@@ -1,6 +1,5 @@
 'use client';
 
-import { Inter } from 'next/font/google';
 import './globals.css';
 import { WagmiProvider } from 'wagmi';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -9,11 +8,6 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import WebGLBackground from '@/components/WebGLBackground';
 
-const inter = Inter({ 
-  subsets: ['latin'], 
-  weight: ['200','300','400','500','600','700'],
-  variable: '--font-inter',
-});
 const queryClient = new QueryClient();
 
 export default function RootLayout({
@@ -22,16 +16,26 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en">
       <head>
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/logo.png" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400..700&family=Space+Grotesk:wght@500;600;700&display=swap"
+          rel="stylesheet"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+          rel="stylesheet"
+        />
         <meta name="theme-color" content="#000000" />
-        <meta name="description" content="ArcWork — Achievement, Invoice & Subscription dApp on Arc Network. Build workflows on programmable money." />
+        <meta name="description" content="ArcWork Protocol — milestone payments for real freelance work, settled in USDC on Arc." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>ArcWork — Build on Programmable Money</title>
+        <title>ArcWork Protocol - Milestone payments for real freelance work</title>
       </head>
-      <body className={inter.className} style={{ background: '#000', color: '#FFF' }}>
+      <body style={{ background: '#000', color: '#FFF' }}>
         <WebGLBackground />
         <WagmiProvider config={config}>
           <QueryClientProvider client={queryClient}>

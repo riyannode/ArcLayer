@@ -1,61 +1,118 @@
 'use client';
 
-import { useAccount } from 'wagmi';
-import { useState } from 'react';
-import { CONTRACTS, shortenAddress } from '@/lib/contracts';
+import Link from 'next/link';
+import { useAccount, useReadContract } from 'wagmi';
+import { CONTRACTS, MILESTONE_ESCROW_ABI, shortenAddress } from '@/lib/contracts';
 
-const BADGE_TYPES = [
-  { id: 0, name: 'First Transaction', desc: 'Complete your first tx on Arc', icon: '⬡' },
-  { id: 1, name: 'Bridge USDC', desc: 'Bridge USDC to Arc Network', icon: '◈' },
-  { id: 2, name: 'Deploy Contract', desc: 'Deploy your first smart contract', icon: '◎' },
-  { id: 3, name: 'Refer Friends', desc: 'Refer a friend to ArcWork', icon: '⬢' },
-  { id: 4, name: 'Complete Invoice', desc: 'Complete your first invoice cycle', icon: '◇' },
-];
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+const ESCROW_CONFIGURED = CONTRACTS.MILESTONE_ESCROW !== ZERO_ADDRESS;
 
-export default function Achievements() {
+export default function WorkProofPage() {
   const { address, isConnected } = useAccount();
+
+  const { data: userProjects } = useReadContract({
+    address: CONTRACTS.MILESTONE_ESCROW,
+    abi: MILESTONE_ESCROW_ABI,
+    functionName: 'getUserProjects',
+    args: [address || ZERO_ADDRESS],
+    query: { enabled: ESCROW_CONFIGURED && Boolean(address) },
+  });
+
+  const projectIds = (userProjects || []) as readonly bigint[];
 
   if (!isConnected) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-8">
-        <div className="glass-card p-12 text-center max-w-md">
-          <div className="text-4xl mb-6" style={{ color: '#00F0FF' }}>⬡</div>
-          <h2 className="text-2xl font-light mb-4">Connect Wallet</h2>
-          <p className="text-sm font-extralight" style={{ color: 'rgba(255,255,255,0.5)' }}>
-            Connect your wallet to view achievements.
-          </p>
+      <div className="relative px-6 py-20">
+        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+          <div>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300/70">
+              Try without wallet
+            </p>
+            <h1 className="font-[var(--font-display)] text-[34px] font-semibold tracking-[-0.03em] md:text-[48px]">
+              Proof badge after paid work completes
+            </h1>
+            <p className="mt-3 max-w-xl text-sm leading-7 text-white/50">
+              WorkProof is emitted after all milestones are released, tying reputation to paid delivery instead of empty engagement.
+            </p>
+            <Link href="/invoice" className="btn-primary mt-8 inline-block">
+              Preview Escrow Flow
+            </Link>
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-white/[0.035] p-6">
+            <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-5">
+              <p className="text-xs uppercase tracking-[0.18em] text-cyan-200/70">WorkProof badge</p>
+              <h2 className="mt-3 text-2xl font-semibold">Brand site redesign completed</h2>
+              <p className="mt-3 text-sm leading-7 text-white/50">
+                1,250 USDC settled across 3 milestones on Arc Testnet.
+              </p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs text-white/35">Project ID</p>
+                  <p className="mt-2 font-mono text-sm">#24</p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs text-white/35">Event</p>
+                  <p className="mt-2 font-mono text-sm text-cyan-200">WorkProofMinted</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative py-24 px-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="relative px-6 py-24">
+      <div className="mx-auto max-w-7xl">
         <div className="mb-12">
-          <p className="text-xs font-light tracking-widest uppercase mb-3" style={{ color: 'rgba(0,240,255,0.6)' }}>
-            Achievements
+          <p className="mb-3 text-xs font-light uppercase tracking-[0.24em] text-cyan-300/70">
+            Work proof
           </p>
-          <h1 style={{ fontSize: 'clamp(32px, 5vw, 48px)', fontWeight: 300, letterSpacing: '-0.03em' }}>
-            Soulbound Badges
-          </h1>
-          <p className="mt-3 text-sm font-light" style={{ color: 'rgba(255,255,255,0.4)' }}>
-            Non-transferable NFT badges for on-chain milestones.
+          <h1 className="text-[36px] font-light leading-tight md:text-[52px]">Proof of completed paid work</h1>
+          <p className="mt-3 max-w-2xl text-sm font-light leading-7 text-white/45">
+            ArcWork proof is issued when a funded project has released all milestones. It ties reputation to completed
+            USDC work instead of empty engagement badges.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {BADGE_TYPES.map((badge) => (
-            <div key={badge.id} className="glass-card p-8 text-center">
-              <div className="text-4xl mb-4" style={{ color: '#00F0FF' }}>{badge.icon}</div>
-              <h3 className="text-base font-light mb-2">{badge.name}</h3>
-              <p className="text-xs font-extralight" style={{ color: 'rgba(255,255,255,0.5)' }}>{badge.desc}</p>
-              <div className="mt-4 text-xs font-light px-4 py-1 rounded-full inline-block"
-                   style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.3)' }}>
-                Not earned
-              </div>
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+          <div className="glass-card p-6">
+            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Wallet</p>
+            <p className="mt-3 text-xl font-light">{shortenAddress(address || '')}</p>
+            <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-sm font-light leading-7 text-white/45">
+                Completed project events emit <span className="text-cyan-200">WorkProofMinted</span> on the escrow
+                contract. A future NFT badge can consume the same signal without changing the core escrow flow.
+              </p>
             </div>
-          ))}
+            <Link href="/invoice" className="btn-primary mt-6 inline-block">
+              Create Escrow Project
+            </Link>
+          </div>
+
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-light">Projects attached to this wallet</h2>
+            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {projectIds.length > 0 ? (
+                projectIds.map((id) => (
+                  <div key={id.toString()} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-sm font-medium text-white">Project #{id.toString()}</p>
+                    <p className="mt-2 text-sm font-light leading-6 text-white/45">
+                      Check contract status for funded, submitted, released, or completed proof state.
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:col-span-2">
+                  <p className="text-sm font-light leading-7 text-white/45">
+                    No project records found for this wallet yet. Complete an escrow project to generate proof.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

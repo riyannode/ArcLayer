@@ -1,100 +1,39 @@
 'use client';
 
-import Link from 'next/link';
-
 export default function Footer() {
   const links = [
+    { label: 'Escrows', href: '/invoice' },
     { label: 'Dashboard', href: '/dashboard' },
-    { label: 'Achievements', href: '/achievements' },
-    { label: 'Invoices', href: '/invoice' },
-    { label: 'Subscriptions', href: '/subscription' },
-  ];
-
-  const externalLinks = [
-    { label: 'Explorer', href: 'https://testnet.arcscan.app' },
-    { label: 'Faucet', href: 'https://faucet.circle.com' },
-    { label: 'GitHub', href: 'https://github.com/riyannode/arcwork' },
+    { label: 'Work Proof', href: '/achievements' },
+    { label: 'Trust Layer', href: '/#trust' },
   ];
 
   return (
-    <footer className="relative z-10 py-16 px-6" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-      <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-12">
-          {/* Brand */}
+    <footer className="relative z-10 w-full border-t border-[#2d3a3b] bg-[#0d0f0f] px-6 py-14 md:px-10">
+      <div className="mx-auto max-w-screen-2xl">
+        <div className="mb-10 flex flex-col gap-5 rounded-xl border border-[#2d3a3b] bg-[#141818] p-6 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="flex items-center gap-2.5 mb-4">
-              <img 
-                src="/logo.png" 
-                alt="ArcWork" 
-                className="w-7 h-7 rounded-lg object-cover" 
-                style={{ border: '1px solid rgba(0,240,255,0.2)' }} 
-              />
-              <span className="text-base font-medium" style={{ color: '#00F0FF' }}>ArcWork</span>
-            </div>
-            <p className="text-xs font-extralight leading-relaxed max-w-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
-              The all-in-one platform for achievements, invoices, and subscriptions on Arc Network — powered by USDC.
+            <p className="font-[var(--font-display)] text-2xl font-semibold tracking-[-0.02em] text-[#f2ffff]">
+              Create your first escrow project
+            </p>
+            <p className="mt-2 text-sm text-[#9aa7a8]">
+              Preview the flow, then connect when you are ready to settle work on Arc.
             </p>
           </div>
-
-          {/* Product Links */}
-          <div>
-            <h4 className="text-xs font-medium uppercase tracking-widest mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
-              Product
-            </h4>
-            <div className="space-y-2.5">
-              {links.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className="block text-sm font-light transition-colors duration-300 hover:text-[#00F0FF]"
-                  style={{ color: 'rgba(255,255,255,0.4)' }}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* Resources */}
-          <div>
-            <h4 className="text-xs font-medium uppercase tracking-widest mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
-              Resources
-            </h4>
-            <div className="space-y-2.5">
-              {externalLinks.map((link) => (
-                <a
-                  key={link.href}
-                  href={link.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block text-sm font-light transition-colors duration-300 hover:text-[#00F0FF]"
-                  style={{ color: 'rgba(255,255,255,0.4)' }}
-                >
-                  {link.label}
-                </a>
-              ))}
-            </div>
-          </div>
+          <a href="/invoice" className="btn-primary self-start md:self-auto">
+            Start escrow
+          </a>
         </div>
-
-        {/* Bottom Bar */}
-        <div 
-          className="pt-8 flex flex-col md:flex-row items-center justify-between gap-4"
-          style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}
-        >
-          <p className="text-xs font-extralight" style={{ color: 'rgba(255,255,255,0.25)' }}>
-            © 2026 ArcWork. Built on Arc Network.
-          </p>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="pulse-dot" style={{ width: '6px', height: '6px' }} />
-              <span className="text-[11px] font-light" style={{ color: 'rgba(0,255,136,0.6)' }}>
-                Arc Testnet Live
-              </span>
-            </div>
-            <span className="text-[11px] font-light" style={{ color: 'rgba(255,255,255,0.2)' }}>
-              Chain ID: 5042002
-            </span>
+        <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
+          <div className="text-center text-sm font-semibold text-[#b9cacb] md:text-left">
+            © 2026 ArcWork Protocol. USDC milestone settlement on Arc.
+          </div>
+          <div className="flex flex-wrap justify-center gap-6 text-sm text-[#8a9596]">
+            {links.map((link) => (
+              <a key={link.label} href={link.href} className="transition-colors hover:text-[#dbfcff]">
+                {link.label}
+              </a>
+            ))}
           </div>
         </div>
       </div>

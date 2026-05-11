@@ -1,56 +1,90 @@
 <div align="center">
 
-# 🏆 ArcWork
+# ArcWork
 
-**Achievement · Invoice · Subscription — on Arc Network**
+**USDC milestone escrow for freelance projects, settled on Arc.**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org)
-[![Foundry](https://img.shields.io/badge/Foundry-v0.2-grey?logo=ethereum)](https://getfoundry.sh)
-[![Arc Network](https://img.shields.io/badge/Arc-Network-00F0FF)](https://arc.network)
-
-[Live Demo](https://arcwork-zeta.vercel.app) · [Contracts](https://testnet.arcscan.app) · [Report Bug](https://github.com/riyannode/arcwork/issues)
-
----
+[Live Demo](https://arcwork-zeta.vercel.app) · [Arc Network](https://arc.network) · [Report Bug](https://github.com/riyannode/arcwork/issues)
 
 </div>
 
-## ✨ Features
+---
 
-| Module | Description |
-|--------|-------------|
-| 🏆 **Achievement** | Soulbound NFT badges (ERC-5192) for on-chain actions |
-| 💰 **Invoice** | Create USDC invoices, accept payments cross-chain, auto-settlement |
-| 🔄 **Subscription** | Recurring USDC payments with auto-charge & cancel anytime |
+## Product
 
-## 📁 Structure
+ArcWork helps freelancers and agencies create project invoices, lock client funds in USDC escrow, and release payments milestone-by-milestone on Arc.
 
+The V1 product flow is intentionally narrow:
+
+```text
+create project -> add milestones -> client funds escrow -> freelancer submits work -> client releases payment -> completed proof
 ```
+
+Out of scope for V1:
+
+```text
+subscription billing, leaderboard, PDF invoice, complex dispute flow, AI agents, RWA factoring
+```
+
+## Why Arc
+
+ArcWork uses Arc as the settlement layer for real service payments:
+
+- USDC is the payment unit.
+- Escrow rules live in smart contracts.
+- Client funds are locked before work starts.
+- Payouts settle transparently when milestones are approved.
+- Completed projects emit onchain proof for future reputation badges.
+
+## Structure
+
+```text
 arcwork/
-├── contracts/          # Solidity smart contracts (Foundry)
-│   └── src/
-│       ├── Achievement.sol      # Soulbound badge NFT
-│       ├── Invoice.sol          # USDC invoice + escrow
-│       └── Subscription.sol     # Recurring payments
-└── frontend/           # Next.js 14 + Tailwind + wagmi
+├── contracts/
+│   ├── src/
+│   │   ├── MilestoneEscrow.sol
+│   │   ├── Achievement.sol
+│   │   ├── Invoice.sol
+│   │   └── Subscription.sol
+│   └── test/
+│       └── MilestoneEscrow.t.sol
+└── frontend/
     └── src/
-        ├── app/        # Pages (/, dashboard, achievements, invoice, subscription)
-        ├── components/ # Navbar, Footer, WebGL Background
-        └── lib/        # Contract ABIs & wallet config
+        ├── app/
+        │   ├── dashboard/
+        │   ├── invoice/
+        │   ├── achievements/
+        │   └── subscription/
+        ├── components/
+        └── lib/
 ```
 
-## 🚀 Quick Start
+`MilestoneEscrow.sol` is the V1 core. The older `Invoice` and `Subscription` contracts are kept for reference but are no longer the main product path.
 
-### Smart Contracts
+## Smart Contracts
 
 ```bash
 cd contracts
 forge install OpenZeppelin/openzeppelin-contracts
+forge install foundry-rs/forge-std
 forge build
 forge test
 ```
 
-### Frontend
+Deploy to Arc testnet:
+
+```bash
+cd contracts
+USDC=0x3600000000000000000000000000000000000000 forge script script/DeployArcWork.s.sol --rpc-url https://rpc.testnet.arc.network --broadcast
+```
+
+After deploy, update `frontend/src/lib/contracts.ts`:
+
+```ts
+MILESTONE_ESCROW: '0x...'
+```
+
+## Frontend
 
 ```bash
 cd frontend
@@ -58,49 +92,18 @@ pnpm install
 pnpm dev
 ```
 
-Open [http://localhost:3080](http://localhost:3080)
+Open [http://localhost:3080](http://localhost:3080).
 
-## 🌐 Arc Network
+## Arc Testnet
 
 | Key | Value |
-|-----|-------|
+| --- | --- |
 | Chain ID | `5042002` |
 | RPC | `https://rpc.testnet.arc.network` |
 | Explorer | [testnet.arcscan.app](https://testnet.arcscan.app) |
 | Faucet | [faucet.circle.com](https://faucet.circle.com) |
 | USDC | `0x3600000000000000000000000000000000000000` |
 
-**Why Arc?**
-- ⛽ USDC as gas (no ETH needed)
-- ⚡ Sub-second finality
-- 🔗 EVM compatible
-- 🔒 Opt-in privacy
-- 🌉 Cross-chain USDC via CCTP
+## Grant Pitch
 
-## 📊 Deployed Contracts
-
-| Contract | Address |
-|----------|---------|
-| Achievement | [`0x52138F4C77e53805CaaeD0D2e39292EC312C8440`](https://testnet.arcscan.app/address/0x52138F4C77e53805CaaeD0D2e39292EC312C8440) |
-| Invoice | [`0x1Eb2Ed241Cb978f4BF02DA68E128D50AD7A53Fbf`](https://testnet.arcscan.app/address/0x1Eb2Ed241Cb978f4BF02DA68E128D50AD7A53Fbf) |
-| Subscription | [`0x01028Ca35bE5c3dcE85F661C6528138bc3Ad9Fc1`](https://testnet.arcscan.app/address/0x01028Ca35bE5c3dcE85F661C6528138bc3Ad9Fc1) |
-
-## 💡 Revenue Model
-
-- **Achievement:** Premium badges ($5–50)
-- **Invoice:** 0.5% per invoice
-- **Subscription:** 1–2% per payment
-
-## 🔗 Links
-
-- [Arc Network](https://arc.network)
-- [Arc Docs](https://docs.arc.network)
-- [Circle Faucet](https://faucet.circle.com)
-
----
-
-<div align="center">
-
-**Built on [Arc Network](https://arc.network) by [Circle](https://circle.com)**
-
-</div>
+ArcWork turns Arc into a settlement hub for freelance work: clients fund USDC escrow, freelancers submit milestones, and approved work settles instantly with onchain proof of completed paid work.

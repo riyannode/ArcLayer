@@ -5,7 +5,7 @@
   "scripts": {
     "build": "forge build",
     "test": "forge test",
-    "deploy:testnet": "forge script script/Deploy.s.sol --rpc-url https://rpc.testnet.arc.network --broadcast",
+    "deploy:testnet": "forge script script/DeployArcWork.s.sol --rpc-url https://rpc.testnet.arc.network --broadcast",
     "verify": "forge verify-contract"
   },
   "dependencies": {
