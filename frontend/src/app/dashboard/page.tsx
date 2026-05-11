@@ -1,11 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useAccount, useReadContract } from 'wagmi';
-import { CONTRACTS, MILESTONE_ESCROW_ABI, shortenAddress } from '@/lib/contracts';
-
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-const ESCROW_CONFIGURED = CONTRACTS.MILESTONE_ESCROW !== ZERO_ADDRESS;
+import { useMemo } from 'react';
+import { useAccount, useReadContract, useReadContracts } from 'wagmi';
+import { CONTRACTS, MILESTONE_ESCROW_ABI, PROJECT_STATUS, formatUSDC, shortenAddress } from '@/lib/contracts';
+import { ESCROW_CONFIGURED, ZERO_ADDRESS, type ProjectTuple, projectFromTuple } from '@/lib/escrow';
 
 const operatingStates = [
   { label: 'Created', body: 'Freelancer has drafted project scope and milestones.' },
@@ -39,6 +38,29 @@ export default function Dashboard() {
   });
 
   const projectIds = (userProjects || []) as readonly bigint[];
+  const projectContracts = useMemo(
+    () =>
+      projectIds.map((id) => ({
+        address: CONTRACTS.MILESTONE_ESCROW,
+        abi: MILESTONE_ESCROW_ABI,
+        functionName: 'projects',
+        args: [id] as const,
+      })),
+    [projectIds]
+  );
+
+  const { data: projectReads } = useReadContracts({
+    contracts: projectContracts,
+    query: { enabled: ESCROW_CONFIGURED && projectIds.length > 0 },
+  });
+
+  const liveProjects =
+    projectReads
+      ?.filter((read) => read.status === 'success' && read.result)
+      .map((read) => projectFromTuple(read.result as unknown as ProjectTuple)) || [];
+
+  const totalLocked = liveProjects.reduce((sum, project) => sum + project.totalAmount, BigInt(0));
+  const totalReleased = liveProjects.reduce((sum, project) => sum + project.releasedAmount, BigInt(0));
 
   if (!isConnected) {
     return (
@@ -160,20 +182,26 @@ export default function Dashboard() {
             <p className="mt-4 text-4xl font-light">{projectIds.length}</p>
           </div>
           <div className="glass-card p-6">
-            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Settlement</p>
-            <p className="mt-4 text-4xl font-light">USDC</p>
+            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Locked</p>
+            <p className="mt-4 text-4xl font-light">{formatUSDC(totalLocked)}</p>
           </div>
         </div>
 
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="glass-card p-6">
-            <h2 className="text-lg font-light">Your project IDs</h2>
+            <h2 className="text-lg font-light">Live projects</h2>
             <div className="mt-5 space-y-3">
-              {projectIds.length > 0 ? (
-                projectIds.map((id) => (
-                  <Link href={`/project/${id.toString()}`} key={id.toString()} className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-cyan-300/30">
-                    <span className="text-sm text-white/55">Project #{id.toString()}</span>
-                    <span className="text-xs text-cyan-200">Onchain</span>
+              {liveProjects.length > 0 ? (
+                liveProjects.map((project) => (
+                  <Link href={`/project/${project.id.toString()}`} key={project.id.toString()} className="block rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-cyan-300/30">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="truncate text-sm font-semibold text-white">{project.title || `Project #${project.id.toString()}`}</span>
+                      <span className="font-mono text-xs text-cyan-200">{formatUSDC(project.totalAmount)} USDC</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-4 text-xs text-white/45">
+                      <span>{PROJECT_STATUS[project.status]}</span>
+                      <span>{formatUSDC(project.releasedAmount)} released</span>
+                    </div>
                   </Link>
                 ))
               ) : (
@@ -186,6 +214,10 @@ export default function Dashboard() {
 
           <div className="glass-card p-6">
             <h2 className="text-lg font-light">V1 operating flow</h2>
+            <div className="mt-5 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-cyan-100/70">Live settlement</p>
+              <p className="mt-2 font-mono text-sm text-white/75">{formatUSDC(totalReleased)} USDC released</p>
+            </div>
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {operatingStates.map((state) => (
                 <div key={state.label} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">

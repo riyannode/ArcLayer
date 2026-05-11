@@ -5,7 +5,7 @@ import { useAccount, useReadContract } from 'wagmi';
 import { CONTRACTS, MILESTONE_ESCROW_ABI, shortenAddress } from '@/lib/contracts';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-const ESCROW_CONFIGURED = CONTRACTS.MILESTONE_ESCROW !== ZERO_ADDRESS;
+const ESCROW_CONFIGURED = (CONTRACTS.MILESTONE_ESCROW as string) !== ZERO_ADDRESS;
 
 export default function WorkProofPage() {
   const { address, isConnected } = useAccount();

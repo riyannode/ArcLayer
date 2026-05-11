@@ -2,49 +2,66 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useMemo } from 'react';
+import { useReadContract, useReadContracts } from 'wagmi';
+import {
+  CONTRACTS,
+  MILESTONE_ESCROW_ABI,
+  MILESTONE_STATUS,
+  PROJECT_STATUS,
+  formatUSDC,
+  getExplorerAddressUrl,
+  shortenAddress,
+} from '@/lib/contracts';
+import { ESCROW_CONFIGURED, type MilestoneTuple, type ProjectTuple, milestoneFromTuple, projectFromTuple } from '@/lib/escrow';
 
-const timeline = [
-  {
-    label: 'Created',
-    body: 'Freelancer defined scope, client wallet, and three milestone payouts.',
-    tx: '0x3f1...b29',
-    status: 'Complete',
-  },
-  {
-    label: 'Funded',
-    body: 'Client locked 1,250 USDC into the ArcWork escrow contract.',
-    tx: '0x7b9...e42',
-    status: 'Complete',
-  },
-  {
-    label: 'Submitted',
-    body: 'Second milestone deliverable was attached for client review.',
-    tx: '0xa14...c90',
-    status: 'Active',
-  },
-  {
-    label: 'Released',
-    body: 'Client approval releases USDC directly to the freelancer wallet.',
-    tx: 'Pending',
-    status: 'Pending',
-  },
-  {
-    label: 'WorkProof',
-    body: 'Completion emits a WorkProofMinted event for reputation and portfolio history.',
-    tx: 'Pending',
-    status: 'Pending',
-  },
-];
-
-const milestones = [
-  ['Design system refresh', '450 USDC', 'Released'],
-  ['Landing implementation', '500 USDC', 'Submitted'],
-  ['Final handoff', '300 USDC', 'Funded'],
-];
+function parseProjectId(value: string | undefined) {
+  try {
+    return value && /^\d+$/.test(value) ? BigInt(value) : BigInt(0);
+  } catch {
+    return BigInt(0);
+  }
+}
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
-  const projectId = params.id || '24';
+  const projectId = parseProjectId(params.id);
+
+  const { data: rawProject, isLoading } = useReadContract({
+    address: CONTRACTS.MILESTONE_ESCROW,
+    abi: MILESTONE_ESCROW_ABI,
+    functionName: 'projects',
+    args: [projectId],
+    query: { enabled: ESCROW_CONFIGURED },
+  });
+
+  const project = rawProject ? projectFromTuple(rawProject as ProjectTuple) : null;
+  const milestoneCount = project?.milestoneCount || 0;
+
+  const milestoneContracts = useMemo(
+    () =>
+      Array.from({ length: milestoneCount }, (_, milestoneId) => ({
+        address: CONTRACTS.MILESTONE_ESCROW,
+        abi: MILESTONE_ESCROW_ABI,
+        functionName: 'milestones',
+        args: [projectId, BigInt(milestoneId)] as const,
+      })),
+    [milestoneCount, projectId]
+  );
+
+  const { data: milestoneReads } = useReadContracts({
+    contracts: milestoneContracts,
+    query: { enabled: ESCROW_CONFIGURED && milestoneCount > 0 },
+  });
+
+  const milestones =
+    milestoneReads
+      ?.filter((read) => read.status === 'success' && read.result)
+      .map((read) => milestoneFromTuple(read.result as unknown as MilestoneTuple)) || [];
+
+  const releasedCount = milestones.filter((milestone) => milestone.status === 3).length;
+  const submittedCount = milestones.filter((milestone) => milestone.status >= 2).length;
+  const isMissingProject = project && project.freelancer === '0x0000000000000000000000000000000000000000';
 
   return (
     <div className="relative px-6 py-20">
@@ -55,34 +72,46 @@ export default function ProjectDetailPage() {
               Back to dashboard
             </Link>
             <p className="mt-5 text-xs font-semibold uppercase tracking-[0.22em] text-white/35">
-              Project #{projectId}
+              Project #{projectId.toString()}
             </p>
             <h1 className="mt-3 font-[var(--font-display)] text-[34px] font-semibold tracking-[-0.03em] md:text-[52px]">
-              Brand site redesign
+              {project?.title || 'Onchain project'}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-white/50">
-              A demo project detail view showing contract state, milestone progress, transaction history, and proof output.
+              {project?.description || 'Live MilestoneEscrow state will appear here after deployment and project creation.'}
             </p>
           </div>
           <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/[0.06] px-4 py-3">
             <p className="text-xs text-white/40">Locked escrow</p>
-            <p className="mt-1 font-mono text-lg font-semibold text-cyan-100">1,250 USDC</p>
+            <p className="mt-1 font-mono text-lg font-semibold text-cyan-100">
+              {project ? `${formatUSDC(project.totalAmount)} USDC` : '0.00 USDC'}
+            </p>
           </div>
         </div>
 
-        <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div className="rounded-lg border border-cyan-300/30 bg-cyan-300/[0.06] p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-100/75">Demo mode</p>
-            <p className="mt-2 text-sm leading-6 text-white/60">
-              Showing a sample escrow receipt for grant review and product walkthroughs.
-            </p>
+        {!ESCROW_CONFIGURED && (
+          <div className="mb-6 rounded-lg border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
+            MilestoneEscrow address is not configured yet. Deploy V1 and update the frontend contract address.
           </div>
-          <div className="rounded-lg border border-white/10 bg-white/[0.025] p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Live contract mode</p>
-            <p className="mt-2 text-sm leading-6 text-white/50">
-              Connect wallet and load contract state by project ID after MilestoneEscrow deployment.
-            </p>
+        )}
+
+        {isMissingProject && (
+          <div className="mb-6 rounded-lg border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
+            Project #{projectId.toString()} was not found on the configured escrow contract.
           </div>
+        )}
+
+        <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-3">
+          {[
+            ['Status', project ? PROJECT_STATUS[project.status] : isLoading ? 'Loading' : 'Unavailable'],
+            ['Submitted', `${submittedCount} / ${milestoneCount}`],
+            ['Released', `${releasedCount} / ${milestoneCount}`],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-white/10 bg-white/[0.025] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">{label}</p>
+              <p className="mt-2 font-mono text-lg text-white/75">{value}</p>
+            </div>
+          ))}
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
@@ -90,10 +119,10 @@ export default function ProjectDetailPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Project receipt</p>
             <div className="mt-5 space-y-3">
               {[
-                ['Client', '0x8A31...91F2'],
-                ['Freelancer', '0x42CE...C0A8'],
-                ['Settlement', 'Arc Testnet'],
-                ['Contract', 'MilestoneEscrow'],
+                ['Client', project ? shortenAddress(project.client) : '0x...'],
+                ['Freelancer', project ? shortenAddress(project.freelancer) : '0x...'],
+                ['Released', project ? `${formatUSDC(project.releasedAmount)} USDC` : '0.00 USDC'],
+                ['Contract', ESCROW_CONFIGURED ? shortenAddress(CONTRACTS.MILESTONE_ESCROW) : 'Not deployed'],
               ].map(([label, value]) => (
                 <div key={label} className="ledger-row flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-4 py-3">
                   <span className="text-sm text-white/45">{label}</span>
@@ -101,46 +130,38 @@ export default function ProjectDetailPage() {
                 </div>
               ))}
             </div>
-
-            <div className="mt-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Milestones</p>
-              <div className="mt-3 space-y-3">
-                {milestones.map(([name, amount, status]) => (
-                  <div key={name} className="ledger-row flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-4 py-3">
-                    <div>
-                      <p className="text-sm font-semibold text-white">{name}</p>
-                      <p className="mt-1 font-mono text-xs text-white/40">{amount}</p>
-                    </div>
-                    <span className={status === 'Released' ? 'text-sm text-cyan-200' : 'text-sm text-white/55'}>{status}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {ESCROW_CONFIGURED && (
+              <a href={getExplorerAddressUrl(CONTRACTS.MILESTONE_ESCROW)} target="_blank" rel="noopener noreferrer" className="mt-5 inline-flex text-sm font-semibold text-cyan-200">
+                View escrow contract
+              </a>
+            )}
           </section>
 
           <section className="glass-card p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Escrow timeline</p>
-            <div className="mt-5 space-y-4">
-              {timeline.map((item, index) => (
-                <div key={item.label} className="timeline-step grid grid-cols-[auto_1fr] gap-4" data-active={item.status === 'Active'}>
-                  <div className="flex flex-col items-center">
-                    <div className={item.status === 'Complete' || item.status === 'Active' ? 'h-8 w-8 rounded-md border border-cyan-300/30 bg-cyan-300/[0.08]' : 'h-8 w-8 rounded-md border border-white/10 bg-white/[0.03]'}>
-                      <span className="flex h-full items-center justify-center font-mono text-xs text-cyan-200">0{index + 1}</span>
-                    </div>
-                    {index < timeline.length - 1 && <div className="h-12 w-px bg-white/10" />}
-                  </div>
-                  <div className="pb-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h2 className="text-base font-semibold text-white">{item.label}</h2>
-                      <span className={item.status === 'Active' ? 'text-xs font-semibold text-cyan-200' : 'text-xs text-white/45'}>
-                        {item.status}
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Milestones</p>
+            <div className="mt-5 space-y-3">
+              {milestones.length > 0 ? (
+                milestones.map((milestone) => (
+                  <div key={milestone.id.toString()} className="ledger-row rounded-lg border border-white/10 bg-black/20 px-4 py-3">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{milestone.title}</p>
+                        <p className="mt-1 font-mono text-xs text-white/40">{formatUSDC(milestone.amount)} USDC</p>
+                      </div>
+                      <span className={milestone.status === 3 ? 'text-sm text-cyan-200' : 'text-sm text-white/55'}>
+                        {MILESTONE_STATUS[milestone.status]}
                       </span>
                     </div>
-                    <p className="mt-2 text-sm leading-6 text-white/50">{item.body}</p>
-                    <p className="mt-2 font-mono text-xs text-white/35">{item.tx}</p>
+                    {milestone.deliverableURI && (
+                      <p className="mt-3 truncate font-mono text-xs text-white/35">{milestone.deliverableURI}</p>
+                    )}
                   </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="rounded-lg border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/45">
+                  No milestones loaded yet.
+                </p>
+              )}
             </div>
           </section>
         </div>

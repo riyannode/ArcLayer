@@ -13,7 +13,7 @@ import {
 } from '@/lib/contracts';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-const ESCROW_CONFIGURED = CONTRACTS.MILESTONE_ESCROW !== ZERO_ADDRESS;
+const ESCROW_CONFIGURED = (CONTRACTS.MILESTONE_ESCROW as string) !== ZERO_ADDRESS;
 
 type MilestoneInput = {
   title: string;
