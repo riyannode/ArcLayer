@@ -61,6 +61,12 @@ export default function InvoicePage() {
     );
   };
 
+  const removeMilestone = (index: number) => {
+    setMilestones((current) =>
+      current.length > 1 ? current.filter((_, milestoneIndex) => milestoneIndex !== index) : current
+    );
+  };
+
   const submitCreateProject = () => {
     if (!ESCROW_CONFIGURED || !isAddress(client) || activeMilestones.length === 0) return;
 
@@ -183,7 +189,7 @@ export default function InvoicePage() {
       </div>
       <div className="space-y-3">
         {milestones.map((milestone, index) => (
-          <div key={index} className="ledger-row grid grid-cols-1 gap-3 rounded-lg border border-white/10 bg-white/[0.025] p-3 md:grid-cols-[1fr_150px]">
+          <div key={index} className="ledger-row grid grid-cols-1 gap-3 rounded-lg border border-white/10 bg-white/[0.025] p-3 md:grid-cols-[1fr_150px_auto]">
             <input
               value={milestone.title}
               onChange={(event) => updateMilestone(index, 'title', event.target.value)}
@@ -197,6 +203,15 @@ export default function InvoicePage() {
               placeholder="USDC"
               className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-sm font-light text-white outline-none transition focus:border-cyan-300/40"
             />
+            <button
+              type="button"
+              onClick={() => removeMilestone(index)}
+              disabled={milestones.length === 1}
+              aria-label={`Delete milestone ${index + 1}`}
+              className="rounded-lg border border-red-300/15 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-red-100/70 transition hover:border-red-300/35 hover:bg-red-300/10 hover:text-red-100 disabled:cursor-not-allowed disabled:opacity-30 md:self-stretch"
+            >
+              Delete
+            </button>
           </div>
         ))}
       </div>
