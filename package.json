@@ -1,10 +1,14 @@
 {
   "name": "arcwork",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "description": "ArcLayer monorepo root",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "corepack pnpm --dir apps/console build",
+    "build:contracts": "npm --prefix contracts run build",
+    "test": "npm --prefix contracts run test",
+    "dev:console": "corepack pnpm --dir apps/console dev",
+    "dev:indexer": "corepack pnpm --dir indexer start"
   },
   "keywords": [],
   "author": "",

@@ -1,8 +1,8 @@
 <div align="center">
 
-# ArcWork
+# ArcLayer
 
-**Milestone-based USDC escrow for freelance work on Arc testnet**
+**Agent labor settlement layer on Arc testnet**
 
 [Live App](https://frontend-rouge-eta-64.vercel.app) · [Arc Explorer](https://testnet.arcscan.app) · [Arc Network](https://arc.network)
 
@@ -10,16 +10,17 @@
 
 ## Overview
 
-ArcWork turns freelance project settlement into an onchain flow:
+ArcLayer is the protocol pivot of the original ArcWork repo. The repository now carries:
+
+- the legacy `MilestoneEscrow` path that is already live on Arc testnet
+- a new contract-layer scaffold for `JobEscrow`, `AgentRegistry`, `WorkProof`, and `ReputationOracle`
+- a workspace SDK in `sdk/`
+- a standalone indexer scaffold in `indexer/`
+- a protocol console in `apps/console/`
+
+The current live flow is still:
 
 `createProject -> fundProject -> submitMilestone -> approveMilestone -> release USDC -> emit WorkProof`
-
-The product surface is intentionally narrow for V1:
-
-- freelancers define project scope and milestone payouts
-- clients lock the full USDC amount into escrow before work starts
-- milestone releases happen only after client approval
-- completed work emits onchain proof for later reputation systems
 
 ## What Is Live
 
@@ -33,11 +34,22 @@ Arc testnet deployment:
 | --- | --- |
 | `MilestoneEscrow` | `0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2` |
 | `Achievement` | `0x7245B200ce09B515bd235f1eD262c2abb0890165` |
+| `AgentRegistry` | `0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21` |
+| `WorkProof` | `0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5` |
+| `JobEscrow` | `0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225` |
+| `ReputationOracle` | `0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c` |
 | Testnet USDC | `0x3600000000000000000000000000000000000000` |
 
-Deploy proof:
+Legacy deploy proof:
 
 - `MilestoneEscrow`: [0xd10476a06b942348a22b32faea36e53f2b6d5f8ad1c6f4a0eb9f3e36d23ded10](https://testnet.arcscan.app/tx/0xd10476a06b942348a22b32faea36e53f2b6d5f8ad1c6f4a0eb9f3e36d23ded10)
+
+Protocol deploy proof:
+
+- `AgentRegistry`: [0xc973a730482eeb67ce17a7e04a96200a3d50bfcc4905ace265b04d9cf7fafbb9](https://testnet.arcscan.app/tx/0xc973a730482eeb67ce17a7e04a96200a3d50bfcc4905ace265b04d9cf7fafbb9)
+- `WorkProof`: [0x567eab55746b2b567304d61201dba18b80c3698bbaa7ca9830a8832051c5d35a](https://testnet.arcscan.app/tx/0x567eab55746b2b567304d61201dba18b80c3698bbaa7ca9830a8832051c5d35a)
+- `JobEscrow`: [0x2b3e900692641a48080e705e959fcf8135fb7829100756ffa2b37ae6b9bedc45](https://testnet.arcscan.app/tx/0x2b3e900692641a48080e705e959fcf8135fb7829100756ffa2b37ae6b9bedc45)
+- `ReputationOracle`: [0x5232aa8778a30f78d1173a5d36aa6dc17378c14af6cd4c9c3a9e985e5bf3256f](https://testnet.arcscan.app/tx/0x5232aa8778a30f78d1173a5d36aa6dc17378c14af6cd4c9c3a9e985e5bf3256f)
 
 ## End-to-End Proof
 
@@ -72,7 +84,7 @@ Final onchain state for project `0`:
 ## Architecture
 
 ```text
-Frontend (Next.js + wagmi + viem)
+Console (Next.js + wagmi + viem)
         |
         +--> MilestoneEscrow.sol on Arc testnet
         |       |
@@ -82,7 +94,9 @@ Frontend (Next.js + wagmi + viem)
         |       +--> MilestoneReleased
         |       +--> WorkProofMinted
         |
-        +--> Optional event indexer / Supabase cache
+        +--> sdk/
+        |
+        +--> indexer/
 ```
 
 The contract remains the source of truth. Cached metadata should only accelerate reads and never override onchain state.
@@ -92,23 +106,15 @@ The contract remains the source of truth. Cached metadata should only accelerate
 ```text
 arcwork/
 ├── contracts/
-│   ├── src/
-│   │   ├── MilestoneEscrow.sol
-│   │   ├── Achievement.sol
-│   │   ├── Invoice.sol
-│   │   └── Subscription.sol
-│   ├── script/
-│   └── test/
+├── sdk/
+├── indexer/
+├── apps/
+│   └── console/
 ├── docs/
-│   └── indexing.md
-└── frontend/
-    └── src/
-        ├── app/
-        ├── components/
-        └── lib/
+└── demo-video/
 ```
 
-`MilestoneEscrow.sol` is the V1 core. `Invoice.sol` and `Subscription.sol` are legacy references and are not the primary settlement path.
+`MilestoneEscrow.sol` remains the live V1 core for the current console reads, while the newly deployed ArcLayer modules are live on testnet and recorded in `sdk/src/addresses.ts`.
 
 ## Local Development
 
@@ -121,12 +127,11 @@ forge build
 forge test
 ```
 
-Frontend:
+Console:
 
 ```bash
-cd frontend
-pnpm install
-pnpm dev
+corepack pnpm install
+corepack pnpm --dir apps/console dev
 ```
 
 ## Arc Testnet Config

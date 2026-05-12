@@ -1,0 +1,14 @@
+{
+  "name": "@arcwork/indexer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --import tsx src/server.ts"
+  },
+  "dependencies": {
+    "@arcwork/sdk": "workspace:*",
+    "tsx": "^4.19.2",
+    "viem": "^2.17.0"
+  }
+}
