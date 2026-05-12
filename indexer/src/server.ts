@@ -23,17 +23,17 @@ function writeJson(res: ServerResponse, payload: unknown) {
 async function runSyncCycle() {
   const fromBlockValue = readMetaValue("last_synced_block");
   const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
-  const events = await fetchJobEvents(fromBlock);
+  const { events, latestBlock } = await fetchJobEvents(fromBlock);
 
-  if (events.length === 0) {
-    return;
+  if (events.length > 0) {
+    await syncProjectionStore(events);
   }
 
-  await syncProjectionStore(events);
-  const highestBlock = events[events.length - 1]?.blockNumber;
-  if (highestBlock !== undefined) {
-    // Persist progress so restarts continue from the next block.
-    writeMetaValue("last_synced_block", highestBlock.toString());
+  // Always advance the cursor to latestBlock so empty ranges don't
+  // get re-scanned forever. Previous logic returned early on zero events
+  // which pinned fromBlock and produced an ever-growing re-scan window.
+  if (latestBlock >= fromBlock) {
+    writeMetaValue("last_synced_block", latestBlock.toString());
   }
 }
 
