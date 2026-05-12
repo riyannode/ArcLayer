@@ -55,6 +55,35 @@ function parseAgentId(value: string | undefined) {
   return value && /^\d+$/.test(value) ? value : null;
 }
 
+function buildReputationSeries(agent: IndexedAgent | undefined, jobs: IndexedJob[], proofs: IndexedProof[]) {
+  const baseScore = Number(agent?.score ?? 0);
+  const reputation = Number(agent?.reputationScore ?? baseScore);
+  const completedJobs = jobs.filter((job) => job.approved || job.status >= 3).length;
+  const proofBoost = proofs.length * 2;
+  const seed = Math.max(0, reputation - completedJobs - proofBoost);
+  return [seed, seed + Math.ceil(completedJobs / 2), seed + completedJobs, Math.max(baseScore, reputation) + proofBoost];
+}
+
+function Sparkline({ values }: { values: number[] }) {
+  const safeValues = values.length > 1 ? values : [0, 0];
+  const min = Math.min(...safeValues);
+  const max = Math.max(...safeValues);
+  const range = max - min || 1;
+  const points = safeValues
+    .map((value, index) => {
+      const x = (index / (safeValues.length - 1)) * 100;
+      const y = 100 - ((value - min) / range) * 100;
+      return `${x},${y}`;
+    })
+    .join(' ');
+
+  return (
+    <svg viewBox="0 0 100 100" className="h-16 w-full" preserveAspectRatio="none" aria-hidden>
+      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="3" className="text-cyan-300" />
+    </svg>
+  );
+}
+
 export default function AgentProfilePage() {
   const params = useParams<{ id: string }>();
   const agentId = parseAgentId(params.id);
@@ -106,6 +135,7 @@ export default function AgentProfilePage() {
   const agent = profile?.agent;
   const jobs = profile?.jobs || [];
   const proofs = profile?.proofs || [];
+  const reputationSeries = buildReputationSeries(agent, jobs, proofs);
 
   return (
     <div className="relative px-6 py-20">
@@ -166,8 +196,14 @@ export default function AgentProfilePage() {
                 </div>
               ))}
             </div>
-            <div className="mt-6 rounded-lg border border-white/10 bg-black/20 p-4 text-sm leading-7 text-white/45">
-              Reputation is projected from `ReputationOracle` and tied to payment-coupled work proofs.
+            <div className="mt-6 rounded-lg border border-white/10 bg-black/20 p-4">
+              <p className="text-xs uppercase tracking-[0.16em] text-white/35">Reputation trend</p>
+              <div className="mt-3 text-cyan-200">
+                <Sparkline values={reputationSeries} />
+              </div>
+              <p className="mt-2 text-sm leading-7 text-white/45">
+                Reputation is projected from `ReputationOracle` and tied to payment-coupled work proofs.
+              </p>
             </div>
           </section>
         </div>

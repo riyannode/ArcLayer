@@ -135,6 +135,10 @@ const upsertMeta = db.prepare(`
   ON CONFLICT(key) DO UPDATE SET value = excluded.value
 `);
 
+export function writeMetaValue(key: string, value: string) {
+  upsertMeta.run(key, value);
+}
+
 const upsertJobEvent = db.prepare(`
   INSERT INTO job_events (event_key, job_id, agent_id, type, block_number, tx_hash, payload_json)
   VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -385,4 +389,9 @@ export function readOverview() {
     agents,
     proofs,
   };
+}
+
+export function readMetaValue(key: string) {
+  const row = db.prepare(`SELECT value FROM meta WHERE key = ?`).get(key) as { value?: string } | undefined;
+  return row?.value ?? null;
 }

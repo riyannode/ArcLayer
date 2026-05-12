@@ -1,5 +1,5 @@
-import { createServer } from "node:http";
-import { INDEXER_PORT, DEFAULT_FROM_BLOCK } from "./config";
+import { createServer, type ServerResponse } from "node:http";
+import { DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS } from "./config";
 import { fetchJobEvents } from "./ingest";
 import {
   readAgentById,
@@ -8,20 +8,49 @@ import {
   readJobById,
   readJobEvents,
   readJobs,
+  readMetaValue,
   readOverview,
   readProofByJobId,
   readProofs,
   syncProjectionStore,
+  writeMetaValue,
 } from "./db";
 
-function writeJson(res: Parameters<typeof createServer>[0] extends (req: infer _Req, res: infer Res) => unknown ? Res : never, payload: unknown) {
+function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
 }
 
-createServer(async (req, res) => {
-  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-  const events = await fetchJobEvents(DEFAULT_FROM_BLOCK);
+async function runSyncCycle() {
+  const fromBlockValue = readMetaValue("last_synced_block");
+  const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
+  const events = await fetchJobEvents(fromBlock);
+
+  if (events.length === 0) {
+    return;
+  }
+
   await syncProjectionStore(events);
+  const highestBlock = events[events.length - 1]?.blockNumber;
+  if (highestBlock !== undefined) {
+    // Persist progress so restarts continue from the next block.
+    writeMetaValue("last_synced_block", highestBlock.toString());
+  }
+}
+
+async function startPollingLoop() {
+  try {
+    await runSyncCycle();
+  } catch (error) {
+    console.error("Indexer polling error", error);
+  } finally {
+    setTimeout(startPollingLoop, POLL_INTERVAL_MS);
+  }
+}
+
+startPollingLoop();
+
+createServer((req, res) => {
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -110,10 +139,11 @@ createServer(async (req, res) => {
   }
 
   writeJson(res, {
-      ok: true,
-      endpoints: ["/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events"],
-      eventCount: events.length,
-    });
+    ok: true,
+    endpoints: ["/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events"],
+    eventCount: Number(readMetaValue("event_count") || "0"),
+    lastSyncedBlock: readMetaValue("last_synced_block"),
+  });
 }).listen(INDEXER_PORT, () => {
   console.log(`ArcLayer indexer listening on http://localhost:${INDEXER_PORT}`);
 });
