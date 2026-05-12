@@ -27,7 +27,23 @@ export async function GET(request: NextRequest) {
       ok: true,
       endpoints: ['/overview', '/jobs', '/jobs/:id', '/agents', '/agents/:id', '/proofs', '/job-events', '/agent-events'],
       eventCount: events.length,
+      lastSyncedBlock: events.length > 0 ? String(events[0].blockNumber) : '0',
     });
+  }
+
+  // Parsed event tail (most recent first) for telemetry console.
+  if (segments[0] === 'job-events' || segments[0] === 'agent-events') {
+    const parsed = events
+      .slice()
+      .sort((a, b) => Number(BigInt(b.blockNumber) - BigInt(a.blockNumber)))
+      .map((e) => {
+        const out: Record<string, unknown> = {};
+        for (const [k, v] of Object.entries(e as unknown as Record<string, unknown>)) {
+          out[k] = typeof v === 'bigint' ? v.toString() : v;
+        }
+        return out;
+      });
+    return NextResponse.json(parsed);
   }
 
   if (segments[0] === 'overview') {
