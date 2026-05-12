@@ -235,9 +235,9 @@ export default function LiveLogStream() {
         }
         .llog-body {
           font-family: var(--font-mono);
-          font-size: 12px; line-height: 1.75;
-          padding: 12px 14px;
-          min-height: 240px; max-height: 280px;
+          font-size: 11.5px; line-height: 1.7;
+          padding: 10px 14px;
+          min-height: 180px; max-height: 220px;
           overflow: hidden;
           background: linear-gradient(180deg, rgba(5,5,5,0.6) 0%, rgba(5,5,5,0.92) 100%);
           mask-image: linear-gradient(180deg, transparent 0, black 20px, black 100%);

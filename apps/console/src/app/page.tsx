@@ -40,15 +40,19 @@ export default function Home() {
       <HomeSidebar />
 
       <main className="relative z-20 min-h-screen md:pl-[56px]">
-        <div className="relative mx-auto grid max-w-[1480px] grid-cols-1 gap-8 px-6 py-10 md:grid-cols-[1.18fr_0.82fr] md:gap-12 md:px-10 md:py-16 lg:px-14">
+        <div className="relative mx-auto grid max-w-[1480px] grid-cols-1 gap-8 px-4 py-10 md:grid-cols-[1.25fr_0.75fr] md:gap-8 md:px-6 md:py-14 lg:px-8">
           <HomeHero />
 
-          <div className="relative flex min-h-[480px] flex-col gap-8 md:min-h-[680px]">
+          <div className="relative flex min-h-[420px] flex-col gap-6 md:min-h-[560px]">
+            {/* Hex grid — logo floats solo */}
             <div className="relative flex flex-1 items-center justify-center">
               <HexGrid3D />
+            </div>
+            {/* Row: terminal (wide) + active escrow card (compact) side-by-side */}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-[1.35fr_0.65fr]">
+              <LiveLogStream />
               <HomeFeaturedCard />
             </div>
-            <LiveLogStream />
           </div>
         </div>
 

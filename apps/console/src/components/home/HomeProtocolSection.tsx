@@ -38,7 +38,6 @@ export default function HomeProtocolSection() {
       <div className="mx-auto max-w-[1600px]">
         <div className="mb-12 grid grid-cols-1 gap-10 md:grid-cols-[1fr_1.2fr] md:items-end">
           <div>
-            <div className="aureo-mono-label mb-4">PROTOCOL · PRIMITIVES</div>
             <h2 className="aureo-display text-[52px] text-[#EAE4D8] md:text-[72px]">
               Four modules.
               <br />
