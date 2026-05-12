@@ -10,6 +10,7 @@ import {
   buildFundJobConfig,
   buildSetBudgetConfig,
 } from '@arcwork/sdk';
+import { StatusBanner } from '@/components/StatusBanner';
 import { formatUSDC, parseUSDC, shortenAddress } from '@/lib/contracts';
 import { fetchIndexerJson, type IndexedJob, waitForIndexer } from '@/lib/indexer';
 import { config } from '@/lib/wagmi';
@@ -23,8 +24,10 @@ export default function JobsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isFunding, setIsFunding] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txState, setTxState] = useState<string | null>(null);
+  const [statusTone, setStatusTone] = useState<'idle' | 'pending' | 'synced' | 'error'>('idle');
   const [createForm, setCreateForm] = useState({
     agentId: '1',
     worker: '0xf1d7143A42e07CbAEb3a7c70DAC4C9f2B675dFF0',
@@ -38,8 +41,13 @@ export default function JobsPage() {
   });
 
   async function loadJobs() {
-    const nextJobs = await fetchIndexerJson<IndexedJob[]>('/jobs');
-    setJobs(nextJobs);
+    setIsRefreshing(true);
+    try {
+      const nextJobs = await fetchIndexerJson<IndexedJob[]>('/jobs');
+      setJobs(nextJobs);
+    } finally {
+      setIsRefreshing(false);
+    }
   }
 
   useEffect(() => {
@@ -49,13 +57,16 @@ export default function JobsPage() {
       try {
         setIsLoading(true);
         setError(null);
+        setStatusTone('pending');
         const nextJobs = await fetchIndexerJson<IndexedJob[]>('/jobs');
         if (!cancelled) {
           setJobs(nextJobs);
+          setStatusTone('synced');
         }
       } catch (nextError) {
         if (!cancelled) {
           setError(nextError instanceof Error ? nextError.message : 'Failed to load jobs.');
+          setStatusTone('error');
         }
       } finally {
         if (!cancelled) {
@@ -73,6 +84,7 @@ export default function JobsPage() {
   async function handleCreateJob() {
     try {
       setIsCreating(true);
+      setStatusTone('pending');
       setTxState('Submitting createJob transaction...');
       const hash = await writeContractAsync(
         buildCreateJobConfig(
@@ -90,9 +102,11 @@ export default function JobsPage() {
         (payload) => payload.some((job) => job.worker.toLowerCase() === createForm.worker.toLowerCase() && job.evaluator.toLowerCase() === createForm.evaluator.toLowerCase())
       );
       setJobs(nextJobs);
+      setStatusTone('synced');
       setTxState('Job created and indexed.');
     } catch (nextError) {
       setTxState(nextError instanceof Error ? nextError.message : 'createJob failed.');
+      setStatusTone('error');
     } finally {
       setIsCreating(false);
     }
@@ -101,6 +115,7 @@ export default function JobsPage() {
   async function handleFundJob() {
     try {
       setIsFunding(true);
+      setStatusTone('pending');
       const budget = parseUSDC(fundForm.budget);
       const amount = parseUSDC(fundForm.amount);
       const jobId = BigInt(fundForm.jobId);
@@ -123,9 +138,11 @@ export default function JobsPage() {
         (payload) => payload.some((job) => job.id === fundForm.jobId && job.fundedAmount === amount.toString())
       );
       setJobs(nextJobs);
+      setStatusTone('synced');
       setTxState('Budget set, USDC approved, and funding confirmed.');
     } catch (nextError) {
       setTxState(nextError instanceof Error ? nextError.message : 'Funding flow failed.');
+      setStatusTone('error');
     } finally {
       setIsFunding(false);
     }
@@ -144,9 +161,17 @@ export default function JobsPage() {
               Browse `JobEscrow` records and push create, budget, approve, and fund transactions from the console.
             </p>
           </div>
-          <Link href="/dashboard" className="btn-primary self-start md:self-auto">
-            Back to dashboard
-          </Link>
+          <div className="flex gap-3 self-start md:self-auto">
+            <button
+              onClick={() => loadJobs()}
+              className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-white/80"
+            >
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <Link href="/dashboard" className="btn-primary">
+              Back to dashboard
+            </Link>
+          </div>
         </div>
 
         {error && (
@@ -154,6 +179,27 @@ export default function JobsPage() {
             {error}
           </div>
         )}
+
+        <div className="mb-6">
+          <StatusBanner
+            tone={statusTone}
+            title={
+              statusTone === 'pending'
+                ? 'Pending Confirmation'
+                : statusTone === 'synced'
+                  ? 'Indexer Synced'
+                  : statusTone === 'error'
+                    ? 'Action Error'
+                    : 'Ready'
+            }
+            body={
+              txState ||
+              (isRefreshing
+                ? 'Refreshing indexed jobs from the local indexer.'
+                : 'Jobs view is loaded and ready for manual refresh or a new create/fund flow.')
+            }
+          />
+        </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <section className="glass-card p-6">
@@ -214,7 +260,7 @@ export default function JobsPage() {
             </div>
 
             <div className="glass-card p-6 text-sm leading-6 text-white/45">
-              {txState || (isConnected ? 'Wallet connected. Ready for create/fund flow.' : 'Connect wallet to submit protocol write transactions.')}
+              {isConnected ? 'Wallet connected. Ready for create/fund flow.' : 'Connect wallet to submit protocol write transactions.'}
             </div>
           </section>
         </div>

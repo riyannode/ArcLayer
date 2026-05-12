@@ -6,6 +6,7 @@ import { waitForTransactionReceipt } from '@wagmi/core';
 import { useAccount, useWriteContract } from 'wagmi';
 import { buildRegisterAgentConfig } from '@arcwork/sdk';
 import { fetchIndexerJson, type IndexedAgent, waitForIndexer } from '@/lib/indexer';
+import { StatusBanner } from '@/components/StatusBanner';
 import { shortenAddress } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
 
@@ -15,8 +16,10 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState<IndexedAgent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [txState, setTxState] = useState<string | null>(null);
+  const [statusTone, setStatusTone] = useState<'idle' | 'pending' | 'synced' | 'error'>('idle');
   const [form, setForm] = useState({
     agentId: '3',
     skill: 'solidity-auditor',
@@ -24,8 +27,13 @@ export default function AgentsPage() {
   });
 
   async function loadAgents() {
-    const nextAgents = await fetchIndexerJson<IndexedAgent[]>('/agents');
-    setAgents(nextAgents);
+    setIsRefreshing(true);
+    try {
+      const nextAgents = await fetchIndexerJson<IndexedAgent[]>('/agents');
+      setAgents(nextAgents);
+    } finally {
+      setIsRefreshing(false);
+    }
   }
 
   useEffect(() => {
@@ -35,13 +43,16 @@ export default function AgentsPage() {
       try {
         setIsLoading(true);
         setError(null);
+        setStatusTone('pending');
         const nextAgents = await fetchIndexerJson<IndexedAgent[]>('/agents');
         if (!cancelled) {
           setAgents(nextAgents);
+          setStatusTone('synced');
         }
       } catch (nextError) {
         if (!cancelled) {
           setError(nextError instanceof Error ? nextError.message : 'Failed to load agents.');
+          setStatusTone('error');
         }
       } finally {
         if (!cancelled) {
@@ -59,6 +70,7 @@ export default function AgentsPage() {
   async function handleRegisterAgent() {
     try {
       setIsSubmitting(true);
+      setStatusTone('pending');
       setTxState('Submitting registerAgent transaction...');
       const hash = await writeContractAsync(
         buildRegisterAgentConfig(BigInt(form.agentId), form.skill, form.metadataURI)
@@ -71,9 +83,11 @@ export default function AgentsPage() {
         (payload) => payload.some((agent) => agent.agentId === form.agentId)
       );
       setAgents(nextAgents);
+      setStatusTone('synced');
       setTxState('Agent registration confirmed.');
     } catch (nextError) {
       setTxState(nextError instanceof Error ? nextError.message : 'Agent registration failed.');
+      setStatusTone('error');
     } finally {
       setIsSubmitting(false);
     }
@@ -92,9 +106,17 @@ export default function AgentsPage() {
               Browse registered agents and push new `registerAgent` transactions directly from the console.
             </p>
           </div>
-          <Link href="/docs" className="btn-primary self-start md:self-auto">
-            SDK Quickstart
-          </Link>
+          <div className="flex gap-3 self-start md:self-auto">
+            <button
+              onClick={() => loadAgents()}
+              className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-white/80"
+            >
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <Link href="/docs" className="btn-primary">
+              SDK Quickstart
+            </Link>
+          </div>
         </div>
 
         {error && (
@@ -102,6 +124,27 @@ export default function AgentsPage() {
             {error}
           </div>
         )}
+
+        <div className="mb-6">
+          <StatusBanner
+            tone={statusTone}
+            title={
+              statusTone === 'pending'
+                ? 'Pending Confirmation'
+                : statusTone === 'synced'
+                  ? 'Indexer Synced'
+                  : statusTone === 'error'
+                    ? 'Action Error'
+                    : 'Ready'
+            }
+            body={
+              txState ||
+              (isRefreshing
+                ? 'Refreshing indexed agent list from the local indexer.'
+                : 'Agent registry is loaded and ready for manual refresh or a new registerAgent flow.')
+            }
+          />
+        </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.05fr_0.95fr]">
           <section className="glass-card p-6">
@@ -168,7 +211,7 @@ export default function AgentsPage() {
               {isSubmitting ? 'Registering...' : 'Register Agent'}
             </button>
             <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/45">
-              {txState || (isConnected ? 'Wallet connected. Ready to send registerAgent.' : 'Connect wallet to submit agent registration.')}
+              {isConnected ? 'Wallet connected. Ready to send registerAgent.' : 'Connect wallet to submit agent registration.'}
             </div>
           </section>
         </div>

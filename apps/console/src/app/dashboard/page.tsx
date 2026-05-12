@@ -4,104 +4,49 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { formatUSDC, shortenAddress } from '@/lib/contracts';
+import { StatusBanner } from '@/components/StatusBanner';
+import { fetchIndexerJson, type DashboardOverview } from '@/lib/indexer';
 
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
-const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || 'http://localhost:4307';
-
-type IndexedJob = {
-  id: string;
-  agentId: string;
-  client: string;
-  worker: string;
-  evaluator: string;
-  budget: string;
-  fundedAmount: string;
-  createdAt: string;
-  jobSpecHash: string;
-  deliverableURI: string;
-  proofMetadataURI: string;
-  approved: boolean;
-  status: number;
-};
-
-type IndexedAgent = {
-  agentId: string;
-  controller: string;
-  skillHash: string;
-  metadataURI: string;
-  registeredAt: string;
-  reputationScore: string;
-  score: string;
-  jobs: string[];
-  proofTokenIds: string[];
-};
-
-type DashboardOverview = {
-  summary: {
-    eventCount: number;
-    jobs: number;
-    agents: number;
-    proofs: number;
-    totalBudget: string;
-    totalFunded: string;
-    settledJobs: number;
-    fundedJobs: number;
-  };
-  jobs: IndexedJob[];
-  agents: IndexedAgent[];
-  proofs: {
-    tokenId: string;
-    jobId: string;
-    agentId: string;
-    payer: string;
-    amountPaid: string;
-    mintedAt: string;
-    metadataURI: string;
-  }[];
-};
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  async function loadOverview(options?: { silent?: boolean }) {
+    try {
+      if (options?.silent) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+      setError(null);
+      const nextOverview = await fetchIndexerJson<DashboardOverview>('/overview');
+      setOverview(nextOverview);
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : 'Failed to load protocol dashboard from the indexer.'
+      );
+      if (!options?.silent) {
+        setOverview(null);
+      }
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        setIsLoading(true);
-        setError(null);
-        const response = await fetch(`${INDEXER_BASE_URL}/overview`, { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(`Indexer returned HTTP ${response.status}.`);
-        }
-        const nextOverview = (await response.json()) as DashboardOverview;
-
-        if (!cancelled) {
-          setOverview(nextOverview);
-        }
-      } catch (nextError) {
-        if (!cancelled) {
-          setError(
-            nextError instanceof Error
-              ? nextError.message
-              : 'Failed to load protocol dashboard from the indexer.'
-          );
-          setOverview(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
+    loadOverview();
+    const interval = window.setInterval(() => {
+      loadOverview({ silent: true });
+    }, 15000);
+    return () => window.clearInterval(interval);
   }, []);
 
   const jobs = overview?.jobs || [];
@@ -139,9 +84,17 @@ export default function Dashboard() {
               {isConnected && address ? `${shortenAddress(address)} · ` : ''}Arc Testnet protocol telemetry
             </p>
           </div>
-          <Link href="/docs" className="btn-primary self-start md:self-auto">
-            SDK Quickstart
-          </Link>
+          <div className="flex gap-3 self-start md:self-auto">
+            <button
+              onClick={() => loadOverview({ silent: true })}
+              className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-white/80"
+            >
+              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            </button>
+            <Link href="/docs" className="btn-primary">
+              SDK Quickstart
+            </Link>
+          </div>
         </div>
 
         {error && (
@@ -149,6 +102,20 @@ export default function Dashboard() {
             <p className="text-sm font-light text-amber-100">
               {error} Start the indexer with <span className="font-mono">corepack pnpm --dir indexer start</span>.
             </p>
+          </div>
+        )}
+
+        {!error && (
+          <div className="mb-8">
+            <StatusBanner
+              tone={isRefreshing ? 'pending' : 'synced'}
+              title={isRefreshing ? 'Indexer Refreshing' : 'Indexer Synced'}
+              body={
+                isRefreshing
+                  ? 'Refreshing overview from the indexer. Receipt status may already be final onchain while projections catch up.'
+                  : `Protocol snapshot loaded. ${summary?.eventCount ?? 0} indexed events across ${summary?.jobs ?? 0} jobs and ${summary?.agents ?? 0} agents.`
+              }
+            />
           </div>
         )}
 
