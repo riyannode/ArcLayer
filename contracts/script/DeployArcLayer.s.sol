@@ -7,7 +7,7 @@ import "../src/JobEscrow.sol";
 import "../src/ReputationOracle.sol";
 import "../src/WorkProof.sol";
 
-contract DeployArcWork is Script {
+contract DeployArcLayer is Script {
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address usdc = vm.envAddress("USDC");

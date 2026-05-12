@@ -1,5 +1,5 @@
-import { CONTRACTS, JOB_ESCROW_ABI, publicClient } from "@arcwork/sdk";
-import type { IndexedJobEvent } from "@arcwork/sdk";
+import { CONTRACTS, JOB_ESCROW_ABI, publicClient } from "@arclayer/sdk";
+import type { IndexedJobEvent } from "@arclayer/sdk";
 
 const EVENT_NAMES = [
   "JobCreated",

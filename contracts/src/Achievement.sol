@@ -30,7 +30,7 @@ contract Achievement is ERC721, ERC721URIStorage, Ownable {
 
     event BadgeMinted(address indexed to, BadgeType badgeType, uint256 tokenId);
 
-    constructor() ERC721("ArcWork Achievement", "ARCWRK") Ownable(msg.sender) {}
+    constructor() ERC721("ArcLayer Achievement", "ARCWRK") Ownable(msg.sender) {}
 
     /// @notice Mint a soulbound badge for an achievement
     function mintBadge(

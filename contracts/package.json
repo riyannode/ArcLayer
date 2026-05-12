@@ -1,11 +1,11 @@
 {
-  "name": "arcwork-contracts",
+  "name": "arclayer-contracts",
   "version": "1.0.0",
-  "description": "ArcWork smart contracts for Arc Network",
+  "description": "ArcLayer smart contracts for Arc Network",
   "scripts": {
     "build": "forge build",
     "test": "forge test",
-    "deploy:testnet": "forge script script/DeployArcWork.s.sol --rpc-url https://rpc.testnet.arc.network --broadcast",
+    "deploy:testnet": "forge script script/DeployArcLayer.s.sol --rpc-url https://rpc.testnet.arc.network --broadcast",
     "verify": "forge verify-contract"
   },
   "dependencies": {

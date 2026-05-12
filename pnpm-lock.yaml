@@ -10,7 +10,7 @@ importers:
 
   apps/console:
     dependencies:
-      '@arcwork/sdk':
+      '@arclayer/sdk':
         specifier: workspace:*
         version: link:../../sdk
       '@tanstack/react-query':
@@ -56,7 +56,7 @@ importers:
 
   indexer:
     dependencies:
-      '@arcwork/sdk':
+      '@arclayer/sdk':
         specifier: workspace:*
         version: link:../sdk
       tsx:

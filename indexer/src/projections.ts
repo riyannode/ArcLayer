@@ -1,5 +1,5 @@
-import { readAgentProfile, readAllJobs, readWorkProof, readWorkProofTokenByJobId } from "@arcwork/sdk";
-import type { IndexedJobEvent } from "@arcwork/sdk";
+import { readAgentProfile, readAllJobs, readWorkProof, readWorkProofTokenByJobId } from "@arclayer/sdk";
+import type { IndexedJobEvent } from "@arclayer/sdk";
 
 export function buildJobProjection(events: IndexedJobEvent[]) {
   return events.reduce<Record<string, IndexedJobEvent[]>>((acc, event) => {

@@ -44,7 +44,7 @@ forge test
 ## Deploy
 
 ```bash
-USDC=0x3600000000000000000000000000000000000000 forge script script/DeployArcWork.s.sol --rpc-url https://rpc.testnet.arc.network --broadcast
+USDC=0x3600000000000000000000000000000000000000 forge script script/DeployArcLayer.s.sol --rpc-url https://rpc.testnet.arc.network --broadcast
 ```
 
 Update `sdk/src/addresses.ts` with deployed protocol addresses after deployment.

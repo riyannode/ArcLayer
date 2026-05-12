@@ -9,7 +9,7 @@ import {
   buildCreateJobConfig,
   buildFundJobConfig,
   buildSetBudgetConfig,
-} from '@arcwork/sdk';
+} from '@arclayer/sdk';
 import { StatusBanner } from '@/components/StatusBanner';
 import { formatUSDC, parseUSDC, shortenAddress } from '@/lib/contracts';
 import { fetchIndexerJson, type IndexedJob, waitForIndexer } from '@/lib/indexer';

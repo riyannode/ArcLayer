@@ -2,12 +2,12 @@
 
 ## Goal
 
-Refactor `ArcWork` from a single-app milestone escrow demo into `ArcLayer`, a protocol-oriented monorepo for agent-to-agent work settlement on Arc.
+Refactor the single-app milestone escrow demo into `ArcLayer`, a protocol-oriented monorepo for agent-to-agent work settlement on Arc.
 
 Target shape:
 
 ```text
-arcwork/
+arclayer/
 ├── contracts/
 ├── sdk/
 ├── indexer/
@@ -27,7 +27,7 @@ This plan is based on the current repository state on May 12, 2026, not on an ab
   - reusable owner/fee/funding/storage patterns
 - `contracts/test/MilestoneEscrow.t.sol`
   - baseline Foundry coverage for create, fund, submit, release
-- `contracts/script/DeployArcWork.s.sol`
+- `contracts/script/DeployArcLayer.s.sol`
   - working deployment entrypoint for Arc testnet
 - `frontend/src/lib/contracts.ts`
   - contract addresses, ABIs, chain constants, formatter helpers
@@ -77,7 +77,7 @@ This minimizes breakage and preserves a working testnet path throughout the pivo
 ## Target Monorepo Layout
 
 ```text
-arcwork/
+arclayer/
 ├── package.json
 ├── pnpm-workspace.yaml
 ├── contracts/
@@ -183,7 +183,7 @@ Recommended internal shape:
 
 Files:
 
-- refactor [contracts/src/MilestoneEscrow.sol](/C:/Users/kikoi/OneDrive/Desktop/PENTING/arcwork/contracts/src/MilestoneEscrow.sol)
+- refactor `contracts/src/MilestoneEscrow.sol`
 - add `contracts/src/JobEscrow.sol`
 - update deploy script
 - add or rename tests
@@ -293,7 +293,7 @@ Extract from current frontend:
 Target modules:
 
 - `src/client.ts`
-  - `ArcWorkClient` or `ArcLayerClient`
+  - `ArcLayerClient`
 - `src/agent.ts`
   - registry reads/writes
 - `src/job.ts`
@@ -333,7 +333,7 @@ Current repo bias suggests `wagmi generate` is the lower-friction path.
 
 NPM target:
 
-- `@arcwork/sdk`
+- `@arclayer/sdk`
 
 Release preconditions:
 
@@ -347,7 +347,7 @@ Release preconditions:
 
 Current reuse source:
 
-- [frontend/src/lib/escrow-indexer.ts](/C:/Users/kikoi/OneDrive/Desktop/PENTING/arcwork/frontend/src/lib/escrow-indexer.ts)
+- `frontend/src/lib/escrow-indexer.ts`
 
 Keep:
 

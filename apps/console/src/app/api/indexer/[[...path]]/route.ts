@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DEFAULT_FROM_BLOCK } from '@arcwork/indexer/config';
-import { fetchJobEvents } from '@arcwork/indexer/ingest';
+import { DEFAULT_FROM_BLOCK } from '@arclayer/indexer/config';
+import { fetchJobEvents } from '@arclayer/indexer/ingest';
 import {
   buildAgentDetailProjection,
   buildAgentsProjection,
@@ -8,7 +8,7 @@ import {
   buildJobsProjection,
   buildOverviewProjection,
   buildProofsProjection,
-} from '@arcwork/indexer/projections';
+} from '@arclayer/indexer/projections';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;

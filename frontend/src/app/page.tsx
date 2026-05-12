@@ -72,7 +72,7 @@ export default function Home() {
               </h1>
 
               <p className="mt-6 max-w-[460px] text-sm leading-7 text-[#8f999a] md:text-base">
-                ArcLayer turns the original ArcWork escrow into protocol infrastructure: contract modules, SDK access,
+                ArcLayer turns the original escrow app into protocol infrastructure: contract modules, SDK access,
                 event indexing, and a console for inspecting jobs and agents on Arc.
               </p>
 

@@ -9,7 +9,7 @@ import {
   buildEvaluateJobConfig,
   buildSettleJobConfig,
   buildSubmitDeliverableConfig,
-} from '@arcwork/sdk';
+} from '@arclayer/sdk';
 import { CONTRACTS, formatUSDC, getExplorerAddressUrl, shortenAddress } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
 import { fetchIndexerJson, INDEXER_BASE_URL, type JobDetail, waitForIndexer } from '@/lib/indexer';

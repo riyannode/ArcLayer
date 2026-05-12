@@ -17,8 +17,8 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
-      "@arcwork/sdk": ["./sdk/src/index.ts"],
-      "@arcwork/indexer/*": ["../indexer/src/*"]
+      "@arclayer/sdk": ["./sdk/src/index.ts"],
+      "@arclayer/indexer/*": ["../indexer/src/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

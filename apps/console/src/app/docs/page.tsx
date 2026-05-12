@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 const quickstart = [
   'Install the workspace SDK package.',
-  'Read contract addresses and ABIs from @arcwork/sdk.',
+  'Read contract addresses and ABIs from @arclayer/sdk.',
   'Create jobs or inspect project history using the exported client helpers.',
   'Use the indexer service for cached protocol reads when RPC fanout becomes expensive.',
 ];
@@ -25,7 +25,7 @@ export default function DocsPage() {
 
         <div className="mt-8 rounded-xl border border-white/10 bg-white/[0.035] p-6">
           <pre className="overflow-x-auto text-sm text-cyan-100">
-{`import { CONTRACTS, readProject } from '@arcwork/sdk'
+{`import { CONTRACTS, readProject } from '@arclayer/sdk'
 
 const project = await readProject(0n)
 console.log(CONTRACTS.MILESTONE_ESCROW, CONTRACTS.JOB_ESCROW, project)`}

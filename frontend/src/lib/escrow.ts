@@ -1,4 +1,4 @@
-import { CONTRACTS, ZERO_ADDRESS } from '@arcwork/sdk';
+import { CONTRACTS, ZERO_ADDRESS } from '@arclayer/sdk';
 
 export {
   milestoneEscrow,
@@ -10,7 +10,7 @@ export {
   readUserProjects,
   type MilestoneTuple,
   type ProjectTuple,
-} from '@arcwork/sdk';
+} from '@arclayer/sdk';
 
 export const ESCROW_CONFIGURED = (CONTRACTS.MILESTONE_ESCROW as string) !== ZERO_ADDRESS;
 export { ZERO_ADDRESS };

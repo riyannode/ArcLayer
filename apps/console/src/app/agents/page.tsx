@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useAccount, useWriteContract } from 'wagmi';
-import { buildRegisterAgentConfig } from '@arcwork/sdk';
+import { buildRegisterAgentConfig } from '@arclayer/sdk';
 import { fetchIndexerJson, type IndexedAgent, waitForIndexer } from '@/lib/indexer';
 import { StatusBanner } from '@/components/StatusBanner';
 import { shortenAddress } from '@/lib/contracts';

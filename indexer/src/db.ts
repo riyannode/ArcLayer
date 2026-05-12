@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import type { IndexedJobEvent } from "@arcwork/sdk";
+import type { IndexedJobEvent } from "@arclayer/sdk";
 import {
   buildAgentEventProjection,
   buildAgentsProjection,

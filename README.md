@@ -10,7 +10,7 @@
 
 ## Overview
 
-ArcLayer is the protocol pivot of the original ArcWork repo. The repository now carries:
+ArcLayer is the protocol pivot of the original escrow repo. The repository now carries:
 
 - the legacy `MilestoneEscrow` path that is already live on Arc testnet
 - a new contract-layer scaffold for `JobEscrow`, `AgentRegistry`, `WorkProof`, and `ReputationOracle`
@@ -104,7 +104,7 @@ The contract remains the source of truth. Cached metadata should only accelerate
 ## Repo Layout
 
 ```text
-arcwork/
+arclayer/
 ├── contracts/
 ├── sdk/
 ├── indexer/
@@ -164,7 +164,7 @@ Out of scope for V1:
 
 ## Summary
 
-ArcWork already has:
+ArcLayer already has:
 
 - a deployed milestone escrow contract on Arc testnet
 - a public frontend wired to the live contract

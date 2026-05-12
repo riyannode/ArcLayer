@@ -1,6 +1,6 @@
 import { http, fallback, createConfig } from 'wagmi';
 import { injected } from 'wagmi/connectors';
-import { ARC_RPC_URLS, arcTestnet } from '@arcwork/sdk';
+import { ARC_RPC_URLS, arcTestnet } from '@arclayer/sdk';
 
 export const config = createConfig({
   chains: [arcTestnet],

@@ -1,4 +1,4 @@
-# ArcWork Indexing Layer
+# ArcLayer Indexing Layer
 
 The contract is the source of truth. The indexer is a cache builder for fast dashboard and grant-review views.
 
