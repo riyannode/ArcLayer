@@ -82,6 +82,7 @@ export type IndexedJobEvent = {
   eventName: "JobCreated" | "JobFunded" | "DeliverableSubmitted" | "JobSettled";
   blockNumber: bigint;
   transactionHash: `0x${string}`;
+  logIndex: number;
   jobId?: bigint;
   agentId?: bigint;
   client?: Address;

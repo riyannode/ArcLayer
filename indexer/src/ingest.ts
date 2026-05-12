@@ -12,7 +12,7 @@ const MAX_BLOCK_RANGE = BigInt(10_000);
 
 export async function fetchJobEvents(fromBlock: bigint = BigInt(0)): Promise<IndexedJobEvent[]> {
   const latestBlock = await publicClient.getBlockNumber();
-  const eventGroups = [];
+  const eventGroups: any[] = [];
 
   for (const eventName of EVENT_NAMES) {
     for (let start = fromBlock; start <= latestBlock; start += MAX_BLOCK_RANGE + BigInt(1)) {
@@ -20,7 +20,7 @@ export async function fetchJobEvents(fromBlock: bigint = BigInt(0)): Promise<Ind
       const chunk = await publicClient.getContractEvents({
         address: CONTRACTS.JOB_ESCROW,
         abi: JOB_ESCROW_ABI,
-        eventName,
+        eventName: eventName as any,
         fromBlock: start,
         toBlock: end,
       });
@@ -30,10 +30,11 @@ export async function fetchJobEvents(fromBlock: bigint = BigInt(0)): Promise<Ind
 
   return eventGroups
     .flat()
-    .map((event) => ({
+    .map((event: any) => ({
       eventName: event.eventName as IndexedJobEvent["eventName"],
       blockNumber: event.blockNumber,
       transactionHash: event.transactionHash,
+      logIndex: event.logIndex ?? 0,
       ...(event.args as Record<string, unknown>),
     }))
     .sort((a, b) => Number(a.blockNumber - b.blockNumber));
