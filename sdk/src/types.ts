@@ -24,6 +24,41 @@ export type MilestoneTuple = readonly [
   number,
 ];
 
+export type AgentRecordTuple = readonly [
+  bigint,
+  `0x${string}`,
+  string,
+  Address,
+  bigint,
+  bigint,
+  boolean,
+];
+
+export type JobTuple = readonly [
+  bigint,
+  bigint,
+  Address,
+  Address,
+  Address,
+  bigint,
+  bigint,
+  bigint,
+  `0x${string}`,
+  string,
+  string,
+  boolean,
+  number,
+];
+
+export type WorkProofTuple = readonly [
+  bigint,
+  bigint,
+  Address,
+  bigint,
+  bigint,
+  string,
+];
+
 export type IndexedEscrowEvent = {
   eventName:
     | "ProjectCreated"
@@ -40,5 +75,20 @@ export type IndexedEscrowEvent = {
   totalAmount?: bigint;
   payout?: bigint;
   fee?: bigint;
+  deliverableURI?: string;
+};
+
+export type IndexedJobEvent = {
+  eventName: "JobCreated" | "JobFunded" | "DeliverableSubmitted" | "JobSettled";
+  blockNumber: bigint;
+  transactionHash: `0x${string}`;
+  jobId?: bigint;
+  agentId?: bigint;
+  client?: Address;
+  worker?: Address;
+  evaluator?: Address;
+  payout?: bigint;
+  fee?: bigint;
+  amount?: bigint;
   deliverableURI?: string;
 };

@@ -3,3 +3,4 @@ export * from "./addresses";
 export * from "./chain";
 export * from "./client";
 export * from "./types";
+export * from "./writes";

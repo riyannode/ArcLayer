@@ -1,31 +1,37 @@
-import { CONTRACTS, MILESTONE_ESCROW_ABI, publicClient } from "@arcwork/sdk";
-import type { IndexedEscrowEvent } from "@arcwork/sdk";
+import { CONTRACTS, JOB_ESCROW_ABI, publicClient } from "@arcwork/sdk";
+import type { IndexedJobEvent } from "@arcwork/sdk";
 
 const EVENT_NAMES = [
-  "ProjectCreated",
-  "ProjectFunded",
-  "MilestoneSubmitted",
-  "MilestoneReleased",
-  "WorkProofMinted",
+  "JobCreated",
+  "JobFunded",
+  "DeliverableSubmitted",
+  "JobSettled",
 ] as const;
 
-export async function fetchEscrowEvents(fromBlock: bigint = BigInt(0)): Promise<IndexedEscrowEvent[]> {
-  const eventGroups = await Promise.all(
-    EVENT_NAMES.map((eventName) =>
-      publicClient.getContractEvents({
-        address: CONTRACTS.MILESTONE_ESCROW,
-        abi: MILESTONE_ESCROW_ABI,
+const MAX_BLOCK_RANGE = BigInt(10_000);
+
+export async function fetchJobEvents(fromBlock: bigint = BigInt(0)): Promise<IndexedJobEvent[]> {
+  const latestBlock = await publicClient.getBlockNumber();
+  const eventGroups = [];
+
+  for (const eventName of EVENT_NAMES) {
+    for (let start = fromBlock; start <= latestBlock; start += MAX_BLOCK_RANGE + BigInt(1)) {
+      const end = start + MAX_BLOCK_RANGE > latestBlock ? latestBlock : start + MAX_BLOCK_RANGE;
+      const chunk = await publicClient.getContractEvents({
+        address: CONTRACTS.JOB_ESCROW,
+        abi: JOB_ESCROW_ABI,
         eventName,
-        fromBlock,
-        toBlock: "latest",
-      })
-    )
-  );
+        fromBlock: start,
+        toBlock: end,
+      });
+      eventGroups.push(chunk);
+    }
+  }
 
   return eventGroups
     .flat()
     .map((event) => ({
-      eventName: event.eventName as IndexedEscrowEvent["eventName"],
+      eventName: event.eventName as IndexedJobEvent["eventName"],
       blockNumber: event.blockNumber,
       transactionHash: event.transactionHash,
       ...(event.args as Record<string, unknown>),

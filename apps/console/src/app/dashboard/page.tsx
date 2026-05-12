@@ -1,146 +1,128 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo } from 'react';
-import { useAccount, useReadContract, useReadContracts } from 'wagmi';
-import { CONTRACTS, MILESTONE_ESCROW_ABI, PROJECT_STATUS, formatUSDC, shortenAddress } from '@/lib/contracts';
-import { ESCROW_CONFIGURED, ZERO_ADDRESS, type ProjectTuple, projectFromTuple } from '@/lib/escrow';
+import { useEffect, useMemo, useState } from 'react';
+import { useAccount } from 'wagmi';
+import { formatUSDC, shortenAddress } from '@/lib/contracts';
 
-const operatingStates = [
-  { label: 'Created', body: 'Freelancer has drafted project scope and milestones.' },
-  { label: 'Funded', body: 'Client has locked USDC into the Arc escrow contract.' },
-  { label: 'Submitted', body: 'Freelancer has attached a milestone delivery link.' },
-  { label: 'Released', body: 'Client has approved work and USDC has settled.' },
-];
+const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
+const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || 'http://localhost:4307';
 
-const demoProjects = [
-  ['Brand site redesign', '0x8A31...91F2', '1,250 USDC', 'Yes', '2 / 3', '1 / 3', 'Pending', '24'],
-  ['Launch deck build', '0x19BD...AA04', '640 USDC', 'Yes', '3 / 3', '3 / 3', 'Minted', '18'],
-  ['Audit handoff', '0x77E4...20CD', '900 USDC', 'Pending', '0 / 2', '0 / 2', 'None', '31'],
-];
+type IndexedJob = {
+  id: string;
+  agentId: string;
+  client: string;
+  worker: string;
+  evaluator: string;
+  budget: string;
+  fundedAmount: string;
+  createdAt: string;
+  jobSpecHash: string;
+  deliverableURI: string;
+  proofMetadataURI: string;
+  approved: boolean;
+  status: number;
+};
+
+type IndexedAgent = {
+  agentId: string;
+  controller: string;
+  skillHash: string;
+  metadataURI: string;
+  registeredAt: string;
+  reputationScore: string;
+  score: string;
+  jobs: string[];
+  proofTokenIds: string[];
+};
+
+type DashboardOverview = {
+  summary: {
+    eventCount: number;
+    jobs: number;
+    agents: number;
+    proofs: number;
+    totalBudget: string;
+    totalFunded: string;
+    settledJobs: number;
+    fundedJobs: number;
+  };
+  jobs: IndexedJob[];
+  agents: IndexedAgent[];
+  proofs: {
+    tokenId: string;
+    jobId: string;
+    agentId: string;
+    payer: string;
+    amountPaid: string;
+    mintedAt: string;
+    metadataURI: string;
+  }[];
+};
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
+  const [overview, setOverview] = useState<DashboardOverview | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const { data: projectCounter } = useReadContract({
-    address: CONTRACTS.MILESTONE_ESCROW,
-    abi: MILESTONE_ESCROW_ABI,
-    functionName: 'projectCounter',
-    query: { enabled: ESCROW_CONFIGURED },
-  });
+  useEffect(() => {
+    let cancelled = false;
 
-  const { data: userProjects } = useReadContract({
-    address: CONTRACTS.MILESTONE_ESCROW,
-    abi: MILESTONE_ESCROW_ABI,
-    functionName: 'getUserProjects',
-    args: [address || ZERO_ADDRESS],
-    query: { enabled: ESCROW_CONFIGURED && Boolean(address) },
-  });
+    async function load() {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const response = await fetch(`${INDEXER_BASE_URL}/overview`, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`Indexer returned HTTP ${response.status}.`);
+        }
+        const nextOverview = (await response.json()) as DashboardOverview;
 
-  const projectIds = (userProjects || []) as readonly bigint[];
-  const projectContracts = useMemo(
-    () =>
-      projectIds.map((id) => ({
-        address: CONTRACTS.MILESTONE_ESCROW,
-        abi: MILESTONE_ESCROW_ABI,
-        functionName: 'projects',
-        args: [id] as const,
-      })),
-    [projectIds]
-  );
+        if (!cancelled) {
+          setOverview(nextOverview);
+        }
+      } catch (nextError) {
+        if (!cancelled) {
+          setError(
+            nextError instanceof Error
+              ? nextError.message
+              : 'Failed to load protocol dashboard from the indexer.'
+          );
+          setOverview(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
 
-  const { data: projectReads } = useReadContracts({
-    contracts: projectContracts,
-    query: { enabled: ESCROW_CONFIGURED && projectIds.length > 0 },
-  });
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  const liveProjects =
-    projectReads
-      ?.filter((read) => read.status === 'success' && read.result)
-      .map((read) => projectFromTuple(read.result as unknown as ProjectTuple)) || [];
+  const jobs = overview?.jobs || [];
+  const agents = overview?.agents || [];
+  const summary = overview?.summary;
 
-  const totalLocked = liveProjects.reduce((sum, project) => sum + project.totalAmount, BigInt(0));
-  const totalReleased = liveProjects.reduce((sum, project) => sum + project.releasedAmount, BigInt(0));
+  const settledJobs = useMemo(() => jobs.filter((job) => job.status === 5), [jobs]);
+  const fundedJobs = useMemo(() => jobs.filter((job) => BigInt(job.fundedAmount) > BigInt(0)), [jobs]);
 
-  if (!isConnected) {
-    return (
-      <div className="relative px-6 py-20">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300/70">
-                Try without wallet
-              </p>
-              <h1 className="font-[var(--font-display)] text-[34px] font-semibold tracking-[-0.03em] md:text-[48px]">
-                Track escrow projects before connecting
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/50">
-                Grant reviewers and new users can inspect the operating model without a wallet.
-              </p>
-            </div>
-            <Link href="/docs" className="btn-primary self-start md:self-auto">
-              Read Quickstart
-            </Link>
-          </div>
-
-          <div className="hidden overflow-hidden rounded-xl border border-white/10 bg-white/[0.035] md:block">
-            <table className="w-full table-fixed border-collapse text-left">
-              <caption className="sr-only">Escrow projects and milestone status</caption>
-              <thead>
-                <tr className="border-b border-white/10 text-xs uppercase tracking-[0.16em] text-white/35">
-                  <th scope="col" className="px-5 py-3 font-semibold">Project</th>
-                  <th scope="col" className="px-5 py-3 font-semibold">Client</th>
-                  <th scope="col" className="px-5 py-3 font-semibold">Total</th>
-                  <th scope="col" className="px-5 py-3 font-semibold">Funded</th>
-                  <th scope="col" className="px-5 py-3 font-semibold">Submitted</th>
-                  <th scope="col" className="px-5 py-3 font-semibold">Released</th>
-                  <th scope="col" className="px-5 py-3 font-semibold">Proof</th>
-                </tr>
-              </thead>
-              <tbody>
-                {demoProjects.map((row) => (
-                  <tr key={row[0]} className="border-b border-white/5 text-sm last:border-b-0 hover:bg-white/[0.025]">
-                    <th scope="row" className="px-5 py-4 font-semibold text-white">
-                      <Link href={`/project/${row[7]}`} className="hover:text-cyan-200">{row[0]}</Link>
-                    </th>
-                    <td className="px-5 py-4 font-mono text-white/55">{row[1]}</td>
-                    <td className="px-5 py-4 font-mono text-white/70">{row[2]}</td>
-                    {row.slice(3, 7).map((value, index) => (
-                      <td key={`${row[7]}-${index}-${value}`} className={`px-5 py-4 ${value === 'Minted' || value === 'Yes' ? 'text-cyan-200' : 'text-white/55'}`}>
-                        {value}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="space-y-3 md:hidden">
-            {demoProjects.map((row) => (
-              <Link href={`/project/${row[7]}`} key={row[0]} className="block rounded-xl border border-white/10 bg-white/[0.035] p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-semibold text-white">{row[0]}</p>
-                    <p className="mt-1 font-mono text-xs text-white/45">{row[1]}</p>
-                  </div>
-                  <span className="font-mono text-sm text-cyan-200">{row[2]}</span>
-                </div>
-                <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-                  <span className="text-white/45">Funded <b className="text-white/75">{row[3]}</b></span>
-                  <span className="text-white/45">Submitted <b className="text-white/75">{row[4]}</b></span>
-                  <span className="text-white/45">Released <b className="text-white/75">{row[5]}</b></span>
-                  <span className="text-white/45">Proof <b className="text-cyan-200">{row[6]}</b></span>
-                </div>
-              </Link>
-            ))}
-          </div>
-          <p className="mt-5 text-xs leading-5 text-white/40">
-            Connect wallet from the top navigation to replace demo rows with live Arc escrow data.
-          </p>
-        </div>
-      </div>
+  const connectedJobs = useMemo(() => {
+    if (!address) return [];
+    const lower = address.toLowerCase();
+    return jobs.filter(
+      (job) =>
+        job.client.toLowerCase() === lower ||
+        job.worker.toLowerCase() === lower ||
+        job.evaluator.toLowerCase() === lower
     );
-  }
+  }, [address, jobs]);
+
+  const topAgents = useMemo(() => [...agents].sort((a, b) => Number(BigInt(b.score) - BigInt(a.score))).slice(0, 6), [agents]);
 
   return (
     <div className="relative px-6 py-24">
@@ -148,13 +130,13 @@ export default function Dashboard() {
         <div className="mb-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
             <p className="mb-3 text-xs font-light uppercase tracking-[0.24em] text-cyan-300/70">
-              Escrow dashboard
+              Protocol dashboard
             </p>
             <h1 className="text-[36px] font-light leading-tight md:text-[52px]">
-              Milestone command center
+              JobEscrow and AgentRegistry overview
             </h1>
             <p className="mt-3 text-sm font-light text-white/45">
-              {shortenAddress(address || '')} · Arc Testnet
+              {isConnected && address ? `${shortenAddress(address)} · ` : ''}Arc Testnet protocol telemetry
             </p>
           </div>
           <Link href="/docs" className="btn-primary self-start md:self-auto">
@@ -162,69 +144,156 @@ export default function Dashboard() {
           </Link>
         </div>
 
-        {!ESCROW_CONFIGURED && (
+        {error && (
           <div className="mb-8 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-5">
             <p className="text-sm font-light text-amber-100">
-              MilestoneEscrow is not deployed yet. Deploy the V1 contract, then replace
-              <span className="font-medium"> CONTRACTS.MILESTONE_ESCROW </span>
-              in <span className="font-medium">frontend/src/lib/contracts.ts</span>.
+              {error} Start the indexer with <span className="font-mono">corepack pnpm --dir indexer start</span>.
             </p>
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
           <div className="glass-card p-6">
-            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Total projects</p>
-            <p className="mt-4 text-4xl font-light">{ESCROW_CONFIGURED ? String(projectCounter || BigInt(0)) : '0'}</p>
+            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Jobs</p>
+            <p className="mt-4 text-4xl font-light">{isLoading ? '...' : summary?.jobs ?? 0}</p>
           </div>
           <div className="glass-card p-6">
-            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Your projects</p>
-            <p className="mt-4 text-4xl font-light">{projectIds.length}</p>
+            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Agents</p>
+            <p className="mt-4 text-4xl font-light">{isLoading ? '...' : summary?.agents ?? 0}</p>
           </div>
           <div className="glass-card p-6">
-            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Locked</p>
-            <p className="mt-4 text-4xl font-light">{formatUSDC(totalLocked)}</p>
+            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Budgeted</p>
+            <p className="mt-4 text-4xl font-light">{isLoading || !summary ? '...' : formatUSDC(BigInt(summary.totalBudget))}</p>
+          </div>
+          <div className="glass-card p-6">
+            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Funded</p>
+            <p className="mt-4 text-4xl font-light">{isLoading || !summary ? '...' : formatUSDC(BigInt(summary.totalFunded))}</p>
           </div>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1.05fr_0.95fr]">
           <div className="glass-card p-6">
-            <h2 className="text-lg font-light">Live projects</h2>
+            <h2 className="text-lg font-light">Live jobs</h2>
             <div className="mt-5 space-y-3">
-              {liveProjects.length > 0 ? (
-                liveProjects.map((project) => (
-                  <Link href={`/project/${project.id.toString()}`} key={project.id.toString()} className="block rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-cyan-300/30">
+              {jobs.length > 0 ? (
+                jobs.map((job) => (
+                  <Link
+                    href={`/job/${job.id.toString()}`}
+                    key={job.id}
+                    className="block rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-cyan-300/30"
+                  >
                     <div className="flex items-center justify-between gap-4">
-                      <span className="truncate text-sm font-semibold text-white">{project.title || `Project #${project.id.toString()}`}</span>
-                      <span className="font-mono text-xs text-cyan-200">{formatUSDC(project.totalAmount)} USDC</span>
+                      <span className="truncate text-sm font-semibold text-white">Job #{job.id}</span>
+                      <span className="font-mono text-xs text-cyan-200">{formatUSDC(BigInt(job.budget))} USDC</span>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-4 text-xs text-white/45">
-                      <span>{PROJECT_STATUS[project.status]}</span>
-                      <span>{formatUSDC(project.releasedAmount)} released</span>
+                      <span>Agent #{job.agentId}</span>
+                      <span>{JOB_STATUS[job.status]}</span>
                     </div>
                   </Link>
                 ))
               ) : (
                 <p className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm font-light leading-7 text-white/45">
-                  No onchain project IDs found for this wallet yet. Create a project first, then fund it from the client wallet.
+                  {isLoading ? 'Loading jobs...' : 'No protocol jobs found yet.'}
                 </p>
               )}
             </div>
           </div>
 
           <div className="glass-card p-6">
-            <h2 className="text-lg font-light">V1 operating flow</h2>
-            <div className="mt-5 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-cyan-100/70">Live settlement</p>
-              <p className="mt-2 font-mono text-sm text-white/75">{formatUSDC(totalReleased)} USDC released</p>
+            <h2 className="text-lg font-light">Top agents</h2>
+            <div className="mt-5 space-y-3">
+              {topAgents.length > 0 ? (
+                topAgents.map((profile) => (
+                  <Link
+                    href={`/agent/${profile.agentId}`}
+                    key={profile.agentId}
+                    className="block rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-cyan-300/30"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="truncate text-sm font-semibold text-white">Agent #{profile.agentId}</span>
+                      <span className="font-mono text-xs text-cyan-200">Score {profile.score}</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-4 text-xs text-white/45">
+                      <span>{shortenAddress(profile.controller)}</span>
+                      <span>{profile.jobs.length} jobs</span>
+                    </div>
+                  </Link>
+                ))
+              ) : (
+                <p className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm font-light leading-7 text-white/45">
+                  {isLoading ? 'Loading agents...' : 'No registered agents were discovered from active jobs.'}
+                </p>
+              )}
             </div>
+          </div>
+        </div>
+
+        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+          <div className="glass-card p-6">
+            <h2 className="text-lg font-light">Protocol flow</h2>
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {operatingStates.map((state) => (
+              {[
+                { label: 'Created', body: 'Client created a job and assigned an agent identity.' },
+                { label: 'Funded', body: 'Escrow received USDC against the job budget.' },
+                { label: 'Evaluated', body: 'Evaluator marked the deliverable as approved or rejected.' },
+                { label: 'Settled', body: 'Worker was paid and WorkProof could be minted.' },
+              ].map((state) => (
                 <div key={state.label} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                   <p className="text-sm font-medium text-white">{state.label}</p>
                   <p className="mt-2 text-sm font-light leading-6 text-white/45">{state.body}</p>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="glass-card p-6">
+            <h2 className="text-lg font-light">Connected wallet view</h2>
+            <div className="mt-5 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-cyan-100/70">Protocol participation</p>
+              <p className="mt-2 font-mono text-sm text-white/75">
+                {isConnected && address ? `${connectedJobs.length} matching jobs` : 'Connect wallet to filter jobs'}
+              </p>
+            </div>
+            <div className="mt-5 space-y-3">
+              {isConnected && address ? (
+                connectedJobs.length > 0 ? (
+                  connectedJobs.map((job) => (
+                    <Link
+                      href={`/job/${job.id}`}
+                      key={`connected-${job.id}`}
+                      className="block rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-cyan-300/30"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm font-semibold text-white">Job #{job.id}</span>
+                        <span className="font-mono text-xs text-cyan-200">{JOB_STATUS[job.status]}</span>
+                      </div>
+                      <div className="mt-2 text-xs text-white/45">
+                        Client {shortenAddress(job.client)} · Worker {shortenAddress(job.worker)}
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <p className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm font-light leading-7 text-white/45">
+                    No `JobEscrow` records found for this wallet yet.
+                  </p>
+                )
+              ) : (
+                <p className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm font-light leading-7 text-white/45">
+                  Connect wallet from the navigation to filter the dashboard by client, worker, or evaluator address.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-white/35">Settled jobs</p>
+                <p className="mt-2 font-mono text-white/80">{summary?.settledJobs ?? settledJobs.length}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-xs uppercase tracking-[0.16em] text-white/35">Funded jobs</p>
+                <p className="mt-2 font-mono text-white/80">{summary?.fundedJobs ?? fundedJobs.length}</p>
+              </div>
             </div>
           </div>
         </div>
