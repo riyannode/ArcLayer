@@ -20,8 +20,8 @@ export default function HomeHero() {
 
       {/* Headline — slogan */}
       <h1
-        className="aureo-display text-[58px] text-[#EAE4D8] sm:text-[80px] md:text-[104px] lg:text-[120px]"
-        style={{ lineHeight: 0.88 }}
+        className="aureo-display text-[48px] text-[#EAE4D8] sm:text-[64px] md:text-[76px] lg:text-[84px]"
+        style={{ lineHeight: 0.92 }}
       >
         <span className="block section-reveal" style={{ animationDelay: '0.05s' }}>
           PROTOCOL

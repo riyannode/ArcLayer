@@ -210,7 +210,7 @@ export default function HexGrid3D() {
       aria-hidden="true"
     >
       {/* Layer 1 — outer dashed orbital rings (rotate Z, slow CW) */}
-      <div className="hex-layer-outer absolute" style={{ width: 640, height: 640 }}>
+      <div className="hex-layer-outer absolute" style={{ width: 560, height: 560 }}>
         <svg viewBox="-320 -320 640 640" className="h-full w-full">
           <circle
             cx="0"
@@ -242,7 +242,7 @@ export default function HexGrid3D() {
       </div>
 
       {/* Layer 2 — hex cells stage (Y-axis, main honeycomb) */}
-      <div className="hex-stage relative" style={{ width: 640, height: 640 }}>
+      <div className="hex-stage relative" style={{ width: 560, height: 560 }}>
         <div
           className="absolute inset-0"
           style={{
@@ -368,52 +368,15 @@ export default function HexGrid3D() {
         </svg>
       </div>
 
-      {/* Layer 3 — central core: ArcMark logo, counter-rotating on Y */}
+      {/* Layer 3 — central core: ArcMark logo (no shield), counter-rotating on Y */}
       <div
         className="hex-core absolute flex items-center justify-center"
         style={{
-          width: 300,
-          height: 300,
+          width: 220,
+          height: 220,
           transform: 'translateZ(140px)',
         }}
       >
-        <svg viewBox="-80 -80 160 160" className="absolute inset-0 h-full w-full">
-          <defs>
-            <radialGradient id="coreFill" cx="0.5" cy="0.5" r="0.5">
-              <stop offset="0" stopColor="#0a0a0a" stopOpacity="1" />
-              <stop offset="0.7" stopColor="#050505" stopOpacity="0.98" />
-              <stop offset="1" stopColor="#050505" stopOpacity="0.92" />
-            </radialGradient>
-            <filter id="coreGlowStrong" x="-60%" y="-60%" width="220%" height="220%">
-              <feGaussianBlur stdDeviation="3" result="b" />
-              <feMerge>
-                <feMergeNode in="b" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-          <path
-            d={hexPath(72)}
-            fill="url(#coreFill)"
-            stroke="rgba(197, 166, 124, 0.95)"
-            strokeWidth="1.8"
-            filter="url(#coreGlowStrong)"
-          />
-          <path
-            d={hexPath(64)}
-            fill="none"
-            stroke="rgba(234, 228, 216, 0.5)"
-            strokeWidth="0.7"
-            strokeDasharray="2 3"
-            className="hex-core-ring"
-          />
-          <path
-            d={hexPath(54)}
-            fill="none"
-            stroke="rgba(197, 166, 124, 0.3)"
-            strokeWidth="0.5"
-          />
-        </svg>
         <div className="relative z-10 hex-core-logo">
           <ArcMark size={140} />
         </div>
@@ -465,17 +428,18 @@ export default function HexGrid3D() {
           100% { transform: rotateX(-28deg) rotateY(-360deg); }
         }
 
-        /* Layer 3: core frame, Y-axis CW fast (counter to stage) */
+        /* Layer 3: core logo, Y-axis rotation (no shield frame, logo itself rotates) */
         .hex-core {
           transform-style: preserve-3d;
-          animation: hex-core-spin 14s linear infinite;
+          animation: hex-core-spin 12s linear infinite;
         }
         @keyframes hex-core-spin {
-          0%   { transform: translateZ(140px) rotateY(0deg); }
-          100% { transform: translateZ(140px) rotateY(360deg); }
+          0%   { transform: translateZ(140px) translateY(0px) rotateY(0deg); }
+          50%  { transform: translateZ(140px) translateY(-8px) rotateY(180deg); }
+          100% { transform: translateZ(140px) translateY(0px) rotateY(360deg); }
         }
 
-        /* Logo breathing — scale + glow, does not rotate with frame */
+        /* Logo breathing — scale + glow, stacks on top of core rotation */
         .hex-core-logo {
           animation: hex-core-breathe 3.6s ease-in-out infinite;
           transform-style: preserve-3d;
@@ -484,23 +448,15 @@ export default function HexGrid3D() {
           0%, 100% {
             transform: scale(1);
             filter:
-              drop-shadow(0 0 14px rgba(197, 166, 124, 0.75))
-              drop-shadow(0 0 30px rgba(234, 228, 216, 0.28));
+              drop-shadow(0 0 18px rgba(197, 166, 124, 0.85))
+              drop-shadow(0 0 38px rgba(234, 228, 216, 0.35));
           }
           50% {
-            transform: scale(1.08);
+            transform: scale(1.1);
             filter:
-              drop-shadow(0 0 30px rgba(197, 166, 124, 1))
-              drop-shadow(0 0 52px rgba(234, 228, 216, 0.48));
+              drop-shadow(0 0 36px rgba(197, 166, 124, 1))
+              drop-shadow(0 0 62px rgba(234, 228, 216, 0.55));
           }
-        }
-
-        .hex-core-ring {
-          transform-origin: center;
-          animation: hex-ring-rotate 18s linear infinite;
-        }
-        @keyframes hex-ring-rotate {
-          to { transform: rotate(360deg); }
         }
 
         .hex-active {
@@ -535,7 +491,6 @@ export default function HexGrid3D() {
           .hex-stage,
           .hex-core,
           .hex-core-logo,
-          .hex-core-ring,
           .hex-active,
           .hex-core-dot,
           .hex-scan {

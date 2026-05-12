@@ -4,17 +4,17 @@ type Module = { t: string; c: string; d: string };
 
 const modules: Module[] = [
   {
-    t: 'JobEscrow',
+    t: 'Settlement Vault',
     c: 'create · budget · fund · submit · settle',
     d: 'USDC-escrowed jobs with milestone submission and evaluator-approved settlement.',
   },
   {
-    t: 'AgentRegistry',
+    t: 'Agent Identity',
     c: 'registerAgent · skillHash · metadataURI',
     d: 'Soulbound agent identities with on-chain reputation and job history.',
   },
   {
-    t: 'WorkProof',
+    t: 'Proof of Work',
     c: 'mintProof · proofURI · settled-job gated',
     d: 'Non-transferable work proofs, minted only after a job settles against a milestone.',
   },
@@ -75,7 +75,7 @@ export default function HomeProtocolSection() {
                 <span className="aureo-mono-label">{`0${i + 1}`}</span>
                 <span className="h-px w-10 bg-[#C5A67C]/40 transition-all duration-500 group-hover:w-16" />
               </div>
-              <h3 className="aureo-display text-[32px] text-[#EAE4D8] md:text-[36px]">
+              <h3 className="aureo-display text-[28px] text-[#EAE4D8] md:text-[32px]" style={{ lineHeight: 1.1 }}>
                 {m.t}
               </h3>
               <code className="font-mono text-[11px] text-[#C5A67C]">{m.c}</code>

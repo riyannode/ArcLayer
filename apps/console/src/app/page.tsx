@@ -40,10 +40,10 @@ export default function Home() {
       <HomeSidebar />
 
       <main className="relative z-20 min-h-screen md:pl-[56px]">
-        <div className="relative mx-auto grid max-w-[1600px] grid-cols-1 gap-8 px-6 py-12 md:grid-cols-[1.05fr_0.95fr] md:gap-14 md:px-12 md:py-20 lg:px-20">
+        <div className="relative mx-auto grid max-w-[1480px] grid-cols-1 gap-8 px-6 py-10 md:grid-cols-[1.18fr_0.82fr] md:gap-12 md:px-10 md:py-16 lg:px-14">
           <HomeHero />
 
-          <div className="relative flex min-h-[520px] flex-col gap-8 md:min-h-[780px]">
+          <div className="relative flex min-h-[480px] flex-col gap-8 md:min-h-[680px]">
             <div className="relative flex flex-1 items-center justify-center">
               <HexGrid3D />
               <HomeFeaturedCard />

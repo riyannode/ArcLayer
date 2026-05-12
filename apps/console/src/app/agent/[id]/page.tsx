@@ -249,7 +249,7 @@ export default function AgentProfilePage() {
           </section>
 
           <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
-            <div className="aureo-mono-label mb-2">WORK PROOFS</div>
+            <div className="aureo-mono-label mb-2">PROOF OF WORK</div>
             <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Soulbound history</h2>
             <div className="mt-5 space-y-3">
               {proofs.length > 0 ? (

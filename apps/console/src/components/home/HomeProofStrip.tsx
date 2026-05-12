@@ -5,10 +5,10 @@
  * with explorer links. Proves the protocol is real, not marketing copy.
  */
 const contracts = [
-  { label: 'JOB ESCROW', addr: '0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225' },
-  { label: 'AGENT REGISTRY', addr: '0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21' },
-  { label: 'WORK PROOF', addr: '0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5' },
-  { label: 'MILESTONE ESCROW', addr: '0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2' },
+  { label: 'SETTLEMENT VAULT', addr: '0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225' },
+  { label: 'AGENT IDENTITY', addr: '0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21' },
+  { label: 'PROOF OF WORK', addr: '0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5' },
+  { label: 'MILESTONE', addr: '0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2' },
 ];
 
 const ARC_EXPLORER = 'https://explorer.testnet.arc.network';
