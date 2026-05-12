@@ -20,7 +20,7 @@ function parseIndexPath(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   const segments = parseIndexPath(request);
-  const events = await fetchJobEvents(DEFAULT_FROM_BLOCK);
+  const { events } = await fetchJobEvents(DEFAULT_FROM_BLOCK);
 
   if (segments.length === 0) {
     return NextResponse.json({
