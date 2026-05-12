@@ -2,26 +2,35 @@
 
 type BannerTone = 'idle' | 'pending' | 'synced' | 'error';
 
-const TONE_STYLES: Record<BannerTone, string> = {
-  idle: 'border-white/10 bg-black/20 text-white/45',
-  pending: 'border-cyan-300/20 bg-cyan-300/[0.08] text-cyan-50',
-  synced: 'border-emerald-300/20 bg-emerald-300/[0.08] text-emerald-50',
-  error: 'border-amber-300/20 bg-amber-300/10 text-amber-100',
+const TONE_STYLES: Record<BannerTone, { border: string; bg: string; fg: string; accent: string }> = {
+  idle: { border: 'rgba(255, 255, 255, 0.1)', bg: 'rgba(10, 10, 10, 0.6)', fg: '#9a9a9a', accent: '#7A7A7A' },
+  pending: { border: 'rgba(197, 166, 124, 0.4)', bg: 'rgba(197, 166, 124, 0.06)', fg: '#EAE4D8', accent: '#C5A67C' },
+  synced: { border: 'rgba(184, 205, 126, 0.4)', bg: 'rgba(184, 205, 126, 0.06)', fg: '#EAE4D8', accent: '#B8CD7E' },
+  error: { border: 'rgba(230, 130, 130, 0.4)', bg: 'rgba(230, 130, 130, 0.06)', fg: '#f0c5c5', accent: '#e68282' },
 };
 
-export function StatusBanner({
-  tone,
-  title,
-  body,
-}: {
-  tone: BannerTone;
-  title: string;
-  body: string;
-}) {
+export function StatusBanner({ tone, title, body }: { tone: BannerTone; title: string; body: string }) {
+  const s = TONE_STYLES[tone];
   return (
-    <div className={`rounded-xl border p-4 text-sm leading-6 ${TONE_STYLES[tone]}`}>
-      <p className="text-xs font-semibold uppercase tracking-[0.18em]">{title}</p>
-      <p className="mt-2">{body}</p>
+    <div
+      className="relative overflow-hidden p-4"
+      style={{
+        border: `1px solid ${s.border}`,
+        background: s.bg,
+        color: s.fg,
+      }}
+    >
+      <span
+        className="absolute left-0 top-0 h-full w-[2px]"
+        style={{ background: s.accent, boxShadow: `0 0 8px ${s.accent}` }}
+      />
+      <div className="pl-3">
+        <div className="flex items-center gap-2">
+          {tone === 'pending' && <span className="pulse-dot" style={{ background: s.accent }} />}
+          <p className="aureo-mono-label" style={{ color: s.accent }}>{title}</p>
+        </div>
+        <p className="mt-1.5 font-mono text-[11.5px] leading-5" style={{ color: s.fg }}>{body}</p>
+      </div>
     </div>
   );
 }

@@ -18,23 +18,14 @@ export default function Dashboard() {
 
   async function loadOverview(options?: { silent?: boolean }) {
     try {
-      if (options?.silent) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
-      }
+      if (options?.silent) setIsRefreshing(true);
+      else setIsLoading(true);
       setError(null);
-      const nextOverview = await fetchIndexerJson<DashboardOverview>('/overview');
-      setOverview(nextOverview);
+      const next = await fetchIndexerJson<DashboardOverview>('/overview');
+      setOverview(next);
     } catch (nextError) {
-      setError(
-        nextError instanceof Error
-          ? nextError.message
-          : 'Failed to load protocol dashboard from the indexer.'
-      );
-      if (!options?.silent) {
-        setOverview(null);
-      }
+      setError(nextError instanceof Error ? nextError.message : 'Failed to load protocol dashboard.');
+      if (!options?.silent) setOverview(null);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -43,64 +34,54 @@ export default function Dashboard() {
 
   useEffect(() => {
     loadOverview();
-    const interval = window.setInterval(() => {
-      loadOverview({ silent: true });
-    }, 15000);
-    return () => window.clearInterval(interval);
+    const id = window.setInterval(() => loadOverview({ silent: true }), 15000);
+    return () => window.clearInterval(id);
   }, []);
 
   const jobs = overview?.jobs || [];
   const agents = overview?.agents || [];
   const summary = overview?.summary;
 
-  const settledJobs = useMemo(() => jobs.filter((job) => job.status === 5), [jobs]);
-  const fundedJobs = useMemo(() => jobs.filter((job) => BigInt(job.fundedAmount) > BigInt(0)), [jobs]);
-
+  const settledJobs = useMemo(() => jobs.filter((j) => j.status === 5), [jobs]);
+  const fundedJobs = useMemo(() => jobs.filter((j) => BigInt(j.fundedAmount) > BigInt(0)), [jobs]);
   const connectedJobs = useMemo(() => {
     if (!address) return [];
     const lower = address.toLowerCase();
-    return jobs.filter(
-      (job) =>
-        job.client.toLowerCase() === lower ||
-        job.worker.toLowerCase() === lower ||
-        job.evaluator.toLowerCase() === lower
-    );
+    return jobs.filter((j) => j.client.toLowerCase() === lower || j.worker.toLowerCase() === lower || j.evaluator.toLowerCase() === lower);
   }, [address, jobs]);
-
   const topAgents = useMemo(() => [...agents].sort((a, b) => Number(BigInt(b.score) - BigInt(a.score))).slice(0, 6), [agents]);
 
   return (
-    <div className="relative px-6 py-24">
+    <div className="relative px-6 py-16 md:px-10 md:py-24">
       <div className="mx-auto max-w-7xl">
+        {/* Header */}
         <div className="mb-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-3 text-xs font-light uppercase tracking-[0.24em] text-cyan-300/70">
-              Protocol dashboard
-            </p>
-            <h1 className="text-[36px] font-light leading-tight md:text-[52px]">
-              JobEscrow and AgentRegistry overview
+            <div className="aureo-mono-label mb-3">PROTOCOL · CONSOLE</div>
+            <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
+              JobEscrow &amp; <span className="italic text-[#C5A67C]">AgentRegistry</span>
             </h1>
-            <p className="mt-3 text-sm font-light text-white/45">
-              {isConnected && address ? `${shortenAddress(address)} · ` : ''}Arc Testnet protocol telemetry
+            <p className="mt-3 max-w-xl font-mono text-[12px] leading-6 text-[#9a9a9a]">
+              {isConnected && address ? <><span className="text-[#C5A67C]">{shortenAddress(address)}</span> · </> : ''}
+              Arc Testnet · chain 5042002 · live protocol telemetry from @arclayer/indexer.
             </p>
           </div>
           <div className="flex gap-3 self-start md:self-auto">
             <button
               onClick={() => loadOverview({ silent: true })}
-              className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-white/80"
+              className="btn-bordered"
             >
-              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+              {isRefreshing ? 'REFRESHING…' : 'REFRESH'}
             </button>
-            <Link href="/docs" className="btn-primary">
-              SDK Quickstart
-            </Link>
+            <Link href="/docs" className="btn-primary">SDK QUICKSTART</Link>
           </div>
         </div>
 
         {error && (
-          <div className="mb-8 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-5">
-            <p className="text-sm font-light text-amber-100">
-              {error} Start the indexer with <span className="font-mono">corepack pnpm --dir indexer start</span>.
+          <div className="mb-8 p-5" style={{ border: '1px solid rgba(230, 130, 130, 0.35)', background: 'rgba(230, 130, 130, 0.06)' }}>
+            <div className="aureo-mono-label" style={{ color: '#e68282' }}>INDEXER · UNREACHABLE</div>
+            <p className="mt-2 font-mono text-[11.5px] leading-5 text-[#f0c5c5]">
+              {error} &nbsp;·&nbsp; start with <span className="text-[#C5A67C]">pnpm --dir indexer start</span>
             </p>
           </div>
         )}
@@ -109,117 +90,123 @@ export default function Dashboard() {
           <div className="mb-8">
             <StatusBanner
               tone={isRefreshing ? 'pending' : 'synced'}
-              title={isRefreshing ? 'Indexer Refreshing' : 'Indexer Synced'}
+              title={isRefreshing ? 'INDEXER · REFRESHING' : 'INDEXER · SYNCED'}
               body={
                 isRefreshing
-                  ? 'Refreshing overview from the indexer. Receipt status may already be final onchain while projections catch up.'
-                  : `Protocol snapshot loaded. ${summary?.eventCount ?? 0} indexed events across ${summary?.jobs ?? 0} jobs and ${summary?.agents ?? 0} agents.`
+                  ? 'Refreshing overview. Receipts may already be final on-chain while projections catch up.'
+                  : `${summary?.eventCount ?? 0} indexed events · ${summary?.jobs ?? 0} jobs · ${summary?.agents ?? 0} agents.`
               }
             />
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-4">
-          <div className="glass-card p-6">
-            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Jobs</p>
-            <p className="mt-4 text-4xl font-light">{isLoading ? '...' : summary?.jobs ?? 0}</p>
-          </div>
-          <div className="glass-card p-6">
-            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Agents</p>
-            <p className="mt-4 text-4xl font-light">{isLoading ? '...' : summary?.agents ?? 0}</p>
-          </div>
-          <div className="glass-card p-6">
-            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Budgeted</p>
-            <p className="mt-4 text-4xl font-light">{isLoading || !summary ? '...' : formatUSDC(BigInt(summary.totalBudget))}</p>
-          </div>
-          <div className="glass-card p-6">
-            <p className="text-xs font-light uppercase tracking-[0.2em] text-white/35">Funded</p>
-            <p className="mt-4 text-4xl font-light">{isLoading || !summary ? '...' : formatUSDC(BigInt(summary.totalFunded))}</p>
-          </div>
+        {/* KPI strip */}
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          {[
+            { k: 'JOBS', v: isLoading ? '…' : String(summary?.jobs ?? 0) },
+            { k: 'AGENTS', v: isLoading ? '…' : String(summary?.agents ?? 0) },
+            { k: 'BUDGETED', v: isLoading || !summary ? '…' : `${formatUSDC(BigInt(summary.totalBudget))}` },
+            { k: 'FUNDED', v: isLoading || !summary ? '…' : `${formatUSDC(BigInt(summary.totalFunded))}` },
+          ].map((s, i) => (
+            <div
+              key={s.k}
+              className="flex flex-col gap-3 p-5"
+              style={{
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                background: 'rgba(10, 10, 10, 0.6)',
+                animation: `fadeInUp 0.4s ${i * 0.05}s both cubic-bezier(0.16, 1, 0.3, 1)`,
+              }}
+            >
+              <span className="aureo-mono-label">{s.k}</span>
+              <span className="aureo-display text-[38px] text-[#EAE4D8] md:text-[46px]">{s.v}</span>
+              <span className="h-px w-8 bg-[#C5A67C]/50" />
+            </div>
+          ))}
         </div>
 
+        {/* Live jobs + top agents */}
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="glass-card p-6">
-            <h2 className="text-lg font-light">Live jobs</h2>
-            <div className="mt-5 space-y-3">
-              {jobs.length > 0 ? (
-                jobs.map((job) => (
-                  <Link
-                    href={`/job/${job.id.toString()}`}
-                    key={job.id}
-                    className="block rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-cyan-300/30"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="truncate text-sm font-semibold text-white">Job #{job.id}</span>
-                      <span className="font-mono text-xs text-cyan-200">{formatUSDC(BigInt(job.budget))} USDC</span>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-4 text-xs text-white/45">
-                      <span>Agent #{job.agentId}</span>
-                      <span>{JOB_STATUS[job.status]}</span>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <p className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm font-light leading-7 text-white/45">
-                  {isLoading ? 'Loading jobs...' : 'No protocol jobs found yet.'}
-                </p>
-              )}
-            </div>
-          </div>
+          <ListPanel title="Live jobs" count={jobs.length}>
+            {jobs.length > 0 ? (
+              jobs.map((job) => (
+                <Link
+                  href={`/job/${job.id.toString()}`}
+                  key={job.id}
+                  className="ledger-row block border border-white/10 bg-black/20 px-4 py-3"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-mono text-[12.5px] text-[#EAE4D8]">Job #{job.id}</span>
+                    <span className="font-mono text-[11px] text-[#C5A67C]">{formatUSDC(BigInt(job.budget))} USDC</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#7A7A7A]">
+                    <span>Agent #{job.agentId}</span>
+                    <span className="chip-status pending">{JOB_STATUS[job.status]}</span>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              <Empty msg={isLoading ? 'Loading jobs…' : 'No protocol jobs indexed yet.'} />
+            )}
+          </ListPanel>
 
-          <div className="glass-card p-6">
-            <h2 className="text-lg font-light">Top agents</h2>
-            <div className="mt-5 space-y-3">
-              {topAgents.length > 0 ? (
-                topAgents.map((profile) => (
-                  <Link
-                    href={`/agent/${profile.agentId}`}
-                    key={profile.agentId}
-                    className="block rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-cyan-300/30"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="truncate text-sm font-semibold text-white">Agent #{profile.agentId}</span>
-                      <span className="font-mono text-xs text-cyan-200">Score {profile.score}</span>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-4 text-xs text-white/45">
-                      <span>{shortenAddress(profile.controller)}</span>
-                      <span>{profile.jobs.length} jobs</span>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <p className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm font-light leading-7 text-white/45">
-                  {isLoading ? 'Loading agents...' : 'No registered agents were discovered from active jobs.'}
-                </p>
-              )}
-            </div>
-          </div>
+          <ListPanel title="Top agents" count={topAgents.length}>
+            {topAgents.length > 0 ? (
+              topAgents.map((a) => (
+                <Link
+                  href={`/agent/${a.agentId}`}
+                  key={a.agentId}
+                  className="ledger-row block border border-white/10 bg-black/20 px-4 py-3"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-mono text-[12.5px] text-[#EAE4D8]">Agent #{a.agentId}</span>
+                    <span className="font-mono text-[11px] text-[#C5A67C]">Score {a.score}</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#7A7A7A]">
+                    <span>{shortenAddress(a.controller)}</span>
+                    <span>{a.jobs.length} jobs</span>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              <Empty msg={isLoading ? 'Loading agents…' : 'No registered agents from active jobs.'} />
+            )}
+          </ListPanel>
         </div>
 
+        {/* Protocol flow + wallet view */}
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className="glass-card p-6">
-            <h2 className="text-lg font-light">Protocol flow</h2>
+          <div className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+            <div className="aureo-mono-label mb-4">PROTOCOL · FLOW</div>
+            <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Lifecycle</h2>
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {[
-                { label: 'Created', body: 'Client created a job and assigned an agent identity.' },
-                { label: 'Funded', body: 'Escrow received USDC against the job budget.' },
-                { label: 'Evaluated', body: 'Evaluator marked the deliverable as approved or rejected.' },
-                { label: 'Settled', body: 'Worker was paid and WorkProof could be minted.' },
-              ].map((state) => (
-                <div key={state.label} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="text-sm font-medium text-white">{state.label}</p>
-                  <p className="mt-2 text-sm font-light leading-6 text-white/45">{state.body}</p>
+                { l: 'Created', b: 'Client opens a job and assigns an agent identity.' },
+                { l: 'Funded', b: 'Escrow receives USDC against the job budget.' },
+                { l: 'Evaluated', b: 'Evaluator marks the deliverable approved or rejected.' },
+                { l: 'Settled', b: 'Worker is paid; WorkProof becomes mintable.' },
+              ].map((state, i) => (
+                <div
+                  key={state.l}
+                  className="p-4"
+                  style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0, 0, 0, 0.3)' }}
+                >
+                  <p className="font-mono text-[10px] tracking-[0.2em] text-[#C5A67C]">0{i + 1} · {state.l.toUpperCase()}</p>
+                  <p className="mt-2 font-mono text-[11px] leading-5 text-[#9a9a9a]">{state.b}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="glass-card p-6">
-            <h2 className="text-lg font-light">Connected wallet view</h2>
-            <div className="mt-5 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-cyan-100/70">Protocol participation</p>
-              <p className="mt-2 font-mono text-sm text-white/75">
-                {isConnected && address ? `${connectedJobs.length} matching jobs` : 'Connect wallet to filter jobs'}
+          <div className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+            <div className="aureo-mono-label mb-4">WALLET · VIEW</div>
+            <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Your jobs</h2>
+            <div
+              className="mt-5 p-4"
+              style={{ border: '1px solid rgba(197, 166, 124, 0.25)', background: 'rgba(197, 166, 124, 0.06)' }}
+            >
+              <p className="aureo-mono-label" style={{ color: '#C5A67C' }}>PARTICIPATION</p>
+              <p className="mt-2 font-mono text-[12px] text-[#EAE4D8]">
+                {isConnected && address ? `${connectedJobs.length} matching job${connectedJobs.length === 1 ? '' : 's'}` : 'Connect wallet to filter jobs'}
               </p>
             </div>
             <div className="mt-5 space-y-3">
@@ -229,42 +216,63 @@ export default function Dashboard() {
                     <Link
                       href={`/job/${job.id}`}
                       key={`connected-${job.id}`}
-                      className="block rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-cyan-300/30"
+                      className="ledger-row block border border-white/10 bg-black/20 px-4 py-3"
                     >
                       <div className="flex items-center justify-between gap-4">
-                        <span className="text-sm font-semibold text-white">Job #{job.id}</span>
-                        <span className="font-mono text-xs text-cyan-200">{JOB_STATUS[job.status]}</span>
+                        <span className="font-mono text-[12.5px] text-[#EAE4D8]">Job #{job.id}</span>
+                        <span className="chip-status pending">{JOB_STATUS[job.status]}</span>
                       </div>
-                      <div className="mt-2 text-xs text-white/45">
-                        Client {shortenAddress(job.client)} · Worker {shortenAddress(job.worker)}
+                      <div className="mt-2 font-mono text-[10.5px] text-[#7A7A7A]">
+                        client {shortenAddress(job.client)} · worker {shortenAddress(job.worker)}
                       </div>
                     </Link>
                   ))
                 ) : (
-                  <p className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm font-light leading-7 text-white/45">
-                    No `JobEscrow` records found for this wallet yet.
-                  </p>
+                  <Empty msg="No JobEscrow records found for this wallet yet." />
                 )
               ) : (
-                <p className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm font-light leading-7 text-white/45">
-                  Connect wallet from the navigation to filter the dashboard by client, worker, or evaluator address.
-                </p>
+                <Empty msg="Connect wallet from the navigation to filter by client, worker, or evaluator." />
               )}
             </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-xs uppercase tracking-[0.16em] text-white/35">Settled jobs</p>
-                <p className="mt-2 font-mono text-white/80">{summary?.settledJobs ?? settledJobs.length}</p>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-xs uppercase tracking-[0.16em] text-white/35">Funded jobs</p>
-                <p className="mt-2 font-mono text-white/80">{summary?.fundedJobs ?? fundedJobs.length}</p>
-              </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <Stat l="SETTLED" v={`${summary?.settledJobs ?? settledJobs.length}`} />
+              <Stat l="FUNDED" v={`${summary?.fundedJobs ?? fundedJobs.length}`} />
             </div>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ListPanel({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+  return (
+    <div className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="aureo-mono-label mb-2">LEDGER</div>
+          <h2 className="aureo-display text-[28px] text-[#EAE4D8]">{title}</h2>
+        </div>
+        <span className="font-mono text-[11px] text-[#C5A67C]">{count} indexed</span>
+      </div>
+      <div className="mt-5 space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function Empty({ msg }: { msg: string }) {
+  return (
+    <p className="p-4 font-mono text-[11.5px] leading-5 text-[#7A7A7A]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0, 0, 0, 0.25)' }}>
+      {msg}
+    </p>
+  );
+}
+
+function Stat({ l, v }: { l: string; v: string }) {
+  return (
+    <div className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0, 0, 0, 0.3)' }}>
+      <p className="aureo-mono-label">{l}</p>
+      <p className="mt-1.5 font-mono text-[13px] text-[#EAE4D8]">{v}</p>
     </div>
   );
 }

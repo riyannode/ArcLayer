@@ -3,11 +3,12 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * AUREO dot-matrix particle field.
- * - Canvas-backed, full-bleed.
- * - Slow orbital drift + pointer parallax.
- * - Gold particles on near-black.
- * - DOM fallback: dot-pattern CSS behind canvas.
+ * Ambient ArcLayer background.
+ * - Dot-matrix gold particles with slow orbital drift
+ * - Faint radial grid pulse
+ * - Pointer parallax
+ * - Scanline sweep
+ * - DOM fallback behind canvas
  */
 export default function DotMatrixField() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -25,16 +26,12 @@ export default function DotMatrixField() {
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
 
     type P = {
-      x: number;
-      y: number;
-      baseX: number;
-      baseY: number;
-      r: number;
-      phase: number;
-      speed: number;
+      baseX: number; baseY: number;
+      r: number; phase: number; speed: number;
       alpha: number;
     };
     let particles: P[] = [];
+    let links: Array<[number, number, number]> = []; // i, j, distSq
 
     const resize = () => {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -48,7 +45,8 @@ export default function DotMatrixField() {
 
     const seed = () => {
       particles = [];
-      const spacing = 42;
+      links = [];
+      const spacing = 44;
       const cols = Math.ceil(w / spacing) + 2;
       const rows = Math.ceil(h / spacing) + 2;
       for (let i = 0; i < cols; i++) {
@@ -56,15 +54,25 @@ export default function DotMatrixField() {
           const baseX = i * spacing + (j % 2 === 0 ? 0 : spacing / 2);
           const baseY = j * spacing;
           particles.push({
-            x: baseX,
-            y: baseY,
-            baseX,
-            baseY,
-            r: Math.random() * 0.6 + 0.35,
+            baseX, baseY,
+            r: Math.random() * 0.6 + 0.4,
             phase: Math.random() * Math.PI * 2,
-            speed: 0.18 + Math.random() * 0.22,
-            alpha: 0.12 + Math.random() * 0.28,
+            speed: 0.16 + Math.random() * 0.22,
+            alpha: 0.1 + Math.random() * 0.3,
           });
+        }
+      }
+      // precompute sparse neighbor link candidates (just horizontal+vertical)
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        for (let j = i + 1; j < particles.length; j++) {
+          const q = particles[j];
+          const dx = p.baseX - q.baseX;
+          const dy = p.baseY - q.baseY;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < spacing * spacing * 1.2) {
+            links.push([i, j, d2]);
+          }
         }
       }
     };
@@ -80,7 +88,6 @@ export default function DotMatrixField() {
     const tick = (now: number) => {
       const t = (now - start) / 1000;
 
-      // smooth pointer
       pointerRef.current.x += (pointerRef.current.tx - pointerRef.current.x) * 0.04;
       pointerRef.current.y += (pointerRef.current.ty - pointerRef.current.y) * 0.04;
       const px = pointerRef.current.x;
@@ -88,36 +95,75 @@ export default function DotMatrixField() {
 
       ctx.clearRect(0, 0, w, h);
 
-      // soft depth fade (radial gradient centered, faint)
       const cx = w / 2;
       const cy = h / 2;
       const maxR = Math.hypot(cx, cy);
 
+      // pre-compute each particle's current position
+      const posX = new Float32Array(particles.length);
+      const posY = new Float32Array(particles.length);
+      const parX = px * 30;
+      const parY = py * 30;
+
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
-
-        // slow orbital drift
         const theta = t * p.speed + p.phase;
-        const driftX = Math.cos(theta) * 6;
-        const driftY = Math.sin(theta * 0.8) * 6;
+        posX[i] = p.baseX + Math.cos(theta) * 6 + parX;
+        posY[i] = p.baseY + Math.sin(theta * 0.8) * 6 + parY;
+      }
 
-        // pointer parallax
-        const parX = px * 28;
-        const parY = py * 28;
+      // links — faint gold threads (sparse, only closest neighbors)
+      ctx.lineWidth = 0.3;
+      for (let k = 0; k < links.length; k++) {
+        const [i, j, d2] = links[k];
+        const p = particles[i];
+        const q = particles[j];
+        const xi = posX[i];
+        const yi = posY[i];
+        const xj = posX[j];
+        const yj = posY[j];
 
-        const x = p.baseX + driftX + parX;
-        const y = p.baseY + driftY + parY;
+        // only draw when close
+        const dx = xi - xj;
+        const dy = yi - yj;
+        const live = dx * dx + dy * dy;
+        const falloff = 1 - Math.min(1, live / (d2 * 1.6));
+        if (falloff < 0.3) continue;
 
-        // depth fade — particles near edges dim, center pops
+        const midX = (xi + xj) / 2;
+        const midY = (yi + yj) / 2;
+        const d = Math.hypot(midX - cx, midY - cy) / maxR;
+        const depth = 1 - Math.min(1, d * 1.1);
+        const a = Math.min(p.alpha, q.alpha) * 0.22 * falloff * (0.2 + depth);
+        ctx.strokeStyle = `rgba(197, 166, 124, ${a})`;
+        ctx.beginPath();
+        ctx.moveTo(xi, yi);
+        ctx.lineTo(xj, yj);
+        ctx.stroke();
+      }
+
+      // dots
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        const x = posX[i];
+        const y = posY[i];
         const d = Math.hypot(x - cx, y - cy) / maxR;
         const depth = 1 - Math.min(1, d * 1.1);
         const a = p.alpha * (0.25 + depth * 0.9);
-
         ctx.beginPath();
         ctx.fillStyle = `rgba(197, 166, 124, ${a})`;
         ctx.arc(x, y, p.r, 0, Math.PI * 2);
         ctx.fill();
       }
+
+      // scanline
+      const scanY = ((t * 40) % (h + 200)) - 100;
+      const grad = ctx.createLinearGradient(0, scanY - 80, 0, scanY + 80);
+      grad.addColorStop(0, 'rgba(197, 166, 124, 0)');
+      grad.addColorStop(0.5, 'rgba(197, 166, 124, 0.055)');
+      grad.addColorStop(1, 'rgba(197, 166, 124, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, scanY - 80, w, 160);
 
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -140,22 +186,20 @@ export default function DotMatrixField() {
       className="pointer-events-none fixed inset-0 z-0"
       style={{
         background:
-          'radial-gradient(circle at 72% 18%, rgba(197, 166, 124, 0.08), transparent 42%), linear-gradient(180deg, #050505 0%, #030303 50%, #050505 100%)',
+          'radial-gradient(circle at 72% 18%, rgba(197, 166, 124, 0.08), transparent 42%), radial-gradient(circle at 20% 80%, rgba(184, 205, 126, 0.05), transparent 40%), linear-gradient(180deg, #050505 0%, #030303 50%, #050505 100%)',
       }}
     >
-      {/* DOM fallback dot pattern — always rendered, canvas sits on top */}
-      <div className="absolute inset-0 dot-pattern opacity-35" />
+      <div className="absolute inset-0 dot-pattern opacity-30" />
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 h-full w-full opacity-70"
+        className="absolute inset-0 h-full w-full opacity-75"
         style={{ mixBlendMode: 'screen' }}
       />
-      {/* Soft vignette for focus */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.55) 100%)',
+            'radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.6) 100%)',
         }}
       />
     </div>

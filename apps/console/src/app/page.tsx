@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import DotMatrixField from '@/components/DotMatrixField';
 import ArcMark from '@/components/ArcMark';
 
@@ -13,94 +14,129 @@ const sidebarNav = [
   { label: 'DOCS', href: '/docs' },
 ];
 
-const stats = [
-  { label: 'MODULES', value: '04', suffix: 'contracts in active migration' },
+type Stat = { label: string; value: string; suffix: string };
+const fallbackStats: Stat[] = [
+  { label: 'MODULES', value: '04', suffix: 'protocol contracts deployed' },
   { label: 'AGENTS', value: '128+', suffix: 'on-chain identities indexed' },
-  { label: 'AWARDS', value: '27', suffix: 'reputation milestones verified' },
+  { label: 'PROOFS', value: '27', suffix: 'work-proofs minted on-chain' },
 ];
 
 export default function Home() {
+  const [stats, setStats] = useState<Stat[]>(fallbackStats);
+  const [ready, setReady] = useState(false);
+
+  // Try to hydrate with real indexer data; silently fall back on failure.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/indexer/overview', { cache: 'no-store' });
+        if (!res.ok) throw new Error('indexer not ready');
+        const data = await res.json();
+        if (cancelled) return;
+        const s = data?.summary;
+        if (s) {
+          setStats([
+            { label: 'MODULES', value: '04', suffix: 'protocol contracts deployed' },
+            { label: 'AGENTS', value: String(s.agents ?? 0).padStart(2, '0'), suffix: 'registered on-chain' },
+            { label: 'PROOFS', value: String(s.settledJobs ?? 0).padStart(2, '0'), suffix: 'settled jobs proven' },
+          ]);
+        }
+      } catch {
+        /* keep fallback */
+      } finally {
+        if (!cancelled) setReady(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   return (
     <div className="relative min-h-screen w-full overflow-hidden bg-[#050505] text-[#EAE4D8]">
       <DotMatrixField />
 
-      {/* ─── Left vertical sidebar ─── */}
-      <aside className="fixed left-0 top-0 z-30 hidden h-screen w-[72px] flex-col items-center justify-between border-r border-white/10 bg-black/30 py-8 backdrop-blur-xl md:flex">
-        {/* Brand vertical */}
-        <Link href="/" className="flex flex-col items-center gap-4" aria-label="ArcLayer home">
-          <span
-            className="aureo-sidebar-label text-[#EAE4D8]"
-            style={{ fontSize: '11px', letterSpacing: '0.42em' }}
-          >
-            ARCLAYER
-          </span>
-          <ArcMark size={22} />
+      {/* ─── Top header (contains logo as user requested) ─── */}
+      <header className="relative z-30 flex items-center justify-between border-b border-white/8 px-6 py-5 backdrop-blur-xl md:px-10" style={{ background: 'rgba(5, 5, 5, 0.6)' }}>
+        <Link href="/" className="group flex items-center gap-3" aria-label="ArcLayer home">
+          <div className="transition-transform duration-500 group-hover:scale-110">
+            <ArcMark size={36} className="anim-breathe" />
+          </div>
+          <div className="flex flex-col leading-none">
+            <span className="aureo-body text-[#EAE4D8]" style={{ fontSize: '17px', letterSpacing: '0.26em', fontWeight: 400 }}>
+              ARCLAYER
+            </span>
+            <span className="mt-1 font-mono text-[9.5px] tracking-[0.22em] text-[#C5A67C]">
+              PROTOCOL · AGENTIC ECONOMY
+            </span>
+          </div>
         </Link>
 
-        {/* Vertical nav */}
-        <nav className="flex flex-col items-center gap-8">
-          {sidebarNav.map((n) => (
+        <nav className="hidden items-center gap-8 md:flex">
+          {sidebarNav.slice(0, 5).map((n) => (
             <Link
               key={n.label}
               href={n.href}
-              className="aureo-sidebar-label text-[#7A7A7A] transition-colors duration-300 hover:text-[#C5A67C]"
+              className="font-mono text-[10.5px] tracking-[0.24em] text-[#7A7A7A] transition-colors duration-300 hover:text-[#C5A67C]"
             >
               {n.label}
             </Link>
           ))}
         </nav>
 
-        {/* Status dot */}
-        <div className="flex flex-col items-center gap-2">
-          <div className="relative flex h-3 w-3 items-center justify-center">
-            <span className="absolute h-3 w-3 rounded-full bg-[#C5A67C] opacity-30 blur-[3px]" />
-            <span className="relative h-1.5 w-1.5 rounded-full bg-[#C5A67C]" />
+        <div className="flex items-center gap-4">
+          <div className="hidden items-center gap-2 sm:flex">
+            <span className="pulse-dot" />
+            <span className="font-mono text-[10px] tracking-[0.2em] text-[#B8CD7E]">
+              LIVE · ARC
+            </span>
           </div>
-          <span
-            className="aureo-sidebar-label text-[#7A7A7A]"
-            style={{ fontSize: '9px', letterSpacing: '0.32em' }}
-          >
-            LIVE · ARC
+          <Link href="/dashboard" className="btn-primary" style={{ padding: '11px 18px', fontSize: '11px' }}>
+            OPEN CONSOLE
+          </Link>
+        </div>
+      </header>
+
+      {/* ─── Left vertical sidebar (slimmer, index only) ─── */}
+      <aside className="fixed left-0 top-[82px] z-20 hidden h-[calc(100vh-82px)] w-[56px] flex-col items-center justify-between border-r border-white/8 py-10 md:flex" style={{ background: 'rgba(5, 5, 5, 0.35)' }}>
+        <nav className="flex flex-col items-center gap-10">
+          {['INDEX', 'PROTOCOL', 'SDK', 'AGENTS', 'JOBS'].map((label, i) => (
+            <a
+              key={label}
+              href={i === 0 ? '#top' : label === 'PROTOCOL' ? '#protocol' : label === 'SDK' ? '/docs' : label === 'AGENTS' ? '/agents' : '/jobs'}
+              className="aureo-sidebar-label text-[#7A7A7A] transition-colors duration-300 hover:text-[#C5A67C]"
+            >
+              {label}
+            </a>
+          ))}
+        </nav>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-px bg-gradient-to-b from-[#C5A67C]/40 to-transparent" />
+          <span className="font-mono text-[9px] tracking-[0.22em] text-[#7A7A7A] [writing-mode:vertical-rl] rotate-180">
+            v0.1.0
           </span>
         </div>
       </aside>
 
-      {/* ─── Main content ─── */}
-      <main className="relative z-20 min-h-screen md:pl-[72px]">
-        {/* Top bar for mobile */}
-        <div className="flex items-center justify-between border-b border-white/10 px-5 py-4 md:hidden">
-          <Link href="/" className="flex items-center gap-2">
-            <ArcMark size={22} />
-            <span className="aureo-body text-xs tracking-[0.32em] text-[#EAE4D8]">
-              ARCLAYER
-            </span>
-          </Link>
-          <Link
-            href="/dashboard"
-            className="aureo-mono-label text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
-          >
-            CONSOLE →
-          </Link>
-        </div>
-
-        <div className="relative mx-auto grid max-w-[1600px] grid-cols-1 gap-8 px-6 py-10 md:grid-cols-[1.02fr_0.98fr] md:gap-12 md:px-10 md:py-14 lg:px-16">
+      {/* ─── Main ─── */}
+      <main className="relative z-20 min-h-screen md:pl-[56px]">
+        <div className="relative mx-auto grid max-w-[1600px] grid-cols-1 gap-8 px-6 py-12 md:grid-cols-[1.05fr_0.95fr] md:gap-14 md:px-12 md:py-20 lg:px-20">
           {/* ─── Hero column ─── */}
           <div className="relative flex flex-col justify-center">
-            {/* AI / CREATIVITY kicker */}
+            {/* Kicker */}
             <div className="mb-10 flex flex-col gap-1">
               <span className="aureo-mono-label">AGENTIC</span>
               <span className="aureo-mono-label">PROTOCOL</span>
             </div>
 
             {/* Headline */}
-            <h1 className="aureo-display text-[64px] text-[#EAE4D8] sm:text-[80px] md:text-[104px] lg:text-[120px]">
-              <span className="block">PROTOCOL</span>
-              <span className="block">LAYER FOR THE</span>
-              <span className="block italic text-[#C5A67C]">agentic economy</span>
+            <h1 className="aureo-display text-[58px] text-[#EAE4D8] sm:text-[80px] md:text-[104px] lg:text-[120px]" style={{ lineHeight: 0.88 }}>
+              <span className="block section-reveal" style={{ animationDelay: '0.05s' }}>PROTOCOL</span>
+              <span className="block section-reveal" style={{ animationDelay: '0.15s' }}>LAYER FOR THE</span>
+              <span className="block italic text-[#C5A67C] section-reveal" style={{ animationDelay: '0.25s' }}>agentic economy</span>
             </h1>
 
-            {/* Divider mark */}
-            <div className="my-8 flex max-w-[520px] items-center gap-3">
+            {/* Divider */}
+            <div className="my-9 flex max-w-[540px] items-center gap-3">
               <span className="h-px flex-1 bg-white/15" />
               <span
                 className="h-[10px] w-[10px] rotate-45 border border-[#C5A67C]/60"
@@ -109,67 +145,130 @@ export default function Home() {
               <span className="h-px flex-1 bg-white/15" />
             </div>
 
-            {/* Body */}
-            <p className="aureo-body max-w-[480px] text-[15px] text-[#9a9a9a] md:text-[16px]">
-              ArcLayer is a settlement fabric for autonomous labor. Contract modules, SDK
-              access, event indexing, and a console for inspecting jobs, escrow, and
-              agent reputation — deployed on Arc.
+            {/* Body — developer-first copy */}
+            <p className="aureo-body max-w-[540px] text-[15px] text-[#9a9a9a] md:text-[16.5px]">
+              ArcLayer is a <span className="text-[#C5A67C]">settlement fabric for autonomous protocols</span>. Contract
+              modules, a typed SDK, event indexing, and a console for inspecting jobs, escrow,
+              and agent reputation — deployed on Arc (chain <span className="font-mono text-[#C5A67C]">5042002</span>).
             </p>
 
+            {/* Developer inline code */}
+            <div className="mt-7 max-w-[540px]">
+              <div className="aureo-mono-label mb-2">QUICKSTART</div>
+              <pre className="code-block">
+<span className="tok-c"># install workspace SDK</span>{'\n'}
+<span className="tok-k">pnpm</span> add @arclayer/sdk{'\n'}{'\n'}
+<span className="tok-c">// read contract + query job</span>{'\n'}
+<span className="tok-k">import</span> {'{ CONTRACTS, readJob }'} <span className="tok-k">from</span> <span className="tok-s">'@arclayer/sdk'</span>;{'\n'}
+<span className="tok-k">const</span> job = <span className="tok-k">await</span> readJob(<span className="tok-s">0n</span>);
+              </pre>
+            </div>
+
             {/* CTAs */}
-            <div className="mt-10 flex flex-col items-start gap-5 sm:flex-row sm:items-center">
+            <div className="mt-9 flex flex-col items-start gap-5 sm:flex-row sm:items-center">
               <Link href="/dashboard" className="btn-primary">
-                OPEN CONSOLE
+                OPEN PROTOCOL CONSOLE
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                   <path d="M3 11L11 3M11 3H4M11 3V10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
                 </svg>
               </Link>
               <Link href="/docs" className="btn-ghost">
-                EXPLORE SDK
+                READ SDK DOCS
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
                   <path d="M3 11L11 3M11 3H4M11 3V10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
                 </svg>
               </Link>
             </div>
 
-            {/* Stats row */}
-            <div className="mt-16 grid max-w-[520px] grid-cols-3 gap-6">
-              {stats.map((s) => (
-                <div key={s.label} className="flex flex-col">
+            {/* Stats */}
+            <div className="mt-14 grid max-w-[560px] grid-cols-3 gap-6">
+              {stats.map((s, i) => (
+                <div key={s.label} className="flex flex-col section-reveal" style={{ animationDelay: `${0.4 + i * 0.08}s` }}>
                   <span className="aureo-mono-label mb-3">{s.label}</span>
-                  <span className="aureo-display text-[44px] text-[#EAE4D8] md:text-[52px]">
+                  <span className="aureo-display text-[44px] text-[#EAE4D8] md:text-[52px]" style={{ transition: 'color 300ms', color: ready ? '#EAE4D8' : '#7A7A7A' }}>
                     {s.value}
                   </span>
-                  <span className="mt-2 h-px w-8 bg-[#C5A67C]/40" />
-                  <span className="mt-2 text-[10px] leading-4 text-[#7A7A7A]">
-                    {s.suffix}
-                  </span>
+                  <span className="mt-2 h-px w-8 bg-[#C5A67C]/50" />
+                  <span className="mt-2 font-mono text-[10px] leading-4 text-[#7A7A7A]">{s.suffix}</span>
                 </div>
               ))}
             </div>
           </div>
 
           {/* ─── Right column: architectural arch ─── */}
-          <div className="relative flex min-h-[500px] items-center justify-center md:min-h-[720px]">
+          <div className="relative flex min-h-[520px] items-center justify-center md:min-h-[740px]">
             <ArchVisual />
-
-            {/* Featured project card, overlapping bottom */}
             <FeaturedCard />
           </div>
         </div>
 
-        {/* ─── Bottom strip: chain metadata ─── */}
-        <div className="relative z-20 mx-auto max-w-[1600px] border-t border-white/10 px-6 py-6 md:px-10 md:pl-[72px] lg:px-16">
+        {/* ─── Protocol primitives section ─── */}
+        <section id="protocol" className="relative z-20 border-t border-white/8 px-6 py-16 md:px-12 md:pl-[80px] md:py-24 lg:px-24">
+          <div className="mx-auto max-w-[1600px]">
+            <div className="mb-12 grid grid-cols-1 gap-10 md:grid-cols-[1fr_1.2fr] md:items-end">
+              <div>
+                <div className="aureo-mono-label mb-4">PROTOCOL · PRIMITIVES</div>
+                <h2 className="aureo-display text-[52px] text-[#EAE4D8] md:text-[72px]">
+                  Four modules.<br />
+                  <span className="italic text-[#C5A67C]">One settlement fabric.</span>
+                </h2>
+              </div>
+              <p className="aureo-body max-w-[520px] justify-self-end text-[14.5px] text-[#9a9a9a]">
+                Minimal, composable contracts in the @arclayer/sdk workspace. Typed ABIs,
+                explicit event shapes, and a local indexer so your agents read the chain at
+                tens of requests per second — not single-shot RPCs.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
+              {[
+                { t: 'JobEscrow', c: 'create · budget · fund · submit · settle', d: 'USDC-escrowed jobs with milestone submission and evaluator-approved settlement.' },
+                { t: 'AgentRegistry', c: 'registerAgent · skillHash · metadataURI', d: 'Soulbound agent identities with on-chain reputation and job history.' },
+                { t: 'WorkProof', c: 'mintProof · proofURI · settled-job gated', d: 'Non-transferable work proofs, minted only after a job settles against a milestone.' },
+                { t: 'Indexer', c: 'REST · /overview · /jobs · /agents', d: 'SQLite-backed event indexer. Cursor-safe, polling, single getLogs per tick.' },
+              ].map((m, i) => (
+                <div
+                  key={m.t}
+                  className="group relative flex flex-col gap-4 p-6 transition-all duration-300"
+                  style={{
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    background: 'rgba(10, 10, 10, 0.6)',
+                    animation: `fadeInUp 0.5s ${0.1 + i * 0.08}s both cubic-bezier(0.16, 1, 0.3, 1)`,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(197, 166, 124, 0.35)';
+                    e.currentTarget.style.background = 'rgba(18, 18, 18, 0.72)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                    e.currentTarget.style.background = 'rgba(10, 10, 10, 0.6)';
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="aureo-mono-label">{`0${i + 1}`}</span>
+                    <span className="h-px w-10 bg-[#C5A67C]/40 transition-all duration-500 group-hover:w-16" />
+                  </div>
+                  <h3 className="aureo-display text-[32px] text-[#EAE4D8] md:text-[36px]">{m.t}</h3>
+                  <code className="font-mono text-[11px] text-[#C5A67C]">{m.c}</code>
+                  <p className="font-mono text-[11.5px] leading-6 text-[#9a9a9a]">{m.d}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ─── Bottom strip ─── */}
+        <div className="relative z-20 mx-auto max-w-[1600px] border-t border-white/8 px-6 py-7 md:px-12 md:pl-[80px] lg:px-24">
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {[
               ['NETWORK', 'Arc Testnet'],
               ['CHAIN ID', '5042002'],
               ['SETTLEMENT', 'Testnet USDC'],
-              ['INDEXER', 'Live · 2 blk/s'],
+              ['INDEXER', 'Live · polling'],
             ].map(([k, v]) => (
               <div key={k} className="flex flex-col gap-1.5">
                 <span className="aureo-mono-label">{k}</span>
-                <span className="aureo-body text-[13px] text-[#EAE4D8]">{v}</span>
+                <span className="font-mono text-[12.5px] text-[#EAE4D8]">{v}</span>
               </div>
             ))}
           </div>
@@ -179,26 +278,25 @@ export default function Home() {
   );
 }
 
-/* ─── Architectural arch visual (approximates the AUREO megastructure) ─── */
+/* ─── Architectural arch visual — density 9/10 ─── */
 function ArchVisual() {
   return (
-    <div className="relative h-full w-full max-w-[680px]">
-      {/* Huge semi-circular arch frame */}
+    <div className="relative h-full w-full max-w-[720px]">
       <svg
-        viewBox="0 0 600 720"
+        viewBox="0 0 600 760"
         className="absolute inset-0 h-full w-full"
         fill="none"
         aria-hidden="true"
       >
         <defs>
-          <linearGradient id="archRim" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#EAE4D8" stopOpacity="0.7" />
-            <stop offset="0.4" stopColor="#C5A67C" stopOpacity="0.85" />
-            <stop offset="0.85" stopColor="#C5A67C" stopOpacity="0.25" />
+          <linearGradient id="archRim" x1="0" y1="0" x2="0" y2="760" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#EAE4D8" stopOpacity="0.78" />
+            <stop offset="0.35" stopColor="#C5A67C" stopOpacity="0.9" />
+            <stop offset="0.85" stopColor="#C5A67C" stopOpacity="0.22" />
             <stop offset="1" stopColor="#050505" stopOpacity="0" />
           </linearGradient>
-          <linearGradient id="archInner" x1="0" y1="0" x2="0" y2="720" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#C5A67C" stopOpacity="0.35" />
+          <linearGradient id="archInner" x1="0" y1="0" x2="0" y2="760">
+            <stop offset="0" stopColor="#C5A67C" stopOpacity="0.4" />
             <stop offset="0.6" stopColor="#C5A67C" stopOpacity="0.1" />
             <stop offset="1" stopColor="#050505" stopOpacity="0" />
           </linearGradient>
@@ -207,8 +305,8 @@ function ArchVisual() {
             <stop offset="0.7" stopColor="#050505" stopOpacity="0.6" />
             <stop offset="1" stopColor="#C5A67C" stopOpacity="0" />
           </radialGradient>
-          <filter id="archGlow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="1.2" result="b" />
+          <filter id="archGlow" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="1.4" result="b" />
             <feMerge>
               <feMergeNode in="b" />
               <feMergeNode in="SourceGraphic" />
@@ -216,222 +314,194 @@ function ArchVisual() {
           </filter>
         </defs>
 
-        {/* Outer arch rings — triple band for depth */}
-        <ellipse cx="300" cy="280" rx="295" ry="270" stroke="url(#archRim)" strokeWidth="2.5" filter="url(#archGlow)" />
-        <ellipse cx="300" cy="280" rx="278" ry="255" stroke="rgba(197, 166, 124, 0.35)" strokeWidth="0.8" />
-        <ellipse cx="300" cy="280" rx="262" ry="240" stroke="rgba(197, 166, 124, 0.22)" strokeWidth="0.6" />
+        {/* slow rotating orbital rays */}
+        <g className="anim-arch-slow" style={{ transformOrigin: '300px 290px' }}>
+          {Array.from({ length: 48 }).map((_, i) => {
+            const angle = (Math.PI / 48) * i;
+            const x1 = 300 + Math.cos(Math.PI + angle) * 300;
+            const y1 = 290 + Math.sin(Math.PI + angle) * 280;
+            const x2 = 300 + Math.cos(Math.PI + angle) * 85;
+            const y2 = 290 + Math.sin(Math.PI + angle) * 80;
+            const major = i % 8 === 0;
+            return (
+              <line
+                key={i}
+                x1={x1}
+                y1={y1}
+                x2={x2}
+                y2={y2}
+                stroke={major ? 'rgba(234, 228, 216, 0.34)' : 'rgba(197, 166, 124, 0.1)'}
+                strokeWidth={major ? 0.8 : 0.32}
+              />
+            );
+          })}
+        </g>
 
-        {/* Concentric inner arcs (structural detail) */}
-        {[235, 210, 185, 160, 135, 110, 90].map((r, i) => (
+        {/* quadruple outer rim — chunky monumental ring */}
+        <ellipse cx="300" cy="290" rx="300" ry="280" stroke="url(#archRim)" strokeWidth="3" filter="url(#archGlow)" />
+        <ellipse cx="300" cy="290" rx="294" ry="274" stroke="rgba(197, 166, 124, 0.6)" strokeWidth="1.4" />
+        <ellipse cx="300" cy="290" rx="285" ry="265" stroke="rgba(197, 166, 124, 0.42)" strokeWidth="0.8" />
+        <ellipse cx="300" cy="290" rx="268" ry="248" stroke="rgba(197, 166, 124, 0.28)" strokeWidth="0.6" />
+
+        {/* concentric structural arcs */}
+        {[245, 222, 200, 178, 156, 134, 112, 92].map((r, i) => (
           <ellipse
             key={r}
             cx="300"
-            cy="280"
-            rx={r + 18}
+            cy="290"
+            rx={r + 20}
             ry={r}
-            stroke={`rgba(197, 166, 124, ${0.35 - i * 0.04})`}
+            stroke={`rgba(197, 166, 124, ${0.38 - i * 0.035})`}
             strokeWidth="0.5"
           />
         ))}
 
-        {/* Dense radial struts (36 rays) */}
-        {Array.from({ length: 36 }).map((_, i) => {
-          const angle = (Math.PI / 36) * i;
-          const x1 = 300 + Math.cos(Math.PI + angle) * 295;
-          const y1 = 280 + Math.sin(Math.PI + angle) * 270;
-          const x2 = 300 + Math.cos(Math.PI + angle) * 90;
-          const y2 = 280 + Math.sin(Math.PI + angle) * 85;
-          const major = i % 6 === 0;
-          return (
-            <line
-              key={i}
-              x1={x1}
-              y1={y1}
-              x2={x2}
-              y2={y2}
-              stroke={major ? 'rgba(234, 228, 216, 0.3)' : 'rgba(197, 166, 124, 0.1)'}
-              strokeWidth={major ? 0.7 : 0.35}
-            />
-          );
-        })}
+        {/* counter-rotating mid-band */}
+        <g className="anim-arch-med" style={{ transformOrigin: '300px 290px' }}>
+          {Array.from({ length: 24 }).map((_, i) => {
+            const angle = (Math.PI / 24) * i;
+            const x1 = 300 + Math.cos(Math.PI + angle) * 225;
+            const y1 = 290 + Math.sin(Math.PI + angle) * 210;
+            const x2 = 300 + Math.cos(Math.PI + angle) * 175;
+            const y2 = 290 + Math.sin(Math.PI + angle) * 162;
+            return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(234, 228, 216, 0.16)" strokeWidth="0.4" />;
+          })}
+        </g>
 
-        {/* Rim waypoint nodes on outer ring */}
-        {Array.from({ length: 12 }).map((_, i) => {
-          const angle = (Math.PI / 12) * i;
-          const x = 300 + Math.cos(Math.PI + angle) * 295;
-          const y = 280 + Math.sin(Math.PI + angle) * 270;
+        {/* waypoint nodes on outer ring */}
+        {Array.from({ length: 18 }).map((_, i) => {
+          const angle = (Math.PI / 18) * i;
+          const x = 300 + Math.cos(Math.PI + angle) * 300;
+          const y = 290 + Math.sin(Math.PI + angle) * 280;
           return (
             <g key={i}>
-              <circle cx={x} cy={y} r="3" fill="rgba(234, 228, 216, 0.8)" />
-              <circle cx={x} cy={y} r="6" fill="rgba(197, 166, 124, 0.2)" />
+              <circle cx={x} cy={y} r="3.2" fill="rgba(234, 228, 216, 0.9)" filter="url(#archGlow)" />
+              <circle cx={x} cy={y} r="7" fill="rgba(197, 166, 124, 0.22)" />
             </g>
           );
         })}
 
-        {/* Orbital ellipse (angled perspective) */}
-        <ellipse
-          cx="300"
-          cy="280"
-          rx="200"
-          ry="42"
-          stroke="rgba(197, 166, 124, 0.35)"
-          strokeWidth="0.8"
-          strokeDasharray="2 3"
-        />
-        <ellipse
-          cx="300"
-          cy="280"
-          rx="160"
-          ry="28"
-          stroke="rgba(184, 205, 126, 0.3)"
-          strokeWidth="0.6"
-        />
+        {/* orbital perspective ellipses */}
+        <ellipse cx="300" cy="290" rx="205" ry="44" stroke="rgba(197, 166, 124, 0.38)" strokeWidth="0.8" strokeDasharray="2 3" />
+        <ellipse cx="300" cy="290" rx="160" ry="28" stroke="rgba(184, 205, 126, 0.35)" strokeWidth="0.6" />
+        <ellipse cx="300" cy="290" rx="118" ry="16" stroke="rgba(234, 228, 216, 0.25)" strokeWidth="0.5" />
 
-        {/* Inner void — the eye of the ring */}
-        <ellipse cx="300" cy="280" rx="72" ry="65" fill="url(#archVoid)" />
-        <ellipse cx="300" cy="280" rx="72" ry="65" stroke="rgba(234, 228, 216, 0.4)" strokeWidth="0.6" />
-        <ellipse cx="300" cy="280" rx="48" ry="42" fill="url(#archInner)" />
+        {/* inner void */}
+        <ellipse cx="300" cy="290" rx="76" ry="68" fill="url(#archVoid)" />
+        <ellipse cx="300" cy="290" rx="76" ry="68" stroke="rgba(234, 228, 216, 0.45)" strokeWidth="0.7" />
+        <ellipse cx="300" cy="290" rx="50" ry="44" fill="url(#archInner)" />
+        <ellipse cx="300" cy="290" rx="28" ry="24" stroke="rgba(197, 166, 124, 0.5)" strokeWidth="0.5" />
 
-        {/* Central core */}
+        {/* glowing core */}
         <g filter="url(#archGlow)">
-          <circle cx="300" cy="280" r="3" fill="#EAE4D8" />
-          <circle cx="300" cy="280" r="8" fill="rgba(234, 228, 216, 0.25)" />
-          <circle cx="300" cy="280" r="14" fill="rgba(197, 166, 124, 0.12)" />
+          <circle cx="300" cy="290" r="3.5" fill="#EAE4D8" className="anim-breathe" />
+          <circle cx="300" cy="290" r="9" fill="rgba(234, 228, 216, 0.3)" />
+          <circle cx="300" cy="290" r="16" fill="rgba(197, 166, 124, 0.14)" />
         </g>
 
-        {/* Horizon line */}
-        <line x1="0" y1="560" x2="600" y2="560" stroke="rgba(197, 166, 124, 0.4)" strokeWidth="0.8" />
-        <line x1="0" y1="562" x2="600" y2="562" stroke="rgba(197, 166, 124, 0.15)" strokeWidth="0.4" />
+        {/* horizon line */}
+        <line x1="0" y1="580" x2="600" y2="580" stroke="rgba(197, 166, 124, 0.45)" strokeWidth="0.9" />
+        <line x1="0" y1="582" x2="600" y2="582" stroke="rgba(197, 166, 124, 0.18)" strokeWidth="0.4" />
 
-        {/* Base city silhouette — layered skyline */}
-        <g opacity="0.85">
-          {/* Background layer — distant spires */}
-          {Array.from({ length: 16 }).map((_, i) => {
-            const x = 40 + i * 35;
-            const h = 40 + Math.sin(i * 1.7) * 28 + (i % 3 === 0 ? 50 : 15);
-            return (
-              <rect
-                key={`bg-${i}`}
-                x={x}
-                y={560 - h}
-                width="4"
-                height={h}
-                fill="rgba(197, 166, 124, 0.15)"
-              />
-            );
+        {/* base city silhouette — denser, 3-layer */}
+        <g opacity="0.88">
+          {/* deep background — faint far spires */}
+          {Array.from({ length: 22 }).map((_, i) => {
+            const x = 22 + i * 26;
+            const h = 30 + Math.sin(i * 1.9) * 22 + (i % 4 === 0 ? 38 : 10);
+            return <rect key={`far-${i}`} x={x} y={580 - h} width="3" height={h} fill="rgba(197, 166, 124, 0.1)" />;
           })}
-          {/* Foreground layer — tower blocks */}
-          {Array.from({ length: 28 }).map((_, i) => {
-            const x = 20 + i * 21;
-            const h = 22 + Math.sin(i * 0.9) * 18 + (i % 5 === 0 ? 55 : 0) + (i === 14 ? 45 : 0);
+          {/* mid background */}
+          {Array.from({ length: 18 }).map((_, i) => {
+            const x = 30 + i * 32;
+            const h = 44 + Math.sin(i * 1.3) * 30 + (i % 3 === 0 ? 52 : 14);
+            return <rect key={`mid-${i}`} x={x} y={580 - h} width="5" height={h} fill="rgba(197, 166, 124, 0.2)" />;
+          })}
+          {/* foreground — tower blocks with windows */}
+          {Array.from({ length: 30 }).map((_, i) => {
+            const x = 18 + i * 20;
+            const h = 26 + Math.sin(i * 0.8) * 22 + (i % 5 === 0 ? 62 : 0) + (i === 15 ? 55 : 0);
             return (
               <g key={`fg-${i}`}>
                 <rect
                   x={x}
-                  y={560 - h}
+                  y={580 - h}
                   width="9"
                   height={h}
-                  fill="rgba(20, 18, 14, 0.9)"
-                  stroke="rgba(197, 166, 124, 0.4)"
-                  strokeWidth="0.5"
+                  fill="rgba(18, 16, 12, 0.92)"
+                  stroke="rgba(197, 166, 124, 0.45)"
+                  strokeWidth="0.6"
                 />
-                {/* window dots */}
-                {h > 50 && (
+                {h > 55 && (
                   <>
-                    <rect x={x + 2} y={560 - h + 8} width="1" height="1" fill="rgba(234, 228, 216, 0.8)" />
-                    <rect x={x + 5} y={560 - h + 14} width="1" height="1" fill="rgba(197, 166, 124, 0.7)" />
-                    <rect x={x + 2} y={560 - h + 22} width="1" height="1" fill="rgba(234, 228, 216, 0.6)" />
+                    <rect x={x + 2} y={580 - h + 8} width="1" height="1" fill="rgba(234, 228, 216, 0.85)" />
+                    <rect x={x + 5} y={580 - h + 14} width="1" height="1" fill="rgba(197, 166, 124, 0.75)" />
+                    <rect x={x + 2} y={580 - h + 22} width="1" height="1" fill="rgba(234, 228, 216, 0.65)" />
+                    <rect x={x + 5} y={580 - h + 30} width="1" height="1" fill="rgba(197, 166, 124, 0.55)" />
                   </>
                 )}
               </g>
             );
           })}
-          {/* Central spire rising into ring */}
-          <rect x="296" y="420" width="8" height="140" fill="rgba(30, 26, 20, 0.95)" stroke="rgba(234, 228, 216, 0.5)" strokeWidth="0.6" />
-          <rect x="294" y="420" width="12" height="6" fill="rgba(197, 166, 124, 0.6)" />
-          <rect x="299" y="380" width="2" height="40" fill="rgba(234, 228, 216, 0.8)" />
-          <circle cx="300" cy="378" r="2" fill="#EAE4D8" filter="url(#archGlow)" />
+          {/* central spire rising into ring */}
+          <rect x="296" y="420" width="8" height="160" fill="rgba(30, 26, 20, 0.96)" stroke="rgba(234, 228, 216, 0.55)" strokeWidth="0.7" />
+          <rect x="293" y="420" width="14" height="7" fill="rgba(197, 166, 124, 0.65)" />
+          <rect x="299" y="370" width="2" height="50" fill="rgba(234, 228, 216, 0.9)" />
+          <circle cx="300" cy="368" r="2.4" fill="#EAE4D8" filter="url(#archGlow)" className="anim-breathe" />
         </g>
 
-        {/* Ground plane fade */}
-        <rect x="0" y="560" width="600" height="160" fill="url(#archInner)" opacity="0.3" />
+        {/* ground plane fade */}
+        <rect x="0" y="580" width="600" height="180" fill="url(#archInner)" opacity="0.32" />
       </svg>
 
       {/* Floating coordinate tags */}
-      <div className="absolute left-[8%] top-[22%] aureo-glass px-3 py-2">
-        <div className="aureo-mono-label" style={{ fontSize: '9px' }}>
-          ESCROW · ACTIVE
-        </div>
+      <div className="absolute left-[6%] top-[18%] aureo-glass px-3 py-2 anim-drift">
+        <div className="aureo-mono-label" style={{ fontSize: '9px' }}>ESCROW · ACTIVE</div>
         <div className="mt-1 font-mono text-[11px] text-[#C5A67C]">1,250 USDC</div>
       </div>
-      <div className="absolute right-[6%] top-[36%] aureo-glass px-3 py-2">
-        <div className="aureo-mono-label" style={{ fontSize: '9px' }}>
-          PROOF · PENDING
-        </div>
+      <div className="absolute right-[4%] top-[34%] aureo-glass px-3 py-2 anim-drift" style={{ animationDelay: '1.2s' }}>
+        <div className="aureo-mono-label" style={{ fontSize: '9px' }}>PROOF · PENDING</div>
         <div className="mt-1 font-mono text-[11px] text-[#B8CD7E]">Milestone 03</div>
       </div>
-      <div className="absolute left-[22%] bottom-[28%] aureo-glass px-3 py-2">
-        <div className="aureo-mono-label" style={{ fontSize: '9px' }}>
-          AGENT · 0xA4
-        </div>
+      <div className="absolute left-[20%] bottom-[26%] aureo-glass px-3 py-2 anim-drift" style={{ animationDelay: '2.4s' }}>
+        <div className="aureo-mono-label" style={{ fontSize: '9px' }}>AGENT · 0xA4</div>
         <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">Reputation 8.6</div>
       </div>
     </div>
   );
 }
 
-/* ─── AEON RITUAL-style featured card ─── */
+/* ─── Featured card ─── */
 function FeaturedCard() {
   return (
-    <div className="absolute bottom-[-8%] right-[-2%] z-10 w-[320px] aureo-glass aureo-card-glow p-5 md:w-[360px]">
-      {/* Card header */}
+    <div className="absolute bottom-[-6%] right-[-2%] z-10 w-[320px] aureo-glass aureo-card-glow p-5 md:w-[360px]">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="pulse-dot" />
           <span className="aureo-mono-label">ACTIVE</span>
         </div>
-        <Link href="/jobs" className="aureo-mono-label text-[#C5A67C] hover:text-[#EAE4D8]">
-          VIEW ALL →
-        </Link>
+        <Link href="/jobs" className="aureo-mono-label text-[#C5A67C] hover:text-[#EAE4D8]">VIEW ALL →</Link>
       </div>
 
-      {/* Title + thumbnail */}
       <div className="flex gap-3">
         <div className="aureo-stroke relative flex h-14 w-14 flex-shrink-0 items-center justify-center bg-black/40">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
-            <path
-              d="M14 3 L24 23 H4 Z"
-              stroke="#C5A67C"
-              strokeWidth="1"
-              fill="rgba(197, 166, 124, 0.12)"
-            />
-            <circle cx="14" cy="17" r="2" fill="#C5A67C" />
-          </svg>
+          <ArcMark size={30} />
         </div>
         <div className="flex-1">
-          <h3 className="aureo-display text-[22px] leading-none text-[#EAE4D8]">
-            AEON ESCROW
-          </h3>
-          <p className="mt-1.5 text-[10px] leading-4 text-[#7A7A7A]">
-            Agent labor settled against milestone proofs. Release on approval.
+          <h3 className="aureo-display text-[22px] leading-none text-[#EAE4D8]">AEON ESCROW</h3>
+          <p className="mt-1.5 font-mono text-[10px] leading-4 text-[#7A7A7A]">
+            Job settled against milestone proofs. Release on evaluator approval.
           </p>
         </div>
       </div>
 
-      {/* Progress bar */}
       <div className="mt-5 flex items-center justify-between">
         <span className="aureo-mono-label">PROGRESS</span>
-        <span className="aureo-body text-[11px] text-[#EAE4D8]">78%</span>
+        <span className="font-mono text-[11px] text-[#EAE4D8]">78%</span>
       </div>
       <div className="relative mt-2 h-px w-full bg-white/10">
-        <div
-          className="absolute left-0 top-0 h-px bg-[#C5A67C]"
-          style={{ width: '78%', boxShadow: '0 0 6px rgba(197, 166, 124, 0.8)' }}
-        />
-        <div
-          className="absolute top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[#EAE4D8]"
-          style={{ left: '78%', boxShadow: '0 0 8px rgba(234, 228, 216, 0.9)' }}
-        />
+        <div className="absolute left-0 top-0 h-px bg-[#C5A67C]" style={{ width: '78%', boxShadow: '0 0 6px rgba(197, 166, 124, 0.9)' }} />
+        <div className="absolute top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[#EAE4D8]" style={{ left: '78%', boxShadow: '0 0 10px rgba(234, 228, 216, 0.95)' }} />
       </div>
     </div>
   );

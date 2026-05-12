@@ -51,6 +51,8 @@ type AgentDetail = {
   proofs: IndexedProof[];
 };
 
+const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
+
 function parseAgentId(value: string | undefined) {
   return value && /^\d+$/.test(value) ? value : null;
 }
@@ -61,25 +63,53 @@ function buildReputationSeries(agent: IndexedAgent | undefined, jobs: IndexedJob
   const completedJobs = jobs.filter((job) => job.approved || job.status >= 3).length;
   const proofBoost = proofs.length * 2;
   const seed = Math.max(0, reputation - completedJobs - proofBoost);
-  return [seed, seed + Math.ceil(completedJobs / 2), seed + completedJobs, Math.max(baseScore, reputation) + proofBoost];
+  return [
+    seed,
+    seed + Math.ceil(completedJobs / 2),
+    seed + completedJobs,
+    Math.max(baseScore, reputation) + proofBoost,
+  ];
 }
 
 function Sparkline({ values }: { values: number[] }) {
-  const safeValues = values.length > 1 ? values : [0, 0];
-  const min = Math.min(...safeValues);
-  const max = Math.max(...safeValues);
+  const safe = values.length > 1 ? values : [0, 0];
+  const min = Math.min(...safe);
+  const max = Math.max(...safe);
   const range = max - min || 1;
-  const points = safeValues
-    .map((value, index) => {
-      const x = (index / (safeValues.length - 1)) * 100;
-      const y = 100 - ((value - min) / range) * 100;
+  const points = safe
+    .map((v, i) => {
+      const x = (i / (safe.length - 1)) * 100;
+      const y = 100 - ((v - min) / range) * 100;
       return `${x},${y}`;
     })
     .join(' ');
 
   return (
-    <svg viewBox="0 0 100 100" className="h-16 w-full" preserveAspectRatio="none" aria-hidden>
-      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="3" className="text-cyan-300" />
+    <svg viewBox="0 0 100 100" className="h-20 w-full" preserveAspectRatio="none" aria-hidden>
+      <defs>
+        <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="100" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#C5A67C" stopOpacity="0.35" />
+          <stop offset="1" stopColor="#C5A67C" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polyline
+        points={`0,100 ${points} 100,100`}
+        fill="url(#sparkFill)"
+        stroke="none"
+      />
+      <polyline
+        points={points}
+        fill="none"
+        stroke="#C5A67C"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {safe.map((v, i) => {
+        const x = (i / (safe.length - 1)) * 100;
+        const y = 100 - ((v - min) / range) * 100;
+        return <circle key={i} cx={x} cy={y} r="1.2" fill="#EAE4D8" />;
+      })}
     </svg>
   );
 }
@@ -93,169 +123,151 @@ export default function AgentProfilePage() {
 
   useEffect(() => {
     let cancelled = false;
-
     async function load() {
-      if (!agentId) {
-        setError('Invalid agent id.');
-        setIsLoading(false);
-        return;
-      }
-
+      if (!agentId) { setError('Invalid agent id.'); setIsLoading(false); return; }
       try {
-        setIsLoading(true);
-        setError(null);
-
-        const response = await fetch(`${INDEXER_BASE_URL}/agents/${agentId}`, { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error(response.status === 404 ? 'Agent not found.' : `Indexer returned HTTP ${response.status}.`);
-        }
-
-        const nextProfile = (await response.json()) as AgentDetail;
-        if (!cancelled) {
-          setProfile(nextProfile);
-        }
-      } catch (nextError) {
-        if (!cancelled) {
-          setError(nextError instanceof Error ? nextError.message : 'Failed to load agent profile.');
-          setProfile(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
+        setIsLoading(true); setError(null);
+        const r = await fetch(`${INDEXER_BASE_URL}/agents/${agentId}`, { cache: 'no-store' });
+        if (!r.ok) throw new Error(r.status === 404 ? 'Agent not found.' : `Indexer returned HTTP ${r.status}.`);
+        const next = (await r.json()) as AgentDetail;
+        if (!cancelled) setProfile(next);
+      } catch (e) {
+        if (!cancelled) { setError(e instanceof Error ? e.message : 'Failed to load agent profile.'); setProfile(null); }
+      } finally { if (!cancelled) setIsLoading(false); }
     }
-
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [agentId]);
 
   const agent = profile?.agent;
   const jobs = profile?.jobs || [];
   const proofs = profile?.proofs || [];
-  const reputationSeries = buildReputationSeries(agent, jobs, proofs);
+  const series = buildReputationSeries(agent, jobs, proofs);
 
   return (
-    <div className="relative px-6 py-20">
+    <div className="relative px-6 py-16 md:px-10 md:py-20">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <Link href="/dashboard" className="text-sm font-semibold text-cyan-200">
-              Back to dashboard
+            <Link href="/dashboard" className="font-mono text-[11px] tracking-[0.16em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
+              ← BACK · CONSOLE
             </Link>
-            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.22em] text-white/35">Agent Registry</p>
-            <h1 className="mt-3 font-[var(--font-display)] text-[34px] font-semibold tracking-[-0.03em] md:text-[52px]">
-              Agent #{agentId || '0'}
+            <div className="aureo-mono-label mt-5 mb-3">PROTOCOL · AGENT</div>
+            <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
+              Agent <span className="italic text-[#C5A67C]">#{agentId || '0'}</span>
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-white/50">
-              Indexed capability profile and work-proof history sourced from the ArcLayer protocol indexer.
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#9a9a9a]">
+              Indexed capability profile and work-proof history from the ArcLayer indexer.
             </p>
           </div>
-          <Link href="/docs" className="btn-primary self-start md:self-auto">
-            SDK Quickstart
-          </Link>
+          <Link href="/docs" className="btn-primary self-start md:self-auto">SDK QUICKSTART</Link>
         </div>
 
         {error && (
-          <div className="mb-6 rounded-lg border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
-            {error}
+          <div className="mb-6 p-4" style={{ border: '1px solid rgba(230, 130, 130, 0.35)', background: 'rgba(230, 130, 130, 0.06)' }}>
+            <p className="font-mono text-[11.5px] text-[#f0c5c5]">{error}</p>
           </div>
         )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="glass-card p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Registry record</p>
-            <div className="mt-5 space-y-3">
+          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+            <div className="aureo-mono-label mb-2">REGISTRY</div>
+            <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Record</h2>
+            <div className="mt-5 space-y-2.5">
               {[
-                ['Controller', agent ? shortenAddress(agent.controller) : isLoading ? 'Loading' : 'Unavailable'],
-                ['Skill hash', agent ? `${agent.skillHash.slice(0, 10)}...${agent.skillHash.slice(-8)}` : isLoading ? 'Loading' : 'Unavailable'],
-                ['Metadata', agent?.metadataURI || (isLoading ? 'Loading' : 'Unavailable')],
-                ['Registered', agent ? new Date(Number(agent.registeredAt) * 1000).toLocaleString() : isLoading ? 'Loading' : 'Unavailable'],
+                ['controller', agent ? shortenAddress(agent.controller) : isLoading ? '…' : '—'],
+                ['skill hash', agent ? `${agent.skillHash.slice(0, 10)}…${agent.skillHash.slice(-8)}` : isLoading ? '…' : '—'],
+                ['metadata', agent?.metadataURI || (isLoading ? '…' : '—')],
+                ['registered', agent ? new Date(Number(agent.registeredAt) * 1000).toLocaleString() : isLoading ? '…' : '—'],
               ].map(([label, value]) => (
-                <div key={label} className="ledger-row flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-4 py-3">
-                  <span className="text-sm text-white/45">{label}</span>
-                  <span className="max-w-[60%] truncate text-right font-mono text-sm text-white/75">{value}</span>
+                <div key={label} className="ledger-row flex items-center justify-between border border-white/10 bg-black/20 px-4 py-2.5">
+                  <span className="font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">{label}</span>
+                  <span className="max-w-[60%] truncate text-right font-mono text-[11.5px] text-[#EAE4D8]">{value}</span>
                 </div>
               ))}
             </div>
           </section>
 
-          <section className="glass-card p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Protocol telemetry</p>
+          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+            <div className="aureo-mono-label mb-2">TELEMETRY</div>
+            <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Protocol signals</h2>
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
               {[
-                ['Score', agent ? agent.score : isLoading ? 'Loading' : '0'],
-                ['Jobs', String(jobs.length)],
-                ['Proofs', String(proofs.length)],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-lg border border-white/10 bg-black/20 p-4">
-                  <p className="text-xs uppercase tracking-[0.16em] text-white/35">{label}</p>
-                  <p className="mt-3 font-mono text-lg text-white/80">{value}</p>
+                ['SCORE', agent ? agent.score : isLoading ? '…' : '0'],
+                ['JOBS', String(jobs.length)],
+                ['PROOFS', String(proofs.length)],
+              ].map(([label, value], i) => (
+                <div key={label} className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)', animation: `fadeInUp 0.4s ${i * 0.05}s both cubic-bezier(0.16, 1, 0.3, 1)` }}>
+                  <p className="aureo-mono-label">{label}</p>
+                  <p className="mt-2 aureo-display text-[28px] text-[#EAE4D8]">{value}</p>
                 </div>
               ))}
             </div>
-            <div className="mt-6 rounded-lg border border-white/10 bg-black/20 p-4">
-              <p className="text-xs uppercase tracking-[0.16em] text-white/35">Reputation trend</p>
-              <div className="mt-3 text-cyan-200">
-                <Sparkline values={reputationSeries} />
+            <div className="mt-6 p-4" style={{ border: '1px solid rgba(197, 166, 124, 0.2)', background: 'rgba(0,0,0,0.3)' }}>
+              <div className="flex items-center justify-between">
+                <p className="aureo-mono-label" style={{ color: '#C5A67C' }}>REPUTATION · TREND</p>
+                <span className="font-mono text-[11px] text-[#C5A67C]">{series[series.length - 1]}</span>
               </div>
-              <p className="mt-2 text-sm leading-7 text-white/45">
-                Reputation is projected from `ReputationOracle` and tied to payment-coupled work proofs.
+              <div className="mt-3">
+                <Sparkline values={series} />
+              </div>
+              <p className="mt-2 font-mono text-[10.5px] leading-5 text-[#7A7A7A]">
+                Reputation projected from ReputationOracle, coupled to paid WorkProof mints.
               </p>
             </div>
           </section>
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="glass-card p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Jobs</p>
+          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+            <div className="aureo-mono-label mb-2">JOBS</div>
+            <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Linked jobs</h2>
             <div className="mt-5 space-y-3">
               {jobs.length > 0 ? (
                 jobs.map((job) => (
                   <Link
                     key={job.id}
                     href={`/job/${job.id}`}
-                    className="block rounded-lg border border-white/10 bg-black/20 px-4 py-3 transition hover:border-cyan-300/30"
+                    className="ledger-row block border border-white/10 bg-black/20 px-4 py-3"
                   >
                     <div className="flex items-center justify-between gap-4">
-                      <span className="font-mono text-sm text-white/80">Job #{job.id}</span>
-                      <span className="font-mono text-xs text-cyan-200">{formatUSDC(BigInt(job.budget))} USDC</span>
+                      <span className="font-mono text-[12.5px] text-[#EAE4D8]">Job #{job.id}</span>
+                      <span className="font-mono text-[11px] text-[#C5A67C]">{formatUSDC(BigInt(job.budget))} USDC</span>
                     </div>
-                    <div className="mt-2 flex items-center justify-between gap-4 text-xs text-white/45">
-                      <span>Worker {shortenAddress(job.worker)}</span>
-                      <span>Status {job.status}</span>
+                    <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#7A7A7A]">
+                      <span>worker {shortenAddress(job.worker)}</span>
+                      <span className="chip-status pending">{JOB_STATUS[job.status] || job.status}</span>
                     </div>
                   </Link>
                 ))
               ) : (
-                <p className="rounded-lg border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/45">
-                  {isLoading ? 'Loading jobs...' : 'No jobs found for this agent yet.'}
+                <p className="p-4 font-mono text-[11.5px] text-[#7A7A7A]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
+                  {isLoading ? 'Loading jobs…' : 'No jobs for this agent yet.'}
                 </p>
               )}
             </div>
           </section>
 
-          <section className="glass-card p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Work proofs</p>
+          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+            <div className="aureo-mono-label mb-2">WORK PROOFS</div>
+            <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Soulbound history</h2>
             <div className="mt-5 space-y-3">
               {proofs.length > 0 ? (
-                proofs.map((proof) => (
-                  <div key={proof.tokenId} className="rounded-lg border border-white/10 bg-black/20 px-4 py-3">
+                proofs.map((p) => (
+                  <div key={p.tokenId} className="ledger-row border border-white/10 bg-black/20 px-4 py-3">
                     <div className="flex items-center justify-between gap-4">
-                      <span className="font-mono text-sm text-white/80">Job #{proof.jobId}</span>
-                      <span className="font-mono text-xs text-cyan-200">{formatUSDC(BigInt(proof.amountPaid))} USDC</span>
+                      <span className="font-mono text-[12.5px] text-[#EAE4D8]">Job #{p.jobId}</span>
+                      <span className="font-mono text-[11px] text-[#C5A67C]">{formatUSDC(BigInt(p.amountPaid))} USDC</span>
                     </div>
-                    <div className="mt-2 flex items-center justify-between gap-4 text-xs text-white/45">
-                      <span>Payer {shortenAddress(proof.payer)}</span>
-                      <span>{new Date(Number(proof.mintedAt) * 1000).toLocaleDateString()}</span>
+                    <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#7A7A7A]">
+                      <span>payer {shortenAddress(p.payer)}</span>
+                      <span>{new Date(Number(p.mintedAt) * 1000).toLocaleDateString()}</span>
                     </div>
                   </div>
                 ))
               ) : (
-                <p className="rounded-lg border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/45">
-                  {isLoading ? 'Loading proofs...' : 'No work proofs minted for this agent yet.'}
+                <p className="p-4 font-mono text-[11.5px] text-[#7A7A7A]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
+                  {isLoading ? 'Loading proofs…' : 'No WorkProofs minted for this agent yet.'}
                 </p>
               )}
             </div>

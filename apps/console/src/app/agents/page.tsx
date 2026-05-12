@@ -28,100 +28,76 @@ export default function AgentsPage() {
 
   async function loadAgents() {
     setIsRefreshing(true);
-    try {
-      const nextAgents = await fetchIndexerJson<IndexedAgent[]>('/agents');
-      setAgents(nextAgents);
-    } finally {
-      setIsRefreshing(false);
-    }
+    try { setAgents(await fetchIndexerJson<IndexedAgent[]>('/agents')); }
+    finally { setIsRefreshing(false); }
   }
 
   useEffect(() => {
     let cancelled = false;
-
-    async function load() {
+    (async () => {
       try {
         setIsLoading(true);
         setError(null);
         setStatusTone('pending');
-        const nextAgents = await fetchIndexerJson<IndexedAgent[]>('/agents');
-        if (!cancelled) {
-          setAgents(nextAgents);
-          setStatusTone('synced');
-        }
-      } catch (nextError) {
-        if (!cancelled) {
-          setError(nextError instanceof Error ? nextError.message : 'Failed to load agents.');
-          setStatusTone('error');
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
+        const next = await fetchIndexerJson<IndexedAgent[]>('/agents');
+        if (!cancelled) { setAgents(next); setStatusTone('synced'); }
+      } catch (e) {
+        if (!cancelled) { setError(e instanceof Error ? e.message : 'Failed to load agents.'); setStatusTone('error'); }
+      } finally { if (!cancelled) setIsLoading(false); }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   async function handleRegisterAgent() {
     try {
       setIsSubmitting(true);
       setStatusTone('pending');
-      setTxState('Submitting registerAgent transaction...');
+      setTxState('Submitting registerAgent transaction…');
       const hash = await writeContractAsync(
         buildRegisterAgentConfig(BigInt(form.agentId), form.skill, form.metadataURI)
       );
-      setTxState(`Waiting for ${hash.slice(0, 10)}...`);
+      setTxState(`Waiting for ${hash.slice(0, 10)}…`);
       await waitForTransactionReceipt(config, { hash });
-      setTxState('Receipt confirmed. Waiting for indexer refresh...');
-      const nextAgents = await waitForIndexer<IndexedAgent[]>(
+      setTxState('Receipt confirmed. Waiting for indexer refresh…');
+      const next = await waitForIndexer<IndexedAgent[]>(
         '/agents',
-        (payload) => payload.some((agent) => agent.agentId === form.agentId)
+        (payload) => payload.some((a) => a.agentId === form.agentId)
       );
-      setAgents(nextAgents);
+      setAgents(next);
       setStatusTone('synced');
       setTxState('Agent registration confirmed.');
-    } catch (nextError) {
-      setTxState(nextError instanceof Error ? nextError.message : 'Agent registration failed.');
+    } catch (e) {
+      setTxState(e instanceof Error ? e.message : 'Agent registration failed.');
       setStatusTone('error');
-    } finally {
-      setIsSubmitting(false);
-    }
+    } finally { setIsSubmitting(false); }
   }
 
   return (
-    <div className="relative px-6 py-20">
+    <div className="relative px-6 py-16 md:px-10 md:py-20">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/35">Agent directory</p>
-            <h1 className="mt-3 font-[var(--font-display)] text-[34px] font-semibold tracking-[-0.03em] md:text-[52px]">
-              Indexed agent registry
+            <div className="aureo-mono-label mb-3">PROTOCOL · AGENTS</div>
+            <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
+              Agent <span className="italic text-[#C5A67C]">registry</span>
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-white/50">
-              Browse registered agents and push new `registerAgent` transactions directly from the console.
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#9a9a9a]">
+              Browse registered agents and push <span className="text-[#C5A67C]">registerAgent</span> transactions
+              directly. Contract: <span className="text-[#C5A67C]">AgentRegistry</span> — soulbound identities with
+              reputation and job history.
             </p>
           </div>
           <div className="flex gap-3 self-start md:self-auto">
-            <button
-              onClick={() => loadAgents()}
-              className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-white/80"
-            >
-              {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            <button onClick={() => loadAgents()} className="btn-bordered">
+              {isRefreshing ? 'REFRESHING…' : 'REFRESH'}
             </button>
-            <Link href="/docs" className="btn-primary">
-              SDK Quickstart
-            </Link>
+            <Link href="/docs" className="btn-primary">SDK QUICKSTART</Link>
           </div>
         </div>
 
         {error && (
-          <div className="mb-6 rounded-lg border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
-            {error}
+          <div className="mb-6 p-4" style={{ border: '1px solid rgba(230, 130, 130, 0.35)', background: 'rgba(230, 130, 130, 0.06)' }}>
+            <p className="font-mono text-[11.5px] text-[#f0c5c5]">{error}</p>
           </div>
         )}
 
@@ -129,89 +105,64 @@ export default function AgentsPage() {
           <StatusBanner
             tone={statusTone}
             title={
-              statusTone === 'pending'
-                ? 'Pending Confirmation'
-                : statusTone === 'synced'
-                  ? 'Indexer Synced'
-                  : statusTone === 'error'
-                    ? 'Action Error'
-                    : 'Ready'
+              statusTone === 'pending' ? 'PENDING · CONFIRMATION'
+                : statusTone === 'synced' ? 'INDEXER · SYNCED'
+                : statusTone === 'error' ? 'ACTION · ERROR'
+                : 'READY'
             }
-            body={
-              txState ||
-              (isRefreshing
-                ? 'Refreshing indexed agent list from the local indexer.'
-                : 'Agent registry is loaded and ready for manual refresh or a new registerAgent flow.')
-            }
+            body={txState || (isRefreshing ? 'Refreshing indexed agents.' : 'Ready for registerAgent flow.')}
           />
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-          <section className="glass-card p-6">
+          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
             <div className="flex items-center justify-between gap-4">
-              <h2 className="text-lg font-light">Registered agents</h2>
-              <span className="font-mono text-xs text-cyan-200">{agents.length} indexed</span>
+              <div>
+                <div className="aureo-mono-label mb-2">LEDGER</div>
+                <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Registered agents</h2>
+              </div>
+              <span className="font-mono text-[11px] text-[#C5A67C]">{agents.length} indexed</span>
             </div>
             <div className="mt-5 space-y-3">
               {agents.length > 0 ? (
-                agents.map((agent) => (
+                agents.map((a) => (
                   <Link
-                    key={agent.agentId}
-                    href={`/agent/${agent.agentId}`}
-                    className="block rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 transition hover:border-cyan-300/30"
+                    key={a.agentId}
+                    href={`/agent/${a.agentId}`}
+                    className="ledger-row block border border-white/10 bg-black/20 px-4 py-3"
                   >
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-sm font-semibold text-white">Agent #{agent.agentId}</span>
-                      <span className="font-mono text-xs text-cyan-200">Score {agent.score}</span>
+                      <span className="font-mono text-[12.5px] text-[#EAE4D8]">Agent #{a.agentId}</span>
+                      <span className="font-mono text-[11px] text-[#C5A67C]">Score {a.score}</span>
                     </div>
-                    <div className="mt-2 flex items-center justify-between gap-4 text-xs text-white/45">
-                      <span>{shortenAddress(agent.controller)}</span>
-                      <span>{agent.jobs.length} jobs</span>
+                    <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#7A7A7A]">
+                      <span>{shortenAddress(a.controller)}</span>
+                      <span>{a.jobs.length} jobs</span>
                     </div>
                   </Link>
                 ))
               ) : (
-                <p className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm leading-6 text-white/45">
-                  {isLoading ? 'Loading agents...' : 'No indexed agents yet.'}
+                <p className="p-4 font-mono text-[11.5px] text-[#7A7A7A]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.25)' }}>
+                  {isLoading ? 'Loading agents…' : 'No indexed agents yet.'}
                 </p>
               )}
             </div>
           </section>
 
-          <section className="glass-card p-6">
-            <h2 className="text-lg font-light">Register agent</h2>
-            <p className="mt-2 text-sm leading-6 text-white/45">
-              This triggers `AgentRegistry.registerAgent(agentId, skillHash, metadataURI)` using the connected wallet.
-            </p>
+          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+            <div className="aureo-mono-label mb-2">ACTION · WRITE</div>
+            <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Register agent</h2>
+            <code className="mt-2 block font-mono text-[10.5px] text-[#7A7A7A]">AgentRegistry.registerAgent(agentId, skillHash, metadataURI)</code>
             <div className="mt-5 space-y-3">
-              <input
-                value={form.agentId}
-                onChange={(event) => setForm((current) => ({ ...current, agentId: event.target.value }))}
-                placeholder="Agent ID"
-                className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
-              />
-              <input
-                value={form.skill}
-                onChange={(event) => setForm((current) => ({ ...current, skill: event.target.value }))}
-                placeholder="Skill label"
-                className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
-              />
-              <input
-                value={form.metadataURI}
-                onChange={(event) => setForm((current) => ({ ...current, metadataURI: event.target.value }))}
-                placeholder="ipfs://..."
-                className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
-              />
+              <input value={form.agentId} onChange={(e) => setForm((c) => ({ ...c, agentId: e.target.value }))} placeholder="agentId" className="input-mono" />
+              <input value={form.skill} onChange={(e) => setForm((c) => ({ ...c, skill: e.target.value }))} placeholder="skill-label" className="input-mono" />
+              <input value={form.metadataURI} onChange={(e) => setForm((c) => ({ ...c, metadataURI: e.target.value }))} placeholder="ipfs://…" className="input-mono" />
             </div>
-            <button
-              onClick={handleRegisterAgent}
-              disabled={!isConnected || isSubmitting}
-              className="mt-5 rounded-xl bg-cyan-300 px-4 py-3 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {isSubmitting ? 'Registering...' : 'Register Agent'}
+            <button onClick={handleRegisterAgent} disabled={!isConnected || isSubmitting} className="btn-primary mt-5">
+              {isSubmitting ? 'REGISTERING…' : 'REGISTER AGENT'}
             </button>
-            <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/45">
-              {isConnected ? 'Wallet connected. Ready to send registerAgent.' : 'Connect wallet to submit agent registration.'}
+            <div className="mt-4 p-4 font-mono text-[11.5px] leading-5 text-[#9a9a9a]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
+              {isConnected ? '✓ Wallet connected — ready to send registerAgent.' : '⚠ Connect wallet to submit registerAgent.'}
             </div>
           </section>
         </div>

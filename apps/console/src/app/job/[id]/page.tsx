@@ -35,173 +35,153 @@ export default function JobDetailPage() {
 
   useEffect(() => {
     let cancelled = false;
-
     async function load() {
-      if (!jobId) {
-        setError('Invalid job id.');
-        setIsLoading(false);
-        return;
-      }
-
+      if (!jobId) { setError('Invalid job id.'); setIsLoading(false); return; }
       try {
-        setIsLoading(true);
-        setError(null);
-
-        const nextPayload = await fetchIndexerJson<JobDetail>(`/jobs/${jobId}`);
-        if (!cancelled) {
-          setPayload(nextPayload);
-        }
-      } catch (nextError) {
-        if (!cancelled) {
-          setError(nextError instanceof Error ? nextError.message : 'Failed to load job.');
-          setPayload(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
+        setIsLoading(true); setError(null);
+        const next = await fetchIndexerJson<JobDetail>(`/jobs/${jobId}`);
+        if (!cancelled) setPayload(next);
+      } catch (e) {
+        if (!cancelled) { setError(e instanceof Error ? e.message : 'Failed to load job.'); setPayload(null); }
+      } finally { if (!cancelled) setIsLoading(false); }
     }
-
     load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [jobId]);
 
   const job = payload?.job || null;
   const proof = payload?.proof || null;
 
-  async function refreshJob() {
-    if (!jobId) return;
-    const nextPayload = await fetchIndexerJson<JobDetail>(`/jobs/${jobId}`);
-    setPayload(nextPayload);
-  }
-
   async function handleSubmitDeliverable() {
     if (!jobId) return;
     try {
       setActiveAction('submit');
-      setTxState('Submitting deliverable...');
+      setTxState('Submitting deliverable…');
       const hash = await writeContractAsync(
         buildSubmitDeliverableConfig(BigInt(jobId), deliverableURI, proofMetadataURI)
       );
       await waitForTransactionReceipt(config, { hash });
-      setTxState('Receipt confirmed. Waiting for indexer refresh...');
-      const nextPayload = await waitForIndexer<JobDetail>(
+      setTxState('Receipt confirmed. Waiting for indexer refresh…');
+      const next = await waitForIndexer<JobDetail>(
         `/jobs/${jobId}`,
-        (payload) => payload.job.deliverableURI === deliverableURI && payload.job.proofMetadataURI === proofMetadataURI
+        (p) => p.job.deliverableURI === deliverableURI && p.job.proofMetadataURI === proofMetadataURI
       );
-      setPayload(nextPayload);
+      setPayload(next);
       setTxState('Deliverable submitted and indexed.');
-    } catch (nextError) {
-      setTxState(nextError instanceof Error ? nextError.message : 'submitDeliverable failed.');
-    } finally {
-      setActiveAction(null);
-    }
+    } catch (e) { setTxState(e instanceof Error ? e.message : 'submitDeliverable failed.'); }
+    finally { setActiveAction(null); }
   }
 
   async function handleEvaluate(approved: boolean) {
     if (!jobId) return;
     try {
       setActiveAction(approved ? 'approve' : 'reject');
-      setTxState(approved ? 'Approving deliverable...' : 'Rejecting deliverable...');
+      setTxState(approved ? 'Approving deliverable…' : 'Rejecting deliverable…');
       const hash = await writeContractAsync(buildEvaluateJobConfig(BigInt(jobId), approved));
       await waitForTransactionReceipt(config, { hash });
-      setTxState('Receipt confirmed. Waiting for indexer refresh...');
-      const nextPayload = await waitForIndexer<JobDetail>(
+      setTxState('Receipt confirmed. Waiting for indexer refresh…');
+      const next = await waitForIndexer<JobDetail>(
         `/jobs/${jobId}`,
-        (payload) => payload.job.approved === approved && payload.job.status === 4
+        (p) => p.job.approved === approved && p.job.status === 4
       );
-      setPayload(nextPayload);
+      setPayload(next);
       setTxState(approved ? 'Deliverable approved and indexed.' : 'Deliverable rejected and indexed.');
-    } catch (nextError) {
-      setTxState(nextError instanceof Error ? nextError.message : 'evaluate failed.');
-    } finally {
-      setActiveAction(null);
-    }
+    } catch (e) { setTxState(e instanceof Error ? e.message : 'evaluate failed.'); }
+    finally { setActiveAction(null); }
   }
 
   async function handleSettle() {
     if (!jobId) return;
     try {
       setActiveAction('settle');
-      setTxState('Settling job...');
+      setTxState('Settling job…');
       const hash = await writeContractAsync(buildSettleJobConfig(BigInt(jobId)));
       await waitForTransactionReceipt(config, { hash });
-      setTxState('Receipt confirmed. Waiting for indexer refresh...');
-      const nextPayload = await waitForIndexer<JobDetail>(
+      setTxState('Receipt confirmed. Waiting for indexer refresh…');
+      const next = await waitForIndexer<JobDetail>(
         `/jobs/${jobId}`,
-        (payload) => payload.job.status === 5 && payload.proof !== null
+        (p) => p.job.status === 5 && p.proof !== null
       );
-      setPayload(nextPayload);
+      setPayload(next);
       setTxState('Job settled and indexed.');
-    } catch (nextError) {
-      setTxState(nextError instanceof Error ? nextError.message : 'settle failed.');
-    } finally {
-      setActiveAction(null);
-    }
+    } catch (e) { setTxState(e instanceof Error ? e.message : 'settle failed.'); }
+    finally { setActiveAction(null); }
   }
 
+  const statusChipClass = job
+    ? job.status === 5 ? 'chip-status active'
+      : job.status === 6 ? 'chip-status error'
+      : 'chip-status pending'
+    : 'chip-status';
+
   return (
-    <div className="relative px-6 py-20">
+    <div className="relative px-6 py-16 md:px-10 md:py-20">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <Link href="/dashboard" className="text-sm font-semibold text-cyan-200">
-              Back to dashboard
+            <Link href="/dashboard" className="font-mono text-[11px] tracking-[0.16em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
+              ← BACK · CONSOLE
             </Link>
-            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.22em] text-white/35">JobEscrow</p>
-            <h1 className="mt-3 font-[var(--font-display)] text-[34px] font-semibold tracking-[-0.03em] md:text-[52px]">
-              Job #{jobId || '0'}
+            <div className="aureo-mono-label mt-5 mb-3">PROTOCOL · JOB</div>
+            <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
+              Job <span className="italic text-[#C5A67C]">#{jobId || '0'}</span>
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-7 text-white/50">
-              Protocol job detail projected by the ArcLayer indexer from `JobEscrow` and linked `WorkProof` records.
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#9a9a9a]">
+              JobEscrow record projected by the indexer from on-chain events and linked WorkProof.
             </p>
           </div>
-          <div className="rounded-lg border border-cyan-300/20 bg-cyan-300/[0.06] px-4 py-3">
-            <p className="text-xs text-white/40">Budget</p>
-            <p className="mt-1 font-mono text-lg font-semibold text-cyan-100">
-              {job ? `${formatUSDC(BigInt(job.budget))} USDC` : isLoading ? 'Loading' : '0.00 USDC'}
-            </p>
+          <div
+            className="flex flex-col gap-1 p-4"
+            style={{ border: '1px solid rgba(197, 166, 124, 0.3)', background: 'rgba(197, 166, 124, 0.06)' }}
+          >
+            <span className="aureo-mono-label" style={{ color: '#C5A67C' }}>BUDGET</span>
+            <span className="font-mono text-[18px] text-[#EAE4D8]">
+              {job ? `${formatUSDC(BigInt(job.budget))} USDC` : isLoading ? '…' : '0.00 USDC'}
+            </span>
           </div>
         </div>
 
         {error && (
-          <div className="mb-6 rounded-lg border border-amber-300/20 bg-amber-300/10 p-4 text-sm text-amber-100">
-            {error}
+          <div className="mb-6 p-4" style={{ border: '1px solid rgba(230, 130, 130, 0.35)', background: 'rgba(230, 130, 130, 0.06)' }}>
+            <p className="font-mono text-[11.5px] text-[#f0c5c5]">{error}</p>
           </div>
         )}
 
-        <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-4">
+        {/* KPIs */}
+        <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
           {[
-            ['Status', job ? JOB_STATUS[job.status] : isLoading ? 'Loading' : 'Unavailable'],
-            ['Funded', job ? `${formatUSDC(BigInt(job.fundedAmount))} USDC` : isLoading ? 'Loading' : '0.00 USDC'],
-            ['Approved', job ? (job.approved ? 'Yes' : 'No') : isLoading ? 'Loading' : 'No'],
-            ['Proof', proof ? `Token #${proof.tokenId}` : isLoading ? 'Loading' : 'Pending'],
-          ].map(([label, value]) => (
-            <div key={label} className="rounded-lg border border-white/10 bg-white/[0.025] p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">{label}</p>
-              <p className="mt-2 font-mono text-lg text-white/75">{value}</p>
+            ['STATUS', job ? JOB_STATUS[job.status] : isLoading ? '…' : '—', statusChipClass],
+            ['FUNDED', job ? `${formatUSDC(BigInt(job.fundedAmount))} USDC` : isLoading ? '…' : '0.00 USDC'],
+            ['APPROVED', job ? (job.approved ? 'Yes' : 'No') : isLoading ? '…' : '—'],
+            ['PROOF', proof ? `#${proof.tokenId}` : isLoading ? '…' : 'pending'],
+          ].map(([label, value, chip], i) => (
+            <div key={label as string} className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)', animation: `fadeInUp 0.4s ${i * 0.04}s both cubic-bezier(0.16, 1, 0.3, 1)` }}>
+              <p className="aureo-mono-label">{label as string}</p>
+              {chip
+                ? <span className={chip as string}>{value as string}</span>
+                : <p className="mt-2 font-mono text-[14px] text-[#EAE4D8]">{value as string}</p>
+              }
             </div>
           ))}
         </div>
 
+        {/* Receipt + deliverable */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="glass-card p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Job receipt</p>
-            <div className="mt-5 space-y-3">
+          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+            <div className="aureo-mono-label mb-2">RECEIPT</div>
+            <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Parties &amp; metadata</h2>
+            <div className="mt-5 space-y-2.5">
               {[
-                ['Client', job ? shortenAddress(job.client) : isLoading ? 'Loading' : 'Unavailable'],
-                ['Worker', job ? shortenAddress(job.worker) : isLoading ? 'Loading' : 'Unavailable'],
-                ['Evaluator', job ? shortenAddress(job.evaluator) : isLoading ? 'Loading' : 'Unavailable'],
-                ['Agent', job ? `#${job.agentId}` : isLoading ? 'Loading' : 'Unavailable'],
-                ['Spec hash', job ? `${job.jobSpecHash.slice(0, 10)}...${job.jobSpecHash.slice(-8)}` : isLoading ? 'Loading' : 'Unavailable'],
-                ['Created', job ? new Date(Number(job.createdAt) * 1000).toLocaleString() : isLoading ? 'Loading' : 'Unavailable'],
+                ['client', job ? shortenAddress(job.client) : isLoading ? '…' : '—'],
+                ['worker', job ? shortenAddress(job.worker) : isLoading ? '…' : '—'],
+                ['evaluator', job ? shortenAddress(job.evaluator) : isLoading ? '…' : '—'],
+                ['agent', job ? `#${job.agentId}` : isLoading ? '…' : '—'],
+                ['spec hash', job ? `${job.jobSpecHash.slice(0, 10)}…${job.jobSpecHash.slice(-8)}` : isLoading ? '…' : '—'],
+                ['created', job ? new Date(Number(job.createdAt) * 1000).toLocaleString() : isLoading ? '…' : '—'],
               ].map(([label, value]) => (
-                <div key={label} className="ledger-row flex items-center justify-between rounded-lg border border-white/10 bg-black/20 px-4 py-3">
-                  <span className="text-sm text-white/45">{label}</span>
-                  <span className="max-w-[60%] truncate text-right font-mono text-sm text-white/75">{value}</span>
+                <div key={label} className="ledger-row flex items-center justify-between border border-white/10 bg-black/20 px-4 py-2.5">
+                  <span className="font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">{label}</span>
+                  <span className="max-w-[60%] truncate text-right font-mono text-[11.5px] text-[#EAE4D8]">{value}</span>
                 </div>
               ))}
             </div>
@@ -209,39 +189,30 @@ export default function JobDetailPage() {
               href={getExplorerAddressUrl(CONTRACTS.JOB_ESCROW)}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-5 inline-flex text-sm font-semibold text-cyan-200"
+              className="mt-5 inline-flex font-mono text-[11px] tracking-[0.14em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
             >
-              View JobEscrow contract
+              VIEW CONTRACT ↗
             </a>
           </section>
 
-          <section className="glass-card p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Deliverable and proof</p>
+          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+            <div className="aureo-mono-label mb-2">ARTIFACTS</div>
+            <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Deliverable &amp; proof</h2>
             <div className="mt-5 space-y-3">
-              <div className="rounded-lg border border-white/10 bg-black/20 px-4 py-3">
-                <p className="text-sm font-semibold text-white">Deliverable URI</p>
-                <p className="mt-2 truncate font-mono text-xs text-white/45">
-                  {job?.deliverableURI || (isLoading ? 'Loading...' : 'No deliverable submitted yet.')}
-                </p>
-              </div>
-              <div className="rounded-lg border border-white/10 bg-black/20 px-4 py-3">
-                <p className="text-sm font-semibold text-white">Proof metadata URI</p>
-                <p className="mt-2 truncate font-mono text-xs text-white/45">
-                  {job?.proofMetadataURI || (isLoading ? 'Loading...' : 'No proof metadata yet.')}
-                </p>
-              </div>
-              <div className="rounded-lg border border-white/10 bg-black/20 px-4 py-3">
-                <p className="text-sm font-semibold text-white">Minted proof</p>
+              <ArtifactRow label="Deliverable URI" value={job?.deliverableURI || (isLoading ? '…' : 'No deliverable submitted.')} />
+              <ArtifactRow label="Proof metadata URI" value={job?.proofMetadataURI || (isLoading ? '…' : 'No proof metadata.')} />
+              <div className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
+                <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>MINTED PROOF</p>
                 {proof ? (
-                  <div className="mt-2 space-y-2 text-xs text-white/45">
-                    <p className="font-mono text-cyan-200">Token #{proof.tokenId}</p>
-                    <p>Payer {shortenAddress(proof.payer)}</p>
-                    <p>Amount {formatUSDC(BigInt(proof.amountPaid))} USDC</p>
-                    <p>Minted {new Date(Number(proof.mintedAt) * 1000).toLocaleString()}</p>
+                  <div className="mt-2 space-y-1 font-mono text-[11px] text-[#9a9a9a]">
+                    <p className="text-[#C5A67C]">Token #{proof.tokenId}</p>
+                    <p>payer {shortenAddress(proof.payer)}</p>
+                    <p>amount {formatUSDC(BigInt(proof.amountPaid))} USDC</p>
+                    <p>minted {new Date(Number(proof.mintedAt) * 1000).toLocaleString()}</p>
                   </div>
                 ) : (
-                  <p className="mt-2 text-sm text-white/45">
-                    {isLoading ? 'Loading proof...' : 'No work proof minted for this job yet.'}
+                  <p className="mt-2 font-mono text-[11.5px] text-[#7A7A7A]">
+                    {isLoading ? 'Loading proof…' : 'No work proof minted for this job.'}
                   </p>
                 )}
               </div>
@@ -249,70 +220,59 @@ export default function JobDetailPage() {
           </section>
         </div>
 
-        <section className="mt-6 glass-card p-6">
+        {/* Actions */}
+        <section className="mt-6 p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">Job actions</p>
-              <h2 className="mt-2 text-lg font-light">Submit, evaluate, and settle</h2>
+              <div className="aureo-mono-label mb-2">ACTIONS · WRITE</div>
+              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Submit · evaluate · settle</h2>
             </div>
-            <a href={`${INDEXER_BASE_URL}/jobs/${jobId || '0'}`} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold text-cyan-200">
-              Open indexed JSON
+            <a
+              href={`${INDEXER_BASE_URL}/jobs/${jobId || '0'}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-[11px] tracking-[0.14em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
+            >
+              OPEN INDEXED JSON ↗
             </a>
           </div>
 
           <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
             <div className="space-y-3">
-              <input
-                value={deliverableURI}
-                onChange={(event) => setDeliverableURI(event.target.value)}
-                placeholder="Deliverable URI"
-                className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
-              />
-              <input
-                value={proofMetadataURI}
-                onChange={(event) => setProofMetadataURI(event.target.value)}
-                placeholder="Proof metadata URI"
-                className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-white outline-none"
-              />
-              <button
-                onClick={handleSubmitDeliverable}
-                disabled={!isConnected || activeAction !== null}
-                className="rounded-xl bg-cyan-300 px-4 py-3 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {activeAction === 'submit' ? 'Submitting...' : 'Submit Deliverable'}
+              <input value={deliverableURI} onChange={(e) => setDeliverableURI(e.target.value)} placeholder="ipfs://deliverable" className="input-mono" />
+              <input value={proofMetadataURI} onChange={(e) => setProofMetadataURI(e.target.value)} placeholder="ipfs://proof-metadata" className="input-mono" />
+              <button onClick={handleSubmitDeliverable} disabled={!isConnected || activeAction !== null} className="btn-primary">
+                {activeAction === 'submit' ? 'SUBMITTING…' : 'SUBMIT DELIVERABLE'}
               </button>
             </div>
 
             <div className="space-y-3">
-              <button
-                onClick={() => handleEvaluate(true)}
-                disabled={!isConnected || activeAction !== null}
-                className="w-full rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {activeAction === 'approve' ? 'Approving...' : 'Evaluate: Approve'}
+              <button onClick={() => handleEvaluate(true)} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
+                {activeAction === 'approve' ? 'APPROVING…' : 'EVALUATE · APPROVE'}
               </button>
-              <button
-                onClick={() => handleEvaluate(false)}
-                disabled={!isConnected || activeAction !== null}
-                className="w-full rounded-xl bg-white/10 px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {activeAction === 'reject' ? 'Rejecting...' : 'Evaluate: Reject'}
+              <button onClick={() => handleEvaluate(false)} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full" style={{ borderColor: 'rgba(230, 130, 130, 0.4)', color: '#e68282' }}>
+                {activeAction === 'reject' ? 'REJECTING…' : 'EVALUATE · REJECT'}
               </button>
-              <button
-                onClick={handleSettle}
-                disabled={!isConnected || activeAction !== null}
-                className="w-full rounded-xl bg-cyan-300 px-4 py-3 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {activeAction === 'settle' ? 'Settling...' : 'Settle Job'}
+              <button onClick={handleSettle} disabled={!isConnected || activeAction !== null} className="btn-primary w-full">
+                {activeAction === 'settle' ? 'SETTLING…' : 'SETTLE JOB'}
               </button>
             </div>
           </div>
 
-          <div className="mt-5 rounded-xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-white/45">
-            {txState || (isConnected ? 'Wallet connected. Contract permissions still decide which actions succeed.' : 'Connect wallet to run submit/evaluate/settle transactions.')}
+          <div className="mt-5 p-4 font-mono text-[11.5px] leading-5 text-[#9a9a9a]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
+            {txState || (isConnected ? '✓ Wallet connected. Contract permissions decide which actions succeed.' : '⚠ Connect wallet to run submit / evaluate / settle.')}
           </div>
         </section>
       </div>
+    </div>
+  );
+}
+
+function ArtifactRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
+      <p className="aureo-mono-label">{label}</p>
+      <p className="mt-2 truncate font-mono text-[11.5px] text-[#EAE4D8]">{value}</p>
     </div>
   );
 }
