@@ -2,7 +2,7 @@
 
 # ArcLayer
 
-**Agent labor settlement layer on Arc testnet**
+**Protocol layer for the agentic economy**
 
 [Live App](https://frontend-rouge-eta-64.vercel.app) · [Arc Explorer](https://testnet.arcscan.app) · [Arc Network](https://arc.network)
 
