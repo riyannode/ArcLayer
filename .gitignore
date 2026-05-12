@@ -39,6 +39,7 @@ frontend/.vercel/
 frontend/.npmrc
 frontend/.nvmrc
 frontend/next-env.d.ts
+indexer/data/
 
 # Logs
 *.log
@@ -47,3 +48,4 @@ pnpm-debug.log*
 
 # Misc
 *.tsbuildinfo
+.vercel

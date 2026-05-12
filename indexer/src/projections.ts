@@ -121,7 +121,7 @@ export async function buildProofsProjection() {
     })
   );
 
-  return proofs.filter(Boolean);
+  return proofs.filter((proof): proof is NonNullable<typeof proof> => proof !== null);
 }
 
 export async function buildOverviewProjection(events: IndexedJobEvent[]) {

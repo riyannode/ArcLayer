@@ -23,8 +23,8 @@ const nextConfig = {
   },
   webpack: (config) => {
     config.resolve.alias['@'] = path.join(__dirname, 'src');
-    config.resolve.alias['@arcwork/sdk'] = path.join(__dirname, '..', '..', 'sdk', 'src');
-    config.resolve.alias['@arcwork/indexer'] = path.join(__dirname, '..', '..', 'indexer', 'src');
+    config.resolve.alias['@arcwork/sdk'] = path.join(__dirname, 'sdk', 'src');
+    config.resolve.alias['@arcwork/indexer'] = path.join(__dirname, '..', 'indexer', 'src');
     config.resolve.fallback = {
       ...config.resolve.fallback,
       '@react-native-async-storage/async-storage': false,
