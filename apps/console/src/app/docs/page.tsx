@@ -1,169 +1,129 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import Link from 'next/link';
-import { MDXRemote } from 'next-mdx-remote/rsc';
 
 const quickstart = [
-  { step: '01', title: 'Install', body: 'Add the typed workspace SDK to your project.', code: 'pnpm add @arclayer/sdk' },
-  { step: '02', title: 'Read', body: 'Import contract metadata and a read helper.', code: "import { CONTRACTS, readJob } from '@arclayer/sdk'" },
-  { step: '03', title: 'Write', body: 'Build a wagmi-compatible write config.', code: 'const tx = buildRegisterAgentConfig(agentId, skill, uri)' },
-  { step: '04', title: 'Index', body: 'Point at the indexer for fast reads.', code: 'fetch(`${INDEXER_URL}/agents/1`).then(r => r.json())' },
+  { step: '01', title: 'Install', body: 'Add the workspace SDK.', code: 'pnpm add @arclayer/sdk' },
+  { step: '02', title: 'Connect', body: 'Open a viem client on Arc testnet.', code: "import { createClient } from '@arclayer/sdk';\nconst client = createClient();" },
+  { step: '03', title: 'Read', body: 'Query a job or agent.', code: "import { readJob } from '@arclayer/sdk';\nconst job = await readJob(0n);" },
+  { step: '04', title: 'Index', body: 'Point at the indexer for fast reads.', code: 'fetch(`/api/indexer/agents/1`).then(r => r.json())' },
 ];
 
-const sdkExamples = [
+const examples = [
   {
-    title: 'Read protocol addresses and load a job',
-    tag: 'READ',
-    code: `import { CONTRACTS, readJob } from '@arclayer/sdk';
+    title: 'Register an agent',
+    lang: 'typescript',
+    code: `import { CONTRACTS, AGENT_REGISTRY_ABI } from '@arclayer/sdk';
+import { useWriteContract } from 'wagmi';
 
-const job = await readJob(0n);
-console.log(CONTRACTS.JOB_ESCROW, job);`,
-  },
-  {
-    title: 'Register and submit with write helpers',
-    tag: 'WRITE',
-    code: `import { createArcClient, registerAgent, submitDeliverable } from '@arclayer/sdk';
-
-const client = createArcClient({ account, transport });
-await registerAgent(client, {
-  agentId: 12n,
-  skillHash: '0xabc123...',
-  metadataURI: 'ipfs://agent-profile',
-});
-
-await submitDeliverable(client, {
-  jobId: 8n,
-  deliverableURI: 'ipfs://deliverable',
-  proofMetadataURI: 'ipfs://proof',
+const { writeContractAsync } = useWriteContract();
+await writeContractAsync({
+  address: CONTRACTS.AGENT_REGISTRY,
+  abi: AGENT_REGISTRY_ABI,
+  functionName: 'registerAgent',
+  args: [skillHash, 'ipfs://agent-metadata'],
 });`,
   },
   {
-    title: 'Query indexer for agent telemetry',
-    tag: 'INDEX',
-    code: `const res = await fetch(process.env.NEXT_PUBLIC_INDEXER_URL + '/agents/1');
-const profile = await res.json();
-console.log(profile.agent.score, profile.jobs.length, profile.proofs.length);`,
+    title: 'Create a job with milestones',
+    lang: 'typescript',
+    code: `import { CONTRACTS, JOB_ESCROW_ABI, parseUSDC } from '@arclayer/sdk';
+
+await writeContractAsync({
+  address: CONTRACTS.JOB_ESCROW,
+  abi: JOB_ESCROW_ABI,
+  functionName: 'createJob',
+  args: [agentId, parseUSDC('1000'), 'ipfs://job-spec'],
+});`,
+  },
+  {
+    title: 'Read indexer overview',
+    lang: 'typescript',
+    code: `const res = await fetch('/api/indexer/overview');
+const { summary, jobs, agents, proofs } = await res.json();
+// summary.jobs, summary.agents, summary.proofs, summary.totalFunded`,
   },
 ];
 
-async function loadBuildPlanMdx() {
-  const buildPlanPath = path.join(process.cwd(), '..', '..', 'docs', 'arclayer-build-plan.md');
-  try {
-    return await fs.readFile(buildPlanPath, 'utf8');
-  } catch {
-    return '> Build plan unavailable in this build.';
-  }
-}
+const apiEndpoints = [
+  { method: 'GET', path: '/api/indexer/overview', desc: 'Protocol totals + recent activity' },
+  { method: 'GET', path: '/api/indexer/jobs', desc: 'All jobs, newest first' },
+  { method: 'GET', path: '/api/indexer/jobs/:id', desc: 'Single job detail + events' },
+  { method: 'GET', path: '/api/indexer/agents', desc: 'All registered agents' },
+  { method: 'GET', path: '/api/indexer/agents/:id', desc: 'Agent profile + job history + proofs' },
+  { method: 'GET', path: '/api/indexer/proofs', desc: 'All work-proofs minted' },
+];
 
-export default async function DocsPage() {
-  const buildPlan = await loadBuildPlanMdx();
-
+export default function DocsPage() {
   return (
-    <div className="relative px-6 py-16 md:px-10 md:py-24">
-      <div className="mx-auto max-w-6xl">
-        {/* Header */}
-        <div className="mb-10">
-          <div className="aureo-mono-label mb-3">PROTOCOL · SDK</div>
-          <h1 className="aureo-display text-[48px] text-[#EAE4D8] md:text-[72px]">
-            Build on the <span className="italic text-[#C5A67C]">protocol layer</span>
-          </h1>
-          <p className="mt-4 max-w-3xl font-mono text-[12.5px] leading-6 text-[#9a9a9a]">
-            The repo exposes a workspace SDK (<span className="text-[#C5A67C]">@arclayer/sdk</span>), a standalone indexer,
-            and this console. Below: quickstart, SDK surface, and the full build plan.
-          </p>
+    <main className="min-h-screen pb-32">
+      <section className="max-w-6xl mx-auto px-6 pt-16">
+        <div className="aureo-mono-label mb-6" style={{ color: '#C5A67C' }}>SDK · DOCS</div>
+        <h1 className="aureo-display text-5xl md:text-6xl mb-6" style={{ color: '#EAE4D8' }}>
+          Build agents on <em className="italic" style={{ color: '#C5A67C' }}>Arc</em>
+        </h1>
+        <p className="text-base max-w-2xl mb-12" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+          Typed SDK, contract ABIs, event indexer, and a console. Everything you need to ship escrowed
+          agent workflows with on-chain reputation and provable work.
+        </p>
 
-          <div className="mt-6 flex flex-wrap gap-2">
-            <span className="tag-pill">typescript</span>
-            <span className="tag-pill">wagmi / viem</span>
-            <span className="tag-pill">next.js app router</span>
-            <span className="tag-pill">arc testnet · 5042002</span>
-          </div>
+        <div className="flex flex-wrap gap-3 mb-16">
+          <a href="https://github.com/riyannode/ArcLayer" target="_blank" rel="noopener noreferrer" className="aureo-cta-ghost">
+            GITHUB ↗
+          </a>
+          <Link href="/dashboard" className="aureo-cta-primary">
+            OPEN CONSOLE ↗
+          </Link>
         </div>
+      </section>
 
-        {/* Quickstart grid */}
-        <div className="mb-14 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {quickstart.map((q, i) => (
-            <div
-              key={q.step}
-              className="flex flex-col gap-3 p-5"
-              style={{
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                background: 'rgba(10, 10, 10, 0.6)',
-                animation: `fadeInUp 0.4s ${0.05 + i * 0.07}s both cubic-bezier(0.16, 1, 0.3, 1)`,
-              }}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[11px] tracking-[0.18em] text-[#C5A67C]">{q.step}</span>
-                <span className="h-px w-10 bg-[#C5A67C]/40" />
-              </div>
-              <h3 className="aureo-display text-[24px] text-[#EAE4D8]">{q.title}</h3>
-              <p className="font-mono text-[11px] leading-5 text-[#9a9a9a]">{q.body}</p>
-              <code className="block overflow-x-auto border-l-2 border-[#C5A67C] bg-black/40 px-3 py-2 font-mono text-[10.5px] text-[#EAE4D8]">
-                {q.code}
-              </code>
+      {/* Quickstart */}
+      <section className="max-w-6xl mx-auto px-6 mb-24">
+        <div className="aureo-mono-label mb-6">PROTOCOL · QUICKSTART</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {quickstart.map((q) => (
+            <div key={q.step} className="aureo-glass-card p-5">
+              <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>{q.step}</div>
+              <div className="aureo-display text-xl mb-2" style={{ color: '#EAE4D8' }}>{q.title}</div>
+              <p className="text-sm mb-3" style={{ color: 'rgba(234, 228, 216, 0.65)', lineHeight: 1.5 }}>{q.body}</p>
+              <pre className="aureo-code text-xs p-3 overflow-x-auto" style={{ color: '#C5A67C' }}>{q.code}</pre>
             </div>
           ))}
         </div>
+      </section>
 
-        {/* SDK examples */}
-        <div className="mb-14">
-          <div className="mb-6 flex items-end justify-between gap-4">
-            <div>
-              <div className="aureo-mono-label mb-2">SDK · EXAMPLES</div>
-              <h2 className="aureo-display text-[36px] text-[#EAE4D8] md:text-[48px]">Typed entry-points</h2>
-            </div>
-            <a
-              href="https://github.com/riyannode/ArcLayer/tree/main/sdk"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-bordered"
-            >
-              SOURCE ↗
-            </a>
-          </div>
-
-          <div className="space-y-4">
-            {sdkExamples.map((ex, i) => (
-              <div
-                key={ex.title}
-                className="overflow-hidden"
-                style={{
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                  background: 'rgba(10, 10, 10, 0.6)',
-                  animation: `fadeInUp 0.4s ${i * 0.08}s both cubic-bezier(0.16, 1, 0.3, 1)`,
-                }}
-              >
-                <div className="flex items-center justify-between border-b border-white/8 px-5 py-3" style={{ background: 'rgba(197, 166, 124, 0.03)' }}>
-                  <h3 className="aureo-display text-[20px] text-[#EAE4D8]">{ex.title}</h3>
-                  <span className="tag-pill">{ex.tag}</span>
-                </div>
-                <pre className="overflow-x-auto p-5 font-mono text-[12px] leading-6 text-[#EAE4D8]">{ex.code}</pre>
+      {/* API */}
+      <section className="max-w-6xl mx-auto px-6 mb-24">
+        <div className="aureo-mono-label mb-6">PROTOCOL · REST API</div>
+        <div className="aureo-glass-card overflow-hidden">
+          <div className="grid grid-cols-[60px_1fr_1.5fr] gap-0">
+            <div className="aureo-mono-label p-4 border-b border-white/10" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>METHOD</div>
+            <div className="aureo-mono-label p-4 border-b border-white/10" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>PATH</div>
+            <div className="aureo-mono-label p-4 border-b border-white/10" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>DESCRIPTION</div>
+            {apiEndpoints.map((e, i) => (
+              <div key={e.path} className="contents">
+                <div className="aureo-mono text-xs p-4 border-b border-white/5" style={{ color: '#C5A67C' }}>{e.method}</div>
+                <div className="aureo-mono text-xs p-4 border-b border-white/5 break-all" style={{ color: '#EAE4D8' }}>{e.path}</div>
+                <div className="text-sm p-4 border-b border-white/5" style={{ color: 'rgba(234, 228, 216, 0.7)' }}>{e.desc}</div>
               </div>
             ))}
           </div>
         </div>
+      </section>
 
-        {/* Build plan MDX */}
-        <div className="mb-10">
-          <div className="mb-6">
-            <div className="aureo-mono-label mb-2">PROTOCOL · BUILD PLAN</div>
-            <h2 className="aureo-display text-[36px] text-[#EAE4D8] md:text-[48px]">Architecture</h2>
-          </div>
-
-          <section
-            className="prose-arc p-8"
-            style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.55)' }}
-          >
-            <MDXRemote source={buildPlan} />
-          </section>
+      {/* Examples */}
+      <section className="max-w-6xl mx-auto px-6 mb-24">
+        <div className="aureo-mono-label mb-6">PROTOCOL · EXAMPLES</div>
+        <div className="space-y-6">
+          {examples.map((ex) => (
+            <div key={ex.title} className="aureo-glass-card p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="aureo-display text-xl" style={{ color: '#EAE4D8' }}>{ex.title}</h3>
+                <span className="aureo-mono-label" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>{ex.lang}</span>
+              </div>
+              <pre className="aureo-code text-sm p-4 overflow-x-auto" style={{ color: '#C5A67C', lineHeight: 1.6 }}>{ex.code}</pre>
+            </div>
+          ))}
         </div>
-
-        <div className="flex flex-wrap gap-3">
-          <Link href="/dashboard" className="btn-primary">OPEN CONSOLE</Link>
-          <Link href="/jobs" className="btn-bordered">INSPECT JOBS</Link>
-          <Link href="/agents" className="btn-bordered">BROWSE AGENTS</Link>
-        </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
