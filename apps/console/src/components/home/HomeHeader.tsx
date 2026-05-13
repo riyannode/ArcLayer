@@ -19,9 +19,10 @@ const nav = [
 export default function HomeHeader() {
   return (
     <header
-      className="relative z-30 flex items-center justify-between border-b border-white/8 px-6 py-5 backdrop-blur-xl md:px-10"
+      className="relative z-30 flex items-center justify-between border-b border-white/8 px-6 py-5 backdrop-blur-xl md:border-b-0 md:px-10"
       style={{ background: 'rgba(5, 5, 5, 0.6)' }}
     >
+      <div className="pointer-events-none absolute bottom-0 left-[56px] right-0 h-px bg-white/8" aria-hidden="true" />
       <Link href="/" className="group flex items-center gap-3" aria-label="ArcLayer home">
         <ArcMark size={34} className="header-logo-anim" />
         <div className="flex flex-col leading-none">
