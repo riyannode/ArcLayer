@@ -23,7 +23,7 @@ export default function HomeHeader() {
       style={{ background: 'rgba(5, 5, 5, 0.6)' }}
     >
       <Link href="/" className="group flex items-center gap-3" aria-label="ArcLayer home">
-        <ArcMark size={34} className="transition-transform duration-500 group-hover:rotate-3" />
+        <ArcMark size={34} className="header-logo-anim" />
         <div className="flex flex-col leading-none">
           <span
             className="aureo-body text-[#EAE4D8] transition-colors duration-300 group-hover:text-[#C5A67C]"
@@ -65,6 +65,31 @@ export default function HomeHeader() {
           OPEN CONSOLE
         </Link>
       </div>
+
+      <style jsx>{`
+        .header-logo-anim {
+          animation: header-logo-spin 16s linear infinite,
+                     header-logo-float 5s ease-in-out infinite;
+          transform-origin: center;
+          filter: drop-shadow(0 0 10px rgba(197, 166, 124, 0.55));
+          transition: filter 300ms ease;
+        }
+        .header-logo-anim:hover {
+          filter: drop-shadow(0 0 18px rgba(197, 166, 124, 0.95));
+        }
+        @keyframes header-logo-spin {
+          0%   { transform: translateY(0) rotateY(0deg); }
+          50%  { transform: translateY(-3px) rotateY(180deg); }
+          100% { transform: translateY(0) rotateY(360deg); }
+        }
+        @keyframes header-logo-float {
+          0%, 100% { transform: translateY(0); }
+          50%      { transform: translateY(-2px); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .header-logo-anim { animation: none; }
+        }
+      `}</style>
     </header>
   );
 }

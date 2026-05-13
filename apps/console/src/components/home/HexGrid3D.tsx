@@ -1,10 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import ArcMark from '@/components/ArcMark';
 
 /**
- * HexGrid3D — 3D rotating honeycomb with the ArcMark logo core.
+ * HexGrid3D — 3D rotating honeycomb (no center logo; logo moved to header).
  *
  * Three counter-rotating layers give mechanical-watch depth:
  *   1. Outer orbital rings (rotate Z clockwise, 48s)
@@ -368,19 +367,7 @@ export default function HexGrid3D() {
         </svg>
       </div>
 
-      {/* Layer 3 — central core: ArcMark logo (no shield), counter-rotating on Y */}
-      <div
-        className="hex-core absolute flex items-center justify-center"
-        style={{
-          width: 220,
-          height: 220,
-          transform: 'translateZ(140px)',
-        }}
-      >
-        <div className="relative z-10 hex-core-logo">
-          <ArcMark size={140} />
-        </div>
-      </div>
+      {/* Layer 3 removed — central ArcMark shown in header only */}
 
       {/* Scan ring — soft animated equator */}
       <div className="hex-scan absolute" style={{ width: 540, height: 540 }}>
@@ -428,36 +415,9 @@ export default function HexGrid3D() {
           100% { transform: rotateX(-28deg) rotateY(-360deg); }
         }
 
-        /* Layer 3: core logo, Y-axis rotation (no shield frame, logo itself rotates) */
-        .hex-core {
-          transform-style: preserve-3d;
-          animation: hex-core-spin 12s linear infinite;
-        }
-        @keyframes hex-core-spin {
-          0%   { transform: translateZ(140px) translateY(0px) rotateY(0deg); }
-          50%  { transform: translateZ(140px) translateY(-8px) rotateY(180deg); }
-          100% { transform: translateZ(140px) translateY(0px) rotateY(360deg); }
-        }
+        /* Layer 3 (core logo) removed — ArcMark now lives in header only */
 
-        /* Logo breathing — scale + glow, stacks on top of core rotation */
-        .hex-core-logo {
-          animation: hex-core-breathe 3.6s ease-in-out infinite;
-          transform-style: preserve-3d;
-        }
-        @keyframes hex-core-breathe {
-          0%, 100% {
-            transform: scale(1);
-            filter:
-              drop-shadow(0 0 18px rgba(197, 166, 124, 0.85))
-              drop-shadow(0 0 38px rgba(234, 228, 216, 0.35));
-          }
-          50% {
-            transform: scale(1.1);
-            filter:
-              drop-shadow(0 0 36px rgba(197, 166, 124, 1))
-              drop-shadow(0 0 62px rgba(234, 228, 216, 0.55));
-          }
-        }
+        /* Logo breathing removed along with core */
 
         .hex-active {
           animation: hex-pulse 3.6s ease-in-out infinite;
@@ -489,8 +449,6 @@ export default function HexGrid3D() {
           .hex-wrap,
           .hex-layer-outer,
           .hex-stage,
-          .hex-core,
-          .hex-core-logo,
           .hex-active,
           .hex-core-dot,
           .hex-scan {
