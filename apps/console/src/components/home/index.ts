@@ -2,12 +2,11 @@
  * ArcLayer landing — home composition.
  *
  * The landing page is intentionally isolated from the shared protocol chrome
- * (Navbar, Footer, WebGLBackground). All landing-only pieces live in this
+ * (Footer, WebGLBackground) while sharing Navbar. All landing-only pieces live in this
  * folder so future dev work on marketing doesn't leak into /dashboard, /jobs,
  * /agents, or the SDK surface.
  *
  * Structure:
- *   HomeHeader         — top bar: logo + nav + live status + OPEN CONSOLE
  *   HomeSidebar        — slim vertical AUREO-style rail (md+)
  *   HomeHero           — editorial headline + quickstart + CTAs
  *     └─ HomeProofStrip  — 4 deployed contracts on Arc Testnet
@@ -17,7 +16,6 @@
  *   HomeProtocolSection — "Four modules. One settlement fabric."
  *   HomeFooterStrip    — small network metadata strip
  */
-export { default as HomeHeader } from './HomeHeader';
 export { default as HomeSidebar } from './HomeSidebar';
 export { default as HomeHero } from './HomeHero';
 export { default as HomeStats } from './HomeStats';

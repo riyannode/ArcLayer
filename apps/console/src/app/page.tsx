@@ -5,7 +5,7 @@
  *
  * This file is intentionally a thin composition. Every visual piece lives in
  * `@/components/home/*` so the landing stays isolated from the in-app
- * protocol chrome (Navbar, Footer, WebGLBackground). Touching the hero,
+ * protocol chrome (Footer, WebGLBackground) while sharing Navbar. Touching the hero,
  * sidebar, proof strip, stats, or protocol section? Edit the file in
  * `components/home/` — do not fatten this page back up.
  *
@@ -21,7 +21,6 @@ import {
   HexGrid3D,
   HomeFeaturedCard,
   HomeFooterStrip,
-  HomeHeader,
   HomeHero,
   HomeProtocolSection,
   HomeSidebar,
@@ -36,7 +35,6 @@ export default function Home() {
     >
       <DotMatrixField />
 
-      <HomeHeader />
       <HomeSidebar />
 
       {/*

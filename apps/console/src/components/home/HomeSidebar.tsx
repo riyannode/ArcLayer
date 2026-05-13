@@ -7,7 +7,7 @@
  */
 const items = [
   { label: 'INDEX', href: '#top' },
-  { label: 'PROTOCOL', href: '#protocol' },
+  { label: 'PROTOCOL', href: '/protocol' },
   { label: 'SDK', href: '/docs' },
   { label: 'AGENTS', href: '/agents' },
   { label: 'JOBS', href: '/jobs' },

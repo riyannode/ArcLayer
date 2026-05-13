@@ -29,6 +29,13 @@ const nextConfig = {
       ...config.resolve.fallback,
       '@react-native-async-storage/async-storage': false,
       'pino-pretty': false,
+      '@farcaster/mini-app-solana': false,
+      '@farcaster/miniapp-sdk': false,
+      '@farcaster/miniapp-wagmi-connector': false,
+      '@solana/wallet-adapter-react': false,
+      '@solana/wallet-adapter-base': false,
+      '@solana/web3.js': false,
+      'bs58': false,
     };
     return config;
   },

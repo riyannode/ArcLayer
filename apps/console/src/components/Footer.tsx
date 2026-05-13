@@ -5,7 +5,7 @@ import ArcMark from './ArcMark';
 
 export default function Footer() {
   const protocolLinks = [
-    { label: 'PROTOCOL', href: '/dashboard' },
+    { label: 'PROTOCOL', href: '/protocol' },
     { label: 'JOBS', href: '/jobs' },
     { label: 'AGENTS', href: '/agents' },
     { label: 'SDK', href: '/docs' },
@@ -40,7 +40,7 @@ export default function Footer() {
           </div>
           <div className="flex gap-3">
             <Link href="/docs" className="btn-primary">READ DOCS</Link>
-            <Link href="/dashboard" className="btn-bordered">OPEN PROTOCOL</Link>
+            <Link href="/protocol" className="btn-bordered">OPEN PROTOCOL</Link>
           </div>
         </div>
 

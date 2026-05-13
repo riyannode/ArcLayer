@@ -78,7 +78,7 @@ export default function HomeHero() {
 
       {/* CTAs */}
       <div className="mt-3 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-2.5">
-        <Link href="/dashboard" className="btn-primary">
+        <Link href="/protocol" className="btn-primary">
           OPEN PROTOCOL CONSOLE
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
             <path d="M3 11L11 3M11 3H4M11 3V10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />

@@ -69,7 +69,7 @@ export default function DocsPage() {
           <a href="https://github.com/riyannode/ArcLayer" target="_blank" rel="noopener noreferrer" className="aureo-cta-ghost">
             GITHUB ↗
           </a>
-          <Link href="/dashboard" className="aureo-cta-primary">
+          <Link href="/protocol" className="aureo-cta-primary">
             OPEN CONSOLE ↗
           </Link>
         </div>

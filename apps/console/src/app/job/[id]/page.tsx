@@ -119,7 +119,7 @@ export default function JobDetailPage() {
       <div className="aureo-shell">
         <div className="aureo-detail-hero mb-8 p-5 md:p-7 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <Link href="/dashboard" className="font-mono text-[11px] tracking-[0.16em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
+            <Link href="/protocol" className="font-mono text-[11px] tracking-[0.16em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
               ← BACK · CONSOLE
             </Link>
             <div className="aureo-mono-label mt-5 mb-3">PROTOCOL · JOB</div>

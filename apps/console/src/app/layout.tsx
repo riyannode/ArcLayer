@@ -1,15 +1,11 @@
 'use client';
 
 import './globals.css';
-import { WagmiProvider } from 'wagmi';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { usePathname } from 'next/navigation';
-import { config } from '@/lib/wagmi';
+import Providers from '@/components/Providers';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import WebGLBackground from '@/components/WebGLBackground';
-
-const queryClient = new QueryClient();
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -36,15 +32,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body style={{ background: '#050505', color: '#EAE4D8' }}>
         {!isLanding && <WebGLBackground />}
-        <WagmiProvider config={config}>
-          <QueryClientProvider client={queryClient}>
-            <div className="relative z-10 min-h-screen flex flex-col">
-              {!isLanding && <Navbar />}
-              <main key={pathname} className="flex-1 page-transition">{children}</main>
-              {!isLanding && <Footer />}
-            </div>
-          </QueryClientProvider>
-        </WagmiProvider>
+        <Providers>
+          <div className="relative z-10 min-h-screen flex flex-col">
+            <Navbar />
+            <main key={pathname} className="flex-1 page-transition">{children}</main>
+            {!isLanding && <Footer />}
+          </div>
+        </Providers>
       </body>
     </html>
   );
