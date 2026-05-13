@@ -1,9 +1,10 @@
 'use client';
 
 import Link from 'next/link';
+import ArcMark from '@/components/ArcMark';
 
 /**
- * Home header — top bar with ArcLayer wordmark, protocol nav,
+ * Home header — top bar with ArcMark logo + ArcLayer wordmark, protocol nav,
  * live status indicator, and OPEN CONSOLE CTA. Kept separate from shared
  * Navbar so landing stays independent from in-app chrome.
  */
@@ -21,7 +22,8 @@ export default function HomeHeader() {
       className="relative z-30 flex items-center justify-between border-b border-white/8 px-6 py-5 backdrop-blur-xl md:px-10"
       style={{ background: 'rgba(5, 5, 5, 0.6)' }}
     >
-      <Link href="/" className="group flex items-center" aria-label="ArcLayer home">
+      <Link href="/" className="group flex items-center gap-3" aria-label="ArcLayer home">
+        <ArcMark size={34} className="transition-transform duration-500 group-hover:rotate-3" />
         <div className="flex flex-col leading-none">
           <span
             className="aureo-body text-[#EAE4D8] transition-colors duration-300 group-hover:text-[#C5A67C]"
