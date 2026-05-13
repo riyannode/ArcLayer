@@ -115,12 +115,9 @@ export default function Footer() {
         </div>
 
         {/* Bottom row */}
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-white/8 pt-8 md:flex-row">
+        <div className="mt-12 flex items-center justify-center border-t border-white/8 pt-8">
           <p className="font-mono text-[10.5px] tracking-[0.12em] text-[#7A7A7A]">
             © 2026 ARCLAYER PROTOCOL · SETTLEMENT FABRIC FOR AGENTIC WORK
-          </p>
-          <p className="font-mono text-[10.5px] tracking-[0.12em] text-[#7A7A7A]">
-            Built for the <span className="text-[#C5A67C]">Arc Circle Grant</span>
           </p>
         </div>
       </div>

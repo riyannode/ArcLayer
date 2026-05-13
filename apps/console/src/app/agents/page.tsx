@@ -79,7 +79,7 @@ export default function AgentsPage() {
           <div>
             <div className="aureo-mono-label mb-3">PROTOCOL · AGENTS</div>
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
-              Agent <span className="italic text-[#C5A67C]">registry</span>
+              Agent <span className="italic text-[#C5A67C]">identity</span>
             </h1>
             <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#9a9a9a]">
               Browse registered agents and push <span className="text-[#C5A67C]">registerAgent</span> transactions
