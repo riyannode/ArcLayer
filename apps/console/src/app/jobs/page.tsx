@@ -124,8 +124,8 @@ export default function JobsPage() {
   }
 
   return (
-    <div className="relative px-6 py-16 md:px-10 md:py-20">
-      <div className="mx-auto max-w-7xl">
+    <div className="aureo-page">
+      <div className="aureo-shell">
         <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="aureo-mono-label mb-3">PROTOCOL · JOBS</div>
@@ -165,7 +165,7 @@ export default function JobsPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+          <section className="aureo-panel p-4 md:p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <div className="aureo-mono-label mb-2">LEDGER</div>
@@ -174,12 +174,25 @@ export default function JobsPage() {
               <span className="font-mono text-[11px] text-[#C5A67C]">{jobs.length} indexed</span>
             </div>
             <div className="mt-5 space-y-3">
-              {jobs.length > 0 ? (
+              {isLoading ? (
+                [0, 1, 2, 3].map((i) => (
+                  <div key={`skel-${i}`} className="aureo-skel block px-4 py-3 md:px-5 md:py-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="aureo-skel-bar" style={{ width: '92px' }} />
+                      <span className="aureo-skel-bar" style={{ width: '86px' }} />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-4">
+                      <span className="aureo-skel-bar" style={{ width: '140px', height: '8px' }} />
+                      <span className="aureo-skel-bar" style={{ width: '68px', height: '8px' }} />
+                    </div>
+                  </div>
+                ))
+              ) : jobs.length > 0 ? (
                 jobs.map((job) => (
                   <Link
                     key={job.id}
                     href={`/job/${job.id}`}
-                    className="ledger-row block border border-white/10 bg-black/20 px-4 py-3"
+                    className="aureo-list-card block px-4 py-3 md:px-5 md:py-4"
                   >
                     <div className="flex items-center justify-between gap-4">
                       <span className="font-mono text-[12.5px] text-[#EAE4D8]">Job #{job.id}</span>
@@ -192,15 +205,19 @@ export default function JobsPage() {
                   </Link>
                 ))
               ) : (
-                <p className="p-4 font-mono text-[11.5px] text-[#7A7A7A]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.25)' }}>
-                  {isLoading ? 'Loading jobs…' : 'No indexed jobs yet.'}
-                </p>
+                <div className="aureo-empty">
+                  <span className="aureo-empty-glyph">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 7h16M4 12h16M4 17h10" strokeLinecap="round" /></svg>
+                  </span>
+                  <p className="font-mono text-[11.5px] text-[#EAE4D8]">No indexed jobs yet</p>
+                  <p className="font-mono text-[10.5px] text-[#7A7A7A]">Create the first job from the panel on the right to see it indexed here.</p>
+                </div>
               )}
             </div>
           </section>
 
           <section className="space-y-6">
-            <div className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+            <div className="aureo-panel p-4 md:p-6">
               <div className="aureo-mono-label mb-2">ACTION · WRITE</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Create job</h2>
               <code className="mt-2 block font-mono text-[10.5px] text-[#7A7A7A]">JobEscrow.createJob(agentId, worker, evaluator, spec)</code>
@@ -215,7 +232,7 @@ export default function JobsPage() {
               </button>
             </div>
 
-            <div className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+            <div className="aureo-panel p-4 md:p-6">
               <div className="aureo-mono-label mb-2">ACTION · WRITE</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Budget &amp; fund</h2>
               <code className="mt-2 block font-mono text-[10.5px] text-[#7A7A7A]">setBudget → approve USDC → fundJob</code>

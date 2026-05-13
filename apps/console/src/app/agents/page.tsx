@@ -73,8 +73,8 @@ export default function AgentsPage() {
   }
 
   return (
-    <div className="relative px-6 py-16 md:px-10 md:py-20">
-      <div className="mx-auto max-w-7xl">
+    <div className="aureo-page">
+      <div className="aureo-shell">
         <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="aureo-mono-label mb-3">PROTOCOL · AGENTS</div>
@@ -115,7 +115,7 @@ export default function AgentsPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+          <section className="aureo-panel p-4 md:p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <div className="aureo-mono-label mb-2">LEDGER</div>
@@ -124,12 +124,25 @@ export default function AgentsPage() {
               <span className="font-mono text-[11px] text-[#C5A67C]">{agents.length} indexed</span>
             </div>
             <div className="mt-5 space-y-3">
-              {agents.length > 0 ? (
+              {isLoading ? (
+                [0, 1, 2, 3].map((i) => (
+                  <div key={`skel-${i}`} className="aureo-skel block px-4 py-3 md:px-5 md:py-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="aureo-skel-bar" style={{ width: '104px' }} />
+                      <span className="aureo-skel-bar" style={{ width: '72px' }} />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-4">
+                      <span className="aureo-skel-bar" style={{ width: '120px', height: '8px' }} />
+                      <span className="aureo-skel-bar" style={{ width: '52px', height: '8px' }} />
+                    </div>
+                  </div>
+                ))
+              ) : agents.length > 0 ? (
                 agents.map((a) => (
                   <Link
                     key={a.agentId}
                     href={`/agent/${a.agentId}`}
-                    className="ledger-row block border border-white/10 bg-black/20 px-4 py-3"
+                    className="aureo-list-card block px-4 py-3 md:px-5 md:py-4"
                   >
                     <div className="flex items-center justify-between gap-4">
                       <span className="font-mono text-[12.5px] text-[#EAE4D8]">Agent #{a.agentId}</span>
@@ -142,14 +155,18 @@ export default function AgentsPage() {
                   </Link>
                 ))
               ) : (
-                <p className="p-4 font-mono text-[11.5px] text-[#7A7A7A]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.25)' }}>
-                  {isLoading ? 'Loading agents…' : 'No indexed agents yet.'}
-                </p>
+                <div className="aureo-empty">
+                  <span className="aureo-empty-glyph">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20c1.5-4 4-6 7.5-6s6 2 7.5 6" strokeLinecap="round" /></svg>
+                  </span>
+                  <p className="font-mono text-[11.5px] text-[#EAE4D8]">No registered agents yet</p>
+                  <p className="font-mono text-[10.5px] text-[#7A7A7A]">Register the first agent from the panel on the right to see it indexed here.</p>
+                </div>
               )}
             </div>
           </section>
 
-          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+          <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">ACTION · WRITE</div>
             <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Register agent</h2>
             <code className="mt-2 block font-mono text-[10.5px] text-[#7A7A7A]">AgentRegistry.registerAgent(agentId, skillHash, metadataURI)</code>

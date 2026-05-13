@@ -1,7 +1,7 @@
 #!/bin/bash
-cd /root/arclayer-indexer/indexer
+cd /root/ArcLayer/indexer
 export INDEXER_PORT=3535
-export DATABASE_PATH=/root/arclayer-indexer/data/arclayer-indexer.sqlite
+export DATABASE_PATH=/root/ArcLayer/indexer/data/arclayer-indexer.sqlite
 export ARC_RPC_URL=https://rpc.testnet.arc.network
 export POLL_INTERVAL_MS=15000
 export FROM_BLOCK=41752050

@@ -3,7 +3,12 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { readContract, waitForTransactionReceipt } from '@wagmi/core';
+import { useAccount, useWriteContract } from 'wagmi';
+import { CONTRACTS, JOB_ESCROW_ABI, buildApproveUsdcConfig, buildCreateJobConfig, buildFundJobConfig, buildSetBudgetConfig } from '@arclayer/sdk';
 import { formatUSDC, shortenAddress } from '@/lib/contracts';
+import { parseUSDC } from '@/lib/contracts';
+import { config } from '@/lib/wagmi';
 
 const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || 'http://localhost:4307';
 
@@ -116,10 +121,16 @@ function Sparkline({ values }: { values: number[] }) {
 
 export default function AgentProfilePage() {
   const params = useParams<{ id: string }>();
+  const { address, isConnected } = useAccount();
+  const { writeContractAsync } = useWriteContract();
   const agentId = parseAgentId(params.id);
   const [profile, setProfile] = useState<AgentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [runInput, setRunInput] = useState('Run a paid test task through x402.');
+  const [runBudget, setRunBudget] = useState('1');
+  const [runState, setRunState] = useState<string | null>(null);
+  const [isRunning, setIsRunning] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,10 +155,53 @@ export default function AgentProfilePage() {
   const proofs = profile?.proofs || [];
   const series = buildReputationSeries(agent, jobs, proofs);
 
+  async function handlePaidRun() {
+    if (!agent || !agentId || !address) return;
+    try {
+      setIsRunning(true);
+      setRunState('POST /api/agents/:id/run -> 402 Payment Required');
+      const first = await fetch(`/api/agents/${agentId}/run`, { method: 'POST', body: JSON.stringify({ input: runInput }) });
+      if (first.status !== 402) throw new Error(`Expected x402 challenge, received HTTP ${first.status}.`);
+
+      const amount = parseUSDC(runBudget);
+      const nextJobId = (await readContract(config, {
+        address: CONTRACTS.JOB_ESCROW,
+        abi: JOB_ESCROW_ABI,
+        functionName: 'jobCounter',
+      }) as bigint) + BigInt(1);
+      setRunState('Creating JobEscrow run for agent worker...');
+      const createHash = await writeContractAsync(buildCreateJobConfig(BigInt(agentId), agent.controller as `0x${string}`, address, runInput));
+      await waitForTransactionReceipt(config, { hash: createHash });
+
+      setRunState('Setting budget and approving testnet USDC...');
+      const visibleJobId = nextJobId;
+      const budgetHash = await writeContractAsync(buildSetBudgetConfig(visibleJobId, amount));
+      await waitForTransactionReceipt(config, { hash: budgetHash });
+      const approveHash = await writeContractAsync(buildApproveUsdcConfig(amount));
+      await waitForTransactionReceipt(config, { hash: approveHash });
+
+      setRunState('Funding job and retrying x402 request with X-PAYMENT...');
+      const fundHash = await writeContractAsync(buildFundJobConfig(visibleJobId, amount));
+      await waitForTransactionReceipt(config, { hash: fundHash });
+      const paid = await fetch(`/api/agents/${agentId}/run`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-payment': JSON.stringify({ txHash: fundHash, chainId: 5042002 }) },
+        body: JSON.stringify({ input: runInput, jobId: visibleJobId.toString() }),
+      });
+      const payload = await paid.json();
+      if (!paid.ok) throw new Error(payload.message || payload.error || `Paid run failed with HTTP ${paid.status}.`);
+      setRunState(`${payload.result.message} Job #${visibleJobId.toString()} funded.`);
+    } catch (e) {
+      setRunState(e instanceof Error ? e.message : 'Paid run failed.');
+    } finally {
+      setIsRunning(false);
+    }
+  }
+
   return (
-    <div className="relative px-6 py-16 md:px-10 md:py-20">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+    <div className="aureo-page">
+      <div className="aureo-shell">
+        <div className="aureo-detail-hero mb-8 p-5 md:p-7 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
             <Link href="/dashboard" className="font-mono text-[11px] tracking-[0.16em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
               ← BACK · CONSOLE
@@ -163,6 +217,24 @@ export default function AgentProfilePage() {
           <Link href="/docs" className="btn-primary self-start md:self-auto">SDK QUICKSTART</Link>
         </div>
 
+        <section className="mb-6 p-6" style={{ border: '1px solid rgba(197, 166, 124, 0.22)', background: 'rgba(10, 10, 10, 0.68)' }}>
+          <div className="aureo-mono-label mb-2">X402 · BUYER RUN</div>
+          <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Payment-required agent call</h2>
+          <p className="mt-2 max-w-3xl font-mono text-[11.5px] leading-5 text-[#9a9a9a]">
+            Calls <span className="text-[#C5A67C]">POST /api/agents/{agentId}/run</span>, receives a 402 challenge, registers a funded JobEscrow payment on Arc Testnet, then retries with X-PAYMENT.
+          </p>
+          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_auto]">
+            <input value={runInput} onChange={(e) => setRunInput(e.target.value)} className="input-mono" placeholder="buyer task / prompt" />
+            <input value={runBudget} onChange={(e) => setRunBudget(e.target.value)} className="input-mono" placeholder="USDC" />
+            <button onClick={handlePaidRun} disabled={!isConnected || !agent || isRunning} className="btn-primary">
+              {isRunning ? 'RUNNING...' : 'PAY · RUN'}
+            </button>
+          </div>
+          <div className="mt-4 p-4 font-mono text-[11.5px] leading-5 text-[#9a9a9a]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
+            {runState || (isConnected ? 'Wallet connected. Needs testnet USDC for approval/funding.' : 'Connect a wallet on Arc Testnet 5042002 to test end-to-end.')}
+          </div>
+        </section>
+
         {error && (
           <div className="mb-6 p-4" style={{ border: '1px solid rgba(230, 130, 130, 0.35)', background: 'rgba(230, 130, 130, 0.06)' }}>
             <p className="font-mono text-[11.5px] text-[#f0c5c5]">{error}</p>
@@ -170,7 +242,7 @@ export default function AgentProfilePage() {
         )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+          <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">REGISTRY</div>
             <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Record</h2>
             <div className="mt-5 space-y-2.5">
@@ -188,7 +260,7 @@ export default function AgentProfilePage() {
             </div>
           </section>
 
-          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+          <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">TELEMETRY</div>
             <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Protocol signals</h2>
             <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -219,7 +291,7 @@ export default function AgentProfilePage() {
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+          <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">JOBS</div>
             <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Linked jobs</h2>
             <div className="mt-5 space-y-3">
@@ -248,7 +320,7 @@ export default function AgentProfilePage() {
             </div>
           </section>
 
-          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+          <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">PROOF OF WORK</div>
             <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Soulbound history</h2>
             <div className="mt-5 space-y-3">

@@ -41,15 +41,17 @@ export default function Navbar() {
     connect({ connector });
   }, [connect]);
 
-  const walletOptions = [
-    {
-      id: 'injected',
-      name: 'MetaMask / Browser Wallet',
-      description: 'Connect with any injected EVM wallet',
-      connector: connectors.find(c => c.id === 'injected'),
-      recommended: true,
-    },
-  ].filter(w => w.connector);
+  const walletOptions = connectors.map((connector) => ({
+    id: connector.uid,
+    name: connector.name,
+    description: connector.id === 'walletConnect'
+      ? 'Scan with mobile wallets via WalletConnect'
+      : connector.id === 'coinbaseWalletSDK'
+      ? 'Use Coinbase Wallet extension or mobile app'
+      : 'Connect with an injected EVM wallet',
+    connector,
+    recommended: connector.id === 'injected' || connector.id === 'metaMaskSDK',
+  }));
 
   return (
     <>

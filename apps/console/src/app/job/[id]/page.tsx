@@ -115,9 +115,9 @@ export default function JobDetailPage() {
     : 'chip-status';
 
   return (
-    <div className="relative px-6 py-16 md:px-10 md:py-20">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+    <div className="aureo-page">
+      <div className="aureo-shell">
+        <div className="aureo-detail-hero mb-8 p-5 md:p-7 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
             <Link href="/dashboard" className="font-mono text-[11px] tracking-[0.16em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
               ← BACK · CONSOLE
@@ -167,7 +167,7 @@ export default function JobDetailPage() {
 
         {/* Receipt + deliverable */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+          <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">RECEIPT</div>
             <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Parties &amp; metadata</h2>
             <div className="mt-5 space-y-2.5">
@@ -195,7 +195,7 @@ export default function JobDetailPage() {
             </a>
           </section>
 
-          <section className="p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+          <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">ARTIFACTS</div>
             <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Deliverable &amp; proof</h2>
             <div className="mt-5 space-y-3">
@@ -221,7 +221,7 @@ export default function JobDetailPage() {
         </div>
 
         {/* Actions */}
-        <section className="mt-6 p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
+        <section className="aureo-panel mt-6 p-4 md:p-6">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <div className="aureo-mono-label mb-2">ACTIONS · WRITE</div>

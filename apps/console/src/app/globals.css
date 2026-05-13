@@ -279,6 +279,137 @@ body {
 .chip-status.pending { border-color: rgba(197, 166, 124, 0.4); color: #C5A67C; }
 .chip-status.error { border-color: rgba(230, 130, 130, 0.4); color: #e68282; }
 
+/* AUREO protocol pages */
+.page-transition {
+  animation: pageMaterialize 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes pageMaterialize {
+  from { opacity: 0; transform: translateY(10px) scale(0.992); filter: blur(8px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+.aureo-page {
+  position: relative;
+  padding: 56px 20px 64px;
+  overflow-x: clip;
+}
+.aureo-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(197, 166, 124, 0.12), transparent 28%),
+    radial-gradient(circle at 88% 18%, rgba(184, 205, 126, 0.07), transparent 24%),
+    linear-gradient(180deg, rgba(255,255,255,0.025), transparent 34%);
+}
+.aureo-shell { position: relative; z-index: 1; width: min(100%, 1280px); margin-inline: auto; }
+.aureo-panel {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(145deg, rgba(14, 14, 14, 0.78), rgba(5, 5, 5, 0.62));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255,255,255,0.035);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.aureo-list-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(135deg, rgba(0,0,0,0.42), rgba(197,166,124,0.035));
+  transition: transform 220ms ease, border-color 220ms ease, background 220ms ease;
+}
+.aureo-list-card::after {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0; width: 2px;
+  background: linear-gradient(180deg, #C5A67C, transparent);
+  opacity: 0.75;
+}
+.aureo-list-card:hover { transform: translateY(-2px); border-color: rgba(197, 166, 124, 0.36); background: rgba(197,166,124,0.055); }
+
+/* ─── Skeleton / shimmer for list loading states ─── */
+.aureo-skel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: linear-gradient(135deg, rgba(0,0,0,0.35), rgba(197,166,124,0.02));
+}
+.aureo-skel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(197, 166, 124, 0.06) 42%,
+    rgba(234, 228, 216, 0.08) 50%,
+    rgba(197, 166, 124, 0.06) 58%,
+    transparent 100%);
+  animation: aureoShimmer 1.6s ease-in-out infinite;
+}
+.aureo-skel-bar {
+  display: inline-block;
+  height: 10px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.06);
+}
+@keyframes aureoShimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Empty state surface */
+.aureo-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 40px 24px;
+  text-align: center;
+  border: 1px dashed rgba(197, 166, 124, 0.22);
+  background: linear-gradient(180deg, rgba(14,14,14,0.55), rgba(5,5,5,0.35));
+}
+.aureo-empty-glyph {
+  width: 32px; height: 32px;
+  border: 1px solid rgba(197, 166, 124, 0.32);
+  border-radius: 2px;
+  display: flex; align-items: center; justify-content: center;
+  color: rgba(197, 166, 124, 0.55);
+}
+.aureo-detail-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(197, 166, 124, 0.18);
+  background:
+    linear-gradient(120deg, rgba(197,166,124,0.12), transparent 38%),
+    linear-gradient(180deg, rgba(14,14,14,0.82), rgba(5,5,5,0.72));
+}
+.aureo-detail-hero::after {
+  content: '';
+  position: absolute;
+  inset: auto -10% -45% 35%;
+  height: 220px;
+  background: radial-gradient(ellipse, rgba(197,166,124,0.16), transparent 68%);
+  transform: rotate(-7deg);
+  pointer-events: none;
+}
+
+@media (min-width: 768px) {
+  .aureo-page { padding: 72px 40px 80px; }
+}
+@media (min-width: 1024px) {
+  .aureo-page { padding-block: 84px; }
+}
+@media (max-width: 767px) {
+  .btn-primary, .btn-bordered { width: 100%; min-height: 44px; padding-inline: 14px; }
+  .aureo-mono-label { font-size: 10.5px; letter-spacing: 0.18em; }
+  .input-mono { min-height: 44px; font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-transition, .section-reveal, .animate-fade-in-up { animation: none; }
+  .aureo-skel::before { animation: none; }
+}
+
 /* Prose overrides for docs MDX */
 .prose-arc {
   font-family: var(--font-body); color: #c5c0b2;

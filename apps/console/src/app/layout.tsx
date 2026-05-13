@@ -40,7 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <QueryClientProvider client={queryClient}>
             <div className="relative z-10 min-h-screen flex flex-col">
               {!isLanding && <Navbar />}
-              <main className="flex-1">{children}</main>
+              <main key={pathname} className="flex-1 page-transition">{children}</main>
               {!isLanding && <Footer />}
             </div>
           </QueryClientProvider>
