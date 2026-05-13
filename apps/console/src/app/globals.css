@@ -319,7 +319,7 @@ body {
    ============================================================ */
 .header-logo-anim {
   transform-style: preserve-3d;
-  animation: header-logo-orbit 48s linear infinite,
+  animation: header-logo-orbit 50s linear infinite,
              header-logo-float 6s ease-in-out infinite;
   filter: drop-shadow(0 0 10px rgba(197, 166, 124, 0.18));
   transition: filter 400ms ease;
