@@ -39,8 +39,8 @@ export default function Home() {
       <HomeHeader />
       <HomeSidebar />
 
-      <main className="relative z-20 min-h-screen md:pl-[56px]">
-        <div className="relative mx-auto grid max-w-[1480px] grid-cols-1 gap-8 px-4 py-10 md:grid-cols-[1.25fr_0.75fr] md:gap-8 md:px-6 md:py-14 lg:px-8">
+      <main className="relative z-20 min-h-screen md:pl-[48px]">
+        <div className="relative mx-auto grid max-w-[1480px] grid-cols-1 gap-6 px-3 py-10 md:grid-cols-[1fr_0.85fr] md:gap-7 md:px-4 md:py-12 lg:px-5">
           <HomeHero />
 
           <div className="relative flex min-h-[420px] flex-col gap-6 md:min-h-[560px]">

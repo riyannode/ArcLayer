@@ -311,3 +311,31 @@ body {
   border-left: 2px solid rgba(197, 166, 124, 0.4);
   padding-left: 16px; margin: 18px 0; color: #9a9a9a; font-style: italic;
 }
+
+/* ============================================================
+   Header ArcMark logo — slow orbit + float (mirrors honeycomb outer ring 48s).
+   Placed in globals.css to bypass styled-jsx SSR scoping issues
+   when the class is forwarded to a child SVG component.
+   ============================================================ */
+.header-logo-anim {
+  transform-style: preserve-3d;
+  animation: header-logo-orbit 48s linear infinite,
+             header-logo-float 6s ease-in-out infinite;
+  filter: drop-shadow(0 0 10px rgba(197, 166, 124, 0.18));
+  transition: filter 400ms ease;
+  will-change: transform, filter;
+}
+.header-logo-anim:hover {
+  filter: drop-shadow(0 0 16px rgba(197, 166, 124, 0.38));
+}
+@keyframes header-logo-orbit {
+  from { transform: rotateY(0deg); }
+  to   { transform: rotateY(360deg); }
+}
+@keyframes header-logo-float {
+  0%, 100% { translate: 0 0; }
+  50%      { translate: 0 -2px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .header-logo-anim { animation: none; }
+}

@@ -13,15 +13,15 @@ export default function HomeHero() {
   return (
     <div className="relative flex flex-col justify-center">
       {/* Kicker */}
-      <div className="mb-10 flex flex-col gap-1">
+      <div className="mb-5 flex flex-col gap-1">
         <span className="aureo-mono-label">AGENTIC</span>
         <span className="aureo-mono-label">PROTOCOL</span>
       </div>
 
       {/* Headline — slogan */}
       <h1
-        className="aureo-display text-[48px] text-[#EAE4D8] sm:text-[64px] md:text-[76px] lg:text-[84px]"
-        style={{ lineHeight: 0.92 }}
+        className="aureo-display text-[44px] text-[#EAE4D8] sm:text-[58px] md:text-[68px] lg:text-[76px]"
+        style={{ lineHeight: 0.88 }}
       >
         <span className="block section-reveal" style={{ animationDelay: '0.05s' }}>
           PROTOCOL
@@ -38,7 +38,7 @@ export default function HomeHero() {
       </h1>
 
       {/* Divider */}
-      <div className="my-9 flex max-w-[540px] items-center gap-3">
+      <div className="my-6 flex max-w-[480px] items-center gap-3">
         <span className="h-px flex-1 bg-white/15" />
         <span
           className="h-[10px] w-[10px] rotate-45 border border-[#C5A67C]/60"
@@ -48,7 +48,7 @@ export default function HomeHero() {
       </div>
 
       {/* Body */}
-      <p className="aureo-body max-w-[540px] text-[15px] text-[#9a9a9a] md:text-[16.5px]">
+      <p className="aureo-body max-w-[520px] text-[14.5px] text-[#9a9a9a] md:text-[15.5px]">
         ArcLayer is a{' '}
         <span className="text-[#C5A67C]">settlement fabric for autonomous protocols</span>.
         Contract modules, a typed SDK, event indexing, and a console for inspecting jobs,
@@ -57,7 +57,7 @@ export default function HomeHero() {
       </p>
 
       {/* Developer quickstart */}
-      <div className="mt-7 max-w-[540px]">
+      <div className="mt-5 max-w-[520px]">
         <div className="aureo-mono-label mb-2">QUICKSTART</div>
         <pre className="code-block">
 <span className="tok-c"># install workspace SDK</span>{'\n'}
@@ -70,7 +70,7 @@ export default function HomeHero() {
       </div>
 
       {/* CTAs */}
-      <div className="mt-9 flex flex-col items-start gap-5 sm:flex-row sm:items-center">
+      <div className="mt-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
         <Link href="/dashboard" className="btn-primary">
           OPEN PROTOCOL CONSOLE
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
