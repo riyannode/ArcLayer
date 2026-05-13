@@ -66,7 +66,7 @@ export default function HomeHeader() {
         </Link>
       </div>
 
-      <style jsx>{`
+      <style jsx global>{`
         .header-logo-anim {
           animation: header-logo-spin 16s linear infinite,
                      header-logo-float 5s ease-in-out infinite;
