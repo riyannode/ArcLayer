@@ -46,7 +46,7 @@ export default function HomeStats() {
   }, []);
 
   return (
-    <div className="mt-14 grid max-w-[560px] grid-cols-3 gap-6">
+    <div className="mt-7 grid max-w-[560px] grid-cols-3 gap-6">
       {stats.map((s, i) => (
         <div
           key={s.label}
@@ -55,7 +55,7 @@ export default function HomeStats() {
         >
           <span className="aureo-mono-label mb-3">{s.label}</span>
           <span
-            className="aureo-display text-[44px] text-[#EAE4D8] md:text-[52px]"
+            className="aureo-display text-[38px] text-[#EAE4D8] md:text-[44px]"
             style={{ transition: 'color 300ms', color: ready ? '#EAE4D8' : '#7A7A7A' }}
           >
             {s.value}

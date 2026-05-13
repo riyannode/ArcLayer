@@ -39,11 +39,19 @@ export default function Home() {
       <HomeHeader />
       <HomeSidebar />
 
-      <main className="relative z-20 min-h-screen md:pl-[48px]">
-        <div className="relative mx-auto grid max-w-[1480px] grid-cols-1 gap-6 px-3 py-10 md:grid-cols-[1fr_0.85fr] md:gap-7 md:px-4 md:py-12 lg:px-5">
-          <HomeHero />
+      {/*
+        Grid tuned for 80–90% browser zoom primary target (desktop 1440/1536/1920).
+        12-col split: hero takes 7, right visual/terminal column takes 5.
+        Vertical padding reduced so first viewport fits: nav → hero → CTAs → proof → stats → right column
+        without the lower cards being pushed below the fold at 80–90% zoom.
+      */}
+      <main className="relative z-20 min-h-[calc(100svh-64px)] md:pl-[48px]">
+        <div className="relative mx-auto grid max-w-[1480px] grid-cols-1 gap-5 px-3 py-6 md:grid-cols-12 md:gap-6 md:px-4 md:py-8 lg:px-5">
+          <div className="md:col-span-7">
+            <HomeHero />
+          </div>
 
-          <div className="relative flex min-h-[420px] flex-col gap-6 md:min-h-[560px]">
+          <div className="relative flex flex-col gap-4 md:col-span-5 md:min-h-[480px]">
             {/* Hex grid — logo floats solo */}
             <div className="relative flex flex-1 items-center justify-center">
               <HexGrid3D />

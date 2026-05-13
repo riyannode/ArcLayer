@@ -16,7 +16,7 @@ const ARC_EXPLORER = 'https://explorer.testnet.arc.network';
 export default function HomeProofStrip() {
   return (
     <div
-      className="mt-10 rounded-sm border border-white/10 bg-white/[0.02] p-5 section-reveal"
+      className="mt-6 rounded-sm border border-white/10 bg-white/[0.02] p-4 section-reveal"
       style={{ animationDelay: '0.35s' }}
     >
       <div className="mb-3 flex items-center justify-between">
