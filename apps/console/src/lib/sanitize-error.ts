@@ -11,7 +11,7 @@ const SECRET_PATTERNS: Array<[RegExp, string]> = [
   [/Bearer\s+[A-Za-z0-9._\-+/=]+/gi, 'Bearer [redacted]'],
   // Common key prefixes (sk-, ksk_, pk-, api_key=, secret=, token=)
   [/\b(?:sk|ksk|pk)[_-][A-Za-z0-9]{8,}/gi, '[redacted-key]'],
-  [/\b(?:api[_-]?key|secret|token|password)\s*[:=]\s*['"]?[^\s'"&]{8,}/gi, '[redacted-credential]'],
+  [/\b(?:api[_-]?key|secret|token|password)\s*[:=]\s*['"]?[^\s'"&]{4,}/gi, '[redacted-credential]'],
   // URLs with embedded userinfo (https://user:pass@host)
   [/(https?:\/\/)[^:\s/]+:[^@\s]+@/gi, '$1[redacted]@'],
   // Absolute filesystem paths
