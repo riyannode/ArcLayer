@@ -61,7 +61,7 @@ export interface CacheAndReturnInput {
 
 export function createX402Facilitator(opts: X402FacilitatorOptions = {}) {
   const store: X402Store = opts.store ?? supabaseStore;
-  const rpcUrl = opts.rpcUrl ?? process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network';
+  const rpcUrl = opts.rpcUrl ?? process.env.ARC_RPC_URL ?? 'https://rpc.drpc.testnet.arc.network';
   const jobEscrowAddress = opts.jobEscrowAddress ?? JOB_ESCROW_ADDRESS;
 
   async function paymentRequired(input: BuildRequirementInput): Promise<NextResponse> {

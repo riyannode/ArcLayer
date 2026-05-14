@@ -95,7 +95,7 @@ export async function verifyArcEscrowPayment(input: VerifyArcEscrowInput): Promi
 
   const client = createPublicClient({
     chain: arcTestnet,
-    transport: http(input.rpcUrl ?? process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network'),
+    transport: http(input.rpcUrl ?? process.env.ARC_RPC_URL ?? 'https://rpc.drpc.testnet.arc.network'),
   });
 
   const receipt = await client.getTransactionReceipt({ hash: txHash as Hash }).catch((error) => ({ error }));

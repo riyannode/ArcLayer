@@ -8,11 +8,15 @@ import {
   WORK_PROOF_ABI,
 } from "./abi";
 
+// Ordered by measured latency (Arc Testnet, May 2026):
+// dRPC ~65ms, rpc.testnet ~463ms, quicknode ~463ms, blockdaemon ~473ms.
+// `viem.fallback` uses this order — fastest healthy endpoint wins,
+// others act as automatic failover.
 export const ARC_RPC_URLS = [
-  "https://rpc.testnet.arc.network",
-  "https://rpc.blockdaemon.testnet.arc.network",
   "https://rpc.drpc.testnet.arc.network",
+  "https://rpc.testnet.arc.network",
   "https://rpc.quicknode.testnet.arc.network",
+  "https://rpc.blockdaemon.testnet.arc.network",
 ] as const;
 
 export const arcTestnet = {
