@@ -146,10 +146,79 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         resourceMethod: 'POST',
       });
       if (consumed.cachedResponse) return x402Facilitator.toResponse(consumed.cachedResponse);
-      if ((!consumed.ok || !consumed.consumptionId) && consumed.code !== 'ALREADY_CONSUMED') {
+      if (!consumed.ok || !consumed.consumptionId) {
         return x402Facilitator.paymentRejected({
-          status: 422,
+          status: consumed.code === 'ALREADY_CONSUMED' ? 409 : 422,
           error: { code: consumed.code, message: consumed.message },
+        });
+      }
+
+      const inputRaw = body.input ?? body.prompt ?? null;
+      const inputStr =
+        typeof inputRaw === 'string'
+          ? inputRaw
+          : inputRaw == null
+            ? ''
+            : JSON.stringify(inputRaw);
+
+      try {
+        const result = await runAgent({
+          agentId,
+          jobId: settled.payment.jobId,
+          payer: settled.payment.payer ?? '0x0000000000000000000000000000000000000000',
+          input: inputStr || `(no input provided - agent #${agentId} acknowledges payment)`,
+        });
+
+        return x402Facilitator.cacheAndReturn({
+          payment: settled.payment,
+          consumptionId: consumed.consumptionId,
+          resource,
+          statusCode: 200,
+          responseBody: {
+            ok: true,
+            cached: false,
+            agentId,
+            jobId: settled.payment.jobId,
+            run: {
+              status: 'completed',
+              output: result.output,
+              model: result.model,
+              tokensUsed: result.tokensUsed,
+              latencyMs: result.latencyMs,
+              completedAt: Date.now(),
+            },
+            payment: {
+              chainId: arcTestnet.id,
+              txHash: settled.payment.txHash,
+              payer: settled.payment.payer,
+              amount: settled.payment.amount,
+            },
+          },
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return x402Facilitator.cacheAndReturn({
+          payment: settled.payment,
+          consumptionId: consumed.consumptionId,
+          resource,
+          statusCode: 502,
+          responseBody: {
+            ok: false,
+            cached: false,
+            agentId,
+            jobId: settled.payment.jobId,
+            run: {
+              status: 'failed',
+              error: msg,
+              completedAt: Date.now(),
+            },
+            payment: {
+              chainId: arcTestnet.id,
+              txHash: settled.payment.txHash,
+              payer: settled.payment.payer,
+              amount: settled.payment.amount,
+            },
+          },
         });
       }
     }
