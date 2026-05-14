@@ -5,7 +5,7 @@
  *   1. POST /api/agents/:id/run without payment
  *   2. Server returns 402 Payment Required with `accepts[]` descriptor
  *   3. Wallet signs & submits JobEscrow-funding tx (testnet USDC)
- *   4. We retry the POST with `X-PAYMENT: <txHash>` header
+ *   4. We retry the POST with a structured `X-PAYMENT` payload
  *   5. Server verifies receipt on-chain, returns job result
  *
  * This file is network-only — it assumes wagmi config is loaded and an
@@ -18,13 +18,15 @@ import { sendTransaction, waitForTransactionReceipt } from 'wagmi/actions';
 import { CONTRACTS, JOB_ESCROW_ABI, USDC_ABI, arcTestnet } from '@arclayer/sdk';
 
 export interface X402Accept {
-  scheme: 'exact';
+  scheme: 'exact' | 'arc-escrow' | 'arclayer-escrow';
   network: string;
   chainId: number;
   asset: Address;
   payTo: Address;
   maxAmountRequired: string; // bigint-as-string, base units
   resource: string;
+  requirementId?: string;
+  jobId?: string;
   description?: string;
   mimeType?: string;
 }
@@ -92,6 +94,18 @@ async function settlePayment(
   return fundHash;
 }
 
+function buildPaymentHeader(accept: X402Accept, txHash: Hash, jobId: bigint): string {
+  return JSON.stringify({
+    scheme: accept.scheme,
+    network: accept.network,
+    chainId: accept.chainId,
+    txHash,
+    requirementId: accept.requirementId,
+    resource: accept.resource,
+    jobId: accept.jobId ?? jobId.toString(),
+  });
+}
+
 /**
  * Run an agent with automatic x402 payment handling.
  *
@@ -134,7 +148,7 @@ export async function runAgent<T = unknown>(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-PAYMENT': txHash,
+        'X-PAYMENT': buildPaymentHeader(accept, txHash, body.jobId),
       },
       body: serialize(body),
     });

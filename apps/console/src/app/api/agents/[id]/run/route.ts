@@ -19,6 +19,13 @@ const publicClient = createPublicClient({
   transport: fallback(ARC_RPC_URLS.map((url) => http(url))),
 });
 
+const X402_FACILITATOR_ENABLED = process.env.X402_FACILITATOR_ENABLED === 'true';
+
+async function getX402Facilitator() {
+  const { createX402Facilitator } = await import('@/lib/x402/facilitator');
+  return createX402Facilitator();
+}
+
 function paymentRequired(agentId: string) {
   const resource = `/api/agents/${agentId}/run`;
   const accepts = [
@@ -97,9 +104,58 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const payment = req.headers.get('x-payment');
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
-  if (!payment) return paymentRequired(agentId);
+  const resource = `/api/agents/${agentId}/run`;
 
-  // Parse X-PAYMENT header — supports raw txHash OR {txHash} JSON.
+  if (!payment) {
+    if (X402_FACILITATOR_ENABLED) {
+      const x402Facilitator = await getX402Facilitator();
+      return x402Facilitator.paymentRequired({
+        resource,
+        resourceMethod: 'POST',
+        agentId,
+        jobId: body.jobId == null ? undefined : String(body.jobId),
+        amountRequired: '1000000',
+        payTo: CONTRACTS.JOB_ESCROW,
+        asset: CONTRACTS.USDC,
+        description: 'Fund an ArcLayer escrow run with Arc testnet USDC, then retry with X-PAYMENT.',
+        mimeType: 'application/json',
+        routePattern: '/api/agents/[id]/run',
+      });
+    }
+    return paymentRequired(agentId);
+  }
+
+  if (X402_FACILITATOR_ENABLED) {
+    const x402Facilitator = await getX402Facilitator();
+    const parsedPayment = x402Facilitator.parsePaymentFromRequest(req);
+    const verified = await x402Facilitator.verifyPayment({ payment: parsedPayment, resource });
+    if (!verified.ok) {
+      const legacyRawTxHash = isHash(payment);
+      if (!legacyRawTxHash || verified.error.code !== 'MISSING_REQUIREMENT_ID') {
+        return x402Facilitator.paymentRejected(verified);
+      }
+    } else {
+      const settled = await x402Facilitator.settlePayment({ paymentId: verified.payment.paymentId });
+      if (!settled.ok) return x402Facilitator.paymentRejected(settled);
+
+      const consumed = await x402Facilitator.consumePayment({
+        paymentId: verified.payment.paymentId,
+        txHash: verified.payment.txHash,
+        requirementId: verified.payment.requirementId,
+        resource,
+        resourceMethod: 'POST',
+      });
+      if (consumed.cachedResponse) return x402Facilitator.toResponse(consumed.cachedResponse);
+      if ((!consumed.ok || !consumed.consumptionId) && consumed.code !== 'ALREADY_CONSUMED') {
+        return x402Facilitator.paymentRejected({
+          status: 422,
+          error: { code: consumed.code, message: consumed.message },
+        });
+      }
+    }
+  }
+
+  // Parse X-PAYMENT header — supports raw txHash OR structured JSON with {txHash}.
   let txHash = payment;
   try {
     const parsed = JSON.parse(payment) as { txHash?: string };
