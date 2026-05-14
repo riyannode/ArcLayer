@@ -9,6 +9,13 @@ import type {
   X402CachedResponse,
 } from './types';
 
+function assert0x(value: string, field: string): `0x${string}` {
+  if (!value.startsWith('0x') || value.length < 4) {
+    throw new Error(`[x402] store data corruption: ${field} is not a 0x-prefixed hex string (got: ${value.slice(0, 10)}...)`);
+  }
+  return value as `0x${string}`;
+}
+
 // snake_case row types
 
 interface ReqRow {
@@ -109,8 +116,8 @@ function rowToRequirement(r: ReqRow): X402Requirement {
     resourceMethod: r.resource_method,
     description: r.description ?? undefined,
     mimeType: r.mime_type ?? undefined,
-    payTo: r.pay_to,
-    asset: r.asset,
+    payTo: assert0x(r.pay_to, 'requirement.pay_to'),
+    asset: assert0x(r.asset, 'requirement.asset'),
     amountRequired: r.amount_required,
     amountDisplay: r.amount_display ?? undefined,
     currency: 'USDC',
@@ -132,18 +139,18 @@ function rowToPayment(r: PayRow): X402Payment {
     id: r.id,
     paymentId: r.payment_id,
     requirementId: r.requirement_id,
-    txHash: r.tx_hash,
+    txHash: assert0x(r.tx_hash, 'payment.tx_hash'),
     chainId: r.chain_id,
     scheme: r.scheme as X402Payment['scheme'],
     network: r.network as X402Payment['network'],
-    payer: r.payer ?? undefined,
-    payTo: r.pay_to,
-    asset: r.asset,
+    payer: r.payer ? assert0x(r.payer, 'payment.payer') : undefined,
+    payTo: assert0x(r.pay_to, 'payment.pay_to'),
+    asset: assert0x(r.asset, 'payment.asset'),
     amount: r.amount,
     jobId: r.job_id,
     resource: r.resource,
     blockNumber: r.block_number ?? undefined,
-    blockHash: r.block_hash ?? undefined,
+    blockHash: r.block_hash ? assert0x(r.block_hash, 'payment.block_hash') : undefined,
     logIndex: r.log_index ?? undefined,
     eventName: 'JobFunded',
     verificationPayload: r.verification_payload,
