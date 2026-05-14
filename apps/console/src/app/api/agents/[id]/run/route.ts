@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createPublicClient, fallback, http, isHash, parseEventLogs } from 'viem';
 import { ARC_RPC_URLS, CONTRACTS, JOB_ESCROW_ABI, arcTestnet } from '@arclayer/sdk';
+import { buildPaymentRequiredHeader, buildPaymentResponseHeader } from '@/lib/x402Headers';
 import { runAgent } from '@/lib/agentExecutor';
 import {
   createRun,
@@ -19,25 +20,48 @@ const publicClient = createPublicClient({
 });
 
 function paymentRequired(agentId: string) {
+  const resource = `/api/agents/${agentId}/run`;
+  const accepts = [
+    {
+      scheme: 'arclayer-escrow' as const,
+      network: 'eip155:5042002' as const,
+      chainId: 5042002 as const,
+      asset: CONTRACTS.USDC,
+      payTo: CONTRACTS.JOB_ESCROW,
+      maxAmountRequired: '1000000',
+      resource,
+      description: 'Fund an ArcLayer escrow run with Arc testnet USDC, then retry with X-PAYMENT.',
+      mimeType: 'application/json',
+    },
+    {
+      scheme: 'exact' as const,
+      network: 'eip155:5042002' as const,
+      chainId: 5042002 as const,
+      asset: CONTRACTS.USDC,
+      payTo: CONTRACTS.JOB_ESCROW,
+      maxAmountRequired: '1000000',
+      resource,
+      description: 'Legacy exact-payment compatibility for ArcLayer x402 migration.',
+      mimeType: 'application/json',
+    },
+  ];
+
   return NextResponse.json(
     {
       error: 'payment_required',
       x402Version: 1,
-      accepts: [
-        {
-          scheme: 'exact',
-          network: 'arc-testnet',
-          chainId: arcTestnet.id,
-          asset: CONTRACTS.USDC,
-          payTo: CONTRACTS.JOB_ESCROW,
-          maxAmountRequired: '1000000',
-          resource: `/api/agents/${agentId}/run`,
-          description: 'Fund a Settlement Vault run with testnet USDC, then retry with X-PAYMENT.',
-          mimeType: 'application/json',
-        },
-      ],
+      accepts,
     },
-    { status: 402, headers: { 'X-402-Version': '1' } }
+    {
+      status: 402,
+      headers: {
+        'X-402-Version': '1',
+        'PAYMENT-REQUIRED': buildPaymentRequiredHeader({
+          x402Version: 1,
+          accepts,
+        }),
+      },
+    }
   );
 }
 
@@ -46,6 +70,26 @@ function rejectPayment(message: string, status = 402) {
     { error: 'payment_not_settled', message },
     { status, headers: status === 402 ? { 'X-402-Version': '1' } : {} }
   );
+}
+
+function paymentResponseHeaders(args: {
+  txHash: `0x${string}`;
+  payer: `0x${string}`;
+  amount: string;
+  jobId: string;
+  resource: string;
+}) {
+  return {
+    'PAYMENT-RESPONSE': buildPaymentResponseHeader({
+      success: true,
+      transaction: args.txHash,
+      network: 'eip155:5042002',
+      payer: args.payer,
+      amount: args.amount,
+      jobId: args.jobId,
+      resource: args.resource,
+    }),
+  };
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -108,6 +152,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         payer: existing.payer,
         amount: existing.amount,
       },
+    }, {
+      headers: paymentResponseHeaders({
+        txHash: txHash as `0x${string}`,
+        payer: existing.payer as `0x${string}`,
+        amount: existing.amount,
+        jobId: existing.jobId,
+        resource: `/api/agents/${agentId}/run`,
+      }),
     });
   }
 
@@ -202,7 +254,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           amount: failed.amount,
         },
       },
-      { status: 502 }
+      {
+        status: 502,
+        headers: paymentResponseHeaders({
+          txHash: txHash as `0x${string}`,
+          payer: failed.payer as `0x${string}`,
+          amount: failed.amount,
+          jobId: failed.jobId,
+          resource: `/api/agents/${agentId}/run`,
+        }),
+      }
     );
   }
 
@@ -272,6 +333,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         payer: submitted.payer,
         amount: submitted.amount,
       },
+    }, {
+      headers: paymentResponseHeaders({
+        txHash: txHash as `0x${string}`,
+        payer: submitted.payer as `0x${string}`,
+        amount: submitted.amount,
+        jobId: submitted.jobId,
+        resource: `/api/agents/${agentId}/run`,
+      }),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -298,7 +367,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
           amount: submitFailed.amount,
         },
       },
-      { status: 502 }
+      {
+        status: 502,
+        headers: paymentResponseHeaders({
+          txHash: txHash as `0x${string}`,
+          payer: submitFailed.payer as `0x${string}`,
+          amount: submitFailed.amount,
+          jobId: submitFailed.jobId,
+          resource: `/api/agents/${agentId}/run`,
+        }),
+      }
     );
   }
 }
