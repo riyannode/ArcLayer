@@ -49,3 +49,9 @@ pnpm-debug.log*
 # Misc
 *.tsbuildinfo
 .vercel
+
+# Local agent/tooling files
+.agents/
+skills-lock.json
+X402_FACILITATOR_BUILD_PLAN.*
+apps/console/scripts/arc-e2e-*.mjs
