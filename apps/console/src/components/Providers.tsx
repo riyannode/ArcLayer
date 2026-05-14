@@ -35,23 +35,22 @@ export default function Providers({ children }: { children: React.ReactNode }) {
           accentColor: '#C5A67C',
           logo: '/arc-brand.svg',
           showWalletLoginFirst: true,
-          // Curated top-popular wallet list. Explicitly NOT using
-          // `detected_ethereum_wallets` because it auto-enumerates every
-          // installed EIP-6963 provider (SubWallet, Frame, Brave, etc.)
-          // cluttering the modal. Named IDs keep the list short and
-          // recognizable. Privy v2 resolves named IDs via RDNS-first
-          // EIP-6963, so clicking "MetaMask" routes to the real MetaMask
-          // provider when installed, not window.ethereum.
+          // Curated short list. Three buttons cover ~95% of EVM users:
+          // MetaMask (desktop majority), Coinbase Wallet (mainstream/onboarding),
+          // and WalletConnect (mobile + everything else via QR).
           //
-          // `wallet_connect` stays for mobile + desktop wallets not in
-          // the curated list.
+          // Dropped from earlier list:
+          //  - rabby      → power-user niche, available via WC
+          //  - phantom    → Solana-first, EVM rarely the primary use
+          //  - rainbow    → small share, available via WC
+          //  - okx_wallet → known to hijack window.ethereum on this stack
+          //
+          // Note: clicking "Other wallet" expands WalletConnect's directory
+          // (~300 wallets). That list is owned by WC, not us — we cannot
+          // truncate it without removing WalletConnect entirely.
           walletList: [
             'metamask',
             'coinbase_wallet',
-            'rabby_wallet',
-            'phantom',
-            'rainbow',
-            'okx_wallet',
             'wallet_connect',
           ],
           walletChainType: 'ethereum-only',

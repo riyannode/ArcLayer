@@ -170,7 +170,10 @@ export default function AgentProfilePage() {
         functionName: 'jobCounter',
       }) as bigint) + BigInt(1);
       setRunState('Creating JobEscrow run for agent worker...');
-      const createHash = await writeContractAsync(buildCreateJobConfig(BigInt(agentId), agent.controller as `0x${string}`, address, runInput));
+      // Worker = service-owned address that runs the agent and submits deliverables on-chain.
+      // Falls back to agent.controller if env not set (legacy behaviour).
+      const serviceWorker = (process.env.NEXT_PUBLIC_WORKER_ADDR as `0x${string}` | undefined) ?? (agent.controller as `0x${string}`);
+      const createHash = await writeContractAsync(buildCreateJobConfig(BigInt(agentId), serviceWorker, address, runInput));
       await waitForTransactionReceipt(config, { hash: createHash });
 
       setRunState('Setting budget and approving testnet USDC...');

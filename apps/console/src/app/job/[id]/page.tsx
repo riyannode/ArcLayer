@@ -20,18 +20,40 @@ function parseJobId(value: string | undefined) {
   return value && /^\d+$/.test(value) ? value : null;
 }
 
+type Action = 'submit' | 'approve' | 'reject' | 'settle' | 'approve_settle' | null;
+
+type DeliverablePreview = {
+  agentId?: string;
+  jobId?: string;
+  runId?: string;
+  input?: string;
+  output?: string;
+  completedAt?: number;
+};
+
+const IPFS_GATEWAY = process.env.NEXT_PUBLIC_IPFS_GATEWAY || 'https://gateway.pinata.cloud/ipfs';
+
+function ipfsToHttp(uri: string | null | undefined): string | null {
+  if (!uri || !uri.startsWith('ipfs://')) return null;
+  return `${IPFS_GATEWAY}/${uri.replace('ipfs://', '')}`;
+}
+
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
   const jobId = parseJobId(params.id);
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const [payload, setPayload] = useState<JobDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [txState, setTxState] = useState<string | null>(null);
-  const [activeAction, setActiveAction] = useState<'submit' | 'approve' | 'reject' | 'settle' | null>(null);
+  const [activeAction, setActiveAction] = useState<Action>(null);
   const [deliverableURI, setDeliverableURI] = useState('ipfs://deliverable-next');
   const [proofMetadataURI, setProofMetadataURI] = useState('ipfs://proof-next');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [preview, setPreview] = useState<DeliverablePreview | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,6 +73,26 @@ export default function JobDetailPage() {
 
   const job = payload?.job || null;
   const proof = payload?.proof || null;
+
+  // Auto-fetch deliverable JSON from IPFS once a deliverableURI lands on chain.
+  useEffect(() => {
+    let cancelled = false;
+    const url = ipfsToHttp(job?.deliverableURI);
+    if (!url) { setPreview(null); setPreviewError(null); return; }
+    setPreviewLoading(true);
+    setPreviewError(null);
+    fetch(url, { cache: 'no-store' })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`gateway ${r.status}`);
+        return r.json();
+      })
+      .then((j: DeliverablePreview) => { if (!cancelled) setPreview(j); })
+      .catch((e: unknown) => {
+        if (!cancelled) setPreviewError(e instanceof Error ? e.message : 'fetch failed');
+      })
+      .finally(() => { if (!cancelled) setPreviewLoading(false); });
+    return () => { cancelled = true; };
+  }, [job?.deliverableURI]);
 
   async function handleSubmitDeliverable() {
     if (!jobId) return;
@@ -106,6 +148,37 @@ export default function JobDetailPage() {
       setTxState('Job settled and indexed.');
     } catch (e) { setTxState(e instanceof Error ? e.message : 'settle failed.'); }
     finally { setActiveAction(null); }
+  }
+
+  // Hybrid γ: one-click flow — evaluate(true) then settle().
+  // Two wallet signatures, one button. Used by the buyer/evaluator after
+  // reviewing the IPFS deliverable preview.
+  async function handleApproveAndSettle() {
+    if (!jobId) return;
+    try {
+      setActiveAction('approve_settle');
+      // 1. evaluate(true)
+      setTxState('Step 1/2: signing approve…');
+      const evalHash = await writeContractAsync(buildEvaluateJobConfig(BigInt(jobId), true));
+      setTxState('Step 1/2: waiting for approve receipt…');
+      await waitForTransactionReceipt(config, { hash: evalHash });
+
+      // 2. settle()
+      setTxState('Step 2/2: signing settle…');
+      const settleHash = await writeContractAsync(buildSettleJobConfig(BigInt(jobId)));
+      setTxState('Step 2/2: waiting for settle receipt…');
+      await waitForTransactionReceipt(config, { hash: settleHash });
+
+      setTxState('Both txs mined. Waiting for indexer refresh…');
+      const next = await waitForIndexer<JobDetail>(
+        `/jobs/${jobId}`,
+        (p) => p.job.status === 5 && p.proof !== null
+      );
+      setPayload(next);
+      setTxState(`Settled. WorkProof #${next.proof?.tokenId ?? '?'} minted.`);
+    } catch (e) {
+      setTxState(e instanceof Error ? `approve&settle failed: ${e.message}` : 'approve&settle failed.');
+    } finally { setActiveAction(null); }
   }
 
   const statusChipClass = job
@@ -199,8 +272,49 @@ export default function JobDetailPage() {
             <div className="aureo-mono-label mb-2">ARTIFACTS</div>
             <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Deliverable &amp; proof</h2>
             <div className="mt-5 space-y-3">
-              <ArtifactRow label="Deliverable URI" value={job?.deliverableURI || (isLoading ? '…' : 'No deliverable submitted.')} />
-              <ArtifactRow label="Proof metadata URI" value={job?.proofMetadataURI || (isLoading ? '…' : 'No proof metadata.')} />
+              <ArtifactRow
+                label="Deliverable URI"
+                value={job?.deliverableURI || (isLoading ? '…' : 'No deliverable submitted.')}
+                href={ipfsToHttp(job?.deliverableURI)}
+              />
+              <ArtifactRow
+                label="Proof metadata URI"
+                value={job?.proofMetadataURI || (isLoading ? '…' : 'No proof metadata.')}
+                href={ipfsToHttp(job?.proofMetadataURI)}
+              />
+
+              {/* IPFS preview — auto-fetched once a deliverableURI is on chain */}
+              {job?.deliverableURI && (
+                <div className="p-4" style={{ border: '1px solid rgba(184, 205, 126, 0.25)', background: 'rgba(184, 205, 126, 0.04)' }}>
+                  <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>DELIVERABLE PREVIEW · IPFS</p>
+                  {previewLoading && (
+                    <p className="mt-2 font-mono text-[11.5px] text-[#7A7A7A]">Fetching from IPFS gateway…</p>
+                  )}
+                  {previewError && (
+                    <p className="mt-2 font-mono text-[11.5px] text-[#f0c5c5]">Could not fetch: {previewError}</p>
+                  )}
+                  {preview && (
+                    <div className="mt-3 space-y-2 font-mono text-[11.5px] text-[#EAE4D8]">
+                      {preview.input && (
+                        <div>
+                          <p className="text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">INPUT</p>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-[#9a9a9a]">{preview.input}</p>
+                        </div>
+                      )}
+                      {preview.output && (
+                        <div>
+                          <p className="text-[10.5px] tracking-[0.14em] text-[#C5A67C]">OUTPUT</p>
+                          <p className="mt-1 whitespace-pre-wrap break-words">{preview.output}</p>
+                        </div>
+                      )}
+                      {preview.runId && (
+                        <p className="text-[10.5px] text-[#7A7A7A]">run {preview.runId.slice(0, 10)}…{preview.runId.slice(-8)}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
                 <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>MINTED PROOF</p>
                 {proof ? (
@@ -220,12 +334,19 @@ export default function JobDetailPage() {
           </section>
         </div>
 
-        {/* Actions */}
+        {/* Actions — status-aware. The buyer-flow is: Funded→Submitted (auto by service)
+            → Submitted (Approve&Settle) → Settled. Manual override stays available. */}
         <section className="aureo-panel mt-6 p-4 md:p-6">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <div className="aureo-mono-label mb-2">ACTIONS · WRITE</div>
-              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Submit · evaluate · settle</h2>
+              <div className="aureo-mono-label mb-2">ACTIONS · {job ? JOB_STATUS[job.status] : '…'}</div>
+              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">
+                {job?.status === 5 ? 'Settlement complete' :
+                 job?.status === 4 ? (job.approved ? 'Settle to release payout' : 'Rejected — no settlement') :
+                 job?.status === 3 ? 'Review deliverable, then approve & settle' :
+                 job?.status === 2 ? 'Funded — awaiting agent submission' :
+                 'Job lifecycle controls'}
+              </h2>
             </div>
             <a
               href={`${INDEXER_BASE_URL}/jobs/${jobId || '0'}`}
@@ -237,30 +358,103 @@ export default function JobDetailPage() {
             </a>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-            <div className="space-y-3">
-              <input value={deliverableURI} onChange={(e) => setDeliverableURI(e.target.value)} placeholder="ipfs://deliverable" className="input-mono" />
-              <input value={proofMetadataURI} onChange={(e) => setProofMetadataURI(e.target.value)} placeholder="ipfs://proof-metadata" className="input-mono" />
-              <button onClick={handleSubmitDeliverable} disabled={!isConnected || activeAction !== null} className="btn-primary">
-                {activeAction === 'submit' ? 'SUBMITTING…' : 'SUBMIT DELIVERABLE'}
-              </button>
+          {/* Caller authority hint */}
+          {job && address && (
+            <div className="mt-4 p-3 font-mono text-[10.5px] tracking-[0.04em] text-[#7A7A7A]" style={{ border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}>
+              you are{' '}
+              {address.toLowerCase() === job.client.toLowerCase() && <span className="text-[#C5A67C]">CLIENT </span>}
+              {address.toLowerCase() === job.evaluator.toLowerCase() && <span className="text-[#B8CD7E]">EVALUATOR </span>}
+              {address.toLowerCase() === job.worker.toLowerCase() && <span className="text-[#9eb8ff]">WORKER </span>}
+              {address.toLowerCase() !== job.client.toLowerCase() &&
+               address.toLowerCase() !== job.evaluator.toLowerCase() &&
+               address.toLowerCase() !== job.worker.toLowerCase() && <span>· not a participant</span>}
             </div>
+          )}
 
-            <div className="space-y-3">
-              <button onClick={() => handleEvaluate(true)} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
-                {activeAction === 'approve' ? 'APPROVING…' : 'EVALUATE · APPROVE'}
+          {/* PRIMARY: status-driven actions */}
+          <div className="mt-5 space-y-3">
+            {job?.status === 3 && (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
+                <button
+                  onClick={handleApproveAndSettle}
+                  disabled={!isConnected || activeAction !== null || !preview}
+                  className="btn-primary"
+                  title={!preview ? 'Waiting for IPFS preview to load…' : 'Sign 2 txs: evaluate(true) + settle()'}
+                >
+                  {activeAction === 'approve_settle' ? 'PROCESSING…' : '✓ APPROVE & SETTLE'}
+                </button>
+                <button
+                  onClick={() => handleEvaluate(false)}
+                  disabled={!isConnected || activeAction !== null}
+                  className="btn-bordered"
+                  style={{ borderColor: 'rgba(230, 130, 130, 0.4)', color: '#e68282' }}
+                >
+                  {activeAction === 'reject' ? 'REJECTING…' : '✕ REJECT'}
+                </button>
+              </div>
+            )}
+
+            {job?.status === 4 && job.approved && (
+              <button
+                onClick={handleSettle}
+                disabled={!isConnected || activeAction !== null}
+                className="btn-primary w-full"
+              >
+                {activeAction === 'settle' ? 'SETTLING…' : '⟶ SETTLE (release payout + mint WorkProof)'}
               </button>
-              <button onClick={() => handleEvaluate(false)} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full" style={{ borderColor: 'rgba(230, 130, 130, 0.4)', color: '#e68282' }}>
-                {activeAction === 'reject' ? 'REJECTING…' : 'EVALUATE · REJECT'}
-              </button>
-              <button onClick={handleSettle} disabled={!isConnected || activeAction !== null} className="btn-primary w-full">
-                {activeAction === 'settle' ? 'SETTLING…' : 'SETTLE JOB'}
-              </button>
-            </div>
+            )}
+
+            {job?.status === 5 && proof && (
+              <div className="p-4" style={{ border: '1px solid rgba(184, 205, 126, 0.35)', background: 'rgba(184, 205, 126, 0.06)' }}>
+                <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>SETTLED</p>
+                <p className="mt-2 font-mono text-[12px] text-[#EAE4D8]">
+                  {formatUSDC(BigInt(proof.amountPaid))} USDC paid to worker · WorkProof #{proof.tokenId} minted
+                </p>
+              </div>
+            )}
+
+            {job && job.status < 3 && (
+              <p className="font-mono text-[11.5px] text-[#7A7A7A]">
+                {job.status === 2
+                  ? '✓ Funded. The service worker will auto-submit the deliverable after the next /run call.'
+                  : 'Job not yet funded. Buyer must complete x402 payment first.'}
+              </p>
+            )}
+          </div>
+
+          {/* ADVANCED override — manual submitDeliverable, kept for ops/debug */}
+          <div className="mt-6 border-t border-white/10 pt-4">
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="font-mono text-[10.5px] tracking-[0.16em] text-[#7A7A7A] transition-colors hover:text-[#C5A67C]"
+            >
+              {showAdvanced ? '▾' : '▸'} ADVANCED · MANUAL OVERRIDE
+            </button>
+            {showAdvanced && (
+              <div className="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+                <div className="space-y-3">
+                  <p className="font-mono text-[10.5px] text-[#7A7A7A]">submitDeliverable (worker only)</p>
+                  <input value={deliverableURI} onChange={(e) => setDeliverableURI(e.target.value)} placeholder="ipfs://deliverable" className="input-mono" />
+                  <input value={proofMetadataURI} onChange={(e) => setProofMetadataURI(e.target.value)} placeholder="ipfs://proof-metadata" className="input-mono" />
+                  <button onClick={handleSubmitDeliverable} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
+                    {activeAction === 'submit' ? 'SUBMITTING…' : 'SUBMIT DELIVERABLE'}
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  <p className="font-mono text-[10.5px] text-[#7A7A7A]">individual evaluator/settle txs</p>
+                  <button onClick={() => handleEvaluate(true)} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
+                    {activeAction === 'approve' ? 'APPROVING…' : 'EVALUATE · APPROVE only'}
+                  </button>
+                  <button onClick={handleSettle} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
+                    {activeAction === 'settle' ? 'SETTLING…' : 'SETTLE only'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="mt-5 p-4 font-mono text-[11.5px] leading-5 text-[#9a9a9a]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
-            {txState || (isConnected ? '✓ Wallet connected. Contract permissions decide which actions succeed.' : '⚠ Connect wallet to run submit / evaluate / settle.')}
+            {txState || (isConnected ? '✓ Wallet connected. Contract permissions decide which actions succeed.' : '⚠ Connect wallet to act on this job.')}
           </div>
         </section>
       </div>
@@ -268,11 +462,22 @@ export default function JobDetailPage() {
   );
 }
 
-function ArtifactRow({ label, value }: { label: string; value: string }) {
+function ArtifactRow({ label, value, href }: { label: string; value: string; href?: string | null }) {
   return (
     <div className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
       <p className="aureo-mono-label">{label}</p>
-      <p className="mt-2 truncate font-mono text-[11.5px] text-[#EAE4D8]">{value}</p>
+      {href ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-2 block truncate font-mono text-[11.5px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
+        >
+          {value} ↗
+        </a>
+      ) : (
+        <p className="mt-2 truncate font-mono text-[11.5px] text-[#EAE4D8]">{value}</p>
+      )}
     </div>
   );
 }
