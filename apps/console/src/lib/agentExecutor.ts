@@ -1,9 +1,10 @@
 /**
  * Agent executor — wraps the 9router LLM gateway.
  *
- * For B1 we use cx/gpt-5.5 hosted at the internal 9router. The executor is a
- * pure function: given (agentId, jobId, input), produce a string output. It
- * does not touch the database or the chain — that's the caller's job.
+ * For B1 we use cx/gpt-5.5 hosted at the configured OpenAI-compatible endpoint.
+ * The executor is a pure function: given (agentId, jobId, input), produce a
+ * string output. It does not touch the database or the chain — that's the
+ * caller's job.
  *
  * Failure modes:
  *   - Network error → throw, caller marks run as failed
@@ -12,9 +13,12 @@
  *
  * Timeout: AGENT_TIMEOUT_MS env (default 60s) — hard cap per run.
  */
-const ENDPOINT =
-  process.env.ARCLAYER_AGENT_ENDPOINT || 'http://43.156.160.127:20128/v1/chat/completions';
+const ENDPOINT_BASE = process.env.ARCLAYER_AGENT_ENDPOINT || 'http://localhost:20128/v1';
+const ENDPOINT = ENDPOINT_BASE.endsWith('/chat/completions')
+  ? ENDPOINT_BASE
+  : `${ENDPOINT_BASE.replace(/\/$/, '')}/chat/completions`;
 const MODEL = process.env.ARCLAYER_AGENT_MODEL || 'cx/gpt-5.5';
+const API_KEY = process.env.ARCLAYER_AGENT_API_KEY;
 const TIMEOUT_MS = Number(process.env.ARCLAYER_AGENT_TIMEOUT_MS || 60_000);
 const MAX_TOKENS = Number(process.env.ARCLAYER_AGENT_MAX_TOKENS || 800);
 
@@ -58,11 +62,14 @@ export async function runAgent(args: {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
 
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
+  if (API_KEY) headers.authorization = `Bearer ${API_KEY}`;
+
   let resp: Response;
   try {
     resp = await fetch(ENDPOINT, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify({
         model: MODEL,
         max_tokens: MAX_TOKENS,
