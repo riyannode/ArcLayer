@@ -249,7 +249,11 @@ export function createX402Facilitator(opts: X402FacilitatorOptions = {}) {
   }
 
   function toResponse(cached: X402CachedResponse): NextResponse {
-    const body = cached.responseBody !== undefined ? JSON.stringify(cached.responseBody) : (cached.bodyText ?? '');
+    const bodyPayload =
+      cached.responseBody && typeof cached.responseBody === 'object' && !Array.isArray(cached.responseBody)
+        ? { ...cached.responseBody, cached: true }
+        : cached.responseBody;
+    const body = bodyPayload !== undefined ? JSON.stringify(bodyPayload) : (cached.bodyText ?? '');
     return new NextResponse(body, {
       status: cached.statusCode,
       headers: {
