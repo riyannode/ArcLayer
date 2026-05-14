@@ -59,10 +59,6 @@ function paymentId(): string {
   return `pay_${randomBytes(16).toString('hex')}`;
 }
 
-function reject(code: VerifyArcEscrowResult extends infer T ? never : never, message: string): never {
-  throw new Error(`${code}:${message}`);
-}
-
 function fail(code: Extract<VerifyArcEscrowResult, { ok: false }>['code'], message: string, details?: Record<string, unknown>): VerifyArcEscrowResult {
   return { ok: false, code, message, details };
 }
