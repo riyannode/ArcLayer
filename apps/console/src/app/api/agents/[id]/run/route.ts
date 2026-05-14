@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CONTRACTS, arcTestnet } from '@arclayer/sdk';
 import { runAgent } from '@/lib/agentExecutor';
 import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { sanitizeErrorMessage } from '@/lib/sanitize-error';
 import { createX402Facilitator } from '@/lib/x402/facilitator';
 
 const X402_FACILITATOR_DISABLED = process.env.X402_FACILITATOR_ENABLED === 'false';
@@ -136,7 +137,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       },
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = sanitizeErrorMessage(err);
     return facilitator.cacheAndReturn({
       payment: settled.payment,
       consumptionId: consumed.consumptionId,
