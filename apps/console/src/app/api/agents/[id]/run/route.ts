@@ -1,11 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CONTRACTS, arcTestnet } from '@arclayer/sdk';
 import { runAgent } from '@/lib/agentExecutor';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 import { createX402Facilitator } from '@/lib/x402/facilitator';
 
 const X402_FACILITATOR_DISABLED = process.env.X402_FACILITATOR_ENABLED === 'false';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const ip = getClientIp(req);
+  const rateLimit = checkRateLimit(ip);
+
+  if (rateLimit.limited) {
+    return NextResponse.json(
+      {
+        error: 'rate_limit_exceeded',
+        message: 'Too many requests. Try again later.',
+      },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': String(Math.max(1, Math.ceil(rateLimit.retryAfterMs / 1000))),
+          'X-RateLimit-Limit': '10',
+          'X-RateLimit-Remaining': '0',
+          'X-RateLimit-Reset': String(Math.ceil(rateLimit.resetAt / 1000)),
+        },
+      }
+    );
+  }
+
   const agentId = params.id;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
 
