@@ -3,6 +3,7 @@ packages:
   - "indexer"
   - "apps/*"
 allowBuilds:
+  '@reown/appkit': true
   bufferutil: true
   esbuild: true
   keccak: true

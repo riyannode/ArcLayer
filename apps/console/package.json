@@ -11,6 +11,7 @@
     "@arclayer/sdk": "workspace:*",
     "@privy-io/react-auth": "^3.25.0",
     "@privy-io/wagmi": "^4.0.7",
+    "@supabase/supabase-js": "^2.105.4",
     "@tanstack/react-query": "^5.0.0",
     "@wagmi/core": "^2.12.0",
     "next": "14.2.0",
