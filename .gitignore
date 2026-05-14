@@ -55,3 +55,4 @@ pnpm-debug.log*
 skills-lock.json
 X402_FACILITATOR_BUILD_PLAN.*
 apps/console/scripts/arc-e2e-*.mjs
+X402_PHASE_H_CLEANUP_PLAN.txt
