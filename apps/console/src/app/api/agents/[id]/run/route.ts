@@ -90,6 +90,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         ? ''
         : JSON.stringify(inputRaw);
 
+  const MAX_INPUT_LENGTH = 2000;
+  if (inputStr.length > MAX_INPUT_LENGTH) {
+    return NextResponse.json(
+      {
+        error: 'input_too_long',
+        message: `Input exceeds maximum length of ${MAX_INPUT_LENGTH} characters (got ${inputStr.length}).`,
+      },
+      { status: 400 }
+    );
+  }
+
   try {
     const result = await runAgent({
       agentId,
