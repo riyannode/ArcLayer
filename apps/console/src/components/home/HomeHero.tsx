@@ -4,24 +4,24 @@ import Link from 'next/link';
 import HomeProofStrip from './HomeProofStrip';
 import HomeStats from './HomeStats';
 
+const arrow = (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+    <path d="M3 11L11 3M11 3H4M11 3V10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+  </svg>
+);
+
 /**
- * Home hero — editorial serif headline, developer quickstart block,
- * CTAs, real deployed contracts strip, and live indexer stats.
+ * Home hero — editorial serif headline, real deployed contracts strip,
+ * live indexer stats, and primary homepage CTAs.
  * Left column of the landing grid.
- *
- * Spacing tuned for 80–90% browser zoom (primary viewing target) while
- * staying usable at 100%. Headline uses clamp() so it scales continuously
- * with viewport width instead of jumping at breakpoints.
  */
 export default function HomeHero() {
   return (
     <div className="relative flex max-w-[540px] flex-col justify-center">
-      {/* Kicker */}
       <div className="mb-2 flex flex-col gap-1">
         <span className="aureo-mono-label">x402 · USDC ESCROW · PROOF OF WORK</span>
       </div>
 
-      {/* Headline — slogan (fluid, clamp-driven) */}
       <h1
         className="aureo-display text-[#EAE4D8]"
         style={{
@@ -43,7 +43,6 @@ export default function HomeHero() {
         </span>
       </h1>
 
-      {/* Divider */}
       <div className="my-3 flex max-w-[460px] items-center gap-3">
         <span className="h-px flex-1 bg-white/15" />
         <span
@@ -53,8 +52,7 @@ export default function HomeHero() {
         <span className="h-px flex-1 bg-white/15" />
       </div>
 
-      {/* Body */}
-      <p className="aureo-body max-w-[510px] text-[14px] text-[#9a9a9a] md:text-[14.5px]">
+      <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.68)] md:text-[14.5px]">
         ArcLayer lets agent builders add{' '}
         <span className="text-[#C5A67C]">x402 payments, USDC escrow, Proof of Work, and reputation</span>{' '}
         to any AI agent or API — without rebuilding payment and settlement logic from scratch.
@@ -62,48 +60,37 @@ export default function HomeHero() {
         <span className="font-mono text-[#C5A67C]">5042002</span>).
       </p>
 
-      {/* Developer quickstart */}
-      <div className="mt-2 max-w-[500px]">
-        <div className="aureo-mono-label mb-1.5">QUICKSTART</div>
-        <pre className="code-block py-2.5">
-<span className="tok-c"># install workspace SDK</span>{'\n'}
-<span className="tok-k">pnpm</span> add @arclayer/sdk{'\n'}{'\n'}
-<span className="tok-c">// read contract + query job</span>{'\n'}
-<span className="tok-k">import</span> {'{ CONTRACTS, readJob }'} <span className="tok-k">from</span>{' '}
-<span className="tok-s">&apos;@arclayer/sdk&apos;</span>;{'\n'}
-<span className="tok-k">const</span> job = <span className="tok-k">await</span> readJob(<span className="tok-s">0n</span>);
-        </pre>
+      <HomeProofStrip />
+      <HomeStats />
+
+      <div className="mt-7 flex flex-col items-start gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+        <Link href="/protocol" className="btn-primary">
+          Launch Console
+          {arrow}
+        </Link>
+        <Link href="/agents" className="btn-ghost">
+          Register Agent
+          {arrow}
+        </Link>
+        <Link href="/jobs" className="btn-ghost">
+          Create Job
+          {arrow}
+        </Link>
       </div>
 
-      {/* CTAs */}
-      <div className="mt-3 flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-2.5">
-        <Link href="/protocol" className="btn-primary">
-          OPEN PROTOCOL CONSOLE
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <path d="M3 11L11 3M11 3H4M11 3V10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
-        </Link>
-        <Link href="/docs" className="btn-ghost">
-          READ SDK DOCS
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <path d="M3 11L11 3M11 3H4M11 3V10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] uppercase tracking-[0.16em]">
+        <Link href="/docs" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
+          Read SDK ↗
         </Link>
         <a
           href="https://github.com/riyannode/ArcLayer"
           target="_blank"
           rel="noopener noreferrer"
-          className="btn-ghost"
+          className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]"
         >
-          GITHUB
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-            <path d="M3 11L11 3M11 3H4M11 3V10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-          </svg>
+          GitHub ↗
         </a>
       </div>
-
-      <HomeProofStrip />
-      <HomeStats />
     </div>
   );
 }

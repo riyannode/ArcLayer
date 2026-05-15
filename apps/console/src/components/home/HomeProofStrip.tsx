@@ -28,7 +28,7 @@ export default function HomeProofStrip() {
         </span>
         <span
           className="aureo-mono-label"
-          style={{ color: 'rgba(234, 228, 216, 0.4)', fontSize: '10px' }}
+          style={{ color: 'rgba(234, 228, 216, 0.62)', fontSize: '10px' }}
         >
           LIVE
         </span>
@@ -44,7 +44,7 @@ export default function HomeProofStrip() {
           >
             <span
               className="font-mono text-[10px] uppercase tracking-[0.15em]"
-              style={{ color: 'rgba(234, 228, 216, 0.55)' }}
+              style={{ color: 'rgba(234, 228, 216, 0.68)' }}
             >
               {c.label}
             </span>

@@ -6,8 +6,8 @@ export type HomeStat = { label: string; value: string; suffix: string };
 
 const fallbackStats: HomeStat[] = [
   { label: 'MODULES', value: '04', suffix: 'protocol contracts deployed' },
-  { label: 'AGENTS', value: '02', suffix: 'registered on-chain' },
-  { label: 'PROOFS', value: '02', suffix: 'settled jobs proven' },
+  { label: 'AGENTS', value: '04', suffix: 'registered on-chain' },
+  { label: 'PROOFS', value: '03', suffix: 'settled jobs proven' },
 ];
 
 /**
@@ -46,22 +46,22 @@ export default function HomeStats() {
   }, []);
 
   return (
-    <div className="mt-7 grid max-w-[560px] grid-cols-3 gap-6">
+    <div className="mt-7 grid max-w-[560px] grid-cols-3 gap-4 sm:gap-6">
       {stats.map((s, i) => (
         <div
           key={s.label}
           className="flex flex-col section-reveal"
           style={{ animationDelay: `${0.4 + i * 0.08}s` }}
         >
-          <span className="aureo-mono-label mb-3">{s.label}</span>
+          <span className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>{s.label}</span>
           <span
             className="aureo-display text-[38px] text-[#EAE4D8] md:text-[44px]"
-            style={{ transition: 'color 300ms', color: ready ? '#EAE4D8' : '#7A7A7A' }}
+            style={{ transition: 'color 300ms', color: ready ? '#EAE4D8' : 'rgba(234, 228, 216, 0.52)' }}
           >
             {s.value}
           </span>
           <span className="mt-2 h-px w-8 bg-[#C5A67C]/50" />
-          <span className="mt-2 font-mono text-[10px] leading-4 text-[#7A7A7A]">
+          <span className="mt-2 font-mono text-[10px] leading-4 text-[rgba(234,228,216,0.68)]">
             {s.suffix}
           </span>
         </div>
