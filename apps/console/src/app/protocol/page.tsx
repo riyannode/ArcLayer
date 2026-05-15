@@ -7,7 +7,7 @@ import { formatUSDC, shortenAddress } from '@/lib/contracts';
 import { fetchIndexerJson, type DashboardOverview } from '@/lib/indexer';
 
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
-const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'active', 6: 'error' };
+const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'success', 6: 'error' };
 
 const RPC_ENDPOINTS = [
   { label: 'rpc.testnet.arc.network', url: 'https://rpc.testnet.arc.network' },
@@ -180,8 +180,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Telemetry bar: RPC + indexer */}
-        <div className="mb-8 grid grid-cols-1 gap-3 md:grid-cols-[1.4fr_1fr]">
+        {/* Telemetry bar: RPC + indexer + x402 */}
+        <div className="mb-8 grid grid-cols-1 gap-3 md:grid-cols-[1.4fr_1fr_1fr]">
           <Panel title="RPC · HEALTH" sub={`${RPC_ENDPOINTS.length} endpoints`}>
             <div className="space-y-2">
               {rpcHealth.length === 0
@@ -216,6 +216,38 @@ export default function Dashboard() {
               <div className="flex items-baseline justify-between">
                 <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>CADENCE</span>
                 <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>indexer 10s · rpc 15s</span>
+              </div>
+            </div>
+          </Panel>
+          <Panel
+            title="X402 · FACILITATOR"
+            sub="Arc testnet settlement config"
+            action={<Link href="/api/x402/supported" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>INSPECT CONFIG ↗</Link>}
+          >
+            <div className="flex flex-col gap-3">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>SCHEME</span>
+                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>arc-escrow</span>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>NETWORK</span>
+                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>Arc Testnet</span>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>CHAIN ID</span>
+                <span className="font-mono text-[11.5px]" style={{ color: '#C5A67C' }}>5042002</span>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>ASSET</span>
+                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>USDC</span>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>FACILITATOR</span>
+                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>/api/x402</span>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>SUPPORTED CONFIG</span>
+                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>/api/x402/supported</span>
               </div>
             </div>
           </Panel>

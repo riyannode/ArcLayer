@@ -4,6 +4,11 @@ type Module = { t: string; c: string; d: string };
 
 const modules: Module[] = [
   {
+    t: 'x402 Facilitator',
+    c: 'verify · settle · consume · replay-safe',
+    d: 'HTTP 402 micropayment gate. Each API call is backed by a JobEscrow USDC payment on Arc — verified on-chain, settled atomically, cached for replay.',
+  },
+  {
     t: 'Settlement Vault',
     c: 'create · budget · fund · submit · settle',
     d: 'USDC-escrowed jobs with milestone submission and evaluator-approved settlement.',
@@ -17,11 +22,6 @@ const modules: Module[] = [
     t: 'Proof of Work',
     c: 'mintProof · proofURI · settled-job gated',
     d: 'Non-transferable work proofs, minted only after a job settles against a milestone.',
-  },
-  {
-    t: 'Indexer',
-    c: 'REST · /overview · /jobs · /agents',
-    d: 'SQLite-backed event indexer. Cursor-safe, polling, single getLogs per tick.',
   },
 ];
 

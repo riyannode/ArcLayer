@@ -34,8 +34,10 @@ type DeliverablePreview = {
 const IPFS_GATEWAY = process.env.NEXT_PUBLIC_IPFS_GATEWAY || 'https://gateway.pinata.cloud/ipfs';
 
 function ipfsToHttp(uri: string | null | undefined): string | null {
-  if (!uri || !uri.startsWith('ipfs://')) return null;
-  return `${IPFS_GATEWAY}/${uri.replace('ipfs://', '')}`;
+  if (!uri) return null;
+  if (uri.startsWith('ipfs://')) return `${IPFS_GATEWAY}/${uri.replace('ipfs://', '')}`;
+  if (uri.startsWith('http://') || uri.startsWith('https://')) return uri;
+  return null;
 }
 
 export default function JobDetailPage() {
@@ -182,7 +184,7 @@ export default function JobDetailPage() {
   }
 
   const statusChipClass = job
-    ? job.status === 5 ? 'chip-status active'
+    ? job.status === 5 ? 'chip-status success'
       : job.status === 6 ? 'chip-status error'
       : 'chip-status pending'
     : 'chip-status';

@@ -275,7 +275,8 @@ body {
   letter-spacing: 0.1em; text-transform: uppercase;
   border: 1px solid rgba(255, 255, 255, 0.12); color: rgba(234, 228, 216, 0.8);
 }
-.chip-status.active { border-color: rgba(184, 205, 126, 0.4); color: #B8CD7E; }
+.chip-status.active,
+.chip-status.success { border-color: rgba(184, 205, 126, 0.4); color: #B8CD7E; }
 .chip-status.pending { border-color: rgba(197, 166, 124, 0.4); color: #C5A67C; }
 .chip-status.error { border-color: rgba(230, 130, 130, 0.4); color: #e68282; }
 

@@ -18,7 +18,7 @@ import { config } from '@/lib/wagmi';
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
 
 export default function JobsPage() {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const [jobs, setJobs] = useState<IndexedJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -64,6 +64,19 @@ export default function JobsPage() {
     try {
       setIsCreating(true);
       setStatusTone('pending');
+
+      // Pre-flight: contract rejects worker == msg.sender
+      if (address && createForm.worker.toLowerCase() === address.toLowerCase()) {
+        setTxState('Worker address cannot be the same as your connected wallet (client). Use a different worker address.');
+        setStatusTone('error');
+        return;
+      }
+      if (address && createForm.evaluator.toLowerCase() === address.toLowerCase()) {
+        setTxState('Evaluator address cannot be the same as your connected wallet (client). Use a different evaluator address.');
+        setStatusTone('error');
+        return;
+      }
+
       setTxState('Submitting createJob transaction…');
       const hash = await writeContractAsync(
         buildCreateJobConfig(

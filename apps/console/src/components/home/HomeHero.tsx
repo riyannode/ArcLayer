@@ -57,9 +57,9 @@ export default function HomeHero() {
       {/* Body */}
       <p className="aureo-body max-w-[510px] text-[14px] text-[#9a9a9a] md:text-[14.5px]">
         ArcLayer is a{' '}
-        <span className="text-[#C5A67C]">settlement fabric for autonomous protocols</span>.
-        Contract modules, a typed SDK, event indexing, and a console for inspecting jobs,
-        escrow, and agent reputation — deployed on Arc (chain{' '}
+        <span className="text-[#C5A67C]">x402 settlement fabric for autonomous protocols</span>.
+        The facilitator turns API requests into Arc testnet USDC escrow jobs, then indexes
+        agent work, settlement, and reputation — deployed on Arc (chain{' '}
         <span className="font-mono text-[#C5A67C]">5042002</span>).
       </p>
 

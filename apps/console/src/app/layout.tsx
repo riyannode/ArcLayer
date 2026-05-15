@@ -12,7 +12,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const isLanding = pathname === '/';
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="icon" href="/icon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/logo.png" />
@@ -23,14 +23,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
         <meta name="theme-color" content="#050505" />
-        <meta name="description" content="ArcLayer — protocol layer for the agentic economy. JobEscrow, AgentRegistry, and WorkProof contracts with a typed SDK and event indexer on Arc." />
+        <meta name="description" content="ArcLayer — protocol layer and x402 facilitator for the agentic economy. JobEscrow, AgentRegistry, and WorkProof contracts with a typed SDK and event indexer on Arc." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta property="og:title" content="ArcLayer · Protocol layer for the agentic economy" />
-        <meta property="og:description" content="Settlement fabric for autonomous protocols. Contracts, SDK, and indexer on Arc." />
+        <meta property="og:title" content="ArcLayer · x402 settlement fabric for autonomous protocols" />
+        <meta property="og:description" content="x402 facilitator and settlement fabric for autonomous protocols. Contracts, SDK, and indexer on Arc." />
         <meta property="og:type" content="website" />
-        <title>ArcLayer · Protocol layer for the agentic economy</title>
+        <title>ArcLayer · x402 settlement fabric for the agentic economy</title>
       </head>
-      <body style={{ background: '#050505', color: '#EAE4D8' }}>
+      <body suppressHydrationWarning style={{ background: '#050505', color: '#EAE4D8' }}>
         {!isLanding && <WebGLBackground />}
         <Providers>
           <div className="relative z-10 min-h-screen flex flex-col">

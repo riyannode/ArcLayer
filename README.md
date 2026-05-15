@@ -2,22 +2,22 @@
 
 # ArcLayer
 
-**Protocol layer for the agentic economy**
+**Protocol layer and x402 facilitator for the agentic economy on Arc.**
 
-[Live App](https://arclayer-zeta.vercel.app) · [Arc Explorer](https://testnet.arcscan.app) · [Arc Network](https://arc.network)
+[Live Console](https://arclayer-zeta.vercel.app) · [Arc Explorer](https://testnet.arcscan.app) · [Arc Network](https://arc.network) · [x402 Protocol](https://x402.org)
 
 </div>
 
 ## Overview
 
-ArcLayer is a protocol layer that enables on-chain micropayments for AI agent execution. The repository carries:
+ArcLayer is a protocol layer and **x402 facilitator** that enables on-chain micropayments for autonomous AI agent execution on Arc Network. It implements the [x402 micropayment protocol](https://x402.org) on top of `JobEscrow`-based verification and settlement on Arc Testnet (chain `5042002`, asset `USDC`). The repository carries:
 
-- **Legacy V1** — `MilestoneEscrow` milestone-based escrow, live on Arc Testnet
-- **Protocol V2** — `JobEscrow`, `AgentRegistry`, `WorkProof`, `ReputationOracle`, live on Arc Testnet
+- **x402 Facilitator** — production-ready micropayment gate for protected API routes (scheme: `arc-escrow`)
+- **Protocol Contracts** — `JobEscrow`, `AgentRegistry`, `WorkProof`, `ReputationOracle`, live on Arc Testnet
 - **SDK** — `@arclayer/sdk` TypeScript client for all contracts
 - **Indexer** — lightweight event indexer with SQLite cache
 - **Console** — Next.js app with x402 facilitator, agent runner, and protocol UI
-- **x402 Facilitator** — production-ready micropayment gate for protected API routes
+- **Legacy V1** — `MilestoneEscrow` milestone-based escrow (historical, still deployed)
 
 ---
 
@@ -25,12 +25,12 @@ ArcLayer is a protocol layer that enables on-chain micropayments for AI agent ex
 
 | Component | Status |
 |---|---|
-| MilestoneEscrow (V1) | ✅ Live on Arc Testnet |
-| Protocol contracts (V2) | ✅ Live on Arc Testnet |
-| Console app | ✅ Production — `https://arclayer-zeta.vercel.app` |
 | x402 Facilitator | ✅ Production E2E pass — 17/17 (May 2026) |
+| Protocol contracts | ✅ Live on Arc Testnet |
+| Console app | ✅ Production — `https://arclayer-zeta.vercel.app` |
 | SDK | ✅ Published workspace package |
 | Indexer | ✅ Running on VPS (PM2) |
+| MilestoneEscrow (V1) | ✅ Legacy — deployed, historical |
 
 ---
 
@@ -38,46 +38,33 @@ ArcLayer is a protocol layer that enables on-chain micropayments for AI agent ex
 
 | Contract | Address |
 |---|---|
-| `MilestoneEscrow` (V1) | `0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2` |
-| `Achievement` | `0x7245B200ce09B515bd235f1eD262c2abb0890165` |
 | `AgentRegistry` | `0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21` |
 | `WorkProof` | `0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5` |
 | `JobEscrow` | `0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225` |
 | `ReputationOracle` | `0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c` |
 | Testnet USDC | `0x3600000000000000000000000000000000000000` |
+| `MilestoneEscrow` (V1) | `0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2` |
+| `Achievement` (V1) | `0x7245B200ce09B515bd235f1eD262c2abb0890165` |
 
 ---
 
 ## Deploy Proofs
 
-### Legacy V1
-- `MilestoneEscrow`: [0xd10476a06b942348a22b32faea36e53f2b6d5f8ad1c6f4a0eb9f3e36d23ded10](https://testnet.arcscan.app/tx/0xd10476a06b942348a22b32faea36e53f2b6d5f8ad1c6f4a0eb9f3e36d23ded10)
+### x402 Facilitator
+Production E2E verified May 2026 — 17/17 test cases pass. See E2E table below.
 
-### Protocol V2
+### Protocol Contracts
 - `AgentRegistry`: [0xc973a730482eeb67ce17a7e04a96200a3d50bfcc4905ace265b04d9cf7fafbb9](https://testnet.arcscan.app/tx/0xc973a730482eeb67ce17a7e04a96200a3d50bfcc4905ace265b04d9cf7fafbb9)
 - `WorkProof`: [0x567eab55746b2b567304d61201dba18b80c3698bbaa7ca9830a8832051c5d35a](https://testnet.arcscan.app/tx/0x567eab55746b2b567304d61201dba18b80c3698bbaa7ca9830a8832051c5d35a)
 - `JobEscrow`: [0x2b3e900692641a48080e705e959fcf8135fb7829100756ffa2b37ae6b9bedc45](https://testnet.arcscan.app/tx/0x2b3e900692641a48080e705e959fcf8135fb7829100756ffa2b37ae6b9bedc45)
 - `ReputationOracle`: [0x5232aa8778a30f78d1173a5d36aa6dc17378c14af6cd4c9c3a9e985e5bf3256f](https://testnet.arcscan.app/tx/0x5232aa8778a30f78d1173a5d36aa6dc17378c14af6cd4c9c3a9e985e5bf3256f)
 
+### Legacy V1
+- `MilestoneEscrow`: [0xd10476a06b942348a22b32faea36e53f2b6d5f8ad1c6f4a0eb9f3e36d23ded10](https://testnet.arcscan.app/tx/0xd10476a06b942348a22b32faea36e53f2b6d5f8ad1c6f4a0eb9f3e36d23ded10)
+
 ---
 
 ## End-to-End Proofs
-
-### Legacy V1 — MilestoneEscrow (Project 0)
-
-Project `0` completed end-to-end on Arc Testnet.
-
-| Step | Tx |
-|---|---|
-| `createProject` | [0x54393be9...](https://testnet.arcscan.app/tx/0x54393be919309c6492145606e135f0191297d4fc6f7f0cb11194b354b4ea45ab) |
-| `approve USDC` | [0x76a37085...](https://testnet.arcscan.app/tx/0x76a3708537431f071cbf304af07d124009eddcf1cfa2c87fa352e1a201998775) |
-| `fundProject` | [0xa79c1402...](https://testnet.arcscan.app/tx/0xa79c140210befdcaaf7b56979a57dd054490016bb66dc6bff5e2ae939412fb6e) |
-| `submitMilestone(0)` | [0x17342a44...](https://testnet.arcscan.app/tx/0x17342a444ab7d142fc8c900316786471c55d53f03644cb36ce94e6cfdf03f32f) |
-| `approveMilestone(0)` | [0x2b5cbd9a...](https://testnet.arcscan.app/tx/0x2b5cbd9a83fad46f57562595272b1cb94ecbcc16b55b499997ac4d1ca6ecc0d7) |
-| `submitMilestone(1)` | [0x410e0c18...](https://testnet.arcscan.app/tx/0x410e0c18551b2cbc459e6708977dcbd728bdea8cf103168fcc563eca851ce79e) |
-| `approveMilestone(1)` + `WorkProofMinted` | [0xd68f8e8a...](https://testnet.arcscan.app/tx/0xd68f8e8a77b5d7101c9954f81463c58fe4ffbec514930ffeb36e5845489cf767) |
-
-Final state: `totalAmount=2000000`, `releasedAmount=2000000`, `milestoneCount=2`, `status=Completed`
 
 ### x402 Facilitator — Production E2E (May 2026)
 
@@ -100,6 +87,22 @@ Paid agent run completed end-to-end on production (`https://arclayer-zeta.vercel
 - **output**: `Hello. Task received for Agent ID demo, Job ID 13.`
 - **latency**: `2724ms`
 - **E2E score**: 17/17 ✅
+
+### Legacy V1 — MilestoneEscrow (Project 0)
+
+Project `0` completed end-to-end on Arc Testnet.
+
+| Step | Tx |
+|---|---|
+| `createProject` | [0x54393be9...](https://testnet.arcscan.app/tx/0x54393be919309c6492145606e135f0191297d4fc6f7f0cb11194b354b4ea45ab) |
+| `approve USDC` | [0x76a37085...](https://testnet.arcscan.app/tx/0x76a3708537431f071cbf304af07d124009eddcf1cfa2c87fa352e1a201998775) |
+| `fundProject` | [0xa79c1402...](https://testnet.arcscan.app/tx/0xa79c140210befdcaaf7b56979a57dd054490016bb66dc6bff5e2ae939412fb6e) |
+| `submitMilestone(0)` | [0x17342a44...](https://testnet.arcscan.app/tx/0x17342a444ab7d142fc8c900316786471c55d53f03644cb36ce94e6cfdf03f32f) |
+| `approveMilestone(0)` | [0x2b5cbd9a...](https://testnet.arcscan.app/tx/0x2b5cbd9a83fad46f57562595272b1cb94ecbcc16b55b499997ac4d1ca6ecc0d7) |
+| `submitMilestone(1)` | [0x410e0c18...](https://testnet.arcscan.app/tx/0x410e0c18551b2cbc459e6708977dcbd728bdea8cf103168fcc563eca851ce79e) |
+| `approveMilestone(1)` + `WorkProofMinted` | [0xd68f8e8a...](https://testnet.arcscan.app/tx/0xd68f8e8a77b5d7101c9954f81463c58fe4ffbec514930ffeb36e5845489cf767) |
+
+Final state: `totalAmount=2000000`, `releasedAmount=2000000`, `milestoneCount=2`, `status=Completed`
 
 ---
 
