@@ -33,7 +33,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
         appearance: {
           theme: 'dark',
           accentColor: '#C5A67C',
-          logo: '/arc-brand.svg',
+          logo: '/arclayer-logo-nav.png',
           showWalletLoginFirst: true,
           // Curated short list. Three buttons cover ~95% of EVM users:
           // MetaMask (desktop majority), Coinbase Wallet (mainstream/onboarding),
