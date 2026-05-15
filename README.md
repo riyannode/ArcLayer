@@ -4,9 +4,20 @@
 
 **x402 payment facilitator + USDC escrow protocol layer for autonomous agents on Arc Testnet.**
 
-[Live Console](https://arclayer-zeta.vercel.app) · [Arc Explorer](https://testnet.arcscan.app) · [Arc Network](https://arc.network) · [x402 Protocol](https://x402.org)
+[Live Console](https://arclayers.xyz) · [Vercel Mirror](https://arclayer-zeta.vercel.app) · [Arc Explorer](https://testnet.arcscan.app) · [Arc Network](https://arc.network) · [x402 Protocol](https://x402.org)
 
 </div>
+
+## For AI Coding Agents
+
+Integrating ArcLayer into another app? Paste this one-liner into Cursor, Claude, Codex, Kiro, Hermes, OpenClaw, v0, or any AI coding agent:
+
+```
+Read this skill and use it to integrate ArcLayer into my app:
+https://raw.githubusercontent.com/riyannode/ArcLayer/main/docs/ARCLAYER_INTEGRATION_SKILL.md
+```
+
+Working **inside** this repo? Read [`AGENTS.md`](./AGENTS.md) first — it covers protocol flows, integration rules, and what AI coding agents should and should not modify.
 
 ## Overview
 
@@ -30,11 +41,14 @@ Core components:
 
 ## Verified Status
 
-Last repo/runtime verification: **2026-05-15 22:22 UTC**.
+Last repo/runtime verification: **2026-05-15 23:45 UTC**.
 
 | Component | Status | Proof |
 |---|---|---|
-| Console app | ✅ Live | `https://arclayer-zeta.vercel.app` returns `200` |
+| Canonical console | ✅ Live | `https://arclayers.xyz` returns `200` from Vercel |
+| Vercel mirror | ✅ Live | `https://arclayer-zeta.vercel.app` returns `200` |
+| Docs portal | ✅ Live | `https://arclayers.xyz/docs` returns `200` from Vercel |
+| Console routes | ✅ Live | `/`, `/docs`, `/agents`, `/jobs`, `/protocol` all return `200` |
 | TypeScript | ✅ Pass | `npx tsc --noEmit` |
 | Next.js production build | ✅ Pass | `NODE_OPTIONS="--max-old-space-size=4096" npm run build` |
 | Unit tests | ✅ Pass | `53/53` tests, `6/6` files |
@@ -44,9 +58,11 @@ Last repo/runtime verification: **2026-05-15 22:22 UTC**.
 | Protocol contracts | ✅ Live | All contract addresses below return bytecode on Arc Testnet |
 | Indexer | ✅ Running | PM2 service `arclayer-indexer` online |
 | SDK | ✅ Workspace package | `@arclayer/sdk` in `sdk/` |
+| AI integration skill | ✅ Added | [`docs/ARCLAYER_INTEGRATION_SKILL.md`](./docs/ARCLAYER_INTEGRATION_SKILL.md) |
+| Repo agent guide | ✅ Added | [`AGENTS.md`](./AGENTS.md) |
 | Legacy V1 | ✅ Deployed | `MilestoneEscrow` and `Achievement` live on Arc Testnet |
 
-> Domain note: `arclayers.xyz` is intended as the canonical custom domain, but DNS/cache propagation may still point some resolvers to an old nginx host. For grant/demo proof, use `https://arclayer-zeta.vercel.app` until the custom domain consistently resolves to Vercel.
+> Domain status: `arclayers.xyz` is now the canonical custom domain. `www.arclayers.xyz/*` redirects to `https://arclayers.xyz/*` through Vercel.
 
 ---
 
@@ -127,7 +143,7 @@ Client, worker, and evaluator used separate burner wallets. Job `19` completed t
 | Amount funded | `0.01 USDC` |
 | Paid to worker | `0.00995 USDC` |
 | Platform fee | `0.00005 USDC` |
-| Live job page | https://arclayer-zeta.vercel.app/job/19 |
+| Live job page | https://arclayers.xyz/job/19 |
 
 | Step | Tx |
 |---|---|
@@ -203,7 +219,8 @@ Indexer:
 
 ```text
 arclayer/
-├── contracts/                  Solidity contracts and Foundry project
+├── AGENTS.md                      AI agent guide (protocol flows, rules, what to modify)
+├── contracts/                     Solidity contracts and Foundry project
 │   └── src/
 │       ├── AgentRegistry.sol
 │       ├── JobEscrow.sol
@@ -211,7 +228,7 @@ arclayer/
 │       ├── ReputationOracle.sol
 │       ├── MilestoneEscrow.sol
 │       └── Achievement.sol
-├── sdk/                        @arclayer/sdk TypeScript workspace package
+├── sdk/                           @arclayer/sdk TypeScript workspace package
 │   └── src/
 │       ├── abi.ts
 │       ├── addresses.ts
@@ -220,7 +237,7 @@ arclayer/
 │       ├── types.ts
 │       ├── writes.ts
 │       └── index.ts
-├── indexer/                    Event indexer with SQLite + HTTP server
+├── indexer/                       Event indexer with SQLite + HTTP server
 │   └── src/
 │       ├── config.ts
 │       ├── db.ts
@@ -228,7 +245,7 @@ arclayer/
 │       ├── projections.ts
 │       └── server.ts
 ├── apps/
-│   └── console/                Next.js app: UI + x402 facilitator APIs
+│   └── console/                   Next.js app: UI + x402 facilitator APIs
 │       ├── src/app/
 │       │   ├── api/
 │       │   │   ├── agents/[id]/run/    Paid agent execution endpoint
@@ -244,8 +261,12 @@ arclayer/
 │       │   ├── jobs/                   Job list page
 │       │   ├── job/[id]/               Job detail page
 │       │   ├── protocol/               Protocol overview page
-│       │   ├── docs/                   Docs page
+│       │   ├── docs/                   Developer docs + SDK reference
 │       │   └── project/[id]/           Legacy milestone project page
+│       ├── src/components/
+│       │   ├── home/                   Homepage sections (Hero, HowItWorks, CoreModules)
+│       │   ├── CopyButton.tsx          Reusable copy-to-clipboard component
+│       │   └── ...
 │       ├── src/lib/
 │       │   ├── x402/                   Facilitator core
 │       │   │   ├── constants.ts
@@ -274,7 +295,8 @@ arclayer/
 │       └── supabase/migrations/
 │           └── 001_x402_facilitator.sql
 └── docs/
-    ├── README.md
+    ├── README.md                  Docs index
+    ├── ARCLAYER_INTEGRATION_SKILL.md   AI agent integration prompt
     ├── indexing.md
     ├── sdk-reference.md
     └── arclayer-build-plan.md
@@ -540,10 +562,14 @@ Run `apps/console/supabase/migrations/001_x402_facilitator.sql` in the Supabase 
 Use these commands to reproduce the current proof set:
 
 ```bash
-# Console health
+# Console health (canonical domain)
+curl -i https://arclayers.xyz/
+curl -i https://arclayers.xyz/docs
+curl -s https://arclayers.xyz/api/x402/supported
+curl -i -X POST https://arclayers.xyz/api/agents/demo/run
+
+# Vercel mirror (still live as fallback)
 curl -i https://arclayer-zeta.vercel.app/
-curl -s https://arclayer-zeta.vercel.app/api/x402/supported
-curl -i -X POST https://arclayer-zeta.vercel.app/api/agents/demo/run
 
 # Local code checks
 cd apps/console
