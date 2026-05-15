@@ -16,6 +16,7 @@ import { fetchIndexerJson, type IndexedJob, waitForIndexer } from '@/lib/indexer
 import { config } from '@/lib/wagmi';
 
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
+const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'success', 6: 'error' };
 
 export default function JobsPage() {
   const { address, isConnected } = useAccount();
@@ -213,7 +214,7 @@ export default function JobsPage() {
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#7A7A7A]">
                       <span>worker {shortenAddress(job.worker)}</span>
-                      <span className="chip-status pending">{JOB_STATUS[job.status]}</span>
+                      <span className={`chip-status ${JOB_TONE[job.status] ?? 'pending'}`}>{JOB_STATUS[job.status]}</span>
                     </div>
                   </Link>
                 ))
