@@ -74,6 +74,32 @@ export function parseAgentName(metadataURI: string | null | undefined): string |
   }
 }
 
+/**
+ * Extract the `?skill=` query value from our `arclayer://agent/<name>?skill=<label>`
+ * metadata URI. Returns the raw skill string (e.g. "solidity-auditor") or null
+ * if the URI doesn't follow our scheme.
+ */
+export function parseAgentSkill(metadataURI: string | null | undefined): string | null {
+  if (!metadataURI) return null;
+  const m = /^arclayer:\/\/agent\/[^?#]+\?(.+)$/i.exec(metadataURI);
+  if (!m) return null;
+  const params = new URLSearchParams(m[1]);
+  const skill = params.get('skill');
+  return skill ? decodeURIComponent(skill) : null;
+}
+
+/**
+ * Pretty-print a skill label like "solidity-auditor" → "Solidity Auditor".
+ */
+export function formatSkillLabel(skill: string | null | undefined): string | null {
+  if (!skill) return null;
+  return skill
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
 /** Heuristic: numeric ids (1, 2, 3…) are legacy demo registrations. */
 export function isLegacyNumericId(id: bigint | string | number): boolean {
   const n = typeof id === 'bigint' ? id : BigInt(id);

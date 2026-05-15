@@ -15,7 +15,7 @@ import { StatusBanner } from '@/components/StatusBanner';
 import { formatUSDC, parseUSDC, shortenAddress } from '@/lib/contracts';
 import { fetchIndexerJson, type IndexedAgent, type IndexedJob, waitForIndexer } from '@/lib/indexer';
 import { config } from '@/lib/wagmi';
-import { displayAgentLabel, shortAgentId } from '@/lib/agentName';
+import { displayAgentLabel, formatSkillLabel, parseAgentSkill, shortAgentId } from '@/lib/agentName';
 
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
 const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'success', 6: 'error' };
@@ -52,6 +52,8 @@ function JobsPage() {
     evaluator: '',
     jobSpec: '',
   });
+  const [workerTouched, setWorkerTouched] = useState(false);
+  const [evaluatorTouched, setEvaluatorTouched] = useState(false);
   const [fundForm, setFundForm] = useState({ jobId: '', budget: '1', amount: '1' });
   const [depositTouched, setDepositTouched] = useState(false);
   const [createdJobId, setCreatedJobId] = useState<string>('');
@@ -61,10 +63,33 @@ function JobsPage() {
     [agents, createForm.agentId]
   );
 
+  const selectedAgentLabel = selectedAgent
+    ? displayAgentLabel({ agentId: selectedAgent.agentId, metadataURI: selectedAgent.metadataURI })
+    : null;
+  const selectedAgentSkill = selectedAgent ? formatSkillLabel(parseAgentSkill(selectedAgent.metadataURI)) : null;
+
   const selectedFundingJob = useMemo(
     () => jobs.find((job) => job.id === fundForm.jobId) ?? null,
     [jobs, fundForm.jobId]
   );
+
+  // Auto-fill worker with the selected agent's controller (most common case).
+  useEffect(() => {
+    if (!workerTouched && selectedAgent) {
+      setCreateForm((current) =>
+        current.worker === selectedAgent.controller ? current : { ...current, worker: selectedAgent.controller }
+      );
+    }
+  }, [selectedAgent, workerTouched]);
+
+  // Auto-fill client address (evaluator) with the connected wallet.
+  useEffect(() => {
+    if (!evaluatorTouched && address) {
+      setCreateForm((current) =>
+        current.evaluator.toLowerCase() === address.toLowerCase() ? current : { ...current, evaluator: address }
+      );
+    }
+  }, [address, evaluatorTouched]);
 
   async function loadJobs() {
     setIsRefreshing(true);
@@ -137,12 +162,17 @@ function JobsPage() {
     }
     if (!isValidAddress(createForm.evaluator)) {
       setStatusTone('error');
-      setTxState('Evaluator address must be a valid 0x wallet.');
+      setTxState('Client address must be a valid 0x wallet.');
       return;
     }
     if (!createForm.jobSpec.trim()) {
       setStatusTone('error');
       setTxState('Task Description cannot be empty.');
+      return;
+    }
+    if (createForm.worker.toLowerCase() === createForm.evaluator.toLowerCase()) {
+      setStatusTone('error');
+      setTxState('Worker and client cannot be the same address. The worker receives payout — use the agent\u2019s controller or a dedicated worker wallet.');
       return;
     }
 
@@ -151,18 +181,7 @@ function JobsPage() {
       setStatusTone('pending');
       setCreatedJobId('');
 
-      if (address && createForm.worker.toLowerCase() == address.toLowerCase()) {
-        setTxState('Worker address cannot be the same as your connected wallet (client). Use a different worker address.');
-        setStatusTone('error');
-        return;
-      }
-      if (address && createForm.evaluator.toLowerCase() == address.toLowerCase()) {
-        setTxState('Evaluator address cannot be the same as your connected wallet (client). Use a different evaluator address.');
-        setStatusTone('error');
-        return;
-      }
-
-      setTxState('Submitting createJob transaction…');
+      setTxState('Submitting createJob transaction\u2026');
       const hash = await writeContractAsync(
         buildCreateJobConfig(
           BigInt(createForm.agentId),
@@ -171,9 +190,9 @@ function JobsPage() {
           createForm.jobSpec.trim()
         )
       );
-      setTxState(`Waiting for ${hash.slice(0, 10)}…`);
+      setTxState(`Waiting for ${hash.slice(0, 10)}\u2026`);
       await waitForTransactionReceipt(config, { hash });
-      setTxState('Receipt confirmed. Waiting for indexer refresh…');
+      setTxState('Receipt confirmed. Waiting for indexer refresh\u2026');
       const next = await waitForIndexer<IndexedJob[]>(
         '/jobs',
         (payload) => payload.some(
@@ -218,19 +237,19 @@ function JobsPage() {
       const amount = parseUSDC(fundForm.amount);
       const jobId = BigInt(fundForm.jobId);
 
-      setTxState('Setting budget…');
+      setTxState('Setting budget\u2026');
       const b = await writeContractAsync(buildSetBudgetConfig(jobId, budget));
       await waitForTransactionReceipt(config, { hash: b });
 
-      setTxState('Approving USDC…');
+      setTxState('Approving USDC\u2026');
       const a = await writeContractAsync(buildApproveUsdcConfig(amount));
       await waitForTransactionReceipt(config, { hash: a });
 
-      setTxState('Funding Settlement Vault…');
+      setTxState('Funding Settlement Vault\u2026');
       const f = await writeContractAsync(buildFundJobConfig(jobId, amount));
       await waitForTransactionReceipt(config, { hash: f });
 
-      setTxState('Funding receipt confirmed. Waiting for indexer refresh…');
+      setTxState('Funding receipt confirmed. Waiting for indexer refresh\u2026');
       const next = await waitForIndexer<IndexedJob[]>(
         '/jobs',
         (payload) => payload.some((j) => j.id === fundForm.jobId && j.fundedAmount === amount.toString())
@@ -246,6 +265,9 @@ function JobsPage() {
     }
   }
 
+  const customWorker = !!(selectedAgent && createForm.worker && createForm.worker.toLowerCase() !== selectedAgent.controller.toLowerCase());
+  const customClient = !!(address && createForm.evaluator && createForm.evaluator.toLowerCase() !== address.toLowerCase());
+
   return (
     <div className="aureo-page">
       <div className="aureo-shell">
@@ -256,16 +278,35 @@ function JobsPage() {
               Create and fund a <span className="italic text-[#C5A67C]">job</span>
             </h1>
             <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.68)]">
-              First select a registered agent. Then write the Task Description, set the budget, and deposit USDC into the Settlement Vault.
+              Pick a registered agent, write the task, set the budget, then deposit USDC into the Settlement Vault.
             </p>
           </div>
           <div className="flex flex-wrap gap-3 self-start md:self-auto">
             <button onClick={() => loadJobs()} className="btn-bordered">
-              {isRefreshing ? 'REFRESHING…' : 'REFRESH'}
+              {isRefreshing ? 'REFRESHING\u2026' : 'REFRESH'}
             </button>
             <Link href="/agents" className="btn-primary">BACK TO AGENTS</Link>
           </div>
         </div>
+
+        {/* Role explainer strip — compact, scannable */}
+        <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-1 border-l-2 border-[#C5A67C]/40 pl-4 font-mono text-[10.5px] text-[rgba(234,228,216,0.7)]">
+          <span><span className="text-[#C5A67C]">Client</span> &rarr; funds &amp; approves work</span>
+          <span className="text-[rgba(234,228,216,0.3)]">&middot;</span>
+          <span><span className="text-[#C5A67C]">Worker</span> &rarr; completes &amp; receives payout</span>
+          <span className="text-[rgba(234,228,216,0.3)]">&middot;</span>
+          <span><span className="text-[#C5A67C]">Agent</span> &rarr; on-chain identity</span>
+        </div>
+
+        {/* Connected wallet badge */}
+        {isConnected && address && (
+          <div className="mb-5 inline-flex items-center gap-2 border border-[rgba(184,205,126,0.35)] bg-[rgba(184,205,126,0.06)] px-3 py-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#B8CD7E]" />
+            Connected as <span className="text-[#EAE4D8]">{shortenAddress(address)}</span>
+            <span className="text-[rgba(234,228,216,0.45)]">&middot;</span>
+            <span className="text-[#C5A67C]">Client</span>
+          </div>
+        )}
 
         {error && (
           <div className="mb-6 p-4" style={{ border: '1px solid rgba(230, 130, 130, 0.35)', background: 'rgba(230, 130, 130, 0.06)' }}>
@@ -299,7 +340,7 @@ function JobsPage() {
               <span className="font-mono text-[11px] text-[#C5A67C]">{jobs.length} indexed</span>
             </div>
             <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.58)]">
-              Track Create → Budget → Fund → Submit → Evaluate → Settle, with the selected agent, worker, and funding state visible in one place.
+              Track Create &rarr; Budget &rarr; Fund &rarr; Submit &rarr; Evaluate &rarr; Settle, with the selected agent, worker, and funding state visible in one place.
             </p>
             <div className="mt-5 space-y-3">
               {isLoading ? (
@@ -319,12 +360,15 @@ function JobsPage() {
                 jobs.map((job) => {
                   const agent = agents.find((candidate) => candidate.agentId === job.agentId) ?? null;
                   const agentLabel = agent ? displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI }) : shortAgentId(job.agentId);
+                  const skill = agent ? formatSkillLabel(parseAgentSkill(agent.metadataURI)) : null;
                   return (
                     <Link key={job.id} href={`/job/${job.id}`} className="aureo-list-card block px-4 py-3 md:px-5 md:py-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <div className="font-mono text-[12.5px] text-[#EAE4D8]">Job #{job.id}</div>
-                          <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">{agentLabel} · {shortAgentId(job.agentId)}</div>
+                          <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">
+                            {agentLabel}{skill ? ` · ${skill}` : ''} · {shortAgentId(job.agentId)}
+                          </div>
                         </div>
                         <span className={`chip-status ${JOB_TONE[job.status] ?? 'pending'}`}>{JOB_STATUS[job.status]}</span>
                       </div>
@@ -340,7 +384,7 @@ function JobsPage() {
                       </div>
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
                         <div className="font-mono text-[10px] text-[rgba(234,228,216,0.68)]">Worker {shortenAddress(job.worker)}</div>
-                        <div className="font-mono text-[10px] text-[rgba(234,228,216,0.68)]">Evaluator {shortenAddress(job.evaluator)}</div>
+                        <div className="font-mono text-[10px] text-[rgba(234,228,216,0.68)]">Client {shortenAddress(job.evaluator)}</div>
                       </div>
                       <div className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.52)]">Proof of Work {job.proofMetadataURI ? 'available' : job.status === 5 ? 'pending metadata' : 'not minted yet'}</div>
                     </Link>
@@ -360,32 +404,58 @@ function JobsPage() {
 
           <section className="space-y-6">
             <div className="aureo-panel p-4 md:p-6">
-              <div className="aureo-mono-label mb-2">STEP 1 · SELECT REGISTERED AGENT</div>
-              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Create job</h2>
-              <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.52)]">Settlement Vault · createJob(agentId, worker, evaluator, taskDescription)</code>
+              <div className="flex items-center gap-2">
+                <div className="aureo-mono-label">STEP 1 · CREATE JOB</div>
+                {createdJobId && (
+                  <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#B8CD7E] text-[#0a0a0a]" title="Step 1 complete">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  </span>
+                )}
+              </div>
+              <h2 className="mt-2 aureo-display text-[28px] text-[#EAE4D8]">Create job assignment</h2>
+              <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.6)]">
+                Assign work to a registered agent. Set the worker wallet and approval authority.
+              </p>
+
               <div className="mt-5 space-y-4">
                 <div>
                   <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">SELECT REGISTERED AGENT</label>
                   <select
                     value={createForm.agentId}
-                    onChange={(e) => setCreateForm((c) => ({ ...c, agentId: e.target.value }))}
+                    onChange={(e) => {
+                      setWorkerTouched(false);
+                      setCreateForm((c) => ({ ...c, agentId: e.target.value }));
+                    }}
                     className="input-mono"
                   >
                     {agents.length === 0 ? (
                       <option value="">No registered agents yet</option>
                     ) : (
-                      agents.map((agent) => (
-                        <option key={agent.agentId} value={agent.agentId}>
-                          {displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI })} · {shortAgentId(agent.agentId)}
-                        </option>
-                      ))
+                      agents.map((agent) => {
+                        const label = displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI });
+                        const skill = formatSkillLabel(parseAgentSkill(agent.metadataURI));
+                        return (
+                          <option key={agent.agentId} value={agent.agentId}>
+                            {label}{skill ? ` — ${skill}` : ''} · {shortAgentId(agent.agentId)}
+                          </option>
+                        );
+                      })
                     )}
                   </select>
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">
-                    {selectedAgent
-                      ? `Selected full ID ${selectedAgent.agentId}. Controller ${shortenAddress(selectedAgent.controller)}.`
-                      : 'Register an agent first on the Agents page, then return here.'}
-                  </div>
+                  {selectedAgent ? (
+                    <div className="mt-2 border border-[rgba(197,166,124,0.25)] bg-[rgba(197,166,124,0.04)] px-3 py-2">
+                      <div className="font-mono text-[11px] text-[#EAE4D8]">
+                        {selectedAgentLabel}{selectedAgentSkill ? <span className="text-[rgba(234,228,216,0.7)]"> &middot; {selectedAgentSkill}</span> : null}
+                      </div>
+                      <div className="mt-1 font-mono text-[10px] text-[rgba(234,228,216,0.55)]">
+                        Controller {shortenAddress(selectedAgent.controller)}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">
+                      Register an agent first on the Agents page, then return here.
+                    </div>
+                  )}
                 </div>
 
                 {agents.length === 0 && (
@@ -402,25 +472,47 @@ function JobsPage() {
                 )}
 
                 <div>
-                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">WORKER ADDRESS</label>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label className="block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">WORKER ADDRESS</label>
+                    {customWorker && (
+                      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#C5A67C]">Custom worker</span>
+                    )}
+                  </div>
                   <input
                     value={createForm.worker}
-                    onChange={(e) => setCreateForm((c) => ({ ...c, worker: e.target.value }))}
-                    placeholder="0x... worker wallet"
+                    onChange={(e) => {
+                      setWorkerTouched(true);
+                      setCreateForm((c) => ({ ...c, worker: e.target.value }));
+                    }}
+                    placeholder={selectedAgent ? selectedAgent.controller : '0x... worker wallet'}
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Use a worker wallet different from the connected client wallet. The contract rejects worker == client.</div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">
+                    {selectedAgent && !customWorker
+                      ? 'Auto-filled with the selected agent\u2019s controller. Edit to use a different worker wallet.'
+                      : 'Worker and client cannot be the same address. The worker receives payout — use the agent\u2019s controller or a dedicated worker wallet.'}
+                  </div>
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">EVALUATOR ADDRESS</label>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label className="block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">CLIENT ADDRESS</label>
+                    {customClient && (
+                      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#C5A67C]">Custom evaluator</span>
+                    )}
+                  </div>
                   <input
                     value={createForm.evaluator}
-                    onChange={(e) => setCreateForm((c) => ({ ...c, evaluator: e.target.value }))}
-                    placeholder="0x... evaluator wallet"
+                    onChange={(e) => {
+                      setEvaluatorTouched(true);
+                      setCreateForm((c) => ({ ...c, evaluator: e.target.value }));
+                    }}
+                    placeholder={address ? address : 'Connect wallet to auto-fill'}
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Optional workflow choice, but if used, keep it different from the connected client wallet for clean role separation.</div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">
+                    The wallet that approves and settles the job. Auto-filled with your connected wallet.
+                  </div>
                 </div>
 
                 <div>
@@ -428,19 +520,25 @@ function JobsPage() {
                   <textarea
                     value={createForm.jobSpec}
                     onChange={(e) => setCreateForm((c) => ({ ...c, jobSpec: e.target.value }))}
-                    placeholder="Describe exactly what the agent should do"
+                    placeholder={'Example: Audit the Settlement Vault contract on Arc Testnet and produce a report covering reentrancy, access control, and overflow risks. Deliver findings as a markdown file pinned to IPFS.'}
                     className="input-mono min-h-[120px]"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">This is the human-readable instruction used to create the job intent.</div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Be specific. This is the human-readable instruction the agent will work against.</div>
                 </div>
               </div>
+
               <button onClick={handleCreateJob} disabled={!isConnected || isCreating || isFunding} className="btn-primary mt-5">
-                {isCreating ? 'CREATING…' : 'CREATE JOB'}
+                {isCreating ? 'CREATING\u2026' : 'CREATE JOB'}
               </button>
+
+              {/* Developer footnote — muted, doesn't dominate */}
+              <div className="mt-4 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.4)]">
+                Developer note: <code className="text-[rgba(234,228,216,0.55)]">createJob(agentId, worker, evaluator, taskDescription)</code> — &ldquo;Client Address&rdquo; maps to the <code className="text-[rgba(234,228,216,0.55)]">evaluator</code> contract parameter.
+              </div>
 
               {createdJobId && (
                 <div className="mt-4 rounded-none border border-[rgba(184,205,126,0.35)] bg-[rgba(184,205,126,0.08)] p-4">
-                  <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[#B8CD7E]">Create Success</div>
+                  <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[#B8CD7E]">Step 1 complete</div>
                   <div className="mt-2 font-mono text-[12px] text-[#EAE4D8]">Job #{createdJobId} created</div>
                   <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.68)]">Step 2 is prefilled below. Set Budget and Deposit Amount next.</div>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -452,9 +550,12 @@ function JobsPage() {
             </div>
 
             <div className="aureo-panel p-4 md:p-6">
-              <div className="aureo-mono-label mb-2">STEP 2 · BUDGET + DEPOSIT USDC</div>
-              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Fund Settlement Vault</h2>
-              <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.52)]">setBudget → approve USDC → fund</code>
+              <div className="aureo-mono-label mb-2">STEP 2 · FUND JOB ESCROW</div>
+              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Approve &amp; fund escrow</h2>
+              <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.6)]">
+                Set the agreed budget, approve USDC, and deposit funds into the Settlement Vault.
+              </p>
+
               <div className="mt-5 space-y-4">
                 <div>
                   <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">JOB ID</label>
@@ -468,18 +569,23 @@ function JobsPage() {
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">BUDGET AMOUNT</label>
+                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">BUDGET AMOUNT (USDC)</label>
                   <input
                     value={fundForm.budget}
                     onChange={(e) => setFundForm((c) => ({ ...c, budget: e.target.value }))}
                     placeholder="1"
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Writes the job budget in USDC. If you do not edit Deposit Amount manually, it mirrors this value.</div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">The agreed price for completing this job. Deposit Amount mirrors this unless edited.</div>
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">DEPOSIT AMOUNT</label>
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <label className="block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">DEPOSIT AMOUNT (USDC)</label>
+                    {depositTouched && fundForm.amount !== fundForm.budget && (
+                      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#C5A67C]">Custom deposit</span>
+                    )}
+                  </div>
                   <input
                     value={fundForm.amount}
                     onChange={(e) => {
@@ -489,7 +595,7 @@ function JobsPage() {
                     placeholder="1"
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Approves USDC and deposits that amount into the Settlement Vault for this job.</div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">USDC sent into the Settlement Vault for this job. Usually equal to Budget.</div>
                 </div>
 
                 {selectedFundingJob && (
@@ -502,15 +608,21 @@ function JobsPage() {
                   </div>
                 )}
               </div>
+
               <button onClick={handleFundJob} disabled={!isConnected || isCreating || isFunding} className="btn-primary mt-5">
-                {isFunding ? 'FUNDING…' : 'SET BUDGET · FUND'}
+                {isFunding ? 'FUNDING\u2026' : 'APPROVE & FUND'}
               </button>
+
+              {/* Developer footnote */}
+              <div className="mt-4 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.4)]">
+                Developer note: <code className="text-[rgba(234,228,216,0.55)]">setBudget &rarr; approve(USDC) &rarr; fund(jobId, amount)</code>
+              </div>
             </div>
 
             <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(10,10,10,0.6)] p-5 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.68)]">
               {isConnected
-                ? '✓ Wallet connected. Flow: Select Registered Agent → Create Job → Set Budget → Deposit USDC → later submit deliverable, evaluate, and mint Proof of Work.'
-                : '⚠ Connect wallet to submit protocol writes.'}
+                ? '\u2713 Wallet connected. Flow: Select Agent \u2192 Create Job \u2192 Set Budget \u2192 Deposit USDC \u2192 later submit deliverable, evaluate, and mint Proof of Work.'
+                : '\u26a0 Connect wallet to submit protocol writes.'}
             </div>
           </section>
         </div>
