@@ -5,6 +5,7 @@ Documentation for ArcLayer testnet launch.
 ## Start Here
 
 - [SDK Reference](./sdk-reference.md) - complete `@arclayer/sdk` API, typed read helpers, write config builders, and production usage notes.
+- [AI Agent Integration Skill](./ARCLAYER_INTEGRATION_SKILL.md) - copy-paste prompt for Codex, Cursor, Claude, Kiro, v0, and other AI coding agents.
 - [Indexing](./indexing.md) - event-backed indexing model and cache design.
 - [Build Plan](./arclayer-build-plan.md) - protocol build plan and roadmap context.
 
