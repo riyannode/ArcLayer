@@ -35,29 +35,22 @@ export default function Providers({ children }: { children: React.ReactNode }) {
           accentColor: '#C5A67C',
           logo: '/arclayer-logo-nav.png',
           showWalletLoginFirst: true,
-          // Curated short list. Three buttons cover ~95% of EVM users:
-          // MetaMask (desktop majority), Coinbase Wallet (mainstream/onboarding),
-          // and WalletConnect (mobile + everything else via QR).
-          //
-          // Dropped from earlier list:
-          //  - rabby      → power-user niche, available via WC
-          //  - phantom    → Solana-first, EVM rarely the primary use
-          //  - rainbow    → small share, available via WC
-          //  - okx_wallet → known to hijack window.ethereum on this stack
-          //
-          // Note: clicking "Other wallet" expands WalletConnect's directory
-          // (~300 wallets). That list is owned by WC, not us — we cannot
-          // truncate it without removing WalletConnect entirely.
+          // Curated wallet list — 5 popular options.
+          // 'detected_wallets' auto-surfaces any injected extension (OKX,
+          // SubWallet, Trust, Phantom EVM, etc.) without opening the
+          // WalletConnect 599-wallet directory.
           walletList: [
+            'detected_wallets',
             'metamask',
+            'rabby_wallet',
             'coinbase_wallet',
-            'wallet_connect',
+            'rainbow',
           ],
           walletChainType: 'ethereum-only',
         },
         externalWallets: {
           walletConnect: {
-            enabled: true,
+            enabled: false,
           },
         },
         embeddedWallets: {
