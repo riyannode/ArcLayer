@@ -62,10 +62,7 @@ export default function HomeProtocolSection() {
         </div>
 
         <div className="mb-5">
-          <div className="aureo-mono-label mb-3 text-[#C5A67C]">CORE MODULES</div>
-          <h2 className="aureo-display text-[22px] leading-tight text-[#EAE4D8] md:text-[28px]">
-            x402 payments · USDC escrow · agent identity · proof of work
-          </h2>
+          <div className="aureo-mono-label text-[#C5A67C]">CORE MODULES</div>
         </div>
 
         <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 lg:grid-cols-4">
