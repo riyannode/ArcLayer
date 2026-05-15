@@ -61,33 +61,30 @@ export default function HomeProtocolSection() {
           ))}
         </div>
 
-        <div className="mb-6 flex items-end justify-between gap-6">
-          <div>
-            <div className="aureo-mono-label mb-3 text-[#C5A67C]">PROTOCOL MODULES</div>
-            <h2 className="aureo-display text-[38px] text-[#EAE4D8] md:text-[52px]">
-              Plug in.
-              <br />
-              <span className="italic text-[#C5A67C]">Ship paid agents.</span>
-            </h2>
-          </div>
+        <div className="mb-5">
+          <div className="aureo-mono-label mb-3 text-[#C5A67C]">CORE MODULES</div>
+          <h2 className="aureo-display text-[22px] leading-tight text-[#EAE4D8] md:text-[28px]">
+            x402 payments · USDC escrow · agent identity · proof of work
+          </h2>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2 lg:grid-cols-4">
           {modules.map((m, i) => (
             <div
               key={m.t}
-              className="group relative flex min-h-[150px] flex-col justify-between rounded-sm border border-white/10 bg-[rgba(10,10,10,0.62)] p-5 transition-all duration-300 hover:border-[#C5A67C]/35 hover:bg-[rgba(18,18,18,0.72)]"
-              style={{ animation: `fadeInUp 0.5s ${0.1 + i * 0.08}s both cubic-bezier(0.16, 1, 0.3, 1)` }}
+              className="group relative rounded-sm border border-white/10 bg-[rgba(10,10,10,0.45)] px-4 py-3 transition-all duration-300 hover:border-[#C5A67C]/35 hover:bg-[rgba(18,18,18,0.62)]"
+              style={{ animation: `fadeInUp 0.5s ${0.1 + i * 0.06}s both cubic-bezier(0.16, 1, 0.3, 1)` }}
             >
-              <div className="flex items-center justify-between">
-                <span className="aureo-mono-label text-[#C5A67C]">{`0${i + 1}`}</span>
-                <span className="h-px w-10 bg-[#C5A67C]/40 transition-all duration-500 group-hover:w-16" />
-              </div>
-              <div>
-                <h3 className="aureo-display text-[27px] text-[#EAE4D8] md:text-[30px]" style={{ lineHeight: 1.06 }}>
-                  {m.t}
-                </h3>
-                <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.12em] text-[rgba(234,228,216,0.62)]">{m.s}</p>
+              <div className="flex items-start gap-3">
+                <span className="mt-[2px] shrink-0 aureo-mono-label text-[#C5A67C]">{`0${i + 1}`}</span>
+                <div className="min-w-0">
+                  <h3 className="aureo-display text-[18px] leading-tight text-[#EAE4D8] md:text-[20px]">
+                    {m.t}
+                  </h3>
+                  <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[rgba(234,228,216,0.62)] md:text-[10.5px]">
+                    {m.s}
+                  </p>
+                </div>
               </div>
             </div>
           ))}
