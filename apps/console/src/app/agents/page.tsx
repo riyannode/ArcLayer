@@ -38,24 +38,28 @@ export default function AgentsPage() {
   const [form, setForm] = useState({
     name: '',
     skill: 'solidity-auditor',
-    metadataURI: '', // empty = auto-derive from name
+    metadataURI: '',
   });
   const [nameStatus, setNameStatus] = useState<NameStatus>({ state: 'idle' });
 
   const derivedAgentId = useMemo(() => {
     try {
       return form.name.trim() ? nameToAgentId(form.name) : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }, [form.name]);
 
-  const effectiveMetadataURI = form.metadataURI.trim() || (form.name.trim()
-    ? buildAgentMetadataURI(form.name, form.skill)
-    : '');
+  const effectiveMetadataURI =
+    form.metadataURI.trim() || (form.name.trim() ? buildAgentMetadataURI(form.name, form.skill) : '');
 
   async function loadAgents() {
     setIsRefreshing(true);
-    try { setAgents(await fetchIndexerJson<IndexedAgent[]>('/agents')); }
-    finally { setIsRefreshing(false); }
+    try {
+      setAgents(await fetchIndexerJson<IndexedAgent[]>('/agents'));
+    } finally {
+      setIsRefreshing(false);
+    }
   }
 
   useEffect(() => {
@@ -66,18 +70,30 @@ export default function AgentsPage() {
         setError(null);
         setStatusTone('pending');
         const next = await fetchIndexerJson<IndexedAgent[]>('/agents');
-        if (!cancelled) { setAgents(next); setStatusTone('synced'); }
+        if (!cancelled) {
+          setAgents(next);
+          setStatusTone('synced');
+        }
       } catch (e) {
-        if (!cancelled) { setError(e instanceof Error ? e.message : 'Failed to load agents.'); setStatusTone('error'); }
-      } finally { if (!cancelled) setIsLoading(false); }
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : 'Failed to load agents.');
+          setStatusTone('error');
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // Live name availability check — debounced 350ms.
   useEffect(() => {
     const norm = normalizeAgentName(form.name);
-    if (!norm) { setNameStatus({ state: 'idle' }); return; }
+    if (!norm) {
+      setNameStatus({ state: 'idle' });
+      return;
+    }
     if (norm.length < 2) {
       setNameStatus({ state: 'invalid', reason: 'Name must be at least 2 characters.' });
       return;
@@ -106,7 +122,7 @@ export default function AgentsPage() {
   }, [form.name]);
 
   async function handleRegisterAgent() {
-    if (nameStatus.state !== 'free') return;
+    if (nameStatus.state != 'free') return;
     try {
       setIsSubmitting(true);
       setStatusTone('pending');
@@ -114,26 +130,23 @@ export default function AgentsPage() {
       const agentId = nameStatus.agentId;
       const metadataURI = effectiveMetadataURI;
       const normalizedName = normalizeAgentName(form.name);
-      const hash = await writeContractAsync(
-        buildRegisterAgentConfig(agentId, form.skill, metadataURI)
-      );
+      const hash = await writeContractAsync(buildRegisterAgentConfig(agentId, form.skill, metadataURI));
       setTxState(`Waiting for ${hash.slice(0, 10)}…`);
       await waitForTransactionReceipt(config, { hash });
       setTxState('Receipt confirmed. Waiting for indexer refresh…');
       const wantId = agentId.toString();
-      const next = await waitForIndexer<IndexedAgent[]>(
-        '/agents',
-        (payload) => payload.some((a) => a.agentId === wantId)
-      );
+      const next = await waitForIndexer<IndexedAgent[]>('/agents', (payload) => payload.some((a) => a.agentId === wantId));
       setAgents(next);
       setStatusTone('synced');
-      setTxState(`Agent "${normalizedName}" registered as ${shortAgentId(agentId)}.`);
+      setTxState(`Agent “${normalizedName}” registered as ${shortAgentId(agentId)}.`);
       setForm({ name: '', skill: 'solidity-auditor', metadataURI: '' });
       setNameStatus({ state: 'idle' });
     } catch (e) {
       setTxState(e instanceof Error ? e.message : 'Agent registration failed.');
       setStatusTone('error');
-    } finally { setIsSubmitting(false); }
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   async function handleCopyAgentId(agentId: string) {
@@ -147,7 +160,6 @@ export default function AgentsPage() {
     }
   }
 
-
   return (
     <div className="aureo-page">
       <div className="aureo-shell">
@@ -155,17 +167,17 @@ export default function AgentsPage() {
           <div>
             <div className="aureo-mono-label mb-3">PROTOCOL · AGENTS</div>
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
-              Agent <span className="italic text-[#C5A67C]">identity</span>
+              Register an <span className="italic text-[#C5A67C]">agent</span>
             </h1>
-            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#9a9a9a]">
-              Registered AI agents, agent APIs, and autonomous services. Each agent is a soulbound on-chain identity through <span className="text-[#C5A67C]">AgentRegistry</span>, paid through <span className="text-[#C5A67C]">JobEscrow</span>, and scored by reputation.
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.68)]">
+              First register a readable agent name. Then copy the full agent ID or jump straight into Create Job without guessing the on-chain identifier.
             </p>
           </div>
-          <div className="flex gap-3 self-start md:self-auto">
+          <div className="flex flex-wrap gap-3 self-start md:self-auto">
             <button onClick={() => loadAgents()} className="btn-bordered">
               {isRefreshing ? 'REFRESHING…' : 'REFRESH'}
             </button>
-            <Link href="/docs" className="btn-primary">SDK QUICKSTART</Link>
+            <Link href="/jobs" className="btn-primary">GO TO JOBS</Link>
           </div>
         </div>
 
@@ -179,24 +191,30 @@ export default function AgentsPage() {
           <StatusBanner
             tone={statusTone}
             title={
-              statusTone === 'pending' ? 'PENDING · CONFIRMATION'
-                : statusTone === 'synced' ? 'INDEXER · SYNCED'
-                : statusTone === 'error' ? 'ACTION · ERROR'
-                : 'READY'
+              statusTone === 'pending'
+                ? 'PENDING · CONFIRMATION'
+                : statusTone === 'synced'
+                  ? 'INDEXER · SYNCED'
+                  : statusTone === 'error'
+                    ? 'ACTION · ERROR'
+                    : 'READY'
             }
-            body={txState || (isRefreshing ? 'Refreshing indexed agents.' : 'Ready for registerAgent flow.')}
+            body={txState || (isRefreshing ? 'Refreshing registered agents.' : 'Ready for registerAgent flow.')}
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.02fr_0.98fr]">
           <section className="aureo-panel p-4 md:p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <div className="aureo-mono-label mb-2">LEDGER</div>
-                <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Registered agents</h2>
+                <div className="aureo-mono-label mb-2">STEP 2 · REGISTERED AGENTS</div>
+                <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent cards</h2>
               </div>
               <span className="font-mono text-[11px] text-[#C5A67C]">{agents.length} indexed</span>
             </div>
+            <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.58)]">
+              Every card shows the readable name, short ID, controller, job count, and a one-click copy for the full agent ID.
+            </p>
             <div className="mt-5 space-y-3">
               {isLoading ? (
                 [0, 1, 2, 3].map((i) => (
@@ -216,30 +234,46 @@ export default function AgentsPage() {
                   const label = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI });
                   const subtitle = parseAgentName(a.metadataURI) ? shortAgentId(a.agentId) : null;
                   return (
-                    <Link
-                      key={a.agentId}
-                      href={`/agent/${a.agentId}`}
-                      className="aureo-list-card block px-4 py-3 md:px-5 md:py-4 group"
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="font-mono text-[12.5px] text-[#EAE4D8] group-hover:text-[#C5A67C] transition-colors">{label}</span>
-                        <span className="shrink-0 font-mono text-[11px] text-[#C5A67C]">Score {a.score}</span>
+                    <div key={a.agentId} className="aureo-list-card block px-4 py-3 md:px-5 md:py-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <div className="font-mono text-[12.5px] text-[#EAE4D8]">{label}</div>
+                          <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">
+                            {subtitle || shortAgentId(a.agentId)}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="chip-status success">Score {a.score}</span>
+                          <span className="tag-pill">{a.jobs.length} jobs</span>
+                        </div>
                       </div>
-                      <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#7A7A7A]">
-                        <span>{subtitle || shortAgentId(a.agentId)} · {shortenAddress(a.controller)}</span>
-                        <span>{a.jobs.length} jobs</span>
+                      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">
+                        <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.28)] px-3 py-2">
+                          <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.52)]">Controller</div>
+                          <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{shortenAddress(a.controller)}</div>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyAgentId(a.agentId)}
+                            className="btn-bordered px-3 py-2 text-[9.5px]"
+                          >
+                            COPY FULL ID
+                          </button>
+                          <Link href={`/jobs?agentId=${encodeURIComponent(a.agentId)}`} className="btn-primary px-3 py-2 text-[9.5px]">
+                            USE IN CREATE JOB
+                          </Link>
+                        </div>
                       </div>
-                      <div className="mt-1.5 flex items-center justify-between gap-2">
-                        <span className="font-mono text-[9.5px] text-[#5a5a5a] break-all leading-tight">{a.agentId}</span>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCopyAgentId(a.agentId); }}
-                          className="shrink-0 rounded border border-[rgba(255,255,255,0.12)] px-2 py-0.5 font-mono text-[9px] tracking-wider text-[#7A7A7A] hover:border-[#C5A67C] hover:text-[#C5A67C] transition-colors"
-                        >
-                          COPY
-                        </button>
+                      <div className="mt-3 rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] px-3 py-2">
+                        <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.52)]">Full Agent ID</div>
+                        <div className="mt-1 break-all font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.68)]">{a.agentId}</div>
                       </div>
-                    </Link>
+                      <div className="mt-3 flex flex-wrap gap-3">
+                        <Link href={`/agent/${a.agentId}`} className="font-mono text-[10.5px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">Open agent detail →</Link>
+                        <Link href={`/jobs?agentId=${encodeURIComponent(a.agentId)}`} className="font-mono text-[10.5px] text-[rgba(234,228,216,0.58)] transition-colors hover:text-[#EAE4D8]">Preselect on Jobs page →</Link>
+                      </div>
+                    </div>
                   );
                 })
               ) : (
@@ -248,21 +282,20 @@ export default function AgentsPage() {
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20c1.5-4 4-6 7.5-6s6 2 7.5 6" strokeLinecap="round" /></svg>
                   </span>
                   <p className="font-mono text-[11.5px] text-[#EAE4D8]">No registered agents yet</p>
-                  <p className="font-mono text-[10.5px] text-[#7A7A7A]">Register the first agent from the panel on the right to see it indexed here.</p>
+                  <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Complete Step 1 on the right. Your first registered agent will appear here automatically.</p>
                 </div>
               )}
             </div>
           </section>
 
           <section className="aureo-panel p-4 md:p-6">
-            <div className="aureo-mono-label mb-2">ACTION · WRITE</div>
+            <div className="aureo-mono-label mb-2">STEP 1 · REGISTER BY NAME</div>
             <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Register agent</h2>
-            <code className="mt-2 block font-mono text-[10.5px] text-[#7A7A7A]">AgentRegistry.registerAgent(keccak(name), skillHash, metadataURI)</code>
+            <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.52)]">Agent Registry · registerAgent(keccak(name), skillHash, metadataURI)</code>
 
-            <div className="mt-5 space-y-3">
-              {/* Primary: human-readable name. agentId is derived. */}
+            <div className="mt-5 space-y-4">
               <div>
-                <label className="mb-1 block font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">AGENT NAME</label>
+                <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">AGENT NAME</label>
                 <input
                   value={form.name}
                   onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
@@ -271,28 +304,18 @@ export default function AgentsPage() {
                   autoComplete="off"
                   spellCheck={false}
                 />
-                {/* Live availability indicator */}
+                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Pick a unique readable handle. The on-chain agent ID is derived automatically from this name.</div>
                 <div className="mt-1.5 font-mono text-[10.5px]">
-                  {nameStatus.state === 'idle' && (
-                    <span className="text-[#7A7A7A]">Pick a unique handle. Lowercase, 2+ chars.</span>
-                  )}
-                  {nameStatus.state === 'checking' && (
-                    <span className="text-[#C5A67C]">checking on chain…</span>
-                  )}
-                  {nameStatus.state === 'free' && (
-                    <span className="text-[#B8CD7E]">✓ "{normalizeAgentName(form.name)}" is available</span>
-                  )}
-                  {nameStatus.state === 'taken' && (
-                    <span className="text-[#f0c5c5]">✕ "{normalizeAgentName(form.name)}" already registered. Pick another.</span>
-                  )}
-                  {nameStatus.state === 'invalid' && (
-                    <span className="text-[#f0c5c5]">✕ {nameStatus.reason}</span>
-                  )}
+                  {nameStatus.state === 'idle' && <span className="text-[rgba(234,228,216,0.58)]">Use lowercase. Minimum 2 characters.</span>}
+                  {nameStatus.state === 'checking' && <span className="text-[#C5A67C]">Checking on chain…</span>}
+                  {nameStatus.state === 'free' && <span className="text-[#B8CD7E]">✓ “{normalizeAgentName(form.name)}” is available</span>}
+                  {nameStatus.state === 'taken' && <span className="text-[#f0c5c5]">✕ “{normalizeAgentName(form.name)}” is already registered</span>}
+                  {nameStatus.state === 'invalid' && <span className="text-[#f0c5c5]">✕ {nameStatus.reason}</span>}
                 </div>
               </div>
 
               <div>
-                <label className="mb-1 block font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">SKILL LABEL</label>
+                <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">SKILL LABEL</label>
                 <input
                   value={form.skill}
                   onChange={(e) => setForm((c) => ({ ...c, skill: e.target.value }))}
@@ -300,13 +323,11 @@ export default function AgentsPage() {
                   className="input-mono"
                   autoComplete="off"
                 />
+                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Stored into the agent metadata URI so devs can identify the intended capability later.</div>
               </div>
 
-              {/* Derived metadataURI shown read-only by default; toggle to override. */}
               <div>
-                <label className="mb-1 block font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">
-                  METADATA URI <span className="text-[#7A7A7A]">(auto)</span>
-                </label>
+                <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">METADATA URI</label>
                 <input
                   value={form.metadataURI || effectiveMetadataURI}
                   onChange={(e) => setForm((c) => ({ ...c, metadataURI: e.target.value }))}
@@ -314,16 +335,14 @@ export default function AgentsPage() {
                   className="input-mono"
                   autoComplete="off"
                 />
-                <div className="mt-1.5 font-mono text-[10.5px] text-[#7A7A7A]">
-                  Auto-built from your name. Override with an <code>ipfs://</code> URI for richer metadata.
-                </div>
+                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Auto-generated from the name by default. Override only if you want custom metadata like an ipfs:// URI.</div>
               </div>
 
-              {/* Show the derived on-chain id so engineers can verify */}
               {derivedAgentId !== null && (
-                <div className="mt-2 p-3 font-mono text-[10.5px] leading-5 text-[#7A7A7A]" style={{ border: '1px solid rgba(255, 255, 255, 0.06)', background: 'rgba(0,0,0,0.3)' }}>
-                  <span className="text-[#C5A67C]">on-chain id:</span> <span className="text-[#EAE4D8]">{shortAgentId(derivedAgentId)}</span>
-                  <span className="ml-2 text-[#7A7A7A]">(uint256 keccak256 of name)</span>
+                <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] px-4 py-3">
+                  <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.52)]">Derived On-Chain Agent ID</div>
+                  <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{shortAgentId(derivedAgentId)}</div>
+                  <div className="mt-1 break-all font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.58)]">{derivedAgentId.toString()}</div>
                 </div>
               )}
             </div>
@@ -333,18 +352,24 @@ export default function AgentsPage() {
               disabled={!isConnected || isSubmitting || nameStatus.state !== 'free'}
               className="btn-primary mt-5"
               title={
-                !isConnected ? 'Connect wallet first.' :
-                nameStatus.state === 'taken' ? 'Name already registered.' :
-                nameStatus.state === 'checking' ? 'Verifying availability…' :
-                nameStatus.state === 'invalid' ? nameStatus.reason :
-                'Sign registerAgent transaction.'
+                !isConnected
+                  ? 'Connect wallet first.'
+                  : nameStatus.state === 'taken'
+                    ? 'Name already registered.'
+                    : nameStatus.state === 'checking'
+                      ? 'Verifying availability…'
+                      : nameStatus.state === 'invalid'
+                        ? nameStatus.reason
+                        : 'Sign registerAgent transaction.'
               }
             >
               {isSubmitting ? 'REGISTERING…' : 'REGISTER AGENT'}
             </button>
 
-            <div className="mt-4 p-4 font-mono text-[11.5px] leading-5 text-[#9a9a9a]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
-              {isConnected ? '✓ Wallet connected — ready to send registerAgent.' : '⚠ Connect wallet to submit registerAgent.'}
+            <div className="mt-4 rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] p-4 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.68)]">
+              {isConnected
+                ? '✓ Wallet connected. After registration, use the card actions on the left to copy the full ID or prefill the Jobs page.'
+                : '⚠ Connect wallet to submit registerAgent.'}
             </div>
           </section>
         </div>
