@@ -110,10 +110,10 @@ export default function Navbar() {
                   fontSize: '11px',
                   letterSpacing: '0.24em',
                   fontWeight: 400,
-                  color: isActive ? '#EAE4D8' : '#7A7A7A',
+                  color: isActive ? '#C5A67C' : '#EAE4D8',
                 }}
                 onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = '#C5A67C'; }}
-                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = '#7A7A7A'; }}
+                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = '#EAE4D8'; }}
               >
                 {link.label}
                 {isActive && (
@@ -182,7 +182,7 @@ export default function Navbar() {
                   fontFamily: 'Inter, sans-serif',
                   fontSize: '11px',
                   letterSpacing: '0.24em',
-                  color: isActive ? '#C5A67C' : 'rgba(234, 228, 216, 0.7)',
+                  color: isActive ? '#C5A67C' : '#EAE4D8',
                   background: isActive ? 'rgba(197, 166, 124, 0.08)' : 'transparent',
                   borderLeft: isActive ? '2px solid #C5A67C' : '2px solid transparent',
                 }}
