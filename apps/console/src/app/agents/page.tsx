@@ -135,10 +135,16 @@ export default function AgentsPage() {
       await waitForTransactionReceipt(config, { hash });
       setTxState('Receipt confirmed. Waiting for indexer refresh…');
       const wantId = agentId.toString();
-      const next = await waitForIndexer<IndexedAgent[]>('/agents', (payload) => payload.some((a) => a.agentId === wantId));
-      setAgents(next);
-      setStatusTone('synced');
-      setTxState(`Agent “${normalizedName}” registered as ${shortAgentId(agentId)}.`);
+      try {
+        const next = await waitForIndexer<IndexedAgent[]>('/agents', (payload) => payload.some((a) => a.agentId === wantId));
+        setAgents(next);
+        setStatusTone('synced');
+        setTxState(`Agent "${normalizedName}" registered as ${shortAgentId(agentId)}.`);
+      } catch {
+        // Indexer hasn't caught up yet — tx is confirmed on-chain though
+        setStatusTone('synced');
+        setTxState(`Agent "${normalizedName}" registered on-chain as ${shortAgentId(agentId)}. Indexer syncing — refresh in a few seconds.`);
+      }
       setForm({ name: '', skill: 'solidity-auditor', metadataURI: '' });
       setNameStatus({ state: 'idle' });
     } catch (e) {

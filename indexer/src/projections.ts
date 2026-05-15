@@ -66,26 +66,39 @@ export async function buildJobDetailProjection(jobId: bigint) {
   };
 }
 
-export async function buildAgentsProjection() {
+export async function buildAgentsProjection(registeredAgentIds: bigint[] = []) {
   const jobs = await readAllJobs();
-  const uniqueAgentIds = Array.from(new Set(jobs.map((job) => job.agentId.toString()))).map((id) => BigInt(id));
-  const profiles = await Promise.all(uniqueAgentIds.map((agentId) => readAgentProfile(agentId)));
+  const fromJobs = jobs.map((job) => job.agentId.toString());
+  const fromRegistry = registeredAgentIds.map((id) => id.toString());
+  const uniqueAgentIds = Array.from(new Set([...fromRegistry, ...fromJobs])).map((id) => BigInt(id));
 
-  return profiles.map((profile) => ({
-    agentId: profile.agent.agentId.toString(),
-    controller: profile.agent.controller,
-    skillHash: profile.agent.skillHash,
-    metadataURI: profile.agent.metadataURI,
-    registeredAt: profile.agent.registeredAt.toString(),
-    reputationScore: profile.agent.reputationScore.toString(),
-    score: profile.score.toString(),
-    jobs: profile.jobs.map((job) => job.id.toString()),
-    proofTokenIds: profile.proofTokenIds.map((tokenId) => tokenId.toString()),
-  }));
+  const profiles = await Promise.all(
+    uniqueAgentIds.map(async (agentId) => {
+      try {
+        return await readAgentProfile(agentId);
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  return profiles
+    .filter((p): p is NonNullable<typeof p> => p !== null)
+    .map((profile) => ({
+      agentId: profile.agent.agentId.toString(),
+      controller: profile.agent.controller,
+      skillHash: profile.agent.skillHash,
+      metadataURI: profile.agent.metadataURI,
+      registeredAt: profile.agent.registeredAt.toString(),
+      reputationScore: profile.agent.reputationScore.toString(),
+      score: profile.score.toString(),
+      jobs: profile.jobs.map((job) => job.id.toString()),
+      proofTokenIds: profile.proofTokenIds.map((tokenId) => tokenId.toString()),
+    }));
 }
 
-export async function buildAgentDetailProjection(agentId: bigint) {
-  const profiles = await buildAgentsProjection();
+export async function buildAgentDetailProjection(agentId: bigint, registeredAgentIds: bigint[] = []) {
+  const profiles = await buildAgentsProjection(registeredAgentIds);
   const profile = profiles.find((entry) => entry.agentId === agentId.toString());
 
   if (!profile) {

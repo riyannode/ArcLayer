@@ -93,3 +93,14 @@ export type IndexedJobEvent = {
   amount?: bigint;
   deliverableURI?: string;
 };
+
+export type IndexedAgentEvent = {
+  eventName: "AgentRegistered";
+  blockNumber: bigint;
+  transactionHash: `0x${string}`;
+  logIndex: number;
+  agentId: bigint;
+  controller: Address;
+  skillHash: `0x${string}`;
+  metadataURI: string;
+};

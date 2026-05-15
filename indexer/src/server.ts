@@ -1,6 +1,6 @@
 import { createServer, type ServerResponse } from "node:http";
 import { DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS } from "./config";
-import { fetchJobEvents } from "./ingest";
+import { fetchAgentEvents, fetchJobEvents } from "./ingest";
 import {
   readAgentById,
   readAgentEvents,
@@ -23,10 +23,14 @@ function writeJson(res: ServerResponse, payload: unknown) {
 async function runSyncCycle() {
   const fromBlockValue = readMetaValue("last_synced_block");
   const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
-  const { events, latestBlock } = await fetchJobEvents(fromBlock);
 
-  if (events.length > 0) {
-    await syncProjectionStore(events);
+  const [{ events, latestBlock }, { events: agentEvts }] = await Promise.all([
+    fetchJobEvents(fromBlock),
+    fetchAgentEvents(fromBlock),
+  ]);
+
+  if (events.length > 0 || agentEvts.length > 0) {
+    await syncProjectionStore(events, agentEvts);
   }
 
   // Always advance the cursor to latestBlock so empty ranges don't

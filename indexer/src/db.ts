@@ -2,9 +2,8 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import type { IndexedJobEvent } from "@arclayer/sdk";
+import type { IndexedAgentEvent, IndexedJobEvent } from "@arclayer/sdk";
 import {
-  buildAgentEventProjection,
   buildAgentsProjection,
   buildJobProjection,
   buildJobsProjection,
@@ -165,19 +164,23 @@ function stringifyJson(value: unknown) {
   return JSON.stringify(value, (_key, entry) => (typeof entry === "bigint" ? entry.toString() : entry));
 }
 
-function serializeEventKey(event: IndexedJobEvent) {
+function serializeEventKey(event: { transactionHash: `0x${string}`; logIndex: number }) {
   return `${event.transactionHash}:${event.logIndex}`;
 }
 
-export async function syncProjectionStore(events: IndexedJobEvent[]) {
+export async function syncProjectionStore(
+  events: IndexedJobEvent[],
+  agentEvents: IndexedAgentEvent[] = [],
+) {
+  const registeredAgentIds = agentEvents.map((event) => event.agentId);
+
   const [jobs, agents, proofs] = await Promise.all([
     buildJobsProjection(),
-    buildAgentsProjection(),
+    buildAgentsProjection(registeredAgentIds),
     buildProofsProjection(),
   ]);
 
   const jobGroups = buildJobProjection(events);
-  const agentGroups = buildAgentEventProjection(events);
 
   db.exec("BEGIN");
   try {
@@ -239,17 +242,15 @@ export async function syncProjectionStore(events: IndexedJobEvent[]) {
       }
     }
 
-    for (const batch of Object.values(agentGroups)) {
-      for (const event of batch) {
-        upsertAgentEvent.run(
-          serializeEventKey(event),
-          String(event.agentId ?? "0"),
-          event.eventName,
-          event.blockNumber.toString(),
-          event.transactionHash,
-          stringifyJson(event)
-        );
-      }
+    for (const event of agentEvents) {
+      upsertAgentEvent.run(
+        serializeEventKey(event),
+        event.agentId.toString(),
+        event.eventName,
+        event.blockNumber.toString(),
+        event.transactionHash,
+        stringifyJson(event)
+      );
     }
 
     upsertMeta.run("last_sync_at", Date.now().toString());
