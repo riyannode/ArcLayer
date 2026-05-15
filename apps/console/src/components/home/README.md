@@ -37,7 +37,7 @@ here so devs can find and edit it without grep'ing the rest of the app.
 
 - `HomeStats` hydrates from `/api/indexer/overview` (own-origin Next.js
   proxy) with a silent fallback to zeroed counts. No external fetches.
-- `HomeProofStrip` links to `https://explorer.testnet.arc.network` with
+- `HomeProofStrip` links to `https://testnet.arcscan.app` with
   the real deployed addresses on chain `5042002`.
 
 ## Slogan

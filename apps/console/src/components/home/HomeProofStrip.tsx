@@ -1,5 +1,7 @@
 'use client';
 
+import { ARC_EXPLORER } from '@/lib/contracts';
+
 /**
  * Proof strip — 4 real deployed contracts on Arc Testnet (chain 5042002)
  * with explorer links. Proves the protocol is real, not marketing copy.
@@ -10,8 +12,6 @@ const contracts = [
   { label: 'PROOF OF WORK', addr: '0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5' },
   { label: 'MILESTONE', addr: '0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2' },
 ];
-
-const ARC_EXPLORER = 'https://explorer.testnet.arc.network';
 
 export default function HomeProofStrip() {
   return (

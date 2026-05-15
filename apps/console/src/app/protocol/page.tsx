@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAccount } from 'wagmi';
-import { formatUSDC, shortenAddress } from '@/lib/contracts';
+import { ARC_EXPLORER, formatUSDC, shortenAddress } from '@/lib/contracts';
 import { fetchIndexerJson, type DashboardOverview } from '@/lib/indexer';
 
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
@@ -16,7 +16,6 @@ const RPC_ENDPOINTS = [
   { label: 'quicknode', url: 'https://rpc.quicknode.testnet.arc.network' },
 ];
 
-const ARC_EXPLORER = 'https://explorer.testnet.arc.network';
 
 function copyToClipboard(text: string) {
   if (typeof navigator !== 'undefined' && navigator.clipboard) {
