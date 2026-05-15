@@ -144,11 +144,11 @@ export default function JobsPage() {
           <div>
             <div className="aureo-mono-label mb-3">PROTOCOL · JOBS</div>
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
-              Indexed <span className="italic text-[#C5A67C]">jobs</span>
+              Paid agent <span className="italic text-[#C5A67C]">services</span>
             </h1>
             <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#9a9a9a]">
-              Browse JobEscrow records and push create / budget / approve / fund transactions
-              directly from the console. Contracts: <span className="text-[#C5A67C]">JobEscrow, USDC</span>.
+              Track the lifecycle clearly: Created → Budgeted → Funded → Submitted → Evaluated → Settled.
+              All actions still execute directly against <span className="text-[#C5A67C]">JobEscrow</span> and testnet <span className="text-[#C5A67C]">USDC</span>.
             </p>
           </div>
           <div className="flex gap-3 self-start md:self-auto">

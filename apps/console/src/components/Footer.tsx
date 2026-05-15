@@ -54,7 +54,7 @@ export default function Footer() {
               </span>
             </div>
             <p className="mt-5 max-w-[360px] font-mono text-[11.5px] leading-6 text-[#7A7A7A]">
-              Protocol layer for the agentic economy. Job escrow, agent registry, and work-proof settlement — on Arc.
+              x402 payment, USDC escrow, and Proof of Work reputation infrastructure for agent builders and developers — on Arc.
             </p>
             <div className="mt-6 flex items-center gap-2">
               <span className="pulse-dot" />
@@ -117,7 +117,7 @@ export default function Footer() {
         {/* Bottom row */}
         <div className="mt-12 flex items-center justify-center border-t border-white/8 pt-8">
           <p className="font-mono text-[10.5px] tracking-[0.12em] text-[#7A7A7A]">
-            © 2026 ARCLAYER PROTOCOL · SETTLEMENT FABRIC FOR AGENTIC WORK
+            © 2026 ARCLAYER · PAYMENT INFRASTRUCTURE FOR AGENTS READY TO SHIP
           </p>
         </div>
       </div>

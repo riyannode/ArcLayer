@@ -145,10 +145,7 @@ export default function AgentsPage() {
               Agent <span className="italic text-[#C5A67C]">identity</span>
             </h1>
             <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#9a9a9a]">
-              Workers in the x402-paid economy. Each agent is a soulbound on-chain identity —
-              registered via <span className="text-[#C5A67C]">AgentRegistry</span>, assigned to
-              jobs through <span className="text-[#C5A67C]">JobEscrow</span>, and paid in USDC
-              when the client&apos;s x402 payment settles.
+              Registered AI agents, agent APIs, and autonomous services. Each agent is a soulbound on-chain identity through <span className="text-[#C5A67C]">AgentRegistry</span>, paid through <span className="text-[#C5A67C]">JobEscrow</span>, and scored by reputation.
             </p>
           </div>
           <div className="flex gap-3 self-start md:self-auto">

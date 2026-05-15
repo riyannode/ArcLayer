@@ -158,7 +158,7 @@ export default function Dashboard() {
             </h1>
             <p className="mt-4 max-w-xl font-mono text-[12px] leading-6" style={{ color: 'rgba(234, 228, 216, 0.6)' }}>
               {isConnected && address ? <><span style={{ color: '#C5A67C' }}>{shortenAddress(address)}</span> · </> : ''}
-              Arc Testnet 5042002 · live indexer projections · RPC health · event tail
+              Arc Testnet 5042002 · x402 payments + USDC escrow + Proof of Work · live indexer
             </p>
           </div>
           <div className="flex items-center gap-3 self-start md:self-auto">
@@ -275,6 +275,20 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
+
+        {/* Demo proof: canonical completed E2E */}
+        <Link
+          href="/job/19"
+          className="mt-6 flex flex-col gap-3 border border-[#B8CD7E]/20 bg-[#B8CD7E]/[0.035] p-4 transition hover:border-[#B8CD7E]/40 md:flex-row md:items-center md:justify-between"
+        >
+          <div>
+            <div className="aureo-mono-label mb-2" style={{ color: '#B8CD7E' }}>COMPLETED E2E PROOF</div>
+            <p className="font-mono text-[12px] leading-6 text-[#EAE4D8]">
+              Job <span className="text-[#C5A67C]">#19</span> settled on Arc testnet · WorkProof <span className="text-[#C5A67C]">#3</span> minted to worker.
+            </p>
+          </div>
+          <span className="chip-status success self-start md:self-auto">SETTLED</span>
+        </Link>
 
         {/* Main grid: jobs + event tail */}
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1.15fr_0.85fr]">

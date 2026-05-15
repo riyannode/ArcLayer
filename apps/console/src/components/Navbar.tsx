@@ -80,7 +80,7 @@ export default function Navbar() {
         {/* Brand — pinned to viewport left (aligns with HomeSidebar column) */}
         <Link href="/" className="group flex items-center gap-3 pl-3 md:pl-4" aria-label="ArcLayer home">
           <div className="relative transition-transform duration-300 group-hover:scale-105">
-            <ArcMark size={scrolled ? 26 : 30} />
+            <ArcMark size={scrolled ? 30 : 34} glow={false} />
           </div>
           <div className="flex flex-col leading-none">
             <span
@@ -90,7 +90,7 @@ export default function Navbar() {
               ARCLAYER
             </span>
             <span className="mt-1 hidden font-mono text-[9px] tracking-[0.2em] text-[#C5A67C] md:block">
-              PROTOCOL · AGENTIC ECONOMY
+              x402 · ESCROW · PROOF
             </span>
           </div>
         </Link>

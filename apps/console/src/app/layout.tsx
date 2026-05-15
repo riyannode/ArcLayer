@@ -14,8 +14,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-        <link rel="apple-touch-icon" href="/logo.png" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192" />
+        <link rel="icon" href="/icon-512.png" type="image/png" sizes="512x512" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
@@ -23,12 +25,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
         <meta name="theme-color" content="#050505" />
-        <meta name="description" content="ArcLayer — protocol layer and x402 facilitator for the agentic economy. JobEscrow, AgentRegistry, and WorkProof contracts with a typed SDK and event indexer on Arc." />
+        <meta name="description" content="ArcLayer — payment infrastructure for agents ready to ship. Add x402 payments, USDC escrow, Proof of Work, and reputation to any AI agent or API." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta property="og:title" content="ArcLayer · x402 settlement fabric for autonomous protocols" />
-        <meta property="og:description" content="x402 facilitator and settlement fabric for autonomous protocols. Contracts, SDK, and indexer on Arc." />
+        <meta property="og:title" content="ArcLayer · Payment infrastructure for agents ready to ship" />
+        <meta property="og:description" content="Add x402 payments, USDC escrow, Proof of Work, and reputation to any AI agent or API — without rebuilding payment and settlement logic from scratch." />
         <meta property="og:type" content="website" />
-        <title>ArcLayer · x402 settlement fabric for the agentic economy</title>
+        <meta property="og:image" content="/icon-512.png" />
+        <title>ArcLayer · Payment infrastructure for agents ready to ship</title>
       </head>
       <body suppressHydrationWarning style={{ background: '#050505', color: '#EAE4D8' }}>
         {!isLanding && <WebGLBackground />}

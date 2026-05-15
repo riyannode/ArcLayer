@@ -18,8 +18,7 @@ export default function HomeHero() {
     <div className="relative flex max-w-[540px] flex-col justify-center">
       {/* Kicker */}
       <div className="mb-2 flex flex-col gap-1">
-        <span className="aureo-mono-label">AGENTIC</span>
-        <span className="aureo-mono-label">PROTOCOL</span>
+        <span className="aureo-mono-label">x402 · USDC ESCROW · PROOF OF WORK</span>
       </div>
 
       {/* Headline — slogan (fluid, clamp-driven) */}
@@ -31,10 +30,10 @@ export default function HomeHero() {
         }}
       >
         <span className="block section-reveal" style={{ animationDelay: '0.05s' }}>
-          PROTOCOL
+          PROTOCOL LAYER
         </span>
         <span className="block section-reveal" style={{ animationDelay: '0.15s' }}>
-          LAYER FOR THE
+          FOR THE
         </span>
         <span
           className="block italic text-[#C5A67C] section-reveal"
@@ -56,10 +55,10 @@ export default function HomeHero() {
 
       {/* Body */}
       <p className="aureo-body max-w-[510px] text-[14px] text-[#9a9a9a] md:text-[14.5px]">
-        ArcLayer is a{' '}
-        <span className="text-[#C5A67C]">x402 settlement fabric for autonomous protocols</span>.
-        The facilitator turns API requests into Arc testnet USDC escrow jobs, then indexes
-        agent work, settlement, and reputation — deployed on Arc (chain{' '}
+        ArcLayer lets agent builders add{' '}
+        <span className="text-[#C5A67C]">x402 payments, USDC escrow, Proof of Work, and reputation</span>{' '}
+        to any AI agent or API — without rebuilding payment and settlement logic from scratch.
+        Deployed on Arc (chain{' '}
         <span className="font-mono text-[#C5A67C]">5042002</span>).
       </p>
 

@@ -1,49 +1,53 @@
 'use client';
 
 /**
- * ArcLayer brand mark — two curved vertical strokes forming an open arch.
- * Luminous gold/ivory glow. Matches the user-provided logo.
+ * ArcLayer brand mark.
+ *
+ * Renders the canonical logo art (transparent PNG, gold/cream tones) at any
+ * pixel size. Source asset lives at `/public/arclayer-logo-mark.png` and was
+ * generated from the user-provided master image. For favicon/browser-tab use
+ * the matching `/icon-512.png` family declared in `app/layout.tsx`.
+ *
+ * Notes:
+ *   - PNG (not SVG) preserves the painterly glow without re-rasterizing
+ *     gradients at every size.
+ *   - `priority` skips lazy-load for navbar usage.
+ *   - At small sizes the `glow` prop can be set to `false` so the mark stays
+ *     crisp instead of bleeding into surrounding chrome.
  */
+import Image from 'next/image';
+
 export default function ArcMark({
   size = 48,
   className = '',
+  glow = true,
 }: {
   size?: number;
   className?: string;
+  glow?: boolean;
 }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 64 64"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
+    <span
       className={className}
+      style={{
+        display: 'inline-flex',
+        width: size,
+        height: size,
+        position: 'relative',
+        filter: glow && size >= 28
+          ? 'drop-shadow(0 0 6px rgba(197, 166, 124, 0.35))'
+          : 'none',
+      }}
       aria-label="ArcLayer"
     >
-      <defs>
-        <linearGradient id="arcLeft" x1="20" y1="8" x2="20" y2="56" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#EAE4D8" />
-          <stop offset="1" stopColor="#C5A67C" />
-        </linearGradient>
-        <linearGradient id="arcRight" x1="44" y1="8" x2="44" y2="56" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#EAE4D8" />
-          <stop offset="1" stopColor="#B8CD7E" />
-        </linearGradient>
-        <filter id="arcGlow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="1.2" result="b" />
-          <feMerge>
-            <feMergeNode in="b" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
-      <g filter="url(#arcGlow)" strokeLinecap="round" strokeWidth="4" fill="none">
-        {/* left arch stroke */}
-        <path d="M18 56 Q 18 18 30 8" stroke="url(#arcLeft)" />
-        {/* right arch stroke */}
-        <path d="M46 56 Q 46 18 34 8" stroke="url(#arcRight)" />
-      </g>
-    </svg>
+      <Image
+        src="/arclayer-logo-mark.png"
+        alt=""
+        width={size}
+        height={size}
+        priority
+        style={{ objectFit: 'contain' }}
+      />
+    </span>
   );
 }

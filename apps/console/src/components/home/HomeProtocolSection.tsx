@@ -5,23 +5,23 @@ type Module = { t: string; c: string; d: string };
 const modules: Module[] = [
   {
     t: 'x402 Facilitator',
-    c: 'verify · settle · consume · replay-safe',
-    d: 'HTTP 402 micropayment gate. Each API call is backed by a JobEscrow USDC payment on Arc — verified on-chain, settled atomically, cached for replay.',
+    c: 'HTTP 402 → USDC escrow',
+    d: 'Drop-in HTTP 402 payment gate for any agent API. Each call is backed by an on-chain USDC payment — verified, settled atomically, replay-safe.',
   },
   {
-    t: 'Settlement Vault',
-    c: 'create · budget · fund · submit · settle',
-    d: 'USDC-escrowed jobs with milestone submission and evaluator-approved settlement.',
+    t: 'Job Escrow',
+    c: 'create · fund · submit · settle',
+    d: 'USDC locked in escrow per job. Released to the agent only after evaluator approval — no trust required between client and worker.',
   },
   {
-    t: 'Agent Identity',
-    c: 'registerAgent · skillHash · metadataURI',
-    d: 'Soulbound agent identities with on-chain reputation and job history.',
+    t: 'Agent Registry',
+    c: 'registerAgent · skillHash · reputation',
+    d: 'Soulbound on-chain identity for any AI agent or autonomous service. Track jobs, skills, and earned reputation in one record.',
   },
   {
     t: 'Proof of Work',
-    c: 'mintProof · proofURI · settled-job gated',
-    d: 'Non-transferable work proofs, minted only after a job settles against a milestone.',
+    c: 'non-transferable · settled-job gated',
+    d: 'WorkProof NFTs minted only after a job settles. Verifiable, portable proof of completed, paid agent work — feeds the ReputationOracle.',
   },
 ];
 
@@ -40,19 +40,20 @@ export default function HomeProtocolSection() {
         aria-hidden="true"
       />
       <div className="mx-auto max-w-[1600px]">
-        <div className="mb-12 grid grid-cols-1 gap-10 md:grid-cols-[1fr_1.2fr] md:items-end">
+        <div className="mb-12 grid grid-cols-1 gap-8 md:grid-cols-[1fr_1.1fr] md:items-end">
           <div>
-            <h2 className="aureo-display text-[52px] text-[#EAE4D8] md:text-[72px]">
-              Four modules.
+            <h2 className="aureo-display text-[48px] text-[#EAE4D8] md:text-[64px]">
+              Plug in.
               <br />
-              <span className="italic text-[#C5A67C]">One settlement fabric.</span>
+              <span className="italic text-[#C5A67C]">Ship paid agents.</span>
             </h2>
           </div>
-          <p className="aureo-body max-w-[520px] justify-self-end text-[14.5px] text-[#9a9a9a]">
-            Minimal, composable contracts in the @arclayer/sdk workspace. Typed ABIs,
-            explicit event shapes, and a local indexer so your agents read the chain at
-            tens of requests per second — not single-shot RPCs.
-          </p>
+          <div className="justify-self-end">
+            <p className="aureo-body max-w-[560px] text-[14.5px] text-[#9a9a9a]">
+              HTTP 402 request → USDC JobEscrow funding → agent execution → Proof of Work + reputation.
+              Infrastructure developers plug into their own agent apps and APIs.
+            </p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
