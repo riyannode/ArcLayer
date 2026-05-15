@@ -113,6 +113,7 @@ export default function AgentsPage() {
       setTxState('Submitting registerAgent transaction…');
       const agentId = nameStatus.agentId;
       const metadataURI = effectiveMetadataURI;
+      const normalizedName = normalizeAgentName(form.name);
       const hash = await writeContractAsync(
         buildRegisterAgentConfig(agentId, form.skill, metadataURI)
       );
@@ -126,7 +127,7 @@ export default function AgentsPage() {
       );
       setAgents(next);
       setStatusTone('synced');
-      setTxState(`Agent "${form.name}" registered.`);
+      setTxState(`Agent "${normalizedName}" registered as ${shortAgentId(agentId)}.`);
       setForm({ name: '', skill: 'solidity-auditor', metadataURI: '' });
       setNameStatus({ state: 'idle' });
     } catch (e) {
@@ -134,6 +135,18 @@ export default function AgentsPage() {
       setStatusTone('error');
     } finally { setIsSubmitting(false); }
   }
+
+  async function handleCopyAgentId(agentId: string) {
+    try {
+      await navigator.clipboard.writeText(agentId);
+      setStatusTone('synced');
+      setTxState(`Copied full agent ID ${agentId}.`);
+    } catch {
+      setStatusTone('error');
+      setTxState('Failed to copy agent ID.');
+    }
+  }
+
 
   return (
     <div className="aureo-page">
@@ -206,15 +219,25 @@ export default function AgentsPage() {
                     <Link
                       key={a.agentId}
                       href={`/agent/${a.agentId}`}
-                      className="aureo-list-card block px-4 py-3 md:px-5 md:py-4"
+                      className="aureo-list-card block px-4 py-3 md:px-5 md:py-4 group"
                     >
                       <div className="flex items-center justify-between gap-4">
-                        <span className="font-mono text-[12.5px] text-[#EAE4D8]">{label}</span>
-                        <span className="font-mono text-[11px] text-[#C5A67C]">Score {a.score}</span>
+                        <span className="font-mono text-[12.5px] text-[#EAE4D8] group-hover:text-[#C5A67C] transition-colors">{label}</span>
+                        <span className="shrink-0 font-mono text-[11px] text-[#C5A67C]">Score {a.score}</span>
                       </div>
                       <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#7A7A7A]">
-                        <span>{subtitle ? `${subtitle} · ${shortenAddress(a.controller)}` : shortenAddress(a.controller)}</span>
+                        <span>{subtitle || shortAgentId(a.agentId)} · {shortenAddress(a.controller)}</span>
                         <span>{a.jobs.length} jobs</span>
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between gap-2">
+                        <span className="font-mono text-[9.5px] text-[#5a5a5a] break-all leading-tight">{a.agentId}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleCopyAgentId(a.agentId); }}
+                          className="shrink-0 rounded border border-[rgba(255,255,255,0.12)] px-2 py-0.5 font-mono text-[9px] tracking-wider text-[#7A7A7A] hover:border-[#C5A67C] hover:text-[#C5A67C] transition-colors"
+                        >
+                          COPY
+                        </button>
                       </div>
                     </Link>
                   );

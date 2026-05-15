@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useAccount, useWriteContract } from 'wagmi';
 import {
@@ -12,7 +12,7 @@ import {
 } from '@arclayer/sdk';
 import { StatusBanner } from '@/components/StatusBanner';
 import { formatUSDC, parseUSDC, shortenAddress } from '@/lib/contracts';
-import { fetchIndexerJson, type IndexedJob, waitForIndexer } from '@/lib/indexer';
+import { fetchIndexerJson, type IndexedAgent, type IndexedJob, waitForIndexer } from '@/lib/indexer';
 import { config } from '@/lib/wagmi';
 
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
@@ -22,6 +22,7 @@ export default function JobsPage() {
   const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const [jobs, setJobs] = useState<IndexedJob[]>([]);
+  const [agents, setAgents] = useState<IndexedAgent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isFunding, setIsFunding] = useState(false);
@@ -30,20 +31,34 @@ export default function JobsPage() {
   const [txState, setTxState] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<'idle' | 'pending' | 'synced' | 'error'>('idle');
   const [createForm, setCreateForm] = useState({
-    agentId: '1',
+    agentId: '',
     worker: '0xf1d7143A42e07CbAEb3a7c70DAC4C9f2B675dFF0',
     evaluator: '0x9dc3f8F2E2Aa59F9300D9B40D16725317F52B074',
     jobSpec: 'audit a solidity vault adapter',
   });
-  const [fundForm, setFundForm] = useState({ jobId: '1', budget: '1', amount: '1' });
+  const [fundForm, setFundForm] = useState({ jobId: '', budget: '1', amount: '1' });
+
+  const selectedAgent = useMemo(
+    () => agents.find((agent) => agent.agentId === createForm.agentId) ?? null,
+    [agents, createForm.agentId]
+  );
+
 
   async function loadJobs() {
     setIsRefreshing(true);
     try {
-      const next = await fetchIndexerJson<IndexedJob[]>('/jobs');
-      setJobs(next);
+      const [nextJobs, nextAgents] = await Promise.all([
+        fetchIndexerJson<IndexedJob[]>('/jobs'),
+        fetchIndexerJson<IndexedAgent[]>('/agents'),
+      ]);
+      setJobs(nextJobs);
+      setAgents(nextAgents);
+      if (!createForm.agentId && nextAgents.length > 0) {
+        setCreateForm((current) => ({ ...current, agentId: nextAgents[0].agentId }));
+      }
     } finally { setIsRefreshing(false); }
   }
+
 
   useEffect(() => {
     let cancelled = false;
@@ -52,8 +67,19 @@ export default function JobsPage() {
         setIsLoading(true);
         setError(null);
         setStatusTone('pending');
-        const next = await fetchIndexerJson<IndexedJob[]>('/jobs');
-        if (!cancelled) { setJobs(next); setStatusTone('synced'); }
+        const [nextJobs, nextAgents] = await Promise.all([
+          fetchIndexerJson<IndexedJob[]>('/jobs'),
+          fetchIndexerJson<IndexedAgent[]>('/agents'),
+        ]);
+        if (!cancelled) {
+          setJobs(nextJobs);
+          setAgents(nextAgents);
+          setCreateForm((current) => ({
+            ...current,
+            agentId: current.agentId || nextAgents[0]?.agentId || '',
+          }));
+          setStatusTone('synced');
+        }
       } catch (e) {
         if (!cancelled) { setError(e instanceof Error ? e.message : 'Failed to load jobs.'); setStatusTone('error'); }
       } finally { if (!cancelled) setIsLoading(false); }
@@ -61,7 +87,14 @@ export default function JobsPage() {
     return () => { cancelled = true; };
   }, []);
 
+
   async function handleCreateJob() {
+    if (!createForm.agentId) {
+      setStatusTone('error');
+      setTxState('Register an agent first, then select it here.');
+      return;
+    }
+
     try {
       setIsCreating(true);
       setStatusTone('pending');
@@ -95,8 +128,12 @@ export default function JobsPage() {
         (payload) => payload.some((j) => j.worker.toLowerCase() === createForm.worker.toLowerCase() && j.evaluator.toLowerCase() === createForm.evaluator.toLowerCase())
       );
       setJobs(next);
+      const createdJob = next.find((j) => j.worker.toLowerCase() === createForm.worker.toLowerCase() && j.evaluator.toLowerCase() === createForm.evaluator.toLowerCase());
       setStatusTone('synced');
-      setTxState('Job created and indexed.');
+      setTxState(createdJob ? `Job #${createdJob.id} created and indexed.` : 'Job created and indexed.');
+      if (createdJob) {
+        setFundForm((current) => ({ ...current, jobId: createdJob.id }));
+      }
     } catch (e) {
       setTxState(e instanceof Error ? e.message : 'createJob failed.');
       setStatusTone('error');
@@ -236,10 +273,41 @@ export default function JobsPage() {
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Create job</h2>
               <code className="mt-2 block font-mono text-[10.5px] text-[#7A7A7A]">JobEscrow.createJob(agentId, worker, evaluator, spec)</code>
               <div className="mt-5 space-y-3">
-                <input value={createForm.agentId} onChange={(e) => setCreateForm((c) => ({ ...c, agentId: e.target.value }))} placeholder="agentId" className="input-mono" />
-                <input value={createForm.worker} onChange={(e) => setCreateForm((c) => ({ ...c, worker: e.target.value }))} placeholder="worker 0x…" className="input-mono" />
-                <input value={createForm.evaluator} onChange={(e) => setCreateForm((c) => ({ ...c, evaluator: e.target.value }))} placeholder="evaluator 0x…" className="input-mono" />
-                <textarea value={createForm.jobSpec} onChange={(e) => setCreateForm((c) => ({ ...c, jobSpec: e.target.value }))} placeholder="job spec" className="input-mono min-h-[110px]" />
+                <div>
+                  <label className="mb-1 block font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">REGISTERED AGENT</label>
+                  <select
+                    value={createForm.agentId}
+                    onChange={(e) => setCreateForm((c) => ({ ...c, agentId: e.target.value }))}
+                    className="input-mono"
+                  >
+                    {agents.length === 0 ? (
+                      <option value="">No registered agents yet</option>
+                    ) : (
+                      agents.map((agent) => (
+                        <option key={agent.agentId} value={agent.agentId}>
+                          {agent.metadataURI.includes('arclayer://agent/') ? agent.metadataURI.replace('arclayer://agent/', '') : `Agent ${agent.agentId.slice(0, 10)}…`} · {agent.agentId.slice(0, 10)}…
+                        </option>
+                      ))
+                    )}
+                  </select>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[#7A7A7A]">
+                    {selectedAgent
+                      ? `Selected full ID ${selectedAgent.agentId}. Controller ${shortenAddress(selectedAgent.controller)}.`
+                      : 'Register an agent first on the Agents page, then select it here.'}
+                  </div>
+                </div>
+                <div>
+                  <label className="mb-1 block font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">WORKER ADDRESS</label>
+                  <input value={createForm.worker} onChange={(e) => setCreateForm((c) => ({ ...c, worker: e.target.value }))} placeholder="worker 0x…" className="input-mono" />
+                </div>
+                <div>
+                  <label className="mb-1 block font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">EVALUATOR ADDRESS</label>
+                  <input value={createForm.evaluator} onChange={(e) => setCreateForm((c) => ({ ...c, evaluator: e.target.value }))} placeholder="evaluator 0x…" className="input-mono" />
+                </div>
+                <div>
+                  <label className="mb-1 block font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">JOB SPEC</label>
+                  <textarea value={createForm.jobSpec} onChange={(e) => setCreateForm((c) => ({ ...c, jobSpec: e.target.value }))} placeholder="job spec" className="input-mono min-h-[110px]" />
+                </div>
               </div>
               <button onClick={handleCreateJob} disabled={!isConnected || isCreating || isFunding} className="btn-primary mt-5">
                 {isCreating ? 'CREATING…' : 'CREATE JOB'}
@@ -251,9 +319,20 @@ export default function JobsPage() {
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Budget &amp; fund</h2>
               <code className="mt-2 block font-mono text-[10.5px] text-[#7A7A7A]">setBudget → approve USDC → fundJob</code>
               <div className="mt-5 space-y-3">
-                <input value={fundForm.jobId} onChange={(e) => setFundForm((c) => ({ ...c, jobId: e.target.value }))} placeholder="jobId" className="input-mono" />
-                <input value={fundForm.budget} onChange={(e) => setFundForm((c) => ({ ...c, budget: e.target.value }))} placeholder="budget USDC" className="input-mono" />
-                <input value={fundForm.amount} onChange={(e) => setFundForm((c) => ({ ...c, amount: e.target.value }))} placeholder="funding USDC" className="input-mono" />
+                <div>
+                  <label className="mb-1 block font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">JOB ID TO FUND</label>
+                  <input value={fundForm.jobId} onChange={(e) => setFundForm((c) => ({ ...c, jobId: e.target.value }))} placeholder="jobId" className="input-mono" />
+                </div>
+                <div>
+                  <label className="mb-1 block font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">JOB BUDGET IN USDC</label>
+                  <input value={fundForm.budget} onChange={(e) => setFundForm((c) => ({ ...c, budget: e.target.value }))} placeholder="budget USDC" className="input-mono" />
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[#7A7A7A]">Writes JobEscrow.setBudget(jobId, budget).</div>
+                </div>
+                <div>
+                  <label className="mb-1 block font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">USDC AMOUNT TO APPROVE + FUND</label>
+                  <input value={fundForm.amount} onChange={(e) => setFundForm((c) => ({ ...c, amount: e.target.value }))} placeholder="funding USDC" className="input-mono" />
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[#7A7A7A]">Approves USDC, then funds the selected job with the same amount.</div>
+                </div>
               </div>
               <button onClick={handleFundJob} disabled={!isConnected || isCreating || isFunding} className="btn-primary mt-5">
                 {isFunding ? 'FUNDING…' : 'SET BUDGET · FUND'}
