@@ -88,6 +88,39 @@ Paid agent run completed end-to-end on production (`https://arclayer-zeta.vercel
 - **latency**: `2724ms`
 - **E2E score**: 17/17 ✅
 
+### Protocol JobEscrow — Role-Separated E2E (Job 19)
+
+Client, worker, and evaluator used separate burner wallets.
+
+Job `19` completed the full lifecycle on Arc Testnet:
+- `registerAgent`
+- `createJob`
+- `setBudget`
+- `approve USDC`
+- `fund escrow`
+- `worker submitDeliverable`
+- `evaluator evaluate(true)`
+- `client settle`
+- `WorkProof #3 minted`
+- Indexer and live UI verified
+
+| Key | Value |
+|---|---|
+| Job ID | `19` |
+| Agent ID | `1778814739` |
+| WorkProof Token ID | `3` |
+| Final status | `Settled` |
+| Amount funded | `0.01 USDC` |
+| Paid to worker | `0.00995 USDC` |
+| Platform fee | `0.00005 USDC` |
+| Live job page | https://arclayer-zeta.vercel.app/job/19 |
+
+| Step | Tx |
+|---|---|
+| `submitDeliverable` | [0xf66a7ba5...](https://testnet.arcscan.app/tx/0xf66a7ba5e00fe2a23d96681f55facfa0fe76f29152215cbf60b999b1ba9bfa72) |
+| `evaluate(true)` | [0x69734562...](https://testnet.arcscan.app/tx/0x6973456264d6b42be02560f003c280ce24afa7a26071cebb09d60f0e5da894ef) |
+| `settle` | [0x8883f432...](https://testnet.arcscan.app/tx/0x8883f432d034c95b9a663fe602b69879b1fa3d089cb17a35f4b5741c2f6873cf) |
+
 ### Legacy V1 — MilestoneEscrow (Project 0)
 
 Project `0` completed end-to-end on Arc Testnet.
