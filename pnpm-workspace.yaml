@@ -1,6 +1,7 @@
 packages:
   - "sdk"
   - "indexer"
+  - "agents"
   - "apps/*"
 allowBuilds:
   '@reown/appkit': true
