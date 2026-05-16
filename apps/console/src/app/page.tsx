@@ -56,8 +56,8 @@ export default function Home() {
           </div>
         </div>
 
-        <HomeProtocolSection />
         <HomeWhoIsThisFor />
+        <HomeProtocolSection />
       </main>
       <HomeFooterStrip />
     </div>

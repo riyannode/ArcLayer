@@ -68,27 +68,22 @@ export default function HomeHero() {
       </div>
       <HomeStats />
 
+      {/* Primary paths — two clear entry points */}
       <div className="mt-7 flex flex-col items-start gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
+        <Link href="/x402-demo" className="btn-primary">
+          Charge for API Access
+          {arrow}
+        </Link>
         <Link href="/jobs" className="btn-primary">
-          Create &amp; Pay a Job
-          {arrow}
-        </Link>
-        <Link href="/x402-demo" className="btn-ghost">
-          Try x402 Demo
-          {arrow}
-        </Link>
-        <Link href="/docs" className="btn-ghost">
-          Developer Docs
+          Create Paid Agent Job
           {arrow}
         </Link>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] uppercase tracking-[0.16em]">
-        <Link href="/agents" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
-          Register Agent ↗
-        </Link>
-        <Link href="/protocol" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
-          Protocol Console ↗
+      {/* Secondary — docs + console */}
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] uppercase tracking-[0.16em]">
+        <Link href="/docs" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
+          Developer Docs ↗
         </Link>
         <a
           href="https://github.com/riyannode/ArcLayer"
