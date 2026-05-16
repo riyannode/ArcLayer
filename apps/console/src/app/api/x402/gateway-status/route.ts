@@ -10,7 +10,7 @@ export async function GET() {
       ok: probe.ok,
       readiness: probe.ok ? 'runtime_supported' : 'arcTestnet_not_returned_by_runtime',
       gateway: probe,
-      evidence: gatewayEvidenceSummary(),
+      evidence: await gatewayEvidenceSummary(),
       note: 'Circle API keys are not required for the normal Gateway/Nanopayments facilitator flow.',
     }, { status: probe.ok ? 200 : 503 });
   } catch (err) {
@@ -18,7 +18,7 @@ export async function GET() {
       ok: false,
       readiness: 'probe_failed',
       error: err instanceof Error ? err.message : String(err),
-      evidence: gatewayEvidenceSummary(),
+      evidence: await gatewayEvidenceSummary(),
     }, { status: 502 });
   }
 }

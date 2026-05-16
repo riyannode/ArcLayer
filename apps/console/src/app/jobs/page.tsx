@@ -663,24 +663,24 @@ function JobsPage() {
 
                 {/* Payment method awareness — informational, escrow flow is the same on-chain */}
                 <div>
-                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">PAYMENT METHOD</label>
+                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">AGENT RUN PAYMENT · X402</label>
                   <div className="grid gap-2 md:grid-cols-2">
                     <div className="border border-[#C5A67C]/40 bg-[#C5A67C]/5 p-3">
                       <div className="font-mono text-[11px] text-[#C5A67C]">Arc Native Payment</div>
                       <div className="mt-1 font-mono text-[10px] leading-[1.6] text-[rgba(234,228,216,0.6)]">
-                        On-chain USDC escrow on Arc Testnet. Verified and settled on-chain. Default flow used when you fund this job below.
+                        Direct EIP-3009 USDC transfer on Arc Testnet. Verified and settled on-chain when the agent runs.
                       </div>
                     </div>
                     <div className="border border-white/10 bg-white/[0.02] p-3">
                       <div className="font-mono text-[11px] text-[#7CB5C5]">Circle Gateway Payment</div>
                       <div className="mt-1 font-mono text-[10px] leading-[1.6] text-[rgba(234,228,216,0.6)]">
-                        Pay via Circle Gateway in the x402 demo. Live verification on Arc Testnet; final settlement requires buyer GatewayWallet deposit.{' '}
+                        Pay via Circle Gateway batched settlement. Live verification; final settlement requires buyer GatewayWallet deposit.{' '}
                         <Link href="/x402-demo" className="text-[#7CB5C5] underline underline-offset-2 hover:text-[#EAE4D8]">try in demo ↗</Link>
                       </div>
                     </div>
                   </div>
                   <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.5)]">
-                    Job creation here uses Arc Native Payment via the Settlement Vault. Use the x402 demo to exercise both payment paths end-to-end.
+                    These are the two x402 payment paths used when the agent runs. The Settlement Vault below is the on-chain trust layer that holds the locked budget — it is not a third payment method.
                   </div>
                 </div>
               </div>
@@ -708,10 +708,10 @@ function JobsPage() {
             </div>
 
             <div className="aureo-panel p-4 md:p-6">
-              <div className="aureo-mono-label mb-2">STEP 2 · FUND JOB ESCROW</div>
-              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Approve &amp; fund escrow</h2>
+              <div className="aureo-mono-label mb-2">STEP 2 · FUND TRUST LAYER</div>
+              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Approve &amp; fund Settlement Vault</h2>
               <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.6)]">
-                Set the agreed budget, approve USDC, and deposit funds into the Settlement Vault.
+                Set the agreed budget, approve USDC, and deposit funds into ArcLayer Escrow as the post-payment trust layer.
               </p>
 
               <div className="mt-5 space-y-4">
@@ -779,7 +779,7 @@ function JobsPage() {
 
             <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(10,10,10,0.6)] p-5 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.68)]">
               {isConnected
-                ? '\u2713 Wallet connected. Flow: Select Agent \u2192 Create Job \u2192 Set Budget \u2192 Deposit USDC \u2192 later submit deliverable, evaluate, and mint Proof of Work.'
+                ? '\u2713 Wallet connected. Flow: Select Agent \u2192 Create Job \u2192 Fund Trust Layer \u2192 Pay & Run Agent (Arc Native or Circle Gateway) \u2192 Submit \u2192 Evaluate \u2192 Mint Proof of Work.'
                 : '\u26a0 Connect wallet to submit protocol writes.'}
             </div>
           </section>

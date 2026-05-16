@@ -17,3 +17,10 @@ export { getArcTestnetGatewayConfig, getBatchFacilitatorClient, gatewayFacilitat
 export { consumeGatewayPayment, deriveGatewayPaymentId, gatewayEvidenceSummary, getGatewayPayment, recordGatewayPayment, type GatewayPaymentEvidence } from './gateway/payment-store';
 export { createX402Facilitator, type X402Facilitator, type X402FacilitatorOptions, type ConsumePaymentInput, type CacheAndReturnInput } from './facilitator';
 export { canonicalResource } from './parser';
+export {
+  createArcNativeReceipt,
+  createGatewayReceipt,
+  type X402PaymentReceipt,
+  type X402PaymentProvider,
+  type X402ReceiptStatus,
+} from './receipt';

@@ -89,15 +89,21 @@ async function handleGatewaySettle(body: Record<string, unknown>): Promise<NextR
 
     const paymentId = deriveGatewayPaymentId(paymentPayload, paymentRequirements);
     if (!result.success) {
-      recordGatewayPayment({
+      await recordGatewayPayment({
         paymentId,
-        status: 'accepted',
+        status: 'accepted_pending_settlement',
         payer: result.payer,
+        payTo: paymentRequirements.payTo as string | undefined,
+        amount: paymentRequirements.maxAmountRequired as string | undefined,
+        asset: paymentRequirements.asset as string | undefined,
         transaction: result.transaction || '',
         network: result.network,
-        verifiedAt: Date.now(),
-raw: result as unknown as Record<string, unknown>,
-        });
+        resource: typeof paymentRequirements.resource === 'string'
+          ? paymentRequirements.resource
+          : (paymentRequirements.resource as { url?: string } | undefined)?.url,
+        settledAt: Date.now(),
+        raw: result as unknown as Record<string, unknown>,
+      });
       return NextResponse.json(
         {
           success: true,
@@ -111,7 +117,21 @@ raw: result as unknown as Record<string, unknown>,
       );
     }
 
-    recordGatewayPayment({ paymentId, status: 'settled', payer: result.payer, transaction: result.transaction, network: result.network, settledAt: Date.now(), raw: result as unknown as Record<string, unknown> });
+    await recordGatewayPayment({
+      paymentId,
+      status: 'settled',
+      payer: result.payer,
+      payTo: paymentRequirements.payTo as string | undefined,
+      amount: paymentRequirements.maxAmountRequired as string | undefined,
+      asset: paymentRequirements.asset as string | undefined,
+      transaction: result.transaction,
+      network: result.network,
+      resource: typeof paymentRequirements.resource === 'string'
+        ? paymentRequirements.resource
+        : (paymentRequirements.resource as { url?: string } | undefined)?.url,
+      settledAt: Date.now(),
+      raw: result as unknown as Record<string, unknown>,
+    });
     return NextResponse.json(
       {
         success: true,

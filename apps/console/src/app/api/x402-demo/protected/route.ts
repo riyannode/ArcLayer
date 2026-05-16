@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
     try {
       const client = getBatchFacilitatorClient();
       const paymentId = deriveGatewayPaymentId(proof, gatewayRequirements);
-      const consumed = consumeGatewayPayment(paymentId);
+      const consumed = await consumeGatewayPayment(paymentId);
       if (!consumed.ok && consumed.reason === 'replayed') {
         return NextResponse.json(
           { ok: false, unlocked: false, error: 'gateway_payment_replayed', paymentId, accepts: [buildArcNativeRequirements(), gatewayRequirements] },

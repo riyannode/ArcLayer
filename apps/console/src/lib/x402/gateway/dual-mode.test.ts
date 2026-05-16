@@ -1,10 +1,10 @@
 /**
  * Minimal unit tests for dual-mode x402 routing logic.
  * Covers: isBatchPayment routing, paymentId derivation stability,
- * replay protection, accepted_pending_settlement handling,
+ * replay protection (mocked Supabase), accepted_pending_settlement handling,
  * and /supported response shape.
  */
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import {
   CIRCLE_BATCHING_NAME,
   CIRCLE_BATCHING_VERSION,
@@ -15,16 +15,81 @@ import {
   X402_VERSION_V2,
 } from '../constants';
 import { isBatchPayment } from './batch-client';
-import {
-  deriveGatewayPaymentId,
-  recordGatewayPayment,
-  consumeGatewayPayment,
-  getGatewayPayment,
-  type GatewayPaymentEvidence,
-} from './payment-store';
+
+// ─── Shared in-memory store backing the Supabase mock ────────────────────────
+const mockStore = new Map<string, Record<string, unknown>>();
+
+vi.mock('../supabaseClient', () => {
+  // Helper to wrap a row result in a thenable chain (.select().single()/.maybeSingle())
+  const wrapRow = (row: Record<string, unknown> | null) => ({
+    select: () => ({
+      single: async () => ({ data: row, error: row ? null : { code: 'PGRST116', message: 'not found' } }),
+      maybeSingle: async () => ({ data: row, error: null }),
+    }),
+    single: async () => ({ data: row, error: row ? null : { code: 'PGRST116', message: 'not found' } }),
+    maybeSingle: async () => ({ data: row, error: null }),
+  });
+
+  const fakeFrom = (_table: string) => {
+    const api = {
+      upsert: (rows: Record<string, unknown> | Record<string, unknown>[], _opts?: unknown) => {
+        const list = Array.isArray(rows) ? rows : [rows];
+        let last: Record<string, unknown> | null = null;
+        for (const row of list) {
+          const id = row.payment_id as string;
+          const existing = mockStore.get(id) || {};
+          const merged = { ...existing, ...row };
+          mockStore.set(id, merged);
+          last = merged;
+        }
+        return wrapRow(last);
+      },
+      select: (_cols?: string) => ({
+        eq: (col: string, val: string) => {
+          if (col === 'payment_id') {
+            const row = mockStore.get(val) || null;
+            return wrapRow(row);
+          }
+          return wrapRow(null);
+        },
+      }),
+    };
+    return api;
+  };
+
+  const fakeRpc = async (fnName: string, params: Record<string, unknown>) => {
+    if (fnName === 'x402_gateway_consume_payment') {
+      const id = params.p_payment_id as string;
+      const row = mockStore.get(id);
+      if (!row) {
+        return { data: [{ ok: false, reason: 'missing' }], error: null };
+      }
+      if (row.consumed_at) {
+        return { data: [{ ok: false, reason: 'replayed', ...row }], error: null };
+      }
+      row.consumed_at = new Date().toISOString();
+      mockStore.set(id, row);
+      return { data: [{ ok: true, ...row }], error: null };
+    }
+    return { data: null, error: null };
+  };
+
+  const adminProxy = {
+    from: fakeFrom,
+    rpc: fakeRpc,
+  };
+
+  return {
+    supabaseAdmin: adminProxy,
+    getSupabaseAdmin: () => adminProxy,
+  };
+});
+
+// Import payment-store AFTER vi.mock is registered
+const { recordGatewayPayment, consumeGatewayPayment, getGatewayPayment, deriveGatewayPaymentId } =
+  await import('./payment-store');
 
 // ─── 1. isBatchPayment routing ───────────────────────────────────────────────
-
 describe('isBatchPayment routing', () => {
   it('returns true for GatewayWalletBatched requirements', () => {
     const req = { extra: { name: CIRCLE_BATCHING_NAME, version: CIRCLE_BATCHING_VERSION } };
@@ -53,7 +118,6 @@ describe('isBatchPayment routing', () => {
 });
 
 // ─── 2. Gateway paymentId derivation stability ───────────────────────────────
-
 describe('deriveGatewayPaymentId', () => {
   const payload = { from: '0xABC', nonce: '123', amount: '10000' };
   const requirements = { scheme: 'exact', network: GATEWAY_NETWORK_NAME, asset: USDC_ADDRESS };
@@ -81,37 +145,31 @@ describe('deriveGatewayPaymentId', () => {
 });
 
 // ─── 3. Replay protection ────────────────────────────────────────────────────
-
 describe('Gateway replay protection', () => {
-  const paymentId = 'test-replay-' + Date.now();
-
   beforeEach(() => {
-    // Record a verified payment
-    recordGatewayPayment({ paymentId, status: 'verified', payer: '0xAAA' });
+    mockStore.clear();
   });
 
-  it('consumeGatewayPayment succeeds on first use', () => {
-    const result = consumeGatewayPayment(paymentId);
+  it('consumeGatewayPayment succeeds on first use', async () => {
+    const paymentId = 'replay-001';
+    await recordGatewayPayment({ paymentId, status: 'verified', payer: '0xAAA' });
+    const result = await consumeGatewayPayment(paymentId);
     expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.evidence.paymentId).toBe(paymentId);
-      expect(result.evidence.usedAt).toBeGreaterThan(0);
-    }
   });
 
-  it('consumeGatewayPayment rejects replay (second use)', () => {
-    // First consume
-    consumeGatewayPayment(paymentId);
-    // Second consume — replay
-    const result = consumeGatewayPayment(paymentId);
+  it('consumeGatewayPayment rejects replay (second use)', async () => {
+    const paymentId = 'replay-002';
+    await recordGatewayPayment({ paymentId, status: 'verified', payer: '0xAAA' });
+    await consumeGatewayPayment(paymentId);
+    const result = await consumeGatewayPayment(paymentId);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe('replayed');
     }
   });
 
-  it('consumeGatewayPayment returns missing for unknown paymentId', () => {
-    const result = consumeGatewayPayment('nonexistent-id-xyz');
+  it('consumeGatewayPayment returns missing for unknown paymentId', async () => {
+    const result = await consumeGatewayPayment('nonexistent-xyz');
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe('missing');
@@ -120,38 +178,51 @@ describe('Gateway replay protection', () => {
 });
 
 // ─── 4. accepted_pending_settlement handling ─────────────────────────────────
-
 describe('accepted_pending_settlement status tracking', () => {
-  it('records accepted status and upgrades to settled', () => {
-    const paymentId = 'pending-settle-' + Date.now();
+  beforeEach(() => {
+    mockStore.clear();
+  });
 
-    // Simulate: verify succeeded, settle returned !success (async batch)
-    recordGatewayPayment({ paymentId, status: 'accepted', payer: '0xBBB', verifiedAt: Date.now() });
-    const pending = getGatewayPayment(paymentId);
-    expect(pending?.status).toBe('accepted');
+  it('records accepted status and upgrades to settled', async () => {
+    const paymentId = 'pending-settle-001';
 
-    // Simulate: later settlement confirmation
-    recordGatewayPayment({ paymentId, status: 'settled', settledAt: Date.now(), transaction: '0xTX123' });
-    const settled = getGatewayPayment(paymentId);
+    await recordGatewayPayment({
+      paymentId,
+      status: 'accepted_pending_settlement',
+      payer: '0xBBB',
+      verifiedAt: Date.now(),
+    });
+    const pending = await getGatewayPayment(paymentId);
+    expect(pending?.status).toBe('accepted_pending_settlement');
+
+    await recordGatewayPayment({
+      paymentId,
+      status: 'settled',
+      settledAt: Date.now(),
+      transaction: '0xTX123',
+    });
+    const settled = await getGatewayPayment(paymentId);
     expect(settled?.status).toBe('settled');
     expect(settled?.transaction).toBe('0xTX123');
-    // Original payer preserved via merge
+    // Original payer preserved via upsert merge
     expect(settled?.payer).toBe('0xBBB');
   });
 
-  it('accepted payment can still be consumed for resource unlock', () => {
-    const paymentId = 'accepted-consume-' + Date.now();
-    recordGatewayPayment({ paymentId, status: 'accepted', payer: '0xCCC' });
+  it('accepted payment can still be consumed for resource unlock', async () => {
+    const paymentId = 'accepted-consume-001';
+    await recordGatewayPayment({
+      paymentId,
+      status: 'accepted_pending_settlement',
+      payer: '0xCCC',
+    });
 
-    const result = consumeGatewayPayment(paymentId);
+    const result = await consumeGatewayPayment(paymentId);
     expect(result.ok).toBe(true);
   });
 });
 
 // ─── 5. /supported response shape validation ─────────────────────────────────
-
 describe('/supported response shape', () => {
-  // Simulate the response structure from the route handler
   function buildSupportedResponse() {
     const arcNativeExact = {
       x402Version: X402_VERSION_V2,

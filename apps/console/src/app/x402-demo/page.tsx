@@ -47,9 +47,19 @@ export default function X402DemoPage() {
       .then((r) => r.json())
       .then(setRelayer)
       .catch((e) => setRelayer({ ready: false, relayerAddress: null, usdcBalance: '0', error: e instanceof Error ? e.message : String(e) }));
-    fetch('/api/x402/gateway-probe')
+    fetch('/api/x402/gateway-status')
       .then((r) => r.json())
-      .then(setGatewayProbe)
+      .then((data) => {
+        // Map gateway-status response shape to GatewayProbe shape used by UI.
+        // gateway-status returns { ok, readiness, gateway: { ok, network, gatewayWallet, error }, ... }
+        const gw = (data?.gateway ?? {}) as { ok?: boolean; network?: string; gatewayWallet?: string; error?: string };
+        setGatewayProbe({
+          supported: Boolean(gw.ok),
+          network: gw.network,
+          gatewayWallet: gw.gatewayWallet,
+          error: gw.error,
+        });
+      })
       .catch(() => setGatewayProbe({ supported: false, error: 'probe_failed' }));
   }, []);
 

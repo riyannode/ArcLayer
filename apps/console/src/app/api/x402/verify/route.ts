@@ -106,7 +106,20 @@ async function handleGatewayVerify(body: Record<string, unknown>): Promise<NextR
     }
 
     const paymentId = deriveGatewayPaymentId(paymentPayload, paymentRequirements);
-    recordGatewayPayment({ paymentId, status: 'verified', payer: result.payer, verifiedAt: Date.now(), raw: result as unknown as Record<string, unknown> });
+    await recordGatewayPayment({
+      paymentId,
+      status: 'verified',
+      payer: result.payer,
+      payTo: paymentRequirements.payTo as string | undefined,
+      amount: paymentRequirements.maxAmountRequired as string | undefined,
+      asset: paymentRequirements.asset as string | undefined,
+      network: toCaip2Network(paymentRequirements.network),
+      resource: typeof paymentRequirements.resource === 'string'
+        ? paymentRequirements.resource
+        : (paymentRequirements.resource as { url?: string } | undefined)?.url,
+      verifiedAt: Date.now(),
+      raw: result as unknown as Record<string, unknown>,
+    });
 
     return NextResponse.json(
       { isValid: true, payer: result.payer, paymentIdentifier: paymentId, extra: { mode: 'circle-gateway', status: 'verified' } },
