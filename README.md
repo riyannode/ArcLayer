@@ -147,20 +147,44 @@ NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
 ## Contract Addresses — Arc Testnet
 
-| Contract | Address |
-|---|---|
-| `AgentRegistry` | `0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21` |
-| `JobEscrow` | `0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225` |
-| `WorkProof` | `0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5` |
-| `ReputationOracle` | `0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c` |
-| Testnet USDC | `0x3600000000000000000000000000000000000000` (6 decimals) |
-| `MilestoneEscrow` (V1) | `0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2` |
-| `Achievement` (V1) | `0x7245B200ce09B515bd235f1eD262c2abb0890165` |
+Network: **Arc Testnet** · Chain ID: `5042002` · Explorer: [`testnet.arcscan.app`](https://testnet.arcscan.app)
+
+### Core ArcLayer V2 contracts
+
+| Contract | Address | Deployer | Deployment tx |
+|---|---|---|---|
+| `AgentRegistry` | `0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21` | `0x9dC3F8F2E2aA59f9300d9b40D16725317F52b074` | [`0xc973a7…afbb9`](https://testnet.arcscan.app/tx/0xc973a730482eeb67ce17a7e04a96200a3d50bfcc4905ace265b04d9cf7fafbb9) |
+| `JobEscrow` | `0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225` | `0x9dC3F8F2E2aA59f9300d9b40D16725317F52b074` | [`0x2b3e90…edc45`](https://testnet.arcscan.app/tx/0x2b3e900692641a48080e705e959fcf8135fb7829100756ffa2b37ae6b9bedc45) |
+| `WorkProof` | `0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5` | `0x9dC3F8F2E2aA59f9300d9b40D16725317F52b074` | [`0x567eab…5d35a`](https://testnet.arcscan.app/tx/0x567eab55746b2b567304d61201dba18b80c3698bbaa7ca9830a8832051c5d35a) |
+| `ReputationOracle` | `0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c` | `0x9dC3F8F2E2aA59f9300d9b40D16725317F52b074` | [`0x5232aa…3256f`](https://testnet.arcscan.app/tx/0x5232aa8778a30f78d1173a5d36aa6dc17378c14af6cd4c9c3a9e985e5bf3256f) |
+
+V2 post-deploy configuration:
+
+| Action | Target | Value | Tx |
+|---|---|---|---|
+| `WorkProof.setMinter(address)` | `WorkProof` | `JobEscrow` (`0xF0E1…d225`) | [`0xc64185…d5e`](https://testnet.arcscan.app/tx/0xc64185ba4f3319b4779f79bcc26c01807b60135e6b931279118231b7e4ed3d5e) |
+
+### Token and payment infrastructure
+
+| Component | Address | Notes |
+|---|---|---|
+| Testnet USDC | `0x3600000000000000000000000000000000000000` | 6 decimals; Arc Testnet USDC used for escrow + x402 exact payments |
+| x402 default payTo | `0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b` | Seller / settlement receiver for x402 demo payments |
+| Circle `GatewayWallet` | `0x0077777d7EBA4688BDeF3E311b846F25870A19B9` | EIP-712 verifying contract for `GatewayWalletBatched` payments |
+
+### Legacy V1 contracts kept for compatibility
+
+| Contract | Address | Status |
+|---|---|---|
+| `MilestoneEscrow` (V1) | `0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2` | Legacy escrow path, not the main jobs flow |
+| `Achievement` (V1) | `0x7245B200ce09B515bd235f1eD262c2abb0890165` | Legacy proof NFT, replaced by `WorkProof` in V2 |
+| `Invoice` (V1) | `0x1Eb2Ed241Cb978f4BF02DA68E128D50AD7A53Fbf` | Legacy invoice module, exported by SDK |
+| `Subscription` (V1) | `0x01028Ca35bE5c3dcE85F661C6528138bc3Ad9Fc1` | Legacy subscription module, exported by SDK |
 
 > **UI labels vs contract names** — use UI labels in copy, contract names in code:
 > Settlement Vault = `JobEscrow` · Agent Registry = `AgentRegistry` · Proof of Work = `WorkProof` · Reputation Oracle = `ReputationOracle`
 
-Full deployment txs in [`docs/e2e-proofs.md`](./docs/e2e-proofs.md).
+Canonical SDK constants live in [`sdk/src/addresses.ts`](./sdk/src/addresses.ts). Full proof history and E2E txs live in [`docs/e2e-proofs.md`](./docs/e2e-proofs.md).
 
 ---
 
