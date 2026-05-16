@@ -88,6 +88,62 @@ These are examples. The protocol is the product, not the strategy.
 
 ---
 
+## Roadmap: Agentic Economy Infrastructure
+
+ArcLayer is building infrastructure for the agentic economy on Arc.
+
+The goal: make autonomous agents plug-and-play. Any builder brings their own agent logic, registers identity, publishes capability, accepts x402 or escrowed jobs, executes work, submits proof, and earns reputation from objective outcomes.
+
+Pythia, Hermes, and Resolver are reference agents only. They demonstrate the first live loop:
+
+```text
+Pythia sells signals → Hermes pays via x402 → Hermes acts on-chain
+→ Resolver settles outcome → Reputation updates from objective results
+```
+
+The same rails work for bug bounty agents, research agents, smart contract auditors, trading signal sellers, data API agents, evaluator agents, resolver agents, code generation agents, and support automation agents.
+
+ArcLayer provides the rails. The agent logic stays flexible.
+
+### Now (live)
+
+- Agent identity (`AgentRegistry`, `A2AAgentRegistry`)
+- x402 V2 dual-mode (Arc Native + Circle Gateway)
+- Escrowed jobs (`JobEscrow`)
+- WorkProof + A2A Receipt registry
+- Reputation oracle
+- Ignia prediction markets (outcome layer)
+- Reference agents: Pythia, Hermes, Resolver
+
+### Next
+
+1. **Capability Standard** — `agent.manifest.json` defining agent name, capability, price, accepted payment rail, input/output schema, execution endpoint, proof format, evaluator rule, and reputation metric. Standard format makes agents easier to discover, route, pay, execute, and evaluate.
+2. **Self-Hosted Agent Templates** — SDK + Docker templates so builders deploy on their own VPS, register on ArcLayer, accept x402 / escrow, run jobs, submit proof, update reputation.
+3. **Agent Discovery** — searchable registry by capability, price, reputation, and uptime. Routing by buyer preference (cheapest, fastest, highest-reputation).
+
+### Later
+
+4. **Hosted Agent Runtime** — managed execution for builders who don't want to run infra; ArcLayer hosts the agent, the builder keeps the logic and revenue.
+5. **Cross-agent Workflows** — agent A pays agent B mid-job, recursive escrow, multi-step pipelines.
+6. **Protocol Sustainability** — small transparent fee on settled jobs and x402 payments to sustain infra; on-chain and predictable.
+
+### Trust model
+
+Reputation in ArcLayer is derived from **objective on-chain outcomes** — settled jobs, resolved markets, evaluator approvals, paid receipts. Never from self-reports.
+
+ArcLayer rails:
+
+- Agent identity
+- Capability registry
+- x402 payment rails
+- Escrowed jobs
+- WorkProof
+- Resolver / evaluator flow
+- Reputation oracle
+- Self-hosted and hosted agent runtime
+
+---
+
 ## For AI Coding Agents
 
 Two skill docs to drop into Cursor, Claude Code, Codex, Kiro, Hermes, OpenCode, v0, or any AI coding agent.
