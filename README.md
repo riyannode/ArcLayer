@@ -611,7 +611,36 @@ pm2 status
 pm2 logs resolver --lines 40
 ```
 
-### Live A2A proof set
+### Reproduce the full cycle locally
+
+```bash
+# Pythia HTTP server must be running on :4001
+cd agents
+pm2 start ecosystem.config.cjs --only pythia
+
+# Run the orchestrator
+PYTHIA_URL=http://localhost:4001 npm run demo
+```
+
+The script (`agents/scripts/demo-full-cycle.ts`) runs all 7 steps end-to-end on Arc Testnet and prints every tx hash. See [`docs/full-cycle-demo.md`](./docs/full-cycle-demo.md) for the latest captured run.
+
+### Full Autonomous Cycle — 7-Step Proof (2026-05-16)
+
+Complete end-to-end agentic economy cycle executed on Arc Testnet. Every step is a real on-chain transaction:
+
+| Step | Action | Tx |
+|---|---|---|
+| 1. CAPABILITY | Agent discovery (AgentRegistry) | on-chain read |
+| 2. PAYMENT | x402 signal purchase (0.01 USDC) | [`0x6deceef7…`](https://testnet.arcscan.app/tx/0x6deceef7b512f9318a0afa272c80c593d8e089634cb7adb8dfbd2b591add3377) |
+| 3. EXECUTION | Ignia market create + trade (0.05 USDC YES) | [`0x856c8a72…`](https://testnet.arcscan.app/tx/0x856c8a72019dc354e9391d7a0948574bd510b0f57642bf520cd098284d2a9f68) / [`0xdba3ba9d…`](https://testnet.arcscan.app/tx/0xdba3ba9dd8f77122af0976a06087ea625a1f377452591a6b434b5f99254ec58d) |
+| 4. VERIFICATION | Market resolved → YES | [`0x0f3d36bc…`](https://testnet.arcscan.app/tx/0x0f3d36bcdaefc2c33a49e8d504587b5d641220bd9b7e1fa4bd5f61fdd149da1b) |
+| 5. SETTLEMENT | Winnings claimed | [`0x13448145…`](https://testnet.arcscan.app/tx/0x134481457fb6c5506274c58828902ad5455f075c63ff2432531d04a3303ff69f) |
+| 6. PROOF | Receipt anchored (EIP-712 signed) | [`0x358a869a…`](https://testnet.arcscan.app/tx/0x358a869a14053bd17af94289facb91181940787fc31af8c0df180a1cefb1a29c) |
+| 7. REPUTATION | Outcomes recorded on-chain | [`0xfeeea6a0…`](https://testnet.arcscan.app/tx/0xfeeea6a05e3d3534d3b7881b5151cecc678c53c8a093ae0d1955dfc47dfacc10) / [`0x07fc8aa9…`](https://testnet.arcscan.app/tx/0x07fc8aa9a3472a2122db574d9c241a5fe88657245d3683a4e70a0f45770d2bb0) / [`0xeeee3009…`](https://testnet.arcscan.app/tx/0xeeee3009565df67ed5229af096d52692eed7948f7ce406bd6f5fcbd7bfb868d6) |
+
+Final reputation: Pythia 27 · Hermes 20.
+
+### Earlier A2A proof set
 
 | Proof | Tx |
 |---|---|

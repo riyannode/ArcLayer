@@ -10,6 +10,7 @@
     "dev:hermes": "tsx watch hermes/agent.ts",
     "resolver": "tsx resolver/daemon.ts",
     "scanner": "tsx scanner/market-scanner.ts",
+    "demo": "tsx scripts/demo-full-cycle.ts",
     "dev:resolver": "tsx watch resolver/daemon.ts",
     "dev:scanner": "tsx watch scanner/market-scanner.ts"
   },
