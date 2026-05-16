@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'viem';
+import { DevDetails } from '@/components/DevDetails';
 import { shortenAddress } from '@/lib/contracts';
 
 const ARC_CHAIN_ID = 5042002;
@@ -262,7 +263,7 @@ export default function X402DemoPage() {
       <div className="mx-auto max-w-4xl">
         <div className="mb-8">
           <h1 className="mb-2 font-mono text-[11px] tracking-[0.2em] text-[#C5A67C]">x402 DUAL-MODE PROTECTED RESOURCE DEMO</h1>
-          <p className="max-w-2xl font-mono text-[13px] leading-relaxed text-white/60">Full Arc Testnet flow with two production-live payment modes: <span className="text-[#C5A67C]">Arc Native Payment</span> (self-hosted EIP-3009 relayer, settles on-chain) and <span className="text-[#7CB5C5]">Circle Gateway Payment</span> (BatchFacilitatorClient, settles through Circle Gateway).</p>
+          <p className="max-w-2xl font-mono text-[13px] leading-relaxed text-white/60">Full Arc Testnet flow with two payment modes: <span className="text-[#C5A67C]">Arc Native Payment</span> (verified and settled on-chain) and <span className="text-[#7CB5C5]">Circle Gateway Payment</span> (Live verification; final settlement requires buyer GatewayWallet deposit.).</p>
         </div>
 
         {/* MODE SELECTOR */}
@@ -271,13 +272,13 @@ export default function X402DemoPage() {
             onClick={() => setMode('arc-native')}
             className={`flex-1 border py-3 font-mono text-[11px] tracking-[0.16em] transition-all ${mode === 'arc-native' ? 'border-[#C5A67C]/60 bg-[#C5A67C]/10 text-[#C5A67C]' : 'border-white/10 text-white/40 hover:border-white/20'}`}
           >
-            ARC NATIVE (EIP-3009)
+            ARC NATIVE PAYMENT
           </button>
           <button
             onClick={() => setMode('circle-gateway')}
             className={`flex-1 border py-3 font-mono text-[11px] tracking-[0.16em] transition-all ${mode === 'circle-gateway' ? 'border-[#7CB5C5]/60 bg-[#7CB5C5]/10 text-[#7CB5C5]' : 'border-white/10 text-white/40 hover:border-white/20'}`}
           >
-            CIRCLE GATEWAY (BATCHED)
+            CIRCLE GATEWAY PAYMENT
           </button>
         </div>
 
@@ -304,10 +305,21 @@ export default function X402DemoPage() {
         <div className="mb-6 border border-white/10 bg-white/[0.02] p-4 font-mono text-[11px]">
           <div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">ACTIVE MODE</div>
           {mode === 'arc-native' ? (
-            <div><span className="text-[#C5A67C]">Arc Native</span> · {NETWORK} · EIP-3009 · Self-hosted relayer settlement · Header: X-PAYMENT · payTo {shortenAddress(payTo)}</div>
+            <div><span className="text-[#C5A67C]">Arc Native Payment</span> · Payment verified · Payment completed · payTo {shortenAddress(payTo)}</div>
           ) : (
-            <div><span className="text-[#7CB5C5]">Circle Gateway</span> · eip155:5042002 · BatchFacilitatorClient · verifies live · settlement pending until buyer GatewayWallet deposit · Header: PAYMENT-SIGNATURE · payTo {shortenAddress(payTo)}</div>
+            <div><span className="text-[#7CB5C5]">Circle Gateway Payment</span> · Live verification; final settlement requires buyer GatewayWallet deposit. · payTo {shortenAddress(payTo)}</div>
           )}
+          <DevDetails>
+            {mode === 'arc-native' ? (
+              <div>
+                Technical path: x402 exact · EIP-3009 transferWithAuthorization · network {NETWORK} · header X-PAYMENT · self-hosted relayer · replay protection via on-chain nonce consumption.
+              </div>
+            ) : (
+              <div>
+                Technical path: x402 exact · extra.name GatewayWalletBatched · header PAYMENT-SIGNATURE · isBatchPayment routing · BatchFacilitatorClient verify/settle · local paymentId replay ledger.
+              </div>
+            )}
+          </DevDetails>
         </div>
 
         {/* ACTION BUTTONS */}
@@ -331,7 +343,7 @@ export default function X402DemoPage() {
           <div className="border border-white/10 bg-black/30 p-4 font-mono text-[11px] leading-relaxed">
             <div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">RESULT</div>
             <div>Unlocked: <span className={unlocked ? 'text-green-400/80' : 'text-white/40'}>{unlocked ? 'YES' : 'NO'}</span></div>
-            <div>Mode: <span className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{mode === 'arc-native' ? 'Arc Native' : 'Circle Gateway'}</span></div>
+            <div>Mode: <span className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{mode === 'arc-native' ? 'Arc Native Payment' : 'Circle Gateway Payment'}</span></div>
             <div>Replay: <span className={replayResult.startsWith('Rejected') ? 'text-green-400/80' : 'text-white/40'}>{replayResult}</span></div>
             {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="mt-2 block break-all text-[#C5A67C] underline underline-offset-2">{txHash}</a>}
           </div>
@@ -340,8 +352,8 @@ export default function X402DemoPage() {
             <div className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{step.toUpperCase()}</div>
             <div className="mt-2 text-white/40">
               {mode === 'arc-native'
-                ? 'Header: X-PAYMENT = base64(JSON PaymentPayload). Legacy alias PAYMENT-SIGNATURE accepted.'
-                : 'Header: PAYMENT-SIGNATURE = base64(JSON PaymentPayload). Routed to BatchFacilitatorClient.'}
+                ? 'Payment completed with an on-chain USDC receipt.'
+                : 'Payment verified live. Final settlement requires buyer GatewayWallet deposit.'}
             </div>
           </div>
         </div>
@@ -361,11 +373,12 @@ export default function X402DemoPage() {
             <div>
               <div className="mb-1 text-[#7CB5C5]">Circle Gateway Payment</div>
               <div className="text-white/60">✅ Verify: pass</div>
-              <div className="text-white/60">✅ Settle: Circle Gateway pass</div>
+              <div className="text-white/60">✅ Live verification: pass</div>
               <div className="text-white/60">✅ Unlock: pass</div>
               <div className="text-white/60">✅ Receipt already used protection (local paymentId ledger)</div>
               <div className="text-white/60">✅ Settlement ID: <span className="font-mono text-[#7CB5C5]">0e366c3d-…1913fd</span></div>
               <div className="text-white/60">✅ Payment receipt: <span className="font-mono text-[#7CB5C5]">fa643dfc…dddf01</span></div>
+              <div className="text-white/45">Final settlement requires buyer GatewayWallet deposit.</div>
             </div>
           </div>
         </div>

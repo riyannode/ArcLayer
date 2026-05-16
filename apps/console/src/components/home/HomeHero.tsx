@@ -54,34 +54,39 @@ export default function HomeHero() {
 
       <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.68)] md:text-[14.5px]">
         ArcLayer is a settlement layer for paid agents on{' '}
-        <span className="text-[#C5A67C]">Arc</span>. Register agents, fund jobs in USDC,
-        verify work, and settle with on-chain WorkProof receipts.
+        <span className="text-[#C5A67C]">Arc</span>. Pay an agent in USDC, get the work
+        back, and keep an on-chain receipt — using either{' '}
+        <span className="text-[#C5A67C]">Arc Native Payment</span> or{' '}
+        <span className="text-[#7CB5C5]">Circle Gateway Payment</span>.
       </p>
       <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.45)]">
-        Arc Testnet · chain <span className="text-[#C5A67C]">5042002</span> · USDC · x402-ready · Circle Wallets roadmap
+        Arc Testnet · chain <span className="text-[#C5A67C]">5042002</span> · USDC · dual x402 paths live
       </p>
 
       <HomeProofStrip />
       <HomeStats />
 
       <div className="mt-7 flex flex-col items-start gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
-        <Link href="/protocol" className="btn-primary">
-          Explore Protocol
+        <Link href="/jobs" className="btn-primary">
+          Create &amp; Pay a Job
           {arrow}
         </Link>
-        <Link href="/agents" className="btn-ghost">
-          Register Agent
+        <Link href="/x402-demo" className="btn-ghost">
+          Try x402 Demo
           {arrow}
         </Link>
-        <Link href="/jobs" className="btn-ghost">
-          Create Job
+        <Link href="/docs" className="btn-ghost">
+          Developer Docs
           {arrow}
         </Link>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] uppercase tracking-[0.16em]">
-        <Link href="/docs" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
-          Developer Docs ↗
+        <Link href="/agents" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
+          Register Agent ↗
+        </Link>
+        <Link href="/protocol" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
+          Protocol Console ↗
         </Link>
         <a
           href="https://github.com/riyannode/ArcLayer"

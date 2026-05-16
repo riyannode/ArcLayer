@@ -4,7 +4,8 @@ import { ARC_EXPLORER } from '@/lib/contracts';
 
 /**
  * Proof strip — 4 real deployed contracts on Arc Testnet (chain 5042002)
- * with explorer links. Proves the protocol is real, not marketing copy.
+ * with explorer links + live x402 settlement evidence row.
+ * Proves the protocol is real, not marketing copy.
  */
 const contracts = [
   { label: 'SETTLEMENT VAULT', addr: '0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225' },
@@ -12,6 +13,8 @@ const contracts = [
   { label: 'PROOF OF WORK', addr: '0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5' },
   { label: 'MILESTONE', addr: '0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2' },
 ];
+
+const ARC_NATIVE_TX = '0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264';
 
 export default function HomeProofStrip() {
   return (
@@ -53,6 +56,26 @@ export default function HomeProofStrip() {
             </span>
           </a>
         ))}
+      </div>
+
+      {/* Live x402 evidence row */}
+      <div className="mt-3 flex flex-col gap-2 border-t border-white/5 pt-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-0.5">
+          <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-white/40">
+            x402 PAYMENT — VERIFIED ON-CHAIN
+          </span>
+          <span className="font-mono text-[10.5px] text-[rgba(234,228,216,0.65)]">
+            Arc Native Payment settled · USDC released · proof minted
+          </span>
+        </div>
+        <a
+          href={`${ARC_EXPLORER}/tx/${ARC_NATIVE_TX}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-[10.5px] text-[#C5A67C] underline underline-offset-2 transition hover:text-[#EAE4D8]"
+        >
+          view receipt ↗
+        </a>
       </div>
     </div>
   );

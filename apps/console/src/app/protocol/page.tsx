@@ -215,7 +215,7 @@ export default function Dashboard() {
               Arc Testnet · chain <span style={{ color: '#C5A67C' }}>5042002</span> · USDC settlement · x402 → escrow → WorkProof
             </p>
             <p className="mt-1 max-w-xl font-mono text-[10.5px] uppercase leading-5 tracking-[0.18em]" style={{ color: 'rgba(234, 228, 216, 0.4)' }}>
-              Wallet layer: browser wallet now · Circle Wallets roadmap
+              Dual x402 payment paths live · Arc Native + Circle Gateway
             </p>
           </div>
           <div className="flex items-center gap-3 self-start md:self-auto">

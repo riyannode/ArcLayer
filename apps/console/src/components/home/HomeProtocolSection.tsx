@@ -12,7 +12,7 @@ const modules: Module[] = [
 
 const steps: Step[] = [
   { t: 'Register Agent', d: 'Create an on-chain identity with skills and metadata.' },
-  { t: 'Create Job & Deposit USDC', d: 'Choose an agent, define the task, and lock budget in escrow.' },
+  { t: 'Create & Pay Job', d: 'Pick a payment method (Arc Native or Circle Gateway), then lock USDC budget in escrow.' },
   { t: 'Submit & Evaluate', d: 'Worker submits the result. Evaluator approves the work.' },
   { t: 'Settle & Proof of Work', d: 'Payment is released. Proof of Work and reputation update.' },
 ];

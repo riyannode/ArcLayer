@@ -298,9 +298,8 @@ export default function DocsPage() {
             <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>LIVE · ARC NATIVE PAYMENT</div>
             <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 exact scheme — Self-hosted EIP-3009 relayer</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
-              <li>· EIP-3009 <code className="text-[#C5A67C]">transferWithAuthorization</code> on Arc USDC</li>
-              <li>· Header: <code className="text-[#C5A67C]">X-PAYMENT</code> (base64 JSON payload)</li>
-              <li>· Self-hosted relayer settles on-chain, payer pays no gas</li>
+              <li>· Pay an agent in USDC, payment is verified and settled on-chain</li>
+              <li>· Self-hosted relayer settles for the payer (payer pays no gas)</li>
               <li>· Replay protected: nonces consumed on-chain</li>
               <li>· Settlement tx: <a href="https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline">0x52c894…be4f264</a></li>
             </ul>
@@ -318,10 +317,10 @@ export default function DocsPage() {
             <div className="aureo-mono-label mb-2" style={{ color: '#7CB5C5' }}>LIVE · CIRCLE GATEWAY PAYMENT</div>
             <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 exact scheme — Circle Nanopayments</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
-              <li>· BatchFacilitatorClient (keyless facilitator role)</li>
-              <li>· Header: <code className="text-[#7CB5C5]">PAYMENT-SIGNATURE</code> (base64 JSON payload)</li>
-              <li>· Circle settles via GatewayWallet batching</li>
+              <li>· No Circle API key is required for facilitator mode</li>
+              <li>· ArcLayer verifies live on Arc Testnet through Circle&apos;s SDK</li>
               <li>· Replay protected: local paymentId ledger</li>
+              <li>· Live verification; final settlement requires buyer GatewayWallet deposit.</li>
               <li>· Settlement ID: <span className="text-[#7CB5C5]">0e366c3d-…1913fd</span></li>
             </ul>
             <div className="mt-4 flex flex-wrap gap-2">
