@@ -18,16 +18,6 @@ type Job = {
   status: number;
 };
 
-type Agent = {
-  agentId: string;
-  controller: string;
-  metadataURI: string;
-  registeredAt: string;
-  score: string;
-  jobs: string[];
-  proofTokenIds: string[];
-};
-
 type Proof = {
   tokenId: string;
   jobId: string;
@@ -49,35 +39,57 @@ type Overview = {
     fundedJobs: number;
   };
   jobs: Job[];
-  agents: Agent[];
   proofs: Proof[];
+};
+
+type FeedItem = {
+  id: string;
+  ts: string;
+  agent: 'Pythia' | 'Hermes';
+  type: 'signal' | 'payment' | 'decision' | 'trade' | 'balance' | 'error';
+  label: string;
+  detail: string;
+  tx?: string;
+};
+
+type AutonomousFeed = {
+  items: FeedItem[];
+  latest: string | null;
+};
+
+type AgentStats = {
+  callsServed: number;
+  callsFailed: number;
+  signalsCorrect: number;
+  signalsWrong: number;
+  cumulativePnlBps: number;
+  calibrationScore: number;
+  totalRevenue: string;
+  reputationScore: number;
 };
 
 type A2AOnChain = {
   chainId: number;
-  agents: Record<string, { agentId: string; role: string; stats: any }>;
+  contracts: Record<string, string>;
+  agents: Record<string, { agentId: string; role: string; stats: AgentStats | null }>;
   markets: { totalIgnia: number | null; totalMirrors: number | null };
   timestamp: string;
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const STATUS_LABELS: Record<number, string> = {
-  0: 'Created',
-  1: 'Funded',
-  2: 'Assigned',
-  3: 'Delivered',
-  4: 'Evaluated',
-  5: 'Settled',
+const TYPE_COLORS: Record<FeedItem['type'], string> = {
+  signal: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
+  payment: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  decision: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+  trade: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  balance: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
+  error: 'bg-red-500/15 text-red-300 border-red-500/30',
 };
 
-const STATUS_COLORS: Record<number, string> = {
-  0: 'bg-zinc-700',
-  1: 'bg-amber-600',
-  2: 'bg-blue-600',
-  3: 'bg-purple-600',
-  4: 'bg-cyan-600',
-  5: 'bg-emerald-600',
+const AGENT_COLORS: Record<'Pythia' | 'Hermes', string> = {
+  Pythia: 'text-cyan-300',
+  Hermes: 'text-amber-300',
 };
 
 function short(addr: string) {
@@ -90,26 +102,27 @@ function formatUSDC(raw: string) {
   return n < 0.01 && n > 0 ? '<0.01' : n.toFixed(2);
 }
 
-function timeAgo(unix: string) {
-  const diff = Math.floor(Date.now() / 1000) - Number(unix);
+function timeAgoFromMs(ms: number) {
+  const diff = Math.floor((Date.now() - ms) / 1000);
+  if (diff < 0) return 'now';
   if (diff < 60) return `${diff}s ago`;
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-function loopStage(job: Job): string {
-  if (job.status === 5) return 'SETTLED';
-  if (job.status === 4) return 'EVALUATED';
-  if (job.status === 3) return 'DELIVERED';
-  if (Number(job.fundedAmount) > 0 && job.status >= 1) return 'FUNDED';
-  return 'CREATED';
+function timeAgo(unix: string) {
+  return timeAgoFromMs(Number(unix) * 1000);
 }
 
-// ─── Sparkline Component ─────────────────────────────────────────────────────
+function timeAgoIso(iso: string) {
+  return timeAgoFromMs(Date.parse(iso));
+}
 
-function Sparkline({ data, color = '#C5A67C' }: { data: number[]; color?: string }) {
-  if (data.length < 2) return null;
+// ─── Sparkline ──────────────────────────────────────────────────────────────
+
+function Sparkline({ data, color }: { data: number[]; color: string }) {
+  if (data.length < 2) return <div className="h-10" />;
   const max = Math.max(...data);
   const min = Math.min(...data);
   const range = max - min || 1;
@@ -120,22 +133,12 @@ function Sparkline({ data, color = '#C5A67C' }: { data: number[]; color?: string
     const y = h - ((v - min) / range) * (h - 4) - 2;
     return `${x},${y}`;
   }).join(' ');
-
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-10" preserveAspectRatio="none">
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
+      <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
-
-// ─── Pulse Dot ───────────────────────────────────────────────────────────────
 
 function PulseDot({ active }: { active: boolean }) {
   return (
@@ -148,99 +151,122 @@ function PulseDot({ active }: { active: boolean }) {
   );
 }
 
-// ─── Activity Feed Item ──────────────────────────────────────────────────────
+// ─── Feed Item ──────────────────────────────────────────────────────────────
 
-function ActivityItem({ job, isNew }: { job: Job; isNew: boolean }) {
-  const stage = loopStage(job);
+function FeedRow({ item, isNew }: { item: FeedItem; isNew: boolean }) {
   return (
-    <div className={`flex items-center gap-3 border-b border-white/5 py-3 px-1 transition-colors duration-700 ${isNew ? 'bg-emerald-950/20' : ''}`}>
-      <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-white ${STATUS_COLORS[job.status] || 'bg-zinc-700'}`}>
-        {stage}
+    <div className={`flex items-start gap-3 border-b border-white/5 px-1 py-2.5 transition-colors duration-700 ${isNew ? 'bg-emerald-950/20' : ''}`}>
+      <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${TYPE_COLORS[item.type]}`}>
+        {item.type}
       </span>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-mono text-xs text-[#EAE4D8]">
-          Job #{job.id} · <span className="text-[#7A7A7A]">{short(job.worker)}</span>
+        <p className="font-mono text-xs text-[#EAE4D8]">
+          <span className={`font-semibold ${AGENT_COLORS[item.agent]}`}>{item.agent}</span>{' '}
+          <span className="text-[#9A9A9A]">{item.label}</span>
         </p>
-        <p className="font-mono text-[10px] text-[#555]">
-          {Number(job.fundedAmount) > 0 ? `${formatUSDC(job.fundedAmount)} USDC` : 'unfunded'} · {timeAgo(job.createdAt)}
-        </p>
+        <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-[#555]">
+          <span>{timeAgoIso(item.ts)}</span>
+          {item.tx && (
+            <a
+              href={`https://explorer.testnet.arc.network/tx/${item.tx}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="truncate text-[#7A7A7A] hover:text-[#C5A67C]"
+            >
+              {item.tx.slice(0, 10)}…
+            </a>
+          )}
+        </div>
       </div>
-      {job.status === 5 && (
-        <span className="text-emerald-400 text-xs">✓</span>
-      )}
     </div>
   );
 }
 
-// ─── Main Dashboard ──────────────────────────────────────────────────────────
+// ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function A2ADashboardPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [onchain, setOnchain] = useState<A2AOnChain | null>(null);
+  const [feed, setFeed] = useState<AutonomousFeed | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [prevJobIds, setPrevJobIds] = useState<Set<string>>(new Set());
-  const [newJobIds, setNewJobIds] = useState<Set<string>>(new Set());
+  const [prevFeedIds, setPrevFeedIds] = useState<Set<string>>(new Set());
+  const [newFeedIds, setNewFeedIds] = useState<Set<string>>(new Set());
   const [volumeHistory, setVolumeHistory] = useState<number[]>([]);
-  const [jobCountHistory, setJobCountHistory] = useState<number[]>([]);
-  const tickRef = useRef(0);
+  const [signalHistory, setSignalHistory] = useState<number[]>([]);
+  const [_tick, setTick] = useState(0);
 
   const fetchData = useCallback(async () => {
     try {
-      const [ovRes, ocRes] = await Promise.all([
+      const [ovRes, ocRes, fdRes] = await Promise.all([
         fetch('/api/indexer/overview', { cache: 'no-store' }),
         fetch('/api/a2a/status', { cache: 'no-store' }),
+        fetch('/api/indexer/autonomous-feed?limit=50', { cache: 'no-store' }),
       ]);
       if (!ovRes.ok) throw new Error(`indexer ${ovRes.status}`);
       const ovData: Overview = await ovRes.json();
       const ocData: A2AOnChain = ocRes.ok ? await ocRes.json() : null;
+      const fdData: AutonomousFeed = fdRes.ok ? await fdRes.json() : { items: [], latest: null };
 
-      // Detect new jobs for highlight
-      const currentIds = new Set(ovData.jobs.map(j => j.id));
-      if (prevJobIds.size > 0) {
-        const fresh = new Set(Array.from(currentIds).filter(id => !prevJobIds.has(id)));
-        setNewJobIds(fresh);
-        if (fresh.size > 0) setTimeout(() => setNewJobIds(new Set()), 3000);
+      // Detect new feed items
+      const currentIds = new Set(fdData.items.map((i) => i.id));
+      if (prevFeedIds.size > 0) {
+        const fresh = new Set(Array.from(currentIds).filter((id) => !prevFeedIds.has(id)));
+        if (fresh.size > 0) {
+          setNewFeedIds(fresh);
+          setTimeout(() => setNewFeedIds(new Set()), 4000);
+        }
       }
-      setPrevJobIds(currentIds);
+      setPrevFeedIds(currentIds);
 
-      // Accumulate history for sparklines
-      setVolumeHistory(prev => [...prev.slice(-29), Number(ovData.summary.totalFunded) / 1e6]);
-      setJobCountHistory(prev => [...prev.slice(-29), ovData.summary.jobs]);
+      setVolumeHistory((prev) => [...prev.slice(-29), Number(ovData.summary.totalFunded) / 1e6]);
+      setSignalHistory((prev) => [
+        ...prev.slice(-29),
+        ocData?.agents.pythia?.stats?.callsServed ?? prev[prev.length - 1] ?? 0,
+      ]);
 
       setOverview(ovData);
       if (ocData) setOnchain(ocData);
+      setFeed(fdData);
       setError(null);
     } catch (err: any) {
       setError(err?.message || 'fetch failed');
     }
-    tickRef.current++;
-  }, [prevJobIds]);
+  }, [prevFeedIds]);
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 10000);
+    const interval = setInterval(fetchData, 8000);
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Tick every second so timeAgo recomputes for live feel
+  useEffect(() => {
+    const t = setInterval(() => setTick((x) => x + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
   const summary = overview?.summary;
-  const recentJobs = overview?.jobs?.slice(0, 12) || [];
-  const activeAgents = overview?.agents?.filter(a => a.jobs.length > 0) || [];
+  const pythia = onchain?.agents.pythia;
+  const hermes = onchain?.agents.hermes;
+  const latestFeedMs = feed?.latest ? Date.parse(feed.latest) : 0;
+  const isLive = latestFeedMs > 0 && Date.now() - latestFeedMs < 120_000;
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-[#EAE4D8] selection:bg-[#C5A67C]/20">
-      {/* Header */}
-      <header className="border-b border-white/5 px-6 py-5">
+      {/* ─── Header ───────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-10 border-b border-white/5 bg-[#0A0A0A]/95 px-6 py-4 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-3">
-            <PulseDot active={!error} />
+            <PulseDot active={isLive} />
             <h1 className="font-mono text-sm font-medium tracking-tight">
               ArcLayer <span className="text-[#C5A67C]">A2A Economy</span>
             </h1>
           </div>
           <div className="flex items-center gap-4 font-mono text-[10px] text-[#555]">
             <span>Arc Testnet · 5042002</span>
-            <span>Refresh 10s</span>
-            {onchain?.timestamp && <span>{new Date(onchain.timestamp).toLocaleTimeString()}</span>}
+            <span className={isLive ? 'text-emerald-400' : 'text-amber-400'}>
+              {isLive ? 'Autonomous · LIVE' : 'Autonomous · idle'}
+            </span>
           </div>
         </div>
       </header>
@@ -252,87 +278,87 @@ export default function A2ADashboardPage() {
           </div>
         )}
 
-        {/* ─── KPI Strip ─────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
-          <KPICard label="Total Jobs" value={summary?.jobs ?? '—'} />
-          <KPICard label="Agents" value={summary?.agents ?? '—'} />
-          <KPICard label="Settled" value={summary?.settledJobs ?? '—'} accent />
-          <KPICard label="Proofs Minted" value={summary?.proofs ?? '—'} />
-          <KPICard label="Volume (USDC)" value={summary ? formatUSDC(summary.totalFunded) : '—'} accent />
+        {/* ─── Hero: Autonomous Agents (Pythia + Hermes) ───────────────── */}
+        <section className="grid gap-4 md:grid-cols-2">
+          <AgentHeroCard
+            name="Pythia"
+            role="Signal Oracle"
+            color="cyan"
+            stats={pythia?.stats || null}
+            agentId={pythia?.agentId}
+            description="Sells crypto signals (BTC/ETH/SOL) for 0.001 USDC via x402 EIP-3009."
+            isLive={isLive}
+          />
+          <AgentHeroCard
+            name="Hermes"
+            role="Autonomous Trader"
+            color="amber"
+            stats={hermes?.stats || null}
+            agentId={hermes?.agentId}
+            description="Buys signals from Pythia, queries Polymarket, trades Ignia prediction markets."
+            isLive={isLive}
+          />
+        </section>
+
+        {/* ─── KPI Strip ───────────────────────────────────────────────── */}
+        <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <KPICard label="Signals Served" value={pythia?.stats?.callsServed ?? '—'} accent />
+          <KPICard label="Ignia Trades" value={hermes?.stats?.callsServed ?? '—'} accent />
           <KPICard label="Ignia Markets" value={onchain?.markets.totalIgnia ?? '—'} />
-        </div>
+          <KPICard label="Mirrors" value={onchain?.markets.totalMirrors ?? '—'} />
+          <KPICard label="Marketplace Jobs" value={summary?.jobs ?? '—'} />
+          <KPICard label="Volume USDC" value={summary ? formatUSDC(summary.totalFunded) : '—'} accent />
+        </section>
 
-        {/* ─── Sparklines ────────────────────────────────────────────── */}
-        <div className="mt-6 grid gap-3 md:grid-cols-2">
-          <div className="rounded border border-white/5 bg-white/[0.02] p-4">
-            <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-[#555]">Volume (USDC) — Live</p>
-            <Sparkline data={volumeHistory.length > 1 ? volumeHistory : [0, 0]} color="#C5A67C" />
-          </div>
-          <div className="rounded border border-white/5 bg-white/[0.02] p-4">
-            <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-[#555]">Job Count — Live</p>
-            <Sparkline data={jobCountHistory.length > 1 ? jobCountHistory : [0, 0]} color="#6EE7B7" />
-          </div>
-        </div>
+        {/* ─── Sparklines ──────────────────────────────────────────────── */}
+        <section className="mt-6 grid gap-3 md:grid-cols-2">
+          <SparklineCard label="Signals Served · Live" data={signalHistory} color="#22D3EE" />
+          <SparklineCard label="Marketplace Volume USDC · Live" data={volumeHistory} color="#C5A67C" />
+        </section>
 
-        {/* ─── Main Grid: Activity Feed + Agent Cards ────────────────── */}
-        <div className="mt-6 grid gap-6 lg:grid-cols-3">
-          {/* Activity Feed */}
+        {/* ─── Main Grid: Autonomous Feed + Loop Diagram ───────────────── */}
+        <section className="mt-6 grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 rounded border border-white/5 bg-white/[0.02] p-4">
             <div className="mb-3 flex items-center justify-between">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-[#555]">Trade Cycle Feed</p>
-              <span className="font-mono text-[10px] text-[#333]">latest 12</span>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-[#555]">
+                Autonomous Activity · Pythia ↔ Hermes
+              </p>
+              <span className="font-mono text-[10px] text-[#333]">
+                {feed?.items.length ?? 0} events · last {feed?.latest ? timeAgoIso(feed.latest) : '—'}
+              </span>
             </div>
-            <div className="max-h-[480px] overflow-y-auto scrollbar-thin">
-              {recentJobs.length === 0 ? (
-                <p className="py-8 text-center font-mono text-xs text-[#333]">Waiting for data…</p>
+            <div className="max-h-[560px] overflow-y-auto pr-1">
+              {!feed || feed.items.length === 0 ? (
+                <p className="py-8 text-center font-mono text-xs text-[#333]">
+                  Waiting for autonomous loop…
+                </p>
               ) : (
-                recentJobs.map(job => (
-                  <ActivityItem key={job.id} job={job} isNew={newJobIds.has(job.id)} />
+                feed.items.map((item) => (
+                  <FeedRow key={item.id} item={item} isNew={newFeedIds.has(item.id)} />
                 ))
               )}
             </div>
           </div>
 
-          {/* Active Agents */}
-          <div className="rounded border border-white/5 bg-white/[0.02] p-4">
-            <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-[#555]">Active Agents</p>
-            <div className="space-y-3 max-h-[480px] overflow-y-auto">
-              {activeAgents.map(agent => (
-                <AgentCard key={agent.agentId} agent={agent} />
-              ))}
-              {activeAgents.length === 0 && (
-                <p className="py-8 text-center font-mono text-xs text-[#333]">No active agents</p>
-              )}
+          <div className="space-y-4">
+            <LoopCard summary={summary} pythiaServed={pythia?.stats?.callsServed} />
+            <ContractsCard contracts={onchain?.contracts} />
+          </div>
+        </section>
+
+        {/* ─── Marketplace Section (manual JobEscrow) ──────────────────── */}
+        {summary && summary.jobs > 0 && (
+          <section className="mt-6 rounded border border-white/5 bg-white/[0.02] p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-[#555]">
+                Marketplace Jobs · JobEscrow
+              </p>
+              <span className="font-mono text-[10px] text-[#333]">
+                {summary.settledJobs}/{summary.jobs} settled
+              </span>
             </div>
-          </div>
-        </div>
-
-        {/* ─── Economy Loop Diagram ──────────────────────────────────── */}
-        <div className="mt-6 rounded border border-white/5 bg-white/[0.02] p-6">
-          <p className="mb-4 font-mono text-[10px] uppercase tracking-widest text-[#555]">Autonomous Trade Cycle</p>
-          <div className="flex flex-wrap items-center justify-center gap-2 font-mono text-[11px]">
-            <LoopStep label="Signal" icon="📡" active={true} />
-            <Arrow />
-            <LoopStep label="Job Created" icon="📋" active={summary ? summary.jobs > 0 : false} />
-            <Arrow />
-            <LoopStep label="Funded" icon="💰" active={summary ? summary.fundedJobs > 0 : false} />
-            <Arrow />
-            <LoopStep label="Delivered" icon="📦" active={recentJobs.some(j => j.status >= 3)} />
-            <Arrow />
-            <LoopStep label="Settled" icon="✅" active={summary ? summary.settledJobs > 0 : false} />
-            <Arrow />
-            <LoopStep label="Proof NFT" icon="🏆" active={summary ? summary.proofs > 0 : false} />
-            <Arrow />
-            <LoopStep label="Reputation" icon="⭐" active={true} />
-          </div>
-        </div>
-
-        {/* ─── Recent Proofs ─────────────────────────────────────────── */}
-        {overview && overview.proofs.length > 0 && (
-          <div className="mt-6 rounded border border-white/5 bg-white/[0.02] p-4">
-            <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-[#555]">Recent Settlement Proofs</p>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {overview.proofs.slice(0, 6).map(proof => (
+              {overview!.proofs.slice(0, 6).map((proof) => (
                 <div key={proof.tokenId} className="rounded border border-white/5 bg-black/30 p-3">
                   <div className="flex items-center justify-between">
                     <span className="font-mono text-xs text-[#C5A67C]">Proof #{proof.tokenId}</span>
@@ -341,20 +367,17 @@ export default function A2ADashboardPage() {
                   <p className="mt-1 font-mono text-[10px] text-[#7A7A7A]">
                     Job #{proof.jobId} · {formatUSDC(proof.amountPaid)} USDC
                   </p>
-                  <p className="mt-0.5 font-mono text-[10px] text-[#444]">
-                    Payer: {short(proof.payer)}
-                  </p>
+                  <p className="mt-0.5 font-mono text-[10px] text-[#444]">payer {short(proof.payer)}</p>
                 </div>
               ))}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Footer */}
         <footer className="mt-10 border-t border-white/5 pt-4 font-mono text-[10px] text-[#333]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span>ArcLayer Protocol · Autonomous Agent Economy on Arc Network</span>
-            <span>Data: on-chain indexer · No simulated values</span>
+            <span>Source: on-chain indexer + agent telemetry · No simulated values</span>
           </div>
         </footer>
       </div>
@@ -363,6 +386,65 @@ export default function A2ADashboardPage() {
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
+
+function AgentHeroCard({
+  name,
+  role,
+  color,
+  stats,
+  agentId,
+  description,
+  isLive,
+}: {
+  name: string;
+  role: string;
+  color: 'cyan' | 'amber';
+  stats: AgentStats | null;
+  agentId?: string;
+  description: string;
+  isLive: boolean;
+}) {
+  const accentText = color === 'cyan' ? 'text-cyan-300' : 'text-amber-300';
+  const accentBorder = color === 'cyan' ? 'border-cyan-500/20' : 'border-amber-500/20';
+  return (
+    <div className={`rounded border bg-white/[0.02] p-5 ${accentBorder}`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className={`font-mono text-[10px] uppercase tracking-widest ${accentText}`}>{role}</p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight">{name}</h2>
+        </div>
+        <span
+          className={`rounded-full border px-2 py-0.5 font-mono text-[9px] ${
+            isLive ? 'border-emerald-500/30 text-emerald-300' : 'border-zinc-600/30 text-zinc-500'
+          }`}
+        >
+          {isLive ? '● running' : '○ idle'}
+        </span>
+      </div>
+      <p className="mt-2 font-mono text-[11px] leading-5 text-[#7A7A7A]">{description}</p>
+      <div className="mt-4 grid grid-cols-2 gap-2 font-mono text-xs">
+        <Stat label="Calls served" value={stats?.callsServed ?? '—'} />
+        <Stat label="Reputation" value={stats?.reputationScore ?? '—'} />
+        <Stat label="Calibration" value={stats?.calibrationScore ?? '—'} />
+        <Stat label="Revenue" value={stats ? formatUSDC(stats.totalRevenue) : '—'} />
+      </div>
+      {agentId && (
+        <p className="mt-3 truncate font-mono text-[10px] text-[#444]" title={agentId}>
+          {agentId.slice(0, 14)}…{agentId.slice(-12)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded border border-white/5 bg-black/30 px-3 py-2">
+      <p className="text-[9px] uppercase tracking-widest text-[#555]">{label}</p>
+      <p className="mt-1 text-sm text-[#EAE4D8]">{value}</p>
+    </div>
+  );
+}
 
 function KPICard({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
   return (
@@ -375,36 +457,67 @@ function KPICard({ label, value, accent }: { label: string; value: string | numb
   );
 }
 
-function AgentCard({ agent }: { agent: Agent }) {
-  const name = agent.metadataURI.includes('agent/')
-    ? agent.metadataURI.split('agent/')[1]?.split('?')[0] || short(agent.agentId)
-    : short(agent.agentId);
-
+function SparklineCard({ label, data, color }: { label: string; data: number[]; color: string }) {
   return (
-    <div className="rounded border border-white/5 bg-black/30 p-3">
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-xs text-[#EAE4D8] capitalize">{name}</span>
-        <span className="font-mono text-[10px] text-[#555]">{agent.jobs.length} jobs</span>
-      </div>
-      <div className="mt-2 flex items-center gap-3 font-mono text-[10px] text-[#7A7A7A]">
-        <span>{agent.proofTokenIds.length} proofs</span>
-        <span>·</span>
-        <span>Score: {Number(agent.score) > 0 ? formatUSDC(agent.score) : '0'}</span>
-      </div>
-      <p className="mt-1 font-mono text-[9px] text-[#333]">{short(agent.controller)}</p>
+    <div className="rounded border border-white/5 bg-white/[0.02] p-4">
+      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-[#555]">{label}</p>
+      <Sparkline data={data.length > 1 ? data : [0, 0]} color={color} />
     </div>
   );
 }
 
-function LoopStep({ label, icon, active }: { label: string; icon: string; active: boolean }) {
+function LoopCard({ summary, pythiaServed }: { summary?: Overview['summary']; pythiaServed?: number }) {
+  const steps = [
+    { label: 'Hermes wakes', icon: '⏱', active: true },
+    { label: 'Buys signal', icon: '📡', active: (pythiaServed ?? 0) > 0 },
+    { label: 'x402 settle', icon: '💰', active: (pythiaServed ?? 0) > 0 },
+    { label: 'Polymarket', icon: '🌐', active: true },
+    { label: 'Ignia trade', icon: '🎯', active: (summary?.fundedJobs ?? 0) > 0 || (pythiaServed ?? 0) > 0 },
+    { label: 'Reputation', icon: '⭐', active: true },
+  ];
   return (
-    <div className={`flex items-center gap-1.5 rounded border px-3 py-2 transition-all ${active ? 'border-[#C5A67C]/40 bg-[#C5A67C]/5 text-[#EAE4D8]' : 'border-white/5 text-[#444]'}`}>
-      <span>{icon}</span>
-      <span>{label}</span>
+    <div className="rounded border border-white/5 bg-white/[0.02] p-4">
+      <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-[#555]">Trade Cycle</p>
+      <div className="space-y-2">
+        {steps.map((s, i) => (
+          <div
+            key={s.label}
+            className={`flex items-center gap-3 rounded border px-3 py-2 font-mono text-xs transition-colors ${
+              s.active
+                ? 'border-[#C5A67C]/30 bg-[#C5A67C]/5 text-[#EAE4D8]'
+                : 'border-white/5 text-[#444]'
+            }`}
+          >
+            <span className="text-[#7A7A7A]">{String(i + 1).padStart(2, '0')}</span>
+            <span>{s.icon}</span>
+            <span>{s.label}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function Arrow() {
-  return <span className="text-[#333] text-lg">→</span>;
+function ContractsCard({ contracts }: { contracts?: Record<string, string> }) {
+  if (!contracts) return null;
+  return (
+    <div className="rounded border border-white/5 bg-white/[0.02] p-4">
+      <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-[#555]">Contracts</p>
+      <div className="space-y-1.5 font-mono text-[10px]">
+        {Object.entries(contracts).map(([k, v]) => (
+          <div key={k} className="flex items-center justify-between gap-2">
+            <span className="text-[#7A7A7A]">{k}</span>
+            <a
+              href={`https://explorer.testnet.arc.network/address/${v}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#9A9A9A] hover:text-[#C5A67C]"
+            >
+              {short(v)}
+            </a>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
