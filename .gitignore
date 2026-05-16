@@ -48,11 +48,42 @@ pnpm-debug.log*
 
 # Misc
 *.tsbuildinfo
-.vercel
 
-# Local agent/tooling files
+# Local AI / Hermes artifacts (never commit)
 .agents/
 skills-lock.json
-X402_FACILITATOR_BUILD_PLAN.*
+
+# ArcLayer temporary plans / cleanup plans
+X402_*_PLAN.*
+X402_*_CLEANUP_PLAN.*
+ARCLAYER_*_PLAN.*
+ARCLAYER_*_FINAL_PR.*
+
+# Local E2E / QA artifacts
 apps/console/scripts/arc-e2e-*.mjs
-X402_PHASE_H_CLEANUP_PLAN.txt
+apps/console/e2e-*.mjs
+qa-output/
+recordings/
+*.webm
+*.mp4
+*.png
+*.jpg
+*.jpeg
+
+# Local scratch scripts
+qa/
+qa-live-test.mjs
+agents/_*.ts
+agents/.env.bak.*
+apps/console/scripts/_*.mjs
+apps/console/scripts/pr0-*.mjs
+apps/console/scripts/*gateway*.mjs
+apps/console/scripts/*live-test*.mjs
+apps/console/scripts/derive-addresses.mjs
+apps/console/scripts/e2e-*.mjs
+.vercel
+
+# Agent dev scripts (not for commit)
+agents/data/
+agents/scripts/
+scripts/record-*.mjs
