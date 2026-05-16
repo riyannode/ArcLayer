@@ -6,6 +6,7 @@ import Providers from '@/components/Providers';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import WebGLBackground from '@/components/WebGLBackground';
+import { ProtectionNoticeProvider } from '@/components/protection';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -36,11 +37,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body suppressHydrationWarning style={{ background: '#050505', color: '#EAE4D8' }}>
         {!isLanding && <WebGLBackground />}
         <Providers>
-          <div className="relative z-10 min-h-screen flex flex-col">
-            <Navbar />
-            <main key={pathname} className="flex-1 page-transition">{children}</main>
-            {!isLanding && <Footer />}
-          </div>
+          <ProtectionNoticeProvider>
+            <div className="relative z-10 min-h-screen flex flex-col">
+              <Navbar />
+              <main key={pathname} className="flex-1 page-transition">{children}</main>
+              {!isLanding && <Footer />}
+            </div>
+          </ProtectionNoticeProvider>
         </Providers>
       </body>
     </html>

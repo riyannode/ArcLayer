@@ -12,6 +12,7 @@ import {
   buildSetBudgetConfig,
 } from '@arclayer/sdk';
 import { StatusBanner } from '@/components/StatusBanner';
+import { InlineProtectionNotice, useProtectionNotice, NOTICE_WORKER_EQUALS_CLIENT } from '@/components/protection';
 import { formatUSDC, parseUSDC, shortenAddress } from '@/lib/contracts';
 import { fetchIndexerJson, type IndexedAgent, type IndexedJob, waitForIndexer } from '@/lib/indexer';
 import { config } from '@/lib/wagmi';
@@ -37,6 +38,7 @@ function JobsPage() {
   const preselectedAgentId = searchParams.get('agentId')?.trim() ?? '';
   const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
+  const { notify } = useProtectionNotice();
   const [jobs, setJobs] = useState<IndexedJob[]>([]);
   const [agents, setAgents] = useState<IndexedAgent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -221,6 +223,7 @@ function JobsPage() {
     if (createForm.worker.toLowerCase() === createForm.evaluator.toLowerCase()) {
       setStatusTone('error');
       setTxState('Worker and client cannot be the same address. The worker receives payout — use the agent\u2019s controller or a dedicated worker wallet.');
+      notify(NOTICE_WORKER_EQUALS_CLIENT);
       return;
     }
 
@@ -677,6 +680,10 @@ function JobsPage() {
                   </div>
                 </div>
               </div>
+
+              {createForm.worker && createForm.evaluator && createForm.worker.toLowerCase() === createForm.evaluator.toLowerCase() && (
+                <InlineProtectionNotice {...NOTICE_WORKER_EQUALS_CLIENT} className="mt-4" />
+              )}
 
               <button onClick={handleCreateJob} disabled={!isConnected || isCreating || isFunding} className="btn-primary mt-5">
                 {isCreating ? 'CREATING\u2026' : 'CREATE JOB'}

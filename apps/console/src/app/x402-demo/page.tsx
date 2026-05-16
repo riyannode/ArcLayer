@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'viem';
 import { DevDetails } from '@/components/DevDetails';
+import { InlineProtectionNotice, NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_REQUIRED, NOTICE_PAYMENT_SETTLED, NOTICE_PAYMENT_VERIFIED, NOTICE_REPLAY_FAILED, NOTICE_REPLAY_REJECTED, NOTICE_RESOURCE_UNLOCKED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
 import { shortenAddress } from '@/lib/contracts';
 
 const ARC_CHAIN_ID = 5042002;
@@ -30,6 +31,7 @@ function b64(value: unknown) { return btoa(JSON.stringify(value)); }
 export default function X402DemoPage() {
   const { ready, authenticated, login } = usePrivy();
   const { wallets } = useWallets();
+  const { notify } = useProtectionNotice();
   const [mode, setMode] = useState<PaymentMode>('arc-native');
   const [step, setStep] = useState<Step>('idle');
   const [logs, setLogs] = useState<LogLine[]>([]);
@@ -75,7 +77,9 @@ export default function X402DemoPage() {
       await wallet.switchChain(ARC_CHAIN_ID);
       log(`Wallet connected on Arc: ${shortenAddress(address)}`);
     } catch (e) {
-      log(`Failed to switch to Arc Testnet: ${e instanceof Error ? e.message : String(e)}`, 'error'); setStep('error'); return;
+      log(`Failed to switch to Arc Testnet: ${e instanceof Error ? e.message : String(e)}`, 'error');
+      notify(NOTICE_WRONG_CHAIN);
+      setStep('error'); return;
     }
 
     setStep('challenge');
@@ -86,11 +90,16 @@ export default function X402DemoPage() {
     const req = challenge.paymentRequirements as Requirement;
     setRequirement(req);
     log(`2/9 Received 402 Payment Required: ${formatUnits(BigInt(req.amount), 6)} USDC`, 'success');
+    notify(NOTICE_PAYMENT_REQUIRED);
 
     const client = createPublicClient({ transport: http(ARC_RPC) });
     const balance = await client.readContract({ address: USDC, abi: BALANCE_ABI, functionName: 'balanceOf', args: [address] });
     log(`Payer USDC balance: ${formatUnits(balance, 6)} USDC`);
-    if (balance < BigInt(req.amount)) { log(`Insufficient USDC. Need ${formatUnits(BigInt(req.amount), 6)} USDC.`, 'error'); setStep('error'); return; }
+    if (balance < BigInt(req.amount)) {
+      log(`Insufficient USDC. Need ${formatUnits(BigInt(req.amount), 6)} USDC.`, 'error');
+      notify(NOTICE_INSUFFICIENT_USDC);
+      setStep('error'); return;
+    }
 
     setStep('signing');
     const validBefore = String(Math.floor(Date.now() / 1000) + 600);
@@ -131,6 +140,7 @@ export default function X402DemoPage() {
     const verifyJson = await verify.json();
     if (!verifyJson.isValid) { log(`Verify failed: ${verifyJson.invalidReason || verifyJson.error} — ${verifyJson.invalidMessage || ''}`, 'error'); setStep('error'); return; }
     log(`Verified signer: ${shortenAddress(verifyJson.payer)}`, 'success');
+    notify(NOTICE_PAYMENT_VERIFIED);
 
     setStep('settling');
     log('5/9 Settling USDC on-chain through relayer...');
@@ -139,6 +149,12 @@ export default function X402DemoPage() {
     if (!settleJson.success) { log(`Settle failed: ${settleJson.errorReason || settleJson.error} — ${settleJson.errorMessage || ''}`, 'error'); setStep('error'); return; }
     setTxHash(settleJson.transaction);
     log(`6/9 Settled on Arc: ${settleJson.transaction.slice(0, 18)}...`, 'success');
+    notify({
+      ...NOTICE_PAYMENT_SETTLED,
+      title: `−${formatUnits(BigInt(req.amount), 6)} USDC settled`,
+      message: `On-chain settlement confirmed. Your wallet was charged ${formatUnits(BigInt(req.amount), 6)} USDC via EIP-3009.`,
+      technicalDetail: `tx: ${settleJson.transaction}`,
+    });
 
     setStep('retrying');
     log('7/9 Retrying protected resource with canonical X-PAYMENT header...');
@@ -148,6 +164,7 @@ export default function X402DemoPage() {
     if (!unlockedResp.ok || !unlockedJson.unlocked) { log(`Protected retry failed: ${unlockedJson.error || unlockedResp.status}`, 'error'); setStep('error'); return; }
     setUnlocked(true);
     log('8/9 Protected resource unlocked with settlement proof.', 'success');
+    notify(NOTICE_RESOURCE_UNLOCKED);
 
     setStep('replay');
     log('9/9 Replay test: reusing the same nonce against /api/x402/verify...');
@@ -156,8 +173,13 @@ export default function X402DemoPage() {
     const rejected = replayJson.isValid === false && replayJson.invalidReason === 'nonce_used';
     setReplayResult(rejected ? 'Rejected: nonce_used' : `Unexpected: ${JSON.stringify(replayJson).slice(0, 80)}`);
     log(rejected ? 'Replay rejected: nonce_used ✓' : 'Replay test did not return expected nonce_used', rejected ? 'success' : 'error');
+    if (rejected) {
+      notify({ ...NOTICE_REPLAY_REJECTED, technicalDetail: 'Replay rejected: nonce_used', message: 'This Arc Native EIP-3009 nonce was already consumed and cannot unlock the protected resource again.' });
+    } else {
+      notify(NOTICE_REPLAY_FAILED);
+    }
     setStep(rejected ? 'done' : 'error');
-  }, [log]);
+  }, [log, notify]);
 
   /* ─── CIRCLE GATEWAY FLOW ─── */
   const runGateway = useCallback(async (wallet: { address: string; switchChain: (id: number) => Promise<void>; getEthereumProvider: () => Promise<{ request: (args: { method: string; params: unknown[] }) => Promise<unknown> }> }) => {
@@ -167,7 +189,9 @@ export default function X402DemoPage() {
       await wallet.switchChain(ARC_CHAIN_ID);
       log(`Wallet connected on Arc: ${shortenAddress(address)}`);
     } catch (e) {
-      log(`Failed to switch to Arc Testnet: ${e instanceof Error ? e.message : String(e)}`, 'error'); setStep('error'); return;
+      log(`Failed to switch to Arc Testnet: ${e instanceof Error ? e.message : String(e)}`, 'error');
+      notify(NOTICE_WRONG_CHAIN);
+      setStep('error'); return;
     }
 
     setStep('challenge');
@@ -186,7 +210,11 @@ export default function X402DemoPage() {
     const client = createPublicClient({ transport: http(ARC_RPC) });
     const balance = await client.readContract({ address: USDC, abi: BALANCE_ABI, functionName: 'balanceOf', args: [address] });
     log(`Payer USDC balance: ${formatUnits(balance, 6)} USDC`);
-    if (balance < BigInt(gwOption.amount)) { log(`Insufficient USDC. Need ${formatUnits(BigInt(gwOption.amount), 6)} USDC.`, 'error'); setStep('error'); return; }
+    if (balance < BigInt(gwOption.amount)) {
+      log(`Insufficient USDC. Need ${formatUnits(BigInt(gwOption.amount), 6)} USDC.`, 'error');
+      notify(NOTICE_INSUFFICIENT_USDC);
+      setStep('error'); return;
+    }
 
     setStep('signing');
     // Circle Gateway requires authorization validity >= 604900s (7 days + 100s buffer).
@@ -236,6 +264,7 @@ export default function X402DemoPage() {
     const verifyJson = await verify.json();
     if (!verifyJson.isValid) { log(`Gateway verify failed: ${verifyJson.invalidReason || verifyJson.error}`, 'error'); setStep('error'); return; }
     log(`[GW] Verified payer: ${shortenAddress(verifyJson.payer)}`, 'success');
+    notify(NOTICE_PAYMENT_VERIFIED);
 
     setStep('settling');
     log('[GW] 5/7 Settling via Circle Gateway (may be async/batched)...');
@@ -249,6 +278,12 @@ export default function X402DemoPage() {
       setTxHash(settleJson.transaction || '');
       log(`[GW] 6/7 Settled: ${settleJson.transaction?.slice(0, 18) || 'batched'}...`, 'success');
     }
+    notify({
+      ...NOTICE_PAYMENT_SETTLED,
+      title: `−${formatUnits(BigInt(gwOption.amount), 6)} USDC settled`,
+      message: `Circle Gateway settlement confirmed. Your wallet was charged ${formatUnits(BigInt(gwOption.amount), 6)} USDC via EIP-3009.`,
+      technicalDetail: settleJson.transaction ? `tx: ${settleJson.transaction}` : 'batched (pending finalization)',
+    });
 
     setStep('retrying');
     log('[GW] 6/7 Retrying protected resource with PAYMENT-SIGNATURE header...');
@@ -258,20 +293,43 @@ export default function X402DemoPage() {
     if (!unlockedResp.ok || !unlockedJson.unlocked) { log(`Protected retry failed: ${unlockedJson.error || unlockedResp.status}`, 'error'); setStep('error'); return; }
     setUnlocked(true);
     log('[GW] 7/7 Protected resource unlocked via Circle Gateway.', 'success');
-    setStep('done');
-  }, [log]);
+    notify(NOTICE_RESOURCE_UNLOCKED);
+
+    // Gateway replay test: reuse same PAYMENT-SIGNATURE
+    setStep('replay');
+    log('[GW] 8/8 Replay test: reusing same PAYMENT-SIGNATURE...');
+    const replayResp = await fetch('/api/x402-demo/protected', { headers: { 'PAYMENT-SIGNATURE': header, 'X-PAYMENT': header } });
+    const replayJson = await replayResp.json();
+    const replayRejected = !replayResp.ok || replayJson.error === 'gateway_payment_replayed' || replayJson.error === 'nonce_used' || replayJson.error === 'payment_already_used';
+    if (replayRejected) {
+      const reason = replayJson.error || 'gateway_payment_replayed';
+      setReplayResult(`Rejected: ${reason}`);
+      log(`[GW] Receipt already used protection verified ✓`, 'success');
+      log(`[GW] Replay rejected: ${reason} ✓`, 'success');
+      notify({ ...NOTICE_REPLAY_REJECTED, message: 'This Circle Gateway payment receipt was already consumed and cannot unlock the protected resource again.', technicalDetail: `Replay rejected: ${reason}` });
+    } else {
+      setReplayResult('Unexpected: replay unlocked resource');
+      log('[GW] Replay unexpectedly unlocked resource', 'error');
+      notify(NOTICE_REPLAY_FAILED);
+    }
+    setStep(replayRejected ? 'done' : 'error');
+  }, [log, notify]);
 
   /* ─── MAIN RUNNER ─── */
   const runDemo = useCallback(async () => {
     reset();
     const wallet = wallets[0];
-    if (!wallet) { log('No wallet connected', 'error'); setStep('error'); return; }
+    if (!wallet) {
+      log('No wallet connected', 'error');
+      notify({ ...NOTICE_WALLET_NOT_CONNECTED, surface: 'toast', autoCloseMs: 4_500 });
+      setStep('error'); return;
+    }
     if (mode === 'arc-native') {
       await runArcNative(wallet as unknown as Parameters<typeof runArcNative>[0]);
     } else {
       await runGateway(wallet as unknown as Parameters<typeof runGateway>[0]);
     }
-  }, [wallets, log, reset, mode, runArcNative, runGateway]);
+  }, [wallets, log, reset, mode, runArcNative, runGateway, notify]);
 
   const busy = !['idle', 'done', 'error'].includes(step);
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
@@ -343,7 +401,10 @@ export default function X402DemoPage() {
         {/* ACTION BUTTONS */}
         <div className="mb-6">
           {!ready ? <div className="font-mono text-[10px] text-white/30">LOADING PRIVY...</div> : !authenticated ? (
-            <button onClick={login} className="w-full border border-[#C5A67C]/40 py-3 font-mono text-[11px] tracking-[0.18em] text-[#C5A67C]">CONNECT WALLET</button>
+            <>
+              <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} className="mb-3" />
+              <button onClick={login} className="w-full border border-[#C5A67C]/40 py-3 font-mono text-[11px] tracking-[0.18em] text-[#C5A67C]">CONNECT WALLET</button>
+            </>
           ) : (
             <button
               onClick={busy ? undefined : runDemo}

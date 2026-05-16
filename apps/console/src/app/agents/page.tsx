@@ -7,6 +7,7 @@ import { useAccount, useWriteContract } from 'wagmi';
 import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
 import { fetchIndexerJson, type IndexedAgent, waitForIndexer } from '@/lib/indexer';
 import { StatusBanner } from '@/components/StatusBanner';
+import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/components/protection';
 import { shortenAddress } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
 import {
@@ -447,6 +448,10 @@ export default function AgentsPage() {
                 </div>
               )}
             </div>
+
+            {!isConnected && (
+              <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} className="mt-5" />
+            )}
 
             <button
               onClick={handleRegisterAgent}

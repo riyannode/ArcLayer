@@ -319,6 +319,51 @@ export default function A2ADashboardPage() {
           <SparklineCard label="Marketplace Volume USDC · Live" data={volumeHistory} color="#C5A67C" />
         </section>
 
+        {/* ─── x402 Charge Notice · Per-Execution Micropayment Proof ──── */}
+        <section className="mt-6 rounded border border-emerald-500/20 bg-emerald-950/[0.06] p-4">
+          <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <p className="font-mono text-[10px] uppercase tracking-widest text-emerald-300">
+                x402 · per-execution charge (live)
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 font-mono text-[11px]">
+              <div>
+                <span className="text-[#7A7A7A]">price/call</span>{' '}
+                <span className="text-[#EAE4D8]">0.001 USDC</span>
+              </div>
+              <div>
+                <span className="text-[#7A7A7A]">scheme</span>{' '}
+                <span className="text-[#EAE4D8]">EIP-3009 · exact</span>
+              </div>
+              <div>
+                <span className="text-[#7A7A7A]">calls served</span>{' '}
+                <span className="text-cyan-300">{pythia?.stats?.callsServed ?? 0}</span>
+              </div>
+              <div>
+                <span className="text-[#7A7A7A]">total deducted</span>{' '}
+                <span className="text-emerald-300">
+                  {pythia?.stats?.callsServed != null
+                    ? (Number(pythia.stats.callsServed) * 0.001).toFixed(3)
+                    : '0.000'}{' '}
+                  USDC
+                </span>
+              </div>
+              <div>
+                <span className="text-[#7A7A7A]">pythia revenue</span>{' '}
+                <span className="text-amber-300">
+                  {pythia?.stats?.totalRevenue ? formatUSDC(pythia.stats.totalRevenue) : '0.00'} USDC
+                </span>
+              </div>
+            </div>
+          </div>
+          <p className="mt-2 font-mono text-[10px] leading-[1.6] text-[#7A7A7A]">
+            Each Hermes → Pythia signal call settles 0.001 USDC on-chain via x402 EIP-3009 (no gas, no approval, single-tx).
+            Numbers above are derived from indexed on-chain events. Tx hashes below.
+          </p>
+        </section>
+
         {/* ─── Live Proof Transactions ────────────────────────────────── */}
         {proofTxs.length > 0 && (
           <section className="mt-6 rounded border border-[#C5A67C]/20 bg-[#C5A67C]/[0.03] p-4">
