@@ -193,6 +193,7 @@ export default function A2ADashboardPage() {
   const [newFeedIds, setNewFeedIds] = useState<Set<string>>(new Set());
   const [volumeHistory, setVolumeHistory] = useState<number[]>([]);
   const [signalHistory, setSignalHistory] = useState<number[]>([]);
+  const [showAllProofs, setShowAllProofs] = useState(false);
   const [_tick, setTick] = useState(0);
 
   const fetchData = useCallback(async () => {
@@ -250,6 +251,8 @@ export default function A2ADashboardPage() {
   const hermes = onchain?.agents.hermes;
   const latestFeedMs = feed?.latest ? Date.parse(feed.latest) : 0;
   const isLive = latestFeedMs > 0 && Date.now() - latestFeedMs < 120_000;
+  const proofTxs = (feed?.items ?? []).filter((item) => item.tx);
+  const visibleProofTxs = showAllProofs ? proofTxs : proofTxs.slice(0, 3);
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-[#EAE4D8] selection:bg-[#C5A67C]/20">
@@ -315,6 +318,51 @@ export default function A2ADashboardPage() {
           <SparklineCard label="Signals Served · Live" data={signalHistory} color="#22D3EE" />
           <SparklineCard label="Marketplace Volume USDC · Live" data={volumeHistory} color="#C5A67C" />
         </section>
+
+        {/* ─── Live Proof Transactions ────────────────────────────────── */}
+        {proofTxs.length > 0 && (
+          <section className="mt-6 rounded border border-[#C5A67C]/20 bg-[#C5A67C]/[0.03] p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">
+                  Live Proof · On-Chain Transactions
+                </p>
+              </div>
+              {proofTxs.length > 3 && (
+                <button
+                  onClick={() => setShowAllProofs(!showAllProofs)}
+                  className="font-mono text-[10px] text-[#7A7A7A] hover:text-[#C5A67C] transition-colors"
+                >
+                  {showAllProofs ? 'Show Less' : `Show All (${proofTxs.length})`}
+                </button>
+              )}
+            </div>
+            <div className="space-y-2">
+              {visibleProofTxs.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 rounded border border-white/5 bg-black/30 px-3 py-2.5 font-mono text-xs"
+                >
+                  <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${TYPE_COLORS[item.type]}`}>
+                    {item.type}
+                  </span>
+                  <span className={`shrink-0 font-semibold ${AGENT_COLORS[item.agent]}`}>{item.agent}</span>
+                  <span className="min-w-0 flex-1 truncate text-[#9A9A9A]">{item.label}</span>
+                  <a
+                    href={`https://explorer.testnet.arc.network/tx/${item.tx}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 text-[#C5A67C] hover:text-[#EAE4D8] transition-colors"
+                  >
+                    {item.tx!.slice(0, 10)}…{item.tx!.slice(-6)}
+                  </a>
+                  <span className="shrink-0 text-[10px] text-[#555]">{timeAgoIso(item.ts)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* ─── Main Grid: Autonomous Feed + Loop Diagram ───────────────── */}
         <section className="mt-6 grid gap-6 lg:grid-cols-3">
