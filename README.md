@@ -570,9 +570,9 @@ ArcLayer is production-verified on Arc Testnet, but these features are intention
 - ❌ Subscription billing
 - ❌ Dynamic pricing engine
 - ❌ Dispute resolution / arbitration layer
-- ❌ Auto refund on agent execution failure
+- ❌ Automatic refunds for failed or timed-out agent execution
 - ❌ Browser push notifications or Telegram bot alerts
-- ❌ Standalone facilitator SDK outside this monorepo
+- ❌ Standalone x402 facilitator SDK/package outside this monorepo
 - ❌ Custom batching engine beyond Circle Gateway settlement
 
 ---
