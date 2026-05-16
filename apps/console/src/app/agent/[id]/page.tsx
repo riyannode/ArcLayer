@@ -9,6 +9,7 @@ import { CONTRACTS, JOB_ESCROW_ABI, buildApproveUsdcConfig, buildCreateJobConfig
 import { formatUSDC, shortenAddress } from '@/lib/contracts';
 import { parseUSDC } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
+import { CopyButton } from '@/components/CopyButton';
 
 const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || '/api/indexer';
 
@@ -246,19 +247,29 @@ export default function AgentProfilePage() {
         )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="aureo-panel p-4 md:p-6">
+          <section className="aureo-panel p-4 md:p-6 min-w-0">
             <div className="aureo-mono-label mb-2">REGISTRY</div>
             <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Record</h2>
             <div className="mt-5 space-y-2.5">
-              {[
-                ['controller', agent ? shortenAddress(agent.controller) : isLoading ? '…' : '—'],
-                ['skill hash', agent ? `${agent.skillHash.slice(0, 10)}…${agent.skillHash.slice(-8)}` : isLoading ? '…' : '—'],
-                ['metadata', agent?.metadataURI || (isLoading ? '…' : '—')],
-                ['registered', agent ? new Date(Number(agent.registeredAt) * 1000).toLocaleString() : isLoading ? '…' : '—'],
-              ].map(([label, value]) => (
-                <div key={label} className="ledger-row flex items-center justify-between border border-white/10 bg-black/20 px-4 py-2.5">
-                  <span className="font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">{label}</span>
-                  <span className="max-w-[60%] truncate text-right font-mono text-[11.5px] text-[#EAE4D8]">{value}</span>
+              {([
+                { label: 'controller', value: agent?.controller, display: agent ? shortenAddress(agent.controller) : isLoading ? '…' : '—', copyable: !!agent?.controller },
+                { label: 'skill hash', value: agent?.skillHash, display: agent ? `${agent.skillHash.slice(0, 10)}…${agent.skillHash.slice(-8)}` : isLoading ? '…' : '—', copyable: !!agent?.skillHash },
+                { label: 'metadata', value: agent?.metadataURI, display: agent?.metadataURI || (isLoading ? '…' : '—'), copyable: !!agent?.metadataURI },
+                { label: 'registered', value: undefined, display: agent ? new Date(Number(agent.registeredAt) * 1000).toLocaleString() : isLoading ? '…' : '—', copyable: false },
+              ] as const).map((row) => (
+                <div key={row.label} className="ledger-row flex flex-col gap-2 border border-white/10 bg-black/20 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                  <span className="font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A] sm:shrink-0">{row.label}</span>
+                  <div className="flex min-w-0 flex-1 items-center gap-2 sm:justify-end">
+                    <span
+                      className="block min-w-0 flex-1 truncate font-mono text-[11.5px] text-[#EAE4D8] sm:flex-none sm:max-w-[60%]"
+                      title={typeof row.value === 'string' ? row.value : undefined}
+                    >
+                      {row.display}
+                    </span>
+                    {row.copyable && row.value ? (
+                      <CopyButton text={row.value} label="COPY" className="shrink-0 px-2 py-1 text-[9px]" />
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>
