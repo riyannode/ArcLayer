@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import HomeProofStrip from './HomeProofStrip';
 import HomeStats from './HomeStats';
+import LiveLogStream from './LiveLogStream';
 
 const arrow = (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
@@ -63,7 +63,9 @@ export default function HomeHero() {
         Arc Testnet · chain <span className="text-[#C5A67C]">5042002</span> · USDC · dual x402 paths live
       </p>
 
-      <HomeProofStrip />
+      <div className="mt-6 section-reveal" style={{ animationDelay: '0.4s' }}>
+        <LiveLogStream />
+      </div>
       <HomeStats />
 
       <div className="mt-7 flex flex-col items-start gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
