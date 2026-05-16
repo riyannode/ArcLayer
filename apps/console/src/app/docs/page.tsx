@@ -289,19 +289,20 @@ export default function DocsPage() {
         <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
           Use ArcLayer x402 endpoints to require USDC settlement on Arc before any API or agent
           run. The flow is HTTP-native: server returns <code className="text-[#C5A67C]">402 Payment Required</code>,
-          client signs an EIP-3009 authorization, the relayer settles on-chain, and the resource
-          unlocks.
+          client signs a payment authorization, ArcLayer verifies/settles through Arc Native Payment
+          or Circle Gateway Payment, and the resource unlocks.
         </p>
 
         <div className="grid gap-4 md:grid-cols-2 mb-4">
           <div className="border border-[#C5A67C]/30 bg-[rgba(197,166,124,0.04)] p-5">
-            <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>LIVE · CANONICAL V2</div>
-            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 exact scheme on Arc Testnet</div>
+            <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>LIVE · ARC NATIVE PAYMENT</div>
+            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 exact scheme — Self-hosted EIP-3009 relayer</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
               <li>· EIP-3009 <code className="text-[#C5A67C]">transferWithAuthorization</code> on Arc USDC</li>
-              <li>· Canonical <code className="text-[#C5A67C]">X-PAYMENT</code> base64 header (legacy <code className="text-[#C5A67C]">PAYMENT-SIGNATURE</code> aliased)</li>
-              <li>· Self-hosted relayer settles, payer pays no gas</li>
+              <li>· Header: <code className="text-[#C5A67C]">X-PAYMENT</code> (base64 JSON payload)</li>
+              <li>· Self-hosted relayer settles on-chain, payer pays no gas</li>
               <li>· Replay protected: nonces consumed on-chain</li>
+              <li>· Settlement tx: <a href="https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline">0x52c894…be4f264</a></li>
             </ul>
             <div className="mt-4 flex flex-wrap gap-2">
               <Link href="/x402-demo" className="border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">
@@ -313,6 +314,25 @@ export default function DocsPage() {
             </div>
           </div>
 
+          <div className="border border-[#7CB5C5]/30 bg-[rgba(124,181,197,0.04)] p-5">
+            <div className="aureo-mono-label mb-2" style={{ color: '#7CB5C5' }}>LIVE · CIRCLE GATEWAY PAYMENT</div>
+            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 exact scheme — Circle Nanopayments</div>
+            <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
+              <li>· BatchFacilitatorClient (keyless facilitator role)</li>
+              <li>· Header: <code className="text-[#7CB5C5]">PAYMENT-SIGNATURE</code> (base64 JSON payload)</li>
+              <li>· Circle settles via GatewayWallet batching</li>
+              <li>· Replay protected: local paymentId ledger</li>
+              <li>· Settlement ID: <span className="text-[#7CB5C5]">0e366c3d-…1913fd</span></li>
+            </ul>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link href="/x402-demo" className="border border-[#7CB5C5]/40 bg-[#7CB5C5]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#7CB5C5] transition hover:bg-[#7CB5C5]/20">
+                Try Gateway demo ↗
+              </Link>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 mb-4">
           <div className="border border-white/10 bg-black/30 p-5">
             <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>ALSO SUPPORTED</div>
             <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>arc-escrow scheme</div>
@@ -328,21 +348,49 @@ export default function DocsPage() {
         <div className="border border-white/10 bg-black/30 p-5 mb-4">
           <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>FACILITATOR ENDPOINTS</div>
           <div className="grid gap-2 text-xs font-mono" style={{ color: 'rgba(234, 228, 216, 0.75)' }}>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/supported</span><span className="hidden md:inline opacity-60">— list schemes (exact + arc-escrow)</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">POST</span><span className="text-[#EAE4D8]">/api/x402/verify</span><span className="hidden md:inline opacity-60">— verify EIP-3009 signature offline</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">POST</span><span className="text-[#EAE4D8]">/api/x402/settle</span><span className="hidden md:inline opacity-60">— relayer submits on-chain</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/relayer-status</span><span className="hidden md:inline opacity-60">— relayer address + USDC balance</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402-demo/protected</span><span className="hidden md:inline opacity-60">— sample protected resource</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/supported</span><span className="hidden md:inline opacity-60">— list schemes (exact Arc Native + Circle Gateway + arc-escrow)</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">POST</span><span className="text-[#EAE4D8]">/api/x402/verify</span><span className="hidden md:inline opacity-60">— verifies Arc Native (EIP-3009) and Circle Gateway via isBatchPayment routing</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">POST</span><span className="text-[#EAE4D8]">/api/x402/settle</span><span className="hidden md:inline opacity-60">— Arc Native settles on-chain; Circle Gateway settles via BatchFacilitatorClient</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/relayer-status</span><span className="hidden md:inline opacity-60">— relayer address + USDC balance (Arc Native)</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402-demo/protected</span><span className="hidden md:inline opacity-60">— sample protected resource (dual-mode)</span></div>
+          </div>
+        </div>
+
+        <div className="border border-white/10 bg-black/30 p-5 mb-4">
+          <div className="aureo-mono-label mb-3" style={{ color: '#7CB5C5' }}>PRODUCTION VERIFICATION</div>
+          <p className="text-sm mb-3" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.55 }}>
+            Both x402 payment paths have completed end-to-end on Arc Testnet (chainId 5042002, USDC <code className="text-[#C5A67C]">0x3600…0000</code>).
+          </p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="border border-[#C5A67C]/20 bg-black/30 p-4 text-xs" style={{ color: 'rgba(234, 228, 216, 0.8)', lineHeight: 1.6 }}>
+              <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>ARC NATIVE PAYMENT</div>
+              <div>· Verify: pass</div>
+              <div>· Settle: on-chain pass</div>
+              <div>· Unlock: pass</div>
+              <div>· Receipt already used protection: pass</div>
+              <div className="mt-2">Settlement tx: <a href="https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline break-all">0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264</a></div>
+              <div>Block: 42498828 · Buyer: <code className="text-[#C5A67C]">0x9fC73…8eE5</code></div>
+            </div>
+            <div className="border border-[#7CB5C5]/20 bg-black/30 p-4 text-xs" style={{ color: 'rgba(234, 228, 216, 0.8)', lineHeight: 1.6 }}>
+              <div className="aureo-mono-label mb-2" style={{ color: '#7CB5C5' }}>CIRCLE GATEWAY PAYMENT</div>
+              <div>· Verify: pass</div>
+              <div>· Settle: Circle Gateway pass</div>
+              <div>· Unlock: pass</div>
+              <div>· Receipt already used protection: pass</div>
+              <div className="mt-2">Settlement ID (Circle): <span className="text-[#7CB5C5] break-all">0e366c3d-8eb8-46cc-a07f-55350a1913fd</span></div>
+              <div>Payment receipt: <span className="text-[#7CB5C5] break-all">fa643dfcbce2b50f69207d7f6412a142d110e9cc95322695e70a228514dddf01</span></div>
+              <div>GatewayWallet: <code className="text-[#7CB5C5]">0x0077…19B9</code></div>
+            </div>
           </div>
         </div>
 
         <div className="border border-white/10 bg-black/30 p-5">
-          <div className="aureo-mono-label mb-2" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>CAVEATS</div>
+          <div className="aureo-mono-label mb-2" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>NOTES</div>
           <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.55 }}>
-            <li>· Settlement runs in self-hosted mode. Circle Gateway batching is wired in code but currently has no Arc Testnet endpoint, so we fall back to direct relayer submission.</li>
-            <li>· Operators must fund the relayer wallet with Arc USDC and native gas. Check <code className="text-[#C5A67C]">/api/x402/relayer-status</code> before relying on settle.</li>
+            <li>· Arc Native Payment ships a self-hosted relayer; operators must fund it with Arc USDC and native gas. Check <code className="text-[#C5A67C]">/api/x402/relayer-status</code> before relying on settle.</li>
+            <li>· Circle Gateway Payment uses Circle&apos;s <code className="text-[#7CB5C5]">BatchFacilitatorClient</code>. The facilitator role is keyless; buyers must hold a USDC balance in their GatewayWallet (<code className="text-[#7CB5C5]">0x0077…19B9</code>) before signing a payment.</li>
             <li>· EIP-712 domain reads <code className="text-[#C5A67C]">name</code> and <code className="text-[#C5A67C]">version</code> from the on-chain USDC contract; the Arc deployment reports <code className="text-[#C5A67C]">USDC</code> / <code className="text-[#C5A67C]">2</code>.</li>
-            <li>· Testnet only. Do not point production traffic at this facilitator until Arc mainnet keys and audited relayer ops are live.</li>
+            <li>· Testnet only. Mainnet rollout requires Arc mainnet keys and audited relayer ops.</li>
           </ul>
         </div>
       </section>

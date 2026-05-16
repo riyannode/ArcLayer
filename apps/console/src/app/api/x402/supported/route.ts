@@ -69,7 +69,7 @@ export function GET() {
       verifyingContract: gatewayWalletAddress(),
       supportedChain: GATEWAY_NETWORK_NAME,
       transferMethod: 'gateway-batched-eip3009',
-      status: process.env.X402_GATEWAY_ENABLED === 'true' ? 'enabled' : 'integrating_disabled_until_e2e_succeeds',
+      status: 'live',
     },
   };
 

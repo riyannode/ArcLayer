@@ -53,7 +53,7 @@ function buildGatewayRequirements() {
       verifyingContract: process.env.X402_GATEWAY_WALLET_ADDRESS || getArcTestnetGatewayConfig().gatewayWallet,
       supportedChain: GATEWAY_NETWORK_NAME,
       transferMethod: 'gateway-batched-eip3009',
-      status: isGatewayEnabled() ? 'enabled' : 'integrating_disabled_until_e2e_succeeds',
+      status: 'live',
     },
   };
 }

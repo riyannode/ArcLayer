@@ -27,14 +27,14 @@ ArcLayer is the **settlement layer for paid AI agents on Arc**. Any HTTP API can
 4. Worker submits deliverable, evaluator approves, settle pays USDC + mints WorkProof NFT
 ```
 
-**Live on Arc Testnet (`chainId=5042002`).** ArcLayer supports dual x402 paths on Arc Testnet: Arc Native exact settlement is live on-chain. Circle Gateway/Nanopayments verification is live; final settlement requires buyer GatewayWallet deposit.
+**Live on Arc Testnet (`chainId=5042002`).** ArcLayer ships dual production-live x402 paths on Arc Testnet: **Arc Native Payment** (self-hosted EIP-3009 relayer, settles on-chain) and **Circle Gateway Payment** (BatchFacilitatorClient / Circle Nanopayments). Both verify, settle, and unlock end-to-end with replay protection.
 
 ---
 
 ## Current development focus
 
 - Minimal product console for agents, jobs, escrow, and proofs (live)
-- x402 V2 dual-mode facilitator on Arc USDC — Arc Native (self-hosted EIP-3009 relayer, settled on-chain) + Circle Gateway (BatchFacilitatorClient, verified live)
+- x402 V2 dual-mode facilitator on Arc USDC — Arc Native Payment (self-hosted EIP-3009 relayer, settled on-chain) + Circle Gateway Payment (BatchFacilitatorClient, settled through Circle Gateway)
 - Circle Wallets integration for programmable agent wallets (backend / agent layer, alongside Privy for users)
 - Capability probe report: [`docs/x402/arc-capability-report.md`](./docs/x402/arc-capability-report.md)
 
@@ -180,13 +180,35 @@ Last repo/runtime verification: **2026-05-16**.
 | x402 supported endpoint | ✅ Live | `GET /api/x402/supported` returns Arc Native + Circle Gateway + legacy options |
 | x402 payment gate | ✅ Live | `POST /api/agents/demo/run` without payment returns `402` |
 | x402 verify/settle APIs | ✅ Live | Validates inputs, returns `400` on missing body |
-| x402 dual-mode (Arc Native + Circle Gateway) | ✅ Live | `isBatchPayment()` routes; Arc Native settles on-chain, Gateway verifies live |
-| Circle Gateway facilitator | ✅ Verified live | `GET /api/x402/gateway-status` returns `runtime_supported` (Arc Testnet domain 26); settlement activates once buyer deposits USDC into GatewayWallet |
+| **Arc Native Payment** | ✅ **Production-live** | Verify → Settle on-chain → Unlock → Replay rejected. Settlement tx: [`0x52c894…be4f264`](https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264) (block 42498828) |
+| **Circle Gateway Payment** | ✅ **Production-live** | Verify → Settle via Circle → Unlock → Replay rejected. Settlement ID: `0e366c3d-8eb8-46cc-a07f-55350a1913fd` · Payment receipt: `fa643dfc…dddf01` |
+| Circle Gateway facilitator | ✅ Live | Keyless `BatchFacilitatorClient`; Arc Testnet domain 26; GatewayWallet `0x0077…19B9` |
 | Protocol contracts | ✅ Live | All addresses return bytecode on Arc Testnet |
 | Indexer | ✅ Running | PM2 `arclayer-indexer` online |
 | SDK | ✅ Workspace package | `@arclayer/sdk` in `sdk/` |
 | Notification system | ✅ Live | Per-wallet job assignment + payment alerts |
 | Legacy V1 | ✅ Deployed | `MilestoneEscrow` + `Achievement` live on Arc Testnet |
+
+### Production Verification — x402 Dual-Mode
+
+Both payment paths have completed full end-to-end on Arc Testnet (`chainId=5042002`, USDC `0x3600…0000`):
+
+**Arc Native Payment** (self-hosted EIP-3009 relayer):
+- ✅ Verify: pass
+- ✅ Settle: on-chain pass
+- ✅ Unlock: pass
+- ✅ Receipt already used protection: pass
+- Settlement tx: [`0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264`](https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264)
+- Block: 42498828 · Buyer: `0x9fC73BE13EAB35DD55547f89b1aD2663b9038eE5`
+
+**Circle Gateway Payment** (BatchFacilitatorClient / Nanopayments):
+- ✅ Verify: pass
+- ✅ Settle: Circle Gateway pass
+- ✅ Unlock: pass
+- ✅ Receipt already used protection: pass
+- Settlement ID: `0e366c3d-8eb8-46cc-a07f-55350a1913fd`
+- Payment receipt: `fa643dfcbce2b50f69207d7f6412a142d110e9cc95322695e70a228514dddf01`
+- GatewayWallet: `0x0077777d7EBA4688BDeF3E311b846F25870A19B9`
 
 End-to-end protocol proofs (jobIds, txHashes, settlements): see [`docs/e2e-proofs.md`](./docs/e2e-proofs.md).
 
