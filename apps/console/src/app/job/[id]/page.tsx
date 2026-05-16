@@ -33,6 +33,29 @@ type DeliverablePreview = {
 
 const IPFS_GATEWAY = process.env.NEXT_PUBLIC_IPFS_GATEWAY || 'https://gateway.pinata.cloud/ipfs';
 
+// Known placeholder URIs used by the contract before a real deliverable is pinned.
+const PLACEHOLDER_URIS = new Set([
+  'ipfs://deliverable-next',
+  'ipfs://proof-next',
+  'ipfs://test',
+  'ipfs://placeholder',
+]);
+
+// CIDv0 (Qm…46) or CIDv1 (bafy…) — keep the regex permissive but real-CID-shaped.
+const CID_V0 = /^Qm[1-9A-HJ-NP-Za-km-z]{44}$/;
+const CID_V1 = /^[a-z0-9]{50,}$/i;
+
+function isPlaceholderURI(uri: string | null | undefined): boolean {
+  if (!uri) return true;
+  if (PLACEHOLDER_URIS.has(uri.toLowerCase())) return true;
+  if (uri.startsWith('ipfs://')) {
+    const cid = uri.slice('ipfs://'.length).split('/')[0];
+    if (!cid || cid.length < 10) return true;
+    if (!CID_V0.test(cid) && !CID_V1.test(cid)) return true;
+  }
+  return false;
+}
+
 function ipfsToHttp(uri: string | null | undefined): string | null {
   if (!uri) return null;
   if (uri.startsWith('ipfs://')) return `${IPFS_GATEWAY}/${uri.replace('ipfs://', '')}`;
@@ -81,9 +104,15 @@ export default function JobDetailPage() {
   const isClient = !!(job && address && address.toLowerCase() === job.client.toLowerCase());
   const isWorker = !!(job && address && address.toLowerCase() === job.worker.toLowerCase());
 
-  // Auto-fetch deliverable JSON from IPFS once a deliverableURI lands on chain.
+  // Auto-fetch deliverable JSON only when a real IPFS CID or HTTPS URL is submitted.
   useEffect(() => {
     let cancelled = false;
+    if (isPlaceholderURI(job?.deliverableURI)) {
+      setPreview(null);
+      setPreviewError(null);
+      setPreviewLoading(false);
+      return;
+    }
     const url = ipfsToHttp(job?.deliverableURI);
     if (!url) { setPreview(null); setPreviewError(null); return; }
     setPreviewLoading(true);
@@ -290,16 +319,58 @@ export default function JobDetailPage() {
                 href={ipfsToHttp(job?.proofMetadataURI)}
               />
 
-              {/* IPFS preview — auto-fetched once a deliverableURI is on chain */}
+              {/* Submitted work preview */}
               {job?.deliverableURI && (
                 <div className="p-4" style={{ border: '1px solid rgba(184, 205, 126, 0.25)', background: 'rgba(184, 205, 126, 0.04)' }}>
-                  <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>DELIVERABLE PREVIEW · IPFS</p>
+                  <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>SUBMITTED WORK PREVIEW</p>
+
+                  {/* Always show the raw URI + copy */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <code className="flex-1 truncate font-mono text-[10.5px] text-[#9a9a9a]">{job.deliverableURI}</code>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(job.deliverableURI)}
+                      className="shrink-0 font-mono text-[9px] tracking-[0.14em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
+                      title="Copy URI"
+                    >
+                      COPY
+                    </button>
+                    {ipfsToHttp(job.deliverableURI) && !isPlaceholderURI(job.deliverableURI) && (
+                      <a
+                        href={ipfsToHttp(job.deliverableURI)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 font-mono text-[9px] tracking-[0.14em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
+                      >
+                        OPEN ↗
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Placeholder URI — explain clearly */}
+                  {isPlaceholderURI(job.deliverableURI) && (
+                    <p className="mt-3 font-mono text-[11px] text-[#f5c864]">
+                      No valid work file submitted yet. Please submit a real IPFS CID or HTTPS link.
+                    </p>
+                  )}
+
+                  {/* Loading state */}
                   {previewLoading && (
-                    <p className="mt-2 font-mono text-[11.5px] text-[#7A7A7A]">Fetching from IPFS gateway…</p>
+                    <p className="mt-2 font-mono text-[11.5px] text-[#7A7A7A]">Fetching preview…</p>
                   )}
-                  {previewError && (
-                    <p className="mt-2 font-mono text-[11.5px] text-[#f0c5c5]">Could not fetch: {previewError}</p>
+
+                  {/* Fetch error — human-readable */}
+                  {previewError && !isPlaceholderURI(job.deliverableURI) && (
+                    <div className="mt-3">
+                      <p className="font-mono text-[11px] text-[#f0c5c5]">
+                        Preview unavailable. The submitted work link could not be opened.
+                      </p>
+                      <p className="mt-1 font-mono text-[10px] text-[#7A7A7A]">
+                        This may happen if the IPFS CID is invalid, the file is not pinned yet, or the gateway is temporarily unavailable.
+                      </p>
+                    </div>
                   )}
+
+                  {/* Successful preview */}
                   {preview && (
                     <div className="mt-3 space-y-2 font-mono text-[11.5px] text-[#EAE4D8]">
                       {preview.input && (
