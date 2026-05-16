@@ -172,7 +172,7 @@ function FeedRow({ item, isNew }: { item: FeedItem; isNew: boolean }) {
           <span>{timeAgoIso(item.ts)}</span>
           {item.tx && (
             <a
-              href={`https://explorer.testnet.arc.network/tx/${item.tx}`}
+              href={`https://testnet.arcscan.app/tx/${item.tx}`}
               target="_blank"
               rel="noopener noreferrer"
               className="truncate text-[#7A7A7A] hover:text-[#C5A67C]"
@@ -366,7 +366,7 @@ export default function A2ADashboardPage() {
               <div className="flex items-center justify-between">
                 <p className="font-mono text-[9.5px] uppercase tracking-widest text-amber-300/80">Hermes · payer</p>
                 <a
-                  href={`https://explorer.testnet.arc.network/address/${onchain?.wallets?.hermes ?? ''}`}
+                  href={`https://testnet.arcscan.app/address/${onchain?.wallets?.hermes ?? ''}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-mono text-[9.5px] text-[#7A7A7A] hover:text-amber-300"
@@ -389,7 +389,7 @@ export default function A2ADashboardPage() {
               <div className="flex items-center justify-between">
                 <p className="font-mono text-[9.5px] uppercase tracking-widest text-cyan-300/80">Pythia · receiver</p>
                 <a
-                  href={`https://explorer.testnet.arc.network/address/${onchain?.wallets?.pythia ?? ''}`}
+                  href={`https://testnet.arcscan.app/address/${onchain?.wallets?.pythia ?? ''}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-mono text-[9.5px] text-[#7A7A7A] hover:text-cyan-300"
@@ -450,7 +450,7 @@ export default function A2ADashboardPage() {
                   <span className={`shrink-0 font-semibold ${AGENT_COLORS[item.agent]}`}>{item.agent}</span>
                   <span className="min-w-0 flex-1 truncate text-[#9A9A9A]">{item.label}</span>
                   <a
-                    href={`https://explorer.testnet.arc.network/tx/${item.tx}`}
+                    href={`https://testnet.arcscan.app/tx/${item.tx}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="shrink-0 text-[#C5A67C] hover:text-[#EAE4D8] transition-colors"
@@ -656,7 +656,7 @@ function ContractsCard({ contracts }: { contracts?: Record<string, string> }) {
           <div key={k} className="flex items-center justify-between gap-2">
             <span className="text-[#7A7A7A]">{k}</span>
             <a
-              href={`https://explorer.testnet.arc.network/address/${v}`}
+              href={`https://testnet.arcscan.app/address/${v}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[#9A9A9A] hover:text-[#C5A67C]"

@@ -27,4 +27,5 @@ export { default as HexGrid3D } from './HexGrid3D';
 export { default as LiveLogStream } from './LiveLogStream';
 export { default as HomeProtocolSection } from './HomeProtocolSection';
 export { default as HomeWhoIsThisFor } from './HomeWhoIsThisFor';
+export { default as HomeX402ProofCard } from './HomeX402ProofCard';
 export { default as HomeFooterStrip } from './HomeFooterStrip';

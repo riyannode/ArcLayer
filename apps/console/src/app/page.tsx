@@ -23,6 +23,7 @@ import {
   HomeHero,
   HomeProtocolSection,
   HomeSidebar,
+  HomeX402ProofCard,
 } from '@/components/home';
 
 export default function Home() {
@@ -56,6 +57,7 @@ export default function Home() {
         </div>
 
         <HomeProtocolSection />
+        <HomeX402ProofCard />
       </main>
       <HomeFooterStrip />
     </div>

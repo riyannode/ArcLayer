@@ -7,6 +7,9 @@
 import { NextResponse } from 'next/server';
 import { createPublicClient, http, type Hex } from 'viem';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
 const CHAIN_ID = 5042002;
 

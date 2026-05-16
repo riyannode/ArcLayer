@@ -13,7 +13,7 @@ export default function Footer() {
 
   const resourceLinks = [
     { label: 'Github', href: 'https://github.com/riyannode/ArcLayer', ext: true },
-    { label: 'RPC', href: 'https://rpc.testnet.arc.network', ext: true },
+    { label: 'RPC', href: 'https://rpc.drpc.testnet.arc.network', ext: true },
     { label: 'Explorer', href: 'https://testnet.arcscan.app', ext: true },
     { label: 'Circle · Arc', href: 'https://arc.circle.com', ext: true },
   ];
