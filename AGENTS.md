@@ -4,6 +4,8 @@ Guide for AI coding agents (Codex, Cursor, Claude, Kiro, v0, Windsurf, etc.) and
 
 If you only want to integrate ArcLayer from an external app, jump to: [docs/ARCLAYER_INTEGRATION_SKILL.md](./docs/ARCLAYER_INTEGRATION_SKILL.md).
 
+If you want to build an **autonomous agent business** on ArcLayer (signal seller, executor, evaluator, skill marketplace), jump to: [docs/AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md](./docs/AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md).
+
 ---
 
 ## What ArcLayer is

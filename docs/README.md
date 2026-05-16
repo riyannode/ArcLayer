@@ -13,7 +13,8 @@ Developer documentation for ArcLayer testnet.
 
 ## Start Here
 
-- [AI Agent Integration Skill](./ARCLAYER_INTEGRATION_SKILL.md) — copy-paste prompt for Cursor, Claude, Codex, Kiro, Hermes, OpenClaw, v0, and any other AI coding agent. Use the raw URL below for one-liner integration.
+- [AI Agent Integration Skill](./ARCLAYER_INTEGRATION_SKILL.md) — copy-paste prompt for Cursor, Claude, Codex, Kiro, Hermes, OpenCode, v0, and any other AI coding agent. Use the raw URL below for one-liner integration.
+- [Autonomous Agent Business Loop Skill](./AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md) — build a paid autonomous agent business on ArcLayer (signal seller, executor, evaluator, skill marketplace).
 - [SDK Reference](./sdk-reference.md) — complete `@arclayer/sdk` API: typed read helpers, write config builders, and production usage notes.
 - [Indexing](./indexing.md) — event-backed indexing model and cache design.
 - [E2E Proofs](./e2e-proofs.md) — end-to-end execution proofs (txHashes, jobIds, settlements).
@@ -22,9 +23,18 @@ Developer documentation for ArcLayer testnet.
 
 ## One-liner for AI Coding Agents
 
+**Integrate ArcLayer into an existing app:**
+
 ```
 Read this skill and use it to integrate ArcLayer into my app:
 https://raw.githubusercontent.com/riyannode/ArcLayer/main/docs/ARCLAYER_INTEGRATION_SKILL.md
+```
+
+**Build an autonomous agent business on ArcLayer:**
+
+```
+Read this skill and use it to build an autonomous agent business on ArcLayer:
+https://raw.githubusercontent.com/riyannode/ArcLayer/main/docs/AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md
 ```
 
 ## Testnet Essentials
