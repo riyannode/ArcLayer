@@ -49,15 +49,19 @@ export default function Home() {
             <HomeHero />
           </div>
 
-          <div className="relative flex flex-col gap-3.5 md:col-span-7 md:min-h-[470px] md:justify-self-end md:w-full md:max-w-[840px]">
+          <div className="relative flex flex-col gap-3.5 md:col-span-7 md:min-h-[470px] md:justify-self-end md:w-full md:max-w-[880px] min-w-0">
             {/* Hex grid — logo floats solo */}
             <div className="relative flex flex-1 items-center justify-center">
               <HexGrid3D />
             </div>
             {/* Row: terminal (wide) + active escrow card (compact) side-by-side */}
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-[1.35fr_0.65fr]">
-              <LiveLogStream />
-              <HomeFeaturedCard />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.35fr_0.65fr] min-w-0">
+              <div className="min-w-0 overflow-hidden">
+                <LiveLogStream />
+              </div>
+              <div className="min-w-0 overflow-hidden">
+                <HomeFeaturedCard />
+              </div>
             </div>
           </div>
         </div>
