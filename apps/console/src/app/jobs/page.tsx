@@ -63,6 +63,7 @@ function JobsPage() {
   const [jobStatusFilter, setJobStatusFilter] = useState<'all' | '0' | '1' | '2' | '3' | '4' | '5' | '6'>('all');
   const [jobSort, setJobSort] = useState<'relevant' | 'newest' | 'budgetDesc' | 'budgetAsc' | 'settledFirst'>('relevant');
   const [myJobsOnly, setMyJobsOnly] = useState(false);
+  const [showAllJobs, setShowAllJobs] = useState(false);
 
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.agentId === createForm.agentId) ?? null,
@@ -117,6 +118,8 @@ function JobsPage() {
       return (relevance[a.status] ?? 9) - (relevance[b.status] ?? 9) || Number(BigInt(b.id) - BigInt(a.id));
     });
   }, [jobs, jobSearch, jobStatusFilter, jobSort, myJobsOnly, address, agentById]);
+
+  const visibleJobs = showAllJobs ? filteredJobs : filteredJobs.slice(0, 5);
 
   // Auto-fill worker with the selected agent's controller (most common case).
   useEffect(() => {
@@ -470,7 +473,7 @@ function JobsPage() {
                   </div>
                 ))
               ) : filteredJobs.length > 0 ? (
-                filteredJobs.map((job) => {
+                visibleJobs.map((job) => {
                   const agent = agentById.get(job.agentId) ?? null;
                   const agentLabel = agent ? displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI }) : shortAgentId(job.agentId);
                   const skill = agent ? formatSkillLabel(parseAgentSkill(agent.metadataURI)) : null;
@@ -520,6 +523,16 @@ function JobsPage() {
                     </>
                   )}
                 </div>
+              )}
+              {filteredJobs.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllJobs((v) => !v)}
+                  className="font-mono text-[10.5px] uppercase tracking-[0.18em]"
+                  style={{ color: '#C5A67C' }}
+                >
+                  {showAllJobs ? `Show less ↑` : `Show all (${filteredJobs.length}) ↓`}
+                </button>
               )}
             </div>
           </section>

@@ -45,6 +45,7 @@ export default function AgentsPage() {
   // Filter / sort state for the registered agents list
   const [agentSearch, setAgentSearch] = useState('');
   const [agentSort, setAgentSort] = useState<'top' | 'jobs' | 'newest' | 'name'>('top');
+  const [showAllAgents, setShowAllAgents] = useState(false);
 
   const filteredAgents = useMemo(() => {
     const q = agentSearch.trim().toLowerCase();
@@ -80,6 +81,8 @@ export default function AgentsPage() {
     }
     return list;
   }, [agents, agentSearch, agentSort]);
+
+  const visibleAgents = showAllAgents ? filteredAgents : filteredAgents.slice(0, 5);
 
   const derivedAgentId = useMemo(() => {
     try {
@@ -313,7 +316,7 @@ export default function AgentsPage() {
                   </div>
                 ))
               ) : filteredAgents.length > 0 ? (
-                filteredAgents.map((a) => {
+                visibleAgents.map((a) => {
                   const label = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI });
                   const hasName = !!parseAgentName(a.metadataURI);
                   return (
@@ -372,6 +375,16 @@ export default function AgentsPage() {
                     </>
                   )}
                 </div>
+              )}
+              {filteredAgents.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllAgents((v) => !v)}
+                  className="font-mono text-[10.5px] uppercase tracking-[0.18em]"
+                  style={{ color: '#C5A67C' }}
+                >
+                  {showAllAgents ? `Show less ↑` : `Show all (${filteredAgents.length}) ↓`}
+                </button>
               )}
             </div>
           </section>
