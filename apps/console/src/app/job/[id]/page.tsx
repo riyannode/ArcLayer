@@ -375,6 +375,11 @@ export default function JobDetailPage() {
 
           {/* PRIMARY: status-driven actions */}
           <div className="mt-5 space-y-3">
+            {job?.status === 3 && previewError && (
+              <div className="p-3 font-mono text-[11px] tracking-[0.04em]" style={{ border: '1px solid rgba(245, 200, 100, 0.35)', background: 'rgba(245, 200, 100, 0.06)', color: '#f5c864' }}>
+                ⚠️ Preview unavailable — you can still approve on-chain if you trust the submitted URI.
+              </div>
+            )}
             {job?.status === 3 && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
                 <button
