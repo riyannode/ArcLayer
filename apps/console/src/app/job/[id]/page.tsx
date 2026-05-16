@@ -76,6 +76,11 @@ export default function JobDetailPage() {
   const job = payload?.job || null;
   const proof = payload?.proof || null;
 
+  // Role checks for UI gating
+  const isEvaluator = !!(job && address && address.toLowerCase() === job.evaluator.toLowerCase());
+  const isClient = !!(job && address && address.toLowerCase() === job.client.toLowerCase());
+  const isWorker = !!(job && address && address.toLowerCase() === job.worker.toLowerCase());
+
   // Auto-fetch deliverable JSON from IPFS once a deliverableURI lands on chain.
   useEffect(() => {
     let cancelled = false;
@@ -375,12 +380,12 @@ export default function JobDetailPage() {
 
           {/* PRIMARY: status-driven actions */}
           <div className="mt-5 space-y-3">
-            {job?.status === 3 && previewError && (
+            {job?.status === 3 && previewError && isEvaluator && (
               <div className="p-3 font-mono text-[11px] tracking-[0.04em]" style={{ border: '1px solid rgba(245, 200, 100, 0.35)', background: 'rgba(245, 200, 100, 0.06)', color: '#f5c864' }}>
                 ⚠️ Preview unavailable — you can still approve on-chain if you trust the submitted URI.
               </div>
             )}
-            {job?.status === 3 && (
+            {job?.status === 3 && isEvaluator && (
               <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
                 <button
                   onClick={handleApproveAndSettle}
@@ -400,8 +405,15 @@ export default function JobDetailPage() {
                 </button>
               </div>
             )}
+            {job?.status === 3 && !isEvaluator && isConnected && (
+              <div className="p-3 font-mono text-[11px] tracking-[0.04em] text-[#7A7A7A]" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
+                {isWorker
+                  ? '⏳ Deliverable submitted. Waiting for evaluator to approve.'
+                  : '👁  Read-only — only the evaluator can approve or reject this job.'}
+              </div>
+            )}
 
-            {job?.status === 4 && job.approved && (
+            {job?.status === 4 && job.approved && (isEvaluator || isClient) && (
               <button
                 onClick={handleSettle}
                 disabled={!isConnected || activeAction !== null}
@@ -409,6 +421,11 @@ export default function JobDetailPage() {
               >
                 {activeAction === 'settle' ? 'SETTLING…' : '⟶ SETTLE (release payout + mint WorkProof)'}
               </button>
+            )}
+            {job?.status === 4 && job.approved && !isEvaluator && !isClient && isConnected && (
+              <div className="p-3 font-mono text-[11px] tracking-[0.04em] text-[#7A7A7A]" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
+                ⏳ Approved. Waiting for client/evaluator to settle and release payout.
+              </div>
             )}
 
             {job?.status === 5 && proof && (
@@ -447,15 +464,19 @@ export default function JobDetailPage() {
                     {activeAction === 'submit' ? 'SUBMITTING…' : 'SUBMIT DELIVERABLE'}
                   </button>
                 </div>
-                <div className="space-y-3">
-                  <p className="font-mono text-[10.5px] text-[#7A7A7A]">individual evaluator/settle txs</p>
-                  <button onClick={() => handleEvaluate(true)} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
-                    {activeAction === 'approve' ? 'APPROVING…' : 'EVALUATE · APPROVE only'}
-                  </button>
-                  <button onClick={handleSettle} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
-                    {activeAction === 'settle' ? 'SETTLING…' : 'SETTLE only'}
-                  </button>
-                </div>
+                {(isEvaluator || isClient) && (
+                  <div className="space-y-3">
+                    <p className="font-mono text-[10.5px] text-[#7A7A7A]">individual evaluator/settle txs</p>
+                    {isEvaluator && (
+                      <button onClick={() => handleEvaluate(true)} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
+                        {activeAction === 'approve' ? 'APPROVING…' : 'EVALUATE · APPROVE only'}
+                      </button>
+                    )}
+                    <button onClick={handleSettle} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
+                      {activeAction === 'settle' ? 'SETTLING…' : 'SETTLE only'}
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
