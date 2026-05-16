@@ -379,9 +379,9 @@ export default function JobDetailPage() {
               <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
                 <button
                   onClick={handleApproveAndSettle}
-                  disabled={!isConnected || activeAction !== null || !preview}
+                  disabled={!isConnected || activeAction !== null}
                   className="btn-primary"
-                  title={!preview ? 'Waiting for IPFS preview to load…' : 'Sign 2 txs: evaluate(true) + settle()'}
+                  title="Sign 2 txs: evaluate(true) + settle()"
                 >
                   {activeAction === 'approve_settle' ? 'PROCESSING…' : '✓ APPROVE & SETTLE'}
                 </button>
