@@ -293,6 +293,7 @@ export default function A2ADashboardPage() {
             color="cyan"
             stats={pythia?.stats || null}
             agentId={pythia?.agentId}
+            wallet={onchain?.wallets?.pythia}
             description="Sells crypto signals (BTC/ETH/SOL) for 0.01 USDC via x402 EIP-3009."
             isLive={isLive}
           />
@@ -302,6 +303,7 @@ export default function A2ADashboardPage() {
             color="amber"
             stats={hermes?.stats || null}
             agentId={hermes?.agentId}
+            wallet={onchain?.wallets?.hermes}
             description="Buys signals from Pythia, queries Polymarket, trades Ignia prediction markets."
             isLive={isLive}
           />
@@ -541,6 +543,7 @@ function AgentHeroCard({
   color,
   stats,
   agentId,
+  wallet,
   description,
   isLive,
 }: {
@@ -549,20 +552,38 @@ function AgentHeroCard({
   color: 'cyan' | 'amber';
   stats: AgentStats | null;
   agentId?: string;
+  wallet?: string;
   description: string;
   isLive: boolean;
 }) {
   const accentText = color === 'cyan' ? 'text-cyan-300' : 'text-amber-300';
   const accentBorder = color === 'cyan' ? 'border-cyan-500/20' : 'border-amber-500/20';
+  const copyWallet = async () => {
+    if (!wallet) return;
+    await navigator.clipboard.writeText(wallet);
+  };
+
   return (
     <div className={`rounded border bg-white/[0.02] p-5 ${accentBorder}`}>
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <p className={`font-mono text-[10px] uppercase tracking-widest ${accentText}`}>{role}</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight">{name}</h2>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <h2 className="text-2xl font-semibold tracking-tight">{name}</h2>
+            {wallet && (
+              <button
+                type="button"
+                onClick={copyWallet}
+                title={`Copy ${name} wallet: ${wallet}`}
+                className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest text-[#7A7A7A] transition-colors hover:border-[#C5A67C]/40 hover:text-[#C5A67C]"
+              >
+                copy wallet
+              </button>
+            )}
+          </div>
         </div>
         <span
-          className={`rounded-full border px-2 py-0.5 font-mono text-[9px] ${
+          className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] ${
             isLive ? 'border-emerald-500/30 text-emerald-300' : 'border-zinc-600/30 text-zinc-500'
           }`}
         >
@@ -576,11 +597,24 @@ function AgentHeroCard({
         <Stat label="Calibration" value={stats?.calibrationScore ?? '—'} />
         <Stat label="Revenue" value={stats ? formatUSDC(stats.totalRevenue) : '—'} />
       </div>
-      {agentId && (
-        <p className="mt-3 truncate font-mono text-[10px] text-[#444]" title={agentId}>
-          {agentId.slice(0, 14)}…{agentId.slice(-12)}
-        </p>
-      )}
+      <div className="mt-3 space-y-1 font-mono text-[10px] text-[#444]">
+        {wallet && (
+          <a
+            href={`https://testnet.arcscan.app/address/${wallet}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block truncate hover:text-[#C5A67C]"
+            title={wallet}
+          >
+            wallet {wallet.slice(0, 14)}…{wallet.slice(-12)} ↗
+          </a>
+        )}
+        {agentId && (
+          <p className="truncate" title={agentId}>
+            agent {agentId.slice(0, 14)}…{agentId.slice(-12)}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
