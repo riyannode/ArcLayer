@@ -30,9 +30,20 @@ function normalizePayloadForGateway(payload: Record<string, unknown>, requiremen
   const accepted = (payload.accepted as Record<string, unknown> | undefined) ?? requirements;
   const normalizedAccepted = { ...accepted, network: toCaip2Network(accepted.network) };
 
-  // Inject required `resource` field if missing
-  let resource = payload.resource as Record<string, unknown> | undefined;
-  if (!resource) {
+  // Inject required `resource` field. Circle Gateway expects an OBJECT
+  // ({ url, description?, mimeType? }), not a bare URL string. Canonical x402
+  // clients can pass `resource: "<url>"`, so coerce string → object here.
+  const rawResource = payload.resource;
+  let resource: Record<string, unknown>;
+  if (typeof rawResource === 'string' && rawResource.length > 0) {
+    resource = {
+      url: rawResource,
+      description: 'ArcLayer x402 Gateway demo',
+      mimeType: 'application/json',
+    };
+  } else if (rawResource && typeof rawResource === 'object') {
+    resource = rawResource as Record<string, unknown>;
+  } else {
     resource = {
       url: 'https://arclayers.xyz/api/x402-demo/protected',
       description: 'ArcLayer x402 Gateway demo',

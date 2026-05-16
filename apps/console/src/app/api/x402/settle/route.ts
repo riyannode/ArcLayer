@@ -26,8 +26,17 @@ function normalizeRequirementsForGateway(req: Record<string, unknown>): Record<s
 function normalizePayloadForGateway(payload: Record<string, unknown>, requirements: Record<string, unknown>): Record<string, unknown> {
   const accepted = (payload.accepted as Record<string, unknown> | undefined) ?? requirements;
   const normalizedAccepted = { ...accepted, network: toCaip2Network(accepted.network) };
-  let resource = payload.resource as Record<string, unknown> | undefined;
-  if (!resource) {
+  const rawResource = payload.resource;
+  let resource: Record<string, unknown>;
+  if (typeof rawResource === 'string' && rawResource.length > 0) {
+    resource = {
+      url: rawResource,
+      description: 'ArcLayer x402 Gateway demo',
+      mimeType: 'application/json',
+    };
+  } else if (rawResource && typeof rawResource === 'object') {
+    resource = rawResource as Record<string, unknown>;
+  } else {
     resource = {
       url: 'https://arclayers.xyz/api/x402-demo/protected',
       description: 'ArcLayer x402 Gateway demo',

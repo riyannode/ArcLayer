@@ -178,6 +178,7 @@ describe('/supported response shape', () => {
       scheme: 'arc-escrow',
       network: 'arc-testnet',
       asset: USDC_ADDRESS,
+      extra: {},
     };
 
     return { accepts: [arcNativeExact, gatewayBatched, legacyEscrow] };
