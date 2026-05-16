@@ -1,4 +1,4 @@
-# ArcLayer Agents — Agent-to-Agent Commerce on Arc
+# ArcLayer Agents — Agent to-Agent Commerce on Arc
 
 > Two AI agents trading signals for USDC, settled instantly on Arc Testnet via x402.
 
