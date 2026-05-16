@@ -4,439 +4,75 @@
 
 **x402 payment facilitator + USDC escrow protocol layer for autonomous agents on Arc Testnet.**
 
-[Live Console](https://arclayers.xyz) · [Vercel Mirror](https://arclayer-zeta.vercel.app) · [Arc Explorer](https://testnet.arcscan.app) · [Arc Network](https://arc.network) · [x402 Protocol](https://x402.org)
+[![Live Console](https://img.shields.io/badge/console-arclayers.xyz-C5A67C?style=flat-square)](https://arclayers.xyz)
+[![Arc Testnet](https://img.shields.io/badge/chain-Arc%20Testnet-EAE4D8?style=flat-square)](https://arc.network)
+[![chainId 5042002](https://img.shields.io/badge/chainId-5042002-7A7A7A?style=flat-square)](https://testnet.arcscan.app)
+[![x402](https://img.shields.io/badge/x402-arc--escrow-C5A67C?style=flat-square)](https://x402.org)
+
+[**Console**](https://arclayers.xyz) · [**Docs**](https://arclayers.xyz/docs) · [**Explorer**](https://testnet.arcscan.app) · [**Vercel mirror**](https://arclayer-zeta.vercel.app) · [**GitHub**](https://github.com/riyannode/ArcLayer)
 
 </div>
 
+---
+
+## TL;DR
+
+ArcLayer is the **payment + settlement layer for paid AI agents**. Any HTTP API can require USDC escrow before execution using a single header — no API keys, no Stripe, no custodian.
+
+```
+1. Client hits  POST /api/agents/123/run         → 402 PAYMENT-REQUIRED
+2. Client funds JobEscrow on Arc Testnet (USDC)  → JobFunded event
+3. Client retries with X-PAYMENT: <txHash>       → 200 + agent output
+4. Worker submits deliverable, evaluator approves, settle pays USDC + mints WorkProof NFT
+```
+
+**Live on Arc Testnet (`chainId=5042002`).** Production-grade x402 facilitator, USDC escrow, agent registry, proof-of-work NFTs.
+
+---
+
 ## For AI Coding Agents
 
-Integrating ArcLayer into another app? Paste this one-liner into Cursor, Claude, Codex, Kiro, Hermes, OpenClaw, v0, or any AI coding agent:
+Integrating ArcLayer into another app? Paste this one-liner into Cursor, Claude Code, Codex, Kiro, Hermes, OpenCode, v0, or any AI coding agent:
 
 ```
 Read this skill and use it to integrate ArcLayer into my app:
 https://raw.githubusercontent.com/riyannode/ArcLayer/main/docs/ARCLAYER_INTEGRATION_SKILL.md
 ```
 
-Working **inside** this repo? Read [`AGENTS.md`](./AGENTS.md) first — it covers protocol flows, integration rules, and what AI coding agents should and should not modify.
-
-## Overview
-
-ArcLayer is a protocol layer for paid autonomous agent execution on Arc Network. It combines an **x402-style payment gate**, **USDC escrow settlement**, **on-chain agent identity**, and **proof-of-work NFTs** so API/agent providers can require payment before execution and settle the work on-chain.
-
-Production deployment currently targets **Arc Testnet** (`chainId=5042002`) and testnet **USDC** (`0x3600000000000000000000000000000000000000`).
-
-Core components:
-
-- **x402 Facilitator** — reusable micropayment gate for protected API routes (`arc-escrow` scheme)
-- **JobEscrow** — USDC escrow per paid agent job
-- **AgentRegistry** — on-chain agent identity and metadata registry
-- **WorkProof** — NFT receipt minted for verified completed work
-- **ReputationOracle** — simple on-chain reputation scores for agents/workers
-- **SDK** — `@arclayer/sdk` TypeScript client for contracts and Arc Testnet config
-- **Indexer** — lightweight Arc Testnet event indexer with SQLite cache and HTTP API
-- **Console** — Next.js app with landing page, protocol UI, agents, jobs, x402 APIs, and indexer proxy
-- **Legacy V1** — `MilestoneEscrow` + `Achievement` milestone escrow flow, kept as historical proof
+Working **inside** this repo? Read [`AGENTS.md`](./AGENTS.md) — it covers protocol flows, integration rules, and what AI coding agents should and should not modify.
 
 ---
 
-## Verified Status
+## Quick Start
 
-Last repo/runtime verification: **2026-05-15 23:45 UTC**.
-
-| Component | Status | Proof |
-|---|---|---|
-| Canonical console | ✅ Live | `https://arclayers.xyz` returns `200` from Vercel |
-| Vercel mirror | ✅ Live | `https://arclayer-zeta.vercel.app` returns `200` |
-| Docs portal | ✅ Live | `https://arclayers.xyz/docs` returns `200` from Vercel |
-| Console routes | ✅ Live | `/`, `/docs`, `/agents`, `/jobs`, `/protocol` all return `200` |
-| TypeScript | ✅ Pass | `npx tsc --noEmit` |
-| Next.js production build | ✅ Pass | `NODE_OPTIONS="--max-old-space-size=4096" npm run build` |
-| Unit tests | ✅ Pass | `53/53` tests, `6/6` files |
-| x402 supported endpoint | ✅ Live | `GET /api/x402/supported` returns Arc Testnet + USDC config |
-| x402 payment gate | ✅ Live | `POST /api/agents/demo/run` without payment returns `402` |
-| x402 verify/settle APIs | ✅ Live | Missing-body requests return expected `400` validation |
-| Protocol contracts | ✅ Live | All contract addresses below return bytecode on Arc Testnet |
-| Indexer | ✅ Running | PM2 service `arclayer-indexer` online |
-| SDK | ✅ Workspace package | `@arclayer/sdk` in `sdk/` |
-| AI integration skill | ✅ Added | [`docs/ARCLAYER_INTEGRATION_SKILL.md`](./docs/ARCLAYER_INTEGRATION_SKILL.md) |
-| Repo agent guide | ✅ Added | [`AGENTS.md`](./AGENTS.md) |
-| Legacy V1 | ✅ Deployed | `MilestoneEscrow` and `Achievement` live on Arc Testnet |
-
-> Domain status: `arclayers.xyz` is now the canonical custom domain. `www.arclayers.xyz/*` redirects to `https://arclayers.xyz/*` through Vercel.
-
----
-
-## Contract Addresses — Arc Testnet
-
-| Contract | Address |
-|---|---|
-| `AgentRegistry` | `0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21` |
-| `WorkProof` | `0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5` |
-| `JobEscrow` | `0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225` |
-| `ReputationOracle` | `0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c` |
-| Testnet USDC | `0x3600000000000000000000000000000000000000` |
-| `MilestoneEscrow` (V1) | `0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2` |
-| `Achievement` (V1) | `0x7245B200ce09B515bd235f1eD262c2abb0890165` |
-
----
-
-## Deployment Proofs
-
-### Protocol Contracts
-
-- `AgentRegistry`: [0xc973a730482eeb67ce17a7e04a96200a3d50bfcc4905ace265b04d9cf7fafbb9](https://testnet.arcscan.app/tx/0xc973a730482eeb67ce17a7e04a96200a3d50bfcc4905ace265b04d9cf7fafbb9)
-- `WorkProof`: [0x567eab55746b2b567304d61201dba18b80c3698bbaa7ca9830a8832051c5d35a](https://testnet.arcscan.app/tx/0x567eab55746b2b567304d61201dba18b80c3698bbaa7ca9830a8832051c5d35a)
-- `JobEscrow`: [0x2b3e900692641a48080e705e959fcf8135fb7829100756ffa2b37ae6b9bedc45](https://testnet.arcscan.app/tx/0x2b3e900692641a48080e705e959fcf8135fb7829100756ffa2b37ae6b9bedc45)
-- `ReputationOracle`: [0x5232aa8778a30f78d1173a5d36aa6dc17378c14af6cd4c9c3a9e985e5bf3256f](https://testnet.arcscan.app/tx/0x5232aa8778a30f78d1173a5d36aa6dc17378c14af6cd4c9c3a9e985e5bf3256f)
-
-### Legacy V1
-
-- `MilestoneEscrow`: [0xd10476a06b942348a22b32faea36e53f2b6d5f8ad1c6f4a0eb9f3e36d23ded10](https://testnet.arcscan.app/tx/0xd10476a06b942348a22b32faea36e53f2b6d5f8ad1c6f4a0eb9f3e36d23ded10)
-
----
-
-## End-to-End Proofs
-
-### x402 Facilitator — Production E2E
-
-Paid agent run completed end-to-end on production (`https://arclayer-zeta.vercel.app`).
-
-| Step | Result |
-|---|---|
-| No payment → `402` + `PAYMENT-REQUIRED` | ✅ |
-| `createJob` on Arc Testnet | ✅ jobId `13` |
-| `setBudget` + `approve USDC` + `fund escrow` | ✅ `JobFunded` emitted |
-| `POST /api/x402/verify` | ✅ `verified` |
-| `POST /api/x402/settle` | ✅ `settled` |
-| `POST /api/agents/demo/run` first run | ✅ `200`, agent executed |
-| Retry same payment | ✅ `200`, `cached: true` |
-| Same txHash → different resource | ✅ rejected `PAYMENT_REPLAY_DIFFERENT_RESOURCE` |
-
-- **txHash**: `0x3b5578f304970f3e91fa36e3de1af2c389dd4c01f2c3d17040fca7e020ae80d9`
-- **jobId**: `13`
-- **model**: `gpt-5.5` through an OpenAI-compatible agent endpoint
-- **output**: `Hello. Task received for Agent ID demo, Job ID 13.`
-- **latency**: `2724ms`
-- **E2E score**: `17/17` ✅
-
-### Protocol JobEscrow — Role-Separated E2E
-
-Client, worker, and evaluator used separate burner wallets. Job `19` completed the full lifecycle on Arc Testnet:
-
-1. `registerAgent`
-2. `createJob`
-3. `setBudget`
-4. `approve USDC`
-5. `fund escrow`
-6. Worker `submitDeliverable`
-7. Evaluator `evaluate(true)`
-8. Client `settle`
-9. `WorkProof #3` minted
-10. Indexer and live UI verified
-
-| Key | Value |
-|---|---|
-| Job ID | `19` |
-| Agent ID | `1778814739` |
-| WorkProof Token ID | `3` |
-| Final status | `Settled` |
-| Amount funded | `0.01 USDC` |
-| Paid to worker | `0.00995 USDC` |
-| Platform fee | `0.00005 USDC` |
-| Live job page | https://arclayers.xyz/job/19 |
-
-| Step | Tx |
-|---|---|
-| `submitDeliverable` | [0xf66a7ba5...](https://testnet.arcscan.app/tx/0xf66a7ba5e00fe2a23d96681f55facfa0fe76f29152215cbf60b999b1ba9bfa72) |
-| `evaluate(true)` | [0x69734562...](https://testnet.arcscan.app/tx/0x6973456264d6b42be02560f003c280ce24afa7a26071cebb09d60f0e5da894ef) |
-| `settle` | [0x8883f432...](https://testnet.arcscan.app/tx/0x8883f432d034c95b9a663fe602b69879b1fa3d089cb17a35f4b5741c2f6873cf) |
-
-### Legacy V1 — MilestoneEscrow
-
-Project `0` completed end-to-end on Arc Testnet.
-
-| Step | Tx |
-|---|---|
-| `createProject` | [0x54393be9...](https://testnet.arcscan.app/tx/0x54393be919309c6492145606e135f0191297d4fc6f7f0cb11194b354b4ea45ab) |
-| `approve USDC` | [0x76a37085...](https://testnet.arcscan.app/tx/0x76a3708537431f071cbf304af07d124009eddcf1cfa2c87fa352e1a201998775) |
-| `fundProject` | [0xa79c1402...](https://testnet.arcscan.app/tx/0xa79c140210befdcaaf7b56979a57dd054490016bb66dc6bff5e2ae939412fb6e) |
-| `submitMilestone(0)` | [0x17342a44...](https://testnet.arcscan.app/tx/0x17342a444ab7d142fc8c900316786471c55d53f03644cb36ce94e6cfdf03f32f) |
-| `approveMilestone(0)` | [0x2b5cbd9a...](https://testnet.arcscan.app/tx/0x2b5cbd9a83fad46f57562595272b1cb94ecbcc16b55b499997ac4d1ca6ecc0d7) |
-| `submitMilestone(1)` | [0x410e0c18...](https://testnet.arcscan.app/tx/0x410e0c18551b2cbc459e6708977dcbd728bdea8cf103168fcc563eca851ce79e) |
-| `approveMilestone(1)` + `WorkProofMinted` | [0xd68f8e8a...](https://testnet.arcscan.app/tx/0xd68f8e8a77b5d7101c9954f81463c58fe4ffbec514930ffeb36e5845489cf767) |
-
-Final state: `totalAmount=2000000`, `releasedAmount=2000000`, `milestoneCount=2`, `status=Completed`.
-
----
-
-## Architecture
-
-```text
-Client / Agent Consumer
-  │
-  ├─ POST /api/agents/[id]/run without X-PAYMENT
-  │       └─ 402 + PAYMENT-REQUIRED header + requirement row in Supabase
-  │
-  ├─ Arc Testnet: createJob → setBudget → approve USDC → JobEscrow.fund()
-  │       └─ emits JobFunded(jobId, client, amount)
-  │
-  ├─ POST /api/agents/[id]/run with X-PAYMENT: <txHash>
-  │       ├─ parse X-PAYMENT header
-  │       ├─ verify on-chain receipt + JobFunded event
-  │       ├─ settle payment idempotently
-  │       ├─ consume payment atomically via Supabase RPC
-  │       │       ├─ already consumed for same resource → cached response
-  │       │       └─ consumed first time → run protected agent work
-  │       ├─ agentExecutor → OpenAI-compatible LLM endpoint
-  │       └─ cache response in x402_response_cache
-  │
-  ├─ POST /api/x402/verify      generic facilitator verification
-  ├─ POST /api/x402/settle      generic facilitator settlement
-  └─ GET  /api/x402/supported   supported network/scheme config
-
-Supabase (server-only service role):
-  x402_requirements      payment challenges issued per request
-  x402_payments          verified on-chain payments
-  x402_payment_attempts  audit trail
-  x402_consumptions      atomic consume gate, unique per txHash/resource
-  x402_response_cache    idempotent response replay
-
-Contracts (Arc Testnet, chainId 5042002):
-  JobEscrow              escrow + JobFunded event
-  AgentRegistry          agent identity
-  WorkProof              proof-of-work NFT
-  ReputationOracle       reputation scoring
-  MilestoneEscrow        legacy V1 milestone flow
-  Achievement            legacy V1 achievement NFT
-
-Indexer:
-  Arc Testnet events → SQLite cache → HTTP API → Next.js /api/indexer proxy
-```
-
----
-
-## Repo Layout
-
-```text
-arclayer/
-├── AGENTS.md                      AI agent guide (protocol flows, rules, what to modify)
-├── contracts/                     Solidity contracts and Foundry project
-│   └── src/
-│       ├── AgentRegistry.sol
-│       ├── JobEscrow.sol
-│       ├── WorkProof.sol
-│       ├── ReputationOracle.sol
-│       ├── MilestoneEscrow.sol
-│       └── Achievement.sol
-├── sdk/                           @arclayer/sdk TypeScript workspace package
-│   └── src/
-│       ├── abi.ts
-│       ├── addresses.ts
-│       ├── chain.ts
-│       ├── client.ts
-│       ├── types.ts
-│       ├── writes.ts
-│       └── index.ts
-├── indexer/                       Event indexer with SQLite + HTTP server
-│   └── src/
-│       ├── config.ts
-│       ├── db.ts
-│       ├── ingest.ts
-│       ├── projections.ts
-│       └── server.ts
-├── apps/
-│   └── console/                   Next.js app: UI + x402 facilitator APIs
-│       ├── src/app/
-│       │   ├── api/
-│       │   │   ├── agents/[id]/run/    Paid agent execution endpoint
-│       │   │   ├── x402/supported/     Network + scheme config
-│       │   │   ├── x402/verify/        Payment verification
-│       │   │   ├── x402/settle/        Payment settlement
-│       │   │   ├── jobs/[id]/runs/     Job run history
-│       │   │   ├── jobs/[id]/submit/   Deliverable submission
-│       │   │   ├── runs/[id]/          Run detail
-│       │   │   └── indexer/            Indexer proxy
-│       │   ├── agents/                 Agent list page
-│       │   ├── agent/[id]/             Agent detail page
-│       │   ├── jobs/                   Job list page
-│       │   ├── job/[id]/               Job detail page
-│       │   ├── protocol/               Protocol overview page
-│       │   ├── docs/                   Developer docs + SDK reference
-│       │   └── project/[id]/           Legacy milestone project page
-│       ├── src/components/
-│       │   ├── home/                   Homepage sections (Hero, HowItWorks, CoreModules)
-│       │   ├── CopyButton.tsx          Reusable copy-to-clipboard component
-│       │   └── ...
-│       ├── src/lib/
-│       │   ├── x402/                   Facilitator core
-│       │   │   ├── constants.ts
-│       │   │   ├── facilitator.ts
-│       │   │   ├── headers.ts
-│       │   │   ├── parser.ts
-│       │   │   ├── requirements.ts
-│       │   │   ├── store.ts
-│       │   │   ├── store.supabase.ts
-│       │   │   ├── supabaseClient.ts
-│       │   │   ├── types.ts
-│       │   │   ├── verify-arc-escrow.ts
-│       │   │   └── index.ts
-│       │   ├── agentExecutor.ts
-│       │   ├── contracts.ts
-│       │   ├── escrow-indexer.ts
-│       │   ├── escrow.ts
-│       │   ├── indexer.ts
-│       │   ├── jobSubmitter.ts
-│       │   ├── pinataClient.ts
-│       │   ├── rate-limit.ts
-│       │   ├── sanitize-error.ts
-│       │   ├── wagmi.ts
-│       │   ├── workerKeys.ts
-│       │   └── x402Client.ts
-│       └── supabase/migrations/
-│           └── 001_x402_facilitator.sql
-└── docs/
-    ├── README.md                  Docs index
-    ├── ARCLAYER_INTEGRATION_SKILL.md   AI agent integration prompt
-    ├── indexing.md
-    ├── sdk-reference.md
-    └── arclayer-build-plan.md
-```
-
----
-
-## x402 Facilitator
-
-The facilitator is a reusable payment gate for protected API routes. It implements an Arc-specific `arc-escrow` scheme compatible with x402-style payment negotiation.
-
-### Flow
-
-1. Client hits a protected route without payment.
-2. Server returns `402` with `PAYMENT-REQUIRED` and a generated `requirementId`.
-3. Client creates/funds a `JobEscrow` job on Arc Testnet using USDC.
-4. Client retries with `X-PAYMENT: <txHash>` or structured payment JSON.
-5. Facilitator verifies the on-chain `JobFunded` event against the requirement.
-6. Facilitator atomically consumes the payment using Supabase RPC.
-7. Protected work runs once; retries return the cached response.
-
-### Replay protection
-
-- `txHash` is unique per payment row.
-- Same `txHash` + same resource returns cached response.
-- Same `txHash` + different resource rejects with `PAYMENT_REPLAY_DIFFERENT_RESOURCE`.
-- `x402_consume_payment()` enforces first-write-wins atomic consumption in Postgres.
-
-### Generic endpoints
-
-```text
-GET  /api/x402/supported   network + scheme config
-POST /api/x402/verify      verify a payment against a requirement
-POST /api/x402/settle      mark a payment as settled, idempotent
-POST /api/agents/[id]/run  paid agent execution when X402_FACILITATOR_ENABLED=true
-```
-
-### Supported response proof
-
-`GET /api/x402/supported` returns:
-
-```json
-{
-  "x402Version": 1,
-  "accepts": [
-    {
-      "scheme": "arc-escrow",
-      "network": "arc-testnet",
-      "chainId": 5042002,
-      "asset": "0x3600000000000000000000000000000000000000",
-      "assetSymbol": "USDC",
-      "facilitator": "/api/x402",
-      "jobEscrow": "0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225",
-      "maxTimeoutSeconds": 300
-    }
-  ],
-  "facilitator": "ArcLayer",
-  "version": "1"
-}
-```
-
----
-
-## SDK
-
-`@arclayer/sdk` is a workspace TypeScript package that exports typed contract ABIs, addresses, Arc Testnet chain config, viem clients, and write helpers.
-
-```typescript
-import {
-  arcTestnet,
-  CONTRACTS,
-  publicClient,
-  jobEscrow,
-  agentRegistry,
-  workProof,
-} from '@arclayer/sdk';
-
-const job = await jobEscrow.read.jobs([BigInt(jobId)]);
-console.log(arcTestnet.id); // 5042002
-console.log(CONTRACTS.JobEscrow); // 0xF0E1...
-```
-
-RPC endpoints used by the app/SDK:
-
-```text
-https://rpc.drpc.testnet.arc.network
-https://rpc.testnet.arc.network
-https://rpc.quicknode.testnet.arc.network
-https://rpc.blockdaemon.testnet.arc.network
-```
-
-The SDK uses viem and can be configured with fallback transports so the fastest healthy endpoint wins.
-
----
-
-## Indexer
-
-The indexer replays Arc Testnet events and caches derived metadata in SQLite. It is a read optimization layer only; contract state remains canonical.
+### Use the protocol (developer)
 
 ```bash
-# Start indexer locally
-corepack pnpm --dir indexer start
+# 1. Hit a paid endpoint — get 402
+curl -i https://arclayers.xyz/api/agents/demo/run
 
-# Or from repo scripts
-pnpm dev:indexer
+# 2. Fund a job on Arc Testnet via SDK (see SDK section below)
+# 3. Retry with X-PAYMENT: <txHash> → get 200 + agent output
 ```
 
-Production status checked May 2026:
-
-```text
-PM2: arclayer-indexer online
-PM2: cf-indexer-tunnel online
-```
-
-The console reads indexer data through `/api/indexer/[[...path]]`.
-
----
-
-## Local Development
-
-### Prerequisites
-
-- Node.js 20+
-- pnpm through Corepack
-- Foundry for contract build/test/deploy
-
-### Install
+### Build locally (contributor)
 
 ```bash
-corepack enable
-corepack pnpm install
+git clone https://github.com/riyannode/ArcLayer.git
+cd ArcLayer
+corepack enable && corepack pnpm install
+
+# Run console (Next.js)
+corepack pnpm dev:console        # → http://localhost:3000
+
+# Run indexer
+corepack pnpm dev:indexer
+
+# Build contracts
+cd contracts && forge install && forge build && forge test
 ```
 
-### Console
-
-```bash
-corepack pnpm --dir apps/console dev
-```
-
-### Console checks
+### Verify everything works
 
 ```bash
 cd apps/console
@@ -445,33 +81,272 @@ npm test -- --run
 NODE_OPTIONS="--max-old-space-size=4096" npm run build
 ```
 
-Current verified results:
+---
+
+## Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Client / Agent Consumer                                         │
+└────────────┬─────────────────────────────────────────────────────┘
+             │
+             │  POST /api/agents/[id]/run  (no payment)
+             ▼
+   ┌─────────────────────────┐
+   │  402 PAYMENT-REQUIRED   │  ◄──── x402 Facilitator (Next.js API)
+   └────────────┬────────────┘
+                │
+                │  client funds JobEscrow on Arc Testnet
+                ▼
+   ┌──────────────────────────────────────────────────────┐
+   │  Arc Testnet (chainId 5042002)                       │
+   │  ├─ JobEscrow         escrow + JobFunded event       │
+   │  ├─ AgentRegistry     agent identity                 │
+   │  ├─ WorkProof         proof-of-work NFT (soulbound)  │
+   │  └─ ReputationOracle  reputation scoring             │
+   └────────────┬─────────────────────────────────────────┘
+                │  emits JobFunded(jobId, client, amount)
+                ▼
+   ┌─────────────────────────────────────────────────────┐
+   │  Retry: POST /run + X-PAYMENT: <txHash>             │
+   │  ├─ verify on-chain receipt + JobFunded event       │
+   │  ├─ atomic consume via Supabase RPC                 │
+   │  ├─ run protected agent work (LLM call)             │
+   │  └─ cache response (idempotent retries)             │
+   └─────────────────────────────────────────────────────┘
+
+   Indexer:    Arc Testnet events → SQLite → /api/indexer
+   Supabase:   x402_requirements, x402_payments, x402_consumptions, x402_response_cache
+```
+
+---
+
+## Tech Stack
+
+| Layer | Tech |
+|---|---|
+| **Contracts** | Solidity, Foundry, OpenZeppelin |
+| **Chain** | Arc Testnet (`chainId=5042002`), USDC `0x3600...` |
+| **SDK** | TypeScript, viem, ABIs, write helpers |
+| **Indexer** | Node.js, SQLite, viem event subscriptions, PM2 |
+| **Console** | Next.js 14 (App Router), Tailwind, wagmi v2, Privy |
+| **x402 Layer** | Next.js API routes, Supabase (server-only RPC) |
+| **Hosting** | Vercel (console) + VPS (indexer + tunnel) |
+
+---
+
+## Contract Addresses — Arc Testnet
+
+| Contract | Address |
+|---|---|
+| `AgentRegistry` | `0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21` |
+| `JobEscrow` | `0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225` |
+| `WorkProof` | `0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5` |
+| `ReputationOracle` | `0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c` |
+| Testnet USDC | `0x3600000000000000000000000000000000000000` (6 decimals) |
+| `MilestoneEscrow` (V1) | `0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2` |
+| `Achievement` (V1) | `0x7245B200ce09B515bd235f1eD262c2abb0890165` |
+
+> **UI labels vs contract names** — use UI labels in copy, contract names in code:
+> Settlement Vault = `JobEscrow` · Agent Registry = `AgentRegistry` · Proof of Work = `WorkProof` · Reputation Oracle = `ReputationOracle`
+
+Full deployment txs in [`docs/e2e-proofs.md`](./docs/e2e-proofs.md).
+
+---
+
+## Verified Status
+
+Last repo/runtime verification: **2026-05-16**.
+
+| Component | Status | Proof |
+|---|---|---|
+| Canonical console | ✅ Live | `https://arclayers.xyz` returns `200` |
+| Vercel mirror | ✅ Live | `https://arclayer-zeta.vercel.app` returns `200` |
+| Docs portal | ✅ Live | `https://arclayers.xyz/docs` returns `200` |
+| All console routes | ✅ Live | `/`, `/docs`, `/agents`, `/jobs`, `/protocol` return `200` |
+| TypeScript | ✅ Pass | `npx tsc --noEmit` |
+| Next.js production build | ✅ Pass | `npm run build` |
+| Unit tests | ✅ Pass | `53/53` tests, `6/6` files (Vitest) |
+| x402 supported endpoint | ✅ Live | `GET /api/x402/supported` returns Arc Testnet config |
+| x402 payment gate | ✅ Live | `POST /api/agents/demo/run` without payment returns `402` |
+| x402 verify/settle APIs | ✅ Live | Validates inputs, returns `400` on missing body |
+| Protocol contracts | ✅ Live | All addresses return bytecode on Arc Testnet |
+| Indexer | ✅ Running | PM2 `arclayer-indexer` online |
+| SDK | ✅ Workspace package | `@arclayer/sdk` in `sdk/` |
+| Legacy V1 | ✅ Deployed | `MilestoneEscrow` + `Achievement` live on Arc Testnet |
+
+End-to-end protocol proofs (jobIds, txHashes, settlements): see [`docs/e2e-proofs.md`](./docs/e2e-proofs.md).
+
+---
+
+## Repo Layout
 
 ```text
-TypeScript: pass
-Vitest: 6 files, 53 tests passed
-Next.js build: pass, 11 pages/routes rendered
+arclayer/
+├── AGENTS.md                  AI agent guide (rules, protocol flows)
+├── README.md                  This file
+├── contracts/                 Solidity + Foundry
+│   └── src/
+│       ├── AgentRegistry.sol
+│       ├── JobEscrow.sol
+│       ├── WorkProof.sol
+│       ├── ReputationOracle.sol
+│       ├── MilestoneEscrow.sol  (legacy V1)
+│       └── Achievement.sol      (legacy V1)
+│
+├── sdk/                       @arclayer/sdk — TypeScript client
+│   └── src/
+│       ├── abi.ts             Contract ABIs
+│       ├── addresses.ts       Deployed addresses
+│       ├── chain.ts           arcTestnet viem chain config
+│       ├── client.ts          publicClient + write helpers
+│       ├── writes.ts          buildCreateJobConfig, buildFundJobConfig...
+│       └── index.ts
+│
+├── indexer/                   Event indexer (SQLite + HTTP)
+│   └── src/
+│       ├── ingest.ts          viem event subscriptions
+│       ├── projections.ts     SQL projections
+│       └── server.ts          HTTP API
+│
+├── apps/console/              Next.js 14 app (UI + x402 facilitator)
+│   ├── src/app/
+│   │   ├── api/
+│   │   │   ├── agents/[id]/run/   Paid agent execution endpoint
+│   │   │   ├── x402/supported/    Network + scheme config
+│   │   │   ├── x402/verify/       Payment verification
+│   │   │   ├── x402/settle/       Payment settlement
+│   │   │   └── indexer/           Indexer reverse proxy
+│   │   ├── agents/, agent/[id]/   Agent list + detail
+│   │   ├── jobs/, job/[id]/       Job list + detail
+│   │   ├── protocol/              Protocol overview
+│   │   └── docs/                  Developer docs
+│   ├── src/components/
+│   │   ├── home/                  Hero, HowItWorks, CoreModules
+│   │   ├── CopyButton.tsx         Reusable copy-to-clipboard
+│   │   └── ...
+│   ├── src/lib/x402/              x402 facilitator core
+│   │   ├── facilitator.ts
+│   │   ├── verify-arc-escrow.ts
+│   │   ├── store.supabase.ts
+│   │   └── types.ts
+│   └── supabase/migrations/
+│       └── 001_x402_facilitator.sql
+│
+└── docs/
+    ├── README.md                       Docs index
+    ├── ARCLAYER_INTEGRATION_SKILL.md   AI agent integration prompt
+    ├── e2e-proofs.md                   E2E execution proofs
+    ├── sdk-reference.md                @arclayer/sdk reference
+    ├── indexing.md                     Indexer model
+    └── arclayer-build-plan.md          Roadmap
 ```
 
-### Contracts
+---
 
-```bash
-cd contracts
-forge install
-forge build
-forge test
+## SDK
+
+`@arclayer/sdk` exports typed contract ABIs, addresses, Arc Testnet chain config, viem clients, and write config builders.
+
+```ts
+import {
+  arcTestnet,
+  CONTRACTS,
+  publicClient,
+  buildCreateJobConfig,
+  buildFundJobConfig,
+} from '@arclayer/sdk';
+import { useWriteContract } from 'wagmi';
+
+const { writeContractAsync } = useWriteContract();
+
+// Create a job
+await writeContractAsync(buildCreateJobConfig(agentId, worker, client, taskInput));
+
+// Fund the escrow
+await writeContractAsync(buildFundJobConfig(jobId, amountUSDC));
 ```
 
-### SDK
+Full reference: [`docs/sdk-reference.md`](./docs/sdk-reference.md).
 
-```bash
-corepack pnpm --dir sdk build
+---
+
+## x402 Facilitator
+
+The facilitator implements an Arc-specific `arc-escrow` payment scheme on top of the [x402](https://x402.org) standard. Any protected route can require USDC escrow before execution.
+
+### Endpoints
+
+```text
+GET  /api/x402/supported     network + scheme config
+POST /api/x402/verify        verify payment against requirement
+POST /api/x402/settle        mark payment as settled (idempotent)
+POST /api/agents/[id]/run    paid agent execution (when X402_FACILITATOR_ENABLED=true)
 ```
 
-### Environment variables (`apps/console`)
+### Replay protection
+
+- `txHash` is unique per payment row.
+- Same `txHash` + same resource → returns cached response.
+- Same `txHash` + different resource → rejects with `PAYMENT_REPLAY_DIFFERENT_RESOURCE`.
+- `x402_consume_payment()` Postgres RPC enforces first-write-wins atomic consumption.
+
+### `GET /api/x402/supported` response
+
+```json
+{
+  "x402Version": 1,
+  "accepts": [{
+    "scheme": "arc-escrow",
+    "network": "arc-testnet",
+    "chainId": 5042002,
+    "asset": "0x3600000000000000000000000000000000000000",
+    "assetSymbol": "USDC",
+    "facilitator": "/api/x402",
+    "jobEscrow": "0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225",
+    "maxTimeoutSeconds": 300
+  }],
+  "facilitator": "ArcLayer",
+  "version": "1"
+}
+```
+
+---
+
+## Indexer
+
+Replays Arc Testnet events into a local SQLite cache. Read optimization layer only — contract state remains canonical.
 
 ```bash
-# Supabase (server-only — never expose service role key to browser)
+corepack pnpm dev:indexer
+```
+
+Production status:
+
+```text
+PM2: arclayer-indexer    online
+PM2: cf-indexer-tunnel   online
+```
+
+Console reads via `/api/indexer/[[...path]]`. Endpoints:
+
+```text
+GET /api/indexer/overview          Protocol totals + recent activity
+GET /api/indexer/jobs              All jobs, newest first
+GET /api/indexer/jobs/:id          Single job + events
+GET /api/indexer/agents            All registered agents
+GET /api/indexer/agents/:id        Agent profile + jobs + proofs
+GET /api/indexer/proofs            All work proofs
+```
+
+---
+
+## Environment Variables
+
+`apps/console/.env.local`:
+
+```bash
+# Supabase (server-only — NEVER expose service role key in browser)
 NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon-key>
 SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
@@ -489,12 +364,20 @@ X402_VERIFY_TIMEOUT_MS=10000
 # Agent executor (OpenAI-compatible endpoint)
 ARCLAYER_AGENT_ENDPOINT=https://<your-llm-proxy>/v1
 ARCLAYER_AGENT_MODEL=<model-name>
-ARCLAYER_AGENT_API_KEY=<server-only-key>
+ARCLAYER_AGENT_API_KEY=***
+
+# Privy (browser-safe)
+NEXT_PUBLIC_PRIVY_APP_ID=<privy-app-id>
 ```
 
-### Supabase schema
+Run the Supabase migration once:
 
-Run `apps/console/supabase/migrations/001_x402_facilitator.sql` in the Supabase SQL editor. The migration is idempotent and safe to run multiple times.
+```bash
+# In Supabase SQL editor, paste:
+apps/console/supabase/migrations/001_x402_facilitator.sql
+```
+
+The migration is idempotent.
 
 ---
 
@@ -504,29 +387,41 @@ Run `apps/console/supabase/migrations/001_x402_facilitator.sql` in the Supabase 
 |---|---|
 | Chain ID | `5042002` |
 | RPC primary | `https://rpc.drpc.testnet.arc.network` |
-| RPC fallback | `https://rpc.testnet.arc.network` |
+| RPC fallbacks | `https://rpc.testnet.arc.network`, `https://rpc.quicknode.testnet.arc.network`, `https://rpc.blockdaemon.testnet.arc.network` |
 | Explorer | `https://testnet.arcscan.app` |
 | Faucet | `https://faucet.circle.com` |
-| USDC | `0x3600000000000000000000000000000000000000` |
+| USDC | `0x3600000000000000000000000000000000000000` (6 decimals) |
 
 ---
 
-## Console App Routes
+## Console Routes
 
 | Route | Purpose |
 |---|---|
 | `/` | Landing page |
 | `/agents` | Agent list |
-| `/agent/[id]` | Agent detail |
+| `/agent/[id]` | Agent detail (registry, telemetry, jobs, proofs) |
 | `/jobs` | Job list |
-| `/job/[id]` | Job detail |
-| `/protocol` | Protocol overview |
-| `/docs` | Documentation |
-| `/project/[id]` | Legacy milestone project |
-| `/api/x402/supported` | x402 network/scheme discovery |
+| `/job/[id]` | Job detail (lifecycle + events) |
+| `/protocol` | Protocol overview + module map |
+| `/docs` | Developer docs (in-app) |
+| `/project/[id]` | Legacy V1 milestone project |
+| `/api/x402/supported` | x402 discovery |
 | `/api/x402/verify` | Payment verification |
 | `/api/x402/settle` | Payment settlement |
 | `/api/agents/[id]/run` | Paid agent execution |
+
+---
+
+## Production Checklist
+
+- [ ] Use `@arclayer/sdk` read helpers for normalized contract objects.
+- [ ] Use write config builders with viem/wagmi wallet clients. **Never expose private keys in frontend code.**
+- [ ] Validate Arc Testnet `chainId=5042002` before transaction submission.
+- [ ] Worker MUST be a different address than the connected client (`createJob` reverts otherwise).
+- [ ] Reserve ~400k gas for `settle()`. Never hardcode 300k.
+- [ ] Store rich metadata offchain (IPFS), write durable URIs onchain.
+- [ ] Re-read contracts after confirmations. Indexes/caches are acceleration layers, not canonical.
 
 ---
 
@@ -534,42 +429,38 @@ Run `apps/console/supabase/migrations/001_x402_facilitator.sql` in the Supabase 
 
 ### Live scope
 
-- Arc Testnet only (`chainId=5042002`)
-- Testnet USDC escrow payments
-- JobEscrow-based paid agent execution
-- x402-style 402 negotiation, verification, settlement, and replay protection
-- Generic `/api/x402/verify`, `/api/x402/settle`, `/api/x402/supported`
-- Supabase ledger with requirements, payments, attempts, consumptions, and response cache
-- Indexer-backed UI reads with on-chain state as canonical source
-- Legacy V1 milestone escrow proof retained for historical context
+- ✅ Arc Testnet (`chainId=5042002`)
+- ✅ Testnet USDC escrow payments
+- ✅ JobEscrow-based paid agent execution
+- ✅ x402 negotiation, verification, settlement, replay protection
+- ✅ Generic `/api/x402/*` endpoints
+- ✅ Supabase ledger (requirements, payments, consumptions, cache)
+- ✅ Indexer-backed UI reads with on-chain canonical state
+- ✅ Legacy V1 milestone escrow proof retained
 
-### Not production scope yet
+### Not in scope yet
 
-- Mainnet payments
-- Multi-chain settlement
-- Payment batching
-- Subscription billing
-- Dynamic pricing engine
-- Dispute resolution
-- Automatic refund on agent execution failure
-- Full admin ledger dashboard
-- Third-party standalone facilitator SDK outside this monorepo
+- ❌ Mainnet payments
+- ❌ Multi-chain settlement
+- ❌ Payment batching
+- ❌ Subscription billing
+- ❌ Dynamic pricing engine
+- ❌ Dispute resolution
+- ❌ Auto refund on agent execution failure
+- ❌ Standalone facilitator SDK outside this monorepo
 
 ---
 
 ## Verification Commands
 
-Use these commands to reproduce the current proof set:
+Reproduce the current proof set:
 
 ```bash
 # Console health (canonical domain)
 curl -i https://arclayers.xyz/
 curl -i https://arclayers.xyz/docs
-curl -s https://arclayers.xyz/api/x402/supported
+curl -s https://arclayers.xyz/api/x402/supported | jq .
 curl -i -X POST https://arclayers.xyz/api/agents/demo/run
-
-# Vercel mirror (still live as fallback)
-curl -i https://arclayer-zeta.vercel.app/
 
 # Local code checks
 cd apps/console
@@ -577,8 +468,42 @@ npx tsc --noEmit
 npm test -- --run
 NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
-# On-chain bytecode check example
+# On-chain bytecode check (JobEscrow)
 curl -s -X POST https://rpc.drpc.testnet.arc.network \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"eth_getCode","params":["0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225","latest"],"id":1}'
 ```
+
+---
+
+## Contributing
+
+```bash
+# Fork → clone → branch
+git checkout -b feat/your-feature
+
+# Make changes, then verify
+cd apps/console
+npx tsc --noEmit && npm test -- --run && npm run build
+
+# Open a PR against main
+```
+
+**Before opening a PR:**
+
+- TypeScript must pass (`npx tsc --noEmit`)
+- All Vitest tests must pass (`npm test -- --run`)
+- Next.js build must succeed
+- Don't rename existing contract functions
+- Don't change deployed contract addresses
+- Don't hardcode private keys or service role keys
+
+For AI coding agents working in this repo, read [`AGENTS.md`](./AGENTS.md) first.
+
+---
+
+## License
+
+MIT — see [`LICENSE`](./LICENSE).
+
+Built on [Arc Network](https://arc.network) · Implements [x402](https://x402.org) · Settled in [USDC](https://www.circle.com/usdc).
