@@ -5,7 +5,7 @@
 **Track:** Track 4 — Best Agentic Economy Experience on Arc
 **Project URL:** https://arclayers.xyz
 **Repository:** https://github.com/riyannode/ArcLayer
-**Circle Developer Account Email:** _(fill before submit — must match account at https://console.circle.com/signup)_
+**Circle Developer Account Email:** cutepelong@gmail.com
 **Demo Video:** _(fill before submit — see "Demo Video Script" section)_
 
 ---
