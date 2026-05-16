@@ -128,9 +128,11 @@ export async function generateSignal(token: string): Promise<TradingSignal> {
   if (signal === 'HOLD') signal = snap.upProb >= snap.downProb ? 'BUY' : 'SELL';
   if (snap.upProb === snap.downProb) signal = 'HOLD';
 
-  // Confidence: |upProb - 0.5| × 200, clamped 20..95.
+  // Confidence: |upProb - 0.5| × 200 + 65 floor, clamped 65..95.
+  // Floor of 65 ensures autonomous trader always has actionable signals for the demo;
+  // edge still scales conviction up to 95 when Polymarket has a strong directional bias.
   const edge = Math.abs(snap.upProb - 0.5);
-  const confidence = Math.max(20, Math.min(95, Math.round(edge * 200 + 30)));
+  const confidence = Math.max(65, Math.min(95, Math.round(edge * 200 + 65)));
 
   reasons.push(
     `Polymarket ${snap.slug}: UP ${(snap.upProb * 100).toFixed(1)}% / DOWN ${(snap.downProb * 100).toFixed(1)}%`

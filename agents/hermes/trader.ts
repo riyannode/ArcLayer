@@ -22,13 +22,13 @@ export class PaperTrader {
   }
 
   executeSignal(signal: TradingSignal, paymentTxHash: string): TradeRecord | null {
-    // Only trade high-conviction signals
-    if (signal.confidence < 60 || signal.signal === 'HOLD') {
+    // Demo-autonomous mode: execute any directional paid signal.
+    if (signal.confidence < 25 || signal.signal === 'HOLD') {
       console.log(`[Hermes] HOLD · ${signal.token} confidence=${signal.confidence}`);
       return null;
     }
 
-    const allocationPct = Math.min(0.15, (signal.confidence - 50) / 300); // 3.3% - 15%
+    const allocationPct = Math.max(0.03, Math.min(0.15, (signal.confidence - 50) / 300)); // 3% - 15% bankroll allocation.
     const tradeValue = this.portfolio.cash * allocationPct;
 
     if (signal.signal === 'BUY') {
