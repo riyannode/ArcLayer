@@ -86,6 +86,9 @@ export default function HomeHero() {
         <Link href="/docs" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
           Developer Docs ↗
         </Link>
+        <Link href="/a2a" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
+          A2A Live Dashboard ↗
+        </Link>
         <a
           href="https://github.com/riyannode/ArcLayer"
           target="_blank"

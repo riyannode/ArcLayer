@@ -11,6 +11,7 @@ const items = [
   { label: 'SDK', href: '/docs' },
   { label: 'AGENTS', href: '/agents' },
   { label: 'JOBS', href: '/jobs' },
+  { label: 'A2A', href: '/a2a' },
 ];
 
 export default function HomeSidebar() {

@@ -7,6 +7,9 @@
 import * as dotenv from 'dotenv';
 import express from 'express';
 import { generateSignal } from './logic.js';
+import { resolveIgniaWithPythia } from './resolver.js';
+import { createA2ARouter } from './a2a-routes.js';
+import { getLatestMarketId, readMarket } from '../shared/ignia.js';
 
 dotenv.config();
 
@@ -16,7 +19,9 @@ app.use(express.json());
 const PORT = Number(process.env.PYTHIA_PORT ?? 4001);
 const SELLER_ADDRESS = process.env.PYTHIA_SELLER_ADDRESS ?? '0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b';
 const FACILITATOR_URL = process.env.FACILITATOR_URL ?? 'https://arclayers.xyz';
-const PRICE_PER_SIGNAL = '0.01';
+// x402 exact amount uses atomic USDC units. 10000 = 0.01 USDC (6 decimals).
+const PRICE_PER_SIGNAL = '10000';
+const PRICE_PER_SIGNAL_DISPLAY = '0.01';
 const USDC_ADDRESS = '0x3600000000000000000000000000000000000000';
 
 interface PaymentRequirements {
@@ -50,8 +55,8 @@ const servedNonces = new Set<string>();
 app.get('/signal/:token', async (req, res) => {
   const token = req.params.token.toUpperCase();
 
-  if (!['BTC', 'ETH', 'SOL'].includes(token)) {
-    return res.status(400).json({ error: 'Unsupported token. Use BTC, ETH, or SOL.' });
+  if (!['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'].includes(token)) {
+    return res.status(400).json({ error: 'Unsupported token. Use BTC, ETH, SOL, XRP, or DOGE.' });
   }
 
   const requirements = buildRequirements(token);
@@ -59,7 +64,7 @@ app.get('/signal/:token', async (req, res) => {
 
   if (!paymentHeader) {
     return res.status(402).json({
-      x402Version: 1,
+      x402Version: 2,
       paymentRequirements: requirements,
       accepts: [requirements],
       error: 'Payment required',
@@ -83,7 +88,7 @@ app.get('/signal/:token', async (req, res) => {
     const verifyRes = await fetch(`${FACILITATOR_URL}/api/x402/verify`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ paymentPayload: payload, paymentRequirements: requirements }),
+      body: JSON.stringify({ x402Version: 2, paymentPayload: payload, paymentRequirements: requirements }),
     });
 
     if (!verifyRes.ok) {
@@ -100,7 +105,7 @@ app.get('/signal/:token', async (req, res) => {
     const settleRes = await fetch(`${FACILITATOR_URL}/api/x402/settle`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ paymentPayload: payload, paymentRequirements: requirements }),
+      body: JSON.stringify({ x402Version: 2, paymentPayload: payload, paymentRequirements: requirements }),
     });
 
     if (!settleRes.ok) {
@@ -113,8 +118,8 @@ app.get('/signal/:token', async (req, res) => {
 
     if (nonce) servedNonces.add(nonce);
 
-    // Generate signal
-    const signal = generateSignal(token);
+    // Generate signal (async — fetches Polymarket live data)
+    const signal = await generateSignal(token);
 
     // PAYMENT-RESPONSE header
     const responsePayload = Buffer.from(
@@ -134,6 +139,8 @@ app.get('/signal/:token', async (req, res) => {
   }
 });
 
+app.use('/api/a2a', createA2ARouter());
+
 app.get('/health', (_req, res) => {
   res.json({
     agent: 'Pythia',
@@ -151,8 +158,51 @@ app.get('/stats', (_req, res) => {
   res.json({
     signalsServed: servedNonces.size,
     revenue: (servedNonces.size * Number(PRICE_PER_SIGNAL)).toFixed(2) + ' USDC',
-    supportedTokens: ['BTC', 'ETH', 'SOL'],
+    supportedTokens: ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE'],
   });
+});
+
+const ORACLE_PRIVATE_KEY = process.env.PYTHIA_ORACLE_PRIVATE_KEY as `0x${string}` | undefined;
+
+app.get('/ignia/market/:id?', async (req, res) => {
+  try {
+    const id = req.params.id ? BigInt(req.params.id) : await getLatestMarketId();
+    const market = await readMarket(id);
+    res.json({
+      marketId: id.toString(),
+      question: market.question,
+      yesShares: market.yesShares.toString(),
+      noShares: market.noShares.toString(),
+      pool: market.pool.toString(),
+      outcome: market.outcome,
+      yesProbabilityPct: Number(market.yesProbabilityBps.toFixed(2)),
+      resolutionDeadline: Number(market.resolutionDeadline),
+      deadlineISO: new Date(Number(market.resolutionDeadline) * 1000).toISOString(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? String(err) });
+  }
+});
+
+app.post('/ignia/resolve/:id', async (req, res) => {
+  if (!ORACLE_PRIVATE_KEY) {
+    return res.status(503).json({ error: 'PYTHIA_ORACLE_PRIVATE_KEY not configured' });
+  }
+  try {
+    const marketId = BigInt(req.params.id);
+    const dryRun = req.query.dryRun === 'true' || req.query.dry === '1';
+    const result = await resolveIgniaWithPythia(ORACLE_PRIVATE_KEY, marketId, { dryRun });
+    console.log(`[Pythia] Resolve marketId=${marketId} status=${result.status} outcome=${result.decision.outcome} tx=${result.txHash ?? '-'}`);
+    res.json({
+      ...result,
+      decision: {
+        ...result.decision,
+        marketId: result.decision.marketId.toString(),
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? String(err) });
+  }
 });
 
 app.listen(PORT, () => {
@@ -162,9 +212,12 @@ app.listen(PORT, () => {
   console.log(`Seller: ${SELLER_ADDRESS}`);
   console.log(`Price: ${PRICE_PER_SIGNAL} USDC/signal`);
   console.log(`Facilitator: ${FACILITATOR_URL}`);
+  console.log(`Oracle: ${ORACLE_PRIVATE_KEY ? 'configured' : 'NOT configured (set PYTHIA_ORACLE_PRIVATE_KEY)'}`);
   console.log(`Endpoints:`);
-  console.log(`  GET /signal/:token  (BTC|ETH|SOL) — x402 gated`);
-  console.log(`  GET /health`);
-  console.log(`  GET /stats`);
+  console.log(`  GET  /signal/:token         (BTC|ETH|SOL) — x402 gated`);
+  console.log(`  GET  /ignia/market/:id?     latest market state if id omitted`);
+  console.log(`  POST /ignia/resolve/:id     oracle resolution (?dry=1 for dry-run)`);
+  console.log(`  GET  /health`);
+  console.log(`  GET  /stats`);
   console.log();
 });

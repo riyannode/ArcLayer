@@ -7,7 +7,11 @@
     "pythia": "tsx pythia/server.ts",
     "hermes": "tsx hermes/agent.ts",
     "dev:pythia": "tsx watch pythia/server.ts",
-    "dev:hermes": "tsx watch hermes/agent.ts"
+    "dev:hermes": "tsx watch hermes/agent.ts",
+    "resolver": "tsx resolver/daemon.ts",
+    "scanner": "tsx scanner/market-scanner.ts",
+    "dev:resolver": "tsx watch resolver/daemon.ts",
+    "dev:scanner": "tsx watch scanner/market-scanner.ts"
   },
   "dependencies": {
     "express": "^4.21.0",

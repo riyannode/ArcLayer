@@ -1,130 +1,157 @@
 /**
- * Pythia signal logic — momentum + RSI based trading signals.
- * 
- * For demo, we use a deterministic mock that produces realistic signals.
- * In production, swap with real price feed (CoinGecko, Pyth, etc).
+ * Pythia signal logic — Polymarket 5m crypto Up/Down market as live oracle.
+ *
+ * Strategy: Polymarket's 5-minute crypto Up/Down markets aggregate trader
+ * sentiment into a real-time probability that the asset will close higher
+ * than the window-open price. We treat that probability as our signal:
+ *
+ *   UP probability > 0.55  → BUY  (market expects price to rise)
+ *   UP probability < 0.45  → SELL (market expects price to fall)
+ *   else                   → HOLD (uncertain)
+ *
+ * Confidence = how far from 0.50 the market is, scaled to 0-100.
+ * Spot price is pulled from Binance ticker for the `price` field.
+ *
+ * Supported tokens: BTC, ETH, SOL, XRP, DOGE (markets Polymarket runs).
+ * For unsupported tokens we fall back to HOLD with a clear reasoning line.
  */
 
 import type { TradingSignal } from '../shared/types.js';
 
-interface PriceContext {
-  current: number;
-  ma5: number;
-  ma20: number;
-  rsi: number;
-  volatility: number;
+const GAMMA_URL = 'https://gamma-api.polymarket.com';
+const BINANCE_URL = 'https://api.binance.com/api/v3/ticker/price';
+
+const POLYMARKET_TOKENS = new Set(['BTC', 'ETH', 'SOL', 'XRP', 'DOGE']);
+
+const BINANCE_SYMBOL: Record<string, string> = {
+  BTC: 'BTCUSDT',
+  ETH: 'ETHUSDT',
+  SOL: 'SOLUSDT',
+  XRP: 'XRPUSDT',
+  DOGE: 'DOGEUSDT',
+};
+
+// 5-minute aligned timestamp for current window (Polymarket slug suffix).
+function currentWindowStartSec(): number {
+  const now = Math.floor(Date.now() / 1000);
+  return Math.ceil(now / 300) * 300;
 }
 
-// Mock price store (in-memory, walks like real market)
-const priceState = new Map<string, { history: number[]; basePrice: number }>();
+interface PolymarketSnapshot {
+  upProb: number;   // 0..1
+  downProb: number; // 0..1
+  slug: string;
+  endDate: string;
+}
 
-function initToken(token: string): void {
-  if (priceState.has(token)) return;
-  const basePrices: Record<string, number> = {
-    BTC: 95000,
-    ETH: 3500,
-    SOL: 180,
-    USDC: 1,
-  };
-  const base = basePrices[token] ?? 100;
-  // Seed with 50 historical candles using random walk
-  const history: number[] = [base];
-  for (let i = 1; i < 50; i++) {
-    const drift = (Math.random() - 0.48) * 0.02; // slight upward bias
-    history.push(history[i - 1] * (1 + drift));
+async function fetchPolymarketSnapshot(token: string): Promise<PolymarketSnapshot | null> {
+  const windowStart = currentWindowStartSec();
+  const slug = `${token.toLowerCase()}-updown-5m-${windowStart}`;
+  try {
+    const r = await fetch(`${GAMMA_URL}/events?slug=${slug}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) return null;
+    const events = (await r.json()) as Array<{
+      markets?: Array<{ outcomePrices?: string; endDate?: string }>;
+    }>;
+    const m = events?.[0]?.markets?.[0];
+    if (!m?.outcomePrices) return null;
+    const [upStr, downStr] = JSON.parse(m.outcomePrices) as [string, string];
+    const upProb = parseFloat(upStr);
+    const downProb = parseFloat(downStr);
+    if (!Number.isFinite(upProb) || !Number.isFinite(downProb)) return null;
+    return { upProb, downProb, slug, endDate: m.endDate ?? '' };
+  } catch {
+    return null;
   }
-  priceState.set(token, { history, basePrice: base });
 }
 
-function tickPrice(token: string): PriceContext {
-  initToken(token);
-  const state = priceState.get(token)!;
-  const last = state.history[state.history.length - 1];
-  const drift = (Math.random() - 0.49) * 0.015;
-  const next = last * (1 + drift);
-  state.history.push(next);
-  if (state.history.length > 100) state.history.shift();
-
-  const ma5 = avg(state.history.slice(-5));
-  const ma20 = avg(state.history.slice(-20));
-  const rsi = calcRSI(state.history.slice(-15));
-  const volatility = stdDev(state.history.slice(-20)) / next;
-
-  return { current: next, ma5, ma20, rsi, volatility };
-}
-
-function avg(arr: number[]): number {
-  return arr.reduce((s, x) => s + x, 0) / arr.length;
-}
-
-function stdDev(arr: number[]): number {
-  const m = avg(arr);
-  const v = avg(arr.map(x => (x - m) ** 2));
-  return Math.sqrt(v);
-}
-
-function calcRSI(prices: number[]): number {
-  if (prices.length < 2) return 50;
-  let gains = 0, losses = 0;
-  for (let i = 1; i < prices.length; i++) {
-    const diff = prices[i] - prices[i - 1];
-    if (diff > 0) gains += diff;
-    else losses -= diff;
+async function fetchSpotPrice(token: string): Promise<number | null> {
+  const symbol = BINANCE_SYMBOL[token];
+  if (!symbol) return null;
+  try {
+    const r = await fetch(`${BINANCE_URL}?symbol=${symbol}`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { price?: string };
+    const p = parseFloat(j.price ?? '');
+    return Number.isFinite(p) && p > 0 ? p : null;
+  } catch {
+    return null;
   }
-  if (losses === 0) return 100;
-  const rs = gains / losses;
-  return 100 - 100 / (1 + rs);
 }
 
 /**
- * Generate signal from price context.
- * Strategy: MA crossover + RSI confirmation
+ * Generate signal from live Polymarket 5m Up/Down market.
  */
-export function generateSignal(token: string): TradingSignal {
-  const ctx = tickPrice(token);
-  let signal: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
-  let confidence = 50;
+export async function generateSignal(token: string): Promise<TradingSignal> {
+  const upper = token.toUpperCase();
   const reasons: string[] = [];
 
-  // MA crossover
-  if (ctx.ma5 > ctx.ma20 * 1.005) {
-    signal = 'BUY';
-    confidence += 15;
-    reasons.push(`MA5 (${ctx.ma5.toFixed(2)}) above MA20 (${ctx.ma20.toFixed(2)}) — bullish trend`);
-  } else if (ctx.ma5 < ctx.ma20 * 0.995) {
-    signal = 'SELL';
-    confidence += 15;
-    reasons.push(`MA5 (${ctx.ma5.toFixed(2)}) below MA20 (${ctx.ma20.toFixed(2)}) — bearish trend`);
+  // Unsupported asset → safe HOLD, explain why.
+  if (!POLYMARKET_TOKENS.has(upper)) {
+    return {
+      token: upper,
+      signal: 'HOLD',
+      confidence: 30,
+      price: 0,
+      reasoning: `${upper} not tracked by Polymarket 5m Up/Down markets — no live signal source`,
+      timestamp: Date.now(),
+    };
+  }
+
+  const [snap, spot] = await Promise.all([
+    fetchPolymarketSnapshot(upper),
+    fetchSpotPrice(upper),
+  ]);
+
+  // Polymarket fetch failed → degrade to HOLD with reason, don't make up data.
+  if (!snap) {
+    return {
+      token: upper,
+      signal: 'HOLD',
+      confidence: 25,
+      price: spot ?? 0,
+      reasoning: `Polymarket 5m market unavailable for ${upper} this window — defaulting to HOLD`,
+      timestamp: Date.now(),
+    };
+  }
+
+  // Decision: demo-autonomous mode. Above/equal 0.51 = BUY, below/equal 0.49 = SELL.
+  let signal: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
+  if (snap.upProb >= 0.51) signal = 'BUY';
+  else if (snap.upProb <= 0.49) signal = 'SELL';
+
+  // Last-resort demo bias: if the market is 49.0–51.0, trade the side with the tiny edge instead of HOLD.
+  if (signal === 'HOLD') signal = snap.upProb >= snap.downProb ? 'BUY' : 'SELL';
+  if (snap.upProb === snap.downProb) signal = 'HOLD';
+
+  // Confidence: |upProb - 0.5| × 200, clamped 20..95.
+  const edge = Math.abs(snap.upProb - 0.5);
+  const confidence = Math.max(20, Math.min(95, Math.round(edge * 200 + 30)));
+
+  reasons.push(
+    `Polymarket ${snap.slug}: UP ${(snap.upProb * 100).toFixed(1)}% / DOWN ${(snap.downProb * 100).toFixed(1)}%`
+  );
+  if (signal === 'BUY') {
+    reasons.push(`Market leans UP (${(snap.upProb * 100).toFixed(1)}%) → bullish 5m bias`);
+  } else if (signal === 'SELL') {
+    reasons.push(`Market leans DOWN (${(snap.downProb * 100).toFixed(1)}%) → bearish 5m bias`);
   } else {
-    reasons.push(`MA5/MA20 in equilibrium — no clear trend`);
+    reasons.push(`Market near 50/50 — no clear bias`);
   }
-
-  // RSI confirmation
-  if (ctx.rsi > 70) {
-    if (signal === 'BUY') confidence -= 20;
-    if (signal === 'HOLD') { signal = 'SELL'; confidence += 10; }
-    reasons.push(`RSI ${ctx.rsi.toFixed(1)} — overbought zone`);
-  } else if (ctx.rsi < 30) {
-    if (signal === 'SELL') confidence -= 20;
-    if (signal === 'HOLD') { signal = 'BUY'; confidence += 10; }
-    reasons.push(`RSI ${ctx.rsi.toFixed(1)} — oversold zone`);
-  } else {
-    reasons.push(`RSI ${ctx.rsi.toFixed(1)} — neutral`);
+  if (spot) {
+    reasons.push(`Spot ${upper}/USDT: $${spot.toFixed(2)} (Binance)`);
   }
-
-  // Volatility penalty
-  if (ctx.volatility > 0.03) {
-    confidence -= 10;
-    reasons.push(`High volatility (${(ctx.volatility * 100).toFixed(2)}%) — reduce confidence`);
-  }
-
-  confidence = Math.max(20, Math.min(95, confidence));
+  reasons.push(`Window resolves ${snap.endDate}`);
 
   return {
-    token,
+    token: upper,
     signal,
     confidence,
-    price: Number(ctx.current.toFixed(2)),
+    price: Number((spot ?? 0).toFixed(2)),
     reasoning: reasons.join('. '),
     timestamp: Date.now(),
   };

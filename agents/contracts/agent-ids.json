@@ -1,0 +1,17 @@
+{
+  "pythia": {
+    "agentId": "0x49c996c626a315b5af92d58f0db6c12acf106818d47b39221b8a73217ddccc37",
+    "txHash": "0x916db4c9f9f22d20928ee21c233d2689ddebb7247a74c77790a0a6eaed0c264d",
+    "address": "0x51a6e681f5a74A65dD853Dc21d9ffF4A5341514e"
+  },
+  "hermes": {
+    "agentId": "0xe0704f9716c028e812f9a6651af63bf49d8a5476dc32ff04093d217459044234",
+    "txHash": "0x9eda111d2858e5786b1122ce55a6eec0322ed6e1e9764167772e4e9a0781e466",
+    "address": "0x8fafCF61AA3E429EE6627b2a5a3FFAEc6B51A528"
+  },
+  "resolver": {
+    "agentId": "0xab202894ba69a54449eacc00f3bd58441a2ac7a4a6501f80edbc799a6efd2d2f",
+    "txHash": "0x914c8ee4855f49d3db6e0f50c0c1ad67799cfaf627126de88db4744ced1e5143",
+    "address": "0x51a6e681f5a74A65dD853Dc21d9ffF4A5341514e"
+  }
+}

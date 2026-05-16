@@ -20,10 +20,10 @@ export const arcTestnet: Chain = {
   name: 'Arc Testnet',
   nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://testnet-rpc.arc.circle.com'] },
+    default: { http: [process.env.ARC_RPC_URL ?? 'https://rpc.drpc.testnet.arc.network'] },
   },
   blockExplorers: {
-    default: { name: 'Arc Explorer', url: 'https://testnet-explorer.arc.circle.com' },
+    default: { name: 'Arc Explorer', url: 'https://explorer.testnet.arc.network' },
   },
 };
 
@@ -116,7 +116,8 @@ export class X402Client {
   }
 
   private async signPayment(requirements: PaymentRequirements): Promise<X402PaymentPayload> {
-    const value = parseUnits(requirements.amount, USDC_DECIMALS);
+    // Amount is already in atomic USDC units (e.g. "10000" = 0.01 USDC)
+    const value = BigInt(requirements.amount);
     const validAfter = 0;
     const validBefore = Math.floor(Date.now() / 1000) + (requirements.maxTimeoutSeconds || 300);
     const nonce = keccak256(
@@ -160,9 +161,17 @@ export class X402Client {
     });
 
     return {
-      x402Version: 1,
+      x402Version: 2,
       scheme: 'exact',
       network: 'eip155:5042002',
+      accepted: {
+        scheme: 'exact',
+        network: 'eip155:5042002',
+        asset: USDC_ADDRESS,
+        amount: requirements.amount,
+        payTo: requirements.payTo,
+        maxTimeoutSeconds: requirements.maxTimeoutSeconds || 300,
+      },
       payload: {
         signature,
         authorization: {

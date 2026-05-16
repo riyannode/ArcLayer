@@ -24,6 +24,14 @@ export interface X402PaymentPayload {
   x402Version: number;
   scheme: 'exact';
   network: string;
+  accepted: {
+    scheme: 'exact';
+    network: string;
+    asset: string;
+    amount: string;
+    payTo: string;
+    maxTimeoutSeconds: number;
+  };
   payload: {
     signature: string;
     authorization: {
