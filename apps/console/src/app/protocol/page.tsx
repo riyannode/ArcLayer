@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { ARC_EXPLORER, formatUSDC, shortenAddress } from '@/lib/contracts';
+import { shortAgentId } from '@/lib/agentName';
 import { fetchIndexerJson, type DashboardOverview } from '@/lib/indexer';
 
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
@@ -301,15 +302,21 @@ export default function Dashboard() {
                 <Link
                   key={job.id}
                   href={`/job/${job.id.toString()}`}
-                  className="ledger-row block border border-white/10 bg-black/20 px-4 py-3 hover:border-[#C5A67C]/40"
+                  className="ledger-row block border border-white/10 bg-black/20 px-4 py-3 hover:border-[#C5A67C]/40 overflow-hidden"
                 >
-                  <div className="grid grid-cols-1 items-center gap-2 md:grid-cols-[40px_1fr_70px_80px_90px] md:gap-3">
-                    <span className="font-mono text-[12.5px]" style={{ color: '#EAE4D8' }}>#{job.id}</span>
-                    <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.7)' }}>
+                  <div className="grid grid-cols-1 items-center gap-2 md:grid-cols-[40px_1fr_90px_80px_90px] md:gap-3 min-w-0">
+                    <span className="font-mono text-[12.5px] min-w-0 truncate" style={{ color: '#EAE4D8' }}>#{job.id}</span>
+                    <span className="font-mono text-[11px] min-w-0 truncate" style={{ color: 'rgba(234, 228, 216, 0.7)' }}>
                       {shortenAddress(job.client)} <span style={{ color: '#C5A67C' }}>→</span> {shortenAddress(job.worker)}
                     </span>
-                    <span className="text-left font-mono text-[10.5px] md:text-right" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>ag #{job.agentId}</span>
-                    <span className="text-left font-mono text-[11px] md:text-right" style={{ color: '#C5A67C' }}>{formatUSDC(BigInt(job.budget))}</span>
+                    <span
+                      title={`agent ${job.agentId}`}
+                      className="text-left font-mono text-[10.5px] md:text-right min-w-0 truncate whitespace-nowrap overflow-hidden"
+                      style={{ color: 'rgba(234, 228, 216, 0.5)' }}
+                    >
+                      ag {shortAgentId(job.agentId)}
+                    </span>
+                    <span className="text-left font-mono text-[11px] md:text-right min-w-0 truncate" style={{ color: '#C5A67C' }}>{formatUSDC(BigInt(job.budget))}</span>
                     <span className={`chip-status ${JOB_TONE[job.status] || 'pending'} justify-self-start md:justify-self-end`}>{JOB_STATUS[job.status]}</span>
                   </div>
                 </Link>
