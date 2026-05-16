@@ -193,10 +193,15 @@ export default function X402DemoPage() {
     // See @circle-fin/x402-batching: GATEWAY_AUTH_VALIDITY_WINDOW_SECONDS = 7d + 100s.
     const validBefore = String(Math.floor(Date.now() / 1000) + 604900);
     const nonce = randomNonce();
-    const verifyingContract = (gwOption.extra?.verifyingContract as string) || USDC;
+    // Gateway EIP-712 domain: use extra fields from 402 response (name, version, verifyingContract)
+    // Circle SDK expects: name='GatewayWalletBatched', version='1', verifyingContract=GatewayWallet
+    const gwDomainName = String(gwOption.extra?.name || 'GatewayWalletBatched');
+    const gwDomainVersion = String(gwOption.extra?.version || '1');
+    const gwVerifyingContract = getAddress(String(gwOption.extra?.verifyingContract || USDC));
 
     const paymentPayload = {
       x402Version: 2,
+      resource: `${window.location.origin}/api/x402-demo/protected`,
       accepted: { ...gwOption, asset: getAddress(gwOption.asset), payTo: getAddress(gwOption.payTo), extra: { ...gwOption.extra, name: 'GatewayWalletBatched' } },
       payload: {
         signature: '0x' as Hex,
@@ -205,6 +210,7 @@ export default function X402DemoPage() {
     };
 
     log('[GW] 3/7 Signing EIP-3009 for Gateway batching...');
+    log(`[GW] Domain: name=${gwDomainName} version=${gwDomainVersion} verifyingContract=${gwVerifyingContract.slice(0, 10)}...`);
     try {
       const provider = await wallet.getEthereumProvider();
       paymentPayload.payload.signature = await provider.request({
@@ -215,7 +221,7 @@ export default function X402DemoPage() {
             TransferWithAuthorization: [{ name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' }],
           },
           primaryType: 'TransferWithAuthorization',
-          domain: { name: 'USDC', version: '2', chainId: ARC_CHAIN_ID, verifyingContract: getAddress(verifyingContract) },
+          domain: { name: gwDomainName, version: gwDomainVersion, chainId: ARC_CHAIN_ID, verifyingContract: gwVerifyingContract },
           message: { from: address, to: getAddress(gwOption.payTo), value: `0x${BigInt(gwOption.amount).toString(16)}`, validAfter: '0x0', validBefore: `0x${BigInt(validBefore).toString(16)}`, nonce },
         })],
       }) as Hex;
