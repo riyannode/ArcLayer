@@ -147,7 +147,7 @@ export default function LiveLogStream() {
   }, []);
 
   return (
-    <div className="llog">
+    <div className="llog w-full min-w-0 max-w-full overflow-hidden">
       <div className="llog-bar">
         <div className="llog-dots" aria-hidden="true">
           <span className="llog-dot r" />
@@ -250,18 +250,22 @@ export default function LiveLogStream() {
         }
         .llog-line {
           display: flex; gap: 10px; align-items: baseline;
-          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          min-width: 0; overflow: hidden;
           animation: llog-line-in 0.35s ease both;
         }
         @keyframes llog-line-in {
           from { opacity: 0; transform: translateY(4px); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        .llog-ts    { color: rgba(234,228,216,0.35); min-width: 64px; }
-        .llog-chev  { color: #C5A67C; }
-        .llog-call  { color: #EAE4D8; }
-        .llog-hash  { color: #C5A67C; }
-        .llog-note  { color: rgba(234,228,216,0.55); }
+        .llog-ts    { color: rgba(234,228,216,0.35); min-width: 64px; flex-shrink: 0; white-space: nowrap; }
+        .llog-chev  { color: #C5A67C; flex-shrink: 0; }
+        .llog-call  { color: #EAE4D8; flex-shrink: 0; white-space: nowrap; }
+        .llog-hash  { color: #C5A67C; flex-shrink: 0; white-space: nowrap; }
+        .llog-note  {
+          color: rgba(234,228,216,0.55);
+          min-width: 0; flex: 1 1 auto;
+          overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
         .lvl-ok   .llog-call { color: #B8CD7E; }
         .lvl-warn .llog-call { color: #E6C28C; }
         .lvl-dim  .llog-call { color: rgba(234,228,216,0.65); }
