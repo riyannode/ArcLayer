@@ -126,8 +126,22 @@ export async function GET(req: NextRequest) {
         );
       }
 
+      // Circle Gateway requires `resource` as an object ({url, description?, mimeType?}),
+      // not a bare URL string. Canonical x402 clients can pass `resource: "<url>"`,
+      // so coerce string → object here. Mirrors normalization in /api/x402/verify.
+      const rawResource = (proof as Record<string, unknown>).resource;
+      let resource: Record<string, unknown>;
+      if (typeof rawResource === 'string' && rawResource.length > 0) {
+        resource = { url: rawResource, description: 'ArcLayer x402 Gateway demo', mimeType: 'application/json' };
+      } else if (rawResource && typeof rawResource === 'object') {
+        resource = rawResource as Record<string, unknown>;
+      } else {
+        resource = { url: req.url, description: 'ArcLayer x402 Gateway demo', mimeType: 'application/json' };
+      }
+      const normalizedProof = { ...(proof as Record<string, unknown>), resource };
+
       const verify = await client.verify(
-        proof as unknown as Parameters<typeof client.verify>[0],
+        normalizedProof as unknown as Parameters<typeof client.verify>[0],
         gatewayRequirements as unknown as Parameters<typeof client.verify>[1],
       );
       if (!verify.isValid) {
@@ -138,7 +152,7 @@ export async function GET(req: NextRequest) {
       }
 
       const settle = await client.settle(
-        proof as unknown as Parameters<typeof client.settle>[0],
+        normalizedProof as unknown as Parameters<typeof client.settle>[0],
         gatewayRequirements as unknown as Parameters<typeof client.settle>[1],
       ).catch((error) => ({ success: false, errorReason: 'gateway_settlement_pending', errorMessage: error instanceof Error ? error.message : String(error), transaction: '', network: GATEWAY_NETWORK_NAME, payer: verify.payer }));
 
