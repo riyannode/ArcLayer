@@ -13,6 +13,9 @@ importers:
       '@arclayer/sdk':
         specifier: workspace:*
         version: link:../../sdk
+      '@circle-fin/x402-batching':
+        specifier: ^3.0.4
+        version: 3.0.4(@x402/core@2.12.0)(@x402/evm@2.12.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))(viem@2.48.11(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))
       '@privy-io/react-auth':
         specifier: ^3.25.0
         version: 3.25.0(@solana-program/system@0.10.0(@solana/kit@5.5.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)))(@solana-program/token@0.9.0(@solana/kit@5.5.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)))(@solana/kit@5.5.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))(@solana/sysvars@5.5.1(typescript@5.9.3))(@tanstack/query-core@5.100.10)(@tanstack/react-query@5.100.10(react@18.3.1))(@types/react@18.3.28)(bufferutil@4.1.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@18.3.1))(utf-8-validate@5.0.10)(zod@4.4.3)
@@ -28,6 +31,12 @@ importers:
       '@wagmi/core':
         specifier: ^2.12.0
         version: 2.22.1(@tanstack/query-core@5.100.10)(@types/react@18.3.28)(react@18.3.1)(typescript@5.9.3)(use-sync-external-store@1.4.0(react@18.3.1))(viem@2.48.11(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))
+      '@x402/core':
+        specifier: ^2.12.0
+        version: 2.12.0
+      '@x402/evm':
+        specifier: ^2.12.0
+        version: 2.12.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
       next:
         specifier: 14.2.0
         version: 14.2.0(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -130,6 +139,17 @@ packages:
 
   '@base-org/account@2.4.0':
     resolution: {integrity: sha512-A4Umpi8B9/pqR78D1Yoze4xHyQaujioVRqqO3d6xuDFw9VRtjg6tK3bPlwE0aW+nVH/ntllCpPa2PbI8Rnjcug==}
+
+  '@circle-fin/x402-batching@3.0.4':
+    resolution: {integrity: sha512-631ZdmNQiCdNRLCY3uNTiD8G+cK4wiIElk/iQESwcpziQfirBXPCR9At14Kqgeq6tyFF67wHrIZzSRhPWk7C6Q==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@x402/core': ^2.3.0
+      '@x402/evm': ^2.3.0
+      viem: ^2.0.0
+    peerDependenciesMeta:
+      '@x402/evm':
+        optional: true
 
   '@coinbase/cdp-sdk@1.49.0':
     resolution: {integrity: sha512-Tk/ZXjVRb/ph7AIXqJ+yhQX0LQMlC0cCyeNWzN02guG/r6Dk39r4asZdGSzyNyZod4CNktn7S4N0DFn85KTOPw==}
@@ -1765,6 +1785,12 @@ packages:
 
   '@walletconnect/window-metadata@1.0.1':
     resolution: {integrity: sha512-9koTqyGrM2cqFRW517BPY/iEtUDx2r1+Pwwu5m7sJ7ka79wi3EyqhqcICk/yDmv6jAS1rjKgTKXlEhanYjijcA==}
+
+  '@x402/core@2.12.0':
+    resolution: {integrity: sha512-dLae9AbZRN/W7GsKe9ngqGsflnP+esE72s0GjmqDZbPihM/tlHCA6UnDdgM0qfOiDOf9iL+mmCs1OyLWpwnGLQ==}
+
+  '@x402/evm@2.12.0':
+    resolution: {integrity: sha512-kZUoHPVdBS8wlTg5K1eoh/1V0+5n9ABGRPC5DOQwRlkAwIrAFOEi2pQE+jgvOx0iM5ib2xj9gJjpldRbasX12w==}
 
   abitype@1.0.6:
     resolution: {integrity: sha512-MMSqYh4+C/aVqI2RQaWqbvI4Kxo5cQV40WQ4QFtDnNzCkqChm8MuENhElmynZlO0qUy/ObkEUaXtKqYnx1Kp3A==}
@@ -4257,6 +4283,13 @@ snapshots:
       - use-sync-external-store
       - utf-8-validate
       - zod
+
+  '@circle-fin/x402-batching@3.0.4(@x402/core@2.12.0)(@x402/evm@2.12.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))(viem@2.48.11(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))':
+    dependencies:
+      '@x402/core': 2.12.0
+      viem: 2.48.11(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+    optionalDependencies:
+      '@x402/evm': 2.12.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
 
   '@coinbase/cdp-sdk@1.49.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)':
     dependencies:
@@ -8464,6 +8497,20 @@ snapshots:
     dependencies:
       '@walletconnect/window-getters': 1.0.1
       tslib: 1.14.1
+
+  '@x402/core@2.12.0':
+    dependencies:
+      zod: 3.25.76
+
+  '@x402/evm@2.12.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)':
+    dependencies:
+      '@x402/core': 2.12.0
+      viem: 2.48.11(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
 
   abitype@1.0.6(typescript@5.9.3)(zod@3.25.76):
     optionalDependencies:

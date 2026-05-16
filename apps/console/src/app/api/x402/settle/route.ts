@@ -1,7 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createX402Facilitator, parseExactVerifyRequest, settleExactPayment } from '@/lib/x402';
+import {
+  createX402Facilitator,
+  deriveGatewayPaymentId,
+  getBatchFacilitatorClient,
+  isBatchPayment,
+  recordGatewayPayment,
+  parseExactVerifyRequest,
+  settleExactPayment,
+} from '@/lib/x402';
 
 export const runtime = 'nodejs';
+
+// ─── Helper: normalize payload for Circle Gateway API ─────────────────────────
+function toCaip2Network(network: unknown): string {
+  if (typeof network !== 'string') return 'eip155:5042002';
+  if (network.startsWith('eip155:')) return network;
+  if (network === 'arcTestnet') return 'eip155:5042002';
+  return network;
+}
+
+function normalizeRequirementsForGateway(req: Record<string, unknown>): Record<string, unknown> {
+  return { ...req, network: toCaip2Network(req.network) };
+}
+
+function normalizePayloadForGateway(payload: Record<string, unknown>, requirements: Record<string, unknown>): Record<string, unknown> {
+  const accepted = (payload.accepted as Record<string, unknown> | undefined) ?? requirements;
+  const normalizedAccepted = { ...accepted, network: toCaip2Network(accepted.network) };
+  let resource = payload.resource as Record<string, unknown> | undefined;
+  if (!resource) {
+    resource = {
+      url: 'https://arclayers.xyz/api/x402-demo/protected',
+      description: 'ArcLayer x402 Gateway demo',
+      mimeType: 'application/json',
+    };
+  }
+  return { ...payload, accepted: normalizedAccepted, resource };
+}
 
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -19,15 +53,78 @@ export async function POST(req: NextRequest) {
   const version = body.x402Version;
 
   if (version === 2 || scheme === 'exact') {
+    const paymentRequirements = body.paymentRequirements as Record<string, unknown> | undefined;
+    if (paymentRequirements && isBatchPayment(paymentRequirements)) {
+      return handleGatewaySettle(body);
+    }
     return handleExactSettle(body);
   }
 
   return handleArcEscrowSettle(body);
 }
 
+// ─── Gateway batched settle (Circle Gateway) ─────────────────────────────────
+async function handleGatewaySettle(body: Record<string, unknown>): Promise<NextResponse> {
+  const paymentPayload = body.paymentPayload ?? body;
+  const paymentRequirements = body.paymentRequirements as Record<string, unknown>;
+
+  const normalizedRequirements = normalizeRequirementsForGateway(paymentRequirements);
+  const normalizedPayload = normalizePayloadForGateway(paymentPayload as Record<string, unknown>, normalizedRequirements);
+
+  try {
+    const client = getBatchFacilitatorClient();
+    const result = await client.settle(
+      normalizedPayload as unknown as Parameters<typeof client.settle>[0],
+      normalizedRequirements as unknown as Parameters<typeof client.settle>[1],
+    );
+
+    const paymentId = deriveGatewayPaymentId(paymentPayload, paymentRequirements);
+    if (!result.success) {
+      recordGatewayPayment({
+        paymentId,
+        status: 'accepted',
+        payer: result.payer,
+        transaction: result.transaction || '',
+        network: result.network,
+        verifiedAt: Date.now(),
+raw: result as unknown as Record<string, unknown>,
+        });
+      return NextResponse.json(
+        {
+          success: true,
+          payer: result.payer,
+          transaction: result.transaction || '',
+          network: result.network,
+          paymentIdentifier: paymentId,
+          extra: { mode: 'circle-gateway', status: 'accepted_pending_settlement', settlementError: result.errorReason },
+        },
+        { status: 202 }
+      );
+    }
+
+    recordGatewayPayment({ paymentId, status: 'settled', payer: result.payer, transaction: result.transaction, network: result.network, settledAt: Date.now(), raw: result as unknown as Record<string, unknown> });
+    return NextResponse.json(
+      {
+        success: true,
+        payer: result.payer,
+        transaction: result.transaction,
+        network: result.network,
+        paymentIdentifier: paymentId,
+        extra: { mode: 'circle-gateway', status: 'settled' },
+      },
+      { status: 200 }
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Gateway settle failed';
+    return NextResponse.json(
+      { success: false, errorReason: 'gateway_error', errorMessage: message, transaction: '' },
+      { status: 502 }
+    );
+  }
+}
+
 // ─── Exact scheme (V2 canonical) ──────────────────────────────────────────────
 async function handleExactSettle(body: Record<string, unknown>): Promise<NextResponse> {
-  // Reuse parseExactVerifyRequest for shape validation (settle accepts same structure)
   const parsed = parseExactVerifyRequest(body);
   if (!parsed.ok) {
     return NextResponse.json(

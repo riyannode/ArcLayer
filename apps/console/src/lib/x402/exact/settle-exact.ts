@@ -41,7 +41,7 @@ export interface SettleExactInput {
   relayerPrivateKey?: Hex;
   /** Circle Gateway base URL. */
   circleGatewayUrl?: string;
-  /** Circle API key for gateway auth. */
+  /** Circle API key (optional, NOT required for facilitator flow). */
   circleApiKey?: string;
 }
 
@@ -70,12 +70,10 @@ function splitSignature(sig: Hex): { v: number; r: Hex; s: Hex } {
  */
 async function settleViaCircleGateway(input: SettleExactInput): Promise<SettleResponse> {
   const baseUrl = input.circleGatewayUrl ?? process.env.CIRCLE_GATEWAY_URL ?? 'https://gateway-api-testnet.circle.com';
+  // NOTE: Circle API key is NOT required for the normal Gateway/Nanopayments
+  // facilitator flow. The BatchFacilitatorClient() is keyless. This REST path
+  // is a legacy fallback and does not gate on credentials.
   const apiKey = input.circleApiKey ?? process.env.CIRCLE_API_KEY ?? '';
-
-  if (!apiKey) {
-    // No Circle API key configured — fall through to self-hosted
-    return settleErr('relayer_not_configured', 'Circle Gateway API key not configured, falling back to self-hosted');
-  }
 
   const body = {
     paymentPayload: {
@@ -220,8 +218,11 @@ async function settleOnChain(input: SettleExactInput): Promise<SettleResponse> {
 
 /**
  * Main settle entry point.
- * Strategy: Circle Gateway first → self-hosted fallback if gateway fails.
+ * Strategy: Circle Gateway REST first → self-hosted fallback if gateway fails.
  * If `selfHosted: true`, skip gateway entirely.
+ * NOTE: Circle API key is NOT required for the normal Gateway facilitator flow.
+ * The BatchFacilitatorClient (used in /api/x402/settle route) is keyless.
+ * This REST path is a secondary fallback only.
  */
 export async function settleExactPayment(input: SettleExactInput): Promise<SettleResponse> {
   // Check authorization hasn't expired

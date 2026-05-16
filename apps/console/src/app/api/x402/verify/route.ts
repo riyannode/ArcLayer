@@ -1,7 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createX402Facilitator, parseExactVerifyRequest, verifyExactEvmPayment } from '@/lib/x402';
+import {
+  createX402Facilitator,
+  deriveGatewayPaymentId,
+  getBatchFacilitatorClient,
+  isBatchPayment,
+  recordGatewayPayment,
+  parseExactVerifyRequest,
+  verifyExactEvmPayment,
+} from '@/lib/x402';
 
 export const runtime = 'nodejs';
+
+// ─── Helper: normalize payload for Circle Gateway API ─────────────────────────
+// Circle Gateway requires:
+//  - network in CAIP-2 format (e.g. "eip155:5042002") not "arcTestnet"
+//  - paymentPayload.resource to be present
+function toCaip2Network(network: unknown): string {
+  if (typeof network !== 'string') return 'eip155:5042002';
+  if (network.startsWith('eip155:')) return network;
+  if (network === 'arcTestnet') return 'eip155:5042002';
+  return network;
+}
+
+function normalizeRequirementsForGateway(req: Record<string, unknown>): Record<string, unknown> {
+  return { ...req, network: toCaip2Network(req.network) };
+}
+
+function normalizePayloadForGateway(payload: Record<string, unknown>, requirements: Record<string, unknown>): Record<string, unknown> {
+  const accepted = (payload.accepted as Record<string, unknown> | undefined) ?? requirements;
+  const normalizedAccepted = { ...accepted, network: toCaip2Network(accepted.network) };
+
+  // Inject required `resource` field if missing
+  let resource = payload.resource as Record<string, unknown> | undefined;
+  if (!resource) {
+    resource = {
+      url: 'https://arclayers.xyz/api/x402-demo/protected',
+      description: 'ArcLayer x402 Gateway demo',
+      mimeType: 'application/json',
+    };
+  }
+
+  return { ...payload, accepted: normalizedAccepted, resource };
+}
 
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
@@ -15,16 +55,59 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── Scheme routing ───────────────────────────────────────────────────────────
-  // V2 exact scheme: x402Version=2 OR scheme="exact" in body
   const scheme = (body.scheme as string) ?? (body.paymentRequirements as Record<string, unknown>)?.scheme ?? null;
   const version = body.x402Version;
 
   if (version === 2 || scheme === 'exact') {
+    // Check if this is a Gateway batched payment
+    const paymentRequirements = body.paymentRequirements as Record<string, unknown> | undefined;
+    if (paymentRequirements && isBatchPayment(paymentRequirements)) {
+      return handleGatewayVerify(body);
+    }
     return handleExactVerify(body);
   }
 
   // V1 arc-escrow (legacy)
   return handleArcEscrowVerify(req, body);
+}
+
+// ─── Gateway batched verify (Circle Gateway) ─────────────────────────────────
+async function handleGatewayVerify(body: Record<string, unknown>): Promise<NextResponse> {
+  const paymentPayload = body.paymentPayload ?? body;
+  const paymentRequirements = body.paymentRequirements as Record<string, unknown>;
+
+  // Circle requires CAIP-2 network format and resource field
+  const normalizedRequirements = normalizeRequirementsForGateway(paymentRequirements);
+  const normalizedPayload = normalizePayloadForGateway(paymentPayload as Record<string, unknown>, normalizedRequirements);
+
+  try {
+    const client = getBatchFacilitatorClient();
+    const result = await client.verify(
+      normalizedPayload as unknown as Parameters<typeof client.verify>[0],
+      normalizedRequirements as unknown as Parameters<typeof client.verify>[1],
+    );
+
+    if (!result.isValid) {
+      return NextResponse.json(
+        { isValid: false, invalidReason: result.invalidReason, payer: result.payer },
+        { status: 422 }
+      );
+    }
+
+    const paymentId = deriveGatewayPaymentId(paymentPayload, paymentRequirements);
+    recordGatewayPayment({ paymentId, status: 'verified', payer: result.payer, verifiedAt: Date.now(), raw: result as unknown as Record<string, unknown> });
+
+    return NextResponse.json(
+      { isValid: true, payer: result.payer, paymentIdentifier: paymentId, extra: { mode: 'circle-gateway', status: 'verified' } },
+      { status: 200 }
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Gateway verify failed';
+    return NextResponse.json(
+      { isValid: false, invalidReason: 'gateway_error', invalidMessage: message },
+      { status: 502 }
+    );
+  }
 }
 
 // ─── Exact scheme (V2 canonical) ──────────────────────────────────────────────
