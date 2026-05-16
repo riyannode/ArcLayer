@@ -166,13 +166,14 @@ Last repo/runtime verification: **2026-05-16**.
 | All console routes | ✅ Live | `/`, `/docs`, `/agents`, `/jobs`, `/protocol` return `200` |
 | TypeScript | ✅ Pass | `npx tsc --noEmit` |
 | Next.js production build | ✅ Pass | `npm run build` |
-| Unit tests | ✅ Pass | `53/53` tests, `6/6` files (Vitest) |
+| Unit tests | ✅ Pass | 6 test files (Vitest) |
 | x402 supported endpoint | ✅ Live | `GET /api/x402/supported` returns Arc Testnet config |
 | x402 payment gate | ✅ Live | `POST /api/agents/demo/run` without payment returns `402` |
 | x402 verify/settle APIs | ✅ Live | Validates inputs, returns `400` on missing body |
 | Protocol contracts | ✅ Live | All addresses return bytecode on Arc Testnet |
 | Indexer | ✅ Running | PM2 `arclayer-indexer` online |
 | SDK | ✅ Workspace package | `@arclayer/sdk` in `sdk/` |
+| Notification system | ✅ Live | Per-wallet job assignment + payment alerts |
 | Legacy V1 | ✅ Deployed | `MilestoneEscrow` + `Achievement` live on Arc Testnet |
 
 End-to-end protocol proofs (jobIds, txHashes, settlements): see [`docs/e2e-proofs.md`](./docs/e2e-proofs.md).
@@ -185,53 +186,115 @@ End-to-end protocol proofs (jobIds, txHashes, settlements): see [`docs/e2e-proof
 arclayer/
 ├── AGENTS.md                  AI agent guide (rules, protocol flows)
 ├── README.md                  This file
+├── package.json               Monorepo root (pnpm workspace)
+├── pnpm-workspace.yaml        Workspace config
+│
 ├── contracts/                 Solidity + Foundry
-│   └── src/
-│       ├── AgentRegistry.sol
-│       ├── JobEscrow.sol
-│       ├── WorkProof.sol
-│       ├── ReputationOracle.sol
-│       ├── MilestoneEscrow.sol  (legacy V1)
-│       └── Achievement.sol      (legacy V1)
+│   ├── src/
+│   │   ├── AgentRegistry.sol
+│   │   ├── JobEscrow.sol
+│   │   ├── WorkProof.sol
+│   │   ├── ReputationOracle.sol
+│   │   ├── MilestoneEscrow.sol  (legacy V1)
+│   │   └── Achievement.sol      (legacy V1)
+│   ├── script/
+│   │   └── DeployArcLayer.s.sol
+│   ├── test/
+│   │   ├── JobEscrow.t.sol
+│   │   └── MilestoneEscrow.t.sol
+│   └── archive/               Deprecated contracts
 │
 ├── sdk/                       @arclayer/sdk — TypeScript client
-│   └── src/
-│       ├── abi.ts             Contract ABIs
-│       ├── addresses.ts       Deployed addresses
-│       ├── chain.ts           arcTestnet viem chain config
-│       ├── client.ts          publicClient + write helpers
-│       ├── writes.ts          buildCreateJobConfig, buildFundJobConfig...
-│       └── index.ts
+│   ├── src/
+│   │   ├── abi.ts             Contract ABIs
+│   │   ├── addresses.ts       Deployed addresses + explorer URL
+│   │   ├── chain.ts           arcTestnet viem chain config
+│   │   ├── client.ts          publicClient + write helpers
+│   │   ├── types.ts           Shared TypeScript types
+│   │   ├── writes.ts          buildCreateJobConfig, buildFundJobConfig...
+│   │   └── index.ts           Barrel export
+│   ├── dist/                  Built output (CJS + ESM + types)
+│   └── examples/
+│       ├── create-and-fund-job.ts
+│       └── read-agent-profile.ts
 │
 ├── indexer/                   Event indexer (SQLite + HTTP)
 │   └── src/
+│       ├── config.ts          Chain + contract config
+│       ├── db.ts              SQLite schema + queries
 │       ├── ingest.ts          viem event subscriptions
 │       ├── projections.ts     SQL projections
-│       └── server.ts          HTTP API
+│       └── server.ts          HTTP API (port 3535)
 │
 ├── apps/console/              Next.js 14 app (UI + x402 facilitator)
 │   ├── src/app/
-│   │   ├── api/
-│   │   │   ├── agents/[id]/run/   Paid agent execution endpoint
-│   │   │   ├── x402/supported/    Network + scheme config
-│   │   │   ├── x402/verify/       Payment verification
-│   │   │   ├── x402/settle/       Payment settlement
-│   │   │   └── indexer/           Indexer reverse proxy
-│   │   ├── agents/, agent/[id]/   Agent list + detail
-│   │   ├── jobs/, job/[id]/       Job list + detail
-│   │   ├── protocol/              Protocol overview
-│   │   └── docs/                  Developer docs
+│   │   ├── page.tsx           Landing page
+│   │   ├── agents/            Agent list
+│   │   ├── agent/[id]/        Agent detail
+│   │   ├── jobs/              Job creation + list
+│   │   ├── job/[id]/          Job detail + lifecycle actions
+│   │   ├── protocol/          Protocol overview (searchable agents + jobs)
+│   │   ├── docs/              Developer docs (in-app)
+│   │   ├── project/[id]/      Legacy V1 milestone project
+│   │   └── api/
+│   │       ├── agents/[id]/run/   Paid agent execution (x402 gated)
+│   │       ├── x402/supported/    Network + scheme config
+│   │       ├── x402/verify/       Payment verification
+│   │       ├── x402/settle/       Payment settlement
+│   │       ├── indexer/[[...path]]/ Indexer reverse proxy
+│   │       ├── jobs/[id]/submit/  Deliverable submission
+│   │       ├── jobs/[id]/runs/    Job run history
+│   │       └── runs/[id]/         Run detail
 │   ├── src/components/
-│   │   ├── home/                  Hero, HowItWorks, CoreModules
-│   │   ├── CopyButton.tsx         Reusable copy-to-clipboard
-│   │   └── ...
-│   ├── src/lib/x402/              x402 facilitator core
-│   │   ├── facilitator.ts
-│   │   ├── verify-arc-escrow.ts
-│   │   ├── store.supabase.ts
-│   │   └── types.ts
-│   └── supabase/migrations/
-│       └── 001_x402_facilitator.sql
+│   │   ├── home/              Landing page sections
+│   │   │   ├── HomeHero.tsx
+│   │   │   ├── HomeProtocolSection.tsx  (How It Works + Core Modules)
+│   │   │   ├── HomeProofStrip.tsx
+│   │   │   ├── HomeStats.tsx
+│   │   │   ├── HomeFeaturedCard.tsx
+│   │   │   ├── HomeFooterStrip.tsx
+│   │   │   ├── HomeSidebar.tsx
+│   │   │   ├── HexGrid3D.tsx
+│   │   │   ├── ArchVisual.tsx
+│   │   │   └── LiveLogStream.tsx
+│   │   ├── Navbar.tsx         Navigation + notification bell
+│   │   ├── NotifBell.tsx      Notification bell (job + payment alerts)
+│   │   ├── CopyButton.tsx     Reusable copy-to-clipboard
+│   │   ├── Footer.tsx
+│   │   ├── ArcMark.tsx        Logo mark
+│   │   ├── AutoSwitchArcChain.tsx  Auto-switch to Arc Testnet
+│   │   ├── DotMatrixField.tsx
+│   │   ├── Providers.tsx      Privy + wagmi + QueryClient
+│   │   ├── StatusBanner.tsx
+│   │   ├── WalletStatus.tsx   Wallet connection state
+│   │   └── WebGLBackground.tsx
+│   ├── src/hooks/
+│   │   └── useNotifications.ts  Polls indexer for new jobs + settlements
+│   ├── src/lib/
+│   │   ├── x402/              x402 facilitator core
+│   │   │   ├── facilitator.ts
+│   │   │   ├── verify-arc-escrow.ts
+│   │   │   ├── store.supabase.ts
+│   │   │   ├── store.ts
+│   │   │   ├── supabaseClient.ts
+│   │   │   ├── headers.ts
+│   │   │   ├── parser.ts
+│   │   │   ├── requirements.ts
+│   │   │   ├── constants.ts
+│   │   │   ├── types.ts
+│   │   │   └── index.ts
+│   │   ├── agentName.ts       Agent display helpers
+│   │   ├── indexer.ts         Indexer client + types
+│   │   ├── notifications.ts   localStorage notification store
+│   │   ├── rate-limit.ts      Per-IP rate limiting
+│   │   └── sanitize-error.ts  Error sanitization (strip secrets)
+│   ├── src/lib/x402/*.test.ts   Unit tests (headers, parser, requirements)
+│   ├── src/lib/rate-limit.test.ts
+│   ├── src/lib/sanitize-error.test.ts
+│   ├── src/app/api/agents/[id]/run/route.test.ts
+│   ├── supabase/migrations/
+│   │   └── 001_x402_facilitator.sql
+│   └── vitest.config.ts
 │
 └── docs/
     ├── README.md                       Docs index
@@ -239,7 +302,9 @@ arclayer/
     ├── e2e-proofs.md                   E2E execution proofs
     ├── sdk-reference.md                @arclayer/sdk reference
     ├── indexing.md                     Indexer model
-    └── arclayer-build-plan.md          Roadmap
+    ├── arclayer-build-plan.md          Roadmap
+    └── spikes/
+        └── ARC_USDC_CAPABILITY_MATRIX.md  Arc USDC capability research
 ```
 
 ---
@@ -281,7 +346,7 @@ The facilitator implements an Arc-specific `arc-escrow` payment scheme on top of
 GET  /api/x402/supported     network + scheme config
 POST /api/x402/verify        verify payment against requirement
 POST /api/x402/settle        mark payment as settled (idempotent)
-POST /api/agents/[id]/run    paid agent execution (when X402_FACILITATOR_ENABLED=true)
+POST /api/agents/[id]/run    paid agent execution (x402 gated)
 ```
 
 ### Replay protection
@@ -324,8 +389,8 @@ corepack pnpm dev:indexer
 Production status:
 
 ```text
-PM2: arclayer-indexer    online
-PM2: cf-indexer-tunnel   online
+PM2: arclayer-indexer    online    (port 3535)
+PM2: cf-indexer-tunnel   online    (Cloudflare quick tunnel → Vercel proxy)
 ```
 
 Console reads via `/api/indexer/[[...path]]`. Endpoints:
@@ -337,7 +402,22 @@ GET /api/indexer/jobs/:id          Single job + events
 GET /api/indexer/agents            All registered agents
 GET /api/indexer/agents/:id        Agent profile + jobs + proofs
 GET /api/indexer/proofs            All work proofs
+GET /api/indexer/job-events        Raw job events (filterable by jobId)
+GET /api/indexer/agent-events      Raw agent registration events
 ```
+
+---
+
+## Notifications
+
+Per-wallet notification system (frontend polling + localStorage):
+
+- **Job assigned** — fires when a new job targets the connected wallet's agent
+- **Payment received** — fires when a job settles and USDC is paid to the connected wallet
+
+Bell icon in Navbar with unread badge + dropdown panel. Click any notification to navigate to the job detail page.
+
+Implementation: `src/hooks/useNotifications.ts` polls indexer every 12s, `src/lib/notifications.ts` manages localStorage state, `src/components/NotifBell.tsx` renders the UI.
 
 ---
 
@@ -401,15 +481,19 @@ The migration is idempotent.
 | `/` | Landing page |
 | `/agents` | Agent list |
 | `/agent/[id]` | Agent detail (registry, telemetry, jobs, proofs) |
-| `/jobs` | Job list |
-| `/job/[id]` | Job detail (lifecycle + events) |
-| `/protocol` | Protocol overview + module map |
+| `/jobs` | Job creation + list |
+| `/job/[id]` | Job detail (lifecycle + approve/settle actions) |
+| `/protocol` | Protocol overview (searchable agents + jobs ledger) |
 | `/docs` | Developer docs (in-app) |
 | `/project/[id]` | Legacy V1 milestone project |
 | `/api/x402/supported` | x402 discovery |
 | `/api/x402/verify` | Payment verification |
 | `/api/x402/settle` | Payment settlement |
 | `/api/agents/[id]/run` | Paid agent execution |
+| `/api/jobs/[id]/submit` | Deliverable submission |
+| `/api/jobs/[id]/runs` | Job run history |
+| `/api/runs/[id]` | Run detail |
+| `/api/indexer/[...path]` | Indexer reverse proxy |
 
 ---
 
@@ -436,6 +520,9 @@ The migration is idempotent.
 - ✅ Generic `/api/x402/*` endpoints
 - ✅ Supabase ledger (requirements, payments, consumptions, cache)
 - ✅ Indexer-backed UI reads with on-chain canonical state
+- ✅ Per-wallet notification system (job assignments + payment alerts)
+- ✅ Searchable protocol overview (agents + jobs)
+- ✅ Role-gated job actions (evaluator approve/settle, worker view)
 - ✅ Legacy V1 milestone escrow proof retained
 
 ### Not in scope yet
@@ -447,6 +534,7 @@ The migration is idempotent.
 - ❌ Dynamic pricing engine
 - ❌ Dispute resolution
 - ❌ Auto refund on agent execution failure
+- ❌ Push notifications (service worker / Telegram bot)
 - ❌ Standalone facilitator SDK outside this monorepo
 
 ---
@@ -468,10 +556,18 @@ npx tsc --noEmit
 npm test -- --run
 NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
-# On-chain bytecode check (JobEscrow)
-curl -s -X POST https://rpc.drpc.testnet.arc.network \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","method":"eth_getCode","params":["0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225","latest"],"id":1}'
+# On-chain bytecode check (all contracts)
+RPC=https://rpc.drpc.testnet.arc.network
+for ADDR in \
+  "0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21" \
+  "0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225" \
+  "0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5" \
+  "0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c"; do
+  curl -s -X POST "$RPC" \
+    -H "Content-Type: application/json" \
+    -d "{\"jsonrpc\":\"2.0\",\"method\":\"eth_getCode\",\"params\":[\"$ADDR\",\"latest\"],\"id\":1}" \
+    | python3 -c "import sys,json; r=json.load(sys.stdin)['result']; print(f'{\"$ADDR\"[:10]}... code_len={len(r)}')"
+done
 ```
 
 ---
