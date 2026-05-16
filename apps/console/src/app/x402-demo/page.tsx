@@ -262,7 +262,7 @@ export default function X402DemoPage() {
       <div className="mx-auto max-w-4xl">
         <div className="mb-8">
           <h1 className="mb-2 font-mono text-[11px] tracking-[0.2em] text-[#C5A67C]">x402 DUAL-MODE PROTECTED RESOURCE DEMO</h1>
-          <p className="max-w-2xl font-mono text-[13px] leading-relaxed text-white/60">Full Arc Testnet flow with two payment modes: <span className="text-[#C5A67C]">Arc Native</span> (self-hosted EIP-3009 relayer) and <span className="text-[#7CB5C5]">Circle Gateway</span> (BatchFacilitatorClient nanopayments).</p>
+          <p className="max-w-2xl font-mono text-[13px] leading-relaxed text-white/60">Full Arc Testnet flow with two payment modes: <span className="text-[#C5A67C]">Arc Native</span> (self-hosted EIP-3009 relayer, settles on-chain) and <span className="text-[#7CB5C5]">Circle Gateway</span> (BatchFacilitatorClient). Circle Gateway verifies live; settlement activates once the buyer deposits USDC into GatewayWallet.</p>
         </div>
 
         {/* MODE SELECTOR */}
@@ -306,7 +306,7 @@ export default function X402DemoPage() {
           {mode === 'arc-native' ? (
             <div><span className="text-[#C5A67C]">Arc Native</span> · {NETWORK} · EIP-3009 · Self-hosted relayer settlement · Header: X-PAYMENT · payTo {shortenAddress(payTo)}</div>
           ) : (
-            <div><span className="text-[#7CB5C5]">Circle Gateway</span> · arcTestnet · BatchFacilitatorClient · Async batched settlement · Header: PAYMENT-SIGNATURE · payTo {shortenAddress(payTo)}</div>
+            <div><span className="text-[#7CB5C5]">Circle Gateway</span> · eip155:5042002 · BatchFacilitatorClient · verifies live · settlement pending until buyer GatewayWallet deposit · Header: PAYMENT-SIGNATURE · payTo {shortenAddress(payTo)}</div>
           )}
         </div>
 
@@ -342,6 +342,26 @@ export default function X402DemoPage() {
               {mode === 'arc-native'
                 ? 'Header: X-PAYMENT = base64(JSON PaymentPayload). Legacy alias PAYMENT-SIGNATURE accepted.'
                 : 'Header: PAYMENT-SIGNATURE = base64(JSON PaymentPayload). Routed to BatchFacilitatorClient.'}
+            </div>
+          </div>
+        </div>
+
+        {/* EVIDENCE / PROOF STATUS */}
+        <div className="mb-6 border border-white/10 bg-white/[0.02] p-4 font-mono text-[10.5px] leading-[1.9]">
+          <div className="mb-3 text-[9px] tracking-[0.2em] text-white/30">INTEGRATION EVIDENCE</div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <div className="mb-1 text-[#C5A67C]">Arc Native (EIP-3009)</div>
+              <div className="text-white/60">✅ Verified</div>
+              <div className="text-white/60">✅ Settled on-chain</div>
+              <div className="text-white/60">✅ tx: <a href="https://testnet.arcscan.app/tx/0xac1f26afce8955e6b8f29ff7bf4f6b0c3313457ebbf79c5a81fbdf1c3adb3cb6" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline underline-offset-2">0xac1f26af…3adb3cb6</a></div>
+            </div>
+            <div>
+              <div className="mb-1 text-[#7CB5C5]">Circle Gateway (Nanopayments)</div>
+              <div className="text-white/60">✅ Runtime supported (Arc Testnet domain 26)</div>
+              <div className="text-white/60">✅ Verified live (isValid: true)</div>
+              <div className="text-white/60">⏳ Settlement pending — requires buyer GatewayWallet deposit</div>
+              <div className="text-white/60">✅ No API key required (facilitator is keyless)</div>
             </div>
           </div>
         </div>

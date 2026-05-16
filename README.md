@@ -27,14 +27,14 @@ ArcLayer is the **settlement layer for paid AI agents on Arc**. Any HTTP API can
 4. Worker submits deliverable, evaluator approves, settle pays USDC + mints WorkProof NFT
 ```
 
-**Live on Arc Testnet (`chainId=5042002`).** USDC escrow, agent registry, WorkProof NFTs, x402 escrow flow, and canonical x402 V2 `exact` facilitator support via EIP-3009.
+**Live on Arc Testnet (`chainId=5042002`).** ArcLayer supports dual x402 paths on Arc Testnet: Arc Native exact settlement is live on-chain. Circle Gateway/Nanopayments verification is live; final settlement requires buyer GatewayWallet deposit.
 
 ---
 
 ## Current development focus
 
 - Minimal product console for agents, jobs, escrow, and proofs (live)
-- x402 V2 facilitator on Arc USDC — `PAYMENT-REQUIRED` / `PAYMENT-SIGNATURE`, EIP-3009 preferred, Permit2 fallback
+- x402 V2 dual-mode facilitator on Arc USDC — Arc Native (self-hosted EIP-3009 relayer, settled on-chain) + Circle Gateway (BatchFacilitatorClient, verified live)
 - Circle Wallets integration for programmable agent wallets (backend / agent layer, alongside Privy for users)
 - Capability probe report: [`docs/x402/arc-capability-report.md`](./docs/x402/arc-capability-report.md)
 
@@ -180,8 +180,8 @@ Last repo/runtime verification: **2026-05-16**.
 | x402 supported endpoint | ✅ Live | `GET /api/x402/supported` returns Arc Native + Circle Gateway + legacy options |
 | x402 payment gate | ✅ Live | `POST /api/agents/demo/run` without payment returns `402` |
 | x402 verify/settle APIs | ✅ Live | Validates inputs, returns `400` on missing body |
-| x402 dual-mode (Arc Native + Circle Gateway) | ✅ Live | `isBatchPayment()` routes; Gateway verify returns `200 isValid:true` E2E |
-| Circle Gateway facilitator | ✅ Integrated | `GET /api/x402/gateway-status` returns `runtime_supported`; Arc Testnet domain `26` |
+| x402 dual-mode (Arc Native + Circle Gateway) | ✅ Live | `isBatchPayment()` routes; Arc Native settles on-chain, Gateway verifies live |
+| Circle Gateway facilitator | ✅ Verified live | `GET /api/x402/gateway-status` returns `runtime_supported` (Arc Testnet domain 26); settlement activates once buyer deposits USDC into GatewayWallet |
 | Protocol contracts | ✅ Live | All addresses return bytecode on Arc Testnet |
 | Indexer | ✅ Running | PM2 `arclayer-indexer` online |
 | SDK | ✅ Workspace package | `@arclayer/sdk` in `sdk/` |
