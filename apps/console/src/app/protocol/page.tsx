@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { ARC_EXPLORER, formatUSDC, shortenAddress } from '@/lib/contracts';
-import { shortAgentId } from '@/lib/agentName';
+import { displayAgentLabel, formatSkillLabel, parseAgentName, parseAgentSkill, shortAgentId } from '@/lib/agentName';
 import { fetchIndexerJson, type DashboardOverview } from '@/lib/indexer';
 
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
@@ -68,6 +68,13 @@ export default function Dashboard() {
   const [events, setEvents] = useState<JobEvent[]>([]);
   const [lastSyncedBlock, setLastSyncedBlock] = useState<bigint | null>(null);
   const [tickCount, setTickCount] = useState(0);
+  const [agentSearch, setAgentSearch] = useState('');
+  const [agentSort, setAgentSort] = useState<'top' | 'jobs' | 'newest' | 'name'>('top');
+  const [showAllAgents, setShowAllAgents] = useState(false);
+  const [jobSearch, setJobSearch] = useState('');
+  const [jobStatusFilter, setJobStatusFilter] = useState<'all' | '0' | '1' | '2' | '3' | '4' | '5'>('all');
+  const [jobSort, setJobSort] = useState<'relevant' | 'newest' | 'budgetDesc' | 'budgetAsc' | 'depositDesc' | 'settledFirst'>('relevant');
+  const [showAllJobs, setShowAllJobs] = useState(false);
   const pulseRef = useRef<HTMLSpanElement>(null);
 
   async function loadOverview(options?: { silent?: boolean }) {
@@ -139,6 +146,52 @@ export default function Dashboard() {
     if (!b.ok) return a;
     return (a.latency ?? 9999) < (b.latency ?? 9999) ? a : b;
   }) : null;
+
+  const agentById = useMemo(() => new Map(agents.map((a) => [a.agentId, a])), [agents]);
+
+  const filteredAgents = useMemo(() => {
+    const q = agentSearch.trim().toLowerCase();
+    const rows = agents.filter((a) => {
+      if (!q) return true;
+      const name = parseAgentName(a.metadataURI) || '';
+      const skill = formatSkillLabel(parseAgentSkill(a.metadataURI)) || parseAgentSkill(a.metadataURI) || '';
+      return [name, skill, a.controller, a.agentId, shortAgentId(a.agentId)].some((v) => v.toLowerCase().includes(q));
+    });
+    return rows.sort((a, b) => {
+      if (agentSort === 'jobs') return b.jobs.length - a.jobs.length || Number(BigInt(b.score) - BigInt(a.score));
+      if (agentSort === 'newest') return Number(BigInt(b.registeredAt || '0') - BigInt(a.registeredAt || '0'));
+      if (agentSort === 'name') {
+        const an = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI }).toLowerCase();
+        const bn = displayAgentLabel({ agentId: b.agentId, metadataURI: b.metadataURI }).toLowerCase();
+        return an.localeCompare(bn);
+      }
+      return Number(BigInt(b.score) - BigInt(a.score)) || b.jobs.length - a.jobs.length;
+    });
+  }, [agents, agentSearch, agentSort]);
+  const visibleAgents = showAllAgents ? filteredAgents : filteredAgents.slice(0, 3);
+
+  const filteredJobs = useMemo(() => {
+    const q = jobSearch.trim().toLowerCase();
+    const relevance: Record<number, number> = { 3: 0, 4: 1, 2: 2, 1: 3, 0: 4, 5: 5, 6: 6 };
+    const rows = jobs.filter((j) => {
+      if (jobStatusFilter !== 'all' && j.status !== Number(jobStatusFilter)) return false;
+      if (!q) return true;
+      const agent = agentById.get(j.agentId);
+      const name = agent ? displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI }) : shortAgentId(j.agentId);
+      const skill = agent ? (formatSkillLabel(parseAgentSkill(agent.metadataURI)) || parseAgentSkill(agent.metadataURI) || '') : '';
+      const status = JOB_STATUS[j.status] || '';
+      return [`#${j.id}`, j.id, j.agentId, shortAgentId(j.agentId), j.worker, j.client, name, skill, status].some((v) => String(v).toLowerCase().includes(q));
+    });
+    return rows.sort((a, b) => {
+      if (jobSort === 'newest') return Number(BigInt(b.id) - BigInt(a.id));
+      if (jobSort === 'budgetDesc') return Number(BigInt(b.budget) - BigInt(a.budget));
+      if (jobSort === 'budgetAsc') return Number(BigInt(a.budget) - BigInt(b.budget));
+      if (jobSort === 'depositDesc') return Number(BigInt(b.fundedAmount) - BigInt(a.fundedAmount));
+      if (jobSort === 'settledFirst') return (b.status === 5 ? 1 : 0) - (a.status === 5 ? 1 : 0) || Number(BigInt(b.id) - BigInt(a.id));
+      return (relevance[a.status] ?? 9) - (relevance[b.status] ?? 9) || Number(BigInt(b.id) - BigInt(a.id));
+    });
+  }, [jobs, jobSearch, jobStatusFilter, jobSort, agentById]);
+  const visibleJobs = showAllJobs ? filteredJobs : filteredJobs.slice(0, 5);
 
   const topAgents = useMemo(() => [...agents].sort((a, b) => Number(BigInt(b.score) - BigInt(a.score))), [agents]);
   const connectedJobs = useMemo(() => {
@@ -293,34 +346,84 @@ export default function Dashboard() {
 
         {/* Main grid: jobs + event tail */}
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-          <Panel title="JOB · LEDGER" sub={`${jobs.length} indexed`} action={<Link href="/jobs" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>OPEN ALL ↗</Link>}>
-            <div className="mb-3 hidden grid-cols-[40px_1fr_70px_80px_90px] items-center gap-3 border-b border-white/5 pb-2 font-mono text-[10px] uppercase tracking-[0.2em] md:grid" style={{ color: 'rgba(234, 228, 216, 0.4)' }}>
-              <span>ID</span><span>CLIENT → WORKER</span><span className="text-right">AGENT</span><span className="text-right">USDC</span><span className="text-right">STATE</span>
+          <Panel
+            title="JOBS · FIND"
+            sub="Search by job ID, agent, worker, client, or status. Sort by amount or lifecycle."
+            action={<Link href="/jobs" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>OPEN ALL ↗</Link>}
+          >
+            <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
+              <input
+                value={jobSearch}
+                onChange={(e) => setJobSearch(e.target.value)}
+                placeholder="Search job, agent, worker, client..."
+                className="input-mono flex-1 text-[11px]"
+                spellCheck={false}
+              />
+              <select
+                value={jobStatusFilter}
+                onChange={(e) => setJobStatusFilter(e.target.value as typeof jobStatusFilter)}
+                className="input-mono text-[10.5px] md:w-[120px]"
+              >
+                <option value="all">All status</option>
+                <option value="0">Created</option>
+                <option value="1">Budgeted</option>
+                <option value="2">Funded</option>
+                <option value="3">Submitted</option>
+                <option value="4">Evaluated</option>
+                <option value="5">Settled</option>
+              </select>
+              <select
+                value={jobSort}
+                onChange={(e) => setJobSort(e.target.value as typeof jobSort)}
+                className="input-mono text-[10.5px] md:w-[140px]"
+              >
+                <option value="relevant">Most relevant</option>
+                <option value="newest">Newest</option>
+                <option value="budgetDesc">Highest budget</option>
+                <option value="budgetAsc">Lowest budget</option>
+                <option value="depositDesc">Highest deposit</option>
+                <option value="settledFirst">Settled first</option>
+              </select>
             </div>
             <div className="space-y-2">
-              {jobs.length === 0 ? <Empty msg={isLoading ? 'Loading jobs…' : 'No jobs indexed yet.'} /> : jobs.map((job) => (
-                <Link
-                  key={job.id}
-                  href={`/job/${job.id.toString()}`}
-                  className="ledger-row block border border-white/10 bg-black/20 px-4 py-3 hover:border-[#C5A67C]/40 overflow-hidden"
-                >
-                  <div className="grid grid-cols-1 items-center gap-2 md:grid-cols-[40px_1fr_90px_80px_90px] md:gap-3 min-w-0">
-                    <span className="font-mono text-[12.5px] min-w-0 truncate" style={{ color: '#EAE4D8' }}>#{job.id}</span>
-                    <span className="font-mono text-[11px] min-w-0 truncate" style={{ color: 'rgba(234, 228, 216, 0.7)' }}>
-                      {shortenAddress(job.client)} <span style={{ color: '#C5A67C' }}>→</span> {shortenAddress(job.worker)}
-                    </span>
-                    <span
-                      title={`agent ${job.agentId}`}
-                      className="text-left font-mono text-[10.5px] md:text-right min-w-0 truncate whitespace-nowrap overflow-hidden"
-                      style={{ color: 'rgba(234, 228, 216, 0.5)' }}
+              {filteredJobs.length === 0 ? (
+                <Empty msg={isLoading ? 'Loading jobs…' : (jobSearch || jobStatusFilter !== 'all' ? 'No matching jobs found.' : 'No jobs indexed yet.')} />
+              ) : (
+                visibleJobs.map((job) => {
+                  const ag = agentById.get(job.agentId);
+                  const agName = ag ? displayAgentLabel({ agentId: ag.agentId, metadataURI: ag.metadataURI }) : shortAgentId(job.agentId);
+                  const agSkill = ag ? formatSkillLabel(parseAgentSkill(ag.metadataURI)) : null;
+                  return (
+                    <Link
+                      key={job.id}
+                      href={`/job/${job.id.toString()}`}
+                      className="ledger-row block border border-white/10 bg-black/20 px-3 py-2.5 hover:border-[#C5A67C]/40 overflow-hidden"
                     >
-                      ag {shortAgentId(job.agentId)}
-                    </span>
-                    <span className="text-left font-mono text-[11px] md:text-right min-w-0 truncate" style={{ color: '#C5A67C' }}>{formatUSDC(BigInt(job.budget))}</span>
-                    <span className={`chip-status ${JOB_TONE[job.status] || 'pending'} justify-self-start md:justify-self-end`}>{JOB_STATUS[job.status]}</span>
-                  </div>
-                </Link>
-              ))}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
+                        <span className="font-mono text-[12px] whitespace-nowrap" style={{ color: '#EAE4D8' }}>#{job.id}</span>
+                        <span className={`chip-status ${JOB_TONE[job.status] || 'pending'}`}>{JOB_STATUS[job.status]}</span>
+                        <span className="font-mono text-[10.5px] min-w-0 truncate" style={{ color: 'rgba(234, 228, 216, 0.7)' }}>
+                          {agName}{agSkill ? <span style={{ color: 'rgba(234, 228, 216, 0.45)' }}> · {agSkill}</span> : null}
+                        </span>
+                        <span className="font-mono text-[11px] whitespace-nowrap ml-auto" style={{ color: '#C5A67C' }}>{formatUSDC(BigInt(job.budget))}</span>
+                      </div>
+                      <div className="mt-1 font-mono text-[10px] truncate" style={{ color: 'rgba(234, 228, 216, 0.45)' }}>
+                        worker {shortenAddress(job.worker)} · client {shortenAddress(job.client)}
+                      </div>
+                    </Link>
+                  );
+                })
+              )}
+              {filteredJobs.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllJobs((v) => !v)}
+                  className="font-mono text-[10.5px] uppercase tracking-[0.18em]"
+                  style={{ color: '#C5A67C' }}
+                >
+                  {showAllJobs ? `Show less ↑` : `Show all (${filteredJobs.length}) ↓`}
+                </button>
+              )}
             </div>
           </Panel>
 
@@ -377,28 +480,80 @@ export default function Dashboard() {
           </Panel>
         </div>
 
-        {/* Agent leaderboard */}
+        {/* Agent finder */}
         <div className="mt-8">
-          <Panel title="AGENT · LEADERBOARD" sub={`${topAgents.length} registered`} action={<Link href="/agents" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>OPEN ALL ↗</Link>}>
-            <div className="mb-3 hidden grid-cols-[40px_1fr_80px_80px_80px] items-center gap-3 border-b border-white/5 pb-2 font-mono text-[10px] uppercase tracking-[0.2em] md:grid" style={{ color: 'rgba(234, 228, 216, 0.4)' }}>
-              <span>ID</span><span>CONTROLLER</span><span className="text-right">SCORE</span><span className="text-right">JOBS</span><span className="text-right">PROOFS</span>
+          <Panel
+            title="AGENTS · FIND"
+            sub="Search by name, capability, controller, or agent ID. Use a worker to create a job."
+            action={<Link href="/agents" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>OPEN ALL ↗</Link>}
+          >
+            <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
+              <input
+                value={agentSearch}
+                onChange={(e) => setAgentSearch(e.target.value)}
+                placeholder="Search agent, worker, controller, ID..."
+                className="input-mono flex-1 text-[11px]"
+                spellCheck={false}
+              />
+              <select
+                value={agentSort}
+                onChange={(e) => setAgentSort(e.target.value as typeof agentSort)}
+                className="input-mono text-[10.5px] md:w-[130px]"
+              >
+                <option value="top">Top score</option>
+                <option value="jobs">Most jobs</option>
+                <option value="newest">Newest</option>
+                <option value="name">Name A-Z</option>
+              </select>
             </div>
             <div className="space-y-2">
-              {topAgents.length === 0 ? <Empty msg="No agents registered." /> : topAgents.map((a) => (
-                <Link
-                  key={a.agentId}
-                  href={`/agent/${a.agentId}`}
-                  className="ledger-row block border border-white/10 bg-black/20 px-4 py-3 hover:border-[#C5A67C]/40"
+              {filteredAgents.length === 0 ? (
+                <Empty msg={isLoading ? 'Loading agents…' : (agentSearch ? 'No matching agents found.' : 'No agents registered.')} />
+              ) : (
+                visibleAgents.map((a) => {
+                  const name = parseAgentName(a.metadataURI);
+                  const label = name || `Agent ${shortAgentId(a.agentId)}`;
+                  const skill = formatSkillLabel(parseAgentSkill(a.metadataURI));
+                  return (
+                    <div key={a.agentId} className="ledger-row flex flex-col gap-2 border border-white/10 bg-black/20 px-3 py-2.5 hover:border-[#C5A67C]/40 md:flex-row md:items-center md:justify-between md:gap-4">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono text-[12px] truncate" style={{ color: '#EAE4D8' }}>{label}</div>
+                        <div className="mt-0.5 font-mono text-[10px] truncate" style={{ color: 'rgba(234, 228, 216, 0.48)' }}>
+                          {skill ? <>{skill} · </> : null}ID <span title={a.agentId}>{shortAgentId(a.agentId)}</span> · controller {shortenAddress(a.controller)}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="chip-status success" title={`Score ${a.score}`}>Score {formatScore(a.score)}</span>
+                        <span className="tag-pill">{a.jobs.length} {a.jobs.length === 1 ? 'job' : 'jobs'}</span>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(a.agentId)}
+                          className="btn-bordered px-2.5 py-1.5 text-[9px]"
+                          title={`Copy full ID: ${a.agentId}`}
+                        >
+                          Copy ID
+                        </button>
+                        <Link href={`/jobs?agentId=${encodeURIComponent(a.agentId)}`} className="btn-primary px-2.5 py-1.5 text-[9px]">
+                          Use
+                        </Link>
+                        <Link href={`/agent/${a.agentId}`} className="font-mono text-[9px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
+                          Details →
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              {filteredAgents.length > 3 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllAgents((v) => !v)}
+                  className="font-mono text-[10.5px] uppercase tracking-[0.18em]"
+                  style={{ color: '#C5A67C' }}
                 >
-                  <div className="grid grid-cols-1 items-center gap-2 md:grid-cols-[40px_1fr_80px_80px_80px] md:gap-3">
-                    <span className="font-mono text-[12.5px]" style={{ color: '#EAE4D8' }}>#{a.agentId}</span>
-                    <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.7)' }}>{shortenAddress(a.controller)}</span>
-                    <span className="text-left font-mono text-[11px] md:text-right" style={{ color: '#C5A67C' }}>{a.score}</span>
-                    <span className="text-left font-mono text-[11px] md:text-right" style={{ color: 'rgba(234, 228, 216, 0.7)' }}>{a.jobs.length}</span>
-                    <span className="text-left font-mono text-[11px] md:text-right" style={{ color: 'rgba(234, 228, 216, 0.7)' }}>{a.proofTokenIds.length}</span>
-                  </div>
-                </Link>
-              ))}
+                  {showAllAgents ? `Show less ↑` : `Show all (${filteredAgents.length}) ↓`}
+                </button>
+              )}
             </div>
           </Panel>
         </div>
@@ -443,6 +598,14 @@ export default function Dashboard() {
       </div>
     </div>
   );
+}
+
+
+function formatScore(raw: string): string {
+  const n = Number(raw);
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2).replace(/\.?0+$/, '') + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.?0+$/, '') + 'K';
+  return String(n);
 }
 
 function eventColor(name: string): string {
