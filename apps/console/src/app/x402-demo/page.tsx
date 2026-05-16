@@ -179,7 +179,9 @@ export default function X402DemoPage() {
     if (balance < BigInt(gwOption.amount)) { log(`Insufficient USDC. Need ${formatUnits(BigInt(gwOption.amount), 6)} USDC.`, 'error'); setStep('error'); return; }
 
     setStep('signing');
-    const validBefore = String(Math.floor(Date.now() / 1000) + 600);
+    // Circle Gateway requires authorization validity >= 604900s (7 days + 100s buffer).
+    // See @circle-fin/x402-batching: GATEWAY_AUTH_VALIDITY_WINDOW_SECONDS = 7d + 100s.
+    const validBefore = String(Math.floor(Date.now() / 1000) + 604900);
     const nonce = randomNonce();
     const verifyingContract = (gwOption.extra?.verifyingContract as string) || USDC;
 
