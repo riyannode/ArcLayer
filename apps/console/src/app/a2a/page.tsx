@@ -202,10 +202,11 @@ export default function A2ADashboardPage() {
 
   const fetchData = useCallback(async () => {
     try {
+      const cacheBust = Date.now();
       const [ovRes, ocRes, fdRes] = await Promise.all([
-        fetch('/api/indexer/overview', { cache: 'no-store' }),
-        fetch('/api/a2a/status', { cache: 'no-store' }),
-        fetch('/api/indexer/autonomous-feed?limit=50', { cache: 'no-store' }),
+        fetch(`/api/indexer/overview?t=${cacheBust}`, { cache: 'no-store' }),
+        fetch(`/api/a2a/status?t=${cacheBust}`, { cache: 'no-store' }),
+        fetch(`/api/indexer/autonomous-feed?limit=50&t=${cacheBust}`, { cache: 'no-store' }),
       ]);
       if (!ovRes.ok) throw new Error(`indexer ${ovRes.status}`);
       const ovData: Overview = await ovRes.json();
@@ -294,6 +295,7 @@ export default function A2ADashboardPage() {
             stats={pythia?.stats || null}
             agentId={pythia?.agentId}
             wallet={onchain?.wallets?.pythia}
+            balance={onchain?.balances?.usdc?.pythia}
             description="Sells crypto signals (BTC/ETH/SOL) for 0.01 USDC via x402 EIP-3009."
             isLive={isLive}
           />
@@ -304,6 +306,7 @@ export default function A2ADashboardPage() {
             stats={hermes?.stats || null}
             agentId={hermes?.agentId}
             wallet={onchain?.wallets?.hermes}
+            balance={onchain?.balances?.usdc?.hermes}
             description="Buys signals from Pythia, queries Polymarket, trades Ignia prediction markets."
             isLive={isLive}
           />
@@ -544,6 +547,7 @@ function AgentHeroCard({
   stats,
   agentId,
   wallet,
+  balance,
   description,
   isLive,
 }: {
@@ -553,14 +557,22 @@ function AgentHeroCard({
   stats: AgentStats | null;
   agentId?: string;
   wallet?: string;
+  balance?: string | null;
   description: string;
   isLive: boolean;
 }) {
   const accentText = color === 'cyan' ? 'text-cyan-300' : 'text-amber-300';
   const accentBorder = color === 'cyan' ? 'border-cyan-500/20' : 'border-amber-500/20';
+  const [copied, setCopied] = useState(false);
   const copyWallet = async () => {
     if (!wallet) return;
-    await navigator.clipboard.writeText(wallet);
+    try {
+      await navigator.clipboard.writeText(wallet);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked, no-op */
+    }
   };
 
   return (
@@ -577,7 +589,7 @@ function AgentHeroCard({
                 title={`Copy ${name} wallet: ${wallet}`}
                 className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest text-[#7A7A7A] transition-colors hover:border-[#C5A67C]/40 hover:text-[#C5A67C]"
               >
-                copy wallet
+                {copied ? '✓ copied' : 'copy wallet'}
               </button>
             )}
           </div>
@@ -596,6 +608,16 @@ function AgentHeroCard({
         <Stat label="Reputation" value={stats?.reputationScore ?? '—'} />
         <Stat label="Calibration" value={stats?.calibrationScore ?? '—'} />
         <Stat label="Revenue" value={stats ? formatUSDC(stats.totalRevenue) : '—'} />
+      </div>
+      {/* Live USDC balance · refreshes every 8s */}
+      <div className={`mt-3 rounded border ${accentBorder} bg-black/30 px-3 py-2`}>
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="font-mono text-[9px] uppercase tracking-widest text-[#555]">USDC balance · live</p>
+          <span className="font-mono text-[8px] text-emerald-400/70">● synced</span>
+        </div>
+        <p className={`mt-1 font-mono text-base ${accentText}`}>
+          {balance ? `${formatUSDC(balance)} USDC` : '—'}
+        </p>
       </div>
       <div className="mt-3 space-y-1 font-mono text-[10px] text-[#444]">
         {wallet && (
