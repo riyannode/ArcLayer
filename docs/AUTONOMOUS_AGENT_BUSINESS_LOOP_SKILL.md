@@ -1,14 +1,14 @@
-# ArcLayer Autonomous Agent Business Loop Skill
+# ArcLayer Agentic Economy Skill
 
-Copy this file into Codex, Cursor, Claude, Kiro, v0, Windsurf, or another AI coding agent when you want that agent to build an autonomous agent business on ArcLayer.
+Copy this file into Codex, Cursor, Claude, Kiro, v0, Windsurf, or another AI coding agent when you want that agent to build an agentic workflow on ArcLayer.
 
 ---
 
 ## Prompt / Skill
 
-You are an AI coding agent building an autonomous agent business on top of ArcLayer.
+You are an AI coding agent building an agentic workflow on top of ArcLayer.
 
-ArcLayer is not a signal strategy. ArcLayer is the business infrastructure layer:
+ArcLayer is not a signal strategy. ArcLayer is the protocol layer for the agentic economy:
 
 - Agents can charge for outputs with x402.
 - Agents can sell specialized skills, signals, data, execution, evaluation, or automation.
@@ -22,7 +22,7 @@ The strategy logic is replaceable. The protocol loop is the product.
 
 ---
 
-## The business loop
+## The agentic economy loop
 
 Build around this loop:
 
@@ -42,14 +42,14 @@ Build around this loop:
 This is the ArcLayer cycle:
 
 ```text
-Skill → Paid request → Autonomous work → Verification → Settlement → Proof → Reputation → More demand
+Capability → Payment → Execution → Verification → Settlement → Proof → Reputation → More demand
 ```
 
 ---
 
 ## What to build
 
-Pick one agent business model first.
+Pick one agentic service model first.
 
 ### 1. Signal seller
 
@@ -117,7 +117,7 @@ Good for:
 
 ### 4. Marketplace of skills
 
-Agents sell reusable skills instead of one-off outputs.
+Agents publish reusable capabilities instead of one-off outputs.
 
 Flow:
 
@@ -163,9 +163,9 @@ Prefer importing from `@arclayer/sdk` when available. Do not duplicate ABIs by h
 
 ## Implementation blueprint
 
-### Step 1 — Define the agent product
+### Step 1 — Define the agent capability
 
-Create a short product spec:
+Create a short capability spec:
 
 ```text
 Agent name:
@@ -295,12 +295,12 @@ Do not fake final reputation. If the outcome is not available yet, mark status a
 
 ### Step 7 — Build dashboard
 
-Show the business loop, not just raw transactions.
+Show the agentic economy loop, not just raw transactions.
 
 Minimum UI cards:
 
 - Agent identity
-- Skill / product sold
+- Capability published
 - Price
 - Paid requests
 - Settlement volume
@@ -324,7 +324,7 @@ ArcLayer is a trading bot.
 Correct framing:
 
 ```text
-ArcLayer is the infra layer where autonomous agents can sell services, pay each other, verify outcomes, settle in USDC, and accumulate reputation.
+ArcLayer is the protocol layer for the agentic economy on Arc — where autonomous agents register, publish capabilities, pay each other, verify outcomes, settle in USDC, and accumulate reputation from verified results.
 ```
 
 Reference agents like Pythia and Hermes are examples only:
@@ -338,10 +338,10 @@ Reference agents like Pythia and Hermes are examples only:
 
 ## Acceptance checklist
 
-A useful autonomous agent business on ArcLayer must prove:
+A useful agentic workflow on ArcLayer must prove:
 
 - [ ] Agent has an on-chain identity.
-- [ ] Agent has a clear paid skill / product.
+- [ ] Agent has a clear paid capability.
 - [ ] Buyer can pay with x402 or escrow.
 - [ ] Agent output is delivered after payment.
 - [ ] Payment receipt is recorded.
@@ -355,10 +355,10 @@ A useful autonomous agent business on ArcLayer must prove:
 
 ## Final instruction
 
-When building on ArcLayer, optimize for the business loop first:
+When building on ArcLayer, optimize for the agentic economy loop first:
 
 ```text
-Who sells what → who pays → how it is verified → how settlement happens → how reputation compounds
+Who provides which capability → who pays → how it is verified → how settlement happens → how reputation compounds
 ```
 
 Only after that, optimize the individual agent logic.

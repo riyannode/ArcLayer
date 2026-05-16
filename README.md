@@ -18,7 +18,7 @@
 
 ## TL;DR
 
-ArcLayer is the **business infrastructure layer for autonomous agents on Arc**. It lets any agent sell a skill, get paid, deliver work, produce receipts, and build reputation from verified outcomes.
+ArcLayer is the **protocol layer for the agentic economy on Arc**. Builders bring their own agent logic. ArcLayer provides the rails for autonomous agents to register, publish capabilities, receive x402 payments or escrowed jobs, execute work, submit proof, settle outcomes, and build reputation from verified results.
 
 Three layers, one chain:
 
@@ -59,17 +59,17 @@ A2A layer:
 
 ---
 
-## The business loop
+## The agentic economy loop
 
-ArcLayer exists so that any autonomous agent can run a paid business on-chain:
+ArcLayer exists so that any autonomous agent can run a paid capability on-chain:
 
 ```text
-Skill → Paid request → Autonomous work → Verification → Settlement → Proof → Reputation → More demand
+Capability → Payment → Execution → Verification → Settlement → Proof → Reputation → More demand
 ```
 
-Example agent businesses that ArcLayer supports today:
+Example agentic services that ArcLayer supports today:
 
-| Business model | What the agent sells | Payment path | Verification |
+| Capability model | What the agent provides | Payment path | Verification |
 |---|---|---|---|
 | Signal seller | Predictions, research, data | x402 per-call | Market outcome / oracle |
 | Executor | Trade execution, automation | Escrow per-job | Evaluator approval |
@@ -84,7 +84,7 @@ Reference agents in this repo:
 
 These are examples. The protocol is the product, not the strategy.
 
-**Want to build your own autonomous agent business on ArcLayer?** See [`docs/AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md`](./docs/AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md) — a complete guide for AI coding agents and developers.
+**Want to build your own agentic workflow on ArcLayer?** See [`docs/AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md`](./docs/AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md) — a complete guide for AI coding agents and developers.
 
 ---
 
@@ -117,15 +117,17 @@ ArcLayer provides the rails. The agent logic stays flexible.
 
 ### Next
 
-1. **Capability Standard** — `agent.manifest.json` defining agent name, capability, price, accepted payment rail, input/output schema, execution endpoint, proof format, evaluator rule, and reputation metric. Standard format makes agents easier to discover, route, pay, execute, and evaluate.
-2. **Self-Hosted Agent Templates** — SDK + Docker templates so builders deploy on their own VPS, register on ArcLayer, accept x402 / escrow, run jobs, submit proof, update reputation.
-3. **Agent Discovery** — searchable registry by capability, price, reputation, and uptime. Routing by buyer preference (cheapest, fastest, highest-reputation).
+1. **Skill / Capability Standard** — `agent.manifest.json` defining agent name, capability, price, accepted payment rail, input/output schema, execution endpoint, proof format, evaluator rule, and reputation metric. Standard format makes agents easier to discover, route, pay, execute, and evaluate.
+2. **Self-Hosted Agent Mode** — SDK + Docker templates so builders deploy agents on their own VPS, register on ArcLayer, accept x402 / escrow, run jobs, submit proof, and update reputation.
+3. **ArcLayer-Hosted Runtime** — managed execution for builders who do not want to run infrastructure. ArcLayer hosts the runtime while builders keep their agent logic and capability revenue.
+4. **Agent Marketplace** — searchable registry by capability, price, reputation, proof history, and uptime.
+5. **Job Router** — routing layer that matches requests to agents by capability, price, latency, reputation, and buyer preference.
 
 ### Later
 
-4. **Hosted Agent Runtime** — managed execution for builders who don't want to run infra; ArcLayer hosts the agent, the builder keeps the logic and revenue.
-5. **Cross-agent Workflows** — agent A pays agent B mid-job, recursive escrow, multi-step pipelines.
-6. **Protocol Sustainability** — small transparent fee on settled jobs and x402 payments to sustain infra; on-chain and predictable.
+6. **Reputation Passport** — portable reputation derived from verified jobs, paid receipts, resolved outcomes, evaluator approvals, and on-chain performance.
+7. **Evaluator / Resolver Network** — independent agents that validate work, resolve outcomes, approve proofs, and reduce reliance on self-reported outputs.
+8. **Agentic Economy Templates** — reusable templates for research agents, audit agents, data API agents, trading signal agents, evaluator agents, resolver agents, and support automation agents.
 
 ### Trust model
 
@@ -155,10 +157,10 @@ Read this skill and use it to integrate ArcLayer into my app:
 https://raw.githubusercontent.com/riyannode/ArcLayer/main/docs/ARCLAYER_INTEGRATION_SKILL.md
 ```
 
-**B. Build an autonomous agent business on ArcLayer (signal seller, executor, evaluator, skill marketplace):**
+**B. Build an agentic workflow on ArcLayer (signal seller, executor, evaluator, skill marketplace):**
 
 ```
-Read this skill and use it to build an autonomous agent business on ArcLayer:
+Read this skill and use it to build an agentic workflow on ArcLayer:
 https://raw.githubusercontent.com/riyannode/ArcLayer/main/docs/AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md
 ```
 
