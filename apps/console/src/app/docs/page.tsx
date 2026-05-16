@@ -289,45 +289,61 @@ export default function DocsPage() {
         <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
           Use ArcLayer x402 endpoints to require USDC settlement on Arc before any API or agent
           run. The flow is HTTP-native: server returns <code className="text-[#C5A67C]">402 Payment Required</code>,
-          client pays, server verifies and serves.
+          client signs an EIP-3009 authorization, the relayer settles on-chain, and the resource
+          unlocks.
         </p>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="border border-white/10 bg-black/30 p-5">
-            <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>CURRENT</div>
-            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>ArcLayer escrow flow</div>
+        <div className="grid gap-4 md:grid-cols-2 mb-4">
+          <div className="border border-[#C5A67C]/30 bg-[rgba(197,166,124,0.04)] p-5">
+            <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>LIVE · CANONICAL V2</div>
+            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 exact scheme on Arc Testnet</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
-              <li>· USDC-funded jobs via JobEscrow</li>
-              <li>· Worker submits → client/evaluator approves → settle</li>
-              <li>· WorkProof receipt minted on settle</li>
+              <li>· EIP-3009 <code className="text-[#C5A67C]">transferWithAuthorization</code> on Arc USDC</li>
+              <li>· Canonical <code className="text-[#C5A67C]">X-PAYMENT</code> base64 header (legacy <code className="text-[#C5A67C]">PAYMENT-SIGNATURE</code> aliased)</li>
+              <li>· Self-hosted relayer settles, payer pays no gas</li>
+              <li>· Replay protected: nonces consumed on-chain</li>
             </ul>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link href="/x402-demo" className="border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">
+                Try the live demo ↗
+              </Link>
+              <a href="https://arclayers.xyz/api/x402/supported" target="_blank" rel="noopener noreferrer" className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.7)] transition hover:border-white/20 hover:text-[#EAE4D8]">
+                /api/x402/supported ↗
+              </a>
+            </div>
           </div>
 
           <div className="border border-white/10 bg-black/30 p-5">
-            <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>NEXT</div>
-            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 V2 on Arc USDC</div>
+            <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>ALSO SUPPORTED</div>
+            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>arc-escrow scheme</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
-              <li>· <code className="text-[#C5A67C]">PAYMENT-REQUIRED</code> / <code className="text-[#C5A67C]">PAYMENT-SIGNATURE</code> headers</li>
-              <li>· EIP-3009 transferWithAuthorization preferred</li>
-              <li>· Permit2 fallback if available on Arc</li>
+              <li>· USDC-funded jobs via JobEscrow + WorkProof</li>
+              <li>· Worker submits → client/evaluator approves → settle</li>
+              <li>· WorkProof receipt minted on settle</li>
+              <li>· Use when work has milestones or evaluator review</li>
             </ul>
           </div>
         </div>
 
-        <div className="mt-4 border border-white/10 bg-black/30 p-5">
-          <div className="aureo-mono-label mb-2" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>RESEARCH</div>
-          <p className="text-sm" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-            Capability probe in progress: verifying Arc USDC support for EIP-3009, EIP-2612, and
-            Permit2 deployment. Report:{' '}
-            <a
-              href="https://github.com/riyannode/ArcLayer/blob/main/docs/x402/arc-capability-report.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#C5A67C] hover:underline"
-            >
-              docs/x402/arc-capability-report.md ↗
-            </a>
-          </p>
+        <div className="border border-white/10 bg-black/30 p-5 mb-4">
+          <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>FACILITATOR ENDPOINTS</div>
+          <div className="grid gap-2 text-xs font-mono" style={{ color: 'rgba(234, 228, 216, 0.75)' }}>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/supported</span><span className="hidden md:inline opacity-60">— list schemes (exact + arc-escrow)</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">POST</span><span className="text-[#EAE4D8]">/api/x402/verify</span><span className="hidden md:inline opacity-60">— verify EIP-3009 signature offline</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">POST</span><span className="text-[#EAE4D8]">/api/x402/settle</span><span className="hidden md:inline opacity-60">— relayer submits on-chain</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/relayer-status</span><span className="hidden md:inline opacity-60">— relayer address + USDC balance</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402-demo/protected</span><span className="hidden md:inline opacity-60">— sample protected resource</span></div>
+          </div>
+        </div>
+
+        <div className="border border-white/10 bg-black/30 p-5">
+          <div className="aureo-mono-label mb-2" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>CAVEATS</div>
+          <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.55 }}>
+            <li>· Settlement runs in self-hosted mode. Circle Gateway batching is wired in code but currently has no Arc Testnet endpoint, so we fall back to direct relayer submission.</li>
+            <li>· Operators must fund the relayer wallet with Arc USDC and native gas. Check <code className="text-[#C5A67C]">/api/x402/relayer-status</code> before relying on settle.</li>
+            <li>· EIP-712 domain reads <code className="text-[#C5A67C]">name</code> and <code className="text-[#C5A67C]">version</code> from the on-chain USDC contract; the Arc deployment reports <code className="text-[#C5A67C]">USDC</code> / <code className="text-[#C5A67C]">2</code>.</li>
+            <li>· Testnet only. Do not point production traffic at this facilitator until Arc mainnet keys and audited relayer ops are live.</li>
+          </ul>
         </div>
       </section>
 

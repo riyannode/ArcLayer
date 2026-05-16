@@ -1,365 +1,178 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { createPublicClient, http, formatUnits, getAddress, type Hex } from 'viem';
+import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'viem';
 import { shortenAddress } from '@/lib/contracts';
 
 const ARC_CHAIN_ID = 5042002;
 const ARC_RPC = 'https://rpc.testnet.arc.network';
 const USDC = getAddress('0x3600000000000000000000000000000000000000');
 const NETWORK = 'eip155:5042002';
-const PAY_TO = getAddress('0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b'); // relayer = recipient for demo
+const FALLBACK_PAY_TO = getAddress('0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b');
 
-type Step = 'idle' | 'connecting' | 'signing' | 'verifying' | 'settling' | 'done' | 'error';
+const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
 
-interface Log {
-  ts: string;
-  msg: string;
-  type?: 'info' | 'success' | 'error';
-}
+type Step = 'idle' | 'challenge' | 'signing' | 'verifying' | 'settling' | 'retrying' | 'replay' | 'done' | 'error';
+type LogType = 'info' | 'success' | 'error';
 
-function ts(): string {
-  return new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
+interface LogLine { ts: string; msg: string; type: LogType }
+interface RelayerStatus { ready: boolean; relayerAddress: string | null; usdcBalance: string; settleMode?: string; error?: string }
+interface Requirement { scheme: 'exact'; network: string; asset: `0x${string}`; amount: string; payTo: `0x${string}`; maxTimeoutSeconds: number; extra?: Record<string, unknown> }
+
+function nowTs() { return new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
+function randomNonce(): Hex { return `0x${Array.from(crypto.getRandomValues(new Uint8Array(32))).map((b) => b.toString(16).padStart(2, '0')).join('')}` as Hex; }
+function b64(value: unknown) { return btoa(JSON.stringify(value)); }
 
 export default function X402DemoPage() {
   const { ready, authenticated, login } = usePrivy();
   const { wallets } = useWallets();
   const [step, setStep] = useState<Step>('idle');
-  const [logs, setLogs] = useState<Log[]>([]);
-  const [txHash, setTxHash] = useState<string>('');
-  const [amount, setAmount] = useState('0.01');
+  const [logs, setLogs] = useState<LogLine[]>([]);
+  const [txHash, setTxHash] = useState('');
+  const [unlocked, setUnlocked] = useState(false);
+  const [replayResult, setReplayResult] = useState('Not run');
+  const [relayer, setRelayer] = useState<RelayerStatus | null>(null);
+  const [requirement, setRequirement] = useState<Requirement | null>(null);
 
-  const log = useCallback((msg: string, type: Log['type'] = 'info') => {
-    setLogs((prev) => [...prev, { ts: ts(), msg, type }]);
+  const log = useCallback((msg: string, type: LogType = 'info') => setLogs((prev) => [...prev, { ts: nowTs(), msg, type }]), []);
+
+  useEffect(() => {
+    fetch('/api/x402/relayer-status')
+      .then((r) => r.json())
+      .then(setRelayer)
+      .catch((e) => setRelayer({ ready: false, relayerAddress: null, usdcBalance: '0', error: e instanceof Error ? e.message : String(e) }));
   }, []);
 
   const reset = useCallback(() => {
-    setStep('idle');
-    setLogs([]);
-    setTxHash('');
+    setLogs([]); setTxHash(''); setUnlocked(false); setReplayResult('Not run'); setRequirement(null); setStep('idle');
   }, []);
 
   const runDemo = useCallback(async () => {
     reset();
-    setStep('connecting');
-
     const wallet = wallets[0];
-    if (!wallet) {
-      log('No wallet connected', 'error');
-      setStep('error');
-      return;
-    }
-
+    if (!wallet) { log('No wallet connected', 'error'); setStep('error'); return; }
     const address = wallet.address as `0x${string}`;
-    log(`Wallet: ${shortenAddress(address)}`);
 
-    // Switch to Arc if needed
     try {
       await wallet.switchChain(ARC_CHAIN_ID);
-      log(`Chain: Arc Testnet (${ARC_CHAIN_ID})`);
-    } catch {
-      log('Failed to switch to Arc Testnet', 'error');
-      setStep('error');
-      return;
+      log(`Wallet connected on Arc: ${shortenAddress(address)}`);
+    } catch (e) {
+      log(`Failed to switch to Arc Testnet: ${e instanceof Error ? e.message : String(e)}`, 'error'); setStep('error'); return;
     }
 
-    // Check balance
+    setStep('challenge');
+    log('1/9 Requesting protected resource without payment...');
+    const first = await fetch('/api/x402-demo/protected');
+    const challenge = await first.json();
+    if (first.status !== 402 || !challenge.paymentRequirements) { log('Protected endpoint did not return x402 402 challenge', 'error'); setStep('error'); return; }
+    const req = challenge.paymentRequirements as Requirement;
+    setRequirement(req);
+    log(`2/9 Received 402 Payment Required: ${formatUnits(BigInt(req.amount), 6)} USDC`, 'success');
+
     const client = createPublicClient({ transport: http(ARC_RPC) });
-    const balanceOfAbi = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
-    const balance = await client.readContract({ address: USDC, abi: balanceOfAbi, functionName: 'balanceOf', args: [address] });
-    const balDisplay = formatUnits(balance, 6);
-    log(`Balance: ${balDisplay} USDC`);
+    const balance = await client.readContract({ address: USDC, abi: BALANCE_ABI, functionName: 'balanceOf', args: [address] });
+    log(`Payer USDC balance: ${formatUnits(balance, 6)} USDC`);
+    if (balance < BigInt(req.amount)) { log(`Insufficient USDC. Need ${formatUnits(BigInt(req.amount), 6)} USDC.`, 'error'); setStep('error'); return; }
 
-    const amountAtomic = BigInt(Math.round(parseFloat(amount) * 1_000_000));
-    if (balance < amountAtomic) {
-      log(`Insufficient balance. Need ${amount} USDC, have ${balDisplay}`, 'error');
-      setStep('error');
-      return;
-    }
-
-    // Build EIP-3009 authorization
     setStep('signing');
-    log('Building EIP-3009 authorization...');
-
-    const now = Math.floor(Date.now() / 1000);
-    const validAfter = '0';
-    const validBefore = String(now + 600);
-    const nonce = `0x${Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join('')}` as Hex;
-
-    const domain = {
-      name: 'USDC',
-      version: '2',
-      chainId: ARC_CHAIN_ID,
-      verifyingContract: USDC,
+    const validBefore = String(Math.floor(Date.now() / 1000) + 600);
+    const nonce = randomNonce();
+    const paymentPayload = {
+      x402Version: 2,
+      accepted: { ...req, asset: getAddress(req.asset), payTo: getAddress(req.payTo), extra: { name: 'USDC', version: '2', decimals: 6, symbol: 'USDC' } },
+      payload: {
+        signature: '0x' as Hex,
+        authorization: { from: address, to: getAddress(req.payTo), value: req.amount, validAfter: '0', validBefore, nonce },
+      },
     };
 
-    const types = {
-      TransferWithAuthorization: [
-        { name: 'from', type: 'address' },
-        { name: 'to', type: 'address' },
-        { name: 'value', type: 'uint256' },
-        { name: 'validAfter', type: 'uint256' },
-        { name: 'validBefore', type: 'uint256' },
-        { name: 'nonce', type: 'bytes32' },
-      ],
-    };
-
-    const message = {
-      from: address,
-      to: PAY_TO,
-      value: amountAtomic,
-      validAfter: BigInt(validAfter),
-      validBefore: BigInt(validBefore),
-      nonce,
-    };
-
-    let signature: Hex;
+    log('3/9 Signing EIP-3009 transferWithAuthorization...');
     try {
       const provider = await wallet.getEthereumProvider();
-      const rawSig = await provider.request({
+      paymentPayload.payload.signature = await provider.request({
         method: 'eth_signTypedData_v4',
-        params: [
-          address,
-          JSON.stringify({
-            types: { EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' }, { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }], ...types },
-            primaryType: 'TransferWithAuthorization',
-            domain,
-            message: {
-              from: address,
-              to: PAY_TO,
-              value: `0x${amountAtomic.toString(16)}`,
-              validAfter: '0x0',
-              validBefore: `0x${BigInt(validBefore).toString(16)}`,
-              nonce,
-            },
-          }),
-        ],
-      });
-      signature = rawSig as Hex;
-      log(`Signature: ${signature.slice(0, 20)}...`, 'success');
-    } catch (e: unknown) {
-      log(`User rejected signature: ${e instanceof Error ? e.message : String(e)}`, 'error');
-      setStep('error');
-      return;
-    }
-
-    // Verify
-    setStep('verifying');
-    log('Calling /api/x402/verify...');
-
-    const payload = {
-      x402Version: 2,
-      paymentPayload: {
-        x402Version: 2,
-        accepted: {
-          scheme: 'exact',
-          network: NETWORK,
-          asset: USDC,
-          amount: amountAtomic.toString(),
-          payTo: PAY_TO,
-          maxTimeoutSeconds: 300,
-          extra: { name: 'USDC', version: '2', decimals: 6 },
-        },
-        payload: {
-          signature,
-          authorization: {
-            from: address,
-            to: PAY_TO,
-            value: amountAtomic.toString(),
-            validAfter,
-            validBefore,
-            nonce,
+        params: [address, JSON.stringify({
+          types: {
+            EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' }, { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }],
+            TransferWithAuthorization: [{ name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' }],
           },
-        },
-      },
-      paymentRequirements: {
-        scheme: 'exact',
-        network: NETWORK,
-        asset: USDC,
-        amount: amountAtomic.toString(),
-        payTo: PAY_TO,
-        maxTimeoutSeconds: 300,
-        extra: { name: 'USDC', version: '2', decimals: 6 },
-      },
-    };
+          primaryType: 'TransferWithAuthorization',
+          domain: { name: 'USDC', version: '2', chainId: ARC_CHAIN_ID, verifyingContract: USDC },
+          message: { from: address, to: getAddress(req.payTo), value: `0x${BigInt(req.amount).toString(16)}`, validAfter: '0x0', validBefore: `0x${BigInt(validBefore).toString(16)}`, nonce },
+        })],
+      }) as Hex;
+      log(`Signature created: ${paymentPayload.payload.signature.slice(0, 18)}...`, 'success');
+    } catch (e) { log(`Signature failed: ${e instanceof Error ? e.message : String(e)}`, 'error'); setStep('error'); return; }
 
-    try {
-      const verifyResp = await fetch('/api/x402/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const verifyJson = await verifyResp.json();
+    const body = { x402Version: 2, paymentPayload, paymentRequirements: req };
 
-      if (!verifyJson.isValid) {
-        log(`Verify failed: ${verifyJson.invalidReason} — ${verifyJson.invalidMessage}`, 'error');
-        setStep('error');
-        return;
-      }
-      log(`Verified ✓ payer=${shortenAddress(verifyJson.payer)}`, 'success');
-    } catch (e: unknown) {
-      log(`Verify request failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
-      setStep('error');
-      return;
-    }
+    setStep('verifying');
+    log('4/9 Verifying canonical exact payment...');
+    const verify = await fetch('/api/x402/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const verifyJson = await verify.json();
+    if (!verifyJson.isValid) { log(`Verify failed: ${verifyJson.invalidReason || verifyJson.error} — ${verifyJson.invalidMessage || ''}`, 'error'); setStep('error'); return; }
+    log(`Verified signer: ${shortenAddress(verifyJson.payer)}`, 'success');
 
-    // Settle
     setStep('settling');
-    log('Calling /api/x402/settle (relayer submits on-chain)...');
+    log('5/9 Settling USDC on-chain through relayer...');
+    const settle = await fetch('/api/x402/settle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const settleJson = await settle.json();
+    if (!settleJson.success) { log(`Settle failed: ${settleJson.errorReason || settleJson.error} — ${settleJson.errorMessage || ''}`, 'error'); setStep('error'); return; }
+    setTxHash(settleJson.transaction);
+    log(`6/9 Settled on Arc: ${settleJson.transaction.slice(0, 18)}...`, 'success');
 
-    try {
-      const settleResp = await fetch('/api/x402/settle', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const settleJson = await settleResp.json();
+    setStep('retrying');
+    log('7/9 Retrying protected resource with canonical X-PAYMENT header...');
+    const header = b64(paymentPayload);
+    const unlockedResp = await fetch('/api/x402-demo/protected', { headers: { 'X-PAYMENT': header } });
+    const unlockedJson = await unlockedResp.json();
+    if (!unlockedResp.ok || !unlockedJson.unlocked) { log(`Protected retry failed: ${unlockedJson.error || unlockedResp.status}`, 'error'); setStep('error'); return; }
+    setUnlocked(true);
+    log('8/9 Protected resource unlocked with settlement proof.', 'success');
 
-      if (!settleJson.success) {
-        log(`Settle failed: ${settleJson.errorReason} — ${settleJson.errorMessage}`, 'error');
-        setStep('error');
-        return;
-      }
+    setStep('replay');
+    log('9/9 Replay test: reusing the same nonce against /api/x402/verify...');
+    const replay = await fetch('/api/x402/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const replayJson = await replay.json();
+    const rejected = replayJson.isValid === false && replayJson.invalidReason === 'nonce_used';
+    setReplayResult(rejected ? 'Rejected: nonce_used' : `Unexpected: ${JSON.stringify(replayJson).slice(0, 80)}`);
+    log(rejected ? 'Replay rejected: nonce_used ✓' : 'Replay test did not return expected nonce_used', rejected ? 'success' : 'error');
+    setStep(rejected ? 'done' : 'error');
+  }, [wallets, log, reset]);
 
-      setTxHash(settleJson.transaction);
-      log(`Settled ✓ tx=${settleJson.transaction.slice(0, 18)}...`, 'success');
-      log(`Amount: ${amount} USDC transferred via EIP-3009`, 'success');
-      setStep('done');
-    } catch (e: unknown) {
-      log(`Settle request failed: ${e instanceof Error ? e.message : String(e)}`, 'error');
-      setStep('error');
-    }
-  }, [wallets, amount, log, reset]);
+  const busy = !['idle', 'done', 'error'].includes(step);
+  const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
 
   return (
-    <main className="min-h-screen bg-[#050505] text-[#EAE4D8] px-4 py-12 md:py-20">
-      <div className="mx-auto max-w-[640px]">
-        {/* Header */}
-        <div className="mb-10">
-          <h1 className="font-mono text-[11px] tracking-[0.2em] text-[#C5A67C] mb-2">
-            x402 PROTOCOL DEMO
-          </h1>
-          <p className="font-mono text-[13px] text-white/60 leading-relaxed">
-            Canonical x402 V2 payment on Arc Testnet. Sign an EIP-3009 authorization,
-            verify the signature, and settle USDC on-chain via relayer — gasless for the payer.
-          </p>
-        </div>
-
-        {/* Info card */}
-        <div
-          className="mb-8 p-4 font-mono text-[11px] leading-[1.8]"
-          style={{ border: '1px solid rgba(197, 166, 124, 0.15)', background: 'rgba(197, 166, 124, 0.03)' }}
-        >
-          <div className="flex justify-between"><span className="text-white/40">Scheme</span><span>exact (EIP-3009)</span></div>
-          <div className="flex justify-between"><span className="text-white/40">Network</span><span>eip155:5042002</span></div>
-          <div className="flex justify-between"><span className="text-white/40">Asset</span><span>USDC (6 decimals)</span></div>
-          <div className="flex justify-between"><span className="text-white/40">Recipient</span><span>{shortenAddress(PAY_TO)}</span></div>
-          <div className="flex justify-between"><span className="text-white/40">Settlement</span><span>Relayer (gasless for payer)</span></div>
-        </div>
-
-        {/* Amount input */}
-        <div className="mb-6">
-          <label className="block font-mono text-[10px] tracking-[0.18em] text-white/40 mb-2">
-            AMOUNT (USDC)
-          </label>
-          <input
-            type="number"
-            step="0.001"
-            min="0.001"
-            max="10"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            disabled={step !== 'idle' && step !== 'error' && step !== 'done'}
-            className="w-full bg-transparent font-mono text-[14px] text-[#EAE4D8] px-3 py-2 outline-none"
-            style={{ border: '1px solid rgba(197, 166, 124, 0.25)' }}
-          />
-        </div>
-
-        {/* Action button */}
+    <main className="min-h-screen bg-[#050505] px-4 py-12 text-[#EAE4D8] md:py-20">
+      <div className="mx-auto max-w-4xl">
         <div className="mb-8">
-          {!ready ? (
-            <div className="font-mono text-[10px] text-white/30">LOADING PRIVY...</div>
-          ) : !authenticated ? (
-            <button
-              onClick={login}
-              className="w-full py-3 font-mono text-[11px] tracking-[0.18em] transition-all duration-300"
-              style={{ border: '1px solid rgba(197, 166, 124, 0.4)', color: '#C5A67C' }}
-            >
-              CONNECT WALLET
-            </button>
-          ) : step === 'idle' || step === 'error' || step === 'done' ? (
-            <button
-              onClick={runDemo}
-              className="w-full py-3 font-mono text-[11px] tracking-[0.18em] transition-all duration-300"
-              style={{
-                border: '1px solid rgba(197, 166, 124, 0.5)',
-                color: '#050505',
-                background: '#C5A67C',
-              }}
-            >
-              {step === 'done' ? 'RUN AGAIN' : 'SIGN & SETTLE x402 PAYMENT'}
-            </button>
+          <h1 className="mb-2 font-mono text-[11px] tracking-[0.2em] text-[#C5A67C]">x402 CANONICAL PROTECTED RESOURCE DEMO</h1>
+          <p className="max-w-2xl font-mono text-[13px] leading-relaxed text-white/60">Full Arc Testnet flow: 402 challenge → EIP-3009 signature → verify → relayer settlement → retry with <span className="text-[#C5A67C]">X-PAYMENT</span> → unlocked resource → replay rejection.</p>
+        </div>
+
+        <div className="mb-8 grid gap-4 md:grid-cols-3">
+          <div className="border border-white/10 bg-white/[0.02] p-4 font-mono text-[11px]"><div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">PROTECTED RESOURCE</div><div>/api/x402-demo/protected</div><div className="mt-2 text-white/40">No header returns 402. Settled X-PAYMENT returns 200.</div></div>
+          <div className="border border-white/10 bg-white/[0.02] p-4 font-mono text-[11px]"><div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">RELAYER STATUS</div><div className={relayer?.ready ? 'text-green-400/80' : 'text-red-400/80'}>{relayer?.ready ? 'READY' : 'NOT READY'}</div><div className="mt-2 text-white/40">{relayer?.relayerAddress ? shortenAddress(relayer.relayerAddress) : 'not configured'} · {relayer?.usdcBalance ?? '0'} USDC</div></div>
+          <div className="border border-white/10 bg-white/[0.02] p-4 font-mono text-[11px]"><div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">PAYMENT KIND</div><div>exact · EIP-3009</div><div className="mt-2 text-white/40">{NETWORK} · USDC · payTo {shortenAddress(payTo)}</div></div>
+        </div>
+
+        <div className="mb-6">
+          {!ready ? <div className="font-mono text-[10px] text-white/30">LOADING PRIVY...</div> : !authenticated ? (
+            <button onClick={login} className="w-full border border-[#C5A67C]/40 py-3 font-mono text-[11px] tracking-[0.18em] text-[#C5A67C]">CONNECT WALLET</button>
           ) : (
-            <div
-              className="w-full py-3 text-center font-mono text-[11px] tracking-[0.18em] text-[#C5A67C]"
-              style={{ border: '1px solid rgba(197, 166, 124, 0.2)' }}
-            >
-              {step === 'connecting' && 'CONNECTING...'}
-              {step === 'signing' && 'WAITING FOR SIGNATURE...'}
-              {step === 'verifying' && 'VERIFYING...'}
-              {step === 'settling' && 'SETTLING ON-CHAIN...'}
-            </div>
+            <button onClick={busy ? undefined : runDemo} disabled={busy || relayer?.ready === false} className="w-full border border-[#C5A67C]/50 bg-[#C5A67C] py-3 font-mono text-[11px] tracking-[0.18em] text-[#050505] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/30">{busy ? `RUNNING: ${step.toUpperCase()}` : step === 'done' ? 'RUN AGAIN' : 'RUN FULL x402 FLOW'}</button>
           )}
+          <button onClick={reset} className="mt-3 w-full border border-white/10 py-2 font-mono text-[10px] tracking-[0.16em] text-white/40">RESET</button>
         </div>
 
-        {/* Tx result */}
-        {txHash && (
-          <div
-            className="mb-6 p-4 font-mono text-[11px]"
-            style={{ border: '1px solid rgba(80, 200, 120, 0.3)', background: 'rgba(80, 200, 120, 0.04)' }}
-          >
-            <div className="text-[10px] tracking-[0.18em] text-green-400/70 mb-2">SETTLEMENT CONFIRMED</div>
-            <a
-              href={`https://testnet.arcscan.app/tx/${txHash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#C5A67C] underline underline-offset-2 break-all"
-            >
-              {txHash}
-            </a>
-          </div>
-        )}
-
-        {/* Live logs */}
-        {logs.length > 0 && (
-          <div
-            className="p-4 font-mono text-[10.5px] leading-[1.9] max-h-[320px] overflow-y-auto"
-            style={{ border: '1px solid rgba(255, 255, 255, 0.06)', background: 'rgba(0,0,0,0.3)' }}
-          >
-            <div className="text-[9px] tracking-[0.2em] text-white/30 mb-2">EXECUTION LOG</div>
-            {logs.map((l, i) => (
-              <div key={i} className="flex gap-2">
-                <span className="text-white/20 shrink-0">{l.ts}</span>
-                <span className={
-                  l.type === 'success' ? 'text-green-400/80' :
-                  l.type === 'error' ? 'text-red-400/80' :
-                  'text-white/50'
-                }>
-                  {l.msg}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Footer */}
-        <div className="mt-10 font-mono text-[9.5px] text-white/20 leading-relaxed">
-          <p>x402 V2 · scheme: exact · EIP-3009 transferWithAuthorization</p>
-          <p>Payer signs off-chain → relayer submits on-chain → USDC settled</p>
-          <p className="mt-1">Arc Testnet · chainId 5042002 · USDC 0x3600...0000</p>
+        <div className="mb-6 grid gap-4 md:grid-cols-2">
+          <div className="border border-white/10 bg-black/30 p-4 font-mono text-[11px] leading-relaxed"><div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">RESULT</div><div>Unlocked: <span className={unlocked ? 'text-green-400/80' : 'text-white/40'}>{unlocked ? 'YES' : 'NO'}</span></div><div>Replay: <span className={replayResult.startsWith('Rejected') ? 'text-green-400/80' : 'text-white/40'}>{replayResult}</span></div>{txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="mt-2 block break-all text-[#C5A67C] underline underline-offset-2">{txHash}</a>}</div>
+          <div className="border border-white/10 bg-black/30 p-4 font-mono text-[11px] leading-relaxed"><div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">CURRENT STEP</div><div className="text-[#C5A67C]">{step.toUpperCase()}</div><div className="mt-2 text-white/40">Canonical header: X-PAYMENT = base64(JSON PaymentPayload). Legacy alias PAYMENT-SIGNATURE is accepted by the protected endpoint.</div></div>
         </div>
+
+        {logs.length > 0 && <div className="max-h-[380px] overflow-y-auto border border-white/10 bg-black/40 p-4 font-mono text-[10.5px] leading-[1.9]"><div className="mb-2 text-[9px] tracking-[0.2em] text-white/30">STEP LOGS</div>{logs.map((l, i) => <div key={i} className="flex gap-2"><span className="shrink-0 text-white/20">{l.ts}</span><span className={l.type === 'success' ? 'text-green-400/80' : l.type === 'error' ? 'text-red-400/80' : 'text-white/55'}>{l.msg}</span></div>)}</div>}
       </div>
     </main>
   );
