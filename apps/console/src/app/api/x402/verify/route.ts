@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createX402Facilitator, parseExactVerifyRequest, verifyExactEvmPayment } from '@/lib/x402';
+import {
+  createX402Facilitator,
+  deriveGatewayPaymentId,
+  getBatchFacilitatorClient,
+  isBatchPayment,
+  recordGatewayPayment,
+  parseExactVerifyRequest,
+  verifyExactEvmPayment,
+} from '@/lib/x402';
 
 export const runtime = 'nodejs';
 
@@ -15,16 +23,55 @@ export async function POST(req: NextRequest) {
   }
 
   // ─── Scheme routing ───────────────────────────────────────────────────────────
-  // V2 exact scheme: x402Version=2 OR scheme="exact" in body
   const scheme = (body.scheme as string) ?? (body.paymentRequirements as Record<string, unknown>)?.scheme ?? null;
   const version = body.x402Version;
 
   if (version === 2 || scheme === 'exact') {
+    // Check if this is a Gateway batched payment
+    const paymentRequirements = body.paymentRequirements as Record<string, unknown> | undefined;
+    if (paymentRequirements && isBatchPayment(paymentRequirements)) {
+      return handleGatewayVerify(body);
+    }
     return handleExactVerify(body);
   }
 
   // V1 arc-escrow (legacy)
   return handleArcEscrowVerify(req, body);
+}
+
+// ─── Gateway batched verify (Circle Gateway) ─────────────────────────────────
+async function handleGatewayVerify(body: Record<string, unknown>): Promise<NextResponse> {
+  const paymentPayload = body.paymentPayload ?? body;
+  const paymentRequirements = body.paymentRequirements as Record<string, unknown>;
+
+  try {
+    const client = getBatchFacilitatorClient();
+    const result = await client.verify(
+      paymentPayload as unknown as Parameters<typeof client.verify>[0],
+      paymentRequirements as unknown as Parameters<typeof client.verify>[1],
+    );
+
+    if (!result.isValid) {
+      return NextResponse.json(
+        { isValid: false, invalidReason: result.invalidReason, payer: result.payer },
+        { status: 422 }
+      );
+    }
+
+    const paymentId = deriveGatewayPaymentId(paymentPayload, paymentRequirements);
+    recordGatewayPayment({ paymentId, status: 'verified', payer: result.payer, verifiedAt: Date.now(), raw: result as unknown as Record<string, unknown> });
+
+    return NextResponse.json(
+      { isValid: true, payer: result.payer, paymentIdentifier: paymentId, extra: { mode: 'circle-gateway', status: 'verified' } },
+      { status: 200 }
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Gateway verify failed';
+    return NextResponse.json(
+      { isValid: false, invalidReason: 'gateway_error', invalidMessage: message },
+      { status: 502 }
+    );
+  }
 }
 
 // ─── Exact scheme (V2 canonical) ──────────────────────────────────────────────

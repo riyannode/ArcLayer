@@ -3,6 +3,10 @@ import {
   ARC_TESTNET_CAIP2_NETWORK,
   ARC_TESTNET_CHAIN_ID,
   ARC_TESTNET_NETWORK,
+  CIRCLE_BATCHING_NAME,
+  CIRCLE_BATCHING_VERSION,
+  GATEWAY_NETWORK_NAME,
+  getArcTestnetGatewayConfig,
   JOB_ESCROW_ADDRESS,
   PAYMENT_REQUIRED_HEADER,
   REPUTATION_ORACLE_ADDRESS,
@@ -14,11 +18,62 @@ import {
 
 export const runtime = 'nodejs';
 
+const DEFAULT_AMOUNT_ATOMIC = '10000';
+const DEFAULT_PAY_TO = '0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b';
+
+function gatewayWalletAddress() {
+  return process.env.X402_GATEWAY_WALLET_ADDRESS || getArcTestnetGatewayConfig().gatewayWallet;
+}
+
 export function GET() {
   const maxTimeoutSeconds = Number(process.env.X402_REQUIREMENT_TTL_SECONDS || '300');
+  const amount = process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC;
+  const payTo = process.env.X402_RECEIVER_ADDRESS || process.env.X402_PAY_TO || DEFAULT_PAY_TO;
+
+  const arcNativeExact = {
+    x402Version: X402_VERSION_V2,
+    scheme: 'exact',
+    network: ARC_TESTNET_CAIP2_NETWORK,
+    asset: USDC_ADDRESS,
+    assetSymbol: 'USDC',
+    decimals: 6,
+    amount,
+    payTo,
+    facilitator: '/api/x402',
+    verify: '/api/x402/verify',
+    settle: '/api/x402/settle',
+    maxTimeoutSeconds,
+    extra: {
+      name: 'USDC',
+      version: '2',
+      transferMethod: 'eip3009',
+    },
+  };
+
+  const gatewayBatched = {
+    x402Version: X402_VERSION_V2,
+    scheme: 'exact',
+    network: GATEWAY_NETWORK_NAME,
+    asset: USDC_ADDRESS,
+    assetSymbol: 'USDC',
+    decimals: 6,
+    amount,
+    payTo,
+    facilitator: '/api/x402',
+    verify: '/api/x402/verify',
+    settle: '/api/x402/settle',
+    maxTimeoutSeconds,
+    extra: {
+      name: CIRCLE_BATCHING_NAME,
+      version: CIRCLE_BATCHING_VERSION,
+      verifyingContract: gatewayWalletAddress(),
+      supportedChain: GATEWAY_NETWORK_NAME,
+      transferMethod: 'gateway-batched-eip3009',
+      status: process.env.X402_GATEWAY_ENABLED === 'true' ? 'enabled' : 'integrating_disabled_until_e2e_succeeds',
+    },
+  };
 
   return NextResponse.json({
-    // Canonical x402 V2 facilitator support
     kinds: [
       {
         x402Version: X402_VERSION_V2,
@@ -28,55 +83,43 @@ export function GET() {
           asset: USDC_ADDRESS,
           assetSymbol: 'USDC',
           decimals: 6,
-          eip712: {
-            name: 'USD Coin',
-            version: '2',
-            chainId: ARC_TESTNET_CHAIN_ID,
-            verifyingContract: USDC_ADDRESS,
-          },
+          eip712: { name: 'USDC', version: '2', chainId: ARC_TESTNET_CHAIN_ID, verifyingContract: USDC_ADDRESS },
           transferMethod: 'eip3009',
           maxTimeoutSeconds,
         },
       },
-    ],
-
-    // Current accepted schemes exposed by ArcLayer facilitator
-    accepts: [
       {
         x402Version: X402_VERSION_V2,
         scheme: 'exact',
-        network: ARC_TESTNET_CAIP2_NETWORK,
-        asset: USDC_ADDRESS,
-        assetSymbol: 'USDC',
-        decimals: 6,
-        facilitator: '/api/x402',
-        verify: '/api/x402/verify',
-        settle: '/api/x402/settle',
-        maxTimeoutSeconds,
+        network: GATEWAY_NETWORK_NAME,
         extra: {
-          name: 'USD Coin',
-          version: '2',
-          transferMethod: 'eip3009',
+          asset: USDC_ADDRESS,
+          assetSymbol: 'USDC',
+          decimals: 6,
+          name: CIRCLE_BATCHING_NAME,
+          version: CIRCLE_BATCHING_VERSION,
+          verifyingContract: gatewayWalletAddress(),
+          maxTimeoutSeconds,
         },
       },
-      {
-        x402Version: X402_VERSION,
-        scheme: 'arc-escrow',
-        network: ARC_TESTNET_NETWORK,
-        chainId: ARC_TESTNET_CHAIN_ID,
-        asset: USDC_ADDRESS,
-        assetSymbol: 'USDC',
-        decimals: 6,
-        facilitator: '/api/x402',
-        jobEscrow: JOB_ESCROW_ADDRESS,
-        maxTimeoutSeconds,
-      },
     ],
-
-    // legacy/additive compatibility
+    accepts: [arcNativeExact, gatewayBatched, {
+      x402Version: X402_VERSION,
+      scheme: 'arc-escrow',
+      network: ARC_TESTNET_NETWORK,
+      chainId: ARC_TESTNET_CHAIN_ID,
+      asset: USDC_ADDRESS,
+      assetSymbol: 'USDC',
+      decimals: 6,
+      facilitator: '/api/x402',
+      jobEscrow: JOB_ESCROW_ADDRESS,
+      maxTimeoutSeconds,
+    }],
     facilitator: 'ArcLayer',
     version: String(X402_VERSION_V2),
     headers: {
+      arcNative: 'X-PAYMENT',
+      gatewayPreferred: 'PAYMENT-SIGNATURE',
       required: PAYMENT_REQUIRED_HEADER,
       response: 'PAYMENT-RESPONSE',
     },
@@ -86,18 +129,16 @@ export function GET() {
         name: 'Arc Testnet',
         chainId: ARC_TESTNET_CHAIN_ID,
         schemes: ['exact', 'arc-escrow', 'arclayer-escrow'],
-        assets: [
-          {
-            symbol: 'USDC',
-            address: USDC_ADDRESS,
-            decimals: 6,
-          },
-        ],
-        contracts: {
-          jobEscrow: JOB_ESCROW_ADDRESS,
-          workProof: WORK_PROOF_ADDRESS,
-          reputationOracle: REPUTATION_ORACLE_ADDRESS,
-        },
+        assets: [{ symbol: 'USDC', address: USDC_ADDRESS, decimals: 6 }],
+        contracts: { jobEscrow: JOB_ESCROW_ADDRESS, workProof: WORK_PROOF_ADDRESS, reputationOracle: REPUTATION_ORACLE_ADDRESS },
+      },
+      {
+        network: GATEWAY_NETWORK_NAME,
+        name: 'Circle Gateway Arc Testnet',
+        chainId: ARC_TESTNET_CHAIN_ID,
+        schemes: ['exact'],
+        assets: [{ symbol: 'USDC', address: USDC_ADDRESS, decimals: 6 }],
+        contracts: { gatewayWallet: gatewayWalletAddress() },
       },
     ],
   });

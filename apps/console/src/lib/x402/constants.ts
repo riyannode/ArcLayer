@@ -16,3 +16,10 @@ export const PAYMENT_RESPONSE_HEADER = 'PAYMENT-RESPONSE' as const;
 export const DEFAULT_REQUIREMENT_TTL_SECONDS = 300;
 export const DEFAULT_RESPONSE_CACHE_TTL_SECONDS = 86400;
 export const DEFAULT_VERIFY_TIMEOUT_MS = 10000;
+
+// Circle Gateway Batching
+export const GATEWAY_NETWORK_NAME = 'arcTestnet' as const;
+export const GATEWAY_FACILITATOR_URL_TESTNET = 'https://gateway-api-testnet.circle.com' as const;
+export const GATEWAY_FACILITATOR_URL_MAINNET = 'https://gateway-api.circle.com' as const;
+export const CIRCLE_BATCHING_NAME = 'GatewayWalletBatched' as const;
+export const CIRCLE_BATCHING_VERSION = '1' as const;

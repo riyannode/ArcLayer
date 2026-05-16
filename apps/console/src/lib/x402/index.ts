@@ -13,5 +13,7 @@ export * from './exact/types';
 export { parseExactVerifyRequest, verifyExactEvmPayment, exactEip3009Abi } from './exact/verify-exact';
 export { settleExactPayment } from './exact/settle-exact';
 export { verifyExactSettlementProof, type SettlementProofResult } from './exact/verify-settlement-proof';
+export { getArcTestnetGatewayConfig, getBatchFacilitatorClient, gatewayFacilitatorUrl, isBatchPayment, isGatewayEnabled, probeGatewayRuntimeSupport } from './gateway/batch-client';
+export { consumeGatewayPayment, deriveGatewayPaymentId, gatewayEvidenceSummary, getGatewayPayment, recordGatewayPayment, type GatewayPaymentEvidence } from './gateway/payment-store';
 export { createX402Facilitator, type X402Facilitator, type X402FacilitatorOptions, type ConsumePaymentInput, type CacheAndReturnInput } from './facilitator';
 export { canonicalResource } from './parser';
