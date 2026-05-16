@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import HomeStats from './HomeStats';
+import HomeWhoIsThisFor from './HomeWhoIsThisFor';
 import LiveLogStream from './LiveLogStream';
 
 const arrow = (
@@ -66,7 +66,8 @@ export default function HomeHero() {
       <div className="mt-6 section-reveal" style={{ animationDelay: '0.4s' }}>
         <LiveLogStream />
       </div>
-      <HomeStats />
+
+      <HomeWhoIsThisFor />
 
       {/* Primary paths — two clear entry points */}
       <div className="mt-7 flex flex-col items-start gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">

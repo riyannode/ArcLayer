@@ -23,7 +23,6 @@ import {
   HomeHero,
   HomeProtocolSection,
   HomeSidebar,
-  HomeWhoIsThisFor,
 } from '@/components/home';
 
 export default function Home() {
@@ -56,7 +55,6 @@ export default function Home() {
           </div>
         </div>
 
-        <HomeWhoIsThisFor />
         <HomeProtocolSection />
       </main>
       <HomeFooterStrip />
