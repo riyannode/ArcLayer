@@ -391,11 +391,12 @@ export default function X402DemoPage() {
             <div>
               <div className="mb-1 text-[#7CB5C5]">Circle Gateway Payment</div>
               <div className="text-white/60">✅ Verify: pass</div>
-              <div className="text-white/60">✅ Live verification: pass</div>
+              <div className="text-white/60">✅ Live verification: pass (GatewayWalletBatched domain)</div>
+              <div className="text-white/60">✅ Settle: Circle Gateway pass</div>
               <div className="text-white/60">✅ Unlock: pass</div>
               <div className="text-white/60">✅ Receipt already used protection (local paymentId ledger)</div>
-              <div className="text-white/60">✅ Settlement ID: <span className="font-mono text-[#7CB5C5]">0e366c3d-…1913fd</span></div>
-              <div className="text-white/60">✅ Payment receipt: <span className="font-mono text-[#7CB5C5]">fa643dfc…dddf01</span></div>
+              <div className="text-white/60">✅ Settlement ID: <span className="font-mono text-[#7CB5C5]">0b17bc8b-…7a91e3</span></div>
+              <div className="text-white/60">✅ EIP-712 domain: <span className="font-mono text-[#7CB5C5]">GatewayWalletBatched v1</span></div>
               <div className="text-white/45">Final settlement requires buyer GatewayWallet deposit.</div>
             </div>
           </div>

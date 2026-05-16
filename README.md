@@ -175,13 +175,13 @@ Last repo/runtime verification: **2026-05-16**.
 | Docs portal | ✅ Live | `https://arclayers.xyz/docs` returns `200` |
 | All console routes | ✅ Live | `/`, `/docs`, `/agents`, `/jobs`, `/protocol` return `200` |
 | TypeScript | ✅ Pass | `npx tsc --noEmit` |
-| Next.js production build | ✅ Pass | `npm run build` |
-| Unit tests | ✅ Pass | 6 test files (Vitest) |
+| Next.js production build | ✅ Pass | `npm run build` (22 routes) |
+| Unit tests | ✅ Pass | 77/77 across 8 test files (Vitest) |
 | x402 supported endpoint | ✅ Live | `GET /api/x402/supported` returns Arc Native + Circle Gateway + legacy options |
 | x402 payment gate | ✅ Live | `POST /api/agents/demo/run` without payment returns `402` |
 | x402 verify/settle APIs | ✅ Live | Validates inputs, returns `400` on missing body |
 | **Arc Native Payment** | ✅ **Production-live** | Verify → Settle on-chain → Unlock → Replay rejected. Settlement tx: [`0x52c894…be4f264`](https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264) (block 42498828) |
-| **Circle Gateway Payment** | ✅ **Production-live** | Verify → Settle via Circle → Unlock → Replay rejected. Settlement ID: `0e366c3d-8eb8-46cc-a07f-55350a1913fd` · Payment receipt: `fa643dfc…dddf01` |
+| **Circle Gateway Payment** | ✅ **Production-live** | Verify → Settle via Circle → Unlock → Replay rejected. Latest settlement ID: `0b17bc8b-a174-46a1-be00-fd24117a91e3`. Signing domain: `GatewayWalletBatched` v1 |
 | Circle Gateway facilitator | ✅ Live | Keyless `BatchFacilitatorClient`; Arc Testnet domain 26; GatewayWallet `0x0077…19B9` |
 | Protocol contracts | ✅ Live | All addresses return bytecode on Arc Testnet |
 | Indexer | ✅ Running | PM2 `arclayer-indexer` online |
@@ -206,9 +206,10 @@ Both payment paths have completed full end-to-end on Arc Testnet (`chainId=50420
 - ✅ Settle: Circle Gateway pass
 - ✅ Unlock: pass
 - ✅ Receipt already used protection: pass
-- Settlement ID: `0e366c3d-8eb8-46cc-a07f-55350a1913fd`
-- Payment receipt: `fa643dfcbce2b50f69207d7f6412a142d110e9cc95322695e70a228514dddf01`
+- ✅ EIP-712 signing domain: `GatewayWalletBatched` v1, verifyingContract `0x0077777d7EBA4688BDeF3E311b846F25870A19B9`
+- Latest settlement ID: `0b17bc8b-a174-46a1-be00-fd24117a91e3`
 - GatewayWallet: `0x0077777d7EBA4688BDeF3E311b846F25870A19B9`
+- Buyer: `0x9fC73BE13EAB35DD55547f89b1aD2663b9038eE5`
 
 End-to-end protocol proofs (jobIds, txHashes, settlements): see [`docs/e2e-proofs.md`](./docs/e2e-proofs.md).
 

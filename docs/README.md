@@ -93,8 +93,28 @@ GET /api/indexer/proofs              All work proofs
 GET  /api/x402/supported             Network + scheme config
 POST /api/x402/verify                Payment verification
 POST /api/x402/settle                Payment settlement
+GET  /api/x402-demo/protected        Dual-mode protected resource demo
 POST /api/agents/[id]/run            Paid agent execution (402 → fund → 200)
 ```
+
+## x402 Dual-Mode Status
+
+ArcLayer is live on Arc Testnet with two x402 V2 payment modes plus legacy escrow compatibility:
+
+| Mode | Scheme | Status | Evidence |
+| --- | --- | --- | --- |
+| Arc Native Payment | `exact` / EIP-3009 | ✅ Production-live | Verify → on-chain settle → protected resource unlock → replay rejected |
+| Circle Gateway Payment | `exact` / `GatewayWalletBatched` | ✅ Production-live | Verify → Circle Gateway settle → protected resource unlock → replay rejected |
+| ArcLayer Escrow | `arc-escrow` V1 | ✅ Backward compatible | JobEscrow receipt verification and protected agent runs |
+
+Gateway signing uses EIP-712 domain `GatewayWalletBatched` v1 with GatewayWallet `0x0077777d7EBA4688BDeF3E311b846F25870A19B9`. Arc Native signing uses live USDC `name()`/`version()` with USDC `0x3600000000000000000000000000000000000000`.
+
+Latest production evidence:
+
+- Arc Native settlement tx: [`0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264`](https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264)
+- Circle Gateway settlement ID: `0b17bc8b-a174-46a1-be00-fd24117a91e3`
+- Buyer test wallet: `0x9fC73BE13EAB35DD55547f89b1aD2663b9038eE5`
+- Demo: https://arclayers.xyz/x402-demo
 
 ## Production Checklist
 
