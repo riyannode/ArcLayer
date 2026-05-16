@@ -1,6 +1,8 @@
 export const ARC_TESTNET_CHAIN_ID = 5042002 as const;
 export const ARC_TESTNET_NETWORK = 'arc-testnet' as const;
+export const ARC_TESTNET_CAIP2_NETWORK = 'eip155:5042002' as const;
 export const X402_VERSION = 1 as const;
+export const X402_VERSION_V2 = 2 as const;
 
 export const JOB_ESCROW_ADDRESS = '0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225' as const;
 export const WORK_PROOF_ADDRESS = '0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5' as const;

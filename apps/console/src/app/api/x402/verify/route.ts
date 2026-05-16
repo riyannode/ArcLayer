@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createX402Facilitator } from '@/lib/x402';
+import { createX402Facilitator, parseExactVerifyRequest, verifyExactEvmPayment } from '@/lib/x402';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
-  const facilitator = createX402Facilitator();
-
   let body: Record<string, unknown>;
   try {
     body = (await req.json()) as Record<string, unknown>;
@@ -16,9 +14,48 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // ─── Scheme routing ───────────────────────────────────────────────────────────
+  // V2 exact scheme: x402Version=2 OR scheme="exact" in body
+  const scheme = (body.scheme as string) ?? (body.paymentRequirements as Record<string, unknown>)?.scheme ?? null;
+  const version = body.x402Version;
+
+  if (version === 2 || scheme === 'exact') {
+    return handleExactVerify(body);
+  }
+
+  // V1 arc-escrow (legacy)
+  return handleArcEscrowVerify(req, body);
+}
+
+// ─── Exact scheme (V2 canonical) ──────────────────────────────────────────────
+async function handleExactVerify(body: Record<string, unknown>): Promise<NextResponse> {
+  const parsed = parseExactVerifyRequest(body);
+  if (!parsed.ok) {
+    return NextResponse.json(
+      { isValid: false, invalidReason: parsed.reason, invalidMessage: parsed.message },
+      { status: parsed.status }
+    );
+  }
+
+  const result = await verifyExactEvmPayment({
+    paymentPayload: parsed.paymentPayload,
+    paymentRequirements: parsed.paymentRequirements,
+  });
+
+  if (!result.isValid) {
+    return NextResponse.json(result, { status: 422 });
+  }
+
+  return NextResponse.json(result, { status: 200 });
+}
+
+// ─── Arc-escrow scheme (V1 legacy) ───────────────────────────────────────────
+async function handleArcEscrowVerify(req: NextRequest, body: Record<string, unknown>): Promise<NextResponse> {
+  const facilitator = createX402Facilitator();
+
   if (body.x402Version !== 1) {
     return NextResponse.json(
-      { ok: false, error: { code: 'UNSUPPORTED_VERSION', message: 'Only x402Version 1 is supported' } },
+      { ok: false, error: { code: 'UNSUPPORTED_VERSION', message: 'Only x402Version 1 is supported for arc-escrow scheme' } },
       { status: 400 }
     );
   }
@@ -31,7 +68,6 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Also accept X-PAYMENT header as fallback
   const headerPayment = facilitator.parsePaymentFromRequest(req);
   const payment = headerPayment ?? {
     scheme: 'arc-escrow' as const,

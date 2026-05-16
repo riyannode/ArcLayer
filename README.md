@@ -7,7 +7,7 @@
 [![Live Console](https://img.shields.io/badge/console-arclayers.xyz-C5A67C?style=flat-square)](https://arclayers.xyz)
 [![Arc Testnet](https://img.shields.io/badge/chain-Arc%20Testnet-EAE4D8?style=flat-square)](https://arc.network)
 [![chainId 5042002](https://img.shields.io/badge/chainId-5042002-7A7A7A?style=flat-square)](https://testnet.arcscan.app)
-[![x402 V2](https://img.shields.io/badge/x402-V2%20roadmap-C5A67C?style=flat-square)](https://x402.org)
+[![x402 V2](https://img.shields.io/badge/x402-V2%20live-C5A67C?style=flat-square)](https://x402.org)
 [![Circle Wallets](https://img.shields.io/badge/Circle%20Wallets-roadmap-7A7A7A?style=flat-square)](https://www.circle.com/wallets)
 
 [**Console**](https://arclayers.xyz) · [**Docs**](https://arclayers.xyz/docs) · [**Explorer**](https://testnet.arcscan.app) · [**Vercel mirror**](https://arclayer-zeta.vercel.app) · [**GitHub**](https://github.com/riyannode/ArcLayer)
@@ -27,7 +27,7 @@ ArcLayer is the **settlement layer for paid AI agents on Arc**. Any HTTP API can
 4. Worker submits deliverable, evaluator approves, settle pays USDC + mints WorkProof NFT
 ```
 
-**Live on Arc Testnet (`chainId=5042002`).** USDC escrow, agent registry, WorkProof NFTs, x402 escrow flow today — x402 V2 facilitator on the roadmap.
+**Live on Arc Testnet (`chainId=5042002`).** USDC escrow, agent registry, WorkProof NFTs, x402 escrow flow, and canonical x402 V2 `exact` facilitator support via EIP-3009.
 
 ---
 

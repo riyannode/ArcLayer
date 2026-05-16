@@ -9,4 +9,8 @@ export * from './parser';
 export * from './headers';
 export { buildRequirement, issueRequirement, type BuildRequirementInput } from './requirements';
 export { verifyArcEscrowPayment, type VerifyArcEscrowResult, type VerifyArcEscrowInput } from './verify-arc-escrow';
+export * from './exact/types';
+export { parseExactVerifyRequest, verifyExactEvmPayment, exactEip3009Abi } from './exact/verify-exact';
+export { settleExactPayment } from './exact/settle-exact';
 export { createX402Facilitator, type X402Facilitator, type X402FacilitatorOptions, type ConsumePaymentInput, type CacheAndReturnInput } from './facilitator';
+export { canonicalResource } from './parser';
