@@ -72,6 +72,8 @@ type A2AOnChain = {
   chainId: number;
   contracts: Record<string, string>;
   agents: Record<string, { agentId: string; role: string; stats: AgentStats | null }>;
+  wallets: { pythia: string; hermes: string };
+  balances: { usdc: { hermes: string | null; pythia: string | null } };
   markets: { totalIgnia: number | null; totalMirrors: number | null };
   timestamp: string;
 };
@@ -99,7 +101,9 @@ function short(addr: string) {
 
 function formatUSDC(raw: string) {
   const n = Number(raw) / 1e6;
-  return n < 0.01 && n > 0 ? '<0.01' : n.toFixed(2);
+  if (n > 0 && n < 0.01) return n.toFixed(3);
+  if (n < 1) return n.toFixed(3);
+  return n.toFixed(2);
 }
 
 function timeAgoFromMs(ms: number) {
@@ -289,7 +293,7 @@ export default function A2ADashboardPage() {
             color="cyan"
             stats={pythia?.stats || null}
             agentId={pythia?.agentId}
-            description="Sells crypto signals (BTC/ETH/SOL) for 0.001 USDC via x402 EIP-3009."
+            description="Sells crypto signals (BTC/ETH/SOL) for 0.01 USDC via x402 EIP-3009."
             isLive={isLive}
           />
           <AgentHeroCard
@@ -325,13 +329,13 @@ export default function A2ADashboardPage() {
             <div className="flex items-center gap-2">
               <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
               <p className="font-mono text-[10px] uppercase tracking-widest text-emerald-300">
-                x402 · per-execution charge (live)
+                x402 · per-execution charge (live on-chain reads)
               </p>
             </div>
             <div className="flex flex-wrap gap-x-6 gap-y-2 font-mono text-[11px]">
               <div>
                 <span className="text-[#7A7A7A]">price/call</span>{' '}
-                <span className="text-[#EAE4D8]">0.001 USDC</span>
+                <span className="text-[#EAE4D8]">0.01 USDC</span>
               </div>
               <div>
                 <span className="text-[#7A7A7A]">scheme</span>{' '}
@@ -344,23 +348,74 @@ export default function A2ADashboardPage() {
               <div>
                 <span className="text-[#7A7A7A]">total deducted</span>{' '}
                 <span className="text-emerald-300">
-                  {pythia?.stats?.callsServed != null
-                    ? (Number(pythia.stats.callsServed) * 0.001).toFixed(3)
-                    : '0.000'}{' '}
-                  USDC
+                  {pythia?.stats?.totalRevenue ? formatUSDC(pythia.stats.totalRevenue) : '0.00'} USDC
                 </span>
               </div>
               <div>
-                <span className="text-[#7A7A7A]">pythia revenue</span>{' '}
+                <span className="text-[#7A7A7A]">pythia revenue (on-chain)</span>{' '}
                 <span className="text-amber-300">
                   {pythia?.stats?.totalRevenue ? formatUSDC(pythia.stats.totalRevenue) : '0.00'} USDC
                 </span>
               </div>
             </div>
           </div>
-          <p className="mt-2 font-mono text-[10px] leading-[1.6] text-[#7A7A7A]">
-            Each Hermes → Pythia signal call settles 0.001 USDC on-chain via x402 EIP-3009 (no gas, no approval, single-tx).
-            Numbers above are derived from indexed on-chain events. Tx hashes below.
+
+          {/* Balance Snapshot · live wallet reads from Arc Testnet */}
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded border border-amber-500/15 bg-black/30 p-3">
+              <div className="flex items-center justify-between">
+                <p className="font-mono text-[9.5px] uppercase tracking-widest text-amber-300/80">Hermes · payer</p>
+                <a
+                  href={`https://explorer.testnet.arc.network/address/${onchain?.wallets?.hermes ?? ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-[9.5px] text-[#7A7A7A] hover:text-amber-300"
+                >
+                  {short(onchain?.wallets?.hermes ?? '')} ↗
+                </a>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="font-mono text-[18px] text-amber-300">
+                  {onchain?.balances?.usdc?.hermes ? formatUSDC(onchain.balances.usdc.hermes) : '—'}
+                </span>
+                <span className="font-mono text-[10px] text-[#7A7A7A]">USDC (live)</span>
+              </div>
+              <p className="mt-1 font-mono text-[9.5px] text-[#555]">
+                Each x402 settlement deducts 0.01 USDC from this wallet on-chain.
+              </p>
+            </div>
+
+            <div className="rounded border border-cyan-500/15 bg-black/30 p-3">
+              <div className="flex items-center justify-between">
+                <p className="font-mono text-[9.5px] uppercase tracking-widest text-cyan-300/80">Pythia · receiver</p>
+                <a
+                  href={`https://explorer.testnet.arc.network/address/${onchain?.wallets?.pythia ?? ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-[9.5px] text-[#7A7A7A] hover:text-cyan-300"
+                >
+                  {short(onchain?.wallets?.pythia ?? '')} ↗
+                </a>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="font-mono text-[18px] text-cyan-300">
+                  {onchain?.balances?.usdc?.pythia ? formatUSDC(onchain.balances.usdc.pythia) : '—'}
+                </span>
+                <span className="font-mono text-[10px] text-[#7A7A7A]">USDC (live)</span>
+              </div>
+              <p className="mt-1 font-mono text-[9.5px] text-[#555]">
+                Receives 0.01 USDC per signal. Counter on-chain via ReputationRegistry.totalRevenue.
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-3 font-mono text-[10px] leading-[1.6] text-[#7A7A7A]">
+            All numbers above are direct on-chain reads (not cached, not derived from indexer guesses).
+            "calls served" + "total deducted" come from{' '}
+            <span className="text-emerald-300/80">ReputationRegistry.getStats(Pythia)</span>.
+            Wallet balances come from{' '}
+            <span className="text-emerald-300/80">USDC.balanceOf()</span> on Arc Testnet (chain {onchain?.chainId ?? '5042002'}).
+            Each tx hash below is verifiable on the explorer.
           </p>
         </section>
 

@@ -17,6 +17,12 @@ const CONTRACTS = {
   receiptRegistry: '0x5F591465D0C2fe20A28D2539dFBB2B00716397B7' as Hex,
   mirrorRegistry: '0xec5910926925941c451C97A8bd2c4Ba7bD173195' as Hex,
   ignia: '0xd66971F9Da4c60DB4A061686F43dBf39Db5E2916' as Hex,
+  usdc: '0x3600000000000000000000000000000000000000' as Hex,
+};
+
+const WALLETS = {
+  pythia: '0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b' as Hex,
+  hermes: '0x8fafCF61AA3E429EE6627b2a5a3FFAEc6B51A528' as Hex,
 };
 
 // Known agent IDs (keccak256-derived from registration tx)
@@ -74,6 +80,16 @@ const IGNIA_ABI = [
   },
 ] as const;
 
+const ERC20_BALANCE_ABI = [
+  {
+    type: 'function',
+    name: 'balanceOf',
+    inputs: [{ type: 'address', name: 'account' }],
+    outputs: [{ type: 'uint256' }],
+    stateMutability: 'view',
+  },
+] as const;
+
 interface RawStats {
   callsServed: bigint;
   callsFailed: bigint;
@@ -104,7 +120,7 @@ export async function GET() {
   try {
     const client = createPublicClient({ transport: http(RPC) });
 
-    const [pythiaStats, hermesStats, totalMirrors, marketCount] = await Promise.allSettled([
+    const [pythiaStats, hermesStats, totalMirrors, marketCount, hermesUsdc, pythiaUsdc] = await Promise.allSettled([
       client.readContract({
         address: CONTRACTS.reputationRegistry,
         abi: REPUTATION_ABI,
@@ -127,6 +143,18 @@ export async function GET() {
         abi: IGNIA_ABI,
         functionName: 'marketCount',
       }) as Promise<bigint>,
+      client.readContract({
+        address: CONTRACTS.usdc,
+        abi: ERC20_BALANCE_ABI,
+        functionName: 'balanceOf',
+        args: [WALLETS.hermes],
+      }) as Promise<bigint>,
+      client.readContract({
+        address: CONTRACTS.usdc,
+        abi: ERC20_BALANCE_ABI,
+        functionName: 'balanceOf',
+        args: [WALLETS.pythia],
+      }) as Promise<bigint>,
     ]);
 
     return NextResponse.json({
@@ -142,6 +170,13 @@ export async function GET() {
           agentId: HERMES_AGENT_ID,
           role: 'autonomous_trader',
           stats: fmtStats(hermesStats),
+        },
+      },
+      wallets: WALLETS,
+      balances: {
+        usdc: {
+          hermes: hermesUsdc.status === 'fulfilled' ? hermesUsdc.value.toString() : null,
+          pythia: pythiaUsdc.status === 'fulfilled' ? pythiaUsdc.value.toString() : null,
         },
       },
       markets: {
