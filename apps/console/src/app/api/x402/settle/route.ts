@@ -11,6 +11,32 @@ import {
 
 export const runtime = 'nodejs';
 
+// ─── Helper: normalize payload for Circle Gateway API ─────────────────────────
+function toCaip2Network(network: unknown): string {
+  if (typeof network !== 'string') return 'eip155:5042002';
+  if (network.startsWith('eip155:')) return network;
+  if (network === 'arcTestnet') return 'eip155:5042002';
+  return network;
+}
+
+function normalizeRequirementsForGateway(req: Record<string, unknown>): Record<string, unknown> {
+  return { ...req, network: toCaip2Network(req.network) };
+}
+
+function normalizePayloadForGateway(payload: Record<string, unknown>, requirements: Record<string, unknown>): Record<string, unknown> {
+  const accepted = (payload.accepted as Record<string, unknown> | undefined) ?? requirements;
+  const normalizedAccepted = { ...accepted, network: toCaip2Network(accepted.network) };
+  let resource = payload.resource as Record<string, unknown> | undefined;
+  if (!resource) {
+    resource = {
+      url: 'https://arclayers.xyz/api/x402-demo/protected',
+      description: 'ArcLayer x402 Gateway demo',
+      mimeType: 'application/json',
+    };
+  }
+  return { ...payload, accepted: normalizedAccepted, resource };
+}
+
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
   try {
@@ -42,11 +68,14 @@ async function handleGatewaySettle(body: Record<string, unknown>): Promise<NextR
   const paymentPayload = body.paymentPayload ?? body;
   const paymentRequirements = body.paymentRequirements as Record<string, unknown>;
 
+  const normalizedRequirements = normalizeRequirementsForGateway(paymentRequirements);
+  const normalizedPayload = normalizePayloadForGateway(paymentPayload as Record<string, unknown>, normalizedRequirements);
+
   try {
     const client = getBatchFacilitatorClient();
     const result = await client.settle(
-      paymentPayload as unknown as Parameters<typeof client.settle>[0],
-      paymentRequirements as unknown as Parameters<typeof client.settle>[1],
+      normalizedPayload as unknown as Parameters<typeof client.settle>[0],
+      normalizedRequirements as unknown as Parameters<typeof client.settle>[1],
     );
 
     const paymentId = deriveGatewayPaymentId(paymentPayload, paymentRequirements);

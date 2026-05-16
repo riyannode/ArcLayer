@@ -18,7 +18,8 @@ export const DEFAULT_RESPONSE_CACHE_TTL_SECONDS = 86400;
 export const DEFAULT_VERIFY_TIMEOUT_MS = 10000;
 
 // Circle Gateway Batching
-export const GATEWAY_NETWORK_NAME = 'arcTestnet' as const;
+export const GATEWAY_CHAIN_CONFIG_KEY = 'arcTestnet' as const;
+export const GATEWAY_NETWORK_NAME = ARC_TESTNET_CAIP2_NETWORK;
 export const GATEWAY_FACILITATOR_URL_TESTNET = 'https://gateway-api-testnet.circle.com' as const;
 export const GATEWAY_FACILITATOR_URL_MAINNET = 'https://gateway-api.circle.com' as const;
 export const CIRCLE_BATCHING_NAME = 'GatewayWalletBatched' as const;

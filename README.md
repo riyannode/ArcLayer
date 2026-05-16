@@ -177,9 +177,11 @@ Last repo/runtime verification: **2026-05-16**.
 | TypeScript | ✅ Pass | `npx tsc --noEmit` |
 | Next.js production build | ✅ Pass | `npm run build` |
 | Unit tests | ✅ Pass | 6 test files (Vitest) |
-| x402 supported endpoint | ✅ Live | `GET /api/x402/supported` returns Arc Testnet config |
+| x402 supported endpoint | ✅ Live | `GET /api/x402/supported` returns Arc Native + Circle Gateway + legacy options |
 | x402 payment gate | ✅ Live | `POST /api/agents/demo/run` without payment returns `402` |
 | x402 verify/settle APIs | ✅ Live | Validates inputs, returns `400` on missing body |
+| x402 dual-mode (Arc Native + Circle Gateway) | ✅ Live | `isBatchPayment()` routes; Gateway verify returns `200 isValid:true` E2E |
+| Circle Gateway facilitator | ✅ Integrated | `GET /api/x402/gateway-status` returns `runtime_supported`; Arc Testnet domain `26` |
 | Protocol contracts | ✅ Live | All addresses return bytecode on Arc Testnet |
 | Indexer | ✅ Running | PM2 `arclayer-indexer` online |
 | SDK | ✅ Workspace package | `@arclayer/sdk` in `sdk/` |

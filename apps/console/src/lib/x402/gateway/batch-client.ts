@@ -17,6 +17,7 @@ import {
 } from '@circle-fin/x402-batching/server';
 import { CHAIN_CONFIGS } from '@circle-fin/x402-batching/client';
 import {
+  GATEWAY_CHAIN_CONFIG_KEY,
   GATEWAY_FACILITATOR_URL_MAINNET,
   GATEWAY_FACILITATOR_URL_TESTNET,
   GATEWAY_NETWORK_NAME,
@@ -57,8 +58,8 @@ export function isBatchPayment(requirements: { extra?: Record<string, unknown> }
 }
 
 export function getArcTestnetGatewayConfig() {
-  const config = CHAIN_CONFIGS[GATEWAY_NETWORK_NAME];
-  if (!config) throw new Error(`Circle x402 batching SDK has no chain config for ${GATEWAY_NETWORK_NAME}`);
+  const config = CHAIN_CONFIGS[GATEWAY_CHAIN_CONFIG_KEY];
+  if (!config) throw new Error(`Circle x402 batching SDK has no chain config for ${GATEWAY_CHAIN_CONFIG_KEY}`);
   return config;
 }
 
@@ -66,11 +67,11 @@ export async function probeGatewayRuntimeSupport() {
   const client = getBatchFacilitatorClient();
   const supported = await client.getSupported();
   const kinds = Array.isArray(supported.kinds) ? supported.kinds : [];
-  const arcKinds = kinds.filter((kind) => kind.network === GATEWAY_NETWORK_NAME || kind.network === 'eip155:5042002');
+  const arcKinds = kinds.filter((kind) => kind.network === GATEWAY_NETWORK_NAME || kind.network === GATEWAY_CHAIN_CONFIG_KEY);
   const config = getArcTestnetGatewayConfig();
   return {
     ok: arcKinds.length > 0,
-    expected: { supportedChainName: GATEWAY_NETWORK_NAME, domain: 26, nanopayments: true },
+    expected: { supportedChainName: GATEWAY_CHAIN_CONFIG_KEY, domain: 26, nanopayments: true },
     sdkConfig: {
       chainId: config.chain.id,
       domain: config.domain,

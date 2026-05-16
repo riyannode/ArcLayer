@@ -11,6 +11,38 @@ import {
 
 export const runtime = 'nodejs';
 
+// ─── Helper: normalize payload for Circle Gateway API ─────────────────────────
+// Circle Gateway requires:
+//  - network in CAIP-2 format (e.g. "eip155:5042002") not "arcTestnet"
+//  - paymentPayload.resource to be present
+function toCaip2Network(network: unknown): string {
+  if (typeof network !== 'string') return 'eip155:5042002';
+  if (network.startsWith('eip155:')) return network;
+  if (network === 'arcTestnet') return 'eip155:5042002';
+  return network;
+}
+
+function normalizeRequirementsForGateway(req: Record<string, unknown>): Record<string, unknown> {
+  return { ...req, network: toCaip2Network(req.network) };
+}
+
+function normalizePayloadForGateway(payload: Record<string, unknown>, requirements: Record<string, unknown>): Record<string, unknown> {
+  const accepted = (payload.accepted as Record<string, unknown> | undefined) ?? requirements;
+  const normalizedAccepted = { ...accepted, network: toCaip2Network(accepted.network) };
+
+  // Inject required `resource` field if missing
+  let resource = payload.resource as Record<string, unknown> | undefined;
+  if (!resource) {
+    resource = {
+      url: 'https://arclayers.xyz/api/x402-demo/protected',
+      description: 'ArcLayer x402 Gateway demo',
+      mimeType: 'application/json',
+    };
+  }
+
+  return { ...payload, accepted: normalizedAccepted, resource };
+}
+
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>;
   try {
@@ -44,11 +76,15 @@ async function handleGatewayVerify(body: Record<string, unknown>): Promise<NextR
   const paymentPayload = body.paymentPayload ?? body;
   const paymentRequirements = body.paymentRequirements as Record<string, unknown>;
 
+  // Circle requires CAIP-2 network format and resource field
+  const normalizedRequirements = normalizeRequirementsForGateway(paymentRequirements);
+  const normalizedPayload = normalizePayloadForGateway(paymentPayload as Record<string, unknown>, normalizedRequirements);
+
   try {
     const client = getBatchFacilitatorClient();
     const result = await client.verify(
-      paymentPayload as unknown as Parameters<typeof client.verify>[0],
-      paymentRequirements as unknown as Parameters<typeof client.verify>[1],
+      normalizedPayload as unknown as Parameters<typeof client.verify>[0],
+      normalizedRequirements as unknown as Parameters<typeof client.verify>[1],
     );
 
     if (!result.isValid) {
