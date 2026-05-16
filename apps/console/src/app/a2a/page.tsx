@@ -267,7 +267,7 @@ export default function A2ADashboardPage() {
           <div className="flex items-center gap-3">
             <PulseDot active={isLive} />
             <h1 className="font-mono text-sm font-medium tracking-tight">
-              ArcLayer <span className="text-[#C5A67C]">A2A Economy</span>
+              ArcLayer <span className="text-[#C5A67C]">Autonomous Agent Network</span>
             </h1>
           </div>
           <div className="flex items-center gap-4 font-mono text-[10px] text-[#555]">
@@ -286,6 +286,34 @@ export default function A2ADashboardPage() {
           </div>
         )}
 
+        {/* ─── Page Title · Autonomous Agent Network ──────────────────── */}
+        <section className="mb-6">
+          <h2 className="text-2xl font-semibold tracking-tight text-[#EAE4D8]">
+            Autonomous Agent Network
+          </h2>
+          <p className="mt-1 max-w-3xl font-mono text-[12px] leading-5 text-[#7A7A7A]">
+            Agents discover each other, request services, pay with x402 / USDC, and build reputation
+            automatically. This page validates autonomous agent-to-agent commerce — not signal accuracy.
+          </p>
+        </section>
+
+        {/* ─── Demo-Strategy Disclaimer · honest framing ──────────────── */}
+        <section className="mb-6 rounded border border-amber-500/15 bg-amber-950/[0.05] px-4 py-3">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-amber-300/80">
+            ⚠ demo strategy · not financial advice
+          </p>
+          <p className="mt-1.5 font-mono text-[11px] leading-5 text-[#9C9080]">
+            The current Pythia signal engine is a <strong className="text-amber-200">demo strategy</strong> for
+            protocol validation. ArcLayer doesn’t claim signal accuracy, profit, or trading performance.
+            Developers can replace it with their own model, market API, evaluator, or custom logic — the
+            agent-to-agent payment, receipt, and reputation rails remain identical.
+          </p>
+          <p className="mt-1.5 font-mono text-[11px] leading-5 text-[#9C9080]">
+            <span className="text-emerald-300/90">Verified on-chain:</span> agent request, x402/USDC payment,
+            receipt, signal response, transaction hash, activity log, and reputation from real events.
+          </p>
+        </section>
+
         {/* ─── Hero: Autonomous Agents (Pythia + Hermes) ───────────────── */}
         <section className="grid gap-4 md:grid-cols-2">
           <AgentHeroCard
@@ -296,7 +324,7 @@ export default function A2ADashboardPage() {
             agentId={pythia?.agentId}
             wallet={onchain?.wallets?.pythia}
             balance={onchain?.balances?.usdc?.pythia}
-            description="Sells crypto signals (BTC/ETH/SOL) for 0.01 USDC via x402 EIP-3009."
+            description="Programmable data provider agent. Returns demo market signals to validate x402 payment, receipt, and reputation rails."
             isLive={isLive}
           />
           <AgentHeroCard
@@ -307,7 +335,7 @@ export default function A2ADashboardPage() {
             agentId={hermes?.agentId}
             wallet={onchain?.wallets?.hermes}
             balance={onchain?.balances?.usdc?.hermes}
-            description="Buys signals from Pythia, queries Polymarket, trades Ignia prediction markets."
+            description="Autonomous consumer agent. Requests services from oracle agents, pays via x402, and records all interactions on-chain."
             isLive={isLive}
           />
         </section>
