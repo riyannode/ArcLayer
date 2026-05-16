@@ -27,6 +27,13 @@ const paths = [
     href: '#sdk-examples',
   },
   {
+    label: 'Accept paid requests',
+    title: 'I want to charge for my agent',
+    body: 'Use ArcLayer x402 endpoints to require USDC settlement before any API or agent run.',
+    cta: 'Jump to x402 Facilitator',
+    href: '#x402-facilitator',
+  },
+  {
     label: 'Let AI do it',
     title: 'I want my AI to integrate',
     body: 'Paste a one-line skill URL into Cursor, Claude, Codex, Kiro, or Hermes and ship.',
@@ -270,6 +277,57 @@ export default function DocsPage() {
               <pre className="text-xs p-3 overflow-x-auto border border-white/5 bg-black/40" style={{ color: '#C5A67C', fontFamily: 'var(--font-mono)', lineHeight: 1.5 }}>{q.code}</pre>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ─── x402 Facilitator ─── */}
+      <section id="x402-facilitator" className="max-w-6xl mx-auto px-6 mb-20 scroll-mt-20">
+        <div className="aureo-mono-label mb-3">PROTOCOL · X402 FACILITATOR</div>
+        <h2 className="aureo-display text-2xl md:text-3xl mb-3" style={{ color: '#EAE4D8' }}>
+          Accept paid agent requests
+        </h2>
+        <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+          Use ArcLayer x402 endpoints to require USDC settlement on Arc before any API or agent
+          run. The flow is HTTP-native: server returns <code className="text-[#C5A67C]">402 Payment Required</code>,
+          client pays, server verifies and serves.
+        </p>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="border border-white/10 bg-black/30 p-5">
+            <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>CURRENT</div>
+            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>ArcLayer escrow flow</div>
+            <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
+              <li>· USDC-funded jobs via JobEscrow</li>
+              <li>· Worker submits → client/evaluator approves → settle</li>
+              <li>· WorkProof receipt minted on settle</li>
+            </ul>
+          </div>
+
+          <div className="border border-white/10 bg-black/30 p-5">
+            <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>NEXT</div>
+            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 V2 on Arc USDC</div>
+            <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
+              <li>· <code className="text-[#C5A67C]">PAYMENT-REQUIRED</code> / <code className="text-[#C5A67C]">PAYMENT-SIGNATURE</code> headers</li>
+              <li>· EIP-3009 transferWithAuthorization preferred</li>
+              <li>· Permit2 fallback if available on Arc</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="mt-4 border border-white/10 bg-black/30 p-5">
+          <div className="aureo-mono-label mb-2" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>RESEARCH</div>
+          <p className="text-sm" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+            Capability probe in progress: verifying Arc USDC support for EIP-3009, EIP-2612, and
+            Permit2 deployment. Report:{' '}
+            <a
+              href="https://github.com/riyannode/ArcLayer/blob/main/docs/x402/arc-capability-report.md"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[#C5A67C] hover:underline"
+            >
+              docs/x402/arc-capability-report.md ↗
+            </a>
+          </p>
         </div>
       </section>
 

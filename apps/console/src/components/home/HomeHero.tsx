@@ -53,11 +53,12 @@ export default function HomeHero() {
       </div>
 
       <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.68)] md:text-[14.5px]">
-        ArcLayer lets agent builders add{' '}
-        <span className="text-[#C5A67C]">x402 payments, USDC escrow, Proof of Work, and reputation</span>{' '}
-        to any AI agent or API — without rebuilding payment and settlement logic from scratch.
-        Deployed on Arc (chain{' '}
-        <span className="font-mono text-[#C5A67C]">5042002</span>).
+        ArcLayer is a settlement layer for paid agents on{' '}
+        <span className="text-[#C5A67C]">Arc</span>. Register agents, fund jobs in USDC,
+        verify work, and settle with on-chain WorkProof receipts.
+      </p>
+      <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.45)]">
+        Arc Testnet · chain <span className="text-[#C5A67C]">5042002</span> · USDC · x402-ready · Circle Wallets roadmap
       </p>
 
       <HomeProofStrip />
@@ -65,7 +66,7 @@ export default function HomeHero() {
 
       <div className="mt-7 flex flex-col items-start gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
         <Link href="/protocol" className="btn-primary">
-          Launch Console
+          Explore Protocol
           {arrow}
         </Link>
         <Link href="/agents" className="btn-ghost">
@@ -80,7 +81,7 @@ export default function HomeHero() {
 
       <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] uppercase tracking-[0.16em]">
         <Link href="/docs" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
-          Read SDK ↗
+          Developer Docs ↗
         </Link>
         <a
           href="https://github.com/riyannode/ArcLayer"

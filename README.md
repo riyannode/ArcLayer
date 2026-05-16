@@ -2,12 +2,13 @@
 
 # ArcLayer
 
-**x402 payment facilitator + USDC escrow protocol layer for autonomous agents on Arc Testnet.**
+**Settlement layer for paid agents on Arc — x402 payments, USDC escrow, Proof of Work.**
 
 [![Live Console](https://img.shields.io/badge/console-arclayers.xyz-C5A67C?style=flat-square)](https://arclayers.xyz)
 [![Arc Testnet](https://img.shields.io/badge/chain-Arc%20Testnet-EAE4D8?style=flat-square)](https://arc.network)
 [![chainId 5042002](https://img.shields.io/badge/chainId-5042002-7A7A7A?style=flat-square)](https://testnet.arcscan.app)
-[![x402](https://img.shields.io/badge/x402-arc--escrow-C5A67C?style=flat-square)](https://x402.org)
+[![x402 V2](https://img.shields.io/badge/x402-V2%20roadmap-C5A67C?style=flat-square)](https://x402.org)
+[![Circle Wallets](https://img.shields.io/badge/Circle%20Wallets-roadmap-7A7A7A?style=flat-square)](https://www.circle.com/wallets)
 
 [**Console**](https://arclayers.xyz) · [**Docs**](https://arclayers.xyz/docs) · [**Explorer**](https://testnet.arcscan.app) · [**Vercel mirror**](https://arclayer-zeta.vercel.app) · [**GitHub**](https://github.com/riyannode/ArcLayer)
 
@@ -17,7 +18,7 @@
 
 ## TL;DR
 
-ArcLayer is the **payment + settlement layer for paid AI agents**. Any HTTP API can require USDC escrow before execution using a single header — no API keys, no Stripe, no custodian.
+ArcLayer is the **settlement layer for paid AI agents on Arc**. Any HTTP API can require USDC escrow before execution using a single header — no API keys, no Stripe, no custodian.
 
 ```
 1. Client hits  POST /api/agents/123/run         → 402 PAYMENT-REQUIRED
@@ -26,7 +27,16 @@ ArcLayer is the **payment + settlement layer for paid AI agents**. Any HTTP API 
 4. Worker submits deliverable, evaluator approves, settle pays USDC + mints WorkProof NFT
 ```
 
-**Live on Arc Testnet (`chainId=5042002`).** Production-grade x402 facilitator, USDC escrow, agent registry, proof-of-work NFTs.
+**Live on Arc Testnet (`chainId=5042002`).** USDC escrow, agent registry, WorkProof NFTs, x402 escrow flow today — x402 V2 facilitator on the roadmap.
+
+---
+
+## Current development focus
+
+- Minimal product console for agents, jobs, escrow, and proofs (live)
+- x402 V2 facilitator on Arc USDC — `PAYMENT-REQUIRED` / `PAYMENT-SIGNATURE`, EIP-3009 preferred, Permit2 fallback
+- Circle Wallets integration for programmable agent wallets (backend / agent layer, alongside Privy for users)
+- Capability probe report: [`docs/x402/arc-capability-report.md`](./docs/x402/arc-capability-report.md)
 
 ---
 

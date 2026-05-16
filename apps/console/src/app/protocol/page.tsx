@@ -212,7 +212,10 @@ export default function Dashboard() {
             </h1>
             <p className="mt-4 max-w-xl font-mono text-[12px] leading-6" style={{ color: 'rgba(234, 228, 216, 0.6)' }}>
               {isConnected && address ? <><span style={{ color: '#C5A67C' }}>{shortenAddress(address)}</span> · </> : ''}
-              Arc Testnet 5042002 · x402 payments + USDC escrow + Proof of Work · live indexer
+              Arc Testnet · chain <span style={{ color: '#C5A67C' }}>5042002</span> · USDC settlement · x402 → escrow → WorkProof
+            </p>
+            <p className="mt-1 max-w-xl font-mono text-[10.5px] uppercase leading-5 tracking-[0.18em]" style={{ color: 'rgba(234, 228, 216, 0.4)' }}>
+              Wallet layer: browser wallet now · Circle Wallets roadmap
             </p>
           </div>
           <div className="flex items-center gap-3 self-start md:self-auto">
