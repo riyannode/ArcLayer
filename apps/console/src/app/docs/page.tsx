@@ -13,33 +13,41 @@ const ONELINER_PROMPT = `Read this skill and use it to integrate ArcLayer into m
 
 const paths = [
   {
+    label: 'Path A · x402',
+    title: 'Charge for my API',
+    body: 'Protect an API or agent run with HTTP 402. Users pay with Arc Native Payment or Circle Gateway Payment before the resource unlocks.',
+    cta: 'Use x402 path',
+    href: '#path-a-x402',
+  },
+  {
+    label: 'Path B · Escrow',
+    title: 'Create accountable agent work',
+    body: 'Register agents, create jobs, fund the Settlement Vault, approve work, settle payout, and mint WorkProof.',
+    cta: 'Use escrow path',
+    href: '#path-b-escrow',
+  },
+  {
     label: 'Read protocol data',
-    title: 'I want to read',
+    title: 'Index jobs and agents',
     body: 'Pull jobs, agents, proofs, and stats from the indexer REST API. No wallet needed.',
     cta: 'Jump to REST API',
     href: '#rest-api',
   },
   {
-    label: 'Write on-chain',
-    title: 'I want to build',
-    body: 'Use the typed SDK with wagmi/viem to register agents, create jobs, and settle escrow.',
-    cta: 'Jump to SDK Examples',
-    href: '#sdk-examples',
-  },
-  {
-    label: 'Accept paid requests',
-    title: 'I want to charge for my agent',
-    body: 'Use ArcLayer x402 endpoints to require USDC settlement before any API or agent run.',
-    cta: 'Jump to x402 Facilitator',
-    href: '#x402-facilitator',
-  },
-  {
-    label: 'Let AI do it',
-    title: 'I want my AI to integrate',
-    body: 'Paste a one-line skill URL into Cursor, Claude, Codex, Kiro, or Hermes and ship.',
-    cta: 'Jump to AI Skill',
+    label: 'AI agent skill',
+    title: 'Let AI integrate it',
+    body: 'Paste the ArcLayer integration skill into Cursor, Claude, Codex, Kiro, Windsurf, or Hermes and ship faster.',
+    cta: 'Copy AI skill',
     href: '#ai-skill',
   },
+];
+
+const fiveMinutePath = [
+  'Pick Path A if you are charging for API access. Pick Path B if you need accountable work and escrow.',
+  'Install @arclayer/sdk and add Arc Testnet chainId 5042002.',
+  'Use indexer APIs for reads; use SDK builders for wallet writes.',
+  'Keep user UI labels simple; put raw contract and x402 details inside Developer details.',
+  'Test one full happy path on Arc Testnet before claiming production readiness.',
 ];
 
 const quickstart = [
@@ -262,6 +270,21 @@ export default function DocsPage() {
         </div>
       </section>
 
+      {/* ─── 5 Minute Integration Path ─── */}
+      <section className="max-w-6xl mx-auto px-6 mb-20">
+        <div className="border border-[#C5A67C]/25 bg-gradient-to-br from-[rgba(197,166,124,0.06)] to-[rgba(5,5,5,0.6)] p-5">
+          <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>5-MINUTE INTEGRATION PATH</div>
+          <div className="grid gap-3 md:grid-cols-5">
+            {fiveMinutePath.map((item, i) => (
+              <div key={item} className="border border-white/8 bg-black/25 p-3">
+                <div className="font-mono text-[10px] mb-2" style={{ color: '#C5A67C' }}>0{i + 1}</div>
+                <p className="text-xs" style={{ color: 'rgba(234, 228, 216, 0.72)', lineHeight: 1.5 }}>{item}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ─── Quickstart ─── */}
       <section className="max-w-6xl mx-auto px-6 mb-20">
         <div className="aureo-mono-label mb-6">PROTOCOL · QUICKSTART</div>
@@ -281,8 +304,8 @@ export default function DocsPage() {
       </section>
 
       {/* ─── x402 Facilitator ─── */}
-      <section id="x402-facilitator" className="max-w-6xl mx-auto px-6 mb-20 scroll-mt-20">
-        <div className="aureo-mono-label mb-3">PROTOCOL · X402 FACILITATOR</div>
+      <section id="path-a-x402" className="max-w-6xl mx-auto px-6 mb-20 scroll-mt-20">
+        <div className="aureo-mono-label mb-3">PATH A · X402 PAID ENDPOINT</div>
         <h2 className="aureo-display text-2xl md:text-3xl mb-3" style={{ color: '#EAE4D8' }}>
           Accept paid agent requests
         </h2>
@@ -319,8 +342,8 @@ export default function DocsPage() {
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
               <li>· No Circle API key is required for facilitator mode</li>
               <li>· ArcLayer verifies live on Arc Testnet through Circle&apos;s SDK</li>
-              <li>· Replay protected: local paymentId ledger</li>
-              <li>· Live verification; final settlement requires buyer GatewayWallet deposit.</li>
+              <li>· Replay protected: receipt already used protection</li>
+              <li>· Payment verified by Circle Gateway. Settlement handled automatically.</li>
               <li>· Settlement ID: <span className="text-[#7CB5C5]">0e366c3d-…1913fd</span></li>
             </ul>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -391,6 +414,69 @@ export default function DocsPage() {
             <li>· EIP-712 domain reads <code className="text-[#C5A67C]">name</code> and <code className="text-[#C5A67C]">version</code> from the on-chain USDC contract; the Arc deployment reports <code className="text-[#C5A67C]">USDC</code> / <code className="text-[#C5A67C]">2</code>.</li>
             <li>· Testnet only. Mainnet rollout requires Arc mainnet keys and audited relayer ops.</li>
           </ul>
+        </div>
+      </section>
+
+      {/* ─── Path B: Escrow ─── */}
+      <section id="path-b-escrow" className="max-w-6xl mx-auto px-6 mb-20 scroll-mt-20">
+        <div className="aureo-mono-label mb-3">PATH B · ACCOUNTABLE AGENT WORK</div>
+        <h2 className="aureo-display text-2xl md:text-3xl mb-3" style={{ color: '#EAE4D8' }}>
+          Use ArcLayer Escrow when work needs review
+        </h2>
+        <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+          Escrow is a trust layer, not a payment method. Use it when an agent run produces a deliverable
+          that a client must approve before payout. ArcLayer holds USDC in the Settlement Vault until
+          the client approves the work, then settles payout and mints a WorkProof.
+        </p>
+
+        <div className="grid gap-4 md:grid-cols-2 mb-6">
+          <div className="border border-[#C5A67C]/30 bg-[rgba(197,166,124,0.04)] p-5">
+            <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>WHEN TO USE</div>
+            <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.72)', lineHeight: 1.55 }}>
+              <li>· Agent produces a deliverable (file, dataset, decision)</li>
+              <li>· Client wants to review before paying</li>
+              <li>· Reputation should follow completed work</li>
+              <li>· You need a Proof of Work record</li>
+            </ul>
+          </div>
+          <div className="border border-white/10 bg-black/30 p-5">
+            <div className="aureo-mono-label mb-2" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>WHEN NOT TO USE</div>
+            <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.72)', lineHeight: 1.55 }}>
+              <li>· Charging for plain API access — use Path A x402</li>
+              <li>· Pay-per-call agent runs without review — use Path A</li>
+              <li>· One-shot tipping — use direct USDC transfer</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="border border-white/10 bg-black/30 p-5 mb-4">
+          <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>ESCROW JOB FLOW</div>
+          <ol className="grid gap-2 text-sm md:grid-cols-2" style={{ color: 'rgba(234, 228, 216, 0.78)', lineHeight: 1.5 }}>
+            <li><span className="font-mono text-[#C5A67C]">01.</span> Register Agent — on-chain identity, controller wallet</li>
+            <li><span className="font-mono text-[#C5A67C]">02.</span> Create Job — agent, worker, Client Address, task</li>
+            <li><span className="font-mono text-[#C5A67C]">03.</span> Approve &amp; Fund Settlement Vault — USDC held until approval</li>
+            <li><span className="font-mono text-[#C5A67C]">04.</span> Submit Work — worker posts deliverable URI</li>
+            <li><span className="font-mono text-[#C5A67C]">05.</span> Approve Work — client/evaluator approves or rejects</li>
+            <li><span className="font-mono text-[#C5A67C]">06.</span> Settle Payment — payout + WorkProof NFT minted</li>
+          </ol>
+        </div>
+
+        <div className="border border-white/10 bg-black/30 p-5">
+          <div className="aureo-mono-label mb-3" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>NOTES</div>
+          <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.55 }}>
+            <li>· UI label <code className="text-[#C5A67C]">Client Address</code> maps to the contract param <code className="text-[#C5A67C]">evaluator</code>.</li>
+            <li>· <code className="text-[#C5A67C]">worker !== Client Address</code> — <code className="text-[#C5A67C]">createJob</code> reverts with &quot;Worker is client&quot; if they match.</li>
+            <li>· Use <code className="text-[#C5A67C]">@arclayer/sdk</code> builders for writes; let the wallet estimate gas.</li>
+            <li>· Settlement mints a WorkProof receipt; reputation updates after the indexer syncs.</li>
+          </ul>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href="/jobs" className="border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">
+              Open Jobs Console ↗
+            </Link>
+            <a href="#sdk-examples" className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.7)] transition hover:border-white/20 hover:text-[#EAE4D8]">
+              SDK Examples ↓
+            </a>
+          </div>
         </div>
       </section>
 

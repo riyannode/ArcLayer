@@ -382,7 +382,7 @@ function JobsPage() {
           <section className="aureo-panel p-4 md:p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <div className="aureo-mono-label mb-2">STEP 3 · LIVE JOBS</div>
+                <div className="aureo-mono-label mb-2">LIVE ESCROW JOBS</div>
                 <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Job cards</h2>
               </div>
               <span className="font-mono text-[11px] text-[#EAE4D8]">
@@ -392,7 +392,7 @@ function JobsPage() {
               </span>
             </div>
             <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
-              Track Create &rarr; Budget &rarr; Fund &rarr; Submit &rarr; Evaluate &rarr; Settle, with the selected agent, worker, and funding state visible in one place.
+              Track Create Job &rarr; Approve &amp; Fund Settlement Vault &rarr; Submit Work &rarr; Approve Work &rarr; Settle Payment, with the selected agent, worker, and escrow state visible in one place.
             </p>
 
             {/* Filter / sort bar */}
@@ -661,26 +661,19 @@ function JobsPage() {
                   <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Be specific. This is the human-readable instruction the agent will work against.</div>
                 </div>
 
-                {/* Payment method awareness — informational, escrow flow is the same on-chain */}
+                {/* Escrow trust layer info — not a payment method selector */}
                 <div>
-                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">AGENT RUN PAYMENT · X402</label>
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <div className="border border-[#C5A67C]/40 bg-[#C5A67C]/5 p-3">
-                      <div className="font-mono text-[11px] text-[#C5A67C]">Arc Native Payment</div>
-                      <div className="mt-1 font-mono text-[10px] leading-[1.6] text-[rgba(234,228,216,0.6)]">
-                        Direct EIP-3009 USDC transfer on Arc Testnet. Verified and settled on-chain when the agent runs.
-                      </div>
-                    </div>
-                    <div className="border border-white/10 bg-white/[0.02] p-3">
-                      <div className="font-mono text-[11px] text-[#7CB5C5]">Circle Gateway Payment</div>
-                      <div className="mt-1 font-mono text-[10px] leading-[1.6] text-[rgba(234,228,216,0.6)]">
-                        Pay via Circle Gateway batched settlement. Live verification; final settlement requires buyer GatewayWallet deposit.{' '}
-                        <Link href="/x402-demo" className="text-[#7CB5C5] underline underline-offset-2 hover:text-[#EAE4D8]">try in demo ↗</Link>
-                      </div>
+                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">SETTLEMENT VAULT · TRUST LAYER</label>
+                  <div className="border border-white/10 bg-white/[0.02] p-3">
+                    <div className="font-mono text-[11px] text-[#C5A67C]">ArcLayer Escrow</div>
+                    <div className="mt-1 font-mono text-[10px] leading-[1.6] text-[rgba(234,228,216,0.6)]">
+                      USDC is held in the Settlement Vault until the client approves the work. This is a trust layer, not a payment method.
+                      The agent run itself is paid via x402 (Arc Native or Circle Gateway) — {' '}
+                      <Link href="/x402-demo" className="text-[#7CB5C5] underline underline-offset-2 hover:text-[#EAE4D8]">see x402 demo ↗</Link>
                     </div>
                   </div>
                   <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.5)]">
-                    These are the two x402 payment paths used when the agent runs. The Settlement Vault below is the on-chain trust layer that holds the locked budget — it is not a third payment method.
+                    The escrow holds the locked budget. After work is approved, payout settles and a WorkProof NFT is minted.
                   </div>
                 </div>
               </div>
@@ -689,10 +682,14 @@ function JobsPage() {
                 {isCreating ? 'CREATING\u2026' : 'CREATE JOB'}
               </button>
 
-              {/* Developer footnote — muted, doesn't dominate */}
-              <div className="mt-4 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.4)]">
-                Developer note: <code className="text-[rgba(234,228,216,0.55)]">createJob(agentId, worker, evaluator, taskDescription)</code> — &ldquo;Client Address&rdquo; maps to the <code className="text-[rgba(234,228,216,0.55)]">evaluator</code> contract parameter.
-              </div>
+              <details className="mt-4 group border-t border-white/5 pt-3">
+                <summary className="cursor-pointer font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.42)] transition hover:text-[rgba(234,228,216,0.65)]">
+                  Developer details
+                </summary>
+                <div className="mt-2 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.42)]">
+                  <code className="text-[rgba(234,228,216,0.58)]">createJob(agentId, worker, evaluator, taskDescription)</code> — &ldquo;Client Address&rdquo; maps to the <code className="text-[rgba(234,228,216,0.58)]">evaluator</code> contract parameter.
+                </div>
+              </details>
 
               {createdJobId && (
                 <div className="mt-4 rounded-none border border-[rgba(184,205,126,0.35)] bg-[rgba(184,205,126,0.08)] p-4">
@@ -708,10 +705,10 @@ function JobsPage() {
             </div>
 
             <div className="aureo-panel p-4 md:p-6">
-              <div className="aureo-mono-label mb-2">STEP 2 · FUND TRUST LAYER</div>
+              <div className="aureo-mono-label mb-2">STEP 2 · APPROVE &amp; FUND</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Approve &amp; fund Settlement Vault</h2>
               <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.6)]">
-                Set the agreed budget, approve USDC, and deposit funds into ArcLayer Escrow as the post-payment trust layer.
+                Set the agreed budget, approve USDC, and deposit funds into the Settlement Vault. The escrow holds USDC until the client approves the work.
               </p>
 
               <div className="mt-5 space-y-4">
@@ -771,15 +768,19 @@ function JobsPage() {
                 {isFunding ? 'FUNDING\u2026' : 'APPROVE & FUND'}
               </button>
 
-              {/* Developer footnote */}
-              <div className="mt-4 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.4)]">
-                Developer note: <code className="text-[rgba(234,228,216,0.55)]">setBudget &rarr; approve(USDC) &rarr; fund(jobId, amount)</code>
-              </div>
+              <details className="mt-4 group border-t border-white/5 pt-3">
+                <summary className="cursor-pointer font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.42)] transition hover:text-[rgba(234,228,216,0.65)]">
+                  Developer details
+                </summary>
+                <div className="mt-2 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.42)]">
+                  <code className="text-[rgba(234,228,216,0.58)]">setBudget &rarr; approve(USDC) &rarr; fund(jobId, amount)</code>
+                </div>
+              </details>
             </div>
 
             <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(10,10,10,0.6)] p-5 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.68)]">
               {isConnected
-                ? '\u2713 Wallet connected. Flow: Select Agent \u2192 Create Job \u2192 Fund Trust Layer \u2192 Pay & Run Agent (Arc Native or Circle Gateway) \u2192 Submit \u2192 Evaluate \u2192 Mint Proof of Work.'
+                ? '\u2713 Wallet connected. Flow: Select Agent \u2192 Create Job \u2192 Approve & Fund Settlement Vault \u2192 Submit Work \u2192 Approve Work \u2192 Settle Payment \u2192 WorkProof minted.'
                 : '\u26a0 Connect wallet to submit protocol writes.'}
             </div>
           </section>

@@ -280,8 +280,8 @@ export default function X402DemoPage() {
     <main className="min-h-screen bg-[#050505] px-4 py-12 text-[#EAE4D8] md:py-20">
       <div className="mx-auto max-w-4xl">
         <div className="mb-8">
-          <h1 className="mb-2 font-mono text-[11px] tracking-[0.2em] text-[#C5A67C]">x402 DUAL-MODE PROTECTED RESOURCE DEMO</h1>
-          <p className="max-w-2xl font-mono text-[13px] leading-relaxed text-white/60">Full Arc Testnet flow with two payment modes: <span className="text-[#C5A67C]">Arc Native Payment</span> (verified and settled on-chain) and <span className="text-[#7CB5C5]">Circle Gateway Payment</span> (Live verification; final settlement requires buyer GatewayWallet deposit.).</p>
+          <h1 className="mb-2 font-mono text-[11px] tracking-[0.2em] text-[#C5A67C]">x402 PROTECTED RESOURCE · LIVE DEMO</h1>
+          <p className="max-w-2xl font-mono text-[13px] leading-relaxed text-white/60">Pay USDC on Arc Testnet to unlock a protected API. Pick a payment method: <span className="text-[#C5A67C]">Arc Native Payment</span> (direct on-chain) or <span className="text-[#7CB5C5]">Circle Gateway Payment</span> (via Circle&apos;s batched settlement).</p>
         </div>
 
         {/* MODE SELECTOR */}
@@ -325,7 +325,7 @@ export default function X402DemoPage() {
           {mode === 'arc-native' ? (
             <div><span className="text-[#C5A67C]">Arc Native Payment</span> · Payment verified · Payment completed · payTo {shortenAddress(payTo)}</div>
           ) : (
-            <div><span className="text-[#7CB5C5]">Circle Gateway Payment</span> · Live verification; final settlement requires buyer GatewayWallet deposit. · payTo {shortenAddress(payTo)}</div>
+            <div><span className="text-[#7CB5C5]">Circle Gateway Payment</span> · Payment verified · Payment accepted by Circle Gateway · payTo {shortenAddress(payTo)}</div>
           )}
           <DevDetails>
             {mode === 'arc-native' ? (
@@ -371,7 +371,7 @@ export default function X402DemoPage() {
             <div className="mt-2 text-white/40">
               {mode === 'arc-native'
                 ? 'Payment completed with an on-chain USDC receipt.'
-                : 'Payment verified live. Final settlement requires buyer GatewayWallet deposit.'}
+                : 'Payment verified by Circle Gateway. Settlement handled automatically.'}
             </div>
           </div>
         </div>
@@ -394,10 +394,10 @@ export default function X402DemoPage() {
               <div className="text-white/60">✅ Live verification: pass (GatewayWalletBatched domain)</div>
               <div className="text-white/60">✅ Settle: Circle Gateway pass</div>
               <div className="text-white/60">✅ Unlock: pass</div>
-              <div className="text-white/60">✅ Receipt already used protection (local paymentId ledger)</div>
+              <div className="text-white/60">✅ Receipt already used protection</div>
               <div className="text-white/60">✅ Settlement ID: <span className="font-mono text-[#7CB5C5]">0b17bc8b-…7a91e3</span></div>
               <div className="text-white/60">✅ EIP-712 domain: <span className="font-mono text-[#7CB5C5]">GatewayWalletBatched v1</span></div>
-              <div className="text-white/45">Final settlement requires buyer GatewayWallet deposit.</div>
+              <div className="text-white/45">Circle handles settlement automatically via batched processing.</div>
             </div>
           </div>
         </div>

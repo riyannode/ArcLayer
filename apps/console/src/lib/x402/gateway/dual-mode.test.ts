@@ -4,7 +4,17 @@
  * replay protection (mocked Supabase), accepted_pending_settlement handling,
  * and /supported response shape.
  */
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeAll, beforeEach, vi } from 'vitest';
+
+type PaymentRequirementExtra = {
+  name?: string;
+  version?: string;
+  transferMethod?: string;
+};
+
+type PaymentRequirementWithExtra = {
+  extra?: PaymentRequirementExtra;
+};
 import {
   CIRCLE_BATCHING_NAME,
   CIRCLE_BATCHING_VERSION,
@@ -85,9 +95,21 @@ vi.mock('../supabaseClient', () => {
   };
 });
 
-// Import payment-store AFTER vi.mock is registered
-const { recordGatewayPayment, consumeGatewayPayment, getGatewayPayment, deriveGatewayPaymentId } =
-  await import('./payment-store');
+// Import payment-store AFTER vi.mock is registered.
+// Using a lazy holder + beforeAll to avoid top-level await (tsconfig target).
+type PaymentStore = typeof import('./payment-store');
+let recordGatewayPayment: PaymentStore['recordGatewayPayment'];
+let consumeGatewayPayment: PaymentStore['consumeGatewayPayment'];
+let getGatewayPayment: PaymentStore['getGatewayPayment'];
+let deriveGatewayPaymentId: PaymentStore['deriveGatewayPaymentId'];
+
+beforeAll(async () => {
+  const mod = await import('./payment-store');
+  recordGatewayPayment = mod.recordGatewayPayment;
+  consumeGatewayPayment = mod.consumeGatewayPayment;
+  getGatewayPayment = mod.getGatewayPayment;
+  deriveGatewayPaymentId = mod.deriveGatewayPaymentId;
+});
 
 // ─── 1. isBatchPayment routing ───────────────────────────────────────────────
 describe('isBatchPayment routing', () => {
@@ -262,18 +284,18 @@ describe('/supported response shape', () => {
 
   it('Arc Native option uses eip155:5042002 network and eip3009 transfer', () => {
     const resp = buildSupportedResponse();
-    const arcNative = resp.accepts[0];
+    const arcNative = resp.accepts[0] as PaymentRequirementWithExtra & typeof resp.accepts[number];
     expect(arcNative.network).toBe('eip155:5042002');
     expect(arcNative.scheme).toBe('exact');
-    expect(arcNative.extra.transferMethod).toBe('eip3009');
+    expect(arcNative.extra?.transferMethod).toBe('eip3009');
   });
 
   it('Gateway option uses arcTestnet network and GatewayWalletBatched name', () => {
     const resp = buildSupportedResponse();
-    const gateway = resp.accepts[1];
+    const gateway = resp.accepts[1] as PaymentRequirementWithExtra & typeof resp.accepts[number];
     expect(gateway.network).toBe(GATEWAY_NETWORK_NAME);
-    expect(gateway.extra.name).toBe(CIRCLE_BATCHING_NAME);
-    expect(gateway.extra.version).toBe(CIRCLE_BATCHING_VERSION);
+    expect(gateway.extra?.name).toBe(CIRCLE_BATCHING_NAME);
+    expect(gateway.extra?.version).toBe(CIRCLE_BATCHING_VERSION);
   });
 
   it('Gateway option is detected by isBatchPayment', () => {

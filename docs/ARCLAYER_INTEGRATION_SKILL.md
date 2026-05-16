@@ -8,21 +8,20 @@ Copy this file into Codex, Cursor, Claude, Kiro, v0, Windsurf, or another AI cod
 
 You are an AI coding agent integrating ArcLayer into an existing app.
 
-ArcLayer is a protocol/payment infrastructure layer for the agentic economy. It provides:
+ArcLayer gives agent apps two integration paths:
 
-- Agent registry for registering AI agents on-chain
-- Job escrow for assigning work to agents
-- Testnet USDC escrow payments
-- Job submission, evaluation, and settlement
-- Proof of Work generation
-- Reputation based on completed jobs
-- REST indexer APIs for fast reads
-- Optional x402 HTTP 402 paid-agent-run flow
+- **Path A — Charge for my API / agent run:** use **x402**. The user pays before a protected endpoint unlocks.
+- **Path B — Create accountable agent work:** use **ArcLayer Escrow**. The user creates a job, deposits USDC into the Settlement Vault, approves the deliverable, then settles payout and WorkProof.
 
-Network facts:
+Do not mix these labels. ArcLayer Escrow is a trust layer after work assignment, not a third x402 payment method.
+
+---
+
+## Network facts
 
 - Chain: Arc Testnet
 - Chain ID: `5042002`
+- CAIP-2: `eip155:5042002`
 - Primary RPC: `https://rpc.drpc.testnet.arc.network`
 - Explorer: `https://testnet.arcscan.app`
 - USDC: `0x3600000000000000000000000000000000000000` (`6` decimals)
@@ -38,63 +37,160 @@ Prefer importing addresses, ABIs, chain config, and write builders from `@arclay
 
 ---
 
-## Integration goals
+## Decision tree
 
-1. Detect whether the app already has wallet connection.
-2. Add Arc Testnet configuration if missing.
-3. Add ArcLayer SDK or contract ABI integration.
-4. Allow users to register an agent.
-5. Allow users to create a job with an `agentId`, worker wallet, evaluator/client wallet, and task description.
-6. Allow the worker or agent to submit deliverables.
-7. Allow the evaluator or client to approve the work.
-8. Allow settlement after approval.
-9. Read jobs, agents, proofs, and protocol stats from ArcLayer indexer APIs.
-10. Keep UI simple and explain every wallet action clearly.
+### If the app needs to charge for API access
+
+Use **Path A: x402 paid endpoint**.
+
+User-facing labels:
+
+- `Arc Native Payment` — direct EIP-3009 USDC payment on Arc Testnet.
+- `Circle Gateway Payment` — Circle Gateway batched settlement.
+- `Payment receipt`
+- `Payment completed`
+- `Receipt already used protection`
+- Put raw payloads, nonces, payment identifiers, and EIP-712 details under `Developer details`.
+
+Required behavior:
+
+1. Protected route returns HTTP `402` with payment requirements.
+2. Client signs payment.
+3. Client retries with `X-PAYMENT` for Arc Native or `PAYMENT-SIGNATURE` for Circle Gateway.
+4. Server verifies and settles through `/api/x402/verify` and `/api/x402/settle`.
+5. Protected route unlocks only after a valid payment receipt.
+
+Supported x402 modes:
+
+- Arc Native Payment: `scheme: exact`, EIP-3009, self-hosted settlement.
+- Circle Gateway Payment: `scheme: exact`, `extra.name: GatewayWalletBatched`, Circle Gateway facilitator.
+- Legacy `arc-escrow` may exist for backward compatibility but should not be marketed as a payment method in new UI.
+
+### If the app needs accountable agent work
+
+Use **Path B: ArcLayer Escrow job flow**.
+
+User-facing labels:
+
+- `Register Agent`
+- `Create Job`
+- `Approve & Fund Settlement Vault`
+- `Submit Work`
+- `Approve Work`
+- `Settle Payment`
+- `Mint WorkProof`
+- `Developer details`
+
+Required behavior:
+
+1. Register or select an agent.
+2. Create a job with `agentId`, `worker`, `evaluator`, and `taskDescription`.
+3. Set budget, approve USDC, and fund the Settlement Vault.
+4. Worker submits deliverable.
+5. Client/evaluator approves or rejects.
+6. Settle payment and mint WorkProof after approval.
 
 ---
 
-## Important rules
+## Important guardrails
 
 - Do not rename contract functions.
 - Do not change deployed contract addresses.
 - Do not hardcode private keys.
 - Do not commit `.env`, `.env.*`, mnemonics, API keys, service-role keys, Vercel tokens, or private key files.
 - Use the connected wallet for client/evaluator actions.
-- Use clear UX labels for worker, client/evaluator, escrow, approval, and settlement.
 - Prefer label `Client Address` in UI. It maps to the contract param `evaluator`.
 - Validate `worker !== connected client` before opening the wallet popup. `createJob` reverts with `Worker is client` if they match.
-- Prefer reading from indexer APIs when displaying lists.
-- Use direct contract writes only for on-chain actions.
-- Keep all flows testnet-friendly.
-- Add helpful empty states and error messages.
-- If the app already uses wagmi, viem, ethers, Privy, RainbowKit, ConnectKit, or Reown/AppKit, extend the existing wallet setup. Do not replace it unless the user asks.
+- Keep protocol jargon out of primary UI. Put raw method names, addresses, payloads, and hashes inside collapsed `Developer details`.
+- Prefer indexer APIs for reads and direct contract writes for on-chain actions.
+- Let the wallet estimate gas. Do not hardcode settlement gas at `300000`.
+- If the app already uses wagmi, viem, ethers, Privy, RainbowKit, ConnectKit, or Reown/AppKit, extend the existing wallet setup. Do not replace it unless asked.
 
 ---
 
-## Useful ArcLayer flows
+## Path A — x402 paid endpoint quickstart
+
+### 1. Add supported payment requirements
+
+Expose a supported endpoint that returns both payment options:
+
+```ts
+GET /api/x402/supported
+```
+
+Expected options:
+
+```ts
+[
+  {
+    scheme: 'exact',
+    network: 'eip155:5042002',
+    asset: '0x3600000000000000000000000000000000000000',
+    payTo: '<seller>',
+    extra: { name: 'ArcNativeExact' }
+  },
+  {
+    scheme: 'exact',
+    network: 'eip155:5042002',
+    asset: '0x3600000000000000000000000000000000000000',
+    payTo: '<seller>',
+    extra: { name: 'GatewayWalletBatched' }
+  }
+]
+```
+
+### 2. Route by payment type
+
+Use one verify endpoint and one settle endpoint. Route internally:
+
+```ts
+if (isBatchPayment(paymentRequirements)) {
+  // Circle Gateway Payment
+  return gatewayClient.verify(paymentPayload, paymentRequirements);
+}
+
+// Arc Native Payment
+return verifyExactPayment(paymentPayload, paymentRequirements);
+```
+
+Same pattern for settle.
+
+### 3. Header handling
+
+- Arc Native Payment: read `X-PAYMENT`.
+- Circle Gateway Payment: read `PAYMENT-SIGNATURE`.
+- Success response: return `PAYMENT-RESPONSE`.
+
+### 4. UX copy
+
+Good copy:
+
+- `Choose payment method`
+- `Arc Native Payment — direct on-chain USDC payment on Arc Testnet`
+- `Circle Gateway Payment — pay through Circle Gateway batched settlement`
+- `Payment completed`
+- `Payment receipt confirmed`
+- `Receipt already used protection`
+
+Avoid copy:
+
+- `local paymentId ledger`
+- `final settlement requires buyer GatewayWallet deposit`
+- Raw `isBatchPayment`, `PAYMENT-SIGNATURE`, or `GatewayWalletBatched` in main UI.
+
+---
+
+## Path B — Escrow job flow
 
 ### 1. Register agent
 
-Purpose: create an on-chain identity for an AI agent.
-
-On-chain action:
-
 ```ts
-registerAgent(skillHash, metadataURI)
+registerAgent(agentId, skillHash, metadataURI)
 ```
 
-UX requirements:
+Explain that the connected wallet becomes the agent controller. Show pending tx, confirmed tx, indexer sync, agent ID, controller, metadata URI, and explorer link.
 
-- Explain that the connected wallet becomes the agent controller.
-- Ask for a readable name/capability, then convert it into metadata and/or skill hash.
-- Show pending tx → confirmed tx → indexer sync.
-- After success, show the `agentId`, controller, metadata URI, and explorer link.
-
-### 2. Create escrow job
-
-Purpose: assign work to a registered agent.
-
-On-chain action:
+### 2. Create job
 
 ```ts
 createJob(agentId, worker, evaluator, taskDescription)
@@ -102,28 +198,23 @@ createJob(agentId, worker, evaluator, taskDescription)
 
 UX labels:
 
-- `agentId` → Agent
-- `worker` → Worker wallet, the wallet that completes work and receives payout
-- `evaluator` → Client Address / evaluator, the wallet that approves work
-- `taskDescription` → Task description / job spec
+- `agentId` → `Agent`
+- `worker` → `Worker wallet`
+- `evaluator` → `Client Address`
+- `taskDescription` → `Task description`
 
 Validation:
 
 - `agentId` must be present.
 - `worker` must be a valid address.
-- `evaluator` / Client Address must be a valid address.
-- `worker !== connected wallet` if connected wallet is the client creating the job.
-- Warn clearly if worker and client are the same.
+- `Client Address` must be a valid address.
+- `worker !== Client Address`.
 
-Suggested warning copy:
+Suggested warning:
 
 > Worker and client cannot be the same address. The worker receives payout — use the agent's controller or a dedicated worker wallet.
 
-### 3. Fund job escrow
-
-Purpose: put USDC into escrow so the worker can be paid after approval.
-
-On-chain actions:
+### 3. Fund Settlement Vault
 
 ```ts
 setBudget(jobId, amount)
@@ -131,62 +222,38 @@ approve(USDC, JOB_ESCROW, amount)
 fund(jobId, amount)
 ```
 
-UX requirements:
+Copy:
 
-- Label as `Fund Job Escrow` or `Approve & Fund Escrow`.
-- Explain that USDC is held by the Job Escrow contract until approval + settlement.
-- Use 6 decimals for USDC.
-- Show each transaction step separately if possible.
+- `Approve & Fund Settlement Vault`
+- `The Settlement Vault holds USDC for this job until the client approves work and settlement completes.`
 
-### 4. Submit job result
-
-Purpose: worker submits deliverable URI / proof URI.
-
-On-chain action:
+### 4. Submit work
 
 ```ts
 submitDeliverable(jobId, deliverableURI)
 ```
 
-UX requirements:
+Deliverable can be `ipfs://`, `https://`, or another durable URI.
 
-- Only worker or permitted agent flow should submit.
-- Deliverable can be `ipfs://`, `https://`, or another durable URI.
-- Show a link to the submitted deliverable.
-
-### 5. Evaluate job
-
-Purpose: client/evaluator approves or rejects work.
-
-On-chain action:
+### 5. Approve work
 
 ```ts
 evaluate(jobId, approved)
 ```
 
-UX requirements:
-
-- Label as `Approve Work` / `Reject Work`, not raw `evaluate()`.
-- Explain that approval unlocks settlement.
-- If rejected, show that settlement will not pay out unless the contract supports later remediation.
+Label as `Approve Work` / `Reject Work`, not raw `evaluate()`.
 
 ### 6. Settle payment
-
-Purpose: complete payment and mint Proof of Work.
-
-On-chain action:
 
 ```ts
 settle(jobId)
 ```
 
-UX requirements:
+Explain that settlement pays the worker and mints a WorkProof NFT.
 
-- Label as `Settle Payment`.
-- Explain that settlement pays the worker and mints a WorkProof NFT.
-- Do not hardcode gas at `300000`; settlement can require around `400000` gas. Let the wallet estimate.
+---
 
-### 7. Read protocol/indexer data
+## Indexer reads
 
 Prefer REST/indexer reads for list views, dashboards, and post-tx polling.
 
@@ -199,185 +266,39 @@ GET /api/indexer/jobs/:id
 GET /api/indexer/agents
 GET /api/indexer/agents/:id
 GET /api/indexer/proofs
+GET /api/indexer/job-events
 ```
 
-Display:
-
-- Agents: name/capability when available, `agentId`, controller, reputation, jobs completed
-- Jobs: status, agent, worker, client/evaluator, budget, funded amount, deliverable, proof
-- Proofs: proof id, job id, agent id, worker, URI, tx/explorer link
-- Stats: total agents, total jobs, total funded, total proofs
+After each write, poll the relevant indexer endpoint until the new state appears.
 
 ---
 
-## Recommended implementation process
-
-Before coding:
-
-1. Inspect the existing app architecture.
-2. Detect framework and wallet stack.
-3. Find existing chain config and contract helpers.
-4. Find existing API proxy routes, if any.
-5. Decide whether to use `@arclayer/sdk` or direct ABIs. Prefer SDK.
-
-Implementation order:
-
-1. Add Arc Testnet chain config.
-2. Add `@arclayer/sdk` dependency.
-3. Add indexer fetch helper.
-4. Add agent registration UI.
-5. Add job creation UI.
-6. Add fund escrow UI.
-7. Add submit/evaluate/settle actions.
-8. Add jobs/agents/proofs read views.
-9. Add empty states and plain-English error messages.
-10. Typecheck and build.
-
-Verification:
-
-1. Wallet connects.
-2. App switches or warns for Arc Testnet `5042002`.
-3. Agent registration opens wallet popup and confirms.
-4. Created agent appears from indexer after polling.
-5. Job creation blocks same worker/client address.
-6. Job create tx confirms.
-7. Budget/fund flow uses USDC 6 decimals.
-8. Job appears as funded in indexer.
-9. Worker can submit deliverable.
-10. Client can approve work.
-11. Settlement succeeds and proof appears.
-
----
-
-## Example SDK usage patterns
-
-Install:
-
-```bash
-pnpm add @arclayer/sdk
-# or
-npm install @arclayer/sdk
-```
-
-Read from SDK:
-
-```ts
-import { readAgentProfile, readJob, CONTRACTS, ARC_CHAIN_ID } from '@arclayer/sdk';
-
-const job = await readJob(BigInt(jobId));
-const agent = await readAgentProfile(job.agentId);
-```
-
-Use write builders with wagmi:
+## Minimal SDK pattern
 
 ```ts
 import {
+  buildRegisterAgentConfig,
   buildCreateJobConfig,
   buildSetBudgetConfig,
   buildApproveUsdcConfig,
   buildFundJobConfig,
-  parseUSDC,
+  buildSubmitDeliverableConfig,
+  buildEvaluateJobConfig,
+  buildSettleJobConfig,
 } from '@arclayer/sdk';
-import { useWriteContract } from 'wagmi';
-
-const { writeContractAsync } = useWriteContract();
-
-const jobHash = await writeContractAsync(
-  buildCreateJobConfig({
-    agentId,
-    worker,
-    evaluator: clientAddress,
-    taskDescription,
-  })
-);
-
-const amount = parseUSDC('1.50');
-await writeContractAsync(buildSetBudgetConfig({ jobId, amount }));
-await writeContractAsync(buildApproveUsdcConfig({ amount }));
-await writeContractAsync(buildFundJobConfig({ jobId, amount }));
 ```
 
-If helper signatures differ in the installed SDK version, inspect the SDK exports and adapt without renaming protocol functions.
+Use these builders for writes. Keep app-specific UX around them.
 
 ---
 
-## UI copy recommendations
+## Acceptance checklist
 
-Use these labels:
-
-- `Register Agent`
-- `Create Job`
-- `Worker Address`
-- `Client Address`
-- `Task Description`
-- `Fund Job Escrow`
-- `Approve & Fund`
-- `Submit Deliverable`
-- `Approve Work`
-- `Settle Payment`
-- `Proof of Work`
-- `Reputation`
-
-Avoid these labels in user-facing UI:
-
-- `evaluator` (use `Client Address` unless writing developer docs)
-- `msg.sender`
-- `uint256`
-- `bytes32`
-- `transferFrom`
-- `mintProof()`
-
-Explain wallet actions like this:
-
-- Register Agent: "Creates an on-chain identity for your AI agent."
-- Create Job: "Assigns work to an agent and stores the worker/client roles on-chain."
-- Approve USDC: "Lets the escrow contract move the exact USDC amount you chose."
-- Fund Escrow: "Moves USDC into escrow. Funds remain locked until approval and settlement."
-- Submit Deliverable: "Uploads the result URI for the client to review."
-- Approve Work: "Marks the deliverable accepted and unlocks settlement."
-- Settle Payment: "Pays the worker and mints the Proof of Work NFT."
-
----
-
-## Expected output
-
-When integrating ArcLayer into an app, update the existing app with:
-
-- Clean UI components
-- Wallet connection flow
-- Arc Testnet support
-- Agent registration
-- Job creation
-- Escrow/payment flow
-- Job evaluation and settlement
-- Indexer reads
-- Helpful error states
-- Required environment variable notes
-- Docs page or README section explaining how the integration works
-
-Do not remove existing docs. Do not change contract names, SDK function names, deployed addresses, or API paths.
-
----
-
-## Final response format for the coding agent
-
-When done, report:
-
-```txt
-Implemented:
-- ...
-
-Files changed:
-- ...
-
-Verification:
-- typecheck: pass/fail
-- build: pass/fail
-- routes tested: ...
-- known limitations: ...
-
-Next step:
-- ...
-```
-
-Do not claim mainnet readiness. ArcLayer integration is testnet-first unless the user explicitly provides production deployment details.
+- Path A and Path B are explained separately.
+- x402 UI shows exactly two payment methods: Arc Native Payment and Circle Gateway Payment.
+- Jobs UI does not show x402 as a selectable payment method.
+- Escrow is described as a trust layer, not a payment method.
+- Main UI uses user-friendly labels.
+- Raw contract names and protocol internals are hidden in `Developer details`.
+- Wallet actions show pending, confirmed, and indexer-sync states.
+- No secrets are committed or printed.

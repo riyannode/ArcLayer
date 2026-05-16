@@ -14,6 +14,7 @@
  *   ArchVisual         — monumental ring SVG (right column)
  *   HomeFeaturedCard   — glass card overlapping the visual
  *   HomeProtocolSection — "Four modules. One settlement fabric."
+ *   HomeWhoIsThisFor   — landing path selector for x402 vs escrow
  *   HomeFooterStrip    — small network metadata strip
  */
 export { default as HomeSidebar } from './HomeSidebar';
@@ -25,4 +26,5 @@ export { default as ArchVisual } from './ArchVisual';
 export { default as HexGrid3D } from './HexGrid3D';
 export { default as LiveLogStream } from './LiveLogStream';
 export { default as HomeProtocolSection } from './HomeProtocolSection';
+export { default as HomeWhoIsThisFor } from './HomeWhoIsThisFor';
 export { default as HomeFooterStrip } from './HomeFooterStrip';
