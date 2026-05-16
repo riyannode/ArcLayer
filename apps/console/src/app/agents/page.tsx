@@ -219,7 +219,7 @@ export default function AgentsPage() {
               <span className="font-mono text-[11px] text-[#C5A67C]">{agents.length} indexed</span>
             </div>
             <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.58)]">
-              Every card shows the readable name, short ID, controller, job count, and a one-click copy for the full agent ID.
+              Compact list. Each row shows readable name, short ID, controller, score and jobs. Click Use to preselect for create job.
             </p>
             <div className="mt-5 space-y-3">
               {isLoading ? (
@@ -238,46 +238,42 @@ export default function AgentsPage() {
               ) : agents.length > 0 ? (
                 agents.map((a) => {
                   const label = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI });
-                  const subtitle = parseAgentName(a.metadataURI) ? shortAgentId(a.agentId) : null;
+                  const hasName = !!parseAgentName(a.metadataURI);
                   return (
-                    <div key={a.agentId} className="aureo-list-card block px-4 py-3 md:px-5 md:py-4">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <div className="font-mono text-[12.5px] text-[#EAE4D8]">{label}</div>
-                          <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">
-                            {subtitle || shortAgentId(a.agentId)}
-                          </div>
-                        </div>
+                    <div key={a.agentId} className="aureo-list-card flex flex-col gap-2 px-3 py-2.5 md:flex-row md:items-center md:justify-between md:gap-4 md:px-4 md:py-2.5">
+                      {/* Left: identity */}
+                      <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="chip-status success">Score {a.score}</span>
-                          <span className="tag-pill">{a.jobs.length} jobs</span>
+                          <span className="font-mono text-[12px] text-[#EAE4D8]">{hasName ? label : `Agent ${label}`}</span>
+                          {hasName && <span className="font-mono text-[10px] text-[rgba(234,228,216,0.5)]">{shortAgentId(a.agentId)}</span>}
+                        </div>
+                        <div className="mt-0.5 font-mono text-[10px] text-[rgba(234,228,216,0.5)]">
+                          controller {shortenAddress(a.controller)}
                         </div>
                       </div>
-                      <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">
-                        <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.28)] px-3 py-2">
-                          <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.52)]">Controller</div>
-                          <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{shortenAddress(a.controller)}</div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleCopyAgentId(a.agentId)}
-                            className="btn-bordered px-3 py-2 text-[9.5px]"
-                          >
-                            COPY FULL ID
-                          </button>
-                          <Link href={`/jobs?agentId=${encodeURIComponent(a.agentId)}`} className="btn-primary px-3 py-2 text-[9.5px]">
-                            USE IN CREATE JOB
-                          </Link>
-                        </div>
+
+                      {/* Center: badges */}
+                      <div className="flex items-center gap-2">
+                        <span className="chip-status success">Score {a.score}</span>
+                        <span className="tag-pill">{a.jobs.length} jobs</span>
                       </div>
-                      <div className="mt-3 rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] px-3 py-2">
-                        <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.52)]">Full Agent ID</div>
-                        <div className="mt-1 break-all font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.68)]">{a.agentId}</div>
-                      </div>
-                      <div className="mt-3 flex flex-wrap gap-3">
-                        <Link href={`/agent/${a.agentId}`} className="font-mono text-[10.5px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">Open agent detail →</Link>
-                        <Link href={`/jobs?agentId=${encodeURIComponent(a.agentId)}`} className="font-mono text-[10.5px] text-[rgba(234,228,216,0.58)] transition-colors hover:text-[#EAE4D8]">Preselect on Jobs page →</Link>
+
+                      {/* Right: actions */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleCopyAgentId(a.agentId); }}
+                          className="btn-bordered px-2.5 py-1.5 text-[9px]"
+                          title={`Copy full ID: ${a.agentId}`}
+                        >
+                          Copy ID
+                        </button>
+                        <Link href={`/jobs?agentId=${encodeURIComponent(a.agentId)}`} className="btn-primary px-2.5 py-1.5 text-[9px]">
+                          Use
+                        </Link>
+                        <Link href={`/agent/${a.agentId}`} className="font-mono text-[9px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
+                          Details →
+                        </Link>
                       </div>
                     </div>
                   );
