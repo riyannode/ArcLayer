@@ -193,10 +193,12 @@ export default function LiveLogStream() {
           box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5), 0 0 10px rgba(197,166,124,0.08);
         }
         .llog-bar {
-          display: flex; align-items: center; gap: 10px;
+          display: flex; align-items: center; gap: 8px;
           padding: 8px 14px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.06);
           background: rgba(10, 10, 10, 0.95);
+          overflow: hidden;
+          min-width: 0;
         }
         .llog-dots { display: inline-flex; gap: 5px; margin-right: 4px; }
         .llog-dot {
@@ -210,17 +212,21 @@ export default function LiveLogStream() {
           font-family: var(--font-mono, ui-monospace, monospace);
           font-size: 11px; letter-spacing: 0.12em;
           color: rgba(234,228,216,0.85);
+          white-space: nowrap; flex-shrink: 0;
         }
-        .llog-sep { color: rgba(234,228,216,0.35); }
+        .llog-sep { color: rgba(234,228,216,0.35); flex-shrink: 0; }
         .llog-meta {
           font-family: var(--font-mono);
           font-size: 10.5px; color: #C5A67C; letter-spacing: 0.08em;
+          white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          min-width: 0;
         }
         .llog-grow { flex: 1; }
         .llog-status {
           display: inline-flex; align-items: center; gap: 6px;
           font-family: var(--font-mono); font-size: 10px;
-          letter-spacing: 0.2em; text-transform: uppercase;
+          letter-spacing: 0.16em; text-transform: uppercase;
+          white-space: nowrap; flex-shrink: 0;
         }
         .llog-status.on { color: #B8CD7E; }
         .llog-status.off { color: rgba(234,228,216,0.45); }
