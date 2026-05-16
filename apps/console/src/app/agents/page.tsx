@@ -42,6 +42,45 @@ export default function AgentsPage() {
   });
   const [nameStatus, setNameStatus] = useState<NameStatus>({ state: 'idle' });
 
+  // Filter / sort state for the registered agents list
+  const [agentSearch, setAgentSearch] = useState('');
+  const [agentSort, setAgentSort] = useState<'top' | 'jobs' | 'newest' | 'name'>('top');
+
+  const filteredAgents = useMemo(() => {
+    const q = agentSearch.trim().toLowerCase();
+    let list = agents.slice();
+    if (q) {
+      list = list.filter((a) => {
+        const label = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI }).toLowerCase();
+        return (
+          label.includes(q) ||
+          a.agentId.toLowerCase().includes(q) ||
+          a.controller.toLowerCase().includes(q) ||
+          (a.metadataURI ?? '').toLowerCase().includes(q)
+        );
+      });
+    }
+    switch (agentSort) {
+      case 'top':
+        list.sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0));
+        break;
+      case 'jobs':
+        list.sort((a, b) => (b.jobs?.length ?? 0) - (a.jobs?.length ?? 0));
+        break;
+      case 'newest':
+        list.reverse();
+        break;
+      case 'name':
+        list.sort((a, b) => {
+          const la = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI }).toLowerCase();
+          const lb = displayAgentLabel({ agentId: b.agentId, metadataURI: b.metadataURI }).toLowerCase();
+          return la.localeCompare(lb);
+        });
+        break;
+    }
+    return list;
+  }, [agents, agentSearch, agentSort]);
+
   const derivedAgentId = useMemo(() => {
     try {
       return form.name.trim() ? nameToAgentId(form.name) : null;
@@ -175,7 +214,7 @@ export default function AgentsPage() {
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
               Register an <span className="italic text-[#C5A67C]">agent</span>
             </h1>
-            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.68)]">
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
               First register a readable agent name. Then copy the full agent ID or jump straight into Create Job without guessing the on-chain identifier.
             </p>
           </div>
@@ -216,12 +255,50 @@ export default function AgentsPage() {
                 <div className="aureo-mono-label mb-2">STEP 2 · REGISTERED AGENTS</div>
                 <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent cards</h2>
               </div>
-              <span className="font-mono text-[11px] text-[#C5A67C]">{agents.length} indexed</span>
+              <span className="font-mono text-[11px] text-[#EAE4D8]">
+                {filteredAgents.length}
+                <span className="text-[#C5A67C]"> / {agents.length} </span>
+                indexed
+              </span>
             </div>
-            <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.58)]">
+            <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
               Compact list. Each row shows readable name, short ID, controller, score and jobs. Click Use to preselect for create job.
             </p>
-            <div className="mt-5 space-y-3">
+
+            {/* Filter / sort bar */}
+            <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
+              <input
+                value={agentSearch}
+                onChange={(e) => setAgentSearch(e.target.value)}
+                placeholder="Search by name, ID, controller…"
+                className="input-mono flex-1"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <select
+                value={agentSort}
+                onChange={(e) => setAgentSort(e.target.value as typeof agentSort)}
+                className="input-mono md:w-[200px]"
+                title="Sort agents"
+              >
+                <option value="top">Top score</option>
+                <option value="jobs">Most jobs</option>
+                <option value="newest">Newest</option>
+                <option value="name">Name A → Z</option>
+              </select>
+              {agentSearch && (
+                <button
+                  type="button"
+                  onClick={() => setAgentSearch('')}
+                  className="btn-bordered px-3 py-2 text-[10px]"
+                  title="Clear search"
+                >
+                  CLEAR
+                </button>
+              )}
+            </div>
+
+            <div className="mt-4 space-y-3">
               {isLoading ? (
                 [0, 1, 2, 3].map((i) => (
                   <div key={`skel-${i}`} className="aureo-skel block px-4 py-3 md:px-5 md:py-4">
@@ -235,8 +312,8 @@ export default function AgentsPage() {
                     </div>
                   </div>
                 ))
-              ) : agents.length > 0 ? (
-                agents.map((a) => {
+              ) : filteredAgents.length > 0 ? (
+                filteredAgents.map((a) => {
                   const label = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI });
                   const hasName = !!parseAgentName(a.metadataURI);
                   return (
@@ -245,9 +322,9 @@ export default function AgentsPage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-[12px] text-[#EAE4D8]">{hasName ? label : `Agent ${label}`}</span>
-                          {hasName && <span className="font-mono text-[10px] text-[rgba(234,228,216,0.5)]">{shortAgentId(a.agentId)}</span>}
+                          {hasName && <span className="font-mono text-[10px] text-[rgba(234,228,216,0.72)]">{shortAgentId(a.agentId)}</span>}
                         </div>
-                        <div className="mt-0.5 font-mono text-[10px] text-[rgba(234,228,216,0.5)]">
+                        <div className="mt-0.5 font-mono text-[10px] text-[rgba(234,228,216,0.72)]">
                           controller {shortenAddress(a.controller)}
                         </div>
                       </div>
@@ -283,8 +360,17 @@ export default function AgentsPage() {
                   <span className="aureo-empty-glyph">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20c1.5-4 4-6 7.5-6s6 2 7.5 6" strokeLinecap="round" /></svg>
                   </span>
-                  <p className="font-mono text-[11.5px] text-[#EAE4D8]">No registered agents yet</p>
-                  <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Complete Step 1 on the right. Your first registered agent will appear here automatically.</p>
+                  {agents.length > 0 ? (
+                    <>
+                      <p className="font-mono text-[11.5px] text-[#EAE4D8]">No agents match your search</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.7)]">Try a different keyword or clear the filter.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-mono text-[11.5px] text-[#EAE4D8]">No registered agents yet</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.7)]">Complete Step 1 on the right. Your first registered agent will appear here automatically.</p>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -293,11 +379,11 @@ export default function AgentsPage() {
           <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">STEP 1 · REGISTER BY NAME</div>
             <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Register agent</h2>
-            <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.52)]">Agent Registry · registerAgent(keccak(name), skillHash, metadataURI)</code>
+            <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.72)]">Agent Registry · registerAgent(keccak(name), skillHash, metadataURI)</code>
 
             <div className="mt-5 space-y-4">
               <div>
-                <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">AGENT NAME</label>
+                <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">AGENT NAME</label>
                 <input
                   value={form.name}
                   onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
@@ -306,9 +392,9 @@ export default function AgentsPage() {
                   autoComplete="off"
                   spellCheck={false}
                 />
-                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Pick a unique readable handle. The on-chain agent ID is derived automatically from this name.</div>
+                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">Pick a unique readable handle. The on-chain agent ID is derived automatically from this name.</div>
                 <div className="mt-1.5 font-mono text-[10.5px]">
-                  {nameStatus.state === 'idle' && <span className="text-[rgba(234,228,216,0.58)]">Use lowercase. Minimum 2 characters.</span>}
+                  {nameStatus.state === 'idle' && <span className="text-[rgba(234,228,216,0.78)]">Use lowercase. Minimum 2 characters.</span>}
                   {nameStatus.state === 'checking' && <span className="text-[#C5A67C]">Checking on chain…</span>}
                   {nameStatus.state === 'free' && <span className="text-[#B8CD7E]">✓ “{normalizeAgentName(form.name)}” is available</span>}
                   {nameStatus.state === 'taken' && <span className="text-[#f0c5c5]">✕ “{normalizeAgentName(form.name)}” is already registered</span>}
@@ -317,7 +403,7 @@ export default function AgentsPage() {
               </div>
 
               <div>
-                <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">SKILL LABEL</label>
+                <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">SKILL LABEL</label>
                 <input
                   value={form.skill}
                   onChange={(e) => setForm((c) => ({ ...c, skill: e.target.value }))}
@@ -325,11 +411,11 @@ export default function AgentsPage() {
                   className="input-mono"
                   autoComplete="off"
                 />
-                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Stored into the agent metadata URI so devs can identify the intended capability later.</div>
+                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">Stored into the agent metadata URI so devs can identify the intended capability later.</div>
               </div>
 
               <div>
-                <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">METADATA URI</label>
+                <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">METADATA URI</label>
                 <input
                   value={form.metadataURI || effectiveMetadataURI}
                   onChange={(e) => setForm((c) => ({ ...c, metadataURI: e.target.value }))}
@@ -337,14 +423,14 @@ export default function AgentsPage() {
                   className="input-mono"
                   autoComplete="off"
                 />
-                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Auto-generated from the name by default. Override only if you want custom metadata like an ipfs:// URI.</div>
+                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">Auto-generated from the name by default. Override only if you want custom metadata like an ipfs:// URI.</div>
               </div>
 
               {derivedAgentId !== null && (
                 <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] px-4 py-3">
-                  <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.52)]">Derived On-Chain Agent ID</div>
+                  <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.72)]">Derived On-Chain Agent ID</div>
                   <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{shortAgentId(derivedAgentId)}</div>
-                  <div className="mt-1 break-all font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.58)]">{derivedAgentId.toString()}</div>
+                  <div className="mt-1 break-all font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.78)]">{derivedAgentId.toString()}</div>
                 </div>
               )}
             </div>
@@ -368,7 +454,7 @@ export default function AgentsPage() {
               {isSubmitting ? 'REGISTERING…' : 'REGISTER AGENT'}
             </button>
 
-            <div className="mt-4 rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] p-4 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.68)]">
+            <div className="mt-4 rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] p-4 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)]">
               {isConnected
                 ? '✓ Wallet connected. After registration, use the card actions on the left to copy the full ID or prefill the Jobs page.'
                 : '⚠ Connect wallet to submit registerAgent.'}

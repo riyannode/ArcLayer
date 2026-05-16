@@ -58,6 +58,12 @@ function JobsPage() {
   const [depositTouched, setDepositTouched] = useState(false);
   const [createdJobId, setCreatedJobId] = useState<string>('');
 
+  // Filter / sort state for job list
+  const [jobSearch, setJobSearch] = useState('');
+  const [jobStatusFilter, setJobStatusFilter] = useState<'all' | '0' | '1' | '2' | '3' | '4' | '5' | '6'>('all');
+  const [jobSort, setJobSort] = useState<'relevant' | 'newest' | 'budgetDesc' | 'budgetAsc' | 'settledFirst'>('relevant');
+  const [myJobsOnly, setMyJobsOnly] = useState(false);
+
   const selectedAgent = useMemo(
     () => agents.find((agent) => agent.agentId === createForm.agentId) ?? null,
     [agents, createForm.agentId]
@@ -72,6 +78,45 @@ function JobsPage() {
     () => jobs.find((job) => job.id === fundForm.jobId) ?? null,
     [jobs, fundForm.jobId]
   );
+
+  const agentById = useMemo(
+    () => new Map(agents.map((a) => [a.agentId, a])),
+    [agents]
+  );
+
+  const filteredJobs = useMemo(() => {
+    const q = jobSearch.trim().toLowerCase();
+    const lower = address?.toLowerCase() ?? '';
+    // Relevance: actionable first (Submitted > Evaluated > Funded > Budgeted > Created), terminal last.
+    const relevance: Record<number, number> = { 3: 0, 4: 1, 2: 2, 1: 3, 0: 4, 5: 5, 6: 6 };
+    const rows = jobs.filter((j) => {
+      if (jobStatusFilter !== 'all' && j.status !== Number(jobStatusFilter)) return false;
+      if (myJobsOnly && lower) {
+        if (
+          j.client.toLowerCase() !== lower &&
+          j.worker.toLowerCase() !== lower &&
+          j.evaluator.toLowerCase() !== lower
+        ) {
+          return false;
+        }
+      }
+      if (!q) return true;
+      const agent = agentById.get(j.agentId);
+      const name = agent ? displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI }) : shortAgentId(j.agentId);
+      const skill = agent ? (formatSkillLabel(parseAgentSkill(agent.metadataURI)) || parseAgentSkill(agent.metadataURI) || '') : '';
+      const status = JOB_STATUS[j.status] || '';
+      return [`#${j.id}`, j.id, j.agentId, shortAgentId(j.agentId), j.worker, j.client, j.evaluator, name, skill, status]
+        .some((v) => String(v).toLowerCase().includes(q));
+    });
+    return rows.sort((a, b) => {
+      if (jobSort === 'newest') return Number(BigInt(b.id) - BigInt(a.id));
+      if (jobSort === 'budgetDesc') return Number(BigInt(b.budget) - BigInt(a.budget));
+      if (jobSort === 'budgetAsc') return Number(BigInt(a.budget) - BigInt(b.budget));
+      if (jobSort === 'settledFirst') return (b.status === 5 ? 1 : 0) - (a.status === 5 ? 1 : 0) || Number(BigInt(b.id) - BigInt(a.id));
+      // 'relevant': actionable first, then newest
+      return (relevance[a.status] ?? 9) - (relevance[b.status] ?? 9) || Number(BigInt(b.id) - BigInt(a.id));
+    });
+  }, [jobs, jobSearch, jobStatusFilter, jobSort, myJobsOnly, address, agentById]);
 
   // Auto-fill worker with the selected agent's controller (most common case).
   useEffect(() => {
@@ -277,7 +322,7 @@ function JobsPage() {
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
               Create and fund a <span className="italic text-[#C5A67C]">job</span>
             </h1>
-            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.68)]">
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
               Pick a registered agent, write the task, set the budget, then deposit USDC into the Settlement Vault.
             </p>
           </div>
@@ -337,12 +382,80 @@ function JobsPage() {
                 <div className="aureo-mono-label mb-2">STEP 3 · LIVE JOBS</div>
                 <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Job cards</h2>
               </div>
-              <span className="font-mono text-[11px] text-[#C5A67C]">{jobs.length} indexed</span>
+              <span className="font-mono text-[11px] text-[#EAE4D8]">
+                {filteredJobs.length}
+                <span className="text-[#C5A67C]"> / {jobs.length} </span>
+                indexed
+              </span>
             </div>
-            <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.58)]">
+            <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
               Track Create &rarr; Budget &rarr; Fund &rarr; Submit &rarr; Evaluate &rarr; Settle, with the selected agent, worker, and funding state visible in one place.
             </p>
-            <div className="mt-5 space-y-3">
+
+            {/* Filter / sort bar */}
+            <div className="mt-4 space-y-3">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
+                <input
+                  value={jobSearch}
+                  onChange={(e) => setJobSearch(e.target.value)}
+                  placeholder="Search job ID, agent, worker, client…"
+                  className="input-mono flex-1"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <select
+                  value={jobSort}
+                  onChange={(e) => setJobSort(e.target.value as typeof jobSort)}
+                  className="input-mono md:w-[180px]"
+                  title="Sort jobs"
+                >
+                  <option value="relevant">Most relevant</option>
+                  <option value="newest">Newest</option>
+                  <option value="budgetDesc">Highest budget</option>
+                  <option value="budgetAsc">Lowest budget</option>
+                  <option value="settledFirst">Settled first</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => setMyJobsOnly((v) => !v)}
+                  disabled={!address}
+                  className={`btn-bordered px-3 py-2 text-[10px] ${myJobsOnly ? 'border-[#C5A67C] text-[#C5A67C]' : ''}`}
+                  title={address ? 'Show jobs where this wallet is client, worker, or evaluator' : 'Connect wallet to filter your jobs'}
+                >
+                  MY JOBS
+                </button>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {(['all', '0', '1', '2', '3', '4', '5', '6'] as const).map((status) => (
+                  <button
+                    key={status}
+                    type="button"
+                    onClick={() => setJobStatusFilter(status)}
+                    className={`chip-status ${status === 'all' ? '' : JOB_TONE[Number(status)] ?? 'pending'} ${jobStatusFilter === status ? 'border-[#C5A67C] text-[#EAE4D8]' : ''}`}
+                    title={status === 'all' ? 'Show all jobs' : `Show ${JOB_STATUS[Number(status)]} jobs`}
+                  >
+                    {status === 'all' ? 'All' : JOB_STATUS[Number(status)]}
+                  </button>
+                ))}
+                {(jobSearch || jobStatusFilter !== 'all' || myJobsOnly) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setJobSearch('');
+                      setJobStatusFilter('all');
+                      setMyJobsOnly(false);
+                    }}
+                    className="btn-bordered px-3 py-2 text-[10px]"
+                    title="Clear filters"
+                  >
+                    CLEAR
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
               {isLoading ? (
                 [0, 1, 2, 3].map((i) => (
                   <div key={`skel-${i}`} className="aureo-skel block px-4 py-3 md:px-5 md:py-4">
@@ -356,9 +469,9 @@ function JobsPage() {
                     </div>
                   </div>
                 ))
-              ) : jobs.length > 0 ? (
-                jobs.map((job) => {
-                  const agent = agents.find((candidate) => candidate.agentId === job.agentId) ?? null;
+              ) : filteredJobs.length > 0 ? (
+                filteredJobs.map((job) => {
+                  const agent = agentById.get(job.agentId) ?? null;
                   const agentLabel = agent ? displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI }) : shortAgentId(job.agentId);
                   const skill = agent ? formatSkillLabel(parseAgentSkill(agent.metadataURI)) : null;
                   return (
@@ -366,7 +479,7 @@ function JobsPage() {
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <div className="font-mono text-[12.5px] text-[#EAE4D8]">Job #{job.id}</div>
-                          <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">
+                          <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
                             {agentLabel}{skill ? ` · ${skill}` : ''} · {shortAgentId(job.agentId)}
                           </div>
                         </div>
@@ -374,17 +487,17 @@ function JobsPage() {
                       </div>
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
                         <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.28)] px-3 py-2">
-                          <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.52)]">Budget</div>
+                          <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.72)]">Budget</div>
                           <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{formatUSDC(BigInt(job.budget))} USDC</div>
                         </div>
                         <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.28)] px-3 py-2">
-                          <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.52)]">Deposit Amount</div>
+                          <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.72)]">Deposit Amount</div>
                           <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{formatUSDC(BigInt(job.fundedAmount))} USDC</div>
                         </div>
                       </div>
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
-                        <div className="font-mono text-[10px] text-[rgba(234,228,216,0.68)]">Worker {shortenAddress(job.worker)}</div>
-                        <div className="font-mono text-[10px] text-[rgba(234,228,216,0.68)]">Client {shortenAddress(job.evaluator)}</div>
+                        <div className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Worker {shortenAddress(job.worker)}</div>
+                        <div className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Client {shortenAddress(job.evaluator)}</div>
                       </div>
                       <div className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.52)]">Proof of Work {job.proofMetadataURI ? 'available' : job.status === 5 ? 'pending metadata' : 'not minted yet'}</div>
                     </Link>
@@ -395,8 +508,17 @@ function JobsPage() {
                   <span className="aureo-empty-glyph">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 7h16M4 12h16M4 17h10" strokeLinecap="round" /></svg>
                   </span>
-                  <p className="font-mono text-[11.5px] text-[#EAE4D8]">No indexed jobs yet</p>
-                  <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Follow Step 1 and Step 2 on the right to create the first funded job.</p>
+                  {jobs.length > 0 ? (
+                    <>
+                      <p className="font-mono text-[11.5px] text-[#EAE4D8]">No jobs match your filter</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">Try a different keyword or clear the filter.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-mono text-[11.5px] text-[#EAE4D8]">No indexed jobs yet</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">Follow Step 1 and Step 2 on the right to create the first funded job.</p>
+                    </>
+                  )}
                 </div>
               )}
             </div>
