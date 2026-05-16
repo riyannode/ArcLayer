@@ -34,6 +34,12 @@ const WalletStatus = dynamic(() => import('./WalletStatus'), {
   ),
 });
 
+// NotifBell uses Privy hooks + localStorage; client-only to avoid SSR mismatch.
+const NotifBell = dynamic(() => import('./NotifBell'), {
+  ssr: false,
+  loading: () => null,
+});
+
 const NAV_LINKS = [
   { href: '/protocol', label: 'PROTOCOL', anchor: null },
   { href: '/agents', label: 'AGENTS', anchor: null },
@@ -140,6 +146,8 @@ export default function Navbar() {
               </span>
             </div>
           )}
+
+          {!isLanding && <NotifBell />}
 
           <WalletStatus variant={isLanding ? 'landing' : 'app'} />
 
