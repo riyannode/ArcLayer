@@ -29,6 +29,7 @@ Thumbs.db
 contracts/cache/
 contracts/out/
 contracts/broadcast/
+contracts/broadcast/**
 contracts/lib/
 contracts/foundry.lock
 
