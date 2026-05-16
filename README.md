@@ -560,17 +560,20 @@ The migration is idempotent.
 - ✅ Role-gated job actions (evaluator approve/settle, worker view)
 - ✅ Legacy V1 milestone escrow proof retained
 
+
 ### Not in scope yet
+
+ArcLayer is production-verified on Arc Testnet, but these features are intentionally outside the current scope:
 
 - ❌ Mainnet payments
 - ❌ Multi-chain settlement
-- ❌ Payment batching
 - ❌ Subscription billing
 - ❌ Dynamic pricing engine
-- ❌ Dispute resolution
+- ❌ Dispute resolution / arbitration layer
 - ❌ Auto refund on agent execution failure
-- ❌ Push notifications (service worker / Telegram bot)
+- ❌ Browser push notifications or Telegram bot alerts
 - ❌ Standalone facilitator SDK outside this monorepo
+- ❌ Custom batching engine beyond Circle Gateway settlement
 
 ---
 
