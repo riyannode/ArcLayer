@@ -2,7 +2,7 @@
 
 # ArcLayer
 
-**Settlement layer for paid agents on Arc — x402 payments, USDC escrow, Proof of Work.**
+**Autonomous agent economy on Arc — x402 payments, prediction markets, on-chain reputation.**
 
 [![Live Console](https://img.shields.io/badge/console-arclayers.xyz-C5A67C?style=flat-square)](https://arclayers.xyz)
 [![Arc Testnet](https://img.shields.io/badge/chain-Arc%20Testnet-EAE4D8?style=flat-square)](https://arc.network)
@@ -18,7 +18,11 @@
 
 ## TL;DR
 
-ArcLayer is the **settlement layer for paid AI agents on Arc**. Any HTTP API can require USDC escrow before execution using a single header — no API keys, no Stripe, no custodian.
+ArcLayer is the **autonomous agent economy on Arc**. Three layers, one chain:
+
+1. **x402 settlement** — any HTTP API can require USDC escrow before execution using a single header. No API keys, no Stripe, no custodian.
+2. **A2A protocol** — agents register on-chain, pay each other, and accumulate reputation that derives from verifiable outcomes, not self-reports.
+3. **Ignia prediction markets** — on-chain markets where agents stake on outcomes; resolved markets feed reputation back to the agents that signaled them.
 
 ```
 1. Client hits  POST /api/agents/123/run         → 402 PAYMENT-REQUIRED
@@ -27,13 +31,24 @@ ArcLayer is the **settlement layer for paid AI agents on Arc**. Any HTTP API can
 4. Worker submits deliverable, evaluator approves, settle pays USDC + mints WorkProof NFT
 ```
 
-**Live on Arc Testnet (`chainId=5042002`).** ArcLayer ships dual production-live x402 paths on Arc Testnet: **Arc Native Payment** (self-hosted EIP-3009 relayer, settles on-chain) and **Circle Gateway Payment** (BatchFacilitatorClient / Circle Nanopayments). Both verify, settle, and unlock end-to-end with replay protection.
+```
+A2A layer:
+1. Agent registers     → A2AAgentRegistry.registerAgent(name, owner)
+2. Agent signals       → MarketMirrorRegistry.mirrorMarket(igniaMarketId, signaledOutcome)
+3. Market resolves     → Ignia.resolve(marketId, outcome)
+4. Resolver daemon     → A2AReputationRegistry.recordOutcome(agentId, correct/wrong)
+5. Reputation score    → reads via /api/a2a/status (multicall)
+```
+
+**Live on Arc Testnet (`chainId=5042002`).** ArcLayer ships dual production-live x402 paths: **Arc Native Payment** (self-hosted EIP-3009 relayer, settles on-chain) and **Circle Gateway Payment** (BatchFacilitatorClient / Circle Nanopayments). Both verify, settle, and unlock end-to-end with replay protection. The A2A protocol layer (Ignia + MarketMirror + Reputation) is live with verified end-to-end resolution proofs.
 
 ---
 
 ## Current development focus
 
-- Minimal product console for agents, jobs, escrow, and proofs (live)
+- Autonomous A2A protocol layer — registered agents, market mirroring, outcome receipts, and reputation scoring (live)
+- Ignia prediction markets on Arc Testnet — market creation, trading, resolution, and A2A reputation feedback loop (live)
+- Minimal product console for agents, jobs, escrow, proofs, and A2A telemetry (live)
 - x402 V2 dual-mode facilitator on Arc USDC — Arc Native Payment (self-hosted EIP-3009 relayer, settled on-chain) + Circle Gateway Payment (BatchFacilitatorClient, settled through Circle Gateway)
 - Circle Wallets integration for programmable agent wallets (backend / agent layer, alongside Privy for users)
 - Capability probe report: [`docs/x402/arc-capability-report.md`](./docs/x402/arc-capability-report.md)
@@ -113,7 +128,14 @@ NODE_OPTIONS="--max-old-space-size=4096" npm run build
    │  ├─ JobEscrow         escrow + JobFunded event       │
    │  ├─ AgentRegistry     agent identity                 │
    │  ├─ WorkProof         proof-of-work NFT (soulbound)  │
-   │  └─ ReputationOracle  reputation scoring             │
+   │  ├─ ReputationOracle  reputation scoring             │
+   │  │                                                   │
+   │  │  A2A Protocol Layer                               │
+   │  ├─ A2AAgentRegistry       agent identity (A2A)      │
+   │  ├─ A2AReputationRegistry  outcome-based reputation  │
+   │  ├─ A2AReceiptRegistry     verifiable receipts       │
+   │  ├─ MarketMirrorRegistry   signal → market mirror    │
+   │  └─ Ignia                  prediction markets        │
    └────────────┬─────────────────────────────────────────┘
                 │  emits JobFunded(jobId, client, amount)
                 ▼
@@ -123,6 +145,14 @@ NODE_OPTIONS="--max-old-space-size=4096" npm run build
    │  ├─ atomic consume via Supabase RPC                 │
    │  ├─ run protected agent work (LLM call)             │
    │  └─ cache response (idempotent retries)             │
+   └─────────────────────────────────────────────────────┘
+
+   ┌─────────────────────────────────────────────────────┐
+   │  Autonomous Agent Layer (PM2)                        │
+   │  ├─ pythia     signal oracle + market creation       │
+   │  ├─ hermes     autonomous trader                    │
+   │  ├─ scanner    Ignia market discovery               │
+   │  └─ resolver   outcome → reputation recording       │
    └─────────────────────────────────────────────────────┘
 
    Indexer:    Arc Testnet events → SQLite → /api/indexer
@@ -171,6 +201,16 @@ V2 post-deploy configuration:
 | Testnet USDC | `0x3600000000000000000000000000000000000000` | 6 decimals; Arc Testnet USDC used for escrow + x402 exact payments |
 | x402 default payTo | `0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b` | Seller / settlement receiver for x402 demo payments |
 | Circle `GatewayWallet` | `0x0077777d7EBA4688BDeF3E311b846F25870A19B9` | EIP-712 verifying contract for `GatewayWalletBatched` payments |
+
+### A2A Protocol contracts (Sprint 5)
+
+| Contract | Address | Purpose |
+|---|---|---|
+| `A2AAgentRegistry` | `0xB263336055dD65FF501e36CA39941760D943703C` | Agent identity + registration |
+| `A2AReputationRegistry` | `0x9c97CAE866397d94e295632B3BFCF342ea20f1Cc` | Outcome-based reputation scoring |
+| `A2AReceiptRegistry` | `0x5F591465D0C2fe20A28D2539dFBB2B00716397B7` | Verifiable interaction receipts |
+| `MarketMirrorRegistry` | `0xec5910926925941c451C97A8bd2c4Ba7bD173195` | Agent signal → market mirroring |
+| `Ignia` | `0xd66971F9Da4c60DB4A061686F43dBf39Db5E2916` | Prediction markets (create, trade, resolve) |
 
 ### Legacy V1 contracts kept for compatibility
 
@@ -437,6 +477,54 @@ POST /api/agents/[id]/run    paid agent execution (x402 gated)
 
 ---
 
+## A2A Autonomous Agent Protocol
+
+ArcLayer's A2A layer lets autonomous agents become persistent economic actors on Arc. Agents have identities, submit market signals, receive outcome-based reputation, and can be consumed by other agents or apps.
+
+### Core loop
+
+```text
+Pythia agent observes market/event data
+  → writes prediction signal
+  → MarketMirrorRegistry mirrors the signal to an Ignia market
+  → Ignia resolves the market outcome
+  → resolver daemon records correct/wrong outcome
+  → A2AReputationRegistry updates the agent score
+  → /a2a dashboard and /api/a2a/status expose live reputation
+```
+
+### Runtime agents
+
+| Agent / daemon | Path | Role |
+|---|---|---|
+| `pythia` | `agents/pythia/` | Signal oracle + A2A route server |
+| `hermes` | `agents/hermes/` | Autonomous trader consuming Pythia signals |
+| `scanner` | `agents/scanner/` | Ignia market discovery loop |
+| `resolver` | `agents/resolver/` | Polls resolved markets and writes reputation outcomes |
+
+### PM2 process manager
+
+```bash
+cd agents
+pm2 start ecosystem.config.cjs
+pm2 status
+pm2 logs resolver --lines 40
+```
+
+### Live A2A proof set
+
+| Proof | Tx |
+|---|---|
+| Ignia market create | `0x2dc18436...` |
+| Market mirror resolve | `0x8cf0c398...` |
+| Pythia reputation update | `0xb44cafc2...` |
+| Hermes reputation update | `0x2053aa73...` |
+| Ignia market resolve | `0xb5bcc670...` |
+
+The dashboard reads current state from Arc Testnet via `viem` multicall; caches/indexes are only acceleration layers.
+
+---
+
 ## Indexer
 
 Replays Arc Testnet events into a local SQLite cache. Read optimization layer only — contract state remains canonical.
@@ -553,6 +641,8 @@ The migration is idempotent.
 | `/api/jobs/[id]/runs` | Job run history |
 | `/api/runs/[id]` | Run detail |
 | `/api/indexer/[...path]` | Indexer reverse proxy |
+| `/a2a` | A2A protocol dashboard (agents, markets, reputation) |
+| `/api/a2a/status` | A2A telemetry (multicall reads from registries + Ignia) |
 
 ---
 
