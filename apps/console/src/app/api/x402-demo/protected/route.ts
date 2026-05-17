@@ -181,13 +181,27 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const result = await verifyExactSettlementProof({
-    paymentPayload: proof as unknown as Parameters<typeof verifyExactSettlementProof>[0]['paymentPayload'],
-    paymentRequirements: arcRequirements,
-  });
-  if (!result.ok) {
+  let result: Awaited<ReturnType<typeof verifyExactSettlementProof>>;
+  try {
+    result = await verifyExactSettlementProof({
+      paymentPayload: proof as unknown as Parameters<typeof verifyExactSettlementProof>[0]['paymentPayload'],
+      paymentRequirements: arcRequirements,
+    });
+  } catch (err) {
     return NextResponse.json(
-      { ok: false, unlocked: false, error: result.reason, message: result.message, accepts: [arcRequirements, gatewayRequirements] },
+      {
+        ok: false,
+        unlocked: false,
+        error: 'invalid_payment_proof',
+        message: err instanceof Error ? err.message : 'Invalid Arc Native payment proof.',
+        accepts: [arcRequirements, gatewayRequirements],
+      },
+      { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+  if (!result.ok || !result.payer || !result.nonce) {
+    return NextResponse.json(
+      { ok: false, unlocked: false, error: result.reason || 'invalid_payment_proof', message: result.message || 'Payment proof is invalid.', accepts: [arcRequirements, gatewayRequirements] },
       { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
     );
   }
@@ -195,8 +209,8 @@ export async function GET(req: NextRequest) {
   const paymentId = deriveNativePaymentId({
     network: arcRequirements.network,
     asset: arcRequirements.asset,
-    from: result.payer!,
-    nonce: result.nonce!,
+    from: result.payer,
+    nonce: result.nonce,
   });
 
   const consumed = await consumeNativePayment(paymentId);

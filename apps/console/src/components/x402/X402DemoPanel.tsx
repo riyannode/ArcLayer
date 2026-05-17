@@ -212,14 +212,14 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
     notify(NOTICE_RESOURCE_UNLOCKED);
 
     setStep('replay');
-    log('9/9 Replay test: reusing the same nonce against /api/x402/verify...');
-    const replay = await fetch('/api/x402/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    log('9/9 Replay test: reusing same X-PAYMENT against /api/x402-demo/protected...');
+    const replay = await fetch('/api/x402-demo/protected', { headers: { 'X-PAYMENT': header } });
     const replayJson = await replay.json();
-    const rejected = replayJson.isValid === false && replayJson.invalidReason === 'nonce_used';
-    setReplayResult(rejected ? 'Rejected: nonce_used' : `Unexpected: ${JSON.stringify(replayJson).slice(0, 80)}`);
-    log(rejected ? 'Replay rejected: nonce_used ✓' : 'Replay test did not return expected nonce_used', rejected ? 'success' : 'error');
+    const rejected = !replay.ok && (replayJson.error === 'native_payment_replayed' || replayJson.error === 'nonce_used' || replayJson.error === 'payment_already_used');
+    setReplayResult(rejected ? `Rejected: ${replayJson.error}` : `Unexpected: ${JSON.stringify(replayJson).slice(0, 80)}`);
+    log(rejected ? `Replay rejected: ${replayJson.error} ✓` : 'Replay test did not return expected rejection', rejected ? 'success' : 'error');
     if (rejected) {
-      notify({ ...NOTICE_REPLAY_REJECTED, technicalDetail: 'Replay rejected: nonce_used', message: 'This Arc Native EIP-3009 nonce was already consumed and cannot unlock the protected resource again.' });
+      notify({ ...NOTICE_REPLAY_REJECTED, technicalDetail: `Replay rejected: ${replayJson.error}`, message: 'This Arc Native EIP-3009 payment receipt was already consumed and cannot unlock the protected resource again.' });
     } else {
       notify(NOTICE_REPLAY_FAILED);
     }
