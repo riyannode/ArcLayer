@@ -90,6 +90,7 @@ export type NetworkAgent = {
   activity: FeedItem[];
   source: 'featured' | 'registry';
   canHide: boolean;
+  connectedTo?: string[];
 };
 
 export type AgentStats = {

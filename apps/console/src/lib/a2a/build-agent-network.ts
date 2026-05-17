@@ -5,6 +5,17 @@ function jobsForAgent(overview: Overview | null, agentId?: string) {
   return overview.jobs.filter((job) => job.agentId?.toLowerCase() === agentId.toLowerCase()).length;
 }
 
+function jobClientsForAgent(overview: Overview | null, agentId?: string) {
+  if (!overview || !agentId) return [];
+  return Array.from(
+    new Set(
+      overview.jobs
+        .filter((job) => job.agentId?.toLowerCase() === agentId.toLowerCase() && job.client)
+        .map((job) => `${job.client.slice(0, 6)}…${job.client.slice(-4)}`)
+    )
+  ).slice(0, 2);
+}
+
 export function buildAgentNetwork({
   onchain,
   overview,
@@ -46,6 +57,7 @@ export function buildAgentNetwork({
       activity: feedItems.filter((item) => item.agent === 'Pythia').slice(0, 8),
       source: 'featured',
       canHide: false,
+      connectedTo: [],
     },
     {
       id: 'hermes',
@@ -66,6 +78,7 @@ export function buildAgentNetwork({
       activity: feedItems.filter((item) => item.agent === 'Hermes').slice(0, 8),
       source: 'featured',
       canHide: false,
+      connectedTo: ['Pythia'],
     },
   ];
 
@@ -100,6 +113,7 @@ export function buildAgentNetwork({
         activity: [],
         source: 'registry',
         canHide: true,
+        connectedTo: jobClientsForAgent(overview, reg.agentId),
       });
     }
   }

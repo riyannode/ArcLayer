@@ -89,6 +89,12 @@ export function AgentDetailDrawer({ agent, onClose, onHide }: { agent: NetworkAg
             <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Agent profile</p>
             <h3 className="mt-1 text-2xl font-semibold text-[#EAE4D8]">{agent.name}</h3>
             <p className="font-mono text-xs text-[#777]">{agent.role}</p>
+            {agent.connectedTo && agent.connectedTo.length > 0 && (
+              <p className="mt-1 inline-flex items-center gap-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Connected → {agent.connectedTo.join(', ')}
+              </p>
+            )}
           </div>
           <button type="button" onClick={onClose} className="rounded border border-white/10 px-2 py-1 font-mono text-xs text-[#777] hover:text-[#EAE4D8]">
             close

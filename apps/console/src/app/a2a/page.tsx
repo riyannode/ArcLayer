@@ -458,34 +458,6 @@ export default function A2ADashboardPage() {
           </p>
         </section>
 
-        {/* ─── Agent-Scoped Workspace Placeholder ─────────────────────── */}
-        <section className="mt-6 grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2 rounded border border-white/5 bg-white/[0.02] p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-[#555]">
-                Per-Agent Proofs & Activity
-              </p>
-              <span className="font-mono text-[10px] text-[#333]">
-                {proofTxs.length} tx proofs · {feed?.items.length ?? 0} events synced
-              </span>
-            </div>
-            <div className="rounded border border-dashed border-white/10 bg-black/20 p-8 text-center">
-              <p className="font-mono text-xs text-[#C5A67C]">Global feed hidden to reduce noise.</p>
-              <p className="mt-2 font-mono text-[11px] leading-5 text-[#777]">
-                Select an agent card above. Its own x402 receipts, transaction proofs, and activity history open in the agent detail panel.
-              </p>
-              <p className="mt-3 font-mono text-[10px] text-[#444]">
-                Reserved slot: future per-agent modules, custom widgets, and marketplace actions.
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <LoopCard summary={summary} pythiaServed={liveSignalsServed} />
-            <ContractsCard contracts={onchain?.contracts} />
-          </div>
-        </section>
-
         {/* ─── Marketplace Section (manual JobEscrow) ──────────────────── */}
         {summary && summary.jobs > 0 && (
           <section className="mt-6 rounded border border-white/5 bg-white/[0.02] p-4">
@@ -661,62 +633,6 @@ function SparklineCard({ label, data, color }: { label: string; data: number[]; 
     <div className="rounded border border-white/5 bg-white/[0.02] p-4">
       <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-[#555]">{label}</p>
       <Sparkline data={data.length > 1 ? data : [0, 0]} color={color} />
-    </div>
-  );
-}
-
-function LoopCard({ summary, pythiaServed }: { summary?: Overview['summary']; pythiaServed?: number }) {
-  const steps = [
-    { label: 'Hermes wakes', icon: '⏱', active: true },
-    { label: 'Buys signal', icon: '📡', active: (pythiaServed ?? 0) > 0 },
-    { label: 'x402 settle', icon: '💰', active: (pythiaServed ?? 0) > 0 },
-    { label: 'Polymarket', icon: '🌐', active: true },
-    { label: 'Ignia trade', icon: '🎯', active: (summary?.fundedJobs ?? 0) > 0 || (pythiaServed ?? 0) > 0 },
-    { label: 'Reputation', icon: '⭐', active: true },
-  ];
-  return (
-    <div className="rounded border border-white/5 bg-white/[0.02] p-4">
-      <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-[#555]">Trade Cycle</p>
-      <div className="space-y-2">
-        {steps.map((s, i) => (
-          <div
-            key={s.label}
-            className={`flex items-center gap-3 rounded border px-3 py-2 font-mono text-xs transition-colors ${
-              s.active
-                ? 'border-[#C5A67C]/30 bg-[#C5A67C]/5 text-[#EAE4D8]'
-                : 'border-white/5 text-[#444]'
-            }`}
-          >
-            <span className="text-[#7A7A7A]">{String(i + 1).padStart(2, '0')}</span>
-            <span>{s.icon}</span>
-            <span>{s.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ContractsCard({ contracts }: { contracts?: Record<string, string> }) {
-  if (!contracts) return null;
-  return (
-    <div className="rounded border border-white/5 bg-white/[0.02] p-4">
-      <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-[#555]">Contracts</p>
-      <div className="space-y-1.5 font-mono text-[10px]">
-        {Object.entries(contracts).map(([k, v]) => (
-          <div key={k} className="flex items-center justify-between gap-2">
-            <span className="text-[#7A7A7A]">{k}</span>
-            <a
-              href={`https://testnet.arcscan.app/address/${v}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#9A9A9A] hover:text-[#C5A67C]"
-            >
-              {short(v)}
-            </a>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

@@ -45,6 +45,12 @@ export function AgentNetworkCard({ agent, selected, onSelect }: { agent: Network
         </div>
         <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] ${statusColor}`}>{agent.status}</span>
       </div>
+      {agent.connectedTo && agent.connectedTo.length > 0 && (
+        <p className="mt-2 inline-flex items-center gap-1 rounded border border-emerald-500/25 bg-emerald-500/[0.06] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-widest text-emerald-300/90">
+          <span className="h-1 w-1 rounded-full bg-emerald-400" />
+          → {agent.connectedTo.join(', ')}
+        </p>
+      )}
       <p className="mt-3 line-clamp-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">{agent.description}</p>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {agent.capability.slice(0, 3).map((cap) => (
