@@ -6,7 +6,7 @@ import { useAccount, useDisconnect } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
 import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'viem';
 import { DevDetails } from '@/components/DevDetails';
-import { NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_REQUIRED, NOTICE_PAYMENT_SETTLED, NOTICE_PAYMENT_VERIFIED, NOTICE_REPLAY_FAILED, NOTICE_REPLAY_REJECTED, NOTICE_RESOURCE_UNLOCKED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
+import { NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_REQUIRED, NOTICE_PAYMENT_SETTLED, NOTICE_REPLAY_FAILED, NOTICE_REPLAY_REJECTED, NOTICE_RESOURCE_UNLOCKED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
 import { shortenAddress } from '@/lib/contracts';
 
 const ARC_CHAIN_ID = 5042002;
@@ -19,7 +19,7 @@ const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'vi
 
 type PaymentMode = 'arc-native' | 'circle-gateway';
 type WalletMode = 'passkey' | 'eoa';
-type Step = 'idle' | 'challenge' | 'signing' | 'verifying' | 'settling' | 'retrying' | 'replay' | 'done' | 'error';
+type Step = 'idle' | 'challenge' | 'signing' | 'paying' | 'replay' | 'done' | 'error';
 type LogType = 'info' | 'success' | 'error' | 'warn';
 
 interface LogLine { ts: string; msg: string; type: LogType }
@@ -135,13 +135,14 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     }
 
     setStep('challenge');
-    log('1/9 Requesting protected resource without payment...');
+    log('1/6 Requesting protected resource without payment...');
     const first = await fetch('/api/x402-demo/protected');
     const challenge = await first.json();
-    if (first.status !== 402 || !challenge.paymentRequirements) { log('Protected endpoint did not return x402 402 challenge', 'error'); setStep('error'); return; }
-    const req = challenge.paymentRequirements as Requirement;
+    if (first.status !== 402 || !Array.isArray(challenge.accepts)) { log('Protected endpoint did not return x402 402 challenge', 'error'); setStep('error'); return; }
+    const accepts = challenge.accepts as Requirement[];
+    const req = accepts.find((a) => !a.extra?.name || a.extra?.name === 'USDC') || accepts[0];
     setRequirement(req);
-    log(`2/9 Received 402 Payment Required: ${formatUnits(BigInt(req.amount), 6)} USDC`, 'success');
+    log(`2/6 Received 402 Payment Required: ${formatUnits(BigInt(req.amount), 6)} USDC`, 'success');
     notify(NOTICE_PAYMENT_REQUIRED);
 
     const client = createPublicClient({ transport: http(ARC_RPC) });
@@ -166,7 +167,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       },
     };
 
-    log('3/9 Signing EIP-3009 transferWithAuthorization...');
+    log('3/6 Signing EIP-3009 transferWithAuthorization...');
     try {
       const provider = await wallet.getEthereumProvider();
       paymentPayload.payload.signature = await provider.request({
@@ -184,47 +185,43 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       log(`Signature created: ${paymentPayload.payload.signature.slice(0, 18)}...`, 'success');
     } catch (e) { log(`Signature failed: ${e instanceof Error ? e.message : String(e)}`, 'error'); setStep('error'); return; }
 
-    const body = { x402Version: 2, paymentRail: 'arc-native', selfHosted: true, paymentPayload, paymentRequirements: req };
+    setStep('paying');
+    log('4/6 Calling protected resource with X-PAYMENT header (server runs verify+settle inline)...');
+    const header = b64(paymentPayload);
+    const paid = await fetch('/api/x402-demo/protected', { headers: { 'X-PAYMENT': header } });
+    const paidJson = await paid.json();
+    if (!paid.ok || !paidJson.unlocked) {
+      log(`Payment failed: ${paidJson.error || paid.status} — ${paidJson.reason || paidJson.message || ''}`, 'error');
+      setStep('error'); return;
+    }
 
-    setStep('verifying');
-    log('4/9 Verifying canonical exact payment...');
-    const verify = await fetch('/api/x402/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const verifyJson = await verify.json();
-    if (!verifyJson.isValid) { log(`Verify failed: ${verifyJson.invalidReason || verifyJson.error} — ${verifyJson.invalidMessage || ''}`, 'error'); setStep('error'); return; }
-    log(`Verified signer: ${shortenAddress(verifyJson.payer)}`, 'success');
-    notify(NOTICE_PAYMENT_VERIFIED);
-
-    setStep('settling');
-    log('5/9 Settling USDC on-chain through relayer...');
-    const settle = await fetch('/api/x402/settle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const settleJson = await settle.json();
-    if (!settleJson.success) { log(`Settle failed: ${settleJson.errorReason || settleJson.error} — ${settleJson.errorMessage || ''}`, 'error'); setStep('error'); return; }
-    setTxHash(settleJson.transaction);
-    log(`6/9 Settled on Arc: ${settleJson.transaction.slice(0, 18)}...`, 'success');
+    // Decode PAYMENT-RESPONSE header for tx hash
+    const paymentRespHeader = paid.headers.get('PAYMENT-RESPONSE') || paid.headers.get('payment-response');
+    let paymentResp: { transaction?: string; payer?: string; mode?: string; paymentId?: string } = {};
+    if (paymentRespHeader) {
+      try {
+        const padded = paymentRespHeader.replace(/-/g, '+').replace(/_/g, '/').padEnd(paymentRespHeader.length + ((4 - (paymentRespHeader.length % 4)) % 4), '=');
+        paymentResp = JSON.parse(atob(padded));
+      } catch { /* ignore */ }
+    }
+    if (paymentResp.transaction) setTxHash(paymentResp.transaction);
+    setUnlocked(true);
+    log(`5/6 Settled & unlocked: tx=${paymentResp.transaction?.slice(0, 18) || 'n/a'}...`, 'success');
     notify({
       ...NOTICE_PAYMENT_SETTLED,
       title: `−${formatUnits(BigInt(req.amount), 6)} USDC settled`,
       message: `On-chain settlement confirmed. Your wallet was charged ${formatUnits(BigInt(req.amount), 6)} USDC via EIP-3009.`,
-      technicalDetail: `tx: ${settleJson.transaction}`,
+      technicalDetail: paymentResp.transaction ? `tx: ${paymentResp.transaction}` : 'settled',
     });
-
-    setStep('retrying');
-    log('7/9 Retrying protected resource with canonical X-PAYMENT header...');
-    const header = b64(paymentPayload);
-    const unlockedResp = await fetch('/api/x402-demo/protected', { headers: { 'X-PAYMENT': header } });
-    const unlockedJson = await unlockedResp.json();
-    if (!unlockedResp.ok || !unlockedJson.unlocked) { log(`Protected retry failed: ${unlockedJson.error || unlockedResp.status}`, 'error'); setStep('error'); return; }
-    setUnlocked(true);
-    log('8/9 Protected resource unlocked with settlement proof.', 'success');
     notify(NOTICE_RESOURCE_UNLOCKED);
 
     setStep('replay');
-    log('9/9 Replay test: reusing same X-PAYMENT against /api/x402-demo/protected...');
+    log('6/6 Replay test: reusing same X-PAYMENT against /api/x402-demo/protected...');
     const replay = await fetch('/api/x402-demo/protected', { headers: { 'X-PAYMENT': header } });
     const replayJson = await replay.json();
-    const rejected = !replay.ok && (replayJson.error === 'native_payment_replayed' || replayJson.error === 'nonce_used' || replayJson.error === 'payment_already_used');
+    const rejected = !replay.ok && (replayJson.error === 'payment_replayed' || replayJson.error === 'native_payment_replayed' || replayJson.error === 'nonce_used' || replayJson.error === 'payment_already_used');
     setReplayResult(rejected ? `Rejected: ${replayJson.error}` : `Unexpected: ${JSON.stringify(replayJson).slice(0, 80)}`);
-    log(rejected ? `Replay rejected: ${replayJson.error} ✓` : 'Replay test did not return expected rejection', 'error');
+    log(rejected ? `Replay rejected: ${replayJson.error} ✓` : 'Replay test did not return expected rejection', rejected ? 'success' : 'error');
     if (rejected) {
       notify({ ...NOTICE_REPLAY_REJECTED, technicalDetail: `Replay rejected: ${replayJson.error}`, message: 'This Arc Native EIP-3009 payment receipt was already consumed and cannot unlock the protected resource again.' });
     } else {
@@ -247,16 +244,16 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     }
 
     setStep('challenge');
-    log('[GW] 1/7 Requesting protected resource without payment...');
+    log('[GW] 1/5 Requesting protected resource without payment...');
     const first = await fetch('/api/x402-demo/protected');
     const challenge = await first.json();
-    if (first.status !== 402 || !challenge.accepts) { log('Protected endpoint did not return x402 402 challenge', 'error'); setStep('error'); return; }
+    if (first.status !== 402 || !Array.isArray(challenge.accepts)) { log('Protected endpoint did not return x402 402 challenge', 'error'); setStep('error'); return; }
 
     const accepts = challenge.accepts as Requirement[];
-    const gwOption = accepts.find((a) => a.extra?.name === 'GatewayWalletBatched');
+    const gwOption = accepts.find((a) => a.extra?.name === 'GatewayWalletBatched' || a.extra?.transferMethod === 'gateway-batched-eip3009');
     if (!gwOption) { log('No GatewayWalletBatched option in 402 response. Gateway may not be enabled.', 'error'); setStep('error'); return; }
     setRequirement(gwOption);
-    log(`[GW] 2/7 Found Gateway option: ${formatUnits(BigInt(gwOption.amount), 6)} USDC via ${gwOption.extra?.name}`, 'success');
+    log(`[GW] 2/5 Found Gateway option: ${formatUnits(BigInt(gwOption.amount), 6)} USDC via ${gwOption.extra?.name}`, 'success');
 
     const client = createPublicClient({ transport: http(ARC_RPC) });
     const balance = await client.readContract({ address: USDC, abi: BALANCE_ABI, functionName: 'balanceOf', args: [address] });
@@ -277,14 +274,14 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     const paymentPayload = {
       x402Version: 2,
       resource: `${window.location.origin}/api/x402-demo/protected`,
-      accepted: { ...gwOption, asset: getAddress(gwOption.asset), payTo: getAddress(gwOption.payTo), extra: { ...gwOption.extra, name: 'GatewayWalletBatched' } },
+      accepted: { ...gwOption, asset: getAddress(gwOption.asset), payTo: getAddress(gwOption.payTo), extra: { ...gwOption.extra, name: gwDomainName } },
       payload: {
         signature: '0x' as Hex,
         authorization: { from: address, to: getAddress(gwOption.payTo), value: gwOption.amount, validAfter: '0', validBefore, nonce },
       },
     };
 
-    log('[GW] 3/7 Signing EIP-3009 for Gateway batching...');
+    log('[GW] 3/5 Signing EIP-3009 for Gateway batching...');
     log(`[GW] Domain: name=${gwDomainName} version=${gwDomainVersion} verifyingContract=${gwVerifyingContract.slice(0, 10)}...`);
     try {
       const provider = await wallet.getEthereumProvider();
@@ -303,55 +300,42 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       log(`Signature created: ${paymentPayload.payload.signature.slice(0, 18)}...`, 'success');
     } catch (e) { log(`Signature failed: ${e instanceof Error ? e.message : String(e)}`, 'error'); setStep('error'); return; }
 
-    const body = { x402Version: 2, paymentRail: 'circle-gateway', paymentPayload, paymentRequirements: gwOption };
+    setStep('paying');
+    log('[GW] 4/5 Calling protected resource with PAYMENT-SIGNATURE header (server runs verify+settle inline)...');
+    const header = b64(paymentPayload);
+    const paid = await fetch('/api/x402-demo/protected', { headers: { 'PAYMENT-SIGNATURE': header } });
+    const paidJson = await paid.json();
+    if (!paid.ok || !paidJson.unlocked) { log(`Gateway payment failed: ${paidJson.error || paid.status} — ${paidJson.reason || paidJson.message || ''}`, 'error'); setStep('error'); return; }
 
-    setStep('verifying');
-    log('[GW] 4/7 Verifying via BatchFacilitatorClient...');
-    const verify = await fetch('/api/x402/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const verifyJson = await verify.json();
-    if (!verifyJson.isValid) { log(`Gateway verify failed: ${verifyJson.invalidReason || verifyJson.error}`, 'error'); setStep('error'); return; }
-    log(`[GW] Verified payer: ${shortenAddress(verifyJson.payer)}`, 'success');
-    notify(NOTICE_PAYMENT_VERIFIED);
-
-    setStep('settling');
-    log('[GW] 5/7 Settling via Circle Gateway (may be async/batched)...');
-    const settle = await fetch('/api/x402/settle', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const settleJson = await settle.json();
-    if (!settleJson.success) { log(`Gateway settle failed: ${settleJson.errorReason || settleJson.error}`, 'error'); setStep('error'); return; }
-    const isPending = settleJson.extra?.status === 'accepted_pending_settlement';
-    if (isPending) {
-      log('[GW] Settlement accepted (pending batch finalization)', 'warn');
-    } else {
-      setTxHash(settleJson.transaction || '');
-      log(`[GW] 6/7 Settled: ${settleJson.transaction?.slice(0, 18) || 'batched'}...`, 'success');
+    const paymentRespHeader = paid.headers.get('PAYMENT-RESPONSE') || paid.headers.get('payment-response');
+    let paymentResp: { transaction?: string; payer?: string; mode?: string; paymentId?: string } = {};
+    if (paymentRespHeader) {
+      try {
+        const padded = paymentRespHeader.replace(/-/g, '+').replace(/_/g, '/').padEnd(paymentRespHeader.length + ((4 - (paymentRespHeader.length % 4)) % 4), '=');
+        paymentResp = JSON.parse(atob(padded));
+      } catch { /* ignore */ }
     }
+    if (paymentResp.transaction) setTxHash(paymentResp.transaction || '');
+    setUnlocked(true);
+    log(`[GW] Settled & unlocked via Circle Gateway: ${paymentResp.transaction?.slice(0, 18) || 'batched'}...`, 'success');
     notify({
       ...NOTICE_PAYMENT_SETTLED,
       title: `−${formatUnits(BigInt(gwOption.amount), 6)} USDC settled`,
       message: `Circle Gateway settlement confirmed. Your wallet was charged ${formatUnits(BigInt(gwOption.amount), 6)} USDC via EIP-3009.`,
-      technicalDetail: settleJson.transaction ? `tx: ${settleJson.transaction}` : 'batched (pending finalization)',
+      technicalDetail: paymentResp.transaction ? `tx: ${paymentResp.transaction}` : 'batched settlement',
     });
-
-    setStep('retrying');
-    log('[GW] 6/7 Retrying protected resource with PAYMENT-SIGNATURE header...');
-    const header = b64(paymentPayload);
-    const unlockedResp = await fetch('/api/x402-demo/protected', { headers: { 'PAYMENT-SIGNATURE': header } });
-    const unlockedJson = await unlockedResp.json();
-    if (!unlockedResp.ok || !unlockedJson.unlocked) { log(`Protected retry failed: ${unlockedJson.error || unlockedResp.status}`, 'error'); setStep('error'); return; }
-    setUnlocked(true);
-    log('[GW] 7/7 Protected resource unlocked via Circle Gateway.', 'success');
     notify(NOTICE_RESOURCE_UNLOCKED);
 
     setStep('replay');
-    log('[GW] 8/8 Replay test: reusing same PAYMENT-SIGNATURE...');
+    log('[GW] 5/5 Replay test: reusing same PAYMENT-SIGNATURE...');
     const replayResp = await fetch('/api/x402-demo/protected', { headers: { 'PAYMENT-SIGNATURE': header } });
     const replayJson = await replayResp.json();
-    const replayRejected = !replayResp.ok || replayJson.error === 'gateway_payment_replayed' || replayJson.error === 'nonce_used' || replayJson.error === 'payment_already_used';
+    const replayRejected = !replayResp.ok || replayJson.error === 'payment_replayed' || replayJson.error === 'gateway_payment_replayed' || replayJson.error === 'nonce_used' || replayJson.error === 'payment_already_used';
     if (replayRejected) {
       const reason = replayJson.error || 'gateway_payment_replayed';
       setReplayResult(`Rejected: ${reason}`);
-      log(`[GW] Receipt already used protection verified ✓`, 'error');
-      log(`[GW] Replay rejected: ${reason} ✓`, 'error');
+      log(`[GW] Receipt already used protection verified ✓`, 'success');
+      log(`[GW] Replay rejected: ${reason} ✓`, 'success');
       notify({ ...NOTICE_REPLAY_REJECTED, message: 'This Circle Gateway payment receipt was already consumed and cannot unlock the protected resource again.', technicalDetail: `Replay rejected: ${reason}` });
     } else {
       setReplayResult('Unexpected: replay unlocked resource');
@@ -659,8 +643,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
 
           <DevDetails>
             {mode === 'arc-native'
-              ? <div>Technical path: x402 exact · EIP-3009 transferWithAuthorization · network {NETWORK} · X-PAYMENT · self-hosted relayer · nonce replay protection.</div>
-              : <div>Technical path: GatewayWalletBatched · PAYMENT-SIGNATURE · /api/x402/settle (circle-gateway rail) · consume-once replay ledger.</div>}
+              ? <div>Technical path: x402 exact · EIP-3009 transferWithAuthorization · network {NETWORK} · X-PAYMENT header · server-side verify+settle inline · nonce replay protection.</div>
+              : <div>Technical path: GatewayWalletBatched · PAYMENT-SIGNATURE header · server-side BatchFacilitator inline verify+settle · consume-once replay ledger.</div>}
           </DevDetails>
         </div>
       </aside>

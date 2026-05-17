@@ -134,7 +134,7 @@ async function handleGatewayPayment(
   const paymentId = deriveGatewayPaymentId(proof, gatewayRequirements);
 
   // ─── Atomic consume-once: looks up settled record + marks consumed in one RPC. ───
-  // Returns 'missing' if /api/x402/settle was never called for this paymentId,
+  // Returns 'missing' if payment was never settled for this paymentId,
   // 'replayed' if already consumed, or success with evidence.
   const consumed = await consumeGatewayPayment(paymentId);
 
@@ -142,7 +142,7 @@ async function handleGatewayPayment(
     return {
       ok: false,
       response: NextResponse.json(
-        { ok: false, error: 'gateway_payment_not_found', paymentId, message: 'Payment must be settled via /api/x402/settle first.' },
+        { ok: false, error: 'gateway_payment_not_found', paymentId, message: 'Payment not found or not yet settled.' },
         { status: 402 },
       ),
     };

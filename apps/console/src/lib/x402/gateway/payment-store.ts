@@ -141,8 +141,8 @@ function normalizeStatusForDb(status: GatewayPaymentStatus): string {
 // ─── public API ───────────────────────────────────────────────────────────────
 
 /**
- * Upsert a payment row. Used by /api/x402/verify (status='verified') and
- * /api/x402/settle (status='settled' | 'accepted_pending_settlement').
+ * Upsert a payment row. Used by middleware verify (status='verified') and
+ * middleware settle (status='settled' | 'accepted_pending_settlement').
  *
  * Merges with any existing row for the same paymentId so verify→settle
  * transitions accumulate state.

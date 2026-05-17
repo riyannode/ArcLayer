@@ -40,8 +40,6 @@ export function GET() {
     amount,
     payTo,
     facilitator: '/api/x402',
-    verify: '/api/x402/verify',
-    settle: '/api/x402/settle',
     maxTimeoutSeconds,
     extra: {
       name: 'USDC',
@@ -60,8 +58,6 @@ export function GET() {
     amount,
     payTo,
     facilitator: '/api/x402',
-    verify: '/api/x402/verify',
-    settle: '/api/x402/settle',
     maxTimeoutSeconds,
     extra: {
       name: CIRCLE_BATCHING_NAME,

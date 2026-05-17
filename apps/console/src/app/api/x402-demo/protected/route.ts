@@ -1,246 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAddress } from 'viem';
-import {
-  ARC_TESTNET_CAIP2_NETWORK,
-  CIRCLE_BATCHING_NAME,
-  CIRCLE_BATCHING_VERSION,
-  GATEWAY_NETWORK_NAME,
-  consumeGatewayPayment,
-  consumeNativePayment,
-  deriveGatewayPaymentId,
-  deriveNativePaymentId,
-  getArcTestnetGatewayConfig,
-  getGatewayPayment,
-  isBatchPayment,
-  isGatewayEnabled,
-  USDC_ADDRESS,
-  X402_VERSION_V2,
-  verifyExactSettlementProof,
-  type PaymentRequirements,
-} from '@/lib/x402';
+import { withX402 } from '@/lib/x402';
 
 export const runtime = 'nodejs';
 
 const DEFAULT_AMOUNT_ATOMIC = '10000'; // 0.01 USDC, 6 decimals
-const DEFAULT_PAY_TO = '0x4aA3402575b6D98EacE35A823EFa267F7365bdD2';
+const RESOURCE = '/api/x402-demo/protected';
 
-function receiver(): `0x${string}` {
-  const configured = process.env.X402_RECEIVER_ADDRESS || process.env.X402_PAY_TO || DEFAULT_PAY_TO;
-  return getAddress(configured) as `0x${string}`;
-}
-
-function buildArcNativeRequirements(): PaymentRequirements {
-  return {
-    scheme: 'exact',
-    network: ARC_TESTNET_CAIP2_NETWORK,
-    asset: getAddress(USDC_ADDRESS) as `0x${string}`,
-    amount: process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC,
-    payTo: receiver(),
-    maxTimeoutSeconds: Number(process.env.X402_REQUIREMENT_TTL_SECONDS || '300'),
-    extra: { name: 'USDC', version: '2', transferMethod: 'eip3009', decimals: 6, symbol: 'USDC' },
-  };
-}
-
-function buildGatewayRequirements() {
-  return {
-    scheme: 'exact',
-    network: GATEWAY_NETWORK_NAME,
-    asset: getAddress(USDC_ADDRESS) as `0x${string}`,
-    amount: process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC,
-    payTo: receiver(),
-    maxTimeoutSeconds: Number(process.env.X402_REQUIREMENT_TTL_SECONDS || '300'),
-    extra: {
-      name: CIRCLE_BATCHING_NAME,
-      version: CIRCLE_BATCHING_VERSION,
-      verifyingContract: process.env.X402_GATEWAY_WALLET_ADDRESS || getArcTestnetGatewayConfig().gatewayWallet,
-      supportedChain: GATEWAY_NETWORK_NAME,
-      transferMethod: 'gateway-batched-eip3009',
-      status: 'live',
+async function protectedHandler(_req: NextRequest) {
+  return NextResponse.json({
+    ok: true,
+    unlocked: true,
+    message: 'ArcLayer x402 protected resource unlocked',
+    data: {
+      proof: 'paid-content',
+      resource: RESOURCE,
+      timestamp: new Date().toISOString(),
     },
-  };
-}
-
-function paymentRequiredResponse() {
-  const arcNative = buildArcNativeRequirements();
-  const gateway = buildGatewayRequirements();
-  return NextResponse.json(
-    {
-      ok: false,
-      error: 'payment_required',
-      message: 'This resource requires x402 payment. Arc Native uses X-PAYMENT. Circle Gateway uses PAYMENT-SIGNATURE.',
-      x402Version: X402_VERSION_V2,
-      paymentRequirements: arcNative,
-      accepts: [arcNative, gateway],
-    },
-    { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2), 'Content-Type': 'application/json' } },
-  );
-}
-
-function decodePaymentHeader(raw: string): unknown | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-    try { return JSON.parse(trimmed); } catch { return null; }
-  }
-  try {
-    const normalized = trimmed.replace(/-/g, '+').replace(/_/g, '/');
-    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
-    return JSON.parse(Buffer.from(padded, 'base64').toString('utf8'));
-  } catch { return null; }
-}
-
-function encodePaymentResponse(value: unknown): string {
-  return Buffer.from(JSON.stringify(value)).toString('base64url');
-}
-
-function extractPaymentProof(req: NextRequest): { proof: unknown; header: 'PAYMENT-SIGNATURE' | 'X-PAYMENT' } | null {
-  const gatewayRaw = req.headers.get('payment-signature');
-  if (gatewayRaw) return { proof: decodePaymentHeader(gatewayRaw), header: 'PAYMENT-SIGNATURE' };
-  const arcRaw = req.headers.get('x-payment');
-  if (arcRaw) return { proof: decodePaymentHeader(arcRaw), header: 'X-PAYMENT' };
-  return null;
-}
-
-export async function GET(req: NextRequest) {
-  const extracted = extractPaymentProof(req);
-  if (!extracted?.proof || typeof extracted.proof !== 'object') return paymentRequiredResponse();
-
-  const proof = extracted.proof as Record<string, unknown>;
-  const accepted = (proof.accepted || proof.paymentRequirements) as Record<string, unknown> | undefined;
-  const gatewayRequirements = buildGatewayRequirements();
-
-  if (extracted.header === 'PAYMENT-SIGNATURE' || isBatchPayment(accepted)) {
-    if (!isGatewayEnabled()) {
-      return NextResponse.json(
-        { ok: false, unlocked: false, error: 'gateway_mode_disabled', message: 'Circle Gateway supports Arc Testnet, but Gateway mode is disabled until ArcLayer E2E succeeds.', accepts: [buildArcNativeRequirements(), gatewayRequirements] },
-        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-
-    try {
-      // ─── Step 1: Derive paymentId ─────────────────────────────────────────────
-      const paymentId = deriveGatewayPaymentId(proof, gatewayRequirements);
-
-      // ─── Step 2: Check payment exists in x402_gateway_payments ────────────────
-      const existing = await getGatewayPayment(paymentId);
-      if (!existing) {
-        return NextResponse.json(
-          { ok: false, unlocked: false, error: 'gateway_payment_not_settled', message: 'No settlement record found for this payment. Call /api/x402/settle first.', paymentId, accepts: [buildArcNativeRequirements(), gatewayRequirements] },
-          { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-        );
-      }
-
-      // ─── Step 3: Require status settled (or accepted_pending_settlement) ──────
-      const isSettled = existing.status === 'settled' || existing.status === 'accepted_pending_settlement' || existing.status === 'consumed';
-      if (!isSettled) {
-        return NextResponse.json(
-          { ok: false, unlocked: false, error: 'gateway_payment_not_settled', message: `Payment exists but status is "${existing.status}". Settlement required before unlock.`, paymentId, accepts: [buildArcNativeRequirements(), gatewayRequirements] },
-          { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-        );
-      }
-
-      // ─── Step 4: Atomically consume paymentId once ────────────────────────────
-      const consumed = await consumeGatewayPayment(paymentId);
-      if (!consumed.ok && consumed.reason === 'replayed') {
-        return NextResponse.json(
-          { ok: false, unlocked: false, error: 'gateway_payment_replayed', message: 'This Gateway payment has already been consumed. Replay rejected.', paymentId, accepts: [buildArcNativeRequirements(), gatewayRequirements] },
-          { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-        );
-      }
-
-      // ─── Step 5: Unlock resource ──────────────────────────────────────────────
-      const paymentResponse = {
-        success: true,
-        mode: 'circle-gateway',
-        paymentId,
-        payer: existing.payer,
-        transaction: existing.transaction ?? null,
-        network: existing.network ?? GATEWAY_NETWORK_NAME,
-        status: existing.status,
-      };
-      return NextResponse.json(
-        { ok: true, message: 'ArcLayer x402 protected resource unlocked', mode: 'circle-gateway', payment: paymentResponse, unlocked: true },
-        { headers: { 'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse) } },
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Gateway unlock failed';
-      return NextResponse.json(
-        { ok: false, unlocked: false, error: 'gateway_error', message, accepts: [buildArcNativeRequirements(), gatewayRequirements] },
-        { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-  }
-
-  const arcRequirements = buildArcNativeRequirements();
-  const payload = proof.payload as Record<string, unknown> | undefined;
-  const authorization = payload?.authorization as Record<string, unknown> | undefined;
-  if (!payload?.signature || !authorization?.from || !authorization?.nonce) {
-    return NextResponse.json(
-      { ok: false, unlocked: false, error: 'invalid_payment_proof', message: 'Payment proof must include payload.signature and payload.authorization.', accepts: [arcRequirements, gatewayRequirements] },
-      { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
-  }
-
-  let result: Awaited<ReturnType<typeof verifyExactSettlementProof>>;
-  try {
-    result = await verifyExactSettlementProof({
-      paymentPayload: proof as unknown as Parameters<typeof verifyExactSettlementProof>[0]['paymentPayload'],
-      paymentRequirements: arcRequirements,
-    });
-  } catch (err) {
-    return NextResponse.json(
-      {
-        ok: false,
-        unlocked: false,
-        error: 'invalid_payment_proof',
-        message: err instanceof Error ? err.message : 'Invalid Arc Native payment proof.',
-        accepts: [arcRequirements, gatewayRequirements],
-      },
-      { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
-  }
-  if (!result.ok || !result.payer || !result.nonce) {
-    return NextResponse.json(
-      { ok: false, unlocked: false, error: result.reason || 'invalid_payment_proof', message: result.message || 'Payment proof is invalid.', accepts: [arcRequirements, gatewayRequirements] },
-      { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
-  }
-
-  const paymentId = deriveNativePaymentId({
-    network: arcRequirements.network,
-    asset: arcRequirements.asset,
-    from: result.payer,
-    nonce: result.nonce,
   });
-
-  const consumed = await consumeNativePayment(paymentId);
-  if (!consumed.ok) {
-    if (consumed.reason === 'missing' || consumed.reason === 'not_settled') {
-      return NextResponse.json(
-        {
-          ok: false,
-          unlocked: false,
-          error: consumed.reason === 'missing' ? 'native_payment_not_found' : 'native_payment_not_settled',
-          paymentId,
-          message: 'Payment must be settled via /api/x402/settle before unlocking this resource.',
-        },
-        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-
-    return NextResponse.json(
-      { ok: false, unlocked: false, error: 'native_payment_replayed', paymentId },
-      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
-  }
-
-  const evidence = consumed.evidence;
-  const paymentResponse = { success: true, mode: 'arc-native', payer: result.payer, transaction: evidence.txHash ?? result.txHash ?? null, amount: result.amount, nonce: result.nonce, paymentId };
-  return NextResponse.json(
-    { ok: true, message: 'ArcLayer x402 protected resource unlocked', mode: 'arc-native', payment: paymentResponse, unlocked: true },
-    { headers: { 'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse) } },
-  );
-  
 }
 
-export async function POST(req: NextRequest) { return GET(req); }
+export const GET = withX402(protectedHandler, {
+  amount: process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC,
+  resource: RESOURCE,
+  description: 'ArcLayer x402 dual-mode demo: Circle Gateway + Arc Native EIP-3009',
+});
+
+export const POST = GET;

@@ -129,7 +129,7 @@ export async function verifyExactSettlementProof(
     return {
       ok: false,
       reason: 'not_settled',
-      message: 'Authorization has not been settled on-chain yet. Call /api/x402/settle first.',
+      message: 'Authorization has not been settled on-chain yet. Settlement happens inline during paid retry.',
     };
   }
 

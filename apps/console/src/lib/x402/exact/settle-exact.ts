@@ -3,8 +3,8 @@
  *
  * STRICT RAIL RULE:
  *   This module NEVER calls Circle Gateway REST, BatchFacilitatorClient, or any
- *   Circle API. Gateway settlement lives exclusively in /api/x402/settle's
- *   `paymentRail === "circle-gateway"` branch.
+ *   Circle API. Gateway settlement lives exclusively in the middleware's
+ *   `handleGateway()` path.
  *
  * IDEMPOTENCY:
  *   Uses atomic reserve-before-submit via `x402_native_claim_payment` RPC.
@@ -289,7 +289,7 @@ async function settleOnChain(input: SettleExactInput): Promise<SettleResponse> {
  * Strict rail rule:
  *   This function is self-hosted Arc Native ONLY. It never calls Circle Gateway
  *   REST and never uses BatchFacilitatorClient. Gateway settlement lives only in
- *   /api/x402/settle's `paymentRail === "circle-gateway"` branch.
+ *   the middleware's `handleGateway()` path.
  */
 export async function settleExactPayment(input: SettleExactInput): Promise<SettleResponse> {
   // Check authorization hasn't expired

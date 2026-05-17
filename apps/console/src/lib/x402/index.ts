@@ -37,3 +37,4 @@ export {
   type X402PaymentProvider,
   type X402ReceiptStatus,
 } from './receipt';
+export { withX402, withGateway, withNative, type X402MiddlewareOptions } from './middleware';

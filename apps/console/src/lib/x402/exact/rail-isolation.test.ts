@@ -4,9 +4,9 @@
  * Proves:
  * 1. Arc Native rail never calls Circle Gateway
  * 2. Circle Gateway rail never falls back to self-hosted native relayer
- * 3. /api/x402/settle rejects missing paymentRail
- * 4. /api/x402/settle rejects rail mismatch (arc-native + GatewayWalletBatched)
- * 5. /api/x402/settle rejects rail mismatch (circle-gateway + non-batch)
+ * 3. Middleware rejects missing paymentRail
+ * 4. Middleware rejects rail mismatch (arc-native + GatewayWalletBatched)
+ * 5. Middleware rejects rail mismatch (circle-gateway + non-batch)
  * 6. Arc Native idempotency: same nonce returns alreadySettled
  * 7. Arc Native lost-success recovery: authorization_used → backfill
  * 8. Gateway replay: consumed payment cannot unlock twice
