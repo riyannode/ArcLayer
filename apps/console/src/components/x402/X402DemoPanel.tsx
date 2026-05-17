@@ -67,6 +67,18 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   const [requirement, setRequirement] = useState<Requirement | null>(null);
   const [gatewayProbe, setGatewayProbe] = useState<GatewayProbe | null>(null);
   const [gatewayBalance, setGatewayBalance] = useState<GatewayBalance | null>(null);
+  const [copiedDeposit, setCopiedDeposit] = useState(false);
+
+  const GATEWAY_WALLET_ADDR = getAddress('0x0077777d7EBA4688BDeF3E311b846F25870A19B9');
+  const copyDepositAddress = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(GATEWAY_WALLET_ADDR);
+      setCopiedDeposit(true);
+      setTimeout(() => setCopiedDeposit(false), 1500);
+    } catch {
+      // clipboard might be unavailable
+    }
+  }, [GATEWAY_WALLET_ADDR]);
 
   const walletMode: WalletMode = eoaConnected ? 'eoa' : authenticated ? 'passkey' : null;
   const activeAddress = useMemo(() => {
@@ -526,8 +538,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
         {compact && (
           <div className="flex flex-col gap-1 border-b border-white/10 pb-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <div className="mb-1 font-mono text-[9px] tracking-[0.24em] text-[#C5A67C]">ARCLAYER x402 MARKET</div>
-              <h2 className={`font-semibold tracking-[-0.04em] text-white ${c.headTitle}`}>Pay per API call</h2>
+              <h2 className={`font-semibold tracking-[-0.04em] text-white ${c.headTitle}`}>Pay API Call</h2>
             </div>
             <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 font-mono text-[10px] text-white/80 sm:mt-0">
               <span className={activeAuthed ? 'h-1.5 w-1.5 rounded-full bg-green-400' : 'h-1.5 w-1.5 rounded-full bg-yellow-400'} />
@@ -541,8 +552,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               <div className={`mb-1.5 font-mono ${c.label} tracking-[0.2em] text-white/80`}>PROTECTED RESOURCE</div>
-              <h3 className={`font-semibold tracking-[-0.03em] text-white ${c.sectionTitle}`}>Will this API unlock after x402 payment?</h3>
-              <p className={`mt-1.5 font-mono text-white/80 ${compact ? 'text-[11px]' : 'text-[12px]'}`}>/api/x402-demo/protected</p>
+              <h3 className={`font-semibold tracking-[-0.03em] text-white ${c.sectionTitle}`}>Pay with x402 to unlock API</h3>
             </div>
             <div className={`rounded-full bg-green-500/15 px-2.5 py-0.5 font-mono ${c.label} text-green-300`}>LIVE</div>
           </div>
@@ -573,11 +583,11 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
               <span className={`font-mono ${c.label} tracking-[0.18em] text-[#C5A67C]`}>ARC NATIVE</span>
               <span className={`rounded-full bg-green-500/15 px-2 py-0.5 font-mono ${c.label} text-green-300`}>RECOMMENDED</span>
             </div>
-            <div className={`font-semibold text-white ${compact ? 'text-base' : 'text-xl'}`}>EOA pay-per-call</div>
-            <p className={`mt-1.5 leading-5 text-white/80 ${c.body}`}>No deposit. Sign one EIP-3009 authorization and settle USDC directly on Arc.</p>
+            <div className={`font-semibold text-white ${compact ? 'text-base' : 'text-xl'}`}>EOA Direct Payment</div>
+            <p className={`mt-1.5 leading-5 text-white/80 ${c.body}`}>No deposit needed. Sign once, pay directly on Arc.</p>
             <div className={`mt-3 grid grid-cols-2 gap-2 font-mono ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
               <div className={`${c.cardRadiusXs} bg-black/25 ${c.cardPadXs}`}><div className="text-white/80">Deposit</div><div className="text-green-300">Not required</div></div>
-              <div className={`${c.cardRadiusXs} bg-black/25 ${c.cardPadXs}`}><div className="text-white/80">Best for</div><div className="text-white/70">Occasional calls</div></div>
+              <div className={`${c.cardRadiusXs} bg-black/25 ${c.cardPadXs}`}><div className="text-white/80">Best for</div><div className="text-white/70">As-needed API calls</div></div>
             </div>
           </button>
 
@@ -586,12 +596,30 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
               <span className={`font-mono ${c.label} tracking-[0.18em] text-[#7CB5C5]`}>CIRCLE GATEWAY</span>
               <span className={`rounded-full bg-white/10 px-2 py-0.5 font-mono ${c.label} text-white/80`}>POWER USER</span>
             </div>
-            <div className={`font-semibold text-white ${compact ? 'text-base' : 'text-xl'}`}>Pre-funded execution</div>
-            <p className={`mt-1.5 leading-5 text-white/80 ${c.body}`}>Deposit once, then execute high-frequency agent payments through Gateway batching.</p>
+            <div className={`font-semibold text-white ${compact ? 'text-base' : 'text-xl'}`}>Prepaid Execution</div>
+            <p className={`mt-1.5 leading-5 text-white/80 ${c.body}`}>Deposit once, pay agents faster with Gateway batching.</p>
             <div className={`mt-3 grid grid-cols-2 gap-2 font-mono ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
               <div className={`${c.cardRadiusXs} bg-black/25 ${c.cardPadXs}`}><div className="text-white/80">Your deposit</div><div className={gatewayBalance?.depositedUsdc && Number(gatewayBalance.depositedUsdc) > 0 ? 'text-green-300' : 'text-yellow-300'}>{gatewayBalance?.depositedUsdc ?? '0'} USDC</div></div>
               <div className={`${c.cardRadiusXs} bg-black/25 ${c.cardPadXs}`}><div className="text-white/80">Best for</div><div className="text-white/70">HFT agents</div></div>
             </div>
+            {walletMode === 'passkey' && (
+              <div className={`mt-3 ${c.cardRadiusXs} border border-[#7CB5C5]/25 bg-[#7CB5C5]/[0.06] ${c.cardPadXs} font-mono ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
+                <div className="mb-1 text-[#7CB5C5]">Deposit USDC to GatewayWallet</div>
+                <div className="flex items-center gap-2">
+                  <code className="min-w-0 flex-1 truncate text-white/80">{GATEWAY_WALLET_ADDR}</code>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyDepositAddress();
+                    }}
+                    className="shrink-0 rounded border border-[#7CB5C5]/35 px-2 py-1 text-[#7CB5C5] hover:bg-[#7CB5C5]/10"
+                  >
+                    {copiedDeposit ? 'COPIED' : 'COPY'}
+                  </button>
+                </div>
+              </div>
+            )}
           </button>
         </div>
 

@@ -323,23 +323,116 @@ function JobsPage() {
   return (
     <div className="aureo-page">
       <div className="aureo-shell">
-        <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="aureo-mono-label mb-3">PROTOCOL · MANUAL JOBS</div>
-            <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
-              Manual Agent <span className="italic text-[#C5A67C]">Jobs</span>
-            </h1>
-            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-              Pick an agent, assign a task, set a USDC budget, and lock funds in the Settlement Vault.
+        <div className="mb-8">
+          <div className="aureo-mono-label mb-3">PROTOCOL · JOBS</div>
+          <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
+            Create a <span className="italic text-[#C5A67C]">Job</span>
+          </h1>
+          <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
+            Pick an agent, assign a task, set a USDC budget, and lock funds in the Settlement Vault.
+          </p>
+        </div>
+
+        {/* Job type chooser cards */}
+        <div className="mb-10 grid gap-6 md:grid-cols-2">
+          {/* Manual Job Card */}
+          <button
+            onClick={() => document.getElementById('manual-job-section')?.scrollIntoView({ behavior: 'smooth' })}
+            className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 text-left transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
+          >
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded border border-white/10 bg-black/40 text-[#C5A67C]">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M7 8h10M7 12h6M7 16h8" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Manual Job</div>
+            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Escrow Job</h2>
+            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
+              Assign work to a registered agent. Fund the Settlement Vault with USDC, approve deliverables, and settle payment on-chain.
             </p>
-          </div>
-          <div className="flex flex-wrap gap-3 self-start md:self-auto">
-            <Link href="/a2a" className="btn-bordered" title="Autonomous Agent Network — agent-to-agent commerce">A2A NETWORK ↗</Link>
-            <button onClick={() => loadJobs()} className="btn-bordered">
-              {isRefreshing ? 'REFRESHING\u2026' : 'REFRESH'}
-            </button>
-            <Link href="/register" className="btn-primary">BACK TO REGISTER</Link>
-          </div>
+
+            <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">How it works</div>
+              <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-[#C5A67C]">→</span>
+                  Create job with agent + worker
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-[#C5A67C]">→</span>
+                  Fund Settlement Vault with USDC
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-[#C5A67C]">→</span>
+                  Worker submits deliverable
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-[#C5A67C]">→</span>
+                  Approve → payout + WorkProof minted
+                </li>
+              </ul>
+            </div>
+
+            <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-[#C5A67C] group-hover:text-[#EAE4D8]">
+              Create Manual Job
+              <span className="transition-transform group-hover:translate-x-1">→</span>
+            </div>
+          </button>
+
+          {/* A2A Job Card */}
+          <Link
+            href="/a2a"
+            className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-cyan-500/40 hover:bg-white/[0.04]"
+          >
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded border border-white/10 bg-black/40 text-cyan-400">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round" />
+              </svg>
+            </div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">A2A Job</div>
+            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Agent-to-Agent</h2>
+            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
+              Call autonomous agents directly via x402 micropayments. No escrow needed — pay per request, fully programmatic.
+            </p>
+
+            <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">How it works</div>
+              <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-cyan-400">→</span>
+                  Discover agents in A2A network
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-cyan-400">→</span>
+                  Call agent endpoint with x402
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-cyan-400">→</span>
+                  Pay per request via micropayment
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-cyan-400">→</span>
+                  Instant settlement, no approval needed
+                </li>
+              </ul>
+            </div>
+
+            <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-cyan-400 group-hover:text-[#EAE4D8]">
+              Browse A2A Network
+              <span className="transition-transform group-hover:translate-x-1">→</span>
+            </div>
+          </Link>
+        </div>
+
+        {/* Manual Job Section */}
+        <div id="manual-job-section">
+        <div className="mb-5 flex flex-wrap gap-3">
+          <button onClick={() => loadJobs()} className="btn-bordered">
+            {isRefreshing ? 'REFRESHING\u2026' : 'REFRESH'}
+          </button>
+          <Link href="/register" className="btn-primary">REGISTER AGENT</Link>
         </div>
 
         {/* Role explainer strip — compact, scannable */}
@@ -779,6 +872,7 @@ function JobsPage() {
                 : '\u26a0 Connect wallet to submit protocol writes.'}
             </div>
           </section>
+        </div>
         </div>
       </div>
     </div>

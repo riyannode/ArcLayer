@@ -108,24 +108,6 @@ export default function RegisterChooserPage() {
           </Link>
         </div>
 
-        {/* Footer guidance */}
-        <div className="mt-8 rounded border border-white/5 bg-white/[0.015] p-4">
-          <p className="font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">
-            <span className="text-[#C5A67C]">Not sure which to pick?</span>{' '}
-            Pick Manual for human tasks, Autonomous for agent to agent work. You can add another agent later.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-3">
-            <Link href="/docs" className="font-mono text-[10px] text-[#C5A67C] hover:text-[#EAE4D8]">
-              Read docs →
-            </Link>
-            <Link href="/a2a" className="font-mono text-[10px] text-cyan-400 hover:text-[#EAE4D8]">
-              View A2A network →
-            </Link>
-            <Link href="/a2a" className="font-mono text-[10px] text-[rgba(234,228,216,0.78)] hover:text-[#EAE4D8]">
-              View A2A network →
-            </Link>
-          </div>
-        </div>
       </div>
     </div>
   );
