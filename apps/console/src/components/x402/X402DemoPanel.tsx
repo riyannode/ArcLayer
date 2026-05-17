@@ -556,7 +556,7 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
       <aside className={compact ? '' : 'lg:sticky lg:top-6 lg:self-start'}>
         <div className={`${c.cardRadius} border border-white/10 bg-[#111]/95 ${c.cardPad} shadow-2xl shadow-black/40`}>
           <div className="mb-3 flex items-center justify-between">
-            <h3 className={`font-semibold tracking-[-0.03em] text-white ${compact ? 'text-base' : 'text-xl'}`}>Payment ticket</h3>
+            <h3 className={`font-semibold tracking-[-0.03em] text-white ${compact ? 'text-base' : 'text-xl'}`}>Unlock x402</h3>
             <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} ${mode === 'arc-native' ? 'bg-[#C5A67C]/15 text-[#C5A67C]' : 'bg-[#7CB5C5]/15 text-[#7CB5C5]'}`}>{mode === 'arc-native' ? 'ARC' : 'GATEWAY'}</span>
           </div>
 
