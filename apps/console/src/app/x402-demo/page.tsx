@@ -23,6 +23,7 @@ interface LogLine { ts: string; msg: string; type: LogType }
 interface RelayerStatus { ready: boolean; relayerAddress: string | null; usdcBalance: string; settleMode?: string; error?: string }
 interface Requirement { scheme: 'exact'; network: string; asset: `0x${string}`; amount: string; payTo: `0x${string}`; maxTimeoutSeconds: number; extra?: Record<string, unknown> }
 interface GatewayProbe { supported: boolean; network?: string; gatewayWallet?: string; error?: string }
+interface GatewayBalance { depositedUsdc: string | null; poolUsdc?: string; method: string; note?: string; error?: string }
 
 function nowTs() { return new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
 function randomNonce(): Hex { return `0x${Array.from(crypto.getRandomValues(new Uint8Array(32))).map((b) => b.toString(16).padStart(2, '0')).join('')}` as Hex; }
@@ -40,6 +41,7 @@ export default function X402DemoPage() {
   const [relayer, setRelayer] = useState<RelayerStatus | null>(null);
   const [requirement, setRequirement] = useState<Requirement | null>(null);
   const [gatewayProbe, setGatewayProbe] = useState<GatewayProbe | null>(null);
+  const [gatewayBalance, setGatewayBalance] = useState<GatewayBalance | null>(null);
 
   const log = useCallback((msg: string, type: LogType = 'info') => setLogs((prev) => [...prev, { ts: nowTs(), msg, type }]), []);
 
@@ -63,6 +65,26 @@ export default function X402DemoPage() {
       })
       .catch(() => setGatewayProbe({ supported: false, error: 'probe_failed' }));
   }, []);
+
+  // Fetch Gateway balance when wallet address is available
+  useEffect(() => {
+    if (!address) { setGatewayBalance(null); return; }
+    fetch(`/api/x402/gateway-balance?address=${address}`)
+      .then((r) => r.json())
+      .then((data: GatewayBalance) => setGatewayBalance(data))
+      .catch((e) => setGatewayBalance({ depositedUsdc: null, method: 'error', error: e instanceof Error ? e.message : String(e) }));
+  }, [address]);
+
+  // Auto-suggest mode based on Gateway deposit balance
+  useEffect(() => {
+    if (!gatewayBalance) return;
+    const deposited = gatewayBalance.depositedUsdc;
+    if (deposited && Number(deposited) >= 0.05) {
+      // User has Gateway deposit — suggest Gateway mode
+      setMode('circle-gateway');
+    }
+    // else: stay on default arc-native
+  }, [gatewayBalance]);
 
   const reset = useCallback(() => {
     setLogs([]); setTxHash(''); setUnlocked(false); setReplayResult('Not run'); setRequirement(null); setStep('idle');
@@ -352,157 +374,150 @@ export default function X402DemoPage() {
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
 
   return (
-    <main className="min-h-screen bg-[#050505] px-4 py-12 text-[#EAE4D8] md:py-20">
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-8">
-          <h1 className="mb-2 font-mono text-[11px] tracking-[0.2em] text-[#C5A67C]">x402 PROTECTED RESOURCE · LIVE DEMO</h1>
-          <p className="max-w-2xl font-mono text-[13px] leading-relaxed text-white/60">Pay USDC on Arc Testnet to unlock a protected API. Pick a payment method: <span className="text-[#C5A67C]">Arc Native Payment</span> (direct on-chain) or <span className="text-[#7CB5C5]">Circle Gateway Payment</span> (via Circle&apos;s batched settlement).</p>
-        </div>
-
-        {/* MODE SELECTOR */}
-        <div className="mb-6 flex gap-3">
-          <button
-            onClick={() => setMode('arc-native')}
-            className={`relative flex-1 border py-3 font-mono text-[11px] tracking-[0.16em] transition-all ${mode === 'arc-native' ? 'border-[#C5A67C]/60 bg-[#C5A67C]/10 text-[#C5A67C]' : 'border-white/10 text-white/40 hover:border-white/20'}`}
-          >
-            ARC NATIVE
-            <span className="ml-2 rounded-sm bg-green-500/20 px-1.5 py-0.5 text-[8px] tracking-normal text-green-400/80">RECOMMENDED</span>
-          </button>
-          <button
-            onClick={() => setMode('circle-gateway')}
-            className={`flex-1 border py-3 font-mono text-[11px] tracking-[0.16em] transition-all ${mode === 'circle-gateway' ? 'border-[#7CB5C5]/60 bg-[#7CB5C5]/10 text-[#7CB5C5]' : 'border-white/10 text-white/40 hover:border-white/20'}`}
-          >
-            CIRCLE GATEWAY
-            <span className="ml-2 rounded-sm bg-white/10 px-1.5 py-0.5 text-[8px] tracking-normal text-white/50">ADVANCED</span>
-          </button>
-        </div>
-
-        {/* STATUS CARDS */}
-        <div className="mb-8 grid gap-4 md:grid-cols-3">
-          <div className="border border-white/10 bg-white/[0.02] p-4 font-mono text-[11px]">
-            <div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">PROTECTED RESOURCE</div>
-            <div>/api/x402-demo/protected</div>
-            <div className="mt-2 text-white/40">No header returns 402. Settled payment returns 200.</div>
+    <main className="min-h-screen bg-[#080808] px-4 py-6 text-[#EAE4D8] md:px-6 md:py-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-5 flex flex-col gap-3 border-b border-white/10 pb-5 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="mb-2 font-mono text-[10px] tracking-[0.24em] text-[#C5A67C]">ARCLAYER x402 MARKET</div>
+            <h1 className="text-3xl font-semibold tracking-[-0.04em] text-white md:text-5xl">Pay per API call</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">Polymarket-style EOA flow for protected AI resources. Pick direct Arc settlement or pre-funded Gateway execution.</p>
           </div>
-          <div className="border border-white/10 bg-white/[0.02] p-4 font-mono text-[11px]">
-            <div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">RELAYER STATUS</div>
-            <div className={relayer?.ready ? 'text-green-400/80' : 'text-red-400/80'}>{relayer?.ready ? 'READY' : 'NOT READY'}</div>
-            <div className="mt-2 text-white/40">{relayer?.relayerAddress ? shortenAddress(relayer.relayerAddress) : 'not configured'} · {relayer?.usdcBalance ?? '0'} USDC</div>
-          </div>
-          <div className="border border-white/10 bg-white/[0.02] p-4 font-mono text-[11px]">
-            <div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">GATEWAY STATUS</div>
-            <div className={gatewayProbe?.supported ? 'text-green-400/80' : 'text-yellow-400/80'}>{gatewayProbe?.supported ? 'SUPPORTED' : 'PROBING...'}</div>
-            <div className="mt-2 text-white/40">{gatewayProbe?.network || 'arcTestnet'} · {gatewayProbe?.gatewayWallet ? shortenAddress(gatewayProbe.gatewayWallet) : 'checking...'}</div>
+          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[11px] text-white/55">
+            <span className={authenticated ? 'h-2 w-2 rounded-full bg-green-400' : 'h-2 w-2 rounded-full bg-yellow-400'} />
+            {authenticated && address ? shortenAddress(address) : 'Wallet not connected'}
           </div>
         </div>
 
-        {/* PAYMENT MODE INFO */}
-        <div className="mb-6 border border-white/10 bg-white/[0.02] p-4 font-mono text-[11px]">
-          <div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">ACTIVE MODE</div>
-          {mode === 'arc-native' ? (
-            <div>
-              <span className="text-[#C5A67C]">Arc Native Payment</span> · Pay per call · <span className="text-green-400/80">No deposit required</span> · payTo {shortenAddress(payTo)}
-              <div className="mt-1.5 text-white/40">Sign once per request. USDC transfers directly via EIP-3009. Best for occasional use.</div>
-            </div>
-          ) : (
-            <div>
-              <span className="text-[#7CB5C5]">Circle Gateway Payment</span> · Batched settlement · <span className="text-yellow-400/80">Requires Gateway deposit</span> · payTo {shortenAddress(payTo)}
-              <div className="mt-1.5 text-white/40">Pre-deposit USDC to Gateway for batch processing. Lower gas per tx. Best for high-frequency agents.</div>
-            </div>
-          )}
-          <DevDetails>
-            {mode === 'arc-native' ? (
-              <div>
-                Technical path: x402 exact · EIP-3009 transferWithAuthorization · network {NETWORK} · header X-PAYMENT · self-hosted relayer · replay protection via on-chain nonce consumption.
+        <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
+          <section className="space-y-5">
+            <div className="rounded-2xl border border-white/10 bg-[#111]/80 p-5 shadow-2xl shadow-black/30">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <div className="mb-2 font-mono text-[10px] tracking-[0.2em] text-white/35">PROTECTED RESOURCE</div>
+                  <h2 className="text-2xl font-semibold tracking-[-0.03em] text-white">Will this API unlock after x402 payment?</h2>
+                  <p className="mt-2 font-mono text-[12px] text-white/45">/api/x402-demo/protected</p>
+                </div>
+                <div className="rounded-full bg-green-500/15 px-3 py-1 font-mono text-[10px] text-green-300">LIVE</div>
               </div>
-            ) : (
-              <div>
-                Technical path: x402 exact · extra.name GatewayWalletBatched · header PAYMENT-SIGNATURE · isBatchPayment routing · BatchFacilitatorClient verify/settle · local paymentId replay ledger.
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-white/10 bg-black/25 p-4">
+                  <div className="font-mono text-[10px] text-white/35">PRICE</div>
+                  <div className="mt-1 text-2xl font-semibold text-white">0.01 USDC</div>
+                  <div className="mt-1 text-xs text-white/40">per resource unlock</div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/25 p-4">
+                  <div className="font-mono text-[10px] text-white/35">RELAYER</div>
+                  <div className={relayer?.ready ? 'mt-1 text-2xl font-semibold text-green-300' : 'mt-1 text-2xl font-semibold text-red-300'}>{relayer?.ready ? 'Ready' : 'Offline'}</div>
+                  <div className="mt-1 text-xs text-white/40">{relayer?.relayerAddress ? shortenAddress(relayer.relayerAddress) : 'not configured'}</div>
+                </div>
+                <div className="rounded-xl border border-white/10 bg-black/25 p-4">
+                  <div className="font-mono text-[10px] text-white/35">GATEWAY</div>
+                  <div className={gatewayProbe?.supported ? 'mt-1 text-2xl font-semibold text-green-300' : 'mt-1 text-2xl font-semibold text-yellow-300'}>{gatewayProbe?.supported ? 'Supported' : 'Checking'}</div>
+                  <div className="mt-1 text-xs text-white/40">{gatewayProbe?.gatewayWallet ? shortenAddress(gatewayProbe.gatewayWallet) : 'arcTestnet'}</div>
+                </div>
               </div>
-            )}
-          </DevDetails>
-        </div>
+            </div>
 
-        {/* ACTION BUTTONS */}
-        <div className="mb-6">
-          {!ready ? <div className="font-mono text-[10px] text-white/30">LOADING WALLET...</div> : !authenticated ? (
-            <>
-              <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} className="mb-3" />
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => register('arclayer-x402').catch((e) => log(`Register failed: ${e instanceof Error ? e.message : String(e)}`, 'error'))} className="border border-[#C5A67C]/40 py-3 font-mono text-[11px] tracking-[0.18em] text-[#C5A67C]">CREATE PASSKEY</button>
-                <button onClick={() => login().catch((e) => log(`Login failed: ${e instanceof Error ? e.message : String(e)}`, 'error'))} className="border border-white/20 py-3 font-mono text-[11px] tracking-[0.18em] text-white/70">SIGN IN</button>
+            <div className="grid gap-4 md:grid-cols-2">
+              <button onClick={() => setMode('arc-native')} className={`cursor-pointer rounded-2xl border p-5 text-left transition-all ${mode === 'arc-native' ? 'border-[#C5A67C]/70 bg-[#C5A67C]/10 shadow-lg shadow-[#C5A67C]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
+                <div className="mb-4 flex items-center justify-between">
+                  <span className="font-mono text-[10px] tracking-[0.18em] text-[#C5A67C]">ARC NATIVE</span>
+                  <span className="rounded-full bg-green-500/15 px-2 py-1 font-mono text-[9px] text-green-300">RECOMMENDED</span>
+                </div>
+                <div className="text-xl font-semibold text-white">EOA pay-per-call</div>
+                <p className="mt-2 text-sm leading-6 text-white/50">No deposit. Sign one EIP-3009 authorization and settle USDC directly on Arc.</p>
+                <div className="mt-4 grid grid-cols-2 gap-2 font-mono text-[11px]">
+                  <div className="rounded-lg bg-black/25 p-3"><div className="text-white/35">Deposit</div><div className="text-green-300">Not required</div></div>
+                  <div className="rounded-lg bg-black/25 p-3"><div className="text-white/35">Best for</div><div className="text-white/70">Occasional calls</div></div>
+                </div>
+              </button>
+
+              <button onClick={() => setMode('circle-gateway')} className={`cursor-pointer rounded-2xl border p-5 text-left transition-all ${mode === 'circle-gateway' ? 'border-[#7CB5C5]/70 bg-[#7CB5C5]/10 shadow-lg shadow-[#7CB5C5]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
+                <div className="mb-4 flex items-center justify-between">
+                  <span className="font-mono text-[10px] tracking-[0.18em] text-[#7CB5C5]">CIRCLE GATEWAY</span>
+                  <span className="rounded-full bg-white/10 px-2 py-1 font-mono text-[9px] text-white/55">POWER USER</span>
+                </div>
+                <div className="text-xl font-semibold text-white">Pre-funded execution</div>
+                <p className="mt-2 text-sm leading-6 text-white/50">Deposit once, then execute high-frequency agent payments through Gateway batching.</p>
+                <div className="mt-4 grid grid-cols-2 gap-2 font-mono text-[11px]">
+                  <div className="rounded-lg bg-black/25 p-3"><div className="text-white/35">Your deposit</div><div className={gatewayBalance?.depositedUsdc && Number(gatewayBalance.depositedUsdc) > 0 ? 'text-green-300' : 'text-yellow-300'}>{gatewayBalance?.depositedUsdc ?? '0'} USDC</div></div>
+                  <div className="rounded-lg bg-black/25 p-3"><div className="text-white/35">Best for</div><div className="text-white/70">HFT agents</div></div>
+                </div>
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
+              <div className="mb-3 font-mono text-[10px] tracking-[0.2em] text-white/35">EXECUTION LOG</div>
+              {logs.length > 0 ? (
+                <div className="max-h-[340px] overflow-y-auto font-mono text-[10.5px] leading-[1.9]">
+                  {logs.map((l, i) => (
+                    <div key={i} className="flex gap-2">
+                      <span className="shrink-0 text-white/20">{l.ts}</span>
+                      <span className={l.type === 'success' ? 'text-green-400/80' : l.type === 'error' ? 'text-red-400/80' : l.type === 'warn' ? 'text-yellow-400/80' : 'text-white/55'}>{l.msg}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="font-mono text-[11px] text-white/35">No execution yet. Connect wallet and run the payment ticket.</div>
+              )}
+            </div>
+          </section>
+
+          <aside className="lg:sticky lg:top-6 lg:self-start">
+            <div className="rounded-2xl border border-white/10 bg-[#111]/95 p-5 shadow-2xl shadow-black/40">
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-xl font-semibold tracking-[-0.03em] text-white">Payment ticket</h3>
+                <span className={mode === 'arc-native' ? 'rounded-full bg-[#C5A67C]/15 px-2 py-1 font-mono text-[9px] text-[#C5A67C]' : 'rounded-full bg-[#7CB5C5]/15 px-2 py-1 font-mono text-[9px] text-[#7CB5C5]'}>{mode === 'arc-native' ? 'ARC' : 'GATEWAY'}</span>
               </div>
-            </>
-          ) : (
-            <button
-              onClick={busy ? undefined : runDemo}
-              disabled={busy || relayer?.ready === false}
-              className={`w-full border py-3 font-mono text-[11px] tracking-[0.18em] disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/30 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505]'}`}
-            >
-              {busy ? `RUNNING: ${step.toUpperCase()}` : step === 'done' ? 'RUN AGAIN' : `RUN ${mode === 'arc-native' ? 'ARC NATIVE' : 'GATEWAY'} x402 FLOW`}
-            </button>
-          )}
-          <button onClick={reset} className="mt-3 w-full border border-white/10 py-2 font-mono text-[10px] tracking-[0.16em] text-white/40">RESET</button>
-        </div>
 
-        {/* RESULTS */}
-        <div className="mb-6 grid gap-4 md:grid-cols-2">
-          <div className="border border-white/10 bg-black/30 p-4 font-mono text-[11px] leading-relaxed">
-            <div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">RESULT</div>
-            <div>Unlocked: <span className={unlocked ? 'text-green-400/80' : 'text-white/40'}>{unlocked ? 'YES' : 'NO'}</span></div>
-            <div>Mode: <span className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{mode === 'arc-native' ? 'Arc Native Payment' : 'Circle Gateway Payment'}</span></div>
-            <div>Replay: <span className={replayResult.startsWith('Rejected') ? 'text-green-400/80' : 'text-white/40'}>{replayResult}</span></div>
-            {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="mt-2 block break-all text-[#C5A67C] underline underline-offset-2">{txHash}</a>}
-          </div>
-          <div className="border border-white/10 bg-black/30 p-4 font-mono text-[11px] leading-relaxed">
-            <div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">CURRENT STEP</div>
-            <div className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{step.toUpperCase()}</div>
-            <div className="mt-2 text-white/40">
-              {mode === 'arc-native'
-                ? 'Payment completed with an on-chain USDC receipt.'
-                : 'Payment verified by Circle Gateway. Settlement handled automatically.'}
-            </div>
-          </div>
-        </div>
-
-        {/* EVIDENCE / PROOF STATUS */}
-        <div className="mb-6 border border-white/10 bg-white/[0.02] p-4 font-mono text-[10.5px] leading-[1.9]">
-          <div className="mb-3 text-[9px] tracking-[0.2em] text-white/30">INTEGRATION EVIDENCE</div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <div className="mb-1 text-[#C5A67C]">Arc Native Payment</div>
-              <div className="text-white/60">✅ Verify: pass</div>
-              <div className="text-white/60">✅ Settle: on-chain pass</div>
-              <div className="text-white/60">✅ Unlock: pass</div>
-              <div className="text-white/60">✅ Receipt already used protection</div>
-              <div className="text-white/60">✅ Settlement tx: <a href="https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline underline-offset-2">0x52c894…f085be4f264</a></div>
-            </div>
-            <div>
-              <div className="mb-1 text-[#7CB5C5]">Circle Gateway Payment</div>
-              <div className="text-white/60">✅ Verify: pass</div>
-              <div className="text-white/60">✅ Live verification: pass (GatewayWalletBatched domain)</div>
-              <div className="text-white/60">✅ Settle: Circle Gateway pass</div>
-              <div className="text-white/60">✅ Unlock: pass</div>
-              <div className="text-white/60">✅ Receipt already used protection</div>
-              <div className="text-white/60">✅ Settlement ID: <span className="font-mono text-[#7CB5C5]">0b17bc8b-…7a91e3</span></div>
-              <div className="text-white/60">✅ EIP-712 domain: <span className="font-mono text-[#7CB5C5]">GatewayWalletBatched v1</span></div>
-              <div className="text-white/45">Circle handles settlement automatically via batched processing.</div>
-            </div>
-          </div>
-        </div>
-
-        {/* LOGS */}
-        {logs.length > 0 && (
-          <div className="max-h-[380px] overflow-y-auto border border-white/10 bg-black/40 p-4 font-mono text-[10.5px] leading-[1.9]">
-            <div className="mb-2 text-[9px] tracking-[0.2em] text-white/30">STEP LOGS</div>
-            {logs.map((l, i) => (
-              <div key={i} className="flex gap-2">
-                <span className="shrink-0 text-white/20">{l.ts}</span>
-                <span className={l.type === 'success' ? 'text-green-400/80' : l.type === 'error' ? 'text-red-400/80' : l.type === 'warn' ? 'text-yellow-400/80' : 'text-white/55'}>{l.msg}</span>
+              <div className="mb-4 grid grid-cols-2 overflow-hidden rounded-xl border border-white/10 bg-black/25 p-1">
+                <button onClick={() => setMode('arc-native')} className={`cursor-pointer rounded-lg py-2 font-mono text-[11px] ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/45'}`}>ARC</button>
+                <button onClick={() => setMode('circle-gateway')} className={`cursor-pointer rounded-lg py-2 font-mono text-[11px] ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/45'}`}>GATEWAY</button>
               </div>
-            ))}
-          </div>
-        )}
+
+              <div className="space-y-3 border-y border-white/10 py-4 font-mono text-[12px]">
+                <div className="flex justify-between gap-4"><span className="text-white/40">Cost</span><span className="text-white">0.01 USDC</span></div>
+                <div className="flex justify-between gap-4"><span className="text-white/40">Pay to</span><span className="text-white">{shortenAddress(payTo)}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-white/40">Network</span><span className="text-white">Arc Testnet</span></div>
+                <div className="flex justify-between gap-4"><span className="text-white/40">Current step</span><span className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{step.toUpperCase()}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-white/40">Unlocked</span><span className={unlocked ? 'text-green-300' : 'text-white/45'}>{unlocked ? 'YES' : 'NO'}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-white/40">Replay guard</span><span className={replayResult.startsWith('Rejected') ? 'text-green-300' : 'text-white/45'}>{replayResult}</span></div>
+              </div>
+
+              {mode === 'circle-gateway' && (!gatewayBalance?.depositedUsdc || Number(gatewayBalance.depositedUsdc) <= 0) && (
+                <div className="mt-4 rounded-xl border border-yellow-400/20 bg-yellow-400/10 p-3 font-mono text-[11px] leading-5 text-yellow-100/80">
+                  Gateway balance is empty for this EOA. Deposit USDC into GatewayWallet first, or use Arc Native for no-deposit execution.
+                </div>
+              )}
+
+              <div className="mt-4">
+                {!ready ? <div className="font-mono text-[10px] text-white/30">LOADING WALLET...</div> : !authenticated ? (
+                  <>
+                    <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} className="mb-3" />
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={() => register('arclayer-x402').catch((e) => log(`Register failed: ${e instanceof Error ? e.message : String(e)}`, 'error'))} className="cursor-pointer rounded-xl border border-[#C5A67C]/40 py-3 font-mono text-[11px] tracking-[0.14em] text-[#C5A67C]">CREATE</button>
+                      <button onClick={() => login().catch((e) => log(`Login failed: ${e instanceof Error ? e.message : String(e)}`, 'error'))} className="cursor-pointer rounded-xl border border-white/20 py-3 font-mono text-[11px] tracking-[0.14em] text-white/70">SIGN IN</button>
+                    </div>
+                  </>
+                ) : (
+                  <button onClick={busy ? undefined : runDemo} disabled={busy || relayer?.ready === false} className={`w-full cursor-pointer rounded-xl border py-3 font-mono text-[11px] tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/30 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                    {busy ? `RUNNING: ${step.toUpperCase()}` : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                  </button>
+                )}
+                <button onClick={reset} className="mt-3 w-full cursor-pointer rounded-xl border border-white/10 py-2 font-mono text-[10px] tracking-[0.14em] text-white/40 hover:border-white/20">RESET</button>
+              </div>
+
+              {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="mt-4 block break-all rounded-xl border border-[#C5A67C]/20 bg-[#C5A67C]/10 p-3 font-mono text-[10px] text-[#C5A67C] underline underline-offset-2">{txHash}</a>}
+
+              <DevDetails>
+                {mode === 'arc-native'
+                  ? <div>Technical path: x402 exact · EIP-3009 transferWithAuthorization · network {NETWORK} · X-PAYMENT · self-hosted relayer · nonce replay protection.</div>
+                  : <div>Technical path: GatewayWalletBatched · PAYMENT-SIGNATURE · BatchFacilitatorClient verify/settle · local paymentId replay ledger.</div>}
+              </DevDetails>
+            </div>
+          </aside>
+        </div>
       </div>
     </main>
   );
