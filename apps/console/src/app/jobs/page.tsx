@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { waitForTransactionReceipt } from '@wagmi/core';
-import { useCircleWallet } from '@/hooks/useCircleWallet';
+import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import {
   buildApproveUsdcConfig,
@@ -37,7 +37,7 @@ export default function JobsPageRoute() {
 function JobsPage() {
   const searchParams = useSearchParams();
   const preselectedAgentId = (searchParams.get('agent') || searchParams.get('agentId'))?.trim() ?? '';
-  const { address, authenticated: isConnected } = useCircleWallet();
+  const { address, isConnected } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const { notify } = useProtectionNotice();
   const [jobs, setJobs] = useState<IndexedJob[]>([]);

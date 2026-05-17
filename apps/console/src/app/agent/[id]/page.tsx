@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { readContract, waitForTransactionReceipt } from '@wagmi/core';
-import { useCircleWallet } from '@/hooks/useCircleWallet';
+import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { CONTRACTS, JOB_ESCROW_ABI, buildApproveUsdcConfig, buildCreateJobConfig, buildFundJobConfig, buildSetBudgetConfig } from '@arclayer/sdk';
 import { formatUSDC, shortenAddress } from '@/lib/contracts';
@@ -124,7 +124,7 @@ function Sparkline({ values }: { values: number[] }) {
 
 export default function AgentProfilePage() {
   const params = useParams<{ id: string }>();
-  const { address, authenticated: isConnected } = useCircleWallet();
+  const { address, isConnected } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const agentId = parseAgentId(params.id);
   const [profile, setProfile] = useState<AgentDetail | null>(null);

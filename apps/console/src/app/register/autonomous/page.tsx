@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { readContract, waitForTransactionReceipt } from '@wagmi/core';
 import { keccak256, stringToBytes } from 'viem';
-import { useCircleWallet } from '@/hooks/useCircleWallet';
+import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { useArcSign } from '@/hooks/useArcSign';
 import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
@@ -76,7 +76,7 @@ function canonicalize(value: unknown): string {
 
 export default function RegisterAutonomousAgentPage() {
   const router = useRouter();
-  const { authenticated: isConnected } = useCircleWallet();
+  const { isConnected } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const { signMessageAsync } = useArcSign();
   const [isSubmitting, setIsSubmitting] = useState(false);
