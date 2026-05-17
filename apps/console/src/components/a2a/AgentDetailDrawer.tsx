@@ -69,7 +69,7 @@ function FeedRow({ item }: { item: FeedItem }) {
   );
 }
 
-export function AgentDetailDrawer({ agent, onClose }: { agent: NetworkAgent | null; onClose: () => void }) {
+export function AgentDetailDrawer({ agent, onClose, onHide }: { agent: NetworkAgent | null; onClose: () => void; onHide?: (agentId: string) => void }) {
   const [copied, setCopied] = useState(false);
   if (!agent) return null;
 
@@ -136,6 +136,27 @@ export function AgentDetailDrawer({ agent, onClose }: { agent: NetworkAgent | nu
             </button>
           ))}
         </div>
+
+        {agent.canHide && onHide && (
+          <div className="mt-4 rounded border border-red-500/15 bg-red-950/[0.05] p-3">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-red-300/80">Dashboard control</p>
+            <p className="mt-1 font-mono text-[11px] text-[#9A8A8A]">
+              Hides this agent from your dashboard view. The agent stays registered on-chain — only your local list is filtered.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm(`Hide ${agent.name} from your dashboard?\n\nThis only affects what you see locally. The agent remains registered on-chain.`)) {
+                  onHide(agent.id);
+                  onClose();
+                }
+              }}
+              className="mt-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-red-300 hover:bg-red-500/20"
+            >
+              Hide from dashboard
+            </button>
+          </div>
+        )}
 
         <div className="mt-6">
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Recent x402/payment receipts</p>

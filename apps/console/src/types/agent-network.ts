@@ -53,6 +53,24 @@ export type AutonomousFeed = {
 
 export type AgentCategory = 'all' | 'signal-oracles' | 'traders' | 'evaluators' | 'developers' | 'data-providers' | 'payment-agents';
 
+export type RegisteredAgentMetadata = {
+  name?: string;
+  role?: string;
+  description?: string;
+  capability?: string[];
+  categories?: AgentCategory[];
+  autonomous?: boolean;
+};
+
+export type RegisteredAgent = {
+  agentId: string;
+  skillHash: string;
+  metadataURI: string;
+  controller: string;
+  registeredAtBlock?: string;
+  metadata: RegisteredAgentMetadata | null;
+};
+
 export type NetworkAgent = {
   id: string;
   name: string;
@@ -70,6 +88,8 @@ export type NetworkAgent = {
   primaryAction: string;
   categories: AgentCategory[];
   activity: FeedItem[];
+  source: 'featured' | 'registry';
+  canHide: boolean;
 };
 
 export type AgentStats = {

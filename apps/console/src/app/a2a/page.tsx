@@ -10,6 +10,7 @@ import type {
   NetworkAgent,
   Overview,
   Proof,
+  RegisteredAgent,
 } from '@/types/agent-network';
 import { buildAgentNetwork } from '@/lib/a2a/build-agent-network';
 import { AgentFilterBar, AGENT_FILTERS } from '@/components/a2a/AgentFilterBar';
@@ -139,19 +140,47 @@ export default function A2ADashboardPage() {
   const [_tick, setTick] = useState(0);
   const [filter, setFilter] = useState<AgentCategory>('all');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [registeredAgents, setRegisteredAgents] = useState<RegisteredAgent[]>([]);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const stored = localStorage.getItem('arclayer_hidden_agents');
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch { return new Set(); }
+  });
+
+  const hideAgent = useCallback((agentId: string) => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      next.add(agentId);
+      localStorage.setItem('arclayer_hidden_agents', JSON.stringify(Array.from(next)));
+      return next;
+    });
+  }, []);
+
+  const unhideAgent = useCallback((agentId: string) => {
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      next.delete(agentId);
+      localStorage.setItem('arclayer_hidden_agents', JSON.stringify(Array.from(next)));
+      return next;
+    });
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
       const cacheBust = Date.now();
-      const [ovRes, ocRes, fdRes] = await Promise.all([
+      const [ovRes, ocRes, fdRes, regRes] = await Promise.all([
         fetch(`/api/indexer/overview?t=${cacheBust}`, { cache: 'no-store' }),
         fetch(`/api/a2a/status?t=${cacheBust}`, { cache: 'no-store' }),
         fetch(`/api/indexer/autonomous-feed?limit=50&t=${cacheBust}`, { cache: 'no-store' }),
+        fetch(`/api/a2a/agents?t=${cacheBust}`, { cache: 'no-store' }),
       ]);
       if (!ovRes.ok) throw new Error(`indexer ${ovRes.status}`);
       const ovData: Overview = await ovRes.json();
       const ocData: A2AOnChain = ocRes.ok ? await ocRes.json() : null;
       const fdData: AutonomousFeed = fdRes.ok ? await fdRes.json() : { items: [], latest: null };
+      const regData = regRes.ok ? await regRes.json().catch(() => ({ agents: [] })) : { agents: [] };
 
       // Detect new feed items
       const currentIds = new Set(fdData.items.map((i) => i.id));
@@ -164,15 +193,18 @@ export default function A2ADashboardPage() {
       }
       setPrevFeedIds(currentIds);
 
+      const feedSignalCount = fdData.items.filter((item) => item.agent === 'Pythia' && item.type === 'payment').length;
+      const signalCount = Math.max(ocData?.agents.pythia?.stats?.callsServed ?? 0, feedSignalCount);
       setVolumeHistory((prev) => [...prev.slice(-29), Number(ovData.summary.totalFunded) / 1e6]);
       setSignalHistory((prev) => [
         ...prev.slice(-29),
-        ocData?.agents.pythia?.stats?.callsServed ?? prev[prev.length - 1] ?? 0,
+        signalCount || prev[prev.length - 1] || 0,
       ]);
 
       setOverview(ovData);
       if (ocData) setOnchain(ocData);
       setFeed(fdData);
+      setRegisteredAgents(Array.isArray(regData.agents) ? regData.agents : []);
       setError(null);
     } catch (err: any) {
       setError(err?.message || 'fetch failed');
@@ -198,10 +230,19 @@ export default function A2ADashboardPage() {
   const isLive = latestFeedMs > 0 && Date.now() - latestFeedMs < 120_000;
   const proofTxs = (feed?.items ?? []).filter((item) => item.tx);
   const visibleProofTxs = showAllProofs ? proofTxs : proofTxs.slice(0, 3);
-  const networkAgents = buildAgentNetwork({ onchain, overview, feed, isLive });
+  const networkAgents = buildAgentNetwork({ onchain, overview, feed, isLive, registeredAgents, hiddenIds });
   const filteredAgents = filter === 'all' ? networkAgents : networkAgents.filter((agent) => agent.categories.includes(filter));
   const selectedAgent = networkAgents.find((agent) => agent.id === selectedAgentId) ?? null;
   const activeFilterLabel = AGENT_FILTERS.find((item) => item.key === filter)?.label ?? 'All agents';
+
+  // Live-derived counters from autonomous feed (compensates for ReputationRegistry not being updated by agent telemetry)
+  const feedItems = feed?.items ?? [];
+  const feedSignalsServed = feedItems.filter((item) => item.agent === 'Pythia' && item.type === 'payment').length;
+  const feedIgniaTrades = feedItems.filter((item) =>
+    item.agent === 'Hermes' && item.type === 'trade' && item.label.toLowerCase().includes('ignia')
+  ).length;
+  const liveSignalsServed = Math.max(pythia?.stats?.callsServed ?? 0, feedSignalsServed);
+  const liveIgniaTrades = Math.max(hermes?.stats?.callsServed ?? 0, feedIgniaTrades);
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-[#EAE4D8] selection:bg-[#C5A67C]/20">
@@ -261,9 +302,22 @@ export default function A2ADashboardPage() {
         {/* ─── Autonomous Agent Network · selectable agent cards ──────── */}
         <section className="mb-6 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-[#777]">
-              Registered agents · {filteredAgents.length} of {networkAgents.length}
-            </p>
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-widest text-[#777]">
+                Registered agents · {filteredAgents.length} of {networkAgents.length}
+              </p>
+              {hiddenIds.size > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    Array.from(hiddenIds).forEach(unhideAgent);
+                  }}
+                  className="mt-1 font-mono text-[10px] text-[#555] underline decoration-dotted hover:text-[#C5A67C]"
+                >
+                  restore {hiddenIds.size} hidden agent{hiddenIds.size > 1 ? 's' : ''}
+                </button>
+              )}
+            </div>
             <AgentFilterBar active={filter} onChange={setFilter} />
           </div>
 
@@ -294,8 +348,8 @@ export default function A2ADashboardPage() {
 
         {/* ─── KPI Strip ───────────────────────────────────────────────── */}
         <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <KPICard label="Signals Served" value={pythia?.stats?.callsServed ?? '—'} accent />
-          <KPICard label="Ignia Trades" value={hermes?.stats?.callsServed ?? '—'} accent />
+          <KPICard label="Signals Served" value={liveSignalsServed} accent />
+          <KPICard label="Ignia Trades" value={liveIgniaTrades} accent />
           <KPICard label="Ignia Markets" value={onchain?.markets.totalIgnia ?? '—'} />
           <KPICard label="Mirrors" value={onchain?.markets.totalMirrors ?? '—'} />
           <KPICard label="Marketplace Jobs" value={summary?.jobs ?? '—'} />
@@ -328,7 +382,7 @@ export default function A2ADashboardPage() {
               </div>
               <div>
                 <span className="text-[#7A7A7A]">calls served</span>{' '}
-                <span className="text-cyan-300">{pythia?.stats?.callsServed ?? 0}</span>
+                <span className="text-cyan-300">{liveSignalsServed}</span>
               </div>
               <div>
                 <span className="text-[#7A7A7A]">total deducted</span>{' '}
@@ -404,77 +458,30 @@ export default function A2ADashboardPage() {
           </p>
         </section>
 
-        {/* ─── Live Proof Transactions ────────────────────────────────── */}
-        {proofTxs.length > 0 && (
-          <section className="mt-6 rounded border border-[#C5A67C]/20 bg-[#C5A67C]/[0.03] p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">
-                  Live Proof · On-Chain Transactions
-                </p>
-              </div>
-              {proofTxs.length > 3 && (
-                <button
-                  onClick={() => setShowAllProofs(!showAllProofs)}
-                  className="font-mono text-[10px] text-[#7A7A7A] hover:text-[#C5A67C] transition-colors"
-                >
-                  {showAllProofs ? 'Show Less' : `Show All (${proofTxs.length})`}
-                </button>
-              )}
-            </div>
-            <div className="space-y-2">
-              {visibleProofTxs.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-3 rounded border border-white/5 bg-black/30 px-3 py-2.5 font-mono text-xs"
-                >
-                  <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${TYPE_COLORS[item.type]}`}>
-                    {item.type}
-                  </span>
-                  <span className={`shrink-0 font-semibold ${AGENT_COLORS[item.agent]}`}>{item.agent}</span>
-                  <span className="min-w-0 flex-1 truncate text-[#9A9A9A]">{item.label}</span>
-                  <a
-                    href={`https://testnet.arcscan.app/tx/${item.tx}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0 text-[#C5A67C] hover:text-[#EAE4D8] transition-colors"
-                  >
-                    {item.tx!.slice(0, 10)}…{item.tx!.slice(-6)}
-                  </a>
-                  <span className="shrink-0 text-[10px] text-[#555]">{timeAgoIso(item.ts)}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ─── Main Grid: Autonomous Feed + Loop Diagram ───────────────── */}
+        {/* ─── Agent-Scoped Workspace Placeholder ─────────────────────── */}
         <section className="mt-6 grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 rounded border border-white/5 bg-white/[0.02] p-4">
             <div className="mb-3 flex items-center justify-between">
               <p className="font-mono text-[10px] uppercase tracking-widest text-[#555]">
-                Autonomous Activity · Pythia ↔ Hermes
+                Per-Agent Proofs & Activity
               </p>
               <span className="font-mono text-[10px] text-[#333]">
-                {feed?.items.length ?? 0} events · last {feed?.latest ? timeAgoIso(feed.latest) : '—'}
+                {proofTxs.length} tx proofs · {feed?.items.length ?? 0} events synced
               </span>
             </div>
-            <div className="max-h-[560px] overflow-y-auto pr-1">
-              {!feed || feed.items.length === 0 ? (
-                <p className="py-8 text-center font-mono text-xs text-[#333]">
-                  Waiting for autonomous loop…
-                </p>
-              ) : (
-                feed.items.map((item) => (
-                  <FeedRow key={item.id} item={item} isNew={newFeedIds.has(item.id)} />
-                ))
-              )}
+            <div className="rounded border border-dashed border-white/10 bg-black/20 p-8 text-center">
+              <p className="font-mono text-xs text-[#C5A67C]">Global feed hidden to reduce noise.</p>
+              <p className="mt-2 font-mono text-[11px] leading-5 text-[#777]">
+                Select an agent card above. Its own x402 receipts, transaction proofs, and activity history open in the agent detail panel.
+              </p>
+              <p className="mt-3 font-mono text-[10px] text-[#444]">
+                Reserved slot: future per-agent modules, custom widgets, and marketplace actions.
+              </p>
             </div>
           </div>
 
           <div className="space-y-4">
-            <LoopCard summary={summary} pythiaServed={pythia?.stats?.callsServed} />
+            <LoopCard summary={summary} pythiaServed={liveSignalsServed} />
             <ContractsCard contracts={onchain?.contracts} />
           </div>
         </section>
@@ -521,7 +528,7 @@ export default function A2ADashboardPage() {
         </footer>
       </div>
 
-      <AgentDetailDrawer agent={selectedAgent} onClose={() => setSelectedAgentId(null)} />
+      <AgentDetailDrawer agent={selectedAgent} onClose={() => setSelectedAgentId(null)} onHide={hideAgent} />
     </main>
   );
 }

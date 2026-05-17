@@ -1,4 +1,4 @@
-import type { A2AOnChain, AutonomousFeed, NetworkAgent, Overview } from '@/types/agent-network';
+import type { A2AOnChain, AutonomousFeed, NetworkAgent, Overview, RegisteredAgent } from '@/types/agent-network';
 
 function jobsForAgent(overview: Overview | null, agentId?: string) {
   if (!overview || !agentId) return 0;
@@ -10,11 +10,15 @@ export function buildAgentNetwork({
   overview,
   feed,
   isLive,
+  registeredAgents,
+  hiddenIds,
 }: {
   onchain: A2AOnChain | null;
   overview: Overview | null;
   feed: AutonomousFeed | null;
   isLive: boolean;
+  registeredAgents?: RegisteredAgent[];
+  hiddenIds?: Set<string>;
 }): NetworkAgent[] {
   const pythiaStats = onchain?.agents.pythia?.stats ?? null;
   const hermesStats = onchain?.agents.hermes?.stats ?? null;
@@ -40,6 +44,8 @@ export function buildAgentNetwork({
       primaryAction: 'Request Signal',
       categories: ['signal-oracles', 'data-providers', 'payment-agents'],
       activity: feedItems.filter((item) => item.agent === 'Pythia').slice(0, 8),
+      source: 'featured',
+      canHide: false,
     },
     {
       id: 'hermes',
@@ -58,41 +64,45 @@ export function buildAgentNetwork({
       primaryAction: 'View Decisions',
       categories: ['traders', 'payment-agents'],
       activity: feedItems.filter((item) => item.agent === 'Hermes').slice(0, 8),
+      source: 'featured',
+      canHide: false,
     },
   ];
 
-  const known = new Set([pythiaId?.toLowerCase(), hermesId?.toLowerCase()].filter(Boolean));
-  const dynamicIds = new Set<string>();
-  overview?.jobs.forEach((job) => {
-    const id = job.agentId;
-    if (id && !known.has(id.toLowerCase())) dynamicIds.add(id);
-  });
-  overview?.proofs.forEach((proof) => {
-    const id = proof.agentId;
-    if (id && !known.has(id.toLowerCase())) dynamicIds.add(id);
-  });
+  // Registry-synced autonomous agents (only those with metadata.autonomous === true)
+  if (registeredAgents && registeredAgents.length > 0) {
+    const knownIds = new Set(['pythia', 'hermes']);
+    for (const reg of registeredAgents) {
+      if (knownIds.has(reg.agentId.toLowerCase())) continue;
+      if (hiddenIds?.has(reg.agentId)) continue;
 
-  Array.from(dynamicIds).slice(0, 12).forEach((agentId, index) => {
-    const completed = jobsForAgent(overview, agentId);
-    const receipts = overview?.proofs.filter((proof) => proof.agentId?.toLowerCase() === agentId.toLowerCase()) ?? [];
-    const volumeRaw = receipts.reduce((sum, proof) => sum + BigInt(proof.amountPaid || '0'), BigInt(0)).toString();
-    agents.push({
-      id: agentId,
-      name: `Agent #${index + 1}`,
-      role: 'Registered Agent',
-      capability: ['General'],
-      description: 'Registered autonomous agent. Metadata is not available yet, so ArcLayer shows safe registry-derived fallback data.',
-      status: completed > 0 || receipts.length > 0 ? 'LIVE' : 'IDLE',
-      agentId,
-      reputation: 0,
-      callsServed: 0,
-      jobsCompleted: completed,
-      revenueRaw: volumeRaw,
-      primaryAction: 'Create Job',
-      categories: ['developers'],
-      activity: [],
-    });
-  });
+      const meta = reg.metadata;
+      const completed = jobsForAgent(overview, reg.agentId);
+      const receipts = overview?.proofs.filter((p) => p.agentId?.toLowerCase() === reg.agentId.toLowerCase()) ?? [];
+      const volumeRaw = receipts.reduce((sum, p) => sum + BigInt(p.amountPaid || '0'), BigInt(0)).toString();
+
+      agents.push({
+        id: reg.agentId,
+        name: meta?.name || `Agent ${reg.agentId.slice(0, 8)}`,
+        role: meta?.role || 'Autonomous Agent',
+        capability: meta?.capability || ['General'],
+        description: meta?.description || 'Registered autonomous agent synced from AgentRegistry.',
+        status: completed > 0 || receipts.length > 0 ? 'LIVE' : 'IDLE',
+        wallet: reg.controller,
+        agentId: reg.agentId,
+        reputation: 0,
+        callsServed: 0,
+        jobsCompleted: completed,
+        revenueRaw: volumeRaw,
+        balanceRaw: null,
+        primaryAction: 'Create Job',
+        categories: (meta?.categories as NetworkAgent['categories']) || ['developers'],
+        activity: [],
+        source: 'registry',
+        canHide: true,
+      });
+    }
+  }
 
   return agents;
 }
