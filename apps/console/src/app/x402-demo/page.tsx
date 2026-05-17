@@ -363,15 +363,17 @@ export default function X402DemoPage() {
         <div className="mb-6 flex gap-3">
           <button
             onClick={() => setMode('arc-native')}
-            className={`flex-1 border py-3 font-mono text-[11px] tracking-[0.16em] transition-all ${mode === 'arc-native' ? 'border-[#C5A67C]/60 bg-[#C5A67C]/10 text-[#C5A67C]' : 'border-white/10 text-white/40 hover:border-white/20'}`}
+            className={`relative flex-1 border py-3 font-mono text-[11px] tracking-[0.16em] transition-all ${mode === 'arc-native' ? 'border-[#C5A67C]/60 bg-[#C5A67C]/10 text-[#C5A67C]' : 'border-white/10 text-white/40 hover:border-white/20'}`}
           >
-            ARC NATIVE PAYMENT
+            ARC NATIVE
+            <span className="ml-2 rounded-sm bg-green-500/20 px-1.5 py-0.5 text-[8px] tracking-normal text-green-400/80">RECOMMENDED</span>
           </button>
           <button
             onClick={() => setMode('circle-gateway')}
             className={`flex-1 border py-3 font-mono text-[11px] tracking-[0.16em] transition-all ${mode === 'circle-gateway' ? 'border-[#7CB5C5]/60 bg-[#7CB5C5]/10 text-[#7CB5C5]' : 'border-white/10 text-white/40 hover:border-white/20'}`}
           >
-            CIRCLE GATEWAY PAYMENT
+            CIRCLE GATEWAY
+            <span className="ml-2 rounded-sm bg-white/10 px-1.5 py-0.5 text-[8px] tracking-normal text-white/50">ADVANCED</span>
           </button>
         </div>
 
@@ -398,9 +400,15 @@ export default function X402DemoPage() {
         <div className="mb-6 border border-white/10 bg-white/[0.02] p-4 font-mono text-[11px]">
           <div className="mb-2 text-[9px] tracking-[0.18em] text-white/30">ACTIVE MODE</div>
           {mode === 'arc-native' ? (
-            <div><span className="text-[#C5A67C]">Arc Native Payment</span> · Payment verified · Payment completed · payTo {shortenAddress(payTo)}</div>
+            <div>
+              <span className="text-[#C5A67C]">Arc Native Payment</span> · Pay per call · <span className="text-green-400/80">No deposit required</span> · payTo {shortenAddress(payTo)}
+              <div className="mt-1.5 text-white/40">Sign once per request. USDC transfers directly via EIP-3009. Best for occasional use.</div>
+            </div>
           ) : (
-            <div><span className="text-[#7CB5C5]">Circle Gateway Payment</span> · Payment verified · Payment accepted by Circle Gateway · payTo {shortenAddress(payTo)}</div>
+            <div>
+              <span className="text-[#7CB5C5]">Circle Gateway Payment</span> · Batched settlement · <span className="text-yellow-400/80">Requires Gateway deposit</span> · payTo {shortenAddress(payTo)}
+              <div className="mt-1.5 text-white/40">Pre-deposit USDC to Gateway for batch processing. Lower gas per tx. Best for high-frequency agents.</div>
+            </div>
           )}
           <DevDetails>
             {mode === 'arc-native' ? (
