@@ -142,11 +142,11 @@ export default function WalletStatus({ variant = 'app' }: Props) {
     );
   }
 
-  // Disconnected — show CONNECT WALLET, then picker modal.
+  // Disconnected — CONNECT WALLET opens a compact picker directly below the button.
   return (
-    <>
+    <div className="relative inline-block">
       <button
-        onClick={() => setShowPicker(true)}
+        onClick={() => setShowPicker((v) => !v)}
         disabled={busy}
         className="btn-primary"
         style={{ padding: '10px 18px', fontSize: '11px' }}
@@ -154,50 +154,43 @@ export default function WalletStatus({ variant = 'app' }: Props) {
         {busy ? 'CONNECTING…' : 'CONNECT WALLET'}
       </button>
 
-      {/* Wallet type picker modal */}
+      {/* Wallet type picker dropdown */}
       {showPicker && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: 'rgba(0,0,0,0.85)' }}
-          onClick={() => setShowPicker(false)}
+          className="absolute right-0 top-full z-50 mt-3 w-[320px] max-w-[calc(100vw-24px)] p-4 font-mono shadow-2xl"
+          style={{
+            background: '#0a0a0a',
+            border: '1px solid rgba(197, 166, 124, 0.25)',
+          }}
         >
-          <div
-            className="w-full max-w-sm p-6 font-mono"
-            style={{
-              background: '#0a0a0a',
-              border: '1px solid rgba(197, 166, 124, 0.25)',
-            }}
-            onClick={(e) => e.stopPropagation()}
+          <h2
+            className="mb-3 text-[10px] tracking-[0.18em]"
+            style={{ color: '#C5A67C' }}
           >
-            <h2
-              className="mb-4 text-xs tracking-[0.18em]"
-              style={{ color: '#C5A67C' }}
-            >
-              CONNECT WALLET
-            </h2>
-            <div className="space-y-3">
-              <button
-                onClick={handlePasskeyConnect}
-                className="w-full rounded-xl border border-[#C5A67C]/40 px-4 py-3 text-left transition-all hover:border-[#C5A67C]/70 hover:bg-[#C5A67C]/5"
-              >
-                <div className="text-[11px] tracking-[0.14em] text-[#C5A67C]">PASSKEY (CIRCLE)</div>
-                <div className="mt-1 text-[10px] text-white/40">Biometric smart account — no extension needed</div>
-              </button>
-              <button
-                onClick={handleEoaConnect}
-                className="w-full rounded-xl border border-white/20 px-4 py-3 text-left transition-all hover:border-white/40 hover:bg-white/[0.03]"
-              >
-                <div className="text-[11px] tracking-[0.14em] text-white/80">EOA WALLET (REOWN)</div>
-                <div className="mt-1 text-[10px] text-white/40">MetaMask, Coinbase, WalletConnect</div>
-              </button>
-            </div>
+            CHOOSE WALLET
+          </h2>
+          <div className="space-y-2">
             <button
-              onClick={() => setShowPicker(false)}
-              className="mt-4 w-full py-2 text-[10px] tracking-[0.18em] text-white/30 hover:text-white/50"
+              onClick={handlePasskeyConnect}
+              className="w-full rounded-xl border border-[#C5A67C]/40 px-4 py-3 text-left transition-all hover:border-[#C5A67C]/70 hover:bg-[#C5A67C]/5"
             >
-              CANCEL
+              <div className="text-[11px] tracking-[0.14em] text-[#C5A67C]">PASSKEY (CIRCLE)</div>
+              <div className="mt-1 text-[10px] text-white/40">Biometric smart account — no extension needed</div>
+            </button>
+            <button
+              onClick={handleEoaConnect}
+              className="w-full rounded-xl border border-white/20 px-4 py-3 text-left transition-all hover:border-white/40 hover:bg-white/[0.03]"
+            >
+              <div className="text-[11px] tracking-[0.14em] text-white/80">EOA WALLET</div>
+              <div className="mt-1 text-[10px] text-white/40">MetaMask, Coinbase, WalletConnect</div>
             </button>
           </div>
+          <button
+            onClick={() => setShowPicker(false)}
+            className="mt-3 w-full py-2 text-[10px] tracking-[0.18em] text-white/30 hover:text-white/50"
+          >
+            CANCEL
+          </button>
         </div>
       )}
 
@@ -266,6 +259,6 @@ export default function WalletStatus({ variant = 'app' }: Props) {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
