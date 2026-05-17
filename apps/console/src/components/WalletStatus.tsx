@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
+import { useAccount, useDisconnect } from 'wagmi';
+import { useAppKit } from '@reown/appkit/react';
 import { shortenAddress } from '@/lib/contracts';
 
 type Variant = 'landing' | 'app';
@@ -18,30 +20,42 @@ interface Props {
  *   - app: Dashboard chrome. Disconnected shows CONNECT WALLET; connected
  *     shows the address pill + DISCONNECT.
  *
- * Backed by Circle Modular Wallets (passkey-based smart accounts).
- * First-time users see a register modal (passkey creation); returning
- * users tap CONNECT and authenticate biometrically.
+ * Supports dual auth: Circle Modular Wallets (passkey) + EOA via Reown AppKit.
  */
 export default function WalletStatus({ variant = 'app' }: Props) {
-  const { ready, authenticated, address, login, register, logout } =
+  const { ready, authenticated, address: circleAddress, login, register, logout } =
     useCircleWallet();
+  const { address: eoaAddress, isConnected: eoaConnected } = useAccount();
+  const { disconnect: eoaDisconnect } = useDisconnect();
+  const { open: openAppKit } = useAppKit();
+
+  const [showPicker, setShowPicker] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
   const [username, setUsername] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
-  const handleConnect = async () => {
+  // Determine which wallet is active
+  const isConnected = authenticated || eoaConnected;
+  const activeAddress = authenticated ? circleAddress : eoaConnected ? eoaAddress : null;
+  const walletType = authenticated ? 'passkey' : eoaConnected ? 'eoa' : null;
+
+  const handlePasskeyConnect = async () => {
+    setShowPicker(false);
     setErr('');
     setBusy(true);
     try {
-      // Try login first; fall back to register if no passkey exists.
       await login();
-    } catch (e) {
-      // No passkey on this device — show register modal.
+    } catch {
       setShowRegister(true);
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleEoaConnect = () => {
+    setShowPicker(false);
+    openAppKit();
   };
 
   const handleRegister = async () => {
@@ -61,6 +75,14 @@ export default function WalletStatus({ variant = 'app' }: Props) {
     }
   };
 
+  const handleDisconnect = () => {
+    if (walletType === 'passkey') {
+      logout();
+    } else {
+      eoaDisconnect();
+    }
+  };
+
   if (!ready) {
     return (
       <div
@@ -73,7 +95,7 @@ export default function WalletStatus({ variant = 'app' }: Props) {
   }
 
   // Landing: after connect, drive the user into /protocol.
-  if (variant === 'landing' && authenticated && address) {
+  if (variant === 'landing' && isConnected && activeAddress) {
     return (
       <Link
         href="/protocol"
@@ -86,7 +108,7 @@ export default function WalletStatus({ variant = 'app' }: Props) {
   }
 
   // App: full session chrome (address pill + disconnect).
-  if (variant === 'app' && authenticated && address) {
+  if (variant === 'app' && isConnected && activeAddress) {
     return (
       <div className="flex items-center gap-2">
         <div
@@ -98,10 +120,11 @@ export default function WalletStatus({ variant = 'app' }: Props) {
           }}
         >
           <span className="pulse-dot" />
-          {shortenAddress(address)}
+          <span className="text-[9px] tracking-[0.14em] text-white/40">{walletType === 'eoa' ? 'EOA' : 'PASSKEY'}</span>
+          {shortenAddress(activeAddress)}
         </div>
         <button
-          onClick={() => logout()}
+          onClick={handleDisconnect}
           className="px-3 py-2 font-mono text-[10px] tracking-[0.18em] text-white/40 transition-all duration-300"
           style={{ border: '1px solid rgba(255, 255, 255, 0.08)' }}
           onMouseEnter={(e) => {
@@ -119,11 +142,11 @@ export default function WalletStatus({ variant = 'app' }: Props) {
     );
   }
 
-  // Disconnected — same CTA in both contexts.
+  // Disconnected — show CONNECT WALLET, then picker modal.
   return (
     <>
       <button
-        onClick={handleConnect}
+        onClick={() => setShowPicker(true)}
         disabled={busy}
         className="btn-primary"
         style={{ padding: '10px 18px', fontSize: '11px' }}
@@ -131,6 +154,54 @@ export default function WalletStatus({ variant = 'app' }: Props) {
         {busy ? 'CONNECTING…' : 'CONNECT WALLET'}
       </button>
 
+      {/* Wallet type picker modal */}
+      {showPicker && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(0,0,0,0.85)' }}
+          onClick={() => setShowPicker(false)}
+        >
+          <div
+            className="w-full max-w-sm p-6 font-mono"
+            style={{
+              background: '#0a0a0a',
+              border: '1px solid rgba(197, 166, 124, 0.25)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2
+              className="mb-4 text-xs tracking-[0.18em]"
+              style={{ color: '#C5A67C' }}
+            >
+              CONNECT WALLET
+            </h2>
+            <div className="space-y-3">
+              <button
+                onClick={handlePasskeyConnect}
+                className="w-full rounded-xl border border-[#C5A67C]/40 px-4 py-3 text-left transition-all hover:border-[#C5A67C]/70 hover:bg-[#C5A67C]/5"
+              >
+                <div className="text-[11px] tracking-[0.14em] text-[#C5A67C]">PASSKEY (CIRCLE)</div>
+                <div className="mt-1 text-[10px] text-white/40">Biometric smart account — no extension needed</div>
+              </button>
+              <button
+                onClick={handleEoaConnect}
+                className="w-full rounded-xl border border-white/20 px-4 py-3 text-left transition-all hover:border-white/40 hover:bg-white/[0.03]"
+              >
+                <div className="text-[11px] tracking-[0.14em] text-white/80">EOA WALLET (REOWN)</div>
+                <div className="mt-1 text-[10px] text-white/40">MetaMask, Coinbase, WalletConnect</div>
+              </button>
+            </div>
+            <button
+              onClick={() => setShowPicker(false)}
+              className="mt-4 w-full py-2 text-[10px] tracking-[0.18em] text-white/30 hover:text-white/50"
+            >
+              CANCEL
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Passkey register modal (fallback when no passkey exists) */}
       {showRegister && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
