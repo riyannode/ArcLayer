@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'viem';
 import { DevDetails } from '@/components/DevDetails';
 import { InlineProtectionNotice, NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_REQUIRED, NOTICE_PAYMENT_SETTLED, NOTICE_PAYMENT_VERIFIED, NOTICE_REPLAY_FAILED, NOTICE_REPLAY_REJECTED, NOTICE_RESOURCE_UNLOCKED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
@@ -29,8 +29,7 @@ function randomNonce(): Hex { return `0x${Array.from(crypto.getRandomValues(new 
 function b64(value: unknown) { return btoa(JSON.stringify(value)); }
 
 export default function X402DemoPage() {
-  const { ready, authenticated, login } = usePrivy();
-  const { wallets } = useWallets();
+  const { ready, authenticated, login, register, address, smartAccount } = useCircleWallet();
   const { notify } = useProtectionNotice();
   const [mode, setMode] = useState<PaymentMode>('arc-native');
   const [step, setStep] = useState<Step>('idle');
@@ -318,18 +317,36 @@ export default function X402DemoPage() {
   /* ─── MAIN RUNNER ─── */
   const runDemo = useCallback(async () => {
     reset();
-    const wallet = wallets[0];
-    if (!wallet) {
+    if (!smartAccount || !address) {
       log('No wallet connected', 'error');
       notify({ ...NOTICE_WALLET_NOT_CONNECTED, surface: 'toast', autoCloseMs: 4_500 });
       setStep('error'); return;
     }
+    // Build a wallet-like adapter for the flow functions
+    const wallet = {
+      address: address as string,
+      switchChain: async (_id: number) => { /* Circle is already on Arc */ },
+      getEthereumProvider: async () => ({
+        request: async (args: { method: string; params: unknown[] }) => {
+          if (args.method === 'eth_signTypedData_v4') {
+            const typedData = JSON.parse(args.params[1] as string);
+            return smartAccount.signTypedData({
+              domain: typedData.domain,
+              types: typedData.types,
+              primaryType: typedData.primaryType,
+              message: typedData.message,
+            });
+          }
+          throw new Error(`Unsupported method: ${args.method}`);
+        },
+      }),
+    };
     if (mode === 'arc-native') {
       await runArcNative(wallet as unknown as Parameters<typeof runArcNative>[0]);
     } else {
       await runGateway(wallet as unknown as Parameters<typeof runGateway>[0]);
     }
-  }, [wallets, log, reset, mode, runArcNative, runGateway, notify]);
+  }, [smartAccount, address, log, reset, mode, runArcNative, runGateway, notify]);
 
   const busy = !['idle', 'done', 'error'].includes(step);
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
@@ -400,10 +417,13 @@ export default function X402DemoPage() {
 
         {/* ACTION BUTTONS */}
         <div className="mb-6">
-          {!ready ? <div className="font-mono text-[10px] text-white/30">LOADING PRIVY...</div> : !authenticated ? (
+          {!ready ? <div className="font-mono text-[10px] text-white/30">LOADING WALLET...</div> : !authenticated ? (
             <>
               <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} className="mb-3" />
-              <button onClick={login} className="w-full border border-[#C5A67C]/40 py-3 font-mono text-[11px] tracking-[0.18em] text-[#C5A67C]">CONNECT WALLET</button>
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => register('arclayer-x402').catch((e) => log(`Register failed: ${e instanceof Error ? e.message : String(e)}`, 'error'))} className="border border-[#C5A67C]/40 py-3 font-mono text-[11px] tracking-[0.18em] text-[#C5A67C]">CREATE PASSKEY</button>
+                <button onClick={() => login().catch((e) => log(`Login failed: ${e instanceof Error ? e.message : String(e)}`, 'error'))} className="border border-white/20 py-3 font-mono text-[11px] tracking-[0.18em] text-white/70">SIGN IN</button>
+              </div>
             </>
           ) : (
             <button

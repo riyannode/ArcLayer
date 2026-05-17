@@ -107,6 +107,8 @@ async function handleGatewaySettle(body: Record<string, unknown>): Promise<NextR
       return NextResponse.json(
         {
           success: true,
+          settled: false,
+          status: 'accepted_pending_settlement',
           payer: result.payer,
           transaction: result.transaction || '',
           network: result.network,
@@ -135,6 +137,8 @@ async function handleGatewaySettle(body: Record<string, unknown>): Promise<NextR
     return NextResponse.json(
       {
         success: true,
+        settled: true,
+        status: 'settled',
         payer: result.payer,
         transaction: result.transaction,
         network: result.network,

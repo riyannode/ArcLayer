@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { waitForTransactionReceipt, readContract } from '@wagmi/core';
-import { useAccount, useWriteContract } from 'wagmi';
+import { readContract, waitForTransactionReceipt } from '@wagmi/core';
+import { useCircleWallet } from '@/hooks/useCircleWallet';
+import { useArcWrite } from '@/hooks/useArcWrite';
 import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
 import { fetchIndexerJson, type IndexedAgent, waitForIndexer } from '@/lib/indexer';
 import { StatusBanner } from '@/components/StatusBanner';
@@ -27,8 +28,8 @@ type NameStatus =
   | { state: 'invalid'; reason: string };
 
 export default function AgentsPage() {
-  const { isConnected } = useAccount();
-  const { writeContractAsync } = useWriteContract();
+  const { authenticated: isConnected } = useCircleWallet();
+  const { writeContractAsync } = useArcWrite();
   const [agents, setAgents] = useState<IndexedAgent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);

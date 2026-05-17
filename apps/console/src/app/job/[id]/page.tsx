@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { waitForTransactionReceipt } from '@wagmi/core';
-import { useAccount, useWriteContract } from 'wagmi';
+import { useCircleWallet } from '@/hooks/useCircleWallet';
+import { useArcWrite } from '@/hooks/useArcWrite';
 import {
   buildEvaluateJobConfig,
   buildSettleJobConfig,
@@ -66,8 +67,8 @@ function ipfsToHttp(uri: string | null | undefined): string | null {
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
   const jobId = parseJobId(params.id);
-  const { address, isConnected } = useAccount();
-  const { writeContractAsync } = useWriteContract();
+  const { address, authenticated: isConnected } = useCircleWallet();
+  const { writeContractAsync } = useArcWrite();
   const [payload, setPayload] = useState<JobDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);

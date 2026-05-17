@@ -3,9 +3,7 @@
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { waitForTransactionReceipt } from '@wagmi/core';
-import { useWriteContract } from 'wagmi';
-import { config } from '@/lib/wagmi';
+import { useArcWrite } from '@/hooks/useArcWrite';
 import type { Hex } from 'viem';
 
 const AGENT_REGISTRY_ADDRESS = '0xB263336055dD65FF501e36CA39941760D943703C' as const;
@@ -189,7 +187,7 @@ function A2ADashboardPage() {
     });
   }, []);
 
-  const { writeContractAsync } = useWriteContract();
+  const { writeContractAsync } = useArcWrite();
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
 
   const deactivateAgent = useCallback(async (agent: NetworkAgent) => {
@@ -205,7 +203,6 @@ function A2ADashboardPage() {
         functionName: 'deactivateAgent',
         args: [agent.id as Hex],
       });
-      await waitForTransactionReceipt(config, { hash: txHash });
       alert(`✓ ${agent.name} deactivated on-chain.\n\nTx: ${txHash}`);
       hideAgent(agent.id);
     } catch (err: any) {

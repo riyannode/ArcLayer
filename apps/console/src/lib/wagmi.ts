@@ -1,13 +1,12 @@
-import { http, fallback } from 'wagmi';
-import { createConfig } from '@privy-io/wagmi';
+import { http, fallback, createConfig } from 'wagmi';
 import { ARC_RPC_URLS, arcTestnet } from '@arclayer/sdk';
 
 /**
- * wagmi config for Privy integration.
+ * Read-only wagmi config retained for @wagmi/core helpers.
  *
- * Connectors are managed by Privy (social login, embedded wallets, external
- * wallets via WalletConnect/injected). We only declare chains + transports
- * here. All connector logic lives inside PrivyProvider.
+ * Circle Modular Wallets handles auth + writes via ERC-4337 bundler.
+ * This config is intentionally connector-free and only supports public
+ * reads / transaction receipt polling against Arc Testnet RPCs.
  */
 export const config = createConfig({
   chains: [arcTestnet],

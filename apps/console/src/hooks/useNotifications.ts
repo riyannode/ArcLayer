@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+import { useCircleWallet } from './useCircleWallet';
 import {
   Notification,
   getNotifications,
@@ -22,12 +22,7 @@ const POLL_INTERVAL_MS = 12_000;
  * Stores notifications in localStorage per wallet address.
  */
 export function useNotifications() {
-  const { authenticated, user } = usePrivy();
-  const walletAccount = user?.linkedAccounts?.find(
-    (acc): acc is { type: 'wallet'; address: string } & typeof acc =>
-      acc.type === 'wallet' && 'address' in acc
-  );
-  const address = user?.wallet?.address || walletAccount?.address || '';
+  const { authenticated, address } = useCircleWallet();
 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);

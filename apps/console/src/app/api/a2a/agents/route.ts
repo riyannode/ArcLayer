@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createPublicClient, http, parseAbiItem, type Hex } from 'viem';
+import { createPublicClient, http, parseAbiItem, type Hex, type Log } from 'viem';
+import { isHiddenAgent } from '@/lib/a2a/hidden-agents';
 import { resolveManifestMetadata } from '@/lib/a2a/manifest';
 
 export const dynamic = 'force-dynamic';
@@ -7,8 +8,16 @@ export const revalidate = 0;
 
 const RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
 const AGENT_REGISTRY = '0xB263336055dD65FF501e36CA39941760D943703C' as Hex;
-const FROM_BLOCK = BigInt(process.env.AGENT_REGISTRY_FROM_BLOCK || '0');
+
+// A2A deploy block on Arc testnet (5042002): 42_548_683.
+// Default to that so we don't scan from genesis (blocked by free-tier RPC range cap).
+const DEFAULT_FROM_BLOCK = BigInt(42548683);
+const FROM_BLOCK = BigInt(process.env.AGENT_REGISTRY_FROM_BLOCK || DEFAULT_FROM_BLOCK.toString());
+
+// drpc.testnet.arc.network free tier rejects ranges > 10_000 blocks.
+const MAX_BLOCK_RANGE = BigInt(process.env.AGENT_REGISTRY_MAX_RANGE || '9000');
 const MAX_METADATA_BYTES = 32_000;
+const METADATA_CONCURRENCY = 6;
 
 const AGENT_REGISTERED = parseAbiItem(
   'event AgentRegistered(uint256 indexed agentId, bytes32 indexed skillHash, address indexed controller, string metadataURI)'
@@ -31,14 +40,15 @@ function ipfsToGateway(uri: string) {
 function isSafeHttpUri(uri: string) {
   try {
     const url = new URL(ipfsToGateway(uri));
-    return url.protocol === 'https:' || url.protocol === 'http:';
+    // Only HTTPS allowed. http:// is unsafe for metadata fetches.
+    return url.protocol === 'https:';
   } catch {
     return false;
   }
 }
 
 async function fetchMetadata(uri: string, agentId?: string): Promise<AgentMetadata | null> {
-  // Try manifest resolver first (handles arclayer://manifest/ and arclayer://agent/ schemes)
+  // Try manifest resolver first (handles arclayer://manifest/ and arclayer://agent/ schemes).
   const resolved = await resolveManifestMetadata(uri, agentId);
   if (resolved) {
     return {
@@ -51,7 +61,6 @@ async function fetchMetadata(uri: string, agentId?: string): Promise<AgentMetada
     };
   }
 
-  // Fallback: HTTP/IPFS fetch (existing behavior)
   if (!uri || !isSafeHttpUri(uri)) return null;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2500);
@@ -80,51 +89,112 @@ async function fetchMetadata(uri: string, agentId?: string): Promise<AgentMetada
   }
 }
 
-export async function GET() {
-  try {
-    const client = createPublicClient({ transport: http(RPC) });
-    const logs = await client.getLogs({
+type RegisteredLog = Log<bigint, number, false, typeof AGENT_REGISTERED, true>;
+
+async function fetchLogsChunked(
+  client: ReturnType<typeof createPublicClient>,
+  fromBlock: bigint,
+  toBlock: bigint,
+): Promise<{ logs: RegisteredLog[]; chunks: number }> {
+  const logs: RegisteredLog[] = [];
+  let chunks = 0;
+  let cursor = fromBlock;
+  while (cursor <= toBlock) {
+    const end = cursor + MAX_BLOCK_RANGE - BigInt(1) > toBlock ? toBlock : cursor + MAX_BLOCK_RANGE - BigInt(1);
+    const chunkLogs = await client.getLogs({
       address: AGENT_REGISTRY,
       event: AGENT_REGISTERED,
-      fromBlock: FROM_BLOCK,
-      toBlock: 'latest',
+      fromBlock: cursor,
+      toBlock: end,
     });
+    logs.push(...(chunkLogs as RegisteredLog[]));
+    chunks += 1;
+    cursor = end + BigInt(1);
+  }
+  return { logs, chunks };
+}
 
-    const latestById = new Map<string, (typeof logs)[number]>();
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+export async function GET() {
+  const client = createPublicClient({ transport: http(RPC) });
+
+  try {
+    const latestBlock = await client.getBlockNumber();
+    const fromBlock = FROM_BLOCK > latestBlock ? latestBlock : FROM_BLOCK;
+    const { logs, chunks } = await fetchLogsChunked(client, fromBlock, latestBlock);
+
+    const latestById = new Map<string, RegisteredLog>();
     for (const log of logs) {
       const agentId = log.args.agentId?.toString();
       if (agentId) latestById.set(agentId, log);
     }
 
-    const agents = await Promise.all(
-      Array.from(latestById.values()).map(async (log) => {
-        const metadataURI = log.args.metadataURI || '';
-        const agentId = log.args.agentId?.toString() || '';
-        const metadata = await fetchMetadata(metadataURI, agentId);
-        return {
-          agentId,
-          skillHash: log.args.skillHash || '',
-          controller: log.args.controller || '',
-          metadataURI,
-          registeredAtBlock: log.blockNumber?.toString(),
-          metadata,
-        };
-      })
-    );
+    const visibleLogs = Array.from(latestById.values()).filter((log) => {
+      const agentId = log.args.agentId?.toString() || '';
+      return agentId && !isHiddenAgent(agentId);
+    });
+
+    const agents = await mapWithConcurrency(visibleLogs, METADATA_CONCURRENCY, async (log) => {
+      const metadataURI = log.args.metadataURI || '';
+      const agentId = log.args.agentId?.toString() || '';
+      const metadata = await fetchMetadata(metadataURI, agentId);
+      return {
+        agentId,
+        skillHash: log.args.skillHash || '',
+        controller: log.args.controller || '',
+        metadataURI,
+        registeredAtBlock: log.blockNumber?.toString(),
+        metadata,
+      };
+    });
 
     const autonomousAgents = agents.filter((agent) => agent.metadata?.autonomous === true);
 
     return NextResponse.json({
       registry: AGENT_REGISTRY,
       agents: autonomousAgents,
-      totalRegistered: agents.length,
+      totalRegistered: latestById.size,
+      totalHidden: latestById.size - visibleLogs.length,
+      totalVisible: visibleLogs.length,
       totalAutonomous: autonomousAgents.length,
+      scan: {
+        fromBlock: fromBlock.toString(),
+        toBlock: latestBlock.toString(),
+        chunks,
+        maxRange: MAX_BLOCK_RANGE.toString(),
+      },
       timestamp: new Date().toISOString(),
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'registry_sync_failed';
     return NextResponse.json(
-      { registry: AGENT_REGISTRY, agents: [], totalRegistered: 0, totalAutonomous: 0, error: err?.message || 'registry_sync_failed' },
-      { status: 200 }
+      {
+        registry: AGENT_REGISTRY,
+        agents: [],
+        totalRegistered: 0,
+        totalAutonomous: 0,
+        scan: {
+          fromBlock: FROM_BLOCK.toString(),
+          toBlock: null,
+          chunks: 0,
+          maxRange: MAX_BLOCK_RANGE.toString(),
+        },
+        error: message,
+      },
+      { status: 200 },
     );
   }
 }

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useAccount } from 'wagmi';
+import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { ARC_EXPLORER, formatUSDC, shortenAddress } from '@/lib/contracts';
 import { displayAgentLabel, formatSkillLabel, parseAgentName, parseAgentSkill, shortAgentId } from '@/lib/agentName';
 import { fetchIndexerJson, type DashboardOverview } from '@/lib/indexer';
@@ -58,7 +58,7 @@ async function probeRpc(url: string): Promise<{ blockNumber: bigint | null; late
 }
 
 export default function Dashboard() {
-  const { address, isConnected } = useAccount();
+  const { address, authenticated: isConnected } = useCircleWallet();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);

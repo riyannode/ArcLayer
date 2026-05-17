@@ -14,3 +14,23 @@ export const CONTRACTS = {
   WORK_PROOF: "0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5",
   REPUTATION_ORACLE: "0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c",
 } as const;
+
+/**
+ * A2A (Agent-to-Agent) stack — separate registry track from core CONTRACTS.
+ *
+ * CONTRACTS.AGENT_REGISTRY is the core registry used by JobEscrow / WorkProof /
+ * ReputationOracle and the indexer. Do NOT confuse it with A2A_AGENT_REGISTRY:
+ * the A2A stack is its own protocol surface for autonomous agent discovery,
+ * receipts, reputation, and market mirroring.
+ *
+ * Both registries coexist on Arc testnet (chainId 5042002).
+ */
+export const A2A_CONTRACTS = {
+  A2A_AGENT_REGISTRY: "0xB263336055dD65FF501e36CA39941760D943703C",
+  A2A_REPUTATION_REGISTRY: "0x9c97CAE866397d94e295632B3BFCF342ea20f1Cc",
+  A2A_RECEIPT_REGISTRY: "0x5F591465D0C2fe20A28D2539dFBB2B00716397B7",
+  MARKET_MIRROR_REGISTRY: "0xec5910926925941c451C97A8bd2c4Ba7bD173195",
+  IGNIA: "0xd66971F9Da4c60DB4A061686F43dBf39Db5E2916",
+  AGENT_REGISTRY_V2: "0x0465CeBC34698Aa156bcBB8d5c1caA39777dDb58",
+} as const;
+

@@ -3,8 +3,9 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { waitForTransactionReceipt, readContract } from '@wagmi/core';
-import { useAccount, useWriteContract } from 'wagmi';
+import { readContract, waitForTransactionReceipt } from '@wagmi/core';
+import { useCircleWallet } from '@/hooks/useCircleWallet';
+import { useArcWrite } from '@/hooks/useArcWrite';
 import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
 import { StatusBanner } from '@/components/StatusBanner';
 import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/components/protection';
@@ -25,8 +26,8 @@ type NameStatus =
 
 export default function RegisterManualAgentPage() {
   const router = useRouter();
-  const { isConnected } = useAccount();
-  const { writeContractAsync } = useWriteContract();
+  const { authenticated: isConnected } = useCircleWallet();
+  const { writeContractAsync } = useArcWrite();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txState, setTxState] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<'idle' | 'pending' | 'synced' | 'error'>('idle');
