@@ -8,7 +8,7 @@ import {
   consumeGatewayPayment,
   deriveGatewayPaymentId,
   getArcTestnetGatewayConfig,
-  getBatchFacilitatorClient,
+  getGatewayPayment,
   isBatchPayment,
   isGatewayEnabled,
   USDC_ADDRESS,
@@ -116,55 +116,45 @@ export async function GET(req: NextRequest) {
     }
 
     try {
-      const client = getBatchFacilitatorClient();
+      // ─── Step 1: Derive paymentId ─────────────────────────────────────────────
       const paymentId = deriveGatewayPaymentId(proof, gatewayRequirements);
+
+      // ─── Step 2: Check payment exists in x402_gateway_payments ────────────────
+      const existing = await getGatewayPayment(paymentId);
+      if (!existing) {
+        return NextResponse.json(
+          { ok: false, unlocked: false, error: 'gateway_payment_not_settled', message: 'No settlement record found for this payment. Call /api/x402/settle first.', paymentId, accepts: [buildArcNativeRequirements(), gatewayRequirements] },
+          { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
+      }
+
+      // ─── Step 3: Require status settled (or accepted_pending_settlement) ──────
+      const isSettled = existing.status === 'settled' || existing.status === 'accepted_pending_settlement' || existing.status === 'consumed';
+      if (!isSettled) {
+        return NextResponse.json(
+          { ok: false, unlocked: false, error: 'gateway_payment_not_settled', message: `Payment exists but status is "${existing.status}". Settlement required before unlock.`, paymentId, accepts: [buildArcNativeRequirements(), gatewayRequirements] },
+          { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
+      }
+
+      // ─── Step 4: Atomically consume paymentId once ────────────────────────────
       const consumed = await consumeGatewayPayment(paymentId);
       if (!consumed.ok && consumed.reason === 'replayed') {
         return NextResponse.json(
-          { ok: false, unlocked: false, error: 'gateway_payment_replayed', paymentId, accepts: [buildArcNativeRequirements(), gatewayRequirements] },
+          { ok: false, unlocked: false, error: 'gateway_payment_replayed', message: 'This Gateway payment has already been consumed. Replay rejected.', paymentId, accepts: [buildArcNativeRequirements(), gatewayRequirements] },
           { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
         );
       }
 
-      // Circle Gateway requires `resource` as an object ({url, description?, mimeType?}),
-      // not a bare URL string. Canonical x402 clients can pass `resource: "<url>"`,
-      // so coerce string → object here. Mirrors normalization in /api/x402/verify.
-      const rawResource = (proof as Record<string, unknown>).resource;
-      let resource: Record<string, unknown>;
-      if (typeof rawResource === 'string' && rawResource.length > 0) {
-        resource = { url: rawResource, description: 'ArcLayer x402 Gateway demo', mimeType: 'application/json' };
-      } else if (rawResource && typeof rawResource === 'object') {
-        resource = rawResource as Record<string, unknown>;
-      } else {
-        resource = { url: req.url, description: 'ArcLayer x402 Gateway demo', mimeType: 'application/json' };
-      }
-      const normalizedProof = { ...(proof as Record<string, unknown>), resource };
-
-      const verify = await client.verify(
-        normalizedProof as unknown as Parameters<typeof client.verify>[0],
-        gatewayRequirements as unknown as Parameters<typeof client.verify>[1],
-      );
-      if (!verify.isValid) {
-        return NextResponse.json(
-          { ok: false, unlocked: false, error: verify.invalidReason || 'gateway_verify_failed', paymentId, accepts: [buildArcNativeRequirements(), gatewayRequirements] },
-          { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-        );
-      }
-
-      const settle = await client.settle(
-        normalizedProof as unknown as Parameters<typeof client.settle>[0],
-        gatewayRequirements as unknown as Parameters<typeof client.settle>[1],
-      ).catch((error) => ({ success: false, errorReason: 'gateway_settlement_pending', errorMessage: error instanceof Error ? error.message : String(error), transaction: '', network: GATEWAY_NETWORK_NAME, payer: verify.payer }));
-
+      // ─── Step 5: Unlock resource ──────────────────────────────────────────────
       const paymentResponse = {
         success: true,
         mode: 'circle-gateway',
         paymentId,
-        payer: settle.payer || verify.payer,
-        transaction: settle.transaction || null,
-        network: settle.network || GATEWAY_NETWORK_NAME,
-        status: settle.success ? 'settled' : 'accepted_pending_settlement',
-        settlementError: settle.success ? undefined : settle.errorReason,
+        payer: existing.payer,
+        transaction: existing.transaction ?? null,
+        network: existing.network ?? GATEWAY_NETWORK_NAME,
+        status: existing.status,
       };
       return NextResponse.json(
         { ok: true, message: 'ArcLayer x402 protected resource unlocked', mode: 'circle-gateway', payment: paymentResponse, unlocked: true },

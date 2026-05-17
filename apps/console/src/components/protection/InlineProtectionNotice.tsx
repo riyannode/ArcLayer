@@ -10,20 +10,20 @@ type Props = {
   className?: string;
 };
 
-const tone: Record<ProtectionSeverity, { wrap: string; tag: string; tagText: string }> = {
-  info: { wrap: "border-sky-400/20 bg-sky-400/[0.04]", tag: "border-sky-400/25 bg-sky-400/10", tagText: "text-sky-200" },
-  success: { wrap: "border-emerald-400/20 bg-emerald-400/[0.04]", tag: "border-emerald-400/25 bg-emerald-400/10", tagText: "text-emerald-200" },
-  warning: { wrap: "border-[#C5A67C]/25 bg-[#C5A67C]/[0.04]", tag: "border-[#C5A67C]/30 bg-[#C5A67C]/10", tagText: "text-[#F2D8A8]" },
-  error: { wrap: "border-red-400/25 bg-red-400/[0.04]", tag: "border-red-400/25 bg-red-400/10", tagText: "text-red-200" },
-  protection: { wrap: "border-[#C5A67C]/30 bg-[#C5A67C]/[0.06]", tag: "border-[#C5A67C]/35 bg-[#C5A67C]/12", tagText: "text-[#F7DCA8]" },
+const tone: Record<ProtectionSeverity, { wrap: string; tag: string; tagText: string; messageText: string; detailText: string }> = {
+  info: { wrap: "border-sky-400/20 bg-sky-400/[0.04]", tag: "border-sky-400/25 bg-sky-400/10", tagText: "text-sky-200", messageText: "text-sky-100/80", detailText: "text-sky-100/75" },
+  success: { wrap: "border-emerald-400/30 bg-emerald-400/[0.06]", tag: "border-emerald-400/35 bg-emerald-400/10", tagText: "text-emerald-300", messageText: "text-emerald-100/85", detailText: "text-emerald-100/75" },
+  warning: { wrap: "border-[#C5A67C]/25 bg-[#C5A67C]/[0.04]", tag: "border-[#C5A67C]/30 bg-[#C5A67C]/10", tagText: "text-[#F2D8A8]", messageText: "text-[#F7DCA8]/80", detailText: "text-[#F7DCA8]/75" },
+  error: { wrap: "border-red-400/30 bg-red-400/[0.06]", tag: "border-red-400/35 bg-red-400/10", tagText: "text-red-300", messageText: "text-red-100/85", detailText: "text-red-100/75" },
+  protection: { wrap: "border-red-400/30 bg-red-400/[0.06]", tag: "border-red-400/35 bg-red-400/10", tagText: "text-red-300", messageText: "text-red-100/85", detailText: "text-red-100/75" },
 };
 
 const labelDefault: Record<ProtectionSeverity, string> = {
   info: "Notice",
-  success: "OK",
+  success: "Success",
   warning: "Heads up",
   error: "Action blocked",
-  protection: "x402 protection",
+  protection: "x402 rejected",
 };
 
 /**
@@ -50,9 +50,9 @@ export function InlineProtectionNotice({
           {label}
         </span>
         <div className="flex-1 min-w-0">
-          <p className="text-xs leading-5 text-white/75">{message}</p>
+          <p className={`text-xs leading-5 ${t.messageText}`}>{message}</p>
           {technicalDetail && (
-            <code className="mt-1 block text-[10px] text-white/80">{technicalDetail}</code>
+            <code className={`mt-1 block text-[10px] ${t.detailText}`}>{technicalDetail}</code>
           )}
         </div>
       </div>

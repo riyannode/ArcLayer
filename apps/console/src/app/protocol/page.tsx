@@ -483,7 +483,7 @@ export default function Dashboard() {
           <Panel
             title="AGENTS · FIND"
             sub="Search by name, capability, controller, or agent ID. Use a worker to create a job."
-            action={<Link href="/agents" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>OPEN ALL ↗</Link>}
+            action={<Link href="/register" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>REGISTER ↗</Link>}
           >
             <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
               <input

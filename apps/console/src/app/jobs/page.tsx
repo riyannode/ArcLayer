@@ -338,7 +338,7 @@ function JobsPage() {
             <button onClick={() => loadJobs()} className="btn-bordered">
               {isRefreshing ? 'REFRESHING\u2026' : 'REFRESH'}
             </button>
-            <Link href="/agents" className="btn-primary">BACK TO AGENTS</Link>
+            <Link href="/register" className="btn-primary">BACK TO REGISTER</Link>
           </div>
         </div>
 

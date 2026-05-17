@@ -42,7 +42,6 @@ const NotifBell = dynamic(() => import('./NotifBell'), {
 
 const NAV_LINKS = [
   { href: '/protocol', label: 'PROTOCOL', anchor: null },
-  { href: '/agents', label: 'AGENTS', anchor: null },
   { href: '/register', label: 'REGISTER', anchor: null },
   { href: '/jobs', label: 'JOBS', anchor: null },
   { href: '/x402-demo', label: 'x402', anchor: null },

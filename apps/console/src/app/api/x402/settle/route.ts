@@ -57,16 +57,53 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ─── Scheme routing ───────────────────────────────────────────────────────────
+  // ─── Strict rail routing ───────────────────────────────────────────────────────
+  // ArcLayer hybrid model intentionally has two isolated rails:
+  //   - arc-native: X-PAYMENT, self-hosted transferWithAuthorization only
+  //   - circle-gateway: PAYMENT-SIGNATURE, Circle BatchFacilitatorClient only
+  // Missing/ambiguous rail is rejected to prevent cross-rail fallback.
+  const paymentRail = body.paymentRail;
+  if (paymentRail !== 'arc-native' && paymentRail !== 'circle-gateway') {
+    return NextResponse.json(
+      {
+        success: false,
+        errorReason: 'missing_payment_rail',
+        errorMessage: 'paymentRail is required and must be "arc-native" or "circle-gateway". Arc Native and Circle Gateway are isolated rails.',
+        transaction: '',
+      },
+      { status: 400 }
+    );
+  }
+
   const scheme = (body.scheme as string) ?? (body.paymentRequirements as Record<string, unknown>)?.scheme ?? null;
   const version = body.x402Version;
 
   if (version === 2 || scheme === 'exact') {
     const paymentRequirements = body.paymentRequirements as Record<string, unknown> | undefined;
-    if (paymentRequirements && isBatchPayment(paymentRequirements)) {
-      return handleGatewaySettle(body);
+    if (paymentRail === 'arc-native') {
+      if (paymentRequirements && isBatchPayment(paymentRequirements)) {
+        return NextResponse.json(
+          { success: false, errorReason: 'rail_mismatch', errorMessage: 'arc-native rail cannot settle GatewayWalletBatched requirements.', transaction: '' },
+          { status: 400 }
+        );
+      }
+      return handleExactSettle(body);
     }
-    return handleExactSettle(body);
+
+    if (!paymentRequirements || !isBatchPayment(paymentRequirements)) {
+      return NextResponse.json(
+        { success: false, errorReason: 'rail_mismatch', errorMessage: 'circle-gateway rail requires GatewayWalletBatched/gateway-batched-eip3009 payment requirements.', transaction: '' },
+        { status: 400 }
+      );
+    }
+    return handleGatewaySettle(body);
+  }
+
+  if (paymentRail === 'circle-gateway') {
+    return NextResponse.json(
+      { success: false, errorReason: 'unsupported_gateway_scheme', errorMessage: 'circle-gateway rail only supports x402 v2 exact GatewayWalletBatched payments.', transaction: '' },
+      { status: 400 }
+    );
   }
 
   return handleArcEscrowSettle(body);
@@ -156,7 +193,7 @@ async function handleGatewaySettle(body: Record<string, unknown>): Promise<NextR
   }
 }
 
-// ─── Exact scheme (V2 canonical) ──────────────────────────────────────────────
+// ─── Exact scheme (V2 canonical — Arc Native ONLY) ─────────────────────────
 async function handleExactSettle(body: Record<string, unknown>): Promise<NextResponse> {
   const parsed = parseExactVerifyRequest(body);
   if (!parsed.ok) {
@@ -166,12 +203,11 @@ async function handleExactSettle(body: Record<string, unknown>): Promise<NextRes
     );
   }
 
-  const selfHosted = body.selfHosted === true || process.env.X402_SETTLE_MODE === 'self-hosted';
-
+  // Arc Native always settles self-hosted. Never touches Circle Gateway.
   const result = await settleExactPayment({
     paymentPayload: parsed.paymentPayload,
     paymentRequirements: parsed.paymentRequirements,
-    selfHosted,
+    selfHosted: true,
   });
 
   if (!result.success) {

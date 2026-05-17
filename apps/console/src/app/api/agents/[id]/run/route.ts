@@ -17,10 +17,8 @@ import {
   createGatewayReceipt,
   deriveGatewayPaymentId,
   getArcTestnetGatewayConfig,
-  getBatchFacilitatorClient,
   isBatchPayment,
   isGatewayEnabled,
-  recordGatewayPayment,
   type X402PaymentReceipt,
 } from '@/lib/x402';
 
@@ -135,8 +133,21 @@ async function handleGatewayPayment(
   const gatewayRequirements = buildGatewayRequirements();
   const paymentId = deriveGatewayPaymentId(proof, gatewayRequirements);
 
-  // Replay check
+  // ─── Atomic consume-once: looks up settled record + marks consumed in one RPC. ───
+  // Returns 'missing' if /api/x402/settle was never called for this paymentId,
+  // 'replayed' if already consumed, or success with evidence.
   const consumed = await consumeGatewayPayment(paymentId);
+
+  if (!consumed.ok && consumed.reason === 'missing') {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { ok: false, error: 'gateway_payment_not_found', paymentId, message: 'Payment must be settled via /api/x402/settle first.' },
+        { status: 402 },
+      ),
+    };
+  }
+
   if (!consumed.ok && consumed.reason === 'replayed') {
     return {
       ok: false,
@@ -147,91 +158,33 @@ async function handleGatewayPayment(
     };
   }
 
-  // Normalize resource field for Circle SDK
-  const rawResource = proof.resource;
-  let resourceObj: Record<string, unknown>;
-  if (typeof rawResource === 'string' && rawResource.length > 0) {
-    resourceObj = { url: rawResource, description: 'ArcLayer agent run', mimeType: 'application/json' };
-  } else if (rawResource && typeof rawResource === 'object') {
-    resourceObj = rawResource as Record<string, unknown>;
-  } else {
-    resourceObj = { url: resource, description: 'ArcLayer agent run', mimeType: 'application/json' };
-  }
-  const normalizedProof = { ...proof, resource: resourceObj };
-
-  try {
-    const client = getBatchFacilitatorClient();
-
-    // Verify
-    const verify = await client.verify(
-      normalizedProof as unknown as Parameters<typeof client.verify>[0],
-      gatewayRequirements as unknown as Parameters<typeof client.verify>[1],
-    );
-    if (!verify.isValid) {
-      return {
-        ok: false,
-        response: NextResponse.json(
-          { ok: false, error: 'gateway_verify_failed', reason: verify.invalidReason, paymentId },
-          { status: 422 },
-        ),
-      };
-    }
-
-    // Settle
-    const settle = await client.settle(
-      normalizedProof as unknown as Parameters<typeof client.settle>[0],
-      gatewayRequirements as unknown as Parameters<typeof client.settle>[1],
-    ).catch((err) => ({
-      success: false,
-      errorReason: 'gateway_settlement_pending',
-      errorMessage: err instanceof Error ? err.message : String(err),
-      transaction: '',
-      network: GATEWAY_NETWORK_NAME,
-      payer: verify.payer,
-    }));
-
-    const status = settle.success ? 'settled' : 'accepted_pending_settlement';
-
-    await recordGatewayPayment({
-      paymentId,
-      status: status as 'settled' | 'accepted_pending_settlement',
-      payer: verify.payer,
-      payTo: gatewayRequirements.payTo,
-      amount: gatewayRequirements.amount,
-      asset: gatewayRequirements.asset,
-      network: gatewayRequirements.network,
-      resource,
-      transaction: settle.transaction || '',
-      settledAt: Date.now(),
-      raw: settle as unknown as Record<string, unknown>,
-    });
-
-    const receipt = createGatewayReceipt({
-      payer: verify.payer || '0x0000000000000000000000000000000000000000',
-      payTo: gatewayRequirements.payTo,
-      amount: gatewayRequirements.amount,
-      asset: gatewayRequirements.asset,
-      network: gatewayRequirements.network,
-      resource,
-      paymentId,
-      gatewaySettlementId: settle.transaction || undefined,
-      status: status === 'settled' ? 'settled' : 'accepted_pending_settlement',
-      verifiedAt: new Date().toISOString(),
-      settledAt: new Date().toISOString(),
-      raw: settle as unknown as Record<string, unknown>,
-    });
-
-    return { ok: true, receipt };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Gateway payment failed';
+  if (!consumed.ok || !consumed.evidence) {
     return {
       ok: false,
       response: NextResponse.json(
-        { ok: false, error: 'gateway_error', message },
-        { status: 502 },
+        { ok: false, error: 'gateway_payment_consume_failed', paymentId },
+        { status: 500 },
       ),
     };
   }
+
+  const evidence = consumed.evidence;
+  const receipt = createGatewayReceipt({
+    payer: evidence.payer || '0x0000000000000000000000000000000000000000',
+    payTo: gatewayRequirements.payTo,
+    amount: gatewayRequirements.amount,
+    asset: gatewayRequirements.asset,
+    network: gatewayRequirements.network,
+    resource,
+    paymentId,
+    gatewaySettlementId: evidence.transaction || undefined,
+    status: evidence.status === 'settled' ? 'settled' : 'accepted_pending_settlement',
+    verifiedAt: new Date().toISOString(),
+    settledAt: evidence.settledAt ? new Date(evidence.settledAt).toISOString() : new Date().toISOString(),
+    raw: evidence.raw || {},
+  });
+
+  return { ok: true, receipt };
 }
 
 // ─── Arc Native payment flow ─────────────────────────────────────────────────

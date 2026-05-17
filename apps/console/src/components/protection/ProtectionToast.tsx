@@ -10,10 +10,10 @@ type Props = {
 
 const severityColor: Record<ProtectionNotice["severity"], string> = {
   info: "border-sky-400/25 bg-sky-400/[0.06]",
-  success: "border-emerald-400/25 bg-emerald-400/[0.06]",
+  success: "border-emerald-400/40 bg-emerald-400/[0.08]",
   warning: "border-[#C5A67C]/25 bg-[#C5A67C]/[0.06]",
-  error: "border-red-400/25 bg-red-400/[0.06]",
-  protection: "border-[#C5A67C]/30 bg-[#C5A67C]/[0.08]",
+  error: "border-red-400/40 bg-red-400/[0.08]",
+  protection: "border-red-400/40 bg-red-400/[0.08]",
 };
 
 const severityIcon: Record<ProtectionNotice["severity"], string> = {
@@ -22,6 +22,22 @@ const severityIcon: Record<ProtectionNotice["severity"], string> = {
   warning: "⚠",
   error: "✕",
   protection: "🛡",
+};
+
+const severityTitleColor: Record<ProtectionNotice["severity"], string> = {
+  info: "text-sky-200",
+  success: "text-emerald-300",
+  warning: "text-[#F2D8A8]",
+  error: "text-red-300",
+  protection: "text-red-300",
+};
+
+const severityMsgColor: Record<ProtectionNotice["severity"], string> = {
+  info: "text-sky-100/80",
+  success: "text-emerald-100/85",
+  warning: "text-[#F7DCA8]/80",
+  error: "text-red-100/85",
+  protection: "text-red-100/85",
 };
 
 function ToastItem({ notice, onDismiss }: { notice: ProtectionNotice; onDismiss: () => void }) {
@@ -47,8 +63,8 @@ function ToastItem({ notice, onDismiss }: { notice: ProtectionNotice; onDismiss:
     >
       <span className="mt-0.5 text-base leading-none">{severityIcon[notice.severity]}</span>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white/90 truncate">{notice.title}</p>
-        <p className="mt-0.5 text-xs text-white/80 line-clamp-2">{notice.message}</p>
+        <p className={`text-sm font-medium truncate ${severityTitleColor[notice.severity]}`}>{notice.title}</p>
+        <p className={`mt-0.5 text-xs line-clamp-2 ${severityMsgColor[notice.severity]}`}>{notice.message}</p>
         {notice.technicalDetail && (
           <code className="mt-1 block text-[10px] text-white/80 truncate">{notice.technicalDetail}</code>
         )}

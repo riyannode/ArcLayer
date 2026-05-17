@@ -7,13 +7,17 @@ import { readContract, waitForTransactionReceipt } from '@wagmi/core';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
+import { fetchIndexerJson, type IndexedAgent } from '@/lib/indexer';
 import { StatusBanner } from '@/components/StatusBanner';
 import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/components/protection';
+import { shortenAddress } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
 import {
   buildAgentMetadataURI,
+  displayAgentLabel,
   nameToAgentId,
   normalizeAgentName,
+  parseAgentName,
   shortAgentId,
 } from '@/lib/agentName';
 
@@ -28,6 +32,19 @@ export default function RegisterManualAgentPage() {
   const router = useRouter();
   const { isConnected } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
+
+  // Registry state
+  const [agents, setAgents] = useState<IndexedAgent[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  // Filter / sort state for the registered agents list
+  const [agentSearch, setAgentSearch] = useState('');
+  const [agentSort, setAgentSort] = useState<'top' | 'jobs' | 'newest' | 'name'>('top');
+  const [showAllAgents, setShowAllAgents] = useState(false);
+
+  // Form state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txState, setTxState] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<'idle' | 'pending' | 'synced' | 'error'>('idle');
@@ -37,6 +54,43 @@ export default function RegisterManualAgentPage() {
     metadataURI: '',
   });
   const [nameStatus, setNameStatus] = useState<NameStatus>({ state: 'idle' });
+
+  const filteredAgents = useMemo(() => {
+    const q = agentSearch.trim().toLowerCase();
+    let list = agents.slice();
+    if (q) {
+      list = list.filter((a) => {
+        const label = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI }).toLowerCase();
+        return (
+          label.includes(q) ||
+          a.agentId.toLowerCase().includes(q) ||
+          a.controller.toLowerCase().includes(q) ||
+          (a.metadataURI ?? '').toLowerCase().includes(q)
+        );
+      });
+    }
+    switch (agentSort) {
+      case 'top':
+        list.sort((a, b) => Number(b.score ?? 0) - Number(a.score ?? 0));
+        break;
+      case 'jobs':
+        list.sort((a, b) => (b.jobs?.length ?? 0) - (a.jobs?.length ?? 0));
+        break;
+      case 'newest':
+        list.reverse();
+        break;
+      case 'name':
+        list.sort((a, b) => {
+          const la = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI }).toLowerCase();
+          const lb = displayAgentLabel({ agentId: b.agentId, metadataURI: b.metadataURI }).toLowerCase();
+          return la.localeCompare(lb);
+        });
+        break;
+    }
+    return list;
+  }, [agents, agentSearch, agentSort]);
+
+  const visibleAgents = showAllAgents ? filteredAgents : filteredAgents.slice(0, 5);
 
   const derivedAgentId = useMemo(() => {
     try {
@@ -48,6 +102,36 @@ export default function RegisterManualAgentPage() {
 
   const effectiveMetadataURI =
     form.metadataURI.trim() || (form.name.trim() ? buildAgentMetadataURI(form.name, form.skill) : '');
+
+  async function loadAgents() {
+    setIsRefreshing(true);
+    try {
+      setAgents(await fetchIndexerJson<IndexedAgent[]>('/agents'));
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Failed to load agents.');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setIsLoading(true);
+        setLoadError(null);
+        const next = await fetchIndexerJson<IndexedAgent[]>('/agents');
+        if (!cancelled) setAgents(next);
+      } catch (e) {
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : 'Failed to load agents.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const norm = normalizeAgentName(form.name);
@@ -95,12 +179,26 @@ export default function RegisterManualAgentPage() {
       setTxState(`Waiting for ${hash.slice(0, 10)}…`);
       await waitForTransactionReceipt(config, { hash });
       setStatusTone('synced');
-      setTxState(`✓ Agent "${normalizedName}" registered as ${shortAgentId(agentId)}. Redirecting…`);
-      setTimeout(() => router.push('/agents'), 1500);
+      setTxState(`✓ Agent "${normalizedName}" registered as ${shortAgentId(agentId)}.`);
+      setIsSubmitting(false);
+      // Refresh registry list so the new agent shows up
+      void loadAgents();
+      setTimeout(() => router.push('/jobs'), 1500);
     } catch (e) {
       setTxState(e instanceof Error ? e.message : 'Agent registration failed.');
       setStatusTone('error');
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleCopyAgentId(agentId: string) {
+    try {
+      await navigator.clipboard.writeText(agentId);
+      setStatusTone('synced');
+      setTxState(`Copied full agent ID ${agentId}.`);
+    } catch {
+      setStatusTone('error');
+      setTxState('Failed to copy agent ID.');
     }
   }
 
@@ -113,15 +211,29 @@ export default function RegisterManualAgentPage() {
           </Link>
         </div>
 
-        <div className="mb-8">
-          <div className="aureo-mono-label mb-3">PROTOCOL · MANUAL AGENT</div>
-          <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[56px]">
-            Register <span className="italic text-[#C5A67C]">manual</span> agent
-          </h1>
-          <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-            Your agent will appear in the Job Marketplace. Clients post jobs with USDC budgets, you submit deliverables, and earn after evaluator approval. Settlement records on-chain via JobEscrow + WorkProof NFT.
-          </p>
+        <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="aureo-mono-label mb-3">PROTOCOL · MANUAL AGENT</div>
+            <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[56px]">
+              Register <span className="italic text-[#C5A67C]">manual</span> agent
+            </h1>
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
+              Your agent will appear in the Job Marketplace. Clients post jobs with USDC budgets, you submit deliverables, and earn after evaluator approval. Settlement records on-chain via JobEscrow + WorkProof NFT.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3 self-start md:self-auto">
+            <button onClick={() => loadAgents()} className="btn-bordered">
+              {isRefreshing ? 'REFRESHING…' : 'REFRESH'}
+            </button>
+            <Link href="/jobs" className="btn-primary">GO TO JOBS</Link>
+          </div>
         </div>
+
+        {loadError && (
+          <div className="mb-6 p-4" style={{ border: '1px solid rgba(230, 130, 130, 0.35)', background: 'rgba(230, 130, 130, 0.06)' }}>
+            <p className="font-mono text-[11.5px] text-[#f0c5c5]">{loadError}</p>
+          </div>
+        )}
 
         <div className="mb-6">
           <StatusBanner
@@ -135,13 +247,14 @@ export default function RegisterManualAgentPage() {
                     ? 'ACTION · ERROR'
                     : 'READY'
             }
-            body={txState || 'Ready for registerAgent flow.'}
+            body={txState || (isRefreshing ? 'Refreshing registered agents.' : 'Ready for registerAgent flow.')}
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_0.9fr]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1.02fr_0.98fr]">
+          {/* STEP 1 — Form */}
           <section className="aureo-panel p-4 md:p-6">
-            <div className="aureo-mono-label mb-2">REGISTER BY NAME</div>
+            <div className="aureo-mono-label mb-2">STEP 1</div>
             <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent details</h2>
             <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
               AgentRegistry · registerAgent(keccak(name), skillHash, metadataURI)
@@ -159,7 +272,7 @@ export default function RegisterManualAgentPage() {
                   spellCheck={false}
                 />
                 <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
-                  Pick a unique readable handle. The on-chain agent ID is derived from this name.
+                  Choose a unique agent handle. The ID is created automatically.
                 </div>
                 <div className="mt-1.5 font-mono text-[10.5px]">
                   {nameStatus.state === 'idle' && <span className="text-[rgba(234,228,216,0.78)]">Use lowercase. Minimum 2 characters.</span>}
@@ -171,7 +284,7 @@ export default function RegisterManualAgentPage() {
               </div>
 
               <div>
-                <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">SKILL LABEL</label>
+                <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">SKILL</label>
                 <input
                   value={form.skill}
                   onChange={(e) => setForm((c) => ({ ...c, skill: e.target.value }))}
@@ -180,7 +293,7 @@ export default function RegisterManualAgentPage() {
                   autoComplete="off"
                 />
                 <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
-                  Identifies the intended capability. Stored into agent metadata.
+                  Metadata label for the agent's capability.
                 </div>
               </div>
 
@@ -194,7 +307,7 @@ export default function RegisterManualAgentPage() {
                   autoComplete="off"
                 />
                 <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
-                  Auto-generated from the name. Override only for custom (e.g. ipfs://) URIs.
+                  Leave as default, or add an IPFS URL.
                 </div>
               </div>
 
@@ -231,57 +344,173 @@ export default function RegisterManualAgentPage() {
             </button>
           </section>
 
-          {/* Right panel: how it works */}
-          <aside className="aureo-panel p-4 md:p-6">
-            <div className="aureo-mono-label mb-2">HOW IT WORKS</div>
-            <h2 className="aureo-display text-[22px] text-[#EAE4D8]">Manual job lifecycle</h2>
+          {/* STEP 2 — Registered agents list */}
+          <section className="aureo-panel p-4 md:p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="aureo-mono-label mb-2">STEP 2</div>
+                <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent cards</h2>
+              </div>
+              <span className="font-mono text-[11px] text-[#EAE4D8]">
+                {filteredAgents.length}
+                <span className="text-[#C5A67C]"> / {agents.length} </span>
+                indexed
+              </span>
+            </div>
+            <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
+              Compact list. Each row shows readable name, short ID, controller, score and jobs. Click Use to preselect for create job.
+            </p>
 
-            <ol className="mt-4 space-y-3 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)]">
-              <li className="flex gap-3">
-                <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">1</span>
-                <div>
-                  <div className="text-[#EAE4D8]">You register</div>
-                  <div className="text-[rgba(234,228,216,0.84)]">Your agent ID + skill go on-chain. You appear in the marketplace agent list.</div>
-                </div>
-              </li>
-              <li className="flex gap-3">
-                <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">2</span>
-                <div>
-                  <div className="text-[#EAE4D8]">Client creates job</div>
-                  <div className="text-[rgba(234,228,216,0.84)]">A client posts a job with your agent preselected and funds USDC into JobEscrow.</div>
-                </div>
-              </li>
-              <li className="flex gap-3">
-                <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">3</span>
-                <div>
-                  <div className="text-[#EAE4D8]">You submit deliverable</div>
-                  <div className="text-[rgba(234,228,216,0.84)]">Attach deliverable URI + proof metadata to the job.</div>
-                </div>
-              </li>
-              <li className="flex gap-3">
-                <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">4</span>
-                <div>
-                  <div className="text-[#EAE4D8]">Evaluator approves</div>
-                  <div className="text-[rgba(234,228,216,0.84)]">Settlement releases USDC from escrow to your wallet.</div>
-                </div>
-              </li>
-              <li className="flex gap-3">
-                <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">5</span>
-                <div>
-                  <div className="text-[#EAE4D8]">WorkProof NFT minted</div>
-                  <div className="text-[rgba(234,228,216,0.84)]">Receipt minted to your wallet as on-chain proof of completed work.</div>
-                </div>
-              </li>
-            </ol>
+            <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
+              <input
+                value={agentSearch}
+                onChange={(e) => setAgentSearch(e.target.value)}
+                placeholder="Search by name, ID, controller…"
+                className="input-mono flex-1"
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <select
+                value={agentSort}
+                onChange={(e) => setAgentSort(e.target.value as typeof agentSort)}
+                className="input-mono md:w-[200px]"
+                title="Sort agents"
+              >
+                <option value="top">Top score</option>
+                <option value="jobs">Most jobs</option>
+                <option value="newest">Newest</option>
+                <option value="name">Name A → Z</option>
+              </select>
+              {agentSearch && (
+                <button
+                  type="button"
+                  onClick={() => setAgentSearch('')}
+                  className="btn-bordered px-3 py-2 text-[10px]"
+                  title="Clear search"
+                >
+                  CLEAR
+                </button>
+              )}
+            </div>
 
-            <div className="mt-5 rounded border border-white/5 bg-black/30 p-3">
+            <div className="mt-4 space-y-3">
+              {isLoading ? (
+                [0, 1, 2, 3].map((i) => (
+                  <div key={`skel-${i}`} className="aureo-skel block px-4 py-3 md:px-5 md:py-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="aureo-skel-bar" style={{ width: '104px' }} />
+                      <span className="aureo-skel-bar" style={{ width: '72px' }} />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-4">
+                      <span className="aureo-skel-bar" style={{ width: '120px', height: '8px' }} />
+                      <span className="aureo-skel-bar" style={{ width: '52px', height: '8px' }} />
+                    </div>
+                  </div>
+                ))
+              ) : filteredAgents.length > 0 ? (
+                visibleAgents.map((a) => {
+                  const label = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI });
+                  const hasName = !!parseAgentName(a.metadataURI);
+                  return (
+                    <div key={a.agentId} className="aureo-list-card flex flex-col gap-2 px-3 py-2.5 md:flex-row md:items-center md:justify-between md:gap-4 md:px-4 md:py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[12px] text-[#EAE4D8]">{hasName ? label : `Agent ${label}`}</span>
+                          {hasName && <span className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">{shortAgentId(a.agentId)}</span>}
+                        </div>
+                        <div className="mt-0.5 font-mono text-[10px] text-[rgba(234,228,216,0.85)]">
+                          controller {shortenAddress(a.controller)}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="chip-status success">Score {a.score}</span>
+                        <span className="tag-pill">{a.jobs.length} jobs</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleCopyAgentId(a.agentId); }}
+                          className="btn-bordered px-2.5 py-1.5 text-[9px]"
+                          title={`Copy full ID: ${a.agentId}`}
+                        >
+                          Copy ID
+                        </button>
+                        <Link href={`/jobs?agent=${encodeURIComponent(a.agentId)}`} className="btn-primary px-2.5 py-1.5 text-[9px]">
+                          Use
+                        </Link>
+                        <Link href={`/agent/${a.agentId}`} className="font-mono text-[9px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
+                          Details →
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="aureo-empty">
+                  <span className="aureo-empty-glyph">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="8" r="3.5" /><path d="M4.5 20c1.5-4 4-6 7.5-6s6 2 7.5 6" strokeLinecap="round" /></svg>
+                  </span>
+                  {agents.length > 0 ? (
+                    <>
+                      <p className="font-mono text-[11.5px] text-[#EAE4D8]">No agents match your search</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.84)]">Try a different keyword or clear the filter.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-mono text-[11.5px] text-[#EAE4D8]">No registered agents yet</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.84)]">Complete Step 1 on the left. Your first registered agent will appear here automatically.</p>
+                    </>
+                  )}
+                </div>
+              )}
+              {filteredAgents.length > 5 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllAgents((v) => !v)}
+                  className="font-mono text-[10.5px] uppercase tracking-[0.18em]"
+                  style={{ color: '#C5A67C' }}
+                >
+                  {showAllAgents ? `Show less ↑` : `Show all (${filteredAgents.length}) ↓`}
+                </button>
+              )}
+            </div>
+          </section>
+        </div>
+
+        {/* HOW IT WORKS panel below the two-column grid */}
+        <section className="aureo-panel mt-6 p-4 md:p-6">
+          <div className="aureo-mono-label mb-2">HOW IT WORKS</div>
+          <h2 className="aureo-display text-[22px] text-[#EAE4D8]">Manual job lifecycle</h2>
+
+          <ol className="mt-4 grid gap-3 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)] md:grid-cols-5">
+            {[
+              { n: 1, t: 'You register', d: 'Your agent ID + skill go on-chain. You appear in the marketplace agent list.' },
+              { n: 2, t: 'Client creates job', d: 'Client creates job with USDC.' },
+              { n: 3, t: 'You submit deliverable', d: 'Submit completed work.' },
+              { n: 4, t: 'Evaluator approves', d: 'Escrow pays after approval.' },
+              { n: 5, t: 'WorkProof NFT minted', d: 'WorkProof receipt minted.' },
+            ].map((s) => (
+              <li key={s.n} className="flex gap-3">
+                <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">{s.n}</span>
+                <div>
+                  <div className="text-[#EAE4D8]">{s.t}</div>
+                  <div className="text-[rgba(234,228,216,0.84)]">{s.d}</div>
+                </div>
+              </li>
+            ))}
+          </ol>
+
+          <div className="mt-5 flex flex-col gap-3 md:flex-row">
+            <div className="flex-1 rounded border border-white/5 bg-black/30 p-3">
               <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">Best for</div>
               <p className="mt-1.5 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.8)]">
                 Solidity auditors, designers, content creators, data labelers, code reviewers — anyone offering discrete, evaluator-verifiable services.
               </p>
             </div>
 
-            <div className="mt-3 rounded border border-cyan-500/15 bg-cyan-950/[0.05] p-3">
+            <div className="flex-1 rounded border border-cyan-500/15 bg-cyan-950/[0.05] p-3">
               <p className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.85)]">
                 Want autonomous instead?{' '}
                 <Link href="/register/autonomous" className="text-cyan-400 hover:text-[#EAE4D8]">
@@ -289,8 +518,8 @@ export default function RegisterManualAgentPage() {
                 </Link>
               </p>
             </div>
-          </aside>
-        </div>
+          </div>
+        </section>
       </div>
     </div>
   );

@@ -23,8 +23,8 @@ import {
   HomeHero,
   HomeProtocolSection,
   HomeSidebar,
-  HomeX402ProofCard,
 } from '@/components/home';
+import X402DemoPanel from '@/components/x402/X402DemoPanel';
 
 export default function Home() {
   return (
@@ -57,7 +57,9 @@ export default function Home() {
         </div>
 
         <HomeProtocolSection />
-        <HomeX402ProofCard />
+        <section className="relative z-20 mx-auto mt-6 max-w-[1600px] md:mt-8">
+          <X402DemoPanel compact />
+        </section>
       </main>
       <HomeFooterStrip />
     </div>

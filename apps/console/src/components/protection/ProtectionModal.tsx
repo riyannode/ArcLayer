@@ -7,12 +7,44 @@ type Props = {
   onClose: () => void;
 };
 
-const severityStyles: Record<ProtectionNotice["severity"], { badge: string; glow: string; label: string }> = {
-  info: { badge: "border-sky-400/30 bg-sky-400/10 text-sky-200", glow: "shadow-sky-500/10", label: "Info" },
-  success: { badge: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200", glow: "shadow-emerald-500/10", label: "Verified" },
-  warning: { badge: "border-[#C5A67C]/40 bg-[#C5A67C]/10 text-[#F2D8A8]", glow: "shadow-[#C5A67C]/10", label: "Protection" },
-  error: { badge: "border-red-400/30 bg-red-400/10 text-red-200", glow: "shadow-red-500/10", label: "Action blocked" },
-  protection: { badge: "border-[#C5A67C]/50 bg-[#C5A67C]/15 text-[#F7DCA8]", glow: "shadow-[#C5A67C]/20", label: "x402 protection" },
+const severityStyles: Record<ProtectionNotice["severity"], { badge: string; glow: string; label: string; title: string; message: string; detail: string }> = {
+  info: { badge: "border-sky-400/30 bg-sky-400/10 text-sky-200", glow: "shadow-sky-500/10", label: "Info", title: "text-sky-200", message: "text-sky-100/80", detail: "text-sky-100/80" },
+  success: { badge: "border-emerald-400/40 bg-emerald-400/10 text-emerald-200", glow: "shadow-emerald-500/10", label: "Verified", title: "text-emerald-300", message: "text-emerald-100/85", detail: "text-emerald-100/80" },
+  warning: { badge: "border-[#C5A67C]/40 bg-[#C5A67C]/10 text-[#F2D8A8]", glow: "shadow-[#C5A67C]/10", label: "Protection", title: "text-[#F2D8A8]", message: "text-[#F7DCA8]/80", detail: "text-[#F7DCA8]/75" },
+  error: { badge: "border-red-400/40 bg-red-400/10 text-red-200", glow: "shadow-red-500/10", label: "Action blocked", title: "text-red-300", message: "text-red-100/85", detail: "text-red-100/80" },
+  protection: { badge: "border-red-400/40 bg-red-400/10 text-red-200", glow: "shadow-red-500/15", label: "x402 protection", title: "text-red-300", message: "text-red-100/85", detail: "text-red-100/80" },
+};
+
+const severityDivider: Record<ProtectionNotice["severity"], string> = {
+  info: "from-sky-400/30",
+  success: "from-emerald-400/30",
+  warning: "from-[#C5A67C]/30",
+  error: "from-red-400/30",
+  protection: "from-red-400/30",
+};
+
+const severityDetailBox: Record<ProtectionNotice["severity"], string> = {
+  info: "border-sky-400/15 bg-sky-400/[0.03]",
+  success: "border-emerald-400/15 bg-emerald-400/[0.03]",
+  warning: "border-[#C5A67C]/15 bg-[#C5A67C]/[0.03]",
+  error: "border-red-400/15 bg-red-400/[0.03]",
+  protection: "border-red-400/15 bg-red-400/[0.03]",
+};
+
+const severityDetailLabel: Record<ProtectionNotice["severity"], string> = {
+  info: "text-sky-100/70",
+  success: "text-emerald-100/70",
+  warning: "text-[#F7DCA8]/70",
+  error: "text-red-100/70",
+  protection: "text-red-100/70",
+};
+
+const severityAction: Record<ProtectionNotice["severity"], string> = {
+  info: "border-sky-400/35 bg-sky-400/10 text-sky-100 hover:bg-sky-400/15",
+  success: "border-emerald-400/35 bg-emerald-400/10 text-emerald-100 hover:bg-emerald-400/15",
+  warning: "border-[#C5A67C]/35 bg-[#C5A67C]/10 text-[#F7DCA8] hover:bg-[#C5A67C]/15",
+  error: "border-red-400/35 bg-red-400/10 text-red-100 hover:bg-red-400/15",
+  protection: "border-red-400/35 bg-red-400/10 text-red-100 hover:bg-red-400/15",
 };
 
 export function ProtectionModal({ notice, onClose }: Props) {
@@ -35,19 +67,19 @@ export function ProtectionModal({ notice, onClose }: Props) {
           <span className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] ${styles.badge}`}>
             {styles.label}
           </span>
-          <span className="h-px flex-1 bg-gradient-to-r from-[#C5A67C]/30 to-transparent" />
+          <span className={`h-px flex-1 bg-gradient-to-r ${severityDivider[notice.severity]} to-transparent`} />
         </div>
 
-        <h2 id={`protection-title-${notice.id}`} className="text-2xl font-semibold tracking-tight text-white">
+        <h2 id={`protection-title-${notice.id}`} className={`text-2xl font-semibold tracking-tight ${styles.title}`}>
           {notice.title}
         </h2>
-        {notice.subtitle && <p className="mt-1 text-sm font-medium text-[#C5A67C]">{notice.subtitle}</p>}
-        <p className="mt-4 text-sm leading-6 text-white/78">{notice.message}</p>
+        {notice.subtitle && <p className={`mt-1 text-sm font-medium ${styles.message}`}>{notice.subtitle}</p>}
+        <p className={`mt-4 text-sm leading-6 ${styles.message}`}>{notice.message}</p>
 
         {notice.technicalDetail && (
-          <div className="mt-5 rounded-xl border border-white/8 bg-white/[0.03] p-3">
-            <div className="mb-1 text-[10px] uppercase tracking-[0.22em] text-white/80">Technical detail</div>
-            <code className="break-words text-xs text-white/80">{notice.technicalDetail}</code>
+          <div className={`mt-5 rounded-xl border ${severityDetailBox[notice.severity]} p-3`}>
+            <div className={`mb-1 text-[10px] uppercase tracking-[0.22em] ${severityDetailLabel[notice.severity]}`}>Technical detail</div>
+            <code className={`break-words text-xs ${styles.detail}`}>{notice.technicalDetail}</code>
           </div>
         )}
 
@@ -55,7 +87,7 @@ export function ProtectionModal({ notice, onClose }: Props) {
           {notice.actionHref && notice.actionLabel && (
             <a
               href={notice.actionHref}
-              className="rounded-lg border border-[#C5A67C]/35 bg-[#C5A67C]/10 px-4 py-2 text-sm font-medium text-[#F7DCA8] transition hover:bg-[#C5A67C]/15"
+              className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${severityAction[notice.severity]}`}
             >
               {notice.actionLabel}
             </a>

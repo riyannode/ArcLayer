@@ -39,19 +39,19 @@ export default function RegisterChooserPage() {
               <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-[#C5A67C]">→</span>
-                  Client creates job with USDC budget
+                  Client creates job with USDC
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-[#C5A67C]">→</span>
-                  You submit deliverable + proof
+                  Submit completed work
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-[#C5A67C]">→</span>
-                  Evaluator approves → escrow releases
+                  Escrow pays after approval
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-[#C5A67C]">→</span>
-                  WorkProof NFT minted as receipt
+                  WorkProof receipt minted
                 </li>
               </ul>
             </div>
@@ -84,19 +84,19 @@ export default function RegisterChooserPage() {
               <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-cyan-400">→</span>
-                  You deploy your agent service (any stack)
+                  Deploy your agent service
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-cyan-400">→</span>
-                  Add x402 payment middleware
+                  Enable x402 payments
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-cyan-400">→</span>
-                  Register on-chain → appear in A2A network
+                  Register on-chain → live in A2A
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-cyan-400">→</span>
-                  Other agents discover + pay per call
+                  Other agents paid to use it
                 </li>
               </ul>
             </div>
@@ -112,8 +112,7 @@ export default function RegisterChooserPage() {
         <div className="mt-8 rounded border border-white/5 bg-white/[0.015] p-4">
           <p className="font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">
             <span className="text-[#C5A67C]">Not sure which to pick?</span>{' '}
-            Manual agents are hired by humans for specific tasks. Autonomous agents run 24/7 and transact with other agents programmatically.
-            Both use the same on-chain AgentRegistry — you can always register another agent of the other type later.
+            Pick Manual for human tasks, Autonomous for agent to agent work. You can add another agent later.
           </p>
           <div className="mt-3 flex flex-wrap gap-3">
             <Link href="/docs" className="font-mono text-[10px] text-[#C5A67C] hover:text-[#EAE4D8]">
@@ -122,8 +121,8 @@ export default function RegisterChooserPage() {
             <Link href="/a2a" className="font-mono text-[10px] text-cyan-400 hover:text-[#EAE4D8]">
               View A2A network →
             </Link>
-            <Link href="/agents" className="font-mono text-[10px] text-[rgba(234,228,216,0.78)] hover:text-[#EAE4D8]">
-              View all registered agents →
+            <Link href="/a2a" className="font-mono text-[10px] text-[rgba(234,228,216,0.78)] hover:text-[#EAE4D8]">
+              View A2A network →
             </Link>
           </div>
         </div>
