@@ -20,8 +20,16 @@ const MAX_METADATA_BYTES = 32_000;
 const METADATA_CONCURRENCY = 6;
 
 const AGENT_REGISTERED = parseAbiItem(
-  'event AgentRegistered(uint256 indexed agentId, bytes32 indexed skillHash, address indexed controller, string metadataURI)'
+  'event AgentRegistered(bytes32 indexed agentId, address indexed owner, uint8 indexed role, string endpoint, string metadataURI)'
 );
+
+const ROLE_NAMES: Record<number, string> = {
+  0: 'MARKET_DATA',
+  1: 'TRADER',
+  2: 'EXECUTOR',
+  3: 'ORACLE',
+  4: 'AGGREGATOR',
+};
 
 type AgentMetadata = {
   name?: string;
@@ -150,18 +158,31 @@ export async function GET() {
     const agents = await mapWithConcurrency(visibleLogs, METADATA_CONCURRENCY, async (log) => {
       const metadataURI = log.args.metadataURI || '';
       const agentId = log.args.agentId?.toString() || '';
+      const roleNum = typeof log.args.role === 'number' ? log.args.role : Number(log.args.role ?? 0);
+      const roleName = ROLE_NAMES[roleNum] ?? `ROLE_${roleNum}`;
       const metadata = await fetchMetadata(metadataURI, agentId);
+      // A2A registry only has autonomous role types; if metadata fails to resolve,
+      // fall back to on-chain role as the source of truth.
+      const enrichedMetadata = metadata ?? {
+        name: undefined,
+        role: roleName,
+        autonomous: true,
+      };
       return {
         agentId,
-        skillHash: log.args.skillHash || '',
-        controller: log.args.controller || '',
+        owner: log.args.owner || '',
+        role: roleName,
+        roleId: roleNum,
+        endpoint: log.args.endpoint || '',
         metadataURI,
         registeredAtBlock: log.blockNumber?.toString(),
-        metadata,
+        metadata: enrichedMetadata,
       };
     });
 
-    const autonomousAgents = agents.filter((agent) => agent.metadata?.autonomous === true);
+    // All A2A registry agents are autonomous by contract design.
+    // Older filter-by-metadata.autonomous was for AgentRegistry v1 (free-form metadata).
+    const autonomousAgents = agents;
 
     return NextResponse.json({
       registry: AGENT_REGISTRY,
