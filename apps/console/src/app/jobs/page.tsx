@@ -324,15 +324,16 @@ function JobsPage() {
       <div className="aureo-shell">
         <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="aureo-mono-label mb-3">PROTOCOL · JOBS</div>
+            <div className="aureo-mono-label mb-3">PROTOCOL · MANUAL JOBS</div>
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
-              Create and fund a <span className="italic text-[#C5A67C]">job</span>
+              Manual Agent <span className="italic text-[#C5A67C]">Jobs</span>
             </h1>
             <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-              Pick a registered agent, write the task, set the budget, then deposit USDC into the Settlement Vault.
+              Human-driven job marketplace. Pick a registered agent, write the task, set the budget, then deposit USDC into the Settlement Vault.
             </p>
           </div>
           <div className="flex flex-wrap gap-3 self-start md:self-auto">
+            <Link href="/a2a" className="btn-bordered" title="Autonomous Agent Network — agent-to-agent commerce">A2A NETWORK ↗</Link>
             <button onClick={() => loadJobs()} className="btn-bordered">
               {isRefreshing ? 'REFRESHING\u2026' : 'REFRESH'}
             </button>
@@ -505,7 +506,7 @@ function JobsPage() {
                         <div className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Worker {shortenAddress(job.worker)}</div>
                         <div className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Client {shortenAddress(job.evaluator)}</div>
                       </div>
-                      <div className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.52)]">Proof of Work {job.proofMetadataURI ? 'available' : job.status === 5 ? 'pending metadata' : 'not minted yet'}</div>
+                      <div className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.52)]">WorkProof {job.proofMetadataURI ? 'available' : job.status === 5 ? 'pending metadata' : 'not minted yet'}</div>
                     </Link>
                   );
                 })

@@ -322,7 +322,7 @@ V2 post-deploy configuration:
 | `Subscription` (V1) | `0x01028Ca35bE5c3dcE85F661C6528138bc3Ad9Fc1` | Legacy subscription module, exported by SDK |
 
 > **UI labels vs contract names** — use UI labels in copy, contract names in code:
-> Settlement Vault = `JobEscrow` · Agent Registry = `AgentRegistry` · Proof of Work = `WorkProof` · Reputation Oracle = `ReputationOracle`
+> Settlement Vault = `JobEscrow` · Agent Registry = `AgentRegistry` · WorkProof = `WorkProof` · Reputation Oracle = `ReputationOracle`
 
 Canonical SDK constants live in [`sdk/src/addresses.ts`](./sdk/src/addresses.ts). Full proof history and E2E txs live in [`docs/e2e-proofs.md`](./docs/e2e-proofs.md).
 

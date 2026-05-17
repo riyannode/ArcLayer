@@ -69,7 +69,19 @@ function FeedRow({ item }: { item: FeedItem }) {
   );
 }
 
-export function AgentDetailDrawer({ agent, onClose, onHide }: { agent: NetworkAgent | null; onClose: () => void; onHide?: (agentId: string) => void }) {
+export function AgentDetailDrawer({
+  agent,
+  onClose,
+  onHide,
+  onDeactivate,
+  isDeactivating = false,
+}: {
+  agent: NetworkAgent | null;
+  onClose: () => void;
+  onHide?: (agentId: string) => void;
+  onDeactivate?: (agent: NetworkAgent) => Promise<void>;
+  isDeactivating?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   if (!agent) return null;
 
@@ -160,6 +172,27 @@ export function AgentDetailDrawer({ agent, onClose, onHide }: { agent: NetworkAg
               className="mt-2 rounded border border-red-500/30 bg-red-500/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-red-300 hover:bg-red-500/20"
             >
               Hide from dashboard
+            </button>
+          </div>
+        )}
+
+        {agent.canHide && onDeactivate && (
+          <div className="mt-3 rounded border border-red-500/20 bg-red-950/[0.08] p-3">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-red-400/90">On-chain deactivation</p>
+            <p className="mt-1 font-mono text-[11px] text-[#9A8A8A]">
+              Permanently deactivates this agent on-chain. Requires wallet signature from the agent controller.
+            </p>
+            <button
+              type="button"
+              disabled={isDeactivating}
+              onClick={async () => {
+                if (confirm(`Deactivate ${agent.name} on-chain?\n\nThis calls deactivateAgent() on the AgentRegistry contract. The agent will be marked inactive permanently.`)) {
+                  await onDeactivate(agent);
+                }
+              }}
+              className="mt-2 rounded border border-red-500/40 bg-red-500/15 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-red-200 hover:bg-red-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isDeactivating ? 'Deactivating…' : 'Deactivate on-chain'}
             </button>
           </div>
         )}

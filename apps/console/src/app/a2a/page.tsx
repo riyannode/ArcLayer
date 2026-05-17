@@ -1,6 +1,21 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { waitForTransactionReceipt } from '@wagmi/core';
+import { useWriteContract } from 'wagmi';
+import { config } from '@/lib/wagmi';
+import type { Hex } from 'viem';
+
+const AGENT_REGISTRY_ADDRESS = '0xB263336055dD65FF501e36CA39941760D943703C' as const;
+const AGENT_REGISTRY_ABI = [
+  {
+    type: 'function',
+    name: 'deactivateAgent',
+    stateMutability: 'nonpayable',
+    inputs: [{ name: 'agentId', type: 'bytes32' }],
+    outputs: [],
+  },
+] as const;
 import type {
   A2AOnChain,
   AgentCategory,
@@ -157,6 +172,33 @@ export default function A2ADashboardPage() {
       return next;
     });
   }, []);
+
+  const { writeContractAsync } = useWriteContract();
+  const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
+
+  const deactivateAgent = useCallback(async (agent: NetworkAgent) => {
+    if (!agent.id || !agent.id.startsWith('0x')) {
+      alert(`Cannot deactivate: invalid agent ID format.\nThis agent isn't registered on-chain.`);
+      return;
+    }
+    try {
+      setDeactivatingId(agent.id);
+      const txHash = await writeContractAsync({
+        address: AGENT_REGISTRY_ADDRESS,
+        abi: AGENT_REGISTRY_ABI,
+        functionName: 'deactivateAgent',
+        args: [agent.id as Hex],
+      });
+      await waitForTransactionReceipt(config, { hash: txHash });
+      alert(`✓ ${agent.name} deactivated on-chain.\n\nTx: ${txHash}`);
+      hideAgent(agent.id);
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || 'Unknown error';
+      alert(`Deactivation failed:\n${msg}\n\nNote: Only the agent controller can deactivate.`);
+    } finally {
+      setDeactivatingId(null);
+    }
+  }, [writeContractAsync, hideAgent]);
 
   const unhideAgent = useCallback((agentId: string) => {
     setHiddenIds((prev) => {
@@ -500,7 +542,7 @@ export default function A2ADashboardPage() {
         </footer>
       </div>
 
-      <AgentDetailDrawer agent={selectedAgent} onClose={() => setSelectedAgentId(null)} onHide={hideAgent} />
+      <AgentDetailDrawer agent={selectedAgent} onClose={() => setSelectedAgentId(null)} onHide={hideAgent} onDeactivate={deactivateAgent} isDeactivating={deactivatingId === selectedAgent?.id} />
     </main>
   );
 }

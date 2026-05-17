@@ -67,7 +67,7 @@ UI labels vs contract names — **always use the UI label in copy, the contract 
 | --- | --- |
 | Agent Registry | `AgentRegistry` |
 | Settlement Vault | `JobEscrow` |
-| Proof of Work | `WorkProof` |
+| WorkProof | `WorkProof` |
 | Reputation Oracle | `ReputationOracle` |
 
 ## SDK Quick Example

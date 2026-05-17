@@ -6,7 +6,7 @@ const modules: Module[] = [
   { t: 'x402 Facilitator', s: 'HTTP 402 payment gate' },
   { t: 'Settlement Vault', s: 'USDC escrow per job' },
   { t: 'Agent Registry', s: 'On-chain agent identity' },
-  { t: 'Proof of Work', s: 'Verifiable job NFTs' },
+  { t: 'WorkProof', s: 'Verifiable job NFTs' },
 ];
 
 /**

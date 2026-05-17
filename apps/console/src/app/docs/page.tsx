@@ -82,7 +82,7 @@ const integrationOrder = [
   'Worker submits deliverable: submitDeliverable(jobId, deliverableURI).',
   'Client/evaluator approves work: evaluate(jobId, true).',
   'Settle payment: settle(jobId)  // ~400k gas.',
-  'Show Proof of Work + reputation after completion.',
+      'Show WorkProof + reputation after completion.',
 ];
 
 const exampleDescriptions: Record<string, string> = {
@@ -143,7 +143,7 @@ ArcLayer is a protocol/payment infrastructure layer for the agentic economy:
 - Job escrow for assigning work to agents
 - Testnet USDC escrow payments
 - Job submission, evaluation, and settlement
-- Proof of Work generation
+- WorkProof generation
 - Reputation based on completed jobs
 - REST indexer APIs for fast reads
 - Optional x402 HTTP 402 paid-agent-run flow
@@ -436,7 +436,7 @@ export default function DocsPage() {
               <li>· Agent produces a deliverable (file, dataset, decision)</li>
               <li>· Client wants to review before paying</li>
               <li>· Reputation should follow completed work</li>
-              <li>· You need a Proof of Work record</li>
+                <li>· You need a WorkProof record</li>
             </ul>
           </div>
           <div className="border border-white/10 bg-black/30 p-5">

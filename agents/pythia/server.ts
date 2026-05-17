@@ -10,6 +10,11 @@ import { generateSignal } from './logic.js';
 import { resolveIgniaWithPythia } from './resolver.js';
 import { createA2ARouter } from './a2a-routes.js';
 import { getLatestMarketId, readMarket } from '../shared/ignia.js';
+import { recordInteraction } from '../contracts/a2a-client.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { keccak256, toBytes } from 'viem';
 
 dotenv.config();
 
@@ -23,6 +28,25 @@ const FACILITATOR_URL = process.env.FACILITATOR_URL ?? 'https://arclayers.xyz';
 const PRICE_PER_SIGNAL = '10000';
 const PRICE_PER_SIGNAL_DISPLAY = '0.01';
 const USDC_ADDRESS = '0x3600000000000000000000000000000000000000';
+const REPUTATION_ORACLE_KEY = process.env.PYTHIA_ORACLE_PRIVATE_KEY as `0x${string}` | undefined;
+
+// Load agent-ids.json so we can record on-chain reputation per signal served.
+const __serverDir = dirname(fileURLToPath(import.meta.url));
+const AGENT_IDS_PATH = join(__serverDir, '..', 'contracts', 'agent-ids.json');
+let pythiaAgentId: `0x${string}` | null = null;
+let hermesAgentId: `0x${string}` | null = null;
+try {
+  if (existsSync(AGENT_IDS_PATH)) {
+    const ids = JSON.parse(readFileSync(AGENT_IDS_PATH, 'utf8')) as {
+      pythia?: { agentId: `0x${string}` };
+      hermes?: { agentId: `0x${string}` };
+    };
+    pythiaAgentId = ids.pythia?.agentId ?? null;
+    hermesAgentId = ids.hermes?.agentId ?? null;
+  }
+} catch {
+  /* non-fatal */
+}
 
 interface PaymentRequirements {
   scheme: 'exact';
@@ -121,6 +145,15 @@ app.get('/signal/:token', async (req, res) => {
     // Generate signal (async — fetches Polymarket live data)
     const signal = await generateSignal(token);
 
+    // ─── Record reputation on-chain (fire-and-forget) ───────────────
+    if (REPUTATION_ORACLE_KEY && pythiaAgentId) {
+      const buyerId = hermesAgentId ?? keccak256(toBytes(payload?.payload?.authorization?.from ?? 'unknown-buyer'));
+      const receiptHash = keccak256(toBytes(`signal:${token}:${nonce ?? Date.now()}`));
+      recordInteraction(REPUTATION_ORACLE_KEY, pythiaAgentId, buyerId, receiptHash, BigInt(PRICE_PER_SIGNAL), true)
+        .then((repTx) => console.log(`[Pythia] Reputation recorded tx=${repTx}`))
+        .catch((err) => console.warn(`[Pythia] Reputation write failed:`, err.message ?? err));
+    }
+
     // PAYMENT-RESPONSE header
     const responsePayload = Buffer.from(
       JSON.stringify({ success: true, txHash, network: 'eip155:5042002', amount: PRICE_PER_SIGNAL, timestamp: Date.now() })
@@ -162,8 +195,6 @@ app.get('/stats', (_req, res) => {
   });
 });
 
-const ORACLE_PRIVATE_KEY = process.env.PYTHIA_ORACLE_PRIVATE_KEY as `0x${string}` | undefined;
-
 app.get('/ignia/market/:id?', async (req, res) => {
   try {
     const id = req.params.id ? BigInt(req.params.id) : await getLatestMarketId();
@@ -185,13 +216,13 @@ app.get('/ignia/market/:id?', async (req, res) => {
 });
 
 app.post('/ignia/resolve/:id', async (req, res) => {
-  if (!ORACLE_PRIVATE_KEY) {
+  if (!REPUTATION_ORACLE_KEY) {
     return res.status(503).json({ error: 'PYTHIA_ORACLE_PRIVATE_KEY not configured' });
   }
   try {
     const marketId = BigInt(req.params.id);
     const dryRun = req.query.dryRun === 'true' || req.query.dry === '1';
-    const result = await resolveIgniaWithPythia(ORACLE_PRIVATE_KEY, marketId, { dryRun });
+    const result = await resolveIgniaWithPythia(REPUTATION_ORACLE_KEY, marketId, { dryRun });
     console.log(`[Pythia] Resolve marketId=${marketId} status=${result.status} outcome=${result.decision.outcome} tx=${result.txHash ?? '-'}`);
     res.json({
       ...result,
@@ -212,7 +243,7 @@ app.listen(PORT, () => {
   console.log(`Seller: ${SELLER_ADDRESS}`);
   console.log(`Price: ${PRICE_PER_SIGNAL} USDC/signal`);
   console.log(`Facilitator: ${FACILITATOR_URL}`);
-  console.log(`Oracle: ${ORACLE_PRIVATE_KEY ? 'configured' : 'NOT configured (set PYTHIA_ORACLE_PRIVATE_KEY)'}`);
+  console.log(`Oracle: ${REPUTATION_ORACLE_KEY ? 'configured' : 'NOT configured (set PYTHIA_ORACLE_PRIVATE_KEY)'}`);
   console.log(`Endpoints:`);
   console.log(`  GET  /signal/:token         (BTC|ETH|SOL) — x402 gated`);
   console.log(`  GET  /ignia/market/:id?     latest market state if id omitted`);

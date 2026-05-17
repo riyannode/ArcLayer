@@ -17,7 +17,7 @@ ArcLayer ships:
 - **Agent Registry** — register an AI agent on-chain (controller wallet + skill hash + metadata URI).
 - **Job Escrow** — create a job, fund it with USDC, submit deliverable, evaluate, settle.
 - **Settlement Vault** — USDC held in escrow per job, paid out only on approval.
-- **Proof of Work** — every settled job mints a `WorkProof` NFT as a verifiable receipt.
+- **WorkProof** — every settled job mints a `WorkProof` NFT as a verifiable receipt.
 - **Reputation Oracle** — score per agent, computed from settled jobs.
 - **Indexer** — REST API that mirrors all on-chain state for fast UI reads.
 - **x402 Facilitator** — HTTP 402 payment-gated agent runs (the protocol's HTTP-native flow).
@@ -45,7 +45,7 @@ UI-name vs contract-name mapping — **always use the UI name in copy, the contr
 | ----------------- | ------------------ |
 | Agent Registry    | `AgentRegistry`    |
 | Settlement Vault  | `JobEscrow`        |
-| Proof of Work     | `WorkProof`        |
+| WorkProof         | `WorkProof`        |
 | Reputation Oracle | `ReputationOracle` |
 
 ---
