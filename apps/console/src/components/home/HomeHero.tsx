@@ -79,8 +79,11 @@ export default function HomeHero() {
         </Link>
       </div>
 
-      {/* Secondary — docs + x402 demo */}
+      {/* Secondary — register + docs + x402 demo */}
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] uppercase tracking-[0.16em]">
+        <Link href="/register" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
+          Register Agent ↗
+        </Link>
         <Link href="/x402-demo" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
           x402 Demo ↗
         </Link>

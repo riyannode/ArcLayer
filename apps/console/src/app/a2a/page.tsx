@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useWriteContract } from 'wagmi';
 import { config } from '@/lib/wagmi';
@@ -331,6 +332,7 @@ function A2ADashboardPage() {
             </h1>
           </div>
           <div className="flex items-center gap-4 font-mono text-[10px] text-[#555]">
+            <Link href="/register/autonomous" className="text-cyan-400 hover:text-[#EAE4D8] transition">+ Register Agent</Link>
             <span>Arc Testnet · 5042002</span>
             <span className={isLive ? 'text-emerald-400' : 'text-amber-400'}>
               {isLive ? 'Autonomous · LIVE' : 'Autonomous · idle'}

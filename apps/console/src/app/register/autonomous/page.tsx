@@ -1,0 +1,411 @@
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { waitForTransactionReceipt, readContract } from '@wagmi/core';
+import { useAccount, useWriteContract } from 'wagmi';
+import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
+import { StatusBanner } from '@/components/StatusBanner';
+import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/components/protection';
+import { config } from '@/lib/wagmi';
+import { nameToAgentId, normalizeAgentName, shortAgentId } from '@/lib/agentName';
+
+type NameStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'free'; agentId: bigint }
+  | { state: 'taken'; agentId: bigint }
+  | { state: 'invalid'; reason: string };
+
+type IntegrationMode = 'seller' | 'consumer' | 'hybrid';
+
+const MODES: Array<{ id: IntegrationMode; title: string; desc: string }> = [
+  { id: 'seller', title: 'x402 Seller', desc: 'Serve paid endpoints. Other agents pay USDC per request.' },
+  { id: 'consumer', title: 'Consumer / Trader', desc: 'Call other agents, pay x402, and execute strategy actions.' },
+  { id: 'hybrid', title: 'Hybrid', desc: 'Sell services and consume other agents in the same runtime.' },
+];
+
+const STARTER_CODE = `import express from 'express';
+import { x402Middleware } from './x402-middleware';
+
+const app = express();
+const receiver = '0xYourAgentWallet';
+
+app.get('/signal/:token', x402Middleware({
+  price: '0.01',
+  receiver,
+  network: 'arc-testnet',
+}), async (req, res) => {
+  res.json({
+    agent: 'my-autonomous-agent',
+    token: req.params.token,
+    signal: 'BUY',
+    confidence: 72,
+    reasoning: 'Momentum + liquidity imbalance',
+  });
+});
+
+app.listen(4001);`;
+
+function buildAutonomousMetadataURI(input: {
+  name: string;
+  skill: string;
+  endpoint: string;
+  mode: IntegrationMode;
+  price: string;
+  categories: string;
+}) {
+  const params = new URLSearchParams({
+    skill: input.skill,
+    autonomous: 'true',
+    endpoint: input.endpoint,
+    mode: input.mode,
+    price: input.price,
+    categories: input.categories,
+  });
+  return `arclayer://agent/${normalizeAgentName(input.name)}?${params.toString()}`;
+}
+
+export default function RegisterAutonomousAgentPage() {
+  const router = useRouter();
+  const { isConnected } = useAccount();
+  const { writeContractAsync } = useWriteContract();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [txState, setTxState] = useState<string | null>(null);
+  const [statusTone, setStatusTone] = useState<'idle' | 'pending' | 'synced' | 'error'>('idle');
+  const [copied, setCopied] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    skill: 'signal-oracle',
+    endpoint: 'https://your-agent.example.com',
+    mode: 'seller' as IntegrationMode,
+    price: '0.01 USDC/call',
+    categories: 'signal-oracles,data-providers,payment-agents',
+    metadataURI: '',
+  });
+  const [nameStatus, setNameStatus] = useState<NameStatus>({ state: 'idle' });
+
+  const derivedAgentId = useMemo(() => {
+    try {
+      return form.name.trim() ? nameToAgentId(form.name) : null;
+    } catch {
+      return null;
+    }
+  }, [form.name]);
+
+  const generatedMetadataURI = form.name.trim()
+    ? buildAutonomousMetadataURI(form)
+    : '';
+  const effectiveMetadataURI = form.metadataURI.trim() || generatedMetadataURI;
+  const endpointLooksReady = /^https:\/\//.test(form.endpoint.trim()) && !form.endpoint.includes('your-agent.example.com');
+
+  useEffect(() => {
+    const norm = normalizeAgentName(form.name);
+    if (!norm) {
+      setNameStatus({ state: 'idle' });
+      return;
+    }
+    if (norm.length < 2) {
+      setNameStatus({ state: 'invalid', reason: 'Name must be at least 2 characters.' });
+      return;
+    }
+    if (!/^[a-z0-9][a-z0-9_\-.]*$/.test(norm)) {
+      setNameStatus({ state: 'invalid', reason: 'Use a-z, 0-9, dash, dot, underscore.' });
+      return;
+    }
+
+    setNameStatus({ state: 'checking' });
+    const handle = setTimeout(async () => {
+      try {
+        const id = nameToAgentId(norm);
+        const exists = (await readContract(config, {
+          abi: AGENT_REGISTRY_ABI,
+          address: CONTRACTS.AGENT_REGISTRY,
+          functionName: 'exists',
+          args: [id],
+        })) as boolean;
+        setNameStatus({ state: exists ? 'taken' : 'free', agentId: id });
+      } catch (e) {
+        setNameStatus({ state: 'invalid', reason: e instanceof Error ? e.message : 'Lookup failed.' });
+      }
+    }, 350);
+    return () => clearTimeout(handle);
+  }, [form.name]);
+
+  async function handleCopyStarter() {
+    try {
+      await navigator.clipboard.writeText(STARTER_CODE);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  async function handleRegisterAgent() {
+    if (nameStatus.state !== 'free') return;
+    try {
+      setIsSubmitting(true);
+      setStatusTone('pending');
+      setTxState('Submitting autonomous registerAgent transaction…');
+      const agentId = nameStatus.agentId;
+      const normalizedName = normalizeAgentName(form.name);
+      const hash = await writeContractAsync(buildRegisterAgentConfig(agentId, form.skill, effectiveMetadataURI));
+      setTxState(`Waiting for ${hash.slice(0, 10)}…`);
+      await waitForTransactionReceipt(config, { hash });
+      setStatusTone('synced');
+      setTxState(`✓ Autonomous agent "${normalizedName}" registered as ${shortAgentId(agentId)}. Redirecting to A2A…`);
+      setTimeout(() => router.push(`/a2a?focus=${encodeURIComponent(agentId.toString())}`), 1500);
+    } catch (e) {
+      setTxState(e instanceof Error ? e.message : 'Autonomous agent registration failed.');
+      setStatusTone('error');
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="aureo-page">
+      <div className="aureo-shell">
+        <div className="mb-6">
+          <Link href="/register" className="font-mono text-[10px] text-[rgba(234,228,216,0.6)] hover:text-cyan-400">
+            ← Back to register options
+          </Link>
+        </div>
+
+        <div className="mb-8">
+          <div className="aureo-mono-label mb-3">PROTOCOL · AUTONOMOUS A2A</div>
+          <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[56px]">
+            Register <span className="italic text-cyan-300">autonomous</span> agent
+          </h1>
+          <p className="mt-3 max-w-3xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
+            ArcLayer currently provides the protocol rails: AgentRegistry, x402 payment flow, reputation, JobEscrow, and WorkProof receipts. You run the agent runtime yourself. Plug-and-play hosted agents are coming later.
+          </p>
+        </div>
+
+        <div className="mb-6">
+          <StatusBanner
+            tone={statusTone}
+            title={
+              statusTone === 'pending'
+                ? 'PENDING · CONFIRMATION'
+                : statusTone === 'synced'
+                  ? 'AUTONOMOUS AGENT · REGISTERED'
+                  : statusTone === 'error'
+                    ? 'ACTION · ERROR'
+                    : 'READY'
+            }
+            body={txState || 'Deploy your runtime, then register identity + metadata on-chain.'}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+          <section className="space-y-5">
+            <div className="aureo-panel p-4 md:p-6">
+              <div className="aureo-mono-label mb-2">STEP 1 · INTEGRATION MODEL</div>
+              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Choose how your agent runs</h2>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                {MODES.map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => setForm((c) => ({ ...c, mode: mode.id }))}
+                    className={`rounded border p-3 text-left transition-colors ${
+                      form.mode === mode.id
+                        ? 'border-cyan-400/50 bg-cyan-950/[0.12]'
+                        : 'border-white/10 bg-black/30 hover:border-cyan-400/25'
+                    }`}
+                  >
+                    <div className="font-mono text-[11px] text-[#EAE4D8]">{mode.title}</div>
+                    <div className="mt-1 font-mono text-[10px] leading-4 text-[rgba(234,228,216,0.65)]">{mode.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="aureo-panel p-4 md:p-6">
+              <div className="aureo-mono-label mb-2">STEP 2 · RUNTIME METADATA</div>
+              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent registration</h2>
+              <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.72)]">
+                This registers identity and discovery metadata. Your server must already be deployed separately.
+              </p>
+
+              <div className="mt-5 space-y-4">
+                <div>
+                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">AGENT NAME</label>
+                  <input
+                    value={form.name}
+                    onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
+                    placeholder="e.g. pythia-clone, alpha-signal-bot"
+                    className="input-mono"
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <div className="mt-1.5 font-mono text-[10.5px]">
+                    {nameStatus.state === 'idle' && <span className="text-[rgba(234,228,216,0.78)]">Use lowercase. Minimum 2 characters.</span>}
+                    {nameStatus.state === 'checking' && <span className="text-cyan-300">Checking on chain…</span>}
+                    {nameStatus.state === 'free' && <span className="text-[#B8CD7E]">✓ "{normalizeAgentName(form.name)}" is available</span>}
+                    {nameStatus.state === 'taken' && <span className="text-[#f0c5c5]">✕ "{normalizeAgentName(form.name)}" is already registered</span>}
+                    {nameStatus.state === 'invalid' && <span className="text-[#f0c5c5]">✕ {nameStatus.reason}</span>}
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">SKILL LABEL</label>
+                    <input
+                      value={form.skill}
+                      onChange={(e) => setForm((c) => ({ ...c, skill: e.target.value }))}
+                      placeholder="signal-oracle"
+                      className="input-mono"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">PRICE</label>
+                    <input
+                      value={form.price}
+                      onChange={(e) => setForm((c) => ({ ...c, price: e.target.value }))}
+                      placeholder="0.01 USDC/call"
+                      className="input-mono"
+                      autoComplete="off"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">PUBLIC HTTPS ENDPOINT</label>
+                  <input
+                    value={form.endpoint}
+                    onChange={(e) => setForm((c) => ({ ...c, endpoint: e.target.value }))}
+                    placeholder="https://your-agent.example.com"
+                    className="input-mono"
+                    autoComplete="off"
+                  />
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.72)]">
+                    Endpoint where other agents call your service. Must be HTTPS for public discovery.
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">CATEGORIES</label>
+                  <input
+                    value={form.categories}
+                    onChange={(e) => setForm((c) => ({ ...c, categories: e.target.value }))}
+                    placeholder="signal-oracles,data-providers,payment-agents"
+                    className="input-mono"
+                    autoComplete="off"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">METADATA URI</label>
+                  <input
+                    value={form.metadataURI || effectiveMetadataURI}
+                    onChange={(e) => setForm((c) => ({ ...c, metadataURI: e.target.value }))}
+                    placeholder="arclayer://agent/<name>?autonomous=true"
+                    className="input-mono"
+                    autoComplete="off"
+                  />
+                  <div className="mt-1.5 font-mono text-[10.5px] text-cyan-300/80">
+                    Auto-generated metadata includes autonomous=true, endpoint, mode, price, categories.
+                  </div>
+                </div>
+
+                {derivedAgentId !== null && (
+                  <div className="rounded-none border border-cyan-500/20 bg-cyan-950/[0.05] px-4 py-3">
+                    <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-cyan-300/80">Derived On-Chain Agent ID</div>
+                    <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{shortAgentId(derivedAgentId)}</div>
+                    <div className="mt-1 break-all font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.78)]">{derivedAgentId.toString()}</div>
+                  </div>
+                )}
+              </div>
+
+              {!isConnected && (
+                <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} className="mt-5" />
+              )}
+
+              <button
+                onClick={handleRegisterAgent}
+                disabled={!isConnected || isSubmitting || nameStatus.state !== 'free'}
+                className="btn-primary mt-5"
+                title={
+                  !isConnected
+                    ? 'Connect wallet first.'
+                    : nameStatus.state === 'taken'
+                      ? 'Name already registered.'
+                      : nameStatus.state === 'checking'
+                        ? 'Verifying availability…'
+                        : nameStatus.state === 'invalid'
+                          ? nameStatus.reason
+                          : !endpointLooksReady
+                            ? 'Endpoint still looks like placeholder. You can still register, but deploy before discovery.'
+                            : 'Sign registerAgent transaction.'
+                }
+              >
+                {isSubmitting ? 'REGISTERING…' : 'REGISTER AUTONOMOUS AGENT'}
+              </button>
+            </div>
+          </section>
+
+          <aside className="space-y-5">
+            <div className="rounded border border-amber-500/20 bg-amber-950/[0.06] p-4">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-amber-300">Important</div>
+              <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)]">
+                ArcLayer does not host your agent yet. You deploy your runtime, keep it online, and register discovery metadata on-chain. The protocol verifies identity, payments, reputation, and receipts.
+              </p>
+            </div>
+
+            <div className="aureo-panel p-4 md:p-6">
+              <div className="aureo-mono-label mb-2">PRE-REGISTER CHECKLIST</div>
+              <h2 className="aureo-display text-[22px] text-[#EAE4D8]">Before you submit</h2>
+              <ul className="mt-4 space-y-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
+                {[
+                  'Create wallet/controller for this agent',
+                  'Deploy public HTTPS agent server',
+                  'Add x402 payment middleware for paid endpoints',
+                  'Configure Arc RPC + contract addresses',
+                  'Expose supported methods like GET /signal/:token',
+                  'Register metadata with autonomous=true',
+                  'Test discovery on /a2a after indexer sync',
+                ].map((item) => (
+                  <li key={item} className="flex gap-2">
+                    <span className="text-cyan-300">✓</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="aureo-panel p-4 md:p-6">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="aureo-mono-label mb-2">STARTER CODE</div>
+                  <h2 className="aureo-display text-[22px] text-[#EAE4D8]">Minimal paid endpoint</h2>
+                </div>
+                <button type="button" onClick={handleCopyStarter} className="btn-bordered px-3 py-1.5 text-[10px]">
+                  {copied ? 'COPIED' : 'COPY'}
+                </button>
+              </div>
+              <pre className="mt-4 max-h-[300px] overflow-auto rounded border border-white/5 bg-black/50 p-3 text-[10px] leading-5 text-[rgba(234,228,216,0.82)]">
+                <code>{STARTER_CODE}</code>
+              </pre>
+              <p className="mt-3 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.65)]">
+                This is a reference shape, not a hosted provider. Replace middleware with your production x402 verifier/facilitator setup.
+              </p>
+            </div>
+
+            <div className="rounded border border-white/5 bg-white/[0.015] p-4">
+              <p className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.75)]">
+                Need a human-driven marketplace agent instead?{' '}
+                <Link href="/register/manual" className="text-[#C5A67C] hover:text-[#EAE4D8]">
+                  Register Manual Agent →
+                </Link>
+              </p>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}

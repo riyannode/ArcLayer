@@ -226,6 +226,7 @@ export default function AgentsPage() {
             <button onClick={() => loadAgents()} className="btn-bordered">
               {isRefreshing ? 'REFRESHING…' : 'REFRESH'}
             </button>
+            <Link href="/register" className="btn-bordered" title="Choose Manual or Autonomous registration flow">REGISTER NEW</Link>
             <Link href="/jobs" className="btn-primary">GO TO JOBS</Link>
           </div>
         </div>
