@@ -252,7 +252,14 @@ function A2ADashboardPage() {
 
       const feedSignalCount = fdData.items.filter((item) => item.agent === 'Pythia' && item.type === 'payment').length;
       const signalCount = Math.max(ocData?.agents.pythia?.stats?.callsServed ?? 0, feedSignalCount);
-      setVolumeHistory((prev) => [...prev.slice(-29), Number(ovData.summary.totalFunded) / 1e6]);
+
+      // Volume sparkline: JobEscrow funded + x402 revenue (Pythia + Hermes)
+      const jobFunded = Number(ovData.summary.totalFunded || '0') / 1e6;
+      const pythiaRev = Number(ocData?.agents.pythia?.stats?.totalRevenue || '0') / 1e6;
+      const hermesRev = Number(ocData?.agents.hermes?.stats?.totalRevenue || '0') / 1e6;
+      const totalVol = jobFunded + pythiaRev + hermesRev;
+
+      setVolumeHistory((prev) => [...prev.slice(-29), totalVol]);
       setSignalHistory((prev) => [
         ...prev.slice(-29),
         signalCount || prev[prev.length - 1] || 0,
@@ -300,6 +307,17 @@ function A2ADashboardPage() {
   ).length;
   const liveSignalsServed = Math.max(pythia?.stats?.callsServed ?? 0, feedSignalsServed);
   const liveIgniaTrades = Math.max(hermes?.stats?.callsServed ?? 0, feedIgniaTrades);
+
+  // Total volume = JobEscrow funded (manual jobs) + x402 signal revenue (Pythia + Hermes totalRevenue)
+  const jobsFundedRaw = summary ? BigInt(summary.totalFunded || '0') : BigInt(0);
+  const pythiaRevenueRaw = pythia?.stats?.totalRevenue ? BigInt(pythia.stats.totalRevenue) : BigInt(0);
+  const hermesRevenueRaw = hermes?.stats?.totalRevenue ? BigInt(hermes.stats.totalRevenue) : BigInt(0);
+  const totalVolumeRaw = jobsFundedRaw + pythiaRevenueRaw + hermesRevenueRaw;
+
+  // Total USDC held by autonomous agents (live wallet balance)
+  const pythiaBal = onchain?.balances?.usdc?.pythia ? BigInt(onchain.balances.usdc.pythia) : BigInt(0);
+  const hermesBal = onchain?.balances?.usdc?.hermes ? BigInt(onchain.balances.usdc.hermes) : BigInt(0);
+  const totalAgentBalanceRaw = pythiaBal + hermesBal;
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-[#EAE4D8] selection:bg-[#C5A67C]/20">
@@ -404,13 +422,14 @@ function A2ADashboardPage() {
         </section>
 
         {/* ─── KPI Strip ───────────────────────────────────────────────── */}
-        <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
           <KPICard label="Signals Served" value={liveSignalsServed} accent />
           <KPICard label="Ignia Trades" value={liveIgniaTrades} accent />
           <KPICard label="Ignia Markets" value={onchain?.markets.totalIgnia ?? '—'} />
           <KPICard label="Mirrors" value={onchain?.markets.totalMirrors ?? '—'} />
           <KPICard label="Marketplace Jobs" value={summary?.jobs ?? '—'} />
-          <KPICard label="Volume USDC" value={summary ? formatUSDC(summary.totalFunded) : '—'} accent />
+          <KPICard label="Volume USDC" value={summary ? formatUSDC(totalVolumeRaw.toString()) : '—'} accent />
+          <KPICard label="Agent Balance" value={onchain ? formatUSDC(totalAgentBalanceRaw.toString()) : '—'} accent />
         </section>
 
         {/* ─── Sparklines ──────────────────────────────────────────────── */}
