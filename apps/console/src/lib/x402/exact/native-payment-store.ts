@@ -40,6 +40,7 @@ export interface NativePaymentEvidence {
   errorReason?: string;
   errorMessage?: string;
   settledAt?: number;
+  consumedAt?: number;
 }
 
 interface NativePaymentRow {
@@ -55,6 +56,7 @@ interface NativePaymentRow {
   error_reason: string | null;
   error_message: string | null;
   settled_at: string | null;
+  consumed_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -66,6 +68,13 @@ interface ClaimRpcRow {
   payer: string | null;
   amount: string | null;
   settled_at: string | null;
+}
+
+interface ConsumeNativeRpcRow {
+  ok: boolean;
+  reason: string | null;
+  status: string | null;
+  consumed_at: string | null;
 }
 
 // ─── derivation ───────────────────────────────────────────────────────────────
@@ -103,6 +112,7 @@ function rowToEvidence(row: NativePaymentRow): NativePaymentEvidence {
     errorReason: row.error_reason ?? undefined,
     errorMessage: row.error_message ?? undefined,
     settledAt: row.settled_at ? Date.parse(row.settled_at) : undefined,
+    consumedAt: row.consumed_at ? Date.parse(row.consumed_at) : undefined,
   };
 }
 
@@ -300,4 +310,39 @@ export async function backfillNativeSettled(input: {
     throw new Error(`[x402-native] backfillNativeSettled failed: ${error.message}`);
   }
   return rowToEvidence(data as NativePaymentRow);
+}
+
+
+/**
+ * Atomic protected-resource consume for Arc Native payments.
+ *
+ * Settlement idempotency prevents double-charge; this prevents replaying the
+ * same settled X-PAYMENT proof to unlock a protected resource repeatedly.
+ */
+export async function consumeNativePayment(
+  paymentId: string,
+): Promise<
+  | { ok: true; evidence: NativePaymentEvidence }
+  | { ok: false; reason: 'missing' | 'not_settled' | 'replayed'; evidence?: NativePaymentEvidence }
+> {
+  const { data, error } = await supabaseAdmin.rpc('x402_native_consume_payment', {
+    p_payment_id: paymentId,
+  });
+
+  if (error) {
+    throw new Error(`[x402-native] consumeNativePayment RPC failed: ${error.message}`);
+  }
+
+  const row = (data as unknown as ConsumeNativeRpcRow[])[0];
+  if (!row) return { ok: false, reason: 'missing' };
+
+  const evidence = await getNativePayment(paymentId);
+  if (row.ok) {
+    if (!evidence) return { ok: false, reason: 'missing' };
+    return { ok: true, evidence };
+  }
+
+  if (row.reason === 'missing') return { ok: false, reason: 'missing' };
+  if (row.reason === 'not_settled') return { ok: false, reason: 'not_settled', evidence };
+  return { ok: false, reason: 'replayed', evidence };
 }

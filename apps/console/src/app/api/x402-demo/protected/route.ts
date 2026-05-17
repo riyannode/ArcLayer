@@ -6,7 +6,9 @@ import {
   CIRCLE_BATCHING_VERSION,
   GATEWAY_NETWORK_NAME,
   consumeGatewayPayment,
+  consumeNativePayment,
   deriveGatewayPaymentId,
+  deriveNativePaymentId,
   getArcTestnetGatewayConfig,
   getGatewayPayment,
   isBatchPayment,
@@ -190,11 +192,41 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const paymentResponse = { success: true, mode: 'arc-native', payer: result.payer, transaction: result.txHash ?? null, amount: result.amount, nonce: result.nonce };
+  const paymentId = deriveNativePaymentId({
+    network: arcRequirements.network,
+    asset: arcRequirements.asset,
+    from: result.payer!,
+    nonce: result.nonce!,
+  });
+
+  const consumed = await consumeNativePayment(paymentId);
+  if (!consumed.ok) {
+    if (consumed.reason === 'missing' || consumed.reason === 'not_settled') {
+      return NextResponse.json(
+        {
+          ok: false,
+          unlocked: false,
+          error: consumed.reason === 'missing' ? 'native_payment_not_found' : 'native_payment_not_settled',
+          paymentId,
+          message: 'Payment must be settled via /api/x402/settle before unlocking this resource.',
+        },
+        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+
+    return NextResponse.json(
+      { ok: false, unlocked: false, error: 'native_payment_replayed', paymentId },
+      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+
+  const evidence = consumed.evidence;
+  const paymentResponse = { success: true, mode: 'arc-native', payer: result.payer, transaction: evidence.txHash ?? result.txHash ?? null, amount: result.amount, nonce: result.nonce, paymentId };
   return NextResponse.json(
     { ok: true, message: 'ArcLayer x402 protected resource unlocked', mode: 'arc-native', payment: paymentResponse, unlocked: true },
     { headers: { 'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse) } },
   );
+  
 }
 
 export async function POST(req: NextRequest) { return GET(req); }

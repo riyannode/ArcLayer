@@ -50,6 +50,7 @@ export interface GatewayPaymentEvidence {
   transaction?: string;
   verifiedAt?: number;
   settledAt?: number;
+  settlementClaimedAt?: number;
   usedAt?: number;
   raw?: Record<string, unknown>;
 }
@@ -68,6 +69,7 @@ interface GatewayPaymentRow {
   settle_payload: Record<string, unknown>;
   verified_at: string | null;
   settled_at: string | null;
+  settlement_claimed_at: string | null;
   consumed_at: string | null;
   created_at: string;
   updated_at: string;
@@ -78,6 +80,14 @@ interface ConsumeRpcRow {
   reason: string | null;
   status: string | null;
   consumed_at: string | null;
+}
+
+interface ClaimGatewaySettlementRpcRow {
+  ok: boolean;
+  reason: string | null;
+  status: string | null;
+  gateway_settlement_id: string | null;
+  settlement_claimed_at: string | null;
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -113,6 +123,7 @@ function rowToEvidence(row: GatewayPaymentRow): GatewayPaymentEvidence {
     transaction: row.gateway_settlement_id ?? undefined,
     verifiedAt: row.verified_at ? Date.parse(row.verified_at) : undefined,
     settledAt: row.settled_at ? Date.parse(row.settled_at) : undefined,
+    settlementClaimedAt: row.settlement_claimed_at ? Date.parse(row.settlement_claimed_at) : undefined,
     usedAt: row.consumed_at ? Date.parse(row.consumed_at) : undefined,
     raw: row.settle_payload && Object.keys(row.settle_payload).length > 0
       ? row.settle_payload
@@ -176,6 +187,54 @@ export async function recordGatewayPayment(
   }
 
   return rowToEvidence(data as GatewayPaymentRow);
+}
+
+/**
+ * Atomically claim the right to call Circle Gateway settle for a payment.
+ *
+ * This closes the double-click race where two requests call client.settle()
+ * before recordGatewayPayment() persists the result.
+ */
+export async function claimGatewaySettlement(input: {
+  paymentId: string;
+  payer?: string;
+  payTo?: string;
+  amount?: string;
+  asset?: string;
+  network?: string;
+  resource?: string;
+  raw?: Record<string, unknown>;
+}): Promise<
+  | { acquired: true; paymentId: string }
+  | { acquired: false; reason: 'already_settled' | 'in_flight' | 'consumed' | 'failed'; existing?: GatewayPaymentEvidence }
+> {
+  const { data, error } = await supabaseAdmin.rpc('x402_gateway_claim_settlement', {
+    p_payment_id: input.paymentId,
+    p_payer: input.payer ?? null,
+    p_pay_to: input.payTo ?? null,
+    p_amount: input.amount ?? null,
+    p_asset: input.asset ?? null,
+    p_network: input.network ?? null,
+    p_resource: input.resource ?? null,
+    p_verify_payload: input.raw ?? {},
+  });
+
+  if (error) {
+    throw new Error(`[x402-gateway] claimGatewaySettlement RPC failed: ${error.message}`);
+  }
+
+  const row = (data as unknown as ClaimGatewaySettlementRpcRow[])[0];
+  if (!row || row.ok) return { acquired: true, paymentId: input.paymentId };
+
+  const existing = await getGatewayPayment(input.paymentId);
+  const reason = row.reason === 'already_settled'
+    ? 'already_settled'
+    : row.reason === 'consumed'
+      ? 'consumed'
+      : row.reason === 'failed'
+        ? 'failed'
+        : 'in_flight';
+  return { acquired: false, reason, existing };
 }
 
 /**

@@ -1,14 +1,6 @@
 'use client';
 
-import Link from 'next/link';
-import HomeWhoIsThisFor from './HomeWhoIsThisFor';
 import LiveLogStream from './LiveLogStream';
-
-const arrow = (
-  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-    <path d="M3 11L11 3M11 3H4M11 3V10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-  </svg>
-);
 
 /**
  * Home hero — editorial serif headline, real deployed contracts strip,
@@ -63,41 +55,6 @@ export default function HomeHero() {
 
       <div className="mt-6 section-reveal" style={{ animationDelay: '0.4s' }}>
         <LiveLogStream />
-      </div>
-
-      <HomeWhoIsThisFor />
-
-      {/* Primary paths — two clear entry points */}
-      <div className="mt-7 flex flex-col items-start gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
-        <Link href="/a2a" className="btn-primary">
-          Explore Autonomous Agents
-          {arrow}
-        </Link>
-        <Link href="/jobs" className="btn-primary">
-          Create Paid Agent Job
-          {arrow}
-        </Link>
-      </div>
-
-      {/* Secondary — register + docs + x402 demo */}
-      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] uppercase tracking-[0.16em]">
-        <Link href="/register" className="text-[rgba(234,228,216,0.85)] transition hover:text-[#C5A67C]">
-          Register Agent ↗
-        </Link>
-        <Link href="/x402-demo" className="text-[rgba(234,228,216,0.85)] transition hover:text-[#C5A67C]">
-          x402 Demo ↗
-        </Link>
-        <Link href="/docs" className="text-[rgba(234,228,216,0.85)] transition hover:text-[#C5A67C]">
-          Developer Docs ↗
-        </Link>
-        <a
-          href="https://github.com/riyannode/ArcLayer"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[rgba(234,228,216,0.85)] transition hover:text-[#C5A67C]"
-        >
-          GitHub ↗
-        </a>
       </div>
     </div>
   );

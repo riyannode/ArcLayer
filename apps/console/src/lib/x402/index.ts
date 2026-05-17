@@ -16,6 +16,7 @@ export { verifyExactSettlementProof, type SettlementProofResult } from './exact/
 export {
   backfillNativeSettled,
   claimNativePayment,
+  consumeNativePayment,
   deriveNativePaymentId,
   getNativePayment,
   markNativeFailed,
@@ -26,7 +27,7 @@ export {
   type NativePaymentStatus,
 } from './exact/native-payment-store';
 export { getArcTestnetGatewayConfig, getBatchFacilitatorClient, gatewayFacilitatorUrl, isBatchPayment, isGatewayEnabled, probeGatewayRuntimeSupport } from './gateway/batch-client';
-export { consumeGatewayPayment, deriveGatewayPaymentId, gatewayEvidenceSummary, getGatewayPayment, recordGatewayPayment, type GatewayPaymentEvidence } from './gateway/payment-store';
+export { claimGatewaySettlement, consumeGatewayPayment, deriveGatewayPaymentId, gatewayEvidenceSummary, getGatewayPayment, recordGatewayPayment, type GatewayPaymentEvidence } from './gateway/payment-store';
 export { createX402Facilitator, type X402Facilitator, type X402FacilitatorOptions, type ConsumePaymentInput, type CacheAndReturnInput } from './facilitator';
 export { canonicalResource } from './parser';
 export {

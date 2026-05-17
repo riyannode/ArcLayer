@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
+  claimGatewaySettlement,
   createX402Facilitator,
   deriveGatewayPaymentId,
   getBatchFacilitatorClient,
@@ -117,6 +118,70 @@ async function handleGatewaySettle(body: Record<string, unknown>): Promise<NextR
   const normalizedRequirements = normalizeRequirementsForGateway(paymentRequirements);
   const normalizedPayload = normalizePayloadForGateway(paymentPayload as Record<string, unknown>, normalizedRequirements);
 
+  const paymentId = deriveGatewayPaymentId(paymentPayload, paymentRequirements);
+  const resourceUrl = typeof paymentRequirements.resource === 'string'
+    ? paymentRequirements.resource
+    : (paymentRequirements.resource as { url?: string } | undefined)?.url;
+
+  // ─── Pre-settle claim: closes the double-click race window ──────────────────
+  // Two concurrent requests cannot both reach client.settle(); the second is
+  // rejected with the existing record. The Gateway batch is charged at most once.
+  const claim = await claimGatewaySettlement({
+    paymentId,
+    payTo: paymentRequirements.payTo as string | undefined,
+    amount: paymentRequirements.maxAmountRequired as string | undefined,
+    asset: paymentRequirements.asset as string | undefined,
+    network: typeof normalizedRequirements.network === 'string' ? normalizedRequirements.network : undefined,
+    resource: resourceUrl,
+    raw: paymentPayload as Record<string, unknown>,
+  });
+
+  if (!claim.acquired) {
+    const existing = claim.existing;
+    if (claim.reason === 'already_settled' || claim.reason === 'consumed') {
+      return NextResponse.json(
+        {
+          success: true,
+          settled: true,
+          status: existing?.status ?? 'settled',
+          payer: existing?.payer ?? '',
+          transaction: existing?.transaction ?? '',
+          network: existing?.network ?? '',
+          paymentIdentifier: paymentId,
+          alreadySettled: true,
+          extra: { mode: 'circle-gateway', status: existing?.status ?? 'settled' },
+        },
+        { status: 200 }
+      );
+    }
+    if (claim.reason === 'in_flight') {
+      return NextResponse.json(
+        {
+          success: false,
+          errorReason: 'gateway_settle_in_flight',
+          errorMessage: 'Another settle request is already in flight for this payment. Retry shortly.',
+          transaction: '',
+          paymentIdentifier: paymentId,
+        },
+        { status: 409 }
+      );
+    }
+    // 'failed' — caller may retry by calling settle again; the claim RPC resets
+    // the row back to claim-able state on retry.
+    return NextResponse.json(
+      {
+        success: false,
+        errorReason: 'gateway_previous_settle_failed',
+        errorMessage: existing?.raw && typeof existing.raw === 'object' && 'errorMessage' in existing.raw
+          ? String((existing.raw as Record<string, unknown>).errorMessage ?? 'previous attempt failed')
+          : 'previous attempt failed',
+        transaction: '',
+        paymentIdentifier: paymentId,
+      },
+      { status: 422 }
+    );
+  }
+
   try {
     const client = getBatchFacilitatorClient();
     const result = await client.settle(
@@ -124,7 +189,6 @@ async function handleGatewaySettle(body: Record<string, unknown>): Promise<NextR
       normalizedRequirements as unknown as Parameters<typeof client.settle>[1],
     );
 
-    const paymentId = deriveGatewayPaymentId(paymentPayload, paymentRequirements);
     if (!result.success) {
       await recordGatewayPayment({
         paymentId,
@@ -135,9 +199,7 @@ async function handleGatewaySettle(body: Record<string, unknown>): Promise<NextR
         asset: paymentRequirements.asset as string | undefined,
         transaction: result.transaction || '',
         network: result.network,
-        resource: typeof paymentRequirements.resource === 'string'
-          ? paymentRequirements.resource
-          : (paymentRequirements.resource as { url?: string } | undefined)?.url,
+        resource: resourceUrl,
         settledAt: Date.now(),
         raw: result as unknown as Record<string, unknown>,
       });
@@ -165,9 +227,7 @@ async function handleGatewaySettle(body: Record<string, unknown>): Promise<NextR
       asset: paymentRequirements.asset as string | undefined,
       transaction: result.transaction,
       network: result.network,
-      resource: typeof paymentRequirements.resource === 'string'
-        ? paymentRequirements.resource
-        : (paymentRequirements.resource as { url?: string } | undefined)?.url,
+      resource: resourceUrl,
       settledAt: Date.now(),
       raw: result as unknown as Record<string, unknown>,
     });
@@ -186,8 +246,26 @@ async function handleGatewaySettle(body: Record<string, unknown>): Promise<NextR
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Gateway settle failed';
+    // Mark the row as failed so a subsequent claim can retry without being
+    // blocked by the in_flight guard. Best-effort — failures here are logged
+    // but do not surface to the user.
+    try {
+      await recordGatewayPayment({
+        paymentId,
+        status: 'failed',
+        payer: undefined,
+        payTo: paymentRequirements.payTo as string | undefined,
+        amount: paymentRequirements.maxAmountRequired as string | undefined,
+        asset: paymentRequirements.asset as string | undefined,
+        network: typeof normalizedRequirements.network === 'string' ? normalizedRequirements.network : undefined,
+        resource: resourceUrl,
+        raw: { errorMessage: message },
+      });
+    } catch {
+      /* swallow — primary error is the gateway failure */
+    }
     return NextResponse.json(
-      { success: false, errorReason: 'gateway_error', errorMessage: message, transaction: '' },
+      { success: false, errorReason: 'gateway_error', errorMessage: message, transaction: '', paymentIdentifier: paymentId },
       { status: 502 }
     );
   }

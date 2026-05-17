@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { useAccount, useDisconnect } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
@@ -51,6 +51,10 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
   const { disconnect: eoaDisconnect } = useDisconnect();
   const { open: openAppKit } = useAppKit();
   const { notify } = useProtectionNotice();
+  // Synchronous lock to prevent double-submit race condition.
+  // setStep is async, so React can let two clicks through before the first
+  // setStep('challenge') renders. useRef gives us instant rejection.
+  const runLockRef = useRef(false);
   const [walletMode, setWalletMode] = useState<WalletMode>('passkey');
   const [mode, setMode] = useState<PaymentMode>('arc-native');
   const [step, setStep] = useState<Step>('idle');
@@ -106,6 +110,7 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
   }, [gatewayBalance]);
 
   const reset = useCallback(() => {
+    runLockRef.current = false;
     setLogs([]); setTxHash(''); setUnlocked(false); setReplayResult('Not run'); setRequirement(null); setStep('idle');
   }, []);
 
@@ -350,7 +355,12 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
   }, [log, notify]);
 
   const runDemo = useCallback(async () => {
+    // Synchronous double-submit guard — prevents two flows with different nonces.
+    // Must happen before reset(); reset intentionally clears stale locks.
+    if (runLockRef.current) return;
+
     reset();
+    runLockRef.current = true;
     if (!activeAuthed || !address) {
       log('No wallet connected', 'error');
       notify({ ...NOTICE_WALLET_NOT_CONNECTED, surface: 'toast', autoCloseMs: 4_500 });
@@ -400,10 +410,15 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
           },
         };
 
-    if (mode === 'arc-native') {
-      await runArcNative(wallet as unknown as Parameters<typeof runArcNative>[0]);
-    } else {
-      await runGateway(wallet as unknown as Parameters<typeof runGateway>[0]);
+    try {
+      if (mode === 'arc-native') {
+        await runArcNative(wallet as unknown as Parameters<typeof runArcNative>[0]);
+      } else {
+        await runGateway(wallet as unknown as Parameters<typeof runGateway>[0]);
+      }
+    } finally {
+      // Release lock — operator may RUN AGAIN after success or error
+      runLockRef.current = false;
     }
   }, [activeAuthed, address, walletMode, smartAccount, log, reset, mode, runArcNative, runGateway, notify]);
 
@@ -412,6 +427,15 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
   const loginCircle = useCallback(() => { login().catch((e) => log(`Circle sign-in failed: ${e instanceof Error ? e.message : String(e)}`, 'error')); }, [login, log]);
 
   const busy = !['idle', 'done', 'error'].includes(step);
+  // After successful payment, keep button disabled for 5s to prevent accidental re-pay
+  const [cooldown, setCooldown] = useState(false);
+  useEffect(() => {
+    if (step === 'done') {
+      setCooldown(true);
+      const t = setTimeout(() => setCooldown(false), 5000);
+      return () => clearTimeout(t);
+    }
+  }, [step]);
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
 
   // Compact-aware sizing tokens
@@ -574,8 +598,8 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
                   </div>
                 </>
               ) : (
-                <button onClick={busy ? undefined : runDemo} disabled={busy || relayer?.ready === false} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
-                  {busy ? `RUNNING: ${step.toUpperCase()}` : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                <button onClick={busy || cooldown ? undefined : runDemo} disabled={busy || cooldown || relayer?.ready === false} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ (cooldown)' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                 </button>
               )
             ) : (
@@ -586,8 +610,8 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
                 </>
               ) : (
                 <>
-                  <button onClick={busy ? undefined : runDemo} disabled={busy || relayer?.ready === false} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
-                    {busy ? `RUNNING: ${step.toUpperCase()}` : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                  <button onClick={busy || cooldown ? undefined : runDemo} disabled={busy || cooldown || relayer?.ready === false} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                    {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ (cooldown)' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                   </button>
                   <button onClick={() => eoaDisconnect()} className={`mt-1.5 w-full cursor-pointer ${c.cardRadiusXs} border border-white/10 ${compact ? 'py-1.5' : 'py-2'} font-mono ${c.label} tracking-[0.14em] text-white/80 hover:border-white/20`}>DISCONNECT EOA</button>
                 </>
