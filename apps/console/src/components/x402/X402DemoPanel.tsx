@@ -217,7 +217,7 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
     const replayJson = await replay.json();
     const rejected = !replay.ok && (replayJson.error === 'native_payment_replayed' || replayJson.error === 'nonce_used' || replayJson.error === 'payment_already_used');
     setReplayResult(rejected ? `Rejected: ${replayJson.error}` : `Unexpected: ${JSON.stringify(replayJson).slice(0, 80)}`);
-    log(rejected ? `Replay rejected: ${replayJson.error} ✓` : 'Replay test did not return expected rejection', rejected ? 'success' : 'error');
+    log(rejected ? `Replay rejected: ${replayJson.error} ✓` : 'Replay test did not return expected rejection', 'error');
     if (rejected) {
       notify({ ...NOTICE_REPLAY_REJECTED, technicalDetail: `Replay rejected: ${replayJson.error}`, message: 'This Arc Native EIP-3009 payment receipt was already consumed and cannot unlock the protected resource again.' });
     } else {
@@ -343,8 +343,8 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
     if (replayRejected) {
       const reason = replayJson.error || 'gateway_payment_replayed';
       setReplayResult(`Rejected: ${reason}`);
-      log(`[GW] Receipt already used protection verified ✓`, 'success');
-      log(`[GW] Replay rejected: ${reason} ✓`, 'success');
+      log(`[GW] Receipt already used protection verified ✓`, 'error');
+      log(`[GW] Replay rejected: ${reason} ✓`, 'error');
       notify({ ...NOTICE_REPLAY_REJECTED, message: 'This Circle Gateway payment receipt was already consumed and cannot unlock the protected resource again.', technicalDetail: `Replay rejected: ${reason}` });
     } else {
       setReplayResult('Unexpected: replay unlocked resource');
@@ -571,7 +571,7 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
             <div className="flex justify-between gap-4"><span className="text-white/80">Network</span><span className="text-white">Arc Testnet</span></div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Current step</span><span className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{step.toUpperCase()}</span></div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Unlocked</span><span className={unlocked ? 'text-green-300' : 'text-white/80'}>{unlocked ? 'YES' : 'NO'}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-white/80">Replay guard</span><span className={replayResult.startsWith('Rejected') ? 'text-green-300' : 'text-white/80'}>{replayResult}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-white/80">Replay guard</span><span className={replayResult.startsWith('Rejected') ? 'text-red-300' : replayResult.startsWith('Unexpected') ? 'text-green-300' : 'text-white/80'}>{replayResult}</span></div>
           </div>
 
           {mode === 'circle-gateway' && (!gatewayBalance?.depositedUsdc || Number(gatewayBalance.depositedUsdc) <= 0) && (
