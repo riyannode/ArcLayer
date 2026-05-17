@@ -57,6 +57,27 @@ type AutonomousFeed = {
   latest: string | null;
 };
 
+type AgentCategory = 'all' | 'signal-oracles' | 'traders' | 'evaluators' | 'developers' | 'data-providers' | 'payment-agents';
+
+type NetworkAgent = {
+  id: string;
+  name: string;
+  role: string;
+  capability: string[];
+  description: string;
+  status: 'LIVE' | 'RUNNING' | 'IDLE';
+  wallet?: string;
+  agentId?: string;
+  reputation: number;
+  callsServed: number;
+  jobsCompleted: number;
+  revenueRaw: string;
+  balanceRaw?: string | null;
+  primaryAction: string;
+  categories: AgentCategory[];
+  activity: FeedItem[];
+};
+
 type AgentStats = {
   callsServed: number;
   callsFailed: number;
@@ -186,6 +207,286 @@ function FeedRow({ item, isNew }: { item: FeedItem; isNew: boolean }) {
   );
 }
 
+const AGENT_FILTERS: { key: AgentCategory; label: string }[] = [
+  { key: 'all', label: 'All agents' },
+  { key: 'signal-oracles', label: 'Signal Oracles' },
+  { key: 'traders', label: 'Traders' },
+  { key: 'evaluators', label: 'Evaluators' },
+  { key: 'developers', label: 'Developers' },
+  { key: 'data-providers', label: 'Data Providers' },
+  { key: 'payment-agents', label: 'Payment Agents' },
+];
+
+function jobsForAgent(overview: Overview | null, agentId?: string) {
+  if (!overview || !agentId) return 0;
+  return overview.jobs.filter((job) => job.agentId?.toLowerCase() === agentId.toLowerCase()).length;
+}
+
+function buildAgentNetwork({
+  onchain,
+  overview,
+  feed,
+  isLive,
+}: {
+  onchain: A2AOnChain | null;
+  overview: Overview | null;
+  feed: AutonomousFeed | null;
+  isLive: boolean;
+}): NetworkAgent[] {
+  const pythiaStats = onchain?.agents.pythia?.stats ?? null;
+  const hermesStats = onchain?.agents.hermes?.stats ?? null;
+  const feedItems = feed?.items ?? [];
+  const pythiaId = onchain?.agents.pythia?.agentId;
+  const hermesId = onchain?.agents.hermes?.agentId;
+
+  const agents: NetworkAgent[] = [
+    {
+      id: 'pythia',
+      name: 'Pythia',
+      role: 'Signal Oracle',
+      capability: ['Data Provider', 'Demo Strategy', 'x402 Seller'],
+      description: 'Programmable data provider agent. Returns demo market signals to validate request, payment, receipt, and reputation rails.',
+      status: isLive ? 'LIVE' : 'IDLE',
+      wallet: onchain?.wallets?.pythia,
+      agentId: pythiaId,
+      reputation: pythiaStats?.reputationScore ?? 0,
+      callsServed: pythiaStats?.callsServed ?? 0,
+      jobsCompleted: jobsForAgent(overview, pythiaId),
+      revenueRaw: pythiaStats?.totalRevenue ?? '0',
+      balanceRaw: onchain?.balances?.usdc?.pythia,
+      primaryAction: 'Request Signal',
+      categories: ['signal-oracles', 'data-providers', 'payment-agents'],
+      activity: feedItems.filter((item) => item.agent === 'Pythia').slice(0, 8),
+    },
+    {
+      id: 'hermes',
+      name: 'Hermes',
+      role: 'Autonomous Trader',
+      capability: ['Consumer Agent', 'Payment Agent', 'Decision Engine'],
+      description: 'Autonomous consumer agent. Requests services from oracle agents, pays via x402, and records all interactions on-chain.',
+      status: isLive ? 'RUNNING' : 'IDLE',
+      wallet: onchain?.wallets?.hermes,
+      agentId: hermesId,
+      reputation: hermesStats?.reputationScore ?? 0,
+      callsServed: hermesStats?.callsServed ?? 0,
+      jobsCompleted: jobsForAgent(overview, hermesId),
+      revenueRaw: hermesStats?.totalRevenue ?? '0',
+      balanceRaw: onchain?.balances?.usdc?.hermes,
+      primaryAction: 'View Decisions',
+      categories: ['traders', 'payment-agents'],
+      activity: feedItems.filter((item) => item.agent === 'Hermes').slice(0, 8),
+    },
+  ];
+
+  const known = new Set([pythiaId?.toLowerCase(), hermesId?.toLowerCase()].filter(Boolean));
+  const dynamicIds = new Set<string>();
+  overview?.jobs.forEach((job) => {
+    const id = job.agentId;
+    if (id && !known.has(id.toLowerCase())) dynamicIds.add(id);
+  });
+  overview?.proofs.forEach((proof) => {
+    const id = proof.agentId;
+    if (id && !known.has(id.toLowerCase())) dynamicIds.add(id);
+  });
+
+  Array.from(dynamicIds).slice(0, 12).forEach((agentId, index) => {
+    const completed = jobsForAgent(overview, agentId);
+    const receipts = overview?.proofs.filter((proof) => proof.agentId?.toLowerCase() === agentId.toLowerCase()) ?? [];
+    const volumeRaw = receipts.reduce((sum, proof) => sum + BigInt(proof.amountPaid || '0'), BigInt(0)).toString();
+    agents.push({
+      id: agentId,
+      name: `Agent #${index + 1}`,
+      role: 'Registered Agent',
+      capability: ['General'],
+      description: 'Registered autonomous agent. Metadata is not available yet, so ArcLayer shows safe registry-derived fallback data.',
+      status: completed > 0 || receipts.length > 0 ? 'LIVE' : 'IDLE',
+      agentId,
+      reputation: 0,
+      callsServed: 0,
+      jobsCompleted: completed,
+      revenueRaw: volumeRaw,
+      primaryAction: 'Create Job',
+      categories: ['developers'],
+      activity: [],
+    });
+  });
+
+  return agents;
+}
+
+function AgentFilterBar({ active, onChange }: { active: AgentCategory; onChange: (key: AgentCategory) => void }) {
+  return (
+    <div className="flex gap-2 overflow-x-auto pb-1">
+      {AGENT_FILTERS.map((filter) => (
+        <button
+          key={filter.key}
+          type="button"
+          onClick={() => onChange(filter.key)}
+          className={`shrink-0 rounded-full border px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest transition-colors ${
+            active === filter.key
+              ? 'border-[#C5A67C]/60 bg-[#C5A67C]/10 text-[#EAD7B5]'
+              : 'border-white/10 bg-white/[0.02] text-[#777] hover:border-white/20 hover:text-[#C5A67C]'
+          }`}
+        >
+          {filter.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AgentNetworkCard({ agent, selected, onSelect }: { agent: NetworkAgent; selected: boolean; onSelect: () => void }) {
+  const accent = agent.name === 'Pythia' ? 'cyan' : agent.name === 'Hermes' ? 'amber' : 'zinc';
+  const border = selected ? 'border-[#C5A67C]/60 bg-[#C5A67C]/[0.04]' : 'border-white/10 bg-white/[0.02]';
+  const avatar = agent.name === 'Pythia' ? '◈' : agent.name === 'Hermes' ? '◆' : '◇';
+  const statusColor = agent.status === 'LIVE' || agent.status === 'RUNNING' ? 'text-emerald-300 border-emerald-500/30' : 'text-zinc-500 border-zinc-600/30';
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`min-w-[280px] rounded border p-4 text-left transition-colors hover:border-[#C5A67C]/40 ${border}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className={`flex h-10 w-10 items-center justify-center rounded border font-mono text-lg ${accent === 'cyan' ? 'border-cyan-500/25 text-cyan-300' : accent === 'amber' ? 'border-amber-500/25 text-amber-300' : 'border-zinc-500/25 text-zinc-300'}`}>
+            {avatar}
+          </div>
+          <div>
+            <p className="text-base font-semibold text-[#EAE4D8]">{agent.name}</p>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#777]">{agent.role}</p>
+          </div>
+        </div>
+        <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] ${statusColor}`}>{agent.status}</span>
+      </div>
+      <p className="mt-3 line-clamp-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">{agent.description}</p>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {agent.capability.slice(0, 3).map((cap) => (
+          <span key={cap} className="rounded border border-white/10 bg-black/20 px-2 py-0.5 font-mono text-[9px] text-[#777]">
+            {cap}
+          </span>
+        ))}
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-2 font-mono text-[10px]">
+        <Stat label="Agent reputation" value={agent.reputation} />
+        <Stat label="Usage" value={agent.callsServed || agent.jobsCompleted || 0} />
+        <Stat label="USDC volume" value={formatUSDC(agent.revenueRaw)} />
+      </div>
+      <div className="mt-3 flex items-center justify-between gap-2 font-mono text-[10px] text-[#555]">
+        <span className="truncate">{short(agent.wallet || agent.agentId || '')}</span>
+        <span className="rounded border border-[#C5A67C]/20 px-2 py-1 text-[#C5A67C]">{agent.primaryAction}</span>
+      </div>
+    </button>
+  );
+}
+
+function EmptyAgentState({ label }: { label: string }) {
+  return (
+    <div className="rounded border border-dashed border-white/10 bg-white/[0.015] p-6 text-center">
+      <p className="font-mono text-xs text-[#C5A67C]">No additional autonomous agents registered yet.</p>
+      <p className="mt-1 font-mono text-[11px] text-[#777]">Register an agent to make it appear in the network.</p>
+      <p className="mt-2 font-mono text-[10px] text-[#555]">Current filter: {label}</p>
+    </div>
+  );
+}
+
+function AgentDetailDrawer({ agent, onClose }: { agent: NetworkAgent | null; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  if (!agent) return null;
+  const copyWallet = async () => {
+    const value = agent.wallet || agent.agentId;
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <aside
+        className="ml-auto h-full w-full max-w-xl overflow-y-auto border-l border-white/10 bg-[#0A0A0A] p-5 shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Agent profile</p>
+            <h3 className="mt-1 text-2xl font-semibold text-[#EAE4D8]">{agent.name}</h3>
+            <p className="font-mono text-xs text-[#777]">{agent.role}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded border border-white/10 px-2 py-1 font-mono text-xs text-[#777] hover:text-[#EAE4D8]">
+            close
+          </button>
+        </div>
+
+        <p className="mt-4 font-mono text-[12px] leading-6 text-[#9A9A9A]">{agent.description}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {agent.capability.map((cap) => (
+            <span key={cap} className="rounded border border-[#C5A67C]/20 bg-[#C5A67C]/5 px-2 py-1 font-mono text-[10px] text-[#EAD7B5]">
+              {cap}
+            </span>
+          ))}
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3 font-mono text-xs">
+          <Stat label="Agent reputation" value={agent.reputation} />
+          <Stat label="Jobs completed" value={agent.jobsCompleted} />
+          <Stat label="Signals served" value={agent.callsServed} />
+          <Stat label="USDC volume" value={`${formatUSDC(agent.revenueRaw)} USDC`} />
+          <Stat label="Wallet balance" value={agent.balanceRaw ? `${formatUSDC(agent.balanceRaw)} USDC` : '—'} />
+          <Stat label="Status" value={agent.status} />
+        </div>
+
+        <div className="mt-5 space-y-2 rounded border border-white/10 bg-white/[0.02] p-3 font-mono text-[11px]">
+          <div>
+            <p className="text-[#555]">Wallet / controller</p>
+            <p className="break-all text-[#EAE4D8]">{agent.wallet || '—'}</p>
+          </div>
+          <div>
+            <p className="text-[#555]">Agent ID</p>
+            <p className="break-all text-[#EAE4D8]">{agent.agentId || agent.id}</p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {['Create Job', 'Request Signal', 'Pay Agent', copied ? '✓ Copied' : 'Copy Wallet'].map((action) => (
+            <button
+              key={action}
+              type="button"
+              onClick={action.includes('Copy') || action.includes('Copied') ? copyWallet : undefined}
+              className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-[#C5A67C] hover:border-[#C5A67C]/40"
+            >
+              {action}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-6">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Recent x402/payment receipts</p>
+          <div className="mt-2 space-y-2">
+            {agent.activity.filter((item) => item.tx).slice(0, 4).map((item) => (
+              <a key={item.id} href={`https://testnet.arcscan.app/tx/${item.tx}`} target="_blank" rel="noopener noreferrer" className="block rounded border border-white/10 bg-white/[0.02] p-2 font-mono text-[11px] text-[#9A9A9A] hover:border-[#C5A67C]/30">
+                Payment receipt · {short(item.tx || '')} ↗
+              </a>
+            ))}
+            {agent.activity.filter((item) => item.tx).length === 0 && (
+              <p className="rounded border border-white/10 bg-white/[0.02] p-2 font-mono text-[11px] text-[#555]">No recent payment receipts for this agent.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Agent history</p>
+          <div className="mt-2 max-h-80 overflow-y-auto rounded border border-white/10 bg-black/20 p-2">
+            {agent.activity.length > 0 ? agent.activity.map((item) => <FeedRow key={item.id} item={item} isNew={false} />) : (
+              <p className="p-3 font-mono text-[11px] text-[#555]">No recent autonomous activity for this agent.</p>
+            )}
+          </div>
+        </div>
+      </aside>
+    </div>
+  );
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function A2ADashboardPage() {
@@ -199,6 +500,8 @@ export default function A2ADashboardPage() {
   const [signalHistory, setSignalHistory] = useState<number[]>([]);
   const [showAllProofs, setShowAllProofs] = useState(false);
   const [_tick, setTick] = useState(0);
+  const [filter, setFilter] = useState<AgentCategory>('all');
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -258,6 +561,10 @@ export default function A2ADashboardPage() {
   const isLive = latestFeedMs > 0 && Date.now() - latestFeedMs < 120_000;
   const proofTxs = (feed?.items ?? []).filter((item) => item.tx);
   const visibleProofTxs = showAllProofs ? proofTxs : proofTxs.slice(0, 3);
+  const networkAgents = buildAgentNetwork({ onchain, overview, feed, isLive });
+  const filteredAgents = filter === 'all' ? networkAgents : networkAgents.filter((agent) => agent.categories.includes(filter));
+  const selectedAgent = networkAgents.find((agent) => agent.id === selectedAgentId) ?? null;
+  const activeFilterLabel = AGENT_FILTERS.find((item) => item.key === filter)?.label ?? 'All agents';
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-[#EAE4D8] selection:bg-[#C5A67C]/20">
@@ -314,30 +621,38 @@ export default function A2ADashboardPage() {
           </p>
         </section>
 
-        {/* ─── Hero: Autonomous Agents (Pythia + Hermes) ───────────────── */}
-        <section className="grid gap-4 md:grid-cols-2">
-          <AgentHeroCard
-            name="Pythia"
-            role="Signal Oracle"
-            color="cyan"
-            stats={pythia?.stats || null}
-            agentId={pythia?.agentId}
-            wallet={onchain?.wallets?.pythia}
-            balance={onchain?.balances?.usdc?.pythia}
-            description="Programmable data provider agent. Returns demo market signals to validate x402 payment, receipt, and reputation rails."
-            isLive={isLive}
-          />
-          <AgentHeroCard
-            name="Hermes"
-            role="Autonomous Trader"
-            color="amber"
-            stats={hermes?.stats || null}
-            agentId={hermes?.agentId}
-            wallet={onchain?.wallets?.hermes}
-            balance={onchain?.balances?.usdc?.hermes}
-            description="Autonomous consumer agent. Requests services from oracle agents, pays via x402, and records all interactions on-chain."
-            isLive={isLive}
-          />
+        {/* ─── Autonomous Agent Network · selectable agent cards ──────── */}
+        <section className="mb-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#777]">
+              Registered agents · {filteredAgents.length} of {networkAgents.length}
+            </p>
+            <AgentFilterBar active={filter} onChange={setFilter} />
+          </div>
+
+          {filteredAgents.length > 0 ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredAgents.map((agent) => (
+                <AgentNetworkCard
+                  key={agent.id}
+                  agent={agent}
+                  selected={agent.id === selectedAgentId}
+                  onSelect={() => setSelectedAgentId(agent.id)}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyAgentState label={activeFilterLabel} />
+          )}
+
+          {filter === 'all' && networkAgents.length <= 2 && (
+            <div className="rounded border border-dashed border-white/10 bg-white/[0.015] p-4 text-center">
+              <p className="font-mono text-[11px] text-[#777]">
+                <span className="text-[#C5A67C]">No additional autonomous agents registered yet.</span>{' '}
+                Register an agent to make it appear in the network.
+              </p>
+            </div>
+          )}
         </section>
 
         {/* ─── KPI Strip ───────────────────────────────────────────────── */}
@@ -560,8 +875,16 @@ export default function A2ADashboardPage() {
             <span>ArcLayer Protocol · Autonomous Agent Economy on Arc Network</span>
             <span>Source: on-chain indexer + agent telemetry · No simulated values</span>
           </div>
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-[#555]">
+            <a href="/jobs" className="rounded border border-white/10 bg-white/[0.02] px-2 py-1 text-[#C5A67C] hover:border-[#C5A67C]/40">
+              ↗ Manual Job Marketplace · /jobs
+            </a>
+            <span>Same protocol stack, human-driven entry point.</span>
+          </div>
         </footer>
       </div>
+
+      <AgentDetailDrawer agent={selectedAgent} onClose={() => setSelectedAgentId(null)} />
     </main>
   );
 }
