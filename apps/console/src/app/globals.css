@@ -16,8 +16,8 @@
   --primary-hi: #EAE4D8;
   --accent: #B8CD7E;
   --text-primary: #EAE4D8;
-  --text-secondary: #9a9a9a;
-  --text-muted: #7A7A7A;
+  --text-secondary: #b5b5b5;
+  --text-muted: #a0a0a0;
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.14);
 
@@ -25,7 +25,7 @@
   --aureo-bg: #050505;
   --aureo-surface: rgba(5, 5, 5, 0.65);
   --aureo-primary: #C5A67C;
-  --aureo-secondary: #7A7A7A;
+  --aureo-secondary: #a0a0a0;
   --aureo-tertiary: #B8CD7E;
   --aureo-ivory: #EAE4D8;
   --aureo-border: rgba(255, 255, 255, 0.14);
@@ -92,7 +92,7 @@ body {
 
 .btn-ghost {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  border: none; border-radius: 0; background: transparent; color: #7A7A7A;
+  border: none; border-radius: 0; background: transparent; color: #a0a0a0;
   cursor: pointer; font-family: var(--font-body);
   font-size: 11.5px; font-weight: 400; letter-spacing: 0.18em; text-transform: uppercase;
   padding: 11px 4px; transition: color 180ms ease;
@@ -117,7 +117,7 @@ body {
   outline: none; transition: border-color 180ms ease, background 180ms ease;
 }
 .input-mono:focus { border-color: rgba(197, 166, 124, 0.5); background: rgba(0, 0, 0, 0.55); }
-.input-mono::placeholder { color: rgba(234, 228, 216, 0.25); font-family: var(--font-mono); }
+.input-mono::placeholder { color: rgba(234, 228, 216, 0.72); font-family: var(--font-mono); }
 
 .code-block {
   font-family: var(--font-mono); font-size: 12px; line-height: 1.65;
@@ -127,7 +127,7 @@ body {
 }
 .code-block .tok-k { color: #C5A67C; }
 .code-block .tok-s { color: #B8CD7E; }
-.code-block .tok-c { color: #7A7A7A; font-style: italic; }
+.code-block .tok-c { color: #a0a0a0; font-style: italic; }
 
 /* ─── Status / atoms ─── */
 .pulse-dot {
@@ -224,7 +224,7 @@ body {
 }
 .aureo-mono-label {
   font-family: 'Inter', sans-serif; font-weight: 500; font-size: 11.5px;
-  letter-spacing: 0.24em; text-transform: uppercase; color: rgba(234, 228, 216, 0.65);
+  letter-spacing: 0.24em; text-transform: uppercase; color: rgba(234, 228, 216, 0.85);
 }
 .aureo-code-label {
   font-family: var(--font-mono); font-weight: 400; font-size: 11px;
@@ -413,7 +413,7 @@ body {
 
 /* Prose overrides for docs MDX */
 .prose-arc {
-  font-family: var(--font-body); color: #c5c0b2;
+  font-family: var(--font-body); color: #d4cfc1;
 }
 .prose-arc h1, .prose-arc h2, .prose-arc h3, .prose-arc h4 {
   font-family: var(--font-display); font-weight: 400; color: #EAE4D8;
@@ -441,7 +441,7 @@ body {
 .prose-arc li { margin: 6px 0; }
 .prose-arc blockquote {
   border-left: 2px solid rgba(197, 166, 124, 0.4);
-  padding-left: 16px; margin: 18px 0; color: #9a9a9a; font-style: italic;
+  padding-left: 16px; margin: 18px 0; color: #b5b5b5; font-style: italic;
 }
 
 /* ============================================================

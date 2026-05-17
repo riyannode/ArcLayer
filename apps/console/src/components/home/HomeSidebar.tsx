@@ -26,7 +26,7 @@ export default function HomeSidebar() {
           <a
             key={it.label}
             href={it.href}
-            className="aureo-sidebar-label text-[#7A7A7A] transition-colors duration-300 hover:text-[#C5A67C]"
+            className="aureo-sidebar-label text-[#a0a0a0] transition-colors duration-300 hover:text-[#C5A67C]"
           >
             {it.label}
           </a>
@@ -34,7 +34,7 @@ export default function HomeSidebar() {
       </nav>
       <div className="flex flex-col items-center gap-3">
         <div className="h-8 w-px bg-gradient-to-b from-[#C5A67C]/40 to-transparent" />
-        <span className="font-mono text-[9px] tracking-[0.22em] text-[#7A7A7A] [writing-mode:vertical-rl] rotate-180">
+        <span className="font-mono text-[9px] tracking-[0.22em] text-[#a0a0a0] [writing-mode:vertical-rl] rotate-180">
           v0.1.0
         </span>
       </div>

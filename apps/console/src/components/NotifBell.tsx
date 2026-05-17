@@ -71,7 +71,7 @@ function NotifItem({
         >
           {notif.message}
         </p>
-        <p className="mt-0.5 font-mono text-[9px] text-white/30">{timeAgo(notif.timestamp)}</p>
+        <p className="mt-0.5 font-mono text-[9px] text-white/80">{timeAgo(notif.timestamp)}</p>
       </div>
       {!notif.read && (
         <span
@@ -138,7 +138,7 @@ export default function NotifBell() {
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="font-mono text-[9px] tracking-[0.14em] text-white/40 transition-colors hover:text-[#C5A67C]"
+                className="font-mono text-[9px] tracking-[0.14em] text-white/80 transition-colors hover:text-[#C5A67C]"
               >
                 MARK ALL READ
               </button>
@@ -149,8 +149,8 @@ export default function NotifBell() {
           <div className="max-h-[360px] overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="px-4 py-8 text-center">
-                <p className="font-mono text-[11px] text-white/30">No notifications yet</p>
-                <p className="mt-1 font-mono text-[9px] text-white/20">
+                <p className="font-mono text-[11px] text-white/80">No notifications yet</p>
+                <p className="mt-1 font-mono text-[9px] text-white/80">
                   You&apos;ll be notified when jobs are assigned or payments received
                 </p>
               </div>

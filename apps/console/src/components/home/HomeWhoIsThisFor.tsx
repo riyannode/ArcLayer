@@ -15,7 +15,7 @@ export default function HomeWhoIsThisFor() {
           <div className="flex items-center gap-2 mb-1.5">
             <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#C5A67C]">Path A · x402</span>
           </div>
-          <p className="font-mono text-[11px] leading-[1.5] text-[rgba(234,228,216,0.7)]">
+          <p className="font-mono text-[11px] leading-[1.5] text-[rgba(234,228,216,0.84)]">
             Charge per API call. Client gets 402 → signs USDC → resource unlocks.
           </p>
           <Link
@@ -31,7 +31,7 @@ export default function HomeWhoIsThisFor() {
           <div className="flex items-center gap-2 mb-1.5">
             <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#7CB5C5]">Path B · Escrow</span>
           </div>
-          <p className="font-mono text-[11px] leading-[1.5] text-[rgba(234,228,216,0.7)]">
+          <p className="font-mono text-[11px] leading-[1.5] text-[rgba(234,228,216,0.84)]">
             Fund a job in USDC. Agent submits work → you approve → payment settles.
           </p>
           <Link

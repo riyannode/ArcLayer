@@ -437,7 +437,7 @@ export default function X402DemoPage() {
             <div className="mb-2 font-mono text-[10px] tracking-[0.24em] text-[#C5A67C]">ARCLAYER x402 MARKET</div>
             <h1 className="text-3xl font-semibold tracking-[-0.04em] text-white md:text-5xl">Pay per API call</h1>
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[11px] text-white/55">
+          <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[11px] text-white/80">
             <span className={activeAuthed ? 'h-2 w-2 rounded-full bg-green-400' : 'h-2 w-2 rounded-full bg-yellow-400'} />
             {activeAuthed && address ? `${walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · ${shortenAddress(address)}` : 'Wallet not connected'}
           </div>
@@ -448,28 +448,28 @@ export default function X402DemoPage() {
             <div className="rounded-2xl border border-white/10 bg-[#111]/80 p-5 shadow-2xl shadow-black/30">
               <div className="mb-4 flex items-start justify-between gap-4">
                 <div>
-                  <div className="mb-2 font-mono text-[10px] tracking-[0.2em] text-white/35">PROTECTED RESOURCE</div>
+                  <div className="mb-2 font-mono text-[10px] tracking-[0.2em] text-white/80">PROTECTED RESOURCE</div>
                   <h2 className="text-2xl font-semibold tracking-[-0.03em] text-white">Will this API unlock after x402 payment?</h2>
-                  <p className="mt-2 font-mono text-[12px] text-white/45">/api/x402-demo/protected</p>
+                  <p className="mt-2 font-mono text-[12px] text-white/80">/api/x402-demo/protected</p>
                 </div>
                 <div className="rounded-full bg-green-500/15 px-3 py-1 font-mono text-[10px] text-green-300">LIVE</div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-                  <div className="font-mono text-[10px] text-white/35">PRICE</div>
+                  <div className="font-mono text-[10px] text-white/80">PRICE</div>
                   <div className="mt-1 text-2xl font-semibold text-white">0.01 USDC</div>
-                  <div className="mt-1 text-xs text-white/40">per resource unlock</div>
+                  <div className="mt-1 text-xs text-white/80">per resource unlock</div>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-                  <div className="font-mono text-[10px] text-white/35">RELAYER</div>
+                  <div className="font-mono text-[10px] text-white/80">RELAYER</div>
                   <div className={relayer?.ready ? 'mt-1 text-2xl font-semibold text-green-300' : 'mt-1 text-2xl font-semibold text-red-300'}>{relayer?.ready ? 'Ready' : 'Offline'}</div>
-                  <div className="mt-1 text-xs text-white/40">{relayer?.relayerAddress ? shortenAddress(relayer.relayerAddress) : 'not configured'}</div>
+                  <div className="mt-1 text-xs text-white/80">{relayer?.relayerAddress ? shortenAddress(relayer.relayerAddress) : 'not configured'}</div>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-black/25 p-4">
-                  <div className="font-mono text-[10px] text-white/35">GATEWAY</div>
+                  <div className="font-mono text-[10px] text-white/80">GATEWAY</div>
                   <div className={gatewayProbe?.supported ? 'mt-1 text-2xl font-semibold text-green-300' : 'mt-1 text-2xl font-semibold text-yellow-300'}>{gatewayProbe?.supported ? 'Supported' : 'Checking'}</div>
-                  <div className="mt-1 text-xs text-white/40">{gatewayProbe?.gatewayWallet ? shortenAddress(gatewayProbe.gatewayWallet) : 'arcTestnet'}</div>
+                  <div className="mt-1 text-xs text-white/80">{gatewayProbe?.gatewayWallet ? shortenAddress(gatewayProbe.gatewayWallet) : 'arcTestnet'}</div>
                 </div>
               </div>
             </div>
@@ -481,40 +481,40 @@ export default function X402DemoPage() {
                   <span className="rounded-full bg-green-500/15 px-2 py-1 font-mono text-[9px] text-green-300">RECOMMENDED</span>
                 </div>
                 <div className="text-xl font-semibold text-white">EOA pay-per-call</div>
-                <p className="mt-2 text-sm leading-6 text-white/50">No deposit. Sign one EIP-3009 authorization and settle USDC directly on Arc.</p>
+                <p className="mt-2 text-sm leading-6 text-white/80">No deposit. Sign one EIP-3009 authorization and settle USDC directly on Arc.</p>
                 <div className="mt-4 grid grid-cols-2 gap-2 font-mono text-[11px]">
-                  <div className="rounded-lg bg-black/25 p-3"><div className="text-white/35">Deposit</div><div className="text-green-300">Not required</div></div>
-                  <div className="rounded-lg bg-black/25 p-3"><div className="text-white/35">Best for</div><div className="text-white/70">Occasional calls</div></div>
+                  <div className="rounded-lg bg-black/25 p-3"><div className="text-white/80">Deposit</div><div className="text-green-300">Not required</div></div>
+                  <div className="rounded-lg bg-black/25 p-3"><div className="text-white/80">Best for</div><div className="text-white/70">Occasional calls</div></div>
                 </div>
               </button>
 
               <button onClick={() => setMode('circle-gateway')} className={`cursor-pointer rounded-2xl border p-5 text-left transition-all ${mode === 'circle-gateway' ? 'border-[#7CB5C5]/70 bg-[#7CB5C5]/10 shadow-lg shadow-[#7CB5C5]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
                 <div className="mb-4 flex items-center justify-between">
                   <span className="font-mono text-[10px] tracking-[0.18em] text-[#7CB5C5]">CIRCLE GATEWAY</span>
-                  <span className="rounded-full bg-white/10 px-2 py-1 font-mono text-[9px] text-white/55">POWER USER</span>
+                  <span className="rounded-full bg-white/10 px-2 py-1 font-mono text-[9px] text-white/80">POWER USER</span>
                 </div>
                 <div className="text-xl font-semibold text-white">Pre-funded execution</div>
-                <p className="mt-2 text-sm leading-6 text-white/50">Deposit once, then execute high-frequency agent payments through Gateway batching.</p>
+                <p className="mt-2 text-sm leading-6 text-white/80">Deposit once, then execute high-frequency agent payments through Gateway batching.</p>
                 <div className="mt-4 grid grid-cols-2 gap-2 font-mono text-[11px]">
-                  <div className="rounded-lg bg-black/25 p-3"><div className="text-white/35">Your deposit</div><div className={gatewayBalance?.depositedUsdc && Number(gatewayBalance.depositedUsdc) > 0 ? 'text-green-300' : 'text-yellow-300'}>{gatewayBalance?.depositedUsdc ?? '0'} USDC</div></div>
-                  <div className="rounded-lg bg-black/25 p-3"><div className="text-white/35">Best for</div><div className="text-white/70">HFT agents</div></div>
+                  <div className="rounded-lg bg-black/25 p-3"><div className="text-white/80">Your deposit</div><div className={gatewayBalance?.depositedUsdc && Number(gatewayBalance.depositedUsdc) > 0 ? 'text-green-300' : 'text-yellow-300'}>{gatewayBalance?.depositedUsdc ?? '0'} USDC</div></div>
+                  <div className="rounded-lg bg-black/25 p-3"><div className="text-white/80">Best for</div><div className="text-white/70">HFT agents</div></div>
                 </div>
               </button>
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-5">
-              <div className="mb-3 font-mono text-[10px] tracking-[0.2em] text-white/35">EXECUTION LOG</div>
+              <div className="mb-3 font-mono text-[10px] tracking-[0.2em] text-white/80">EXECUTION LOG</div>
               {logs.length > 0 ? (
                 <div className="max-h-[340px] overflow-y-auto font-mono text-[10.5px] leading-[1.9]">
                   {logs.map((l, i) => (
                     <div key={i} className="flex gap-2">
-                      <span className="shrink-0 text-white/20">{l.ts}</span>
-                      <span className={l.type === 'success' ? 'text-green-400/80' : l.type === 'error' ? 'text-red-400/80' : l.type === 'warn' ? 'text-yellow-400/80' : 'text-white/55'}>{l.msg}</span>
+                      <span className="shrink-0 text-white/80">{l.ts}</span>
+                      <span className={l.type === 'success' ? 'text-green-400/80' : l.type === 'error' ? 'text-red-400/80' : l.type === 'warn' ? 'text-yellow-400/80' : 'text-white/80'}>{l.msg}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="font-mono text-[11px] text-white/35">No execution yet. Connect wallet and run the payment ticket.</div>
+                <div className="font-mono text-[11px] text-white/80">No execution yet. Connect wallet and run the payment ticket.</div>
               )}
             </div>
           </section>
@@ -527,17 +527,17 @@ export default function X402DemoPage() {
               </div>
 
               <div className="mb-4 grid grid-cols-2 overflow-hidden rounded-xl border border-white/10 bg-black/25 p-1">
-                <button onClick={() => setMode('arc-native')} className={`cursor-pointer rounded-lg py-2 font-mono text-[11px] ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/45'}`}>ARC</button>
-                <button onClick={() => setMode('circle-gateway')} className={`cursor-pointer rounded-lg py-2 font-mono text-[11px] ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/45'}`}>GATEWAY</button>
+                <button onClick={() => setMode('arc-native')} className={`cursor-pointer rounded-lg py-2 font-mono text-[11px] ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
+                <button onClick={() => setMode('circle-gateway')} className={`cursor-pointer rounded-lg py-2 font-mono text-[11px] ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>GATEWAY</button>
               </div>
 
               <div className="space-y-3 border-y border-white/10 py-4 font-mono text-[12px]">
-                <div className="flex justify-between gap-4"><span className="text-white/40">Cost</span><span className="text-white">0.01 USDC</span></div>
-                <div className="flex justify-between gap-4"><span className="text-white/40">Pay to</span><span className="text-white">{shortenAddress(payTo)}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-white/40">Network</span><span className="text-white">Arc Testnet</span></div>
-                <div className="flex justify-between gap-4"><span className="text-white/40">Current step</span><span className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{step.toUpperCase()}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-white/40">Unlocked</span><span className={unlocked ? 'text-green-300' : 'text-white/45'}>{unlocked ? 'YES' : 'NO'}</span></div>
-                <div className="flex justify-between gap-4"><span className="text-white/40">Replay guard</span><span className={replayResult.startsWith('Rejected') ? 'text-green-300' : 'text-white/45'}>{replayResult}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-white/80">Cost</span><span className="text-white">0.01 USDC</span></div>
+                <div className="flex justify-between gap-4"><span className="text-white/80">Pay to</span><span className="text-white">{shortenAddress(payTo)}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-white/80">Network</span><span className="text-white">Arc Testnet</span></div>
+                <div className="flex justify-between gap-4"><span className="text-white/80">Current step</span><span className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{step.toUpperCase()}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-white/80">Unlocked</span><span className={unlocked ? 'text-green-300' : 'text-white/80'}>{unlocked ? 'YES' : 'NO'}</span></div>
+                <div className="flex justify-between gap-4"><span className="text-white/80">Replay guard</span><span className={replayResult.startsWith('Rejected') ? 'text-green-300' : 'text-white/80'}>{replayResult}</span></div>
               </div>
 
               {mode === 'circle-gateway' && (!gatewayBalance?.depositedUsdc || Number(gatewayBalance.depositedUsdc) <= 0) && (
@@ -548,13 +548,13 @@ export default function X402DemoPage() {
 
               <div className="mt-4 space-y-3">
                 <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-white/10 bg-black/25 p-1">
-                  <button onClick={() => setWalletMode('passkey')} className={`cursor-pointer rounded-lg py-2 font-mono text-[10px] tracking-[0.16em] ${walletMode === 'passkey' ? 'bg-white text-black' : 'text-white/45'}`}>PASSKEY</button>
-                  <button onClick={() => setWalletMode('eoa')} className={`cursor-pointer rounded-lg py-2 font-mono text-[10px] tracking-[0.16em] ${walletMode === 'eoa' ? 'bg-white text-black' : 'text-white/45'}`}>EOA WALLET</button>
+                  <button onClick={() => setWalletMode('passkey')} className={`cursor-pointer rounded-lg py-2 font-mono text-[10px] tracking-[0.16em] ${walletMode === 'passkey' ? 'bg-white text-black' : 'text-white/80'}`}>PASSKEY</button>
+                  <button onClick={() => setWalletMode('eoa')} className={`cursor-pointer rounded-lg py-2 font-mono text-[10px] tracking-[0.16em] ${walletMode === 'eoa' ? 'bg-white text-black' : 'text-white/80'}`}>EOA WALLET</button>
                 </div>
 
                 {walletMode === 'passkey' ? (
                   !ready ? (
-                    <div className="font-mono text-[10px] text-white/30">LOADING CIRCLE WALLET...</div>
+                    <div className="font-mono text-[10px] text-white/80">LOADING CIRCLE WALLET...</div>
                   ) : !authenticated ? (
                     <>
                       <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} title="Sign in with passkey" message="Create or restore a Circle Modular Wallet using your device passkey." className="mb-1" />
@@ -564,7 +564,7 @@ export default function X402DemoPage() {
                       </div>
                     </>
                   ) : (
-                    <button onClick={busy ? undefined : runDemo} disabled={busy || relayer?.ready === false} className={`w-full cursor-pointer rounded-xl border py-3 font-mono text-[11px] tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/30 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                    <button onClick={busy ? undefined : runDemo} disabled={busy || relayer?.ready === false} className={`w-full cursor-pointer rounded-xl border py-3 font-mono text-[11px] tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
                       {busy ? `RUNNING: ${step.toUpperCase()}` : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                     </button>
                   )
@@ -576,14 +576,14 @@ export default function X402DemoPage() {
                     </>
                   ) : (
                     <>
-                      <button onClick={busy ? undefined : runDemo} disabled={busy || relayer?.ready === false} className={`w-full cursor-pointer rounded-xl border py-3 font-mono text-[11px] tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/30 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                      <button onClick={busy ? undefined : runDemo} disabled={busy || relayer?.ready === false} className={`w-full cursor-pointer rounded-xl border py-3 font-mono text-[11px] tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
                         {busy ? `RUNNING: ${step.toUpperCase()}` : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                       </button>
-                      <button onClick={() => eoaDisconnect()} className="mt-2 w-full cursor-pointer rounded-xl border border-white/10 py-2 font-mono text-[10px] tracking-[0.14em] text-white/40 hover:border-white/20">DISCONNECT EOA</button>
+                      <button onClick={() => eoaDisconnect()} className="mt-2 w-full cursor-pointer rounded-xl border border-white/10 py-2 font-mono text-[10px] tracking-[0.14em] text-white/80 hover:border-white/20">DISCONNECT EOA</button>
                     </>
                   )
                 )}
-                <button onClick={reset} className="mt-1 w-full cursor-pointer rounded-xl border border-white/10 py-2 font-mono text-[10px] tracking-[0.14em] text-white/40 hover:border-white/20">RESET</button>
+                <button onClick={reset} className="mt-1 w-full cursor-pointer rounded-xl border border-white/10 py-2 font-mono text-[10px] tracking-[0.14em] text-white/80 hover:border-white/20">RESET</button>
               </div>
 
               {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="mt-4 block break-all rounded-xl border border-[#C5A67C]/20 bg-[#C5A67C]/10 p-3 font-mono text-[10px] text-[#C5A67C] underline underline-offset-2">{txHash}</a>}

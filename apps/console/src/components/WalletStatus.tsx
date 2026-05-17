@@ -86,7 +86,7 @@ export default function WalletStatus({ variant = 'app' }: Props) {
   if (!ready) {
     return (
       <div
-        className="px-3 py-2 font-mono text-[10px] tracking-[0.18em] text-white/40"
+        className="px-3 py-2 font-mono text-[10px] tracking-[0.18em] text-white/80"
         style={{ border: '1px solid rgba(255, 255, 255, 0.08)' }}
       >
         LOADING…
@@ -120,12 +120,12 @@ export default function WalletStatus({ variant = 'app' }: Props) {
           }}
         >
           <span className="pulse-dot" />
-          <span className="text-[9px] tracking-[0.14em] text-white/40">{walletType === 'eoa' ? 'EOA' : 'PASSKEY'}</span>
+          <span className="text-[9px] tracking-[0.14em] text-white/80">{walletType === 'eoa' ? 'EOA' : 'PASSKEY'}</span>
           {shortenAddress(activeAddress)}
         </div>
         <button
           onClick={handleDisconnect}
-          className="px-3 py-2 font-mono text-[10px] tracking-[0.18em] text-white/40 transition-all duration-300"
+          className="px-3 py-2 font-mono text-[10px] tracking-[0.18em] text-white/80 transition-all duration-300"
           style={{ border: '1px solid rgba(255, 255, 255, 0.08)' }}
           onMouseEnter={(e) => {
             e.currentTarget.style.borderColor = 'rgba(255,100,100,0.5)';
@@ -175,19 +175,19 @@ export default function WalletStatus({ variant = 'app' }: Props) {
               className="w-full rounded-xl border border-[#C5A67C]/40 px-4 py-3 text-left transition-all hover:border-[#C5A67C]/70 hover:bg-[#C5A67C]/5"
             >
               <div className="text-[11px] tracking-[0.14em] text-[#C5A67C]">PASSKEY (CIRCLE)</div>
-              <div className="mt-1 text-[10px] text-white/40">Biometric smart account — no extension needed</div>
+              <div className="mt-1 text-[10px] text-white/80">Biometric smart account — no extension needed</div>
             </button>
             <button
               onClick={handleEoaConnect}
               className="w-full rounded-xl border border-white/20 px-4 py-3 text-left transition-all hover:border-white/40 hover:bg-white/[0.03]"
             >
               <div className="text-[11px] tracking-[0.14em] text-white/80">EOA WALLET</div>
-              <div className="mt-1 text-[10px] text-white/40">MetaMask, Coinbase, WalletConnect</div>
+              <div className="mt-1 text-[10px] text-white/80">MetaMask, Coinbase, WalletConnect</div>
             </button>
           </div>
           <button
             onClick={() => setShowPicker(false)}
-            className="mt-3 w-full py-2 text-[10px] tracking-[0.18em] text-white/30 hover:text-white/50"
+            className="mt-3 w-full py-2 text-[10px] tracking-[0.18em] text-white/80 hover:text-white/80"
           >
             CANCEL
           </button>
@@ -215,7 +215,7 @@ export default function WalletStatus({ variant = 'app' }: Props) {
             >
               CREATE WALLET
             </h2>
-            <p className="mb-4 text-[11px] leading-relaxed text-white/60">
+            <p className="mb-4 text-[11px] leading-relaxed text-white/80">
               ArcLayer uses Circle Modular Wallets with passkey authentication.
               Choose a username and approve with your device biometrics.
             </p>
@@ -250,7 +250,7 @@ export default function WalletStatus({ variant = 'app' }: Props) {
               <button
                 onClick={() => setShowRegister(false)}
                 disabled={busy}
-                className="px-3 py-2 text-[10px] tracking-[0.18em] text-white/40"
+                className="px-3 py-2 text-[10px] tracking-[0.18em] text-white/80"
                 style={{ border: '1px solid rgba(255,255,255,0.08)' }}
               >
                 CANCEL

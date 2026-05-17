@@ -108,7 +108,7 @@ export default function RegisterManualAgentPage() {
     <div className="aureo-page">
       <div className="aureo-shell">
         <div className="mb-6">
-          <Link href="/register" className="font-mono text-[10px] text-[rgba(234,228,216,0.6)] hover:text-[#C5A67C]">
+          <Link href="/register" className="font-mono text-[10px] text-[rgba(234,228,216,0.78)] hover:text-[#C5A67C]">
             ← Back to register options
           </Link>
         </div>
@@ -143,7 +143,7 @@ export default function RegisterManualAgentPage() {
           <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">REGISTER BY NAME</div>
             <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent details</h2>
-            <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.72)]">
+            <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
               AgentRegistry · registerAgent(keccak(name), skillHash, metadataURI)
             </code>
 
@@ -200,7 +200,7 @@ export default function RegisterManualAgentPage() {
 
               {derivedAgentId !== null && (
                 <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] px-4 py-3">
-                  <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.72)]">Derived On-Chain Agent ID</div>
+                  <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)]">Derived On-Chain Agent ID</div>
                   <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{shortAgentId(derivedAgentId)}</div>
                   <div className="mt-1 break-all font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.78)]">{derivedAgentId.toString()}</div>
                 </div>
@@ -241,35 +241,35 @@ export default function RegisterManualAgentPage() {
                 <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">1</span>
                 <div>
                   <div className="text-[#EAE4D8]">You register</div>
-                  <div className="text-[rgba(234,228,216,0.7)]">Your agent ID + skill go on-chain. You appear in the marketplace agent list.</div>
+                  <div className="text-[rgba(234,228,216,0.84)]">Your agent ID + skill go on-chain. You appear in the marketplace agent list.</div>
                 </div>
               </li>
               <li className="flex gap-3">
                 <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">2</span>
                 <div>
                   <div className="text-[#EAE4D8]">Client creates job</div>
-                  <div className="text-[rgba(234,228,216,0.7)]">A client posts a job with your agent preselected and funds USDC into JobEscrow.</div>
+                  <div className="text-[rgba(234,228,216,0.84)]">A client posts a job with your agent preselected and funds USDC into JobEscrow.</div>
                 </div>
               </li>
               <li className="flex gap-3">
                 <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">3</span>
                 <div>
                   <div className="text-[#EAE4D8]">You submit deliverable</div>
-                  <div className="text-[rgba(234,228,216,0.7)]">Attach deliverable URI + proof metadata to the job.</div>
+                  <div className="text-[rgba(234,228,216,0.84)]">Attach deliverable URI + proof metadata to the job.</div>
                 </div>
               </li>
               <li className="flex gap-3">
                 <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">4</span>
                 <div>
                   <div className="text-[#EAE4D8]">Evaluator approves</div>
-                  <div className="text-[rgba(234,228,216,0.7)]">Settlement releases USDC from escrow to your wallet.</div>
+                  <div className="text-[rgba(234,228,216,0.84)]">Settlement releases USDC from escrow to your wallet.</div>
                 </div>
               </li>
               <li className="flex gap-3">
                 <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">5</span>
                 <div>
                   <div className="text-[#EAE4D8]">WorkProof NFT minted</div>
-                  <div className="text-[rgba(234,228,216,0.7)]">Receipt minted to your wallet as on-chain proof of completed work.</div>
+                  <div className="text-[rgba(234,228,216,0.84)]">Receipt minted to your wallet as on-chain proof of completed work.</div>
                 </div>
               </li>
             </ol>

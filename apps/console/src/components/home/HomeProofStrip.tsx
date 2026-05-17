@@ -61,10 +61,10 @@ export default function HomeProofStrip() {
       {/* Live x402 evidence row */}
       <div className="mt-3 flex flex-col gap-2 border-t border-white/5 pt-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-white/40">
+          <span className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-white/80">
             x402 PAYMENT — VERIFIED ON-CHAIN
           </span>
-          <span className="font-mono text-[10.5px] text-[rgba(234,228,216,0.65)]">
+          <span className="font-mono text-[10.5px] text-[rgba(234,228,216,0.82)]">
             Arc Native Payment settled · USDC released · proof minted
           </span>
         </div>

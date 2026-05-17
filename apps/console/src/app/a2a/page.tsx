@@ -120,7 +120,7 @@ function FeedRow({ item, isNew }: { item: FeedItem; isNew: boolean }) {
       <div className="min-w-0 flex-1">
         <p className="font-mono text-xs text-[#EAE4D8]">
           <span className={`font-semibold ${AGENT_COLORS[item.agent]}`}>{item.agent}</span>{' '}
-          <span className="text-[#9A9A9A]">{item.label}</span>
+          <span className="text-[#b5b5b5]">{item.label}</span>
         </p>
         <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-[#555]">
           <span>{timeAgoIso(item.ts)}</span>
@@ -129,7 +129,7 @@ function FeedRow({ item, isNew }: { item: FeedItem; isNew: boolean }) {
               href={`https://testnet.arcscan.app/tx/${item.tx}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="truncate text-[#7A7A7A] hover:text-[#C5A67C]"
+              className="truncate text-[#a0a0a0] hover:text-[#C5A67C]"
             >
               {item.tx.slice(0, 10)}…
             </a>
@@ -350,7 +350,7 @@ function A2ADashboardPage() {
           <h2 className="text-2xl font-semibold tracking-tight text-[#EAE4D8]">
             Autonomous Agent Network
           </h2>
-          <p className="mt-1 max-w-3xl font-mono text-[12px] leading-5 text-[#7A7A7A]">
+          <p className="mt-1 max-w-3xl font-mono text-[12px] leading-5 text-[#a0a0a0]">
             Agents discover each other, request services, pay with x402 / USDC, and build reputation
             automatically. This page validates autonomous agent-to-agent commerce — not signal accuracy.
           </p>
@@ -361,13 +361,13 @@ function A2ADashboardPage() {
           <p className="font-mono text-[10px] uppercase tracking-widest text-amber-300/80">
             ⚠ demo strategy · not financial advice
           </p>
-          <p className="mt-1.5 font-mono text-[11px] leading-5 text-[#9C9080]">
+          <p className="mt-1.5 font-mono text-[11px] leading-5 text-[#c9bba8]">
             The current Pythia signal engine is a <strong className="text-amber-200">demo strategy</strong> for
             protocol validation. ArcLayer doesn’t claim signal accuracy, profit, or trading performance.
             Developers can replace it with their own model, market API, evaluator, or custom logic — the
             agent-to-agent payment, receipt, and reputation rails remain identical.
           </p>
-          <p className="mt-1.5 font-mono text-[11px] leading-5 text-[#9C9080]">
+          <p className="mt-1.5 font-mono text-[11px] leading-5 text-[#c9bba8]">
             <span className="text-emerald-300/90">Verified on-chain:</span> agent request, x402/USDC payment,
             receipt, signal response, transaction hash, activity log, and reputation from real events.
           </p>
@@ -448,25 +448,25 @@ function A2ADashboardPage() {
             </div>
             <div className="flex flex-wrap gap-x-6 gap-y-2 font-mono text-[11px]">
               <div>
-                <span className="text-[#7A7A7A]">price/call</span>{' '}
+                <span className="text-[#a0a0a0]">price/call</span>{' '}
                 <span className="text-[#EAE4D8]">0.01 USDC</span>
               </div>
               <div>
-                <span className="text-[#7A7A7A]">scheme</span>{' '}
+                <span className="text-[#a0a0a0]">scheme</span>{' '}
                 <span className="text-[#EAE4D8]">EIP-3009 · exact</span>
               </div>
               <div>
-                <span className="text-[#7A7A7A]">calls served</span>{' '}
+                <span className="text-[#a0a0a0]">calls served</span>{' '}
                 <span className="text-cyan-300">{liveSignalsServed}</span>
               </div>
               <div>
-                <span className="text-[#7A7A7A]">total deducted</span>{' '}
+                <span className="text-[#a0a0a0]">total deducted</span>{' '}
                 <span className="text-emerald-300">
                   {pythia?.stats?.totalRevenue ? formatUSDC(pythia.stats.totalRevenue) : '0.00'} USDC
                 </span>
               </div>
               <div>
-                <span className="text-[#7A7A7A]">pythia revenue (on-chain)</span>{' '}
+                <span className="text-[#a0a0a0]">pythia revenue (on-chain)</span>{' '}
                 <span className="text-amber-300">
                   {pythia?.stats?.totalRevenue ? formatUSDC(pythia.stats.totalRevenue) : '0.00'} USDC
                 </span>
@@ -483,7 +483,7 @@ function A2ADashboardPage() {
                   href={`https://testnet.arcscan.app/address/${onchain?.wallets?.hermes ?? ''}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-mono text-[9.5px] text-[#7A7A7A] hover:text-amber-300"
+                  className="font-mono text-[9.5px] text-[#a0a0a0] hover:text-amber-300"
                 >
                   {short(onchain?.wallets?.hermes ?? '')} ↗
                 </a>
@@ -492,7 +492,7 @@ function A2ADashboardPage() {
                 <span className="font-mono text-[18px] text-amber-300">
                   {onchain?.balances?.usdc?.hermes ? formatUSDC(onchain.balances.usdc.hermes) : '—'}
                 </span>
-                <span className="font-mono text-[10px] text-[#7A7A7A]">USDC (live)</span>
+                <span className="font-mono text-[10px] text-[#a0a0a0]">USDC (live)</span>
               </div>
               <p className="mt-1 font-mono text-[9.5px] text-[#555]">
                 Each x402 settlement deducts 0.01 USDC from this wallet on-chain.
@@ -506,7 +506,7 @@ function A2ADashboardPage() {
                   href={`https://testnet.arcscan.app/address/${onchain?.wallets?.pythia ?? ''}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-mono text-[9.5px] text-[#7A7A7A] hover:text-cyan-300"
+                  className="font-mono text-[9.5px] text-[#a0a0a0] hover:text-cyan-300"
                 >
                   {short(onchain?.wallets?.pythia ?? '')} ↗
                 </a>
@@ -515,7 +515,7 @@ function A2ADashboardPage() {
                 <span className="font-mono text-[18px] text-cyan-300">
                   {onchain?.balances?.usdc?.pythia ? formatUSDC(onchain.balances.usdc.pythia) : '—'}
                 </span>
-                <span className="font-mono text-[10px] text-[#7A7A7A]">USDC (live)</span>
+                <span className="font-mono text-[10px] text-[#a0a0a0]">USDC (live)</span>
               </div>
               <p className="mt-1 font-mono text-[9.5px] text-[#555]">
                 Receives 0.01 USDC per signal. Counter on-chain via ReputationRegistry.totalRevenue.
@@ -523,7 +523,7 @@ function A2ADashboardPage() {
             </div>
           </div>
 
-          <p className="mt-3 font-mono text-[10px] leading-[1.6] text-[#7A7A7A]">
+          <p className="mt-3 font-mono text-[10px] leading-[1.6] text-[#a0a0a0]">
             All numbers above are direct on-chain reads (not cached, not derived from indexer guesses).
             "calls served" + "total deducted" come from{' '}
             <span className="text-emerald-300/80">ReputationRegistry.getStats(Pythia)</span>.
@@ -551,7 +551,7 @@ function A2ADashboardPage() {
                     <span className="font-mono text-xs text-[#C5A67C]">Proof #{proof.tokenId}</span>
                     <span className="font-mono text-[10px] text-[#555]">{timeAgo(proof.mintedAt)}</span>
                   </div>
-                  <p className="mt-1 font-mono text-[10px] text-[#7A7A7A]">
+                  <p className="mt-1 font-mono text-[10px] text-[#a0a0a0]">
                     Job #{proof.jobId} · {formatUSDC(proof.amountPaid)} USDC
                   </p>
                   <p className="mt-0.5 font-mono text-[10px] text-[#444]">payer {short(proof.payer)}</p>
@@ -629,7 +629,7 @@ function AgentHeroCard({
                 type="button"
                 onClick={copyWallet}
                 title={`Copy ${name} wallet: ${wallet}`}
-                className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest text-[#7A7A7A] transition-colors hover:border-[#C5A67C]/40 hover:text-[#C5A67C]"
+                className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest text-[#a0a0a0] transition-colors hover:border-[#C5A67C]/40 hover:text-[#C5A67C]"
               >
                 {copied ? '✓ copied' : 'copy wallet'}
               </button>
@@ -644,7 +644,7 @@ function AgentHeroCard({
           {isLive ? '● running' : '○ idle'}
         </span>
       </div>
-      <p className="mt-2 font-mono text-[11px] leading-5 text-[#7A7A7A]">{description}</p>
+      <p className="mt-2 font-mono text-[11px] leading-5 text-[#a0a0a0]">{description}</p>
       <div className="mt-4 grid grid-cols-2 gap-2 font-mono text-xs">
         <Stat label="Calls served" value={stats?.callsServed ?? '—'} />
         <Stat label="Reputation" value={stats?.reputationScore ?? '—'} />

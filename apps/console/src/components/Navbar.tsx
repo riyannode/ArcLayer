@@ -26,7 +26,7 @@ const WalletStatus = dynamic(() => import('./WalletStatus'), {
   ssr: false,
   loading: () => (
     <div
-      className="px-3 py-2 font-mono text-[10px] tracking-[0.18em] text-white/40"
+      className="px-3 py-2 font-mono text-[10px] tracking-[0.18em] text-white/80"
       style={{ border: '1px solid rgba(255, 255, 255, 0.08)' }}
     >
       LOADING…

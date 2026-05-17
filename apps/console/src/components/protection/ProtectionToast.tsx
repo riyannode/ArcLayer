@@ -48,15 +48,15 @@ function ToastItem({ notice, onDismiss }: { notice: ProtectionNotice; onDismiss:
       <span className="mt-0.5 text-base leading-none">{severityIcon[notice.severity]}</span>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-white/90 truncate">{notice.title}</p>
-        <p className="mt-0.5 text-xs text-white/55 line-clamp-2">{notice.message}</p>
+        <p className="mt-0.5 text-xs text-white/80 line-clamp-2">{notice.message}</p>
         {notice.technicalDetail && (
-          <code className="mt-1 block text-[10px] text-white/35 truncate">{notice.technicalDetail}</code>
+          <code className="mt-1 block text-[10px] text-white/80 truncate">{notice.technicalDetail}</code>
         )}
       </div>
       <button
         type="button"
         onClick={() => { setExiting(true); setTimeout(onDismiss, 300); }}
-        className="shrink-0 text-white/30 hover:text-white/60 transition text-xs"
+        className="shrink-0 text-white/80 hover:text-white/80 transition text-xs"
         aria-label="Dismiss"
       >
         ✕

@@ -43,21 +43,21 @@ export default function HomeHero() {
         </span>
       </h1>
 
-      <div className="my-3 flex max-w-[460px] items-center gap-3">
-        <span className="h-px flex-1 bg-white/15" />
+      <div className="my-3 flex max-w-[460px] items-center gap-3" aria-hidden="true">
+        <span className="h-px flex-1 bg-transparent" />
         <span
-          className="h-[10px] w-[10px] rotate-45 border border-[#C5A67C]/60"
-          style={{ background: 'rgba(197, 166, 124, 0.14)' }}
+          className="h-[10px] w-[10px] rotate-45 border border-transparent"
+          style={{ background: 'transparent' }}
         />
-        <span className="h-px flex-1 bg-white/15" />
+        <span className="h-px flex-1 bg-transparent" />
       </div>
 
-      <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.68)] md:text-[14.5px]">
+      <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.82)] md:text-[14.5px]">
         ArcLayer is a protocol layer for autonomous agent commerce on{' '}
         <span className="text-[#C5A67C]">Arc</span>. Reference agents like Pythia and Hermes sell signals,
         complete paid work, and leave verifiable receipts through x402, JobEscrow, and WorkProof.
       </p>
-      <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.45)]">
+      <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.84)]">
         Arc Testnet · chain <span className="text-[#C5A67C]">5042002</span> · USDC · x402 · A2A reputation live
       </p>
 
@@ -81,20 +81,20 @@ export default function HomeHero() {
 
       {/* Secondary — register + docs + x402 demo */}
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] uppercase tracking-[0.16em]">
-        <Link href="/register" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
+        <Link href="/register" className="text-[rgba(234,228,216,0.85)] transition hover:text-[#C5A67C]">
           Register Agent ↗
         </Link>
-        <Link href="/x402-demo" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
+        <Link href="/x402-demo" className="text-[rgba(234,228,216,0.85)] transition hover:text-[#C5A67C]">
           x402 Demo ↗
         </Link>
-        <Link href="/docs" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
+        <Link href="/docs" className="text-[rgba(234,228,216,0.85)] transition hover:text-[#C5A67C]">
           Developer Docs ↗
         </Link>
         <a
           href="https://github.com/riyannode/ArcLayer"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]"
+          className="text-[rgba(234,228,216,0.85)] transition hover:text-[#C5A67C]"
         >
           GitHub ↗
         </a>

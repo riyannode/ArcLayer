@@ -216,7 +216,7 @@ export default function AgentProfilePage() {
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
               Agent <span className="italic text-[#C5A67C]">#{agentId || '0'}</span>
             </h1>
-            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#9a9a9a]">
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#b5b5b5]">
               Indexed capability profile and work-proof history from the ArcLayer indexer.
             </p>
           </div>
@@ -226,7 +226,7 @@ export default function AgentProfilePage() {
         <section className="mb-6 p-6" style={{ border: '1px solid rgba(197, 166, 124, 0.22)', background: 'rgba(10, 10, 10, 0.68)' }}>
           <div className="aureo-mono-label mb-2">X402 · BUYER RUN</div>
           <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Payment-required agent call</h2>
-          <p className="mt-2 max-w-3xl font-mono text-[11.5px] leading-5 text-[#9a9a9a]">
+          <p className="mt-2 max-w-3xl font-mono text-[11.5px] leading-5 text-[#b5b5b5]">
             Calls <span className="text-[#C5A67C]">POST /api/agents/{agentId}/run</span>, receives a 402 challenge, registers a funded JobEscrow payment on Arc Testnet, then retries with X-PAYMENT.
           </p>
           <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_auto]">
@@ -236,7 +236,7 @@ export default function AgentProfilePage() {
               {isRunning ? 'RUNNING...' : 'PAY · RUN'}
             </button>
           </div>
-          <div className="mt-4 p-4 font-mono text-[11.5px] leading-5 text-[#9a9a9a]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
+          <div className="mt-4 p-4 font-mono text-[11.5px] leading-5 text-[#b5b5b5]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
             {runState || (isConnected ? 'Wallet connected. Needs testnet USDC for approval/funding.' : 'Connect a wallet on Arc Testnet 5042002 to test end-to-end.')}
           </div>
         </section>
@@ -259,7 +259,7 @@ export default function AgentProfilePage() {
                 { label: 'registered', value: undefined, display: agent ? new Date(Number(agent.registeredAt) * 1000).toLocaleString() : isLoading ? '…' : '—', copyable: false },
               ] as const).map((row) => (
                 <div key={row.label} className="ledger-row flex flex-col gap-2 border border-white/10 bg-black/20 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                  <span className="font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A] sm:shrink-0">{row.label}</span>
+                  <span className="font-mono text-[10.5px] tracking-[0.14em] text-[#a0a0a0] sm:shrink-0">{row.label}</span>
                   <div className="flex min-w-0 flex-1 items-center gap-2 sm:justify-end">
                     <span
                       className="block min-w-0 flex-1 truncate font-mono text-[11.5px] text-[#EAE4D8] sm:flex-none sm:max-w-[60%]"
@@ -299,7 +299,7 @@ export default function AgentProfilePage() {
               <div className="mt-3">
                 <Sparkline values={series} />
               </div>
-              <p className="mt-2 font-mono text-[10.5px] leading-5 text-[#7A7A7A]">
+              <p className="mt-2 font-mono text-[10.5px] leading-5 text-[#a0a0a0]">
                 Reputation projected from ReputationOracle, coupled to paid WorkProof mints.
               </p>
             </div>
@@ -322,14 +322,14 @@ export default function AgentProfilePage() {
                       <span className="font-mono text-[12.5px] text-[#EAE4D8]">Job #{job.id}</span>
                       <span className="font-mono text-[11px] text-[#C5A67C]">{formatUSDC(BigInt(job.budget))} USDC</span>
                     </div>
-                    <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#7A7A7A]">
+                    <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#a0a0a0]">
                       <span>worker {shortenAddress(job.worker)}</span>
                       <span className={`chip-status ${JOB_TONE[job.status] ?? 'pending'}`}>{JOB_STATUS[job.status] || job.status}</span>
                     </div>
                   </Link>
                 ))
               ) : (
-                <p className="p-4 font-mono text-[11.5px] text-[#7A7A7A]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
+                <p className="p-4 font-mono text-[11.5px] text-[#a0a0a0]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
                   {isLoading ? 'Loading jobs…' : 'No jobs for this agent yet.'}
                 </p>
               )}
@@ -347,14 +347,14 @@ export default function AgentProfilePage() {
                       <span className="font-mono text-[12.5px] text-[#EAE4D8]">Job #{p.jobId}</span>
                       <span className="font-mono text-[11px] text-[#C5A67C]">{formatUSDC(BigInt(p.amountPaid))} USDC</span>
                     </div>
-                    <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#7A7A7A]">
+                    <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#a0a0a0]">
                       <span>payer {shortenAddress(p.payer)}</span>
                       <span>{new Date(Number(p.mintedAt) * 1000).toLocaleDateString()}</span>
                     </div>
                   </div>
                 ))
               ) : (
-                <p className="p-4 font-mono text-[11.5px] text-[#7A7A7A]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
+                <p className="p-4 font-mono text-[11.5px] text-[#a0a0a0]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
                   {isLoading ? 'Loading proofs…' : 'No WorkProofs minted for this agent yet.'}
                 </p>
               )}

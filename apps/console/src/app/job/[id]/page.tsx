@@ -236,7 +236,7 @@ export default function JobDetailPage() {
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
               Job <span className="italic text-[#C5A67C]">#{jobId || '0'}</span>
             </h1>
-            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#9a9a9a]">
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#b5b5b5]">
               JobEscrow record projected by the indexer from on-chain events and linked WorkProof.
             </p>
           </div>
@@ -290,7 +290,7 @@ export default function JobDetailPage() {
                 ['created', job ? new Date(Number(job.createdAt) * 1000).toLocaleString() : isLoading ? '…' : '—'],
               ].map(([label, value]) => (
                 <div key={label} className="ledger-row flex items-center justify-between border border-white/10 bg-black/20 px-4 py-2.5">
-                  <span className="font-mono text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">{label}</span>
+                  <span className="font-mono text-[10.5px] tracking-[0.14em] text-[#a0a0a0]">{label}</span>
                   <span className="max-w-[60%] truncate text-right font-mono text-[11.5px] text-[#EAE4D8]">{value}</span>
                 </div>
               ))}
@@ -327,7 +327,7 @@ export default function JobDetailPage() {
 
                   {/* Always show the raw URI + copy */}
                   <div className="mt-2 flex items-center gap-2">
-                    <code className="flex-1 truncate font-mono text-[10.5px] text-[#9a9a9a]">{job.deliverableURI}</code>
+                    <code className="flex-1 truncate font-mono text-[10.5px] text-[#b5b5b5]">{job.deliverableURI}</code>
                     <button
                       onClick={() => navigator.clipboard.writeText(job.deliverableURI)}
                       className="shrink-0 font-mono text-[9px] tracking-[0.14em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
@@ -356,7 +356,7 @@ export default function JobDetailPage() {
 
                   {/* Loading state */}
                   {previewLoading && (
-                    <p className="mt-2 font-mono text-[11.5px] text-[#7A7A7A]">Fetching preview…</p>
+                    <p className="mt-2 font-mono text-[11.5px] text-[#a0a0a0]">Fetching preview…</p>
                   )}
 
                   {/* Fetch error — human-readable */}
@@ -365,7 +365,7 @@ export default function JobDetailPage() {
                       <p className="font-mono text-[11px] text-[#f0c5c5]">
                         Preview unavailable. The submitted work link could not be opened.
                       </p>
-                      <p className="mt-1 font-mono text-[10px] text-[#7A7A7A]">
+                      <p className="mt-1 font-mono text-[10px] text-[#a0a0a0]">
                         This may happen if the IPFS CID is invalid, the file is not pinned yet, or the gateway is temporarily unavailable.
                       </p>
                     </div>
@@ -376,8 +376,8 @@ export default function JobDetailPage() {
                     <div className="mt-3 space-y-2 font-mono text-[11.5px] text-[#EAE4D8]">
                       {preview.input && (
                         <div>
-                          <p className="text-[10.5px] tracking-[0.14em] text-[#7A7A7A]">INPUT</p>
-                          <p className="mt-1 whitespace-pre-wrap break-words text-[#9a9a9a]">{preview.input}</p>
+                          <p className="text-[10.5px] tracking-[0.14em] text-[#a0a0a0]">INPUT</p>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-[#b5b5b5]">{preview.input}</p>
                         </div>
                       )}
                       {preview.output && (
@@ -387,7 +387,7 @@ export default function JobDetailPage() {
                         </div>
                       )}
                       {preview.runId && (
-                        <p className="text-[10.5px] text-[#7A7A7A]">run {preview.runId.slice(0, 10)}…{preview.runId.slice(-8)}</p>
+                        <p className="text-[10.5px] text-[#a0a0a0]">run {preview.runId.slice(0, 10)}…{preview.runId.slice(-8)}</p>
                       )}
                     </div>
                   )}
@@ -397,14 +397,14 @@ export default function JobDetailPage() {
               <div className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
                 <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>MINTED PROOF</p>
                 {proof ? (
-                  <div className="mt-2 space-y-1 font-mono text-[11px] text-[#9a9a9a]">
+                  <div className="mt-2 space-y-1 font-mono text-[11px] text-[#b5b5b5]">
                     <p className="text-[#C5A67C]">Token #{proof.tokenId}</p>
                     <p>payer {shortenAddress(proof.payer)}</p>
                     <p>amount {formatUSDC(BigInt(proof.amountPaid))} USDC</p>
                     <p>minted {new Date(Number(proof.mintedAt) * 1000).toLocaleString()}</p>
                   </div>
                 ) : (
-                  <p className="mt-2 font-mono text-[11.5px] text-[#7A7A7A]">
+                  <p className="mt-2 font-mono text-[11.5px] text-[#a0a0a0]">
                     {isLoading ? 'Loading proof…' : 'No work proof minted for this job.'}
                   </p>
                 )}
@@ -439,7 +439,7 @@ export default function JobDetailPage() {
 
           {/* Caller authority hint */}
           {job && address && (
-            <div className="mt-4 p-3 font-mono text-[10.5px] tracking-[0.04em] text-[#7A7A7A]" style={{ border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}>
+            <div className="mt-4 p-3 font-mono text-[10.5px] tracking-[0.04em] text-[#a0a0a0]" style={{ border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}>
               you are{' '}
               {address.toLowerCase() === job.client.toLowerCase() && <span className="text-[#C5A67C]">CLIENT </span>}
               {address.toLowerCase() === job.evaluator.toLowerCase() && <span className="text-[#B8CD7E]">EVALUATOR </span>}
@@ -478,7 +478,7 @@ export default function JobDetailPage() {
               </div>
             )}
             {job?.status === 3 && !isEvaluator && isConnected && (
-              <div className="p-3 font-mono text-[11px] tracking-[0.04em] text-[#7A7A7A]" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
+              <div className="p-3 font-mono text-[11px] tracking-[0.04em] text-[#a0a0a0]" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
                 {isWorker
                   ? '⏳ Deliverable submitted. Waiting for evaluator to approve.'
                   : '👁  Read-only — only the evaluator can approve or reject this job.'}
@@ -495,7 +495,7 @@ export default function JobDetailPage() {
               </button>
             )}
             {job?.status === 4 && job.approved && !isEvaluator && !isClient && isConnected && (
-              <div className="p-3 font-mono text-[11px] tracking-[0.04em] text-[#7A7A7A]" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
+              <div className="p-3 font-mono text-[11px] tracking-[0.04em] text-[#a0a0a0]" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
                 ⏳ Approved. Waiting for client/evaluator to settle and release payout.
               </div>
             )}
@@ -510,7 +510,7 @@ export default function JobDetailPage() {
             )}
 
             {job && job.status < 3 && (
-              <p className="font-mono text-[11.5px] text-[#7A7A7A]">
+              <p className="font-mono text-[11.5px] text-[#a0a0a0]">
                 {job.status === 2
                   ? '✓ Funded. The service worker will auto-submit the deliverable after the next /run call.'
                   : 'Job not yet funded. Buyer must complete x402 payment first.'}
@@ -522,14 +522,14 @@ export default function JobDetailPage() {
           <div className="mt-6 border-t border-white/10 pt-4">
             <button
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className="font-mono text-[10.5px] tracking-[0.16em] text-[#7A7A7A] transition-colors hover:text-[#C5A67C]"
+              className="font-mono text-[10.5px] tracking-[0.16em] text-[#a0a0a0] transition-colors hover:text-[#C5A67C]"
             >
               {showAdvanced ? '▾' : '▸'} ADVANCED · MANUAL OVERRIDE
             </button>
             {showAdvanced && (
               <div className="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
                 <div className="space-y-3">
-                  <p className="font-mono text-[10.5px] text-[#7A7A7A]">submitDeliverable (worker only)</p>
+                  <p className="font-mono text-[10.5px] text-[#a0a0a0]">submitDeliverable (worker only)</p>
                   <input value={deliverableURI} onChange={(e) => setDeliverableURI(e.target.value)} placeholder="ipfs://deliverable" className="input-mono" />
                   <input value={proofMetadataURI} onChange={(e) => setProofMetadataURI(e.target.value)} placeholder="ipfs://proof-metadata" className="input-mono" />
                   <button onClick={handleSubmitDeliverable} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
@@ -538,7 +538,7 @@ export default function JobDetailPage() {
                 </div>
                 {(isEvaluator || isClient) && (
                   <div className="space-y-3">
-                    <p className="font-mono text-[10.5px] text-[#7A7A7A]">individual evaluator/settle txs</p>
+                    <p className="font-mono text-[10.5px] text-[#a0a0a0]">individual evaluator/settle txs</p>
                     {isEvaluator && (
                       <button onClick={() => handleEvaluate(true)} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
                         {activeAction === 'approve' ? 'APPROVING…' : 'EVALUATE · APPROVE only'}
@@ -553,7 +553,7 @@ export default function JobDetailPage() {
             )}
           </div>
 
-          <div className="mt-5 p-4 font-mono text-[11.5px] leading-5 text-[#9a9a9a]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
+          <div className="mt-5 p-4 font-mono text-[11.5px] leading-5 text-[#b5b5b5]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
             {txState || (isConnected ? '✓ Wallet connected. Contract permissions decide which actions succeed.' : '⚠ Connect wallet to act on this job.')}
           </div>
         </section>

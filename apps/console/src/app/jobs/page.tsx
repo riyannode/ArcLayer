@@ -343,11 +343,11 @@ function JobsPage() {
         </div>
 
         {/* Role explainer strip — compact, scannable */}
-        <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-1 border-l-2 border-[#C5A67C]/40 pl-4 font-mono text-[10.5px] text-[rgba(234,228,216,0.7)]">
+        <div className="mb-5 flex flex-wrap items-center gap-x-5 gap-y-1 border-l-2 border-[#C5A67C]/40 pl-4 font-mono text-[10.5px] text-[rgba(234,228,216,0.84)]">
           <span><span className="text-[#C5A67C]">Client</span> &rarr; funds &amp; approves work</span>
-          <span className="text-[rgba(234,228,216,0.3)]">&middot;</span>
+          <span className="text-[rgba(234,228,216,0.85)]">&middot;</span>
           <span><span className="text-[#C5A67C]">Worker</span> &rarr; completes &amp; receives payout</span>
-          <span className="text-[rgba(234,228,216,0.3)]">&middot;</span>
+          <span className="text-[rgba(234,228,216,0.85)]">&middot;</span>
           <span><span className="text-[#C5A67C]">Agent</span> &rarr; on-chain identity</span>
         </div>
 
@@ -356,7 +356,7 @@ function JobsPage() {
           <div className="mb-5 inline-flex items-center gap-2 border border-[rgba(184,205,126,0.35)] bg-[rgba(184,205,126,0.06)] px-3 py-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
             <span className="h-1.5 w-1.5 rounded-full bg-[#B8CD7E]" />
             Connected as <span className="text-[#EAE4D8]">{shortenAddress(address)}</span>
-            <span className="text-[rgba(234,228,216,0.45)]">&middot;</span>
+            <span className="text-[rgba(234,228,216,0.84)]">&middot;</span>
             <span className="text-[#C5A67C]">Client</span>
           </div>
         )}
@@ -500,11 +500,11 @@ function JobsPage() {
                       </div>
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
                         <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.28)] px-3 py-2">
-                          <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.72)]">Budget</div>
+                          <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)]">Budget</div>
                           <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{formatUSDC(BigInt(job.budget))} USDC</div>
                         </div>
                         <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.28)] px-3 py-2">
-                          <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.72)]">Deposit Amount</div>
+                          <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)]">Deposit Amount</div>
                           <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{formatUSDC(BigInt(job.fundedAmount))} USDC</div>
                         </div>
                       </div>
@@ -512,7 +512,7 @@ function JobsPage() {
                         <div className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Worker {shortenAddress(job.worker)}</div>
                         <div className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Client {shortenAddress(job.evaluator)}</div>
                       </div>
-                      <div className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.52)]">WorkProof {job.proofMetadataURI ? 'available' : job.status === 5 ? 'pending metadata' : 'not minted yet'}</div>
+                      <div className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.85)]">WorkProof {job.proofMetadataURI ? 'available' : job.status === 5 ? 'pending metadata' : 'not minted yet'}</div>
                     </div>
                   );
                 })
@@ -558,13 +558,13 @@ function JobsPage() {
                 )}
               </div>
               <h2 className="mt-2 aureo-display text-[28px] text-[#EAE4D8]">Create job assignment</h2>
-              <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.6)]">
+              <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">
                 Assign work to a registered agent. Set the worker wallet and approval authority.
               </p>
 
               <div className="mt-5 space-y-4">
                 <div>
-                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">SELECT REGISTERED AGENT</label>
+                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">SELECT REGISTERED AGENT</label>
                   <select
                     value={createForm.agentId}
                     onChange={(e) => {
@@ -590,14 +590,14 @@ function JobsPage() {
                   {selectedAgent ? (
                     <div className="mt-2 border border-[rgba(197,166,124,0.25)] bg-[rgba(197,166,124,0.04)] px-3 py-2">
                       <div className="font-mono text-[11px] text-[#EAE4D8]">
-                        {selectedAgentLabel}{selectedAgentSkill ? <span className="text-[rgba(234,228,216,0.7)]"> &middot; {selectedAgentSkill}</span> : null}
+                        {selectedAgentLabel}{selectedAgentSkill ? <span className="text-[rgba(234,228,216,0.84)]"> &middot; {selectedAgentSkill}</span> : null}
                       </div>
-                      <div className="mt-1 font-mono text-[10px] text-[rgba(234,228,216,0.55)]">
+                      <div className="mt-1 font-mono text-[10px] text-[rgba(234,228,216,0.85)]">
                         Controller {shortenAddress(selectedAgent.controller)}
                       </div>
                     </div>
                   ) : (
-                    <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">
+                    <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
                       Register an agent first on the Agents page, then return here.
                     </div>
                   )}
@@ -605,20 +605,20 @@ function JobsPage() {
 
                 {agents.length === 0 && (
                   <div>
-                    <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">MANUAL AGENT ID</label>
+                    <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">MANUAL AGENT ID</label>
                     <input
                       value={createForm.agentId}
                       onChange={(e) => setCreateForm((c) => ({ ...c, agentId: e.target.value }))}
                       placeholder="Paste full agent ID if indexer is empty"
                       className="input-mono"
                     />
-                    <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Fallback only. This appears when the registered-agent list is unavailable or still empty.</div>
+                    <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">Fallback only. This appears when the registered-agent list is unavailable or still empty.</div>
                   </div>
                 )}
 
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
-                    <label className="block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">WORKER ADDRESS</label>
+                    <label className="block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">WORKER ADDRESS</label>
                     {customWorker && (
                       <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#C5A67C]">Custom worker</span>
                     )}
@@ -632,7 +632,7 @@ function JobsPage() {
                     placeholder={selectedAgent ? selectedAgent.controller : '0x... worker wallet'}
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
                     {selectedAgent && !customWorker
                       ? 'Auto-filled with the selected agent\u2019s controller. Edit to use a different worker wallet.'
                       : 'Worker and client cannot be the same address. The worker receives payout — use the agent\u2019s controller or a dedicated worker wallet.'}
@@ -641,7 +641,7 @@ function JobsPage() {
 
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
-                    <label className="block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">CLIENT ADDRESS</label>
+                    <label className="block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">CLIENT ADDRESS</label>
                     {customClient && (
                       <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#C5A67C]">Custom evaluator</span>
                     )}
@@ -655,34 +655,34 @@ function JobsPage() {
                     placeholder={address ? address : 'Connect wallet to auto-fill'}
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
                     The wallet that approves and settles the job. Auto-filled with your connected wallet.
                   </div>
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">TASK DESCRIPTION</label>
+                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">TASK DESCRIPTION</label>
                   <textarea
                     value={createForm.jobSpec}
                     onChange={(e) => setCreateForm((c) => ({ ...c, jobSpec: e.target.value }))}
                     placeholder={'Example: Audit the Settlement Vault contract on Arc Testnet and produce a report covering reentrancy, access control, and overflow risks. Deliver findings as a markdown file pinned to IPFS.'}
                     className="input-mono min-h-[120px]"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Be specific. This is the human-readable instruction the agent will work against.</div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">Be specific. This is the human-readable instruction the agent will work against.</div>
                 </div>
 
                 {/* Escrow trust layer info — not a payment method selector */}
                 <div>
-                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">SETTLEMENT VAULT · TRUST LAYER</label>
+                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">SETTLEMENT VAULT · TRUST LAYER</label>
                   <div className="border border-white/10 bg-white/[0.02] p-3">
                     <div className="font-mono text-[11px] text-[#C5A67C]">ArcLayer Escrow</div>
-                    <div className="mt-1 font-mono text-[10px] leading-[1.6] text-[rgba(234,228,216,0.6)]">
+                    <div className="mt-1 font-mono text-[10px] leading-[1.6] text-[rgba(234,228,216,0.78)]">
                       USDC is held in the Settlement Vault until the client approves the work. This is a trust layer, not a payment method.
                       The agent run itself is paid via x402 (Arc Native or Circle Gateway) — {' '}
                       <Link href="/x402-demo" className="text-[#7CB5C5] underline underline-offset-2 hover:text-[#EAE4D8]">see x402 demo ↗</Link>
                     </div>
                   </div>
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.5)]">
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
                     The escrow holds the locked budget. After work is approved, payout settles and a WorkProof NFT is minted.
                   </div>
                 </div>
@@ -697,11 +697,11 @@ function JobsPage() {
               </button>
 
               <details className="mt-4 group border-t border-white/5 pt-3">
-                <summary className="cursor-pointer font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.42)] transition hover:text-[rgba(234,228,216,0.65)]">
+                <summary className="cursor-pointer font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)] transition hover:text-[rgba(234,228,216,0.82)]">
                   Developer details
                 </summary>
-                <div className="mt-2 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.42)]">
-                  <code className="text-[rgba(234,228,216,0.58)]">createJob(agentId, worker, evaluator, taskDescription)</code> — &ldquo;Client Address&rdquo; maps to the <code className="text-[rgba(234,228,216,0.58)]">evaluator</code> contract parameter.
+                <div className="mt-2 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.85)]">
+                  <code className="text-[rgba(234,228,216,0.85)]">createJob(agentId, worker, evaluator, taskDescription)</code> — &ldquo;Client Address&rdquo; maps to the <code className="text-[rgba(234,228,216,0.85)]">evaluator</code> contract parameter.
                 </div>
               </details>
 
@@ -709,7 +709,7 @@ function JobsPage() {
                 <div className="mt-4 rounded-none border border-[rgba(184,205,126,0.35)] bg-[rgba(184,205,126,0.08)] p-4">
                   <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[#B8CD7E]">Step 1 complete</div>
                   <div className="mt-2 font-mono text-[12px] text-[#EAE4D8]">Job #{createdJobId} created</div>
-                  <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.68)]">Step 2 is prefilled below. Set Budget and Deposit Amount next.</div>
+                  <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.82)]">Step 2 is prefilled below. Set Budget and Deposit Amount next.</div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Link href={`/job/${createdJobId}`} className="btn-bordered px-3 py-2 text-[9.5px]">OPEN JOB DETAIL</Link>
                     <button type="button" onClick={() => setFundForm((current) => ({ ...current, jobId: createdJobId }))} className="btn-primary px-3 py-2 text-[9.5px]">USE IN FUND STEP</button>
@@ -721,36 +721,36 @@ function JobsPage() {
             <div className="aureo-panel p-4 md:p-6">
               <div className="aureo-mono-label mb-2">STEP 2 · APPROVE &amp; FUND</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Approve &amp; fund Settlement Vault</h2>
-              <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.6)]">
+              <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">
                 Set the agreed budget, approve USDC, and deposit funds into the Settlement Vault. The escrow holds USDC until the client approves the work.
               </p>
 
               <div className="mt-5 space-y-4">
                 <div>
-                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">JOB ID</label>
+                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">JOB ID</label>
                   <input
                     value={fundForm.jobId}
                     onChange={(e) => setFundForm((c) => ({ ...c, jobId: e.target.value }))}
                     placeholder="Job ID to budget and fund"
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">Auto-filled after Create Job succeeds. You can also paste any existing job ID here.</div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">Auto-filled after Create Job succeeds. You can also paste any existing job ID here.</div>
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">BUDGET AMOUNT (USDC)</label>
+                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">BUDGET AMOUNT (USDC)</label>
                   <input
                     value={fundForm.budget}
                     onChange={(e) => setFundForm((c) => ({ ...c, budget: e.target.value }))}
                     placeholder="1"
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">The agreed price for completing this job. Deposit Amount mirrors this unless edited.</div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">The agreed price for completing this job. Deposit Amount mirrors this unless edited.</div>
                 </div>
 
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
-                    <label className="block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.68)]">DEPOSIT AMOUNT (USDC)</label>
+                    <label className="block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">DEPOSIT AMOUNT (USDC)</label>
                     {depositTouched && fundForm.amount !== fundForm.budget && (
                       <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#C5A67C]">Custom deposit</span>
                     )}
@@ -764,12 +764,12 @@ function JobsPage() {
                     placeholder="1"
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.58)]">USDC sent into the Settlement Vault for this job. Usually equal to Budget.</div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">USDC sent into the Settlement Vault for this job. Usually equal to Budget.</div>
                 </div>
 
                 {selectedFundingJob && (
                   <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] px-4 py-3">
-                    <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.52)]">Funding Preview</div>
+                    <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)]">Funding Preview</div>
                     <div className="mt-2 grid gap-2 md:grid-cols-2">
                       <div className="font-mono text-[10.5px] text-[#EAE4D8]">Status {JOB_STATUS[selectedFundingJob.status]}</div>
                       <div className="font-mono text-[10.5px] text-[#EAE4D8]">Worker {shortenAddress(selectedFundingJob.worker)}</div>
@@ -783,16 +783,16 @@ function JobsPage() {
               </button>
 
               <details className="mt-4 group border-t border-white/5 pt-3">
-                <summary className="cursor-pointer font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.42)] transition hover:text-[rgba(234,228,216,0.65)]">
+                <summary className="cursor-pointer font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)] transition hover:text-[rgba(234,228,216,0.82)]">
                   Developer details
                 </summary>
-                <div className="mt-2 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.42)]">
-                  <code className="text-[rgba(234,228,216,0.58)]">setBudget &rarr; approve(USDC) &rarr; fund(jobId, amount)</code>
+                <div className="mt-2 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.85)]">
+                  <code className="text-[rgba(234,228,216,0.85)]">setBudget &rarr; approve(USDC) &rarr; fund(jobId, amount)</code>
                 </div>
               </details>
             </div>
 
-            <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(10,10,10,0.6)] p-5 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.68)]">
+            <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(10,10,10,0.6)] p-5 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
               {isConnected
                 ? '\u2713 Wallet connected. Flow: Select Agent \u2192 Create Job \u2192 Approve & Fund Settlement Vault \u2192 Submit Work \u2192 Approve Work \u2192 Settle Payment \u2192 WorkProof minted.'
                 : '\u26a0 Connect wallet to submit protocol writes.'}

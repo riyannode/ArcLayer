@@ -55,12 +55,12 @@ function FeedRow({ item }: { item: FeedItem }) {
       <div className="min-w-0 flex-1">
         <p className="font-mono text-xs text-[#EAE4D8]">
           <span className={`font-semibold ${AGENT_COLORS[item.agent]}`}>{item.agent}</span>{' '}
-          <span className="text-[#9A9A9A]">{item.label}</span>
+          <span className="text-[#b5b5b5]">{item.label}</span>
         </p>
         <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-[#555]">
           <span>{timeAgoIso(item.ts)}</span>
           {item.tx && (
-            <a href={`https://testnet.arcscan.app/tx/${item.tx}`} target="_blank" rel="noopener noreferrer" className="truncate text-[#7A7A7A] hover:text-[#C5A67C]">
+            <a href={`https://testnet.arcscan.app/tx/${item.tx}`} target="_blank" rel="noopener noreferrer" className="truncate text-[#a0a0a0] hover:text-[#C5A67C]">
               {item.tx.slice(0, 10)}…
             </a>
           )}
@@ -129,7 +129,7 @@ export function AgentDetailDrawer({
           </Link>
         </div>
 
-        <p className="mt-4 font-mono text-[12px] leading-6 text-[#9A9A9A]">{agent.description}</p>
+        <p className="mt-4 font-mono text-[12px] leading-6 text-[#b5b5b5]">{agent.description}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           {agent.capability.map((cap) => (
             <span key={cap} className="rounded border border-[#C5A67C]/20 bg-[#C5A67C]/5 px-2 py-1 font-mono text-[10px] text-[#EAD7B5]">
@@ -174,7 +174,7 @@ export function AgentDetailDrawer({
         {agent.canHide && onHide && (
           <div className="mt-4 rounded border border-red-500/15 bg-red-950/[0.05] p-3">
             <p className="font-mono text-[10px] uppercase tracking-widest text-red-300/80">Dashboard control</p>
-            <p className="mt-1 font-mono text-[11px] text-[#9A8A8A]">
+            <p className="mt-1 font-mono text-[11px] text-[#c0aaaa]">
               Hides this agent from your dashboard view. The agent stays registered on-chain — only your local list is filtered.
             </p>
             <button
@@ -195,7 +195,7 @@ export function AgentDetailDrawer({
         {agent.canHide && onDeactivate && (
           <div className="mt-3 rounded border border-red-500/20 bg-red-950/[0.08] p-3">
             <p className="font-mono text-[10px] uppercase tracking-widest text-red-400/90">On-chain deactivation</p>
-            <p className="mt-1 font-mono text-[11px] text-[#9A8A8A]">
+            <p className="mt-1 font-mono text-[11px] text-[#c0aaaa]">
               Permanently deactivates this agent on-chain. Requires wallet signature from the agent controller.
             </p>
             <button
@@ -217,7 +217,7 @@ export function AgentDetailDrawer({
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Recent x402/payment receipts</p>
           <div className="mt-2 space-y-2">
             {agent.activity.filter((item) => item.tx).slice(0, 4).map((item) => (
-              <a key={item.id} href={`https://testnet.arcscan.app/tx/${item.tx}`} target="_blank" rel="noopener noreferrer" className="block rounded border border-white/10 bg-white/[0.02] p-2 font-mono text-[11px] text-[#9A9A9A] hover:border-[#C5A67C]/30">
+              <a key={item.id} href={`https://testnet.arcscan.app/tx/${item.tx}`} target="_blank" rel="noopener noreferrer" className="block rounded border border-white/10 bg-white/[0.02] p-2 font-mono text-[11px] text-[#b5b5b5] hover:border-[#C5A67C]/30">
                 Payment receipt · {short(item.tx || '')} ↗
               </a>
             ))}

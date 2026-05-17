@@ -26,7 +26,7 @@ export function ProtectionModal({ notice, onClose }: Props) {
           type="button"
           onClick={onClose}
           aria-label="Close protection notice"
-          className="absolute right-4 top-4 rounded-full border border-white/10 px-2 py-1 text-xs text-white/50 transition hover:border-white/20 hover:text-white"
+          className="absolute right-4 top-4 rounded-full border border-white/10 px-2 py-1 text-xs text-white/80 transition hover:border-white/20 hover:text-white"
         >
           ✕
         </button>
@@ -46,8 +46,8 @@ export function ProtectionModal({ notice, onClose }: Props) {
 
         {notice.technicalDetail && (
           <div className="mt-5 rounded-xl border border-white/8 bg-white/[0.03] p-3">
-            <div className="mb-1 text-[10px] uppercase tracking-[0.22em] text-white/35">Technical detail</div>
-            <code className="break-words text-xs text-white/60">{notice.technicalDetail}</code>
+            <div className="mb-1 text-[10px] uppercase tracking-[0.22em] text-white/80">Technical detail</div>
+            <code className="break-words text-xs text-white/80">{notice.technicalDetail}</code>
           </div>
         )}
 

@@ -24,28 +24,23 @@ export default function Footer() {
         {/* CTA strip */}
         <div
           className="mb-12 flex flex-col gap-6 p-8 md:flex-row md:items-center md:justify-between"
-          style={{
-            border: '1px solid rgba(197, 166, 124, 0.2)',
-            background: 'linear-gradient(90deg, rgba(197, 166, 124, 0.06) 0%, rgba(0, 0, 0, 0) 60%)',
-          }}
+          style={{ border: '1px solid transparent' }}
+          aria-hidden="true"
         >
           <div>
-            <div className="aureo-mono-label mb-3">SDK · QUICKSTART</div>
-            <p className="aureo-display text-[28px] text-[#EAE4D8] md:text-[34px]">
-              Build on the <span className="italic text-[#C5A67C]">protocol layer</span>
+            <div className="aureo-mono-label mb-3">&nbsp;</div>
+            <p className="aureo-display text-[28px] md:text-[34px]" style={{ color: 'transparent' }}>
+              &nbsp;
             </p>
-            <p className="mt-2 font-mono text-[12px] text-[#7A7A7A]">
-              pnpm add @arclayer/sdk &nbsp;·&nbsp; Arc Testnet &nbsp;·&nbsp; chain 5042002
+            <p className="mt-2 font-mono text-[12px]" style={{ color: 'transparent' }}>
+              &nbsp;
             </p>
           </div>
-          <div className="flex gap-3">
-            <Link href="/docs" className="btn-primary">READ DOCS</Link>
-            <Link href="/protocol" className="btn-bordered">OPEN PROTOCOL</Link>
-          </div>
+          <div className="flex gap-3" />
         </div>
 
         {/* Columns */}
-        <div className="grid grid-cols-1 gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+        <div className="mt-4 grid grid-cols-1 gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div>
             <div className="flex items-center gap-3">
               <ArcMark size={28} />
@@ -53,7 +48,7 @@ export default function Footer() {
                 ARCLAYER
               </span>
             </div>
-            <p className="mt-5 max-w-[360px] font-mono text-[11.5px] leading-6 text-[#7A7A7A]">
+            <p className="mt-5 max-w-[360px] font-mono text-[11.5px] leading-6 text-[#a0a0a0]">
                   x402 payment, USDC escrow, and WorkProof reputation infrastructure for agent builders and developers — on Arc.
             </p>
             <div className="mt-6 flex items-center gap-2">
@@ -88,7 +83,7 @@ export default function Footer() {
                     rel={l.ext ? 'noopener noreferrer' : undefined}
                     className="font-mono text-[11px] text-[#c5c0b2] transition-colors hover:text-[#C5A67C]"
                   >
-                    {l.label} <span className="text-[#7A7A7A]">↗</span>
+                    {l.label} <span className="text-[#a0a0a0]">↗</span>
                   </a>
                 </li>
               ))}
@@ -116,7 +111,7 @@ export default function Footer() {
 
         {/* Bottom row */}
         <div className="mt-12 flex items-center justify-center border-t border-white/8 pt-8">
-          <p className="font-mono text-[10.5px] tracking-[0.12em] text-[#7A7A7A]">
+          <p className="font-mono text-[10.5px] tracking-[0.12em] text-[#a0a0a0]">
             © 2026 ARCLAYER · PAYMENT INFRASTRUCTURE FOR AGENTS READY TO SHIP
           </p>
         </div>

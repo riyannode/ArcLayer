@@ -54,7 +54,7 @@ export function AgentNetworkCard({ agent, selected, onSelect }: { agent: Network
           → {agent.connectedTo.join(', ')}
         </p>
       )}
-      <p className="mt-3 line-clamp-2 font-mono text-[11px] leading-5 text-[#8A8A8A]">{agent.description}</p>
+      <p className="mt-3 line-clamp-2 font-mono text-[11px] leading-5 text-[#a8a8a8]">{agent.description}</p>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {agent.capability.slice(0, 3).map((cap) => (
           <span key={cap} className="rounded border border-white/10 bg-black/20 px-2 py-0.5 font-mono text-[9px] text-[#777]">

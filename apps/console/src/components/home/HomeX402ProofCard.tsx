@@ -36,7 +36,7 @@ export default function HomeX402ProofCard() {
           <h3 className="font-mono text-xs uppercase tracking-widest text-[#C5A67C]">
             Live x402 Protected Resource
           </h3>
-          <p className="mt-1 text-[11px] text-[#7A7A7A]">
+          <p className="mt-1 text-[11px] text-[#a0a0a0]">
             Unlock a protected agent/API resource with Arc Native or Circle Gateway payment.
           </p>
         </div>
@@ -53,7 +53,7 @@ export default function HomeX402ProofCard() {
             key={b.label}
             className="inline-flex items-center gap-1.5 rounded border border-white/5 bg-white/[0.02] px-2 py-1 font-mono text-[9.5px]"
           >
-            <span className="text-[#9A9A9A]">{b.label}:</span>
+            <span className="text-[#b5b5b5]">{b.label}:</span>
             <span className={b.color}>{b.status}</span>
           </span>
         ))}
@@ -61,10 +61,10 @@ export default function HomeX402ProofCard() {
 
       {/* Flow visualization */}
       <div className="mt-4 overflow-x-auto rounded border border-white/5 bg-white/[0.01] px-3 py-2">
-        <div className="flex items-center gap-1 font-mono text-[9px] text-[#7A7A7A] whitespace-nowrap">
+        <div className="flex items-center gap-1 font-mono text-[9px] text-[#a0a0a0] whitespace-nowrap">
           {FLOW_STEPS.map((step, i) => (
             <span key={step} className="flex items-center gap-1">
-              <span className="text-[#9A9A9A]">{step}</span>
+              <span className="text-[#b5b5b5]">{step}</span>
               {i < FLOW_STEPS.length - 1 && <span className="text-[#C5A67C]">→</span>}
             </span>
           ))}
@@ -72,7 +72,7 @@ export default function HomeX402ProofCard() {
       </div>
 
       {/* Description */}
-      <p className="mt-3 text-[10.5px] leading-relaxed text-[#7A7A7A]">
+      <p className="mt-3 text-[10.5px] leading-relaxed text-[#a0a0a0]">
         ArcLayer includes a live x402 protected resource demo. Choose Arc Native or Circle Gateway
         to unlock a protected agent/API resource, then see duplicate receipt protection reject
         reused payments. Each settlement is 0.01 USDC on Arc Testnet — verifiable on-chain.
@@ -90,13 +90,13 @@ export default function HomeX402ProofCard() {
           href={`${EXPLORER}/address/0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b`}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 rounded border border-white/10 bg-white/[0.02] px-3 py-1.5 font-mono text-[10px] text-[#9A9A9A] transition-colors hover:text-[#EAE4D8]"
+          className="inline-flex items-center gap-1.5 rounded border border-white/10 bg-white/[0.02] px-3 py-1.5 font-mono text-[10px] text-[#b5b5b5] transition-colors hover:text-[#EAE4D8]"
         >
           View on explorer ↗
         </a>
         <Link
           href="/docs"
-          className="inline-flex items-center gap-1.5 rounded border border-white/10 bg-white/[0.02] px-3 py-1.5 font-mono text-[10px] text-[#9A9A9A] transition-colors hover:text-[#EAE4D8]"
+          className="inline-flex items-center gap-1.5 rounded border border-white/10 bg-white/[0.02] px-3 py-1.5 font-mono text-[10px] text-[#b5b5b5] transition-colors hover:text-[#EAE4D8]"
         >
           Integration docs →
         </Link>

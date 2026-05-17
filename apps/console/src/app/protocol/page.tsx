@@ -206,17 +206,12 @@ export default function Dashboard() {
         {/* Header */}
         <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>PROTOCOL · TELEMETRY</div>
+            <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }} aria-hidden="true">&nbsp;</div>
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[60px]" style={{ lineHeight: 0.95 }}>
               Protocol <span className="italic" style={{ color: '#C5A67C' }}>console</span>
             </h1>
-            <p className="mt-4 max-w-xl font-mono text-[12px] leading-6" style={{ color: 'rgba(234, 228, 216, 0.6)' }}>
-              {isConnected && address ? <><span style={{ color: '#C5A67C' }}>{shortenAddress(address)}</span> · </> : ''}
-              Arc Testnet · chain <span style={{ color: '#C5A67C' }}>5042002</span> · USDC settlement · x402 → escrow → WorkProof
-            </p>
-            <p className="mt-1 max-w-xl font-mono text-[10.5px] uppercase leading-5 tracking-[0.18em]" style={{ color: 'rgba(234, 228, 216, 0.4)' }}>
-              Dual x402 payment paths live · Arc Native + Circle Gateway
-            </p>
+            <p className="mt-4 max-w-xl font-mono text-[12px] leading-6" style={{ color: 'rgba(234, 228, 216, 0.6)' }} aria-hidden="true">&nbsp;</p>
+            <p className="mt-1 max-w-xl font-mono text-[10.5px] uppercase leading-5 tracking-[0.18em]" aria-hidden="true">&nbsp;</p>
           </div>
           <div className="flex items-center gap-3 self-start md:self-auto">
             <div className="flex items-center gap-2 rounded-sm border border-white/10 bg-black/40 px-3 py-2">
@@ -232,7 +227,7 @@ export default function Dashboard() {
             <button onClick={() => { loadOverview({ silent: true }); probeAllRpcs(); }} className="btn-bordered">
               {isRefreshing ? 'SYNCING…' : 'REFRESH'}
             </button>
-            <Link href="/docs" className="btn-primary hidden md:inline-flex">SDK DOCS</Link>
+            <span className="hidden md:inline-flex" aria-hidden="true" />
           </div>
         </div>
 

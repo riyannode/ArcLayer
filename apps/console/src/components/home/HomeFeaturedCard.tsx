@@ -32,7 +32,7 @@ export default function HomeFeaturedCard() {
           <h3 className="aureo-display text-[18px] leading-none text-[#EAE4D8]">
             AEON ESCROW
           </h3>
-          <p className="mt-1.5 font-mono text-[10px] leading-4 text-[#7A7A7A]">
+          <p className="mt-1.5 font-mono text-[10px] leading-4 text-[#a0a0a0]">
             Job settled against milestone proofs.
           </p>
         </div>

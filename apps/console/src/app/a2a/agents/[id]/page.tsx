@@ -78,12 +78,12 @@ function FeedRow({ item }: { item: FeedItem }) {
       </span>
       <div className="min-w-0 flex-1">
         <p className="font-mono text-xs text-[#EAE4D8]">
-          <span className="text-[#9A9A9A]">{item.label}</span>
+          <span className="text-[#b5b5b5]">{item.label}</span>
         </p>
         <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-[#555]">
           <span>{timeAgoIso(item.ts)}</span>
           {item.tx && (
-            <a href={`https://testnet.arcscan.app/tx/${item.tx}`} target="_blank" rel="noopener noreferrer" className="truncate text-[#7A7A7A] hover:text-[#C5A67C]">
+            <a href={`https://testnet.arcscan.app/tx/${item.tx}`} target="_blank" rel="noopener noreferrer" className="truncate text-[#a0a0a0] hover:text-[#C5A67C]">
               {item.tx.slice(0, 10)}…
             </a>
           )}
@@ -223,7 +223,7 @@ export default function AgentProfilePage() {
             {/* Tab: Profile */}
             {activeTab === 'profile' && (
               <section className="space-y-6">
-                <p className="max-w-3xl font-mono text-[12px] leading-6 text-[#9A9A9A]">
+                <p className="max-w-3xl font-mono text-[12px] leading-6 text-[#b5b5b5]">
                   {agent.description}
                 </p>
 
@@ -289,7 +289,7 @@ export default function AgentProfilePage() {
 
                 <div className="rounded border border-white/10 bg-white/[0.02] p-4">
                   <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Source</p>
-                  <p className="mt-2 font-mono text-[11px] leading-5 text-[#9A9A9A]">
+                  <p className="mt-2 font-mono text-[11px] leading-5 text-[#b5b5b5]">
                     Reputation data sourced from ReputationRegistry on Arc Testnet (chain 5042002).
                     Scores update on each x402 payment settlement and WorkProof mint.
                   </p>
@@ -330,7 +330,7 @@ export default function AgentProfilePage() {
                           {(Number(job.budget) / 1e6).toFixed(2)} USDC
                         </span>
                       </div>
-                      <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#7A7A7A]">
+                      <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#a0a0a0]">
                         <span>worker {short(job.worker)}</span>
                         <span>{JOB_STATUS[job.status] || `Status ${job.status}`}</span>
                       </div>
@@ -360,7 +360,7 @@ export default function AgentProfilePage() {
                           href={`https://testnet.arcscan.app/tx/${item.tx}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="block rounded border border-white/10 bg-white/[0.02] p-3 font-mono text-[11px] text-[#9A9A9A] hover:border-[#C5A67C]/30"
+                          className="block rounded border border-white/10 bg-white/[0.02] p-3 font-mono text-[11px] text-[#b5b5b5] hover:border-[#C5A67C]/30"
                         >
                           <span className="text-[#EAE4D8]">{item.label}</span>
                           <span className="ml-3 text-[#555]">{short(item.tx || '')} ↗</span>
@@ -387,7 +387,7 @@ export default function AgentProfilePage() {
                               {(Number(p.amountPaid) / 1e6).toFixed(2)} USDC
                             </span>
                           </div>
-                          <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10px] text-[#7A7A7A]">
+                          <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10px] text-[#a0a0a0]">
                             <span>payer {short(p.payer)}</span>
                             <span>{new Date(Number(p.mintedAt) * 1000).toLocaleDateString()}</span>
                           </div>

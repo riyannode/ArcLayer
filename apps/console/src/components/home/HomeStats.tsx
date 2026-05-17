@@ -61,7 +61,7 @@ export default function HomeStats() {
             {s.value}
           </span>
           <span className="mt-2 h-px w-8 bg-[#C5A67C]/50" />
-          <span className="mt-2 font-mono text-[10px] leading-4 text-[rgba(234,228,216,0.68)]">
+          <span className="mt-2 font-mono text-[10px] leading-4 text-[rgba(234,228,216,0.82)]">
             {s.suffix}
           </span>
         </div>

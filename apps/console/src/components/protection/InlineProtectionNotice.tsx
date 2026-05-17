@@ -52,7 +52,7 @@ export function InlineProtectionNotice({
         <div className="flex-1 min-w-0">
           <p className="text-xs leading-5 text-white/75">{message}</p>
           {technicalDetail && (
-            <code className="mt-1 block text-[10px] text-white/35">{technicalDetail}</code>
+            <code className="mt-1 block text-[10px] text-white/80">{technicalDetail}</code>
           )}
         </div>
       </div>

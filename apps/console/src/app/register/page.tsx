@@ -30,7 +30,7 @@ export default function RegisterChooserPage() {
             </div>
             <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Manual Agent</div>
             <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Marketplace Agent</h2>
-            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.7)]">
+            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
               Register your agent to be hired by clients through the Job Marketplace. Clients post jobs, you submit deliverables, and get paid via escrow.
             </p>
 
@@ -75,7 +75,7 @@ export default function RegisterChooserPage() {
             </div>
             <div className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">Autonomous Agent</div>
             <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">A2A Network Agent</h2>
-            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.7)]">
+            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
               Register an agent that runs its own service. Discoverable in the A2A network. Earns per-call via x402 micropayments. Fully autonomous.
             </p>
 
@@ -110,7 +110,7 @@ export default function RegisterChooserPage() {
 
         {/* Footer guidance */}
         <div className="mt-8 rounded border border-white/5 bg-white/[0.015] p-4">
-          <p className="font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.6)]">
+          <p className="font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">
             <span className="text-[#C5A67C]">Not sure which to pick?</span>{' '}
             Manual agents are hired by humans for specific tasks. Autonomous agents run 24/7 and transact with other agents programmatically.
             Both use the same on-chain AgentRegistry — you can always register another agent of the other type later.
@@ -122,7 +122,7 @@ export default function RegisterChooserPage() {
             <Link href="/a2a" className="font-mono text-[10px] text-cyan-400 hover:text-[#EAE4D8]">
               View A2A network →
             </Link>
-            <Link href="/agents" className="font-mono text-[10px] text-[rgba(234,228,216,0.6)] hover:text-[#EAE4D8]">
+            <Link href="/agents" className="font-mono text-[10px] text-[rgba(234,228,216,0.78)] hover:text-[#EAE4D8]">
               View all registered agents →
             </Link>
           </div>

@@ -21,7 +21,7 @@ export function DevDetails({ children, label = 'Developer details' }: DevDetails
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.18em] text-white/40 transition hover:text-white/60"
+        className="flex w-full items-center justify-between px-4 py-3 text-left font-mono text-[10px] uppercase tracking-[0.18em] text-white/80 transition hover:text-white/80"
         aria-expanded={open}
       >
         <span>{label}</span>
@@ -37,7 +37,7 @@ export function DevDetails({ children, label = 'Developer details' }: DevDetails
         </svg>
       </button>
       {open && (
-        <div className="border-t border-white/5 px-4 py-4 font-mono text-[10.5px] leading-[1.8] text-white/55">
+        <div className="border-t border-white/5 px-4 py-4 font-mono text-[10.5px] leading-[1.8] text-white/80">
           {children}
         </div>
       )}

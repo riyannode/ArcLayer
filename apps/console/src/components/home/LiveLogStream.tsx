@@ -35,7 +35,17 @@ export default function LiveLogStream() {
   const [lines, setLines] = useState<LogLine[]>([]);
   const [connected, setConnected] = useState(false);
   const [blockHeight, setBlockHeight] = useState<number | null>(null);
+  // Cursor timestamp must NOT be derived from `new Date()` during render —
+  // SSR vs client hydrate produce different strings → React #425/#418/#423.
+  // Render empty until mounted, then tick from a client-only effect.
+  const [cursorTs, setCursorTs] = useState<string>('');
   const seenRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    setCursorTs(nowHHMMSS());
+    const tick = setInterval(() => setCursorTs(nowHHMMSS()), 1000);
+    return () => clearInterval(tick);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -177,7 +187,7 @@ export default function LiveLogStream() {
           </div>
         ))}
         <div className="llog-line cursor">
-          <span className="llog-ts">{nowHHMMSS()}</span>
+          <span className="llog-ts">{cursorTs || '--:--:--'}</span>
           <span className="llog-chev">❯</span>
           <span className="llog-caret anim-caret">▍</span>
         </div>

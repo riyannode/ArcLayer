@@ -330,7 +330,7 @@ export default function DocsPage() {
               <Link href="/x402-demo" className="border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">
                 Try the live demo ↗
               </Link>
-              <a href="https://arclayers.xyz/api/x402/supported" target="_blank" rel="noopener noreferrer" className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.7)] transition hover:border-white/20 hover:text-[#EAE4D8]">
+              <a href="https://arclayers.xyz/api/x402/supported" target="_blank" rel="noopener noreferrer" className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.84)] transition hover:border-white/20 hover:text-[#EAE4D8]">
                 /api/x402/supported ↗
               </a>
             </div>
@@ -370,11 +370,11 @@ export default function DocsPage() {
         <div className="border border-white/10 bg-black/30 p-5 mb-4">
           <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>FACILITATOR ENDPOINTS</div>
           <div className="grid gap-2 text-xs font-mono" style={{ color: 'rgba(234, 228, 216, 0.75)' }}>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/supported</span><span className="hidden md:inline opacity-60">— list schemes (exact Arc Native + Circle Gateway + arc-escrow)</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">POST</span><span className="text-[#EAE4D8]">/api/x402/verify</span><span className="hidden md:inline opacity-60">— verifies Arc Native (EIP-3009) and Circle Gateway via isBatchPayment routing</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">POST</span><span className="text-[#EAE4D8]">/api/x402/settle</span><span className="hidden md:inline opacity-60">— Arc Native settles on-chain; Circle Gateway settles via BatchFacilitatorClient</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/relayer-status</span><span className="hidden md:inline opacity-60">— relayer address + USDC balance (Arc Native)</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402-demo/protected</span><span className="hidden md:inline opacity-60">— sample protected resource (dual-mode)</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/supported</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— list schemes (exact Arc Native + Circle Gateway + arc-escrow)</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">POST</span><span className="text-[#EAE4D8]">/api/x402/verify</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— verifies Arc Native (EIP-3009) and Circle Gateway via isBatchPayment routing</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">POST</span><span className="text-[#EAE4D8]">/api/x402/settle</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— Arc Native settles on-chain; Circle Gateway settles via BatchFacilitatorClient</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/relayer-status</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— relayer address + USDC balance (Arc Native)</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402-demo/protected</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— sample protected resource (dual-mode)</span></div>
           </div>
         </div>
 
@@ -473,7 +473,7 @@ export default function DocsPage() {
             <Link href="/jobs" className="border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">
               Open Jobs Console ↗
             </Link>
-            <a href="#sdk-examples" className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.7)] transition hover:border-white/20 hover:text-[#EAE4D8]">
+            <a href="#sdk-examples" className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.84)] transition hover:border-white/20 hover:text-[#EAE4D8]">
               SDK Examples ↓
             </a>
           </div>
@@ -511,7 +511,7 @@ export default function DocsPage() {
                 href={SKILL_RAW_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.7)] transition hover:border-white/20 hover:text-[#EAE4D8]"
+                className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.84)] transition hover:border-white/20 hover:text-[#EAE4D8]"
               >
                 View Raw ↗
               </a>
@@ -519,7 +519,7 @@ export default function DocsPage() {
                 href={SKILL_BLOB_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.7)] transition hover:border-white/20 hover:text-[#EAE4D8]"
+                className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.84)] transition hover:border-white/20 hover:text-[#EAE4D8]"
               >
                 View on GitHub ↗
               </a>
@@ -536,10 +536,10 @@ export default function DocsPage() {
           </p>
           <div className="flex flex-wrap gap-2">
             <CopyButton text={ONELINER_PROMPT} label="Copy AI Skill" />
-            <a href="#sdk-examples" className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.7)] transition hover:border-white/20 hover:text-[#EAE4D8]">
+            <a href="#sdk-examples" className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.84)] transition hover:border-white/20 hover:text-[#EAE4D8]">
               View SDK Examples ↓
             </a>
-            <Link href="/protocol" className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.7)] transition hover:border-white/20 hover:text-[#EAE4D8]">
+            <Link href="/protocol" className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.84)] transition hover:border-white/20 hover:text-[#EAE4D8]">
               Open Console ↗
             </Link>
           </div>
