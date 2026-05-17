@@ -157,14 +157,14 @@ export default function LiveLogStream() {
   }, []);
 
   return (
-    <div className="llog w-full min-w-0 max-w-full overflow-hidden">
+    <div className="llog w-full min-w-0 max-w-[480px] overflow-hidden">
       <div className="llog-bar">
         <div className="llog-dots" aria-hidden="true">
           <span className="llog-dot r" />
           <span className="llog-dot y" />
           <span className="llog-dot g" />
         </div>
-        <span className="llog-title">protocol.arclayer</span>
+        <span className="llog-title">arclayer indexer</span>
         <span className="llog-sep">·</span>
         <span className="llog-meta">
           block {blockHeight !== null ? blockHeight.toLocaleString() : '—'}

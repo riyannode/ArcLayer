@@ -6,14 +6,14 @@ import { useAccount, useDisconnect } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
 import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'viem';
 import { DevDetails } from '@/components/DevDetails';
-import { InlineProtectionNotice, NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_REQUIRED, NOTICE_PAYMENT_SETTLED, NOTICE_PAYMENT_VERIFIED, NOTICE_REPLAY_FAILED, NOTICE_REPLAY_REJECTED, NOTICE_RESOURCE_UNLOCKED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
+import { NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_REQUIRED, NOTICE_PAYMENT_SETTLED, NOTICE_PAYMENT_VERIFIED, NOTICE_REPLAY_FAILED, NOTICE_REPLAY_REJECTED, NOTICE_RESOURCE_UNLOCKED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
 import { shortenAddress } from '@/lib/contracts';
 
 const ARC_CHAIN_ID = 5042002;
 const ARC_RPC = 'https://rpc.testnet.arc.network';
 const USDC = getAddress('0x3600000000000000000000000000000000000000');
 const NETWORK = 'eip155:5042002';
-const FALLBACK_PAY_TO = getAddress('0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b');
+const FALLBACK_PAY_TO = getAddress('0x4aA3402575b6D98EacE35A823EFa267F7365bdD2');
 
 const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
 
@@ -35,6 +35,8 @@ function b64(value: unknown) { return btoa(JSON.stringify(value)); }
 interface X402DemoPanelProps {
   /** When true, render compact inline variant suitable for homepage embedding. */
   compact?: boolean;
+  /** Homepage hero variant: render only the payment ticket, no market/log cards. */
+  ticketOnly?: boolean;
 }
 
 /**
@@ -45,8 +47,8 @@ interface X402DemoPanelProps {
  * same UI for inline use on the homepage. All payment logic — Arc Native EIP-3009 and
  * Circle Gateway batching — runs identically in both modes.
  */
-export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
-  const { ready, authenticated, login, register, address: circleAddress, smartAccount } = useCircleWallet();
+export default function X402DemoPanel({ compact = false, ticketOnly = false }: X402DemoPanelProps) {
+  const { authenticated, address: circleAddress, smartAccount } = useCircleWallet();
   const { address: eoaAddress, isConnected: eoaConnected } = useAccount();
   const { disconnect: eoaDisconnect } = useDisconnect();
   const { open: openAppKit } = useAppKit();
@@ -55,7 +57,6 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
   // setStep is async, so React can let two clicks through before the first
   // setStep('challenge') renders. useRef gives us instant rejection.
   const runLockRef = useRef(false);
-  const [walletMode, setWalletMode] = useState<WalletMode>('passkey');
   const [mode, setMode] = useState<PaymentMode>('arc-native');
   const [step, setStep] = useState<Step>('idle');
   const [logs, setLogs] = useState<LogLine[]>([]);
@@ -67,11 +68,12 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
   const [gatewayProbe, setGatewayProbe] = useState<GatewayProbe | null>(null);
   const [gatewayBalance, setGatewayBalance] = useState<GatewayBalance | null>(null);
 
+  const walletMode: WalletMode = eoaConnected ? 'eoa' : authenticated ? 'passkey' : 'eoa';
   const activeAddress = useMemo(() => {
-    if (walletMode === 'eoa') return eoaAddress as `0x${string}` | undefined;
+    if (eoaConnected && eoaAddress) return eoaAddress as `0x${string}`;
     return (circleAddress as `0x${string}`) || undefined;
-  }, [walletMode, eoaAddress, circleAddress]);
-  const activeAuthed = walletMode === 'eoa' ? eoaConnected : authenticated;
+  }, [eoaConnected, eoaAddress, circleAddress]);
+  const activeAuthed = eoaConnected || authenticated;
   const address = activeAddress || '';
 
   const log = useCallback((msg: string, type: LogType = 'info') => setLogs((prev) => [...prev, { ts: nowTs(), msg, type }]), []);
@@ -423,8 +425,6 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
   }, [activeAuthed, address, walletMode, smartAccount, log, reset, mode, runArcNative, runGateway, notify]);
 
   const connectEoa = useCallback(() => { openAppKit(); }, [openAppKit]);
-  const connectCircle = useCallback(() => { register('arclayer-x402').catch((e) => log(`Circle passkey failed: ${e instanceof Error ? e.message : String(e)}`, 'error')); }, [register, log]);
-  const loginCircle = useCallback(() => { login().catch((e) => log(`Circle sign-in failed: ${e instanceof Error ? e.message : String(e)}`, 'error')); }, [login, log]);
 
   const busy = !['idle', 'done', 'error'].includes(step);
   // After successful payment, keep button disabled for 5s to prevent accidental re-pay
@@ -456,6 +456,46 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
     grid: compact ? 'lg:grid-cols-[1fr_320px]' : 'lg:grid-cols-[1fr_380px]',
     gap: compact ? 'gap-3' : 'gap-5',
   };
+
+  if (ticketOnly) {
+    return (
+      <aside className="w-full max-w-[440px]">
+        <div className={`${c.cardRadius} border border-white/10 bg-[#111]/95 ${c.cardPad} shadow-2xl shadow-black/40`}>
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className={`font-semibold tracking-[-0.03em] text-white ${compact ? 'text-base' : 'text-xl'}`}>Unlock x402</h3>
+            <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} ${mode === 'arc-native' ? 'bg-[#C5A67C]/15 text-[#C5A67C]' : 'bg-[#7CB5C5]/15 text-[#7CB5C5]'}`}>{mode === 'arc-native' ? 'ARC' : 'CIRCLE'}</span>
+          </div>
+          <div className={`mb-3 grid grid-cols-2 overflow-hidden ${c.cardRadiusXs} border border-white/10 bg-black/25 p-1`}>
+            <button onClick={() => setMode('arc-native')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
+            <button onClick={() => setMode('circle-gateway')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE</button>
+          </div>
+          <div className={`space-y-2.5 border-y border-white/10 py-3 font-mono ${compact ? 'text-[11px]' : 'text-[12px]'}`}>
+            <div className="flex justify-between gap-4"><span className="text-white/80">Cost</span><span className="text-white">0.01 USDC</span></div>
+            <div className="flex justify-between gap-4"><span className="text-white/80">Pay to</span><span className="text-white">{shortenAddress(payTo)}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-white/80">Network</span><span className="text-white">Arc Testnet</span></div>
+            <div className="flex justify-between gap-4"><span className="text-white/80">Current step</span><span className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{step.toUpperCase()}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-white/80">Unlocked</span><span className={unlocked ? 'text-green-300' : 'text-white/80'}>{unlocked ? 'YES' : 'NO'}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-white/80">Replay guard</span><span className={replayResult.startsWith('Rejected') ? 'text-red-300' : replayResult.startsWith('Unexpected') ? 'text-green-300' : 'text-white/80'}>{replayResult}</span></div>
+          </div>
+          <div className="mt-3 space-y-2.5">
+            {!activeAuthed ? (
+              <button onClick={connectEoa} className={`w-full cursor-pointer ${c.cardRadiusXs} border border-white/20 bg-white/[0.06] ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] text-white hover:bg-white/[0.12]`}>CONNECT WALLET</button>
+            ) : (
+              <>
+                <div className={`flex items-center gap-2 font-mono ${c.label} text-white/60`}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                  {walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · {shortenAddress(address)}
+                </div>
+                <button onClick={busy || cooldown ? undefined : runDemo} disabled={busy || cooldown || relayer?.ready === false} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ (cooldown)' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <div className={`grid ${c.gap} ${c.grid}`}>
@@ -498,7 +538,7 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
               <div className="mt-0.5 text-[10px] text-white/80">{relayer?.relayerAddress ? shortenAddress(relayer.relayerAddress) : 'not configured'}</div>
             </div>
             <div className={`${c.cardRadiusXs} border border-white/10 bg-black/25 ${c.cardPadXs}`}>
-              <div className={`font-mono ${c.label} text-white/80`}>GATEWAY</div>
+              <div className={`font-mono ${c.label} text-white/80`}>CIRCLE</div>
               <div className={`mt-0.5 font-semibold ${gatewayProbe?.supported ? 'text-green-300' : 'text-yellow-300'} ${c.bigVal}`}>{gatewayProbe?.supported ? 'Supported' : 'Checking'}</div>
               <div className="mt-0.5 text-[10px] text-white/80">{gatewayProbe?.gatewayWallet ? shortenAddress(gatewayProbe.gatewayWallet) : 'arcTestnet'}</div>
             </div>
@@ -522,7 +562,7 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
 
           <button onClick={() => setMode('circle-gateway')} className={`cursor-pointer ${c.cardRadius} border ${c.cardPad} text-left transition-all ${mode === 'circle-gateway' ? 'border-[#7CB5C5]/70 bg-[#7CB5C5]/10 shadow-lg shadow-[#7CB5C5]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
             <div className="mb-3 flex items-center justify-between">
-              <span className={`font-mono ${c.label} tracking-[0.18em] text-[#7CB5C5]`}>CIRCLE GATEWAY</span>
+              <span className={`font-mono ${c.label} tracking-[0.18em] text-[#7CB5C5]`}>CIRCLE</span>
               <span className={`rounded-full bg-white/10 px-2 py-0.5 font-mono ${c.label} text-white/80`}>POWER USER</span>
             </div>
             <div className={`font-semibold text-white ${compact ? 'text-base' : 'text-xl'}`}>Pre-funded execution</div>
@@ -557,12 +597,12 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
         <div className={`${c.cardRadius} border border-white/10 bg-[#111]/95 ${c.cardPad} shadow-2xl shadow-black/40`}>
           <div className="mb-3 flex items-center justify-between">
             <h3 className={`font-semibold tracking-[-0.03em] text-white ${compact ? 'text-base' : 'text-xl'}`}>Unlock x402</h3>
-            <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} ${mode === 'arc-native' ? 'bg-[#C5A67C]/15 text-[#C5A67C]' : 'bg-[#7CB5C5]/15 text-[#7CB5C5]'}`}>{mode === 'arc-native' ? 'ARC' : 'GATEWAY'}</span>
+            <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} ${mode === 'arc-native' ? 'bg-[#C5A67C]/15 text-[#C5A67C]' : 'bg-[#7CB5C5]/15 text-[#7CB5C5]'}`}>{mode === 'arc-native' ? 'ARC' : 'CIRCLE'}</span>
           </div>
 
           <div className={`mb-3 grid grid-cols-2 overflow-hidden ${c.cardRadiusXs} border border-white/10 bg-black/25 p-1`}>
             <button onClick={() => setMode('arc-native')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
-            <button onClick={() => setMode('circle-gateway')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>GATEWAY</button>
+            <button onClick={() => setMode('circle-gateway')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE</button>
           </div>
 
           <div className={`space-y-2.5 border-y border-white/10 py-3 font-mono ${compact ? 'text-[11px]' : 'text-[12px]'}`}>
@@ -581,41 +621,21 @@ export default function X402DemoPanel({ compact = false }: X402DemoPanelProps) {
           )}
 
           <div className="mt-3 space-y-2.5">
-            <div className={`grid grid-cols-2 overflow-hidden ${c.cardRadiusXs} border border-white/10 bg-black/25 p-1`}>
-              <button onClick={() => setWalletMode('passkey')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.label} tracking-[0.16em] ${walletMode === 'passkey' ? 'bg-white text-black' : 'text-white/80'}`}>PASSKEY</button>
-              <button onClick={() => setWalletMode('eoa')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.label} tracking-[0.16em] ${walletMode === 'eoa' ? 'bg-white text-black' : 'text-white/80'}`}>EOA WALLET</button>
-            </div>
-
-            {walletMode === 'passkey' ? (
-              !ready ? (
-                <div className={`font-mono ${c.label} text-white/80`}>LOADING CIRCLE WALLET...</div>
-              ) : !authenticated ? (
-                <>
-                  <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} title="Sign in with passkey" message="Create or restore a Circle Modular Wallet using your device passkey." className="mb-1" />
-                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={connectCircle} className={`cursor-pointer ${c.cardRadiusXs} border border-[#C5A67C]/40 ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] text-[#C5A67C]`}>CREATE</button>
-                    <button onClick={loginCircle} className={`cursor-pointer ${c.cardRadiusXs} border border-white/20 ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] text-white/70`}>SIGN IN</button>
-                  </div>
-                </>
-              ) : (
+            {!activeAuthed ? (
+              <>
+                <button onClick={connectEoa} className={`w-full cursor-pointer ${c.cardRadiusXs} border border-white/20 bg-white/[0.06] ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] text-white hover:bg-white/[0.12]`}>CONNECT WALLET</button>
+              </>
+            ) : (
+              <>
+                <div className={`flex items-center gap-2 font-mono ${c.label} text-white/60`}>
+                  <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
+                  {walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · {shortenAddress(address)}
+                </div>
                 <button onClick={busy || cooldown ? undefined : runDemo} disabled={busy || cooldown || relayer?.ready === false} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
                   {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ (cooldown)' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                 </button>
-              )
-            ) : (
-              !eoaConnected ? (
-                <>
-                  <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} title="Connect EOA wallet" message="Open Reown AppKit to connect MetaMask, Coinbase, WalletConnect, or any browser wallet." className="mb-1" />
-                  <button onClick={connectEoa} className={`w-full cursor-pointer ${c.cardRadiusXs} border border-white/20 bg-white/[0.06] ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] text-white hover:bg-white/[0.12]`}>CONNECT EOA WALLET</button>
-                </>
-              ) : (
-                <>
-                  <button onClick={busy || cooldown ? undefined : runDemo} disabled={busy || cooldown || relayer?.ready === false} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
-                    {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ (cooldown)' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
-                  </button>
-                  <button onClick={() => eoaDisconnect()} className={`mt-1.5 w-full cursor-pointer ${c.cardRadiusXs} border border-white/10 ${compact ? 'py-1.5' : 'py-2'} font-mono ${c.label} tracking-[0.14em] text-white/80 hover:border-white/20`}>DISCONNECT EOA</button>
-                </>
-              )
+                <button onClick={() => eoaConnected ? eoaDisconnect() : undefined} className={`mt-1.5 w-full cursor-pointer ${c.cardRadiusXs} border border-white/10 ${compact ? 'py-1.5' : 'py-2'} font-mono ${c.label} tracking-[0.14em] text-white/80 hover:border-white/20`}>DISCONNECT</button>
+              </>
             )}
             <button onClick={reset} className={`mt-1 w-full cursor-pointer ${c.cardRadiusXs} border border-white/10 ${compact ? 'py-1.5' : 'py-2'} font-mono ${c.label} tracking-[0.14em] text-white/80 hover:border-white/20`}>RESET</button>
           </div>

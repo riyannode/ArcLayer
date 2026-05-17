@@ -1,5 +1,6 @@
 'use client';
 
+import X402DemoPanel from '@/components/x402/X402DemoPanel';
 import LiveLogStream from './LiveLogStream';
 
 /**
@@ -53,7 +54,11 @@ export default function HomeHero() {
         Arc Testnet · chain <span className="text-[#C5A67C]">5042002</span> · USDC · x402 · A2A reputation live
       </p>
 
-      <div className="mt-6 section-reveal" style={{ animationDelay: '0.4s' }}>
+      <div className="mt-5 section-reveal" style={{ animationDelay: '0.35s' }}>
+        <X402DemoPanel compact ticketOnly />
+      </div>
+
+      <div className="mt-4 section-reveal" style={{ animationDelay: '0.45s' }}>
         <LiveLogStream />
       </div>
     </div>

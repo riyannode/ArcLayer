@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { useAccount, useDisconnect } from 'wagmi';
@@ -94,16 +93,38 @@ export default function WalletStatus({ variant = 'app' }: Props) {
     );
   }
 
-  // Landing: after connect, drive the user into /protocol.
+  // Landing: after connect, show address pill (same as app) — no redirect.
   if (variant === 'landing' && isConnected && activeAddress) {
     return (
-      <Link
-        href="/protocol"
-        className="btn-primary"
-        style={{ padding: '10px 18px', fontSize: '11px', fontWeight: 600 }}
-      >
-        OPEN CONSOLE →
-      </Link>
+      <div className="flex items-center gap-2">
+        <div
+          className="flex items-center gap-2 px-3 py-2 font-mono text-[11px]"
+          style={{
+            background: 'rgba(197, 166, 124, 0.08)',
+            color: '#C5A67C',
+            border: '1px solid rgba(197, 166, 124, 0.25)',
+          }}
+        >
+          <span className="pulse-dot" />
+          <span className="text-[9px] tracking-[0.14em] text-white/80">{walletType === 'eoa' ? 'EOA' : 'PASSKEY'}</span>
+          {shortenAddress(activeAddress)}
+        </div>
+        <button
+          onClick={handleDisconnect}
+          className="px-3 py-2 font-mono text-[10px] tracking-[0.18em] text-white/80 transition-all duration-300"
+          style={{ border: '1px solid rgba(255, 255, 255, 0.08)' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = 'rgba(255,100,100,0.5)';
+            e.currentTarget.style.color = '#ff6464';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+            e.currentTarget.style.color = 'rgba(255,255,255,0.4)';
+          }}
+        >
+          DISCONNECT
+        </button>
+      </div>
     );
   }
 
