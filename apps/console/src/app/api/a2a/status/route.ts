@@ -30,7 +30,7 @@ const WALLETS = {
 
 // Known agent IDs (keccak256-derived from registration tx)
 const PYTHIA_AGENT_ID = '0x49c996c626a315b5af92d58f0db6c12acf106818d47b39221b8a73217ddccc37' as Hex;
-const HERMES_AGENT_ID = '0xb4e8b2c5a1d3f6e9c7a0b5d8f2e4a1c6d9b3e7f0a2c5d8e1b4f7a0c3d6e9b2f5' as Hex;
+const HERMES_AGENT_ID = '0xe0704f9716c028e812f9a6651af63bf49d8a5476dc32ff04093d217459044234' as Hex;
 
 const REPUTATION_ABI = [
   {
