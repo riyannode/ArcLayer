@@ -502,7 +502,7 @@ export default function A2ADashboardPage() {
 
         {/* ─── Marketplace Section (manual JobEscrow) ──────────────────── */}
         {summary && summary.jobs > 0 && (
-          <section className="mt-6 rounded border border-white/5 bg-white/[0.02] p-4">
+          <section className="mt-5 md:mt-8 rounded border border-white/5 bg-white/[0.02] p-4">
             <div className="mb-3 flex items-center justify-between">
               <p className="font-mono text-[10px] uppercase tracking-widest text-[#555]">
                 Marketplace Jobs · JobEscrow
