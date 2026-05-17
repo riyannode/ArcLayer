@@ -349,7 +349,7 @@ export default function AgentsPage() {
                         >
                           Copy ID
                         </button>
-                        <Link href={`/jobs?agentId=${encodeURIComponent(a.agentId)}`} className="btn-primary px-2.5 py-1.5 text-[9px]">
+                        <Link href={`/jobs?agent=${encodeURIComponent(a.agentId)}`} className="btn-primary px-2.5 py-1.5 text-[9px]">
                           Use
                         </Link>
                         <Link href={`/agent/${a.agentId}`} className="font-mono text-[9px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">

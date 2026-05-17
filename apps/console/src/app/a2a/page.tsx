@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useWriteContract } from 'wagmi';
 import { config } from '@/lib/wagmi';
@@ -142,7 +143,17 @@ function FeedRow({ item, isNew }: { item: FeedItem; isNew: boolean }) {
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
-export default function A2ADashboardPage() {
+export default function A2ADashboardPageRoute() {
+  return (
+    <Suspense fallback={null}>
+      <A2ADashboardPage />
+    </Suspense>
+  );
+}
+
+function A2ADashboardPage() {
+  const searchParams = useSearchParams();
+  const focusId = searchParams.get('focus')?.trim() || null;
   const [overview, setOverview] = useState<Overview | null>(null);
   const [onchain, setOnchain] = useState<A2AOnChain | null>(null);
   const [feed, setFeed] = useState<AutonomousFeed | null>(null);
@@ -154,7 +165,7 @@ export default function A2ADashboardPage() {
   const [showAllProofs, setShowAllProofs] = useState(false);
   const [_tick, setTick] = useState(0);
   const [filter, setFilter] = useState<AgentCategory>('all');
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(focusId);
   const [registeredAgents, setRegisteredAgents] = useState<RegisteredAgent[]>([]);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set();
@@ -163,6 +174,10 @@ export default function A2ADashboardPage() {
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch { return new Set(); }
   });
+
+  useEffect(() => {
+    if (focusId) setSelectedAgentId(focusId);
+  }, [focusId]);
 
   const hideAgent = useCallback((agentId: string) => {
     setHiddenIds((prev) => {

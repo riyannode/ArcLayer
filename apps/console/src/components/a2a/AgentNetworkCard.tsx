@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { NetworkAgent } from '@/types/agent-network';
 
 function short(addr: string) {
@@ -28,10 +29,12 @@ export function AgentNetworkCard({ agent, selected, onSelect }: { agent: Network
   const statusColor = agent.status === 'LIVE' || agent.status === 'RUNNING' ? 'text-emerald-300 border-emerald-500/30' : 'text-zinc-500 border-zinc-600/30';
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
-      className={`min-w-[280px] rounded border p-4 text-left transition-colors hover:border-[#C5A67C]/40 ${border}`}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(); } }}
+      className={`min-w-[280px] cursor-pointer rounded border p-4 text-left transition-colors hover:border-[#C5A67C]/40 focus:outline-none focus:border-[#C5A67C]/40 ${border}`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -66,9 +69,18 @@ export function AgentNetworkCard({ agent, selected, onSelect }: { agent: Network
       </div>
       <div className="mt-3 flex items-center justify-between gap-2 font-mono text-[10px] text-[#555]">
         <span className="truncate">{short(agent.wallet || agent.agentId || '')}</span>
-        <span className="rounded border border-[#C5A67C]/20 px-2 py-1 text-[#C5A67C]">{agent.primaryAction}</span>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href={`/a2a/agents/${agent.id}`}
+            onClick={(event) => event.stopPropagation()}
+            className="rounded border border-white/10 px-2 py-1 text-[#777] hover:border-[#C5A67C]/30 hover:text-[#C5A67C]"
+          >
+            View profile
+          </Link>
+          <span className="rounded border border-[#C5A67C]/20 px-2 py-1 text-[#C5A67C]">{agent.primaryAction}</span>
+        </div>
       </div>
-    </button>
+    </div>
   );
 }
 

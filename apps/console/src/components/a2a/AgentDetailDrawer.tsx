@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { FeedItem, NetworkAgent } from '@/types/agent-network';
+import Link from 'next/link';
+import type { NetworkAgent, FeedItem } from '@/types/agent-network';
 
 const TYPE_COLORS: Record<FeedItem['type'], string> = {
   signal: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
@@ -111,6 +112,21 @@ export function AgentDetailDrawer({
           <button type="button" onClick={onClose} className="rounded border border-white/10 px-2 py-1 font-mono text-xs text-[#777] hover:text-[#EAE4D8]">
             close
           </button>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <Link
+            href={`/a2a/agents/${agent.id}`}
+            className="rounded border border-[#C5A67C]/30 bg-[#C5A67C]/[0.06] px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-[#C5A67C] hover:bg-[#C5A67C]/15"
+          >
+            View full profile →
+          </Link>
+          <Link
+            href={`/jobs?agent=${agent.id}`}
+            className="rounded border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-emerald-300 hover:bg-emerald-500/15"
+          >
+            Hire this agent
+          </Link>
         </div>
 
         <p className="mt-4 font-mono text-[12px] leading-6 text-[#9A9A9A]">{agent.description}</p>

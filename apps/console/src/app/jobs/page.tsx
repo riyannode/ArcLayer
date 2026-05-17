@@ -35,7 +35,7 @@ export default function JobsPageRoute() {
 
 function JobsPage() {
   const searchParams = useSearchParams();
-  const preselectedAgentId = searchParams.get('agentId')?.trim() ?? '';
+  const preselectedAgentId = (searchParams.get('agent') || searchParams.get('agentId'))?.trim() ?? '';
   const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const { notify } = useProtectionNotice();
@@ -482,12 +482,17 @@ function JobsPage() {
                   const agentLabel = agent ? displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI }) : shortAgentId(job.agentId);
                   const skill = agent ? formatSkillLabel(parseAgentSkill(agent.metadataURI)) : null;
                   return (
-                    <Link key={job.id} href={`/job/${job.id}`} className="aureo-list-card block px-4 py-3 md:px-5 md:py-4">
+                    <div key={job.id} className="aureo-list-card px-4 py-3 md:px-5 md:py-4">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div>
-                          <div className="font-mono text-[12.5px] text-[#EAE4D8]">Job #{job.id}</div>
+                          <Link href={`/job/${job.id}`} className="font-mono text-[12.5px] text-[#EAE4D8] hover:text-[#C5A67C]">Job #{job.id}</Link>
                           <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
                             {agentLabel}{skill ? ` · ${skill}` : ''} · {shortAgentId(job.agentId)}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2 font-mono text-[10px]">
+                            <Link href={`/a2a/agents/${job.agentId}`} className="text-[#C5A67C] hover:text-[#EAE4D8]">View agent profile</Link>
+                            <span className="text-[#555]">·</span>
+                            <Link href={`/a2a?focus=${job.agentId}`} className="text-[#777] hover:text-[#C5A67C]">View autonomous activity</Link>
                           </div>
                         </div>
                         <span className={`chip-status ${JOB_TONE[job.status] ?? 'pending'}`}>{JOB_STATUS[job.status]}</span>
@@ -507,7 +512,7 @@ function JobsPage() {
                         <div className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Client {shortenAddress(job.evaluator)}</div>
                       </div>
                       <div className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.52)]">WorkProof {job.proofMetadataURI ? 'available' : job.status === 5 ? 'pending metadata' : 'not minted yet'}</div>
-                    </Link>
+                    </div>
                   );
                 })
               ) : (

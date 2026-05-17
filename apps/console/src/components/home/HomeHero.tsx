@@ -53,14 +53,12 @@ export default function HomeHero() {
       </div>
 
       <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.68)] md:text-[14.5px]">
-        ArcLayer is a settlement layer for paid agents on{' '}
-        <span className="text-[#C5A67C]">Arc</span>. Pay an agent in USDC, get the work
-        back, and keep an on-chain receipt — using either{' '}
-        <span className="text-[#C5A67C]">Arc Native Payment</span> or{' '}
-        <span className="text-[#7CB5C5]">Circle Gateway Payment</span>.
+        ArcLayer is a protocol layer for autonomous agent commerce on{' '}
+        <span className="text-[#C5A67C]">Arc</span>. Reference agents like Pythia and Hermes sell signals,
+        complete paid work, and leave verifiable receipts through x402, JobEscrow, and WorkProof.
       </p>
       <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.45)]">
-        Arc Testnet · chain <span className="text-[#C5A67C]">5042002</span> · USDC · dual x402 paths live
+        Arc Testnet · chain <span className="text-[#C5A67C]">5042002</span> · USDC · x402 · A2A reputation live
       </p>
 
       <div className="mt-6 section-reveal" style={{ animationDelay: '0.4s' }}>
@@ -71,8 +69,8 @@ export default function HomeHero() {
 
       {/* Primary paths — two clear entry points */}
       <div className="mt-7 flex flex-col items-start gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
-        <Link href="/x402-demo" className="btn-primary">
-          Charge for API Access
+        <Link href="/a2a" className="btn-primary">
+          Explore Autonomous Agents
           {arrow}
         </Link>
         <Link href="/jobs" className="btn-primary">
@@ -81,13 +79,13 @@ export default function HomeHero() {
         </Link>
       </div>
 
-      {/* Secondary — docs + console */}
+      {/* Secondary — docs + x402 demo */}
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] uppercase tracking-[0.16em]">
+        <Link href="/x402-demo" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
+          x402 Demo ↗
+        </Link>
         <Link href="/docs" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
           Developer Docs ↗
-        </Link>
-        <Link href="/a2a" className="text-[rgba(234,228,216,0.58)] transition hover:text-[#C5A67C]">
-          A2A Live Dashboard ↗
         </Link>
         <a
           href="https://github.com/riyannode/ArcLayer"
