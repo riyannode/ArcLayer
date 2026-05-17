@@ -436,7 +436,6 @@ export default function X402DemoPage() {
           <div>
             <div className="mb-2 font-mono text-[10px] tracking-[0.24em] text-[#C5A67C]">ARCLAYER x402 MARKET</div>
             <h1 className="text-3xl font-semibold tracking-[-0.04em] text-white md:text-5xl">Pay per API call</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">Polymarket-style EOA flow for protected AI resources. Pick direct Arc settlement or pre-funded Gateway execution.</p>
           </div>
           <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[11px] text-white/55">
             <span className={activeAuthed ? 'h-2 w-2 rounded-full bg-green-400' : 'h-2 w-2 rounded-full bg-yellow-400'} />
