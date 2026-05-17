@@ -106,10 +106,15 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   }, [address]);
 
   useEffect(() => {
-    if (!gatewayBalance) return;
+    if (!gatewayBalance || eoaConnected) return;
     const deposited = gatewayBalance.depositedUsdc;
-    if (deposited && Number(deposited) >= 0.05) setMode('circle-gateway');
-  }, [gatewayBalance]);
+    if (authenticated && deposited && Number(deposited) >= 0.05) setMode('circle-gateway');
+  }, [gatewayBalance, authenticated, eoaConnected]);
+
+  useEffect(() => {
+    if (eoaConnected && mode === 'circle-gateway') setMode('arc-native');
+  }, [eoaConnected, mode]);
+
 
   const reset = useCallback(() => {
     runLockRef.current = false;
@@ -369,6 +374,15 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       setStep('error'); return;
     }
 
+    // Wallet ↔ rail isolation: Circle Gateway requires Circle Modular Wallet (passkey).
+    if (mode === 'circle-gateway' && walletMode !== 'passkey') {
+      log('Circle Gateway requires Circle Wallet (passkey). Switch to ARC NATIVE for EOA.', 'error');
+      notify({ ...NOTICE_WALLET_NOT_CONNECTED, surface: 'toast', autoCloseMs: 4_500, message: 'Circle Gateway needs a Circle Wallet. Use Arc Native for EOA.' });
+      setStep('error');
+      runLockRef.current = false;
+      return;
+    }
+
     const wallet = walletMode === 'passkey'
       ? {
           address: address as string,
@@ -437,6 +451,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     }
   }, [step]);
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
+  const circleDisabledForEoa = walletMode === 'eoa';
 
   // Compact-aware sizing tokens
   const c = {
@@ -463,11 +478,11 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
         <div className={`${c.cardRadius} border border-white/10 bg-[#111]/95 ${c.cardPad} shadow-2xl shadow-black/40`}>
           <div className="mb-3 flex items-center justify-between">
             <h3 className={`font-semibold tracking-[-0.03em] text-white ${compact ? 'text-base' : 'text-xl'}`}>Unlock x402</h3>
-            <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} ${mode === 'arc-native' ? 'bg-[#C5A67C]/15 text-[#C5A67C]' : 'bg-[#7CB5C5]/15 text-[#7CB5C5]'}`}>{mode === 'arc-native' ? 'ARC' : 'CIRCLE'}</span>
+            <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} ${mode === 'arc-native' ? 'bg-[#C5A67C]/15 text-[#C5A67C]' : 'bg-[#7CB5C5]/15 text-[#7CB5C5]'}`}>{mode === 'arc-native' ? 'ARC' : 'CIRCLE GATEWAY'}</span>
           </div>
           <div className={`mb-3 grid grid-cols-2 overflow-hidden ${c.cardRadiusXs} border border-white/10 bg-black/25 p-1`}>
             <button onClick={() => setMode('arc-native')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
-            <button onClick={() => setMode('circle-gateway')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE</button>
+            <button onClick={() => !circleDisabledForEoa && setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE GATEWAY</button>
           </div>
           <div className={`space-y-2.5 border-y border-white/10 py-3 font-mono ${compact ? 'text-[11px]' : 'text-[12px]'}`}>
             <div className="flex justify-between gap-4"><span className="text-white/80">Cost</span><span className="text-white">0.01 USDC</span></div>
@@ -538,7 +553,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
               <div className="mt-0.5 text-[10px] text-white/80">{relayer?.relayerAddress ? shortenAddress(relayer.relayerAddress) : 'not configured'}</div>
             </div>
             <div className={`${c.cardRadiusXs} border border-white/10 bg-black/25 ${c.cardPadXs}`}>
-              <div className={`font-mono ${c.label} text-white/80`}>CIRCLE</div>
+              <div className={`font-mono ${c.label} text-white/80`}>CIRCLE GATEWAY</div>
               <div className={`mt-0.5 font-semibold ${gatewayProbe?.supported ? 'text-green-300' : 'text-yellow-300'} ${c.bigVal}`}>{gatewayProbe?.supported ? 'Supported' : 'Checking'}</div>
               <div className="mt-0.5 text-[10px] text-white/80">{gatewayProbe?.gatewayWallet ? shortenAddress(gatewayProbe.gatewayWallet) : 'arcTestnet'}</div>
             </div>
@@ -560,9 +575,9 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
             </div>
           </button>
 
-          <button onClick={() => setMode('circle-gateway')} className={`cursor-pointer ${c.cardRadius} border ${c.cardPad} text-left transition-all ${mode === 'circle-gateway' ? 'border-[#7CB5C5]/70 bg-[#7CB5C5]/10 shadow-lg shadow-[#7CB5C5]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
+          <button onClick={() => !circleDisabledForEoa && setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer ${c.cardRadius} border ${c.cardPad} text-left transition-all disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'border-[#7CB5C5]/70 bg-[#7CB5C5]/10 shadow-lg shadow-[#7CB5C5]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
             <div className="mb-3 flex items-center justify-between">
-              <span className={`font-mono ${c.label} tracking-[0.18em] text-[#7CB5C5]`}>CIRCLE</span>
+              <span className={`font-mono ${c.label} tracking-[0.18em] text-[#7CB5C5]`}>CIRCLE GATEWAY</span>
               <span className={`rounded-full bg-white/10 px-2 py-0.5 font-mono ${c.label} text-white/80`}>POWER USER</span>
             </div>
             <div className={`font-semibold text-white ${compact ? 'text-base' : 'text-xl'}`}>Pre-funded execution</div>
@@ -597,12 +612,12 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
         <div className={`${c.cardRadius} border border-white/10 bg-[#111]/95 ${c.cardPad} shadow-2xl shadow-black/40`}>
           <div className="mb-3 flex items-center justify-between">
             <h3 className={`font-semibold tracking-[-0.03em] text-white ${compact ? 'text-base' : 'text-xl'}`}>Unlock x402</h3>
-            <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} ${mode === 'arc-native' ? 'bg-[#C5A67C]/15 text-[#C5A67C]' : 'bg-[#7CB5C5]/15 text-[#7CB5C5]'}`}>{mode === 'arc-native' ? 'ARC' : 'CIRCLE'}</span>
+            <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} ${mode === 'arc-native' ? 'bg-[#C5A67C]/15 text-[#C5A67C]' : 'bg-[#7CB5C5]/15 text-[#7CB5C5]'}`}>{mode === 'arc-native' ? 'ARC' : 'CIRCLE GATEWAY'}</span>
           </div>
 
           <div className={`mb-3 grid grid-cols-2 overflow-hidden ${c.cardRadiusXs} border border-white/10 bg-black/25 p-1`}>
             <button onClick={() => setMode('arc-native')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
-            <button onClick={() => setMode('circle-gateway')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE</button>
+            <button onClick={() => !circleDisabledForEoa && setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE GATEWAY</button>
           </div>
 
           <div className={`space-y-2.5 border-y border-white/10 py-3 font-mono ${compact ? 'text-[11px]' : 'text-[12px]'}`}>
