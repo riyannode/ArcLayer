@@ -9,7 +9,7 @@ const ARC_NATIVE_REQUIREMENT = {
   network: 'eip155:5042002',
   asset: '0x3600000000000000000000000000000000000000',
   amount: '10000',
-  payTo: '0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b',
+  payTo: '0x4aA3402575b6D98EacE35A823EFa267F7365bdD2',
   maxTimeoutSeconds: 300,
   extra: { name: 'USDC', version: '2', transferMethod: 'eip3009' },
 };
@@ -19,7 +19,7 @@ const CIRCLE_GATEWAY_REQUIREMENT = {
   network: 'arcTestnet',
   asset: '0x3600000000000000000000000000000000000000',
   amount: '10000',
-  payTo: '0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b',
+  payTo: '0x4aA3402575b6D98EacE35A823EFa267F7365bdD2',
   maxTimeoutSeconds: 300,
   extra: { name: 'GatewayWalletBatched', version: '1' },
 };
@@ -31,7 +31,7 @@ const ARC_NATIVE_PAYMENT = {
   payload: {
     authorization: {
       from: '0x9fC73BE13EAB35DD55547f89b1aD2663b9038eE5',
-      to: '0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b',
+      to: '0x4aA3402575b6D98EacE35A823EFa267F7365bdD2',
       value: '10000',
       validAfter: 0,
       validBefore: 9999999999,

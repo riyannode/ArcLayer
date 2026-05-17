@@ -299,7 +299,7 @@ V2 post-deploy configuration:
 | Component | Address | Notes |
 |---|---|---|
 | Testnet USDC | `0x3600000000000000000000000000000000000000` | 6 decimals; Arc Testnet USDC used for escrow + x402 exact payments |
-| x402 default payTo | `0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b` | Seller / settlement receiver for x402 demo payments |
+| x402 default payTo | `0x4aA3402575b6D98EacE35A823EFa267F7365bdD2` | Seller / settlement receiver for x402 demo payments |
 | Circle `GatewayWallet` | `0x0077777d7EBA4688BDeF3E311b846F25870A19B9` | EIP-712 verifying contract for `GatewayWalletBatched` payments |
 
 ### A2A Protocol contracts (Sprint 5)

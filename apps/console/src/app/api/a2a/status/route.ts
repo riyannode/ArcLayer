@@ -24,7 +24,7 @@ const CONTRACTS = {
 };
 
 const WALLETS = {
-  pythia: '0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b' as Hex,
+  pythia: '0x4aA3402575b6D98EacE35A823EFa267F7365bdD2' as Hex,
   hermes: '0x8fafCF61AA3E429EE6627b2a5a3FFAEc6B51A528' as Hex,
 };
 

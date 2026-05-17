@@ -22,7 +22,7 @@ import {
 export const runtime = 'nodejs';
 
 const DEFAULT_AMOUNT_ATOMIC = '10000'; // 0.01 USDC, 6 decimals
-const DEFAULT_PAY_TO = '0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b';
+const DEFAULT_PAY_TO = '0x4aA3402575b6D98EacE35A823EFa267F7365bdD2';
 
 function receiver(): `0x${string}` {
   const configured = process.env.X402_RECEIVER_ADDRESS || process.env.X402_PAY_TO || DEFAULT_PAY_TO;

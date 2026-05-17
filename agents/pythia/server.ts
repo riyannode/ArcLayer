@@ -22,7 +22,7 @@ const app = express();
 app.use(express.json());
 
 const PORT = Number(process.env.PYTHIA_PORT ?? 4001);
-const SELLER_ADDRESS = process.env.PYTHIA_SELLER_ADDRESS ?? '0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b';
+const SELLER_ADDRESS = process.env.PYTHIA_SELLER_ADDRESS ?? '0x4aA3402575b6D98EacE35A823EFa267F7365bdD2';
 const FACILITATOR_URL = process.env.FACILITATOR_URL ?? 'https://arclayers.xyz';
 // x402 exact amount uses atomic USDC units. 10000 = 0.01 USDC (6 decimals).
 const PRICE_PER_SIGNAL = '10000';
