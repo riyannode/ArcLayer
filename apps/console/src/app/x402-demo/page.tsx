@@ -1,7 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
+import { useAccount, useDisconnect } from 'wagmi';
+import { useAppKit } from '@reown/appkit/react';
 import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'viem';
 import { DevDetails } from '@/components/DevDetails';
 import { InlineProtectionNotice, NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_REQUIRED, NOTICE_PAYMENT_SETTLED, NOTICE_PAYMENT_VERIFIED, NOTICE_REPLAY_FAILED, NOTICE_REPLAY_REJECTED, NOTICE_RESOURCE_UNLOCKED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
@@ -10,12 +12,15 @@ import { shortenAddress } from '@/lib/contracts';
 const ARC_CHAIN_ID = 5042002;
 const ARC_RPC = 'https://rpc.testnet.arc.network';
 const USDC = getAddress('0x3600000000000000000000000000000000000000');
+export const dynamic = 'force-dynamic';
+
 const NETWORK = 'eip155:5042002';
 const FALLBACK_PAY_TO = getAddress('0x3DC78013A70d9E0d1047902f5DCB50aeF68B003b');
 
 const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
 
 type PaymentMode = 'arc-native' | 'circle-gateway';
+type WalletMode = 'passkey' | 'eoa';
 type Step = 'idle' | 'challenge' | 'signing' | 'verifying' | 'settling' | 'retrying' | 'replay' | 'done' | 'error';
 type LogType = 'info' | 'success' | 'error' | 'warn';
 
@@ -30,8 +35,12 @@ function randomNonce(): Hex { return `0x${Array.from(crypto.getRandomValues(new 
 function b64(value: unknown) { return btoa(JSON.stringify(value)); }
 
 export default function X402DemoPage() {
-  const { ready, authenticated, login, register, address, smartAccount } = useCircleWallet();
+  const { ready, authenticated, login, register, address: circleAddress, smartAccount } = useCircleWallet();
+  const { address: eoaAddress, isConnected: eoaConnected } = useAccount();
+  const { disconnect: eoaDisconnect } = useDisconnect();
+  const { open: openAppKit } = useAppKit();
   const { notify } = useProtectionNotice();
+  const [walletMode, setWalletMode] = useState<WalletMode>('passkey');
   const [mode, setMode] = useState<PaymentMode>('arc-native');
   const [step, setStep] = useState<Step>('idle');
   const [logs, setLogs] = useState<LogLine[]>([]);
@@ -42,6 +51,15 @@ export default function X402DemoPage() {
   const [requirement, setRequirement] = useState<Requirement | null>(null);
   const [gatewayProbe, setGatewayProbe] = useState<GatewayProbe | null>(null);
   const [gatewayBalance, setGatewayBalance] = useState<GatewayBalance | null>(null);
+
+  // Resolve active wallet based on mode
+  const activeAddress = useMemo(() => {
+    if (walletMode === 'eoa') return eoaAddress as `0x${string}` | undefined;
+    return (circleAddress as `0x${string}`) || undefined;
+  }, [walletMode, eoaAddress, circleAddress]);
+  const activeReady = walletMode === 'eoa' ? true : ready;
+  const activeAuthed = walletMode === 'eoa' ? eoaConnected : authenticated;
+  const address = activeAddress || '';
 
   const log = useCallback((msg: string, type: LogType = 'info') => setLogs((prev) => [...prev, { ts: nowTs(), msg, type }]), []);
 
@@ -339,36 +357,74 @@ export default function X402DemoPage() {
   /* ─── MAIN RUNNER ─── */
   const runDemo = useCallback(async () => {
     reset();
-    if (!smartAccount || !address) {
+    if (!activeAuthed || !address) {
       log('No wallet connected', 'error');
       notify({ ...NOTICE_WALLET_NOT_CONNECTED, surface: 'toast', autoCloseMs: 4_500 });
       setStep('error'); return;
     }
-    // Build a wallet-like adapter for the flow functions
-    const wallet = {
-      address: address as string,
-      switchChain: async (_id: number) => { /* Circle is already on Arc */ },
-      getEthereumProvider: async () => ({
-        request: async (args: { method: string; params: unknown[] }) => {
-          if (args.method === 'eth_signTypedData_v4') {
-            const typedData = JSON.parse(args.params[1] as string);
-            return smartAccount.signTypedData({
-              domain: typedData.domain,
-              types: typedData.types,
-              primaryType: typedData.primaryType,
-              message: typedData.message,
-            });
-          }
-          throw new Error(`Unsupported method: ${args.method}`);
-        },
-      }),
-    };
+
+    const wallet = walletMode === 'passkey'
+      ? {
+          address: address as string,
+          switchChain: async (_id: number) => { /* Circle is already on Arc */ },
+          getEthereumProvider: async () => ({
+            request: async (args: { method: string; params: unknown[] }) => {
+              if (!smartAccount) throw new Error('Circle smart account not ready');
+              if (args.method === 'eth_signTypedData_v4') {
+                const typedData = JSON.parse(args.params[1] as string);
+                return smartAccount.signTypedData({
+                  domain: typedData.domain,
+                  types: typedData.types,
+                  primaryType: typedData.primaryType,
+                  message: typedData.message,
+                });
+              }
+              throw new Error(`Unsupported method: ${args.method}`);
+            },
+          }),
+        }
+      : {
+          address: address as string,
+          switchChain: async (id: number) => {
+            const eth = (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+            if (!eth) throw new Error('No injected wallet found');
+            try {
+              await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: `0x${id.toString(16)}` }] });
+            } catch (e) {
+              const err = e as { code?: number };
+              if (err.code === 4902) {
+                await eth.request({ method: 'wallet_addEthereumChain', params: [{ chainId: `0x${id.toString(16)}`, chainName: 'Arc Testnet', nativeCurrency: { name: 'Arc', symbol: 'ARC', decimals: 18 }, rpcUrls: [ARC_RPC], blockExplorerUrls: ['https://testnet.arcscan.app'] }] });
+                return;
+              }
+              throw e;
+            }
+          },
+          getEthereumProvider: async () => {
+            const eth = (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+            if (!eth) throw new Error('No injected wallet found');
+            return eth;
+          },
+        };
+
     if (mode === 'arc-native') {
       await runArcNative(wallet as unknown as Parameters<typeof runArcNative>[0]);
     } else {
       await runGateway(wallet as unknown as Parameters<typeof runGateway>[0]);
     }
-  }, [smartAccount, address, log, reset, mode, runArcNative, runGateway, notify]);
+  }, [activeAuthed, address, walletMode, smartAccount, log, reset, mode, runArcNative, runGateway, notify]);
+
+  const connectEoa = useCallback(() => {
+    openAppKit();
+  }, [openAppKit]);
+
+  const connectCircle = useCallback(() => {
+    register('arclayer-x402').catch((e) => log(`Circle passkey failed: ${e instanceof Error ? e.message : String(e)}`, 'error'));
+  }, [register, log]);
+
+  const loginCircle = useCallback(() => {
+    login().catch((e) => log(`Circle sign-in failed: ${e instanceof Error ? e.message : String(e)}`, 'error'));
+  }, [login, log]);
+
 
   const busy = !['idle', 'done', 'error'].includes(step);
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
@@ -383,8 +439,8 @@ export default function X402DemoPage() {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">Polymarket-style EOA flow for protected AI resources. Pick direct Arc settlement or pre-funded Gateway execution.</p>
           </div>
           <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[11px] text-white/55">
-            <span className={authenticated ? 'h-2 w-2 rounded-full bg-green-400' : 'h-2 w-2 rounded-full bg-yellow-400'} />
-            {authenticated && address ? shortenAddress(address) : 'Wallet not connected'}
+            <span className={activeAuthed ? 'h-2 w-2 rounded-full bg-green-400' : 'h-2 w-2 rounded-full bg-yellow-400'} />
+            {activeAuthed && address ? `${walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · ${shortenAddress(address)}` : 'Wallet not connected'}
           </div>
         </div>
 
@@ -491,21 +547,44 @@ export default function X402DemoPage() {
                 </div>
               )}
 
-              <div className="mt-4">
-                {!ready ? <div className="font-mono text-[10px] text-white/30">LOADING WALLET...</div> : !authenticated ? (
-                  <>
-                    <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} className="mb-3" />
-                    <div className="grid grid-cols-2 gap-2">
-                      <button onClick={() => register('arclayer-x402').catch((e) => log(`Register failed: ${e instanceof Error ? e.message : String(e)}`, 'error'))} className="cursor-pointer rounded-xl border border-[#C5A67C]/40 py-3 font-mono text-[11px] tracking-[0.14em] text-[#C5A67C]">CREATE</button>
-                      <button onClick={() => login().catch((e) => log(`Login failed: ${e instanceof Error ? e.message : String(e)}`, 'error'))} className="cursor-pointer rounded-xl border border-white/20 py-3 font-mono text-[11px] tracking-[0.14em] text-white/70">SIGN IN</button>
-                    </div>
-                  </>
+              <div className="mt-4 space-y-3">
+                <div className="grid grid-cols-2 overflow-hidden rounded-xl border border-white/10 bg-black/25 p-1">
+                  <button onClick={() => setWalletMode('passkey')} className={`cursor-pointer rounded-lg py-2 font-mono text-[10px] tracking-[0.16em] ${walletMode === 'passkey' ? 'bg-white text-black' : 'text-white/45'}`}>PASSKEY</button>
+                  <button onClick={() => setWalletMode('eoa')} className={`cursor-pointer rounded-lg py-2 font-mono text-[10px] tracking-[0.16em] ${walletMode === 'eoa' ? 'bg-white text-black' : 'text-white/45'}`}>EOA WALLET</button>
+                </div>
+
+                {walletMode === 'passkey' ? (
+                  !ready ? (
+                    <div className="font-mono text-[10px] text-white/30">LOADING CIRCLE WALLET...</div>
+                  ) : !authenticated ? (
+                    <>
+                      <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} title="Sign in with passkey" message="Create or restore a Circle Modular Wallet using your device passkey." className="mb-1" />
+                      <div className="grid grid-cols-2 gap-2">
+                        <button onClick={connectCircle} className="cursor-pointer rounded-xl border border-[#C5A67C]/40 py-3 font-mono text-[11px] tracking-[0.14em] text-[#C5A67C]">CREATE</button>
+                        <button onClick={loginCircle} className="cursor-pointer rounded-xl border border-white/20 py-3 font-mono text-[11px] tracking-[0.14em] text-white/70">SIGN IN</button>
+                      </div>
+                    </>
+                  ) : (
+                    <button onClick={busy ? undefined : runDemo} disabled={busy || relayer?.ready === false} className={`w-full cursor-pointer rounded-xl border py-3 font-mono text-[11px] tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/30 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                      {busy ? `RUNNING: ${step.toUpperCase()}` : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                    </button>
+                  )
                 ) : (
-                  <button onClick={busy ? undefined : runDemo} disabled={busy || relayer?.ready === false} className={`w-full cursor-pointer rounded-xl border py-3 font-mono text-[11px] tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/30 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
-                    {busy ? `RUNNING: ${step.toUpperCase()}` : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
-                  </button>
+                  !eoaConnected ? (
+                    <>
+                      <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} title="Connect EOA wallet" message="Open Reown AppKit to connect MetaMask, Coinbase, WalletConnect, or any browser wallet." className="mb-1" />
+                      <button onClick={connectEoa} className="w-full cursor-pointer rounded-xl border border-white/20 bg-white/[0.06] py-3 font-mono text-[11px] tracking-[0.14em] text-white hover:bg-white/[0.12]">CONNECT EOA WALLET</button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={busy ? undefined : runDemo} disabled={busy || relayer?.ready === false} className={`w-full cursor-pointer rounded-xl border py-3 font-mono text-[11px] tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/30 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                        {busy ? `RUNNING: ${step.toUpperCase()}` : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                      </button>
+                      <button onClick={() => eoaDisconnect()} className="mt-2 w-full cursor-pointer rounded-xl border border-white/10 py-2 font-mono text-[10px] tracking-[0.14em] text-white/40 hover:border-white/20">DISCONNECT EOA</button>
+                    </>
+                  )
                 )}
-                <button onClick={reset} className="mt-3 w-full cursor-pointer rounded-xl border border-white/10 py-2 font-mono text-[10px] tracking-[0.14em] text-white/40 hover:border-white/20">RESET</button>
+                <button onClick={reset} className="mt-1 w-full cursor-pointer rounded-xl border border-white/10 py-2 font-mono text-[10px] tracking-[0.14em] text-white/40 hover:border-white/20">RESET</button>
               </div>
 
               {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noopener noreferrer" className="mt-4 block break-all rounded-xl border border-[#C5A67C]/20 bg-[#C5A67C]/10 p-3 font-mono text-[10px] text-[#C5A67C] underline underline-offset-2">{txHash}</a>}

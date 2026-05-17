@@ -13,6 +13,8 @@
     "@arclayer/sdk": "workspace:*",
     "@circle-fin/modular-wallets-core": "^1.0.13",
     "@circle-fin/x402-batching": "^3.0.4",
+    "@reown/appkit": "^1.8.19",
+    "@reown/appkit-adapter-wagmi": "^1.8.19",
     "@supabase/supabase-js": "^2.105.4",
     "@tanstack/react-query": "^5.0.0",
     "@wagmi/core": "^2.12.0",
