@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createPublicClient, http, parseAbiItem, type Hex } from 'viem';
+import { resolveManifestMetadata } from '@/lib/a2a/manifest';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -36,7 +37,21 @@ function isSafeHttpUri(uri: string) {
   }
 }
 
-async function fetchMetadata(uri: string): Promise<AgentMetadata | null> {
+async function fetchMetadata(uri: string, agentId?: string): Promise<AgentMetadata | null> {
+  // Try manifest resolver first (handles arclayer://manifest/ and arclayer://agent/ schemes)
+  const resolved = await resolveManifestMetadata(uri, agentId);
+  if (resolved) {
+    return {
+      name: resolved.name,
+      role: resolved.role,
+      description: resolved.description,
+      capability: resolved.capability,
+      categories: resolved.categories,
+      autonomous: resolved.autonomous,
+    };
+  }
+
+  // Fallback: HTTP/IPFS fetch (existing behavior)
   if (!uri || !isSafeHttpUri(uri)) return null;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2500);
@@ -84,9 +99,10 @@ export async function GET() {
     const agents = await Promise.all(
       Array.from(latestById.values()).map(async (log) => {
         const metadataURI = log.args.metadataURI || '';
-        const metadata = await fetchMetadata(metadataURI);
+        const agentId = log.args.agentId?.toString() || '';
+        const metadata = await fetchMetadata(metadataURI, agentId);
         return {
-          agentId: log.args.agentId?.toString() || '',
+          agentId,
           skillHash: log.args.skillHash || '',
           controller: log.args.controller || '',
           metadataURI,

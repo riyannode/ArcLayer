@@ -60,6 +60,9 @@ export type RegisteredAgentMetadata = {
   capability?: string[];
   categories?: AgentCategory[];
   autonomous?: boolean;
+  endpoint?: string;
+  mode?: 'seller' | 'buyer' | 'dual';
+  price?: string;
 };
 
 export type RegisteredAgent = {

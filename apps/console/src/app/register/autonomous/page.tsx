@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { waitForTransactionReceipt, readContract } from '@wagmi/core';
-import { useAccount, useWriteContract } from 'wagmi';
+import { keccak256, stringToBytes } from 'viem';
+import { useAccount, useSignMessage, useWriteContract } from 'wagmi';
 import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
 import { StatusBanner } from '@/components/StatusBanner';
 import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/components/protection';
@@ -48,29 +49,34 @@ app.get('/signal/:token', x402Middleware({
 
 app.listen(4001);`;
 
-function buildAutonomousMetadataURI(input: {
-  name: string;
-  skill: string;
-  endpoint: string;
-  mode: IntegrationMode;
-  price: string;
-  categories: string;
-}) {
-  const params = new URLSearchParams({
-    skill: input.skill,
-    autonomous: 'true',
-    endpoint: input.endpoint,
-    mode: input.mode,
-    price: input.price,
-    categories: input.categories,
-  });
-  return `arclayer://agent/${normalizeAgentName(input.name)}?${params.toString()}`;
+function buildManifestPointerURI(agentId: bigint) {
+  return `arclayer://manifest/${agentId.toString()}`;
+}
+
+function toManifestMode(mode: IntegrationMode): 'seller' | 'buyer' | 'dual' {
+  if (mode === 'consumer') return 'buyer';
+  if (mode === 'hybrid') return 'dual';
+  return 'seller';
+}
+
+function canonicalize(value: unknown): string {
+  if (value === null) return 'null';
+  if (typeof value === 'number' || typeof value === 'boolean') return JSON.stringify(value);
+  if (typeof value === 'string') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(canonicalize).join(',') + ']';
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    const keys = Object.keys(obj).filter((k) => obj[k] !== undefined).sort();
+    return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalize(obj[k])).join(',') + '}';
+  }
+  return 'null';
 }
 
 export default function RegisterAutonomousAgentPage() {
   const router = useRouter();
   const { isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
+  const { signMessageAsync } = useSignMessage();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txState, setTxState] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<'idle' | 'pending' | 'synced' | 'error'>('idle');
@@ -94,8 +100,8 @@ export default function RegisterAutonomousAgentPage() {
     }
   }, [form.name]);
 
-  const generatedMetadataURI = form.name.trim()
-    ? buildAutonomousMetadataURI(form)
+  const generatedMetadataURI = derivedAgentId
+    ? buildManifestPointerURI(derivedAgentId)
     : '';
   const effectiveMetadataURI = form.metadataURI.trim() || generatedMetadataURI;
   const endpointLooksReady = /^https:\/\//.test(form.endpoint.trim()) && !form.endpoint.includes('your-agent.example.com');
@@ -154,8 +160,48 @@ export default function RegisterAutonomousAgentPage() {
       const hash = await writeContractAsync(buildRegisterAgentConfig(agentId, form.skill, effectiveMetadataURI));
       setTxState(`Waiting for ${hash.slice(0, 10)}…`);
       await waitForTransactionReceipt(config, { hash });
+
+      if (effectiveMetadataURI.startsWith('arclayer://manifest/')) {
+        setTxState('Signing and publishing Agent Manifest V1…');
+        const nowIso = new Date().toISOString();
+        const manifest = {
+          schema: 'arclayer.agent/v1',
+          version: 1,
+          agentId: agentId.toString(),
+          name: normalizedName,
+          role: form.skill,
+          description: `${normalizedName} autonomous ${form.skill} agent on ArcLayer.`,
+          endpoint: form.endpoint.trim(),
+          mode: toManifestMode(form.mode),
+          price: form.price.trim(),
+          capability: [form.skill, form.mode, 'x402'].filter(Boolean),
+          categories: form.categories.split(',').map((x) => x.trim()).filter(Boolean),
+          x402: {
+            enabled: true,
+            network: 'arc-testnet',
+            currency: 'USDC',
+            price: form.price.trim(),
+          },
+          createdAt: nowIso,
+          updatedAt: nowIso,
+        };
+        const manifestHash = keccak256(stringToBytes(canonicalize(manifest)));
+        const ts = Math.floor(Date.now() / 1000);
+        const message = ['ArcLayer Manifest v1', `agentId=${agentId.toString()}`, `hash=${manifestHash}`, `ts=${ts}`].join('\n');
+        const signature = await signMessageAsync({ message });
+        const res = await fetch('/api/a2a/manifest', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ manifest, signature, ts }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || 'Manifest publish failed.');
+        }
+      }
+
       setStatusTone('synced');
-      setTxState(`✓ Autonomous agent "${normalizedName}" registered as ${shortAgentId(agentId)}. Redirecting to A2A…`);
+      setTxState(`✓ Autonomous agent "${normalizedName}" registered + manifest published as ${shortAgentId(agentId)}. Redirecting to A2A…`);
       setTimeout(() => router.push(`/a2a?focus=${encodeURIComponent(agentId.toString())}`), 1500);
     } catch (e) {
       setTxState(e instanceof Error ? e.message : 'Autonomous agent registration failed.');
