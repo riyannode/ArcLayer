@@ -47,13 +47,21 @@ const severityAction: Record<ProtectionNotice["severity"], string> = {
   protection: "border-red-400/35 bg-red-400/10 text-red-100 hover:bg-red-400/15",
 };
 
+const severityFrame: Record<ProtectionNotice["severity"], string> = {
+  info: "border-sky-400/30 bg-sky-950/20",
+  success: "border-emerald-400/40 bg-emerald-950/20",
+  warning: "border-[#C5A67C]/35 bg-[#2A1F0D]/35",
+  error: "border-red-400/40 bg-red-950/20",
+  protection: "border-red-400/45 bg-red-950/25",
+};
+
 export function ProtectionModal({ notice, onClose }: Props) {
   const styles = severityStyles[notice.severity];
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center px-4" role="dialog" aria-modal="true" aria-labelledby={`protection-title-${notice.id}`}>
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative w-full max-w-lg rounded-2xl border border-[#C5A67C]/25 bg-[#070707] p-6 shadow-2xl ${styles.glow}`}>
+      <div className={`relative w-full max-w-lg rounded-2xl border ${severityFrame[notice.severity]} p-6 shadow-2xl ${styles.glow}`}>
         <button
           type="button"
           onClick={onClose}
