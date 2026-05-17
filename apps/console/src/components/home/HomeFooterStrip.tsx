@@ -13,7 +13,7 @@ const items: [string, string][] = [
  */
 export default function HomeFooterStrip() {
   return (
-    <div className="relative z-20 w-full">
+    <div className="relative z-20 w-full pb-32">
       <div className="flex flex-wrap items-stretch divide-x divide-white/[0.08] px-6 md:px-12 md:pl-[80px] lg:px-24">
         {items.map(([k, v], i) => (
           <div

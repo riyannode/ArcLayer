@@ -218,7 +218,7 @@ export default function WalletStatus({ variant = 'app' }: Props) {
       {/* Passkey register modal (fallback when no passkey exists) */}
       {showRegister && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
+          className="fixed inset-0 z-[100] flex items-end justify-center pb-4"
           style={{ background: 'rgba(0,0,0,0.85)' }}
           onClick={() => !busy && setShowRegister(false)}
         >

@@ -18,7 +18,7 @@ const FALLBACK_PAY_TO = getAddress('0x4aA3402575b6D98EacE35A823EFa267F7365bdD2')
 const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
 
 type PaymentMode = 'arc-native' | 'circle-gateway';
-type WalletMode = 'passkey' | 'eoa';
+type WalletMode = 'passkey' | 'eoa' | null;
 type Step = 'idle' | 'challenge' | 'signing' | 'paying' | 'replay' | 'done' | 'error';
 type LogType = 'info' | 'success' | 'error' | 'warn';
 
@@ -48,7 +48,7 @@ interface X402DemoPanelProps {
  * Circle Gateway batching — runs identically in both modes.
  */
 export default function X402DemoPanel({ compact = false, ticketOnly = false }: X402DemoPanelProps) {
-  const { authenticated, address: circleAddress, smartAccount } = useCircleWallet();
+  const { authenticated, address: circleAddress, smartAccount, login } = useCircleWallet();
   const { address: eoaAddress, isConnected: eoaConnected } = useAccount();
   const { disconnect: eoaDisconnect } = useDisconnect();
   const { open: openAppKit } = useAppKit();
@@ -68,7 +68,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   const [gatewayProbe, setGatewayProbe] = useState<GatewayProbe | null>(null);
   const [gatewayBalance, setGatewayBalance] = useState<GatewayBalance | null>(null);
 
-  const walletMode: WalletMode = eoaConnected ? 'eoa' : authenticated ? 'passkey' : 'eoa';
+  const walletMode: WalletMode = eoaConnected ? 'eoa' : authenticated ? 'passkey' : null;
   const activeAddress = useMemo(() => {
     if (eoaConnected && eoaAddress) return eoaAddress as `0x${string}`;
     return (circleAddress as `0x${string}`) || undefined;
@@ -114,6 +114,10 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   useEffect(() => {
     if (eoaConnected && mode === 'circle-gateway') setMode('arc-native');
   }, [eoaConnected, mode]);
+
+  useEffect(() => {
+    if (authenticated && !eoaConnected && mode === 'arc-native') setMode('circle-gateway');
+  }, [authenticated, eoaConnected, mode]);
 
 
   const reset = useCallback(() => {
@@ -422,7 +426,13 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     }
   }, [activeAuthed, address, walletMode, smartAccount, log, reset, mode, runArcNative, runGateway, notify]);
 
-  const connectEoa = useCallback(() => { openAppKit(); }, [openAppKit]);
+  const connectSelectedWallet = useCallback(() => {
+    if (mode === 'circle-gateway') {
+      void login();
+      return;
+    }
+    openAppKit();
+  }, [login, mode, openAppKit]);
 
   const busy = !['idle', 'done', 'error'].includes(step);
   // After successful payment, keep button disabled for 5s to prevent accidental re-pay
@@ -435,7 +445,9 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     }
   }, [step]);
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
+  const arcDisabledForPasskey = walletMode === 'passkey';
   const circleDisabledForEoa = walletMode === 'eoa';
+  const connectLabel = mode === 'circle-gateway' ? 'CONNECT CIRCLE PASSKEY' : 'CONNECT WALLET';
 
   // Compact-aware sizing tokens
   const c = {
@@ -465,20 +477,30 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
             <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} ${mode === 'arc-native' ? 'bg-[#C5A67C]/15 text-[#C5A67C]' : 'bg-[#7CB5C5]/15 text-[#7CB5C5]'}`}>{mode === 'arc-native' ? 'ARC' : 'CIRCLE GATEWAY'}</span>
           </div>
           <div className={`mb-3 grid grid-cols-2 overflow-hidden ${c.cardRadiusXs} border border-white/10 bg-black/25 p-1`}>
-            <button onClick={() => setMode('arc-native')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
-            <button onClick={() => !circleDisabledForEoa && setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE GATEWAY</button>
+            <button onClick={() => setMode('arc-native')} disabled={arcDisabledForPasskey} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
+            <button onClick={() => setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE GATEWAY</button>
           </div>
           <div className={`space-y-2.5 border-y border-white/10 py-3 font-mono ${compact ? 'text-[11px]' : 'text-[12px]'}`}>
             <div className="flex justify-between gap-4"><span className="text-white/80">Cost</span><span className="text-white">0.01 USDC</span></div>
-            <div className="flex justify-between gap-4"><span className="text-white/80">Pay to</span><span className="text-white">{shortenAddress(payTo)}</span></div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Network</span><span className="text-white">Arc Testnet</span></div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Current step</span><span className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{step.toUpperCase()}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-white/80">Unlocked</span><span className={unlocked ? 'text-green-300' : 'text-white/80'}>{unlocked ? 'YES' : 'NO'}</span></div>
+            <div className="flex justify-between gap-4">
+              <span className="text-white/80">Status</span>
+              <span className={`inline-flex items-center gap-1.5 ${unlocked ? 'text-green-400' : 'text-red-400'}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${unlocked ? 'bg-green-400' : 'bg-red-400'}`} />
+                {unlocked ? (
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.5-2" /></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                )}
+                {unlocked ? 'UNLOCK' : 'LOCK'}
+              </span>
+            </div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Replay guard</span><span className={replayResult.startsWith('Rejected') ? 'text-red-300' : replayResult.startsWith('Unexpected') ? 'text-green-300' : 'text-white/80'}>{replayResult}</span></div>
           </div>
           <div className="mt-3 space-y-2.5">
             {!activeAuthed ? (
-              <button onClick={connectEoa} className={`w-full cursor-pointer ${c.cardRadiusXs} border border-white/20 bg-white/[0.06] ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] text-white hover:bg-white/[0.12]`}>CONNECT WALLET</button>
+              <button onClick={connectSelectedWallet} className={`w-full cursor-pointer ${c.cardRadiusXs} border border-white/20 bg-white/[0.06] ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] text-white hover:bg-white/[0.12]`}>{connectLabel}</button>
             ) : (
               <>
                 <div className={`flex items-center gap-2 font-mono ${c.label} text-white/60`}>
@@ -546,7 +568,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
 
         {/* Mode picker */}
         <div className="grid gap-3 md:grid-cols-2">
-          <button onClick={() => setMode('arc-native')} className={`cursor-pointer ${c.cardRadius} border ${c.cardPad} text-left transition-all ${mode === 'arc-native' ? 'border-[#C5A67C]/70 bg-[#C5A67C]/10 shadow-lg shadow-[#C5A67C]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
+          <button onClick={() => setMode('arc-native')} disabled={arcDisabledForPasskey} className={`cursor-pointer ${c.cardRadius} border ${c.cardPad} text-left transition-all disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'arc-native' ? 'border-[#C5A67C]/70 bg-[#C5A67C]/10 shadow-lg shadow-[#C5A67C]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
             <div className="mb-3 flex items-center justify-between">
               <span className={`font-mono ${c.label} tracking-[0.18em] text-[#C5A67C]`}>ARC NATIVE</span>
               <span className={`rounded-full bg-green-500/15 px-2 py-0.5 font-mono ${c.label} text-green-300`}>RECOMMENDED</span>
@@ -559,7 +581,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
             </div>
           </button>
 
-          <button onClick={() => !circleDisabledForEoa && setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer ${c.cardRadius} border ${c.cardPad} text-left transition-all disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'border-[#7CB5C5]/70 bg-[#7CB5C5]/10 shadow-lg shadow-[#7CB5C5]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
+          <button onClick={() => setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer ${c.cardRadius} border ${c.cardPad} text-left transition-all disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'border-[#7CB5C5]/70 bg-[#7CB5C5]/10 shadow-lg shadow-[#7CB5C5]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
             <div className="mb-3 flex items-center justify-between">
               <span className={`font-mono ${c.label} tracking-[0.18em] text-[#7CB5C5]`}>CIRCLE GATEWAY</span>
               <span className={`rounded-full bg-white/10 px-2 py-0.5 font-mono ${c.label} text-white/80`}>POWER USER</span>
@@ -600,29 +622,39 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
           </div>
 
           <div className={`mb-3 grid grid-cols-2 overflow-hidden ${c.cardRadiusXs} border border-white/10 bg-black/25 p-1`}>
-            <button onClick={() => setMode('arc-native')} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
-            <button onClick={() => !circleDisabledForEoa && setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE GATEWAY</button>
+            <button onClick={() => setMode('arc-native')} disabled={arcDisabledForPasskey} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
+            <button onClick={() => setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE GATEWAY</button>
           </div>
 
           <div className={`space-y-2.5 border-y border-white/10 py-3 font-mono ${compact ? 'text-[11px]' : 'text-[12px]'}`}>
             <div className="flex justify-between gap-4"><span className="text-white/80">Cost</span><span className="text-white">0.01 USDC</span></div>
-            <div className="flex justify-between gap-4"><span className="text-white/80">Pay to</span><span className="text-white">{shortenAddress(payTo)}</span></div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Network</span><span className="text-white">Arc Testnet</span></div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Current step</span><span className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{step.toUpperCase()}</span></div>
-            <div className="flex justify-between gap-4"><span className="text-white/80">Unlocked</span><span className={unlocked ? 'text-green-300' : 'text-white/80'}>{unlocked ? 'YES' : 'NO'}</span></div>
+            <div className="flex justify-between gap-4">
+              <span className="text-white/80">Status</span>
+              <span className={`inline-flex items-center gap-1.5 ${unlocked ? 'text-green-400' : 'text-red-400'}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${unlocked ? 'bg-green-400' : 'bg-red-400'}`} />
+                {unlocked ? (
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 7.5-2" /></svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+                )}
+                {unlocked ? 'UNLOCK' : 'LOCK'}
+              </span>
+            </div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Replay guard</span><span className={replayResult.startsWith('Rejected') ? 'text-red-300' : replayResult.startsWith('Unexpected') ? 'text-green-300' : 'text-white/80'}>{replayResult}</span></div>
           </div>
 
           {mode === 'circle-gateway' && (!gatewayBalance?.depositedUsdc || Number(gatewayBalance.depositedUsdc) <= 0) && (
             <div className={`mt-3 ${c.cardRadiusXs} border border-yellow-400/20 bg-yellow-400/10 p-2.5 font-mono leading-5 text-yellow-100/80 ${compact ? 'text-[10.5px]' : 'text-[11px]'}`}>
-              Gateway balance is empty for this EOA. Deposit USDC into GatewayWallet first, or use Arc Native for no-deposit execution.
+              Gateway balance is empty for this Circle wallet. Deposit USDC into GatewayWallet first, or connect an EOA for Arc Native no-deposit execution.
             </div>
           )}
 
           <div className="mt-3 space-y-2.5">
             {!activeAuthed ? (
               <>
-                <button onClick={connectEoa} className={`w-full cursor-pointer ${c.cardRadiusXs} border border-white/20 bg-white/[0.06] ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] text-white hover:bg-white/[0.12]`}>CONNECT WALLET</button>
+                <button onClick={connectSelectedWallet} className={`w-full cursor-pointer ${c.cardRadiusXs} border border-white/20 bg-white/[0.06] ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] text-white hover:bg-white/[0.12]`}>{connectLabel}</button>
               </>
             ) : (
               <>

@@ -330,7 +330,7 @@ function JobsPage() {
               Manual Agent <span className="italic text-[#C5A67C]">Jobs</span>
             </h1>
             <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-              Human-driven job marketplace. Pick a registered agent, write the task, set the budget, then deposit USDC into the Settlement Vault.
+              Pick an agent, assign a task, set a USDC budget, and lock funds in the Settlement Vault.
             </p>
           </div>
           <div className="flex flex-wrap gap-3 self-start md:self-auto">
@@ -397,7 +397,7 @@ function JobsPage() {
               </span>
             </div>
             <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
-              Track Create Job &rarr; Approve &amp; Fund Settlement Vault &rarr; Submit Work &rarr; Approve Work &rarr; Settle Payment, with the selected agent, worker, and escrow state visible in one place.
+              Track job creation, Fund Settlement Vault, Work submission, Approval, and payment settlement in one place.
             </p>
 
             {/* Filter / sort bar */}
@@ -550,7 +550,7 @@ function JobsPage() {
           <section className="space-y-6">
             <div className="aureo-panel p-4 md:p-6">
               <div className="flex items-center gap-2">
-                <div className="aureo-mono-label">STEP 1 · CREATE JOB</div>
+                <div className="aureo-mono-label">STEP 1</div>
                 {createdJobId && (
                   <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-[#B8CD7E] text-[#0a0a0a]" title="Step 1 complete">
                     <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
@@ -581,7 +581,7 @@ function JobsPage() {
                         const skill = formatSkillLabel(parseAgentSkill(agent.metadataURI));
                         return (
                           <option key={agent.agentId} value={agent.agentId}>
-                            {label}{skill ? ` — ${skill}` : ''} · {shortAgentId(agent.agentId)}
+                            {label}{skill ? ` — ${skill}` : ''}
                           </option>
                         );
                       })
@@ -655,9 +655,6 @@ function JobsPage() {
                     placeholder={address ? address : 'Connect wallet to auto-fill'}
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
-                    The wallet that approves and settles the job. Auto-filled with your connected wallet.
-                  </div>
                 </div>
 
                 <div>
@@ -668,24 +665,8 @@ function JobsPage() {
                     placeholder={'Example: Audit the Settlement Vault contract on Arc Testnet and produce a report covering reentrancy, access control, and overflow risks. Deliver findings as a markdown file pinned to IPFS.'}
                     className="input-mono min-h-[120px]"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">Be specific. This is the human-readable instruction the agent will work against.</div>
                 </div>
 
-                {/* Escrow trust layer info — not a payment method selector */}
-                <div>
-                  <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">SETTLEMENT VAULT · TRUST LAYER</label>
-                  <div className="border border-white/10 bg-white/[0.02] p-3">
-                    <div className="font-mono text-[11px] text-[#C5A67C]">ArcLayer Escrow</div>
-                    <div className="mt-1 font-mono text-[10px] leading-[1.6] text-[rgba(234,228,216,0.78)]">
-                      USDC is held in the Settlement Vault until the client approves the work. This is a trust layer, not a payment method.
-                      The agent run itself is paid via x402 (Arc Native or Circle Gateway) — {' '}
-                      <Link href="/x402-demo" className="text-[#7CB5C5] underline underline-offset-2 hover:text-[#EAE4D8]">see x402 demo ↗</Link>
-                    </div>
-                  </div>
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
-                    The escrow holds the locked budget. After work is approved, payout settles and a WorkProof NFT is minted.
-                  </div>
-                </div>
               </div>
 
               {createForm.worker && createForm.evaluator && createForm.worker.toLowerCase() === createForm.evaluator.toLowerCase() && (
@@ -719,7 +700,7 @@ function JobsPage() {
             </div>
 
             <div className="aureo-panel p-4 md:p-6">
-              <div className="aureo-mono-label mb-2">STEP 2 · APPROVE &amp; FUND</div>
+              <div className="aureo-mono-label mb-2">STEP 2</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Approve &amp; fund Settlement Vault</h2>
               <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">
                 Set the agreed budget, approve USDC, and deposit funds into the Settlement Vault. The escrow holds USDC until the client approves the work.
