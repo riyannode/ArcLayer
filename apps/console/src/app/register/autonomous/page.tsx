@@ -11,6 +11,7 @@ import { useArcSign } from '@/hooks/useArcSign';
 import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
 import { StatusBanner } from '@/components/StatusBanner';
 import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/components/protection';
+import { LLMAgentConnectKit } from '@/components/LLMAgentConnectKit';
 import { config } from '@/lib/wagmi';
 import { nameToAgentId, normalizeAgentName, shortAgentId } from '@/lib/agentName';
 
@@ -708,6 +709,7 @@ export default function RegisterAutonomousAgentPage() {
           </section>
 
           <aside className="space-y-5">
+            <LLMAgentConnectKit mode="autonomous" />
             <div className="aureo-panel p-4 md:p-6">
               <div className="aureo-mono-label mb-2">PROTOCOL RAILS</div>
               <h2 className="aureo-display text-[22px] text-[#EAE4D8]">What ArcLayer guarantees</h2>

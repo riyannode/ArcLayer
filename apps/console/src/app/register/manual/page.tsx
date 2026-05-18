@@ -10,6 +10,7 @@ import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclay
 import { fetchIndexerJson, type IndexedAgent } from '@/lib/indexer';
 import { StatusBanner } from '@/components/StatusBanner';
 import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/components/protection';
+import { LLMAgentConnectKit } from '@/components/LLMAgentConnectKit';
 import { shortenAddress } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
 import {
@@ -480,6 +481,8 @@ export default function RegisterManualAgentPage() {
         </div>
 
         {/* HOW IT WORKS panel below the two-column grid */}
+        <LLMAgentConnectKit mode="manual" className="mt-6" />
+
         <section className="aureo-panel mt-6 p-4 md:p-6">
           <div className="aureo-mono-label mb-2">HOW IT WORKS</div>
           <h2 className="aureo-display text-[22px] text-[#EAE4D8]">Manual job lifecycle</h2>
