@@ -128,6 +128,7 @@ export function buildAgentNetwork({
         status: completed > 0 || receipts.length > 0 ? 'LIVE' : 'IDLE',
         wallet: reg.controller,
         agentId: reg.agentId,
+        avatar: meta?.avatar || undefined,
         reputation: 0,
         callsServed: 0,
         jobsCompleted: completed,

@@ -191,6 +191,7 @@ export default function RegisterAutonomousAgentPage() {
     price: '0.01 USDC/call',
     categories: 'signal-oracles,data-providers,payment-agents',
     metadataURI: '',
+    avatar: '',
   });
   const [nameStatus, setNameStatus] = useState<NameStatus>({ state: 'idle' });
 
@@ -308,6 +309,7 @@ export default function RegisterAutonomousAgentPage() {
           price: form.price.trim(),
           capability: [form.skill, form.mode, 'x402'].filter(Boolean),
           categories: form.categories.split(',').map((x) => x.trim()).filter(Boolean),
+          avatar: form.avatar.trim() || undefined,
           x402: {
             enabled: true,
             network: 'arc-testnet',
@@ -653,6 +655,31 @@ export default function RegisterAutonomousAgentPage() {
                     <div className="mt-1.5 font-mono text-[10.5px] text-cyan-300/80">
                       Auto-generated metadata includes autonomous=true, endpoint, mode, price, categories, host.
                     </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">AVATAR URL</label>
+                    <input
+                      value={form.avatar}
+                      onChange={(e) => setForm((c) => ({ ...c, avatar: e.target.value }))}
+                      placeholder="https://example.com/my-agent-avatar.png"
+                      className="input-mono"
+                      autoComplete="off"
+                    />
+                    <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
+                      Optional. Public image URL for your agent profile photo.
+                    </div>
+                    {form.avatar.trim() && /^https?:\/\//.test(form.avatar.trim()) && (
+                      <div className="mt-2 flex items-center gap-3">
+                        <img
+                          src={form.avatar.trim()}
+                          alt="Avatar preview"
+                          className="h-10 w-10 rounded-full border border-white/10 object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                        <span className="font-mono text-[10px] text-[#B8CD7E]">Preview</span>
+                      </div>
+                    )}
                   </div>
 
                   {derivedAgentId !== null && (

@@ -63,6 +63,7 @@ export type RegisteredAgentMetadata = {
   endpoint?: string;
   mode?: 'seller' | 'buyer' | 'dual';
   price?: string;
+  avatar?: string;
 };
 
 export type RegisteredAgent = {
@@ -83,6 +84,7 @@ export type NetworkAgent = {
   status: 'LIVE' | 'RUNNING' | 'IDLE';
   wallet?: string;
   agentId?: string;
+  avatar?: string;
   reputation: number;
   callsServed: number;
   jobsCompleted: number;

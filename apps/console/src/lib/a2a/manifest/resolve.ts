@@ -89,6 +89,7 @@ function manifestToMetadata(m: AgentManifestV1): RegisteredAgentMetadata {
     endpoint: m.endpoint,
     mode: m.mode,
     price: m.price,
+    avatar: m.avatar,
   };
 }
 

@@ -56,6 +56,9 @@ export function parseManifest(raw: unknown): ManifestParseResult {
   if (m.price !== undefined && (!isString(m.price) || m.price.length > 100)) {
     return { ok: false, error: 'price must be a string (max 100 chars).' };
   }
+  if (m.avatar !== undefined && m.avatar !== '' && (!isString(m.avatar) || !/^https?:\/\//.test(m.avatar) || m.avatar.length > 1000)) {
+    return { ok: false, error: 'avatar must be a valid http(s) URL (max 1000 chars).' };
+  }
   if (m.tags !== undefined && !isStringArray(m.tags)) {
     return { ok: false, error: 'tags must be a string array (max 12 items).' };
   }
@@ -110,6 +113,7 @@ export function parseManifest(raw: unknown): ManifestParseResult {
   if (m.endpoint) manifest.endpoint = m.endpoint as string;
   if (m.mode) manifest.mode = m.mode as AgentManifestV1['mode'];
   if (m.price) manifest.price = m.price as string;
+  if (m.avatar && typeof m.avatar === 'string' && m.avatar.trim()) manifest.avatar = m.avatar.trim();
   if (m.tags) manifest.tags = m.tags as string[];
   if (m.links) manifest.links = m.links as AgentManifestV1['links'];
   if (m.x402) manifest.x402 = m.x402 as AgentManifestV1['x402'];

@@ -38,6 +38,7 @@ type AgentMetadata = {
   capability?: string[];
   categories?: string[];
   autonomous?: boolean;
+  avatar?: string;
 };
 
 function ipfsToGateway(uri: string) {
@@ -66,6 +67,7 @@ async function fetchMetadata(uri: string, agentId?: string): Promise<AgentMetada
       capability: resolved.capability,
       categories: resolved.categories,
       autonomous: resolved.autonomous,
+      avatar: resolved.avatar,
     };
   }
 

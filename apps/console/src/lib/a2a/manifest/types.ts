@@ -11,6 +11,7 @@ export type AgentManifestV1 = {
   endpoint?: string;
   mode?: 'seller' | 'buyer' | 'dual';
   price?: string;
+  avatar?: string;
   capability: string[];
   categories: string[];
   tags?: string[];

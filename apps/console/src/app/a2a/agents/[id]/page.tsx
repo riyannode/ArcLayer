@@ -171,17 +171,32 @@ export default function AgentProfilePage() {
       <div className="aureo-shell">
         {/* Hero */}
         <div className="aureo-detail-hero mb-8 p-5 md:p-7 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <Link href="/a2a" className="font-mono text-[11px] tracking-[0.16em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
-              ← BACK · A2A NETWORK
-            </Link>
-            <div className="aureo-mono-label mt-5 mb-3">AGENT · PROFILE</div>
-            <h1 className="aureo-display text-[36px] text-[#EAE4D8] md:text-[52px]">
-              {isLoading ? 'Loading…' : agent?.name ?? `Agent ${short(agentId)}`}
-            </h1>
-            {agent && (
-              <p className="mt-2 font-mono text-xs text-[#777]">{agent.role}</p>
+          <div className="flex items-start gap-5">
+            {agent?.avatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={agent.avatar}
+                alt={`${agent.name} avatar`}
+                className="h-20 w-20 shrink-0 rounded-full border border-[#C5A67C]/30 bg-black/40 object-cover md:h-24 md:w-24"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            ) : (
+              <div className="h-20 w-20 shrink-0 rounded-full border border-white/10 bg-white/[0.03] md:h-24 md:w-24 flex items-center justify-center font-mono text-[20px] text-[#777]">
+                {agent?.name ? agent.name.slice(0, 2).toUpperCase() : '?'}
+              </div>
             )}
+            <div>
+              <Link href="/a2a" className="font-mono text-[11px] tracking-[0.16em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
+                ← BACK · A2A NETWORK
+              </Link>
+              <div className="aureo-mono-label mt-5 mb-3">AGENT · PROFILE</div>
+              <h1 className="aureo-display text-[36px] text-[#EAE4D8] md:text-[52px]">
+                {isLoading ? 'Loading…' : agent?.name ?? `Agent ${short(agentId)}`}
+              </h1>
+              {agent && (
+                <p className="mt-2 font-mono text-xs text-[#777]">{agent.role}</p>
+              )}
+            </div>
           </div>
           {agent && (
             <Link
