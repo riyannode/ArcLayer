@@ -253,11 +253,11 @@ function A2ADashboardPage() {
       setPrevFeedIds(currentIds);
 
       const feedSignalCount = fdData.items.filter((item) => item.agent === 'Apolo' && item.type === 'payment').length;
-      const signalCount = Math.max(ocData?.agents.ignia?.stats?.callsServed ?? 0, feedSignalCount);
+      const signalCount = Math.max(ocData?.agents.pythia?.stats?.callsServed ?? 0, feedSignalCount);
 
       // Volume sparkline: JobEscrow funded + x402 revenue (Apolo + Hermes)
       const jobFunded = Number(ovData.summary.totalFunded || '0') / 1e6;
-      const pythiaRev = Number(ocData?.agents.ignia?.stats?.totalRevenue || '0') / 1e6;
+      const pythiaRev = Number(ocData?.agents.pythia?.stats?.totalRevenue || '0') / 1e6;
       const hermesRev = Number(ocData?.agents.hermes?.stats?.totalRevenue || '0') / 1e6;
       const totalVol = jobFunded + pythiaRev + hermesRev;
 
@@ -663,6 +663,22 @@ function AgentHeroCard({
         <Stat label="Reputation" value={stats?.reputationScore ?? '—'} />
         <Stat label="Calibration" value={stats?.calibrationScore ?? '—'} />
         <Stat label="Revenue" value={stats ? formatUSDC(stats.totalRevenue) : '—'} />
+        <Stat
+          label="Winrate"
+          value={
+            stats && (stats.signalsCorrect + stats.signalsWrong) > 0
+              ? `${((stats.signalsCorrect / (stats.signalsCorrect + stats.signalsWrong)) * 100).toFixed(1)}%`
+              : '—'
+          }
+        />
+        <Stat
+          label="PnL (bps)"
+          value={
+            typeof stats?.cumulativePnlBps === 'number'
+              ? `${stats.cumulativePnlBps >= 0 ? '+' : ''}${stats.cumulativePnlBps}`
+              : '—'
+          }
+        />
       </div>
       {/* Live USDC balance · refreshes every 8s */}
       <div className={`mt-3 rounded border ${accentBorder} bg-black/30 px-3 py-2`}>
