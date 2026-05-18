@@ -607,6 +607,327 @@ function FullLoopProof({ latest, apoloStat }: LoopProofProps) {
   );
 }
 
+// ─── Agent Marketplace · 12 categories ───────────────────────────────────────
+
+type AgentCategory = {
+  key: string;
+  label: string;
+  tagline: string;
+  icon: React.ReactNode;
+  capabilities: string[];
+  exampleAgents: string[];
+  feeRange: string;
+  status: 'LIVE' | 'COMING SOON';
+};
+
+const AGENT_CATEGORIES: AgentCategory[] = [
+  {
+    key: 'prediction-market',
+    label: 'Prediction Market',
+    tagline: 'Signal generation for binary outcome markets',
+    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 12l4-4 4 4 4-8 6 12" strokeLinecap="round" strokeLinejoin="round"/></svg>),
+    capabilities: ['Polymarket / Kalshi signal feeds', '5m crypto Up/Down resolution', 'Order book imbalance scoring', 'Probability calibration via backtest'],
+    exampleAgents: ['Pythia · BTC 5m signal oracle', 'Apolo · risk + edge gate'],
+    feeRange: '0.005 – 0.02 USDC / call',
+    status: 'LIVE',
+  },
+  {
+    key: 'spot-futures',
+    label: 'Spot & Futures',
+    tagline: 'DEX/CEX execution and perp trading agents',
+    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 17l6-6 4 4 8-8M14 7h7v7" strokeLinecap="round" strokeLinejoin="round"/></svg>),
+    capabilities: ['Spot routing via 1inch / Odos / 0x', 'Perp execution on Hyperliquid / GMX', 'Slippage + funding-aware sizing', 'Smart-order routing across venues'],
+    exampleAgents: ['Hermes · autonomous trader', 'Echo · perp router (Coming soon)'],
+    feeRange: '0.01 – 0.05 USDC / order',
+    status: 'LIVE',
+  },
+  {
+    key: 'arbitrage',
+    label: 'Arbitrage',
+    tagline: 'Cross-DEX, cross-chain, and MEV opportunities',
+    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M7 7h10l-3-3M17 17H7l3 3" strokeLinecap="round" strokeLinejoin="round"/></svg>),
+    capabilities: ['Cross-DEX price gap monitor', 'Bridge-aware cross-chain routing', 'Mempool / backrun detection', 'Atomic / flash-loan ready'],
+    exampleAgents: ['Hermes-arb · cross-DEX scout (Coming soon)'],
+    feeRange: '0.02 – 0.10 USDC / opportunity',
+    status: 'COMING SOON',
+  },
+  {
+    key: 'portfolio',
+    label: 'Portfolio Manager',
+    tagline: 'Allocation, rebalancing, and automated DCA',
+    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l7 4" strokeLinecap="round"/></svg>),
+    capabilities: ['Target-weight rebalancing', 'Risk-parity / Kelly sizing', 'Tax-aware harvesting', 'Multi-wallet allocation logic'],
+    exampleAgents: ['Custodia · portfolio rebalancer (Coming soon)'],
+    feeRange: '0.05 – 0.25 USDC / cycle',
+    status: 'COMING SOON',
+  },
+  {
+    key: 'rwa',
+    label: 'RWA',
+    tagline: 'Tokenized real-world assets and yield products',
+    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 21V10l9-7 9 7v11M9 21v-6h6v6" strokeLinecap="round" strokeLinejoin="round"/></svg>),
+    capabilities: ['T-bill / money-market routing', 'Real-estate token discovery', 'Compliance-gated allocation', 'Yield-curve aware ladders'],
+    exampleAgents: ['Castle · RWA allocator (Coming soon)'],
+    feeRange: '0.10 – 0.50 USDC / allocation',
+    status: 'COMING SOON',
+  },
+  {
+    key: 'treasury',
+    label: 'Treasury & Yield',
+    tagline: 'DAO treasury, LP optimization, yield farming',
+    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M8 14h2M14 14h2" strokeLinecap="round"/></svg>),
+    capabilities: ['LP impermanent-loss tracker', 'Yield aggregator routing', 'DAO runway forecasting', 'Multi-vault rebalancer'],
+    exampleAgents: ['Vault · yield optimizer (Coming soon)'],
+    feeRange: '0.05 – 0.30 USDC / cycle',
+    status: 'COMING SOON',
+  },
+  {
+    key: 'social',
+    label: 'Social Intelligence',
+    tagline: 'X/Twitter sentiment, whale flows, narrative momentum',
+    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" strokeLinecap="round" strokeLinejoin="round"/></svg>),
+    capabilities: ['X timeline + KOL monitoring', 'Smart-money wallet tracker', 'Narrative momentum scoring', 'Discord / Telegram alpha mining'],
+    exampleAgents: ['Echo · KOL sentiment (Coming soon)'],
+    feeRange: '0.005 – 0.02 USDC / query',
+    status: 'COMING SOON',
+  },
+  {
+    key: 'oracle',
+    label: 'Data & Oracle',
+    tagline: 'Price feeds, off-chain data, custom oracles',
+    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><path d="M2 12h4M18 12h4M12 2v4M12 18v4" strokeLinecap="round"/></svg>),
+    capabilities: ['Chainlink + RTDS feeds', 'Custom HTTP oracle bridge', 'Sub-100ms WS price stream', 'Aggregated medianizer'],
+    exampleAgents: ['Pythia · price + signal oracle'],
+    feeRange: '0.001 – 0.01 USDC / fetch',
+    status: 'LIVE',
+  },
+  {
+    key: 'risk',
+    label: 'Risk & Compliance',
+    tagline: 'KYC, AML, sanctions screening, tx scoring',
+    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2L4 6v6c0 5 3.5 9 8 10 4.5-1 8-5 8-10V6l-8-4z" strokeLinecap="round" strokeLinejoin="round"/></svg>),
+    capabilities: ['Wallet risk scoring', 'OFAC / sanctions screening', 'Tx pattern flagging', 'Compliance gating for agents'],
+    exampleAgents: ['Sentinel · risk gate (Coming soon)'],
+    feeRange: '0.01 – 0.05 USDC / check',
+    status: 'COMING SOON',
+  },
+  {
+    key: 'a2a-commerce',
+    label: 'A2A Commerce',
+    tagline: 'Inter-agent payments, service marketplace, x402',
+    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 4h6l3 5-6 12L3 9l3-5z" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 4l3 5 3-5M3 9h18" strokeLinecap="round"/></svg>),
+    capabilities: ['x402 facilitator + verifier', 'Service discovery via manifest', 'Reputation-weighted routing', 'Receipt + WorkProof minting'],
+    exampleAgents: ['Apolo · decision broker', 'Hermes · executor'],
+    feeRange: '0.005 – 0.05 USDC / call',
+    status: 'LIVE',
+  },
+  {
+    key: 'research',
+    label: 'Research Intelligence',
+    tagline: 'Due diligence, whitepaper analysis, deep research',
+    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5" strokeLinecap="round"/></svg>),
+    capabilities: ['Whitepaper / docs summarization', 'On-chain protocol diagnostics', 'Tokenomics + unlock analysis', 'Comparable-set ranking'],
+    exampleAgents: ['Scribe · research analyst (Coming soon)'],
+    feeRange: '0.05 – 0.50 USDC / report',
+    status: 'COMING SOON',
+  },
+  {
+    key: 'devops-security',
+    label: 'DevOps & Security',
+    tagline: 'Audit, monitoring, incident response',
+    icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M16 12l-4 4-4-4M12 16V4" strokeLinecap="round" strokeLinejoin="round"/><path d="M4 20h16" strokeLinecap="round"/></svg>),
+    capabilities: ['Smart-contract static audit', 'Mempool / RPC monitoring', 'Incident pager + paging', 'CI/CD payload signing'],
+    exampleAgents: ['Forge · contract auditor (Coming soon)'],
+    feeRange: '0.10 – 1.00 USDC / job',
+    status: 'COMING SOON',
+  },
+];
+
+function AgentCategoryGrid({
+  book,
+  stream,
+  asset,
+  marketVolume,
+  wsState,
+  onAssetChange,
+}: {
+  book: Orderbook | null;
+  stream: BtcStream | null;
+  asset: 'BTC' | 'ETH';
+  marketVolume: number | null | undefined;
+  wsState: 'idle' | 'connecting' | 'live' | 'closed';
+  onAssetChange: (asset: 'BTC' | 'ETH') => void;
+}) {
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const active = AGENT_CATEGORIES.find((c) => c.key === activeKey) ?? null;
+
+  return (
+    <div className="flex flex-col gap-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">
+        <span>12 agent categories · click to view spec</span>
+        {active && (
+          <button
+            type="button"
+            onClick={() => setActiveKey(null)}
+            className="rounded-sm border border-white/15 bg-white/5 px-2 py-1 text-[#EAE4D8] transition hover:bg-white/10"
+          >
+            close spec
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {AGENT_CATEGORIES.map((cat) => {
+          const isActive = cat.key === activeKey;
+          const isLive = cat.status === 'LIVE';
+          return (
+            <button
+              key={cat.key}
+              type="button"
+              onClick={() => setActiveKey(isActive ? null : cat.key)}
+              className={`group relative flex flex-col gap-2 rounded-sm border p-3 text-left transition ${
+                isActive
+                  ? 'border-[#C5A67C]/55 bg-[#C5A67C]/10 shadow-[0_0_18px_rgba(197,166,124,0.12)]'
+                  : 'border-white/10 bg-black/25 hover:border-[#C5A67C]/35 hover:bg-white/[0.04]'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className={`flex h-8 w-8 items-center justify-center rounded-sm border border-white/10 bg-black/40 ${isLive ? 'text-[#C5A67C]' : 'text-[#EAE4D8]/45'}`}>
+                  <span className="block h-4 w-4">{cat.icon}</span>
+                </div>
+                <span
+                  className={`shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-wider ${
+                    isLive
+                      ? 'border-emerald-300/40 bg-emerald-400/10 text-emerald-300'
+                      : 'border-white/15 bg-white/5 text-[#EAE4D8]/55'
+                  }`}
+                >
+                  {cat.status}
+                </span>
+              </div>
+              <div className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#EAE4D8]">{cat.label}</div>
+              <div className="line-clamp-2 text-[10.5px] leading-snug text-[#EAE4D8]/60">{cat.tagline}</div>
+              <div className="mt-auto flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-[#C5A67C]">
+                {isActive ? 'hide spec' : 'view spec'}
+                <span className={`transition-transform ${isActive ? 'rotate-90' : 'group-hover:translate-x-0.5'}`}>→</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {active && (
+        <div className="mt-2 rounded-sm border border-[#C5A67C]/30 bg-[#0A0A0A] p-4">
+          {/* If Prediction Market — show live BTC widget + signal stream */}
+          {active.key === 'prediction-market' ? (
+            <div className="flex flex-col gap-4">
+              {/* Asset switcher + WS status */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 text-[#C5A67C]">
+                    <span className="block h-5 w-5">{active.icon}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#C5A67C]">Live · Prediction Market</div>
+                    <div className="mt-0.5 font-mono text-base font-bold uppercase tracking-[0.14em] text-[#EAE4D8]">BTC/ETH 5-Minute Signal</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                    wsState === 'live'
+                      ? 'border-emerald-300/40 bg-emerald-400/10 text-emerald-300'
+                      : wsState === 'connecting'
+                      ? 'border-amber-300/35 bg-amber-400/10 text-[#C5A67C]'
+                      : 'border-white/15 bg-white/5 text-[#EAE4D8]/70'
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${wsState === 'live' ? 'animate-pulse bg-emerald-400' : 'bg-amber-400'}`} />
+                    chainlink · {wsState === 'live' ? 'streaming' : wsState}
+                  </span>
+                  {(['BTC', 'ETH'] as const).map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => onAssetChange(a)}
+                      className={`rounded-sm border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
+                        asset === a
+                          ? 'border-[#C5A67C]/45 bg-[#C5A67C]/15 text-[#EAE4D8]'
+                          : 'border-white/15 bg-white/5 text-[#EAE4D8] hover:bg-white/5'
+                      }`}
+                    >
+                      {a}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* BTC Price Widget */}
+              <div className="h-[480px] overflow-hidden rounded-sm border border-white/10">
+                <LiveMarketWidget book={book} stream={stream} asset={asset} marketVolume={marketVolume} />
+              </div>
+            </div>
+          ) : (
+            /* Generic spec panel for other categories */
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 text-[#C5A67C]">
+                    <span className="block h-5 w-5">{active.icon}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#C5A67C]">Agent Category</div>
+                    <div className="mt-0.5 font-mono text-base font-bold uppercase tracking-[0.14em] text-[#EAE4D8]">{active.label}</div>
+                    <div className="mt-1 text-xs text-[#EAE4D8]/65">{active.tagline}</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">Capabilities</div>
+                  <ul className="mt-2 space-y-1.5">
+                    {active.capabilities.map((cap) => (
+                      <li key={cap} className="flex items-start gap-2 text-[11px] text-[#EAE4D8]/80">
+                        <span className="mt-1 inline-block h-1 w-1 rounded-full bg-[#C5A67C]" />
+                        <span>{cap}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="rounded-sm border border-white/10 bg-black/30 p-3">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">x402 fee range</div>
+                  <div className="mt-1 font-mono text-sm text-[#C5A67C]">{active.feeRange}</div>
+                </div>
+                <div className="rounded-sm border border-white/10 bg-black/30 p-3">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">Network status</div>
+                  <div className="mt-1 flex items-center gap-2 font-mono text-xs">
+                    <span className={`h-1.5 w-1.5 rounded-full ${active.status === 'LIVE' ? 'animate-pulse bg-emerald-400' : 'bg-white/30'}`} />
+                    <span className={active.status === 'LIVE' ? 'text-emerald-300' : 'text-[#EAE4D8]/55'}>
+                      {active.status === 'LIVE' ? 'agents available · discoverable in registry' : 'reserved · open for builders'}
+                    </span>
+                  </div>
+                </div>
+                <div className="rounded-sm border border-white/10 bg-black/30 p-3">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">Example agents</div>
+                  <ul className="mt-2 space-y-1">
+                    {active.exampleAgents.map((a) => (
+                      <li key={a} className="font-mono text-[11px] text-[#EAE4D8]/80">— {a}</li>
+                    ))}
+                  </ul>
+                </div>
+                <a
+                  href="/register"
+                  className="rounded-sm border border-[#C5A67C]/45 bg-[#C5A67C]/10 px-3 py-2 text-center font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#EAE4D8] transition hover:bg-[#C5A67C]/20"
+                >
+                  Register agent in this category →
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Signal Stream — 3 columns ───────────────────────────────────────────────
 
 function SignalStream({ signals }: { signals: SignalEvent[] }) {
@@ -1106,54 +1427,20 @@ export default function LiveA2AAgentPageRoute() {
           </div>
         </header>
 
-        {/* Live market widget */}
+        {/* Agent Marketplace */}
         <TerminalPanel
-          title="Live BTC Price"
-          right={
-            <div className="flex items-center gap-2">
-              <span className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
-                wsState === 'live'
-                  ? 'border-emerald-300/40 bg-emerald-400/10 text-emerald-300'
-                  : wsState === 'connecting'
-                  ? 'border-amber-300/35 bg-amber-400/10 text-[#C5A67C]'
-                  : 'border-white/15 bg-white/5 text-[#EAE4D8]/70'
-              }`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${wsState === 'live' ? 'animate-pulse bg-emerald-400' : 'bg-amber-400'}`} />
-                chainlink · {wsState === 'live' ? 'streaming' : wsState}
-              </span>
-              {(['BTC', 'ETH'] as const).map((a) => (
-                <button
-                  key={a}
-                  type="button"
-                  onClick={() => setOrderbookAsset(a)}
-                  className={`rounded-sm border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
-                    orderbookAsset === a
-                      ? 'border-[#C5A67C]/45 bg-[#C5A67C]/15 text-[#EAE4D8]'
-                      : 'border-white/15 bg-white/5 text-[#EAE4D8] hover:bg-white/5'
-                  }`}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-          }
-          className="h-[560px]"
+          title="Agent Marketplace"
+          right={<Chip tone="cyan">12 CATEGORIES</Chip>}
+          className="min-h-[300px]"
         >
-          <LiveMarketWidget book={activeBook} stream={activeStream} asset={orderbookAsset} marketVolume={activeMarket?.volume} />
-        </TerminalPanel>
-
-        {/* Signal Stream — 3 columns */}
-        <TerminalPanel
-          title="Signal Stream"
-          right={
-            <>
-              <Chip tone="green">LIVE SIGNALS</Chip>
-              <Chip tone="cyan">x402-READY</Chip>
-            </>
-          }
-          className="min-h-[180px]"
-        >
-          <SignalStream signals={signalEvents} />
+          <AgentCategoryGrid
+            book={activeBook}
+            stream={activeStream}
+            asset={orderbookAsset}
+            marketVolume={activeMarket?.volume}
+            wsState={wsState}
+            onAssetChange={setOrderbookAsset}
+          />
         </TerminalPanel>
 
         {/* Agent Graph */}
