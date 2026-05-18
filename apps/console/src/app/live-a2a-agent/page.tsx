@@ -260,12 +260,12 @@ function AgentGraph({ latest }: { latest: SignalRow | null }) {
   return (
     <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
       {node('Pythia', 'Signal Oracle', latest?.ignia.rawSignal ?? 'NEUTRAL', latest ? `${latest.asset} · ${latest.ignia.confidence}% conf` : 'polling Polymarket', lit, 'border-cyan-300/30 bg-cyan-400/5')}
-      {arrow('x402 payment', lit)}
-      {node('Hermes', 'Autonomous Trader', latest?.hermes.action ?? 'SKIP', latest ? `${latest.hermes.sizeUsdc} USDC · ${latest.hermes.mode}` : 'awaiting decision', hermesActed, 'border-amber-300/30 bg-amber-400/5')}
-      {arrow('action / market', hermesActed)}
-      {node('Apolo', 'Decision', latest?.apolo.decision ?? '—', latest ? `${latest.apolo.status} · ${latest.apolo.risk}` : 'no decision yet', apoloApproved, 'border-violet-300/30 bg-violet-400/5')}
-      {arrow('reputation', apoloApproved)}
-      {node('Reputation', 'On-chain Score', '+1', apoloApproved ? 'reputation delta on approve' : 'updates after settlement', apoloApproved, 'border-emerald-300/30 bg-emerald-400/5')}
+      {arrow('signal', lit)}
+      {node('Apolo', 'Decision', latest?.apolo.decision ?? '—', latest ? `${latest.apolo.status} · ${latest.apolo.risk} · conf ${latest.apolo.confidence}%` : 'awaiting signal from Pythia', apoloApproved, 'border-violet-300/30 bg-violet-400/5')}
+      {arrow('x402 payment', apoloApproved)}
+      {node('Hermes', 'Autonomous Trader', latest?.hermes.action ?? 'SKIP', latest ? `${latest.hermes.sizeUsdc} USDC · ${latest.hermes.mode}` : 'awaiting Apolo approval', hermesActed, 'border-amber-300/30 bg-amber-400/5')}
+      {arrow('reputation', hermesActed)}
+      {node('Reputation', 'On-chain Score', hermesActed ? '+1' : '—', hermesActed ? 'Apolo earns reputation on settled job' : 'updates after settlement', hermesActed, 'border-emerald-300/30 bg-emerald-400/5')}
     </div>
   );
 }
@@ -677,7 +677,7 @@ export default function LiveA2AAgentPageRoute() {
               <div className="font-mono text-[11px] uppercase tracking-[0.4em] text-cyan-300">ARCLAYER · A2A</div>
               <h1 className="mt-1 text-2xl font-black uppercase tracking-[0.2em] text-white sm:text-3xl">LIVE A2A AGENT</h1>
               <p className="mt-1 max-w-3xl text-sm text-slate-200">
-                Pythia (Signal Oracle) → Hermes (Autonomous Trader) → Apolo (Decision) → Reputation. Loop runs autonomously 24/7 against live Polymarket BTC/ETH 5m markets, settled with USDC over x402 on Arc.
+                Pythia (Signal Oracle) → Apolo (Decision) → Hermes (Autonomous Trader). Loop runs autonomously 24/7 against live Polymarket BTC/ETH 5m markets, settled with USDC over x402 on Arc. Reputation accrues to Apolo on every settled job.
               </p>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -698,7 +698,7 @@ export default function LiveA2AAgentPageRoute() {
         {/* Agent Graph */}
         <TerminalPanel
           title="Agent Graph"
-          right={<Chip tone="cyan">PYTHIA → x402 → HERMES → APOLO</Chip>}
+          right={<Chip tone="cyan">PYTHIA → APOLO → HERMES</Chip>}
           className="min-h-[200px]"
         >
           <AgentGraph latest={latestRow} />
