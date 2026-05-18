@@ -337,6 +337,16 @@ function LiveMarketWidget({
       </div>
 
       <div className="flex min-h-0 flex-col bg-[#0A0A0A]/90">
+        <div className="grid grid-cols-2 gap-px border-b border-white/10 bg-[#C5A67C]/10">
+          <div className="bg-[#0A0A0A] px-3 py-1.5">
+            <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/45">Real market volume</div>
+            <div className="font-mono text-xs font-bold text-[#EAE4D8]">{marketVolume != null ? `$${fmt(marketVolume, 0)}` : '—'}</div>
+          </div>
+          <div className="bg-[#0A0A0A] px-3 py-1.5">
+            <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/45">Visible depth</div>
+            <div className="font-mono text-xs font-bold text-[#C5A67C]">{fmt(visibleDepth, 0)} shares</div>
+          </div>
+        </div>
         <div className="grid grid-cols-[70px_1fr_70px] border-b border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#EAE4D8]/60">
           <span>Price</span><span className="text-center">Depth</span><span className="text-right">Size</span>
         </div>
@@ -346,16 +356,6 @@ function LiveMarketWidget({
           <div className="mt-0.5 font-mono text-xl font-bold text-[#C5A67C]">{book?.mid != null ? book.mid.toFixed(3) : '—'}</div>
         </div>
         <div className="py-1">{bids.length ? bids.map((x) => row(x, 'bid')) : <div className="p-3 font-mono text-[10px] text-[#EAE4D8]/45">bids pending</div>}</div>
-        <div className="mt-auto grid grid-cols-2 gap-px border-t border-white/10 bg-[#C5A67C]/10">
-          <div className="bg-[#0A0A0A] px-3 py-2">
-            <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/45">Real market volume</div>
-            <div className="mt-1 font-mono text-sm font-bold text-[#EAE4D8]">{marketVolume != null ? `$${fmt(marketVolume, 0)}` : '—'}</div>
-          </div>
-          <div className="bg-[#0A0A0A] px-3 py-2">
-            <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/45">Visible depth</div>
-            <div className="mt-1 font-mono text-sm font-bold text-[#C5A67C]">{fmt(visibleDepth, 0)} shares</div>
-          </div>
-        </div>
       </div>
     </div>
   );
