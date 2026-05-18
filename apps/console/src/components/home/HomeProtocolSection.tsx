@@ -12,7 +12,7 @@ export default function HomeProtocolSection() {
       aria-hidden="true"
     >
       <div
-        className="pointer-events-none absolute left-[56px] top-0 h-px w-[48%] bg-white/10 md:w-[50%] xl:w-[52%] 2xl:w-[56%]"
+        className="pointer-events-none absolute left-[56px] top-0 h-px w-[48%] bg-transparent md:w-[50%] xl:w-[52%] 2xl:w-[56%]"
         aria-hidden="true"
       />
       {/* Empty spacer — preserves original section height (~160px) */}
