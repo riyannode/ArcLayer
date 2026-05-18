@@ -1,819 +1,670 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { waitForTransactionReceipt } from '@wagmi/core';
-import { useWriteContract } from 'wagmi';
-import { config } from '@/lib/wagmi';
-import type { Hex } from 'viem';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
-const AGENT_REGISTRY_ADDRESS = '0xB263336055dD65FF501e36CA39941760D943703C' as const;
-const AGENT_REGISTRY_ABI = [
-  {
-    type: 'function',
-    name: 'deactivateAgent',
-    stateMutability: 'nonpayable',
-    inputs: [{ name: 'agentId', type: 'bytes32' }],
-    outputs: [],
-  },
-] as const;
-import type {
-  A2AOnChain,
-  AgentCategory,
-  AgentStats,
-  AutonomousFeed,
-  FeedItem,
-  NetworkAgent,
-  Overview,
-  Proof,
-  RegisteredAgent,
-} from '@/types/agent-network';
-import { buildAgentNetwork } from '@/lib/a2a/build-agent-network';
-import { AgentFilterBar, AGENT_FILTERS } from '@/components/a2a/AgentFilterBar';
-import { AgentNetworkCard, EmptyAgentState } from '@/components/a2a/AgentNetworkCard';
-import { AgentDetailDrawer } from '@/components/a2a/AgentDetailDrawer';
-import AgentFlowDiagram from '@/components/a2a/AgentFlowDiagram';
-import LivePolymarketFeed from '@/components/a2a/LivePolymarketFeed';
-import LiveSignalPanel from '@/components/a2a/LiveSignalPanel';
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type Verdict = 'YES' | 'PASS' | 'EDGE' | 'NO EDGE' | 'REVIEW';
+
+type LiveMarket = {
+  slug: string;
+  question: string;
+  asset: 'BTC' | 'ETH';
+  upPrice: number;
+  downPrice: number;
+  volume: number | null;
+};
+
+type SignalRow = {
+  asset: 'BTC' | 'ETH';
+  slug: string;
+  market: { upPrice: number; downPrice: number; spread: number; volume: number | null };
+  ignia: { rawSignal: 'UP' | 'DOWN' | 'NEUTRAL'; confidence: number; features: string[] };
+  apolo: { decision: 'UP' | 'DOWN' | 'NEUTRAL'; status: 'APPROVED' | 'REJECTED'; confidence: number; risk: 'LOW' | 'MEDIUM' | 'HIGH'; reason: string };
+  hermes: { action: 'BUY_UP' | 'BUY_DOWN' | 'SKIP'; sizeUsdc: string; mode: 'DRY_RUN' };
+};
+
+type OrderbookLevel = { price: string; size: string };
+
+type Orderbook = {
+  ok: boolean;
+  asset?: string;
+  slug?: string;
+  mid?: number | null;
+  bids: OrderbookLevel[];
+  asks: OrderbookLevel[];
+  error?: string;
+};
+
+type HistoryPoint = { t: number; p: number };
+
+type Candle = { o: number; h: number; l: number; c: number; v: number };
+
+type SignalEvent = {
+  id: string;
+  verdict: Verdict;
+  market: string;
+  confidence: number;
+  evidence: number;
+  engine: string;
+  thesis: string;
+  ts: string;
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-const TYPE_COLORS: Record<FeedItem['type'], string> = {
-  signal: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
-  payment: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
-  decision: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
-  trade: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-  balance: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30',
-  error: 'bg-red-500/15 text-red-300 border-red-500/30',
+const verdictTone: Record<Verdict, string> = {
+  YES: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
+  PASS: 'border-amber-400/35 bg-amber-400/10 text-amber-200',
+  EDGE: 'border-cyan-400/35 bg-cyan-400/10 text-cyan-200',
+  'NO EDGE': 'border-rose-400/35 bg-rose-400/10 text-rose-200',
+  REVIEW: 'border-violet-400/35 bg-violet-400/10 text-violet-200',
 };
 
-const AGENT_COLORS: Record<'Ignia' | 'Apolo' | 'Hermes', string> = {
-  Ignia: 'text-cyan-300',
-  Apolo: 'text-violet-300',
-  Hermes: 'text-amber-300',
-};
-
-function short(addr: string) {
-  if (!addr || addr.length < 12) return addr || '—';
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
+function fmt(n: number, digits = 2) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
-function formatUSDC(raw: string) {
-  const n = Number(raw) / 1e6;
-  if (n > 0 && n < 0.01) return n.toFixed(3);
-  if (n < 1) return n.toFixed(3);
-  return n.toFixed(2);
+function pointsToCandles(points: HistoryPoint[], bucketSec = 300): Candle[] {
+  if (!points.length) return [];
+  const sorted = [...points].sort((a, b) => a.t - b.t);
+  const buckets = new Map<number, number[]>();
+  for (const pt of sorted) {
+    const key = Math.floor(pt.t / bucketSec) * bucketSec;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key)!.push(pt.p);
+  }
+  return Array.from(buckets.entries())
+    .sort((a, b) => a[0] - b[0])
+    .slice(-72)
+    .map(([, prices]) => {
+      const o = prices[0];
+      const c = prices[prices.length - 1];
+      return {
+        o,
+        c,
+        h: Math.max(...prices),
+        l: Math.min(...prices),
+        v: Math.min(100, prices.length * 8),
+      };
+    });
 }
 
-function timeAgoFromMs(ms: number) {
-  const diff = Math.floor((Date.now() - ms) / 1000);
-  if (diff < 0) return 'now';
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+function verdictFromSignal(row: SignalRow | undefined): Verdict {
+  if (!row) return 'REVIEW';
+  if (row.apolo.status === 'REJECTED') return 'NO EDGE';
+  if (row.hermes.action === 'SKIP') return 'PASS';
+  if (row.apolo.confidence >= 70) return 'YES';
+  if (row.apolo.confidence >= 58) return 'EDGE';
+  return 'REVIEW';
 }
 
-function timeAgo(unix: string) {
-  return timeAgoFromMs(Number(unix) * 1000);
+function rowsToSignalEvents(rows: SignalRow[]): SignalEvent[] {
+  return rows.map((row, i) => ({
+    id: `${row.slug}-${i}-${Date.now()}`,
+    verdict: verdictFromSignal(row),
+    market: `${row.asset} Up or Down — 5m`,
+    confidence: row.apolo.confidence,
+    evidence: Math.round(row.market.spread * 1000),
+    engine: row.apolo.status === 'APPROVED' ? 'Forecast + Microstructure' : 'Risk Gate',
+    thesis: row.apolo.reason,
+    ts: new Date().toISOString().slice(11, 19),
+  }));
 }
 
-function timeAgoIso(iso: string) {
-  return timeAgoFromMs(Date.parse(iso));
-}
+// ─── Reusable presentational pieces ──────────────────────────────────────────
 
-// ─── Sparkline ──────────────────────────────────────────────────────────────
-
-function Sparkline({ data, color }: { data: number[]; color: string }) {
-  if (data.length < 2) return <div className="h-10" />;
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const range = max - min || 1;
-  const w = 200;
-  const h = 40;
-  const points = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * w;
-    const y = h - ((v - min) / range) * (h - 4) - 2;
-    return `${x},${y}`;
-  }).join(' ');
+function TerminalPanel({
+  title,
+  right,
+  children,
+  className = '',
+}: {
+  title: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-10" preserveAspectRatio="none">
-      <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <section
+      className={`min-w-0 overflow-hidden rounded-xl border border-cyan-400/10 bg-[#07101d]/92 shadow-[0_0_40px_rgba(0,212,255,0.05)] ${className}`}
+    >
+      <div className="flex h-10 items-center gap-2 border-b border-cyan-400/10 bg-[#0b1424] px-3">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
+        <h2 className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-slate-300">{title}</h2>
+        <div className="ml-auto flex items-center gap-2">{right}</div>
+      </div>
+      {children}
+    </section>
   );
 }
 
-function PulseDot({ active }: { active: boolean }) {
+function Chip({ children, tone = 'cyan' }: { children: React.ReactNode; tone?: 'cyan' | 'green' | 'red' | 'amber' | 'violet' | 'slate' }) {
+  const tones = {
+    cyan: 'border-cyan-400/25 bg-cyan-400/10 text-cyan-200',
+    green: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
+    red: 'border-rose-400/30 bg-rose-400/10 text-rose-200',
+    amber: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
+    violet: 'border-violet-400/30 bg-violet-400/10 text-violet-200',
+    slate: 'border-slate-400/30 bg-slate-400/10 text-slate-200',
+  };
   return (
-    <span className="relative flex h-2.5 w-2.5">
-      {active && (
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-      )}
-      <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${active ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+    <span className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${tones[tone]}`}>
+      {children}
     </span>
   );
 }
 
-// ─── Feed Item ──────────────────────────────────────────────────────────────
-
-function FeedRow({ item, isNew }: { item: FeedItem; isNew: boolean }) {
+function MetricCard({ label, value, sub, tone = 'cyan' }: { label: string; value: string; sub: string; tone?: 'cyan' | 'green' | 'red' | 'amber' | 'violet' }) {
+  const valueTone = {
+    cyan: 'text-cyan-200',
+    green: 'text-emerald-200',
+    red: 'text-rose-200',
+    amber: 'text-amber-200',
+    violet: 'text-violet-200',
+  }[tone];
   return (
-    <div className={`flex items-start gap-3 border-b border-white/5 px-1 py-2.5 transition-colors duration-700 ${isNew ? 'bg-emerald-950/20' : ''}`}>
-      <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${TYPE_COLORS[item.type]}`}>
-        {item.type}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="font-mono text-xs text-[#EAE4D8]">
-          <span className={`font-semibold ${AGENT_COLORS[item.agent]}`}>{item.agent}</span>{' '}
-          <span className="text-[#9A9A9A]">{item.label}</span>
-        </p>
-        <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-[#555]">
-          <span>{timeAgoIso(item.ts)}</span>
-          {item.tx && (
-            <a
-              href={`https://testnet.arcscan.app/tx/${item.tx}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="truncate text-[#7A7A7A] hover:text-[#C5A67C]"
-            >
-              {item.tx.slice(0, 10)}…
-            </a>
-          )}
-        </div>
+    <div className="min-w-[150px] flex-1 border-r border-cyan-400/10 bg-[#091321] px-4 py-3 last:border-r-0">
+      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-400">{label}</div>
+      <div className={`mt-1 font-mono text-lg font-bold ${valueTone}`}>{value}</div>
+      <div className="mt-0.5 text-xs text-slate-400">{sub}</div>
+    </div>
+  );
+}
+
+function CandleChart({ candles, color = '#00d4ff' }: { candles: Candle[]; color?: string }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || candles.length < 2) return;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    const W = rect.width;
+    const H = rect.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const chartH = H * 0.78;
+    const hi = Math.max(...candles.map((c) => c.h));
+    const lo = Math.min(...candles.map((c) => c.l));
+    const range = hi - lo || 0.01;
+    const pad = range * 0.12;
+    const yOf = (p: number) => chartH - ((p - lo + pad) / (range + pad * 2)) * chartH + 8;
+    const step = W / candles.length;
+    const bodyW = Math.max(2, step * 0.62);
+
+    ctx.strokeStyle = 'rgba(0,212,255,0.06)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 5; i += 1) {
+      const y = (chartH / 5) * i;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(W, y);
+      ctx.stroke();
+    }
+
+    candles.forEach((c, i) => {
+      const x = i * step + step / 2;
+      const up = c.c >= c.o;
+      const col = up ? '#34d399' : '#fb7185';
+      ctx.strokeStyle = col;
+      ctx.globalAlpha = 0.75;
+      ctx.beginPath();
+      ctx.moveTo(x, yOf(c.h));
+      ctx.lineTo(x, yOf(c.l));
+      ctx.stroke();
+      ctx.fillStyle = col;
+      const top = yOf(Math.max(c.o, c.c));
+      const bottom = yOf(Math.min(c.o, c.c));
+      ctx.fillRect(x - bodyW / 2, top, bodyW, Math.max(1, bottom - top));
+      ctx.globalAlpha = 0.2;
+      ctx.fillRect(x - bodyW / 2, H - (c.v / 100) * H * 0.16 - 4, bodyW, (c.v / 100) * H * 0.16);
+      ctx.globalAlpha = 1;
+    });
+
+    const lastY = yOf(candles[candles.length - 1].c);
+    ctx.setLineDash([4, 5]);
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0, lastY);
+    ctx.lineTo(W, lastY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }, [candles, color]);
+
+  if (candles.length < 2) {
+    return (
+      <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-slate-500">
+        No history yet for current 5m window
+      </div>
+    );
+  }
+  return <canvas ref={canvasRef} className="h-full w-full" />;
+}
+
+function SignalStream({ signals }: { signals: SignalEvent[] }) {
+  if (!signals.length) {
+    return (
+      <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-slate-500">
+        Waiting for live signals…
+      </div>
+    );
+  }
+  return (
+    <div className="h-full overflow-hidden">
+      <div className="grid grid-cols-[78px_1fr_140px_72px] border-b border-cyan-400/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-slate-400">
+        <span>Verdict</span>
+        <span>Market / Evidence</span>
+        <span>Engine</span>
+        <span className="text-right">Score</span>
+      </div>
+      <div className="space-y-1 p-2">
+        {signals.map((s) => (
+          <div
+            key={s.id}
+            className="grid min-w-0 grid-cols-[78px_1fr_140px_72px] gap-2 rounded border border-cyan-400/5 bg-white/[0.015] px-2 py-2 font-mono text-[11px]"
+          >
+            <span className={`truncate rounded border px-1.5 py-1 text-center text-[9px] ${verdictTone[s.verdict]}`}>{s.verdict}</span>
+            <div className="min-w-0">
+              <div className="truncate text-slate-200">{s.market}</div>
+              <div className="truncate text-[10px] text-slate-400">{s.ts} UTC · {s.thesis}</div>
+            </div>
+            <span className="truncate text-cyan-200">{s.engine}</span>
+            <span className="text-right text-emerald-200">{s.confidence}%/{s.evidence}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-// ─── Main Page ──────────────────────────────────────────────────────────────
+function PolymarketOrderbook({ book, asset }: { book: Orderbook | null; asset: 'BTC' | 'ETH' }) {
+  if (!book || !book.ok || (!book.bids?.length && !book.asks?.length)) {
+    return (
+      <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-slate-500">
+        {book?.error || `Loading ${asset} orderbook…`}
+      </div>
+    );
+  }
 
-export default function LiveA2AAgentPageRoute() {
+  const asks = (book.asks || []).map((l) => ({ price: parseFloat(l.price), size: parseFloat(l.size) })).sort((a, b) => b.price - a.price).slice(0, 7);
+  const bids = (book.bids || []).map((l) => ({ price: parseFloat(l.price), size: parseFloat(l.size) })).sort((a, b) => b.price - a.price).slice(0, 7);
+
+  let askTotal = 0;
+  const askLevels = asks.map((l) => ({ ...l, total: (askTotal += l.size) }));
+  let bidTotal = 0;
+  const bidLevels = bids.map((l) => ({ ...l, total: (bidTotal += l.size) }));
+  const maxTotal = Math.max(askTotal, bidTotal, 1);
+
+  const row = (level: { price: number; size: number; total: number }, side: 'ask' | 'bid') => (
+    <div key={`${side}-${level.price}`} className="relative grid grid-cols-3 px-3 py-1.5 font-mono text-[11px]">
+      <span className={`relative z-10 ${side === 'ask' ? 'text-rose-300' : 'text-emerald-300'}`}>{level.price.toFixed(3)}</span>
+      <span className="relative z-10 text-center text-slate-400">{fmt(level.size, 0)}</span>
+      <span className="relative z-10 text-right text-slate-400">{fmt(level.total, 0)}</span>
+      <span
+        className={`absolute inset-y-0 right-0 ${side === 'ask' ? 'bg-rose-400/10' : 'bg-emerald-400/10'}`}
+        style={{ width: `${Math.min(96, (level.total / maxTotal) * 100)}%` }}
+      />
+    </div>
+  );
+
   return (
-    <Suspense fallback={null}>
-      <LiveA2AAgentPage />
-    </Suspense>
+    <div className="h-full min-h-0 overflow-hidden">
+      <div className="grid grid-cols-3 border-b border-cyan-400/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-slate-400">
+        <span>YES Price</span>
+        <span className="text-center">Size</span>
+        <span className="text-right">Total</span>
+      </div>
+      <div>{askLevels.map((x) => row(x, 'ask'))}</div>
+      <div className="border-y border-cyan-400/10 bg-cyan-400/5 px-3 py-2 text-center font-mono text-sm font-bold text-cyan-200">
+        MID {book.mid != null ? book.mid.toFixed(3) : '—'} · {asset} 5m · live polymarket
+      </div>
+      <div>{bidLevels.map((x) => row(x, 'bid'))}</div>
+    </div>
   );
 }
 
-function LiveA2AAgentPage() {
-  const searchParams = useSearchParams();
-  const focusId = searchParams.get('focus')?.trim() || null;
-  const [overview, setOverview] = useState<Overview | null>(null);
-  const [onchain, setOnchain] = useState<A2AOnChain | null>(null);
-  const [feed, setFeed] = useState<AutonomousFeed | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [prevFeedIds, setPrevFeedIds] = useState<Set<string>>(new Set());
-  const [newFeedIds, setNewFeedIds] = useState<Set<string>>(new Set());
-  const [volumeHistory, setVolumeHistory] = useState<number[]>([]);
-  const [signalHistory, setSignalHistory] = useState<number[]>([]);
-  const [showAllProofs, setShowAllProofs] = useState(false);
-  const [_tick, setTick] = useState(0);
-  const [filter, setFilter] = useState<AgentCategory>('all');
-  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(focusId);
-  const [registeredAgents, setRegisteredAgents] = useState<RegisteredAgent[]>([]);
-  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set();
-    try {
-      const stored = localStorage.getItem('arclayer_hidden_agents');
-      return stored ? new Set(JSON.parse(stored)) : new Set();
-    } catch { return new Set(); }
-  });
+function AgentDecisionFlow({ active, signal }: { active: Verdict; signal: SignalRow | null }) {
+  const nodes: Array<[string, string]> = [
+    ['Ignia · Oracle', signal ? `UP ${signal.market.upPrice.toFixed(3)} / DOWN ${signal.market.downPrice.toFixed(3)}` : 'awaiting market'],
+    ['Regime', 'volatility phase'],
+    ['Entry Quality', 'spread + fee edge'],
+    ['Microstructure', 'imbalance + depth'],
+    ['Sniper', 'late-window timing'],
+    ['Forecast', 'probability model'],
+    ['Synthetic-Arb', 'cross-market hedge'],
+    ['Apolo · Resolver', `verdict: ${active}`],
+  ];
+  return (
+    <div className="grid h-full min-h-[260px] grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+      {nodes.map(([name, sub], i) => {
+        const hot = i === nodes.length - 1 || (active !== 'NO EDGE' && i > 0 && i < 7);
+        return (
+          <div
+            key={name}
+            className={`relative flex min-h-[90px] min-w-0 flex-col justify-center rounded-xl border p-3 ${
+              hot ? 'border-cyan-300/35 bg-cyan-400/10 shadow-[0_0_24px_rgba(0,212,255,0.08)]' : 'border-cyan-400/10 bg-black/10'
+            }`}
+          >
+            {i < nodes.length - 1 && <span className="absolute -right-2 top-1/2 hidden h-px w-4 bg-cyan-300/30 lg:block" />}
+            <div className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-100">{name}</div>
+            <div className="mt-1 text-xs text-slate-400">{sub}</div>
+            <div className="mt-3 h-1 overflow-hidden rounded bg-slate-800">
+              <div className={`h-full ${hot ? 'bg-cyan-300' : 'bg-slate-700'}`} style={{ width: `${hot ? 68 + i * 3 : 22}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
+// ─── Page ────────────────────────────────────────────────────────────────────
+
+export default function LiveA2AAgentPageRoute() {
+  const [now, setNow] = useState('');
+  const [markets, setMarkets] = useState<LiveMarket[]>([]);
+  const [signalRows, setSignalRows] = useState<SignalRow[]>([]);
+  const [signalEvents, setSignalEvents] = useState<SignalEvent[]>([]);
+  const [bookBtc, setBookBtc] = useState<Orderbook | null>(null);
+  const [bookEth, setBookEth] = useState<Orderbook | null>(null);
+  const [historyBtc, setHistoryBtc] = useState<HistoryPoint[]>([]);
+  const [historyEth, setHistoryEth] = useState<HistoryPoint[]>([]);
+  const [orderbookAsset, setOrderbookAsset] = useState<'BTC' | 'ETH'>('BTC');
+  const [scanCount, setScanCount] = useState(0);
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const latestRow = signalRows[0] ?? null;
+  const latestVerdict = verdictFromSignal(latestRow ?? undefined);
+
+  // Clock
   useEffect(() => {
-    if (focusId) setSelectedAgentId(focusId);
-  }, [focusId]);
-
-  const hideAgent = useCallback((agentId: string) => {
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      next.add(agentId);
-      localStorage.setItem('arclayer_hidden_agents', JSON.stringify(Array.from(next)));
-      return next;
-    });
-  }, []);
-
-  const { writeContractAsync } = useWriteContract();
-  const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
-
-  const deactivateAgent = useCallback(async (agent: NetworkAgent) => {
-    if (!agent.id || !agent.id.startsWith('0x')) {
-      alert(`Cannot deactivate: invalid agent ID format.\nThis agent isn't registered on-chain.`);
-      return;
-    }
-    try {
-      setDeactivatingId(agent.id);
-      const txHash = await writeContractAsync({
-        address: AGENT_REGISTRY_ADDRESS,
-        abi: AGENT_REGISTRY_ABI,
-        functionName: 'deactivateAgent',
-        args: [agent.id as Hex],
-      });
-      await waitForTransactionReceipt(config, { hash: txHash });
-      alert(`✓ ${agent.name} deactivated on-chain.\n\nTx: ${txHash}`);
-      hideAgent(agent.id);
-    } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || 'Unknown error';
-      alert(`Deactivation failed:\n${msg}\n\nNote: Only the agent controller can deactivate.`);
-    } finally {
-      setDeactivatingId(null);
-    }
-  }, [writeContractAsync, hideAgent]);
-
-  const unhideAgent = useCallback((agentId: string) => {
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      next.delete(agentId);
-      localStorage.setItem('arclayer_hidden_agents', JSON.stringify(Array.from(next)));
-      return next;
-    });
-  }, []);
-
-  const fetchData = useCallback(async () => {
-    try {
-      const cacheBust = Date.now();
-      const [ovRes, ocRes, fdRes, regRes] = await Promise.all([
-        fetch(`/api/indexer/overview?t=${cacheBust}`, { cache: 'no-store' }),
-        fetch(`/api/a2a/status?t=${cacheBust}`, { cache: 'no-store' }),
-        fetch(`/api/indexer/autonomous-feed?limit=50&t=${cacheBust}`, { cache: 'no-store' }),
-        fetch(`/api/a2a/agents?t=${cacheBust}`, { cache: 'no-store' }),
-      ]);
-      if (!ovRes.ok) throw new Error(`indexer ${ovRes.status}`);
-      const ovData: Overview = await ovRes.json();
-      const ocData: A2AOnChain = ocRes.ok ? await ocRes.json() : null;
-      const fdData: AutonomousFeed = fdRes.ok ? await fdRes.json() : { items: [], latest: null };
-      const regData = regRes.ok ? await regRes.json().catch(() => ({ agents: [] })) : { agents: [] };
-
-      // Detect new feed items
-      const currentIds = new Set(fdData.items.map((i) => i.id));
-      if (prevFeedIds.size > 0) {
-        const fresh = new Set(Array.from(currentIds).filter((id) => !prevFeedIds.has(id)));
-        if (fresh.size > 0) {
-          setNewFeedIds(fresh);
-          setTimeout(() => setNewFeedIds(new Set()), 4000);
-        }
-      }
-      setPrevFeedIds(currentIds);
-
-      const feedSignalCount = fdData.items.filter((item) => item.agent === 'Apolo' && item.type === 'payment').length;
-      const signalCount = Math.max(ocData?.agents.pythia?.stats?.callsServed ?? 0, feedSignalCount);
-
-      // Volume sparkline: JobEscrow funded + x402 revenue (Apolo + Hermes)
-      const jobFunded = Number(ovData.summary.totalFunded || '0') / 1e6;
-      const pythiaRev = Number(ocData?.agents.pythia?.stats?.totalRevenue || '0') / 1e6;
-      const hermesRev = Number(ocData?.agents.hermes?.stats?.totalRevenue || '0') / 1e6;
-      const totalVol = jobFunded + pythiaRev + hermesRev;
-
-      setVolumeHistory((prev) => [...prev.slice(-29), totalVol]);
-      setSignalHistory((prev) => [
-        ...prev.slice(-29),
-        signalCount || prev[prev.length - 1] || 0,
-      ]);
-
-      setOverview(ovData);
-      if (ocData) setOnchain(ocData);
-      setFeed(fdData);
-      setRegisteredAgents(Array.isArray(regData.agents) ? regData.agents : []);
-      setError(null);
-    } catch (err: any) {
-      setError(err?.message || 'fetch failed');
-    }
-  }, [prevFeedIds]);
-
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 8000);
-    return () => clearInterval(interval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Tick every second so timeAgo recomputes for live feel
-  useEffect(() => {
-    const t = setInterval(() => setTick((x) => x + 1), 1000);
+    setNow(new Date().toISOString().slice(11, 19));
+    const t = setInterval(() => setNow(new Date().toISOString().slice(11, 19)), 1000);
     return () => clearInterval(t);
   }, []);
 
-  const summary = overview?.summary;
-  const ignia = onchain?.agents.pythia; // legacy on-chain key, branded as Ignia/Apolo
-  const hermes = onchain?.agents.hermes;
-  const latestFeedMs = feed?.latest ? Date.parse(feed.latest) : 0;
-  const isLive = latestFeedMs > 0 && Date.now() - latestFeedMs < 120_000;
-  const proofTxs = (feed?.items ?? []).filter((item) => item.tx);
-  const visibleProofTxs = showAllProofs ? proofTxs : proofTxs.slice(0, 3);
-  const networkAgents = buildAgentNetwork({ onchain, overview, feed, isLive, registeredAgents, hiddenIds });
-  const filteredAgents = filter === 'all' ? networkAgents : networkAgents.filter((agent) => agent.categories.includes(filter));
-  const selectedAgent = networkAgents.find((agent) => agent.id === selectedAgentId) ?? null;
-  const activeFilterLabel = AGENT_FILTERS.find((item) => item.key === filter)?.label ?? 'All agents';
+  // Markets + signals (every 8s)
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const [mRes, sRes] = await Promise.all([
+          fetch('/api/a2a/markets', { cache: 'no-store' }),
+          fetch('/api/a2a/live-signal', { cache: 'no-store' }),
+        ]);
+        if (!alive) return;
+        if (mRes.ok) {
+          const data = await mRes.json();
+          setMarkets(data.markets || []);
+        }
+        if (sRes.ok) {
+          const data = await sRes.json();
+          const rows: SignalRow[] = data.rows || [];
+          setSignalRows(rows);
+          setSignalEvents((prev) => {
+            const fresh = rowsToSignalEvents(rows);
+            const merged = [...fresh, ...prev];
+            const uniq: SignalEvent[] = [];
+            const seen = new Set<string>();
+            for (const ev of merged) {
+              const key = `${ev.market}-${ev.ts}-${ev.verdict}`;
+              if (seen.has(key)) continue;
+              seen.add(key);
+              uniq.push(ev);
+              if (uniq.length >= 16) break;
+            }
+            return uniq;
+          });
+          setScanCount((n) => n + (rows.length || 0));
+        }
+      } catch (err: any) {
+        if (alive) setErrors((e) => [`signals: ${err?.message}`, ...e].slice(0, 3));
+      }
+    }
+    load();
+    const t = setInterval(load, 8000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
 
-  // Live-derived counters from autonomous feed (compensates for ReputationRegistry not being updated by agent telemetry)
-  const feedItems = feed?.items ?? [];
-  const feedSignalsServed = feedItems.filter((item) => item.agent === 'Apolo' && item.type === 'payment').length;
-  const feedIgniaTrades = feedItems.filter((item) =>
-    item.agent === 'Hermes' && item.type === 'trade' && item.label.toLowerCase().includes('ignia')
-  ).length;
-  const liveSignalsServed = Math.max(ignia?.stats?.callsServed ?? 0, feedSignalsServed);
-  const liveIgniaTrades = Math.max(hermes?.stats?.callsServed ?? 0, feedIgniaTrades);
+  // Orderbook for selected asset (every 4s)
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const r = await fetch(`/api/a2a/orderbook?asset=${orderbookAsset}`, { cache: 'no-store' });
+        if (!alive) return;
+        if (r.ok) {
+          const data = (await r.json()) as Orderbook;
+          if (orderbookAsset === 'BTC') setBookBtc(data);
+          else setBookEth(data);
+        }
+      } catch (err: any) {
+        if (alive) setErrors((e) => [`book: ${err?.message}`, ...e].slice(0, 3));
+      }
+    }
+    load();
+    const t = setInterval(load, 4000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [orderbookAsset]);
 
-  // Total volume = JobEscrow funded (manual jobs) + x402 signal revenue (Apolo + Hermes totalRevenue)
-  const jobsFundedRaw = summary ? BigInt(summary.totalFunded || '0') : BigInt(0);
-  const apoloRevenueRaw = ignia?.stats?.totalRevenue ? BigInt(ignia.stats.totalRevenue) : BigInt(0);
-  const hermesRevenueRaw = hermes?.stats?.totalRevenue ? BigInt(hermes.stats.totalRevenue) : BigInt(0);
-  const totalVolumeRaw = jobsFundedRaw + apoloRevenueRaw + hermesRevenueRaw;
+  // History BTC + ETH (every 30s)
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const [b, e] = await Promise.all([
+          fetch('/api/a2a/history?asset=BTC&interval=1d&fidelity=300', { cache: 'no-store' }).then((r) => r.json()),
+          fetch('/api/a2a/history?asset=ETH&interval=1d&fidelity=300', { cache: 'no-store' }).then((r) => r.json()),
+        ]);
+        if (!alive) return;
+        if (b?.ok) setHistoryBtc(b.history || []);
+        if (e?.ok) setHistoryEth(e.history || []);
+      } catch (err: any) {
+        if (alive) setErrors((er) => [`history: ${err?.message}`, ...er].slice(0, 3));
+      }
+    }
+    load();
+    const t = setInterval(load, 30000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
 
-  // Total USDC held by autonomous agents (live wallet balance)
-  const igniaBal = onchain?.balances?.usdc?.pythia ? BigInt(onchain.balances.usdc.pythia) : BigInt(0);
-  const hermesBal = onchain?.balances?.usdc?.hermes ? BigInt(onchain.balances.usdc.hermes) : BigInt(0);
-  const totalAgentBalanceRaw = igniaBal + hermesBal;
+  const candlesBtc = useMemo(() => pointsToCandles(historyBtc), [historyBtc]);
+  const candlesEth = useMemo(() => pointsToCandles(historyEth), [historyEth]);
+
+  const btcMarket = markets.find((m) => m.asset === 'BTC');
+  const ethMarket = markets.find((m) => m.asset === 'ETH');
+  const activeBook = orderbookAsset === 'BTC' ? bookBtc : bookEth;
+
+  const confidenceAvg = signalRows.length
+    ? Math.round(signalRows.reduce((acc, r) => acc + r.apolo.confidence, 0) / signalRows.length)
+    : 0;
+  const evidenceScore = signalRows.length
+    ? Math.round(Math.max(...signalRows.map((r) => r.market.spread * 1000)))
+    : 0;
+  const engineAgreement = signalRows.length
+    ? Math.round((signalRows.filter((r) => r.apolo.status === 'APPROVED').length / signalRows.length) * 100)
+    : 0;
+  const noEdgeCount = signalRows.filter((r) => r.apolo.status === 'REJECTED').length;
+  const workproofReady = signalRows.filter((r) => r.apolo.status === 'APPROVED').length;
 
   return (
-    <main className="min-h-screen bg-[#0A0A0A] text-[#EAE4D8] selection:bg-[#C5A67C]/20">
-      {/* ─── Header ───────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-10 border-b border-white/5 bg-[#0A0A0A]/95 px-6 py-4 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <PulseDot active={isLive} />
-            <h1 className="font-mono text-sm font-medium tracking-tight">
-              ArcLayer <span className="text-[#C5A67C]">LIVE A2A AGENT</span>
-            </h1>
-          </div>
-          <div className="flex items-center gap-4 font-mono text-[10px] text-[#555]">
-            <span>Arc Testnet · 5042002</span>
-            <span className={isLive ? 'text-emerald-400' : 'text-amber-400'}>
-              {isLive ? 'Autonomous · LIVE' : 'Autonomous · idle'}
-            </span>
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-7xl px-6 py-8">
-        {error && (
-          <div className="mb-6 rounded border border-red-500/20 bg-red-950/10 px-4 py-3 font-mono text-xs text-red-300">
-            ⚠ {error}
-          </div>
-        )}
-
-        {/* ─── Page Title · Agora-submission framing ─────────────────────── */}
-        <section className="mb-6">
-          <h2 className="text-2xl font-semibold tracking-tight text-[#EAE4D8]">
-            Autonomous Prediction-Market Intelligence Network
-          </h2>
-          <p className="mt-1 max-w-3xl font-mono text-[12px] leading-5 text-[#7A7A7A]">
-            <span className="text-[#C5A67C]">Hermes</span> is an autonomous trading agent that pays{' '}
-            <span className="text-violet-300">Apolo</span> in USDC over x402 for live Polymarket
-            decisions generated from <span className="text-cyan-300">Ignia</span>'s raw-signal
-            oracle. Every payment, receipt, and trade is settled on Arc — sub-second, ~$0.01 per
-            transaction, no volatile gas.
-          </p>
-          <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px]">
-            <span className="rounded border border-emerald-500/20 bg-emerald-950/20 px-2 py-1 text-emerald-300/90">
-              live polymarket data
-            </span>
-            <span className="rounded border border-violet-500/20 bg-violet-950/20 px-2 py-1 text-violet-300/90">
-              x402 paid decisions
-            </span>
-            <span className="rounded border border-amber-500/20 bg-amber-950/20 px-2 py-1 text-amber-300/90">
-              autonomous 24/7 loop
-            </span>
-            <span className="rounded border border-cyan-500/20 bg-cyan-950/20 px-2 py-1 text-cyan-300/90">
-              dry-run trades · real settlement
-            </span>
-          </div>
-        </section>
-
-        {/* ─── Honest disclaimer · trades are dry-run for hackathon safety ─ */}
-        <section className="mb-6 rounded border border-white/5 bg-white/[0.02] px-4 py-3">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-[#777]">
-            agora hackathon · how to read this page
-          </p>
-          <p className="mt-1.5 font-mono text-[11px] leading-5 text-[#9C9080]">
-            All <span className="text-emerald-300/90">x402 payments, receipts, agent registry, and
-            on-chain reputation</span> are real. Trade execution against Polymarket is
-            <span className="text-cyan-300/90"> dry-run</span> for hackathon safety — performance is
-            tracked against actual market settlement, so PnL/winrate reflect what the agent{' '}
-            <em>would have</em> earned trading live.
-          </p>
-        </section>
-
-        {/* ─── A2A Flow Diagram ────────────────────────────────────────── */}
-        <section className="mb-6">
-          <AgentFlowDiagram
-            isLive={isLive}
-            igniaActive={isLive}
-            apoloActive={isLive}
-            hermesActive={isLive}
-          />
-        </section>
-
-        {/* ─── Live Polymarket Price Feed ─────────────────────────────── */}
-        <section className="mb-6">
-          <LivePolymarketFeed />
-        </section>
-
-        {/* ─── Live Signal Pipeline · Ignia → Apolo → Hermes ──────────── */}
-        <section className="mb-6">
-          <LiveSignalPanel />
-        </section>
-
-        {/* ─── Autonomous Agent Network · selectable agent cards ──────── */}
-        <section className="mb-6 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-widest text-[#777]">
-                Registered agents · {filteredAgents.length} of {networkAgents.length}
-              </p>
-              {hiddenIds.size > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    Array.from(hiddenIds).forEach(unhideAgent);
-                  }}
-                  className="mt-1 font-mono text-[10px] text-[#555] underline decoration-dotted hover:text-[#C5A67C]"
-                >
-                  restore {hiddenIds.size} hidden agent{hiddenIds.size > 1 ? 's' : ''}
-                </button>
-              )}
-            </div>
-            <AgentFilterBar active={filter} onChange={setFilter} />
-          </div>
-
-          {filteredAgents.length > 0 ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredAgents.map((agent) => (
-                <AgentNetworkCard
-                  key={agent.id}
-                  agent={agent}
-                  selected={agent.id === selectedAgentId}
-                  onSelect={() => setSelectedAgentId(agent.id)}
-                />
-              ))}
-            </div>
-          ) : (
-            <EmptyAgentState label={activeFilterLabel} />
-          )}
-
-          {filter === 'all' && networkAgents.length <= 2 && (
-            <div className="rounded border border-dashed border-white/10 bg-white/[0.015] p-4 text-center">
-              <p className="font-mono text-[11px] text-[#777]">
-                <span className="text-[#C5A67C]">No additional autonomous agents registered yet.</span>{' '}
-                Register an agent to make it appear in the network.
+    <main className="min-h-screen overflow-x-hidden bg-[#030609] px-3 py-4 text-slate-200 sm:px-5 lg:px-7">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(0,212,255,0.12),transparent_34%),radial-gradient(circle_at_80%_10%,rgba(153,102,255,0.12),transparent_30%),linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[length:auto,auto,100%_4px]" />
+      <div className="relative mx-auto flex max-w-[1800px] flex-col gap-3">
+        <header className="overflow-hidden rounded-xl border border-cyan-400/15 bg-[#07101d]/95">
+          <div className="flex flex-col gap-3 border-b border-cyan-400/10 px-4 py-3 lg:flex-row lg:items-center">
+            <div className="min-w-0">
+              <div className="font-mono text-[11px] uppercase tracking-[0.4em] text-cyan-300">ARCLAYER · A2A</div>
+              <h1 className="mt-1 text-2xl font-black uppercase tracking-[0.2em] text-white sm:text-3xl">LIVE A2A AGENT</h1>
+              <p className="mt-1 max-w-3xl text-sm text-slate-300">
+                Live Polymarket signal terminal. Ignia (Oracle) → Pythia engines → Apolo (Resolver) → Hermes (Trader).
+                Real Gamma + CLOB feeds, x402 paid resolver-decision routing on Arc.
               </p>
             </div>
-          )}
-        </section>
-
-        {/* ─── Live Proof Metrics · for Agora judges ──────────────────── */}
-        <section className="mt-6 rounded border border-[#C5A67C]/20 bg-[#C5A67C]/[0.03] p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">
-              live proof metrics · arc testnet
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            <MetricCard label="Decisions Purchased" value={liveSignalsServed} sub="x402 paid calls" />
-            <MetricCard label="USDC Volume" value={summary ? formatUSDC(totalVolumeRaw.toString()) : '0.00'} sub="settled on Arc" />
-            <MetricCard label="On-Chain Receipts" value={summary?.proofs ?? 0} sub="ProofOfWork NFTs" />
-            <MetricCard label="Hermes Trades" value={liveIgniaTrades} sub="autonomous executions" />
-            <MetricCard
-              label="Winrate"
-              value={
-                ignia?.stats && (ignia.stats.signalsCorrect + ignia.stats.signalsWrong) > 0
-                  ? `${((ignia.stats.signalsCorrect / (ignia.stats.signalsCorrect + ignia.stats.signalsWrong)) * 100).toFixed(1)}%`
-                  : '—'
-              }
-              sub="vs market settlement"
-            />
-            <MetricCard
-              label="PnL (bps)"
-              value={
-                typeof ignia?.stats?.cumulativePnlBps === 'number'
-                  ? `${ignia.stats.cumulativePnlBps >= 0 ? '+' : ''}${ignia.stats.cumulativePnlBps}`
-                  : '—'
-              }
-              sub="cumulative"
-            />
-          </div>
-          <p className="mt-3 font-mono text-[9px] text-[#555]">
-            All metrics are live on-chain reads from Arc Testnet (chain {onchain?.chainId ?? '5042002'}).
-            Receipts verifiable on{' '}
-            <a href="https://testnet.arcscan.app" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline decoration-dotted">
-              arcscan.app
-            </a>.
-          </p>
-        </section>
-
-        {/* ─── KPI Strip ───────────────────────────────────────────────── */}
-        <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
-          <KPICard label="Signals Served" value={liveSignalsServed} accent />
-          <KPICard label="Hermes Trades" value={liveIgniaTrades} accent />
-          <KPICard label="Active Markets" value={onchain?.markets.totalIgnia ?? '—'} />
-          <KPICard label="Mirrors" value={onchain?.markets.totalMirrors ?? '—'} />
-          <KPICard label="Marketplace Jobs" value={summary?.jobs ?? '—'} />
-          <KPICard label="Volume USDC" value={summary ? formatUSDC(totalVolumeRaw.toString()) : '—'} accent />
-          <KPICard label="Agent Balance" value={onchain ? formatUSDC(totalAgentBalanceRaw.toString()) : '—'} accent />
-        </section>
-
-        {/* ─── Sparklines ──────────────────────────────────────────────── */}
-        <section className="mt-6 grid gap-3 md:grid-cols-2">
-          <SparklineCard label="Signals Served · Live" data={signalHistory} color="#22D3EE" />
-          <SparklineCard label="Marketplace Volume USDC · Live" data={volumeHistory} color="#C5A67C" />
-        </section>
-
-        {/* ─── x402 Charge Notice · Per-Execution Micropayment Proof ──── */}
-        <section className="mt-6 rounded border border-emerald-500/20 bg-emerald-950/[0.06] p-4">
-          <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              <p className="font-mono text-[10px] uppercase tracking-widest text-emerald-300">
-                x402 · per-execution charge (live on-chain reads)
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-x-6 gap-y-2 font-mono text-[11px]">
-              <div>
-                <span className="text-[#7A7A7A]">price/call</span>{' '}
-                <span className="text-[#EAE4D8]">0.01 USDC</span>
-              </div>
-              <div>
-                <span className="text-[#7A7A7A]">scheme</span>{' '}
-                <span className="text-[#EAE4D8]">EIP-3009 · exact</span>
-              </div>
-              <div>
-                <span className="text-[#7A7A7A]">calls served</span>{' '}
-                <span className="text-cyan-300">{liveSignalsServed}</span>
-              </div>
-              <div>
-                <span className="text-[#7A7A7A]">total deducted</span>{' '}
-                <span className="text-emerald-300">
-                  {ignia?.stats?.totalRevenue ? formatUSDC(ignia.stats.totalRevenue) : '0.00'} USDC
-                </span>
-              </div>
-              <div>
-                <span className="text-[#7A7A7A]">apolo revenue (x402)</span>{' '}
-                <span className="text-amber-300">
-                  {ignia?.stats?.totalRevenue ? formatUSDC(ignia.stats.totalRevenue) : '0.00'} USDC
-                </span>
-              </div>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Chip tone="green">LIVE GAMMA</Chip>
+              <Chip tone="cyan">LIVE CLOB</Chip>
+              <Chip tone="amber">PYTHIA V0</Chip>
+              <div className="font-mono text-xs text-slate-400">{now} UTC</div>
             </div>
           </div>
-
-          {/* Balance Snapshot · live wallet reads from Arc Testnet */}
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded border border-amber-500/15 bg-black/30 p-3">
-              <div className="flex items-center justify-between">
-                <p className="font-mono text-[9.5px] uppercase tracking-widest text-amber-300/80">Hermes · payer</p>
-                <a
-                  href={`https://testnet.arcscan.app/address/${onchain?.wallets?.hermes ?? ''}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-[9.5px] text-[#7A7A7A] hover:text-amber-300"
-                >
-                  {short(onchain?.wallets?.hermes ?? '')} ↗
-                </a>
-              </div>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="font-mono text-[18px] text-amber-300">
-                  {onchain?.balances?.usdc?.hermes ? formatUSDC(onchain.balances.usdc.hermes) : '—'}
-                </span>
-                <span className="font-mono text-[10px] text-[#7A7A7A]">USDC (live)</span>
-              </div>
-              <p className="mt-1 font-mono text-[9.5px] text-[#555]">
-                Each x402 settlement deducts 0.01 USDC from this wallet on-chain.
-              </p>
-            </div>
-
-            <div className="rounded border border-cyan-500/15 bg-black/30 p-3">
-              <div className="flex items-center justify-between">
-                <p className="font-mono text-[9.5px] uppercase tracking-widest text-cyan-300/80">Apolo · paid resolver</p>
-                <a
-                  href={`https://testnet.arcscan.app/address/${onchain?.wallets?.pythia ?? ''}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-[9.5px] text-[#7A7A7A] hover:text-cyan-300"
-                >
-                  {short(onchain?.wallets?.pythia ?? '')} ↗
-                </a>
-              </div>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="font-mono text-[18px] text-cyan-300">
-                  {onchain?.balances?.usdc?.pythia ? formatUSDC(onchain.balances.usdc.pythia) : '—'}
-                </span>
-                <span className="font-mono text-[10px] text-[#7A7A7A]">USDC (live)</span>
-              </div>
-              <p className="mt-1 font-mono text-[9.5px] text-[#555]">
-                Receives 0.01 USDC per signal. Counter on-chain via ReputationRegistry.totalRevenue.
-              </p>
-            </div>
+          <div className="flex min-w-0 flex-wrap">
+            <MetricCard label="Signals Generated" value={`${signalEvents.length}`} sub="last 16 unique" tone="cyan" />
+            <MetricCard label="Markets Scanned" value={`${scanCount}`} sub="Polymarket BTC/ETH 5m" tone="green" />
+            <MetricCard label="Confidence Avg" value={`${confidenceAvg}%`} sub="Apolo resolver" tone="violet" />
+            <MetricCard label="Evidence Score" value={`${evidenceScore}/100`} sub="best 5m edge" tone="amber" />
+            <MetricCard label="No-Edge Filters" value={`${noEdgeCount}`} sub="rejected this poll" tone="red" />
+            <MetricCard label="Engine Agreement" value={`${engineAgreement}%`} sub="approved / total" tone="green" />
           </div>
+        </header>
 
-          <p className="mt-3 font-mono text-[10px] leading-[1.6] text-[#7A7A7A]">
-            All numbers above are direct on-chain reads (not cached, not derived from indexer guesses).
-            "calls served" + "total deducted" come from{' '}
-            <span className="text-emerald-300/80">ReputationRegistry.getStats(Pythia)</span>.
-            Wallet balances come from{' '}
-            <span className="text-emerald-300/80">USDC.balanceOf()</span> on Arc Testnet (chain {onchain?.chainId ?? '5042002'}).
-            Each tx hash below is verifiable on the explorer.
-          </p>
+        <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1.6fr_1fr]">
+          <TerminalPanel
+            title="Polymarket Live Signal Data"
+            right={
+              <>
+                <Chip tone="cyan">BTC 5m</Chip>
+                <Chip tone="violet">ETH 5m</Chip>
+              </>
+            }
+            className="h-[420px]"
+          >
+            <div className="grid h-full min-h-0 grid-cols-1 gap-px bg-cyan-400/10 md:grid-cols-2">
+              <div className="min-h-0 bg-[#07101d] p-2">
+                <div className="mb-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-slate-400">
+                  <span>BTC YES probability</span>
+                  <span className="text-cyan-200">{btcMarket ? btcMarket.upPrice.toFixed(3) : '—'}</span>
+                </div>
+                <div className="h-[calc(100%-1.25rem)]"><CandleChart candles={candlesBtc} /></div>
+              </div>
+              <div className="min-h-0 bg-[#07101d] p-2">
+                <div className="mb-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-slate-400">
+                  <span>ETH YES probability</span>
+                  <span className="text-violet-200">{ethMarket ? ethMarket.upPrice.toFixed(3) : '—'}</span>
+                </div>
+                <div className="h-[calc(100%-1.25rem)]"><CandleChart candles={candlesEth} color="#a78bfa" /></div>
+              </div>
+            </div>
+          </TerminalPanel>
+
+          <TerminalPanel
+            title="Polymarket Orderbook"
+            right={
+              <div className="flex items-center gap-1">
+                {(['BTC', 'ETH'] as const).map((a) => (
+                  <button
+                    key={a}
+                    onClick={() => setOrderbookAsset(a)}
+                    className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
+                      orderbookAsset === a
+                        ? 'border-cyan-400/40 bg-cyan-400/15 text-cyan-100'
+                        : 'border-slate-400/20 bg-slate-400/5 text-slate-300 hover:bg-slate-400/10'
+                    }`}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            }
+            className="h-[420px]"
+          >
+            <PolymarketOrderbook book={activeBook} asset={orderbookAsset} />
+          </TerminalPanel>
         </section>
 
-        {/* ─── Marketplace Section (manual JobEscrow) ──────────────────── */}
-        {summary && summary.jobs > 0 && (
-          <section className="mt-5 md:mt-8 rounded border border-white/5 bg-white/[0.02] p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-[#555]">
-                Marketplace Jobs · JobEscrow
-              </p>
-              <span className="font-mono text-[10px] text-[#333]">
-                {summary.settledJobs}/{summary.jobs} settled
-              </span>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {overview!.proofs.slice(0, 6).map((proof) => (
-                <div key={proof.tokenId} className="rounded border border-white/5 bg-black/30 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-[#C5A67C]">Proof #{proof.tokenId}</span>
-                    <span className="font-mono text-[10px] text-[#555]">{timeAgo(proof.mintedAt)}</span>
+        <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1.6fr_1fr]">
+          <TerminalPanel
+            title="Agent Decision Flow"
+            right={
+              <Chip
+                tone={
+                  latestVerdict === 'YES'
+                    ? 'green'
+                    : latestVerdict === 'NO EDGE'
+                      ? 'red'
+                      : latestVerdict === 'EDGE'
+                        ? 'cyan'
+                        : 'amber'
+                }
+              >
+                {latestVerdict}
+              </Chip>
+            }
+            className="min-h-[340px]"
+          >
+            <AgentDecisionFlow active={latestVerdict} signal={latestRow} />
+          </TerminalPanel>
+
+          <TerminalPanel title="Market Metrics" right={<Chip tone="cyan">LIVE METRICS</Chip>} className="min-h-[340px]">
+            <div className="grid h-full grid-cols-2 gap-px bg-cyan-400/10">
+              {([
+                ['BTC YES', btcMarket ? btcMarket.upPrice.toFixed(3) : '—', 'live Polymarket', 'cyan'],
+                ['BTC DOWN', btcMarket ? btcMarket.downPrice.toFixed(3) : '—', 'live Polymarket', 'red'],
+                ['ETH YES', ethMarket ? ethMarket.upPrice.toFixed(3) : '—', 'live Polymarket', 'violet'],
+                ['ETH DOWN', ethMarket ? ethMarket.downPrice.toFixed(3) : '—', 'live Polymarket', 'red'],
+                ['BTC Volume', btcMarket?.volume ? `$${fmt(btcMarket.volume, 0)}` : '—', '5m window', 'green'],
+                ['ETH Volume', ethMarket?.volume ? `$${fmt(ethMarket.volume, 0)}` : '—', '5m window', 'green'],
+                ['WorkProof Ready', `${workproofReady}`, 'approved by Apolo', 'cyan'],
+                ['Pythia Mode', 'RESEARCH', 'autonomous · no manual buy', 'violet'],
+              ] as Array<[string, string, string, 'cyan' | 'green' | 'red' | 'amber' | 'violet']>).map(([label, value, sub, tone]) => (
+                <div key={label} className="min-w-0 bg-[#07101d] p-3">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{label}</div>
+                  <div
+                    className={`mt-1 font-mono text-lg font-bold ${
+                      tone === 'green'
+                        ? 'text-emerald-200'
+                        : tone === 'red'
+                          ? 'text-rose-200'
+                          : tone === 'amber'
+                            ? 'text-amber-200'
+                            : tone === 'violet'
+                              ? 'text-violet-200'
+                              : 'text-cyan-200'
+                    }`}
+                  >
+                    {value}
                   </div>
-                  <p className="mt-1 font-mono text-[10px] text-[#7A7A7A]">
-                    Job #{proof.jobId} · {formatUSDC(proof.amountPaid)} USDC
-                  </p>
-                  <p className="mt-0.5 font-mono text-[10px] text-[#444]">payer {short(proof.payer)}</p>
+                  <div className="truncate text-xs text-slate-400">{sub}</div>
                 </div>
               ))}
             </div>
-          </section>
-        )}
+          </TerminalPanel>
+        </section>
 
-        <footer className="mt-10 border-t border-white/5 pt-4 font-mono text-[10px] text-[#333]">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span>ArcLayer Protocol · Autonomous Agent Economy on Arc Network</span>
-            <span>Source: on-chain indexer + agent telemetry · No simulated values</span>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-[#555]">
-            <a href="/jobs" className="rounded border border-white/10 bg-white/[0.02] px-2 py-1 text-[#C5A67C] hover:border-[#C5A67C]/40">
-              ↗ Manual Job Marketplace · /jobs
-            </a>
-            <span>Same protocol stack, human-driven entry point.</span>
-          </div>
-        </footer>
-      </div>
-
-      <AgentDetailDrawer agent={selectedAgent} onClose={() => setSelectedAgentId(null)} onHide={hideAgent} onDeactivate={deactivateAgent} isDeactivating={deactivatingId === selectedAgent?.id} />
-    </main>
-  );
-}
-
-// ─── Sub-components ──────────────────────────────────────────────────────────
-
-function AgentHeroCard({
-  name,
-  role,
-  color,
-  stats,
-  agentId,
-  wallet,
-  balance,
-  description,
-  isLive,
-}: {
-  name: string;
-  role: string;
-  color: 'cyan' | 'amber';
-  stats: AgentStats | null;
-  agentId?: string;
-  wallet?: string;
-  balance?: string | null;
-  description: string;
-  isLive: boolean;
-}) {
-  const accentText = color === 'cyan' ? 'text-cyan-300' : 'text-amber-300';
-  const accentBorder = color === 'cyan' ? 'border-cyan-500/20' : 'border-amber-500/20';
-  const [copied, setCopied] = useState(false);
-  const copyWallet = async () => {
-    if (!wallet) return;
-    try {
-      await navigator.clipboard.writeText(wallet);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      /* clipboard blocked, no-op */
-    }
-  };
-
-  return (
-    <div className={`rounded border bg-white/[0.02] p-5 ${accentBorder}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className={`font-mono text-[10px] uppercase tracking-widest ${accentText}`}>{role}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <h2 className="text-2xl font-semibold tracking-tight">{name}</h2>
-            {wallet && (
-              <button
-                type="button"
-                onClick={copyWallet}
-                title={`Copy ${name} wallet: ${wallet}`}
-                className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest text-[#7A7A7A] transition-colors hover:border-[#C5A67C]/40 hover:text-[#C5A67C]"
-              >
-                {copied ? '✓ copied' : 'copy wallet'}
-              </button>
-            )}
-          </div>
-        </div>
-        <span
-          className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] ${
-            isLive ? 'border-emerald-500/30 text-emerald-300' : 'border-zinc-600/30 text-zinc-500'
-          }`}
+        <TerminalPanel
+          title="Signal Stream"
+          right={
+            <>
+              <Chip tone="green">LIVE SIGNALS</Chip>
+              <Chip tone="cyan">x402-READY</Chip>
+            </>
+          }
+          className="h-[430px]"
         >
-          {isLive ? '● running' : '○ idle'}
-        </span>
-      </div>
-      <p className="mt-2 font-mono text-[11px] leading-5 text-[#7A7A7A]">{description}</p>
-      <div className="mt-4 grid grid-cols-2 gap-2 font-mono text-xs">
-        <Stat label="Calls served" value={stats?.callsServed ?? '—'} />
-        <Stat label="Reputation" value={stats?.reputationScore ?? '—'} />
-        <Stat label="Calibration" value={stats?.calibrationScore ?? '—'} />
-        <Stat label="Revenue" value={stats ? formatUSDC(stats.totalRevenue) : '—'} />
-        <Stat
-          label="Winrate"
-          value={
-            stats && (stats.signalsCorrect + stats.signalsWrong) > 0
-              ? `${((stats.signalsCorrect / (stats.signalsCorrect + stats.signalsWrong)) * 100).toFixed(1)}%`
-              : '—'
-          }
-        />
-        <Stat
-          label="PnL (bps)"
-          value={
-            typeof stats?.cumulativePnlBps === 'number'
-              ? `${stats.cumulativePnlBps >= 0 ? '+' : ''}${stats.cumulativePnlBps}`
-              : '—'
-          }
-        />
-      </div>
-      {/* Live USDC balance · refreshes every 8s */}
-      <div className={`mt-3 rounded border ${accentBorder} bg-black/30 px-3 py-2`}>
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="font-mono text-[9px] uppercase tracking-widest text-[#555]">USDC balance · live</p>
-          <span className="font-mono text-[8px] text-emerald-400/70">● synced</span>
-        </div>
-        <p className={`mt-1 font-mono text-base ${accentText}`}>
-          {balance ? `${formatUSDC(balance)} USDC` : '—'}
-        </p>
-      </div>
-      <div className="mt-3 space-y-1 font-mono text-[10px] text-[#444]">
-        {wallet && (
-          <a
-            href={`https://testnet.arcscan.app/address/${wallet}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block truncate hover:text-[#C5A67C]"
-            title={wallet}
-          >
-            wallet {wallet.slice(0, 14)}…{wallet.slice(-12)} ↗
-          </a>
-        )}
-        {agentId && (
-          <p className="truncate" title={agentId}>
-            agent {agentId.slice(0, 14)}…{agentId.slice(-12)}
-          </p>
+          <SignalStream signals={signalEvents} />
+        </TerminalPanel>
+
+        {errors.length > 0 && (
+          <div className="rounded border border-rose-400/30 bg-rose-400/5 px-3 py-2 font-mono text-[10px] text-rose-200">
+            recent fetch warnings: {errors.join(' · ')}
+          </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded border border-white/5 bg-black/30 px-3 py-2">
-      <p className="text-[9px] uppercase tracking-widest text-[#555]">{label}</p>
-      <p className="mt-1 text-sm text-[#EAE4D8]">{value}</p>
-    </div>
-  );
-}
-
-function KPICard({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
-  return (
-    <div className="rounded border border-white/5 bg-white/[0.02] p-4">
-      <p className="font-mono text-[9px] uppercase tracking-widest text-[#555]">{label}</p>
-      <p className={`mt-2 font-mono text-2xl font-medium ${accent ? 'text-[#C5A67C]' : 'text-[#EAE4D8]'}`}>
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function MetricCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
-  return (
-    <div className="rounded border border-[#C5A67C]/10 bg-black/30 p-3">
-      <p className="font-mono text-[9px] uppercase tracking-widest text-[#777]">{label}</p>
-      <p className="mt-1.5 font-mono text-xl font-medium text-[#EAE4D8]">{value}</p>
-      {sub && <p className="mt-0.5 font-mono text-[9px] text-[#555]">{sub}</p>}
-    </div>
-  );
-}
-
-function SparklineCard({ label, data, color }: { label: string; data: number[]; color: string }) {
-  return (
-    <div className="rounded border border-white/5 bg-white/[0.02] p-4">
-      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-[#555]">{label}</p>
-      <Sparkline data={data.length > 1 ? data : [0, 0]} color={color} />
-    </div>
+    </main>
   );
 }
