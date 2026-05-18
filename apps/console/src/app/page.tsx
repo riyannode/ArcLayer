@@ -29,7 +29,7 @@ export default function Home() {
   return (
     <div
       id="top"
-      className="relative min-h-screen w-full overflow-hidden bg-[#050505] text-[#EAE4D8]"
+      className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#050505] text-[#EAE4D8]"
     >
       <DotMatrixField />
 
@@ -41,7 +41,7 @@ export default function Home() {
         Vertical padding reduced so first viewport fits: nav → hero → CTAs → proof → stats → right column
         without the lower cards being pushed below the fold at 80–90% zoom.
       */}
-      <main className="relative z-20 min-h-[calc(100svh-80px)] overflow-x-clip pl-3 pr-3 pt-8 pb-12 md:pl-[68px] md:pr-5 md:pt-9 md:pb-12 lg:pl-[78px] xl:pl-[88px] 2xl:pl-[96px]">
+      <main className="relative z-20 flex-1 overflow-x-clip pl-3 pr-3 pt-8 pb-4 md:pl-[68px] md:pr-5 md:pt-9 md:pb-4 lg:pl-[78px] xl:pl-[88px] 2xl:pl-[96px]">
         <div className="relative grid min-h-[calc(100svh-80px)] grid-cols-1 gap-y-6 md:grid-cols-12 md:items-center md:gap-x-12 xl:gap-x-14 2xl:gap-x-16">
           <div className="md:col-span-5 md:max-w-[540px] md:justify-self-start md:pl-6 xl:pl-8">
             <HomeHero />
