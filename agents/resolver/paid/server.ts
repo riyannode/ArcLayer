@@ -5,9 +5,9 @@
  * Oracle remains pure/internal and only emits raw signals.
  */
 import express from 'express';
-import { resolveSignals } from './decision-engine.js';
-import { fetchRawOracleSignals } from './oracle-client.js';
-import { toTradingSignal } from './legacy-compat.js';
+import { resolveSignals } from '../decision-engine.js';
+import { fetchRawOracleSignals } from '../oracle-client.js';
+import { toTradingSignal } from '../legacy-compat.js';
 
 const app = express();
 app.use(express.json());
