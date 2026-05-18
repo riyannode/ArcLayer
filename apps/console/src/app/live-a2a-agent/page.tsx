@@ -614,6 +614,7 @@ function FullLoopProof({ latest, apoloStat }: LoopProofProps) {
 // ─── Signal Stream — 3 columns ───────────────────────────────────────────────
 
 function SignalStream({ signals }: { signals: SignalEvent[] }) {
+  const [expanded, setExpanded] = useState(false);
   if (!signals.length) {
     return (
       <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-[#EAE4D8]/60">
@@ -621,6 +622,7 @@ function SignalStream({ signals }: { signals: SignalEvent[] }) {
       </div>
     );
   }
+  const visible = expanded ? signals.slice(0, 5) : signals.slice(0, 3);
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="grid min-w-[720px] grid-cols-3 border-b border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#EAE4D8]/60">
@@ -630,7 +632,7 @@ function SignalStream({ signals }: { signals: SignalEvent[] }) {
       </div>
       <div className="flex-1 overflow-auto">
         <div className="min-w-[720px] divide-y divide-white/10">
-          {signals.map((s) => (
+          {visible.map((s) => (
             <div key={s.id} className="grid grid-cols-3 gap-2 px-3 py-2 font-mono text-[11px]">
               <div className="min-w-0 rounded-sm border border-[#C5A67C]/15 bg-[#C5A67C]/5 p-2">
                 <div className="truncate text-[#EAE4D8]">{s.market}</div>
@@ -651,6 +653,18 @@ function SignalStream({ signals }: { signals: SignalEvent[] }) {
           ))}
         </div>
       </div>
+      {signals.length > 3 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex w-full items-center justify-center gap-2 border-t border-white/10 py-2 font-mono text-[10px] uppercase tracking-wider text-[#C5A67C] transition hover:bg-[#C5A67C]/10"
+        >
+          <span>{expanded ? 'Show less' : 'Show all'}</span>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`h-3.5 w-3.5 transition ${expanded ? 'rotate-180' : ''}`}>
+            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }
@@ -1132,6 +1146,20 @@ export default function LiveA2AAgentPageRoute() {
           <LiveMarketWidget book={activeBook} stream={activeStream} asset={orderbookAsset} marketVolume={activeMarket?.volume} />
         </TerminalPanel>
 
+        {/* Signal Stream — 3 columns */}
+        <TerminalPanel
+          title="Signal Stream"
+          right={
+            <>
+              <Chip tone="green">LIVE SIGNALS</Chip>
+              <Chip tone="cyan">x402-READY</Chip>
+            </>
+          }
+          className="min-h-[180px]"
+        >
+          <SignalStream signals={signalEvents} />
+        </TerminalPanel>
+
         {/* Agent Graph */}
         <TerminalPanel
           title="Agent Graph"
@@ -1157,19 +1185,6 @@ export default function LiveA2AAgentPageRoute() {
         </section>
 
 
-        {/* Signal Stream — 3 columns */}
-        <TerminalPanel
-          title="Signal Stream"
-          right={
-            <>
-              <Chip tone="green">LIVE SIGNALS</Chip>
-              <Chip tone="cyan">x402-READY</Chip>
-            </>
-          }
-          className="h-[420px]"
-        >
-          <SignalStream signals={signalEvents} />
-        </TerminalPanel>
 
         {errors.length > 0 && (
           <div className="rounded-sm border border-rose-400/30 bg-rose-400/5 px-3 py-2 font-mono text-[10px] text-rose-200">
