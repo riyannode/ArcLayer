@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
+import { withWalletAuth } from '@/lib/auth/wallet-auth';
 
 export const runtime = 'nodejs';
 
@@ -49,7 +50,7 @@ export async function GET(req: Request) {
   });
 }
 
-export async function POST(req: Request) {
+export const POST = withWalletAuth(async (req, { wallet }) => {
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== 'object') {
     return NextResponse.json(
@@ -58,14 +59,20 @@ export async function POST(req: Request) {
     );
   }
 
-  const wallet = normalizeAddress((body as { wallet?: unknown }).wallet);
+  const bodyWallet = normalizeAddress((body as { wallet?: unknown }).wallet);
   const rail = (body as { rail?: unknown }).rail;
-  if (!wallet) {
+
+  // Body wallet must match authenticated wallet (prevents setting rail for others).
+  if (bodyWallet && bodyWallet !== wallet) {
     return NextResponse.json(
-      { ok: false, error: 'invalid_wallet', message: 'wallet must be a 0x-prefixed 20-byte address.' },
-      { status: 400 },
+      { ok: false, error: 'wallet_mismatch', message: 'Body wallet does not match authenticated wallet.' },
+      { status: 403 },
     );
   }
+
+  // Use authenticated wallet as the canonical address.
+  const resolvedWallet = wallet;
+
   if (!isRail(rail)) {
     return NextResponse.json(
       { ok: false, error: 'invalid_rail', message: "rail must be 'native' or 'gateway'." },
@@ -77,7 +84,7 @@ export async function POST(req: Request) {
   const { data: existing, error: readError } = await supabase
     .from('user_rail_preferences')
     .select('rail, created_at, updated_at')
-    .eq('wallet_address', wallet)
+    .eq('wallet_address', resolvedWallet)
     .maybeSingle();
 
   if (readError) {
@@ -96,7 +103,7 @@ export async function POST(req: Request) {
     }
     return NextResponse.json({
       ok: true,
-      wallet,
+      wallet: resolvedWallet,
       rail: existing.rail,
       createdAt: existing.created_at,
       updatedAt: existing.updated_at,
@@ -105,7 +112,7 @@ export async function POST(req: Request) {
 
   const { data, error } = await supabase
     .from('user_rail_preferences')
-    .insert({ wallet_address: wallet, rail })
+    .insert({ wallet_address: resolvedWallet, rail })
     .select('rail, created_at, updated_at')
     .single();
 
@@ -118,9 +125,9 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    wallet,
+    wallet: resolvedWallet,
     rail: data.rail,
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   });
-}
+});

@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { readContract, waitForTransactionReceipt } from '@wagmi/core';
+import { getAddress, type Hex } from 'viem';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
-import { useRail, railHeaders } from '@/components/rail/RailProvider';
+import { useRail, railQueryParams } from '@/components/rail/RailProvider';
 import { CONTRACTS, JOB_ESCROW_ABI, buildApproveUsdcConfig, buildCreateJobConfig, buildFundJobConfig, buildSetBudgetConfig } from '@arclayer/sdk';
 import { formatUSDC, shortenAddress } from '@/lib/contracts';
 import { parseUSDC } from '@/lib/contracts';
@@ -14,6 +15,14 @@ import { config } from '@/lib/wagmi';
 import { CopyButton } from '@/components/CopyButton';
 
 const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || '/api/indexer';
+
+const ARC_CHAIN_ID = 5042002;
+const USDC = getAddress('0x3600000000000000000000000000000000000000');
+
+function randomNonce(): Hex {
+  return `0x${Array.from(crypto.getRandomValues(new Uint8Array(32))).map((b) => b.toString(16).padStart(2, '0')).join('')}` as Hex;
+}
+function b64(value: unknown) { return btoa(JSON.stringify(value)); }
 
 type IndexedJob = {
   id: string;
@@ -164,49 +173,145 @@ export default function AgentProfilePage() {
     if (!agent || !agentId || !address) return;
     try {
       setIsRunning(true);
-      setRunState('POST /api/agents/:id/run -> 402 Payment Required');
-      const first = await fetch(`/api/agents/${agentId}/run`, {
+
+      // ─── Step 1: Get x402 402 challenge ────────────────────────────────
+      // Rail + payer must be passed as QUERY PARAMS (middleware reads them
+      // from req.nextUrl.searchParams, not from headers).
+      setRunState('1/5 Requesting x402 challenge from /api/agents/:id/run...');
+      const qs = railQueryParams(rail, address);
+      const challengeUrl = `/api/agents/${agentId}/run${qs ? `?${qs}` : ''}`;
+      const first = await fetch(challengeUrl, {
         method: 'POST',
-        headers: { ...railHeaders(rail, address) },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ input: runInput }),
       });
-      if (first.status !== 402) throw new Error(`Expected x402 challenge, received HTTP ${first.status}.`);
+      if (first.status !== 402) {
+        throw new Error(`Expected x402 challenge (HTTP 402), received HTTP ${first.status}.`);
+      }
+      const challenge = await first.json();
+      if (!Array.isArray(challenge.accepts) || challenge.accepts.length === 0) {
+        throw new Error('x402 challenge missing accepts[] requirements.');
+      }
+      type Requirement = {
+        scheme: 'exact';
+        network: string;
+        asset: `0x${string}`;
+        amount: string;
+        payTo: `0x${string}`;
+        maxTimeoutSeconds: number;
+        extra?: Record<string, unknown>;
+      };
+      const accepts = challenge.accepts as Requirement[];
+      // Pick native USDC requirement (skip Gateway-batched if rail===native).
+      const req = accepts.find((a) => !a.extra?.name || a.extra?.name === 'USDC') || accepts[0];
 
+      // ─── Step 2: Optional JobEscrow funding (on-chain provenance) ──────
+      // Funds the job for indexer/protocol audit trail. Independent of x402
+      // payment — x402 verifies the resource access, JobEscrow records the
+      // job for proof-of-work tracking.
       const amount = parseUSDC(runBudget);
       const nextJobId = (await readContract(config, {
         address: CONTRACTS.JOB_ESCROW,
         abi: JOB_ESCROW_ABI,
         functionName: 'jobCounter',
       }) as bigint) + BigInt(1);
-      setRunState('Creating JobEscrow run for agent worker...');
-      // Worker = service-owned address that runs the agent and submits deliverables on-chain.
-      // Falls back to agent.controller if env not set (legacy behaviour).
+      setRunState('2/5 Creating JobEscrow run for agent worker...');
       const serviceWorker = (process.env.NEXT_PUBLIC_WORKER_ADDR as `0x${string}` | undefined) ?? (agent.controller as `0x${string}`);
       const createHash = await writeContractAsync(buildCreateJobConfig(BigInt(agentId), serviceWorker, address, runInput));
       await waitForTransactionReceipt(config, { hash: createHash });
 
-      setRunState('Setting budget and approving testnet USDC...');
+      setRunState('3/5 Setting budget, approving USDC, funding job...');
       const visibleJobId = nextJobId;
       const budgetHash = await writeContractAsync(buildSetBudgetConfig(visibleJobId, amount));
       await waitForTransactionReceipt(config, { hash: budgetHash });
       const approveHash = await writeContractAsync(buildApproveUsdcConfig(amount));
       await waitForTransactionReceipt(config, { hash: approveHash });
-
-      setRunState('Funding job and retrying x402 request with X-PAYMENT...');
       const fundHash = await writeContractAsync(buildFundJobConfig(visibleJobId, amount));
       await waitForTransactionReceipt(config, { hash: fundHash });
-      const paid = await fetch(`/api/agents/${agentId}/run`, {
+
+      // ─── Step 3: Sign EIP-3009 transferWithAuthorization ───────────────
+      setRunState('4/5 Signing EIP-3009 authorization for x402 payment...');
+      const eth = (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+      if (!eth) throw new Error('No injected wallet found. Connect EOA wallet to sign x402 payment.');
+      // Ensure wallet on Arc Testnet.
+      try {
+        await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: `0x${ARC_CHAIN_ID.toString(16)}` }] });
+      } catch (e) {
+        const err = e as { code?: number };
+        if (err.code !== 4902) throw e;
+        await eth.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: `0x${ARC_CHAIN_ID.toString(16)}`,
+            chainName: 'Arc Testnet',
+            nativeCurrency: { name: 'Arc', symbol: 'ARC', decimals: 18 },
+            rpcUrls: ['https://rpc.testnet.arc.network'],
+            blockExplorerUrls: ['https://testnet.arcscan.app'],
+          }],
+        });
+      }
+
+      const validBefore = String(Math.floor(Date.now() / 1000) + 600);
+      const nonce = randomNonce();
+      const paymentPayload = {
+        x402Version: 2,
+        accepted: {
+          ...req,
+          asset: getAddress(req.asset),
+          payTo: getAddress(req.payTo),
+          extra: { name: 'USDC', version: '2', decimals: 6, symbol: 'USDC' },
+        },
+        payload: {
+          signature: '0x' as Hex,
+          authorization: { from: address, to: getAddress(req.payTo), value: req.amount, validAfter: '0', validBefore, nonce },
+        },
+      };
+      paymentPayload.payload.signature = (await eth.request({
+        method: 'eth_signTypedData_v4',
+        params: [address, JSON.stringify({
+          types: {
+            EIP712Domain: [
+              { name: 'name', type: 'string' },
+              { name: 'version', type: 'string' },
+              { name: 'chainId', type: 'uint256' },
+              { name: 'verifyingContract', type: 'address' },
+            ],
+            TransferWithAuthorization: [
+              { name: 'from', type: 'address' },
+              { name: 'to', type: 'address' },
+              { name: 'value', type: 'uint256' },
+              { name: 'validAfter', type: 'uint256' },
+              { name: 'validBefore', type: 'uint256' },
+              { name: 'nonce', type: 'bytes32' },
+            ],
+          },
+          primaryType: 'TransferWithAuthorization',
+          domain: { name: 'USDC', version: '2', chainId: ARC_CHAIN_ID, verifyingContract: USDC },
+          message: {
+            from: address,
+            to: getAddress(req.payTo),
+            value: `0x${BigInt(req.amount).toString(16)}`,
+            validAfter: '0x0',
+            validBefore: `0x${BigInt(validBefore).toString(16)}`,
+            nonce,
+          },
+        })],
+      })) as Hex;
+
+      // ─── Step 4: Retry with X-PAYMENT header ───────────────────────────
+      setRunState('5/5 Posting paid run with X-PAYMENT (server verifies + settles)...');
+      const xPaymentHeader = b64(paymentPayload);
+      const paid = await fetch(challengeUrl, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          ...railHeaders(rail, address),
-          'x-payment': JSON.stringify({ txHash: fundHash, chainId: 5042002 }),
+          'X-PAYMENT': xPaymentHeader,
         },
         body: JSON.stringify({ input: runInput, jobId: visibleJobId.toString() }),
       });
       const payload = await paid.json();
       if (!paid.ok) throw new Error(payload.message || payload.error || `Paid run failed with HTTP ${paid.status}.`);
-      setRunState(`Job #${visibleJobId.toString()} funded. Run status: ${payload.run?.status ?? 'submitted'}.`);
+      setRunState(`Job #${visibleJobId.toString()} settled. JobEscrow tx: ${fundHash.slice(0, 10)}... | Run: ${payload.run?.status ?? 'submitted'}.`);
     } catch (e) {
       setRunState(e instanceof Error ? e.message : 'Paid run failed.');
     } finally {

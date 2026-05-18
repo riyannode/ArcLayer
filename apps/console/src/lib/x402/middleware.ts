@@ -522,7 +522,7 @@ async function handleNative(
  * Wrap a Next.js route handler with x402 dual-mode payment gating.
  *
  * Usage:
- *   export const GET = withX402(handler, { amount: '10000', resource: '/api/premium/data' });
+ *   export const GET = withX402(handler, { amount: '10000', resource: '/api/x402-demo/protected' });
  *
  * Supports both:
  *   - Circle Gateway (PAYMENT-SIGNATURE header) — batched settlement via Circle facilitator
@@ -578,6 +578,6 @@ export function withNative(
   opts: Omit<X402MiddlewareOptions, 'resource'> & { resource?: string },
   resource?: string,
 ) {
-  const resolvedResource = opts.resource || resource || '/api/x402/protected';
+  const resolvedResource = opts.resource || resource || '/api/x402-demo/protected';
   return withX402(handler, { ...opts, resource: resolvedResource });
 }

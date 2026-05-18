@@ -4,8 +4,8 @@
  * Rail context — single source of truth for the user's chosen x402 rail.
  *
  * Selected once per wallet (server-enforced via /api/user/rail), cached in
- * localStorage for instant boot. All x402 calls must include `X-ARC-RAIL: <rail>`
- * header so the server can reject any mismatch.
+ * localStorage for instant boot. x402 calls must include `?rail=...&payer=...`
+ * query params so the server can create a one-shot rail-locked payment session.
  *
  * Rails:
  *   native  = Arc Native EIP-3009 (self-hosted relayer)
@@ -21,6 +21,7 @@ import {
   useState,
 } from 'react';
 import { useArcWallet } from '@/hooks/useArcWallet';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 
 export type Rail = 'native' | 'gateway';
 
@@ -68,6 +69,7 @@ function writeCachedRail(address: string, rail: Rail | null): void {
 
 export function RailProvider({ children }: { children: React.ReactNode }) {
   const { address, isConnected } = useArcWallet();
+  const { authFetch } = useAuthFetch();
 
   const [rail, setRail] = useState<Rail | null>(null);
   const [hydrated, setHydrated] = useState(false);
@@ -122,9 +124,8 @@ export function RailProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       setError(null);
       try {
-        const resp = await fetch('/api/user/rail', {
+        const resp = await authFetch('/api/user/rail', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ wallet: address, rail: next }),
         });
         const data = await resp.json();
@@ -149,7 +150,7 @@ export function RailProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     },
-    [address, isConnected],
+    [address, authFetch, isConnected],
   );
 
   const value = useMemo<RailState>(
@@ -168,7 +169,29 @@ export function useRail(): RailState {
   return ctx;
 }
 
-/** Helper: build fetch headers that include rail + wallet when active. */
+/**
+ * Build query string params for x402 rail selection.
+ *
+ * The x402 middleware reads rail from `?rail=...&payer=...` query params,
+ * NOT from custom headers. This helper returns the query string fragment
+ * to append to the URL (without leading `?` or `&`).
+ *
+ * Usage:
+ *   const qs = railQueryParams(rail, address);
+ *   fetch(`/api/agents/${id}/run${qs ? `?${qs}` : ''}`, { ... });
+ */
+export function railQueryParams(rail: Rail | null, wallet?: string | null): string {
+  if (!rail) return '';
+  const railValue = rail === 'native' ? 'arc-native-eoa' : 'circle-gateway-passkey';
+  const params = new URLSearchParams({ rail: railValue });
+  if (wallet) params.set('payer', wallet);
+  return params.toString();
+}
+
+/**
+ * @deprecated Use `railQueryParams` instead — BE reads rail from query params, not headers.
+ * Kept for backward compatibility during migration.
+ */
 export function railHeaders(rail: Rail | null, wallet?: string | null): Record<string, string> {
   const headers: Record<string, string> = {};
   if (rail) headers['X-ARC-RAIL'] = rail;
