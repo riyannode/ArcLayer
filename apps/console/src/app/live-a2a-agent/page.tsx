@@ -36,6 +36,36 @@ type Orderbook = {
   error?: string;
 };
 
+type PriceCandle = { t: number; o: number; h: number; l: number; c: number };
+type BtcStream = {
+  ok: boolean;
+  asset: 'BTC' | 'ETH';
+  livePrice: number | null;
+  priceToBeat: number | null;
+  change: number | null;
+  changePct: number | null;
+  windowStart: number;
+  windowEnd: number;
+  now: number;
+  candles: PriceCandle[];
+  source?: string;
+  error?: string;
+};
+
+type FlowReceipt = {
+  ok: boolean;
+  startedAt?: string;
+  finishedAt?: string;
+  durationMs?: number;
+  error?: string;
+  payAgent?: { payer: string; payee: string; amountUsdc: string; nonce: string; paymentId: string; rail: 'x402'; asset: 'USDC'; chain: string };
+  paymentCompleted?: { receiptId: string; settledAt: string; txStatus: string; arcscan: string | null };
+  workReceipt?: { seller: 'Pythia'; buyer: 'Hermes'; payloadHash: string; payload: { asset: string; signal: string; confidence: number }; issuedAt: string };
+  agentReputation?: { agent: 'Apolo'; role: string; delta: number; score: number; rationale: string };
+  decision?: { asset: string; decision: string; risk: string; confidence: number; status: 'APPROVED' | 'REJECTED' };
+  hermesAction?: { action: 'BUY_UP' | 'BUY_DOWN' | 'SKIP'; sizeUsdc: string; mode: 'DRY_RUN' };
+};
+
 type SignalEvent = {
   id: string;
   verdict: Verdict;
@@ -186,50 +216,118 @@ function LiveEdgeBoard({ btc, eth, latest }: { btc?: LiveMarket; eth?: LiveMarke
   );
 }
 
-// ─── Orderbook ───────────────────────────────────────────────────────────────
+// ─── Market widget: price, countdown, chart, orderbook ───────────────────────
 
-function PolymarketOrderbook({ book, asset }: { book: Orderbook | null; asset: 'BTC' | 'ETH' }) {
-  if (!book || !book.ok || (!book.bids?.length && !book.asks?.length)) {
-    return (
-      <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-[#EAE4D8]/60">
-        {book?.error || `Loading ${asset} orderbook…`}
-      </div>
-    );
-  }
+function LiveMarketWidget({
+  book,
+  stream,
+  asset,
+}: {
+  book: Orderbook | null;
+  stream: BtcStream | null;
+  asset: 'BTC' | 'ETH';
+}) {
+  const candles = stream?.candles ?? [];
+  const prices = candles.flatMap((c) => [c.h, c.l]);
+  const min = Math.min(...prices, stream?.priceToBeat ?? Infinity, stream?.livePrice ?? Infinity);
+  const max = Math.max(...prices, stream?.priceToBeat ?? -Infinity, stream?.livePrice ?? -Infinity);
+  const range = Number.isFinite(max - min) && max > min ? max - min : 1;
+  const chartW = 520;
+  const chartH = 160;
+  const xStep = candles.length > 1 ? chartW / (candles.length - 1) : chartW;
+  const y = (v: number) => chartH - ((v - min) / range) * chartH;
+  const line = candles.map((c, i) => `${i * xStep},${y(c.c)}`).join(' ');
+  const countdown = stream?.windowEnd ? Math.max(0, stream.windowEnd - Math.floor(Date.now() / 1000)) : null;
+  const directionUp = (stream?.change ?? 0) >= 0;
+  const asks = (book?.asks || []).map((l) => ({ price: parseFloat(l.price), size: parseFloat(l.size) })).filter((l) => Number.isFinite(l.price) && Number.isFinite(l.size)).sort((a, b) => a.price - b.price).slice(0, 5).reverse();
+  const bids = (book?.bids || []).map((l) => ({ price: parseFloat(l.price), size: parseFloat(l.size) })).filter((l) => Number.isFinite(l.price) && Number.isFinite(l.size)).sort((a, b) => b.price - a.price).slice(0, 5);
+  const maxSize = Math.max(...asks.map((x) => x.size), ...bids.map((x) => x.size), 1);
 
-  const asks = (book.asks || []).map((l) => ({ price: parseFloat(l.price), size: parseFloat(l.size) })).sort((a, b) => b.price - a.price).slice(0, 7);
-  const bids = (book.bids || []).map((l) => ({ price: parseFloat(l.price), size: parseFloat(l.size) })).sort((a, b) => b.price - a.price).slice(0, 7);
-
-  let askTotal = 0;
-  const askLevels = asks.map((l) => ({ ...l, total: (askTotal += l.size) }));
-  let bidTotal = 0;
-  const bidLevels = bids.map((l) => ({ ...l, total: (bidTotal += l.size) }));
-  const maxTotal = Math.max(askTotal, bidTotal, 1);
-
-  const row = (level: { price: number; size: number; total: number }, side: 'ask' | 'bid') => (
-    <div key={`${side}-${level.price}`} className="relative grid grid-cols-3 px-3 py-1.5 font-mono text-[11px]">
-      <span className={`relative z-10 ${side === 'ask' ? 'text-rose-300' : 'text-emerald-300'}`}>{level.price.toFixed(3)}</span>
-      <span className="relative z-10 text-center text-[#EAE4D8]/60">{fmt(level.size, 0)}</span>
-      <span className="relative z-10 text-right text-[#EAE4D8]/60">{fmt(level.total, 0)}</span>
-      <span
-        className={`absolute inset-y-0 right-0 ${side === 'ask' ? 'bg-rose-400/10' : 'bg-emerald-400/10'}`}
-        style={{ width: `${Math.min(96, (level.total / maxTotal) * 100)}%` }}
-      />
+  const fmtPrice = (n: number | null | undefined) => (n == null ? '—' : `$${fmt(n, asset === 'BTC' ? 2 : 2)}`);
+  const row = (level: { price: number; size: number }, side: 'ask' | 'bid') => (
+    <div key={`${side}-${level.price}-${level.size}`} className="relative grid grid-cols-[70px_1fr_70px] items-center gap-2 px-3 py-1.5 font-mono text-[11px]">
+      <span className={side === 'ask' ? 'text-rose-300' : 'text-emerald-300'}>{level.price.toFixed(3)}</span>
+      <span className="relative h-4 overflow-hidden rounded bg-white/[0.03]">
+        <span
+          className={`absolute inset-y-0 ${side === 'ask' ? 'right-0 bg-rose-400/15' : 'left-0 bg-emerald-400/15'}`}
+          style={{ width: `${Math.min(100, (level.size / maxSize) * 100)}%` }}
+        />
+      </span>
+      <span className="text-right text-[#EAE4D8]/65">{fmt(level.size, 0)}</span>
     </div>
   );
 
+  if (stream?.ok === false && (!book || !book.ok)) {
+    return <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-[#EAE4D8]/60">{stream.error || 'Loading live market…'}</div>;
+  }
+
   return (
-    <div className="h-full min-h-0 overflow-hidden">
-      <div className="grid grid-cols-3 border-b border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#EAE4D8]/60">
-        <span>YES Price</span>
-        <span className="text-center">Size</span>
-        <span className="text-right">Total</span>
+    <div className="grid h-full min-h-0 grid-cols-1 gap-px bg-[#C5A67C]/10 lg:grid-cols-[1.05fr_.95fr]">
+      <div className="flex min-h-0 flex-col bg-[#0A0A0A]/90 p-4">
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-sm border border-white/10 bg-black/25 p-3">
+            <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#EAE4D8]/55">Live {asset} price</div>
+            <div className={`mt-1 font-mono text-2xl font-bold ${directionUp ? 'text-emerald-300' : 'text-rose-300'}`}>{fmtPrice(stream?.livePrice)}</div>
+            <div className="mt-1 font-mono text-[10px] text-[#EAE4D8]/50">Coinbase spot</div>
+          </div>
+          <div className="rounded-sm border border-white/10 bg-black/25 p-3">
+            <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#EAE4D8]/55">Target price</div>
+            <div className="mt-1 font-mono text-2xl font-bold text-[#C5A67C]">{fmtPrice(stream?.priceToBeat)}</div>
+            <div className="mt-1 font-mono text-[10px] text-[#EAE4D8]/50">5m open / price to beat</div>
+          </div>
+          <div className="rounded-sm border border-white/10 bg-black/25 p-3">
+            <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#EAE4D8]/55">Countdown 5m</div>
+            <div className="mt-1 font-mono text-2xl font-bold text-[#EAE4D8]">{countdown == null ? '—' : `${Math.floor(countdown / 60)}:${String(countdown % 60).padStart(2, '0')}`}</div>
+            <div className={`mt-1 font-mono text-[10px] ${directionUp ? 'text-emerald-300' : 'text-rose-300'}`}>
+              {stream?.change == null ? 'pending' : `${directionUp ? '+' : ''}${fmt(stream.change, 2)} (${directionUp ? '+' : ''}${fmt(stream.changePct ?? 0, 3)}%)`}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-1 items-stretch rounded-sm border border-white/10 bg-black/25 p-3">
+          {candles.length ? (
+            <svg viewBox={`0 0 ${chartW} ${chartH}`} className="h-full min-h-[170px] w-full overflow-visible" role="img" aria-label={`${asset} live candle chart`}>
+              <defs>
+                <linearGradient id={`line-${asset}`} x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stopColor="#C5A67C" stopOpacity="0.8" />
+                  <stop offset="100%" stopColor="#C5A67C" stopOpacity="0.06" />
+                </linearGradient>
+              </defs>
+              {stream?.priceToBeat != null && (
+                <line x1="0" x2={chartW} y1={y(stream.priceToBeat)} y2={y(stream.priceToBeat)} stroke="#C5A67C" strokeDasharray="4 4" strokeOpacity="0.55" />
+              )}
+              {candles.map((c, i) => {
+                const x = i * xStep;
+                const up = c.c >= c.o;
+                return (
+                  <g key={c.t}>
+                    <line x1={x} x2={x} y1={y(c.h)} y2={y(c.l)} stroke={up ? '#6EE7B7' : '#FDA4AF'} strokeOpacity="0.55" />
+                    <rect x={x - 3} y={Math.min(y(c.o), y(c.c))} width="6" height={Math.max(2, Math.abs(y(c.o) - y(c.c)))} fill={up ? '#6EE7B7' : '#FDA4AF'} opacity="0.75" rx="1" />
+                  </g>
+                );
+              })}
+              <polyline points={line} fill="none" stroke={`url(#line-${asset})`} strokeWidth="1.5" />
+            </svg>
+          ) : (
+            <div className="flex flex-1 items-center justify-center font-mono text-[10px] uppercase tracking-widest text-[#EAE4D8]/50">Loading candle chart…</div>
+          )}
+        </div>
       </div>
-      <div>{askLevels.map((x) => row(x, 'ask'))}</div>
-      <div className="border-y border-white/10 bg-[#C5A67C]/5 px-3 py-2 text-center font-mono text-sm font-bold text-[#C5A67C]">
-        MID {book.mid != null ? book.mid.toFixed(3) : '—'} · {asset} 5m · live polymarket
+
+      <div className="flex min-h-0 flex-col bg-[#0A0A0A]/90">
+        <div className="grid grid-cols-[70px_1fr_70px] border-b border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#EAE4D8]/60">
+          <span>Price</span><span className="text-center">Depth</span><span className="text-right">Size</span>
+        </div>
+        <div className="py-1">{asks.length ? asks.map((x) => row(x, 'ask')) : <div className="p-3 font-mono text-[10px] text-[#EAE4D8]/45">asks pending</div>}</div>
+        <div className="border-y border-white/10 bg-[#C5A67C]/5 px-3 py-3 text-center">
+          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#EAE4D8]/55">Polymarket 5m midpoint</div>
+          <div className="mt-0.5 font-mono text-xl font-bold text-[#C5A67C]">{book?.mid != null ? book.mid.toFixed(3) : '—'}</div>
+        </div>
+        <div className="py-1">{bids.length ? bids.map((x) => row(x, 'bid')) : <div className="p-3 font-mono text-[10px] text-[#EAE4D8]/45">bids pending</div>}</div>
+        <div className="mt-auto border-t border-white/10 px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/50">
+          Widget replaces raw orderbook: live price, target, 5m timer, candles, and actionable depth in one reviewer-readable panel.
+        </div>
       </div>
-      <div>{bidLevels.map((x) => row(x, 'bid'))}</div>
     </div>
   );
 }
@@ -484,7 +582,7 @@ function FullLoopProof({ latest, apoloStat }: LoopProofProps) {
   );
 }
 
-// ─── Signal Stream — 2 columns ───────────────────────────────────────────────
+// ─── Signal Stream — 3 columns ───────────────────────────────────────────────
 
 function SignalStream({ signals }: { signals: SignalEvent[] }) {
   if (!signals.length) {
@@ -496,24 +594,109 @@ function SignalStream({ signals }: { signals: SignalEvent[] }) {
   }
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="grid grid-cols-[1fr_92px] border-b border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#EAE4D8]/60">
-        <span>Signal · Apolo Output</span>
-        <span className="text-right">Verdict</span>
+      <div className="grid min-w-[720px] grid-cols-3 border-b border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#EAE4D8]/60">
+        <span>Pythia Signal</span>
+        <span>Apolo Decision</span>
+        <span>Hermes Trade</span>
       </div>
-      <div className="flex-1 space-y-1 overflow-y-auto p-2">
-        {signals.map((s) => (
-          <div
-            key={s.id}
-            className="grid min-w-0 grid-cols-[1fr_92px] gap-2 rounded-sm border border-white/10 bg-white/[0.02] px-3 py-2 font-mono text-[11px]"
-          >
-            <div className="min-w-0">
-              <div className="truncate text-[#EAE4D8]">{s.market}</div>
-              <div className="truncate text-[10px] text-[#EAE4D8]/55">{s.ts} UTC · conf {s.confidence}%</div>
+      <div className="flex-1 overflow-auto">
+        <div className="min-w-[720px] divide-y divide-white/10">
+          {signals.map((s) => (
+            <div key={s.id} className="grid grid-cols-3 gap-2 px-3 py-2 font-mono text-[11px]">
+              <div className="min-w-0 rounded-sm border border-[#C5A67C]/15 bg-[#C5A67C]/5 p-2">
+                <div className="truncate text-[#EAE4D8]">{s.market}</div>
+                <div className="mt-1 text-[10px] text-[#EAE4D8]/55">{s.ts} UTC · conf {s.confidence}%</div>
+              </div>
+              <div className="min-w-0 rounded-sm border border-violet-300/20 bg-violet-400/5 p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-[#D7C7AA]">Apolo filter</span>
+                  <span className={`shrink-0 rounded-sm border px-1.5 py-0.5 text-[9px] ${verdictTone[s.verdict]}`}>{s.verdict}</span>
+                </div>
+                <div className="mt-1 text-[10px] text-[#EAE4D8]/55">risk gate + edge threshold</div>
+              </div>
+              <div className="min-w-0 rounded-sm border border-amber-300/20 bg-amber-400/5 p-2">
+                <div className="truncate text-[#C5A67C]">{s.verdict === 'NO EDGE' || s.verdict === 'PASS' ? 'SKIP' : 'TRADE CANDIDATE'}</div>
+                <div className="mt-1 text-[10px] text-[#EAE4D8]/55">x402-ready · dry-run protected</div>
+              </div>
             </div>
-            <span className={`truncate self-center rounded-sm border px-1.5 py-1 text-center text-[9px] ${verdictTone[s.verdict]}`}>{s.verdict}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LiveA2AFlow({ receipt, running, onRun }: { receipt: FlowReceipt | null; running: boolean; onRun: () => void }) {
+  const steps = [
+    {
+      label: 'Pay agent',
+      value: receipt?.payAgent ? `${receipt.payAgent.amountUsdc} USDC` : 'Pending',
+      sub: receipt?.payAgent ? `Hermes → Pythia · ${receipt.payAgent.rail}` : 'runs backend payment receipt',
+      done: !!receipt?.payAgent,
+    },
+    {
+      label: 'Payment completed',
+      value: receipt?.paymentCompleted?.txStatus ?? 'Pending',
+      sub: receipt?.paymentCompleted?.receiptId ?? 'receipt generated after payment',
+      done: !!receipt?.paymentCompleted,
+    },
+    {
+      label: 'Work receipt',
+      value: receipt?.workReceipt?.payload.signal ?? 'Pending',
+      sub: receipt?.workReceipt ? `${receipt.workReceipt.payload.asset} · ${receipt.workReceipt.payload.confidence}% · ${receipt.workReceipt.payloadHash}` : 'Pythia output hash',
+      done: !!receipt?.workReceipt,
+    },
+    {
+      label: 'Agent reputation',
+      value: receipt?.agentReputation ? `Apolo +${receipt.agentReputation.delta}` : 'Pending',
+      sub: receipt?.agentReputation ? `score ${receipt.agentReputation.score} · resolver/decision filter rewarded` : 'Apolo receives reputation',
+      done: !!receipt?.agentReputation,
+    },
+  ];
+
+  return (
+    <div className="flex h-full flex-col gap-3 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">one backend-backed loop</div>
+          <div className="mt-1 text-sm text-[#EAE4D8]/70">Pythia gives signal → Apolo filters decision → Hermes trades. Apolo gets reputation because Apolo filters the data.</div>
+        </div>
+        <button
+          type="button"
+          onClick={onRun}
+          disabled={running}
+          className="rounded-sm border border-[#C5A67C]/45 bg-[#C5A67C]/15 px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#EAE4D8] transition hover:bg-[#C5A67C]/25 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {running ? 'Running…' : 'Run live flow'}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
+        {steps.map((s, i) => (
+          <div key={s.label} className={`relative rounded-sm border p-3 ${s.done ? 'border-emerald-300/30 bg-emerald-400/5' : 'border-white/10 bg-black/15'}`}>
+            {i < steps.length - 1 && <span className={`absolute -right-1.5 top-1/2 hidden h-px w-3 md:block ${s.done ? 'bg-emerald-300/45' : 'bg-white/20'}`} />}
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#EAE4D8]/55">{s.label}</span>
+              <span className={`h-1.5 w-1.5 rounded-full ${s.done ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,.8)]' : 'bg-white/25'}`} />
+            </div>
+            <div className={`mt-2 truncate font-mono text-base font-bold ${s.done ? 'text-emerald-300' : 'text-[#EAE4D8]/45'}`}>{s.value}</div>
+            <div className="mt-1 truncate text-[10px] text-[#EAE4D8]/55">{s.sub}</div>
           </div>
         ))}
       </div>
+
+      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-sm border border-white/10 bg-[#C5A67C]/10 md:grid-cols-2">
+        <div className="bg-[#0A0A0A]/90 px-3 py-2">
+          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">Decision</div>
+          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.decision ? `${receipt.decision.asset} · ${receipt.decision.decision} · ${receipt.decision.status}` : 'Pending'}</div>
+        </div>
+        <div className="bg-[#0A0A0A]/90 px-3 py-2">
+          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">Hermes output</div>
+          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.hermesAction ? `${receipt.hermesAction.action} · ${receipt.hermesAction.sizeUsdc} USDC · ${receipt.hermesAction.mode}` : 'Pending'}</div>
+        </div>
+      </div>
+
+      {receipt?.error && <div className="rounded-sm border border-rose-400/30 bg-rose-400/5 px-3 py-2 font-mono text-[10px] text-rose-200">{receipt.error}</div>}
     </div>
   );
 }
@@ -530,11 +713,15 @@ export default function LiveA2AAgentPageRoute() {
   const [bookBtc, setBookBtc] = useState<Orderbook | null>(null);
   const [bookEth, setBookEth] = useState<Orderbook | null>(null);
   const [orderbookAsset, setOrderbookAsset] = useState<'BTC' | 'ETH'>('BTC');
+  const [btcStream, setBtcStream] = useState<BtcStream | null>(null);
+  const [ethStream, setEthStream] = useState<BtcStream | null>(null);
   const [scanCount, setScanCount] = useState(0);
   const [loopMs, setLoopMs] = useState(0);
   const [overview, setOverview] = useState<OverviewData | null>(null);
   const [a2aStatus, setA2aStatus] = useState<A2AStatusData | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
+  const [flowReceipt, setFlowReceipt] = useState<FlowReceipt | null>(null);
+  const [flowRunning, setFlowRunning] = useState(false);
 
   const latestRow = signalRows[0] ?? null;
   const latestVerdict = verdictFromSignal(latestRow ?? undefined);
@@ -620,20 +807,28 @@ export default function LiveA2AAgentPageRoute() {
     };
   }, []);
 
-  // Orderbook (every 4s)
+  // Market widget data: Polymarket orderbook + Coinbase live price/candles (every 4s)
   useEffect(() => {
     let alive = true;
     async function load() {
       try {
-        const r = await fetch(`/api/a2a/orderbook?asset=${orderbookAsset}`, { cache: 'no-store' });
+        const [bookRes, streamRes] = await Promise.all([
+          fetch(`/api/a2a/orderbook?asset=${orderbookAsset}`, { cache: 'no-store' }),
+          fetch(`/api/a2a/btc-stream?asset=${orderbookAsset}`, { cache: 'no-store' }),
+        ]);
         if (!alive) return;
-        if (r.ok) {
-          const data = (await r.json()) as Orderbook;
+        if (bookRes.ok) {
+          const data = (await bookRes.json()) as Orderbook;
           if (orderbookAsset === 'BTC') setBookBtc(data);
           else setBookEth(data);
         }
+        if (streamRes.ok) {
+          const data = (await streamRes.json()) as BtcStream;
+          if (orderbookAsset === 'BTC') setBtcStream(data);
+          else setEthStream(data);
+        }
       } catch (err: any) {
-        if (alive) setErrors((e) => [`book: ${err?.message}`, ...e].slice(0, 3));
+        if (alive) setErrors((e) => [`market-widget: ${err?.message}`, ...e].slice(0, 3));
       }
     }
     load();
@@ -647,6 +842,7 @@ export default function LiveA2AAgentPageRoute() {
   const btcMarket = useMemo(() => markets.find((m) => m.asset === 'BTC'), [markets]);
   const ethMarket = useMemo(() => markets.find((m) => m.asset === 'ETH'), [markets]);
   const activeBook = orderbookAsset === 'BTC' ? bookBtc : bookEth;
+  const activeStream = orderbookAsset === 'BTC' ? btcStream : ethStream;
 
   const apoloStat = a2aStatus?.agents?.apolo?.stats;
   const pythiaStat = a2aStatus?.agents?.pythia?.stats;
@@ -666,6 +862,20 @@ export default function LiveA2AAgentPageRoute() {
     1e6;
   const totalAgents = Number(overview?.summary?.totalAgents ?? 0) || 3;
   const completedJobs = Number(overview?.summary?.completedJobs ?? 0) || workproofReady;
+
+  async function runLiveFlow() {
+    setFlowRunning(true);
+    try {
+      const r = await fetch('/api/a2a/run-flow', { method: 'POST', cache: 'no-store' });
+      const data = (await r.json()) as FlowReceipt;
+      setFlowReceipt(data);
+      if (!r.ok || !data.ok) setErrors((e) => [`flow: ${data.error || r.statusText}`, ...e].slice(0, 3));
+    } catch (err: any) {
+      setErrors((e) => [`flow: ${err?.message}`, ...e].slice(0, 3));
+    } finally {
+      setFlowRunning(false);
+    }
+  }
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-5 text-[#EAE4D8] selection:bg-[#C5A67C]/20 sm:px-6 lg:px-8">
@@ -704,6 +914,10 @@ export default function LiveA2AAgentPageRoute() {
           <AgentGraph latest={latestRow} />
         </TerminalPanel>
 
+        <TerminalPanel title="Backend Flow · Pay Agent → Receipt → Reputation" right={<Chip tone="green">RUNNABLE</Chip>} className="min-h-[260px]">
+          <LiveA2AFlow receipt={flowReceipt} running={flowRunning} onRun={runLiveFlow} />
+        </TerminalPanel>
+
         {/* Autonomous Loop + Full Loop Proof */}
         <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1fr_1.2fr]">
           <TerminalPanel title="Autonomous Loop" right={<Chip tone="green">RUNNING 24/7</Chip>} className="min-h-[360px]">
@@ -715,47 +929,33 @@ export default function LiveA2AAgentPageRoute() {
           </TerminalPanel>
         </section>
 
-        {/* Edge + Orderbook */}
-        <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1.4fr_1fr]">
-          <TerminalPanel
-            title="Live Edge · UP / DOWN"
-            right={
-              <Chip tone={latestVerdict === 'YES' ? 'green' : latestVerdict === 'NO EDGE' ? 'red' : latestVerdict === 'EDGE' ? 'cyan' : 'amber'}>
-                {latestVerdict}
-              </Chip>
-            }
-            className="h-[340px]"
-          >
-            <LiveEdgeBoard btc={btcMarket} eth={ethMarket} latest={latestRow} />
-          </TerminalPanel>
+        {/* Live market widget */}
+        <TerminalPanel
+          title="Live BTC Price · Target · Countdown · Chart · Orderbook"
+          right={
+            <div className="flex items-center gap-1">
+              {(['BTC', 'ETH'] as const).map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  onClick={() => setOrderbookAsset(a)}
+                  className={`rounded-sm border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
+                    orderbookAsset === a
+                      ? 'border-[#C5A67C]/45 bg-[#C5A67C]/15 text-[#EAE4D8]'
+                      : 'border-white/15 bg-white/5 text-[#EAE4D8] hover:bg-white/5'
+                  }`}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          }
+          className="h-[560px]"
+        >
+          <LiveMarketWidget book={activeBook} stream={activeStream} asset={orderbookAsset} />
+        </TerminalPanel>
 
-          <TerminalPanel
-            title="Polymarket Live Orderbook"
-            right={
-              <div className="flex items-center gap-1">
-                {(['BTC', 'ETH'] as const).map((a) => (
-                  <button
-                    key={a}
-                    type="button"
-                    onClick={() => setOrderbookAsset(a)}
-                    className={`rounded-sm border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
-                      orderbookAsset === a
-                        ? 'border-[#C5A67C]/45 bg-[#C5A67C]/15 text-[#EAE4D8]'
-                        : 'border-white/15 bg-white/5 text-[#EAE4D8] hover:bg-white/5'
-                    }`}
-                  >
-                    {a}
-                  </button>
-                ))}
-              </div>
-            }
-            className="h-[340px]"
-          >
-            <PolymarketOrderbook book={activeBook} asset={orderbookAsset} />
-          </TerminalPanel>
-        </section>
-
-        {/* Signal Stream — 2 columns */}
+        {/* Signal Stream — 3 columns */}
         <TerminalPanel
           title="Signal Stream"
           right={
