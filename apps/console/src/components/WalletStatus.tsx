@@ -45,8 +45,19 @@ export default function WalletStatus({ variant = 'app' }: Props) {
     setBusy(true);
     try {
       await login();
-    } catch {
-      setShowRegister(true);
+    } catch (e) {
+      // User cancelled/aborted passkey prompt — don't show register modal.
+      // Only fall back to register when login truly failed (no existing passkey).
+      const msg = e instanceof Error ? e.message.toLowerCase() : '';
+      const cancelled =
+        msg.includes('cancel') ||
+        msg.includes('abort') ||
+        msg.includes('notallowed') ||
+        msg.includes('user') ||
+        msg.includes('denied');
+      if (!cancelled) {
+        setShowRegister(true);
+      }
     } finally {
       setBusy(false);
     }
@@ -218,12 +229,12 @@ export default function WalletStatus({ variant = 'app' }: Props) {
       {/* Passkey register modal (fallback when no passkey exists) */}
       {showRegister && (
         <div
-          className="fixed inset-0 z-[100] flex items-end justify-center pb-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center"
           style={{ background: 'rgba(0,0,0,0.85)' }}
           onClick={() => !busy && setShowRegister(false)}
         >
           <div
-            className="w-full max-w-md p-8 font-mono"
+            className="w-full max-w-md rounded p-8 font-mono"
             style={{
               background: '#0a0a0a',
               border: '1px solid rgba(197, 166, 124, 0.25)',
