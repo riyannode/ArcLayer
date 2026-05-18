@@ -3,16 +3,15 @@ pragma solidity ^0.8.20;
 
 import "./AgentRegistry.sol";
 import "./WorkProof.sol";
-
-interface IERC20Like {
-    function transfer(address to, uint256 amount) external returns (bool);
-    function transferFrom(address from, address to, uint256 amount) external returns (bool);
-}
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /// @title JobEscrow
 /// @notice Escrow settlement layer for agent-to-agent jobs on Arc.
 contract JobEscrow {
-    IERC20Like public immutable usdc;
+    using SafeERC20 for IERC20;
+
+    IERC20 public immutable usdc;
     AgentRegistry public immutable agentRegistry;
     WorkProof public immutable workProof;
     address public owner;
@@ -74,6 +73,7 @@ contract JobEscrow {
         uint256 fee
     );
     event JobCancelled(uint256 indexed jobId);
+    event JobRefunded(uint256 indexed jobId, address indexed client, uint256 amount);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Not owner");
@@ -90,7 +90,7 @@ contract JobEscrow {
         require(agentRegistry_ != address(0), "Invalid registry");
         require(workProof_ != address(0), "Invalid work proof");
 
-        usdc = IERC20Like(usdc_);
+        usdc = IERC20(usdc_);
         agentRegistry = AgentRegistry(agentRegistry_);
         workProof = WorkProof(workProof_);
         owner = msg.sender;
@@ -154,7 +154,7 @@ contract JobEscrow {
         require(amount > 0, "Invalid amount");
         require(job.fundedAmount + amount <= job.budget, "Overfunded");
 
-        require(usdc.transferFrom(msg.sender, address(this), amount), "USDC transfer failed");
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
 
         job.fundedAmount += amount;
         if (job.fundedAmount == job.budget) {
@@ -193,7 +193,7 @@ contract JobEscrow {
 
     function settle(uint256 jobId) external onlyExistingJob(jobId) {
         Job storage job = jobs[jobId];
-        require(msg.sender == job.client || msg.sender == job.evaluator || msg.sender == owner, "Not authorized");
+        require(msg.sender == job.evaluator || msg.sender == job.client, "Not authorized");
         require(job.status == JobStatus.Evaluated, "Not settleable");
         require(job.approved, "Not approved");
         require(job.fundedAmount == job.budget, "Underfunded");
@@ -203,9 +203,9 @@ contract JobEscrow {
 
         job.status = JobStatus.Settled;
 
-        require(usdc.transfer(job.worker, payout), "Payout failed");
+        usdc.safeTransfer(job.worker, payout);
         if (fee > 0) {
-            require(usdc.transfer(owner, fee), "Fee transfer failed");
+            usdc.safeTransfer(owner, fee);
         }
 
         workProof.mintProof(
@@ -218,6 +218,22 @@ contract JobEscrow {
         );
 
         emit JobSettled(jobId, job.agentId, job.worker, payout, fee);
+    }
+
+    function refundRejected(uint256 jobId) external onlyExistingJob(jobId) {
+        Job storage job = jobs[jobId];
+        require(msg.sender == job.client || msg.sender == job.evaluator, "Not authorized");
+        require(job.status == JobStatus.Evaluated, "Not refundable");
+        require(!job.approved, "Job approved");
+        require(job.fundedAmount > 0, "Nothing to refund");
+
+        uint256 refund = job.fundedAmount;
+        job.status = JobStatus.Settled;
+        job.fundedAmount = 0;
+
+        usdc.safeTransfer(job.client, refund);
+
+        emit JobRefunded(jobId, job.client, refund);
     }
 
     function cancelJob(uint256 jobId) external onlyExistingJob(jobId) {

@@ -31,6 +31,11 @@ interface GatewayBalance { depositedUsdc: string | null; poolUsdc?: string; meth
 function nowTs() { return new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }); }
 function randomNonce(): Hex { return `0x${Array.from(crypto.getRandomValues(new Uint8Array(32))).map((b) => b.toString(16).padStart(2, '0')).join('')}` as Hex; }
 function b64(value: unknown) { return btoa(JSON.stringify(value)); }
+function parseUsdcToUnits(value?: string | null) {
+  if (!value) return BigInt(0);
+  const [whole = '0', fraction = ''] = value.split('.');
+  return BigInt(whole || '0') * BigInt(1_000_000) + BigInt((fraction + '000000').slice(0, 6));
+}
 
 interface X402DemoPanelProps {
   /** When true, render compact inline variant suitable for homepage embedding. */
@@ -271,11 +276,13 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     setRequirement(gwOption);
     log(`[GW] 2/5 Found Gateway option: ${formatUnits(BigInt(gwOption.amount), 6)} USDC via ${gwOption.extra?.name}`, 'success');
 
-    const client = createPublicClient({ transport: http(ARC_RPC) });
-    const balance = await client.readContract({ address: USDC, abi: BALANCE_ABI, functionName: 'balanceOf', args: [address] });
-    log(`Payer USDC balance: ${formatUnits(balance, 6)} USDC`);
-    if (balance < BigInt(gwOption.amount)) {
-      log(`Insufficient USDC. Need ${formatUnits(BigInt(gwOption.amount), 6)} USDC.`, 'error');
+    // H5 FIX: Check Gateway deposit balance, not raw USDC balance.
+    // Circle Gateway flow deducts from the user's deposit in GatewayWallet, not their EOA.
+    const depositedRaw = gatewayBalance?.depositedUsdc;
+    const depositedAmount = parseUsdcToUnits(depositedRaw);
+    log(`Gateway deposit balance: ${depositedRaw ?? '0'} USDC`);
+    if (depositedAmount < BigInt(gwOption.amount)) {
+      log(`Insufficient Gateway deposit. Need ${formatUnits(BigInt(gwOption.amount), 6)} USDC deposited in GatewayWallet.`, 'error');
       notify(NOTICE_INSUFFICIENT_USDC);
       setStep('error'); return;
     }
@@ -359,7 +366,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       notify(NOTICE_REPLAY_FAILED);
     }
     setStep(replayRejected ? 'done' : 'error');
-  }, [log, notify]);
+  }, [gatewayBalance, log, notify]);
 
   const runDemo = useCallback(async () => {
     // Synchronous double-submit guard — prevents two flows with different nonces.
@@ -459,6 +466,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
   const arcDisabledForPasskey = walletMode === 'passkey';
   const circleDisabledForEoa = walletMode === 'eoa';
+  const gatewayDepositUsdc = gatewayBalance?.depositedUsdc ? Number(gatewayBalance.depositedUsdc) : 0;
+  const gatewayDepositInsufficient = mode === 'circle-gateway' && walletMode === 'passkey' && gatewayDepositUsdc < 0.05;
   const connectLabel = mode === 'circle-gateway' ? 'CONNECT CIRCLE PASSKEY' : 'CONNECT WALLET';
 
   // Compact-aware sizing tokens
@@ -519,8 +528,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                   <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
                   {walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · {shortenAddress(address)}
                 </div>
-                <button onClick={busy || cooldown ? undefined : runDemo} disabled={busy || cooldown || relayer?.ready === false} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
-                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ (cooldown)' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                <button onClick={busy || cooldown || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || cooldown || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ (cooldown)' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                 </button>
               </>
             )}
@@ -690,8 +699,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                   <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
                   {walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · {shortenAddress(address)}
                 </div>
-                <button onClick={busy || cooldown ? undefined : runDemo} disabled={busy || cooldown || relayer?.ready === false} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
-                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ (cooldown)' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                <button onClick={busy || cooldown || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || cooldown || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ (cooldown)' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                 </button>
                 <button onClick={() => eoaConnected ? eoaDisconnect() : undefined} className={`mt-1.5 w-full cursor-pointer ${c.cardRadiusXs} border border-white/10 ${compact ? 'py-1.5' : 'py-2'} font-mono ${c.label} tracking-[0.14em] text-white/80 hover:border-white/20`}>DISCONNECT</button>
               </>
