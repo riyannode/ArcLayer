@@ -107,10 +107,15 @@ type A2AStatusData = {
 
 type OverviewData = {
   summary?: {
-    totalAgents?: number | string;
-    totalJobs?: number | string;
-    completedJobs?: number | string;
+    // Actual fields returned by /api/indexer/overview
+    eventCount?: number;
+    jobs?: number;
+    agents?: number;
+    proofs?: number;
+    totalBudget?: string;
     totalFunded?: string;
+    settledJobs?: number;
+    fundedJobs?: number;
   };
 };
 
@@ -610,7 +615,7 @@ function FullLoopProof({ latest, apoloStat }: LoopProofProps) {
   );
 }
 
-// ─── Signal Stream — 3 columns ───────────────────────────────────────────────
+// ─── Signal Stream — 3 rows collapsed, show all rows expanded ────────────────
 
 function SignalStream({ signals }: { signals: SignalEvent[] }) {
   const [expanded, setExpanded] = useState(false);
@@ -621,18 +626,22 @@ function SignalStream({ signals }: { signals: SignalEvent[] }) {
       </div>
     );
   }
-  const visible = expanded ? signals.slice(0, 5) : signals.slice(0, 3);
+  const visible = expanded ? signals : signals.slice(0, 3);
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="grid min-w-[720px] grid-cols-3 border-b border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#EAE4D8]/60">
+      {/* Header row */}
+      <div className={`grid border-b border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#EAE4D8]/60 ${expanded ? 'min-w-[1100px] grid-cols-5' : 'min-w-[720px] grid-cols-3'}`}>
         <span>Pythia Signal</span>
         <span>Apolo Decision</span>
         <span>Hermes Trade</span>
+        {expanded && <span>Payment</span>}
+        {expanded && <span>Reputation</span>}
       </div>
+      {/* Rows */}
       <div className="flex-1 overflow-auto">
-        <div className="min-w-[720px] divide-y divide-white/10">
+        <div className={`divide-y divide-white/10 ${expanded ? 'min-w-[1100px]' : 'min-w-[720px]'}`}>
           {visible.map((s) => (
-            <div key={s.id} className="grid grid-cols-3 gap-2 px-3 py-2 font-mono text-[11px]">
+            <div key={s.id} className={`grid gap-2 px-3 py-2 font-mono text-[11px] ${expanded ? 'grid-cols-5' : 'grid-cols-3'}`}>
               <div className="min-w-0 rounded-sm border border-[#C5A67C]/15 bg-[#C5A67C]/5 p-2">
                 <div className="truncate text-[#EAE4D8]">{s.market}</div>
                 <div className="mt-1 text-[10px] text-[#EAE4D8]/55">{s.ts} UTC · conf {s.confidence}%</div>
@@ -646,24 +655,35 @@ function SignalStream({ signals }: { signals: SignalEvent[] }) {
               </div>
               <div className="min-w-0 rounded-sm border border-amber-300/20 bg-amber-400/5 p-2">
                 <div className="truncate text-[#C5A67C]">{s.verdict === 'NO EDGE' || s.verdict === 'PASS' ? 'SKIP' : 'TRADE CANDIDATE'}</div>
-                <div className="mt-1 text-[10px] text-[#EAE4D8]/55">x402-ready · dry-run protected</div>
+                <div className="mt-1 text-[10px] text-[#EAE4D8]/55">x402 · dry-run</div>
               </div>
+              {expanded && (
+                <div className="min-w-0 rounded-sm border border-emerald-300/20 bg-emerald-400/5 p-2">
+                  <div className="truncate text-emerald-300">{s.verdict === 'YES' || s.verdict === 'EDGE' ? 'Payment completed' : 'No payment'}</div>
+                  <div className="mt-1 text-[10px] text-[#EAE4D8]/55">0.005 USDC · x402</div>
+                </div>
+              )}
+              {expanded && (
+                <div className="min-w-0 rounded-sm border border-cyan-300/20 bg-cyan-400/5 p-2">
+                  <div className="truncate text-cyan-300">{s.verdict === 'YES' || s.verdict === 'EDGE' ? 'Apolo +1' : '—'}</div>
+                  <div className="mt-1 text-[10px] text-[#EAE4D8]/55">resolver reputation</div>
+                </div>
+              )}
             </div>
           ))}
         </div>
       </div>
-      {signals.length > 3 && (
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="flex w-full items-center justify-center gap-2 border-t border-white/10 py-2 font-mono text-[10px] uppercase tracking-wider text-[#C5A67C] transition hover:bg-[#C5A67C]/10"
-        >
-          <span>{expanded ? 'Show less' : 'Show all'}</span>
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`h-3.5 w-3.5 transition ${expanded ? 'rotate-180' : ''}`}>
-            <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
-          </svg>
-        </button>
-      )}
+      {/* Expand/collapse toggle */}
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center justify-center gap-2 border-t border-white/10 py-2 font-mono text-[10px] uppercase tracking-wider text-[#C5A67C] transition hover:bg-[#C5A67C]/10"
+      >
+        <span>{expanded ? 'Show less' : 'Show all columns'}</span>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`h-3.5 w-3.5 transition ${expanded ? 'rotate-180' : ''}`}>
+          <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -1054,18 +1074,20 @@ export default function LiveA2AAgentPageRoute() {
 
   const workproofReady = signalRows.filter((r) => r.apolo.status === 'APPROVED').length;
 
-  const totalRequests = Math.max(
-    scanCount,
-    (pythiaStat?.callsServed ?? 0) + (apoloStat?.callsServed ?? 0) + (hermesStat?.callsServed ?? 0),
-  );
+  // A2A-only metrics — do NOT include manual job escrow numbers here.
+  // scanCount is a browser-local poll counter, not a real request count, so we drop it.
+  const totalRequests =
+    (pythiaStat?.callsServed ?? 0) + (apoloStat?.callsServed ?? 0) + (hermesStat?.callsServed ?? 0);
   const totalUsdcVolume =
-    (Number(overview?.summary?.totalFunded ?? '0') +
-      Number(pythiaStat?.totalRevenue ?? '0') +
+    (Number(pythiaStat?.totalRevenue ?? '0') +
       Number(apoloStat?.totalRevenue ?? '0') +
       Number(hermesStat?.totalRevenue ?? '0')) /
     1e6;
-  const totalAgents = Number(overview?.summary?.totalAgents ?? 0) || 3;
-  const completedJobs = Number(overview?.summary?.completedJobs ?? 0) || workproofReady;
+  // Total agents = on-chain registered A2A agents (3 in this category).
+  const totalAgents = [pythiaStat, apoloStat, hermesStat].filter((s) => s !== undefined).length;
+  // Completed jobs for A2A category = A2A signals that produced a settled receipt.
+  // workproofReady is approved-by-Apolo signal count (per-session) — keep as A2A-local proxy.
+  const completedJobs = workproofReady;
 
   async function runLiveFlow() {
     setFlowRunning(true);

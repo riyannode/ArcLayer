@@ -256,9 +256,8 @@ export default function Dashboard() {
             sub="x402 + Gateway + escrow paths"
             action={<Link href="/api/x402/supported" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>INSPECT CONFIG ↗</Link>}
           >
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <RailCard title="Arc Native x402" status="LIVE" text="Direct pay-per-call using USDC. No prepaid deposit needed." href="/x402-demo" cta="Try demo" />
-              <RailCard title="Circle Gateway" status="SUPPORTED" text="Prepaid Gateway balance for high-frequency agent calls." href="/api/x402/gateway-status" cta="Check status" />
               <RailCard title="Escrow Jobs" status="LIVE" text="Deposit USDC, approve work, release payout, mint WorkProof." href="/jobs/manual" cta="Create job" />
             </div>
           </Panel>

@@ -19,28 +19,10 @@ export default function Footer() {
   ];
 
   return (
-    <footer className="relative z-10 w-full border-t border-white/8" style={{ background: 'rgba(5, 5, 5, 0.92)' }}>
-      <div className="mx-auto max-w-screen-2xl px-6 py-16 md:px-10">
-        {/* CTA strip */}
-        <div
-          className="mb-12 flex flex-col gap-6 p-8 md:flex-row md:items-center md:justify-between"
-          style={{ border: '1px solid transparent' }}
-          aria-hidden="true"
-        >
-          <div>
-            <div className="aureo-mono-label mb-3">&nbsp;</div>
-            <p className="aureo-display text-[28px] md:text-[34px]" style={{ color: 'transparent' }}>
-              &nbsp;
-            </p>
-            <p className="mt-2 font-mono text-[12px]" style={{ color: 'transparent' }}>
-              &nbsp;
-            </p>
-          </div>
-          <div className="flex gap-3" />
-        </div>
-
+    <footer className="relative z-10 w-full border-t border-white/5" style={{ background: 'rgba(5, 5, 5, 0.38)' }}>
+      <div className="mx-auto max-w-screen-2xl px-6 py-20 md:px-10 md:py-24">
         {/* Columns */}
-        <div className="mt-4 grid grid-cols-1 gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
+        <div className="grid grid-cols-1 gap-12 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div>
             <div className="flex items-center gap-3">
               <ArcMark size={28} />
@@ -48,7 +30,7 @@ export default function Footer() {
                 ARCLAYER
               </span>
             </div>
-            <p className="mt-5 max-w-[360px] font-mono text-[11.5px] leading-6 text-[#a0a0a0]">
+            <p className="mt-5 max-w-[360px] font-mono text-[11.5px] leading-6 text-[#EAE4D8]/85">
                   x402 payment, USDC escrow, and WorkProof reputation infrastructure for agent builders and developers — on Arc.
             </p>
             <div className="mt-6 flex items-center gap-2">
@@ -64,7 +46,7 @@ export default function Footer() {
             <ul className="space-y-2.5">
               {protocolLinks.map((l) => (
                 <li key={l.label}>
-                  <Link href={l.href} className="font-mono text-[11px] tracking-[0.16em] text-[#c5c0b2] transition-colors hover:text-[#C5A67C]">
+                  <Link href={l.href} className="font-mono text-[11px] tracking-[0.16em] text-[#EAE4D8]/90 transition-colors hover:text-[#C5A67C]">
                     {l.label}
                   </Link>
                 </li>
@@ -81,9 +63,9 @@ export default function Footer() {
                     href={l.href}
                     target={l.ext ? '_blank' : undefined}
                     rel={l.ext ? 'noopener noreferrer' : undefined}
-                    className="font-mono text-[11px] text-[#c5c0b2] transition-colors hover:text-[#C5A67C]"
+                    className="font-mono text-[11px] text-[#EAE4D8]/90 transition-colors hover:text-[#C5A67C]"
                   >
-                    {l.label} <span className="text-[#a0a0a0]">↗</span>
+                    {l.label} <span className="text-[#EAE4D8]/55">↗</span>
                   </a>
                 </li>
               ))}
@@ -111,7 +93,7 @@ export default function Footer() {
 
         {/* Bottom row */}
         <div className="mt-12 flex items-center justify-center border-t border-transparent pt-8">
-          <p className="font-mono text-[10.5px] tracking-[0.12em] text-[#a0a0a0]">
+          <p className="font-mono text-[10.5px] tracking-[0.12em] text-[#EAE4D8]/65">
             © 2026 ARCLAYER · PAYMENT INFRASTRUCTURE FOR AGENTS READY TO SHIP
           </p>
         </div>

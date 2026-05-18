@@ -91,7 +91,7 @@ export default function Navbar() {
           </div>
           <div className="flex flex-col leading-none">
             <span
-              className="aureo-body text-[#EAE4D8]"
+              className="aureo-body text-[#EAE4D8]/72"
               style={{ fontSize: '15px', letterSpacing: '0.24em', fontWeight: 400 }}
             >
               ARCLAYER

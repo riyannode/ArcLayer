@@ -1,7 +1,17 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { AGENT_CATEGORIES } from './categories';
+
+type AgentStat = { callsServed?: number; totalRevenue?: string; reputationScore?: number };
+type A2AStatusData = {
+  agents?: {
+    pythia?: { stats?: AgentStat };
+    apolo?: { stats?: AgentStat };
+    hermes?: { stats?: AgentStat };
+  };
+};
 
 function Chip({ children, tone = 'cyan' }: { children: React.ReactNode; tone?: 'cyan' | 'green' | 'amber' | 'violet' }) {
   const tones = {
@@ -29,18 +39,56 @@ function MetricCard({ label, value, sub, tone = 'cyan' }: { label: string; value
   );
 }
 
+function fmt(n: number, digits = 2) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
 export default function LiveA2AAgentPage() {
+  const [a2aStatus, setA2aStatus] = useState<A2AStatusData | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const res = await fetch('/api/a2a/status', { cache: 'no-store' });
+        if (!alive || !res.ok) return;
+        setA2aStatus((await res.json()) as A2AStatusData);
+      } catch {
+        // Keep the dashboard readable if RPC/status fetch is temporarily unavailable.
+      }
+    }
+    load();
+    const t = setInterval(load, 15_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  const metrics = useMemo(() => {
+    const stats = [
+      a2aStatus?.agents?.pythia?.stats,
+      a2aStatus?.agents?.apolo?.stats,
+      a2aStatus?.agents?.hermes?.stats,
+    ];
+    const totalRequests = stats.reduce((sum, stat) => sum + (stat?.callsServed ?? 0), 0);
+    const totalUsdcVolume = stats.reduce((sum, stat) => sum + Number(stat?.totalRevenue ?? '0'), 0) / 1e6;
+    const totalAgents = stats.filter((stat) => stat !== undefined).length;
+
+    return { totalRequests, totalUsdcVolume, totalAgents };
+  }, [a2aStatus]);
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-5 text-[#EAE4D8] selection:bg-[#C5A67C]/20 sm:px-6 lg:px-8">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(197,166,124,0.14),transparent_30%),radial-gradient(circle_at_82%_8%,rgba(255,255,255,0.055),transparent_26%)]" />
-      <div className="relative mx-auto flex max-w-[1480px] flex-col gap-4">
+      <div className="relative mx-auto flex max-w-[1480px] flex-col gap-6 pt-8 pb-12 sm:pt-12">
         <header className="overflow-hidden rounded-sm border border-[#C5A67C]/15 bg-[#0A0A0A]/90">
-          <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 lg:flex-row lg:items-center">
+          <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-5 lg:flex-row lg:items-center">
             <div className="min-w-0">
               <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">ARCLAYER · A2A</div>
-              <h1 className="mt-1 text-3xl font-black uppercase tracking-[0.16em] text-[#EAE4D8] sm:text-3xl">LIVE A2A AGENT</h1>
-              <p className="mt-1 max-w-3xl text-sm text-[#EAE4D8]">
-                Choose an agent category. The live backend flow opens on its own page, like Jobs and Register.
+              <h1 className="mt-2 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5] sm:text-4xl">LIVE A2A AGENT</h1>
+              <p className="mt-2 max-w-3xl text-sm text-[#EAE4D8]/95">
+                Choose an agent category. A2A metrics only count agent-to-agent paid calls, not manual escrow jobs.
               </p>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -50,10 +98,10 @@ export default function LiveA2AAgentPage() {
             </div>
           </div>
           <div className="flex min-w-0 flex-wrap">
-            <MetricCard label="Total Requests" value="24" sub="agent calls + scans" tone="cyan" />
-            <MetricCard label="Total USDC Volume" value="$0.18" sub="x402 + escrow settled" tone="green" />
-            <MetricCard label="Total Agents" value="12" sub="available categories" tone="violet" />
-            <MetricCard label="Completed Jobs" value="3" sub="settled work receipts" tone="amber" />
+            <MetricCard label="Total Requests" value={`${metrics.totalRequests}`} sub="A2A calls only" tone="cyan" />
+            <MetricCard label="Total USDC Volume" value={`$${fmt(metrics.totalUsdcVolume, 2)}`} sub="x402 settled only" tone="green" />
+            <MetricCard label="Total Agents" value={`${metrics.totalAgents || 3}`} sub="A2A network agents" tone="violet" />
+            <MetricCard label="Completed Jobs" value="—" sub="manual escrow excluded" tone="amber" />
           </div>
         </header>
 
@@ -65,17 +113,17 @@ export default function LiveA2AAgentPage() {
           </div>
 
           <div className="p-4">
-            <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">
+            <div className="mb-4 font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/82">
               Click a category to open the agent flow page
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {AGENT_CATEGORIES.map((cat) => {
                 const isLive = cat.status === 'LIVE';
                 return (
                   <Link
                     key={cat.key}
                     href={`/live-a2a-agent/${cat.key}`}
-                    className="group relative flex min-h-[142px] flex-col gap-2 rounded-sm border border-white/10 bg-black/25 p-3 text-left transition hover:border-[#C5A67C]/35 hover:bg-white/[0.04]"
+                    className="group relative flex min-h-[166px] flex-col gap-2 rounded-sm border border-white/[0.045] bg-black/22 p-4 text-left transition hover:border-[#C5A67C]/25 hover:bg-white/[0.035]"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className={`flex h-8 w-8 items-center justify-center rounded-sm border border-white/10 bg-black/40 ${isLive ? 'text-[#C5A67C]' : 'text-[#EAE4D8]/45'}`}>
@@ -86,7 +134,7 @@ export default function LiveA2AAgentPage() {
                       </span>
                     </div>
                     <div className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#EAE4D8]">{cat.label}</div>
-                    <div className="line-clamp-2 text-[10.5px] leading-snug text-[#EAE4D8]/60">{cat.tagline}</div>
+                    <div className="line-clamp-2 text-[10.5px] leading-snug text-[#EAE4D8]/80">{cat.tagline}</div>
                     <div className="mt-auto flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-[#C5A67C]">
                       Open page <span className="transition group-hover:translate-x-0.5">→</span>
                     </div>

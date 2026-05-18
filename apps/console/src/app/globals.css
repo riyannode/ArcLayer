@@ -223,8 +223,8 @@ body {
   font-family: 'Inter', sans-serif; font-weight: 300; line-height: 1.5;
 }
 .aureo-mono-label {
-  font-family: 'Inter', sans-serif; font-weight: 500; font-size: 11.5px;
-  letter-spacing: 0.24em; text-transform: uppercase; color: rgba(234, 228, 216, 0.85);
+  font-family: 'Inter', sans-serif; font-weight: 600; font-size: 11.5px;
+  letter-spacing: 0.24em; text-transform: uppercase; color: rgba(245, 240, 229, 0.92);
 }
 .aureo-code-label {
   font-family: var(--font-mono); font-weight: 400; font-size: 11px;
