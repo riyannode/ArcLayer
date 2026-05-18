@@ -31,6 +31,7 @@ const WALLETS = {
 // Known agent IDs (keccak256-derived from registration tx)
 const PYTHIA_AGENT_ID = '0x49c996c626a315b5af92d58f0db6c12acf106818d47b39221b8a73217ddccc37' as Hex;
 const HERMES_AGENT_ID = '0xe0704f9716c028e812f9a6651af63bf49d8a5476dc32ff04093d217459044234' as Hex;
+const APOLO_AGENT_ID = '0x19ee8cc5500913c67bfdf054d904cd09caea3cdddce78625997cc1bc8eaf5472' as Hex;
 
 const REPUTATION_ABI = [
   {
@@ -123,7 +124,7 @@ export async function GET() {
   try {
     const client = createPublicClient({ transport: http(RPC) });
 
-    const [pythiaStats, hermesStats, totalMirrors, marketCount, hermesUsdc, pythiaUsdc] = await Promise.allSettled([
+    const [pythiaStats, hermesStats, apoloStats, totalMirrors, marketCount, hermesUsdc, pythiaUsdc] = await Promise.allSettled([
       client.readContract({
         address: CONTRACTS.reputationRegistry,
         abi: REPUTATION_ABI,
@@ -135,6 +136,12 @@ export async function GET() {
         abi: REPUTATION_ABI,
         functionName: 'getStats',
         args: [HERMES_AGENT_ID],
+      }) as Promise<RawStats>,
+      client.readContract({
+        address: CONTRACTS.reputationRegistry,
+        abi: REPUTATION_ABI,
+        functionName: 'getStats',
+        args: [APOLO_AGENT_ID],
       }) as Promise<RawStats>,
       client.readContract({
         address: CONTRACTS.mirrorRegistry,
@@ -173,6 +180,11 @@ export async function GET() {
           agentId: HERMES_AGENT_ID,
           role: 'autonomous_trader',
           stats: fmtStats(hermesStats),
+        },
+        apolo: {
+          agentId: APOLO_AGENT_ID,
+          role: 'decision',
+          stats: fmtStats(apoloStats),
         },
       },
       wallets: WALLETS,
