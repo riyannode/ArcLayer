@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,19 +36,31 @@ type Orderbook = {
   error?: string;
 };
 
-type HistoryPoint = { t: number; p: number };
-
-type Candle = { o: number; h: number; l: number; c: number; v: number };
-
 type SignalEvent = {
   id: string;
   verdict: Verdict;
   market: string;
   confidence: number;
-  evidence: number;
-  engine: string;
-  thesis: string;
   ts: string;
+  thesis: string;
+};
+
+type AgentStat = { callsServed?: number; totalRevenue?: string; reputationScore?: number };
+type A2AStatusData = {
+  agents?: {
+    pythia?: { stats?: AgentStat };
+    apolo?: { stats?: AgentStat };
+    hermes?: { stats?: AgentStat };
+  };
+};
+
+type OverviewData = {
+  summary?: {
+    totalAgents?: number | string;
+    totalJobs?: number | string;
+    completedJobs?: number | string;
+    totalFunded?: string;
+  };
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -65,31 +77,6 @@ function fmt(n: number, digits = 2) {
   return n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
-function pointsToCandles(points: HistoryPoint[], bucketSec = 300): Candle[] {
-  if (!points.length) return [];
-  const sorted = [...points].sort((a, b) => a.t - b.t);
-  const buckets = new Map<number, number[]>();
-  for (const pt of sorted) {
-    const key = Math.floor(pt.t / bucketSec) * bucketSec;
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key)!.push(pt.p);
-  }
-  return Array.from(buckets.entries())
-    .sort((a, b) => a[0] - b[0])
-    .slice(-72)
-    .map(([, prices]) => {
-      const o = prices[0];
-      const c = prices[prices.length - 1];
-      return {
-        o,
-        c,
-        h: Math.max(...prices),
-        l: Math.min(...prices),
-        v: Math.min(100, prices.length * 8),
-      };
-    });
-}
-
 function verdictFromSignal(row: SignalRow | undefined): Verdict {
   if (!row) return 'REVIEW';
   if (row.apolo.status === 'REJECTED') return 'NO EDGE';
@@ -103,12 +90,10 @@ function rowsToSignalEvents(rows: SignalRow[]): SignalEvent[] {
   return rows.map((row, i) => ({
     id: `${row.slug}-${i}-${Date.now()}`,
     verdict: verdictFromSignal(row),
-    market: `${row.asset} Up or Down — 5m`,
+    market: `${row.asset} 5m · ${row.apolo.decision}`,
     confidence: row.apolo.confidence,
-    evidence: Math.round(row.market.spread * 1000),
-    engine: row.apolo.status === 'APPROVED' ? 'Forecast + Microstructure' : 'Risk Gate',
-    thesis: row.apolo.reason,
     ts: new Date().toISOString().slice(11, 19),
+    thesis: row.apolo.reason,
   }));
 }
 
@@ -172,116 +157,38 @@ function MetricCard({ label, value, sub, tone = 'cyan' }: { label: string; value
   );
 }
 
-function CandleChart({ candles, color = '#00d4ff' }: { candles: Candle[]; color?: string }) {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+// ─── Live edge readout (UP/DOWN, no candles) ─────────────────────────────────
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || candles.length < 2) return;
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(rect.width * dpr);
-    canvas.height = Math.floor(rect.height * dpr);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.scale(dpr, dpr);
-    const W = rect.width;
-    const H = rect.height;
-    ctx.clearRect(0, 0, W, H);
-
-    const chartH = H * 0.78;
-    const hi = Math.max(...candles.map((c) => c.h));
-    const lo = Math.min(...candles.map((c) => c.l));
-    const range = hi - lo || 0.01;
-    const pad = range * 0.12;
-    const yOf = (p: number) => chartH - ((p - lo + pad) / (range + pad * 2)) * chartH + 8;
-    const step = W / candles.length;
-    const bodyW = Math.max(2, step * 0.62);
-
-    ctx.strokeStyle = 'rgba(0,212,255,0.06)';
-    ctx.lineWidth = 1;
-    for (let i = 1; i < 5; i += 1) {
-      const y = (chartH / 5) * i;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(W, y);
-      ctx.stroke();
-    }
-
-    candles.forEach((c, i) => {
-      const x = i * step + step / 2;
-      const up = c.c >= c.o;
-      const col = up ? '#34d399' : '#fb7185';
-      ctx.strokeStyle = col;
-      ctx.globalAlpha = 0.75;
-      ctx.beginPath();
-      ctx.moveTo(x, yOf(c.h));
-      ctx.lineTo(x, yOf(c.l));
-      ctx.stroke();
-      ctx.fillStyle = col;
-      const top = yOf(Math.max(c.o, c.c));
-      const bottom = yOf(Math.min(c.o, c.c));
-      ctx.fillRect(x - bodyW / 2, top, bodyW, Math.max(1, bottom - top));
-      ctx.globalAlpha = 0.2;
-      ctx.fillRect(x - bodyW / 2, H - (c.v / 100) * H * 0.16 - 4, bodyW, (c.v / 100) * H * 0.16);
-      ctx.globalAlpha = 1;
-    });
-
-    const lastY = yOf(candles[candles.length - 1].c);
-    ctx.setLineDash([4, 5]);
-    ctx.strokeStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(0, lastY);
-    ctx.lineTo(W, lastY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }, [candles, color]);
-
-  if (candles.length < 2) {
-    return (
-      <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-slate-500">
-        No history yet for current 5m window
-      </div>
-    );
-  }
-  return <canvas ref={canvasRef} className="h-full w-full" />;
-}
-
-function SignalStream({ signals }: { signals: SignalEvent[] }) {
-  if (!signals.length) {
-    return (
-      <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-slate-500">
-        Waiting for live signals…
-      </div>
-    );
-  }
+function LiveEdgeBoard({ btc, eth, latest }: { btc?: LiveMarket; eth?: LiveMarket; latest: SignalRow | null }) {
+  const cards = [
+    { label: 'BTC · UP (5m)', val: btc ? btc.upPrice.toFixed(3) : '—', tone: 'green' as const, sub: btc ? `vol ${fmt(btc.volume ?? 0, 0)}` : 'awaiting market' },
+    { label: 'BTC · DOWN (5m)', val: btc ? btc.downPrice.toFixed(3) : '—', tone: 'red' as const, sub: btc ? `spread ${(Math.abs(btc.upPrice - btc.downPrice) * 1000).toFixed(0)} bps` : '—' },
+    { label: 'ETH · UP (5m)', val: eth ? eth.upPrice.toFixed(3) : '—', tone: 'violet' as const, sub: eth ? `vol ${fmt(eth.volume ?? 0, 0)}` : 'awaiting market' },
+    { label: 'ETH · DOWN (5m)', val: eth ? eth.downPrice.toFixed(3) : '—', tone: 'red' as const, sub: eth ? `spread ${(Math.abs(eth.upPrice - eth.downPrice) * 1000).toFixed(0)} bps` : '—' },
+    { label: 'Apolo Verdict', val: latest ? latest.apolo.decision : '—', tone: 'cyan' as const, sub: latest ? `${latest.apolo.confidence}% conf · ${latest.apolo.risk} risk` : 'no signal yet' },
+    { label: 'Hermes Action', val: latest ? latest.hermes.action : 'SKIP', tone: 'amber' as const, sub: latest ? `${latest.hermes.sizeUsdc} USDC · ${latest.hermes.mode}` : 'idle' },
+  ];
+  const valueTone: Record<'green' | 'red' | 'cyan' | 'amber' | 'violet', string> = {
+    green: 'text-emerald-200',
+    red: 'text-rose-200',
+    cyan: 'text-cyan-200',
+    amber: 'text-amber-200',
+    violet: 'text-violet-200',
+  };
   return (
-    <div className="h-full overflow-hidden">
-      <div className="grid grid-cols-[78px_1fr_140px_72px] border-b border-cyan-400/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-slate-400">
-        <span>Verdict</span>
-        <span>Market / Evidence</span>
-        <span>Engine</span>
-        <span className="text-right">Score</span>
-      </div>
-      <div className="space-y-1 p-2">
-        {signals.map((s) => (
-          <div
-            key={s.id}
-            className="grid min-w-0 grid-cols-[78px_1fr_140px_72px] gap-2 rounded border border-cyan-400/5 bg-white/[0.015] px-2 py-2 font-mono text-[11px]"
-          >
-            <span className={`truncate rounded border px-1.5 py-1 text-center text-[9px] ${verdictTone[s.verdict]}`}>{s.verdict}</span>
-            <div className="min-w-0">
-              <div className="truncate text-slate-200">{s.market}</div>
-              <div className="truncate text-[10px] text-slate-400">{s.ts} UTC · {s.thesis}</div>
-            </div>
-            <span className="truncate text-cyan-200">{s.engine}</span>
-            <span className="text-right text-emerald-200">{s.confidence}%/{s.evidence}</span>
-          </div>
-        ))}
-      </div>
+    <div className="grid h-full grid-cols-2 gap-px bg-cyan-400/10 lg:grid-cols-3">
+      {cards.map((c) => (
+        <div key={c.label} className="min-w-0 bg-[#07101d] p-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-400">{c.label}</div>
+          <div className={`mt-1 font-mono text-2xl font-bold ${valueTone[c.tone]}`}>{c.val}</div>
+          <div className="mt-1 truncate text-xs text-slate-400">{c.sub}</div>
+        </div>
+      ))}
     </div>
   );
 }
+
+// ─── Orderbook (kept) ────────────────────────────────────────────────────────
 
 function PolymarketOrderbook({ book, asset }: { book: Orderbook | null; asset: 'BTC' | 'ETH' }) {
   if (!book || !book.ok || (!book.bids?.length && !book.asks?.length)) {
@@ -329,37 +236,195 @@ function PolymarketOrderbook({ book, asset }: { book: Orderbook | null; asset: '
   );
 }
 
-function AgentDecisionFlow({ active, signal }: { active: Verdict; signal: SignalRow | null }) {
-  const nodes: Array<[string, string]> = [
-    ['Ignia · Oracle', signal ? `UP ${signal.market.upPrice.toFixed(3)} / DOWN ${signal.market.downPrice.toFixed(3)}` : 'awaiting market'],
-    ['Regime', 'volatility phase'],
-    ['Entry Quality', 'spread + fee edge'],
-    ['Microstructure', 'imbalance + depth'],
-    ['Sniper', 'late-window timing'],
-    ['Forecast', 'probability model'],
-    ['Synthetic-Arb', 'cross-market hedge'],
-    ['Apolo · Resolver', `verdict: ${active}`],
+// ─── Apolo Pay → Receipt → Reputation flow (LIVE from latest signal + status) ─
+
+type ApoloFlowProps = {
+  latest: SignalRow | null;
+  apoloStat?: AgentStat;
+  txCount: number;
+};
+
+function ApoloPaymentFlow({ latest, apoloStat, txCount }: ApoloFlowProps) {
+  const paid = !!latest && latest.apolo.status !== 'REJECTED';
+  const size = latest?.hermes.sizeUsdc ?? '0';
+  const decision = latest?.apolo.decision ?? '—';
+  const asset = latest?.asset ?? '—';
+  const reputation = apoloStat?.reputationScore ?? null;
+  const calls = apoloStat?.callsServed ?? null;
+  const revenueUsdc = apoloStat?.totalRevenue ? Number(apoloStat.totalRevenue) / 1e6 : null;
+
+  const steps: Array<{ k: string; title: string; sub: string; state: 'live' | 'wait' | 'idle'; tone: 'green' | 'cyan' | 'violet' | 'amber' }> = [
+    {
+      k: '01',
+      title: 'Pay Agent',
+      sub: latest ? `Client → Apolo · ${size} USDC via x402` : 'awaiting next signal',
+      state: latest ? 'live' : 'idle',
+      tone: 'green',
+    },
+    {
+      k: '02',
+      title: 'Payment Completed',
+      sub: paid ? `${size} USDC authorized on Arc` : 'rejected by Apolo risk gate',
+      state: paid ? 'live' : 'wait',
+      tone: 'cyan',
+    },
+    {
+      k: '03',
+      title: 'Work Receipt',
+      sub: paid ? `receipt: ${asset}-${decision} · conf ${latest!.apolo.confidence}%` : 'created on approved signals',
+      state: paid ? 'live' : 'wait',
+      tone: 'violet',
+    },
+    {
+      k: '04',
+      title: 'Apolo Reputation',
+      sub: reputation != null
+        ? `score ${reputation} · ${calls ?? 0} calls served${revenueUsdc != null ? ` · $${fmt(revenueUsdc, 2)} earned` : ''}`
+        : `${txCount} approvals this session · live counter`,
+      state: 'live',
+      tone: 'amber',
+    },
   ];
+
+  const toneText: Record<typeof steps[number]['tone'], string> = {
+    green: 'text-emerald-200',
+    cyan: 'text-cyan-200',
+    violet: 'text-violet-200',
+    amber: 'text-amber-200',
+  };
+
   return (
-    <div className="grid h-full min-h-[260px] grid-cols-1 gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-      {nodes.map(([name, sub], i) => {
-        const hot = i === nodes.length - 1 || (active !== 'NO EDGE' && i > 0 && i < 7);
-        return (
+    <div className="grid h-full min-h-[260px] grid-cols-1 gap-3 p-4 md:grid-cols-4">
+      {steps.map((s, i) => (
+        <div
+          key={s.k}
+          className={`relative rounded-xl border p-4 ${
+            s.state === 'live' ? 'border-cyan-300/30 bg-cyan-400/5' : s.state === 'wait' ? 'border-amber-300/15 bg-amber-400/5' : 'border-slate-400/15 bg-black/15'
+          }`}
+        >
+          {i < steps.length - 1 && <span className="absolute -right-3 top-1/2 hidden h-px w-6 bg-cyan-300/25 md:block" />}
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">{s.k}</span>
+            <span
+              className={`rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                s.state === 'live'
+                  ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-200'
+                  : s.state === 'wait'
+                    ? 'border-amber-300/30 bg-amber-400/10 text-amber-200'
+                    : 'border-slate-400/30 bg-slate-400/10 text-slate-300'
+              }`}
+            >
+              {s.state === 'live' ? 'LIVE' : s.state === 'wait' ? 'WAIT' : 'IDLE'}
+            </span>
+          </div>
+          <div className={`mt-2 font-mono text-sm font-bold uppercase tracking-[0.16em] ${toneText[s.tone]}`}>{s.title}</div>
+          <div className="mt-2 text-xs leading-5 text-slate-400">{s.sub}</div>
+          <div className="mt-4 h-1 overflow-hidden rounded bg-slate-800">
+            <div
+              className={`h-full ${s.state === 'live' ? 'bg-cyan-300' : s.state === 'wait' ? 'bg-amber-300/50' : 'bg-slate-700'}`}
+              style={{ width: `${s.state === 'live' ? 100 : s.state === 'wait' ? 50 : 18}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Backend autonomous route: Pythia → Apolo → Hermes (24/7 loop) ───────────
+
+function AutonomousLoopFlow({ latest, tick }: { latest: SignalRow | null; tick: number }) {
+  const stages: Array<{ name: string; role: string; value: string; sub: string; active: boolean }> = [
+    {
+      name: 'Pythia',
+      role: 'Oracle',
+      value: latest?.ignia.rawSignal ?? 'NEUTRAL',
+      sub: latest ? `${latest.asset} · ${latest.ignia.confidence}% conf` : 'polling Polymarket Gamma',
+      active: !!latest,
+    },
+    {
+      name: 'Apolo',
+      role: 'Resolver',
+      value: latest?.apolo.status ?? 'WAITING',
+      sub: latest ? latest.apolo.reason : 'filters edge + risk gate',
+      active: latest?.apolo.status === 'APPROVED',
+    },
+    {
+      name: 'Hermes',
+      role: 'Trader',
+      value: latest?.hermes.action ?? 'SKIP',
+      sub: latest ? `${latest.hermes.sizeUsdc} USDC · ${latest.hermes.mode}` : 'awaits Apolo approval',
+      active: latest?.hermes.action !== 'SKIP' && latest?.hermes.action != null,
+    },
+  ];
+
+  return (
+    <div className="flex h-full min-h-[240px] flex-col gap-3 p-4">
+      <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-slate-400">
+        <span>autonomous loop · 24/7 · scan #{tick}</span>
+        <span className="flex items-center gap-1 text-emerald-300">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /> running
+        </span>
+      </div>
+      <div className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-3">
+        {stages.map((s, i) => (
           <div
-            key={name}
-            className={`relative flex min-h-[90px] min-w-0 flex-col justify-center rounded-xl border p-3 ${
-              hot ? 'border-cyan-300/35 bg-cyan-400/10 shadow-[0_0_24px_rgba(0,212,255,0.08)]' : 'border-cyan-400/10 bg-black/10'
+            key={s.name}
+            className={`relative rounded-xl border p-4 ${
+              s.active ? 'border-cyan-300/35 bg-cyan-400/10 shadow-[0_0_24px_rgba(0,212,255,0.08)]' : 'border-slate-400/15 bg-black/15'
             }`}
           >
-            {i < nodes.length - 1 && <span className="absolute -right-2 top-1/2 hidden h-px w-4 bg-cyan-300/30 lg:block" />}
-            <div className="font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-100">{name}</div>
-            <div className="mt-1 text-xs text-slate-400">{sub}</div>
-            <div className="mt-3 h-1 overflow-hidden rounded bg-slate-800">
-              <div className={`h-full ${hot ? 'bg-cyan-300' : 'bg-slate-700'}`} style={{ width: `${hot ? 68 + i * 3 : 22}%` }} />
+            {i < stages.length - 1 && (
+              <span className="absolute -right-3 top-1/2 hidden h-px w-6 bg-cyan-300/25 md:block" />
+            )}
+            <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">{s.role}</div>
+            <div className="mt-1 font-mono text-base font-bold uppercase tracking-[0.16em] text-cyan-100">{s.name}</div>
+            <div className="mt-3 rounded border border-cyan-400/15 bg-cyan-400/5 px-3 py-2 text-center font-mono text-xl text-emerald-200">
+              {s.value}
             </div>
+            <div className="mt-2 truncate text-xs text-slate-400">{s.sub}</div>
           </div>
-        );
-      })}
+        ))}
+      </div>
+      <div className="rounded-lg border border-cyan-400/10 bg-black/20 px-3 py-2 font-mono text-[10px] text-slate-400">
+        loop: poll markets → engines vote → Apolo resolves → Hermes (DRY_RUN) emits action → repeat every 8s
+      </div>
+    </div>
+  );
+}
+
+// ─── Signal Stream (3 cols, scrollable) ──────────────────────────────────────
+
+function SignalStream({ signals }: { signals: SignalEvent[] }) {
+  if (!signals.length) {
+    return (
+      <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-slate-500">
+        Waiting for live signals…
+      </div>
+    );
+  }
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="grid grid-cols-[92px_1fr_84px] border-b border-cyan-400/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-slate-400">
+        <span>Verdict</span>
+        <span>Signal → Apolo Output</span>
+        <span className="text-right">Conf</span>
+      </div>
+      <div className="flex-1 space-y-1 overflow-y-auto p-2">
+        {signals.map((s) => (
+          <div
+            key={s.id}
+            className="grid min-w-0 grid-cols-[92px_1fr_84px] gap-2 rounded border border-cyan-400/5 bg-white/[0.015] px-2 py-2 font-mono text-[11px]"
+          >
+            <span className={`truncate rounded border px-1.5 py-1 text-center text-[9px] ${verdictTone[s.verdict]}`}>{s.verdict}</span>
+            <div className="min-w-0">
+              <div className="truncate text-slate-200">{s.market}</div>
+              <div className="truncate text-[10px] text-slate-400">{s.ts} UTC · {s.thesis}</div>
+            </div>
+            <span className="text-right text-emerald-200">{s.confidence}%</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -373,10 +438,10 @@ export default function LiveA2AAgentPageRoute() {
   const [signalEvents, setSignalEvents] = useState<SignalEvent[]>([]);
   const [bookBtc, setBookBtc] = useState<Orderbook | null>(null);
   const [bookEth, setBookEth] = useState<Orderbook | null>(null);
-  const [historyBtc, setHistoryBtc] = useState<HistoryPoint[]>([]);
-  const [historyEth, setHistoryEth] = useState<HistoryPoint[]>([]);
   const [orderbookAsset, setOrderbookAsset] = useState<'BTC' | 'ETH'>('BTC');
   const [scanCount, setScanCount] = useState(0);
+  const [overview, setOverview] = useState<OverviewData | null>(null);
+  const [a2aStatus, setA2aStatus] = useState<A2AStatusData | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
 
   const latestRow = signalRows[0] ?? null;
@@ -417,7 +482,7 @@ export default function LiveA2AAgentPageRoute() {
               if (seen.has(key)) continue;
               seen.add(key);
               uniq.push(ev);
-              if (uniq.length >= 16) break;
+              if (uniq.length >= 24) break;
             }
             return uniq;
           });
@@ -435,7 +500,32 @@ export default function LiveA2AAgentPageRoute() {
     };
   }, []);
 
-  // Orderbook for selected asset (every 4s)
+  // Traction (every 8s)
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      try {
+        const cb = Date.now();
+        const [ovRes, stRes] = await Promise.all([
+          fetch(`/api/indexer/overview?t=${cb}`, { cache: 'no-store' }),
+          fetch(`/api/a2a/status?t=${cb}`, { cache: 'no-store' }),
+        ]);
+        if (!alive) return;
+        if (ovRes.ok) setOverview(await ovRes.json());
+        if (stRes.ok) setA2aStatus(await stRes.json());
+      } catch (err: any) {
+        if (alive) setErrors((e) => [`traction: ${err?.message}`, ...e].slice(0, 3));
+      }
+    }
+    load();
+    const t = setInterval(load, 8000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
+
+  // Orderbook (every 4s)
   useEffect(() => {
     let alive = true;
     async function load() {
@@ -459,48 +549,29 @@ export default function LiveA2AAgentPageRoute() {
     };
   }, [orderbookAsset]);
 
-  // History BTC + ETH (every 30s)
-  useEffect(() => {
-    let alive = true;
-    async function load() {
-      try {
-        const [b, e] = await Promise.all([
-          fetch('/api/a2a/history?asset=BTC&interval=1d&fidelity=300', { cache: 'no-store' }).then((r) => r.json()),
-          fetch('/api/a2a/history?asset=ETH&interval=1d&fidelity=300', { cache: 'no-store' }).then((r) => r.json()),
-        ]);
-        if (!alive) return;
-        if (b?.ok) setHistoryBtc(b.history || []);
-        if (e?.ok) setHistoryEth(e.history || []);
-      } catch (err: any) {
-        if (alive) setErrors((er) => [`history: ${err?.message}`, ...er].slice(0, 3));
-      }
-    }
-    load();
-    const t = setInterval(load, 30000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, []);
-
-  const candlesBtc = useMemo(() => pointsToCandles(historyBtc), [historyBtc]);
-  const candlesEth = useMemo(() => pointsToCandles(historyEth), [historyEth]);
-
-  const btcMarket = markets.find((m) => m.asset === 'BTC');
-  const ethMarket = markets.find((m) => m.asset === 'ETH');
+  const btcMarket = useMemo(() => markets.find((m) => m.asset === 'BTC'), [markets]);
+  const ethMarket = useMemo(() => markets.find((m) => m.asset === 'ETH'), [markets]);
   const activeBook = orderbookAsset === 'BTC' ? bookBtc : bookEth;
 
-  const confidenceAvg = signalRows.length
-    ? Math.round(signalRows.reduce((acc, r) => acc + r.apolo.confidence, 0) / signalRows.length)
-    : 0;
-  const evidenceScore = signalRows.length
-    ? Math.round(Math.max(...signalRows.map((r) => r.market.spread * 1000)))
-    : 0;
-  const engineAgreement = signalRows.length
-    ? Math.round((signalRows.filter((r) => r.apolo.status === 'APPROVED').length / signalRows.length) * 100)
-    : 0;
-  const noEdgeCount = signalRows.filter((r) => r.apolo.status === 'REJECTED').length;
+  const apoloStat = a2aStatus?.agents?.apolo?.stats;
+  const pythiaStat = a2aStatus?.agents?.pythia?.stats;
+  const hermesStat = a2aStatus?.agents?.hermes?.stats;
+
   const workproofReady = signalRows.filter((r) => r.apolo.status === 'APPROVED').length;
+
+  // Traction metrics — prefer backend numbers, fallback to live session counters
+  const totalRequests = Math.max(
+    scanCount,
+    (pythiaStat?.callsServed ?? 0) + (apoloStat?.callsServed ?? 0) + (hermesStat?.callsServed ?? 0),
+  );
+  const totalUsdcVolume =
+    (Number(overview?.summary?.totalFunded ?? '0') +
+      Number(pythiaStat?.totalRevenue ?? '0') +
+      Number(apoloStat?.totalRevenue ?? '0') +
+      Number(hermesStat?.totalRevenue ?? '0')) /
+    1e6;
+  const totalAgents = Number(overview?.summary?.totalAgents ?? 0) || 3;
+  const completedJobs = Number(overview?.summary?.completedJobs ?? 0) || workproofReady;
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#030609] px-3 py-4 text-slate-200 sm:px-5 lg:px-7">
@@ -512,54 +583,45 @@ export default function LiveA2AAgentPageRoute() {
               <div className="font-mono text-[11px] uppercase tracking-[0.4em] text-cyan-300">ARCLAYER · A2A</div>
               <h1 className="mt-1 text-2xl font-black uppercase tracking-[0.2em] text-white sm:text-3xl">LIVE A2A AGENT</h1>
               <p className="mt-1 max-w-3xl text-sm text-slate-300">
-                Live Polymarket signal terminal. Ignia (Oracle) → Pythia engines → Apolo (Resolver) → Hermes (Trader).
-                Real Gamma + CLOB feeds, x402 paid resolver-decision routing on Arc.
+                Pythia (Oracle) → Apolo (Resolver) → Hermes (Trader). Apolo is paid in USDC via x402, returns work receipt, earns reputation. Loop runs autonomously 24/7 against live Polymarket BTC/ETH 5m markets.
               </p>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Chip tone="green">LIVE GAMMA</Chip>
-              <Chip tone="cyan">LIVE CLOB</Chip>
-              <Chip tone="amber">PYTHIA V0</Chip>
+              <Chip tone="green">PAY AGENT</Chip>
+              <Chip tone="cyan">WORK RECEIPT</Chip>
+              <Chip tone="amber">APOLO REP</Chip>
               <div className="font-mono text-xs text-slate-400">{now} UTC</div>
             </div>
           </div>
           <div className="flex min-w-0 flex-wrap">
-            <MetricCard label="Signals Generated" value={`${signalEvents.length}`} sub="last 16 unique" tone="cyan" />
-            <MetricCard label="Markets Scanned" value={`${scanCount}`} sub="Polymarket BTC/ETH 5m" tone="green" />
-            <MetricCard label="Confidence Avg" value={`${confidenceAvg}%`} sub="Apolo resolver" tone="violet" />
-            <MetricCard label="Evidence Score" value={`${evidenceScore}/100`} sub="best 5m edge" tone="amber" />
-            <MetricCard label="No-Edge Filters" value={`${noEdgeCount}`} sub="rejected this poll" tone="red" />
-            <MetricCard label="Engine Agreement" value={`${engineAgreement}%`} sub="approved / total" tone="green" />
+            <MetricCard label="Total Requests" value={`${totalRequests}`} sub="agent calls + scans" tone="cyan" />
+            <MetricCard label="Total USDC Volume" value={`$${fmt(totalUsdcVolume, 2)}`} sub="x402 + escrow settled" tone="green" />
+            <MetricCard label="Total Agents" value={`${totalAgents}`} sub="registered network" tone="violet" />
+            <MetricCard label="Completed Jobs" value={`${completedJobs}`} sub="settled work receipts" tone="amber" />
           </div>
         </header>
 
-        <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1.6fr_1fr]">
+        <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1.35fr_0.65fr]">
+          <TerminalPanel title="Apolo · Pay → Receipt → Reputation" right={<Chip tone="green">LIVE x402</Chip>} className="min-h-[320px]">
+            <ApoloPaymentFlow latest={latestRow} apoloStat={apoloStat} txCount={workproofReady} />
+          </TerminalPanel>
+
+          <TerminalPanel title="Autonomous Backend Route" right={<Chip tone="cyan">PYTHIA → APOLO → HERMES</Chip>} className="min-h-[320px]">
+            <AutonomousLoopFlow latest={latestRow} tick={scanCount} />
+          </TerminalPanel>
+        </section>
+
+        <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1.4fr_1fr]">
           <TerminalPanel
-            title="Polymarket Live Signal Data"
+            title="Live Edge · UP / DOWN"
             right={
-              <>
-                <Chip tone="cyan">BTC 5m</Chip>
-                <Chip tone="violet">ETH 5m</Chip>
-              </>
+              <Chip tone={latestVerdict === 'YES' ? 'green' : latestVerdict === 'NO EDGE' ? 'red' : latestVerdict === 'EDGE' ? 'cyan' : 'amber'}>
+                {latestVerdict}
+              </Chip>
             }
-            className="h-[420px]"
+            className="h-[340px]"
           >
-            <div className="grid h-full min-h-0 grid-cols-1 gap-px bg-cyan-400/10 md:grid-cols-2">
-              <div className="min-h-0 bg-[#07101d] p-2">
-                <div className="mb-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-slate-400">
-                  <span>BTC YES probability</span>
-                  <span className="text-cyan-200">{btcMarket ? btcMarket.upPrice.toFixed(3) : '—'}</span>
-                </div>
-                <div className="h-[calc(100%-1.25rem)]"><CandleChart candles={candlesBtc} /></div>
-              </div>
-              <div className="min-h-0 bg-[#07101d] p-2">
-                <div className="mb-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-slate-400">
-                  <span>ETH YES probability</span>
-                  <span className="text-violet-200">{ethMarket ? ethMarket.upPrice.toFixed(3) : '—'}</span>
-                </div>
-                <div className="h-[calc(100%-1.25rem)]"><CandleChart candles={candlesEth} color="#a78bfa" /></div>
-              </div>
-            </div>
+            <LiveEdgeBoard btc={btcMarket} eth={ethMarket} latest={latestRow} />
           </TerminalPanel>
 
           <TerminalPanel
@@ -569,6 +631,7 @@ export default function LiveA2AAgentPageRoute() {
                 {(['BTC', 'ETH'] as const).map((a) => (
                   <button
                     key={a}
+                    type="button"
                     onClick={() => setOrderbookAsset(a)}
                     className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
                       orderbookAsset === a
@@ -581,68 +644,9 @@ export default function LiveA2AAgentPageRoute() {
                 ))}
               </div>
             }
-            className="h-[420px]"
+            className="h-[340px]"
           >
             <PolymarketOrderbook book={activeBook} asset={orderbookAsset} />
-          </TerminalPanel>
-        </section>
-
-        <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1.6fr_1fr]">
-          <TerminalPanel
-            title="Agent Decision Flow"
-            right={
-              <Chip
-                tone={
-                  latestVerdict === 'YES'
-                    ? 'green'
-                    : latestVerdict === 'NO EDGE'
-                      ? 'red'
-                      : latestVerdict === 'EDGE'
-                        ? 'cyan'
-                        : 'amber'
-                }
-              >
-                {latestVerdict}
-              </Chip>
-            }
-            className="min-h-[340px]"
-          >
-            <AgentDecisionFlow active={latestVerdict} signal={latestRow} />
-          </TerminalPanel>
-
-          <TerminalPanel title="Market Metrics" right={<Chip tone="cyan">LIVE METRICS</Chip>} className="min-h-[340px]">
-            <div className="grid h-full grid-cols-2 gap-px bg-cyan-400/10">
-              {([
-                ['BTC YES', btcMarket ? btcMarket.upPrice.toFixed(3) : '—', 'live Polymarket', 'cyan'],
-                ['BTC DOWN', btcMarket ? btcMarket.downPrice.toFixed(3) : '—', 'live Polymarket', 'red'],
-                ['ETH YES', ethMarket ? ethMarket.upPrice.toFixed(3) : '—', 'live Polymarket', 'violet'],
-                ['ETH DOWN', ethMarket ? ethMarket.downPrice.toFixed(3) : '—', 'live Polymarket', 'red'],
-                ['BTC Volume', btcMarket?.volume ? `$${fmt(btcMarket.volume, 0)}` : '—', '5m window', 'green'],
-                ['ETH Volume', ethMarket?.volume ? `$${fmt(ethMarket.volume, 0)}` : '—', '5m window', 'green'],
-                ['WorkProof Ready', `${workproofReady}`, 'approved by Apolo', 'cyan'],
-                ['Pythia Mode', 'RESEARCH', 'autonomous · no manual buy', 'violet'],
-              ] as Array<[string, string, string, 'cyan' | 'green' | 'red' | 'amber' | 'violet']>).map(([label, value, sub, tone]) => (
-                <div key={label} className="min-w-0 bg-[#07101d] p-3">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{label}</div>
-                  <div
-                    className={`mt-1 font-mono text-lg font-bold ${
-                      tone === 'green'
-                        ? 'text-emerald-200'
-                        : tone === 'red'
-                          ? 'text-rose-200'
-                          : tone === 'amber'
-                            ? 'text-amber-200'
-                            : tone === 'violet'
-                              ? 'text-violet-200'
-                              : 'text-cyan-200'
-                    }`}
-                  >
-                    {value}
-                  </div>
-                  <div className="truncate text-xs text-slate-400">{sub}</div>
-                </div>
-              ))}
-            </div>
           </TerminalPanel>
         </section>
 
@@ -654,7 +658,7 @@ export default function LiveA2AAgentPageRoute() {
               <Chip tone="cyan">x402-READY</Chip>
             </>
           }
-          className="h-[430px]"
+          className="h-[420px]"
         >
           <SignalStream signals={signalEvents} />
         </TerminalPanel>
