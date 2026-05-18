@@ -351,10 +351,6 @@ function LiveMarketWidget({
           <span>Price</span><span className="text-center">Depth</span><span className="text-right">Size</span>
         </div>
         <div className="py-1">{asks.length ? asks.map((x) => row(x, 'ask')) : <div className="p-3 font-mono text-[10px] text-[#EAE4D8]/45">asks pending</div>}</div>
-        <div className="border-y border-white/10 bg-[#C5A67C]/5 px-3 py-3 text-center">
-          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#EAE4D8]/55">Polymarket 5m midpoint</div>
-          <div className="mt-0.5 font-mono text-xl font-bold text-[#C5A67C]">{book?.mid != null ? book.mid.toFixed(3) : '—'}</div>
-        </div>
         <div className="py-1">{bids.length ? bids.map((x) => row(x, 'bid')) : <div className="p-3 font-mono text-[10px] text-[#EAE4D8]/45">bids pending</div>}</div>
       </div>
     </div>
@@ -1092,7 +1088,7 @@ export default function LiveA2AAgentPageRoute() {
               <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">ARCLAYER · A2A</div>
               <h1 className="mt-1 text-3xl font-black uppercase tracking-[0.16em] text-[#EAE4D8] sm:text-3xl">LIVE A2A AGENT</h1>
               <p className="mt-1 max-w-3xl text-sm text-[#EAE4D8]">
-                Pythia (Signal Oracle) → Apolo (Decision) → Hermes (Autonomous Trader). Loop runs autonomously 24/7 against live Polymarket BTC/ETH 5m markets, settled with USDC over x402 on Arc. Reputation accrues to Apolo on every settled job.
+                Pythia finds the signal, Apolo makes the decision, and Hermes records the action — all running 24/7 with USDC payments over x402 on Arc.
               </p>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -1112,7 +1108,7 @@ export default function LiveA2AAgentPageRoute() {
 
         {/* Live market widget */}
         <TerminalPanel
-          title="Live BTC Price · Target · Countdown · Chart · Orderbook"
+          title="Live BTC Price"
           right={
             <div className="flex items-center gap-2">
               <span className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
@@ -1173,24 +1169,8 @@ export default function LiveA2AAgentPageRoute() {
           <LiveA2AFlow receipt={flowReceipt} running={flowRunning} onRun={runLiveFlow} />
         </TerminalPanel>
 
-        {/* Autonomous Loop + Full Loop Proof */}
-        <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1fr_1.2fr]">
-          <TerminalPanel title="Autonomous Loop" right={<Chip tone="green">RUNNING 24/7</Chip>} className="min-h-[360px]">
-            <AutonomousLoopRunner latest={latestRow} scanCount={scanCount} loopMs={loopMs} intervalMs={LOOP_INTERVAL_MS} />
-          </TerminalPanel>
-
-          <TerminalPanel title="Full A2A Loop Proof" right={<Chip tone="violet">EVIDENCE TRAIL</Chip>} className="min-h-[360px]">
-            <FullLoopProof latest={latestRow} apoloStat={apoloStat} />
-          </TerminalPanel>
-        </section>
 
 
-
-        {errors.length > 0 && (
-          <div className="rounded-sm border border-rose-400/30 bg-rose-400/5 px-3 py-2 font-mono text-[10px] text-rose-200">
-            recent fetch warnings: {errors.join(' · ')}
-          </div>
-        )}
       </div>
     </main>
   );
