@@ -51,22 +51,6 @@ type SignalEvent = {
   ts: string;
 };
 
-type OverviewData = {
-  summary?: {
-    totalAgents?: number | string;
-    totalJobs?: number | string;
-    completedJobs?: number | string;
-    totalFunded?: string;
-  };
-};
-
-type A2AStatusData = {
-  agents?: {
-    pythia?: { stats?: { callsServed?: number; totalRevenue?: string; reputationScore?: number } };
-    hermes?: { stats?: { callsServed?: number; totalRevenue?: string } };
-  };
-};
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const verdictTone: Record<Verdict, string> = {
@@ -273,23 +257,25 @@ function SignalStream({ signals }: { signals: SignalEvent[] }) {
   }
   return (
     <div className="h-full overflow-hidden">
-      <div className="grid grid-cols-[92px_1fr_96px] border-b border-cyan-400/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-slate-400">
-        <span>Status</span>
-        <span>Signal → Resolver Output</span>
+      <div className="grid grid-cols-[78px_1fr_140px_72px] border-b border-cyan-400/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-slate-400">
+        <span>Verdict</span>
+        <span>Market / Evidence</span>
+        <span>Engine</span>
         <span className="text-right">Score</span>
       </div>
-      <div className="h-[calc(100%-34px)] space-y-1 overflow-y-auto p-2">
+      <div className="space-y-1 p-2">
         {signals.map((s) => (
           <div
             key={s.id}
-            className="grid min-w-0 grid-cols-[92px_1fr_96px] gap-2 rounded border border-cyan-400/5 bg-white/[0.015] px-2 py-2 font-mono text-[11px]"
+            className="grid min-w-0 grid-cols-[78px_1fr_140px_72px] gap-2 rounded border border-cyan-400/5 bg-white/[0.015] px-2 py-2 font-mono text-[11px]"
           >
             <span className={`truncate rounded border px-1.5 py-1 text-center text-[9px] ${verdictTone[s.verdict]}`}>{s.verdict}</span>
             <div className="min-w-0">
               <div className="truncate text-slate-200">{s.market}</div>
-              <div className="truncate text-[10px] text-slate-400">{s.ts} UTC · {s.engine} · {s.thesis}</div>
+              <div className="truncate text-[10px] text-slate-400">{s.ts} UTC · {s.thesis}</div>
             </div>
-            <span className="text-right text-emerald-200">{s.confidence}%</span>
+            <span className="truncate text-cyan-200">{s.engine}</span>
+            <span className="text-right text-emerald-200">{s.confidence}%/{s.evidence}</span>
           </div>
         ))}
       </div>
@@ -378,53 +364,6 @@ function AgentDecisionFlow({ active, signal }: { active: Verdict; signal: Signal
   );
 }
 
-
-function PaymentWorkFlow({ signal, reputation }: { signal: SignalRow | null; reputation: number | string }) {
-  const steps = [
-    ['Pay agent', 'Client pays Apolo resolver via x402/Arc USDC', 'green'],
-    ['Payment completed', signal ? `${signal.hermes.sizeUsdc} USDC authorized` : 'awaiting signal payment', 'cyan'],
-    ['Work receipt', signal ? `receipt: ${signal.asset}-${signal.apolo.decision}` : 'created after resolver output', 'violet'],
-    ['Agent reputation', `Apolo +rep · score ${reputation ?? '—'}`, 'amber'],
-  ] as Array<[string, string, 'green' | 'cyan' | 'violet' | 'amber']>;
-  return (
-    <div className="grid h-full min-h-[260px] grid-cols-1 gap-3 p-4 md:grid-cols-4">
-      {steps.map(([title, sub, tone], i) => (
-        <div key={title} className="relative rounded-xl border border-cyan-400/10 bg-black/15 p-4">
-          {i < steps.length - 1 && <span className="absolute -right-3 top-1/2 hidden h-px w-6 bg-cyan-300/25 md:block" />}
-          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">0{i + 1}</div>
-          <div className={`mt-2 font-mono text-sm font-bold uppercase tracking-[0.16em] ${
-            tone === 'green' ? 'text-emerald-200' : tone === 'violet' ? 'text-violet-200' : tone === 'amber' ? 'text-amber-200' : 'text-cyan-200'
-          }`}>{title}</div>
-          <div className="mt-2 text-xs leading-5 text-slate-400">{sub}</div>
-          <div className="mt-4 h-1 overflow-hidden rounded bg-slate-800">
-            <div className="h-full bg-cyan-300" style={{ width: `${signal ? 100 : 38 + i * 12}%` }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ResolverTradeFlow({ signal }: { signal: SignalRow | null }) {
-  const stages = [
-    ['Pythia · Oracle', signal?.ignia.rawSignal ?? 'NEUTRAL', 'publishes market signal'],
-    ['Apolo · Resolver', signal?.apolo.status ?? 'WAITING', 'filters data + earns reputation'],
-    ['Hermes · Trade', signal?.hermes.action ?? 'SKIP', 'executes approved trade output'],
-  ];
-  return (
-    <div className="grid h-full min-h-[240px] grid-cols-1 gap-3 p-4 md:grid-cols-3">
-      {stages.map(([name, value, sub], i) => (
-        <div key={name} className="relative rounded-xl border border-cyan-400/10 bg-[#07101d] p-4">
-          {i < stages.length - 1 && <span className="absolute -right-3 top-1/2 hidden h-px w-6 bg-cyan-300/25 md:block" />}
-          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">{sub}</div>
-          <div className="mt-2 font-mono text-sm font-bold uppercase tracking-[0.16em] text-cyan-100">{name}</div>
-          <div className="mt-3 rounded border border-cyan-400/15 bg-cyan-400/5 px-3 py-2 font-mono text-lg text-emerald-200">{value}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function LiveA2AAgentPageRoute() {
@@ -438,8 +377,6 @@ export default function LiveA2AAgentPageRoute() {
   const [historyEth, setHistoryEth] = useState<HistoryPoint[]>([]);
   const [orderbookAsset, setOrderbookAsset] = useState<'BTC' | 'ETH'>('BTC');
   const [scanCount, setScanCount] = useState(0);
-  const [overview, setOverview] = useState<OverviewData | null>(null);
-  const [a2aStatus, setA2aStatus] = useState<A2AStatusData | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
 
   const latestRow = signalRows[0] ?? null;
@@ -492,31 +429,6 @@ export default function LiveA2AAgentPageRoute() {
     }
     load();
     const t = setInterval(load, 8000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, []);
-
-  // Traction metrics from ArcLayer indexer + A2A telemetry
-  useEffect(() => {
-    let alive = true;
-    async function loadTraction() {
-      try {
-        const cacheBust = Date.now();
-        const [ovRes, statusRes] = await Promise.all([
-          fetch(`/api/indexer/overview?t=${cacheBust}`, { cache: 'no-store' }),
-          fetch(`/api/a2a/status?t=${cacheBust}`, { cache: 'no-store' }),
-        ]);
-        if (!alive) return;
-        if (ovRes.ok) setOverview(await ovRes.json());
-        if (statusRes.ok) setA2aStatus(await statusRes.json());
-      } catch (err: any) {
-        if (alive) setErrors((e) => [`traction: ${err?.message}`, ...e].slice(0, 3));
-      }
-    }
-    loadTraction();
-    const t = setInterval(loadTraction, 8000);
     return () => {
       alive = false;
       clearInterval(t);
@@ -589,18 +501,6 @@ export default function LiveA2AAgentPageRoute() {
     : 0;
   const noEdgeCount = signalRows.filter((r) => r.apolo.status === 'REJECTED').length;
   const workproofReady = signalRows.filter((r) => r.apolo.status === 'APPROVED').length;
-  const totalRequests = Math.max(
-    scanCount,
-    Number(a2aStatus?.agents?.pythia?.stats?.callsServed ?? 0) + Number(a2aStatus?.agents?.hermes?.stats?.callsServed ?? 0),
-  );
-  const totalUSDCVolume = (
-    Number(overview?.summary?.totalFunded ?? '0') +
-    Number(a2aStatus?.agents?.pythia?.stats?.totalRevenue ?? '0') +
-    Number(a2aStatus?.agents?.hermes?.stats?.totalRevenue ?? '0')
-  ) / 1e6;
-  const totalAgents = Number(overview?.summary?.totalAgents ?? 0) || 3;
-  const completedJobs = Number(overview?.summary?.completedJobs ?? 0) || workproofReady;
-  const apoloReputation = a2aStatus?.agents?.pythia?.stats?.reputationScore ?? (100 + workproofReady * 2);
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#030609] px-3 py-4 text-slate-200 sm:px-5 lg:px-7">
@@ -612,32 +512,78 @@ export default function LiveA2AAgentPageRoute() {
               <div className="font-mono text-[11px] uppercase tracking-[0.4em] text-cyan-300">ARCLAYER · A2A</div>
               <h1 className="mt-1 text-2xl font-black uppercase tracking-[0.2em] text-white sm:text-3xl">LIVE A2A AGENT</h1>
               <p className="mt-1 max-w-3xl text-sm text-slate-300">
-                Live A2A payment + work receipt demo. Pythia (Oracle) → Apolo (Resolver) → Hermes (Trader).
-                Reviewer flow: agent paid, output returned, receipt visible, Apolo reputation updates.
+                Live Polymarket signal terminal. Ignia (Oracle) → Pythia engines → Apolo (Resolver) → Hermes (Trader).
+                Real Gamma + CLOB feeds, x402 paid resolver-decision routing on Arc.
               </p>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Chip tone="green">PAY AGENT</Chip>
-              <Chip tone="cyan">WORK RECEIPT</Chip>
-              <Chip tone="amber">APOLO REP</Chip>
+              <Chip tone="green">LIVE GAMMA</Chip>
+              <Chip tone="cyan">LIVE CLOB</Chip>
+              <Chip tone="amber">PYTHIA V0</Chip>
               <div className="font-mono text-xs text-slate-400">{now} UTC</div>
             </div>
           </div>
           <div className="flex min-w-0 flex-wrap">
-            <MetricCard label="Total Requests" value={`${totalRequests}`} sub="agent calls + live signals" tone="cyan" />
-            <MetricCard label="Total USDC Volume" value={`$${fmt(totalUSDCVolume, 2)}`} sub="escrow + x402 revenue" tone="green" />
-            <MetricCard label="Total Agents" value={`${totalAgents}`} sub="registered network" tone="violet" />
-            <MetricCard label="Completed Jobs" value={`${completedJobs}`} sub="settled work receipts" tone="amber" />
+            <MetricCard label="Signals Generated" value={`${signalEvents.length}`} sub="last 16 unique" tone="cyan" />
+            <MetricCard label="Markets Scanned" value={`${scanCount}`} sub="Polymarket BTC/ETH 5m" tone="green" />
+            <MetricCard label="Confidence Avg" value={`${confidenceAvg}%`} sub="Apolo resolver" tone="violet" />
+            <MetricCard label="Evidence Score" value={`${evidenceScore}/100`} sub="best 5m edge" tone="amber" />
+            <MetricCard label="No-Edge Filters" value={`${noEdgeCount}`} sub="rejected this poll" tone="red" />
+            <MetricCard label="Engine Agreement" value={`${engineAgreement}%`} sub="approved / total" tone="green" />
           </div>
         </header>
 
-        <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1.35fr_0.65fr]">
-          <TerminalPanel title="Paid Agent Work Flow" right={<Chip tone="green">VISIBLE FRONTEND FLOW</Chip>} className="min-h-[320px]">
-            <PaymentWorkFlow signal={latestRow} reputation={apoloReputation} />
+        <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1.6fr_1fr]">
+          <TerminalPanel
+            title="Polymarket Live Signal Data"
+            right={
+              <>
+                <Chip tone="cyan">BTC 5m</Chip>
+                <Chip tone="violet">ETH 5m</Chip>
+              </>
+            }
+            className="h-[420px]"
+          >
+            <div className="grid h-full min-h-0 grid-cols-1 gap-px bg-cyan-400/10 md:grid-cols-2">
+              <div className="min-h-0 bg-[#07101d] p-2">
+                <div className="mb-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-slate-400">
+                  <span>BTC YES probability</span>
+                  <span className="text-cyan-200">{btcMarket ? btcMarket.upPrice.toFixed(3) : '—'}</span>
+                </div>
+                <div className="h-[calc(100%-1.25rem)]"><CandleChart candles={candlesBtc} /></div>
+              </div>
+              <div className="min-h-0 bg-[#07101d] p-2">
+                <div className="mb-1 flex items-center justify-between font-mono text-[10px] uppercase tracking-widest text-slate-400">
+                  <span>ETH YES probability</span>
+                  <span className="text-violet-200">{ethMarket ? ethMarket.upPrice.toFixed(3) : '—'}</span>
+                </div>
+                <div className="h-[calc(100%-1.25rem)]"><CandleChart candles={candlesEth} color="#a78bfa" /></div>
+              </div>
+            </div>
           </TerminalPanel>
 
-          <TerminalPanel title="Backend Agent Route" right={<Chip tone="cyan">PYTHIA → APOLO → HERMES</Chip>} className="min-h-[320px]">
-            <ResolverTradeFlow signal={latestRow} />
+          <TerminalPanel
+            title="Polymarket Orderbook"
+            right={
+              <div className="flex items-center gap-1">
+                {(['BTC', 'ETH'] as const).map((a) => (
+                  <button
+                    key={a}
+                    onClick={() => setOrderbookAsset(a)}
+                    className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
+                      orderbookAsset === a
+                        ? 'border-cyan-400/40 bg-cyan-400/15 text-cyan-100'
+                        : 'border-slate-400/20 bg-slate-400/5 text-slate-300 hover:bg-slate-400/10'
+                    }`}
+                  >
+                    {a}
+                  </button>
+                ))}
+              </div>
+            }
+            className="h-[420px]"
+          >
+            <PolymarketOrderbook book={activeBook} asset={orderbookAsset} />
           </TerminalPanel>
         </section>
 
@@ -664,17 +610,17 @@ export default function LiveA2AAgentPageRoute() {
             <AgentDecisionFlow active={latestVerdict} signal={latestRow} />
           </TerminalPanel>
 
-          <TerminalPanel title="Work + Reputation Metrics" right={<Chip tone="cyan">LIVE METRICS</Chip>} className="min-h-[340px]">
+          <TerminalPanel title="Market Metrics" right={<Chip tone="cyan">LIVE METRICS</Chip>} className="min-h-[340px]">
             <div className="grid h-full grid-cols-2 gap-px bg-cyan-400/10">
               {([
-                ['Pay Agent', latestRow ? latestRow.hermes.sizeUsdc : '—', 'x402 / Arc USDC', 'green'],
-                ['Payment Completed', latestRow ? 'YES' : 'WAITING', 'authorized before work', 'cyan'],
-                ['Work Receipt', `${workproofReady}`, 'receipt after output', 'violet'],
-                ['Agent Reputation', `${apoloReputation}`, 'credited to Apolo resolver', 'amber'],
-                ['Resolver Output', latestRow?.apolo.decision ?? '—', 'filtered by Apolo', 'cyan'],
-                ['Trade Handoff', latestRow?.hermes.action ?? 'SKIP', 'Hermes receives output', 'green'],
-                ['Completed Jobs', `${completedJobs}`, 'settled work', 'violet'],
-                ['Total Requests', `${totalRequests}`, 'traction metric', 'cyan'],
+                ['BTC YES', btcMarket ? btcMarket.upPrice.toFixed(3) : '—', 'live Polymarket', 'cyan'],
+                ['BTC DOWN', btcMarket ? btcMarket.downPrice.toFixed(3) : '—', 'live Polymarket', 'red'],
+                ['ETH YES', ethMarket ? ethMarket.upPrice.toFixed(3) : '—', 'live Polymarket', 'violet'],
+                ['ETH DOWN', ethMarket ? ethMarket.downPrice.toFixed(3) : '—', 'live Polymarket', 'red'],
+                ['BTC Volume', btcMarket?.volume ? `$${fmt(btcMarket.volume, 0)}` : '—', '5m window', 'green'],
+                ['ETH Volume', ethMarket?.volume ? `$${fmt(ethMarket.volume, 0)}` : '—', '5m window', 'green'],
+                ['WorkProof Ready', `${workproofReady}`, 'approved by Apolo', 'cyan'],
+                ['Pythia Mode', 'RESEARCH', 'autonomous · no manual buy', 'violet'],
               ] as Array<[string, string, string, 'cyan' | 'green' | 'red' | 'amber' | 'violet']>).map(([label, value, sub, tone]) => (
                 <div key={label} className="min-w-0 bg-[#07101d] p-3">
                   <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-400">{label}</div>
@@ -710,7 +656,7 @@ export default function LiveA2AAgentPageRoute() {
           }
           className="h-[430px]"
         >
-          <SignalStream signals={signalEvents.slice(0, 24)} />
+          <SignalStream signals={signalEvents} />
         </TerminalPanel>
 
         {errors.length > 0 && (
