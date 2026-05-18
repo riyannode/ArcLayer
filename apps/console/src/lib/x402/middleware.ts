@@ -42,6 +42,7 @@ import {
 } from './exact/native-payment-store';
 import { settleExactPayment } from './exact/settle-exact';
 import { verifyExactSettlementProof } from './exact/verify-settlement-proof';
+import { claimAccessSession, completeAccessSession, releaseAccessSession } from './access-session';
 import type { PaymentRequirements, PaymentPayload } from './exact/types';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -186,10 +187,27 @@ async function handleGateway(
     );
   }
 
+  // ─── Access session guard: reject if payer already has active session ───
+  const earlyPayer = verifyResult.payer ?? (() => {
+    const payload = proof.payload as Record<string, unknown> | undefined;
+    const auth = payload?.authorization as Record<string, unknown> | undefined;
+    return (auth?.from as string | undefined) ?? null;
+  })();
+  if (earlyPayer) {
+    const sessionClaim = await claimAccessSession(earlyPayer, opts.resource, 'circle-gateway');
+    if (!sessionClaim.ok) {
+      return NextResponse.json(
+        { ok: false, error: 'already_paid', message: 'You already have an active access session for this resource.', expiresAt: sessionClaim.expiresAt },
+        { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+  }
+
   // Settle
   const settleResult = await facilitator.settle(proof as unknown as Parameters<typeof facilitator.settle>[0], requirements);
   if (!settleResult.success) {
     console.error(`[x402-gw] Settlement failed: ${opts.resource} — ${settleResult.errorReason}`);
+    if (earlyPayer) await releaseAccessSession(earlyPayer, opts.resource, 'circle-gateway');
     return NextResponse.json(
       { ok: false, error: 'payment_settlement_failed', reason: settleResult.errorReason },
       { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
@@ -215,6 +233,9 @@ async function handleGateway(
 
   // Consume (replay protection)
   await consumeGatewayPayment(paymentId);
+
+  // Complete access session with payment details
+  if (earlyPayer) await completeAccessSession(earlyPayer, opts.resource, 'circle-gateway', paymentId, settleResult.transaction ?? undefined);
 
   // Execute handler
   const response = await handler(req);
@@ -253,6 +274,16 @@ async function handleNative(
     );
   }
 
+  // ─── Access session guard: reject if payer already has active session ───
+  const payer = authorization.from as string;
+  const sessionClaim = await claimAccessSession(payer, opts.resource, 'arc-native');
+  if (!sessionClaim.ok) {
+    return NextResponse.json(
+      { ok: false, error: 'already_paid', message: 'You already have an active access session for this resource.', expiresAt: sessionClaim.expiresAt },
+      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+
   // Settle on-chain via relayer
   const settleResult = await settleExactPayment({
     paymentPayload: proof as unknown as PaymentPayload,
@@ -263,6 +294,7 @@ async function handleNative(
   if (!settleResult.success) {
     // If already settled, still allow through (idempotent)
     if (!settleResult.alreadySettled) {
+      await releaseAccessSession(payer, opts.resource, 'arc-native');
       return NextResponse.json(
         { ok: false, error: 'settlement_failed', reason: settleResult.errorReason, message: settleResult.errorMessage },
         { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
@@ -297,6 +329,9 @@ async function handleNative(
 
   // Execute handler
   const response = await handler(req);
+
+  // Complete access session with payment details
+  await completeAccessSession(payer, opts.resource, 'arc-native', paymentId, settleResult.transaction ?? undefined);
 
   // Attach PAYMENT-RESPONSE
   const paymentResponse = {

@@ -2,17 +2,12 @@ import { NextResponse } from 'next/server';
 import {
   ARC_TESTNET_CAIP2_NETWORK,
   ARC_TESTNET_CHAIN_ID,
-  ARC_TESTNET_NETWORK,
   CIRCLE_BATCHING_NAME,
   CIRCLE_BATCHING_VERSION,
   GATEWAY_NETWORK_NAME,
   getArcTestnetGatewayConfig,
-  JOB_ESCROW_ADDRESS,
   PAYMENT_REQUIRED_HEADER,
-  REPUTATION_ORACLE_ADDRESS,
   USDC_ADDRESS,
-  WORK_PROOF_ADDRESS,
-  X402_VERSION,
   X402_VERSION_V2,
 } from '@/lib/x402';
 
@@ -99,18 +94,7 @@ export function GET() {
         },
       },
     ],
-    accepts: [arcNativeExact, gatewayBatched, {
-      x402Version: X402_VERSION,
-      scheme: 'arc-escrow',
-      network: ARC_TESTNET_NETWORK,
-      chainId: ARC_TESTNET_CHAIN_ID,
-      asset: USDC_ADDRESS,
-      assetSymbol: 'USDC',
-      decimals: 6,
-      facilitator: '/api/x402',
-      jobEscrow: JOB_ESCROW_ADDRESS,
-      maxTimeoutSeconds,
-    }],
+    accepts: [arcNativeExact, gatewayBatched],
     facilitator: 'ArcLayer',
     version: String(X402_VERSION_V2),
     headers: {
@@ -124,9 +108,8 @@ export function GET() {
         network: ARC_TESTNET_CAIP2_NETWORK,
         name: 'Arc Testnet',
         chainId: ARC_TESTNET_CHAIN_ID,
-        schemes: ['exact', 'arc-escrow', 'arclayer-escrow'],
+        schemes: ['exact'],
         assets: [{ symbol: 'USDC', address: USDC_ADDRESS, decimals: 6 }],
-        contracts: { jobEscrow: JOB_ESCROW_ADDRESS, workProof: WORK_PROOF_ADDRESS, reputationOracle: REPUTATION_ORACLE_ADDRESS },
       },
       {
         network: GATEWAY_NETWORK_NAME,

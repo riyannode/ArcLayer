@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { readContract, waitForTransactionReceipt } from '@wagmi/core';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
+import { useRail, railHeaders } from '@/components/rail/RailProvider';
 import { CONTRACTS, JOB_ESCROW_ABI, buildApproveUsdcConfig, buildCreateJobConfig, buildFundJobConfig, buildSetBudgetConfig } from '@arclayer/sdk';
 import { formatUSDC, shortenAddress } from '@/lib/contracts';
 import { parseUSDC } from '@/lib/contracts';
@@ -126,6 +127,7 @@ export default function AgentProfilePage() {
   const params = useParams<{ id: string }>();
   const { address, isConnected } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
+  const { rail } = useRail();
   const agentId = parseAgentId(params.id);
   const [profile, setProfile] = useState<AgentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -163,7 +165,11 @@ export default function AgentProfilePage() {
     try {
       setIsRunning(true);
       setRunState('POST /api/agents/:id/run -> 402 Payment Required');
-      const first = await fetch(`/api/agents/${agentId}/run`, { method: 'POST', body: JSON.stringify({ input: runInput }) });
+      const first = await fetch(`/api/agents/${agentId}/run`, {
+        method: 'POST',
+        headers: { ...railHeaders(rail, address) },
+        body: JSON.stringify({ input: runInput }),
+      });
       if (first.status !== 402) throw new Error(`Expected x402 challenge, received HTTP ${first.status}.`);
 
       const amount = parseUSDC(runBudget);
@@ -191,7 +197,11 @@ export default function AgentProfilePage() {
       await waitForTransactionReceipt(config, { hash: fundHash });
       const paid = await fetch(`/api/agents/${agentId}/run`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-payment': JSON.stringify({ txHash: fundHash, chainId: 5042002 }) },
+        headers: {
+          'content-type': 'application/json',
+          ...railHeaders(rail, address),
+          'x-payment': JSON.stringify({ txHash: fundHash, chainId: 5042002 }),
+        },
         body: JSON.stringify({ input: runInput, jobId: visibleJobId.toString() }),
       });
       const payload = await paid.json();

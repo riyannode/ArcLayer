@@ -137,10 +137,24 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   }, [authenticated, eoaConnected, mode]);
 
 
+  const sessionKey = useCallback((walletAddress: string) => `x402_paid:${mode}:/api/x402-demo/protected:${walletAddress.toLowerCase()}`, [mode]);
+
+  // Auto-restore unlocked state from sessionStorage on mount/wallet change
+  useEffect(() => {
+    if (!address || typeof window === 'undefined') return;
+    const existing = sessionStorage.getItem(sessionKey(address));
+    if (existing) {
+      try { const parsed = JSON.parse(existing); if (parsed.txHash) setTxHash(parsed.txHash); } catch {}
+      setUnlocked(true);
+      setStep('done');
+    }
+  }, [address, sessionKey]);
+
   const reset = useCallback(() => {
     runLockRef.current = false;
     setLogs([]); setTxHash(''); setUnlocked(false); setReplayResult('Not run'); setRequirement(null); setStep('idle');
-  }, []);
+    if (address && typeof window !== 'undefined') sessionStorage.removeItem(sessionKey(address));
+  }, [address, sessionKey]);
 
   /* ─── ARC NATIVE FLOW ─── */
   const runArcNative = useCallback(async (wallet: { address: string; switchChain: (id: number) => Promise<void>; getEthereumProvider: () => Promise<{ request: (args: { method: string; params: unknown[] }) => Promise<unknown> }> }) => {
@@ -227,6 +241,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     }
     if (paymentResp.transaction) setTxHash(paymentResp.transaction);
     setUnlocked(true);
+    // Persist paid state in sessionStorage — auto-clears on browser/tab close
+    if (typeof window !== 'undefined') sessionStorage.setItem(sessionKey(wallet.address), JSON.stringify({ txHash: paymentResp.transaction, paidAt: Date.now() }));
     log(`5/6 Settled & unlocked: tx=${paymentResp.transaction?.slice(0, 18) || 'n/a'}...`, 'success');
     notify({
       ...NOTICE_PAYMENT_SETTLED,
@@ -249,7 +265,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       notify(NOTICE_REPLAY_FAILED);
     }
     setStep(rejected ? 'done' : 'error');
-  }, [log, notify]);
+  }, [log, notify, sessionKey]);
 
   /* ─── CIRCLE GATEWAY FLOW ─── */
   const runGateway = useCallback(async (wallet: { address: string; switchChain: (id: number) => Promise<void>; getEthereumProvider: () => Promise<{ request: (args: { method: string; params: unknown[] }) => Promise<unknown> }> }) => {
@@ -340,6 +356,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     }
     if (paymentResp.transaction) setTxHash(paymentResp.transaction || '');
     setUnlocked(true);
+    // Persist paid state in sessionStorage — auto-clears on browser/tab close
+    if (typeof window !== 'undefined') sessionStorage.setItem(sessionKey(wallet.address), JSON.stringify({ txHash: paymentResp.transaction, paidAt: Date.now() }));
     log(`[GW] Settled & unlocked via Circle Gateway: ${paymentResp.transaction?.slice(0, 18) || 'batched'}...`, 'success');
     notify({
       ...NOTICE_PAYMENT_SETTLED,
@@ -366,12 +384,28 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       notify(NOTICE_REPLAY_FAILED);
     }
     setStep(replayRejected ? 'done' : 'error');
-  }, [gatewayBalance, log, notify]);
+  }, [gatewayBalance, log, notify, sessionKey]);
 
   const runDemo = useCallback(async () => {
     // Synchronous double-submit guard — prevents two flows with different nonces.
     // Must happen before reset(); reset intentionally clears stale locks.
     if (runLockRef.current) return;
+
+    // ─── Session-paid guard ─────────────────────────────────────────────────
+    // sessionStorage auto-clears on browser/tab close. If a paid flag exists,
+    // the user already unlocked this resource in the current browser session.
+    // Note: server-side guard still protects against bypass via DevTools.
+    if (address && typeof window !== 'undefined') {
+      const existing = sessionStorage.getItem(sessionKey(address));
+      if (existing) {
+        log('Already unlocked this browser session — close & re-open browser to pay again, or click RESET.', 'success');
+        notify({ ...NOTICE_RESOURCE_UNLOCKED, surface: 'toast', autoCloseMs: 5_000, title: 'Already unlocked', message: 'You already paid for this resource in the current browser session. Close the browser to reset, or press RESET.' });
+        try { const parsed = JSON.parse(existing); if (parsed.txHash) setTxHash(parsed.txHash); } catch {}
+        setUnlocked(true);
+        setStep('done');
+        return;
+      }
+    }
 
     reset();
     runLockRef.current = true;
@@ -440,10 +474,11 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
         await runGateway(wallet as unknown as Parameters<typeof runGateway>[0]);
       }
     } finally {
-      // Release lock — operator may RUN AGAIN after success or error
+      // Always release in-flight lock — server enforces double-charge prevention.
+      // Client just guards against rapid double-click.
       runLockRef.current = false;
     }
-  }, [activeAuthed, address, walletMode, smartAccount, log, reset, mode, runArcNative, runGateway, notify]);
+  }, [activeAuthed, address, walletMode, smartAccount, log, reset, mode, runArcNative, runGateway, notify, sessionKey]);
 
   const connectSelectedWallet = useCallback(() => {
     if (mode === 'circle-gateway') {
@@ -457,10 +492,15 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   // After successful payment, keep button disabled for 5s to prevent accidental re-pay
   const [cooldown, setCooldown] = useState(false);
   useEffect(() => {
+    if (step === 'error') {
+      setCooldown(false);
+      return;
+    }
     if (step === 'done') {
       setCooldown(true);
-      const t = setTimeout(() => setCooldown(false), 5000);
-      return () => clearTimeout(t);
+    }
+    if (step === 'idle') {
+      setCooldown(false);
     }
   }, [step]);
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
@@ -528,8 +568,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                   <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
                   {walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · {shortenAddress(address)}
                 </div>
-                <button onClick={busy || cooldown || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || cooldown || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
-                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ (cooldown)' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                <button onClick={busy || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ — UNLOCKED' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                 </button>
               </>
             )}
@@ -699,8 +739,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                   <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
                   {walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · {shortenAddress(address)}
                 </div>
-                <button onClick={busy || cooldown || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || cooldown || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
-                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ (cooldown)' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                <button onClick={busy || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ — UNLOCKED' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                 </button>
                 <button onClick={() => eoaConnected ? eoaDisconnect() : undefined} className={`mt-1.5 w-full cursor-pointer ${c.cardRadiusXs} border border-white/10 ${compact ? 'py-1.5' : 'py-2'} font-mono ${c.label} tracking-[0.14em] text-white/80 hover:border-white/20`}>DISCONNECT</button>
               </>

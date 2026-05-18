@@ -1,3 +1,7 @@
+# Supabase local
+supabase/.temp/
+**/supabase/.temp/
+
 # Dependencies
 node_modules/
 
