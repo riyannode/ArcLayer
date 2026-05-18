@@ -10,7 +10,7 @@ import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'vie
 import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
 import { DEFAULT_GATEWAY_DEPOSIT_USDC } from '@/lib/x402/constants';
 import { DevDetails } from '@/components/DevDetails';
-import { NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_REQUIRED, NOTICE_PAYMENT_SETTLED, NOTICE_REPLAY_FAILED, NOTICE_REPLAY_REJECTED, NOTICE_RESOURCE_UNLOCKED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
+import { NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_SETTLED, NOTICE_REPLAY_FAILED, NOTICE_REPLAY_REJECTED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
 import { shortenAddress } from '@/lib/contracts';
 
 const ARC_CHAIN_ID = 5042002;
@@ -210,7 +210,6 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     const req = accepts.find((a) => !a.extra?.name || a.extra?.name === 'USDC') || accepts[0];
     setRequirement(req);
     log(`2/6 Received 402 Payment Required: ${formatUnits(BigInt(req.amount), 6)} USDC`, 'success');
-    notify(NOTICE_PAYMENT_REQUIRED);
 
     const client = createPublicClient({ transport: http(ARC_RPC) });
     const balance = await client.readContract({ address: USDC, abi: BALANCE_ABI, functionName: 'balanceOf', args: [address] });
@@ -278,23 +277,38 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     log(`5/6 Settled & unlocked: tx=${paymentResp.transaction?.slice(0, 18) || 'n/a'}...`, 'success');
     notify({
       ...NOTICE_PAYMENT_SETTLED,
-      title: `−${formatUnits(BigInt(req.amount), 6)} USDC settled`,
-      message: `On-chain settlement confirmed. Your wallet was charged ${formatUnits(BigInt(req.amount), 6)} USDC via EIP-3009.`,
+      title: `Payment completed`,
+      message: `${formatUnits(BigInt(req.amount), 6)} USDC settled. Protected resource is unlocked.`,
       technicalDetail: paymentResp.transaction ? `tx: ${paymentResp.transaction}` : 'settled',
     });
-    notify(NOTICE_RESOURCE_UNLOCKED);
 
     setStep('replay');
     log('6/6 Replay test: reusing same X-PAYMENT against /api/x402-demo/protected...');
     const replay = await fetch('/api/x402-demo/protected', { headers: { 'X-PAYMENT': header } });
     const replayJson = await replay.json();
-    const rejected = !replay.ok && (replayJson.error === 'payment_replayed' || replayJson.error === 'native_payment_replayed' || replayJson.error === 'nonce_used' || replayJson.error === 'payment_already_used');
-    setReplayResult(rejected ? `Rejected: ${replayJson.error}` : `Unexpected: ${JSON.stringify(replayJson).slice(0, 80)}`);
-    log(rejected ? `Replay rejected: ${replayJson.error} ✓` : 'Replay test did not return expected rejection', rejected ? 'success' : 'error');
+    const replayReason = replayJson.reason || replayJson.error || 'duplicate_rejected';
+    const rejected = !replay.ok && (
+      replayJson.error === 'payment_replayed' ||
+      replayJson.error === 'native_payment_replayed' ||
+      replayJson.error === 'nonce_used' ||
+      replayJson.error === 'payment_already_used' ||
+      replayJson.reason === 'nonce_used' ||
+      replayJson.reason === 'payment_already_used'
+    );
+    setReplayResult(rejected ? 'Success: duplicate rejected' : 'Error: duplicate accepted');
+    log(rejected ? `Replay guard success: ${replayReason} ✓` : 'Replay guard error: duplicate payment was accepted', rejected ? 'success' : 'error');
     if (rejected) {
-      notify({ ...NOTICE_REPLAY_REJECTED, technicalDetail: `Replay rejected: ${replayJson.error}`, message: 'This Arc Native EIP-3009 payment receipt was already consumed and cannot unlock the protected resource again.' });
+      notify({
+        ...NOTICE_REPLAY_REJECTED,
+        surface: 'toast',
+        title: 'Replay guard passed',
+        subtitle: undefined,
+        message: 'Duplicate payment receipt rejected correctly.',
+        technicalDetail: `Reason: ${replayReason}`,
+        autoCloseMs: 3_500,
+      });
     } else {
-      notify(NOTICE_REPLAY_FAILED);
+      notify({ ...NOTICE_REPLAY_FAILED, title: 'Replay guard error', subtitle: undefined, message: 'Duplicate payment was accepted unexpectedly.' });
     }
     setStep(rejected ? 'done' : 'error');
   }, [log, notify, sessionKey]);
@@ -394,27 +408,38 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     log(`[GW] Settled & unlocked via Circle Gateway: ${paymentResp.transaction?.slice(0, 18) || 'batched'}...`, 'success');
     notify({
       ...NOTICE_PAYMENT_SETTLED,
-      title: `−${formatUnits(BigInt(gwOption.amount), 6)} USDC settled`,
-      message: `Circle Gateway settlement confirmed. Your wallet was charged ${formatUnits(BigInt(gwOption.amount), 6)} USDC via EIP-3009.`,
+      title: `Payment completed`,
+      message: `${formatUnits(BigInt(gwOption.amount), 6)} USDC settled via Circle Gateway. Protected resource is unlocked.`,
       technicalDetail: paymentResp.transaction ? `tx: ${paymentResp.transaction}` : 'batched settlement',
     });
-    notify(NOTICE_RESOURCE_UNLOCKED);
 
     setStep('replay');
     log('[GW] 5/5 Replay test: reusing same PAYMENT-SIGNATURE...');
     const replayResp = await fetch('/api/x402-demo/protected', { headers: { 'PAYMENT-SIGNATURE': header } });
     const replayJson = await replayResp.json();
-    const replayRejected = !replayResp.ok || replayJson.error === 'payment_replayed' || replayJson.error === 'gateway_payment_replayed' || replayJson.error === 'nonce_used' || replayJson.error === 'payment_already_used';
+    const replayReason = replayJson.reason || replayJson.error || 'duplicate_rejected';
+    const replayRejected = !replayResp.ok && (
+      replayJson.error === 'payment_replayed' ||
+      replayJson.error === 'gateway_payment_replayed' ||
+      replayJson.error === 'nonce_used' ||
+      replayJson.error === 'payment_already_used' ||
+      replayJson.reason === 'nonce_used' ||
+      replayJson.reason === 'payment_already_used'
+    );
+    setReplayResult(replayRejected ? 'Success: duplicate rejected' : 'Error: duplicate accepted');
+    log(replayRejected ? `[GW] Replay guard success: ${replayReason} ✓` : '[GW] Replay guard error: duplicate payment was accepted', replayRejected ? 'success' : 'error');
     if (replayRejected) {
-      const reason = replayJson.error || 'gateway_payment_replayed';
-      setReplayResult(`Rejected: ${reason}`);
-      log(`[GW] Receipt already used protection verified ✓`, 'success');
-      log(`[GW] Replay rejected: ${reason} ✓`, 'success');
-      notify({ ...NOTICE_REPLAY_REJECTED, message: 'This Circle Gateway payment receipt was already consumed and cannot unlock the protected resource again.', technicalDetail: `Replay rejected: ${reason}` });
+      notify({
+        ...NOTICE_REPLAY_REJECTED,
+        surface: 'toast',
+        title: 'Replay guard passed',
+        subtitle: undefined,
+        message: 'Duplicate Circle Gateway receipt rejected correctly.',
+        technicalDetail: `Reason: ${replayReason}`,
+        autoCloseMs: 3_500,
+      });
     } else {
-      setReplayResult('Unexpected: replay unlocked resource');
-      log('[GW] Replay unexpectedly unlocked resource', 'error');
-      notify(NOTICE_REPLAY_FAILED);
+      notify({ ...NOTICE_REPLAY_FAILED, title: 'Replay guard error', subtitle: undefined, message: 'Duplicate payment was accepted unexpectedly.' });
     }
     setStep(replayRejected ? 'done' : 'error');
   }, [gatewayBalance, log, notify, sessionKey]);
@@ -432,7 +457,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       const existing = sessionStorage.getItem(sessionKey(address));
       if (existing) {
         log('Already unlocked this browser session — close & re-open browser to pay again, or click RESET.', 'success');
-        notify({ ...NOTICE_RESOURCE_UNLOCKED, surface: 'toast', autoCloseMs: 5_000, title: 'Already unlocked', message: 'You already paid for this resource in the current browser session. Close the browser to reset, or press RESET.' });
+        notify({ ...NOTICE_PAYMENT_SETTLED, surface: 'toast', autoCloseMs: 4_000, title: 'Already paid', message: 'This resource is already unlocked in the current browser session.' });
         try { const parsed = JSON.parse(existing); if (parsed.txHash) setTxHash(parsed.txHash); } catch {}
         setUnlocked(true);
         setStep('done');
