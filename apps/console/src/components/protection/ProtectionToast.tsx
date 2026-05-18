@@ -8,6 +8,62 @@ type Props = {
   onDismiss: (id: string) => void;
 };
 
+/** Center toasts use scale animation (no translate conflict with centering). */
+function CenterToastItem({ notice, onDismiss }: { notice: ProtectionNotice; onDismiss: () => void }) {
+  const [exiting, setExiting] = useState(false);
+
+  useEffect(() => {
+    if (notice.autoCloseMs && notice.autoCloseMs > 0) {
+      const t = setTimeout(() => {
+        setExiting(true);
+        setTimeout(onDismiss, 300);
+      }, notice.autoCloseMs);
+      return () => clearTimeout(t);
+    }
+  }, [notice.autoCloseMs, onDismiss]);
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`pointer-events-auto flex w-full items-start gap-3 rounded-xl border p-5 shadow-2xl backdrop-blur-md transition-all duration-300 ${
+        exiting ? "scale-95 opacity-0" : "scale-100 opacity-100"
+      } ${severityColor[notice.severity]}`}
+    >
+      <span className="mt-0.5 text-lg leading-none">{severityIcon[notice.severity]}</span>
+      <div className="flex-1 min-w-0">
+        <p className={`text-base font-semibold ${severityTitleColor[notice.severity]}`}>{notice.title}</p>
+        <p className={`mt-1 whitespace-pre-line text-xs ${severityMsgColor[notice.severity]}`}>{notice.message}</p>
+        {notice.details && notice.details.length > 0 && (
+          <div className="mt-3 space-y-1.5 rounded-lg border border-emerald-400/15 bg-black/20 p-2.5">
+            {notice.details.map((detail) => {
+              const value = detail.href ? (
+                <a href={detail.href} target="_blank" rel="noopener noreferrer" className="underline decoration-emerald-300/50 underline-offset-2 hover:text-emerald-100">
+                  {detail.value}
+                </a>
+              ) : detail.value;
+              return (
+                <div key={detail.label} className="flex items-start justify-between gap-3 text-[11px] leading-4">
+                  <span className="shrink-0 text-emerald-100/60">{detail.label}</span>
+                  <span className={`min-w-0 truncate text-right text-emerald-50/90 ${detail.mono === false ? '' : 'font-mono'}`}>{value}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => { setExiting(true); setTimeout(onDismiss, 300); }}
+        className="shrink-0 text-white/80 hover:text-white transition text-sm"
+        aria-label="Dismiss"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 const severityColor: Record<ProtectionNotice["severity"], string> = {
   info: "border-sky-400/25 bg-sky-400/[0.06]",
   success: "border-emerald-400/40 bg-emerald-400/[0.08]",
@@ -101,14 +157,27 @@ function ToastItem({ notice, onDismiss }: { notice: ProtectionNotice; onDismiss:
 export function ProtectionToast({ toasts, onDismiss }: Props) {
   // Max 3 visible
   const visible = toasts.slice(-3);
+  const centerToasts = visible.filter((t) => t.title === "Payment successful");
+  const cornerToasts = visible.filter((t) => t.title !== "Payment successful");
 
   if (visible.length === 0) return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-[110] flex flex-col-reverse gap-2 pointer-events-none">
-      {visible.map((t) => (
-        <ToastItem key={t.id} notice={t} onDismiss={() => onDismiss(t.id)} />
-      ))}
-    </div>
+    <>
+      {centerToasts.length > 0 && (
+        <div className="fixed left-1/2 top-1/2 z-[110] flex w-[min(92vw,440px)] -translate-x-1/2 -translate-y-1/2 flex-col gap-2 pointer-events-none">
+          {centerToasts.map((t) => (
+            <CenterToastItem key={t.id} notice={t} onDismiss={() => onDismiss(t.id)} />
+          ))}
+        </div>
+      )}
+      {cornerToasts.length > 0 && (
+        <div className="fixed bottom-6 right-6 z-[110] flex flex-col-reverse gap-2 pointer-events-none">
+          {cornerToasts.map((t) => (
+            <ToastItem key={t.id} notice={t} onDismiss={() => onDismiss(t.id)} />
+          ))}
+        </div>
+      )}
+    </>
   );
 }

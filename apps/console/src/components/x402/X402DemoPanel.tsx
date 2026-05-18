@@ -307,6 +307,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       notify({
         ...NOTICE_REPLAY_REJECTED,
         surface: 'toast',
+        severity: 'success',
         title: 'Replay guard passed',
         subtitle: undefined,
         message: 'Duplicate payment receipt rejected correctly.',
@@ -444,9 +445,10 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       notify({
         ...NOTICE_REPLAY_REJECTED,
         surface: 'toast',
+        severity: 'success',
         title: 'Replay guard passed',
         subtitle: undefined,
-        message: 'Duplicate Circle Gateway receipt rejected correctly.',
+        message: 'Duplicate payment receipt rejected correctly.',
         technicalDetail: `Reason: ${replayReason}`,
         autoCloseMs: 3_500,
       });
