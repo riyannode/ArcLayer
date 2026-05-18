@@ -43,6 +43,7 @@ const NotifBell = dynamic(() => import('./NotifBell'), {
 const NAV_LINKS = [
   { href: '/x402-demo', label: 'x402', anchor: null },
   { href: '/protocol', label: 'PROTOCOL', anchor: null },
+  { href: '/live-a2a-agent', label: 'LIVE A2A AGENT', anchor: null },
   { href: '/register', label: 'AGENT', anchor: null },
   { href: '/jobs', label: 'JOBS', anchor: null },
   { href: '/docs', label: 'SDK', anchor: null },

@@ -32,6 +32,9 @@ import { buildAgentNetwork } from '@/lib/a2a/build-agent-network';
 import { AgentFilterBar, AGENT_FILTERS } from '@/components/a2a/AgentFilterBar';
 import { AgentNetworkCard, EmptyAgentState } from '@/components/a2a/AgentNetworkCard';
 import { AgentDetailDrawer } from '@/components/a2a/AgentDetailDrawer';
+import AgentFlowDiagram from '@/components/a2a/AgentFlowDiagram';
+import LivePolymarketFeed from '@/components/a2a/LivePolymarketFeed';
+import LiveSignalPanel from '@/components/a2a/LiveSignalPanel';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -144,15 +147,15 @@ function FeedRow({ item, isNew }: { item: FeedItem; isNew: boolean }) {
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
-export default function A2ADashboardPageRoute() {
+export default function LiveA2AAgentPageRoute() {
   return (
     <Suspense fallback={null}>
-      <A2ADashboardPage />
+      <LiveA2AAgentPage />
     </Suspense>
   );
 }
 
-function A2ADashboardPage() {
+function LiveA2AAgentPage() {
   const searchParams = useSearchParams();
   const focusId = searchParams.get('focus')?.trim() || null;
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -328,7 +331,7 @@ function A2ADashboardPage() {
           <div className="flex items-center gap-3">
             <PulseDot active={isLive} />
             <h1 className="font-mono text-sm font-medium tracking-tight">
-              ArcLayer <span className="text-[#C5A67C]">A2A Agent Registry</span>
+              ArcLayer <span className="text-[#C5A67C]">LIVE A2A AGENT</span>
             </h1>
           </div>
           <div className="flex items-center gap-4 font-mono text-[10px] text-[#555]">
@@ -347,15 +350,66 @@ function A2ADashboardPage() {
           </div>
         )}
 
-        {/* ─── Page Title · A2A registry only ───────────────────────────── */}
+        {/* ─── Page Title · Agora-submission framing ─────────────────────── */}
         <section className="mb-6">
           <h2 className="text-2xl font-semibold tracking-tight text-[#EAE4D8]">
-            Registered A2A Agents
+            Autonomous Prediction-Market Intelligence Network
           </h2>
-          <p className="mt-1 max-w-3xl font-mono text-[12px] leading-5 text-[#9C9080]">
-            Browse autonomous agents registered in the ArcLayer A2A network. Select an agent to inspect profile,
-            reputation, receipts, and on-chain activity.
+          <p className="mt-1 max-w-3xl font-mono text-[12px] leading-5 text-[#7A7A7A]">
+            <span className="text-[#C5A67C]">Hermes</span> is an autonomous trading agent that pays{' '}
+            <span className="text-violet-300">Apolo</span> in USDC over x402 for live Polymarket
+            decisions generated from <span className="text-cyan-300">Ignia</span>'s raw-signal
+            oracle. Every payment, receipt, and trade is settled on Arc — sub-second, ~$0.01 per
+            transaction, no volatile gas.
           </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px]">
+            <span className="rounded border border-emerald-500/20 bg-emerald-950/20 px-2 py-1 text-emerald-300/90">
+              live polymarket data
+            </span>
+            <span className="rounded border border-violet-500/20 bg-violet-950/20 px-2 py-1 text-violet-300/90">
+              x402 paid decisions
+            </span>
+            <span className="rounded border border-amber-500/20 bg-amber-950/20 px-2 py-1 text-amber-300/90">
+              autonomous 24/7 loop
+            </span>
+            <span className="rounded border border-cyan-500/20 bg-cyan-950/20 px-2 py-1 text-cyan-300/90">
+              dry-run trades · real settlement
+            </span>
+          </div>
+        </section>
+
+        {/* ─── Honest disclaimer · trades are dry-run for hackathon safety ─ */}
+        <section className="mb-6 rounded border border-white/5 bg-white/[0.02] px-4 py-3">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-[#777]">
+            agora hackathon · how to read this page
+          </p>
+          <p className="mt-1.5 font-mono text-[11px] leading-5 text-[#9C9080]">
+            All <span className="text-emerald-300/90">x402 payments, receipts, agent registry, and
+            on-chain reputation</span> are real. Trade execution against Polymarket is
+            <span className="text-cyan-300/90"> dry-run</span> for hackathon safety — performance is
+            tracked against actual market settlement, so PnL/winrate reflect what the agent{' '}
+            <em>would have</em> earned trading live.
+          </p>
+        </section>
+
+        {/* ─── A2A Flow Diagram ────────────────────────────────────────── */}
+        <section className="mb-6">
+          <AgentFlowDiagram
+            isLive={isLive}
+            igniaActive={isLive}
+            apoloActive={isLive}
+            hermesActive={isLive}
+          />
+        </section>
+
+        {/* ─── Live Polymarket Price Feed ─────────────────────────────── */}
+        <section className="mb-6">
+          <LivePolymarketFeed />
+        </section>
+
+        {/* ─── Live Signal Pipeline · Ignia → Apolo → Hermes ──────────── */}
+        <section className="mb-6">
+          <LiveSignalPanel />
         </section>
 
         {/* ─── Autonomous Agent Network · selectable agent cards ──────── */}
@@ -404,6 +458,188 @@ function A2ADashboardPage() {
             </div>
           )}
         </section>
+
+        {/* ─── Live Proof Metrics · for Agora judges ──────────────────── */}
+        <section className="mt-6 rounded border border-[#C5A67C]/20 bg-[#C5A67C]/[0.03] p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">
+              live proof metrics · arc testnet
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <MetricCard label="Decisions Purchased" value={liveSignalsServed} sub="x402 paid calls" />
+            <MetricCard label="USDC Volume" value={summary ? formatUSDC(totalVolumeRaw.toString()) : '0.00'} sub="settled on Arc" />
+            <MetricCard label="On-Chain Receipts" value={summary?.proofs ?? 0} sub="ProofOfWork NFTs" />
+            <MetricCard label="Hermes Trades" value={liveIgniaTrades} sub="autonomous executions" />
+            <MetricCard
+              label="Winrate"
+              value={
+                ignia?.stats && (ignia.stats.signalsCorrect + ignia.stats.signalsWrong) > 0
+                  ? `${((ignia.stats.signalsCorrect / (ignia.stats.signalsCorrect + ignia.stats.signalsWrong)) * 100).toFixed(1)}%`
+                  : '—'
+              }
+              sub="vs market settlement"
+            />
+            <MetricCard
+              label="PnL (bps)"
+              value={
+                typeof ignia?.stats?.cumulativePnlBps === 'number'
+                  ? `${ignia.stats.cumulativePnlBps >= 0 ? '+' : ''}${ignia.stats.cumulativePnlBps}`
+                  : '—'
+              }
+              sub="cumulative"
+            />
+          </div>
+          <p className="mt-3 font-mono text-[9px] text-[#555]">
+            All metrics are live on-chain reads from Arc Testnet (chain {onchain?.chainId ?? '5042002'}).
+            Receipts verifiable on{' '}
+            <a href="https://testnet.arcscan.app" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline decoration-dotted">
+              arcscan.app
+            </a>.
+          </p>
+        </section>
+
+        {/* ─── KPI Strip ───────────────────────────────────────────────── */}
+        <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
+          <KPICard label="Signals Served" value={liveSignalsServed} accent />
+          <KPICard label="Hermes Trades" value={liveIgniaTrades} accent />
+          <KPICard label="Active Markets" value={onchain?.markets.totalIgnia ?? '—'} />
+          <KPICard label="Mirrors" value={onchain?.markets.totalMirrors ?? '—'} />
+          <KPICard label="Marketplace Jobs" value={summary?.jobs ?? '—'} />
+          <KPICard label="Volume USDC" value={summary ? formatUSDC(totalVolumeRaw.toString()) : '—'} accent />
+          <KPICard label="Agent Balance" value={onchain ? formatUSDC(totalAgentBalanceRaw.toString()) : '—'} accent />
+        </section>
+
+        {/* ─── Sparklines ──────────────────────────────────────────────── */}
+        <section className="mt-6 grid gap-3 md:grid-cols-2">
+          <SparklineCard label="Signals Served · Live" data={signalHistory} color="#22D3EE" />
+          <SparklineCard label="Marketplace Volume USDC · Live" data={volumeHistory} color="#C5A67C" />
+        </section>
+
+        {/* ─── x402 Charge Notice · Per-Execution Micropayment Proof ──── */}
+        <section className="mt-6 rounded border border-emerald-500/20 bg-emerald-950/[0.06] p-4">
+          <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <p className="font-mono text-[10px] uppercase tracking-widest text-emerald-300">
+                x402 · per-execution charge (live on-chain reads)
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 font-mono text-[11px]">
+              <div>
+                <span className="text-[#7A7A7A]">price/call</span>{' '}
+                <span className="text-[#EAE4D8]">0.01 USDC</span>
+              </div>
+              <div>
+                <span className="text-[#7A7A7A]">scheme</span>{' '}
+                <span className="text-[#EAE4D8]">EIP-3009 · exact</span>
+              </div>
+              <div>
+                <span className="text-[#7A7A7A]">calls served</span>{' '}
+                <span className="text-cyan-300">{liveSignalsServed}</span>
+              </div>
+              <div>
+                <span className="text-[#7A7A7A]">total deducted</span>{' '}
+                <span className="text-emerald-300">
+                  {ignia?.stats?.totalRevenue ? formatUSDC(ignia.stats.totalRevenue) : '0.00'} USDC
+                </span>
+              </div>
+              <div>
+                <span className="text-[#7A7A7A]">apolo revenue (x402)</span>{' '}
+                <span className="text-amber-300">
+                  {ignia?.stats?.totalRevenue ? formatUSDC(ignia.stats.totalRevenue) : '0.00'} USDC
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Balance Snapshot · live wallet reads from Arc Testnet */}
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded border border-amber-500/15 bg-black/30 p-3">
+              <div className="flex items-center justify-between">
+                <p className="font-mono text-[9.5px] uppercase tracking-widest text-amber-300/80">Hermes · payer</p>
+                <a
+                  href={`https://testnet.arcscan.app/address/${onchain?.wallets?.hermes ?? ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-[9.5px] text-[#7A7A7A] hover:text-amber-300"
+                >
+                  {short(onchain?.wallets?.hermes ?? '')} ↗
+                </a>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="font-mono text-[18px] text-amber-300">
+                  {onchain?.balances?.usdc?.hermes ? formatUSDC(onchain.balances.usdc.hermes) : '—'}
+                </span>
+                <span className="font-mono text-[10px] text-[#7A7A7A]">USDC (live)</span>
+              </div>
+              <p className="mt-1 font-mono text-[9.5px] text-[#555]">
+                Each x402 settlement deducts 0.01 USDC from this wallet on-chain.
+              </p>
+            </div>
+
+            <div className="rounded border border-cyan-500/15 bg-black/30 p-3">
+              <div className="flex items-center justify-between">
+                <p className="font-mono text-[9.5px] uppercase tracking-widest text-cyan-300/80">Apolo · paid resolver</p>
+                <a
+                  href={`https://testnet.arcscan.app/address/${onchain?.wallets?.pythia ?? ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-[9.5px] text-[#7A7A7A] hover:text-cyan-300"
+                >
+                  {short(onchain?.wallets?.pythia ?? '')} ↗
+                </a>
+              </div>
+              <div className="mt-2 flex items-baseline gap-2">
+                <span className="font-mono text-[18px] text-cyan-300">
+                  {onchain?.balances?.usdc?.pythia ? formatUSDC(onchain.balances.usdc.pythia) : '—'}
+                </span>
+                <span className="font-mono text-[10px] text-[#7A7A7A]">USDC (live)</span>
+              </div>
+              <p className="mt-1 font-mono text-[9.5px] text-[#555]">
+                Receives 0.01 USDC per signal. Counter on-chain via ReputationRegistry.totalRevenue.
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-3 font-mono text-[10px] leading-[1.6] text-[#7A7A7A]">
+            All numbers above are direct on-chain reads (not cached, not derived from indexer guesses).
+            "calls served" + "total deducted" come from{' '}
+            <span className="text-emerald-300/80">ReputationRegistry.getStats(Pythia)</span>.
+            Wallet balances come from{' '}
+            <span className="text-emerald-300/80">USDC.balanceOf()</span> on Arc Testnet (chain {onchain?.chainId ?? '5042002'}).
+            Each tx hash below is verifiable on the explorer.
+          </p>
+        </section>
+
+        {/* ─── Marketplace Section (manual JobEscrow) ──────────────────── */}
+        {summary && summary.jobs > 0 && (
+          <section className="mt-5 md:mt-8 rounded border border-white/5 bg-white/[0.02] p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="font-mono text-[10px] uppercase tracking-widest text-[#555]">
+                Marketplace Jobs · JobEscrow
+              </p>
+              <span className="font-mono text-[10px] text-[#333]">
+                {summary.settledJobs}/{summary.jobs} settled
+              </span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {overview!.proofs.slice(0, 6).map((proof) => (
+                <div key={proof.tokenId} className="rounded border border-white/5 bg-black/30 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs text-[#C5A67C]">Proof #{proof.tokenId}</span>
+                    <span className="font-mono text-[10px] text-[#555]">{timeAgo(proof.mintedAt)}</span>
+                  </div>
+                  <p className="mt-1 font-mono text-[10px] text-[#7A7A7A]">
+                    Job #{proof.jobId} · {formatUSDC(proof.amountPaid)} USDC
+                  </p>
+                  <p className="mt-0.5 font-mono text-[10px] text-[#444]">payer {short(proof.payer)}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <footer className="mt-10 border-t border-white/5 pt-4 font-mono text-[10px] text-[#333]">
           <div className="flex flex-wrap items-center justify-between gap-2">
