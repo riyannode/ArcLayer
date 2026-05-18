@@ -69,11 +69,11 @@ function MarketCard({ market, history }: { market: MarketData; history: PriceHis
           <span className="font-mono text-sm font-semibold" style={{ color: colors.primary }}>
             {market.asset}
           </span>
-          <span className="font-mono text-[9px] uppercase tracking-widest text-[#777]">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-[#bdb1a0]">
             UP/DOWN · 5m
           </span>
         </div>
-        <span className="font-mono text-[9px] text-[#555]">
+        <span className="font-mono text-[10px] text-[#9C9080]">
           {market.startTime}–{market.endTime} ET
         </span>
       </div>
@@ -81,8 +81,8 @@ function MarketCard({ market, history }: { market: MarketData; history: PriceHis
       <div className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded border border-emerald-500/20 bg-emerald-950/[0.08] p-2">
           <div className="flex items-center justify-between">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-emerald-300/80">UP</span>
-            <span className="font-mono text-[14px] text-emerald-300">{upPct}¢</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-emerald-300">UP</span>
+            <span className="font-mono text-[15px] font-semibold text-emerald-200">{upPct}¢</span>
           </div>
           <PriceSparkline
             data={history?.upHistory ?? [market.upPrice]}
@@ -93,8 +93,8 @@ function MarketCard({ market, history }: { market: MarketData; history: PriceHis
         </div>
         <div className="rounded border border-rose-500/20 bg-rose-950/[0.08] p-2">
           <div className="flex items-center justify-between">
-            <span className="font-mono text-[9px] uppercase tracking-widest text-rose-300/80">DOWN</span>
-            <span className="font-mono text-[14px] text-rose-300">{downPct}¢</span>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-rose-300">DOWN</span>
+            <span className="font-mono text-[15px] font-semibold text-rose-200">{downPct}¢</span>
           </div>
           <PriceSparkline
             data={history?.downHistory ?? [market.downPrice]}
@@ -105,14 +105,14 @@ function MarketCard({ market, history }: { market: MarketData; history: PriceHis
         </div>
       </div>
 
-      <div className="mt-3 flex items-center justify-between font-mono text-[10px]">
+      <div className="mt-3 flex items-center justify-between font-mono text-[11px]">
         <div className="flex items-center gap-1.5">
-          <span className="text-[#555]">bias</span>
+          <span className="text-[#bdb1a0]">bias</span>
           <span style={{ color: biasColor }} className="font-semibold">
             {bias}
           </span>
-          <span className="text-[#555]">·</span>
-          <span className="text-[#9C9080]">
+          <span className="text-[#bdb1a0]">·</span>
+          <span className="text-[#d4c4a8]">
             edge {Math.abs(market.upPrice - market.downPrice).toFixed(3)}
           </span>
         </div>
@@ -120,12 +120,12 @@ function MarketCard({ market, history }: { market: MarketData; history: PriceHis
           href={`https://polymarket.com/event/${market.slug}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[#7A7A7A] hover:text-[#C5A67C]"
+          className="text-[#C5A67C] hover:text-[#e8d4b0]"
         >
           polymarket ↗
         </a>
       </div>
-      <div className="mt-1 font-mono text-[9px] text-[#555]">
+      <div className="mt-1 font-mono text-[10px] text-[#9C9080]">
         vol: {market.volume ? `$${market.volume.toFixed(2)}` : '—'} · slug: {market.slug.slice(0, 24)}…
       </div>
     </div>
@@ -147,7 +147,7 @@ function CountdownTimer() {
   const m = Math.floor(secs / 60);
   const s = (secs % 60).toString().padStart(2, '0');
   return (
-    <span className="font-mono text-[11px] text-[#C5A67C]">
+    <span className="font-mono text-[12px] font-semibold text-[#e8d4b0]">
       next 5m · {m}:{s}
     </span>
   );
@@ -213,7 +213,7 @@ export default function LivePolymarketFeed() {
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-          <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">
+          <p className="font-mono text-[11px] uppercase tracking-widest text-[#e8d4b0]">
             live polymarket feed · btc/eth up-down 5m
           </p>
         </div>
@@ -228,7 +228,7 @@ export default function LivePolymarketFeed() {
 
       {markets.length === 0 && !error ? (
         <div className="rounded border border-dashed border-white/10 p-6 text-center">
-          <p className="font-mono text-[10px] text-[#555]">connecting to gamma-api.polymarket.com…</p>
+          <p className="font-mono text-[11px] text-[#bdb1a0]">connecting to gamma-api.polymarket.com…</p>
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -238,9 +238,9 @@ export default function LivePolymarketFeed() {
         </div>
       )}
 
-      <p className="mt-3 font-mono text-[9px] text-[#555]">
+      <p className="mt-3 font-mono text-[10px] text-[#9C9080]">
         Polled every 5s from{' '}
-        <span className="text-[#7A7A7A]">gamma-api.polymarket.com</span>. These are the exact same
+        <span className="text-[#d4c4a8]">gamma-api.polymarket.com</span>. These are the exact same
         markets Ignia oracle reads to generate signals — Apolo decisions are derived from this raw
         data, then sold to Hermes via x402.
         {lastUpdate > 0 && (
