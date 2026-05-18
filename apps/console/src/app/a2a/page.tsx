@@ -32,6 +32,7 @@ import { buildAgentNetwork } from '@/lib/a2a/build-agent-network';
 import { AgentFilterBar, AGENT_FILTERS } from '@/components/a2a/AgentFilterBar';
 import { AgentNetworkCard, EmptyAgentState } from '@/components/a2a/AgentNetworkCard';
 import { AgentDetailDrawer } from '@/components/a2a/AgentDetailDrawer';
+import AgentFlowDiagram from '@/components/a2a/AgentFlowDiagram';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -372,6 +373,16 @@ function A2ADashboardPage() {
             <span className="text-emerald-300/90">Verified on-chain:</span> agent request, x402/USDC payment,
             receipt, signal response, transaction hash, activity log, and reputation from real events.
           </p>
+        </section>
+
+        {/* ─── A2A Flow Diagram ────────────────────────────────────────── */}
+        <section className="mb-6">
+          <AgentFlowDiagram
+            isLive={isLive}
+            igniaActive={isLive}
+            apoloActive={isLive}
+            hermesActive={isLive}
+          />
         </section>
 
         {/* ─── Autonomous Agent Network · selectable agent cards ──────── */}
