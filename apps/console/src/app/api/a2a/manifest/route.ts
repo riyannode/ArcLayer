@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import {
   createPublicClient,
   http,
@@ -13,6 +13,7 @@ import {
   manifestHash,
   getManifest,
 } from '@/lib/a2a/manifest';
+import { withX402 } from '@/lib/x402';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -64,7 +65,7 @@ async function getOnchainController(agentId: string): Promise<string | null> {
   }
 }
 
-export async function POST(req: Request) {
+async function postHandler(req: NextRequest): Promise<NextResponse> {
   let body: unknown;
   try {
     body = await req.json();
@@ -149,3 +150,10 @@ export async function POST(req: Request) {
     tofu: !onchainController,
   });
 }
+
+// 0.001 USDC = 1000 atomic (6 decimals). GET remains free; publishing/updating a manifest is paid anti-spam.
+export const POST = withX402(postHandler, {
+  amount: '1000',
+  resource: '/api/a2a/manifest',
+  description: 'Publish or update an A2A agent manifest — anti-spam fee',
+});
