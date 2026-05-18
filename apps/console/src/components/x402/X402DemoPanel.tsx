@@ -85,6 +85,13 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   const activeAuthed = eoaConnected || authenticated;
   const address = activeAddress || '';
 
+  // Auto-lock mode based on wallet: EOA → arc-native, Passkey → circle-gateway.
+  // Backend rail-session also enforces this; UI just prevents user confusion.
+  useEffect(() => {
+    if (walletMode === 'eoa' && mode !== 'arc-native') setMode('arc-native');
+    else if (walletMode === 'passkey' && mode !== 'circle-gateway') setMode('circle-gateway');
+  }, [walletMode, mode]);
+
   const log = useCallback((msg: string, type: LogType = 'info') => setLogs((prev) => [...prev, { ts: nowTs(), msg, type }]), []);
 
   // Refresh both gateway balance + wallet USDC after a successful deposit.
@@ -193,7 +200,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
 
     setStep('challenge');
     log('1/6 Requesting protected resource without payment...');
-    const first = await fetch('/api/x402-demo/protected');
+    const challengeUrl = `/api/x402-demo/protected?rail=arc-native-eoa&payer=${encodeURIComponent(address)}`;
+    const first = await fetch(challengeUrl);
     const challenge = await first.json();
     if (first.status !== 402 || !Array.isArray(challenge.accepts)) { log('Protected endpoint did not return x402 402 challenge', 'error'); setStep('error'); return; }
     const accepts = challenge.accepts as Requirement[];
@@ -304,7 +312,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
 
     setStep('challenge');
     log('[GW] 1/5 Requesting protected resource without payment...');
-    const first = await fetch('/api/x402-demo/protected');
+    const challengeUrl = `/api/x402-demo/protected?rail=circle-gateway-passkey&payer=${encodeURIComponent(address)}`;
+    const first = await fetch(challengeUrl);
     const challenge = await first.json();
     if (first.status !== 402 || !Array.isArray(challenge.accepts)) { log('Protected endpoint did not return x402 402 challenge', 'error'); setStep('error'); return; }
 
@@ -526,8 +535,9 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     }
   }, [step]);
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
-  const arcDisabledForPasskey = false;
-  const circleDisabledForEoa = false;
+  // Rail lock: EOA → Arc Native only, Passkey → Circle Gateway only.
+  const arcDisabledForPasskey = walletMode === 'passkey';
+  const circleDisabledForEoa = walletMode === 'eoa';
   const gatewayDepositUsdc = gatewayBalance?.depositedUsdc ? Number(gatewayBalance.depositedUsdc) : 0;
   const gatewayDepositInsufficient = mode === 'circle-gateway' && gatewayDepositUsdc < 0.05;
   const connectLabel = mode === 'circle-gateway' ? 'CONNECT CIRCLE PASSKEY' : 'CONNECT WALLET';
