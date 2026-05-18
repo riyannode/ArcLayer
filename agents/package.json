@@ -5,8 +5,12 @@
   "type": "module",
   "scripts": {
     "pythia": "tsx pythia/server.ts",
+    "pythia:oracle": "tsx pythia/oracle/server.ts",
+    "resolver:paid": "tsx resolver/paid/server.ts",
     "hermes": "tsx hermes/agent.ts",
     "dev:pythia": "tsx watch pythia/server.ts",
+    "dev:pythia:oracle": "tsx watch pythia/oracle/server.ts",
+    "dev:resolver:paid": "tsx watch resolver/paid/server.ts",
     "dev:hermes": "tsx watch hermes/agent.ts",
     "resolver": "tsx resolver/daemon.ts",
     "scanner": "tsx scanner/market-scanner.ts",
