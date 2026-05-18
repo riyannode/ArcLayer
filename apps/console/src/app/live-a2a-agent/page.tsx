@@ -65,11 +65,11 @@ type OverviewData = {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const verdictTone: Record<Verdict, string> = {
-  YES: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-200',
-  PASS: 'border-amber-400/35 bg-amber-400/10 text-amber-200',
-  EDGE: 'border-cyan-400/35 bg-cyan-400/10 text-cyan-200',
+  YES: 'border-emerald-400/40 bg-emerald-400/10 text-emerald-300',
+  PASS: 'border-amber-400/35 bg-amber-400/10 text-[#C5A67C]',
+  EDGE: 'border-cyan-400/35 bg-[#C5A67C]/10 text-[#C5A67C]',
   'NO EDGE': 'border-rose-400/35 bg-rose-400/10 text-rose-200',
-  REVIEW: 'border-violet-400/35 bg-violet-400/10 text-violet-200',
+  REVIEW: 'border-violet-400/35 bg-violet-400/10 text-[#D7C7AA]',
 };
 
 function fmt(n: number, digits = 2) {
@@ -110,11 +110,11 @@ function TerminalPanel({
 }) {
   return (
     <section
-      className={`min-w-0 overflow-hidden rounded-xl border border-cyan-400/10 bg-[#07101d]/90 ${className}`}
+      className={`min-w-0 overflow-hidden rounded-sm border border-white/10 bg-[#0A0A0A]/90 backdrop-blur-xl ${className}`}
     >
-      <div className="flex h-10 items-center gap-2 border-b border-cyan-400/10 bg-[#0b1424] px-3">
+      <div className="flex h-10 items-center gap-2 border-b border-white/10 bg-black/30 px-3">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
-        <h2 className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-slate-200">{title}</h2>
+        <h2 className="font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-[#EAE4D8]">{title}</h2>
         <div className="ml-auto flex items-center gap-2">{right}</div>
       </div>
       {children}
@@ -124,15 +124,15 @@ function TerminalPanel({
 
 function Chip({ children, tone = 'cyan' }: { children: React.ReactNode; tone?: 'cyan' | 'green' | 'red' | 'amber' | 'violet' | 'slate' }) {
   const tones = {
-    cyan: 'border-cyan-400/30 bg-cyan-400/10 text-cyan-200',
-    green: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
+    cyan: 'border-[#C5A67C]/35 bg-[#C5A67C]/10 text-[#C5A67C]',
+    green: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
     red: 'border-rose-400/30 bg-rose-400/10 text-rose-200',
-    amber: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
-    violet: 'border-violet-400/30 bg-violet-400/10 text-violet-200',
-    slate: 'border-slate-400/30 bg-slate-400/10 text-slate-200',
+    amber: 'border-amber-400/30 bg-amber-400/10 text-[#C5A67C]',
+    violet: 'border-violet-400/30 bg-violet-400/10 text-[#D7C7AA]',
+    slate: 'border-white/15 bg-white/5 text-[#EAE4D8]',
   };
   return (
-    <span className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${tones[tone]}`}>
+    <span className={`rounded-sm border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${tones[tone]}`}>
       {children}
     </span>
   );
@@ -140,17 +140,17 @@ function Chip({ children, tone = 'cyan' }: { children: React.ReactNode; tone?: '
 
 function MetricCard({ label, value, sub, tone = 'cyan' }: { label: string; value: string; sub: string; tone?: 'cyan' | 'green' | 'red' | 'amber' | 'violet' }) {
   const valueTone = {
-    cyan: 'text-cyan-200',
-    green: 'text-emerald-200',
+    cyan: 'text-[#C5A67C]',
+    green: 'text-emerald-300',
     red: 'text-rose-200',
-    amber: 'text-amber-200',
-    violet: 'text-violet-200',
+    amber: 'text-[#C5A67C]',
+    violet: 'text-[#D7C7AA]',
   }[tone];
   return (
-    <div className="min-w-[150px] flex-1 border-r border-cyan-400/10 bg-[#091321] px-4 py-3 last:border-r-0">
-      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-300">{label}</div>
+    <div className="min-w-[150px] flex-1 border-r border-white/10 bg-black/20 px-4 py-3 last:border-r-0">
+      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">{label}</div>
       <div className={`mt-1 font-mono text-lg font-bold ${valueTone}`}>{value}</div>
-      <div className="mt-0.5 text-xs text-slate-300/80">{sub}</div>
+      <div className="mt-0.5 text-xs text-[#EAE4D8]/55">{sub}</div>
     </div>
   );
 }
@@ -167,19 +167,19 @@ function LiveEdgeBoard({ btc, eth, latest }: { btc?: LiveMarket; eth?: LiveMarke
     { label: 'Hermes · Action', val: latest ? latest.hermes.action : 'SKIP', tone: 'amber' as const, sub: latest ? `${latest.hermes.sizeUsdc} USDC · ${latest.hermes.mode}` : 'idle' },
   ];
   const valueTone: Record<'green' | 'red' | 'cyan' | 'amber' | 'violet', string> = {
-    green: 'text-emerald-200',
+    green: 'text-emerald-300',
     red: 'text-rose-200',
-    cyan: 'text-cyan-200',
-    amber: 'text-amber-200',
-    violet: 'text-violet-200',
+    cyan: 'text-[#C5A67C]',
+    amber: 'text-[#C5A67C]',
+    violet: 'text-[#D7C7AA]',
   };
   return (
-    <div className="grid h-full grid-cols-2 gap-px bg-cyan-400/10 lg:grid-cols-3">
+    <div className="grid h-full grid-cols-2 gap-px bg-[#C5A67C]/10 lg:grid-cols-3">
       {cards.map((c) => (
-        <div key={c.label} className="min-w-0 bg-[#07101d] p-3">
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-300">{c.label}</div>
+        <div key={c.label} className="min-w-0 bg-[#0A0A0A]/80 p-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">{c.label}</div>
           <div className={`mt-1 font-mono text-2xl font-bold ${valueTone[c.tone]}`}>{c.val}</div>
-          <div className="mt-1 truncate text-xs text-slate-300/80">{c.sub}</div>
+          <div className="mt-1 truncate text-xs text-[#EAE4D8]/55">{c.sub}</div>
         </div>
       ))}
     </div>
@@ -191,7 +191,7 @@ function LiveEdgeBoard({ btc, eth, latest }: { btc?: LiveMarket; eth?: LiveMarke
 function PolymarketOrderbook({ book, asset }: { book: Orderbook | null; asset: 'BTC' | 'ETH' }) {
   if (!book || !book.ok || (!book.bids?.length && !book.asks?.length)) {
     return (
-      <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-slate-300">
+      <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-[#EAE4D8]/60">
         {book?.error || `Loading ${asset} orderbook…`}
       </div>
     );
@@ -209,8 +209,8 @@ function PolymarketOrderbook({ book, asset }: { book: Orderbook | null; asset: '
   const row = (level: { price: number; size: number; total: number }, side: 'ask' | 'bid') => (
     <div key={`${side}-${level.price}`} className="relative grid grid-cols-3 px-3 py-1.5 font-mono text-[11px]">
       <span className={`relative z-10 ${side === 'ask' ? 'text-rose-300' : 'text-emerald-300'}`}>{level.price.toFixed(3)}</span>
-      <span className="relative z-10 text-center text-slate-300">{fmt(level.size, 0)}</span>
-      <span className="relative z-10 text-right text-slate-300">{fmt(level.total, 0)}</span>
+      <span className="relative z-10 text-center text-[#EAE4D8]/60">{fmt(level.size, 0)}</span>
+      <span className="relative z-10 text-right text-[#EAE4D8]/60">{fmt(level.total, 0)}</span>
       <span
         className={`absolute inset-y-0 right-0 ${side === 'ask' ? 'bg-rose-400/10' : 'bg-emerald-400/10'}`}
         style={{ width: `${Math.min(96, (level.total / maxTotal) * 100)}%` }}
@@ -220,13 +220,13 @@ function PolymarketOrderbook({ book, asset }: { book: Orderbook | null; asset: '
 
   return (
     <div className="h-full min-h-0 overflow-hidden">
-      <div className="grid grid-cols-3 border-b border-cyan-400/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-slate-300">
+      <div className="grid grid-cols-3 border-b border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#EAE4D8]/60">
         <span>YES Price</span>
         <span className="text-center">Size</span>
         <span className="text-right">Total</span>
       </div>
       <div>{askLevels.map((x) => row(x, 'ask'))}</div>
-      <div className="border-y border-cyan-400/10 bg-cyan-400/5 px-3 py-2 text-center font-mono text-sm font-bold text-cyan-200">
+      <div className="border-y border-white/10 bg-[#C5A67C]/5 px-3 py-2 text-center font-mono text-sm font-bold text-[#C5A67C]">
         MID {book.mid != null ? book.mid.toFixed(3) : '—'} · {asset} 5m · live polymarket
       </div>
       <div>{bidLevels.map((x) => row(x, 'bid'))}</div>
@@ -234,7 +234,7 @@ function PolymarketOrderbook({ book, asset }: { book: Orderbook | null; asset: '
   );
 }
 
-// ─── Agent Graph: Pythia → x402 → Hermes → Apolo (Decision) ─────────────────
+// ─── Agent Graph: Pythia → Apolo → x402 → Hermes → Reputation ───────────────
 
 function AgentGraph({ latest }: { latest: SignalRow | null }) {
   const lit = !!latest;
@@ -242,24 +242,24 @@ function AgentGraph({ latest }: { latest: SignalRow | null }) {
   const hermesActed = latest?.hermes.action !== 'SKIP' && latest?.hermes.action != null;
 
   const node = (label: string, role: string, value: string, sub: string, active: boolean, accent: string) => (
-    <div className={`relative flex min-w-0 flex-1 flex-col rounded-lg border p-3 ${active ? `${accent} shadow-[0_0_18px_rgba(0,212,255,0.06)]` : 'border-slate-400/15 bg-black/15'}`}>
-      <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-slate-300">{role}</div>
-      <div className="mt-0.5 font-mono text-sm font-bold uppercase tracking-[0.16em] text-slate-100">{label}</div>
-      <div className="mt-2 truncate font-mono text-base text-emerald-200">{value}</div>
-      <div className="mt-1 truncate text-[11px] text-slate-300/80">{sub}</div>
+    <div className={`relative flex min-w-0 flex-1 flex-col rounded-sm border p-3 ${active ? `${accent} shadow-[0_0_18px_rgba(0,212,255,0.06)]` : 'border-white/10 bg-black/15'}`}>
+      <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#EAE4D8]/60">{role}</div>
+      <div className="mt-0.5 font-mono text-sm font-bold uppercase tracking-[0.16em] text-[#EAE4D8]">{label}</div>
+      <div className="mt-2 truncate font-mono text-base text-emerald-300">{value}</div>
+      <div className="mt-1 truncate text-[11px] text-[#EAE4D8]/55">{sub}</div>
     </div>
   );
 
   const arrow = (label: string, active: boolean) => (
     <div className="hidden flex-col items-center self-center md:flex">
-      <span className={`font-mono text-[9px] uppercase tracking-[0.22em] ${active ? 'text-cyan-200' : 'text-slate-400'}`}>{label}</span>
-      <span className={`mt-1 h-px w-8 ${active ? 'bg-cyan-300/60' : 'bg-slate-600/40'}`} />
+      <span className={`font-mono text-[9px] uppercase tracking-[0.22em] ${active ? 'text-[#C5A67C]' : 'text-[#EAE4D8]/40'}`}>{label}</span>
+      <span className={`mt-1 h-px w-8 ${active ? 'bg-[#C5A67C]/60' : 'bg-white/20'}`} />
     </div>
   );
 
   return (
     <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr]">
-      {node('Pythia', 'Signal Oracle', latest?.ignia.rawSignal ?? 'NEUTRAL', latest ? `${latest.asset} · ${latest.ignia.confidence}% conf` : 'polling Polymarket', lit, 'border-cyan-300/30 bg-cyan-400/5')}
+      {node('Pythia', 'Signal Oracle', latest?.ignia.rawSignal ?? 'NEUTRAL', latest ? `${latest.asset} · ${latest.ignia.confidence}% conf` : 'polling Polymarket', lit, 'border-cyan-300/30 bg-[#C5A67C]/5')}
       {arrow('signal', lit)}
       {node('Apolo', 'Decision', latest?.apolo.decision ?? '—', latest ? `${latest.apolo.status} · ${latest.apolo.risk} · conf ${latest.apolo.confidence}%` : 'awaiting signal from Pythia', apoloApproved, 'border-violet-300/30 bg-violet-400/5')}
       {arrow('x402 payment', apoloApproved)}
@@ -291,19 +291,19 @@ function AutonomousLoopRunner({
     { name: 'Hermes', role: 'Autonomous Trader', value: latest?.hermes.action ?? 'SKIP', sub: latest ? `${latest.hermes.sizeUsdc} USDC · ${latest.hermes.mode}` : 'idle', tone: 'amber' as const, active: latest?.hermes.action !== 'SKIP' && latest?.hermes.action != null },
   ];
   const valueTone: Record<'cyan' | 'violet' | 'amber', string> = {
-    cyan: 'text-cyan-200',
-    violet: 'text-violet-200',
-    amber: 'text-amber-200',
+    cyan: 'text-[#C5A67C]',
+    violet: 'text-[#D7C7AA]',
+    amber: 'text-[#C5A67C]',
   };
   const borderTone: Record<'cyan' | 'violet' | 'amber', string> = {
-    cyan: 'border-cyan-300/30 bg-cyan-400/5',
+    cyan: 'border-cyan-300/30 bg-[#C5A67C]/5',
     violet: 'border-violet-300/30 bg-violet-400/5',
     amber: 'border-amber-300/30 bg-amber-400/5',
   };
 
   return (
     <div className="flex h-full flex-col gap-3 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-slate-300">
+      <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">
         <span className="flex items-center gap-2">
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -311,51 +311,51 @@ function AutonomousLoopRunner({
           </span>
           autonomous loop · running 24/7
         </span>
-        <span className="text-slate-300">scan #{scanCount} · uptime {Math.floor(loopMs / 1000)}s</span>
+        <span className="text-[#EAE4D8]/60">scan #{scanCount} · uptime {Math.floor(loopMs / 1000)}s</span>
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         {stages.map((s, i) => (
-          <div key={s.name} className={`relative rounded-xl border p-3 ${s.active ? borderTone[s.tone] : 'border-slate-400/15 bg-black/15'}`}>
+          <div key={s.name} className={`relative rounded-sm border p-3 ${s.active ? borderTone[s.tone] : 'border-white/10 bg-black/15'}`}>
             {i < stages.length - 1 && (
-              <span className={`absolute -right-3 top-1/2 hidden h-px w-6 md:block ${s.active ? 'bg-cyan-300/60' : 'bg-slate-600/40'}`} />
+              <span className={`absolute -right-3 top-1/2 hidden h-px w-6 md:block ${s.active ? 'bg-[#C5A67C]/60' : 'bg-white/20'}`} />
             )}
             <div className="flex items-center justify-between">
-              <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-slate-300">{s.role}</span>
+              <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#EAE4D8]/60">{s.role}</span>
               <span
-                className={`rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                className={`rounded-sm border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
                   s.active
-                    ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-200'
-                    : 'border-slate-400/30 bg-slate-400/10 text-slate-200'
+                    ? 'border-emerald-300/30 bg-emerald-400/10 text-emerald-300'
+                    : 'border-white/15 bg-white/5 text-[#EAE4D8]'
                 }`}
               >
                 {s.active ? 'LIVE' : 'IDLE'}
               </span>
             </div>
-            <div className="mt-1 font-mono text-base font-bold uppercase tracking-[0.16em] text-slate-100">{s.name}</div>
-            <div className={`mt-2 rounded border border-cyan-400/15 bg-cyan-400/5 px-3 py-2 text-center font-mono text-lg ${valueTone[s.tone]}`}>
+            <div className="mt-1 font-mono text-base font-bold uppercase tracking-[0.16em] text-[#EAE4D8]">{s.name}</div>
+            <div className={`mt-2 rounded-sm border border-[#C5A67C]/15 bg-[#C5A67C]/5 px-3 py-2 text-center font-mono text-lg ${valueTone[s.tone]}`}>
               {s.value}
             </div>
-            <div className="mt-2 truncate text-[11px] text-slate-300/80">{s.sub}</div>
+            <div className="mt-2 truncate text-[11px] text-[#EAE4D8]/55">{s.sub}</div>
           </div>
         ))}
       </div>
 
-      <div className="rounded-lg border border-cyan-400/15 bg-[#0b1424] px-3 py-2.5">
-        <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-slate-300">
+      <div className="rounded-sm border border-[#C5A67C]/15 bg-black/30 px-3 py-2.5">
+        <div className="flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">
           <span>next scan in</span>
-          <span className="text-cyan-200">{Math.max(0, Math.ceil((intervalMs - elapsedMs) / 1000))}s</span>
+          <span className="text-[#C5A67C]">{Math.max(0, Math.ceil((intervalMs - elapsedMs) / 1000))}s</span>
         </div>
-        <div className="mt-2 h-1 overflow-hidden rounded bg-slate-800">
-          <div className="h-full bg-cyan-300 transition-all duration-200" style={{ width: `${progress}%` }} />
+        <div className="mt-2 h-1 overflow-hidden rounded bg-white/10">
+          <div className="h-full bg-[#C5A67C] transition-all duration-200" style={{ width: `${progress}%` }} />
         </div>
-        <div className="mt-2 font-mono text-[10px] text-slate-300/80">
+        <div className="mt-2 font-mono text-[10px] text-[#EAE4D8]/55">
           loop:{' '}
-          <span className="text-cyan-200">poll Polymarket</span>{' '}
-          → <span className="text-cyan-200">Pythia signal</span>{' '}
-          → <span className="text-violet-200">Apolo decision</span>{' '}
-          → <span className="text-amber-200">Hermes action</span>{' '}
-          → <span className="text-emerald-200">repeat</span>
+          <span className="text-[#C5A67C]">poll Polymarket</span>{' '}
+          → <span className="text-[#C5A67C]">Pythia signal</span>{' '}
+          → <span className="text-[#D7C7AA]">Apolo decision</span>{' '}
+          → <span className="text-[#C5A67C]">Hermes action</span>{' '}
+          → <span className="text-emerald-300">repeat</span>
         </div>
       </div>
     </div>
@@ -416,12 +416,12 @@ function FullLoopProof({ latest, apoloStat }: LoopProofProps) {
   return (
     <div className="flex h-full flex-col gap-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-300">latest complete a2a loop</div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">latest complete a2a loop</div>
         <span
-          className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+          className={`rounded-sm border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
             hasAll
-              ? 'border-emerald-300/40 bg-emerald-400/10 text-emerald-200'
-              : 'border-amber-300/40 bg-amber-400/10 text-amber-200'
+              ? 'border-emerald-300/40 bg-emerald-400/10 text-emerald-300'
+              : 'border-amber-300/40 bg-amber-400/10 text-[#C5A67C]'
           }`}
         >
           {hasAll ? 'COMPLETE LOOP' : 'PENDING'}
@@ -433,51 +433,51 @@ function FullLoopProof({ latest, apoloStat }: LoopProofProps) {
         {stages.map((st, i) => (
           <div
             key={st.label}
-            className={`relative rounded-lg border px-2 py-2 ${
-              st.done ? 'border-emerald-300/30 bg-emerald-400/5' : 'border-slate-400/15 bg-black/15'
+            className={`relative rounded-sm border px-2 py-2 ${
+              st.done ? 'border-emerald-300/30 bg-emerald-400/5' : 'border-white/10 bg-black/15'
             }`}
           >
             {i < stages.length - 1 && (
-              <span className={`absolute -right-1.5 top-1/2 hidden h-px w-3 md:block ${st.done ? 'bg-emerald-300/40' : 'bg-slate-600/40'}`} />
+              <span className={`absolute -right-1.5 top-1/2 hidden h-px w-3 md:block ${st.done ? 'bg-emerald-300/40' : 'bg-white/20'}`} />
             )}
             <div className="flex items-center gap-1.5">
-              <span className={`h-1.5 w-1.5 rounded-full ${st.done ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-slate-500'}`} />
-              <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-slate-200">{st.label}</span>
+              <span className={`h-1.5 w-1.5 rounded-full ${st.done ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]' : 'bg-white/30'}`} />
+              <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]">{st.label}</span>
             </div>
-            <div className="mt-1 truncate text-[10px] text-slate-300/80">{st.hint}</div>
+            <div className="mt-1 truncate text-[10px] text-[#EAE4D8]/55">{st.hint}</div>
           </div>
         ))}
       </div>
 
       {/* Field grid */}
-      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-cyan-400/10 bg-cyan-400/10 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-sm border border-white/10 bg-[#C5A67C]/10 md:grid-cols-2">
         {fields.map((f) => (
-          <div key={f.k} className="flex flex-wrap items-center justify-between gap-2 bg-[#07101d] px-3 py-2">
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-slate-300">{f.k}</span>
+          <div key={f.k} className="flex flex-wrap items-center justify-between gap-2 bg-[#0A0A0A]/80 px-3 py-2">
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/60">{f.k}</span>
             {f.v ? (
               f.link ? (
                 <a
                   href={f.link}
                   target="_blank"
                   rel="noreferrer"
-                  className={`max-w-[60%] truncate text-right text-cyan-200 hover:text-cyan-100 ${f.mono ? 'font-mono text-[11px]' : 'text-xs'}`}
+                  className={`max-w-[60%] truncate text-right text-[#C5A67C] hover:text-[#EAE4D8] ${f.mono ? 'font-mono text-[11px]' : 'text-xs'}`}
                 >
                   {f.v}
                 </a>
               ) : (
-                <span className={`max-w-[60%] truncate text-right text-slate-100 ${f.mono ? 'font-mono text-[11px]' : 'text-xs'}`}>
+                <span className={`max-w-[60%] truncate text-right text-[#EAE4D8] ${f.mono ? 'font-mono text-[11px]' : 'text-xs'}`}>
                   {f.v}
                 </span>
               )
             ) : (
-              <span className="rounded border border-amber-300/30 bg-amber-400/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-amber-200">
+              <span className="rounded-sm border border-amber-300/30 bg-amber-400/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-[#C5A67C]">
                 pending
               </span>
             )}
           </div>
         ))}
       </div>
-      <div className="font-mono text-[10px] text-slate-300/80">
+      <div className="font-mono text-[10px] text-[#EAE4D8]/55">
         proof rule: only fields verifiable from the indexer or signal feed are shown. on-chain receipts populate as the resolver indexer wires up. nothing is fabricated.
       </div>
     </div>
@@ -489,14 +489,14 @@ function FullLoopProof({ latest, apoloStat }: LoopProofProps) {
 function SignalStream({ signals }: { signals: SignalEvent[] }) {
   if (!signals.length) {
     return (
-      <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-slate-300">
+      <div className="flex h-full items-center justify-center font-mono text-[10px] uppercase tracking-widest text-[#EAE4D8]/60">
         Waiting for live signals…
       </div>
     );
   }
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="grid grid-cols-[1fr_92px] border-b border-cyan-400/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-slate-300">
+      <div className="grid grid-cols-[1fr_92px] border-b border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#EAE4D8]/60">
         <span>Signal · Apolo Output</span>
         <span className="text-right">Verdict</span>
       </div>
@@ -504,13 +504,13 @@ function SignalStream({ signals }: { signals: SignalEvent[] }) {
         {signals.map((s) => (
           <div
             key={s.id}
-            className="grid min-w-0 grid-cols-[1fr_92px] gap-2 rounded border border-cyan-400/10 bg-white/[0.02] px-3 py-2 font-mono text-[11px]"
+            className="grid min-w-0 grid-cols-[1fr_92px] gap-2 rounded-sm border border-white/10 bg-white/[0.02] px-3 py-2 font-mono text-[11px]"
           >
             <div className="min-w-0">
-              <div className="truncate text-slate-100">{s.market}</div>
-              <div className="truncate text-[10px] text-slate-300/80">{s.ts} UTC · conf {s.confidence}%</div>
+              <div className="truncate text-[#EAE4D8]">{s.market}</div>
+              <div className="truncate text-[10px] text-[#EAE4D8]/55">{s.ts} UTC · conf {s.confidence}%</div>
             </div>
-            <span className={`truncate self-center rounded border px-1.5 py-1 text-center text-[9px] ${verdictTone[s.verdict]}`}>{s.verdict}</span>
+            <span className={`truncate self-center rounded-sm border px-1.5 py-1 text-center text-[9px] ${verdictTone[s.verdict]}`}>{s.verdict}</span>
           </div>
         ))}
       </div>
@@ -668,15 +668,15 @@ export default function LiveA2AAgentPageRoute() {
   const completedJobs = Number(overview?.summary?.completedJobs ?? 0) || workproofReady;
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-[#030609] px-3 py-4 text-slate-100 sm:px-5 lg:px-7">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(0,212,255,0.12),transparent_34%),radial-gradient(circle_at_80%_10%,rgba(153,102,255,0.12),transparent_30%),linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[length:auto,auto,100%_4px]" />
-      <div className="relative mx-auto flex max-w-[1800px] flex-col gap-3">
-        <header className="overflow-hidden rounded-xl border border-cyan-400/15 bg-[#07101d]/95">
-          <div className="flex flex-col gap-3 border-b border-cyan-400/10 px-4 py-3 lg:flex-row lg:items-center">
+    <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-5 text-[#EAE4D8] selection:bg-[#C5A67C]/20 sm:px-6 lg:px-8">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(197,166,124,0.14),transparent_30%),radial-gradient(circle_at_82%_8%,rgba(255,255,255,0.055),transparent_26%)]" />
+      <div className="relative mx-auto flex max-w-[1480px] flex-col gap-4">
+        <header className="overflow-hidden rounded-sm border border-[#C5A67C]/15 bg-[#0A0A0A]/80/95">
+          <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 lg:flex-row lg:items-center">
             <div className="min-w-0">
-              <div className="font-mono text-[11px] uppercase tracking-[0.4em] text-cyan-300">ARCLAYER · A2A</div>
-              <h1 className="mt-1 text-2xl font-black uppercase tracking-[0.2em] text-white sm:text-3xl">LIVE A2A AGENT</h1>
-              <p className="mt-1 max-w-3xl text-sm text-slate-200">
+              <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">ARCLAYER · A2A</div>
+              <h1 className="mt-1 text-3xl font-black uppercase tracking-[0.16em] text-[#EAE4D8] sm:text-3xl">LIVE A2A AGENT</h1>
+              <p className="mt-1 max-w-3xl text-sm text-[#EAE4D8]">
                 Pythia (Signal Oracle) → Apolo (Decision) → Hermes (Autonomous Trader). Loop runs autonomously 24/7 against live Polymarket BTC/ETH 5m markets, settled with USDC over x402 on Arc. Reputation accrues to Apolo on every settled job.
               </p>
             </div>
@@ -684,7 +684,7 @@ export default function LiveA2AAgentPageRoute() {
               <Chip tone="green">PAY AGENT</Chip>
               <Chip tone="cyan">WORK RECEIPT</Chip>
               <Chip tone="amber">REPUTATION</Chip>
-              <div className="font-mono text-xs text-slate-200">{now} UTC</div>
+              <div className="font-mono text-xs text-[#EAE4D8]">{now} UTC</div>
             </div>
           </div>
           <div className="flex min-w-0 flex-wrap">
@@ -738,10 +738,10 @@ export default function LiveA2AAgentPageRoute() {
                     key={a}
                     type="button"
                     onClick={() => setOrderbookAsset(a)}
-                    className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
+                    className={`rounded-sm border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider transition ${
                       orderbookAsset === a
-                        ? 'border-cyan-400/40 bg-cyan-400/15 text-cyan-100'
-                        : 'border-slate-400/30 bg-slate-400/5 text-slate-200 hover:bg-slate-400/10'
+                        ? 'border-[#C5A67C]/45 bg-[#C5A67C]/15 text-[#EAE4D8]'
+                        : 'border-white/15 bg-white/5 text-[#EAE4D8] hover:bg-white/5'
                     }`}
                   >
                     {a}
@@ -770,7 +770,7 @@ export default function LiveA2AAgentPageRoute() {
         </TerminalPanel>
 
         {errors.length > 0 && (
-          <div className="rounded border border-rose-400/30 bg-rose-400/5 px-3 py-2 font-mono text-[10px] text-rose-200">
+          <div className="rounded-sm border border-rose-400/30 bg-rose-400/5 px-3 py-2 font-mono text-[10px] text-rose-200">
             recent fetch warnings: {errors.join(' · ')}
           </div>
         )}
