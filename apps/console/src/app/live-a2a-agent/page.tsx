@@ -52,18 +52,37 @@ type BtcStream = {
   error?: string;
 };
 
+type LifecycleEvent = { label: string; ts: string; detail: string };
+type AgentCharge = {
+  seller: 'Pythia' | 'Apolo' | 'Hermes';
+  buyer: 'Apolo' | 'Hermes' | 'Job';
+  service: string;
+  amountUsdc: string;
+  rail: 'x402';
+  asset: 'USDC';
+  network: string;
+  payer: string;
+  payee: string;
+  nonce: string;
+  paymentId: string;
+  receiptId: string;
+  settlementTxHash: string;
+  arcscan: string;
+  status: 'settled';
+  settledAt: string;
+  lifecycle: LifecycleEvent[];
+};
 type FlowReceipt = {
   ok: boolean;
   startedAt?: string;
   finishedAt?: string;
   durationMs?: number;
   error?: string;
-  payAgent?: { payer: string; payee: string; amountUsdc: string; nonce: string; paymentId: string; rail: 'x402'; asset: 'USDC'; chain: string };
-  paymentCompleted?: { receiptId: string; settledAt: string; txStatus: string; arcscan: string | null };
-  workReceipt?: { seller: 'Pythia'; buyer: 'Hermes'; payloadHash: string; payload: { asset: string; signal: string; confidence: number }; issuedAt: string };
+  charges?: AgentCharge[];
   agentReputation?: { agent: 'Apolo'; role: string; delta: number; score: number; rationale: string };
   decision?: { asset: string; decision: string; risk: string; confidence: number; status: 'APPROVED' | 'REJECTED' };
   hermesAction?: { action: 'BUY_UP' | 'BUY_DOWN' | 'SKIP'; sizeUsdc: string; mode: 'DRY_RUN' };
+  signal?: { asset: string; signal: string; confidence: number; payloadHash: string };
 };
 
 type SignalEvent = {
@@ -222,10 +241,12 @@ function LiveMarketWidget({
   book,
   stream,
   asset,
+  marketVolume,
 }: {
   book: Orderbook | null;
   stream: BtcStream | null;
   asset: 'BTC' | 'ETH';
+  marketVolume: number | null | undefined;
 }) {
   const candles = stream?.candles ?? [];
   const prices = candles.flatMap((c) => [c.h, c.l]);
@@ -242,6 +263,7 @@ function LiveMarketWidget({
   const asks = (book?.asks || []).map((l) => ({ price: parseFloat(l.price), size: parseFloat(l.size) })).filter((l) => Number.isFinite(l.price) && Number.isFinite(l.size)).sort((a, b) => a.price - b.price).slice(0, 5).reverse();
   const bids = (book?.bids || []).map((l) => ({ price: parseFloat(l.price), size: parseFloat(l.size) })).filter((l) => Number.isFinite(l.price) && Number.isFinite(l.size)).sort((a, b) => b.price - a.price).slice(0, 5);
   const maxSize = Math.max(...asks.map((x) => x.size), ...bids.map((x) => x.size), 1);
+  const visibleDepth = [...asks, ...bids].reduce((sum, x) => sum + x.size, 0);
 
   const fmtPrice = (n: number | null | undefined) => (n == null ? '—' : `$${fmt(n, asset === 'BTC' ? 2 : 2)}`);
   const row = (level: { price: number; size: number }, side: 'ask' | 'bid') => (
@@ -324,8 +346,15 @@ function LiveMarketWidget({
           <div className="mt-0.5 font-mono text-xl font-bold text-[#C5A67C]">{book?.mid != null ? book.mid.toFixed(3) : '—'}</div>
         </div>
         <div className="py-1">{bids.length ? bids.map((x) => row(x, 'bid')) : <div className="p-3 font-mono text-[10px] text-[#EAE4D8]/45">bids pending</div>}</div>
-        <div className="mt-auto border-t border-white/10 px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/50">
-          Widget replaces raw orderbook: live price, target, 5m timer, candles, and actionable depth in one reviewer-readable panel.
+        <div className="mt-auto grid grid-cols-2 gap-px border-t border-white/10 bg-[#C5A67C]/10">
+          <div className="bg-[#0A0A0A] px-3 py-2">
+            <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/45">Real market volume</div>
+            <div className="mt-1 font-mono text-sm font-bold text-[#EAE4D8]">{marketVolume != null ? `$${fmt(marketVolume, 0)}` : '—'}</div>
+          </div>
+          <div className="bg-[#0A0A0A] px-3 py-2">
+            <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/45">Visible depth</div>
+            <div className="mt-1 font-mono text-sm font-bold text-[#C5A67C]">{fmt(visibleDepth, 0)} shares</div>
+          </div>
         </div>
       </div>
     </div>
@@ -626,40 +655,85 @@ function SignalStream({ signals }: { signals: SignalEvent[] }) {
   );
 }
 
+function compactAddress(v?: string) {
+  if (!v) return '—';
+  return `${v.slice(0, 6)}…${v.slice(-4)}`;
+}
+
+function ChargeCard({ charge, fallback }: { charge?: AgentCharge; fallback: { seller: AgentCharge['seller']; title: string; service: string; amount: string; paidBy: string; recipient: string; status: string } }) {
+  return (
+    <div className="rounded-sm border border-white/10 bg-black/20 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C]">{fallback.title}</div>
+          <div className="mt-1 text-[11px] text-[#EAE4D8]/60">Service: {charge?.service ?? fallback.service}</div>
+        </div>
+        <span className={`rounded-sm border px-2 py-1 font-mono text-[9px] uppercase ${charge ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-300' : 'border-white/10 bg-white/5 text-[#EAE4D8]/45'}`}>
+          {charge ? fallback.status : 'not run'}
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
+        <ProofKV k="x402 amount" v={`${charge?.amountUsdc ?? fallback.amount} USDC`} hot={!!charge} />
+        <ProofKV k="Payment rail" v={charge ? `${charge.rail} / Arc Native` : 'Waiting for run'} hot={!!charge} />
+        <ProofKV k="Asset" v={charge?.asset ?? 'USDC'} />
+        <ProofKV k="Network" v={charge?.network ?? 'Arc Testnet'} />
+        <ProofKV k="Paid by" v={charge?.buyer ?? fallback.paidBy} />
+        <ProofKV k="Recipient" v={charge?.seller ? `${charge.seller} wallet` : fallback.recipient} />
+        <ProofKV k="Payer" v={compactAddress(charge?.payer)} mono />
+        <ProofKV k="Payee" v={compactAddress(charge?.payee)} mono />
+        <ProofKV k="Nonce" v={charge ? compactAddress(charge.nonce) : 'Run flow to generate'} mono />
+        <ProofKV k="Receipt" v={charge ? compactAddress(charge.receiptId) : 'Run flow to generate'} mono />
+        <ProofKV k="Settlement tx" v={charge ? compactAddress(charge.settlementTxHash) : 'Run flow to generate'} mono />
+        <div className="rounded-sm border border-white/10 bg-[#0A0A0A] p-2">
+          <div className="font-mono uppercase tracking-[0.16em] text-[#EAE4D8]/45">Tx / settlement</div>
+          {charge ? (
+            <a href={charge.arcscan} target="_blank" rel="noreferrer" className="mt-1 block font-mono text-[#C5A67C] underline decoration-[#C5A67C]/35 underline-offset-4">View on Arcscan</a>
+          ) : (
+            <div className="mt-1 font-mono text-[#EAE4D8]/35">Run flow first</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProofKV({ k, v, hot, mono }: { k: string; v: string; hot?: boolean; mono?: boolean }) {
+  return (
+    <div className="rounded-sm border border-white/10 bg-[#0A0A0A] p-2">
+      <div className="font-mono uppercase tracking-[0.16em] text-[#EAE4D8]/45">{k}</div>
+      <div className={`mt-1 truncate ${mono ? 'font-mono' : ''} ${hot ? 'text-emerald-300' : 'text-[#EAE4D8]/70'}`}>{v}</div>
+    </div>
+  );
+}
+
 function LiveA2AFlow({ receipt, running, onRun }: { receipt: FlowReceipt | null; running: boolean; onRun: () => void }) {
-  const steps = [
-    {
-      label: 'Pay agent',
-      value: receipt?.payAgent ? `${receipt.payAgent.amountUsdc} USDC` : 'Pending',
-      sub: receipt?.payAgent ? `Hermes → Pythia · ${receipt.payAgent.rail}` : 'runs backend payment receipt',
-      done: !!receipt?.payAgent,
-    },
-    {
-      label: 'Payment completed',
-      value: receipt?.paymentCompleted?.txStatus ?? 'Pending',
-      sub: receipt?.paymentCompleted?.receiptId ?? 'receipt generated after payment',
-      done: !!receipt?.paymentCompleted,
-    },
-    {
-      label: 'Work receipt',
-      value: receipt?.workReceipt?.payload.signal ?? 'Pending',
-      sub: receipt?.workReceipt ? `${receipt.workReceipt.payload.asset} · ${receipt.workReceipt.payload.confidence}% · ${receipt.workReceipt.payloadHash}` : 'Pythia output hash',
-      done: !!receipt?.workReceipt,
-    },
-    {
-      label: 'Agent reputation',
-      value: receipt?.agentReputation ? `Apolo +${receipt.agentReputation.delta}` : 'Pending',
-      sub: receipt?.agentReputation ? `score ${receipt.agentReputation.score} · resolver/decision filter rewarded` : 'Apolo receives reputation',
-      done: !!receipt?.agentReputation,
-    },
+  const charges = receipt?.charges ?? [];
+  const pythiaCharge = charges.find((c) => c.seller === 'Pythia');
+  const apoloCharge = charges.find((c) => c.seller === 'Apolo');
+  const hermesCharge = charges.find((c) => c.seller === 'Hermes');
+  const timeline = pythiaCharge?.lifecycle ?? [
+    { label: 'REQUEST', ts: '', detail: 'Agent requested protected signal' },
+    { label: '402 REQUIRED', ts: '', detail: 'Pythia requires 0.005 USDC' },
+    { label: 'X-PAYMENT', ts: '', detail: 'Apolo signed x402 authorization' },
+    { label: 'VERIFY', ts: '', detail: 'Facilitator verified payment' },
+    { label: 'SETTLE', ts: '', detail: 'USDC settled on Arc' },
+    { label: 'UNLOCK', ts: '', detail: 'Signal delivered + receipt saved' },
   ];
+  const lifecycle = [
+    ['x402 payment required', !!pythiaCharge],
+    ['x402 authorization signed', !!pythiaCharge],
+    ['x402 payment verified', !!pythiaCharge],
+    ['USDC settlement completed', !!pythiaCharge],
+    ['Resource unlocked', !!pythiaCharge],
+    ['Receipt generated', !!pythiaCharge],
+  ] as const;
 
   return (
-    <div className="flex h-full flex-col gap-3 p-4">
+    <div className="flex h-full flex-col gap-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">one backend-backed loop</div>
-          <div className="mt-1 text-sm text-[#EAE4D8]/70">Pythia gives signal → Apolo filters decision → Hermes trades. Apolo gets reputation because Apolo filters the data.</div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">x402 agent payment lifecycle</div>
+          <div className="mt-1 text-sm text-[#EAE4D8]/70">Pythia charges Apolo → Apolo charges Hermes → Hermes logs execution proof. Apolo receives reputation because Apolo filters the data.</div>
         </div>
         <button
           type="button"
@@ -667,32 +741,50 @@ function LiveA2AFlow({ receipt, running, onRun }: { receipt: FlowReceipt | null;
           disabled={running}
           className="rounded-sm border border-[#C5A67C]/45 bg-[#C5A67C]/15 px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#EAE4D8] transition hover:bg-[#C5A67C]/25 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {running ? 'Running…' : 'Run live flow'}
+          {running ? 'Running…' : 'Run x402 flow'}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 md:grid-cols-4">
-        {steps.map((s, i) => (
-          <div key={s.label} className={`relative rounded-sm border p-3 ${s.done ? 'border-emerald-300/30 bg-emerald-400/5' : 'border-white/10 bg-black/15'}`}>
-            {i < steps.length - 1 && <span className={`absolute -right-1.5 top-1/2 hidden h-px w-3 md:block ${s.done ? 'bg-emerald-300/45' : 'bg-white/20'}`} />}
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#EAE4D8]/55">{s.label}</span>
-              <span className={`h-1.5 w-1.5 rounded-full ${s.done ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,.8)]' : 'bg-white/25'}`} />
-            </div>
-            <div className={`mt-2 truncate font-mono text-base font-bold ${s.done ? 'text-emerald-300' : 'text-[#EAE4D8]/45'}`}>{s.value}</div>
-            <div className="mt-1 truncate text-[10px] text-[#EAE4D8]/55">{s.sub}</div>
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
+        {lifecycle.map(([label, done]) => (
+          <div key={label} className={`rounded-sm border p-2 ${done ? 'border-emerald-300/30 bg-emerald-400/5' : 'border-white/10 bg-black/15'}`}>
+            <div className={`h-1.5 w-1.5 rounded-full ${done ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,.8)]' : 'bg-white/25'}`} />
+            <div className={`mt-2 font-mono text-[9px] uppercase tracking-[0.16em] ${done ? 'text-emerald-300' : 'text-[#EAE4D8]/45'}`}>{label}</div>
           </div>
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-sm border border-white/10 bg-[#C5A67C]/10 md:grid-cols-2">
+      <div className="rounded-sm border border-white/10 bg-black/15 p-3">
+        <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C]">402 → x402 → receipt timeline</div>
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
+          {timeline.slice(0, 6).map((ev, i) => (
+            <div key={`${ev.label}-${i}`} className={`relative rounded-sm border p-2 ${pythiaCharge ? 'border-emerald-300/25 bg-emerald-400/5' : 'border-white/10 bg-[#0A0A0A]'}`}>
+              {i < 5 && <span className={`absolute -right-1.5 top-1/2 hidden h-px w-3 md:block ${pythiaCharge ? 'bg-emerald-300/45' : 'bg-white/20'}`} />}
+              <div className="font-mono text-[10px] font-bold text-[#EAE4D8]">{ev.label}</div>
+              <div className="mt-1 text-[10px] leading-relaxed text-[#EAE4D8]/55">{ev.detail}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <ChargeCard charge={pythiaCharge} fallback={{ seller: 'Pythia', title: 'Pythia · Signal Oracle', service: 'BTC 5m signal', amount: '0.005', paidBy: 'Apolo', recipient: 'Pythia wallet', status: 'x402 verified' }} />
+        <ChargeCard charge={apoloCharge} fallback={{ seller: 'Apolo', title: 'Apolo · Decision Agent', service: 'risk + edge decision', amount: '0.010', paidBy: 'Hermes', recipient: 'Apolo wallet', status: 'x402 settled' }} />
+        <ChargeCard charge={hermesCharge} fallback={{ seller: 'Hermes', title: 'Hermes · Autonomous Executor', service: 'execution intent / action proof', amount: '0.015', paidBy: 'Job/session', recipient: 'Hermes wallet', status: 'action logged' }} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-px overflow-hidden rounded-sm border border-white/10 bg-[#C5A67C]/10 md:grid-cols-3">
         <div className="bg-[#0A0A0A]/90 px-3 py-2">
-          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">Decision</div>
-          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.decision ? `${receipt.decision.asset} · ${receipt.decision.decision} · ${receipt.decision.status}` : 'Pending'}</div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">Pythia output</div>
+          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.signal ? `${receipt.signal.asset} · ${receipt.signal.signal} · ${receipt.signal.confidence}%` : 'Run flow to unlock signal receipt'}</div>
+        </div>
+        <div className="bg-[#0A0A0A]/90 px-3 py-2">
+          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">Apolo reputation</div>
+          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.agentReputation ? `+${receipt.agentReputation.delta} · score ${receipt.agentReputation.score}` : 'Run flow to update resolver reputation'}</div>
         </div>
         <div className="bg-[#0A0A0A]/90 px-3 py-2">
           <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">Hermes output</div>
-          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.hermesAction ? `${receipt.hermesAction.action} · ${receipt.hermesAction.sizeUsdc} USDC · ${receipt.hermesAction.mode}` : 'Pending'}</div>
+          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.hermesAction ? `${receipt.hermesAction.action} · ${receipt.hermesAction.sizeUsdc} USDC · ${receipt.hermesAction.mode}` : 'Run flow to log action proof'}</div>
         </div>
       </div>
 
@@ -930,6 +1022,7 @@ export default function LiveA2AAgentPageRoute() {
   const btcMarket = useMemo(() => markets.find((m) => m.asset === 'BTC'), [markets]);
   const ethMarket = useMemo(() => markets.find((m) => m.asset === 'ETH'), [markets]);
   const activeBook = orderbookAsset === 'BTC' ? bookBtc : bookEth;
+  const activeMarket = orderbookAsset === 'BTC' ? btcMarket : ethMarket;
   const baseStream = orderbookAsset === 'BTC' ? btcStream : ethStream;
   const activeTick = orderbookAsset === 'BTC' ? liveTickBtc : liveTickEth;
   // Patch livePrice with the WebSocket tick whenever we have one — keeps the
@@ -1003,30 +1096,6 @@ export default function LiveA2AAgentPageRoute() {
           </div>
         </header>
 
-        {/* Agent Graph */}
-        <TerminalPanel
-          title="Agent Graph"
-          right={<Chip tone="cyan">PYTHIA → APOLO → HERMES</Chip>}
-          className="min-h-[200px]"
-        >
-          <AgentGraph latest={latestRow} />
-        </TerminalPanel>
-
-        <TerminalPanel title="Backend Flow · Pay Agent → Receipt → Reputation" right={<Chip tone="green">RUNNABLE</Chip>} className="min-h-[260px]">
-          <LiveA2AFlow receipt={flowReceipt} running={flowRunning} onRun={runLiveFlow} />
-        </TerminalPanel>
-
-        {/* Autonomous Loop + Full Loop Proof */}
-        <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1fr_1.2fr]">
-          <TerminalPanel title="Autonomous Loop" right={<Chip tone="green">RUNNING 24/7</Chip>} className="min-h-[360px]">
-            <AutonomousLoopRunner latest={latestRow} scanCount={scanCount} loopMs={loopMs} intervalMs={LOOP_INTERVAL_MS} />
-          </TerminalPanel>
-
-          <TerminalPanel title="Full A2A Loop Proof" right={<Chip tone="violet">EVIDENCE TRAIL</Chip>} className="min-h-[360px]">
-            <FullLoopProof latest={latestRow} apoloStat={apoloStat} />
-          </TerminalPanel>
-        </section>
-
         {/* Live market widget */}
         <TerminalPanel
           title="Live BTC Price · Target · Countdown · Chart · Orderbook"
@@ -1060,8 +1129,33 @@ export default function LiveA2AAgentPageRoute() {
           }
           className="h-[560px]"
         >
-          <LiveMarketWidget book={activeBook} stream={activeStream} asset={orderbookAsset} />
+          <LiveMarketWidget book={activeBook} stream={activeStream} asset={orderbookAsset} marketVolume={activeMarket?.volume} />
         </TerminalPanel>
+
+        {/* Agent Graph */}
+        <TerminalPanel
+          title="Agent Graph"
+          right={<Chip tone="cyan">PYTHIA → APOLO → HERMES</Chip>}
+          className="min-h-[200px]"
+        >
+          <AgentGraph latest={latestRow} />
+        </TerminalPanel>
+
+        <TerminalPanel title="Backend Flow · Pay Agent → Receipt → Reputation" right={<Chip tone="green">RUNNABLE</Chip>} className="min-h-[260px]">
+          <LiveA2AFlow receipt={flowReceipt} running={flowRunning} onRun={runLiveFlow} />
+        </TerminalPanel>
+
+        {/* Autonomous Loop + Full Loop Proof */}
+        <section className="grid min-h-0 grid-cols-1 gap-3 xl:grid-cols-[1fr_1.2fr]">
+          <TerminalPanel title="Autonomous Loop" right={<Chip tone="green">RUNNING 24/7</Chip>} className="min-h-[360px]">
+            <AutonomousLoopRunner latest={latestRow} scanCount={scanCount} loopMs={loopMs} intervalMs={LOOP_INTERVAL_MS} />
+          </TerminalPanel>
+
+          <TerminalPanel title="Full A2A Loop Proof" right={<Chip tone="violet">EVIDENCE TRAIL</Chip>} className="min-h-[360px]">
+            <FullLoopProof latest={latestRow} apoloStat={apoloStat} />
+          </TerminalPanel>
+        </section>
+
 
         {/* Signal Stream — 3 columns */}
         <TerminalPanel
