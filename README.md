@@ -501,7 +501,6 @@ arclayer/
     ├── e2e-proofs.md                   E2E execution proofs
     ├── sdk-reference.md                @arclayer/sdk reference
     ├── indexing.md                     Indexer model
-    ├── arclayer-build-plan.md          Roadmap
     └── spikes/
         └── ARC_USDC_CAPABILITY_MATRIX.md  Arc USDC capability research
 ```

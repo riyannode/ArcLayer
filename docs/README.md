@@ -18,7 +18,6 @@ Developer documentation for ArcLayer testnet.
 - [SDK Reference](./sdk-reference.md) — complete `@arclayer/sdk` API: typed read helpers, write config builders, and production usage notes.
 - [Indexing](./indexing.md) — event-backed indexing model and cache design.
 - [E2E Proofs](./e2e-proofs.md) — end-to-end execution proofs (txHashes, jobIds, settlements).
-- [Build Plan](./arclayer-build-plan.md) — protocol build plan and roadmap context.
 - [`AGENTS.md`](../AGENTS.md) — guide for AI agents working **inside** this repo (protocol flows, integration rules, what to modify and what not to touch).
 
 ## One-liner for AI Coding Agents

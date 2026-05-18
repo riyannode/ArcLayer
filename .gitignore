@@ -65,6 +65,9 @@ X402_*_CLEANUP_PLAN.*
 ARCLAYER_*_PLAN.*
 ARCLAYER_*_FINAL_PR.*
 
+# Archived / dead contract sources (kept locally if needed)
+contracts/archive/
+
 # Local E2E / QA artifacts
 apps/console/scripts/arc-e2e-*.mjs
 apps/console/e2e-*.mjs

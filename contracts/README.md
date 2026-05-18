@@ -20,8 +20,6 @@ Current Arc testnet protocol addresses:
 Legacy reference modules:
 
 - `src/MilestoneEscrow.sol`
-- `archive/Invoice.sol`
-- `archive/Subscription.sol`
 
 ## Core Flow
 
