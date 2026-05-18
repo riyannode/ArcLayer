@@ -14,7 +14,7 @@ dotenv.config();
 const PRIVATE_KEY = process.env.HERMES_PRIVATE_KEY as `0x${string}` | undefined;
 // Hermes now buys DECISIONS from Apolo (paid resolver), not raw signals from Pythia/Ignia.
 const APOLO_URL = process.env.APOLO_URL ?? 'http://localhost:4012';
-const TOKENS = (process.env.HERMES_TOKENS ?? 'BTC,ETH,SOL').split(',').map(s => s.trim().toUpperCase());
+const TOKENS = (process.env.HERMES_TOKENS ?? 'BTC,ETH').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
 const INTERVAL_MS = Number(process.env.HERMES_INTERVAL_MS ?? 15000);
 const MAX_ITERATIONS = Number(process.env.HERMES_MAX_ITERATIONS ?? 10);
 const IGNIA_MARKET_ID = process.env.IGNIA_MARKET_ID ? BigInt(process.env.IGNIA_MARKET_ID) : undefined;
