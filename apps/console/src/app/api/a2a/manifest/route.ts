@@ -11,6 +11,7 @@ import {
   upsertManifest,
   buildManifestMessage,
   manifestHash,
+  getManifest,
 } from '@/lib/a2a/manifest';
 
 export const dynamic = 'force-dynamic';
@@ -24,6 +25,19 @@ const MAX_TIMESTAMP_SKEW_SEC = 5 * 60; // ±5min
 const AGENT_REGISTERED = parseAbiItem(
   'event AgentRegistered(uint256 indexed agentId, bytes32 indexed skillHash, address indexed controller, string metadataURI)'
 );
+
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const agentId = url.searchParams.get('agentId')?.trim();
+  if (!agentId) {
+    return NextResponse.json({ error: 'agentId is required' }, { status: 400 });
+  }
+  const record = await getManifest(agentId);
+  if (!record) {
+    return NextResponse.json({ error: 'manifest not found' }, { status: 404 });
+  }
+  return NextResponse.json({ ok: true, manifest: record.manifest, controller: record.controller });
+}
 
 /**
  * Look up the on-chain controller for an agentId by scanning AgentRegistered logs.

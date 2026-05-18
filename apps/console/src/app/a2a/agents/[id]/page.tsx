@@ -14,6 +14,8 @@ import type {
 import { buildAgentNetwork } from '@/lib/a2a/build-agent-network';
 import { fetchIndexerJson } from '@/lib/indexer';
 import type { AgentDetail, IndexedJob, IndexedProof } from '@/lib/indexer';
+import type { AgentManifestV1 } from '@/lib/a2a/manifest';
+import { AvatarUploader } from '@/components/agent/AvatarUploader';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -102,6 +104,8 @@ export default function AgentProfilePage() {
   const [activeTab, setActiveTab] = useState<Tab>('profile');
   const [agent, setAgent] = useState<NetworkAgent | null>(null);
   const [indexerDetail, setIndexerDetail] = useState<AgentDetail | null>(null);
+  const [manifestRaw, setManifestRaw] = useState<AgentManifestV1 | null>(null);
+  const [manifestController, setManifestController] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -148,6 +152,18 @@ export default function AgentProfilePage() {
         } catch {
           // Non-critical — agent may be featured-only without numeric indexer ID
         }
+
+        // Fetch raw manifest for owner-edit operations (avatar upload)
+        try {
+          const mRes = await fetch(`/api/a2a/manifest?agentId=${agentId}&t=${cacheBust}`, { cache: 'no-store' });
+          if (mRes.ok) {
+            const mBody = await mRes.json();
+            setManifestRaw(mBody.manifest as AgentManifestV1);
+            setManifestController(mBody.controller as string);
+          }
+        } catch {
+          // Manifest may not exist yet — non-critical
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load agent.');
@@ -172,19 +188,33 @@ export default function AgentProfilePage() {
         {/* Hero */}
         <div className="aureo-detail-hero mb-8 p-5 md:p-7 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div className="flex items-start gap-5">
-            {agent?.avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={agent.avatar}
-                alt={`${agent.name} avatar`}
-                className="h-20 w-20 shrink-0 rounded-full border border-[#C5A67C]/30 bg-black/40 object-cover md:h-24 md:w-24"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-              />
-            ) : (
-              <div className="h-20 w-20 shrink-0 rounded-full border border-white/10 bg-white/[0.03] md:h-24 md:w-24 flex items-center justify-center font-mono text-[20px] text-[#777]">
-                {agent?.name ? agent.name.slice(0, 2).toUpperCase() : '?'}
-              </div>
-            )}
+            <div className="w-28 shrink-0">
+              {agent?.avatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={agent.avatar}
+                  alt={`${agent.name} avatar`}
+                  className="h-20 w-20 rounded-full border border-[#C5A67C]/30 bg-black/40 object-cover md:h-24 md:w-24"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              ) : (
+                <div className="h-20 w-20 rounded-full border border-white/10 bg-white/[0.03] md:h-24 md:w-24 flex items-center justify-center font-mono text-[20px] text-[#777]">
+                  {agent?.name ? agent.name.slice(0, 2).toUpperCase() : '?'}
+                </div>
+              )}
+              {agent && /^\d+$/.test(agent.id) && (
+                <AvatarUploader
+                  agentId={agent.id}
+                  currentAvatar={agent.avatar}
+                  ownerAddress={manifestController || agent.wallet}
+                  manifestData={manifestRaw || undefined}
+                  onUpdated={(newAvatarUrl) => {
+                    setAgent((prev) => prev ? { ...prev, avatar: newAvatarUrl || undefined } : prev);
+                    setManifestRaw((prev) => prev ? { ...prev, avatar: newAvatarUrl || undefined, updatedAt: new Date().toISOString() } : prev);
+                  }}
+                />
+              )}
+            </div>
             <div>
               <Link href="/a2a" className="font-mono text-[11px] tracking-[0.16em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
                 ← BACK · A2A NETWORK
