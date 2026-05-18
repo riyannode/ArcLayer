@@ -417,29 +417,19 @@ async function handleNative(
     );
   }
 
-  // ─── Access session guard: reject if payer already has active session ───
-  const payer = authorization.from as string;
-  const sessionClaim = await claimAccessSession(payer, opts.resource, 'arc-native');
-  if (!sessionClaim.ok) {
-    return NextResponse.json(
-      { ok: false, error: 'already_paid', message: 'You already have an active access session for this resource.', expiresAt: sessionClaim.expiresAt },
-      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
-  }
-
   // ─── VERIFY-FIRST PATTERN: Execute handler BEFORE settlement ──────────────
   // Rationale: If handler fails (DB error, timeout, panic), user should NOT be
   // charged. Settlement is irreversible on-chain. Handler success is the gate.
   //
-  // Order: verify (done above) → session claim (done) → handler → settle → consume
-  // If settle fails after handler success → release session + 502 (user retries)
+  // Order: verify (done above) → handler → settle → consume
+  // Replay/double-spend protection is enforced by EIP-3009 nonce usage +
+  // consumeNativePayment(paymentId). No per-payer time lock: reviewers can run
+  // multiple fresh payments with fresh nonces.
 
   let response: NextResponse;
   try {
     response = await handler(req);
   } catch (handlerErr) {
-    // Handler threw — release session, do NOT settle
-    await releaseAccessSession(payer, opts.resource, 'arc-native');
     const msg = handlerErr instanceof Error ? handlerErr.message : 'Handler execution failed';
     return NextResponse.json(
       { ok: false, error: 'handler_failed', message: msg },
@@ -449,7 +439,6 @@ async function handleNative(
 
   // Handler succeeded — check response status (non-2xx = logical failure)
   if (response.status >= 400) {
-    await releaseAccessSession(payer, opts.resource, 'arc-native');
     return response; // Pass through handler's error response without settling
   }
 
@@ -463,7 +452,6 @@ async function handleNative(
   if (!settleResult.success) {
     // If already settled, still allow through (idempotent)
     if (!settleResult.alreadySettled) {
-      await releaseAccessSession(payer, opts.resource, 'arc-native');
       return NextResponse.json(
         { ok: false, error: 'settlement_failed', reason: settleResult.errorReason, message: settleResult.errorMessage },
         { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
@@ -498,9 +486,6 @@ async function handleNative(
 
   // Consume rail session (one-shot)
   if (railSessionId) consumeRailSession(railSessionId);
-
-  // Complete access session with payment details
-  await completeAccessSession(payer, opts.resource, 'arc-native', paymentId, settleResult.transaction ?? undefined);
 
   // Attach PAYMENT-RESPONSE
   const paymentResponse = {
