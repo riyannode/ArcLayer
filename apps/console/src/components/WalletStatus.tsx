@@ -33,6 +33,17 @@ export default function WalletStatus({ variant = 'app' }: Props) {
   const [username, setUsername] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const copyAddress = async (addr: string) => {
+    try {
+      await navigator.clipboard.writeText(addr);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      // ignore
+    }
+  };
 
   // Determine which wallet is active
   const isConnected = authenticated || eoaConnected;
@@ -108,8 +119,11 @@ export default function WalletStatus({ variant = 'app' }: Props) {
   if (variant === 'landing' && isConnected && activeAddress) {
     return (
       <div className="flex items-center gap-2">
-        <div
-          className="flex items-center gap-2 px-3 py-2 font-mono text-[11px]"
+        <button
+          type="button"
+          onClick={() => copyAddress(activeAddress)}
+          title="Copy full address"
+          className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] transition hover:brightness-125"
           style={{
             background: 'rgba(197, 166, 124, 0.08)',
             color: '#C5A67C',
@@ -119,7 +133,11 @@ export default function WalletStatus({ variant = 'app' }: Props) {
           <span className="pulse-dot" />
           <span className="text-[9px] tracking-[0.14em] text-white/80">{walletType === 'eoa' ? 'EOA' : 'PASSKEY'}</span>
           {shortenAddress(activeAddress)}
-        </div>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3 text-white/50">
+            <path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z" />
+            <path d="M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.44A1.5 1.5 0 008.378 6H4.5z" />
+          </svg>
+        </button>
         <button
           onClick={handleDisconnect}
           className="px-3 py-2 font-mono text-[10px] tracking-[0.18em] text-white/80 transition-all duration-300"
@@ -143,8 +161,11 @@ export default function WalletStatus({ variant = 'app' }: Props) {
   if (variant === 'app' && isConnected && activeAddress) {
     return (
       <div className="flex items-center gap-2">
-        <div
-          className="flex items-center gap-2 px-3 py-2 font-mono text-[11px]"
+        <button
+          type="button"
+          onClick={() => copyAddress(activeAddress)}
+          title="Copy full address"
+          className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] transition hover:brightness-125"
           style={{
             background: 'rgba(197, 166, 124, 0.08)',
             color: '#C5A67C',
@@ -154,7 +175,15 @@ export default function WalletStatus({ variant = 'app' }: Props) {
           <span className="pulse-dot" />
           <span className="text-[9px] tracking-[0.14em] text-white/80">{walletType === 'eoa' ? 'EOA' : 'PASSKEY'}</span>
           {shortenAddress(activeAddress)}
-        </div>
+          {copied ? (
+            <span className="font-mono text-[9px] tracking-[0.14em] text-emerald-400">COPIED</span>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3 text-white/50">
+              <path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z" />
+              <path d="M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.44A1.5 1.5 0 008.378 6H4.5z" />
+            </svg>
+          )}
+        </button>
         <button
           onClick={handleDisconnect}
           className="px-3 py-2 font-mono text-[10px] tracking-[0.18em] text-white/80 transition-all duration-300"
