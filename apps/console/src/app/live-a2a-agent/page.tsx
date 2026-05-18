@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -715,6 +715,9 @@ export default function LiveA2AAgentPageRoute() {
   const [orderbookAsset, setOrderbookAsset] = useState<'BTC' | 'ETH'>('BTC');
   const [btcStream, setBtcStream] = useState<BtcStream | null>(null);
   const [ethStream, setEthStream] = useState<BtcStream | null>(null);
+  const [liveTickBtc, setLiveTickBtc] = useState<number | null>(null);
+  const [liveTickEth, setLiveTickEth] = useState<number | null>(null);
+  const [wsState, setWsState] = useState<'idle' | 'connecting' | 'live' | 'closed'>('idle');
   const [scanCount, setScanCount] = useState(0);
   const [loopMs, setLoopMs] = useState(0);
   const [overview, setOverview] = useState<OverviewData | null>(null);
@@ -832,17 +835,112 @@ export default function LiveA2AAgentPageRoute() {
       }
     }
     load();
-    const t = setInterval(load, 4000);
+    const t = setInterval(load, 1500);
     return () => {
       alive = false;
       clearInterval(t);
     };
   }, [orderbookAsset]);
 
+
+  // ── Polymarket RTDS Chainlink WebSocket ─────────────────────────────────
+  // Same Chainlink Data Streams feed Polymarket uses to resolve 5m Up/Down
+  // markets. Sub-second updates, no API key, public.
+  // Endpoint: wss://ws-live-data.polymarket.com
+  // Topic:    crypto_prices_chainlink
+  // Payload:  { symbol: 'btc/usd' | 'eth/usd', value: <price>, timestamp: <ms> }
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let alive = true;
+    let backoff = 1000;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let pingTimer: ReturnType<typeof setInterval> | null = null;
+
+    const connect = () => {
+      if (!alive) return;
+      setWsState('connecting');
+      try {
+        ws = new WebSocket('wss://ws-live-data.polymarket.com');
+      } catch {
+        scheduleReconnect();
+        return;
+      }
+      ws.onopen = () => {
+        if (!ws || !alive) return;
+        backoff = 1000;
+        setWsState('live');
+        ws.send(
+          JSON.stringify({
+            action: 'subscribe',
+            subscriptions: [{ topic: 'crypto_prices_chainlink', type: '*' }],
+          }),
+        );
+        // Keepalive: RTDS recommends ~3s heartbeat
+        if (pingTimer) clearInterval(pingTimer);
+        pingTimer = setInterval(() => {
+          try {
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action: 'ping' }));
+          } catch {
+            /* noop */
+          }
+        }, 3000);
+      };
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.topic !== 'crypto_prices_chainlink') return;
+          if (msg.type !== 'update' && msg.type !== 'snapshot') return;
+          const sym = msg.payload?.symbol;
+          const val = msg.payload?.value;
+          if (typeof val !== 'number' || !Number.isFinite(val)) return;
+          if (sym === 'btc/usd') setLiveTickBtc(val);
+          else if (sym === 'eth/usd') setLiveTickEth(val);
+        } catch {
+          /* ignore parse errors */
+        }
+      };
+      ws.onerror = () => {
+        try { ws?.close(); } catch { /* noop */ }
+      };
+      ws.onclose = () => {
+        if (!alive) return;
+        if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+        setWsState('closed');
+        scheduleReconnect();
+      };
+    };
+
+    const scheduleReconnect = () => {
+      if (!alive) return;
+      reconnectTimer = setTimeout(() => {
+        backoff = Math.min(backoff * 2, 15000);
+        connect();
+      }, backoff);
+    };
+
+    connect();
+    return () => {
+      alive = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (pingTimer) clearInterval(pingTimer);
+      try { ws?.close(); } catch { /* noop */ }
+    };
+  }, []);
+
   const btcMarket = useMemo(() => markets.find((m) => m.asset === 'BTC'), [markets]);
   const ethMarket = useMemo(() => markets.find((m) => m.asset === 'ETH'), [markets]);
   const activeBook = orderbookAsset === 'BTC' ? bookBtc : bookEth;
-  const activeStream = orderbookAsset === 'BTC' ? btcStream : ethStream;
+  const baseStream = orderbookAsset === 'BTC' ? btcStream : ethStream;
+  const activeTick = orderbookAsset === 'BTC' ? liveTickBtc : liveTickEth;
+  // Patch livePrice with the WebSocket tick whenever we have one — keeps the
+  // candle/target snapshot from the REST endpoint but overlays sub-100ms price.
+  const activeStream = useMemo<BtcStream | null>(() => {
+    if (!baseStream) return null;
+    if (activeTick == null) return baseStream;
+    const change = baseStream.priceToBeat != null ? activeTick - baseStream.priceToBeat : null;
+    const changePct = change != null && baseStream.priceToBeat ? (change / baseStream.priceToBeat) * 100 : null;
+    return { ...baseStream, livePrice: activeTick, change, changePct };
+  }, [baseStream, activeTick]);
 
   const apoloStat = a2aStatus?.agents?.apolo?.stats;
   const pythiaStat = a2aStatus?.agents?.pythia?.stats;
@@ -933,7 +1031,17 @@ export default function LiveA2AAgentPageRoute() {
         <TerminalPanel
           title="Live BTC Price · Target · Countdown · Chart · Orderbook"
           right={
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
+              <span className={`inline-flex items-center gap-1 rounded-sm border px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider ${
+                wsState === 'live'
+                  ? 'border-emerald-300/40 bg-emerald-400/10 text-emerald-300'
+                  : wsState === 'connecting'
+                  ? 'border-amber-300/35 bg-amber-400/10 text-[#C5A67C]'
+                  : 'border-white/15 bg-white/5 text-[#EAE4D8]/70'
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${wsState === 'live' ? 'animate-pulse bg-emerald-400' : 'bg-amber-400'}`} />
+                chainlink · {wsState === 'live' ? 'streaming' : wsState}
+              </span>
               {(['BTC', 'ETH'] as const).map((a) => (
                 <button
                   key={a}
