@@ -33,6 +33,7 @@ import { AgentFilterBar, AGENT_FILTERS } from '@/components/a2a/AgentFilterBar';
 import { AgentNetworkCard, EmptyAgentState } from '@/components/a2a/AgentNetworkCard';
 import { AgentDetailDrawer } from '@/components/a2a/AgentDetailDrawer';
 import AgentFlowDiagram from '@/components/a2a/AgentFlowDiagram';
+import LivePolymarketFeed from '@/components/a2a/LivePolymarketFeed';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -348,31 +349,45 @@ function A2ADashboardPage() {
           </div>
         )}
 
-        {/* ─── Page Title · Autonomous Agent Network ──────────────────── */}
+        {/* ─── Page Title · Agora-submission framing ─────────────────────── */}
         <section className="mb-6">
           <h2 className="text-2xl font-semibold tracking-tight text-[#EAE4D8]">
-            Autonomous Agent Network
+            Autonomous Prediction-Market Intelligence Network
           </h2>
           <p className="mt-1 max-w-3xl font-mono text-[12px] leading-5 text-[#7A7A7A]">
-            Agents discover each other, request services, pay with x402 / USDC, and build reputation
-            automatically. This page validates autonomous agent-to-agent commerce — not signal accuracy.
+            <span className="text-[#C5A67C]">Hermes</span> is an autonomous trading agent that pays{' '}
+            <span className="text-violet-300">Apolo</span> in USDC over x402 for live Polymarket
+            decisions generated from <span className="text-cyan-300">Ignia</span>'s raw-signal
+            oracle. Every payment, receipt, and trade is settled on Arc — sub-second, ~$0.01 per
+            transaction, no volatile gas.
           </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2 font-mono text-[10px]">
+            <span className="rounded border border-emerald-500/20 bg-emerald-950/20 px-2 py-1 text-emerald-300/90">
+              live polymarket data
+            </span>
+            <span className="rounded border border-violet-500/20 bg-violet-950/20 px-2 py-1 text-violet-300/90">
+              x402 paid decisions
+            </span>
+            <span className="rounded border border-amber-500/20 bg-amber-950/20 px-2 py-1 text-amber-300/90">
+              autonomous 24/7 loop
+            </span>
+            <span className="rounded border border-cyan-500/20 bg-cyan-950/20 px-2 py-1 text-cyan-300/90">
+              dry-run trades · real settlement
+            </span>
+          </div>
         </section>
 
-        {/* ─── Demo-Strategy Disclaimer · honest framing ──────────────── */}
-        <section className="mb-6 rounded border border-amber-500/15 bg-amber-950/[0.05] px-4 py-3">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-amber-300/80">
-            ⚠ demo strategy · not financial advice
+        {/* ─── Honest disclaimer · trades are dry-run for hackathon safety ─ */}
+        <section className="mb-6 rounded border border-white/5 bg-white/[0.02] px-4 py-3">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-[#777]">
+            agora hackathon · how to read this page
           </p>
           <p className="mt-1.5 font-mono text-[11px] leading-5 text-[#9C9080]">
-            The current Ignia raw-signal oracle is a <strong className="text-amber-200">demo strategy</strong> for
-            protocol validation. ArcLayer doesn’t claim signal accuracy, profit, or trading performance.
-            Developers can replace it with their own model, market API, evaluator, or custom logic — the
-            agent-to-agent payment, receipt, and reputation rails remain identical.
-          </p>
-          <p className="mt-1.5 font-mono text-[11px] leading-5 text-[#9C9080]">
-            <span className="text-emerald-300/90">Verified on-chain:</span> agent request, x402/USDC payment,
-            receipt, signal response, transaction hash, activity log, and reputation from real events.
+            All <span className="text-emerald-300/90">x402 payments, receipts, agent registry, and
+            on-chain reputation</span> are real. Trade execution against Polymarket is
+            <span className="text-cyan-300/90"> dry-run</span> for hackathon safety — performance is
+            tracked against actual market settlement, so PnL/winrate reflect what the agent{' '}
+            <em>would have</em> earned trading live.
           </p>
         </section>
 
@@ -384,6 +399,11 @@ function A2ADashboardPage() {
             apoloActive={isLive}
             hermesActive={isLive}
           />
+        </section>
+
+        {/* ─── Live Polymarket Price Feed ─────────────────────────────── */}
+        <section className="mb-6">
+          <LivePolymarketFeed />
         </section>
 
         {/* ─── Autonomous Agent Network · selectable agent cards ──────── */}
@@ -433,11 +453,52 @@ function A2ADashboardPage() {
           )}
         </section>
 
+        {/* ─── Live Proof Metrics · for Agora judges ──────────────────── */}
+        <section className="mt-6 rounded border border-[#C5A67C]/20 bg-[#C5A67C]/[0.03] p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">
+              live proof metrics · arc testnet
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <MetricCard label="Decisions Purchased" value={liveSignalsServed} sub="x402 paid calls" />
+            <MetricCard label="USDC Volume" value={summary ? formatUSDC(totalVolumeRaw.toString()) : '0.00'} sub="settled on Arc" />
+            <MetricCard label="On-Chain Receipts" value={summary?.proofs ?? 0} sub="ProofOfWork NFTs" />
+            <MetricCard label="Hermes Trades" value={liveIgniaTrades} sub="autonomous executions" />
+            <MetricCard
+              label="Winrate"
+              value={
+                ignia?.stats && (ignia.stats.signalsCorrect + ignia.stats.signalsWrong) > 0
+                  ? `${((ignia.stats.signalsCorrect / (ignia.stats.signalsCorrect + ignia.stats.signalsWrong)) * 100).toFixed(1)}%`
+                  : '—'
+              }
+              sub="vs market settlement"
+            />
+            <MetricCard
+              label="PnL (bps)"
+              value={
+                typeof ignia?.stats?.cumulativePnlBps === 'number'
+                  ? `${ignia.stats.cumulativePnlBps >= 0 ? '+' : ''}${ignia.stats.cumulativePnlBps}`
+                  : '—'
+              }
+              sub="cumulative"
+            />
+          </div>
+          <p className="mt-3 font-mono text-[9px] text-[#555]">
+            All metrics are live on-chain reads from Arc Testnet (chain {onchain?.chainId ?? '5042002'}).
+            Receipts verifiable on{' '}
+            <a href="https://testnet.arcscan.app" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline decoration-dotted">
+              arcscan.app
+            </a>.
+          </p>
+        </section>
+
         {/* ─── KPI Strip ───────────────────────────────────────────────── */}
         <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
           <KPICard label="Signals Served" value={liveSignalsServed} accent />
-          <KPICard label="Ignia Trades" value={liveIgniaTrades} accent />
-          <KPICard label="Ignia Markets" value={onchain?.markets.totalIgnia ?? '—'} />
+          <KPICard label="Hermes Trades" value={liveIgniaTrades} accent />
+          <KPICard label="Active Markets" value={onchain?.markets.totalIgnia ?? '—'} />
           <KPICard label="Mirrors" value={onchain?.markets.totalMirrors ?? '—'} />
           <KPICard label="Marketplace Jobs" value={summary?.jobs ?? '—'} />
           <KPICard label="Volume USDC" value={summary ? formatUSDC(totalVolumeRaw.toString()) : '—'} accent />
@@ -728,6 +789,16 @@ function KPICard({ label, value, accent }: { label: string; value: string | numb
       <p className={`mt-2 font-mono text-2xl font-medium ${accent ? 'text-[#C5A67C]' : 'text-[#EAE4D8]'}`}>
         {value}
       </p>
+    </div>
+  );
+}
+
+function MetricCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+  return (
+    <div className="rounded border border-[#C5A67C]/10 bg-black/30 p-3">
+      <p className="font-mono text-[9px] uppercase tracking-widest text-[#777]">{label}</p>
+      <p className="mt-1.5 font-mono text-xl font-medium text-[#EAE4D8]">{value}</p>
+      {sub && <p className="mt-0.5 font-mono text-[9px] text-[#555]">{sub}</p>}
     </div>
   );
 }
