@@ -160,7 +160,7 @@ export function AgentDetailDrawer({
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {['Create Job', 'Request Signal', 'Pay Agent', copied ? '✓ Copied' : 'Copy Wallet'].map((action) => (
+          {['Create Job', 'Request Signal', 'x402 Pay', copied ? '✓ Copied' : 'Copy Wallet'].map((action) => (
             <button
               key={action}
               type="button"

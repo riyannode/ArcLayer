@@ -536,12 +536,12 @@ function FullLoopProof({ latest, apoloStat }: LoopProofProps) {
   ];
 
   const stages = [
-    { label: 'Market Created', done: !!marketCreatedTx, hint: marketCreatedTx ? 'on-chain' : 'pending tx' },
-    { label: 'Signal Sold', done: !!latest, hint: latest ? 'Pythia → Hermes' : 'awaiting' },
-    { label: 'Payment Settled', done: !!paymentReceipt, hint: paymentReceipt ? 'x402 nonce' : 'pending receipt' },
-    { label: 'Action Executed', done: !!actionTx, hint: actionTx ? 'on-chain' : 'pending tx' },
-    { label: 'Outcome Resolved', done: !!resolveTx, hint: resolveTx ? 'on-chain' : 'pending tx' },
-    { label: 'Reputation Updated', done: reputation != null, hint: reputation != null ? `score ${reputation}` : 'pending' },
+    { label: 'Market Created', done: !!marketCreatedTx, hint: marketCreatedTx ? 'on-chain' : 'awaiting indexer' },
+    { label: 'Signal Sold', done: !!latest, hint: latest ? 'Pythia → Apolo' : 'awaiting' },
+    { label: 'x402 Settled', done: !!paymentReceipt, hint: paymentReceipt ? 'x402 receipt' : 'awaiting settlement' },
+    { label: 'Action Executed', done: !!actionTx, hint: actionTx ? 'on-chain' : 'awaiting execution' },
+    { label: 'Outcome Resolved', done: !!resolveTx, hint: resolveTx ? 'on-chain' : 'awaiting resolver' },
+    { label: 'Reputation Updated', done: reputation != null, hint: reputation != null ? `score ${reputation}` : 'awaiting' },
   ];
 
   return (
@@ -659,8 +659,8 @@ function SignalStream({ signals }: { signals: SignalEvent[] }) {
               </div>
               {expanded && (
                 <div className="min-w-0 rounded-sm border border-emerald-300/20 bg-emerald-400/5 p-2">
-                  <div className="truncate text-emerald-300">{s.verdict === 'YES' || s.verdict === 'EDGE' ? 'Payment completed' : 'No payment'}</div>
-                  <div className="mt-1 text-[10px] text-[#EAE4D8]/55">0.005 USDC · x402</div>
+                  <div className="truncate text-emerald-300">{s.verdict === 'YES' || s.verdict === 'EDGE' ? 'x402 settlement completed' : 'No payment'}</div>
+                  <div className="mt-1 text-[10px] text-[#EAE4D8]/55">Pythia → 0.005 USDC · x402</div>
                 </div>
               )}
               {expanded && (
@@ -706,7 +706,7 @@ function ChargeCard({ charge, fallback }: { charge?: AgentCharge; fallback: { se
         </span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-[10px]">
-        <ProofKV k="x402 amount" v={`${charge?.amountUsdc ?? fallback.amount} USDC`} hot={!!charge} />
+        <ProofKV k="Fee" v={`${charge?.amountUsdc ?? fallback.amount} USDC`} hot={!!charge} />
         <ProofKV k="Payment rail" v={charge ? `${charge.rail} / Arc Native` : 'Waiting for run'} hot={!!charge} />
         <ProofKV k="Asset" v={charge?.asset ?? 'USDC'} />
         <ProofKV k="Network" v={charge?.network ?? 'Arc Testnet'} />
@@ -1176,7 +1176,7 @@ export default function LiveA2AAgentPageRoute() {
               <AgentGraph latest={latestRow} />
             </TerminalPanel>
 
-            <TerminalPanel title="Backend Flow · Pay Agent → Receipt → Reputation" right={<Chip tone="green">RUNNABLE</Chip>} className="min-h-[260px]">
+            <TerminalPanel title="Backend Flow · x402 Payment → Settlement → Receipt → Reputation" right={<Chip tone="green">RUNNABLE</Chip>} className="min-h-[260px]">
               <LiveA2AFlow receipt={flowReceipt} running={flowRunning} onRun={runLiveFlow} />
             </TerminalPanel>
           </>
