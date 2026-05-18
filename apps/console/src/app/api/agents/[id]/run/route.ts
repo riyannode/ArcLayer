@@ -8,7 +8,7 @@ import { withX402 } from '@/lib/x402';
 export const runtime = 'nodejs';
 
 const X402_FACILITATOR_DISABLED = process.env.X402_FACILITATOR_ENABLED === 'false';
-const DEFAULT_AMOUNT_ATOMIC = '1000000'; // 1 USDC, 6 decimals
+const DEFAULT_AMOUNT_ATOMIC = '100000'; // 0.10 USDC, 6 decimals
 
 function isValidAgentRouteId(id: string): boolean {
   return /^[a-zA-Z0-9_-]{1,64}$/.test(id);

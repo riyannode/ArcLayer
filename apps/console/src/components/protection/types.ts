@@ -19,6 +19,15 @@ export type ProtectionSeverity =
 
 export type ProtectionSurface = "modal" | "toast" | "inline";
 
+export type ProtectionDetail = {
+  label: string;
+  value: string;
+  /** Optional outbound link (e.g. tx explorer). */
+  href?: string;
+  /** Render value in monospace (default true for hashes/addresses). */
+  mono?: boolean;
+};
+
 export type ProtectionNotice = {
   id: string;
   severity: ProtectionSeverity;
@@ -27,6 +36,11 @@ export type ProtectionNotice = {
   subtitle?: string;
   message: string;
   technicalDetail?: string;
+  /**
+   * Structured key/value rows rendered below the message.
+   * Use for receipts: amount, tx hash, method, status.
+   */
+  details?: ProtectionDetail[];
   actionLabel?: string;
   actionHref?: string;
   /**

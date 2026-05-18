@@ -64,8 +64,25 @@ function ToastItem({ notice, onDismiss }: { notice: ProtectionNotice; onDismiss:
       <span className="mt-0.5 text-base leading-none">{severityIcon[notice.severity]}</span>
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-medium truncate ${severityTitleColor[notice.severity]}`}>{notice.title}</p>
-        <p className={`mt-0.5 text-xs line-clamp-2 ${severityMsgColor[notice.severity]}`}>{notice.message}</p>
-        {notice.technicalDetail && (
+        <p className={`mt-0.5 whitespace-pre-line text-xs ${severityMsgColor[notice.severity]}`}>{notice.message}</p>
+        {notice.details && notice.details.length > 0 && (
+          <div className="mt-3 space-y-1.5 rounded-lg border border-emerald-400/15 bg-black/20 p-2.5">
+            {notice.details.map((detail) => {
+              const value = detail.href ? (
+                <a href={detail.href} target="_blank" rel="noopener noreferrer" className="underline decoration-emerald-300/50 underline-offset-2 hover:text-emerald-100">
+                  {detail.value}
+                </a>
+              ) : detail.value;
+              return (
+                <div key={detail.label} className="flex items-start justify-between gap-3 text-[10.5px] leading-4">
+                  <span className="shrink-0 text-emerald-100/60">{detail.label}</span>
+                  <span className={`min-w-0 truncate text-right text-emerald-50/90 ${detail.mono === false ? '' : 'font-mono'}`}>{value}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {notice.technicalDetail && !notice.details?.length && (
           <code className="mt-1 block text-[10px] text-white/80 truncate">{notice.technicalDetail}</code>
         )}
       </div>

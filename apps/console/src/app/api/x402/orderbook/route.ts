@@ -99,9 +99,9 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-// 0.002 USDC = 2000 atomic (6 decimals)
+// 0.003 USDC = 3000 atomic (6 decimals)
 export const GET = withX402(handler, {
-  amount: '2000',
+  amount: '3000',
   resource: '/api/x402/orderbook',
   description: 'Polymarket live orderbook for current 5m UP/DOWN market',
 });

@@ -277,9 +277,15 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     log(`5/6 Settled & unlocked: tx=${paymentResp.transaction?.slice(0, 18) || 'n/a'}...`, 'success');
     notify({
       ...NOTICE_PAYMENT_SETTLED,
-      title: `Payment completed`,
-      message: `${formatUnits(BigInt(req.amount), 6)} USDC settled. Protected resource is unlocked.`,
-      technicalDetail: paymentResp.transaction ? `tx: ${paymentResp.transaction}` : 'settled',
+      title: 'Payment successful',
+      message: 'Your x402 payment was authorized and verified.\nThe protected agent resource is now unlocked.',
+      details: [
+        { label: 'Amount paid', value: `${formatUnits(BigInt(req.amount), 6)} USDC`, mono: false },
+        ...(paymentResp.transaction ? [{ label: 'Tx hash', value: `${paymentResp.transaction.slice(0, 10)}...${paymentResp.transaction.slice(-8)}`, href: `https://testnet.arcscan.app/tx/${paymentResp.transaction}`, mono: true }] : []),
+        { label: 'Method', value: 'x402 authorization', mono: false },
+        { label: 'Status', value: 'Verified ✓', mono: false },
+      ],
+      autoCloseMs: 6_000,
     });
 
     setStep('replay');
@@ -408,9 +414,15 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     log(`[GW] Settled & unlocked via Circle Gateway: ${paymentResp.transaction?.slice(0, 18) || 'batched'}...`, 'success');
     notify({
       ...NOTICE_PAYMENT_SETTLED,
-      title: `Payment completed`,
-      message: `${formatUnits(BigInt(gwOption.amount), 6)} USDC settled via Circle Gateway. Protected resource is unlocked.`,
-      technicalDetail: paymentResp.transaction ? `tx: ${paymentResp.transaction}` : 'batched settlement',
+      title: 'Payment successful',
+      message: 'Your x402 payment was authorized and verified.\nThe protected agent resource is now unlocked.',
+      details: [
+        { label: 'Amount paid', value: `${formatUnits(BigInt(gwOption.amount), 6)} USDC`, mono: false },
+        ...(paymentResp.transaction ? [{ label: 'Tx hash', value: `${paymentResp.transaction.slice(0, 10)}...${paymentResp.transaction.slice(-8)}`, href: `https://testnet.arcscan.app/tx/${paymentResp.transaction}`, mono: true }] : [{ label: 'Tx hash', value: 'batched settlement', mono: false }]),
+        { label: 'Method', value: 'x402 · Circle Gateway', mono: false },
+        { label: 'Status', value: 'Verified ✓', mono: false },
+      ],
+      autoCloseMs: 6_000,
     });
 
     setStep('replay');
@@ -567,6 +579,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     }
   }, [step]);
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
+  const displayAmount = requirement?.amount ? formatUnits(BigInt(requirement.amount), 6) : '0.04';
   // Rail lock: EOA → Arc Native only, Passkey → Circle Gateway only.
   const arcDisabledForPasskey = walletMode === 'passkey';
   const circleDisabledForEoa = walletMode === 'eoa';
@@ -606,7 +619,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
             <button onClick={() => setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE GATEWAY</button>
           </div>
           <div className={`space-y-2.5 border-y border-white/10 py-3 font-mono ${compact ? 'text-[11px]' : 'text-[12px]'}`}>
-            <div className="flex justify-between gap-4"><span className="text-white/80">Cost</span><span className="text-white">0.01 USDC</span></div>
+            <div className="flex justify-between gap-4"><span className="text-white/80">Cost</span><span className="text-white">{displayAmount} USDC</span></div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Network</span><span className="text-white">Arc Testnet</span></div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Current step</span><span className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{step.toUpperCase()}</span></div>
             <div className="flex justify-between gap-4">
@@ -673,7 +686,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
           <div className="grid gap-2.5 md:grid-cols-3">
             <div className={`${c.cardRadiusXs} border border-white/10 bg-black/25 ${c.cardPadXs}`}>
               <div className={`font-mono ${c.label} text-white/80`}>PRICE</div>
-              <div className={`mt-0.5 font-semibold text-white ${c.bigVal}`}>0.01 USDC</div>
+              <div className={`mt-0.5 font-semibold text-white ${c.bigVal}`}>{displayAmount} USDC</div>
               <div className="mt-0.5 text-[10px] text-white/80">per resource unlock</div>
             </div>
             <div className={`${c.cardRadiusXs} border border-white/10 bg-black/25 ${c.cardPadXs}`}>
@@ -793,7 +806,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
           </div>
 
           <div className={`space-y-2.5 border-y border-white/10 py-3 font-mono ${compact ? 'text-[11px]' : 'text-[12px]'}`}>
-            <div className="flex justify-between gap-4"><span className="text-white/80">Cost</span><span className="text-white">0.01 USDC</span></div>
+            <div className="flex justify-between gap-4"><span className="text-white/80">Cost</span><span className="text-white">{displayAmount} USDC</span></div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Network</span><span className="text-white">Arc Testnet</span></div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Current step</span><span className={mode === 'arc-native' ? 'text-[#C5A67C]' : 'text-[#7CB5C5]'}>{step.toUpperCase()}</span></div>
             <div className="flex justify-between gap-4">
