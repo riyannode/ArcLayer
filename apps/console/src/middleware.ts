@@ -7,10 +7,18 @@ const ALLOWED_ORIGINS = new Set([
   'http://localhost:3001',
 ]);
 
-function corsHeaders(origin: string | null): HeadersInit {
-  if (!origin || !ALLOWED_ORIGINS.has(origin)) return {};
+const CANONICAL_ORIGIN = 'https://arclayers.xyz';
+
+/**
+ * Build CORS headers. ALWAYS sets Access-Control-Allow-Origin explicitly to
+ * override any wildcard injected by upstream proxies/Vercel defaults.
+ * - Allowed origin → echo it back
+ * - Disallowed/missing origin → pin to canonical site (effectively blocks cross-origin)
+ */
+function corsHeaders(origin: string | null): Record<string, string> {
+  const allowed = !!origin && ALLOWED_ORIGINS.has(origin);
   return {
-    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Origin': allowed ? origin! : CANONICAL_ORIGIN,
     'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
     'Access-Control-Allow-Headers': 'content-type,authorization,x-arc-wallet,x-arc-nonce,x-arc-timestamp,x-arc-signature',
     'Access-Control-Max-Age': '86400',
