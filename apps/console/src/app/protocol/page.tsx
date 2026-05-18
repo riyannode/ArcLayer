@@ -6,6 +6,7 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { ARC_EXPLORER, formatUSDC, shortenAddress } from '@/lib/contracts';
 import { displayAgentLabel, formatSkillLabel, parseAgentName, parseAgentSkill, shortAgentId } from '@/lib/agentName';
 import { fetchIndexerJson, type DashboardOverview } from '@/lib/indexer';
+import { WORK_PROOF_ADDRESS } from '@/lib/x402/constants';
 
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
 const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'success', 6: 'error' };
@@ -203,15 +204,22 @@ export default function Dashboard() {
   return (
     <div className="relative px-6 py-16 md:px-10 md:py-24">
       <div className="mx-auto max-w-7xl">
-        {/* Header */}
+        {/* Hero + primary actions */}
         <div className="mb-8 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }} aria-hidden="true">&nbsp;</div>
+            <div className="aureo-mono-label mb-3">PROTOCOL · LIVE CONSOLE</div>
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[60px]" style={{ lineHeight: 0.95 }}>
-              Protocol <span className="italic" style={{ color: '#C5A67C' }}>console</span>
+              Protocol <span className="italic" style={{ color: '#C5A67C' }}>Console</span>
             </h1>
-            <p className="mt-4 max-w-xl font-mono text-[12px] leading-6" style={{ color: 'rgba(234, 228, 216, 0.6)' }} aria-hidden="true">&nbsp;</p>
-            <p className="mt-1 max-w-xl font-mono text-[10.5px] uppercase leading-5 tracking-[0.18em]" aria-hidden="true">&nbsp;</p>
+            <p className="mt-4 max-w-2xl font-mono text-[12px] leading-6" style={{ color: 'rgba(234, 228, 216, 0.78)' }}>
+              Live infrastructure for agent commerce on Arc. Track x402 payments, USDC escrow, WorkProof receipts, agents, and on-chain activity in one dashboard.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Link href="/x402-demo" className="btn-primary px-4 py-2 text-[10.5px]">TRY X402</Link>
+              <Link href="/jobs/manual" className="btn-secondary px-4 py-2 text-[10.5px]">CREATE JOB</Link>
+              <Link href="/register" className="btn-bordered px-4 py-2 text-[10.5px]">REGISTER AGENT</Link>
+              <Link href="/a2a" className="btn-bordered px-4 py-2 text-[10.5px]">OPEN A2A</Link>
+            </div>
           </div>
           <div className="flex items-center gap-3 self-start md:self-auto">
             <div className="flex items-center gap-2 rounded-sm border border-white/10 bg-black/40 px-3 py-2">
@@ -227,79 +235,52 @@ export default function Dashboard() {
             <button onClick={() => { loadOverview({ silent: true }); probeAllRpcs(); }} className="btn-bordered">
               {isRefreshing ? 'SYNCING…' : 'REFRESH'}
             </button>
-            <span className="hidden md:inline-flex" aria-hidden="true" />
           </div>
         </div>
 
-        {/* Telemetry bar: RPC + indexer + x402 */}
-        <div className="mb-8 grid grid-cols-1 gap-3 md:grid-cols-[1.4fr_1fr_1fr]">
-          <Panel title="RPC · HEALTH" sub={`${RPC_ENDPOINTS.length} endpoints`}>
-            <div className="space-y-2">
-              {rpcHealth.length === 0
-                ? RPC_ENDPOINTS.map((ep) => <RpcRow key={ep.label} label={ep.label} latency={null} blockNumber={null} ok={false} loading url={ep.url} />)
-                : rpcHealth.map((r) => {
-                    const ep = RPC_ENDPOINTS.find((e) => e.label === r.label);
-                    return <RpcRow key={r.label} {...r} url={ep?.url} />;
-                  })}
+        {/* Live status + payment rails */}
+        <div className="mb-8 grid grid-cols-1 gap-3 lg:grid-cols-[0.95fr_1.15fr_0.9fr]">
+          <Panel title="WHAT IS LIVE" sub="Production-facing modules on Arc testnet">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {['Agent Registry', 'JobEscrow / Settlement Vault', 'WorkProof', 'x402 Facilitator', 'A2A Registry', 'Reputation', 'Indexer'].map((name) => (
+                <div key={name} className="flex items-center gap-2 rounded-sm border border-[#B8CD7E]/15 bg-[#B8CD7E]/[0.035] px-3 py-2 font-mono text-[10.5px] text-[rgba(234,228,216,0.82)]">
+                  <span className="text-[#B8CD7E]">✓</span>
+                  <span>{name}</span>
+                </div>
+              ))}
             </div>
           </Panel>
-          <Panel title="PROTOCOL · HEALTH" sub={fastestRpc ? `fastest rpc: ${fastestRpc.label} (${fastestRpc.latency?.toFixed(0)}ms)` : 'probing rpcs'}>
-            <div className="flex flex-col gap-3">
-              <div className="flex items-baseline justify-between">
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>STATUS</span>
-                <span className={`chip-status ${healthTone}`}>{healthLabel}</span>
-              </div>
-              <div className="flex items-baseline justify-between">
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>CHAIN HEAD</span>
-                <span className="font-mono text-[11.5px]" style={{ color: '#C5A67C' }}>{chainHead ? `#${chainHead.toString()}` : '—'}</span>
-              </div>
-              <div className="flex items-baseline justify-between" title="Block of last indexed protocol event. Testnet is low-traffic — silence between events is expected.">
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>LAST EVENT</span>
-                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>
-                  {lastSyncedBlock ? `#${lastSyncedBlock.toString()}` : '—'}
-                  {blocksSinceLastEvent !== null && <span className="ml-2" style={{ color: 'rgba(234, 228, 216, 0.4)' }}>(−{blocksSinceLastEvent.toLocaleString()} blk)</span>}
-                </span>
-              </div>
-              <div className="flex items-baseline justify-between">
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>EVENTS INDEXED</span>
-                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>{summary?.eventCount ?? '—'}</span>
-              </div>
-              <div className="flex items-baseline justify-between">
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>CADENCE</span>
-                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>indexer 10s · rpc 15s</span>
-              </div>
-            </div>
-          </Panel>
+
           <Panel
-            title="X402 · FACILITATOR"
-            sub="Arc testnet settlement config"
+            title="PAYMENT RAILS"
+            sub="x402 + Gateway + escrow paths"
             action={<Link href="/api/x402/supported" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>INSPECT CONFIG ↗</Link>}
           >
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <RailCard title="Arc Native x402" status="LIVE" text="Direct pay-per-call using USDC. No prepaid deposit needed." href="/x402-demo" cta="Try demo" />
+              <RailCard title="Circle Gateway" status="SUPPORTED" text="Prepaid Gateway balance for high-frequency agent calls." href="/api/x402/gateway-status" cta="Check status" />
+              <RailCard title="Escrow Jobs" status="LIVE" text="Deposit USDC, approve work, release payout, mint WorkProof." href="/jobs/manual" cta="Create job" />
+            </div>
+          </Panel>
+
+          <Panel title="NETWORK STATUS" sub={fastestRpc ? `fastest rpc: ${fastestRpc.label} (${fastestRpc.latency?.toFixed(0)}ms)` : 'probing rpcs'}>
             <div className="flex flex-col gap-3">
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>SCHEME</span>
-                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>arc-escrow</span>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>NETWORK</span>
-                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>Arc Testnet</span>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>CHAIN ID</span>
-                <span className="font-mono text-[11.5px]" style={{ color: '#C5A67C' }}>5042002</span>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>ASSET</span>
-                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>USDC</span>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>FACILITATOR</span>
-                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>/api/x402</span>
-              </div>
-              <div className="flex items-baseline justify-between gap-4">
-                <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>SUPPORTED CONFIG</span>
-                <span className="font-mono text-[11.5px]" style={{ color: '#EAE4D8' }}>/api/x402/supported</span>
-              </div>
+              <StatusLine label="NETWORK" value="Arc Testnet" />
+              <StatusLine label="RPC" value={rpcHealth.every((r) => r.ok) && rpcHealth.length ? 'Healthy' : 'Probing'} tone={rpcHealth.every((r) => r.ok) && rpcHealth.length ? 'success' : 'pending'} />
+              <StatusLine label="INDEXER" value={healthLabel} tone={healthTone === 'active' ? 'success' : healthTone} />
+              <StatusLine label="LAST EVENT" value={lastSyncedBlock ? `#${lastSyncedBlock.toString()}` : '—'} />
+              <StatusLine label="EVENTS INDEXED" value={String(summary?.eventCount ?? '—')} />
+              <details className="mt-1 border-t border-white/5 pt-3">
+                <summary className="cursor-pointer font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.7)] hover:text-[#C5A67C]">Advanced RPC diagnostics</summary>
+                <div className="mt-3 space-y-2">
+                  {rpcHealth.length === 0
+                    ? RPC_ENDPOINTS.map((ep) => <RpcRow key={ep.label} label={ep.label} latency={null} blockNumber={null} ok={false} loading url={ep.url} />)
+                    : rpcHealth.map((r) => {
+                        const ep = RPC_ENDPOINTS.find((e) => e.label === r.label);
+                        return <RpcRow key={r.label} {...r} url={ep?.url} />;
+                      })}
+                </div>
+              </details>
             </div>
           </Panel>
         </div>
@@ -329,31 +310,33 @@ export default function Dashboard() {
         </div>
 
         {/* Demo proof: canonical completed E2E */}
-        <Link
-          href="/job/19"
-          className="mt-6 flex flex-col gap-3 border border-[#B8CD7E]/20 bg-[#B8CD7E]/[0.035] p-4 transition hover:border-[#B8CD7E]/40 md:flex-row md:items-center md:justify-between"
-        >
+        <div className="mt-6 flex flex-col gap-3 border border-[#B8CD7E]/20 bg-[#B8CD7E]/[0.035] p-4 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="aureo-mono-label mb-2" style={{ color: '#B8CD7E' }}>COMPLETED E2E PROOF</div>
             <p className="font-mono text-[12px] leading-6 text-[#EAE4D8]">
               Job <span className="text-[#C5A67C]">#19</span> settled on Arc testnet · WorkProof <span className="text-[#C5A67C]">#3</span> minted to worker.
             </p>
+            <div className="mt-2 flex flex-wrap gap-3">
+              <Link href="/job/19" className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C5A67C] hover:text-[#EAE4D8]">View Job →</Link>
+              <a href={`${ARC_EXPLORER}/token/${WORK_PROOF_ADDRESS}?a=3`} target="_blank" rel="noopener noreferrer" className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C5A67C] hover:text-[#EAE4D8]">View WorkProof →</a>
+              <a href={`${ARC_EXPLORER}/address/${WORK_PROOF_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C5A67C] hover:text-[#EAE4D8]">View Contract →</a>
+            </div>
           </div>
           <span className="chip-status success self-start md:self-auto">SETTLED</span>
-        </Link>
+        </div>
 
         {/* Main grid: jobs + event tail */}
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <Panel
             title="JOBS · FIND"
-            sub="Search by job ID, agent, worker, client, or status. Sort by amount or lifecycle."
+            sub="Search by job ID, agent, payout wallet, approver, or status."
             action={<Link href="/jobs" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>OPEN ALL ↗</Link>}
           >
             <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
               <input
                 value={jobSearch}
                 onChange={(e) => setJobSearch(e.target.value)}
-                placeholder="Search job, agent, worker, client..."
+                placeholder="Search job, agent, payout wallet, approver..."
                 className="input-mono flex-1 text-[11px]"
                 spellCheck={false}
               />
@@ -406,7 +389,7 @@ export default function Dashboard() {
                         <span className="font-mono text-[11px] whitespace-nowrap ml-auto" style={{ color: '#C5A67C' }}>{formatUSDC(BigInt(job.budget))}</span>
                       </div>
                       <div className="mt-1 font-mono text-[10px] truncate" style={{ color: 'rgba(234, 228, 216, 0.45)' }}>
-                        worker {shortenAddress(job.worker)} · client {shortenAddress(job.client)}
+                        Payout {shortenAddress(job.worker)} · Approver {shortenAddress(job.client)}
                       </div>
                     </Link>
                   );
@@ -482,14 +465,14 @@ export default function Dashboard() {
         <div className="mt-8">
           <Panel
             title="AGENTS · FIND"
-            sub="Search by name, capability, controller, or agent ID. Use a worker to create a job."
+            sub='Find a registered agent. Use "Use" to start a job with that agent.'
             action={<Link href="/register" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>REGISTER ↗</Link>}
           >
             <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
               <input
                 value={agentSearch}
                 onChange={(e) => setAgentSearch(e.target.value)}
-                placeholder="Search agent, worker, controller, ID..."
+                placeholder="Search agent, controller, ID, capability..."
                 className="input-mono flex-1 text-[11px]"
                 spellCheck={false}
               />
@@ -559,7 +542,7 @@ export default function Dashboard() {
         {/* Wallet view */}
         {isConnected && address && (
           <div className="mt-8">
-            <Panel title="WALLET · PARTICIPATION" sub={`${connectedJobs.length} as client/worker/evaluator`}>
+              <Panel title="WALLET · PARTICIPATION" sub={`${connectedJobs.length} as buyer / agent / approver`}>
               {connectedJobs.length === 0 ? (
                 <Empty msg="No JobEscrow records found for this wallet yet." />
               ) : (
@@ -575,7 +558,7 @@ export default function Dashboard() {
                         <span className={`chip-status ${JOB_TONE[job.status] || 'pending'}`}>{JOB_STATUS[job.status]}</span>
                       </div>
                       <div className="mt-1 font-mono text-[10.5px]" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>
-                        client {shortenAddress(job.client)} · worker {shortenAddress(job.worker)}
+                        Approver {shortenAddress(job.client)} · Payout {shortenAddress(job.worker)}
                       </div>
                     </Link>
                   ))}
@@ -593,6 +576,43 @@ export default function Dashboard() {
             </p>
           </div>
         )}
+
+        {/* Developer shortcuts */}
+        <div className="mt-10">
+          <Panel title="DEVELOPER · SHORTCUTS" sub="API endpoints, SDK, contracts">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div>
+                <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.5)]">API</div>
+                <div className="mt-2 space-y-1.5 font-mono text-[10.5px] text-[#EAE4D8]">
+                  <div><a href="/api/x402/supported" className="text-[#C5A67C] hover:text-[#EAE4D8]">GET /api/x402/supported</a></div>
+                  <div><span className="text-[rgba(234,228,216,0.45)]">POST</span> /api/x402/verify</div>
+                  <div><span className="text-[rgba(234,228,216,0.45)]">POST</span> /api/x402/settle</div>
+                  <div><a href="/api/x402/status" className="text-[#C5A67C] hover:text-[#EAE4D8]">GET /api/x402/status</a></div>
+                  <div><a href="/api/x402/gateway-status" className="text-[#C5A67C] hover:text-[#EAE4D8]">GET /api/x402/gateway-status</a></div>
+                </div>
+              </div>
+              <div>
+                <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.5)]">SDK</div>
+                <div className="mt-2 space-y-1.5 font-mono text-[10.5px] text-[#EAE4D8]">
+                  <code className="block rounded-sm border border-white/10 bg-black/40 px-2 py-1.5 text-[10px] text-[#EAE4D8]">pnpm add @arclayer/sdk</code>
+                  <Link href="/docs" className="block text-[#C5A67C] hover:text-[#EAE4D8]">Docs →</Link>
+                  <a href="https://github.com/riyannode/ArcLayer" target="_blank" rel="noopener noreferrer" className="block text-[#C5A67C] hover:text-[#EAE4D8]">GitHub repo ↗</a>
+                </div>
+              </div>
+              <div>
+                <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.5)]">CONTRACTS · ARC TESTNET</div>
+                <div className="mt-2 space-y-1.5 font-mono text-[10px] text-[rgba(234,228,216,0.85)]">
+                  <ContractRow label="AgentRegistry" addr="0xB263336055dD65FF501e36CA39941760D943703C" />
+                  <ContractRow label="JobEscrow" addr="0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225" />
+                  <ContractRow label="WorkProof" addr={WORK_PROOF_ADDRESS} />
+                  <ContractRow label="ReputationOracle" addr="0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c" />
+                  <ContractRow label="Settlement Vault" addr="0x21ddF0d74B231144960026B9f1A9203a966ec0B5" />
+                  <ContractRow label="BondConfig" addr="0x3BFf61a88a45bF44f119B359b4EDeD386Ce4Ee76" />
+                </div>
+              </div>
+            </div>
+          </Panel>
+        </div>
       </div>
     </div>
   );
@@ -658,6 +678,47 @@ function RpcRow({ label, latency, blockNumber, ok, loading, url }: RpcHealth & {
   );
 }
 
+function ContractRow({ label, addr }: { label: string; addr: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span>{label}</span>
+      <a
+        href={`${ARC_EXPLORER}/address/${addr}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="truncate text-[#C5A67C] hover:text-[#EAE4D8]"
+        title={addr}
+      >
+        {addr.slice(0, 6)}…{addr.slice(-4)}
+      </a>
+    </div>
+  );
+}
+
+function RailCard({ title, status, text, href, cta }: { title: string; status: string; text: string; href: string; cta: string }) {
+  const tone = status === 'LIVE' ? '#B8CD7E' : '#C5A67C';
+  return (
+    <Link href={href} className="flex flex-col gap-2 rounded-sm border border-white/10 bg-black/30 p-3 transition hover:border-[#C5A67C]/40">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[11px] font-medium" style={{ color: '#EAE4D8' }}>{title}</span>
+        <span className="font-mono text-[9px] uppercase tracking-[0.14em]" style={{ color: tone }}>{status}</span>
+      </div>
+      <p className="font-mono text-[10px] leading-4" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>{text}</p>
+      <span className="mt-auto font-mono text-[9.5px] uppercase tracking-[0.14em]" style={{ color: '#C5A67C' }}>{cta} →</span>
+    </Link>
+  );
+}
+
+function StatusLine({ label, value, tone }: { label: string; value: string; tone?: string }) {
+  const color = tone === 'success' ? '#B8CD7E' : tone === 'pending' ? '#C5A67C' : '#EAE4D8';
+  return (
+    <div className="flex items-baseline justify-between">
+      <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>{label}</span>
+      <span className="font-mono text-[11.5px]" style={{ color }}>{value}</span>
+    </div>
+  );
+}
+
 function Empty({ msg }: { msg: string }) {
   return (
     <p className="p-4 font-mono text-[11.5px] leading-5" style={{ color: 'rgba(234, 228, 216, 0.45)', border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0, 0, 0, 0.25)' }}>
@@ -665,3 +726,4 @@ function Empty({ msg }: { msg: string }) {
     </p>
   );
 }
+

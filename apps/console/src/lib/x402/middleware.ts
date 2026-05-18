@@ -44,6 +44,12 @@ import { settleExactPayment } from './exact/settle-exact';
 import { verifyExactEvmPayment } from './exact/verify-exact';
 import { verifyExactSettlementProof } from './exact/verify-settlement-proof';
 import { claimAccessSession, completeAccessSession, releaseAccessSession } from './access-session';
+import {
+  createRailSession,
+  validateRailSession,
+  consumeRailSession,
+  type AllowedRail,
+} from './rail-session';
 import type { PaymentRequirements, PaymentPayload } from './exact/types';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -71,7 +77,7 @@ function resolvePayTo(override?: `0x${string}`): `0x${string}` {
 
 // ─── Requirements builders ───────────────────────────────────────────────────
 
-function buildNativeRequirements(opts: X402MiddlewareOptions): PaymentRequirements {
+function buildNativeRequirements(opts: X402MiddlewareOptions, railSessionId?: string): PaymentRequirements {
   return {
     scheme: 'exact',
     network: ARC_TESTNET_CAIP2_NETWORK,
@@ -79,11 +85,11 @@ function buildNativeRequirements(opts: X402MiddlewareOptions): PaymentRequiremen
     amount: opts.amount,
     payTo: resolvePayTo(opts.payTo),
     maxTimeoutSeconds: opts.maxTimeoutSeconds ?? 300,
-    extra: { name: 'USDC', version: '2', transferMethod: 'eip3009', decimals: 6, symbol: 'USDC' },
+    extra: { name: 'USDC', version: '2', transferMethod: 'eip3009', decimals: 6, symbol: 'USDC', ...(railSessionId ? { railSessionId } : {}) },
   };
 }
 
-function buildGatewayRequirements(opts: X402MiddlewareOptions) {
+function buildGatewayRequirements(opts: X402MiddlewareOptions, railSessionId?: string) {
   const gwConfig = getArcTestnetGatewayConfig();
   return {
     scheme: 'exact' as const,
@@ -99,6 +105,7 @@ function buildGatewayRequirements(opts: X402MiddlewareOptions) {
       supportedChain: GATEWAY_NETWORK_NAME,
       transferMethod: 'gateway-batched-eip3009',
       status: 'live',
+      ...(railSessionId ? { railSessionId } : {}),
     },
   };
 }
@@ -138,14 +145,48 @@ function extractPayment(req: NextRequest): { proof: Record<string, unknown>; mod
 
 // ─── 402 Response ────────────────────────────────────────────────────────────
 
-function paymentRequiredResponse(opts: X402MiddlewareOptions) {
-  const native = buildNativeRequirements(opts);
-  const gateway = buildGatewayRequirements(opts);
+function resolveRequestedRail(req: NextRequest): { rail: AllowedRail | null; payer: string | null } {
+  const railParam = req.nextUrl.searchParams.get('rail');
+  const payerParam = req.nextUrl.searchParams.get('payer');
+  const rail = railParam === 'arc-native-eoa' || railParam === 'circle-gateway-passkey' ? railParam : null;
+  const payer = payerParam && /^0x[a-fA-F0-9]{40}$/.test(payerParam) ? getAddress(payerParam) : null;
+  return { rail, payer };
+}
+
+function getRailSessionId(proof: Record<string, unknown>): string | null {
+  const accepted = proof.accepted as Record<string, unknown> | undefined;
+  const extra = accepted?.extra as Record<string, unknown> | undefined;
+  const value = extra?.railSessionId;
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function paymentRequiredResponse(opts: X402MiddlewareOptions, req: NextRequest) {
+  const requested = resolveRequestedRail(req);
+  const accepts: unknown[] = [];
+
+  if (requested.rail && requested.payer) {
+    const session = createRailSession({
+      resource: opts.resource,
+      payer: requested.payer,
+      allowedRail: requested.rail,
+      amount: opts.amount,
+      ttlMs: (opts.maxTimeoutSeconds ?? 300) * 1000,
+    });
+    if (requested.rail === 'arc-native-eoa') {
+      accepts.push(buildNativeRequirements(opts, session.sessionId));
+    } else if (isGatewayEnabled()) {
+      accepts.push(buildGatewayRequirements(opts, session.sessionId));
+    }
+  } else {
+    // Backward-compatible dual-mode fallback for generic clients that do not request rail lock.
+    accepts.push(buildNativeRequirements(opts));
+    if (isGatewayEnabled()) accepts.push(buildGatewayRequirements(opts));
+  }
 
   const paymentRequired = {
     x402Version: X402_VERSION_V2,
     resource: { url: opts.resource, description: opts.description || `Paid resource (${opts.resource})`, mimeType: 'application/json' },
-    accepts: [native, ...(isGatewayEnabled() ? [gateway] : [])],
+    accepts,
   };
 
   return new NextResponse(
@@ -174,6 +215,29 @@ async function handleGateway(
       { ok: false, error: 'gateway_disabled', message: 'Circle Gateway mode is disabled. Use Arc Native (X-PAYMENT header).' },
       { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
     );
+  }
+
+  // ─── Rail session guard ─────────────────────────────────────────────────────
+  const railSessionId = getRailSessionId(proof);
+  if (railSessionId) {
+    const earlyPayer = (() => {
+      const pl = proof.payload as Record<string, unknown> | undefined;
+      const auth = pl?.authorization as Record<string, unknown> | undefined;
+      return (auth?.from as string | undefined) ?? '';
+    })();
+    const railCheck = validateRailSession({
+      sessionId: railSessionId,
+      incomingRail: 'circle-gateway-passkey',
+      payer: earlyPayer,
+      resource: opts.resource,
+      amount: opts.amount,
+    });
+    if (railCheck.ok === false) {
+      return NextResponse.json(
+        { ok: false, error: railCheck.error, message: railCheck.message },
+        { status: 403, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
   }
 
   const requirements = buildGatewayRequirements(opts);
@@ -235,6 +299,9 @@ async function handleGateway(
   // Consume (replay protection)
   await consumeGatewayPayment(paymentId);
 
+  // Consume rail session (one-shot)
+  if (railSessionId) consumeRailSession(railSessionId);
+
   // Complete access session with payment details
   if (earlyPayer) await completeAccessSession(earlyPayer, opts.resource, 'circle-gateway', paymentId, settleResult.transaction ?? undefined);
 
@@ -264,6 +331,27 @@ async function handleNative(
   req: NextRequest,
 ): Promise<NextResponse> {
   const requirements = buildNativeRequirements(opts);
+
+  // ─── Rail session guard ─────────────────────────────────────────────────────
+  const railSessionId = getRailSessionId(proof);
+  if (railSessionId) {
+    const payload = proof.payload as Record<string, unknown> | undefined;
+    const authorization = payload?.authorization as Record<string, unknown> | undefined;
+    const earlyPayer = (authorization?.from as string | undefined) ?? '';
+    const railCheck = validateRailSession({
+      sessionId: railSessionId,
+      incomingRail: 'arc-native-eoa',
+      payer: earlyPayer,
+      resource: opts.resource,
+      amount: opts.amount,
+    });
+    if (railCheck.ok === false) {
+      return NextResponse.json(
+        { ok: false, error: railCheck.error, message: railCheck.message },
+        { status: 403, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+  }
 
   // Validate payload structure
   const payload = proof.payload as Record<string, unknown> | undefined;
@@ -408,6 +496,9 @@ async function handleNative(
     );
   }
 
+  // Consume rail session (one-shot)
+  if (railSessionId) consumeRailSession(railSessionId);
+
   // Complete access session with payment details
   await completeAccessSession(payer, opts.resource, 'arc-native', paymentId, settleResult.transaction ?? undefined);
 
@@ -447,7 +538,7 @@ export function withX402(
     // No payment → 402
     if (!extracted) {
       console.log(`[x402] 402 Payment Required: ${opts.resource}`);
-      return paymentRequiredResponse(opts);
+      return paymentRequiredResponse(opts, req);
     }
 
     // Route to appropriate handler

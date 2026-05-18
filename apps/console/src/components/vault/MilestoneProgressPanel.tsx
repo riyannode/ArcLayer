@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
+import { WorkActionModal, type WorkActionKind, type WorkActionMetadata } from './WorkActionModal';
 
 type VaultJob = {
   id: string;
@@ -32,6 +33,15 @@ type Milestone = {
 
 type LoadedJob = VaultJob & { milestones?: Milestone[] };
 
+type ModalState = {
+  open: boolean;
+  kind: WorkActionKind;
+  jobId: string;
+  milestoneIndex: number;
+};
+
+const CLOSED_MODAL: ModalState = { open: false, kind: 'submit', jobId: '', milestoneIndex: 0 };
+
 export function MilestoneProgressPanel() {
   const { address, isConnected } = useArcWallet();
   const { authFetch } = useAuthFetch();
@@ -39,6 +49,7 @@ export function MilestoneProgressPanel() {
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
+  const [modal, setModal] = useState<ModalState>(CLOSED_MODAL);
 
   async function loadJobs() {
     if (!address) return;
@@ -60,39 +71,55 @@ export function MilestoneProgressPanel() {
     if (isConnected) void loadJobs();
   }, [isConnected, address]);
 
-  async function action(jobId: string, mid: number, actionName: 'submit' | 'approve' | 'reject' | 'dispute') {
+  // Approve has no body to collect — straight POST.
+  async function approve(jobId: string, mid: number) {
     if (!address) return;
-    const key = `${jobId}-${mid}-${actionName}`;
+    const key = `${jobId}-${mid}-approve`;
     setBusy(key);
     setMsg('');
     try {
-      const payload: Record<string, string> = { action: actionName };
-      if (actionName === 'submit') {
-        const uri = window.prompt('Deliverable URI / proof link:');
-        if (!uri) return;
-        payload.deliverableUri = uri;
-      }
-      if (actionName === 'reject') {
-        const fb = window.prompt('Feedback URI / rejection reason:');
-        if (!fb) return;
-        payload.feedbackUri = fb;
-      }
-      if (actionName === 'dispute') {
-        const reason = window.prompt('Dispute reason URI / evidence link:');
-        if (!reason) return;
-        payload.reasonUri = reason;
-      }
-
       const res = await authFetch(`/api/vault/jobs/${jobId}/milestones/${mid}`, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'approve' }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+      setMsg(`APPROVE ok${json.autoFinal ? ` · AI final: ${json.aiDecision?.decision}` : ''}`);
+      await loadJobs();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Action failed');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function openModal(kind: WorkActionKind, jobId: string, mid: number) {
+    setModal({ open: true, kind, jobId, milestoneIndex: mid });
+  }
+
+  async function submitFromModal(uri: string, _meta: WorkActionMetadata) {
+    const { kind, jobId, milestoneIndex } = modal;
+    const key = `${jobId}-${milestoneIndex}-${kind}`;
+    setBusy(key);
+    setMsg('');
+    try {
+      const payload: Record<string, string> = { action: kind };
+      if (kind === 'submit') payload.deliverableUri = uri;
+      if (kind === 'reject') payload.feedbackUri = uri;
+      if (kind === 'dispute') payload.reasonUri = uri;
+
+      const res = await authFetch(`/api/vault/jobs/${jobId}/milestones/${milestoneIndex}`, {
         method: 'POST',
         body: JSON.stringify(payload),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
-      setMsg(`${actionName.toUpperCase()} ok${json.autoFinal ? ` · AI final: ${json.aiDecision?.decision}` : ''}`);
+      setMsg(`${kind.toUpperCase()} ok${json.autoFinal ? ` · AI final: ${json.aiDecision?.decision}` : ''}`);
+      setModal(CLOSED_MODAL);
       await loadJobs();
     } catch (e) {
       setMsg(e instanceof Error ? e.message : 'Action failed');
+      throw e; // let modal show inline error too
     } finally {
       setBusy(null);
     }
@@ -136,7 +163,7 @@ export function MilestoneProgressPanel() {
                   <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[rgba(234,228,216,0.5)]">Job {job.id.slice(0, 8)} · {job.status}</div>
                   <div className="mt-1 font-mono text-[13px] text-[#EAE4D8]">${Number(job.total_amount).toFixed(2)} USDC {job.on_chain_job_id ? `· On-chain #${job.on_chain_job_id}` : ''}</div>
                 </div>
-                <div className="font-mono text-[10px] text-[rgba(234,228,216,0.55)]">Role: {isClient ? 'Client' : isJobber ? 'Jobber' : 'Observer'}</div>
+                <div className="font-mono text-[10px] text-[rgba(234,228,216,0.55)]">Role: {isClient ? 'Approver' : isJobber ? 'Agent' : 'Observer'}</div>
               </div>
 
               <div className="mt-3 space-y-2">
@@ -157,10 +184,10 @@ export function MilestoneProgressPanel() {
                           {m.approve_deadline && <div className="mt-1 font-mono text-[9.5px] text-[rgba(234,228,216,0.45)]">Approve deadline: {new Date(m.approve_deadline).toLocaleString()}</div>}
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {canSubmit && <button disabled={!!busy} onClick={() => action(job.id, m.milestone_index, 'submit')} className="btn-secondary px-3 py-1 text-[9px]">{busy === `${keyBase}-submit` ? '…' : 'SUBMIT'}</button>}
-                          {canApprove && <button disabled={!!busy} onClick={() => action(job.id, m.milestone_index, 'approve')} className="btn-secondary px-3 py-1 text-[9px]">APPROVE</button>}
-                          {canReject && <button disabled={!!busy} onClick={() => action(job.id, m.milestone_index, 'reject')} className="btn-secondary px-3 py-1 text-[9px]">REJECT</button>}
-                          {canDispute && <button disabled={!!busy} onClick={() => action(job.id, m.milestone_index, 'dispute')} className="btn-secondary px-3 py-1 text-[9px]">DISPUTE</button>}
+                          {canSubmit && <button disabled={!!busy} onClick={() => openModal('submit', job.id, m.milestone_index)} className="btn-secondary px-3 py-1 text-[9px]">{busy === `${keyBase}-submit` ? '…' : 'SUBMIT WORK'}</button>}
+                          {canApprove && <button disabled={!!busy} onClick={() => approve(job.id, m.milestone_index)} className="btn-secondary px-3 py-1 text-[9px]">{busy === `${keyBase}-approve` ? '…' : 'APPROVE'}</button>}
+                          {canReject && <button disabled={!!busy} onClick={() => openModal('reject', job.id, m.milestone_index)} className="btn-secondary px-3 py-1 text-[9px]">REJECT</button>}
+                          {canDispute && <button disabled={!!busy} onClick={() => openModal('dispute', job.id, m.milestone_index)} className="btn-secondary px-3 py-1 text-[9px]">DISPUTE</button>}
                         </div>
                       </div>
                     </div>
@@ -171,6 +198,17 @@ export function MilestoneProgressPanel() {
           );
         })}
       </div>
+
+      <WorkActionModal
+        open={modal.open}
+        kind={modal.kind}
+        jobId={modal.jobId}
+        milestoneIndex={modal.milestoneIndex}
+        walletAddress={address ?? undefined}
+        busy={!!busy}
+        onClose={() => setModal(CLOSED_MODAL)}
+        onSubmit={submitFromModal}
+      />
     </div>
   );
 }
