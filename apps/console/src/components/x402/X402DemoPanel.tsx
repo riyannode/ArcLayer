@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { useAccount, useDisconnect } from 'wagmi';
+import { switchChain as wagmiSwitchChain } from '@wagmi/core';
+import { config } from '@/lib/wagmi';
 import { useAppKit } from '@reown/appkit/react';
 import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'viem';
 import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
@@ -55,7 +57,7 @@ interface X402DemoPanelProps {
  * Circle Gateway batching — runs identically in both modes.
  */
 export default function X402DemoPanel({ compact = false, ticketOnly = false }: X402DemoPanelProps) {
-  const { authenticated, address: circleAddress, smartAccount, login } = useCircleWallet();
+  const { authenticated, address: circleAddress, smartAccount, login, logout: circleLogout } = useCircleWallet();
   const { address: eoaAddress, isConnected: eoaConnected } = useAccount();
   const { disconnect: eoaDisconnect } = useDisconnect();
   const { open: openAppKit } = useAppKit();
@@ -464,12 +466,14 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
               if (!smartAccount) throw new Error('Circle smart account not ready');
               if (args.method === 'eth_signTypedData_v4') {
                 const typedData = JSON.parse(args.params[1] as string);
+                const { EIP712Domain: _domain, ...types } = typedData.types;
                 return smartAccount.signTypedData({
                   domain: typedData.domain,
-                  types: typedData.types,
+                  types,
                   primaryType: typedData.primaryType,
                   message: typedData.message,
                 });
+
               }
               throw new Error(`Unsupported method: ${args.method}`);
             },
@@ -478,13 +482,16 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       : {
           address: address as string,
           switchChain: async (id: number) => {
-            const eth = (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
-            if (!eth) throw new Error('No injected wallet found');
+            // Prefer wagmi's switchChain so the active connector handles it.
+            // Falls back to raw EIP-1193 if wagmi is unavailable.
             try {
-              await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: `0x${id.toString(16)}` }] });
+              await wagmiSwitchChain(config, { chainId: id });
+              return;
             } catch (e) {
-              const err = e as { code?: number };
-              if (err.code === 4902) {
+              const err = e as { code?: number; message?: string };
+              if (err.code === 4902 || /Unrecognized chain|Chain.*not configured/i.test(err.message ?? '')) {
+                const eth = (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+                if (!eth) throw new Error('No injected wallet found');
                 await eth.request({ method: 'wallet_addEthereumChain', params: [{ chainId: `0x${id.toString(16)}`, chainName: 'Arc Testnet', nativeCurrency: { name: 'Arc', symbol: 'ARC', decimals: 18 }, rpcUrls: [ARC_RPC], blockExplorerUrls: ['https://testnet.arcscan.app'] }] });
                 return;
               }
@@ -799,7 +806,20 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                 <button onClick={busy || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
                   {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ — UNLOCKED' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                 </button>
-                <button onClick={() => eoaConnected ? eoaDisconnect() : undefined} className={`mt-1.5 w-full cursor-pointer ${c.cardRadiusXs} border border-white/10 ${compact ? 'py-1.5' : 'py-2'} font-mono ${c.label} tracking-[0.14em] text-white/80 hover:border-white/20`}>DISCONNECT</button>
+                <button
+                  onClick={() => {
+                    // Clear session-paid keys for this wallet, then disconnect
+                    if (address && typeof window !== 'undefined') {
+                      sessionStorage.removeItem(sessionKey(address));
+                    }
+                    if (walletMode === 'passkey') circleLogout();
+                    if (eoaConnected) eoaDisconnect();
+                    reset();
+                  }}
+                  className={`mt-1.5 w-full cursor-pointer ${c.cardRadiusXs} border border-white/10 ${compact ? 'py-1.5' : 'py-2'} font-mono ${c.label} tracking-[0.14em] text-white/80 hover:border-white/20`}
+                >
+                  DISCONNECT
+                </button>
               </>
             )}
             <button onClick={reset} className={`mt-1 w-full cursor-pointer ${c.cardRadiusXs} border border-white/10 ${compact ? 'py-1.5' : 'py-2'} font-mono ${c.label} tracking-[0.14em] text-white/80 hover:border-white/20`}>RESET</button>

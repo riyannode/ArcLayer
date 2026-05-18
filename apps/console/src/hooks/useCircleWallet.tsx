@@ -59,7 +59,7 @@ const CircleWalletContext = createContext<CircleWalletState>(DEFAULT_STATE);
 
 // ─── Storage keys ────────────────────────────────────────────────────────────
 
-const CREDENTIAL_STORAGE_KEY = 'arclayer_circle_credential';
+const CREDENTIAL_STORAGE_KEY = 'arclayer.circle.credential.v1';
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 
@@ -118,38 +118,14 @@ export function CircleWalletProvider({ children }: { children: ReactNode }) {
     [publicClient],
   );
 
-  // Auto-restore session on mount
+  // Browser/passkey session policy:
+  // Do NOT auto-call WebAuthn on mount. Browser passkey prompts are user-gesture
+  // gated and can leave the tab/modal in a stuck state after users close the browser
+  // (especially after a logout/refresh cycle). Login/register must be explicit
+  // button actions, never page-load side-effects.
   useEffect(() => {
-    async function restore() {
-      if (!passkeyTransport) {
-        setReady(true);
-        return;
-      }
-
-      try {
-        const stored =
-          typeof window !== 'undefined'
-            ? localStorage.getItem(CREDENTIAL_STORAGE_KEY)
-            : null;
-
-        if (stored) {
-          // Try to login with existing passkey
-          const cred = await toWebAuthnCredential({
-            transport: passkeyTransport,
-            mode: WebAuthnMode.Login,
-          });
-          await initSmartAccount(cred);
-        }
-      } catch {
-        // Passkey not available or user cancelled — stay disconnected
-        localStorage.removeItem(CREDENTIAL_STORAGE_KEY);
-      } finally {
-        setReady(true);
-      }
-    }
-
-    restore();
-  }, [passkeyTransport, initSmartAccount]);
+    setReady(true);
+  }, []);
 
   // Register new passkey
   const register = useCallback(
@@ -182,7 +158,12 @@ export function CircleWalletProvider({ children }: { children: ReactNode }) {
     setCredential(null);
     setSmartAccount(null);
     setBundlerClient(null);
-    localStorage.removeItem(CREDENTIAL_STORAGE_KEY);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(CREDENTIAL_STORAGE_KEY);
+      Object.keys(window.sessionStorage)
+        .filter((key) => key.startsWith('x402_paid:'))
+        .forEach((key) => window.sessionStorage.removeItem(key));
+    }
   }, []);
 
   const value: CircleWalletState = useMemo(
