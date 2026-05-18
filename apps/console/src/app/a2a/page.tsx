@@ -45,8 +45,9 @@ const TYPE_COLORS: Record<FeedItem['type'], string> = {
   error: 'bg-red-500/15 text-red-300 border-red-500/30',
 };
 
-const AGENT_COLORS: Record<'Pythia' | 'Hermes', string> = {
-  Pythia: 'text-cyan-300',
+const AGENT_COLORS: Record<'Ignia' | 'Apolo' | 'Hermes', string> = {
+  Ignia: 'text-cyan-300',
+  Apolo: 'text-violet-300',
   Hermes: 'text-amber-300',
 };
 
@@ -251,12 +252,12 @@ function A2ADashboardPage() {
       }
       setPrevFeedIds(currentIds);
 
-      const feedSignalCount = fdData.items.filter((item) => item.agent === 'Pythia' && item.type === 'payment').length;
-      const signalCount = Math.max(ocData?.agents.pythia?.stats?.callsServed ?? 0, feedSignalCount);
+      const feedSignalCount = fdData.items.filter((item) => item.agent === 'Apolo' && item.type === 'payment').length;
+      const signalCount = Math.max(ocData?.agents.ignia?.stats?.callsServed ?? 0, feedSignalCount);
 
-      // Volume sparkline: JobEscrow funded + x402 revenue (Pythia + Hermes)
+      // Volume sparkline: JobEscrow funded + x402 revenue (Apolo + Hermes)
       const jobFunded = Number(ovData.summary.totalFunded || '0') / 1e6;
-      const pythiaRev = Number(ocData?.agents.pythia?.stats?.totalRevenue || '0') / 1e6;
+      const pythiaRev = Number(ocData?.agents.ignia?.stats?.totalRevenue || '0') / 1e6;
       const hermesRev = Number(ocData?.agents.hermes?.stats?.totalRevenue || '0') / 1e6;
       const totalVol = jobFunded + pythiaRev + hermesRev;
 
@@ -289,7 +290,7 @@ function A2ADashboardPage() {
   }, []);
 
   const summary = overview?.summary;
-  const pythia = onchain?.agents.pythia;
+  const ignia = onchain?.agents.pythia; // legacy on-chain key, branded as Ignia/Apolo
   const hermes = onchain?.agents.hermes;
   const latestFeedMs = feed?.latest ? Date.parse(feed.latest) : 0;
   const isLive = latestFeedMs > 0 && Date.now() - latestFeedMs < 120_000;
@@ -302,23 +303,23 @@ function A2ADashboardPage() {
 
   // Live-derived counters from autonomous feed (compensates for ReputationRegistry not being updated by agent telemetry)
   const feedItems = feed?.items ?? [];
-  const feedSignalsServed = feedItems.filter((item) => item.agent === 'Pythia' && item.type === 'payment').length;
+  const feedSignalsServed = feedItems.filter((item) => item.agent === 'Apolo' && item.type === 'payment').length;
   const feedIgniaTrades = feedItems.filter((item) =>
     item.agent === 'Hermes' && item.type === 'trade' && item.label.toLowerCase().includes('ignia')
   ).length;
-  const liveSignalsServed = Math.max(pythia?.stats?.callsServed ?? 0, feedSignalsServed);
+  const liveSignalsServed = Math.max(ignia?.stats?.callsServed ?? 0, feedSignalsServed);
   const liveIgniaTrades = Math.max(hermes?.stats?.callsServed ?? 0, feedIgniaTrades);
 
-  // Total volume = JobEscrow funded (manual jobs) + x402 signal revenue (Pythia + Hermes totalRevenue)
+  // Total volume = JobEscrow funded (manual jobs) + x402 signal revenue (Apolo + Hermes totalRevenue)
   const jobsFundedRaw = summary ? BigInt(summary.totalFunded || '0') : BigInt(0);
-  const pythiaRevenueRaw = pythia?.stats?.totalRevenue ? BigInt(pythia.stats.totalRevenue) : BigInt(0);
+  const apoloRevenueRaw = ignia?.stats?.totalRevenue ? BigInt(ignia.stats.totalRevenue) : BigInt(0);
   const hermesRevenueRaw = hermes?.stats?.totalRevenue ? BigInt(hermes.stats.totalRevenue) : BigInt(0);
-  const totalVolumeRaw = jobsFundedRaw + pythiaRevenueRaw + hermesRevenueRaw;
+  const totalVolumeRaw = jobsFundedRaw + apoloRevenueRaw + hermesRevenueRaw;
 
   // Total USDC held by autonomous agents (live wallet balance)
-  const pythiaBal = onchain?.balances?.usdc?.pythia ? BigInt(onchain.balances.usdc.pythia) : BigInt(0);
+  const igniaBal = onchain?.balances?.usdc?.pythia ? BigInt(onchain.balances.usdc.pythia) : BigInt(0);
   const hermesBal = onchain?.balances?.usdc?.hermes ? BigInt(onchain.balances.usdc.hermes) : BigInt(0);
-  const totalAgentBalanceRaw = pythiaBal + hermesBal;
+  const totalAgentBalanceRaw = igniaBal + hermesBal;
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-[#EAE4D8] selection:bg-[#C5A67C]/20">
@@ -364,7 +365,7 @@ function A2ADashboardPage() {
             ⚠ demo strategy · not financial advice
           </p>
           <p className="mt-1.5 font-mono text-[11px] leading-5 text-[#9C9080]">
-            The current Pythia signal engine is a <strong className="text-amber-200">demo strategy</strong> for
+            The current Ignia raw-signal oracle is a <strong className="text-amber-200">demo strategy</strong> for
             protocol validation. ArcLayer doesn’t claim signal accuracy, profit, or trading performance.
             Developers can replace it with their own model, market API, evaluator, or custom logic — the
             agent-to-agent payment, receipt, and reputation rails remain identical.
@@ -474,13 +475,13 @@ function A2ADashboardPage() {
               <div>
                 <span className="text-[#7A7A7A]">total deducted</span>{' '}
                 <span className="text-emerald-300">
-                  {pythia?.stats?.totalRevenue ? formatUSDC(pythia.stats.totalRevenue) : '0.00'} USDC
+                  {ignia?.stats?.totalRevenue ? formatUSDC(ignia.stats.totalRevenue) : '0.00'} USDC
                 </span>
               </div>
               <div>
-                <span className="text-[#7A7A7A]">pythia revenue (on-chain)</span>{' '}
+                <span className="text-[#7A7A7A]">apolo revenue (x402)</span>{' '}
                 <span className="text-amber-300">
-                  {pythia?.stats?.totalRevenue ? formatUSDC(pythia.stats.totalRevenue) : '0.00'} USDC
+                  {ignia?.stats?.totalRevenue ? formatUSDC(ignia.stats.totalRevenue) : '0.00'} USDC
                 </span>
               </div>
             </div>
@@ -513,7 +514,7 @@ function A2ADashboardPage() {
 
             <div className="rounded border border-cyan-500/15 bg-black/30 p-3">
               <div className="flex items-center justify-between">
-                <p className="font-mono text-[9.5px] uppercase tracking-widest text-cyan-300/80">Pythia · receiver</p>
+                <p className="font-mono text-[9.5px] uppercase tracking-widest text-cyan-300/80">Apolo · paid resolver</p>
                 <a
                   href={`https://testnet.arcscan.app/address/${onchain?.wallets?.pythia ?? ''}`}
                   target="_blank"

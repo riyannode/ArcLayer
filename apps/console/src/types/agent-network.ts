@@ -39,7 +39,7 @@ export type Overview = {
 export type FeedItem = {
   id: string;
   ts: string;
-  agent: 'Pythia' | 'Hermes';
+  agent: 'Ignia' | 'Apolo' | 'Hermes';
   type: 'signal' | 'payment' | 'decision' | 'trade' | 'balance' | 'error';
   label: string;
   detail: string;

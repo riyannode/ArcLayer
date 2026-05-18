@@ -12,7 +12,8 @@ import { PaperTrader } from './trader.js';
 dotenv.config();
 
 const PRIVATE_KEY = process.env.HERMES_PRIVATE_KEY as `0x${string}` | undefined;
-const PYTHIA_URL = process.env.PYTHIA_URL ?? 'http://localhost:4001';
+// Hermes now buys DECISIONS from Apolo (paid resolver), not raw signals from Pythia/Ignia.
+const APOLO_URL = process.env.APOLO_URL ?? 'http://localhost:4012';
 const TOKENS = (process.env.HERMES_TOKENS ?? 'BTC,ETH,SOL').split(',').map(s => s.trim().toUpperCase());
 const INTERVAL_MS = Number(process.env.HERMES_INTERVAL_MS ?? 15000);
 const MAX_ITERATIONS = Number(process.env.HERMES_MAX_ITERATIONS ?? 10);
@@ -39,10 +40,16 @@ const state: AgentState = {
 };
 
 async function buySignal(token: string): Promise<{ signal: TradingSignal; txHash?: string }> {
-  const url = `${PYTHIA_URL}/signal/${token}`;
-  console.log(`\n[Hermes] Requesting signal for ${token}`);
-  const { data, paymentTxHash } = await client.payAndAccess<TradingSignal & { payment?: { txHash?: string } }>(url);
-  return { signal: data, txHash: paymentTxHash ?? data.payment?.txHash };
+  const url = `${APOLO_URL}/signal/${token}`;
+  console.log(`\n[Hermes] Requesting decision from Apolo for ${token}`);
+  // Apolo returns { ok, decision, signal: TradingSignal-compat, payment }
+  const { data, paymentTxHash } = await client.payAndAccess<{
+    ok: boolean;
+    signal: TradingSignal;
+    decision?: { decisionId?: string; status?: string; payment?: { txHash?: string } };
+  }>(url);
+  const signal = data.signal;
+  return { signal, txHash: paymentTxHash ?? data.decision?.payment?.txHash };
 }
 
 function signalToIgniaSide(signal: TradingSignal): IgniaSide | null {
@@ -113,7 +120,7 @@ async function main() {
   console.log(`\n🪽 Hermes - Autonomous Market Agent`);
   console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
   console.log(`Wallet: ${client.address}`);
-  console.log(`Pythia: ${PYTHIA_URL}`);
+  console.log(`Apolo: ${APOLO_URL}`);
   console.log(`Tokens: ${TOKENS.join(', ')}`);
   console.log(`Interval: ${INTERVAL_MS}ms`);
   console.log(`Max iterations: ${MAX_ITERATIONS}`);

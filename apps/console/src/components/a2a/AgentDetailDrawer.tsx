@@ -11,8 +11,9 @@ const TYPE_COLORS: Record<FeedItem['type'], string> = {
   error: 'bg-red-500/15 text-red-300 border-red-500/30',
 };
 
-const AGENT_COLORS: Record<'Pythia' | 'Hermes', string> = {
-  Pythia: 'text-cyan-300',
+const AGENT_COLORS: Record<'Ignia' | 'Apolo' | 'Hermes', string> = {
+  Ignia: 'text-cyan-300',
+  Apolo: 'text-violet-300',
   Hermes: 'text-amber-300',
 };
 
