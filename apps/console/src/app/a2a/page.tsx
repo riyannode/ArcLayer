@@ -34,6 +34,7 @@ import { AgentNetworkCard, EmptyAgentState } from '@/components/a2a/AgentNetwork
 import { AgentDetailDrawer } from '@/components/a2a/AgentDetailDrawer';
 import AgentFlowDiagram from '@/components/a2a/AgentFlowDiagram';
 import LivePolymarketFeed from '@/components/a2a/LivePolymarketFeed';
+import LiveSignalPanel from '@/components/a2a/LiveSignalPanel';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -404,6 +405,11 @@ function A2ADashboardPage() {
         {/* ─── Live Polymarket Price Feed ─────────────────────────────── */}
         <section className="mb-6">
           <LivePolymarketFeed />
+        </section>
+
+        {/* ─── Live Signal Pipeline · Ignia → Apolo → Hermes ──────────── */}
+        <section className="mb-6">
+          <LiveSignalPanel />
         </section>
 
         {/* ─── Autonomous Agent Network · selectable agent cards ──────── */}
