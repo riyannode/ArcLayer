@@ -59,7 +59,7 @@ async function verifyAndSettle(paymentPayload: unknown, paymentRequirements: Pay
   return { ok: true, verify, settle };
 }
 
-app.post('/signal/:token', async (req, res) => {
+app.all('/signal/:token', async (req, res) => {
   const token = req.params.token.toUpperCase();
   const requirements = buildRequirements(token);
   const paymentHeader = req.header('x-payment') ?? req.header('X-PAYMENT');
