@@ -43,8 +43,8 @@ export async function claimAccessSession(
 
   if (error) {
     console.error('[x402-session] claimAccessSession RPC failed:', error.message);
-    // Fail-open: allow settlement if DB is down (don't block revenue)
-    return { ok: true };
+    // Fail-closed: DB/session outage must not allow duplicate untracked settlement.
+    return { ok: false, reason: 'session_store_unavailable' };
   }
 
   const row = (data as unknown as { ok: boolean; reason: string | null; expires_at: string | null }[])[0];

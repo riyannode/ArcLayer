@@ -41,6 +41,7 @@ import {
   markNativeFailed,
 } from './exact/native-payment-store';
 import { settleExactPayment } from './exact/settle-exact';
+import { verifyExactEvmPayment } from './exact/verify-exact';
 import { verifyExactSettlementProof } from './exact/verify-settlement-proof';
 import { claimAccessSession, completeAccessSession, releaseAccessSession } from './access-session';
 import type { PaymentRequirements, PaymentPayload } from './exact/types';
@@ -267,9 +268,63 @@ async function handleNative(
   // Validate payload structure
   const payload = proof.payload as Record<string, unknown> | undefined;
   const authorization = payload?.authorization as Record<string, unknown> | undefined;
-  if (!payload?.signature || !authorization?.from || !authorization?.nonce) {
+  if (!payload?.signature || !authorization?.from || !authorization?.to || !authorization?.value || !authorization?.validAfter || !authorization?.validBefore || !authorization?.nonce) {
     return NextResponse.json(
-      { ok: false, error: 'invalid_payment_proof', message: 'Payment proof must include payload.signature and payload.authorization (from, nonce).' },
+      { ok: false, error: 'invalid_payment_proof', message: 'Payment proof must include payload.signature and full payload.authorization (from, to, value, validAfter, validBefore, nonce).' },
+      { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+
+  // ─── Pre-settlement resource binding ───────────────────────────────────────
+  // EIP-3009 verifies the user signed *a* transfer, but the middleware must prove
+  // it is the transfer required by this protected resource before unlocking it.
+  let paymentPayload: PaymentPayload;
+  try {
+    paymentPayload = proof as unknown as PaymentPayload;
+    const proofNetwork = paymentPayload.accepted?.network ?? requirements.network;
+    const proofAsset = getAddress(paymentPayload.accepted?.asset ?? requirements.asset);
+    const proofPayTo = getAddress(authorization.to as string);
+    const requiredPayTo = getAddress(requirements.payTo);
+
+    if (proofNetwork !== requirements.network) {
+      return NextResponse.json(
+        { ok: false, error: 'invalid_network', message: `Payment network ${proofNetwork} does not match required ${requirements.network}` },
+        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+    if (proofAsset !== getAddress(requirements.asset)) {
+      return NextResponse.json(
+        { ok: false, error: 'unsupported_asset', message: 'Payment asset does not match required asset.' },
+        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+    if (proofPayTo !== requiredPayTo) {
+      return NextResponse.json(
+        { ok: false, error: 'invalid_recipient', message: 'Payment recipient does not match protected resource recipient.' },
+        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+    if (String(authorization.value) !== requirements.amount) {
+      return NextResponse.json(
+        { ok: false, error: 'invalid_amount', message: `Payment amount ${String(authorization.value)} does not match required ${requirements.amount}` },
+        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+
+    const verifyResult = await verifyExactEvmPayment({
+      paymentPayload,
+      paymentRequirements: requirements,
+    });
+    if (!verifyResult.isValid) {
+      return NextResponse.json(
+        { ok: false, error: 'payment_verification_failed', reason: verifyResult.invalidReason, message: verifyResult.invalidMessage },
+        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Invalid Arc Native payment proof.';
+    return NextResponse.json(
+      { ok: false, error: 'invalid_payment_proof', message },
       { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
     );
   }
@@ -284,7 +339,33 @@ async function handleNative(
     );
   }
 
-  // Settle on-chain via relayer
+  // ─── VERIFY-FIRST PATTERN: Execute handler BEFORE settlement ──────────────
+  // Rationale: If handler fails (DB error, timeout, panic), user should NOT be
+  // charged. Settlement is irreversible on-chain. Handler success is the gate.
+  //
+  // Order: verify (done above) → session claim (done) → handler → settle → consume
+  // If settle fails after handler success → release session + 502 (user retries)
+
+  let response: NextResponse;
+  try {
+    response = await handler(req);
+  } catch (handlerErr) {
+    // Handler threw — release session, do NOT settle
+    await releaseAccessSession(payer, opts.resource, 'arc-native');
+    const msg = handlerErr instanceof Error ? handlerErr.message : 'Handler execution failed';
+    return NextResponse.json(
+      { ok: false, error: 'handler_failed', message: msg },
+      { status: 500, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+
+  // Handler succeeded — check response status (non-2xx = logical failure)
+  if (response.status >= 400) {
+    await releaseAccessSession(payer, opts.resource, 'arc-native');
+    return response; // Pass through handler's error response without settling
+  }
+
+  // ─── Settle on-chain via relayer (only after handler success) ──────────────
   const settleResult = await settleExactPayment({
     paymentPayload: proof as unknown as PaymentPayload,
     paymentRequirements: requirements,
@@ -297,12 +378,12 @@ async function handleNative(
       await releaseAccessSession(payer, opts.resource, 'arc-native');
       return NextResponse.json(
         { ok: false, error: 'settlement_failed', reason: settleResult.errorReason, message: settleResult.errorMessage },
-        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
       );
     }
   }
 
-  // Derive paymentId and consume (replay protection)
+  // ─── Derive paymentId and consume (replay protection) ─────────────────────
   const paymentId = deriveNativePaymentId({
     network: requirements.network,
     asset: requirements.asset,
@@ -326,9 +407,6 @@ async function handleNative(
       { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
     );
   }
-
-  // Execute handler
-  const response = await handler(req);
 
   // Complete access session with payment details
   await completeAccessSession(payer, opts.resource, 'arc-native', paymentId, settleResult.transaction ?? undefined);

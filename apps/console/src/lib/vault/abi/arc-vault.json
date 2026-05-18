@@ -1,0 +1,205 @@
+[
+  {
+    "inputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}],
+    "name": "deposit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "uint256", "name": "totalAmount", "type": "uint256"},
+      {"internalType": "bytes32", "name": "specHash", "type": "bytes32"},
+      {"internalType": "uint256[]", "name": "milestoneAmounts", "type": "uint256[]"},
+      {"internalType": "uint256[]", "name": "milestoneDeadlines", "type": "uint256[]"},
+      {"internalType": "uint256", "name": "jobDeadline", "type": "uint256"}
+    ],
+    "name": "createJob",
+    "outputs": [{"internalType": "uint256", "name": "jobId", "type": "uint256"}],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "uint256", "name": "jobId", "type": "uint256"},
+      {"internalType": "uint256", "name": "completedJobs", "type": "uint256"},
+      {"internalType": "uint256", "name": "ratingX100", "type": "uint256"}
+    ],
+    "name": "acceptJob",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "uint256", "name": "jobId", "type": "uint256"},
+      {"internalType": "uint256", "name": "mid", "type": "uint256"},
+      {"internalType": "string", "name": "deliverableURI", "type": "string"}
+    ],
+    "name": "submitMilestone",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "uint256", "name": "jobId", "type": "uint256"},
+      {"internalType": "uint256", "name": "mid", "type": "uint256"}
+    ],
+    "name": "approveMilestone",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}],
+    "name": "withdraw",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "address", "name": "", "type": "address"}],
+    "name": "openPoolBalance",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "name": "jobs",
+    "outputs": [
+      {"internalType": "uint256", "name": "id", "type": "uint256"},
+      {"internalType": "address", "name": "client", "type": "address"},
+      {"internalType": "address", "name": "jobber", "type": "address"},
+      {"internalType": "uint256", "name": "totalAmount", "type": "uint256"},
+      {"internalType": "uint256", "name": "bondAmount", "type": "uint256"},
+      {"internalType": "uint256", "name": "releasedToJobber", "type": "uint256"},
+      {"internalType": "uint256", "name": "refundedToClient", "type": "uint256"},
+      {"internalType": "uint256", "name": "milestoneCount", "type": "uint256"},
+      {"internalType": "uint256", "name": "deadline", "type": "uint256"},
+      {"internalType": "bytes32", "name": "specHash", "type": "bytes32"},
+      {"internalType": "uint8", "name": "status", "type": "uint8"},
+      {"internalType": "uint64", "name": "createdAt", "type": "uint64"},
+      {"internalType": "uint64", "name": "acceptedAt", "type": "uint64"}
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "jobCounter",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "uint256", "name": "_platformFeeBps", "type": "uint256"},
+      {"internalType": "uint256", "name": "_arbiterFeeBps", "type": "uint256"},
+      {"internalType": "uint256", "name": "_disputeWindow", "type": "uint256"},
+      {"internalType": "uint256", "name": "_missGracePeriod", "type": "uint256"}
+    ],
+    "name": "setConfig",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "address", "name": "_resolver", "type": "address"}],
+    "name": "setResolver",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "address", "name": "_bondConfig", "type": "address"}],
+    "name": "setBondConfig",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "platformFeeBps",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "arbiterFeeBps",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "disputeWindow",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "missGracePeriod",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "address", "name": "user", "type": "address"},
+      {"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"}
+    ],
+    "name": "Deposited",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "uint256", "name": "jobId", "type": "uint256"},
+      {"indexed": true, "internalType": "address", "name": "client", "type": "address"},
+      {"indexed": false, "internalType": "uint256", "name": "totalAmount", "type": "uint256"}
+    ],
+    "name": "JobCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "uint256", "name": "jobId", "type": "uint256"},
+      {"indexed": true, "internalType": "address", "name": "jobber", "type": "address"},
+      {"indexed": false, "internalType": "uint256", "name": "bondAmount", "type": "uint256"}
+    ],
+    "name": "JobAccepted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "uint256", "name": "jobId", "type": "uint256"},
+      {"indexed": false, "internalType": "uint256", "name": "milestoneIndex", "type": "uint256"}
+    ],
+    "name": "MilestoneSubmitted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "uint256", "name": "jobId", "type": "uint256"},
+      {"indexed": false, "internalType": "uint256", "name": "milestoneIndex", "type": "uint256"},
+      {"indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256"}
+    ],
+    "name": "MilestoneReleased",
+    "type": "event"
+  }
+]

@@ -41,6 +41,19 @@ async function runPaidAgent(req: NextRequest, agentId: string) {
     payment = {};
   }
 
+  // M2 fix: strict payment-mode allowlist. Reject unknown values rather than
+  // silently falling back to 'arc-native' (which masked spoofed payment metadata).
+  const ALLOWED_MODES = ['arc-native', 'circle-gateway'] as const;
+  type Mode = typeof ALLOWED_MODES[number];
+  const rawMode = typeof payment.mode === 'string' ? payment.mode : 'arc-native';
+  if (!ALLOWED_MODES.includes(rawMode as Mode)) {
+    return NextResponse.json(
+      { error: 'invalid_payment_mode', message: `payment.mode must be one of: ${ALLOWED_MODES.join(', ')}` },
+      { status: 400 },
+    );
+  }
+  const paymentMode: Mode = rawMode as Mode;
+
   try {
     const result = await runAgent({
       agentId,
@@ -62,7 +75,7 @@ async function runPaidAgent(req: NextRequest, agentId: string) {
         completedAt: Date.now(),
       },
       payment: {
-        provider: payment.mode === 'circle-gateway' ? 'circle-gateway' : 'arc-native',
+        provider: paymentMode,
         status: 'settled',
         chainId: arcTestnet.id,
         txHash: payment.transaction ?? null,
@@ -81,7 +94,7 @@ async function runPaidAgent(req: NextRequest, agentId: string) {
         agentId,
         run: { status: 'failed', error: msg, completedAt: Date.now() },
         payment: {
-          provider: payment.mode === 'circle-gateway' ? 'circle-gateway' : 'arc-native',
+          provider: paymentMode,
           status: 'settled',
           chainId: arcTestnet.id,
           txHash: payment.transaction ?? null,

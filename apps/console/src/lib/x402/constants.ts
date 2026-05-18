@@ -24,3 +24,5 @@ export const GATEWAY_FACILITATOR_URL_TESTNET = 'https://gateway-api-testnet.circ
 export const GATEWAY_FACILITATOR_URL_MAINNET = 'https://gateway-api.circle.com' as const;
 export const CIRCLE_BATCHING_NAME = 'GatewayWalletBatched' as const;
 export const CIRCLE_BATCHING_VERSION = '1' as const;
+export const GATEWAY_WALLET_ADDRESS = '0x0077777d7EBA4688BDeF3E311b846F25870A19B9' as const;
+export const DEFAULT_GATEWAY_DEPOSIT_USDC = '1.00' as const;

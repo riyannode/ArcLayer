@@ -55,6 +55,7 @@ pnpm-debug.log*
 *.tsbuildinfo
 
 # Local AI / Hermes artifacts (never commit)
+.hermes/
 .agents/
 skills-lock.json
 

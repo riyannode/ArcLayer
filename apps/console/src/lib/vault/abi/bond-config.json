@@ -1,0 +1,66 @@
+[
+  {
+    "inputs": [
+      {"internalType": "uint256", "name": "jobAmount", "type": "uint256"},
+      {"internalType": "uint256", "name": "completedJobs", "type": "uint256"},
+      {"internalType": "uint256", "name": "ratingX100", "type": "uint256"}
+    ],
+    "name": "calculateBond",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "owner",
+    "outputs": [{"internalType": "address", "name": "", "type": "address"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "name": "tiers",
+    "outputs": [
+      {"internalType": "uint256", "name": "minAmount", "type": "uint256"},
+      {"internalType": "uint256", "name": "maxAmount", "type": "uint256"},
+      {"internalType": "uint256", "name": "rateBps", "type": "uint256"},
+      {"internalType": "uint256", "name": "flatFee", "type": "uint256"}
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {"internalType": "uint256", "name": "index", "type": "uint256"},
+      {"internalType": "uint256", "name": "minAmount", "type": "uint256"},
+      {"internalType": "uint256", "name": "maxAmount", "type": "uint256"},
+      {"internalType": "uint256", "name": "rateBps", "type": "uint256"},
+      {"internalType": "uint256", "name": "flatFee", "type": "uint256"}
+    ],
+    "name": "updateTier",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "tierCount",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "veteranDiscount",
+    "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [{"internalType": "uint256", "name": "_discount", "type": "uint256"}],
+    "name": "setVeteranDiscount",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  }
+]

@@ -18,6 +18,9 @@ import { formatUSDC, parseUSDC, shortenAddress } from '@/lib/contracts';
 import { fetchIndexerJson, type IndexedAgent, type IndexedJob, waitForIndexer } from '@/lib/indexer';
 import { config } from '@/lib/wagmi';
 import { displayAgentLabel, formatSkillLabel, parseAgentSkill, shortAgentId } from '@/lib/agentName';
+import { VaultDepositPanel } from '@/components/vault/VaultDepositPanel';
+import { MilestoneProgressPanel } from '@/components/vault/MilestoneProgressPanel';
+import { DisputeViewer } from '@/components/vault/DisputeViewer';
 
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
 const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'success', 6: 'error' };
@@ -772,9 +775,15 @@ function JobsPage() {
               </details>
             </div>
 
+            <VaultDepositPanel />
+
+            <MilestoneProgressPanel />
+
+            <DisputeViewer />
+
             <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(10,10,10,0.6)] p-5 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
               {isConnected
-                ? '\u2713 Wallet connected. Flow: Select Agent \u2192 Create Job \u2192 Approve & Fund Settlement Vault \u2192 Submit Work \u2192 Approve Work \u2192 Settle Payment \u2192 WorkProof minted.'
+                ? '\u2713 Wallet connected. Manual flow: Select Agent \u2192 Create Job \u2192 Deposit/Fund Vault \u2192 Submit Milestones \u2192 Approve or Dispute \u2192 Settle Payment \u2192 WorkProof minted.'
                 : '\u26a0 Connect wallet to submit protocol writes.'}
             </div>
           </section>
