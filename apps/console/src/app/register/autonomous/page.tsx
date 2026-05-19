@@ -249,8 +249,8 @@ export default function RegisterAutonomousPage() {
       setNameStatus({ state: 'invalid', reason: 'Name must be at least 2 characters.' });
       return;
     }
-    if (!/^[a-z0-9][a-z0-9_\-.]*$/.test(norm)) {
-      setNameStatus({ state: 'invalid', reason: 'Use a-z, 0-9, dash, dot, underscore.' });
+    if (!/^[a-z0-9][a-z0-9_\-. ]*$/.test(norm)) {
+      setNameStatus({ state: 'invalid', reason: 'Use a-z, 0-9, spaces, dash, dot, underscore.' });
       return;
     }
 

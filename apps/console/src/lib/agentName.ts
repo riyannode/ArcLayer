@@ -31,7 +31,7 @@ import { keccak256, stringToBytes } from 'viem';
 
 /** Normalize a human name before hashing/storing. */
 export function normalizeAgentName(raw: string): string {
-  return raw.trim().toLowerCase();
+  return raw.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 /**

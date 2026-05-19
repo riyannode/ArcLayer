@@ -39,6 +39,21 @@ type AgentMetadata = {
   categories?: string[];
   autonomous?: boolean;
   avatar?: string;
+  endpoint?: string;
+  mode?: 'seller' | 'buyer' | 'dual';
+  price?: string;
+};
+
+type IndexerAgent = {
+  agentId: string;
+  controller: string;
+  skillHash?: string;
+  metadataURI: string;
+  registeredAt?: string;
+  reputationScore?: string;
+  score?: string;
+  jobs?: string[];
+  proofTokenIds?: string[];
 };
 
 function ipfsToGateway(uri: string) {
@@ -124,6 +139,18 @@ async function fetchLogsChunked(
   return { logs, chunks };
 }
 
+async function fetchIndexerAgents(origin: string): Promise<IndexerAgent[]> {
+  try {
+    const res = await fetch(`${origin}/api/indexer/agents`, { cache: 'no-store' });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (Array.isArray(data)) return data as IndexerAgent[];
+    return Array.isArray(data?.agents) ? data.agents as IndexerAgent[] : [];
+  } catch {
+    return [];
+  }
+}
+
 async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
@@ -175,6 +202,7 @@ export async function GET(request: Request) {
       return {
         agentId,
         owner: log.args.owner || '',
+        controller: log.args.owner || '',
         role: roleName,
         roleId: roleNum,
         endpoint: log.args.endpoint || '',
@@ -184,16 +212,41 @@ export async function GET(request: Request) {
       };
     });
 
-    // All A2A registry agents are autonomous by contract design.
-    // Older filter-by-metadata.autonomous was for AgentRegistry v1 (free-form metadata).
-    const autonomousAgents = agents;
+    const origin = new URL(request.url).origin;
+    const indexerAgents = await mapWithConcurrency(await fetchIndexerAgents(origin), METADATA_CONCURRENCY, async (agent) => {
+      const metadata = await fetchMetadata(agent.metadataURI || '', agent.agentId);
+      return {
+        agentId: agent.agentId,
+        owner: agent.controller || '',
+        controller: agent.controller || '',
+        role: metadata?.role || 'REGISTERED_AGENT',
+        roleId: null,
+        endpoint: metadata?.endpoint || '',
+        metadataURI: agent.metadataURI || '',
+        registeredAtBlock: agent.registeredAt,
+        skillHash: agent.skillHash,
+        reputationScore: agent.reputationScore,
+        score: agent.score,
+        jobs: agent.jobs || [],
+        proofTokenIds: agent.proofTokenIds || [],
+        metadata: metadata ?? { autonomous: true },
+      };
+    });
+
+    const merged = new Map<string, any>();
+    for (const agent of indexerAgents) merged.set(String(agent.agentId).toLowerCase(), agent);
+    for (const agent of agents) merged.set(String(agent.agentId).toLowerCase(), agent);
+
+    // All A2A registry agents are autonomous by contract design. Indexer agents are merged
+    // so /a2a can show every registered agent, including inactive/manual registrations.
+    const autonomousAgents = Array.from(merged.values());
 
     return NextResponse.json({
       registry: AGENT_REGISTRY,
       agents: autonomousAgents,
-      totalRegistered: latestById.size,
+      totalRegistered: autonomousAgents.length,
       totalHidden: latestById.size - visibleLogs.length,
-      totalVisible: visibleLogs.length,
+      totalVisible: autonomousAgents.length,
       totalAutonomous: autonomousAgents.length,
       categoryFilter,
       scan: {
