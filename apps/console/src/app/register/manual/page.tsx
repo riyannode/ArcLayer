@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { readContract, waitForTransactionReceipt } from '@wagmi/core';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
+import { useX402AntiSpamPay } from '@/hooks/useX402AntiSpamPay';
 import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
 import { fetchIndexerJson, type IndexedAgent } from '@/lib/indexer';
 import { StatusBanner } from '@/components/StatusBanner';
@@ -33,6 +34,10 @@ export default function RegisterManualAgentPage() {
   const router = useRouter();
   const { isConnected } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
+  const { pay: payAntiSpam } = useX402AntiSpamPay({
+    resource: '/api/x402/register-gate',
+    onProgress: (msg) => { setTxState(msg); setStatusTone('pending'); },
+  });
 
   // Registry state
   const [agents, setAgents] = useState<IndexedAgent[]>([]);
@@ -171,13 +176,29 @@ export default function RegisterManualAgentPage() {
     if (nameStatus.state !== 'free') return;
     try {
       setIsSubmitting(true);
+
+      // STEP A — Anti-spam x402 fee (0.40 USDC). Block before touching chain.
       setStatusTone('pending');
-      setTxState('Submitting registerAgent transaction…');
+      setTxState('Step 1/2 · Paying anti-spam fee (0.40 USDC)…');
+      const payResult = await payAntiSpam();
+      if (!payResult.ok) {
+        setStatusTone('error');
+        setTxState(payResult.error || 'Anti-spam payment failed. Registration not submitted.');
+        setIsSubmitting(false);
+        return;
+      }
+      const feeNote = payResult.txHash
+        ? `Fee paid (${payResult.txHash.slice(0, 10)}…)`
+        : 'Fee paid';
+
+      // STEP B — On-chain registerAgent. x402 fee is non-refundable from this point.
+      setStatusTone('pending');
+      setTxState(`${feeNote}. Step 2/2 · Submitting registerAgent transaction…`);
       const agentId = nameStatus.agentId;
       const metadataURI = effectiveMetadataURI;
       const normalizedName = normalizeAgentName(form.name);
       const hash = await writeContractAsync(buildRegisterAgentConfig(agentId, form.skill, metadataURI));
-      setTxState(`Waiting for ${hash.slice(0, 10)}…`);
+      setTxState(`${feeNote}. Waiting for ${hash.slice(0, 10)}…`);
       await waitForTransactionReceipt(config, { hash });
       setStatusTone('synced');
       setTxState(`✓ Agent "${normalizedName}" registered as ${shortAgentId(agentId)}.`);
@@ -186,7 +207,14 @@ export default function RegisterManualAgentPage() {
       void loadAgents();
       setTimeout(() => router.push('/jobs'), 1500);
     } catch (e) {
-      setTxState(e instanceof Error ? e.message : 'Agent registration failed.');
+      // x402 already paid (sunk cost) but registerAgent failed/rejected.
+      const msg = e instanceof Error ? e.message : 'Agent registration failed.';
+      const isRejection = /user rejected|denied|user cancelled/i.test(msg);
+      setTxState(
+        isRejection
+          ? 'Anti-spam fee was paid, but you cancelled the registration transaction. The fee is non-refundable.'
+          : msg,
+      );
       setStatusTone('error');
       setIsSubmitting(false);
     }
@@ -338,11 +366,14 @@ export default function RegisterManualAgentPage() {
                       ? 'Verifying availability…'
                       : nameStatus.state === 'invalid'
                         ? nameStatus.reason
-                        : 'Sign registerAgent transaction.'
+                        : 'Pay 0.40 USDC anti-spam fee, then sign registerAgent transaction.'
               }
             >
-              {isSubmitting ? 'REGISTERING…' : 'REGISTER MANUAL AGENT'}
+              {isSubmitting ? 'REGISTERING…' : 'PAY & REGISTER'}
             </button>
+            <p className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.6)]">
+              Anti-spam fee: 0.40 USDC · Non-refundable · Prevents spam listings
+            </p>
           </section>
 
           {/* STEP 2 — Registered agents list */}

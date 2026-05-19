@@ -61,7 +61,7 @@ export function DisputeViewer() {
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="aureo-mono-label">VAULT · DISPUTE RESOLVER</div>
-          <h3 className="aureo-display mt-1 text-[24px] text-[#EAE4D8]">AI verdict viewer</h3>
+          <h3 className="aureo-display mt-1 text-[24px] text-[#EAE4D8]">AI resolution</h3>
         </div>
         <button onClick={load} disabled={loading || !isConnected} className="btn-secondary px-4 py-2 text-[10px]">
           {loading ? 'LOADING…' : 'REFRESH'}
