@@ -26,7 +26,8 @@ async function handler(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ ok: false, error: 'missing_fields', message: 'agentId and proofData required' }, { status: 400 });
     }
 
-    const receiptId = `receipt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const { createHash } = await import('crypto');
+    const receiptId = `receipt_${createHash('sha256').update(JSON.stringify({ jobId, agentId, proofData, ts: Date.now() })).digest('hex').slice(0, 16)}`;
 
     return NextResponse.json({
       ok: true,

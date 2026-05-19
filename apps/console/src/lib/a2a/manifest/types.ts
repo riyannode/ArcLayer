@@ -1,10 +1,18 @@
 export const AGENT_MANIFEST_SCHEMA = 'arclayer.agent/v1' as const;
 
+export type AgentRuntimeProvider =
+  | 'claude'
+  | 'hermes'
+  | 'openclaw'
+  | 'openai-compatible'
+  | 'local-command'
+  | 'http';
+
 export type AgentManifestRole = {
   id: string;
   name: string;
   category: string;
-  provider?: string;
+  provider?: AgentRuntimeProvider | string;
   model?: string;
   capabilities: string[];
   price?: string;
@@ -12,6 +20,8 @@ export type AgentManifestRole = {
   endpointPath?: string;
   enabled?: boolean;
 };
+
+export type AgentManifestMode = 'seller' | 'buyer' | 'dual';
 
 export type AgentManifestV1 = {
   schema: typeof AGENT_MANIFEST_SCHEMA;
@@ -22,7 +32,7 @@ export type AgentManifestV1 = {
   description: string;
   controller?: string;
   endpoint?: string;
-  mode?: 'seller' | 'buyer' | 'dual';
+  mode?: AgentManifestMode;
   price?: string;
   avatar?: string;
   capability: string[];
@@ -52,6 +62,7 @@ export type AgentManifestV1 = {
     types?: string[];
     signing?: string;
   };
+  host?: string;
   createdAt: string;
   updatedAt: string;
 };

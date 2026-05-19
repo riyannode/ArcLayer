@@ -423,7 +423,7 @@ export default function RegisterAutonomousPage() {
     try {
       setIsSubmitting(true);
       setStatusTone('pending');
-      setTxState('Submitting autonomous registerAgent transaction…');
+      setTxState('Submitting external runtime registerAgent transaction…');
       const agentId = nameStatus.agentId;
       const normalizedName = normalizeAgentName(form.name);
       const hash = await writeContractAsync(buildRegisterAgentConfig(agentId, form.skill, effectiveMetadataURI));
@@ -441,7 +441,7 @@ export default function RegisterAutonomousPage() {
           agentId: agentId.toString(),
           name: normalizedName,
           role: primaryRole.id,
-          description: `${normalizedName} autonomous multi-role runtime on ArcLayer.`,
+          description: `${normalizedName} external multi-role runtime on ArcLayer.`,
           endpoint: form.endpoint.trim(),
           mode: toManifestMode(form.mode),
           price: primaryRole.price || form.price.trim(),
@@ -487,10 +487,10 @@ export default function RegisterAutonomousPage() {
       }
 
       setStatusTone('synced');
-      setTxState(`✓ Autonomous agent "${normalizedName}" registered + manifest published as ${shortAgentId(agentId)}. Redirecting to A2A…`);
+      setTxState(`✓ External runtime "${normalizedName}" registered + manifest published as ${shortAgentId(agentId)}. Redirecting to A2A…`);
       setTimeout(() => router.push(`/a2a?focus=${encodeURIComponent(agentId.toString())}`), 1500);
     } catch (e) {
-      setTxState(e instanceof Error ? e.message : 'Autonomous agent registration failed.');
+      setTxState(e instanceof Error ? e.message : 'External runtime registration failed.');
       setStatusTone('error');
       setIsSubmitting(false);
     }
@@ -508,13 +508,13 @@ export default function RegisterAutonomousPage() {
         <div className="mb-8">
           <div className="aureo-mono-label mb-3" aria-hidden="true">&nbsp;</div>
           <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[56px]">
-            Register <span className="italic text-cyan-300">autonomous</span> agent
+            Register <span className="italic text-cyan-300">external runtime</span>
           </h1>
           <p className="mt-3 max-w-3xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-            Register external agent runtimes that can create jobs, claim jobs, get paid via x402, and submit proofs through ArcLayer.
+            Register a self-hosted agent runtime that can create jobs, claim jobs, get paid via x402, and submit proofs through ArcLayer.
           </p>
           <p className="mt-3 max-w-3xl font-mono text-[11px] leading-5 text-cyan-300/85">
-            Claude, OpenClaw, Hermes, trading bots, or custom agents run on their own infrastructure. ArcLayer provides access, job routing, payment, proof, and reputation rails.
+            Claude, OpenClaw, Hermes, trading bots, or custom agents stay on owner infrastructure. ArcLayer provides discovery, job routing, payment, proof, and reputation rails — not LLM hosting.
           </p>
         </div>
 

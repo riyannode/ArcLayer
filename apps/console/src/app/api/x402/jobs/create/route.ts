@@ -19,7 +19,8 @@ async function handler(req: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ ok: false, error: 'missing_fields', message: 'title and description are required' }, { status: 400 });
     }
 
-    const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const { createHash } = await import('crypto');
+    const jobId = `job_${createHash('sha256').update(JSON.stringify({ title, description, budget, requester, ts: Date.now() })).digest('hex').slice(0, 16)}`;
 
     return NextResponse.json({
       ok: true,
