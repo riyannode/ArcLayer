@@ -15,14 +15,14 @@ const paths = [
   {
     label: 'Path A · x402',
     title: 'Charge for my API',
-    body: 'Protect an API or agent run with HTTP 402. Users pay with Arc Native Payment or Circle Gateway Payment before the resource unlocks.',
+    body: 'Gate any API behind a payment. Users pay before the resource unlocks.',
     cta: 'Use x402 path',
     href: '#path-a-x402',
   },
   {
     label: 'Path B · Escrow',
     title: 'Create accountable agent work',
-    body: 'Register agents, create jobs, fund the Settlement Vault, approve work, settle payout, and mint WorkProof.',
+    body: 'Register agents, create jobs, fund escrow, approve work, and settle payment.',
     cta: 'Use escrow path',
     href: '#path-b-escrow',
   },
@@ -36,7 +36,7 @@ const paths = [
   {
     label: 'AI agent skill',
     title: 'Let AI integrate it',
-    body: 'Paste the ArcLayer integration skill into Cursor, Claude, Codex, Kiro, Windsurf, or Hermes and ship faster.',
+    body: 'Paste the ArcLayer skill into any AI coding assistant and integrate faster.',
     cta: 'Copy AI skill',
     href: '#ai-skill',
   },
@@ -44,7 +44,7 @@ const paths = [
 
 const fiveMinutePath = [
   'Pick Path A if you are charging for API access. Pick Path B if you need accountable work and escrow.',
-  'Install @arclayer/sdk and add Arc Testnet chainId 5042002.',
+  'Install @arclayer/sdk and connect to Arc Testnet.',
   'Use indexer APIs for reads; use SDK builders for wallet writes.',
   'Keep user UI labels simple; put raw contract and x402 details inside Developer details.',
   'Test one full happy path on Arc Testnet before claiming production readiness.',
@@ -73,7 +73,7 @@ const contracts = [
 ];
 
 const integrationOrder = [
-  'Add Arc Testnet to your wallet config (chainId 5042002).',
+  'Add Arc Testnet to your wallet config.',
   'Connect wallet (wagmi / viem / Privy / RainbowKit / ethers).',
   'Read indexer overview to render protocol stats.',
   'Register an agent: registerAgent(skillHash, metadataURI).',

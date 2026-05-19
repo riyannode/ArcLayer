@@ -219,7 +219,7 @@ export default function RegisterManualAgentPage() {
               Register <span className="italic text-[#C5A67C]">manual</span> agent
             </h1>
             <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-              Your agent will appear in the Job Marketplace. Clients post jobs with USDC budgets, you submit deliverables, and earn after evaluator approval. Settlement records on-chain via JobEscrow + WorkProof NFT.
+              Your agent appears in the marketplace. Clients create jobs, you submit work, and escrow pays after approval.
             </p>
           </div>
           <div className="flex flex-wrap gap-3 self-start md:self-auto">

@@ -70,9 +70,9 @@ const PROVIDERS: Array<{ id: RuntimeProvider; label: string }> = [
 const ROLE_ID_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
 
 const MODES: Array<{ id: IntegrationMode; title: string; desc: string }> = [
-  { id: 'seller', title: 'Job Taker', desc: 'Expose a runtime that claims jobs, executes work, and gets paid via x402.' },
-  { id: 'consumer', title: 'Job Creator', desc: 'Create jobs for other agents, pay x402, and receive signed results/proofs.' },
-  { id: 'hybrid', title: 'Creator + Taker', desc: 'Create jobs and claim matching jobs from the same external runtime.' },
+  { id: 'seller', title: 'Job Taker', desc: 'Take jobs, run work, and get paid.' },
+  { id: 'consumer', title: 'Job Creator', desc: 'Create jobs and receive results.' },
+  { id: 'hybrid', title: 'Creator + Taker', desc: 'Create jobs and also take jobs.' },
 ];
 
 const HOSTS: HostOption[] = [
@@ -80,7 +80,7 @@ const HOSTS: HostOption[] = [
     id: 'self-hosted',
     title: 'Self-Hosted',
     tag: 'YOUR VPS',
-    desc: 'Run Claude, Hermes, OpenClaw, or any custom worker on your own VPS. ArcLayer only provides discovery, jobs, x402, proofs, and reputation rails.',
+    desc: 'Run your agent on your own VPS. ArcLayer handles discovery, jobs, payments, proofs, and reputation.',
     status: 'live',
   },
   {
@@ -94,7 +94,7 @@ const HOSTS: HostOption[] = [
     id: 'arclayer-cloud',
     title: 'ArcLayer Cloud',
     tag: 'MANAGED',
-    desc: 'Plug-and-play. We provision the VPS, container, and 24/7 uptime for you.',
+    desc: 'Managed hosting for your agent runtime.',
     status: 'soon',
   },
   {
@@ -108,21 +108,21 @@ const HOSTS: HostOption[] = [
     id: 'cloudflare',
     title: 'Cloudflare Workers',
     tag: 'DURABLE OBJECTS',
-    desc: 'Persistent stateful agents with WebSocket support. No external DB needed.',
+    desc: 'Run stateful agents on Workers.',
     status: 'soon',
   },
   {
     id: 'supabase-edge',
     title: 'Supabase Edge',
     tag: 'PG_CRON',
-    desc: 'Edge functions triggered by pg_cron. State lives in your Supabase Postgres.',
+    desc: 'Run scheduled agents with Supabase Edge Functions.',
     status: 'soon',
   },
   {
     id: 'browser',
     title: 'Browser Agent',
     tag: 'CLIENT-SIDE',
-    desc: 'Runs in the user’s browser via Web Workers. No server, no hosting cost.',
+    desc: 'Run lightweight agents in the browser.',
     status: 'soon',
   },
 ];
@@ -159,11 +159,11 @@ app.post('/jobs/run', x402Middleware({
 app.listen(4001);`;
 
 const SELF_HOSTED_STACK: Array<{ step: string; title: string; body: string }> = [
-  { step: '01', title: 'External runtime', body: 'Your Claude, Hermes, OpenClaw, bot, or custom LLM keeps running on your own infra.' },
-  { step: '02', title: 'Manifest + roles', body: 'Expose /.well-known/arclayer-agent.json with endpoint, roles, capabilities, pricing, and x402 receiver.' },
-  { step: '03', title: 'Job access', body: 'Use ArcLayer to create jobs, discover open work, claim matching jobs, and submit results/proofs.' },
-  { step: '04', title: 'Payment rails', body: 'ArcLayer verifies x402 payment/receipts and links job settlement to your registered wallet.' },
-  { step: '05', title: 'Reputation layer', body: 'Completed work becomes discoverable history for scoring, routing, and future trust.' },
+  { step: '01', title: 'External runtime', body: 'Your agent keeps running on your infrastructure.' },
+  { step: '02', title: 'Manifest + roles', body: 'Publish one manifest with endpoint, roles, price, and wallet.' },
+  { step: '03', title: 'Job access', body: 'Create, find, claim, and submit jobs through ArcLayer.' },
+  { step: '04', title: 'Payment rails', body: 'ArcLayer verifies payment and links settlement to your wallet.' },
+  { step: '05', title: 'Reputation layer', body: 'Completed work builds visible reputation.' },
 ];
 
 const SELF_HOSTED_CHECKLIST = [
@@ -511,10 +511,10 @@ export default function RegisterAutonomousPage() {
             Register <span className="italic text-cyan-300">external runtime</span>
           </h1>
           <p className="mt-3 max-w-3xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-            Register a self-hosted agent runtime that can create jobs, claim jobs, get paid via x402, and submit proofs through ArcLayer.
+            Register an agent endpoint that can create jobs, take jobs, get paid, and submit proof.
           </p>
           <p className="mt-3 max-w-3xl font-mono text-[11px] leading-5 text-cyan-300/85">
-            Claude, OpenClaw, Hermes, trading bots, or custom agents stay on owner infrastructure. ArcLayer provides discovery, job routing, payment, proof, and reputation rails — not LLM hosting.
+            Your agent stays on your infrastructure. ArcLayer handles discovery, jobs, payment, proof, and reputation.
           </p>
         </div>
 
@@ -530,7 +530,7 @@ export default function RegisterAutonomousPage() {
                     ? 'ACTION · ERROR'
                     : 'READY'
             }
-            body={txState || 'Pick whether this runtime creates jobs, takes jobs, or does both. ArcLayer coordinates access; your agent executes externally.'}
+            body={txState || 'Choose what your agent can do. Your runtime executes the work.'}
           />
         </div>
 
@@ -562,7 +562,7 @@ export default function RegisterAutonomousPage() {
               <div className="aureo-mono-label mb-2">STEP 2 · EXTERNAL RUNTIME HOST</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Where does your agent run?</h2>
               <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)]">
-                ArcLayer does not host the LLM. Register the endpoint where your Claude, Hermes, OpenClaw, or custom runtime already runs.
+                ArcLayer does not host your agent. Add the endpoint where it already runs.
               </p>
 
               <div className="mt-4 space-y-2">
@@ -656,7 +656,7 @@ export default function RegisterAutonomousPage() {
                                   <code>{STARTER_CODE}</code>
                                 </pre>
                                 <p className="mt-2 font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.85)]">
-                                  Reference shape only. Full schema: docs/AGENT_MANIFEST_V1.md. Replace middleware with your production x402 verifier.
+                                  Example only. Use your production verifier before going live.
                                 </p>
                               </div>
                             </div>
@@ -685,7 +685,7 @@ export default function RegisterAutonomousPage() {
                                 🚧 Coming soon
                               </div>
                               <p className="mt-1.5 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.78)]">
-                                We&apos;re building the {host.title} integration. Drop your email and we&apos;ll ping you on launch.
+                                Join the waitlist and we&apos;ll notify you when {host.title} is ready.
                               </p>
 
                               {waitlistSent === host.id ? (

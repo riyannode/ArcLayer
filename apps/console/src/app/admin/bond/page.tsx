@@ -12,8 +12,8 @@ export default function AdminBondPage() {
             Bond <span className="italic text-[#C5A67C]">Configuration</span>
           </h1>
           <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-            Owner-only. Update tier rates, flat fees, and the veteran discount on the BondConfig contract.
-            Changes affect newly accepted jobs only — existing accepted jobs keep their on-chain bond.
+            Owner-only settings for job bonds and fees.
+            Changes apply only to new accepted jobs.
           </p>
         </div>
 

@@ -211,8 +211,8 @@ export default function Dashboard() {
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[60px]" style={{ lineHeight: 0.95 }}>
               Protocol <span className="italic" style={{ color: '#C5A67C' }}>Console</span>
             </h1>
-            <p className="mt-4 max-w-2xl font-mono text-[12px] leading-6" style={{ color: 'rgba(234, 228, 216, 0.78)' }}>
-              Live infrastructure for agent commerce on Arc. Track x402 payments, USDC escrow, WorkProof receipts, agents, and on-chain activity in one dashboard.
+            <p className="mt-4 max-w-2xl font-mono text-[12px] leading-6" style={{ color: 'rgba(234, 228, 216, 0.88)' }}>
+              A clear view of ArcLayer activity. Track agents, jobs, payments, proofs, and network health in one place.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
               <Link href="/" className="btn-primary px-4 py-2 text-[10.5px]">HOME X402</Link>
@@ -240,11 +240,11 @@ export default function Dashboard() {
 
         {/* Live status + payment rails */}
         <div className="mb-8 grid grid-cols-1 gap-3 lg:grid-cols-[0.95fr_1.15fr_0.9fr]">
-          <Panel title="WHAT IS LIVE" sub="Production-facing modules on Arc testnet">
+          <Panel title="LIVE MODULES" sub="Core ArcLayer services">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {['Agent Registry', 'JobEscrow / Settlement Vault', 'WorkProof', 'x402 Facilitator', 'A2A Registry', 'Reputation', 'Indexer'].map((name) => (
-                <div key={name} className="flex items-center gap-2 rounded-sm border border-[#B8CD7E]/15 bg-[#B8CD7E]/[0.035] px-3 py-2 font-mono text-[10.5px] text-[rgba(234,228,216,0.82)]">
-                  <span className="text-[#B8CD7E]">✓</span>
+              {['Agent Registry', 'Settlement Vault', 'WorkProof', 'A2A Registry', 'Reputation', 'Indexer'].map((name) => (
+                <div key={name} className="flex items-center gap-2 rounded-sm border border-[#B8CD7E]/15 bg-[#B8CD7E]/[0.035] px-3 py-2 font-mono text-[10.5px] text-[rgba(234,228,216,0.9)]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#B8CD7E]" aria-hidden="true" />
                   <span>{name}</span>
                 </div>
               ))}
@@ -253,12 +253,12 @@ export default function Dashboard() {
 
           <Panel
             title="PAYMENT RAILS"
-            sub="x402 + Gateway + escrow paths"
+            sub="Pay-per-call and job escrow"
             action={<Link href="/api/x402/supported" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>INSPECT CONFIG ↗</Link>}
           >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <RailCard title="Arc Native x402" status="LIVE" text="Direct pay-per-call using USDC. No prepaid deposit needed." href="/" cta="Open homepage ticket" />
-              <RailCard title="Escrow Jobs" status="LIVE" text="Deposit USDC, approve work, release payout, mint WorkProof." href="/jobs/manual" cta="Create job" />
+              <RailCard title="Arc Native x402" status="LIVE" text="Pay once for a single agent call." href="/" cta="Open homepage ticket" />
+              <RailCard title="Escrow Jobs" status="LIVE" text="Fund a job, approve the result, and release payment." href="/jobs/manual" cta="Create job" />
             </div>
           </Panel>
 
@@ -328,7 +328,7 @@ export default function Dashboard() {
         <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <Panel
             title="JOBS · FIND"
-            sub="Search by job ID, agent, payout wallet, approver, or status."
+            sub="Find jobs by ID, agent, wallet, or status."
             action={<Link href="/jobs" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>OPEN ALL ↗</Link>}
           >
             <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:gap-2">

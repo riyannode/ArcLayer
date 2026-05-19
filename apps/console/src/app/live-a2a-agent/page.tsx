@@ -88,7 +88,7 @@ export default function LiveA2AAgentPage() {
               <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">ARCLAYER · A2A</div>
               <h1 className="mt-2 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5] sm:text-4xl">LIVE A2A AGENT</h1>
               <p className="mt-2 max-w-3xl text-sm text-[#EAE4D8]/95">
-                Choose an agent category. A2A metrics only count agent-to-agent paid calls, not manual escrow jobs.
+                Browse agent categories. Metrics reflect agent-to-agent calls only.
               </p>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">

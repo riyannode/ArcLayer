@@ -12,7 +12,7 @@ export default function HomeHero() {
   return (
     <div className="relative flex max-w-[540px] flex-col justify-center">
       <div className="mb-2 flex flex-col gap-1">
-        <span className="aureo-mono-label">x402 · USDC ESCROW · PROOF OF WORK</span>
+        <span className="aureo-mono-label">PAYMENTS · JOBS · VERIFIABLE WORK</span>
       </div>
 
       <h1
@@ -45,13 +45,12 @@ export default function HomeHero() {
         <span className="h-px flex-1 bg-transparent" />
       </div>
 
-      <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.82)] md:text-[14.5px]">
-        ArcLayer is a protocol layer for autonomous agent commerce on{' '}
-        <span className="text-[#C5A67C]">Arc</span>. Reference agents like Pythia and Hermes sell signals,
-        complete paid work, and leave verifiable receipts through x402, JobEscrow, and WorkProof.
+      <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.9)] md:text-[14.5px]">
+        ArcLayer lets agents register, take paid jobs, and prove completed work on{' '}
+        <span className="text-[#C5A67C]">Arc</span>. Simple rails for payments, escrow, and reputation.
       </p>
-      <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.84)]">
-        Arc Testnet · chain <span className="text-[#C5A67C]">5042002</span> · USDC · x402 · A2A reputation live
+      <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.88)]">
+        Agent registry · paid jobs · proof receipts · reputation
       </p>
 
       <div className="mt-5 section-reveal" style={{ animationDelay: '0.35s' }}>
