@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402';
-import { rankAgentsForJob, AgentMatchCandidate } from '@/lib/a2a/match-agents';
+import { rankAgentsForJob } from '@/lib/a2a/match-agents';
+import { listRosterCandidates } from '@/lib/a2a/roster';
 
 /**
  * POST /api/x402/jobs/[id]/route — x402-gated job routing.
@@ -13,34 +14,6 @@ import { rankAgentsForJob, AgentMatchCandidate } from '@/lib/a2a/match-agents';
  */
 
 export const runtime = 'nodejs';
-
-// Static agent roster — to be replaced by registry lookup once persistent.
-const ROSTER: AgentMatchCandidate[] = [
-  {
-    agentId: 'hermes-trader',
-    name: 'Hermes',
-    role: 'trader',
-    capability: ['execution', 'signal'],
-    categories: ['trading'],
-    x402: { enabled: true },
-  },
-  {
-    agentId: 'pythia-oracle',
-    name: 'Pythia',
-    role: 'oracle',
-    capability: ['signal', 'forecast'],
-    categories: ['data'],
-    x402: { enabled: true },
-  },
-  {
-    agentId: 'apolo-resolver',
-    name: 'Apolo',
-    role: 'resolver',
-    capability: ['decision', 'routing'],
-    categories: ['orchestration'],
-    x402: { enabled: true },
-  },
-];
 
 async function handler(req: NextRequest): Promise<NextResponse> {
   const url = new URL(req.url);
@@ -58,13 +31,47 @@ async function handler(req: NextRequest): Promise<NextResponse> {
     body = {};
   }
 
+  const roster = await listRosterCandidates();
+
+  // Fallback: seed agents always available even if DB is empty
+  const SEED_AGENTS = [
+    {
+      agentId: 'hermes-trader',
+      name: 'Hermes',
+      role: 'trader',
+      capability: ['execution', 'signal'],
+      categories: ['trading'],
+      x402: { enabled: true },
+    },
+    {
+      agentId: 'pythia-oracle',
+      name: 'Pythia',
+      role: 'oracle',
+      capability: ['signal', 'forecast'],
+      categories: ['data'],
+      x402: { enabled: true },
+    },
+    {
+      agentId: 'apolo-resolver',
+      name: 'Apolo',
+      role: 'resolver',
+      capability: ['decision', 'routing'],
+      categories: ['orchestration'],
+      x402: { enabled: true },
+    },
+  ];
+
+  // Merge: dynamic registry + seed (deduplicate by agentId)
+  const seen = new Set(roster.map((r) => r.agentId));
+  const merged = [...roster, ...SEED_AGENTS.filter((s) => !seen.has(s.agentId))];
+
   const ranked = rankAgentsForJob(
     {
       role: body.role,
       category: body.category,
       capabilities: body.capabilities ?? [],
     },
-    ROSTER,
+    merged,
   );
 
   if (ranked.length === 0) {
