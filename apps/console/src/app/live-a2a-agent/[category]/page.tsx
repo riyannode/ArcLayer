@@ -739,7 +739,7 @@ function ProofKV({ k, v, hot, mono }: { k: string; v: string; hot?: boolean; mon
   );
 }
 
-function LiveA2AFlow({ receipt, running, onRun }: { receipt: FlowReceipt | null; running: boolean; onRun: () => void }) {
+function LiveA2AFlow({ receipt }: { receipt: FlowReceipt | null }) {
   const charges = receipt?.charges ?? [];
   const pythiaCharge = charges.find((c) => c.seller === 'Pythia');
   const apoloCharge = charges.find((c) => c.seller === 'Apolo');
@@ -765,17 +765,12 @@ function LiveA2AFlow({ receipt, running, onRun }: { receipt: FlowReceipt | null;
     <div className="flex h-full flex-col gap-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">x402 agent payment lifecycle</div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">x402 agent payment lifecycle · auto-running 24/7</div>
           <div className="mt-1 text-sm text-[#EAE4D8]/70">Pythia charges Apolo → Apolo charges Hermes → Hermes logs execution proof. Apolo receives reputation because Apolo filters the data.</div>
         </div>
-        <button
-          type="button"
-          onClick={onRun}
-          disabled={running}
-          className="rounded-sm border border-[#C5A67C]/45 bg-[#C5A67C]/15 px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-[#EAE4D8] transition hover:bg-[#C5A67C]/25 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {running ? 'Running…' : 'Run x402 flow'}
-        </button>
+        <div className="rounded-sm border border-emerald-300/35 bg-emerald-400/10 px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
+          {receipt ? '● live receipt' : '● polling…'}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
@@ -849,7 +844,6 @@ export default function LiveA2AAgentPageRoute() {
   const [a2aStatus, setA2aStatus] = useState<A2AStatusData | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [flowReceipt, setFlowReceipt] = useState<FlowReceipt | null>(null);
-  const [flowRunning, setFlowRunning] = useState(false);
 
   const latestRow = signalRows[0] ?? null;
   const latestVerdict = verdictFromSignal(latestRow ?? undefined);
@@ -1088,25 +1082,31 @@ export default function LiveA2AAgentPageRoute() {
   // Completed jobs for A2A category = A2A signals that produced a settled receipt.
   // workproofReady is approved-by-Apolo signal count (per-session) — keep as A2A-local proxy.
   const completedJobs = workproofReady;
-
-  async function runLiveFlow() {
-    setFlowRunning(true);
-    try {
-      const r = await fetch('/api/a2a/run-flow', { method: 'POST', cache: 'no-store' });
-      const data = (await r.json()) as FlowReceipt;
-      setFlowReceipt(data);
-      if (!r.ok || !data.ok) setErrors((e) => [`flow: ${data.error || r.statusText}`, ...e].slice(0, 3));
-    } catch (err: any) {
-      setErrors((e) => [`flow: ${err?.message}`, ...e].slice(0, 3));
-    } finally {
-      setFlowRunning(false);
-    }
-  }
-
   const params = useParams<{ category: string }>();
   const categoryKey = Array.isArray(params?.category) ? params.category[0] : params?.category;
   const category = AGENT_CATEGORIES.find((c) => c.key === categoryKey) ?? AGENT_CATEGORIES[0];
   const isPredictionMarket = category.key === 'prediction-market';
+
+  // Auto-poll x402 flow receipt every 30s — fully autonomous, no manual trigger
+  useEffect(() => {
+    if (!isPredictionMarket) return;
+    let cancelled = false;
+    async function poll() {
+      try {
+        const r = await fetch('/api/a2a/run-flow', { method: 'POST', cache: 'no-store' });
+        const data = (await r.json()) as FlowReceipt;
+        if (cancelled) return;
+        setFlowReceipt(data);
+        if (!r.ok || !data.ok) setErrors((e) => [`flow: ${data.error || r.statusText}`, ...e].slice(0, 3));
+      } catch (err: any) {
+        if (cancelled) return;
+        setErrors((e) => [`flow: ${err?.message}`, ...e].slice(0, 3));
+      }
+    }
+    poll();
+    const id = setInterval(poll, 30000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [isPredictionMarket]);
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-5 text-[#EAE4D8] selection:bg-[#C5A67C]/20 sm:px-6 lg:px-8">
@@ -1176,8 +1176,8 @@ export default function LiveA2AAgentPageRoute() {
               <AgentGraph latest={latestRow} />
             </TerminalPanel>
 
-            <TerminalPanel title="Backend Flow · x402 Payment → Settlement → Receipt → Reputation" right={<Chip tone="green">RUNNABLE</Chip>} className="min-h-[260px]">
-              <LiveA2AFlow receipt={flowReceipt} running={flowRunning} onRun={runLiveFlow} />
+            <TerminalPanel title="x402 Payment → Settlement → Receipt → Reputation" right={<Chip tone="green">AUTONOMOUS</Chip>} className="min-h-[260px]">
+              <LiveA2AFlow receipt={flowReceipt} />
             </TerminalPanel>
           </>
         ) : (
