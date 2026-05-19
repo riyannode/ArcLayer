@@ -269,7 +269,7 @@ export default function RegisterAutonomousPage() {
   const [txState, setTxState] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<'idle' | 'pending' | 'synced' | 'error'>('idle');
   const [copied, setCopied] = useState(false);
-  const [expandedHost, setExpandedHost] = useState<RuntimeHost | null>('self-hosted');
+  const [expandedHost, setExpandedHost] = useState<RuntimeHost | null>(null);
   const [waitlistEmail, setWaitlistEmail] = useState('');
   const [waitlistSent, setWaitlistSent] = useState<RuntimeHost | null>(null);
   const [form, setForm] = useState({
@@ -390,7 +390,7 @@ export default function RegisterAutonomousPage() {
   }
 
   function handleHostClick(host: RuntimeHost) {
-    setExpandedHost(host);
+    setExpandedHost((current) => (current === host ? null : host));
     setWaitlistSent(null);
   }
 
