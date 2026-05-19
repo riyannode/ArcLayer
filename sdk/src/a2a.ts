@@ -93,6 +93,43 @@ export class A2AClient {
     });
   }
 
+  /** GET /api/a2a/reputation/:agentId */
+  async getReputation(agentId?: string): Promise<{
+    ok: boolean;
+    agentId: string;
+    reputationScore: string;
+    stats?: Record<string, string>;
+  }> {
+    const id = agentId ?? this.agentId;
+    return this.req(`/api/a2a/reputation/${encodeURIComponent(id)}`);
+  }
+
+  /** POST /api/a2a/webhooks — register a webhook */
+  async createWebhook(input: { url: string; events?: string[] }): Promise<{
+    ok: true;
+    webhook: { id: string; url: string; events: string[] };
+    secret: string;
+  }> {
+    return this.req('/api/a2a/webhooks', {
+      method: 'POST',
+      headers: this.headers(),
+      body: JSON.stringify(input),
+    });
+  }
+
+  /** GET /api/a2a/webhooks — list webhooks for the authenticated agent */
+  async listWebhooks(): Promise<{ ok: true; webhooks: Array<{ id: string; url: string; events: string[]; active: boolean }> }> {
+    return this.req('/api/a2a/webhooks', { headers: this.headers() });
+  }
+
+  /** DELETE /api/a2a/webhooks/:id */
+  async deleteWebhook(id: string): Promise<{ ok: boolean }> {
+    return this.req(`/api/a2a/webhooks/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: this.headers(),
+    });
+  }
+
   /**
    * Poll loop helper. Calls handler for each open job. Returns when
    * `signal` aborts. Designed for `for await` usage too.
