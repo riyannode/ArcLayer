@@ -32,6 +32,11 @@ export default function DotMatrixField() {
     };
     let particles: P[] = [];
     let links: Array<[number, number, number]> = []; // i, j, distSq
+    let lastFrame = 0;
+    let hidden = document.hidden;
+    let reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const isMobile = window.matchMedia('(max-width: 767px)').matches;
+    const frameMs = 1000 / (isMobile ? 15 : 24);
 
     const resize = () => {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -46,7 +51,7 @@ export default function DotMatrixField() {
     const seed = () => {
       particles = [];
       links = [];
-      const spacing = 44;
+      const spacing = isMobile ? 56 : 50;
       const cols = Math.ceil(w / spacing) + 2;
       const rows = Math.ceil(h / spacing) + 2;
       for (let i = 0; i < cols; i++) {
@@ -70,12 +75,16 @@ export default function DotMatrixField() {
           const dx = p.baseX - q.baseX;
           const dy = p.baseY - q.baseY;
           const d2 = dx * dx + dy * dy;
-          if (d2 < spacing * spacing * 1.2) {
+          if (d2 < spacing * spacing * 1.05 && (i + j) % 3 !== 0) {
             links.push([i, j, d2]);
           }
         }
       }
     };
+
+    const onVisibility = () => { hidden = document.hidden; };
+    const motionMq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const onMotion = () => { reducedMotion = motionMq.matches; };
 
     const onMove = (e: MouseEvent) => {
       const rect = canvas.getBoundingClientRect();
@@ -86,6 +95,15 @@ export default function DotMatrixField() {
     const start = performance.now();
 
     const tick = (now: number) => {
+      if (hidden || reducedMotion) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      if (now - lastFrame < frameMs) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      lastFrame = now;
       const t = (now - start) / 1000;
 
       pointerRef.current.x += (pointerRef.current.tx - pointerRef.current.x) * 0.04;
@@ -171,12 +189,16 @@ export default function DotMatrixField() {
     resize();
     window.addEventListener('resize', resize);
     window.addEventListener('mousemove', onMove, { passive: true });
+    document.addEventListener('visibilitychange', onVisibility);
+    motionMq.addEventListener('change', onMotion);
     rafRef.current = requestAnimationFrame(tick);
 
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       window.removeEventListener('resize', resize);
       window.removeEventListener('mousemove', onMove);
+      document.removeEventListener('visibilitychange', onVisibility);
+      motionMq.removeEventListener('change', onMotion);
     };
   }, []);
 

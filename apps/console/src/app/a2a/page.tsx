@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useWriteContract } from 'wagmi';
@@ -125,7 +125,7 @@ function FeedRow({ item, isNew }: { item: FeedItem; isNew: boolean }) {
           <span className={`font-semibold ${AGENT_COLORS[item.agent]}`}>{item.agent}</span>{' '}
           <span className="text-[#9A9A9A]">{item.label}</span>
         </p>
-        <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-[#555]">
+        <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-[#8A8378]">
           <span>{timeAgoIso(item.ts)}</span>
           {item.tx && (
             <a
@@ -165,7 +165,6 @@ function A2ADashboardPage() {
   const [volumeHistory, setVolumeHistory] = useState<number[]>([]);
   const [signalHistory, setSignalHistory] = useState<number[]>([]);
   const [showAllProofs, setShowAllProofs] = useState(false);
-  const [_tick, setTick] = useState(0);
   const [filter, setFilter] = useState<AgentCategory>('all');
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(focusId);
   const [registeredAgents, setRegisteredAgents] = useState<RegisteredAgent[]>([]);
@@ -278,16 +277,18 @@ function A2ADashboardPage() {
   }, [prevFeedIds]);
 
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 8000);
-    return () => clearInterval(interval);
+    let cancelled = false;
+    const loadVisible = () => { if (!document.hidden && !cancelled) void fetchData(); };
+    void fetchData();
+    const interval = setInterval(loadVisible, 30000);
+    const onVisibility = () => { if (!document.hidden) void fetchData(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Tick every second so timeAgo recomputes for live feel
-  useEffect(() => {
-    const t = setInterval(() => setTick((x) => x + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   const summary = overview?.summary;
   const ignia = onchain?.agents.pythia; // legacy on-chain key, branded as Ignia/Apolo
@@ -296,9 +297,9 @@ function A2ADashboardPage() {
   const isLive = latestFeedMs > 0 && Date.now() - latestFeedMs < 120_000;
   const proofTxs = (feed?.items ?? []).filter((item) => item.tx);
   const visibleProofTxs = showAllProofs ? proofTxs : proofTxs.slice(0, 3);
-  const networkAgents = buildAgentNetwork({ onchain, overview, feed, isLive, registeredAgents, hiddenIds });
-  const filteredAgents = filter === 'all' ? networkAgents : networkAgents.filter((agent) => agent.categories.includes(filter));
-  const selectedAgent = networkAgents.find((agent) => agent.id === selectedAgentId) ?? null;
+  const networkAgents = useMemo(() => buildAgentNetwork({ onchain, overview, feed, isLive, registeredAgents, hiddenIds }), [onchain, overview, feed, isLive, registeredAgents, hiddenIds]);
+  const filteredAgents = useMemo(() => filter === 'all' ? networkAgents : networkAgents.filter((agent) => agent.categories.includes(filter)), [filter, networkAgents]);
+  const selectedAgent = useMemo(() => networkAgents.find((agent) => agent.id === selectedAgentId) ?? null, [networkAgents, selectedAgentId]);
   const activeFilterLabel = AGENT_FILTERS.find((item) => item.key === filter)?.label ?? 'All agents';
 
   // Live-derived counters from autonomous feed (compensates for ReputationRegistry not being updated by agent telemetry)
@@ -324,7 +325,7 @@ function A2ADashboardPage() {
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-[#EAE4D8] selection:bg-[#C5A67C]/20">
       {/* ─── Header ───────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-10 border-b border-white/5 bg-[#0A0A0A]/95 px-6 py-4 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b border-white/5 bg-[#0A0A0A]/95 px-6 py-4 ">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <div className="flex items-center gap-3">
             <PulseDot active={isLive} />
@@ -332,7 +333,7 @@ function A2ADashboardPage() {
               ArcLayer <span className="text-[#C5A67C]">A2A Agent Registry</span>
             </h1>
           </div>
-          <div className="flex items-center gap-4 font-mono text-[10px] text-[#555]">
+          <div className="flex items-center gap-4 font-mono text-[10px] text-[#8A8378]">
             <span>Arc Testnet · 5042002</span>
             <span className={isLive ? 'text-emerald-400' : 'text-amber-400'}>
               {isLive ? 'Autonomous · LIVE' : 'Autonomous · idle'}
@@ -405,7 +406,7 @@ function A2ADashboardPage() {
                   onClick={() => {
                     Array.from(hiddenIds).forEach(unhideAgent);
                   }}
-                  className="mt-1 font-mono text-[10px] text-[#555] underline decoration-dotted hover:text-[#C5A67C]"
+                  className="mt-1 font-mono text-[10px] text-[#8A8378] underline decoration-dotted hover:text-[#C5A67C]"
                 >
                   restore {hiddenIds.size} hidden agent{hiddenIds.size > 1 ? 's' : ''}
                 </button>
@@ -439,12 +440,12 @@ function A2ADashboardPage() {
           )}
         </section>
 
-        <footer className="mt-10 border-t border-white/5 pt-4 font-mono text-[10px] text-[#333]">
+        <footer className="mt-10 border-t border-white/5 pt-4 font-mono text-[10px] text-[#81796E]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span>ArcLayer Protocol · Autonomous Agent Economy on Arc Network</span>
             <span>Source: on-chain indexer + agent telemetry · No simulated values</span>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-[#555]">
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-[#8A8378]">
             <a href="/jobs" className="rounded border border-white/10 bg-white/[0.02] px-2 py-1 text-[#C5A67C] hover:border-[#C5A67C]/40">
               ↗ Manual Job Marketplace · /jobs
             </a>
@@ -548,14 +549,14 @@ function AgentHeroCard({
       {/* Live USDC balance · refreshes every 8s */}
       <div className={`mt-3 rounded border ${accentBorder} bg-black/30 px-3 py-2`}>
         <div className="flex items-baseline justify-between gap-2">
-          <p className="font-mono text-[9px] uppercase tracking-widest text-[#555]">USDC balance · live</p>
+          <p className="font-mono text-[9px] uppercase tracking-widest text-[#8A8378]">USDC balance · live</p>
           <span className="font-mono text-[8px] text-emerald-400/70">● synced</span>
         </div>
         <p className={`mt-1 font-mono text-base ${accentText}`}>
           {balance ? `${formatUSDC(balance)} USDC` : '—'}
         </p>
       </div>
-      <div className="mt-3 space-y-1 font-mono text-[10px] text-[#444]">
+      <div className="mt-3 space-y-1 font-mono text-[10px] text-[#7D766D]">
         {wallet && (
           <a
             href={`https://testnet.arcscan.app/address/${wallet}`}
@@ -580,7 +581,7 @@ function AgentHeroCard({
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded border border-white/5 bg-black/30 px-3 py-2">
-      <p className="text-[9px] uppercase tracking-widest text-[#555]">{label}</p>
+      <p className="text-[9px] uppercase tracking-widest text-[#8A8378]">{label}</p>
       <p className="mt-1 text-sm text-[#EAE4D8]">{value}</p>
     </div>
   );
@@ -589,7 +590,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 function KPICard({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
   return (
     <div className="rounded border border-white/5 bg-white/[0.02] p-4">
-      <p className="font-mono text-[9px] uppercase tracking-widest text-[#555]">{label}</p>
+      <p className="font-mono text-[9px] uppercase tracking-widest text-[#8A8378]">{label}</p>
       <p className={`mt-2 font-mono text-2xl font-medium ${accent ? 'text-[#C5A67C]' : 'text-[#EAE4D8]'}`}>
         {value}
       </p>
@@ -602,7 +603,7 @@ function MetricCard({ label, value, sub }: { label: string; value: string | numb
     <div className="rounded border border-[#C5A67C]/10 bg-black/30 p-3">
       <p className="font-mono text-[9px] uppercase tracking-widest text-[#777]">{label}</p>
       <p className="mt-1.5 font-mono text-xl font-medium text-[#EAE4D8]">{value}</p>
-      {sub && <p className="mt-0.5 font-mono text-[9px] text-[#555]">{sub}</p>}
+      {sub && <p className="mt-0.5 font-mono text-[9px] text-[#8A8378]">{sub}</p>}
     </div>
   );
 }
@@ -610,7 +611,7 @@ function MetricCard({ label, value, sub }: { label: string; value: string | numb
 function SparklineCard({ label, data, color }: { label: string; data: number[]; color: string }) {
   return (
     <div className="rounded border border-white/5 bg-white/[0.02] p-4">
-      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-[#555]">{label}</p>
+      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-[#8A8378]">{label}</p>
       <Sparkline data={data.length > 1 ? data : [0, 0]} color={color} />
     </div>
   );

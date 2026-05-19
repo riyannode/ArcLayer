@@ -74,7 +74,7 @@ const activeCells = cells.filter((c) => c.active);
 const HEX_D = hexPath(HEX_SIZE * 0.92);
 
 // ---------- Particle pool ----------
-const PARTICLE_POOL = 10;
+const PARTICLE_POOL = 8;
 type Particle = {
   id: number;
   x: number; // current SVG x
@@ -106,6 +106,7 @@ export default function HexGrid3D() {
   const particlesRef = useRef<Particle[]>(makeParticles());
   const spawnAccumRef = useRef(0);
   const prevTimeRef = useRef<number | null>(null);
+  const lastFrameRef = useRef(0);
   const [, forceRender] = useState(0);
   const reducedMotionRef = useRef(false);
 
@@ -142,8 +143,22 @@ export default function HexGrid3D() {
   useEffect(() => {
     if (reducedMotionRef.current) return;
 
+    let hidden = document.hidden;
+    const onVisibility = () => { hidden = document.hidden; };
+    document.addEventListener('visibilitychange', onVisibility);
+    const frameMs = 1000 / 24;
+
     const tick = (t: number) => {
-      const dt = prevTimeRef.current == null ? 16 : Math.min(48, t - prevTimeRef.current);
+      if (hidden) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      if (t - lastFrameRef.current < frameMs) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      lastFrameRef.current = t;
+      const dt = prevTimeRef.current == null ? 16 : Math.min(80, t - prevTimeRef.current);
       prevTimeRef.current = t;
 
       // Lerp mouse toward target
@@ -162,7 +177,7 @@ export default function HexGrid3D() {
 
       // Particle spawner
       spawnAccumRef.current += dt;
-      if (spawnAccumRef.current > 550 && activeCells.length > 0) {
+      if (spawnAccumRef.current > 900 && activeCells.length > 0) {
         spawnAccumRef.current = 0;
         const free = particlesRef.current.find((p) => !p.alive);
         if (free) {
@@ -186,13 +201,14 @@ export default function HexGrid3D() {
         }
       }
 
-      forceRender((n) => (n + 1) % 1e9);
+      if (particlesRef.current.some((p) => p.alive)) forceRender((n) => (n + 1) % 1e9);
       rafRef.current = requestAnimationFrame(tick);
     };
 
     rafRef.current = requestAnimationFrame(tick);
     return () => {
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 

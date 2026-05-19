@@ -170,7 +170,7 @@ function TerminalPanel({
 }) {
   return (
     <section
-      className={`min-w-0 overflow-hidden rounded-sm border border-white/10 bg-[#0A0A0A]/90 backdrop-blur-xl ${className}`}
+      className={`min-w-0 overflow-hidden rounded-sm border border-white/10 bg-[#0A0A0A]/90  ${className}`}
     >
       <div className="flex h-10 items-center gap-2 border-b border-white/10 bg-black/30 px-3">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
@@ -771,7 +771,7 @@ function LiveA2AFlow({ receipt }: { receipt: FlowReceipt | null }) {
     <div className="flex h-full flex-col gap-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">x402 agent payment lifecycle · auto-running 24/7</div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">x402 agent payment lifecycle · backend-ready demo, auto POST every 90s</div>
           <div className="mt-1 text-sm text-[#EAE4D8]/70">Pythia charges Apolo → Apolo charges Hermes → Hermes logs execution proof. Apolo receives reputation because Apolo filters the data.</div>
         </div>
         <div className={`rounded-sm border px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] ${step >= 0 ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-300' : 'border-white/15 bg-black/20 text-[#EAE4D8]/40'}`}>
@@ -836,7 +836,16 @@ function LiveA2AFlow({ receipt }: { receipt: FlowReceipt | null }) {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-const LOOP_INTERVAL_MS = 8000;
+const MARKET_SIGNAL_POLL_MS = 20000;
+const TRACTION_POLL_MS = 30000;
+const MARKET_WIDGET_POLL_MS = 7000;
+const REGISTRY_POLL_MS = 60000;
+const FLOW_POST_INTERVAL_MS = 90000;
+
+function runWhenVisible(fn: () => void | Promise<void>) {
+  if (typeof document !== 'undefined' && document.hidden) return;
+  void fn();
+}
 
 export default function LiveA2AAgentPageRoute() {
   const [now, setNow] = useState('');
@@ -862,17 +871,18 @@ export default function LiveA2AAgentPageRoute() {
   const latestRow = signalRows[0] ?? null;
   const latestVerdict = verdictFromSignal(latestRow ?? undefined);
 
-  // Clock + loop ticker (every 250ms for smooth progress bar)
+  // Clock + loop ticker: 1s cadence to avoid CPU churn.
   useEffect(() => {
     setNow(new Date().toISOString().slice(11, 19));
     const t = setInterval(() => {
+      if (document.hidden) return;
       setNow(new Date().toISOString().slice(11, 19));
-      setLoopMs((m) => m + 250);
-    }, 250);
+      setLoopMs((m) => m + 1000);
+    }, 1000);
     return () => clearInterval(t);
   }, []);
 
-  // Markets + signals (every loop interval)
+  // Markets + signals (20s, paused when tab is hidden)
   useEffect(() => {
     let alive = true;
     async function load() {
@@ -910,15 +920,15 @@ export default function LiveA2AAgentPageRoute() {
         if (alive) setErrors((e) => [`signals: ${err?.message}`, ...e].slice(0, 3));
       }
     }
-    load();
-    const t = setInterval(load, LOOP_INTERVAL_MS);
+    runWhenVisible(load);
+    const t = setInterval(() => runWhenVisible(load), MARKET_SIGNAL_POLL_MS);
     return () => {
       alive = false;
       clearInterval(t);
     };
   }, []);
 
-  // Traction (every 8s)
+  // Traction (30s, paused when tab is hidden)
   useEffect(() => {
     let alive = true;
     async function load() {
@@ -935,15 +945,15 @@ export default function LiveA2AAgentPageRoute() {
         if (alive) setErrors((e) => [`traction: ${err?.message}`, ...e].slice(0, 3));
       }
     }
-    load();
-    const t = setInterval(load, 8000);
+    runWhenVisible(load);
+    const t = setInterval(() => runWhenVisible(load), TRACTION_POLL_MS);
     return () => {
       alive = false;
       clearInterval(t);
     };
   }, []);
 
-  // Market widget data: Polymarket orderbook + Coinbase live price/candles (every 4s)
+  // Market widget data: Polymarket orderbook + RTDS/candles snapshot (7s, paused when hidden)
   useEffect(() => {
     let alive = true;
     async function load() {
@@ -967,8 +977,8 @@ export default function LiveA2AAgentPageRoute() {
         if (alive) setErrors((e) => [`market-widget: ${err?.message}`, ...e].slice(0, 3));
       }
     }
-    load();
-    const t = setInterval(load, 1500);
+    runWhenVisible(load);
+    const t = setInterval(() => runWhenVisible(load), MARKET_WIDGET_POLL_MS);
     return () => {
       alive = false;
       clearInterval(t);
@@ -1107,7 +1117,7 @@ export default function LiveA2AAgentPageRoute() {
   const categoryTotalUsdcVolume = isPredictionMarket ? totalUsdcVolume : 0;
   const categoryCompletedJobs = isPredictionMarket ? completedJobs : 0;
 
-  // Poll registered agents from on-chain AgentRegistry every 15s.
+  // Poll registered agents from on-chain AgentRegistry every 60s.
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -1122,12 +1132,12 @@ export default function LiveA2AAgentPageRoute() {
         /* registry fetch is best-effort */
       }
     }
-    load();
-    const id = setInterval(load, 15000);
+    runWhenVisible(load);
+    const id = setInterval(() => runWhenVisible(load), REGISTRY_POLL_MS);
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  // Auto-poll x402 flow receipt every 30s — fully autonomous, no manual trigger
+  // Auto-run x402 flow receipt every 90s — low-frequency POST to avoid backend churn
   // Receipt lights up green for ~8s then fades back to dark (idle) until next tx
   useEffect(() => {
     if (!isPredictionMarket) return;
@@ -1150,8 +1160,8 @@ export default function LiveA2AAgentPageRoute() {
         setErrors((e) => [`flow: ${err?.message}`, ...e].slice(0, 3));
       }
     }
-    poll();
-    const id = setInterval(poll, 30000);
+    runWhenVisible(poll);
+    const id = setInterval(() => runWhenVisible(poll), FLOW_POST_INTERVAL_MS);
     return () => { cancelled = true; clearInterval(id); if (fadeTimer) clearTimeout(fadeTimer); };
   }, [isPredictionMarket]);
 
