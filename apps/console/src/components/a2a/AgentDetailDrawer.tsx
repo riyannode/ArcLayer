@@ -11,7 +11,8 @@ const TYPE_COLORS: Record<FeedItem['type'], string> = {
   error: 'bg-red-500/15 text-red-300 border-red-500/30',
 };
 
-const AGENT_COLORS: Record<'Ignia' | 'Apolo' | 'Hermes', string> = {
+const AGENT_COLORS: Record<FeedItem['agent'], string> = {
+  Pythia: 'text-cyan-200',
   Ignia: 'text-cyan-300',
   Apolo: 'text-violet-300',
   Hermes: 'text-amber-300',
@@ -86,6 +87,8 @@ export function AgentDetailDrawer({
 }) {
   const [copied, setCopied] = useState(false);
   if (!agent) return null;
+
+  const x402Receipts = agent.activity.filter((item) => item.tx || item.type === 'payment' || item.label.toLowerCase().includes('x402') || item.label.toLowerCase().includes('apolo'));
 
   const copyWallet = async () => {
     const value = agent.wallet || agent.agentId;
@@ -217,12 +220,18 @@ export function AgentDetailDrawer({
         <div className="mt-6">
           <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Recent x402/payment receipts</p>
           <div className="mt-2 space-y-2">
-            {agent.activity.filter((item) => item.tx).slice(0, 4).map((item) => (
-              <a key={item.id} href={`https://testnet.arcscan.app/tx/${item.tx}`} target="_blank" rel="noopener noreferrer" className="block rounded border border-white/10 bg-white/[0.02] p-2 font-mono text-[11px] text-[#b5b5b5] hover:border-[#C5A67C]/30">
-                Payment receipt · {short(item.tx || '')} ↗
-              </a>
+            {x402Receipts.slice(0, 4).map((item) => (
+              item.tx ? (
+                <a key={item.id} href={`https://testnet.arcscan.app/tx/${item.tx}`} target="_blank" rel="noopener noreferrer" className="block rounded border border-white/10 bg-white/[0.02] p-2 font-mono text-[11px] text-[#b5b5b5] hover:border-[#C5A67C]/30">
+                  Payment receipt · {short(item.tx || '')} ↗
+                </a>
+              ) : (
+                <div key={item.id} className="rounded border border-white/10 bg-white/[0.02] p-2 font-mono text-[11px] text-[#b5b5b5]">
+                  {item.label}
+                </div>
+              )
             ))}
-            {agent.activity.filter((item) => item.tx).length === 0 && (
+            {x402Receipts.length === 0 && (
               <p className="rounded border border-white/10 bg-white/[0.02] p-2 font-mono text-[11px] text-[#555]">No recent payment receipts for this agent.</p>
             )}
           </div>

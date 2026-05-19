@@ -31,23 +31,49 @@ export function buildAgentNetwork({
   registeredAgents?: RegisteredAgent[];
   hiddenIds?: Set<string>;
 }): NetworkAgent[] {
-  // On-chain stats live under legacy keys (pythia/hermes) — re-brand as Ignia/Hermes here.
-  const igniaStats = onchain?.agents.pythia?.stats ?? null;
-  const apoloStats = onchain?.agents.apolo?.stats ?? igniaStats;
+  // On-chain status still exposes the legacy `pythia` key. Keep Pythia visible as the raw oracle.
+  const pythiaStats = onchain?.agents.pythia?.stats ?? null;
+  const igniaStats = pythiaStats;
+  const apoloStats = onchain?.agents.apolo?.stats ?? null;
   const hermesStats = onchain?.agents.hermes?.stats ?? null;
   const feedItems = feed?.items ?? [];
-  const igniaId = onchain?.agents.pythia?.agentId;
+  const pythiaId = onchain?.agents.pythia?.agentId;
+  const igniaId = pythiaId;
   const apoloId = onchain?.agents.apolo?.agentId;
   const hermesId = onchain?.agents.hermes?.agentId;
+  const pythiaActivity = feedItems.filter((item) => item.agent === 'Ignia' || item.agent === 'Pythia').slice(0, 8);
+  const apoloActivity = feedItems.filter((item) => item.agent === 'Apolo' || item.label.toLowerCase().includes('apolo')).slice(0, 8);
 
   const agents: NetworkAgent[] = [
     {
-      id: 'ignia',
-      name: 'Ignia',
+      id: 'pythia',
+      name: 'Pythia',
       role: 'Signal Oracle (raw)',
       capability: ['Polymarket Data', 'Multi-Strategy', 'Internal Feed'],
       description:
-        'Raw-signal oracle. Pulls live Polymarket gamma + CLOB data, runs 6 strategies (regime, microstructure, sniper, forecast-edge, synthetic-arb, entry-quality), and emits unfiltered signals to Apolo. Free, internal-only — never sells directly.',
+        'Raw signal oracle. Pulls live Polymarket gamma + CLOB data, runs multi-strategy signal scoring, and emits unfiltered signals to Apolo. Internal upstream oracle — Apolo is the paid decision seller.',
+      status: isLive ? 'LIVE' : 'IDLE',
+      wallet: onchain?.wallets?.pythia,
+      agentId: pythiaId,
+      reputation: pythiaStats?.reputationScore ?? 0,
+      callsServed: pythiaStats?.callsServed ?? 0,
+      jobsCompleted: jobsForAgent(overview, pythiaId),
+      revenueRaw: '0',
+      balanceRaw: onchain?.balances?.usdc?.pythia,
+      primaryAction: 'View Signals',
+      categories: ['signal-oracles', 'data-providers'],
+      activity: pythiaActivity,
+      source: 'featured',
+      canHide: false,
+      connectedTo: ['Apolo'],
+    },
+    {
+      id: 'ignia',
+      name: 'Ignia',
+      role: 'Signal Engine',
+      capability: ['Feature Engineering', 'Signal Normalization', 'Internal Feed'],
+      description:
+        'Internal signal engine behind Pythia. Normalizes market microstructure features before Apolo applies risk + veto policy.',
       status: isLive ? 'LIVE' : 'IDLE',
       wallet: onchain?.wallets?.pythia,
       agentId: igniaId,
@@ -58,10 +84,10 @@ export function buildAgentNetwork({
       balanceRaw: onchain?.balances?.usdc?.pythia,
       primaryAction: 'View Signals',
       categories: ['signal-oracles', 'data-providers'],
-      activity: feedItems.filter((item) => item.agent === 'Ignia').slice(0, 8),
+      activity: pythiaActivity,
       source: 'featured',
       canHide: false,
-      connectedTo: [],
+      connectedTo: ['Pythia', 'Apolo'],
     },
     {
       id: 'apolo',
@@ -80,7 +106,7 @@ export function buildAgentNetwork({
       balanceRaw: onchain?.balances?.usdc?.pythia,
       primaryAction: 'Buy Decision',
       categories: ['signal-oracles', 'payment-agents'],
-      activity: feedItems.filter((item) => item.agent === 'Apolo').slice(0, 8),
+      activity: apoloActivity,
       source: 'featured',
       canHide: false,
       connectedTo: ['Ignia'],
@@ -113,7 +139,7 @@ export function buildAgentNetwork({
   // Keep featured agents above, but skip duplicate cards by id/name/known on-chain agentId.
   if (registeredAgents && registeredAgents.length > 0) {
     const knownIds = new Set(
-      ['ignia', 'apolo', 'hermes', 'pythia', igniaId, apoloId, hermesId]
+      ['ignia', 'apolo', 'hermes', 'pythia', pythiaId, igniaId, apoloId, hermesId]
         .filter(Boolean)
         .map((id) => String(id).toLowerCase())
     );
