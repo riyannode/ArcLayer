@@ -80,6 +80,7 @@ type FlowReceipt = {
   startedAt?: string;
   finishedAt?: string;
   durationMs?: number;
+  activeStep?: number;
   error?: string;
   charges?: AgentCharge[];
   agentReputation?: { agent: 'Apolo'; role: string; delta: number; score: number; rationale: string };
@@ -746,19 +747,22 @@ function LiveA2AFlow({ receipt }: { receipt: FlowReceipt | null }) {
   const hermesCharge = charges.find((c) => c.seller === 'Hermes');
   const timeline = pythiaCharge?.lifecycle ?? [
     { label: 'REQUEST', ts: '', detail: 'Agent requested protected signal' },
-    { label: '402 REQUIRED', ts: '', detail: 'Pythia requires 0.005 USDC' },
+    { label: '402 REQUIRED', ts: '', detail: 'Pythia requires 0.001 USDC' },
     { label: 'X-PAYMENT', ts: '', detail: 'Apolo signed x402 authorization' },
     { label: 'VERIFY', ts: '', detail: 'Facilitator verified payment' },
     { label: 'SETTLE', ts: '', detail: 'USDC settled on Arc' },
     { label: 'UNLOCK', ts: '', detail: 'Signal delivered + receipt saved' },
   ];
+
+  // activeStep: -1 = idle (all dark), 0..5 = step completed up to that index
+  const step = receipt?.activeStep ?? -1;
   const lifecycle = [
-    ['x402 payment required', !!pythiaCharge],
-    ['x402 authorization signed', !!pythiaCharge],
-    ['x402 payment verified', !!pythiaCharge],
-    ['USDC settlement completed', !!pythiaCharge],
-    ['Resource unlocked', !!pythiaCharge],
-    ['Receipt generated', !!pythiaCharge],
+    'x402 payment required',
+    'x402 authorization signed',
+    'x402 payment verified',
+    'USDC settlement completed',
+    'Resource unlocked',
+    'Receipt generated',
   ] as const;
 
   return (
@@ -768,51 +772,58 @@ function LiveA2AFlow({ receipt }: { receipt: FlowReceipt | null }) {
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">x402 agent payment lifecycle · auto-running 24/7</div>
           <div className="mt-1 text-sm text-[#EAE4D8]/70">Pythia charges Apolo → Apolo charges Hermes → Hermes logs execution proof. Apolo receives reputation because Apolo filters the data.</div>
         </div>
-        <div className="rounded-sm border border-emerald-300/35 bg-emerald-400/10 px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300">
-          {receipt ? '● live receipt' : '● polling…'}
+        <div className={`rounded-sm border px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] ${step >= 0 ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-300' : 'border-white/15 bg-black/20 text-[#EAE4D8]/40'}`}>
+          {step >= 5 ? '● receipt ready' : step >= 0 ? '● processing…' : '○ idle'}
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-6">
-        {lifecycle.map(([label, done]) => (
-          <div key={label} className={`rounded-sm border p-2 ${done ? 'border-emerald-300/30 bg-emerald-400/5' : 'border-white/10 bg-black/15'}`}>
-            <div className={`h-1.5 w-1.5 rounded-full ${done ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,.8)]' : 'bg-white/25'}`} />
-            <div className={`mt-2 font-mono text-[9px] uppercase tracking-[0.16em] ${done ? 'text-emerald-300' : 'text-[#EAE4D8]/45'}`}>{label}</div>
-          </div>
-        ))}
+        {lifecycle.map((label, i) => {
+          const done = i <= step;
+          const active = i === step && step < 5;
+          return (
+            <div key={label} className={`rounded-sm border p-2 transition-all duration-500 ${done ? 'border-emerald-300/30 bg-emerald-400/5' : 'border-white/10 bg-black/15'}`}>
+              <div className={`h-1.5 w-1.5 rounded-full transition-all duration-500 ${done ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,.8)]' : 'bg-white/20'} ${active ? 'animate-pulse' : ''}`} />
+              <div className={`mt-2 font-mono text-[9px] uppercase tracking-[0.16em] transition-colors duration-500 ${done ? 'text-emerald-300' : 'text-[#EAE4D8]/35'}`}>{label}</div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="rounded-sm border border-white/10 bg-black/15 p-3">
         <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C]">402 → x402 → receipt timeline</div>
         <div className="grid grid-cols-1 gap-2 md:grid-cols-6">
-          {timeline.slice(0, 6).map((ev, i) => (
-            <div key={`${ev.label}-${i}`} className={`relative rounded-sm border p-2 ${pythiaCharge ? 'border-emerald-300/25 bg-emerald-400/5' : 'border-white/10 bg-[#0A0A0A]'}`}>
-              {i < 5 && <span className={`absolute -right-1.5 top-1/2 hidden h-px w-3 md:block ${pythiaCharge ? 'bg-emerald-300/45' : 'bg-white/20'}`} />}
-              <div className="font-mono text-[10px] font-bold text-[#EAE4D8]">{ev.label}</div>
-              <div className="mt-1 text-[10px] leading-relaxed text-[#EAE4D8]/55">{ev.detail}</div>
-            </div>
-          ))}
+          {timeline.slice(0, 6).map((ev, i) => {
+            const done = i <= step;
+            return (
+              <div key={`${ev.label}-${i}`} className={`relative rounded-sm border p-2 transition-all duration-500 ${done ? 'border-emerald-300/25 bg-emerald-400/5' : 'border-white/10 bg-[#0A0A0A]'}`}>
+                {i < 5 && <span className={`absolute -right-1.5 top-1/2 hidden h-px w-3 md:block transition-colors duration-500 ${done ? 'bg-emerald-300/45' : 'bg-white/15'}`} />}
+                <div className={`font-mono text-[10px] font-bold transition-colors duration-500 ${done ? 'text-emerald-200' : 'text-[#EAE4D8]/50'}`}>{ev.label}</div>
+                <div className={`mt-1 text-[10px] leading-relaxed transition-colors duration-500 ${done ? 'text-[#EAE4D8]/70' : 'text-[#EAE4D8]/30'}`}>{ev.detail}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <ChargeCard charge={pythiaCharge} fallback={{ seller: 'Pythia', title: 'Pythia · Signal Oracle', service: 'BTC 5m signal', amount: '0.005', paidBy: 'Apolo', recipient: 'Pythia wallet', status: 'x402 verified' }} />
-        <ChargeCard charge={apoloCharge} fallback={{ seller: 'Apolo', title: 'Apolo · Decision Agent', service: 'risk + edge decision', amount: '0.010', paidBy: 'Hermes', recipient: 'Apolo wallet', status: 'x402 settled' }} />
-        <ChargeCard charge={hermesCharge} fallback={{ seller: 'Hermes', title: 'Hermes · Autonomous Executor', service: 'execution intent / action proof', amount: '0.015', paidBy: 'Job/session', recipient: 'Hermes wallet', status: 'action logged' }} />
+        <ChargeCard charge={pythiaCharge} fallback={{ seller: 'Pythia', title: 'Pythia · Signal Oracle', service: 'BTC 5m signal', amount: '0.001', paidBy: 'Apolo', recipient: 'Pythia wallet', status: step >= 2 ? 'x402 verified' : 'waiting' }} />
+        <ChargeCard charge={apoloCharge} fallback={{ seller: 'Apolo', title: 'Apolo · Decision Agent', service: 'risk + edge decision', amount: '0.0002', paidBy: 'Hermes', recipient: 'Apolo wallet', status: step >= 4 ? 'x402 settled' : 'waiting' }} />
+        <ChargeCard charge={hermesCharge} fallback={{ seller: 'Hermes', title: 'Hermes · Autonomous Executor', service: 'execution intent / action proof', amount: '0.01', paidBy: 'Job/session', recipient: 'Hermes wallet', status: step >= 5 ? 'action logged' : 'waiting' }} />
       </div>
 
       <div className="grid grid-cols-1 gap-px overflow-hidden rounded-sm border border-white/10 bg-[#C5A67C]/10 md:grid-cols-3">
         <div className="bg-[#0A0A0A]/90 px-3 py-2">
           <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">Pythia output</div>
-          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.signal ? `${receipt.signal.asset} · ${receipt.signal.signal} · ${receipt.signal.confidence}%` : 'Run flow to unlock signal receipt'}</div>
+          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.signal ? `${receipt.signal.asset} · ${receipt.signal.signal} · ${receipt.signal.confidence}%` : '—'}</div>
         </div>
         <div className="bg-[#0A0A0A]/90 px-3 py-2">
           <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">Apolo reputation</div>
-          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.agentReputation ? `+${receipt.agentReputation.delta} · score ${receipt.agentReputation.score}` : 'Run flow to update resolver reputation'}</div>
+          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.agentReputation ? `+${receipt.agentReputation.delta} · score ${receipt.agentReputation.score}` : '—'}</div>
         </div>
         <div className="bg-[#0A0A0A]/90 px-3 py-2">
           <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/55">Hermes output</div>
-          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.hermesAction ? `${receipt.hermesAction.action} · ${receipt.hermesAction.sizeUsdc} USDC · ${receipt.hermesAction.mode}` : 'Run flow to log action proof'}</div>
+          <div className="mt-1 font-mono text-sm text-[#EAE4D8]">{receipt?.hermesAction ? `${receipt.hermesAction.action} · ${receipt.hermesAction.sizeUsdc} USDC · ${receipt.hermesAction.mode}` : '—'}</div>
         </div>
       </div>
 
@@ -1088,9 +1099,11 @@ export default function LiveA2AAgentPageRoute() {
   const isPredictionMarket = category.key === 'prediction-market';
 
   // Auto-poll x402 flow receipt every 30s — fully autonomous, no manual trigger
+  // Receipt lights up green for ~8s then fades back to dark (idle) until next tx
   useEffect(() => {
     if (!isPredictionMarket) return;
     let cancelled = false;
+    let fadeTimer: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
       try {
         const r = await fetch('/api/a2a/run-flow', { method: 'POST', cache: 'no-store' });
@@ -1098,6 +1111,11 @@ export default function LiveA2AAgentPageRoute() {
         if (cancelled) return;
         setFlowReceipt(data);
         if (!r.ok || !data.ok) setErrors((e) => [`flow: ${data.error || r.statusText}`, ...e].slice(0, 3));
+        // After 8s, reset to idle (all dark) until next poll
+        if (fadeTimer) clearTimeout(fadeTimer);
+        fadeTimer = setTimeout(() => {
+          if (!cancelled) setFlowReceipt((prev) => prev ? { ...prev, activeStep: -1 } : prev);
+        }, 8000);
       } catch (err: any) {
         if (cancelled) return;
         setErrors((e) => [`flow: ${err?.message}`, ...e].slice(0, 3));
@@ -1105,7 +1123,7 @@ export default function LiveA2AAgentPageRoute() {
     }
     poll();
     const id = setInterval(poll, 30000);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => { cancelled = true; clearInterval(id); if (fadeTimer) clearTimeout(fadeTimer); };
   }, [isPredictionMarket]);
 
   return (
