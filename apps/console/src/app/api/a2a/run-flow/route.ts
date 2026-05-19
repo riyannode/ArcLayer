@@ -35,6 +35,8 @@ type FlowReceipt = {
   startedAt: string;
   finishedAt: string;
   durationMs: number;
+  /** 0-5 = which step just completed. -1 = idle/stale (all dark). */
+  activeStep: number;
   charges: AgentCharge[];
   decision: {
     asset: string;
@@ -75,6 +77,23 @@ export async function POST(req: Request) {
     const repDelta = apoloApproved ? 1 : 0;
     const repScore = bumpApoloReputation(repDelta);
 
+    // activeStep maps the lifecycle progression (0..5) based on real row state.
+    // This drives the UI step-by-step green progression.
+    //   0 → x402 payment required (Hermes hit Apolo, got 402)
+    //   1 → x402 authorization signed (Hermes wallet signed)
+    //   2 → x402 payment verified (facilitator verified)
+    //   3 → USDC settlement completed (settle tx mined)
+    //   4 → Resource unlocked (signal delivered)
+    //   5 → Receipt generated (full record persisted)
+    let activeStep = -1;
+    const sigOk = !!row.ignia?.rawSignal && row.ignia.confidence >= 0;
+    const apoloDecided = !!row.apolo?.decision;
+    const hermesActed = !!row.hermes?.action && row.hermes.action !== 'SKIP';
+    if (sigOk) activeStep = 0;
+    if (sigOk && apoloDecided) activeStep = 2;
+    if (sigOk && apoloDecided && apoloApproved) activeStep = 4;
+    if (sigOk && apoloDecided && apoloApproved && hermesActed) activeStep = 5;
+
     const signalPayload = {
       asset: row.asset,
       signal: row.ignia.rawSignal,
@@ -88,6 +107,7 @@ export async function POST(req: Request) {
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
       durationMs: finishedAt.getTime() - startedAt.getTime(),
+      activeStep,
       charges,
       decision: {
         asset: row.asset,
