@@ -1175,7 +1175,7 @@ export default function LiveA2AAgentPageRoute() {
           </div>
           <div className="flex min-w-0 flex-wrap">
             <MetricCard label="Total Requests" value={`${categoryTotalRequests}`} sub="category agent calls" tone="cyan" />
-            <MetricCard label="Total USDC Volume" value={`$${fmt(categoryTotalUsdcVolume, 2)}`} sub="category x402 settled" tone="green" />
+            <MetricCard label="A2A Volume Settled" value={`$${fmt(categoryTotalUsdcVolume, 2)}`} sub="category x402 · manual excluded" tone="green" />
             <MetricCard label="Total Agents" value={`${categoryTotalAgents}`} sub="featured + registry" tone="violet" />
             <MetricCard label="Completed Jobs" value={`${categoryCompletedJobs}`} sub="category work receipts" tone="amber" />
           </div>

@@ -99,7 +99,7 @@ export default function LiveA2AAgentPage() {
           </div>
           <div className="flex min-w-0 flex-wrap">
             <MetricCard label="Total Requests" value={`${metrics.totalRequests}`} sub="A2A calls only" tone="cyan" />
-            <MetricCard label="Total USDC Volume" value={`$${fmt(metrics.totalUsdcVolume, 2)}`} sub="x402 settled only" tone="green" />
+            <MetricCard label="A2A Volume Settled" value={`$${fmt(metrics.totalUsdcVolume, 2)}`} sub="x402 only · manual excluded" tone="green" />
             <MetricCard label="Total Agents" value={`${metrics.totalAgents || 3}`} sub="A2A network agents" tone="violet" />
             <MetricCard label="Completed Jobs" value="—" sub="manual escrow excluded" tone="amber" />
           </div>
