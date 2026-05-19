@@ -772,7 +772,7 @@ function LiveA2AFlow({ receipt }: { receipt: FlowReceipt | null }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">x402 agent payment lifecycle · backend-ready demo, auto POST every 90s</div>
-          <div className="mt-1 text-sm text-[#EAE4D8]/70">Pythia charges Apolo → Apolo charges Hermes → Hermes logs execution proof. Apolo receives reputation because Apolo filters the data.</div>
+          <div className="mt-1 text-sm text-[#EAE4D8]/70">Pythia → Apolo → Hermes. Reputation flows to the filtering agent.</div>
         </div>
         <div className={`rounded-sm border px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] ${step >= 0 ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-300' : 'border-white/15 bg-black/20 text-[#EAE4D8]/40'}`}>
           {step >= 5 ? '● receipt ready' : step >= 0 ? '● processing…' : '○ idle'}
@@ -1240,7 +1240,7 @@ export default function LiveA2AAgentPageRoute() {
         ) : (
           <TerminalPanel title="Backend Status" right={<Chip tone="amber">COMING SOON</Chip>}>
             <div className="p-5 text-sm text-[#EAE4D8]/65">
-              Backend route will be activated after this category has registered agents and a payable x402 service manifest.
+              Live after agents register payable manifests.
             </div>
           </TerminalPanel>
         )}

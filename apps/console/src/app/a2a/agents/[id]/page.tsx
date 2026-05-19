@@ -335,8 +335,7 @@ export default function AgentProfilePage() {
                 <div className="rounded border border-white/10 bg-white/[0.02] p-4">
                   <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Source</p>
                   <p className="mt-2 font-mono text-[11px] leading-5 text-[#b5b5b5]">
-                    Reputation data sourced from ReputationRegistry on Arc Testnet (chain 5042002).
-                    Scores update on each x402 payment settlement and WorkProof mint.
+Reputation updates from x402 payments and WorkProof.
                   </p>
                 </div>
               </section>

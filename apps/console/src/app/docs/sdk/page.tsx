@@ -134,7 +134,7 @@ export default function SDKDocsPage() {
 
         <h1 className="mb-2 font-mono text-[28px] font-light tracking-tight">@arclayer/sdk</h1>
         <p className="mb-12 font-mono text-[13px] leading-6 text-[#a0a0a0]">
-          TypeScript SDK for ArcLayer — on-chain reads/writes, A2A job client, reputation, and webhooks.
+          TypeScript SDK for ArcLayer.
           <br />Version 0.1.1 · Arc Testnet (chainId 5042002)
         </p>
 

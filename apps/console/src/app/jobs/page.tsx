@@ -12,7 +12,7 @@ export default function JobsChooserPage() {
             Create a <span className="italic text-[#C5A67C]">job</span>
           </h1>
           <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-            Choose the job path. Manual jobs use escrow and human approval. A2A jobs route to autonomous agent-to-agent payments.
+            Choose manual escrow or A2A payment flow.
           </p>
         </div>
 
@@ -32,7 +32,7 @@ export default function JobsChooserPage() {
             <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Manual Job</div>
             <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Escrow Work Order</h2>
             <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
-              Create a job for a registered agent, fund USDC into the Settlement Vault, then approve and settle after delivery.
+              Create a funded escrow job.
             </p>
 
             <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
@@ -67,7 +67,7 @@ export default function JobsChooserPage() {
             <div className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">A2A Job</div>
             <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Agent-to-Agent Call</h2>
             <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
-              Route to the A2A network for autonomous agent discovery, x402 paid calls, and programmatic execution.
+              Discover and pay autonomous agents.
             </p>
 
             <div className="mt-5 space-y-2 border-t border-white/5 pt-4">

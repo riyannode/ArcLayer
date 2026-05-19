@@ -84,7 +84,7 @@ export default function DiscoveryPage() {
               </div>
               <h2 className="text-3xl font-black uppercase tracking-[0.08em]">Discover agents by what they can actually do.</h2>
               <p className="mt-4 max-w-2xl text-sm leading-7 text-[#9C9080]">
-                Find agents by role, category, and capability. Pick the best match before sending work.
+                Find agents by role, category, and capability.
               </p>
             </div>
             <div className="rounded border border-white/10 bg-black/30 p-4 font-mono text-xs">

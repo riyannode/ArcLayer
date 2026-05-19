@@ -12,7 +12,7 @@ export default function RegisterChooserPage() {
             Register an <span className="italic text-[#C5A67C]">agent</span>
           </h1>
           <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-            Choose how your agent uses ArcLayer. Register a marketplace agent, or connect your own autonomous runtime.
+            Choose a registration path.
           </p>
         </div>
 
@@ -31,7 +31,7 @@ export default function RegisterChooserPage() {
             <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Manual Agent</div>
             <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Marketplace Agent</h2>
             <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
-              Register an agent clients can hire. Submit work and get paid from escrow after approval.
+              Get hired and paid from escrow.
             </p>
 
             <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
@@ -76,7 +76,7 @@ export default function RegisterChooserPage() {
             <div className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">Autonomous Agent</div>
             <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">A2A Network Agent</h2>
             <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
-              Register a live agent endpoint for the A2A network. Other agents can call it and pay per request.
+              Live endpoint, paid per request.
             </p>
 
             <div className="mt-5 space-y-2 border-t border-white/5 pt-4">

@@ -15,39 +15,39 @@ const paths = [
   {
     label: 'Path A · x402',
     title: 'Charge for my API',
-    body: 'Gate any API behind a payment. Users pay before the resource unlocks.',
+    body: 'Gate any API behind a payment.',
     cta: 'Use x402 path',
     href: '#path-a-x402',
   },
   {
     label: 'Path B · Escrow',
     title: 'Create accountable agent work',
-    body: 'Register agents, create jobs, fund escrow, approve work, and settle payment.',
+    body: 'Fund escrow, approve work, settle payment.',
     cta: 'Use escrow path',
     href: '#path-b-escrow',
   },
   {
     label: 'Read protocol data',
     title: 'Index jobs and agents',
-    body: 'Pull jobs, agents, proofs, and stats from the indexer REST API. No wallet needed.',
+    body: 'Read jobs, agents, and stats via REST.',
     cta: 'Jump to REST API',
     href: '#rest-api',
   },
   {
     label: 'AI agent skill',
     title: 'Let AI integrate it',
-    body: 'Paste the ArcLayer skill into any AI coding assistant and integrate faster.',
+    body: 'Paste into any AI coding assistant.',
     cta: 'Copy AI skill',
     href: '#ai-skill',
   },
 ];
 
 const fiveMinutePath = [
-  'Pick Path A if you are charging for API access. Pick Path B if you need accountable work and escrow.',
-  'Install @arclayer/sdk and connect to Arc Testnet.',
-  'Use indexer APIs for reads; use SDK builders for wallet writes.',
-  'Keep user UI labels simple; put raw contract and x402 details inside Developer details.',
-  'Test one full happy path on Arc Testnet before claiming production readiness.',
+  'Path A = API access. Path B = escrow work.',
+  'Install SDK, connect to Arc Testnet.',
+  'Indexer for reads, SDK for writes.',
+  'Keep UI labels simple.',
+  'Test one happy path on testnet.',
 ];
 
 const quickstart = [
@@ -224,15 +224,14 @@ export default function DocsPage() {
           Build agents on <em className="italic" style={{ color: '#C5A67C' }}>Arc</em>
         </h1>
         <p className="text-base max-w-2xl mb-8" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-          Typed SDK, contract ABIs, REST indexer, and AI-ready integration guides for building
-          escrowed agent workflows on Arc.
+          SDK, APIs, and examples for Arc agents.
         </p>
 
         {/* Testnet warning strip */}
         <div className="border border-[#C5A67C]/25 bg-[#C5A67C]/[0.04] px-4 py-2.5 mb-8 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
           <span className="font-mono uppercase tracking-[0.18em] text-[10px]" style={{ color: '#C5A67C' }}>Testnet</span>
           <span style={{ color: 'rgba(234, 228, 216, 0.7)' }}>
-            Arc Testnet only · chainId <span className="font-mono" style={{ color: '#EAE4D8' }}>5042002</span> · do not use mainnet funds · connected wallet acts as Client / Evaluator.
+            Arc Testnet only · chainId <span className="font-mono" style={{ color: '#EAE4D8' }}>5042002</span>.
           </span>
         </div>
 
@@ -310,10 +309,7 @@ export default function DocsPage() {
           Accept paid agent requests
         </h2>
         <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-          Use ArcLayer x402 endpoints to require USDC settlement on Arc before any API or agent
-          run. The flow is HTTP-native: server returns <code className="text-[#C5A67C]">402 Payment Required</code>,
-          client signs a payment authorization, ArcLayer verifies/settles through Arc Native Payment
-          or Circle Gateway Payment, and the resource unlocks.
+          Charge USDC before API or agent access.
         </p>
 
         <div className="grid gap-4 md:grid-cols-2 mb-4">
@@ -424,9 +420,7 @@ export default function DocsPage() {
           Use ArcLayer Escrow when work needs review
         </h2>
         <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-          Escrow is a trust layer, not a payment method. Use it when an agent run produces a deliverable
-          that a client must approve before payout. ArcLayer holds USDC in the Settlement Vault until
-          the client approves the work, then settles payout and mints a WorkProof.
+          Milestone escrow for reviewed agent work.
         </p>
 
         <div className="grid gap-4 md:grid-cols-2 mb-6">
@@ -454,10 +448,10 @@ export default function DocsPage() {
           <ol className="grid gap-2 text-sm md:grid-cols-2" style={{ color: 'rgba(234, 228, 216, 0.78)', lineHeight: 1.5 }}>
             <li><span className="font-mono text-[#C5A67C]">01.</span> Register Agent — on-chain identity, controller wallet</li>
             <li><span className="font-mono text-[#C5A67C]">02.</span> Create Job — agent, worker, Client Address, task</li>
-            <li><span className="font-mono text-[#C5A67C]">03.</span> Approve &amp; Fund Settlement Vault — USDC held until approval</li>
+            <li><span className="font-mono text-[#C5A67C]">03.</span> Fund Escrow — lock USDC</li>
             <li><span className="font-mono text-[#C5A67C]">04.</span> Submit Work — worker posts deliverable URI</li>
-            <li><span className="font-mono text-[#C5A67C]">05.</span> Approve Work — client/evaluator approves or rejects</li>
-            <li><span className="font-mono text-[#C5A67C]">06.</span> Settle Payment — payout + WorkProof NFT minted</li>
+            <li><span className="font-mono text-[#C5A67C]">05.</span> Review Work</li>
+            <li><span className="font-mono text-[#C5A67C]">06.</span> Settle + mint WorkProof</li>
           </ol>
         </div>
 
@@ -484,8 +478,7 @@ export default function DocsPage() {
       <section id="ai-skill" className="max-w-6xl mx-auto px-6 mb-20 scroll-mt-20">
         <div className="aureo-mono-label mb-3">PROTOCOL · AI AGENT INTEGRATION</div>
         <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-          The fastest way to ship: paste one line into your AI agent and let it wire ArcLayer into
-          your existing app. The skill file is fetched live, so it stays in sync with the protocol.
+Paste into your AI agent to auto-wire ArcLayer.
         </p>
 
         {/* Primary one-liner card */}
@@ -531,8 +524,7 @@ export default function DocsPage() {
         <div className="border border-[#C5A67C]/20 bg-gradient-to-br from-[rgba(197,166,124,0.06)] to-[rgba(5,5,5,0.5)] p-5 mb-6">
           <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>FOR DEPLOYERS</div>
           <p className="text-sm mb-4" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-            Deploying an agent, API, or AI service? Use this skill to let your coding assistant wire
-            ArcLayer payments, escrow, settlement, and proof-of-work into your app.
+Let your coding assistant integrate ArcLayer automatically.
           </p>
           <div className="flex flex-wrap gap-2">
             <CopyButton text={ONELINER_PROMPT} label="Copy AI Skill" />

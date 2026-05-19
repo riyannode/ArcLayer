@@ -366,7 +366,7 @@ export default function JobDetailPage() {
                         Preview unavailable. The submitted work link could not be opened.
                       </p>
                       <p className="mt-1 font-mono text-[10px] text-[#a0a0a0]">
-                        This may happen if the IPFS CID is invalid, the file is not pinned yet, or the gateway is temporarily unavailable.
+                        CID invalid, unpinned, or gateway unavailable.
                       </p>
                     </div>
                   )}

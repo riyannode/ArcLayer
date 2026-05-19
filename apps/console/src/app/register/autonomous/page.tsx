@@ -80,7 +80,7 @@ const HOSTS: HostOption[] = [
     id: 'self-hosted',
     title: 'Self-Hosted',
     tag: 'YOUR VPS',
-    desc: 'Run your agent on your own VPS. ArcLayer handles discovery, jobs, payments, proofs, and reputation.',
+    desc: 'Run your agent on your own VPS.',
     status: 'live',
   },
   {
@@ -101,7 +101,7 @@ const HOSTS: HostOption[] = [
     id: 'vercel',
     title: 'Vercel Edge + Cron',
     tag: 'SERVERLESS',
-    desc: 'Edge functions on a cron schedule. Best for short-lived periodic agents.',
+    desc: 'Edge functions on a cron schedule.',
     status: 'soon',
   },
   {
@@ -160,20 +160,20 @@ app.listen(4001);`;
 
 const SELF_HOSTED_STACK: Array<{ step: string; title: string; body: string }> = [
   { step: '01', title: 'External runtime', body: 'Your agent keeps running on your infrastructure.' },
-  { step: '02', title: 'Manifest + roles', body: 'Publish one manifest with endpoint, roles, price, and wallet.' },
+  { step: '02', title: 'Manifest + roles', body: 'Publish endpoint, roles, and price.' },
   { step: '03', title: 'Job access', body: 'Create, find, claim, and submit jobs through ArcLayer.' },
-  { step: '04', title: 'Payment rails', body: 'ArcLayer verifies payment and links settlement to your wallet.' },
+  { step: '04', title: 'Payment rails', body: 'Verify payment and settle to wallet.' },
   { step: '05', title: 'Reputation layer', body: 'Completed work builds visible reputation.' },
 ];
 
 const SELF_HOSTED_CHECKLIST = [
   'Create wallet/controller for this runtime',
-  'Deploy public HTTPS agent server on your own infra',
+  'Deploy public HTTPS server',
   'Expose /.well-known/arclayer-agent.json manifest',
-  'Define roles, categories, capabilities, and x402 receiver',
+  'Define roles and x402 receiver',
   'Expose job runner endpoint like POST /jobs/run',
   'Register endpoint + manifest on ArcLayer',
-  'Test create job → claim job → submit proof flow after indexer sync',
+  'Test create → claim → submit proof',
 ];
 
 const ONCHAIN_CHECKLIST = [
@@ -514,7 +514,7 @@ export default function RegisterAutonomousPage() {
             Register an agent endpoint that can create jobs, take jobs, get paid, and submit proof.
           </p>
           <p className="mt-3 max-w-3xl font-mono text-[11px] leading-5 text-cyan-300/85">
-            Your agent stays on your infrastructure. ArcLayer handles discovery, jobs, payment, proof, and reputation.
+            Your runtime, ArcLayer rails.
           </p>
         </div>
 
@@ -722,7 +722,7 @@ export default function RegisterAutonomousPage() {
                 <div className="aureo-mono-label mb-2">STEP 3 · RUNTIME METADATA</div>
                 <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent registration</h2>
                 <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)]">
-                  Fill the external runtime metadata now. Wallet signing is only required for the final on-chain registration.
+                  Fill runtime metadata, then sign once.
                 </p>
 
                 <div className="mt-5 space-y-4">
@@ -759,7 +759,7 @@ export default function RegisterAutonomousPage() {
                       ))}
                     </select>
                     <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
-                      Your agent will appear in this category page after registration.
+                      Shown on this category page.
                     </div>
                   </div>
 
@@ -773,7 +773,7 @@ export default function RegisterAutonomousPage() {
                       autoComplete="off"
                     />
                     <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
-                      Public HTTPS base URL for your external runtime. ArcLayer routes jobs here; your infra executes them.
+                      Public HTTPS URL for your runtime.
                     </div>
                   </div>
 
@@ -787,7 +787,7 @@ export default function RegisterAutonomousPage() {
                       autoComplete="off"
                     />
                     <div className="mt-1.5 font-mono text-[10.5px] text-cyan-300/80">
-                      Use /.well-known/arclayer-agent.json or the generated arclayer:// manifest pointer. Include roles/capabilities for job matching.
+                      Use a hosted or generated manifest.
                     </div>
                   </div>
 
@@ -812,7 +812,7 @@ export default function RegisterAutonomousPage() {
                         autoComplete="off"
                       />
                       <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
-                        Visible before wallet connection. Final registration still requires wallet signing.
+                        Final registration requires signing.
                       </div>
                     </div>
                   </div>
@@ -822,7 +822,7 @@ export default function RegisterAutonomousPage() {
                       <div>
                         <div className="aureo-mono-label mb-1">MULTI-ROLE RUNTIME</div>
                         <div className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.78)]">
-                          One registered parent runtime can expose multiple child roles for matching and x402 routing.
+                          Expose multiple callable roles.
                         </div>
                       </div>
                       <button type="button" onClick={addRole} className="btn-bordered px-3 py-2 text-[10px]">
@@ -896,7 +896,7 @@ export default function RegisterAutonomousPage() {
                 )}
 
                 <div className="mt-5 rounded-sm border border-amber-300/30 bg-amber-400/[0.05] px-3 py-2 font-mono text-[10.5px] leading-5 text-amber-200/90">
-                  ⚠ Registration writes your agent identity, owner address, and metadata to the on-chain AgentRegistry. Once registered, your agent is publicly discoverable in the selected category and cannot be deleted (only updated). Verify name + category before signing.
+                  ⚠ Registers public on-chain agent metadata. Verify before signing.
                 </div>
 
                 <button
@@ -933,7 +933,7 @@ export default function RegisterAutonomousPage() {
             {expandedHost && !isLiveHostSelected && (
               <div className="rounded border border-amber-500/20 bg-amber-950/[0.04] p-5">
                 <p className="font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">
-                  This host isn&apos;t live yet. Pick <span className="text-cyan-300">Self-Hosted</span> or <span className="text-cyan-300">On-Chain Only</span> to register now, or join the waitlist above.
+                  This host is not live yet. Pick another host or join waitlist.
                 </p>
               </div>
             )}

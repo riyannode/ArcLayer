@@ -26,10 +26,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
         <meta name="theme-color" content="#050505" />
-          <meta name="description" content="ArcLayer — payment infrastructure for agents ready to ship. Add x402 payments, USDC escrow, WorkProof, and reputation to any AI agent or API." />
+          <meta name="description" content="ArcLayer — payment infrastructure for AI agents." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta property="og:title" content="ArcLayer · Payment infrastructure for agents ready to ship" />
-          <meta property="og:description" content="Add x402 payments, USDC escrow, WorkProof, and reputation to any AI agent or API — without rebuilding payment and settlement logic from scratch." />
+          <meta property="og:description" content="x402 payments, escrow, and reputation for any agent or API." />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="/icon-512.png" />
         <title>ArcLayer · Payment infrastructure for agents ready to ship</title>

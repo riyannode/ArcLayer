@@ -226,7 +226,7 @@ function JobsPage() {
     }
     if (createForm.worker.toLowerCase() === createForm.evaluator.toLowerCase()) {
       setStatusTone('error');
-      setTxState('Worker and client cannot be the same address. The worker receives payout — use the agent\u2019s controller or a dedicated worker wallet.');
+      setTxState('Worker and client cannot be the same address.');
       notify(NOTICE_WORKER_EQUALS_CLIENT);
       return;
     }
@@ -399,7 +399,7 @@ function JobsPage() {
               </span>
             </div>
             <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
-              Track job creation, Fund Settlement Vault, Work submission, Approval, and payment settlement in one place.
+              Create, fund, review, and settle jobs.
             </p>
 
             {/* Filter / sort bar */}
@@ -531,7 +531,7 @@ function JobsPage() {
                   ) : (
                     <>
                       <p className="font-mono text-[11.5px] text-[#EAE4D8]">No indexed jobs yet</p>
-                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">Follow Step 1 and Step 2 on the right to create the first funded job.</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">Create the first funded job.</p>
                     </>
                   )}
                 </div>
@@ -561,7 +561,7 @@ function JobsPage() {
               </div>
               <h2 className="mt-2 aureo-display text-[28px] text-[#EAE4D8]">Create job assignment</h2>
               <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">
-                Assign work to a registered agent. Set the worker wallet and approval authority.
+                Assign work to a registered agent.
               </p>
 
               <div className="mt-5 space-y-4">
@@ -600,7 +600,7 @@ function JobsPage() {
                     </div>
                   ) : (
                     <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
-                      Register an agent first on the Agents page, then return here.
+                      Register an agent first.
                     </div>
                   )}
                 </div>
@@ -614,7 +614,7 @@ function JobsPage() {
                       placeholder="Paste full agent ID if indexer is empty"
                       className="input-mono"
                     />
-                    <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">Fallback only. This appears when the registered-agent list is unavailable or still empty.</div>
+                    <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">Fallback if the indexer is empty.</div>
                   </div>
                 )}
 
@@ -636,8 +636,8 @@ function JobsPage() {
                   />
                   <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
                     {selectedAgent && !customWorker
-                      ? 'Auto-filled with the selected agent\u2019s controller. Edit to use a different worker wallet.'
-                      : 'Worker and client cannot be the same address. The worker receives payout — use the agent\u2019s controller or a dedicated worker wallet.'}
+                      ? 'Auto-filled from selected agent.'
+                      : 'Worker and client cannot be the same address.'}
                   </div>
                 </div>
 
@@ -664,7 +664,7 @@ function JobsPage() {
                   <textarea
                     value={createForm.jobSpec}
                     onChange={(e) => setCreateForm((c) => ({ ...c, jobSpec: e.target.value }))}
-                    placeholder={'Example: Audit the Settlement Vault contract on Arc Testnet and produce a report covering reentrancy, access control, and overflow risks. Deliver findings as a markdown file pinned to IPFS.'}
+                    placeholder={'Example: Audit the Settlement Vault and deliver an IPFS report.'}
                     className="input-mono min-h-[120px]"
                   />
                 </div>
@@ -692,7 +692,7 @@ function JobsPage() {
                 <div className="mt-4 rounded-none border border-[rgba(184,205,126,0.35)] bg-[rgba(184,205,126,0.08)] p-4">
                   <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[#B8CD7E]">Step 1 complete</div>
                   <div className="mt-2 font-mono text-[12px] text-[#EAE4D8]">Job #{createdJobId} created</div>
-                  <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.82)]">Step 2 is prefilled below. Set Budget and Deposit Amount next.</div>
+                  <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.82)]">Step 2 is ready.</div>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Link href={`/job/${createdJobId}`} className="btn-bordered px-3 py-2 text-[9.5px]">OPEN JOB DETAIL</Link>
                     <button type="button" onClick={() => setFundForm((current) => ({ ...current, jobId: createdJobId }))} className="btn-primary px-3 py-2 text-[9.5px]">USE IN FUND STEP</button>
@@ -705,7 +705,7 @@ function JobsPage() {
               <div className="aureo-mono-label mb-2">STEP 2</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Approve &amp; fund Settlement Vault</h2>
               <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">
-                Set the agreed budget, approve USDC, and deposit funds into the Settlement Vault. The escrow holds USDC until the client approves the work.
+                Lock USDC until work is approved.
               </p>
 
               <div className="mt-5 space-y-4">
@@ -717,7 +717,7 @@ function JobsPage() {
                     placeholder="Job ID to budget and fund"
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">Auto-filled after Create Job succeeds. You can also paste any existing job ID here.</div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">Auto-filled after Step 1.</div>
                 </div>
 
                 <div>
@@ -728,7 +728,7 @@ function JobsPage() {
                     placeholder="1"
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">The agreed price for completing this job. Deposit Amount mirrors this unless edited.</div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">Agreed job price.</div>
                 </div>
 
                 <div>
@@ -747,7 +747,7 @@ function JobsPage() {
                     placeholder="1"
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">USDC sent into the Settlement Vault for this job. Usually equal to Budget.</div>
+                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">USDC locked for this job.</div>
                 </div>
 
                 {selectedFundingJob && (

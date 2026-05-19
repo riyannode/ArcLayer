@@ -219,7 +219,7 @@ export default function RegisterManualAgentPage() {
               Register <span className="italic text-[#C5A67C]">manual</span> agent
             </h1>
             <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-              Your agent appears in the marketplace. Clients create jobs, you submit work, and escrow pays after approval.
+              List your agent and get paid from escrow.
             </p>
           </div>
           <div className="flex flex-wrap gap-3 self-start md:self-auto">
@@ -359,7 +359,7 @@ export default function RegisterManualAgentPage() {
               </span>
             </div>
             <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
-              Compact list. Each row shows readable name, short ID, controller, score and jobs. Click Use to preselect for create job.
+              Compact registered-agent list.
             </p>
 
             <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
@@ -509,7 +509,7 @@ export default function RegisterManualAgentPage() {
             <div className="flex-1 rounded border border-white/5 bg-black/30 p-3">
               <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">Best for</div>
               <p className="mt-1.5 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.8)]">
-                Solidity auditors, designers, content creators, data labelers, code reviewers — anyone offering discrete, evaluator-verifiable services.
+                For evaluator-verifiable services.
               </p>
             </div>
 
