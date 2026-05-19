@@ -273,7 +273,10 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     if (paymentResp.transaction) setTxHash(paymentResp.transaction);
     setUnlocked(true);
     // Persist paid state in sessionStorage — auto-clears on browser/tab close
-    if (typeof window !== 'undefined') sessionStorage.setItem(sessionKey(wallet.address), JSON.stringify({ txHash: paymentResp.transaction, paidAt: Date.now() }));
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(sessionKey(wallet.address), JSON.stringify({ txHash: paymentResp.transaction, paidAt: Date.now() }));
+      window.dispatchEvent(new CustomEvent('x402:paid', { detail: { address: wallet.address, rail: mode, resource: '/api/x402/protected-resource' } }));
+    }
     log(`5/6 Settled & unlocked: tx=${paymentResp.transaction?.slice(0, 18) || 'n/a'}...`, 'success');
 
     setStep('replay');
@@ -403,7 +406,10 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     if (paymentResp.transaction) setTxHash(paymentResp.transaction || '');
     setUnlocked(true);
     // Persist paid state in sessionStorage — auto-clears on browser/tab close
-    if (typeof window !== 'undefined') sessionStorage.setItem(sessionKey(wallet.address), JSON.stringify({ txHash: paymentResp.transaction, paidAt: Date.now() }));
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(sessionKey(wallet.address), JSON.stringify({ txHash: paymentResp.transaction, paidAt: Date.now() }));
+      window.dispatchEvent(new CustomEvent('x402:paid', { detail: { address: wallet.address, rail: mode, resource: '/api/x402/protected-resource' } }));
+    }
     log(`[GW] Settled & unlocked via Circle Gateway: ${paymentResp.transaction?.slice(0, 18) || 'batched'}...`, 'success');
 
     setStep('replay');

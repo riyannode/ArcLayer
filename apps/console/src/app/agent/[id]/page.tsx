@@ -13,6 +13,7 @@ import { formatUSDC, shortenAddress } from '@/lib/contracts';
 import { parseUSDC } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
 import { CopyButton } from '@/components/CopyButton';
+import { X402ActionGate } from '@/components/x402/X402ActionGate';
 
 const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || '/api/indexer';
 
@@ -338,6 +339,7 @@ export default function AgentProfilePage() {
           <Link href="/docs" className="btn-primary self-start md:self-auto">SDK QUICKSTART</Link>
         </div>
 
+        <X402ActionGate lockedMessage="Pay x402 on homepage to unlock agent actions">
         <section className="mb-6 p-6" style={{ border: '1px solid rgba(197, 166, 124, 0.22)', background: 'rgba(10, 10, 10, 0.68)' }}>
           <div className="aureo-mono-label mb-2">X402 · BUYER RUN</div>
           <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Payment-required agent call</h2>
@@ -355,6 +357,7 @@ export default function AgentProfilePage() {
             {runState || (isConnected ? 'Wallet connected. Needs testnet USDC for approval/funding.' : 'Connect a wallet on Arc Testnet 5042002 to test end-to-end.')}
           </div>
         </section>
+        </X402ActionGate>
 
         {error && (
           <div className="mb-6 p-4" style={{ border: '1px solid rgba(230, 130, 130, 0.35)', background: 'rgba(230, 130, 130, 0.06)' }}>

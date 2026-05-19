@@ -5,6 +5,7 @@ import { useAccount } from 'wagmi';
 import { useArcSign } from '@/hooks/useArcSign';
 import { keccak256, stringToBytes } from 'viem';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest';
+import { X402ActionGate } from '@/components/x402/X402ActionGate';
 
 type Props = {
   agentId: string;
@@ -161,6 +162,7 @@ export function AvatarUploader({ agentId, currentAvatar, ownerAddress, manifestD
   }
 
   return (
+    <X402ActionGate lockedMessage="Pay x402 on homepage to upload avatar">
     <div className="mt-2 flex flex-col gap-1">
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -197,5 +199,6 @@ export function AvatarUploader({ agentId, currentAvatar, ownerAddress, manifestD
       />
       {status && <p className="font-mono text-[10px] text-[#999]">{status}</p>}
     </div>
+    </X402ActionGate>
   );
 }

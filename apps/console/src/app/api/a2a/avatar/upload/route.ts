@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { recoverMessageAddress, type Hex } from 'viem';
 import { createPublicClient, http, parseAbiItem } from 'viem';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
+import { withX402 } from '@/lib/x402';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -49,7 +50,7 @@ function extFromMime(mime: string): string {
   return 'bin';
 }
 
-export async function POST(req: Request) {
+async function postHandler(req: NextRequest) {
   let form: FormData;
   try {
     form = await req.formData();
@@ -129,3 +130,10 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, url });
 }
+
+// 0.001 USDC = 1000 atomic (6 decimals). Avatar uploads consume storage and are paid actions.
+export const POST = withX402(postHandler, {
+  amount: '1000',
+  resource: '/api/a2a/avatar/upload',
+  description: 'Upload an A2A agent avatar — storage anti-spam fee',
+});

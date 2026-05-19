@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireApiKey } from '@/lib/a2a/auth';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { createWebhook, listWebhooks } from '@/lib/a2a/webhooks';
+import { withX402 } from '@/lib/x402';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** POST: Create a new webhook subscription */
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   const auth = await requireApiKey(req, 'webhooks:manage');
   if (auth.error) return auth.error;
 
@@ -38,6 +39,13 @@ export async function POST(req: NextRequest) {
     secret: result.secret, // shown once
   }, { status: 201 });
 }
+
+// 0.001 USDC = 1000 atomic (6 decimals). Creating webhook subscriptions is a paid action.
+export const POST = withX402(postHandler, {
+  amount: '1000',
+  resource: '/api/a2a/webhooks',
+  description: 'Create an A2A webhook subscription — anti-spam fee',
+});
 
 /** GET: List webhook subscriptions for the authenticated agent */
 export async function GET(req: NextRequest) {

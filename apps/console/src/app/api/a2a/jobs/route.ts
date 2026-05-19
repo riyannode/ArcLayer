@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createA2AJob, listA2AJobs } from '@/lib/a2a/jobs';
 import { applyRateLimit } from '@/lib/rate-limit';
+import { withX402 } from '@/lib/x402';
+
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,7 +19,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ ok: true, jobs });
 }
 
-export async function POST(req: NextRequest) {
+async function postHandler(req: NextRequest) {
   // Phase 12: 5 job creates per minute per IP
   const limited = applyRateLimit(req, 'a2a:jobs:create', { max: 5 });
   if (limited) return limited;
@@ -40,3 +42,10 @@ export async function POST(req: NextRequest) {
   });
   return NextResponse.json({ ok: true, job }, { status: 201 });
 }
+
+// 0.001 USDC = 1000 atomic (6 decimals). Creating a job is a paid action.
+export const POST = withX402(postHandler, {
+  amount: '1000',
+  resource: '/api/a2a/jobs',
+  description: 'Create a new A2A job — anti-spam fee',
+});
