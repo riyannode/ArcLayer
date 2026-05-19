@@ -138,7 +138,9 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
   return out;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const categoryFilter = searchParams.get('category') || null;
   const client = createPublicClient({ transport: http(RPC) });
 
   try {
@@ -193,6 +195,7 @@ export async function GET() {
       totalHidden: latestById.size - visibleLogs.length,
       totalVisible: visibleLogs.length,
       totalAutonomous: autonomousAgents.length,
+      categoryFilter,
       scan: {
         fromBlock: fromBlock.toString(),
         toBlock: latestBlock.toString(),

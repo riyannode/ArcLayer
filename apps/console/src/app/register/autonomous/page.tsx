@@ -14,6 +14,7 @@ import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/component
 import { LLMAgentConnectKit } from '@/components/LLMAgentConnectKit';
 import { config } from '@/lib/wagmi';
 import { nameToAgentId, normalizeAgentName, shortAgentId } from '@/lib/agentName';
+import { AGENT_CATEGORIES } from '@/app/live-a2a-agent/categories';
 
 type NameStatus =
   | { state: 'idle' }
@@ -171,8 +172,10 @@ function canonicalize(value: unknown): string {
   return 'null';
 }
 
-export default function RegisterAutonomousAgentPage() {
+export default function RegisterAutonomousPage() {
   const router = useRouter();
+  const [initialCategory, setInitialCategory] = useState('prediction-market');
+  const defaultCategory = AGENT_CATEGORIES.some((c) => c.key === initialCategory) ? initialCategory : 'prediction-market';
   const { isConnected } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const { signMessageAsync } = useArcSign();
@@ -180,7 +183,7 @@ export default function RegisterAutonomousAgentPage() {
   const [txState, setTxState] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<'idle' | 'pending' | 'synced' | 'error'>('idle');
   const [copied, setCopied] = useState(false);
-  const [expandedHost, setExpandedHost] = useState<RuntimeHost | null>(null);
+  const [expandedHost, setExpandedHost] = useState<RuntimeHost | null>('self-hosted');
   const [waitlistEmail, setWaitlistEmail] = useState('');
   const [waitlistSent, setWaitlistSent] = useState<RuntimeHost | null>(null);
   const [form, setForm] = useState({
@@ -189,11 +192,22 @@ export default function RegisterAutonomousAgentPage() {
     endpoint: 'https://your-agent.example.com',
     mode: 'seller' as IntegrationMode,
     price: '0.01 USDC/call',
-    categories: 'signal-oracles,data-providers,payment-agents',
+    categories: defaultCategory,
     metadataURI: '',
     avatar: '',
   });
   const [nameStatus, setNameStatus] = useState<NameStatus>({ state: 'idle' });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const cat = params.get('category');
+      if (cat && AGENT_CATEGORIES.some((c) => c.key === cat)) {
+        setInitialCategory(cat);
+        setForm((f) => ({ ...f, categories: cat }));
+      }
+    }
+  }, []);
 
   const expandedHostOption = useMemo(
     () => HOSTS.find((h) => h.id === expandedHost) ?? null,
@@ -633,14 +647,21 @@ export default function RegisterAutonomousAgentPage() {
                   )}
 
                   <div>
-                    <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">CATEGORIES</label>
-                    <input
+                    <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">CATEGORY</label>
+                    <select
                       value={form.categories}
                       onChange={(e) => setForm((c) => ({ ...c, categories: e.target.value }))}
-                      placeholder="signal-oracles,data-providers,payment-agents"
-                      className="input-mono"
-                      autoComplete="off"
-                    />
+                      className="input-mono w-full"
+                    >
+                      {AGENT_CATEGORIES.map((cat) => (
+                        <option key={cat.key} value={cat.key}>
+                          {cat.label} {cat.status === 'COMING SOON' ? '(Coming Soon)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
+                      Your agent will appear in this category page after registration.
+                    </div>
                   </div>
 
                   <div>
@@ -694,6 +715,10 @@ export default function RegisterAutonomousAgentPage() {
                 {!isConnected && (
                   <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} className="mt-5" />
                 )}
+
+                <div className="mt-5 rounded-sm border border-amber-300/30 bg-amber-400/[0.05] px-3 py-2 font-mono text-[10.5px] leading-5 text-amber-200/90">
+                  ⚠ Registration writes your agent identity, owner address, and metadata to the on-chain AgentRegistry. Once registered, your agent is publicly discoverable in the selected category and cannot be deleted (only updated). Verify name + category before signing.
+                </div>
 
                 <button
                   onClick={handleRegisterAgent}

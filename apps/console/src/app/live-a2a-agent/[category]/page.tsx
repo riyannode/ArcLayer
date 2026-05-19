@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { RegisteredAgentsList } from '@/components/a2a/RegisteredAgentsList';
+import { filterAgentsByCategory, type RegistryAgent } from '@/lib/a2a/category-filter';
 import { AGENT_CATEGORIES } from '../categories';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -855,6 +857,7 @@ export default function LiveA2AAgentPageRoute() {
   const [a2aStatus, setA2aStatus] = useState<A2AStatusData | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [flowReceipt, setFlowReceipt] = useState<FlowReceipt | null>(null);
+  const [registryAgents, setRegistryAgents] = useState<RegistryAgent[]>([]);
 
   const latestRow = signalRows[0] ?? null;
   const latestVerdict = verdictFromSignal(latestRow ?? undefined);
@@ -1097,6 +1100,32 @@ export default function LiveA2AAgentPageRoute() {
   const categoryKey = Array.isArray(params?.category) ? params.category[0] : params?.category;
   const category = AGENT_CATEGORIES.find((c) => c.key === categoryKey) ?? AGENT_CATEGORIES[0];
   const isPredictionMarket = category.key === 'prediction-market';
+  const registeredCategoryAgents = useMemo(() => filterAgentsByCategory(registryAgents, category.key), [registryAgents, category.key]);
+  const featuredAgentCount = isPredictionMarket ? totalAgents : 0;
+  const categoryTotalAgents = featuredAgentCount + registeredCategoryAgents.length;
+  const categoryTotalRequests = isPredictionMarket ? totalRequests : 0;
+  const categoryTotalUsdcVolume = isPredictionMarket ? totalUsdcVolume : 0;
+  const categoryCompletedJobs = isPredictionMarket ? completedJobs : 0;
+
+  // Poll registered agents from on-chain AgentRegistry every 15s.
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const r = await fetch('/api/a2a/agents', { cache: 'no-store' });
+        if (!r.ok) return;
+        const data = await r.json();
+        if (!cancelled && Array.isArray(data?.agents)) {
+          setRegistryAgents(data.agents as RegistryAgent[]);
+        }
+      } catch {
+        /* registry fetch is best-effort */
+      }
+    }
+    load();
+    const id = setInterval(load, 15000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
 
   // Auto-poll x402 flow receipt every 30s — fully autonomous, no manual trigger
   // Receipt lights up green for ~8s then fades back to dark (idle) until next tx
@@ -1145,10 +1174,10 @@ export default function LiveA2AAgentPageRoute() {
             </div>
           </div>
           <div className="flex min-w-0 flex-wrap">
-            <MetricCard label="Total Requests" value={`${totalRequests}`} sub="agent calls + scans" tone="cyan" />
-            <MetricCard label="Total USDC Volume" value={`$${fmt(totalUsdcVolume, 2)}`} sub="x402 + escrow settled" tone="green" />
-            <MetricCard label="Total Agents" value={`${totalAgents}`} sub="registered network" tone="violet" />
-            <MetricCard label="Completed Jobs" value={`${completedJobs}`} sub="settled work receipts" tone="amber" />
+            <MetricCard label="Total Requests" value={`${categoryTotalRequests}`} sub="category agent calls" tone="cyan" />
+            <MetricCard label="Total USDC Volume" value={`$${fmt(categoryTotalUsdcVolume, 2)}`} sub="category x402 settled" tone="green" />
+            <MetricCard label="Total Agents" value={`${categoryTotalAgents}`} sub="featured + registry" tone="violet" />
+            <MetricCard label="Completed Jobs" value={`${categoryCompletedJobs}`} sub="category work receipts" tone="amber" />
           </div>
         </header>
 
@@ -1194,7 +1223,7 @@ export default function LiveA2AAgentPageRoute() {
               <AgentGraph latest={latestRow} />
             </TerminalPanel>
 
-            <TerminalPanel title="x402 Payment → Settlement → Receipt → Reputation" right={<Chip tone="green">AUTONOMOUS</Chip>} className="min-h-[260px]">
+            <TerminalPanel title="Featured Demo Flow · LIVE" right={<Chip tone="green">PYTHIA → APOLO → HERMES</Chip>} className="min-h-[260px]">
               <LiveA2AFlow receipt={flowReceipt} />
             </TerminalPanel>
           </>
@@ -1205,6 +1234,8 @@ export default function LiveA2AAgentPageRoute() {
             </div>
           </TerminalPanel>
         )}
+
+        <RegisteredAgentsList categoryKey={category.key} categoryLabel={category.label} />
 
         {errors.length > 0 && (
           <div className="rounded-sm border border-rose-400/25 bg-rose-400/5 p-3 font-mono text-[10px] text-rose-200">

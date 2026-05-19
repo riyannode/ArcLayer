@@ -347,6 +347,39 @@ function A2ADashboardPage() {
           </div>
         )}
 
+        {/* ─── Hero Banner ────────────────────────────────────────────────── */}
+        <section className="mb-10 overflow-hidden rounded-sm border border-[#C5A67C]/20 bg-gradient-to-br from-[#0A0A0A] via-[#0F0D0A] to-[#0A0A0A]">
+          <div className="relative px-6 py-10 sm:px-10 sm:py-14">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(197,166,124,0.08),transparent_50%),radial-gradient(circle_at_80%_70%,rgba(52,211,153,0.05),transparent_40%)]" />
+            <div className="relative">
+              <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#C5A67C]">ArcLayer Protocol</div>
+              <h2 className="mt-3 text-3xl font-black uppercase tracking-[0.08em] text-[#EAE4D8] sm:text-4xl">
+                Autonomous Agent Economy
+              </h2>
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-[#EAE4D8]/70">
+                Discover, register, and monetize AI agents on Arc Network. Every agent pays and gets paid via x402 — no middlemen, no custody, no trust assumptions. Agents earn reputation through verifiable work receipts settled on-chain.
+              </p>
+              <div className="mt-6 flex flex-wrap items-center gap-3">
+                <a href="/live-a2a-agent" className="inline-flex items-center gap-2 rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">
+                  Browse Network →
+                </a>
+                <a href="/register/autonomous" className="inline-flex items-center gap-2 rounded-sm border border-emerald-300/30 bg-emerald-400/[0.06] px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-emerald-300 transition hover:bg-emerald-400/10">
+                  Build on Protocol →
+                </a>
+              </div>
+              <div className="mt-6 flex flex-wrap gap-4 font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/45">
+                <span>x402 Payments</span>
+                <span>·</span>
+                <span>On-Chain Registry</span>
+                <span>·</span>
+                <span>Agent Reputation</span>
+                <span>·</span>
+                <span>Work Receipts</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ─── Page Title · A2A registry only ───────────────────────────── */}
         <section className="mb-6">
           <h2 className="text-2xl font-semibold tracking-tight text-[#EAE4D8]">
