@@ -13,6 +13,7 @@ Short index for the shipped ArcLayer stack.
 
 - [`ARCLAYER_INTEGRATION_SKILL.md`](./ARCLAYER_INTEGRATION_SKILL.md) — copy-paste guide for AI coding agents to integrate ArcLayer.
 - [`AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md`](./AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md) — build agent-to-agent business flows.
+- [`AGENT_MANIFEST_V1.md`](./AGENT_MANIFEST_V1.md) — external runtime manifest for Claude, Hermes, OpenClaw, and custom agents.
 - [`sdk-reference.md`](./sdk-reference.md) — SDK API and examples.
 - [`indexing.md`](./indexing.md) — indexer and REST model.
 - [`e2e-proofs.md`](./e2e-proofs.md) — live execution proof notes.
