@@ -1,4 +1,4 @@
-import { AGENT_MANIFEST_SCHEMA, type AgentManifestV1, type ManifestParseResult } from './types';
+import { AGENT_MANIFEST_SCHEMA, type AgentManifestRole, type AgentManifestV1, type ManifestParseResult } from './types';
 
 const MAX_STRING = 2000;
 const MAX_ARRAY = 12;
@@ -9,6 +9,50 @@ function isString(v: unknown): v is string {
 
 function isStringArray(v: unknown, max = MAX_ARRAY): v is string[] {
   return Array.isArray(v) && v.length <= max && v.every((x) => typeof x === 'string' && x.length <= 200);
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function parseRoles(v: unknown): AgentManifestRole[] | string | undefined {
+  if (v === undefined) return undefined;
+  if (!Array.isArray(v) || v.length > 24) return 'roles must be an array (max 24 items).';
+
+  const seen = new Set<string>();
+  const roles: AgentManifestRole[] = [];
+  for (const item of v) {
+    if (!isRecord(item)) return 'roles items must be objects.';
+    const id = item.id;
+    const name = item.name;
+    const category = item.category;
+    const capabilities = item.capabilities;
+    if (!isString(id) || !/^[a-z0-9][a-z0-9-]{1,63}$/.test(id)) return 'roles.id must be a lowercase slug.';
+    if (seen.has(id)) return 'roles.id must be unique.';
+    if (!isString(name) || !name.trim() || name.length > 120) return 'roles.name is required (max 120 chars).';
+    if (!isString(category) || !category.trim() || category.length > 120) return 'roles.category is required (max 120 chars).';
+    if (!isStringArray(capabilities, 24)) return 'roles.capabilities must be a string array (max 24 items).';
+
+    const role: AgentManifestRole = {
+      id,
+      name: name.trim(),
+      category: category.trim(),
+      capabilities,
+    };
+    for (const key of ['provider', 'model', 'price', 'x402AmountAtomic', 'endpointPath'] as const) {
+      if (item[key] !== undefined) {
+        if (!isString(item[key]) || (item[key] as string).length > 200) return `roles.${key} must be a string (max 200 chars).`;
+        role[key] = (item[key] as string).trim();
+      }
+    }
+    if (item.enabled !== undefined) {
+      if (typeof item.enabled !== 'boolean') return 'roles.enabled must be a boolean.';
+      role.enabled = item.enabled;
+    }
+    seen.add(id);
+    roles.push(role);
+  }
+  return roles;
 }
 
 export function parseManifest(raw: unknown): ManifestParseResult {
@@ -39,8 +83,16 @@ export function parseManifest(raw: unknown): ManifestParseResult {
   if (!isStringArray(m.capability)) {
     return { ok: false, error: 'capability must be a string array (max 12 items).' };
   }
+  if (m.capabilities !== undefined && !isStringArray(m.capabilities, 24)) {
+    return { ok: false, error: 'capabilities must be a string array (max 24 items).' };
+  }
   if (!isStringArray(m.categories)) {
     return { ok: false, error: 'categories must be a string array (max 12 items).' };
+  }
+
+  const parsedRoles = parseRoles(m.roles);
+  if (typeof parsedRoles === 'string') {
+    return { ok: false, error: parsedRoles };
   }
 
   // Optional fields — validate if present
@@ -78,12 +130,18 @@ export function parseManifest(raw: unknown): ManifestParseResult {
 
   // Validate x402 object
   if (m.x402 !== undefined) {
-    if (typeof m.x402 !== 'object' || m.x402 === null) {
+    if (!isRecord(m.x402)) {
       return { ok: false, error: 'x402 must be an object.' };
     }
     const x = m.x402 as Record<string, unknown>;
     if (typeof x.enabled !== 'boolean') {
       return { ok: false, error: 'x402.enabled must be a boolean.' };
+    }
+  }
+
+  for (const key of ['jobs', 'proof'] as const) {
+    if (m[key] !== undefined && !isRecord(m[key])) {
+      return { ok: false, error: `${key} must be an object.` };
     }
   }
 
@@ -114,9 +172,13 @@ export function parseManifest(raw: unknown): ManifestParseResult {
   if (m.mode) manifest.mode = m.mode as AgentManifestV1['mode'];
   if (m.price) manifest.price = m.price as string;
   if (m.avatar && typeof m.avatar === 'string' && m.avatar.trim()) manifest.avatar = m.avatar.trim();
+  if (m.capabilities) manifest.capabilities = m.capabilities as string[];
+  if (parsedRoles) manifest.roles = parsedRoles;
   if (m.tags) manifest.tags = m.tags as string[];
   if (m.links) manifest.links = m.links as AgentManifestV1['links'];
   if (m.x402) manifest.x402 = m.x402 as AgentManifestV1['x402'];
+  if (m.jobs) manifest.jobs = m.jobs as AgentManifestV1['jobs'];
+  if (m.proof) manifest.proof = m.proof as AgentManifestV1['proof'];
 
   return { ok: true, manifest };
 }

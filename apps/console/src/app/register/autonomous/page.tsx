@@ -44,6 +44,31 @@ type HostOption = {
   status: HostStatus;
 };
 
+type RuntimeProvider = 'claude' | 'hermes' | 'openclaw' | 'openai-compatible' | 'local-command';
+
+type RuntimeRoleForm = {
+  id: string;
+  name: string;
+  category: string;
+  provider: RuntimeProvider;
+  model: string;
+  capabilities: string;
+  price: string;
+  x402AmountAtomic: string;
+  endpointPath: string;
+  enabled: boolean;
+};
+
+const PROVIDERS: Array<{ id: RuntimeProvider; label: string }> = [
+  { id: 'claude', label: 'Claude' },
+  { id: 'hermes', label: 'Hermes' },
+  { id: 'openclaw', label: 'OpenClaw' },
+  { id: 'openai-compatible', label: 'OpenAI-compatible' },
+  { id: 'local-command', label: 'Local command' },
+];
+
+const ROLE_ID_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
+
 const MODES: Array<{ id: IntegrationMode; title: string; desc: string }> = [
   { id: 'seller', title: 'Job Taker', desc: 'Expose a runtime that claims jobs, executes work, and gets paid via x402.' },
   { id: 'consumer', title: 'Job Creator', desc: 'Create jobs for other agents, pay x402, and receive signed results/proofs.' },
@@ -168,6 +193,58 @@ function toManifestMode(mode: IntegrationMode): 'seller' | 'buyer' | 'dual' {
   return 'seller';
 }
 
+function splitCsv(value: string): string[] {
+  return value.split(',').map((x) => x.trim()).filter(Boolean);
+}
+
+function makeDefaultRole(category = 'prediction-market'): RuntimeRoleForm {
+  return {
+    id: 'signal-oracle',
+    name: 'Signal Oracle',
+    category,
+    provider: 'openai-compatible',
+    model: 'KIRO',
+    capabilities: 'claim_job, run_job, submit_proof, market_signal',
+    price: '0.01 USDC/call',
+    x402AmountAtomic: '10000',
+    endpointPath: '/x402/jobs/run',
+    enabled: true,
+  };
+}
+
+function normalizeRole(role: RuntimeRoleForm) {
+  return {
+    id: role.id.trim(),
+    name: role.name.trim(),
+    category: role.category.trim(),
+    provider: role.provider,
+    model: role.model.trim(),
+    capabilities: splitCsv(role.capabilities),
+    price: role.price.trim(),
+    x402AmountAtomic: role.x402AmountAtomic.trim(),
+    endpointPath: role.endpointPath.trim(),
+    enabled: role.enabled,
+  };
+}
+
+function validateRoles(roles: RuntimeRoleForm[], endpoint: string): string | null {
+  const enabledRoles = roles.filter((role) => role.enabled).map(normalizeRole);
+  if (enabledRoles.length === 0) return 'Enable at least one runtime role.';
+  const ids = new Set<string>();
+  for (const role of enabledRoles) {
+    if (!ROLE_ID_RE.test(role.id)) return `Role ID "${role.id}" must be a lowercase slug.`;
+    if (ids.has(role.id)) return `Role ID "${role.id}" is duplicated.`;
+    if (!role.name) return `Role "${role.id}" needs a name.`;
+    if (!role.category) return `Role "${role.id}" needs a category.`;
+    if (role.capabilities.length === 0) return `Role "${role.id}" needs at least one capability.`;
+    if (!/^\d+$/.test(role.x402AmountAtomic)) return `Role "${role.id}" x402 atomic amount must be numeric.`;
+    if (!role.endpointPath.startsWith('/')) return `Role "${role.id}" endpoint path must start with /.`;
+    ids.add(role.id);
+  }
+  if (endpoint.trim() && !/^https:\/\//.test(endpoint.trim())) return 'Self-hosted endpoint must be HTTPS.';
+  return null;
+}
+
 function canonicalize(value: unknown): string {
   if (value === null) return 'null';
   if (typeof value === 'number' || typeof value === 'boolean') return JSON.stringify(value);
@@ -206,6 +283,7 @@ export default function RegisterAutonomousPage() {
     avatar: '',
     payerWallet: '',
   });
+  const [roles, setRoles] = useState<RuntimeRoleForm[]>(() => [makeDefaultRole(defaultCategory)]);
   const [nameStatus, setNameStatus] = useState<NameStatus>({ state: 'idle' });
 
   useEffect(() => {
@@ -215,6 +293,7 @@ export default function RegisterAutonomousPage() {
       if (cat && AGENT_CATEGORIES.some((c) => c.key === cat)) {
         setInitialCategory(cat);
         setForm((f) => ({ ...f, categories: cat }));
+        setRoles((current) => current.map((role, idx) => (idx === 0 ? { ...role, category: cat } : role)));
       }
     }
   }, []);
@@ -238,6 +317,34 @@ export default function RegisterAutonomousPage() {
     : '';
   const effectiveMetadataURI = form.metadataURI.trim() || generatedMetadataURI;
   const endpointLooksReady = /^https:\/\//.test(form.endpoint.trim()) && !form.endpoint.includes('your-agent.example.com');
+  const enabledRoles = useMemo(() => roles.filter((role) => role.enabled).map(normalizeRole), [roles]);
+  const roleValidationError = useMemo(() => validateRoles(roles, form.endpoint), [roles, form.endpoint]);
+  const primaryRole = enabledRoles[0] ?? normalizeRole(roles[0]);
+  const allCapabilities = useMemo(
+    () => Array.from(new Set(enabledRoles.flatMap((role) => role.capabilities).concat([form.mode, 'x402', 'create_job', 'claim_job', 'submit_proof']))),
+    [enabledRoles, form.mode],
+  );
+
+  function updateRole(index: number, patch: Partial<RuntimeRoleForm>) {
+    setRoles((current) => current.map((role, idx) => (idx === index ? { ...role, ...patch } : role)));
+  }
+
+  function addRole() {
+    const nextIndex = roles.length + 1;
+    setRoles((current) => [
+      ...current,
+      {
+        ...makeDefaultRole(form.categories),
+        id: `role-${nextIndex}`,
+        name: `Runtime Role ${nextIndex}`,
+        capabilities: 'claim_job, run_job, submit_proof',
+      },
+    ]);
+  }
+
+  function removeRole(index: number) {
+    setRoles((current) => (current.length <= 1 ? current : current.filter((_, idx) => idx !== index)));
+  }
 
   useEffect(() => {
     const norm = normalizeAgentName(form.name);
@@ -308,6 +415,11 @@ export default function RegisterAutonomousPage() {
 
   async function handleRegisterAgent() {
     if (nameStatus.state !== 'free') return;
+    if (roleValidationError) {
+      setStatusTone('error');
+      setTxState(roleValidationError);
+      return;
+    }
     try {
       setIsSubmitting(true);
       setStatusTone('pending');
@@ -321,35 +433,30 @@ export default function RegisterAutonomousPage() {
       if (effectiveMetadataURI.startsWith('arclayer://manifest/')) {
         setTxState('Signing and publishing Agent Manifest V1…');
         const nowIso = new Date().toISOString();
+        const manifestRoles = enabledRoles;
+        const manifestCategories = Array.from(new Set(manifestRoles.map((role) => role.category).concat(splitCsv(form.categories))));
         const manifest = {
           schema: 'arclayer.agent/v1',
           version: 1,
           agentId: agentId.toString(),
           name: normalizedName,
-          role: form.skill,
-          description: `${normalizedName} autonomous ${form.skill} agent on ArcLayer.`,
+          role: primaryRole.id,
+          description: `${normalizedName} autonomous multi-role runtime on ArcLayer.`,
           endpoint: form.endpoint.trim(),
           mode: toManifestMode(form.mode),
-          price: form.price.trim(),
-          capability: [form.skill, form.mode, 'x402', 'create_job', 'claim_job', 'submit_proof'].filter(Boolean),
-          capabilities: [form.skill, form.mode, 'x402', 'create_job', 'claim_job', 'submit_proof'].filter(Boolean),
-          categories: form.categories.split(',').map((x) => x.trim()).filter(Boolean),
-          roles: [
-            {
-              id: form.skill,
-              name: form.skill,
-              category: form.categories,
-              capabilities: [form.skill, form.mode, 'job_execution'],
-              price: form.price.trim(),
-            },
-          ],
+          price: primaryRole.price || form.price.trim(),
+          capability: allCapabilities,
+          capabilities: allCapabilities,
+          categories: manifestCategories,
+          roles: manifestRoles,
           avatar: form.avatar.trim() || undefined,
           x402: {
             enabled: true,
             network: 'arc-testnet',
             currency: 'USDC',
-            price: form.price.trim(),
+            price: primaryRole.price || form.price.trim(),
             receiver: form.payerWallet.trim() || address || undefined,
+            payTo: form.payerWallet.trim() || address || undefined,
           },
           jobs: {
             accepts: ['create', 'claim', 'run', 'submit-proof'],
@@ -710,6 +817,71 @@ export default function RegisterAutonomousPage() {
                     </div>
                   </div>
 
+                  <div className="rounded border border-white/10 bg-black/30 p-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <div className="aureo-mono-label mb-1">MULTI-ROLE RUNTIME</div>
+                        <div className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.78)]">
+                          One registered parent runtime can expose multiple child roles for matching and x402 routing.
+                        </div>
+                      </div>
+                      <button type="button" onClick={addRole} className="btn-bordered px-3 py-2 text-[10px]">
+                        + ADD ROLE
+                      </button>
+                    </div>
+
+                    <div className="mt-4 space-y-4">
+                      {roles.map((role, index) => (
+                        <div key={`${role.id}-${index}`} className="rounded border border-white/10 bg-white/[0.015] p-3">
+                          <div className="mb-3 flex items-center justify-between gap-3">
+                            <label className="flex items-center gap-2 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
+                              <input
+                                type="checkbox"
+                                checked={role.enabled}
+                                onChange={(e) => updateRole(index, { enabled: e.target.checked })}
+                              />
+                              ROLE #{index + 1} ENABLED
+                            </label>
+                            {roles.length > 1 && (
+                              <button type="button" onClick={() => removeRole(index)} className="font-mono text-[10px] text-[#f0c5c5] hover:text-white">
+                                REMOVE
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <input value={role.id} onChange={(e) => updateRole(index, { id: e.target.value })} placeholder="role-id" className="input-mono" />
+                            <input value={role.name} onChange={(e) => updateRole(index, { name: e.target.value })} placeholder="Role Name" className="input-mono" />
+                            <input value={role.category} onChange={(e) => updateRole(index, { category: e.target.value })} placeholder="category" className="input-mono" />
+                            <select value={role.provider} onChange={(e) => updateRole(index, { provider: e.target.value as RuntimeProvider })} className="input-mono w-full">
+                              {PROVIDERS.map((provider) => (
+                                <option key={provider.id} value={provider.id}>{provider.label}</option>
+                              ))}
+                            </select>
+                            <input value={role.model} onChange={(e) => updateRole(index, { model: e.target.value })} placeholder="model" className="input-mono" />
+                            <input value={role.endpointPath} onChange={(e) => updateRole(index, { endpointPath: e.target.value })} placeholder="/x402/jobs/run" className="input-mono" />
+                            <input value={role.price} onChange={(e) => updateRole(index, { price: e.target.value })} placeholder="0.01 USDC/call" className="input-mono" />
+                            <input value={role.x402AmountAtomic} onChange={(e) => updateRole(index, { x402AmountAtomic: e.target.value })} placeholder="10000" className="input-mono" inputMode="numeric" />
+                          </div>
+
+                          <div className="mt-3">
+                            <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">CAPABILITIES CSV</label>
+                            <textarea
+                              value={role.capabilities}
+                              onChange={(e) => updateRole(index, { capabilities: e.target.value })}
+                              placeholder="claim_job, run_job, submit_proof"
+                              className="input-mono min-h-[74px]"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className={`mt-3 font-mono text-[10.5px] ${roleValidationError ? 'text-[#f0c5c5]' : 'text-[#B8CD7E]'}`}>
+                      {roleValidationError || `✓ ${enabledRoles.length} role(s) ready for manifest + matcher metadata.`}
+                    </div>
+                  </div>
+
                   {derivedAgentId !== null && (
                     <div className="rounded-none border border-cyan-500/20 bg-cyan-950/[0.05] px-4 py-3">
                       <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-cyan-300/80">Derived On-Chain Agent ID</div>
@@ -729,7 +901,7 @@ export default function RegisterAutonomousPage() {
 
                 <button
                   onClick={handleRegisterAgent}
-                  disabled={!isConnected || isSubmitting || nameStatus.state !== 'free'}
+                  disabled={!isConnected || isSubmitting || nameStatus.state !== 'free' || Boolean(roleValidationError)}
                   className="btn-primary mt-5"
                   title={
                     !isConnected
