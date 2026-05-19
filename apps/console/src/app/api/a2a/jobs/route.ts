@@ -7,7 +7,7 @@ export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const jobs = listA2AJobs({
+  const jobs = await listA2AJobs({
     status: url.searchParams.get('status'),
     agentId: url.searchParams.get('agentId'),
     roleId: url.searchParams.get('roleId'),
@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   if (typeof title !== 'string' || typeof description !== 'string' || !title.trim() || !description.trim()) {
     return NextResponse.json({ ok: false, error: 'missing_fields', message: 'title and description are required' }, { status: 400 });
   }
-  const job = createA2AJob({
+  const job = await createA2AJob({
     title,
     description,
     category: typeof category === 'string' ? category : undefined,

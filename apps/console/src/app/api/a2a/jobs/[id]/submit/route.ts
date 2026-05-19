@@ -9,7 +9,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!body || typeof body !== 'object') return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
   const { agentId, output, proof, summary } = body as Record<string, unknown>;
   if (typeof agentId !== 'string' || !agentId.trim()) return NextResponse.json({ ok: false, error: 'agentId_required' }, { status: 400 });
-  const result = submitA2AJob(params.id, {
+  const result = await submitA2AJob(params.id, {
     agentId: agentId.trim(),
     output,
     proof,
