@@ -21,7 +21,7 @@ import { useArcWrite } from './useArcWrite';
 import { useArcWallet } from './useArcWallet';
 import { useAuthFetch } from './useAuthFetch';
 import { config } from '@/lib/wagmi';
-import { ARC_VAULT_ADDRESS, USDC_DECIMALS } from '@/lib/vault/constants';
+import { ARC_VAULT_ADDRESS, USDC_DECIMALS, isZeroAddress } from '@/lib/vault/constants';
 import { USDC_ADDRESS } from '@/lib/x402/constants';
 import arcVaultAbiJson from '@/lib/vault/abi/arc-vault.json';
 import erc20AbiJson from '@/lib/vault/abi/erc20.json';
@@ -67,7 +67,7 @@ export function useVaultJob() {
       setState({ step: 'error', message: 'Wallet not connected.', errorReason: 'no_wallet' });
       throw new Error('Wallet not connected.');
     }
-    if (ARC_VAULT_ADDRESS === '0x0000000000000000000000000000000000000000') {
+    if (isZeroAddress(ARC_VAULT_ADDRESS)) {
       setState({
         step: 'error',
         message: 'ArcVault contract not deployed yet. Update ARC_VAULT_ADDRESS after deploy.',

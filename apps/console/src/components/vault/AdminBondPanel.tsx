@@ -6,7 +6,7 @@ import { readContract } from '@wagmi/core';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { config } from '@/lib/wagmi';
-import { BOND_CONFIG_ADDRESS } from '@/lib/vault/constants';
+import { BOND_CONFIG_ADDRESS, isZeroAddress } from '@/lib/vault/constants';
 import bondConfigAbiJson from '@/lib/vault/abi/bond-config.json';
 
 const bondConfigAbi = bondConfigAbiJson as Abi;
@@ -30,7 +30,7 @@ export function AdminBondPanel() {
   const [msg, setMsg] = useState('');
 
   const isOwner = owner && address && owner.toLowerCase() === address.toLowerCase();
-  const notDeployed = BOND_CONFIG_ADDRESS === '0x0000000000000000000000000000000000000000';
+  const notDeployed = isZeroAddress(BOND_CONFIG_ADDRESS);
 
   const loadConfig = useCallback(async () => {
     if (notDeployed) return;
