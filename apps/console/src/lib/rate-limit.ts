@@ -1,10 +1,15 @@
 /**
- * In-memory per-IP sliding window rate limiter.
+ * In-memory per-key sliding window rate limiter.
  * Stored on globalThis so it survives Next.js module hot-reloads within the same process.
+ *
+ * Phase 12: Extended to support configurable limits per route/scope and
+ * composite keys (IP + agentId) for authenticated endpoints.
  */
 
-const WINDOW_MS = 60_000; // 1 minute
-const MAX_REQUESTS = 10;
+import { NextResponse } from 'next/server';
+
+const DEFAULT_WINDOW_MS = 60_000; // 1 minute
+const DEFAULT_MAX_REQUESTS = 10;
 
 type RateLimitEntry = {
   count: number;
@@ -20,8 +25,8 @@ let lastSweep = Date.now();
 function maybeSweep(now: number): void {
   if (now - lastSweep < 5 * 60_000) return;
   lastSweep = now;
-  store.forEach((entry, ip) => {
-    if (entry.resetAt <= now) store.delete(ip);
+  store.forEach((entry, key) => {
+    if (entry.resetAt <= now) store.delete(key);
   });
 }
 
@@ -33,19 +38,28 @@ export interface RateLimitResult {
   retryAfterMs: number;
 }
 
-export function checkRateLimit(ip: string): RateLimitResult {
+export interface RateLimitOptions {
+  /** Max requests per window (default: 10) */
+  max?: number;
+  /** Window duration in ms (default: 60_000) */
+  windowMs?: number;
+}
+
+export function checkRateLimit(key: string, opts?: RateLimitOptions): RateLimitResult {
+  const maxReqs = opts?.max ?? DEFAULT_MAX_REQUESTS;
+  const windowMs = opts?.windowMs ?? DEFAULT_WINDOW_MS;
   const now = Date.now();
   maybeSweep(now);
 
-  const existing = store.get(ip);
+  const existing = store.get(key);
 
   if (!existing || existing.resetAt <= now) {
-    const entry: RateLimitEntry = { count: 1, resetAt: now + WINDOW_MS };
-    store.set(ip, entry);
-    return { limited: false, remaining: MAX_REQUESTS - 1, resetAt: entry.resetAt, retryAfterMs: 0 };
+    const entry: RateLimitEntry = { count: 1, resetAt: now + windowMs };
+    store.set(key, entry);
+    return { limited: false, remaining: maxReqs - 1, resetAt: entry.resetAt, retryAfterMs: 0 };
   }
 
-  if (existing.count >= MAX_REQUESTS) {
+  if (existing.count >= maxReqs) {
     return {
       limited: true,
       remaining: 0,
@@ -57,7 +71,7 @@ export function checkRateLimit(ip: string): RateLimitResult {
   existing.count += 1;
   return {
     limited: false,
-    remaining: MAX_REQUESTS - existing.count,
+    remaining: maxReqs - existing.count,
     resetAt: existing.resetAt,
     retryAfterMs: 0,
   };
@@ -69,5 +83,45 @@ export function getClientIp(req: { headers: { get(name: string): string | null }
     req.headers.get('x-real-ip')?.trim() ??
     req.headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() ??
     'unknown'
+  );
+}
+
+// ─── Convenience: rate-limit response helper ──────────────────────────────────
+
+/**
+ * Check rate limit and return a 429 NextResponse if exceeded.
+ * Returns null if within limits.
+ *
+ * Usage:
+ *   const limited = applyRateLimit(req, 'a2a:jobs:create', { max: 5 });
+ *   if (limited) return limited;
+ */
+export function applyRateLimit(
+  req: { headers: { get(name: string): string | null } },
+  scope: string,
+  opts?: RateLimitOptions & { agentId?: string },
+): NextResponse | null {
+  const ip = getClientIp(req);
+  // Composite key: scope + IP + optional agentId for per-agent limiting
+  const key = opts?.agentId ? `${scope}:${opts.agentId}` : `${scope}:${ip}`;
+
+  const result = checkRateLimit(key, opts);
+  if (!result.limited) return null;
+
+  return NextResponse.json(
+    {
+      ok: false,
+      error: 'rate_limited',
+      retryAfterMs: result.retryAfterMs,
+      resetAt: result.resetAt,
+    },
+    {
+      status: 429,
+      headers: {
+        'Retry-After': String(Math.ceil(result.retryAfterMs / 1000)),
+        'X-RateLimit-Remaining': '0',
+        'X-RateLimit-Reset': String(result.resetAt),
+      },
+    },
   );
 }

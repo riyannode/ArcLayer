@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createA2AJob, listA2AJobs } from '@/lib/a2a/jobs';
+import { applyRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Phase 12: 5 job creates per minute per IP
+  const limited = applyRateLimit(req, 'a2a:jobs:create', { max: 5 });
+  if (limited) return limited;
+
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== 'object') return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
   const { title, description, category, roleId, budget, requester, agentId, input } = body as Record<string, unknown>;

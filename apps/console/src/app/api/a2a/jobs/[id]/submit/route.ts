@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { submitA2AJob } from '@/lib/a2a/jobs';
 import { requireApiKey } from '@/lib/a2a/auth';
+import { applyRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,12 +11,18 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const auth = await requireApiKey(req, 'jobs:submit');
   if (auth.error) return auth.error;
 
+  // Phase 12: 60 submits per minute per agent
+  const limited = applyRateLimit(req, 'a2a:jobs:submit', {
+    max: 60,
+    agentId: auth.key.agentId,
+  });
+  if (limited) return limited;
+
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== 'object') return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
 
   const { output, proof, summary } = body as Record<string, unknown>;
   const result = await submitA2AJob(params.id, {
-    // Authenticated key dictates submitter identity — no body spoofing.
     agentId: auth.key.agentId,
     output,
     proof,

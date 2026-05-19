@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { recoverMessageAddress } from 'viem';
 import { createApiKey, revokeApiKey } from '@/lib/a2a/auth';
 import { getManifest } from '@/lib/a2a/manifest';
+import { applyRateLimit } from '@/lib/rate-limit';
+
+const KEY_CREATE_LIMIT = { max: 10, windowMs: 60_000 };
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -71,6 +74,10 @@ async function verifyControllerSignature(input: {
  *   ArcLayer A2A API Key\n...
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // Phase 12: 10 key creates per minute per IP
+  const limited = applyRateLimit(req, 'a2a:keys:create', KEY_CREATE_LIMIT);
+  if (limited) return limited;
+
   let body: {
     agentId?: unknown;
     label?: unknown;

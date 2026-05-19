@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { checkRateLimit, getClientIp } from './rate-limit';
+import { checkRateLimit, getClientIp, applyRateLimit } from './rate-limit';
 
 // Reset the in-memory store between tests by clearing globalThis.__rateLimitStore
 function clearStore() {
@@ -83,5 +83,40 @@ describe('getClientIp', () => {
 
   it('returns "unknown" when no IP header present', () => {
     expect(getClientIp(makeReq({}))).toBe('unknown');
+  });
+});
+
+describe('applyRateLimit', () => {
+  beforeEach(() => clearStore());
+
+  function makeReq(ip = '9.9.9.9') {
+    return { headers: { get: (k: string) => (k === 'x-forwarded-for' ? ip : null) } };
+  }
+
+  it('returns null when within limits', () => {
+    const result = applyRateLimit(makeReq(), 'test:scope', { max: 3 });
+    expect(result).toBeNull();
+  });
+
+  it('returns 429 NextResponse when limit exceeded', () => {
+    for (let i = 0; i < 3; i++) applyRateLimit(makeReq('8.8.8.8'), 'test:block', { max: 3 });
+    const result = applyRateLimit(makeReq('8.8.8.8'), 'test:block', { max: 3 });
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe(429);
+  });
+
+  it('uses agentId as key when provided', () => {
+    // Exhaust limit for agent-a
+    for (let i = 0; i < 2; i++) applyRateLimit(makeReq(), 'test:agent', { max: 2, agentId: 'agent-a' });
+    const blockedA = applyRateLimit(makeReq(), 'test:agent', { max: 2, agentId: 'agent-a' });
+    const allowedB = applyRateLimit(makeReq(), 'test:agent', { max: 2, agentId: 'agent-b' });
+    expect(blockedA).not.toBeNull();
+    expect(allowedB).toBeNull();
+  });
+
+  it('respects custom windowMs', () => {
+    for (let i = 0; i < 5; i++) applyRateLimit(makeReq('7.7.7.7'), 'test:win', { max: 5, windowMs: 1000 });
+    const result = applyRateLimit(makeReq('7.7.7.7'), 'test:win', { max: 5, windowMs: 1000 });
+    expect(result).not.toBeNull();
   });
 });

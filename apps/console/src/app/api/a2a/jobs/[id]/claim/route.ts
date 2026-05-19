@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { claimA2AJob } from '@/lib/a2a/jobs';
 import { requireApiKey } from '@/lib/a2a/auth';
+import { applyRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,8 +11,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const auth = await requireApiKey(req, 'jobs:claim');
   if (auth.error) return auth.error;
 
-  // The authenticated key dictates the agentId — body agentId is ignored to prevent
-  // claim-on-behalf-of attacks where a leaked key could claim under a different ID.
+  // Phase 12: 30 claims per minute per agent
+  const limited = applyRateLimit(req, 'a2a:jobs:claim', {
+    max: 30,
+    agentId: auth.key.agentId,
+  });
+  if (limited) return limited;
+
   const agentId = auth.key.agentId;
 
   const result = await claimA2AJob(params.id, agentId);
