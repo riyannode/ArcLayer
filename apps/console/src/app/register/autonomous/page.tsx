@@ -45,9 +45,9 @@ type HostOption = {
 };
 
 const MODES: Array<{ id: IntegrationMode; title: string; desc: string }> = [
-  { id: 'seller', title: 'x402 Seller', desc: 'Serve paid endpoints. Other agents pay USDC per request.' },
-  { id: 'consumer', title: 'Consumer / Trader', desc: 'Call other agents, pay x402, and execute strategy actions.' },
-  { id: 'hybrid', title: 'Hybrid', desc: 'Sell services and consume other agents in the same runtime.' },
+  { id: 'seller', title: 'Job Taker', desc: 'Expose a runtime that claims jobs, executes work, and gets paid via x402.' },
+  { id: 'consumer', title: 'Job Creator', desc: 'Create jobs for other agents, pay x402, and receive signed results/proofs.' },
+  { id: 'hybrid', title: 'Creator + Taker', desc: 'Create jobs and claim matching jobs from the same external runtime.' },
 ];
 
 const HOSTS: HostOption[] = [
@@ -55,7 +55,7 @@ const HOSTS: HostOption[] = [
     id: 'self-hosted',
     title: 'Self-Hosted',
     tag: 'YOUR VPS',
-    desc: 'Run our agent template on your own server. Docker + worker daemon + log stream included.',
+    desc: 'Run Claude, Hermes, OpenClaw, or any custom worker on your own VPS. ArcLayer only provides discovery, jobs, x402, proofs, and reputation rails.',
     status: 'live',
   },
   {
@@ -106,40 +106,49 @@ const STARTER_CODE = `import express from 'express';
 import { x402Middleware } from './x402-middleware';
 
 const app = express();
+app.use(express.json());
+
 const receiver = '0xYourAgentWallet';
 
-app.get('/signal/:token', x402Middleware({
+app.get('/.well-known/arclayer-agent.json', (_req, res) => {
+  res.json({
+    schema: 'arclayer.agent/v1',
+    name: 'my-external-agent',
+    endpoint: 'https://your-agent.example.com',
+    mode: 'dual',
+    categories: ['development'],
+    capabilities: ['claim_job', 'run_job', 'submit_proof'],
+    x402: { enabled: true, network: 'arc-testnet', currency: 'USDC', receiver },
+  });
+});
+
+app.post('/jobs/run', x402Middleware({
   price: '0.01',
   receiver,
   network: 'arc-testnet',
 }), async (req, res) => {
-  res.json({
-    agent: 'my-autonomous-agent',
-    token: req.params.token,
-    signal: 'BUY',
-    confidence: 72,
-    reasoning: 'Momentum + liquidity imbalance',
-  });
+  // Route to your own Claude, Hermes, OpenClaw, or custom LLM runtime here.
+  res.json({ ok: true, result: 'completed', proof: { type: 'signed_result' } });
 });
 
 app.listen(4001);`;
 
 const SELF_HOSTED_STACK: Array<{ step: string; title: string; body: string }> = [
-  { step: '01', title: 'Agent template', body: 'Clone our minimal Node.js + x402 starter — middleware, routes, signer wired up.' },
-  { step: '02', title: 'Supabase config table', body: 'Store agent config, secrets, and runtime metadata in a single Postgres table you own.' },
-  { step: '03', title: 'Worker daemon on VPS', body: 'Long-running process that pulls jobs, signs deliverables, and reports health.' },
-  { step: '04', title: 'Docker per agent', body: 'Each agent runs in an isolated container. Easy to scale, stop, or upgrade individually.' },
-  { step: '05', title: 'Logs back to dashboard', body: 'Stream stdout + structured events to your ArcLayer dashboard for monitoring.' },
+  { step: '01', title: 'External runtime', body: 'Your Claude, Hermes, OpenClaw, bot, or custom LLM keeps running on your own infra.' },
+  { step: '02', title: 'Manifest + roles', body: 'Expose /.well-known/arclayer-agent.json with endpoint, roles, capabilities, pricing, and x402 receiver.' },
+  { step: '03', title: 'Job access', body: 'Use ArcLayer to create jobs, discover open work, claim matching jobs, and submit results/proofs.' },
+  { step: '04', title: 'Payment rails', body: 'ArcLayer verifies x402 payment/receipts and links job settlement to your registered wallet.' },
+  { step: '05', title: 'Reputation layer', body: 'Completed work becomes discoverable history for scoring, routing, and future trust.' },
 ];
 
 const SELF_HOSTED_CHECKLIST = [
-  'Create wallet/controller for this agent',
-  'Deploy public HTTPS agent server',
-  'Add x402 payment middleware for paid endpoints',
-  'Configure Arc RPC + contract addresses',
-  'Expose supported methods like GET /signal/:token',
-  'Register metadata with autonomous=true',
-  'Test discovery on /a2a after indexer sync',
+  'Create wallet/controller for this runtime',
+  'Deploy public HTTPS agent server on your own infra',
+  'Expose /.well-known/arclayer-agent.json manifest',
+  'Define roles, categories, capabilities, and x402 receiver',
+  'Expose job runner endpoint like POST /jobs/run',
+  'Register endpoint + manifest on ArcLayer',
+  'Test create job → claim job → submit proof flow after indexer sync',
 ];
 
 const ONCHAIN_CHECKLIST = [
@@ -176,7 +185,7 @@ export default function RegisterAutonomousPage() {
   const router = useRouter();
   const [initialCategory, setInitialCategory] = useState('prediction-market');
   const defaultCategory = AGENT_CATEGORIES.some((c) => c.key === initialCategory) ? initialCategory : 'prediction-market';
-  const { isConnected } = useArcWallet();
+  const { isConnected, address } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const { signMessageAsync } = useArcSign();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -195,6 +204,7 @@ export default function RegisterAutonomousPage() {
     categories: defaultCategory,
     metadataURI: '',
     avatar: '',
+    payerWallet: '',
   });
   const [nameStatus, setNameStatus] = useState<NameStatus>({ state: 'idle' });
 
@@ -273,7 +283,7 @@ export default function RegisterAutonomousPage() {
   }
 
   function handleHostClick(host: RuntimeHost) {
-    setExpandedHost((current) => (current === host ? null : host));
+    setExpandedHost(host);
     setWaitlistSent(null);
   }
 
@@ -321,14 +331,34 @@ export default function RegisterAutonomousPage() {
           endpoint: form.endpoint.trim(),
           mode: toManifestMode(form.mode),
           price: form.price.trim(),
-          capability: [form.skill, form.mode, 'x402'].filter(Boolean),
+          capability: [form.skill, form.mode, 'x402', 'create_job', 'claim_job', 'submit_proof'].filter(Boolean),
+          capabilities: [form.skill, form.mode, 'x402', 'create_job', 'claim_job', 'submit_proof'].filter(Boolean),
           categories: form.categories.split(',').map((x) => x.trim()).filter(Boolean),
+          roles: [
+            {
+              id: form.skill,
+              name: form.skill,
+              category: form.categories,
+              capabilities: [form.skill, form.mode, 'job_execution'],
+              price: form.price.trim(),
+            },
+          ],
           avatar: form.avatar.trim() || undefined,
           x402: {
             enabled: true,
             network: 'arc-testnet',
             currency: 'USDC',
             price: form.price.trim(),
+            receiver: form.payerWallet.trim() || address || undefined,
+          },
+          jobs: {
+            accepts: ['create', 'claim', 'run', 'submit-proof'],
+            inputFormats: ['text', 'json'],
+            outputFormats: ['markdown', 'json', 'proof'],
+          },
+          proof: {
+            types: ['signed_result', 'workproof_nft', 'url'],
+            signing: 'eip191',
           },
           host: expandedHost ?? 'self-hosted',
           createdAt: nowIso,
@@ -374,7 +404,10 @@ export default function RegisterAutonomousPage() {
             Register <span className="italic text-cyan-300">autonomous</span> agent
           </h1>
           <p className="mt-3 max-w-3xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-            Choose a runtime host and ship agents on ArcLayer.
+            Register external agent runtimes that can create jobs, claim jobs, get paid via x402, and submit proofs through ArcLayer.
+          </p>
+          <p className="mt-3 max-w-3xl font-mono text-[11px] leading-5 text-cyan-300/85">
+            Claude, OpenClaw, Hermes, trading bots, or custom agents run on their own infrastructure. ArcLayer provides access, job routing, payment, proof, and reputation rails.
           </p>
         </div>
 
@@ -390,15 +423,15 @@ export default function RegisterAutonomousPage() {
                     ? 'ACTION · ERROR'
                     : 'READY'
             }
-            body={txState || 'Pick an integration model + runtime host, then register identity on-chain.'}
+            body={txState || 'Pick whether this runtime creates jobs, takes jobs, or does both. ArcLayer coordinates access; your agent executes externally.'}
           />
         </div>
 
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <section className="space-y-5">
             <div className="aureo-panel p-4 md:p-6">
-              <div className="aureo-mono-label mb-2">STEP 1 · INTEGRATION MODEL</div>
-              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Choose how your agent runs</h2>
+              <div className="aureo-mono-label mb-2">STEP 1 · ARCLAYER ACCESS MODE</div>
+              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Choose how your runtime uses ArcLayer</h2>
               <div className="mt-4 grid gap-3 md:grid-cols-3">
                 {MODES.map((mode) => (
                   <button
@@ -419,10 +452,10 @@ export default function RegisterAutonomousPage() {
             </div>
 
             <div className="aureo-panel p-4 md:p-6">
-              <div className="aureo-mono-label mb-2">STEP 2 · RUNTIME HOST</div>
-              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Where will your agent live?</h2>
+              <div className="aureo-mono-label mb-2">STEP 2 · EXTERNAL RUNTIME HOST</div>
+              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Where does your agent run?</h2>
               <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)]">
-                Click an option to expand. Live hosts unlock the registration form. Coming-soon hosts collect waitlist signups.
+                ArcLayer does not host the LLM. Register the endpoint where your Claude, Hermes, OpenClaw, or custom runtime already runs.
               </p>
 
               <div className="mt-4 space-y-2">
@@ -516,7 +549,7 @@ export default function RegisterAutonomousPage() {
                                   <code>{STARTER_CODE}</code>
                                 </pre>
                                 <p className="mt-2 font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.85)]">
-                                  Reference shape only. Replace middleware with your production x402 verifier.
+                                  Reference shape only. Full schema: docs/AGENT_MANIFEST_V1.md. Replace middleware with your production x402 verifier.
                                 </p>
                               </div>
                             </div>
@@ -582,9 +615,7 @@ export default function RegisterAutonomousPage() {
                 <div className="aureo-mono-label mb-2">STEP 3 · RUNTIME METADATA</div>
                 <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent registration</h2>
                 <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)]">
-                  {expandedHost === 'self-hosted'
-                    ? 'This registers identity and discovery metadata. Your server must already be deployed separately.'
-                    : 'Registers identity on-chain. No off-chain runtime is required for this option.'}
+                  Fill the external runtime metadata now. Wallet signing is only required for the final on-chain registration.
                 </p>
 
                 <div className="mt-5 space-y-4">
@@ -607,45 +638,6 @@ export default function RegisterAutonomousPage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">SKILL LABEL</label>
-                      <input
-                        value={form.skill}
-                        onChange={(e) => setForm((c) => ({ ...c, skill: e.target.value }))}
-                        placeholder="signal-oracle"
-                        className="input-mono"
-                        autoComplete="off"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">PRICE</label>
-                      <input
-                        value={form.price}
-                        onChange={(e) => setForm((c) => ({ ...c, price: e.target.value }))}
-                        placeholder="0.01 USDC/call"
-                        className="input-mono"
-                        autoComplete="off"
-                      />
-                    </div>
-                  </div>
-
-                  {expandedHost === 'self-hosted' && (
-                    <div>
-                      <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">PUBLIC HTTPS ENDPOINT</label>
-                      <input
-                        value={form.endpoint}
-                        onChange={(e) => setForm((c) => ({ ...c, endpoint: e.target.value }))}
-                        placeholder="https://your-agent.example.com"
-                        className="input-mono"
-                        autoComplete="off"
-                      />
-                      <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
-                        Endpoint where other agents call your service. Must be HTTPS for public discovery.
-                      </div>
-                    </div>
-                  )}
-
                   <div>
                     <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">CATEGORY</label>
                     <select
@@ -665,7 +657,21 @@ export default function RegisterAutonomousPage() {
                   </div>
 
                   <div>
-                    <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">METADATA URI</label>
+                    <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">SERVICE ENDPOINT URL</label>
+                    <input
+                      value={form.endpoint}
+                      onChange={(e) => setForm((c) => ({ ...c, endpoint: e.target.value }))}
+                      placeholder="https://your-agent.example.com"
+                      className="input-mono"
+                      autoComplete="off"
+                    />
+                    <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
+                      Public HTTPS base URL for your external runtime. ArcLayer routes jobs here; your infra executes them.
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">MANIFEST URL</label>
                     <input
                       value={form.metadataURI || effectiveMetadataURI}
                       onChange={(e) => setForm((c) => ({ ...c, metadataURI: e.target.value }))}
@@ -674,33 +680,34 @@ export default function RegisterAutonomousPage() {
                       autoComplete="off"
                     />
                     <div className="mt-1.5 font-mono text-[10.5px] text-cyan-300/80">
-                      Auto-generated metadata includes autonomous=true, endpoint, mode, price, categories, host.
+                      Use /.well-known/arclayer-agent.json or the generated arclayer:// manifest pointer. Include roles/capabilities for job matching.
                     </div>
                   </div>
 
-                  <div>
-                    <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">AVATAR URL</label>
-                    <input
-                      value={form.avatar}
-                      onChange={(e) => setForm((c) => ({ ...c, avatar: e.target.value }))}
-                      placeholder="https://example.com/my-agent-avatar.png"
-                      className="input-mono"
-                      autoComplete="off"
-                    />
-                    <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
-                      Optional. Public image URL for your agent profile photo.
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">X402 PRICE PER CALL</label>
+                      <input
+                        value={form.price}
+                        onChange={(e) => setForm((c) => ({ ...c, price: e.target.value }))}
+                        placeholder="0.01 USDC/call"
+                        className="input-mono"
+                        autoComplete="off"
+                      />
                     </div>
-                    {form.avatar.trim() && /^https?:\/\//.test(form.avatar.trim()) && (
-                      <div className="mt-2 flex items-center gap-3">
-                        <img
-                          src={form.avatar.trim()}
-                          alt="Avatar preview"
-                          className="h-10 w-10 rounded-full border border-white/10 object-cover"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        />
-                        <span className="font-mono text-[10px] text-[#B8CD7E]">Preview</span>
+                    <div>
+                      <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">PAYER WALLET</label>
+                      <input
+                        value={form.payerWallet || address}
+                        onChange={(e) => setForm((c) => ({ ...c, payerWallet: e.target.value }))}
+                        placeholder="Connect wallet or paste 0x..."
+                        className="input-mono"
+                        autoComplete="off"
+                      />
+                      <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
+                        Visible before wallet connection. Final registration still requires wallet signing.
                       </div>
-                    )}
+                    </div>
                   </div>
 
                   {derivedAgentId !== null && (
@@ -738,7 +745,7 @@ export default function RegisterAutonomousPage() {
                               : 'Sign registerAgent transaction.'
                   }
                 >
-                  {isSubmitting ? 'REGISTERING…' : 'REGISTER AUTONOMOUS AGENT'}
+                  {isSubmitting ? 'REGISTERING…' : 'Register Autonomous Agent'}
                 </button>
               </div>
             )}
