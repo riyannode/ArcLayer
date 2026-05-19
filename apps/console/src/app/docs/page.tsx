@@ -327,8 +327,8 @@ export default function DocsPage() {
               <li>· Settlement tx: <a href="https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline">0x52c894…be4f264</a></li>
             </ul>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Link href="/" className="border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">
-                Open homepage x402 ↗
+              <Link href="/x402-demo" className="border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">
+                Try the live demo ↗
               </Link>
               <a href="https://arclayers.xyz/api/x402/supported" target="_blank" rel="noopener noreferrer" className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.84)] transition hover:border-white/20 hover:text-[#EAE4D8]">
                 /api/x402/supported ↗
@@ -347,8 +347,8 @@ export default function DocsPage() {
               <li>· Settlement ID: <span className="text-[#7CB5C5]">0e366c3d-…1913fd</span></li>
             </ul>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Link href="/" className="border border-[#7CB5C5]/40 bg-[#7CB5C5]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#7CB5C5] transition hover:bg-[#7CB5C5]/20">
-                Open homepage x402 ↗
+              <Link href="/x402-demo" className="border border-[#7CB5C5]/40 bg-[#7CB5C5]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#7CB5C5] transition hover:bg-[#7CB5C5]/20">
+                Try Gateway demo ↗
               </Link>
             </div>
           </div>

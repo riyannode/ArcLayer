@@ -6,7 +6,6 @@ import { useAccount, useDisconnect } from 'wagmi';
 import { switchChain as wagmiSwitchChain } from '@wagmi/core';
 import { config } from '@/lib/wagmi';
 import { useAppKit } from '@reown/appkit/react';
-import { usePathname } from 'next/navigation';
 import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'viem';
 import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
 import { DEFAULT_GATEWAY_DEPOSIT_USDC } from '@/lib/x402/constants';
@@ -50,13 +49,14 @@ interface X402DemoPanelProps {
 }
 
 /**
- * X402DemoPanel — single source of truth for the homepage x402 payment ticket.
+ * X402DemoPanel — single source of truth for the live x402 protected-resource demo.
  *
- * The payment UI is intentionally homepage-only. Other routes may describe x402 or
- * expose API docs, but should not render this payment trigger.
+ * Renders the full demo (PROTECTED RESOURCE card, mode picker, execution log, payment
+ * ticket sidebar) on the standalone /x402-demo page. With `compact`, scales down the
+ * same UI for inline use on the homepage. All payment logic — Arc Native EIP-3009 and
+ * Circle Gateway batching — runs identically in both modes.
  */
 export default function X402DemoPanel({ compact = false, ticketOnly = false }: X402DemoPanelProps) {
-  const pathname = usePathname();
   const { authenticated, address: circleAddress, smartAccount, login, logout: circleLogout } = useCircleWallet();
   const { address: eoaAddress, isConnected: eoaConnected } = useAccount();
   const { disconnect: eoaDisconnect } = useDisconnect();
@@ -442,12 +442,6 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   }, [gatewayBalance, log, notify, sessionKey]);
 
   const runDemo = useCallback(async () => {
-    if (pathname !== '/') {
-      log('x402 payment trigger is only available on the homepage.', 'warn');
-      notify({ surface: 'toast', severity: 'warning', autoCloseMs: 4_000, title: 'Homepage only', message: 'Open the homepage x402 ticket to start payment.' });
-      return;
-    }
-
     // Synchronous double-submit guard — prevents two flows with different nonces.
     // Must happen before reset(); reset intentionally clears stale locks.
     if (runLockRef.current) return;
@@ -544,7 +538,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       // Client just guards against rapid double-click.
       runLockRef.current = false;
     }
-  }, [activeAuthed, address, walletMode, smartAccount, log, reset, mode, runArcNative, runGateway, notify, sessionKey, pathname]);
+  }, [activeAuthed, address, walletMode, smartAccount, log, reset, mode, runArcNative, runGateway, notify, sessionKey]);
 
   const connectSelectedWallet = useCallback(() => {
     if (mode === 'circle-gateway') {

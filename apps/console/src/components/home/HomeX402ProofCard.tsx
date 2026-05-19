@@ -81,10 +81,10 @@ export default function HomeX402ProofCard() {
       {/* CTAs */}
       <div className="mt-4 flex flex-wrap gap-2.5">
         <Link
-          href="/"
+          href="/x402-demo"
           className="inline-flex items-center gap-1.5 rounded border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-1.5 font-mono text-[10px] text-[#C5A67C] transition-colors hover:bg-[#C5A67C]/20"
         >
-          Open payment ticket →
+          Try payment demo →
         </Link>
         <a
           href={`${EXPLORER}/address/0x4aA3402575b6D98EacE35A823EFa267F7365bdD2`}
