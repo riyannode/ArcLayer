@@ -304,7 +304,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
           { label: 'Status', value: 'Verified ✓', mono: false },
           { label: 'Replay guard', value: 'Passed ✓', mono: false },
         ],
-        autoCloseMs: 7_000,
+        autoCloseMs: 5_000,
       });
     } else {
       notify({ ...NOTICE_REPLAY_FAILED, title: 'Replay guard error', subtitle: undefined, message: 'Duplicate payment was accepted unexpectedly.' });
@@ -433,7 +433,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
           { label: 'Status', value: 'Verified ✓', mono: false },
           { label: 'Replay guard', value: 'Passed ✓', mono: false },
         ],
-        autoCloseMs: 7_000,
+        autoCloseMs: 5_000,
       });
     } else {
       notify({ ...NOTICE_REPLAY_FAILED, title: 'Replay guard error', subtitle: undefined, message: 'Duplicate payment was accepted unexpectedly.' });
