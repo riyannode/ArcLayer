@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
+import { dispatchWebhookEvent } from '@/lib/a2a/webhooks';
 
 export type A2AJobStatus = 'open' | 'claimed' | 'submitted';
 
@@ -138,7 +139,9 @@ export async function createA2AJob(input: CreateJobInput): Promise<A2AJob> {
     // Fallback: return constructed job even if DB write failed
     return rowToJob(row);
   }
-  return rowToJob(data);
+  const job = rowToJob(data);
+  dispatchWebhookEvent('job.created', { job }).catch(() => {});
+  return job;
 }
 
 export async function claimA2AJob(id: string, agentId: string): Promise<{ ok: true; job: A2AJob } | { ok: false; error: string }> {
@@ -166,7 +169,9 @@ export async function claimA2AJob(id: string, agentId: string): Promise<{ ok: tr
     console.error('[a2a.jobs] claim error', error.message);
     return { ok: false, error: 'db_error' };
   }
-  return { ok: true, job: rowToJob(data) };
+  const job = rowToJob(data);
+  dispatchWebhookEvent('job.claimed', { job, claimedBy: agentId }).catch(() => {});
+  return { ok: true, job };
 }
 
 export async function submitA2AJob(id: string, input: SubmitJobInput): Promise<{ ok: true; job: A2AJob; receipt: { id: string; jobId: string; agentId: string; status: string; submittedAt: string } } | { ok: false; error: string }> {
@@ -200,6 +205,7 @@ export async function submitA2AJob(id: string, input: SubmitJobInput): Promise<{
   }
 
   const job = rowToJob(data);
+  dispatchWebhookEvent('job.submitted', { job, agentId: input.agentId, receiptId }).catch(() => {});
   return {
     ok: true,
     job,
