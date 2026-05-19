@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useArcWallet } from '@/hooks/useArcWallet';
-import { useAuthFetch } from '@/hooks/useAuthFetch'; 
 
 type AiAnalysis = {
   decision?: string;
@@ -33,7 +32,6 @@ type Dispute = {
 
 export function DisputeViewer() {
   const { address, isConnected } = useArcWallet();
-  const { authFetch } = useAuthFetch();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
@@ -43,7 +41,7 @@ export function DisputeViewer() {
     setLoading(true);
     setErr('');
     try {
-      const res = await authFetch('/api/vault/disputes');
+      const res = await fetch(`/api/vault/disputes?wallet=${address}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
       setDisputes(json.disputes || []);

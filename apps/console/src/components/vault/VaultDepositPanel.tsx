@@ -2,8 +2,6 @@
 
 import { useState } from 'react';
 import { useArcWallet } from '@/hooks/useArcWallet';
-import { useX402Access } from '@/hooks/useX402Access';
-import { useProtectionNotice } from '@/components/protection';
 import { useVaultJob, type VaultJobStep } from '@/hooks/useVaultJob';
 import type { Address } from 'viem';
 
@@ -12,14 +10,12 @@ type Milestone = {
   amount: string; // USDC string
 };
 
-type DurationTier = 'instant' | 'single_payout' | 'milestone';
+type DurationTier = 'single_payout' | 'milestone';
 
 const MIN_MILESTONE_BPS = 1000; // 10%
 
 export function VaultDepositPanel() {
   const { address, isConnected } = useArcWallet();
-  const { hasAccess: hasX402Access, loading: isX402AccessLoading } = useX402Access();
-  const { notify } = useProtectionNotice();
   const { state, createVaultJob, reset } = useVaultJob();
   const [jobberAddr, setJobberAddr] = useState('');
   const [specJson, setSpecJson] = useState('');
@@ -48,23 +44,6 @@ export function VaultDepositPanel() {
   }
 
   async function handleCreate() {
-    if (isX402AccessLoading) return;
-    if (!hasX402Access) {
-      notify({
-        surface: 'modal',
-        severity: 'protection',
-        title: 'x402 payment required',
-        subtitle: 'Vault action guard',
-        message: 'You can inspect the vault form, but Deposit & Create Vault Job requires paying x402 first.',
-        technicalDetail: 'Deposit & Create Vault Job blocked before wallet transaction was requested.',
-        actionLabel: 'Pay x402 on homepage',
-        actionHref: '/',
-        autoCloseMs: 0,
-        dedupeKey: 'vault-job-x402-required',
-      });
-      return;
-    }
-
     if (!isConnected || !address) return;
     if (!/^0x[a-fA-F0-9]{40}$/.test(jobberAddr)) return;
     if (!specJson.trim()) return;
@@ -137,11 +116,10 @@ export function VaultDepositPanel() {
 
       {/* Tier selector */}
       <div className="mt-5">
-        <label className="mb-2 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">JOB DURATION TIER</label>
-        <div className="grid grid-cols-3 gap-2">
+        <label className="mb-2 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">VAULT JOB TYPE</label>
+        <div className="grid grid-cols-2 gap-2">
           {(
             [
-              { id: 'instant' as const, label: '< 5 min', sub: 'Direct x402' },
               { id: 'single_payout' as const, label: '5min–24hr', sub: 'Single payout' },
               { id: 'milestone' as const, label: '> 24hr', sub: 'Milestone-based' },
             ]

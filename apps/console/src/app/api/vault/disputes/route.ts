@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
-import { withWalletAuth } from '@/lib/auth/wallet-auth';
 
-// GET /api/vault/disputes — list disputes for the authenticated wallet
-// Query: ?role=client|jobber|all  (default all)
-export const GET = withWalletAuth(async (req: NextRequest, { wallet }) => {
+// GET /api/vault/disputes — read-only list disputes for wallet query param
+// Query: ?wallet=0x...&role=client|jobber|all  (default all)
+export async function GET(req: NextRequest) {
+  const wallet = req.nextUrl.searchParams.get('wallet')?.trim().toLowerCase();
   const role = req.nextUrl.searchParams.get('role') || 'all';
+
+  if (!wallet || !/^0x[a-f0-9]{40}$/.test(wallet)) {
+    return NextResponse.json({ error: 'valid wallet query param required' }, { status: 400 });
+  }
+
   const supabase = getSupabaseAdmin();
 
   // Fetch jobs touched by this wallet first to scope disputes
@@ -43,4 +48,4 @@ export const GET = withWalletAuth(async (req: NextRequest, { wallet }) => {
   }));
 
   return NextResponse.json({ disputes: enriched });
-});
+}

@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { withWalletAuth } from '@/lib/auth/wallet-auth';
+import { keccak256, toHex } from 'viem';
 
-// GET /api/vault/jobs — list jobs for connected wallet
-// POST /api/vault/jobs — create a new job (V1 deposit)
-export const GET = withWalletAuth(async (req: NextRequest, { wallet }) => {
+// GET /api/vault/jobs — read-only list jobs for wallet query param
+// POST /api/vault/jobs — create a new job (V1 deposit), wallet-auth protected
+export async function GET(req: NextRequest) {
+  const wallet = req.nextUrl.searchParams.get('wallet')?.trim().toLowerCase();
   const role = req.nextUrl.searchParams.get('role') || 'client'; // client | jobber | all
   const status = req.nextUrl.searchParams.get('status'); // optional filter
+
+  if (!wallet || !/^0x[a-f0-9]{40}$/.test(wallet)) {
+    return NextResponse.json({ error: 'valid wallet query param required' }, { status: 400 });
+  }
 
   const supabase = getSupabaseAdmin();
   let query = supabase.from('vault_jobs').select('*');
@@ -46,7 +52,7 @@ export const GET = withWalletAuth(async (req: NextRequest, { wallet }) => {
   }
 
   return NextResponse.json({ jobs: data });
-});
+}
 
 export const POST = withWalletAuth(async (req: NextRequest, { wallet }) => {
   const body = await req.json() as {
@@ -88,13 +94,9 @@ export const POST = withWalletAuth(async (req: NextRequest, { wallet }) => {
     }
   }
 
-  // M4: spec_hash verification — if client supplied a hash, recompute and compare
+  // M4: spec_hash verification — must match frontend and ArcVault contract
   if (body.specHash && body.specJson) {
-    const canonical = JSON.stringify(body.specJson);
-    const data = new TextEncoder().encode(canonical);
-    const hashBuf = await crypto.subtle.digest('SHA-256', data);
-    const computed = '0x' + Array.from(new Uint8Array(hashBuf))
-      .map((b) => b.toString(16).padStart(2, '0')).join('');
+    const computed = keccak256(toHex(JSON.stringify(body.specJson)));
     if (computed.toLowerCase() !== body.specHash.toLowerCase()) {
       return NextResponse.json(
         { error: 'spec_hash mismatch (computed vs supplied)' },

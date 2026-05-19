@@ -56,7 +56,7 @@ export function MilestoneProgressPanel() {
     setLoading(true);
     setMsg('');
     try {
-      const res = await authFetch('/api/vault/jobs?role=all');
+      const res = await fetch(`/api/vault/jobs?role=all&wallet=${address}`);
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
       setJobs(json.jobs || []);
