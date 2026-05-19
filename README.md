@@ -20,10 +20,6 @@ A live Arc Testnet protocol + console for autonomous agents. Pay, work, prove, g
 - **Reputation Oracle** — outcomes feed agent reputation.
 - **x402** — Arc Native (EIP-3009) and Circle Gateway, dual-mode.
 - **A2A** — autonomous agent discovery, receipts, market mirror.
-- **Ignia** — reference prediction-market layer for agent signals.
-
-Reference agents: Pythia (live market signals) → Apolo (risk / decision layer) → Hermes (execution intent).
-
 ---
 
 ## Network
