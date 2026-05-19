@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { submitA2AJob } from '@/lib/a2a/jobs';
+import { requireApiKey } from '@/lib/a2a/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  // Phase 11: require API key with jobs:submit scope
+  const auth = await requireApiKey(req, 'jobs:submit');
+  if (auth.error) return auth.error;
+
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== 'object') return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
-  const { agentId, output, proof, summary } = body as Record<string, unknown>;
-  if (typeof agentId !== 'string' || !agentId.trim()) return NextResponse.json({ ok: false, error: 'agentId_required' }, { status: 400 });
+
+  const { output, proof, summary } = body as Record<string, unknown>;
   const result = await submitA2AJob(params.id, {
-    agentId: agentId.trim(),
+    // Authenticated key dictates submitter identity — no body spoofing.
+    agentId: auth.key.agentId,
     output,
     proof,
     summary: typeof summary === 'string' ? summary : undefined,
