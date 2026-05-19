@@ -6,7 +6,7 @@
  *
  * Used by:
  * - /api/agents/[id]/run (after verify+settle, before agent execution)
- * - /api/x402-demo/protected (after verify+settle, before resource unlock)
+ * - /api/x402/protected-resource (after verify+settle, before resource unlock)
  * - /jobs UI (display payment confirmation)
  */
 

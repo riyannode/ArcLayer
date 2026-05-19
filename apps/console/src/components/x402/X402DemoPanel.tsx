@@ -49,10 +49,10 @@ interface X402DemoPanelProps {
 }
 
 /**
- * X402DemoPanel — single source of truth for the live x402 protected-resource demo.
+ * X402DemoPanel — single source of truth for the live x402 protected-resource ticket.
  *
- * Renders the full demo (PROTECTED RESOURCE card, mode picker, execution log, payment
- * ticket sidebar) on the standalone /x402-demo page. With `compact`, scales down the
+ * Renders the full protected-resource flow (PROTECTED RESOURCE card, mode picker, execution log, payment
+ * ticket sidebar) on the homepage. With `compact`, scales down the
  * same UI for inline use on the homepage. All payment logic — Arc Native EIP-3009 and
  * Circle Gateway batching — runs identically in both modes.
  */
@@ -168,7 +168,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   }, [address]);
 
 
-  const sessionKey = useCallback((walletAddress: string) => `x402_paid:${mode}:/api/x402-demo/protected:${walletAddress.toLowerCase()}`, [mode]);
+  const sessionKey = useCallback((walletAddress: string) => `x402_paid:${mode}:/api/x402/protected-resource:${walletAddress.toLowerCase()}`, [mode]);
 
   // Auto-restore unlocked state from sessionStorage on mount/wallet change
   useEffect(() => {
@@ -202,7 +202,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
 
     setStep('challenge');
     log('1/6 Requesting protected resource without payment...');
-    const challengeUrl = `/api/x402-demo/protected?rail=arc-native-eoa&payer=${encodeURIComponent(address)}`;
+    const challengeUrl = `/api/x402/protected-resource?rail=arc-native-eoa&payer=${encodeURIComponent(address)}`;
     const first = await fetch(challengeUrl);
     const challenge = await first.json();
     if (first.status !== 402 || !Array.isArray(challenge.accepts)) { log('Protected endpoint did not return x402 402 challenge', 'error'); setStep('error'); return; }
@@ -254,7 +254,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     setStep('paying');
     log('4/6 Calling protected resource with X-PAYMENT header (server runs verify+settle inline)...');
     const header = b64(paymentPayload);
-    const paid = await fetch('/api/x402-demo/protected', { headers: { 'X-PAYMENT': header } });
+    const paid = await fetch('/api/x402/protected-resource', { headers: { 'X-PAYMENT': header } });
     const paidJson = await paid.json();
     if (!paid.ok || !paidJson.unlocked) {
       log(`Payment failed: ${paidJson.error || paid.status} — ${paidJson.reason || paidJson.message || ''}`, 'error');
@@ -277,8 +277,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     log(`5/6 Settled & unlocked: tx=${paymentResp.transaction?.slice(0, 18) || 'n/a'}...`, 'success');
 
     setStep('replay');
-    log('6/6 Replay test: reusing same X-PAYMENT against /api/x402-demo/protected...');
-    const replay = await fetch('/api/x402-demo/protected', { headers: { 'X-PAYMENT': header } });
+    log('6/6 Replay test: reusing same X-PAYMENT against /api/x402/protected-resource...');
+    const replay = await fetch('/api/x402/protected-resource', { headers: { 'X-PAYMENT': header } });
     const replayJson = await replay.json();
     const replayReason = replayJson.reason || replayJson.error || 'duplicate_rejected';
     const rejected = !replay.ok && (
@@ -327,7 +327,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
 
     setStep('challenge');
     log('[GW] 1/5 Requesting protected resource without payment...');
-    const challengeUrl = `/api/x402-demo/protected?rail=circle-gateway-passkey&payer=${encodeURIComponent(address)}`;
+    const challengeUrl = `/api/x402/protected-resource?rail=circle-gateway-passkey&payer=${encodeURIComponent(address)}`;
     const first = await fetch(challengeUrl);
     const challenge = await first.json();
     if (first.status !== 402 || !Array.isArray(challenge.accepts)) { log('Protected endpoint did not return x402 402 challenge', 'error'); setStep('error'); return; }
@@ -358,7 +358,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
 
     const paymentPayload = {
       x402Version: 2,
-      resource: `${window.location.origin}/api/x402-demo/protected`,
+      resource: `${window.location.origin}/api/x402/protected-resource`,
       accepted: { ...gwOption, asset: getAddress(gwOption.asset), payTo: getAddress(gwOption.payTo), extra: { ...gwOption.extra, name: gwDomainName } },
       payload: {
         signature: '0x' as Hex,
@@ -388,7 +388,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     setStep('paying');
     log('[GW] 4/5 Calling protected resource with PAYMENT-SIGNATURE header (server runs verify+settle inline)...');
     const header = b64(paymentPayload);
-    const paid = await fetch('/api/x402-demo/protected', { headers: { 'PAYMENT-SIGNATURE': header } });
+    const paid = await fetch('/api/x402/protected-resource', { headers: { 'PAYMENT-SIGNATURE': header } });
     const paidJson = await paid.json();
     if (!paid.ok || !paidJson.unlocked) { log(`Gateway payment failed: ${paidJson.error || paid.status} — ${paidJson.reason || paidJson.message || ''}`, 'error'); setStep('error'); return; }
 
@@ -408,7 +408,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
 
     setStep('replay');
     log('[GW] 5/5 Replay test: reusing same PAYMENT-SIGNATURE...');
-    const replayResp = await fetch('/api/x402-demo/protected', { headers: { 'PAYMENT-SIGNATURE': header } });
+    const replayResp = await fetch('/api/x402/protected-resource', { headers: { 'PAYMENT-SIGNATURE': header } });
     const replayJson = await replayResp.json();
     const replayReason = replayJson.reason || replayJson.error || 'duplicate_rejected';
     const replayRejected = !replayResp.ok && (

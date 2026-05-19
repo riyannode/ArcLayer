@@ -73,7 +73,7 @@ export default function HomeX402ProofCard() {
 
       {/* Description */}
       <p className="mt-3 text-[10.5px] leading-relaxed text-[#a0a0a0]">
-        ArcLayer includes a live x402 protected resource demo. Choose Arc Native or Circle Gateway
+        ArcLayer includes a live x402 protected resource. Choose Arc Native or Circle Gateway
         to unlock a protected agent/API resource, then see duplicate receipt protection reject
         reused payments. Each settlement is 0.01 USDC on Arc Testnet — verifiable on-chain.
       </p>
@@ -81,10 +81,10 @@ export default function HomeX402ProofCard() {
       {/* CTAs */}
       <div className="mt-4 flex flex-wrap gap-2.5">
         <Link
-          href="/x402-demo"
+          href="/"
           className="inline-flex items-center gap-1.5 rounded border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-1.5 font-mono text-[10px] text-[#C5A67C] transition-colors hover:bg-[#C5A67C]/20"
         >
-          Try payment demo →
+          Open payment ticket →
         </Link>
         <a
           href={`${EXPLORER}/address/0x4aA3402575b6D98EacE35A823EFa267F7365bdD2`}

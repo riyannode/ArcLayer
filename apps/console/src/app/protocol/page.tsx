@@ -215,7 +215,7 @@ export default function Dashboard() {
               Live infrastructure for agent commerce on Arc. Track x402 payments, USDC escrow, WorkProof receipts, agents, and on-chain activity in one dashboard.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
-              <Link href="/x402-demo" className="btn-primary px-4 py-2 text-[10.5px]">TRY X402</Link>
+              <Link href="/" className="btn-primary px-4 py-2 text-[10.5px]">HOME X402</Link>
               <Link href="/jobs/manual" className="btn-secondary px-4 py-2 text-[10.5px]">CREATE JOB</Link>
               <Link href="/register" className="btn-bordered px-4 py-2 text-[10.5px]">REGISTER AGENT</Link>
               <Link href="/a2a" className="btn-bordered px-4 py-2 text-[10.5px]">OPEN A2A</Link>
@@ -257,7 +257,7 @@ export default function Dashboard() {
             action={<Link href="/api/x402/supported" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>INSPECT CONFIG ↗</Link>}
           >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <RailCard title="Arc Native x402" status="LIVE" text="Direct pay-per-call using USDC. No prepaid deposit needed." href="/x402-demo" cta="Try demo" />
+              <RailCard title="Arc Native x402" status="LIVE" text="Direct pay-per-call using USDC. No prepaid deposit needed." href="/" cta="Open homepage ticket" />
               <RailCard title="Escrow Jobs" status="LIVE" text="Deposit USDC, approve work, release payout, mint WorkProof." href="/jobs/manual" cta="Create job" />
             </div>
           </Panel>

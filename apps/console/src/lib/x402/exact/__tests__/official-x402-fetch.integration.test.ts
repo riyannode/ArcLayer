@@ -7,7 +7,7 @@ const PRIVATE_KEY = process.env.X402_E2E_PRIVATE_KEY;
 
 const maybeDescribe = RUN ? describe : describe.skip;
 
-maybeDescribe('official x402-fetch integration: /api/x402-demo/protected', () => {
+maybeDescribe('official x402-fetch integration: /api/x402/protected-resource', () => {
   it('unlocks protected endpoint using official x402-fetch client', async () => {
     if (!PRIVATE_KEY) throw new Error('X402_E2E_PRIVATE_KEY is required when RUN_X402_FETCH_E2E=1');
 
@@ -17,7 +17,7 @@ maybeDescribe('official x402-fetch integration: /api/x402-demo/protected', () =>
     const signer = await createSigner('eip155:5042002', PRIVATE_KEY as `0x${string}`);
     const paidFetch = wrapFetchWithPayment(fetch, signer);
 
-    const res = await paidFetch(`${BASE_URL}/api/x402-demo/protected`, {
+    const res = await paidFetch(`${BASE_URL}/api/x402/protected-resource`, {
       method: 'GET',
       headers: { 'X-Payment-Rail': 'arc-native' },
     });
