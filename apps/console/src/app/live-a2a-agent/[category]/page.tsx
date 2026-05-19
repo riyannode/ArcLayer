@@ -296,11 +296,6 @@ function LiveMarketWidget({
       <div className="flex min-h-0 flex-col bg-[#0A0A0A]/90 p-4">
         <div className="grid grid-cols-3 gap-2">
           <div className="rounded-sm border border-white/10 bg-black/25 p-3">
-            <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#EAE4D8]/55">Live {asset} price</div>
-            <div className={`mt-1 font-mono text-2xl font-bold ${directionUp ? 'text-emerald-300' : 'text-rose-300'}`}>{fmtPrice(stream?.livePrice)}</div>
-            <div className="mt-1 font-mono text-[10px] text-[#EAE4D8]/50">Coinbase spot</div>
-          </div>
-          <div className="rounded-sm border border-white/10 bg-black/25 p-3">
             <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#EAE4D8]/55">Target price</div>
             <div className="mt-1 font-mono text-2xl font-bold text-[#C5A67C]">{fmtPrice(stream?.priceToBeat)}</div>
             <div className="mt-1 font-mono text-[10px] text-[#EAE4D8]/50">5m open / price to beat</div>
@@ -311,6 +306,11 @@ function LiveMarketWidget({
             <div className={`mt-1 font-mono text-[10px] ${directionUp ? 'text-emerald-300' : 'text-rose-300'}`}>
               {stream?.change == null ? 'pending' : `${directionUp ? '+' : ''}${fmt(stream.change, 2)} (${directionUp ? '+' : ''}${fmt(stream.changePct ?? 0, 3)}%)`}
             </div>
+          </div>
+          <div className="rounded-sm border border-white/10 bg-black/25 p-3">
+            <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#EAE4D8]/55">Live {asset} price</div>
+            <div className={`mt-1 font-mono text-2xl font-bold ${directionUp ? 'text-emerald-300' : 'text-rose-300'}`}>{fmtPrice(stream?.livePrice)}</div>
+            <div className="mt-1 font-mono text-[10px] text-[#EAE4D8]/50">Coinbase spot</div>
           </div>
         </div>
 
