@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
+import { useX402Access } from '@/hooks/useX402Access';
 import {
   buildApproveUsdcConfig,
   buildCreateJobConfig,
@@ -42,6 +43,7 @@ function JobsPage() {
   const preselectedAgentId = (searchParams.get('agent') || searchParams.get('agentId'))?.trim() ?? '';
   const { address, isConnected } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
+  const { hasAccess: hasX402Access, loading: isX402AccessLoading } = useX402Access();
   const { notify } = useProtectionNotice();
   const [jobs, setJobs] = useState<IndexedJob[]>([]);
   const [agents, setAgents] = useState<IndexedAgent[]>([]);
@@ -203,7 +205,34 @@ function JobsPage() {
     }
   }, [fundForm.budget, depositTouched]);
 
+  function requireX402ForAction(action: string) {
+    if (isX402AccessLoading) {
+      setStatusTone('pending');
+      setTxState('Checking x402 access before action…');
+      return false;
+    }
+    if (hasX402Access) return true;
+
+    setStatusTone('error');
+    setTxState(`${action} requires a paid x402 session. You can inspect the job form, but on-chain actions are locked until payment.`);
+    notify({
+      surface: 'modal',
+      severity: 'protection',
+      title: 'x402 payment required',
+      subtitle: 'Action guard',
+      message: 'You can view the workflow, but creating or funding jobs requires paying x402 first.',
+      technicalDetail: `${action} blocked before wallet transaction was requested.`,
+      actionLabel: 'Pay x402 on homepage',
+      actionHref: '/',
+      autoCloseMs: 0,
+      dedupeKey: `manual-job-x402-required:${action}`,
+    });
+    return false;
+  }
+
   async function handleCreateJob() {
+    if (!requireX402ForAction('Create Job')) return;
+
     if (!createForm.agentId) {
       setStatusTone('error');
       setTxState('Register an agent first, then select it here.');
@@ -279,6 +308,8 @@ function JobsPage() {
   }
 
   async function handleFundJob() {
+    if (!requireX402ForAction('Approve & Fund')) return;
+
     if (!fundForm.jobId.trim()) {
       setStatusTone('error');
       setTxState('Enter a Job ID first.');
