@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { submitA2AJob } from '@/lib/a2a/jobs';
 import { requireApiKey } from '@/lib/a2a/auth';
 import { applyRateLimit } from '@/lib/rate-limit';
+import { recordDelivery } from '@/lib/a2a/reputation';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,5 +30,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     summary: typeof summary === 'string' ? summary : undefined,
   });
   if (!result.ok) return NextResponse.json(result, { status: result.error === 'job_not_found' ? 404 : 403 });
+
+  // Phase 13: fire-and-forget on-chain reputation recording
+  recordDelivery({
+    providerAgentId: auth.key.agentId,
+    buyerAgentId: 'arclayer-system',
+    jobId: params.id,
+    delivered: true,
+  }).catch((e) => console.error('[submit] recordDelivery error:', e));
+
   return NextResponse.json(result);
 }

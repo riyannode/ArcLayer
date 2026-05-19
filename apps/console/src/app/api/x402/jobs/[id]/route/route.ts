@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402';
-import { rankAgentsForJob } from '@/lib/a2a/match-agents';
 import { listRosterCandidates } from '@/lib/a2a/roster';
+import { rankAgentsWithReputation } from '@/lib/a2a/reputation';
 
 /**
  * POST /api/x402/jobs/[id]/route — x402-gated job routing.
@@ -65,7 +65,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   const seen = new Set(roster.map((r) => r.agentId));
   const merged = [...roster, ...SEED_AGENTS.filter((s) => !seen.has(s.agentId))];
 
-  const ranked = rankAgentsForJob(
+  const ranked = await rankAgentsWithReputation(
     {
       role: body.role,
       category: body.category,
@@ -96,11 +96,13 @@ async function handler(req: NextRequest): Promise<NextResponse> {
         name: selected.name,
         role: selected.role,
         score: selected.score,
+        reputation: selected.repScore.toString(),
       },
       candidates: ranked.slice(0, 3).map((r) => ({
         id: r.agentId,
         name: r.name,
         score: r.score,
+        reputation: r.repScore.toString(),
       })),
       routedBy: 'apolo-decision-engine',
       confidence,
