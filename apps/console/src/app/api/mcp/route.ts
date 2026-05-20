@@ -204,6 +204,311 @@ const TOOLS: Record<
       };
     },
   },
+  set_budget_calldata: {
+    description:
+      'Build calldata for JobEscrow.setBudget(). Sets the USDC budget for a job. Must be called by the client before funding.',
+    args: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'amount', type: 'string', required: true, description: 'Budget in USDC atomic units (6 decimals). E.g. "1000000" = 1 USDC.' },
+    ],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const jobIdRaw = String(args.jobId || '').trim();
+      const amountRaw = String(args.amount || '').trim();
+      if (!jobIdRaw || !amountRaw) throw new Error('jobId, amount required');
+
+      const jobId = BigInt(jobIdRaw);
+      const amount = BigInt(amountRaw);
+
+      const data = encodeFunctionData({
+        abi: JOB_ESCROW_ABI as any,
+        functionName: 'setBudget',
+        args: [jobId, amount],
+      });
+
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.JOB_ESCROW,
+        data,
+        value: '0x0',
+        derived: { jobId: jobId.toString(), budgetAtomic: amount.toString(), budgetUsdc: `${Number(amount) / 1e6} USDC` },
+        signing: {
+          how: 'Send from the client wallet that created this job.',
+          rpc: 'https://rpc.drpc.testnet.arc.network',
+          gasHint: '~80000',
+        },
+      };
+    },
+  },
+  approve_usdc_calldata: {
+    description:
+      'Build calldata for USDC.approve(JobEscrow, amount). Must be called before fund() so the escrow can pull USDC.',
+    args: [
+      { name: 'amount', type: 'string', required: true, description: 'Amount in USDC atomic units (6 decimals).' },
+    ],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const amountRaw = String(args.amount || '').trim();
+      if (!amountRaw) throw new Error('amount required');
+
+      const amount = BigInt(amountRaw);
+
+      const data = encodeFunctionData({
+        abi: [{ name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] }] as any,
+        functionName: 'approve',
+        args: [CONTRACTS.JOB_ESCROW as Hex, amount],
+      });
+
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.USDC,
+        data,
+        value: '0x0',
+        derived: { spender: CONTRACTS.JOB_ESCROW, amountAtomic: amount.toString(), amountUsdc: `${Number(amount) / 1e6} USDC` },
+        signing: {
+          how: 'Send from the client wallet that holds USDC. This approves JobEscrow to pull the specified amount.',
+          rpc: 'https://rpc.drpc.testnet.arc.network',
+          gasHint: '~50000',
+        },
+      };
+    },
+  },
+  fund_job_calldata: {
+    description:
+      'Build calldata for JobEscrow.fund(jobId, amount). Pulls USDC from client into escrow. Requires prior USDC.approve().',
+    args: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'amount', type: 'string', required: true, description: 'Amount in USDC atomic units (6 decimals).' },
+    ],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const jobIdRaw = String(args.jobId || '').trim();
+      const amountRaw = String(args.amount || '').trim();
+      if (!jobIdRaw || !amountRaw) throw new Error('jobId, amount required');
+
+      const jobId = BigInt(jobIdRaw);
+      const amount = BigInt(amountRaw);
+
+      const data = encodeFunctionData({
+        abi: JOB_ESCROW_ABI as any,
+        functionName: 'fund',
+        args: [jobId, amount],
+      });
+
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.JOB_ESCROW,
+        data,
+        value: '0x0',
+        derived: { jobId: jobId.toString(), amountAtomic: amount.toString(), amountUsdc: `${Number(amount) / 1e6} USDC` },
+        signing: {
+          how: 'Send from the client wallet. USDC.approve(JobEscrow, amount) must have been called first.',
+          rpc: 'https://rpc.drpc.testnet.arc.network',
+          gasHint: '~120000',
+        },
+        prerequisites: [
+          'Call set_budget_calldata first to set the job budget.',
+          'Call approve_usdc_calldata to approve the escrow to pull USDC.',
+        ],
+      };
+    },
+  },
+  submit_deliverable_calldata: {
+    description:
+      'Build calldata for JobEscrow.submitDeliverable(). Called by the worker agent after completing the task.',
+    args: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'deliverableURI', type: 'string', required: true, description: 'URI of the deliverable (IPFS or HTTPS).' },
+      { name: 'proofMetadataURI', type: 'string', required: true, description: 'URI of proof metadata (model, latency, tokens hash).' },
+    ],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const jobIdRaw = String(args.jobId || '').trim();
+      const deliverableURI = String(args.deliverableURI || '').trim();
+      const proofMetadataURI = String(args.proofMetadataURI || '').trim();
+      if (!jobIdRaw || !deliverableURI || !proofMetadataURI) {
+        throw new Error('jobId, deliverableURI, proofMetadataURI required');
+      }
+
+      const jobId = BigInt(jobIdRaw);
+
+      const data = encodeFunctionData({
+        abi: JOB_ESCROW_ABI as any,
+        functionName: 'submitDeliverable',
+        args: [jobId, deliverableURI, proofMetadataURI],
+      });
+
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.JOB_ESCROW,
+        data,
+        value: '0x0',
+        derived: { jobId: jobId.toString(), deliverableURI, proofMetadataURI },
+        signing: {
+          how: 'Send from the worker wallet assigned to this job.',
+          rpc: 'https://rpc.drpc.testnet.arc.network',
+          gasHint: '~200000',
+        },
+        invariants: [
+          'Only the designated worker can submit.',
+          'Job must be in funded state.',
+        ],
+      };
+    },
+  },
+  evaluate_job_calldata: {
+    description:
+      'Build calldata for JobEscrow.evaluate(jobId, approved). Called by the evaluator to approve or reject the deliverable.',
+    args: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'approved', type: 'string', required: true, description: '"true" to approve, "false" to reject.' },
+    ],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const jobIdRaw = String(args.jobId || '').trim();
+      const approvedRaw = String(args.approved || '').trim().toLowerCase();
+      if (!jobIdRaw || !approvedRaw) throw new Error('jobId, approved required');
+
+      const jobId = BigInt(jobIdRaw);
+      const approved = approvedRaw === 'true' || approvedRaw === '1';
+
+      const data = encodeFunctionData({
+        abi: JOB_ESCROW_ABI as any,
+        functionName: 'evaluate',
+        args: [jobId, approved],
+      });
+
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.JOB_ESCROW,
+        data,
+        value: '0x0',
+        derived: { jobId: jobId.toString(), approved },
+        signing: {
+          how: 'Send from the evaluator wallet designated for this job.',
+          rpc: 'https://rpc.drpc.testnet.arc.network',
+          gasHint: '~100000',
+        },
+        invariants: [
+          'Only the evaluator can call evaluate.',
+          'Job must have a submitted deliverable.',
+        ],
+      };
+    },
+  },
+  settle_job_calldata: {
+    description:
+      'Build calldata for JobEscrow.settle(jobId). Settles the job: pays worker, takes fee, mints WorkProof NFT. Anyone can call after evaluation.',
+    args: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+    ],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const jobIdRaw = String(args.jobId || '').trim();
+      if (!jobIdRaw) throw new Error('jobId required');
+
+      const jobId = BigInt(jobIdRaw);
+
+      const data = encodeFunctionData({
+        abi: JOB_ESCROW_ABI as any,
+        functionName: 'settle',
+        args: [jobId],
+      });
+
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.JOB_ESCROW,
+        data,
+        value: '0x0',
+        derived: { jobId: jobId.toString() },
+        signing: {
+          how: 'Anyone can call settle after the evaluator has approved. Sends USDC to worker + fee to protocol.',
+          rpc: 'https://rpc.drpc.testnet.arc.network',
+          gasHint: '~400000',
+        },
+        invariants: [
+          'Job must be evaluated (approved=true) before settle.',
+          'settle() mints a WorkProof NFT as receipt.',
+          'Gas is higher than other calls (~400k) — do not hardcode 300k.',
+        ],
+      };
+    },
+  },
+  refund_rejected_calldata: {
+    description:
+      'Build calldata for JobEscrow.refundRejected(jobId). Refunds full fundedAmount to client when evaluator rejected the deliverable. Use this when evaluate(jobId, false) was called instead of settle().',
+    args: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+    ],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const jobIdRaw = String(args.jobId || '').trim();
+      if (!jobIdRaw) throw new Error('jobId required');
+
+      const jobId = BigInt(jobIdRaw);
+
+      const data = encodeFunctionData({
+        abi: JOB_ESCROW_ABI as any,
+        functionName: 'refundRejected',
+        args: [jobId],
+      });
+
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.JOB_ESCROW,
+        data,
+        value: '0x0',
+        derived: { jobId: jobId.toString() },
+        signing: {
+          how: 'Send from client OR evaluator wallet.',
+          rpc: 'https://rpc.drpc.testnet.arc.network',
+          gasHint: '~150000',
+        },
+        invariants: [
+          'Job must be in Evaluated state with approved=false.',
+          'Refunds full fundedAmount back to client.',
+          'Use this instead of settle() when evaluate returned false.',
+        ],
+      };
+    },
+  },
+  cancel_job_calldata: {
+    description:
+      'Build calldata for JobEscrow.cancelJob(jobId). Cancels a job before it is funded. Callable by client, worker, or owner.',
+    args: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+    ],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const jobIdRaw = String(args.jobId || '').trim();
+      if (!jobIdRaw) throw new Error('jobId required');
+
+      const jobId = BigInt(jobIdRaw);
+
+      const data = encodeFunctionData({
+        abi: JOB_ESCROW_ABI as any,
+        functionName: 'cancelJob',
+        args: [jobId],
+      });
+
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.JOB_ESCROW,
+        data,
+        value: '0x0',
+        derived: { jobId: jobId.toString() },
+        signing: {
+          how: 'Send from client, worker, or contract owner.',
+          rpc: 'https://rpc.drpc.testnet.arc.network',
+          gasHint: '~80000',
+        },
+        invariants: [
+          'Only callable while job is in Created or Budgeted state (NOT after fund()).',
+          'After fund(), use refundRejected() flow instead.',
+        ],
+      };
+    },
+  },
 };
 
 function manifest() {

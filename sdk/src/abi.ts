@@ -313,6 +313,20 @@ export const JOB_ESCROW_ABI = [
     outputs: [],
   },
   {
+    name: "refundRejected",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "jobId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    name: "cancelJob",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "jobId", type: "uint256" }],
+    outputs: [],
+  },
+  {
     name: "jobCounter",
     type: "function",
     stateMutability: "view",

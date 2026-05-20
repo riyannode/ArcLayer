@@ -82,3 +82,21 @@ export function buildSettleJobConfig(jobId: bigint) {
     args: [jobId] as const,
   };
 }
+
+export function buildRefundRejectedJobConfig(jobId: bigint) {
+  return {
+    address: CONTRACTS.JOB_ESCROW,
+    abi: JOB_ESCROW_ABI,
+    functionName: "refundRejected" as const,
+    args: [jobId] as const,
+  };
+}
+
+export function buildCancelJobConfig(jobId: bigint) {
+  return {
+    address: CONTRACTS.JOB_ESCROW,
+    abi: JOB_ESCROW_ABI,
+    functionName: "cancelJob" as const,
+    args: [jobId] as const,
+  };
+}
