@@ -88,7 +88,7 @@ export default function ManualJobCategoryPage() {
             <div>
               <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">MANUAL MARKETPLACE · CATEGORY</div>
               <h1 className="mt-2 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5] sm:text-4xl">{categoryMeta.key}</h1>
-              <p className="mt-2 max-w-2xl text-sm text-[#EAE4D8]/90">{categoryMeta.copy}</p>
+              <p className="mt-2 max-w-2xl text-sm text-[#EAE4D8]/90 invisible">{categoryMeta.copy}</p>
             </div>
             <div className="flex flex-wrap gap-2 font-mono text-[10px] uppercase tracking-[0.14em]">
               <span className="chip-status pending">{matchingJobs.length} jobs</span>
@@ -168,7 +168,7 @@ export default function ManualJobCategoryPage() {
                         <div>funded {formatUSDC(BigInt(job.fundedAmount))}</div>
                       </div>
                     </div>
-                    <p className="mt-2 line-clamp-2 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.78)]">{display.description}</p>
+                    <p className="mt-2 line-clamp-2 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.78)] invisible">{display.description}</p>
                     <div className="mt-2 grid gap-1 font-mono text-[9.5px] text-[rgba(234,228,216,0.62)] sm:grid-cols-2">
                       <span>Worker: {shortenAddress(job.worker)}</span>
                       <span>Client: {shortenAddress(job.client || job.evaluator)}</span>
@@ -195,7 +195,7 @@ export default function ManualJobCategoryPage() {
                 className="rounded-sm border border-white/[0.07] bg-black/25 p-4 transition hover:border-[#C5A67C]/35 hover:bg-white/[0.035]"
               >
                 <div className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#EAE4D8]">{template.title}</div>
-                <p className="mt-2 line-clamp-2 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.78)]">{template.jobSpec}</p>
+                <p className="mt-2 line-clamp-2 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.78)] invisible">{template.jobSpec}</p>
                 <div className="mt-3 flex flex-wrap gap-1">
                   <span className="chip-status pending">{template.duration}</span>
                   <span className="chip-status">{template.difficulty}</span>

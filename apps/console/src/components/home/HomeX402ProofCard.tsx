@@ -36,7 +36,7 @@ export default function HomeX402ProofCard() {
           <h3 className="font-mono text-xs uppercase tracking-widest text-[#C5A67C]">
             Live x402 Protected Resource
           </h3>
-          <p className="mt-1 text-[11px] text-[#a0a0a0]">
+          <p className="mt-1 text-[11px] text-[#a0a0a0] invisible">
             Unlock a protected agent/API resource with Arc Native or Circle Gateway payment.
           </p>
         </div>

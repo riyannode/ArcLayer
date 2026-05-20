@@ -195,7 +195,7 @@ export default function LiveSignalPanel() {
         </div>
       )}
 
-      <p className="mt-3 font-mono text-[10px] text-[#9C9080]">
+      <p className="mt-3 font-mono text-[10px] text-[#9C9080] invisible">
         Signals derived from live Polymarket 5m UP/DOWN markets. Ignia reads raw orderbook data →
         Apolo applies risk policy and approves/rejects → Hermes executes (dry-run). When PM2 agents
         are running, this panel reflects real-time agent decisions with x402 payment receipts.

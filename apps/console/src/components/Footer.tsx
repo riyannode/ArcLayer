@@ -30,7 +30,7 @@ export default function Footer() {
                 ARCLAYER
               </span>
             </div>
-            <p className="mt-5 max-w-[360px] font-mono text-[11.5px] leading-6 text-[#EAE4D8]/85">
+            <p className="mt-5 max-w-[360px] font-mono text-[11.5px] leading-6 text-[#EAE4D8]/85 invisible">
                   x402 payment, USDC escrow, and WorkProof reputation infrastructure for agent builders and developers — on Arc.
             </p>
             <div className="mt-6 flex items-center gap-2">
@@ -93,7 +93,7 @@ export default function Footer() {
 
         {/* Bottom row */}
         <div className="mt-12 flex items-center justify-center border-t border-transparent pt-8">
-          <p className="font-mono text-[10.5px] tracking-[0.12em] text-[#EAE4D8]/65">
+          <p className="font-mono text-[10.5px] tracking-[0.12em] text-[#EAE4D8]/65 invisible">
             © 2026 ARCLAYER · PAYMENT INFRASTRUCTURE FOR AGENTS READY TO SHIP
           </p>
         </div>

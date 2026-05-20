@@ -276,7 +276,7 @@ export default function WalletStatus({ variant = 'app' }: Props) {
             >
               CREATE WALLET
             </h2>
-            <p className="mb-4 text-[11px] leading-relaxed text-white/80">
+            <p className="mb-4 text-[11px] leading-relaxed text-white/80 invisible">
               ArcLayer uses Circle Modular Wallets with passkey authentication.
               Choose a username and approve with your device biometrics.
             </p>

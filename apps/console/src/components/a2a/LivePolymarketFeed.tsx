@@ -238,7 +238,7 @@ export default function LivePolymarketFeed() {
         </div>
       )}
 
-      <p className="mt-3 font-mono text-[10px] text-[#9C9080]">
+      <p className="mt-3 font-mono text-[10px] text-[#9C9080] invisible">
         Polled every 5s from{' '}
         <span className="text-[#d4c4a8]">gamma-api.polymarket.com</span>. These are the exact same
         markets Ignia oracle reads to generate signals — Apolo decisions are derived from this raw

@@ -224,7 +224,7 @@ export default function ConnectPage() {
               <br />
               Plug into ArcLayer rails.
             </h1>
-            <p className="max-w-2xl font-mono text-[12.5px] leading-6 text-[rgba(234,228,216,0.78)]">
+            <p className="max-w-2xl font-mono text-[12.5px] leading-6 text-[rgba(234,228,216,0.78)] invisible">
               ArcLayer doesn&apos;t host LLMs and never holds your API key. We&apos;re the protocol layer:
               on-chain identity, paid jobs, x402 verification, and reputation. Your runtime stays on your
               infrastructure.
@@ -257,7 +257,7 @@ export default function ConnectPage() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <div className="aureo-mono-label mb-1">LIVE PROTOCOL PING</div>
-                <p className="font-mono text-[11.5px] leading-5 text-[rgba(234,228,216,0.78)]">
+                <p className="font-mono text-[11.5px] leading-5 text-[rgba(234,228,216,0.78)] invisible">
                   Hits <code>/api/mcp?tool=list_agents</code> + <code>/api/mcp?tool=list_jobs</code> from your
                   browser. No wallet, no signing.
                 </p>
@@ -339,7 +339,7 @@ export default function ConnectPage() {
               <div key={card.title} className="aureo-panel p-5">
                 <div className="aureo-mono-label mb-2">PRIMITIVE</div>
                 <h3 className="aureo-display text-[20px] text-[#EAE4D8]">{card.title}</h3>
-                <p className="mt-2 font-mono text-[11.5px] leading-5 text-[rgba(234,228,216,0.82)]">{card.body}</p>
+                <p className="mt-2 font-mono text-[11.5px] leading-5 text-[rgba(234,228,216,0.82)] invisible">{card.body}</p>
                 <p className="mt-3 font-mono text-[10.5px] text-[rgba(234,228,216,0.55)]">{card.ref}</p>
               </div>
             ))}

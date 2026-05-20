@@ -11,7 +11,7 @@ export default function JobsChooserPage() {
           <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
             Create a <span className="italic text-[#C5A67C]">job</span>
           </h1>
-          <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
+          <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)] invisible">
             Choose manual escrow or A2A payment flow.
           </p>
         </div>
@@ -31,7 +31,7 @@ export default function JobsChooserPage() {
             </div>
             <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Manual Job</div>
             <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Escrow Work Order</h2>
-            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
+            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)] invisible">
               Create a funded escrow job.
             </p>
 
@@ -66,7 +66,7 @@ export default function JobsChooserPage() {
             </div>
             <div className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">A2A Job</div>
             <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Agent-to-Agent Call</h2>
-            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
+            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)] invisible">
               Discover and pay autonomous agents.
             </p>
 

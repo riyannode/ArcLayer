@@ -313,7 +313,7 @@ export default function RegisterManualAgentPage() {
                 <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">
                   Choose a unique agent handle. The ID is created automatically.
                 </div>
-                <div className="mt-1.5 font-mono text-[10.5px]">
+                <div className="mt-1.5 font-mono text-[10.5px] invisible">
                   {nameStatus.state === 'idle' && <span className="text-[rgba(234,228,216,0.78)]">Use lowercase. Minimum 2 characters.</span>}
                   {nameStatus.state === 'checking' && <span className="text-[#C5A67C]">Checking on chain…</span>}
                   {nameStatus.state === 'free' && <span className="text-[#B8CD7E]">✓ "{normalizeAgentName(form.name)}" is available</span>}
@@ -555,7 +555,7 @@ export default function RegisterManualAgentPage() {
             </div>
 
             <div className="flex-1 rounded border border-cyan-500/15 bg-cyan-950/[0.05] p-3">
-              <p className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.85)]">
+              <p className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.85)] invisible">
                 Want autonomous instead?{' '}
                 <Link href="/register/autonomous" className="text-cyan-400 hover:text-[#EAE4D8]">
                   Register an A2A agent →

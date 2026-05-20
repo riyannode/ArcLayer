@@ -146,7 +146,7 @@ export default function AgentFlowDiagram({ isLive, igniaActive, apoloActive, her
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         <div className="rounded border border-cyan-500/15 bg-black/20 p-3">
           <p className="font-mono text-[9px] uppercase tracking-widest text-cyan-300/80">1 · Ignia</p>
-          <p className="mt-1 font-mono text-[10.5px] leading-[1.5] text-[#9CA3AF]">
+          <p className="mt-1 font-mono text-[10.5px] leading-[1.5] text-[#9CA3AF] invisible">
             Reads Polymarket orderbook, generates raw evidence-rich signals using 6 strategy
             engines (regime, entry quality, microstructure, sniper, forecast, synthetic-arb).
             Internal-only — no payment, no execution.
@@ -162,7 +162,7 @@ export default function AgentFlowDiagram({ isLive, igniaActive, apoloActive, her
         </div>
         <div className="rounded border border-amber-500/15 bg-black/20 p-3">
           <p className="font-mono text-[9px] uppercase tracking-widest text-amber-300/80">3 · Hermes</p>
-          <p className="mt-1 font-mono text-[10.5px] leading-[1.5] text-[#9CA3AF]">
+          <p className="mt-1 font-mono text-[10.5px] leading-[1.5] text-[#9CA3AF] invisible">
             Autonomous buyer. Pays Apolo via x402, executes paper trades, tracks PnL/winrate.
             Never holds private keys for real funds — pure paper-trading layer for the
             hackathon protocol demo.

@@ -133,7 +133,7 @@ export function AgentDetailDrawer({
           </Link>
         </div>
 
-        <p className="mt-4 font-mono text-[12px] leading-6 text-[#b5b5b5]">{agent.description}</p>
+        <p className="mt-4 font-mono text-[12px] leading-6 text-[#b5b5b5] invisible">{agent.description}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           {agent.capability.map((cap) => (
             <span key={cap} className="rounded border border-[#C5A67C]/20 bg-[#C5A67C]/5 px-2 py-1 font-mono text-[10px] text-[#EAD7B5]">
@@ -178,7 +178,7 @@ export function AgentDetailDrawer({
         {agent.canHide && onHide && (
           <div className="mt-4 rounded border border-red-500/15 bg-red-950/[0.05] p-3">
             <p className="font-mono text-[10px] uppercase tracking-widest text-red-300/80">Dashboard control</p>
-            <p className="mt-1 font-mono text-[11px] text-[#c0aaaa]">
+            <p className="mt-1 font-mono text-[11px] text-[#c0aaaa] invisible">
               Hides this agent from your dashboard view. The agent stays registered on-chain — only your local list is filtered.
             </p>
             <button
@@ -199,7 +199,7 @@ export function AgentDetailDrawer({
         {agent.canHide && onDeactivate && (
           <div className="mt-3 rounded border border-red-500/20 bg-red-950/[0.08] p-3">
             <p className="font-mono text-[10px] uppercase tracking-widest text-red-400/90">On-chain deactivation</p>
-            <p className="mt-1 font-mono text-[11px] text-[#c0aaaa]">
+            <p className="mt-1 font-mono text-[11px] text-[#c0aaaa] invisible">
               Permanently deactivates this agent on-chain. Requires wallet signature from the agent controller.
             </p>
             <button

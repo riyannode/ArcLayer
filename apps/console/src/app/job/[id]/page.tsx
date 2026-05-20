@@ -236,7 +236,7 @@ export default function JobDetailPage() {
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
               Job <span className="italic text-[#C5A67C]">#{jobId || '0'}</span>
             </h1>
-            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#b5b5b5]">
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#b5b5b5] invisible">
               JobEscrow record projected by the indexer from on-chain events and linked WorkProof.
             </p>
           </div>

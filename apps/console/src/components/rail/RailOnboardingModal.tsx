@@ -52,7 +52,7 @@ export default function RailOnboardingModal() {
             <h2 className="aureo-display text-[30px] text-[#EAE4D8] sm:text-[42px]">
               Choose your <span className="italic text-[#C5A67C]">payment rail</span>
             </h2>
-            <p className="mt-2 max-w-xl font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">
+            <p className="mt-2 max-w-xl font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)] invisible">
               This choice is locked for the wallet session. Deposit, allocate, settle, withdraw, dispute,
               and every job created from this wallet must use the same rail.
             </p>
@@ -92,7 +92,7 @@ export default function RailOnboardingModal() {
                 {option.label}
               </div>
               <h3 className="mt-2 text-lg font-semibold text-[#EAE4D8]">{option.title}</h3>
-              <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">{option.body}</p>
+              <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)] invisible">{option.body}</p>
               <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-[var(--rail-accent)] group-hover:text-[#EAE4D8]">
                 {pending === option.rail ? 'Locking rail…' : 'Select and lock'}
                 <span className="transition-transform group-hover:translate-x-1">→</span>

@@ -510,10 +510,10 @@ export default function RegisterAutonomousPage() {
           <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[56px]">
             Register <span className="italic text-cyan-300">external runtime</span>
           </h1>
-          <p className="mt-3 max-w-3xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
+          <p className="mt-3 max-w-3xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)] invisible">
             Register an agent endpoint that can create jobs, take jobs, get paid, and submit proof.
           </p>
-          <p className="mt-3 max-w-3xl font-mono text-[11px] leading-5 text-cyan-300/85">
+          <p className="mt-3 max-w-3xl font-mono text-[11px] leading-5 text-cyan-300/85 invisible">
             Your runtime, ArcLayer rails.
           </p>
         </div>
@@ -561,7 +561,7 @@ export default function RegisterAutonomousPage() {
             <div className="aureo-panel p-4 md:p-6">
               <div className="aureo-mono-label mb-2">STEP 2 · EXTERNAL RUNTIME HOST</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Where does your agent run?</h2>
-              <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)]">
+              <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)] invisible">
                 ArcLayer does not host your agent. Add the endpoint where it already runs.
               </p>
 
@@ -608,7 +608,7 @@ export default function RegisterAutonomousPage() {
 
                       {isOpen && (
                         <div className="border-t border-white/5 px-4 py-4">
-                          <p className="font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">{host.desc}</p>
+                          <p className="font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)] invisible">{host.desc}</p>
 
                           {host.id === 'self-hosted' && (
                             <div className="mt-4 space-y-4">
@@ -620,7 +620,7 @@ export default function RegisterAutonomousPage() {
                                       <span className="font-mono text-[10px] text-cyan-300/80">{item.step}</span>
                                       <div>
                                         <div className="font-mono text-[11px] text-[#EAE4D8]">{item.title}</div>
-                                        <div className="mt-0.5 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.85)]">
+                                        <div className="mt-0.5 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.85)] invisible">
                                           {item.body}
                                         </div>
                                       </div>
@@ -655,7 +655,7 @@ export default function RegisterAutonomousPage() {
                                 <pre className="mt-2 max-h-[260px] overflow-auto rounded border border-white/5 bg-black/50 p-3 text-[10px] leading-5 text-[rgba(234,228,216,0.82)]">
                                   <code>{STARTER_CODE}</code>
                                 </pre>
-                                <p className="mt-2 font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.85)]">
+                                <p className="mt-2 font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.85)] invisible">
                                   Example only. Use your production verifier before going live.
                                 </p>
                               </div>
@@ -673,7 +673,7 @@ export default function RegisterAutonomousPage() {
                                   </li>
                                 ))}
                               </ul>
-                              <p className="mt-3 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.85)]">
+                              <p className="mt-3 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.85)] invisible">
                                 You can attach a runtime later by editing your manifest.
                               </p>
                             </div>
@@ -684,7 +684,7 @@ export default function RegisterAutonomousPage() {
                               <div className="font-mono text-[10px] uppercase tracking-widest text-amber-300">
                                 🚧 Coming soon
                               </div>
-                              <p className="mt-1.5 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.78)]">
+                              <p className="mt-1.5 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.78)] invisible">
                                 Join the waitlist and we&apos;ll notify you when {host.title} is ready.
                               </p>
 
@@ -721,7 +721,7 @@ export default function RegisterAutonomousPage() {
               <div className="aureo-panel p-4 md:p-6">
                 <div className="aureo-mono-label mb-2">STEP 3 · RUNTIME METADATA</div>
                 <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent registration</h2>
-                <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)]">
+                <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)] invisible">
                   Fill runtime metadata, then sign once.
                 </p>
 
@@ -736,7 +736,7 @@ export default function RegisterAutonomousPage() {
                       autoComplete="off"
                       spellCheck={false}
                     />
-                    <div className="mt-1.5 font-mono text-[10.5px]">
+                    <div className="mt-1.5 font-mono text-[10.5px] invisible">
                       {nameStatus.state === 'idle' && <span className="text-[rgba(234,228,216,0.78)]">Use lowercase. Minimum 2 characters.</span>}
                       {nameStatus.state === 'checking' && <span className="text-cyan-300">Checking on chain…</span>}
                       {nameStatus.state === 'free' && <span className="text-[#B8CD7E]">✓ &quot;{normalizeAgentName(form.name)}&quot; is available</span>}
@@ -895,7 +895,7 @@ export default function RegisterAutonomousPage() {
                   <InlineProtectionNotice {...NOTICE_WALLET_NOT_CONNECTED} className="mt-5" />
                 )}
 
-                <div className="mt-5 rounded-sm border border-amber-300/30 bg-amber-400/[0.05] px-3 py-2 font-mono text-[10.5px] leading-5 text-amber-200/90">
+                <div className="mt-5 rounded-sm border border-amber-300/30 bg-amber-400/[0.05] px-3 py-2 font-mono text-[10.5px] leading-5 text-amber-200/90 invisible">
                   ⚠ Registers public on-chain agent metadata. Verify before signing.
                 </div>
 
@@ -924,7 +924,7 @@ export default function RegisterAutonomousPage() {
 
             {!expandedHost && (
               <div className="rounded border border-white/10 bg-black/30 p-5 text-center">
-                <p className="font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)]">
+                <p className="font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)] invisible">
                   ← Pick a runtime host above to continue.
                 </p>
               </div>
@@ -932,7 +932,7 @@ export default function RegisterAutonomousPage() {
 
             {expandedHost && !isLiveHostSelected && (
               <div className="rounded border border-amber-500/20 bg-amber-950/[0.04] p-5">
-                <p className="font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">
+                <p className="font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)] invisible">
                   This host is not live yet. Pick another host or join waitlist.
                 </p>
               </div>
@@ -962,7 +962,7 @@ export default function RegisterAutonomousPage() {
             </div>
 
             <div className="rounded border border-white/5 bg-white/[0.015] p-4">
-              <p className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.85)]">
+              <p className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.85)] invisible">
                 Need a human-driven marketplace agent instead?{' '}
                 <Link href="/register/manual" className="text-[#C5A67C] hover:text-[#EAE4D8]">
                   Register Manual Agent →

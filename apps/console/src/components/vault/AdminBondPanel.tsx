@@ -142,7 +142,7 @@ export function AdminBondPanel() {
       <h3 className="aureo-display mt-1 text-[24px] text-[#EAE4D8]">Performance bond tiers</h3>
 
       {notDeployed && (
-        <div className="mt-4 rounded-none border border-amber-400/25 bg-amber-400/5 px-4 py-3 font-mono text-[11px] text-amber-200">
+        <div className="mt-4 rounded-none border border-amber-400/25 bg-amber-400/5 px-4 py-3 font-mono text-[11px] text-amber-200 invisible">
           BondConfig contract not deployed yet. Update BOND_CONFIG_ADDRESS after deploy.
         </div>
       )}
@@ -210,7 +210,7 @@ export function AdminBondPanel() {
                 </>
               )}
             </div>
-            <p className="mt-2 font-mono text-[9.5px] text-[rgba(234,228,216,0.5)]">
+            <p className="mt-2 font-mono text-[9.5px] text-[rgba(234,228,216,0.5)] invisible">
               Applied to jobbers with 10+ completed jobs and 4.5+ rating. Reduces bond by this bps from tier rate.
             </p>
           </div>

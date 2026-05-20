@@ -223,7 +223,7 @@ export default function DocsPage() {
         <h1 className="aureo-display text-5xl md:text-6xl mb-6" style={{ color: '#EAE4D8' }}>
           Build agents on <em className="italic" style={{ color: '#C5A67C' }}>Arc</em>
         </h1>
-        <p className="text-base max-w-2xl mb-8" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+        <p className="text-base max-w-2xl mb-8 invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
           SDK, APIs, and examples for Arc agents.
         </p>
 
@@ -260,7 +260,7 @@ export default function DocsPage() {
             >
               <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>{p.label}</div>
               <div className="aureo-display text-2xl mb-2" style={{ color: '#EAE4D8' }}>{p.title}</div>
-              <p className="text-sm mb-4" style={{ color: 'rgba(234, 228, 216, 0.65)', lineHeight: 1.5 }}>{p.body}</p>
+              <p className="text-sm mb-4 invisible" style={{ color: 'rgba(234, 228, 216, 0.65)', lineHeight: 1.5 }}>{p.body}</p>
               <div className="text-xs uppercase tracking-[0.18em] font-medium transition group-hover:translate-x-0.5" style={{ color: '#C5A67C' }}>
                 {p.cta} →
               </div>
@@ -277,7 +277,7 @@ export default function DocsPage() {
             {fiveMinutePath.map((item, i) => (
               <div key={item} className="border border-white/8 bg-black/25 p-3">
                 <div className="font-mono text-[10px] mb-2" style={{ color: '#C5A67C' }}>0{i + 1}</div>
-                <p className="text-xs" style={{ color: 'rgba(234, 228, 216, 0.72)', lineHeight: 1.5 }}>{item}</p>
+                <p className="text-xs invisible" style={{ color: 'rgba(234, 228, 216, 0.72)', lineHeight: 1.5 }}>{item}</p>
               </div>
             ))}
           </div>
@@ -295,7 +295,7 @@ export default function DocsPage() {
             >
               <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>{q.step}</div>
               <div className="aureo-display text-xl mb-2" style={{ color: '#EAE4D8' }}>{q.title}</div>
-              <p className="text-sm mb-4" style={{ color: 'rgba(234, 228, 216, 0.65)', lineHeight: 1.5 }}>{q.body}</p>
+              <p className="text-sm mb-4 invisible" style={{ color: 'rgba(234, 228, 216, 0.65)', lineHeight: 1.5 }}>{q.body}</p>
               <pre className="text-xs p-3 overflow-x-auto border border-white/5 bg-black/40" style={{ color: '#C5A67C', fontFamily: 'var(--font-mono)', lineHeight: 1.5 }}>{q.code}</pre>
             </div>
           ))}
@@ -308,7 +308,7 @@ export default function DocsPage() {
         <h2 className="aureo-display text-2xl md:text-3xl mb-3" style={{ color: '#EAE4D8' }}>
           Accept paid agent requests
         </h2>
-        <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+        <p className="text-sm mb-6 max-w-3xl invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
           Charge USDC before API or agent access.
         </p>
 
@@ -365,7 +365,7 @@ export default function DocsPage() {
 
         <div className="border border-white/10 bg-black/30 p-5 mb-4">
           <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>FACILITATOR ENDPOINTS</div>
-          <div className="grid gap-2 text-xs font-mono" style={{ color: 'rgba(234, 228, 216, 0.75)' }}>
+          <div className="grid gap-2 text-xs font-mono invisible" style={{ color: 'rgba(234, 228, 216, 0.75)' }}>
             <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/supported</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— list schemes (exact Arc Native + Circle Gateway + arc-escrow)</span></div>
             <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/protected-resource</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— returns 402 challenge, then verifies + settles inline on paid retry</span></div>
             <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">HDR</span><span className="text-[#EAE4D8]">X-PAYMENT / PAYMENT-SIGNATURE</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— Arc Native uses X-PAYMENT; Circle Gateway uses PAYMENT-SIGNATURE</span></div>
@@ -376,7 +376,7 @@ export default function DocsPage() {
 
         <div className="border border-white/10 bg-black/30 p-5 mb-4">
           <div className="aureo-mono-label mb-3" style={{ color: '#7CB5C5' }}>PRODUCTION VERIFICATION</div>
-          <p className="text-sm mb-3" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.55 }}>
+          <p className="text-sm mb-3 invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.55 }}>
             Both x402 payment paths have completed end-to-end on Arc Testnet (chainId 5042002, USDC <code className="text-[#C5A67C]">0x3600…0000</code>).
           </p>
           <div className="grid gap-3 md:grid-cols-2">
@@ -419,7 +419,7 @@ export default function DocsPage() {
         <h2 className="aureo-display text-2xl md:text-3xl mb-3" style={{ color: '#EAE4D8' }}>
           Use ArcLayer Escrow when work needs review
         </h2>
-        <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+        <p className="text-sm mb-6 max-w-3xl invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
           Milestone escrow for reviewed agent work.
         </p>
 
@@ -477,7 +477,7 @@ export default function DocsPage() {
       {/* ─── AI Agent Integration Skill ─── */}
       <section id="ai-skill" className="max-w-6xl mx-auto px-6 mb-20 scroll-mt-20">
         <div className="aureo-mono-label mb-3">PROTOCOL · AI AGENT INTEGRATION</div>
-        <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+        <p className="text-sm mb-6 max-w-3xl invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
 Paste into your AI agent to auto-wire ArcLayer.
         </p>
 
@@ -523,7 +523,7 @@ Paste into your AI agent to auto-wire ArcLayer.
         {/* For deployers card */}
         <div className="border border-[#C5A67C]/20 bg-gradient-to-br from-[rgba(197,166,124,0.06)] to-[rgba(5,5,5,0.5)] p-5 mb-6">
           <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>FOR DEPLOYERS</div>
-          <p className="text-sm mb-4" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+          <p className="text-sm mb-4 invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
 Let your coding assistant integrate ArcLayer automatically.
           </p>
           <div className="flex flex-wrap gap-2">
@@ -655,7 +655,7 @@ Let your coding assistant integrate ArcLayer automatically.
                 <div>
                   <h3 className="aureo-display text-lg md:text-xl" style={{ color: '#EAE4D8' }}>{ex.title}</h3>
                   {exampleDescriptions[ex.title] && (
-                    <p className="text-xs mt-1" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>{exampleDescriptions[ex.title]}</p>
+                    <p className="text-xs mt-1 invisible" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>{exampleDescriptions[ex.title]}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">

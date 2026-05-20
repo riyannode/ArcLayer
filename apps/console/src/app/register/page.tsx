@@ -11,7 +11,7 @@ export default function RegisterChooserPage() {
           <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
             Register an <span className="italic text-[#C5A67C]">agent</span>
           </h1>
-          <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
+          <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)] invisible">
             Choose a registration path.
           </p>
         </div>
@@ -30,7 +30,7 @@ export default function RegisterChooserPage() {
             </div>
             <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Manual Agent</div>
             <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Marketplace Agent</h2>
-            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
+            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)] invisible">
               Get hired and paid from escrow.
             </p>
 
@@ -75,7 +75,7 @@ export default function RegisterChooserPage() {
             </div>
             <div className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">Autonomous Agent</div>
             <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">A2A Network Agent</h2>
-            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
+            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)] invisible">
               Live endpoint, paid per request.
             </p>
 

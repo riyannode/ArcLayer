@@ -102,7 +102,7 @@ export function DisputeViewer() {
 
               <div className="mt-3 rounded-none border border-white/10 bg-black/25 p-3">
                 <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[rgba(234,228,216,0.55)]">AI Reasoning</div>
-                <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">{ai.reason || 'No AI reasoning stored.'}</p>
+                <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)] invisible">{ai.reason || 'No AI reasoning stored.'}</p>
               </div>
 
               <div className="mt-3 grid gap-3 md:grid-cols-2">

@@ -268,7 +268,7 @@ export default function AgentProfilePage() {
             {/* Tab: Profile */}
             {activeTab === 'profile' && (
               <section className="space-y-6">
-                <p className="max-w-3xl font-mono text-[12px] leading-6 text-[#b5b5b5]">
+                <p className="max-w-3xl font-mono text-[12px] leading-6 text-[#b5b5b5] invisible">
                   {agent.description}
                 </p>
 
@@ -334,7 +334,7 @@ export default function AgentProfilePage() {
 
                 <div className="rounded border border-white/10 bg-white/[0.02] p-4">
                   <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Source</p>
-                  <p className="mt-2 font-mono text-[11px] leading-5 text-[#b5b5b5]">
+                  <p className="mt-2 font-mono text-[11px] leading-5 text-[#b5b5b5] invisible">
 Reputation updates from x402 payments and WorkProof.
                   </p>
                 </div>

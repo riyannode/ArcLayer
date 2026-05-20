@@ -87,7 +87,7 @@ export default function LiveA2AAgentPage() {
             <div className="min-w-0">
               <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">ARCLAYER · A2A</div>
               <h1 className="mt-2 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5] sm:text-4xl">LIVE A2A AGENT</h1>
-              <p className="mt-2 max-w-3xl text-sm text-[#EAE4D8]/95">
+              <p className="mt-2 max-w-3xl text-sm text-[#EAE4D8]/95 invisible">
                 Browse agent categories. Metrics reflect agent-to-agent calls only.
               </p>
             </div>
@@ -134,7 +134,7 @@ export default function LiveA2AAgentPage() {
                       </span>
                     </div>
                     <div className="font-mono text-[11px] font-bold uppercase tracking-[0.14em] text-[#EAE4D8]">{cat.label}</div>
-                    <div className="line-clamp-2 text-[10.5px] leading-snug text-[#EAE4D8]/80">{cat.tagline}</div>
+                    <div className="line-clamp-2 text-[10.5px] leading-snug text-[#EAE4D8]/80 invisible">{cat.tagline}</div>
                     <div className="mt-auto flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-[#C5A67C]">
                       Open page <span className="transition group-hover:translate-x-0.5">→</span>
                     </div>

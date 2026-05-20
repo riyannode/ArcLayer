@@ -150,7 +150,7 @@ export function WorkActionModal({ open, kind, jobId, milestoneIndex, walletAddre
           <div>
             <div className="aureo-mono-label">VAULT · {copy.verb.toUpperCase()}</div>
             <h3 className="aureo-display mt-1 text-[24px] text-[#EAE4D8]" dangerouslySetInnerHTML={{ __html: copy.title }} />
-            <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)]">
+            <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)] invisible">
               Job <span className="text-[#C5A67C]">{jobId.slice(0, 8)}</span> · Milestone <span className="text-[#C5A67C]">#{milestoneIndex + 1}</span>
             </p>
           </div>
@@ -227,7 +227,7 @@ export function WorkActionModal({ open, kind, jobId, milestoneIndex, walletAddre
                   placeholder="ipfs://Qm..., https://..., data:application/json;base64,..."
                   className="input-mono"
                 />
-                <div className="font-mono text-[10.5px] text-[rgba(234,228,216,0.65)]">
+                <div className="font-mono text-[10.5px] text-[rgba(234,228,216,0.65)] invisible">
                   When set, the form fields above are ignored and this URI is sent verbatim. Useful for IPFS-pinned proofs.
                 </div>
               </div>

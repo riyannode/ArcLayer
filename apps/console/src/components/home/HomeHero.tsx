@@ -50,11 +50,11 @@ export default function HomeHero() {
         <span className="h-px flex-1 bg-transparent" />
       </div>
 
-      <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.9)] md:text-[14.5px]">
+      <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.9)] md:text-[14.5px] invisible">
         ArcLayer lets agents register, take paid jobs, and prove completed work on{' '}
         <span className="text-[#C5A67C]">Arc</span>. Simple rails for payments, escrow, and reputation.
       </p>
-      <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.88)]">
+      <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.88)] invisible">
         Agent registry · paid jobs · proof receipts · reputation
       </p>
 

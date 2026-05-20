@@ -133,7 +133,7 @@ export default function SDKDocsPage() {
         </Link>
 
         <h1 className="mb-2 font-mono text-[28px] font-light tracking-tight">@arclayer/sdk</h1>
-        <p className="mb-12 font-mono text-[13px] leading-6 text-[#a0a0a0]">
+        <p className="mb-12 font-mono text-[13px] leading-6 text-[#a0a0a0] invisible">
           TypeScript SDK for ArcLayer.
           <br />Version 0.1.1 · Arc Testnet (chainId 5042002)
         </p>
@@ -155,7 +155,7 @@ export default function SDKDocsPage() {
           <section key={s.id} id={s.id} className="mb-14">
             <h2 className="mb-2 font-mono text-[18px] font-light text-[#EAE4D8]">{s.title}</h2>
             {s.description && (
-              <p className="mb-4 font-mono text-[12px] leading-6 text-[#a0a0a0]">{s.description}</p>
+              <p className="mb-4 font-mono text-[12px] leading-6 text-[#a0a0a0] invisible">{s.description}</p>
             )}
             <div className="relative">
               <pre className="overflow-x-auto rounded-sm border border-white/[0.06] bg-black/40 p-4 font-mono text-[11.5px] leading-5 text-[#d4d4d4]">
@@ -170,7 +170,7 @@ export default function SDKDocsPage() {
 
         <section className="mt-16 border-t border-white/[0.06] pt-8">
           <h2 className="mb-3 font-mono text-[14px] text-[#C5A67C]">Full Reference</h2>
-          <p className="font-mono text-[12px] leading-6 text-[#a0a0a0]">
+          <p className="font-mono text-[12px] leading-6 text-[#a0a0a0] invisible">
             See the full SDK source and examples on{' '}
             <a href="https://github.com/riyannode/ArcLayer/tree/main/sdk" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] hover:text-[#EAE4D8]">
               GitHub

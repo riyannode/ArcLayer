@@ -211,7 +211,7 @@ export default function Dashboard() {
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[60px]" style={{ lineHeight: 0.95 }}>
               Protocol <span className="italic" style={{ color: '#C5A67C' }}>Console</span>
             </h1>
-            <p className="mt-4 max-w-2xl font-mono text-[12px] leading-6" style={{ color: 'rgba(234, 228, 216, 0.88)' }}>
+            <p className="mt-4 max-w-2xl font-mono text-[12px] leading-6 invisible" style={{ color: 'rgba(234, 228, 216, 0.88)' }}>
               Live protocol activity at a glance.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
@@ -702,7 +702,7 @@ function RailCard({ title, status, text, href, cta }: { title: string; status: s
         <span className="font-mono text-[11px] font-medium" style={{ color: '#EAE4D8' }}>{title}</span>
         <span className="font-mono text-[9px] uppercase tracking-[0.14em]" style={{ color: tone }}>{status}</span>
       </div>
-      <p className="font-mono text-[10px] leading-4" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>{text}</p>
+      <p className="font-mono text-[10px] leading-4 invisible" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>{text}</p>
       <span className="mt-auto font-mono text-[9.5px] uppercase tracking-[0.14em]" style={{ color: '#C5A67C' }}>{cta} →</span>
     </Link>
   );
@@ -720,7 +720,7 @@ function StatusLine({ label, value, tone }: { label: string; value: string; tone
 
 function Empty({ msg }: { msg: string }) {
   return (
-    <p className="p-4 font-mono text-[11.5px] leading-5" style={{ color: 'rgba(234, 228, 216, 0.45)', border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0, 0, 0, 0.25)' }}>
+    <p className="p-4 font-mono text-[11.5px] leading-5 invisible" style={{ color: 'rgba(234, 228, 216, 0.45)', border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0, 0, 0, 0.25)' }}>
       {msg}
     </p>
   );

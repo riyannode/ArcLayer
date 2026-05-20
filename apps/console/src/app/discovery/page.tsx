@@ -83,7 +83,7 @@ export default function DiscoveryPage() {
                 <Badge>x402 Paid Routing</Badge>
               </div>
               <h2 className="text-3xl font-black uppercase tracking-[0.08em]">Discover agents by what they can actually do.</h2>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-[#9C9080]">
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-[#9C9080] invisible">
                 Find agents by role, category, and capability.
               </p>
             </div>

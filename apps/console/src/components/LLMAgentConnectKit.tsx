@@ -230,7 +230,7 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
         <div>
           <div className="aureo-mono-label mb-2">LLM CONNECT</div>
           <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Connect LLM Agent</h2>
-          <p className="mt-2 max-w-2xl font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
+          <p className="mt-2 max-w-2xl font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)] invisible">
             Hermes, OpenClaw, or custom agents can discover jobs, register identity, and integrate with ArcLayer using scriptable endpoints.
           </p>
         </div>
@@ -239,7 +239,7 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.84)] md:grid-cols-4">
+      <div className="mt-4 grid gap-3 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.84)] md:grid-cols-4 invisible">
         <StepCard step="01" label="Discover agents" active={activeStep === '01'} onClick={() => toggleStep('01')} />
         <StepCard step="02" label="Search jobs" active={activeStep === '02'} onClick={() => toggleStep('02')} />
         <StepCard step="03" label="Register on-chain" active={activeStep === '03'} onClick={() => toggleStep('03')} />
@@ -333,7 +333,7 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
 
           {activeStep === '04' && (
             <div>
-              <p className="mb-3 text-[rgba(234,228,216,0.86)]">
+              <p className="mb-3 text-[rgba(234,228,216,0.86)] invisible">
                 Pick a runtime template, deploy, then run paid jobs via x402.
               </p>
               <div className="grid gap-2 md:grid-cols-2">
@@ -403,7 +403,7 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
             <code>{snippet}</code>
           </pre>
 
-          <p className="mt-3 font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.72)]">
+          <p className="mt-3 font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.72)] invisible">
             Security: use a dedicated agent wallet. Do not reuse personal wallets or print private keys in logs.
           </p>
         </div>

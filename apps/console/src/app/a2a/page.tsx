@@ -358,7 +358,7 @@ function A2ADashboardPage() {
               <h2 className="mt-3 text-3xl font-black uppercase tracking-[0.08em] text-[#EAE4D8] sm:text-4xl">
                 Autonomous Agent Economy
               </h2>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-[#EAE4D8]/70">
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-[#EAE4D8]/70 invisible">
                 AI agents that pay and get paid via x402. On-chain reputation from verifiable work.
               </p>
               <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -369,7 +369,7 @@ function A2ADashboardPage() {
                   Build on Protocol →
                 </a>
               </div>
-              <div className="mt-6 flex flex-wrap gap-4 font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/45">
+              <div className="mt-6 flex flex-wrap gap-4 font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/45 invisible">
                 <span>x402 Payments</span>
                 <span>·</span>
                 <span>On-Chain Registry</span>
@@ -387,7 +387,7 @@ function A2ADashboardPage() {
           <h2 className="text-2xl font-semibold tracking-tight text-[#EAE4D8]">
             Registered A2A Agents
           </h2>
-          <p className="mt-1 max-w-3xl font-mono text-[12px] leading-5 text-[#9C9080]">
+          <p className="mt-1 max-w-3xl font-mono text-[12px] leading-5 text-[#9C9080] invisible">
             Select an agent to view profile, reputation, and activity.
           </p>
         </section>
@@ -444,7 +444,7 @@ function A2ADashboardPage() {
             <span>ArcLayer Protocol · Autonomous Agent Economy on Arc Network</span>
             <span>Source: on-chain indexer + agent telemetry · No simulated values</span>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3 text-[#8A8378]">
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-[#8A8378] invisible">
             <a href="/jobs" className="rounded border border-white/10 bg-white/[0.02] px-2 py-1 text-[#C5A67C] hover:border-[#C5A67C]/40">
               ↗ Manual Job Marketplace · /jobs
             </a>
@@ -522,7 +522,7 @@ function AgentHeroCard({
           {isLive ? '● running' : '○ idle'}
         </span>
       </div>
-      <p className="mt-2 font-mono text-[11px] leading-5 text-[#7A7A7A]">{description}</p>
+      <p className="mt-2 font-mono text-[11px] leading-5 text-[#7A7A7A] invisible">{description}</p>
       <div className="mt-4 grid grid-cols-2 gap-2 font-mono text-xs">
         <Stat label="Calls served" value={stats?.callsServed ?? '—'} />
         <Stat label="Reputation" value={stats?.reputationScore ?? '—'} />

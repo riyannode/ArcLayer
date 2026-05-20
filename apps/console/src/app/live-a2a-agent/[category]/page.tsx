@@ -437,7 +437,7 @@ function AutonomousLoopRunner({
 
   return (
     <div className="flex h-full flex-col gap-3 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">
+      <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60 invisible">
         <span className="flex items-center gap-2">
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -483,7 +483,7 @@ function AutonomousLoopRunner({
         <div className="mt-2 h-1 overflow-hidden rounded bg-white/10">
           <div className="h-full bg-[#C5A67C] transition-all duration-200" style={{ width: `${progress}%` }} />
         </div>
-        <div className="mt-2 font-mono text-[10px] text-[#EAE4D8]/55">
+        <div className="mt-2 font-mono text-[10px] text-[#EAE4D8]/55 invisible">
           loop:{' '}
           <span className="text-[#C5A67C]">poll Polymarket</span>{' '}
           → <span className="text-[#C5A67C]">Pythia signal</span>{' '}
@@ -611,7 +611,7 @@ function FullLoopProof({ latest, apoloStat }: LoopProofProps) {
           </div>
         ))}
       </div>
-      <div className="font-mono text-[10px] text-[#EAE4D8]/55">
+      <div className="font-mono text-[10px] text-[#EAE4D8]/55 invisible">
         proof rule: only fields verifiable from the indexer or signal feed are shown. on-chain receipts populate as the resolver indexer wires up. nothing is fabricated.
       </div>
     </div>
@@ -771,8 +771,8 @@ function LiveA2AFlow({ receipt }: { receipt: FlowReceipt | null }) {
     <div className="flex h-full flex-col gap-4 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60">x402 agent payment lifecycle · backend-ready demo, auto POST every 90s</div>
-          <div className="mt-1 text-sm text-[#EAE4D8]/70">Pythia → Apolo → Hermes. Reputation flows to the filtering agent.</div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#EAE4D8]/60 invisible">x402 agent payment lifecycle · backend-ready demo, auto POST every 90s</div>
+          <div className="mt-1 text-sm text-[#EAE4D8]/70 invisible">Pythia → Apolo → Hermes. Reputation flows to the filtering agent.</div>
         </div>
         <div className={`rounded-sm border px-3 py-2 font-mono text-[10px] font-bold uppercase tracking-[0.18em] ${step >= 0 ? 'border-emerald-300/35 bg-emerald-400/10 text-emerald-300' : 'border-white/15 bg-black/20 text-[#EAE4D8]/40'}`}>
           {step >= 5 ? '● receipt ready' : step >= 0 ? '● processing…' : '○ idle'}
@@ -1175,7 +1175,7 @@ export default function LiveA2AAgentPageRoute() {
               <Link href="/live-a2a-agent" className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C] transition hover:text-[#EAE4D8]">← Back to categories</Link>
               <div className="mt-2 font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">ARCLAYER · A2A CATEGORY</div>
               <h1 className="mt-1 text-3xl font-black uppercase tracking-[0.16em] text-[#EAE4D8] sm:text-3xl">{category.label}</h1>
-              <p className="mt-1 max-w-3xl text-sm text-[#EAE4D8]/75">{category.tagline}</p>
+              <p className="mt-1 max-w-3xl text-sm text-[#EAE4D8]/75 invisible">{category.tagline}</p>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <Chip tone={category.status === 'LIVE' ? 'green' : 'slate'}>{category.status}</Chip>

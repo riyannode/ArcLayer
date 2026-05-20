@@ -332,7 +332,7 @@ export default function AgentProfilePage() {
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
               Agent <span className="italic text-[#C5A67C]">#{agentId || '0'}</span>
             </h1>
-            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#b5b5b5]">
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#b5b5b5] invisible">
               Indexed capability profile and work-proof history from the ArcLayer indexer.
             </p>
           </div>
@@ -343,7 +343,7 @@ export default function AgentProfilePage() {
         <section className="mb-6 p-6" style={{ border: '1px solid rgba(197, 166, 124, 0.22)', background: 'rgba(10, 10, 10, 0.68)' }}>
           <div className="aureo-mono-label mb-2">X402 · BUYER RUN</div>
           <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Payment-required agent call</h2>
-          <p className="mt-2 max-w-3xl font-mono text-[11.5px] leading-5 text-[#b5b5b5]">
+          <p className="mt-2 max-w-3xl font-mono text-[11.5px] leading-5 text-[#b5b5b5] invisible">
             Calls <span className="text-[#C5A67C]">POST /api/agents/{agentId}/run</span>, receives a 402 challenge, registers a funded JobEscrow payment on Arc Testnet, then retries with X-PAYMENT.
           </p>
           <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_auto]">
@@ -417,7 +417,7 @@ export default function AgentProfilePage() {
               <div className="mt-3">
                 <Sparkline values={series} />
               </div>
-              <p className="mt-2 font-mono text-[10.5px] leading-5 text-[#a0a0a0]">
+              <p className="mt-2 font-mono text-[10.5px] leading-5 text-[#a0a0a0] invisible">
                 Reputation projected from ReputationOracle, coupled to paid WorkProof mints.
               </p>
             </div>

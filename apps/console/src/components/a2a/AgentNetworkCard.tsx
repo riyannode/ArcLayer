@@ -54,7 +54,7 @@ export function AgentNetworkCard({ agent, selected, onSelect }: { agent: Network
           → {agent.connectedTo.join(', ')}
         </p>
       )}
-      <p className="mt-3 line-clamp-2 font-mono text-[11px] leading-5 text-[#a8a8a8]">{agent.description}</p>
+      <p className="mt-3 line-clamp-2 font-mono text-[11px] leading-5 text-[#a8a8a8] invisible">{agent.description}</p>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {agent.capability.slice(0, 3).map((cap) => (
           <span key={cap} className="rounded border border-white/10 bg-black/20 px-2 py-0.5 font-mono text-[9px] text-[#777]">
@@ -67,7 +67,7 @@ export function AgentNetworkCard({ agent, selected, onSelect }: { agent: Network
         <Stat label="Usage" value={agent.callsServed || agent.jobsCompleted || 0} />
         <Stat label="USDC volume" value={formatUSDC(agent.revenueRaw)} />
       </div>
-      <div className="mt-3 flex items-center justify-between gap-2 font-mono text-[10px] text-[#555]">
+      <div className="mt-3 flex items-center justify-between gap-2 font-mono text-[10px] text-[#555] invisible">
         <span className="truncate">{short(agent.wallet || agent.agentId || '')}</span>
         <div className="flex shrink-0 items-center gap-2">
           <Link
