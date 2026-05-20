@@ -10,6 +10,17 @@ import { ERC8183_AGENTIC_COMMERCE_ABI } from '@arclayer/sdk';
 export const ERC8183_ABI = ERC8183_AGENTIC_COMMERCE_ABI;
 
 /**
+ * ERC-8183 uses ERC-20 USDC units for budget/payment accounting.
+ *
+ * Arc has two USDC surfaces:
+ * - ERC-20 USDC: 6 decimals, used by approve/fund/settlement/x402.
+ * - Native gas USDC: 18 decimals, used for gas/native balance.
+ *
+ * Never store ERC-8183 budgets in 18-decimal native units.
+ */
+export const ERC8183_USDC_DECIMALS = 6;
+
+/**
  * Official ERC-8183 job status values verified against the repo's deployed ABI
  * and indexer projection. There is NO on-chain Claimed state in this contract;
  * A2A claim remains an off-chain queue state only.
