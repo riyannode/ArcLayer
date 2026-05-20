@@ -10,27 +10,37 @@
     "name": "Arc Testnet",
     "chainId": 5042002,
     "explorer": "https://testnet.arcscan.app",
-    "rpc": "https://rpc.drpc.testnet.arc.network",
-    "currency": {
+    "rpc": "https://rpc.testnet.arc.network",
+    "canonicalRpc": "https://rpc.testnet.arc.network",
+    "fallbackRpcs": [
+      "https://rpc.drpc.testnet.arc.network",
+      "https://rpc.quicknode.testnet.arc.network",
+      "https://rpc.blockdaemon.testnet.arc.network"
+    ],
+    "nativeCurrency": {
+      "name": "USD Coin",
+      "symbol": "USDC",
+      "decimals": 18
+    },
+    "settlementAsset": {
       "address": "0x3600000000000000000000000000000000000000",
       "symbol": "USDC",
       "decimals": 6
-    }
+    },
+    "cctpDomain": 26
   },
   "contracts": {
-    "AgentRegistry": "0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21",
-    "JobEscrow": "0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225",
-    "WorkProof": "0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5",
-    "ReputationOracle": "0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c",
-    "A2AAgentRegistry": "0xB263336055dD65FF501e36CA39941760D943703C"
+    "ERC8004IdentityRegistry": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+    "ERC8183AgenticCommerce": "0x0747EEf0706327138c69792bF28Cd525089e4583"
   },
   "capabilities": [
-    "agent-registry",
-    "job-escrow",
-    "work-proof",
-    "reputation-oracle",
+    "erc-8004-agent-identity",
+    "erc-8183-agentic-commerce",
+    "usdc-native-gas",
+    "cctp-domain-26",
+    "circle-app-kit",
     "x402-payment",
-    "a2a-manifest"
+    "arc-docs-mcp"
   ],
   "endpoints": {
     "agents": "https://arclayers.xyz/api/indexer/agents",

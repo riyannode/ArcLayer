@@ -1,6 +1,6 @@
 import { ARC_EXPLORER } from '@arclayer/sdk';
 
-export { ARC_CHAIN_ID, ARC_EXPLORER, CONTRACTS, USDC_ABI, MILESTONE_ESCROW_ABI } from '@arclayer/sdk';
+export { ARC_CHAIN_ID, ARC_EXPLORER, CONTRACTS, USDC_ABI } from '@arclayer/sdk';
 
 export const BADGE_NAMES = [
   'First Transaction',

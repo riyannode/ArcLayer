@@ -1,8 +1,8 @@
 import { createServer, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
-import { DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS, INDEX_ARC_REFERENCE_ERC8183 } from "./config";
+import { DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS, ARC_REFERENCE_WALLET_FILTER } from "./config";
 import { fetchAgentEvents, fetchJobEvents } from "./ingest";
-import { fetchArcErc8183Events, updateKnownAgentAddresses, type ArcErc8183Event } from "./arc-erc8183-ingest";
+import { arcWalletFilterActive } from "./projections";
 import {
   readAgentById,
   readAgentEvents,
@@ -19,18 +19,11 @@ import {
 } from "./db";
 
 // ─── Sync Lock ───────────────────────────────────────────────────────────────
-// Requirement #5: If previous sync is still running, skip the next tick.
 let syncInProgress = false;
 let lastSyncError: string | null = null;
 let lastSyncAt: number | null = null;
 let lastSyncDurationMs: number | null = null;
 let syncSkipCount = 0;
-
-// ─── Phase 6: Arc ERC-8183 secondary indexer state ───────────────────────────
-let arcErc8183Events: ArcErc8183Event[] = [];
-let lastArcErc8183Sync: number | null = null;
-let lastArcErc8183Block: bigint = BigInt(0);
-let arcErc8183Error: string | null = null;
 
 function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
@@ -121,7 +114,6 @@ function readAutonomousFeed(limit = 50) {
 }
 
 async function runSyncCycle() {
-  // ─── Sync Lock (#5) ──────────────────────────────────────────────────────
   if (syncInProgress) {
     syncSkipCount++;
     console.log(`[indexer] sync skip (previous still running) count=${syncSkipCount}`);
@@ -140,45 +132,9 @@ async function runSyncCycle() {
       fetchAgentEvents(fromBlock),
     ]);
 
-    // ─── Skip rebuild if no new events (#1, #2) ────────────────────────────
     if (events.length > 0 || agentEvts.length > 0) {
       console.log(`[indexer] new events: jobs=${events.length} agents=${agentEvts.length} block=${latestBlock}`);
       await syncProjectionStore(events, agentEvts);
-    }
-
-    // ─── Phase 6: Refresh known-agent allowlist for ERC-8183 filter ──────────
-    // After ingesting AgentRegistered events, update the dynamic allowlist
-    // so subsequent ERC-8183 sweeps include jobs involving these controllers.
-    if (agentEvts.length > 0 || arcErc8183Events.length === 0) {
-      try {
-        const allAgents = readAgents();
-        updateKnownAgentAddresses(allAgents.map((a) => a.controller));
-      } catch (e) {
-        console.warn("[indexer] could not refresh known agents:", e);
-      }
-    }
-
-    // ─── Phase 6: Secondary fetch — official Arc ERC-8183 (filtered) ─────────
-    if (INDEX_ARC_REFERENCE_ERC8183) {
-      try {
-        const arcFromBlockValue = readMetaValue("arc_erc8183_last_block");
-        const arcFromBlock = arcFromBlockValue ? BigInt(arcFromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
-        const { events: arcEvents, latestBlock: arcLatest } = await fetchArcErc8183Events(arcFromBlock);
-        if (arcEvents.length > 0) {
-          // Append to in-memory ring (cap at 1000 most-recent for /api/arc-erc8183)
-          arcErc8183Events = [...arcErc8183Events, ...arcEvents].slice(-1000);
-          console.log(`[indexer] arc-erc8183 filtered events: ${arcEvents.length} block=${arcLatest}`);
-        }
-        if (arcLatest >= arcFromBlock) {
-          writeMetaValue("arc_erc8183_last_block", arcLatest.toString());
-          lastArcErc8183Block = arcLatest;
-        }
-        lastArcErc8183Sync = Date.now();
-        arcErc8183Error = null;
-      } catch (e) {
-        arcErc8183Error = e instanceof Error ? e.message : String(e);
-        console.error("[indexer] arc-erc8183 sync error:", arcErc8183Error);
-      }
     }
 
     // Always advance cursor so empty ranges don't get re-scanned
@@ -218,10 +174,24 @@ createServer((req, res) => {
     return;
   }
 
-  // ─── Health endpoint (#6): always responds even if sync is failing ───────
   if (url.pathname === "/health") {
+    const filterActive = arcWalletFilterActive();
+    const isProd = process.env.NODE_ENV === "production";
     writeJson(res, {
       status: "ok",
+      mode: filterActive ? "arclayer-filtered" : "arc-reference-global",
+      arcLayerWalletFilter: {
+        active: filterActive,
+        walletCount: ARC_REFERENCE_WALLET_FILTER.length,
+        warning:
+          !filterActive && isProd
+            ? "global official Arc reference indexing mode; not filtered to ArcLayer-owned activity"
+            : null,
+      },
+      contracts: {
+        erc8004: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+        erc8183: "0x0747EEf0706327138c69792bF28Cd525089e4583",
+      },
       syncInProgress,
       lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : null,
       lastSyncDurationMs,
@@ -229,31 +199,6 @@ createServer((req, res) => {
       syncSkipCount,
       lastSyncedBlock: readMetaValue("last_synced_block"),
       pollIntervalMs: POLL_INTERVAL_MS,
-      arcErc8183: {
-        enabled: INDEX_ARC_REFERENCE_ERC8183,
-        lastSync: lastArcErc8183Sync ? new Date(lastArcErc8183Sync).toISOString() : null,
-        lastBlock: lastArcErc8183Block.toString(),
-        bufferedEvents: arcErc8183Events.length,
-        error: arcErc8183Error,
-      },
-    });
-    return;
-  }
-
-  // ─── Phase 6: Arc ERC-8183 (filtered) feed ────────────────────────────────
-  if (url.pathname === "/api/arc-erc8183") {
-    writeJson(res, {
-      enabled: INDEX_ARC_REFERENCE_ERC8183,
-      events: arcErc8183Events.map((e) => ({
-        ...e,
-        jobId: e.jobId.toString(),
-        blockNumber: e.blockNumber.toString(),
-        amount: e.amount?.toString(),
-        expiredAt: e.expiredAt?.toString(),
-      })),
-      count: arcErc8183Events.length,
-      lastSync: lastArcErc8183Sync ? new Date(lastArcErc8183Sync).toISOString() : null,
-      lastBlock: lastArcErc8183Block.toString(),
     });
     return;
   }
@@ -307,7 +252,7 @@ createServer((req, res) => {
 
     writeJson(res, {
       agent,
-      jobs: readJobs().filter((job) => job.agentId === id),
+      jobs: readJobs().filter((job) => job.worker === agent.controller || job.client === agent.controller),
       proofs: readProofs().filter((proof) => proof.agentId === id),
     });
     return;
@@ -342,10 +287,11 @@ createServer((req, res) => {
 
   writeJson(res, {
     ok: true,
+    mode: "arc-reference-100%",
     endpoints: ["/health", "/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/autonomous-feed"],
     eventCount: Number(readMetaValue("event_count") || "0"),
     lastSyncedBlock: readMetaValue("last_synced_block"),
   });
 }).listen(INDEXER_PORT, () => {
-  console.log(`ArcLayer indexer listening on http://localhost:${INDEXER_PORT}`);
+  console.log(`ArcLayer indexer (Arc Reference Mode) listening on http://localhost:${INDEXER_PORT}`);
 });

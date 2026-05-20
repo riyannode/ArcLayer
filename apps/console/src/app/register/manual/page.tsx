@@ -159,12 +159,20 @@ export default function RegisterManualAgentPage() {
     const handle = setTimeout(async () => {
       try {
         const id = nameToAgentId(norm);
-        const exists = (await readContract(config, {
-          abi: AGENT_REGISTRY_ABI,
-          address: CONTRACTS.AGENT_REGISTRY,
-          functionName: 'exists',
-          args: [id],
-        })) as boolean;
+        // ERC-8004 official: check ownership via ownerOf — if it reverts, the
+        // tokenId (= agentId) is unminted and therefore "free".
+        let exists = false;
+        try {
+          const owner = (await readContract(config, {
+            abi: AGENT_REGISTRY_ABI,
+            address: CONTRACTS.AGENT_REGISTRY,
+            functionName: 'ownerOf',
+            args: [id],
+          })) as string;
+          exists = !!owner && owner !== '0x0000000000000000000000000000000000000000';
+        } catch {
+          exists = false;
+        }
         setNameStatus({ state: exists ? 'taken' : 'free', agentId: id });
       } catch (e) {
         setNameStatus({ state: 'invalid', reason: e instanceof Error ? e.message : 'Lookup failed.' });
@@ -193,21 +201,43 @@ export default function RegisterManualAgentPage() {
         ? `Fee paid (${payResult.txHash.slice(0, 10)}…)`
         : 'Fee paid';
 
-      // STEP B — On-chain registerAgent. x402 fee is non-refundable from this point.
+      // STEP B — On-chain register. x402 fee is non-refundable from this point.
       setStatusTone('pending');
-      setTxState(`${feeNote}. Step 2/2 · Submitting registerAgent transaction…`);
-      const agentId = nameStatus.agentId;
+      setTxState(`${feeNote}. Step 2/2 · Submitting register transaction…`);
       const metadataURI = effectiveMetadataURI;
       const normalizedName = normalizeAgentName(form.name);
-      const hash = await writeContractAsync(buildRegisterAgentConfig(agentId, form.skill, metadataURI));
+      const hash = await writeContractAsync(buildRegisterAgentConfig(metadataURI));
       setTxState(`${feeNote}. Waiting for ${hash.slice(0, 10)}…`);
-      await waitForTransactionReceipt(config, { hash });
+      const receipt = await waitForTransactionReceipt(config, { hash });
+
+      // ERC-8004 mints an ERC-721-like tokenId on chain. Authoritative tokenId
+      // comes from the Transfer(from=0x0, to, tokenId) event in the receipt,
+      // NOT from any client-side name hash.
+      const TRANSFER_TOPIC =
+        '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+      const ZERO_TOPIC = `0x${'0'.repeat(64)}` as const;
+      const registryAddr = CONTRACTS.AGENT_REGISTRY.toLowerCase();
+      const mintLog = receipt.logs.find(
+        (log) =>
+          log.address.toLowerCase() === registryAddr &&
+          log.topics[0] === TRANSFER_TOPIC &&
+          log.topics[1] === ZERO_TOPIC,
+      );
+      if (!mintLog || !mintLog.topics[3]) {
+        throw new Error('Could not parse Transfer event from register receipt');
+      }
+      const agentId = BigInt(mintLog.topics[3]);
+
       setStatusTone('synced');
       setTxState(`✓ Agent "${normalizedName}" registered as ${shortAgentId(agentId)}.`);
       setIsSubmitting(false);
       // Refresh registry list so the new agent shows up
       try {
-        await waitForIndexer<IndexedAgent[]>('/agents', (next) => next.some((a) => a.agentId.toLowerCase() === agentId.toString().toLowerCase()), { attempts: 6, delayMs: 2000 });
+        await waitForIndexer<IndexedAgent[]>(
+          '/agents',
+          (next) => next.some((a) => a.agentId.toLowerCase() === agentId.toString().toLowerCase()),
+          { attempts: 6, delayMs: 2000 },
+        );
         setIndexerSynced(true);
       } catch {
         // Tx is confirmed on chain; indexer just hasn't caught up yet.
@@ -296,7 +326,7 @@ export default function RegisterManualAgentPage() {
             <div className="aureo-mono-label mb-2">STEP 1</div>
             <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent details</h2>
             <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.85)] invisible">
-              AgentRegistry · registerAgent(keccak(name), skillHash, metadataURI)
+              AgentRegistry · register(metadataURI)
             </code>
 
             <div className="mt-5 space-y-4">
@@ -352,7 +382,7 @@ export default function RegisterManualAgentPage() {
 
               {derivedAgentId !== null && (
                 <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] px-4 py-3">
-                  <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)]">Derived On-Chain Agent ID</div>
+                  <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)]">Derived Agent ID (local hint)</div>
                   <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{shortAgentId(derivedAgentId)}</div>
                   <div className="mt-1 break-all font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.78)]">{derivedAgentId.toString()}</div>
                 </div>
@@ -376,7 +406,7 @@ export default function RegisterManualAgentPage() {
                       ? 'Verifying availability…'
                       : nameStatus.state === 'invalid'
                         ? nameStatus.reason
-                        : 'Pay 0.40 USDC anti-spam fee, then sign registerAgent transaction.'
+                        : 'Pay 0.40 USDC anti-spam fee, then sign register transaction. Agent ID is created on-chain after registration.'
               }
             >
               {isSubmitting ? 'REGISTERING…' : 'PAY & REGISTER'}
@@ -534,7 +564,7 @@ export default function RegisterManualAgentPage() {
               { n: 2, t: 'Client creates job', d: 'Client creates job with USDC.' },
               { n: 3, t: 'You submit deliverable', d: 'Submit completed work.' },
               { n: 4, t: 'Evaluator approves', d: 'Escrow pays after approval.' },
-              { n: 5, t: 'WorkProof NFT minted', d: 'WorkProof receipt minted.' },
+              { n: 5, t: 'Settlement complete', d: 'ERC-8183 completion recorded on-chain.' },
             ].map((s) => (
               <li key={s.n} className="flex gap-3">
                 <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">{s.n}</span>

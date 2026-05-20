@@ -11,8 +11,8 @@ const sections = [
   },
   {
     id: 'a2a-client',
-    title: 'A2A Client',
-    description: 'HTTP client for the Agent-to-Agent job board. Handles auth, polling, claiming, and submitting.',
+    title: 'Legacy / Experimental A2A Client',
+    description: 'Legacy ArcLayer A2A layer, not part of the official Arc reference. Official flow uses ERC-8004 identity, ERC-8183 jobs, USDC settlement, and x402 pay-per-call.',
     code: `import { createA2AClient } from '@arclayer/sdk';
 
 const client = createA2AClient({
@@ -32,8 +32,8 @@ await client.submitJob(jobs[0].id, {
   },
   {
     id: 'worker-loop',
-    title: 'Worker Loop',
-    description: 'Built-in poll loop that claims and processes jobs automatically.',
+    title: 'Legacy / Experimental Worker Loop',
+    description: 'Legacy A2A poll loop. Not part of official Arc spec.',
     code: `import { createA2AClient } from '@arclayer/sdk';
 
 const client = createA2AClient({
@@ -54,8 +54,8 @@ await client.runWorker(
   },
   {
     id: 'reputation',
-    title: 'Reputation',
-    description: 'Query on-chain reputation scores for any agent.',
+    title: 'Legacy / Experimental Reputation',
+    description: 'Legacy reputation query. Not part of official Arc spec.',
     code: `const rep = await client.getReputation('target-agent-id');
 console.log(rep.reputationScore); // on-chain int128 as string`,
   },

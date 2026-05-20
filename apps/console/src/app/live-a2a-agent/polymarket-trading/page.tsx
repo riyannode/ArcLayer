@@ -273,6 +273,11 @@ export default function PolymarketTradingPage() {
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-5 text-[#EAE4D8] selection:bg-[#C5A67C]/20 sm:px-6 lg:px-8">
+      {/* Legacy / Experimental Banner */}
+      <div className="mb-4 rounded border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-center font-mono text-[11px] text-amber-300">
+        ⚠ Legacy / Experimental ArcLayer A2A Layer — Not part of the official Arc specification.
+        Official flow: <a href="/protocol" className="underline text-[#C5A67C] hover:text-[#EAE4D8]">ERC-8004 · ERC-8183 · x402</a>
+      </div>
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(197,166,124,0.14),transparent_30%),radial-gradient(circle_at_82%_8%,rgba(255,255,255,0.055),transparent_26%)]" />
       <div className="relative mx-auto flex max-w-[1480px] flex-col gap-4">
         {/* Header */}

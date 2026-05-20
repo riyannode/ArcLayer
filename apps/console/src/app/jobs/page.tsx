@@ -40,7 +40,7 @@ export default function JobsChooserPage() {
               <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
                 <li className="flex items-start gap-2"><span className="mt-0.5 text-[#C5A67C]">→</span>Select agent + worker</li>
                 <li className="flex items-start gap-2"><span className="mt-0.5 text-[#C5A67C]">→</span>Create and fund escrow</li>
-                <li className="flex items-start gap-2"><span className="mt-0.5 text-[#C5A67C]">→</span>Approve delivery + mint WorkProof</li>
+                <li className="flex items-start gap-2"><span className="mt-0.5 text-[#C5A67C]">→</span>Approve delivery + complete settlement</li>
               </ul>
             </div>
 

@@ -1,26 +1,35 @@
-import { AGENT_REGISTRY_ABI, CONTRACTS, JOB_ESCROW_ABI, publicClient } from "@arclayer/sdk";
+import {
+  ERC8004_IDENTITY_REGISTRY_ABI,
+  ERC8183_AGENTIC_COMMERCE_ABI,
+  CONTRACTS,
+  publicClient,
+} from "@arclayer/sdk";
 import type { IndexedAgentEvent, IndexedJobEvent } from "@arclayer/sdk";
 import { MAX_BLOCK_RANGE } from "./config";
 
+// ── Official ERC-8183 AgenticCommerce events ────────────────────────────────
+
 const JOB_EVENT_NAMES = [
   "JobCreated",
+  "BudgetSet",
   "JobFunded",
-  "DeliverableSubmitted",
-  "JobSettled",
+  "JobSubmitted",
+  "JobCompleted",
 ] as const;
 
-const AGENT_EVENT_NAMES = ["AgentRegistered"] as const;
-
-// Pre-extract the four event ABI items once. `getLogs({ events })` below
-// sends a single eth_getLogs per chunk with topic0 = [JobCreated, JobFunded,
-// DeliverableSubmitted, JobSettled] — replacing the previous 4-call fanout.
-const JOB_EVENT_ABIS = JOB_ESCROW_ABI.filter(
+const JOB_EVENT_ABIS = ERC8183_AGENTIC_COMMERCE_ABI.filter(
   (item): item is typeof item & { type: "event"; name: typeof JOB_EVENT_NAMES[number] } =>
     item.type === "event" &&
     (JOB_EVENT_NAMES as readonly string[]).includes((item as { name?: string }).name ?? ""),
 );
 
-const AGENT_EVENT_ABIS = AGENT_REGISTRY_ABI.filter(
+// ── Official ERC-8004 IdentityRegistry events ───────────────────────────────
+// ERC-8004 is ERC-721-like — Transfer event signals registration when from=0x0.
+
+const AGENT_EVENT_NAMES = ["Transfer"] as const;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+const AGENT_EVENT_ABIS = ERC8004_IDENTITY_REGISTRY_ABI.filter(
   (item): item is typeof item & { type: "event"; name: typeof AGENT_EVENT_NAMES[number] } =>
     item.type === "event" &&
     (AGENT_EVENT_NAMES as readonly string[]).includes((item as { name?: string }).name ?? ""),
@@ -56,6 +65,10 @@ async function fetchEventsChunked(
   return collected;
 }
 
+/**
+ * Fetch ERC-8183 AgenticCommerce events from Arc Testnet.
+ * Returns normalized IndexedJobEvent[] using official event names.
+ */
 export async function fetchJobEvents(
   fromBlock: bigint = BigInt(0),
 ): Promise<FetchJobEventsResult> {
@@ -66,8 +79,8 @@ export async function fetchJobEvents(
   }
 
   const collected = await fetchEventsChunked(
-    CONTRACTS.JOB_ESCROW,
-    JOB_ESCROW_ABI,
+    CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+    ERC8183_AGENTIC_COMMERCE_ABI,
     fromBlock,
     latestBlock,
   );
@@ -91,6 +104,10 @@ export async function fetchJobEvents(
   return { events, latestBlock };
 }
 
+/**
+ * Fetch ERC-8004 IdentityRegistry registrations from Arc Testnet.
+ * Treats Transfer{from=0x0} as registration event.
+ */
 export async function fetchAgentEvents(
   fromBlock: bigint = BigInt(0),
 ): Promise<FetchAgentEventsResult> {
@@ -101,27 +118,36 @@ export async function fetchAgentEvents(
   }
 
   const collected = await fetchEventsChunked(
-    CONTRACTS.AGENT_REGISTRY,
-    AGENT_REGISTRY_ABI,
+    CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+    ERC8004_IDENTITY_REGISTRY_ABI,
     fromBlock,
     latestBlock,
   );
 
   const events = collected
-    .filter((event: any) => (AGENT_EVENT_NAMES as readonly string[]).includes(event.eventName))
+    .filter((event: any) => event.eventName === "Transfer")
     .map((event: any) => {
       const args = (event.args ?? {}) as Record<string, unknown>;
+      const from = (args.from as string | undefined)?.toLowerCase();
+      const isMint = from === ZERO_ADDRESS;
       return {
-        eventName: "AgentRegistered" as const,
-        blockNumber: event.blockNumber as bigint,
-        transactionHash: event.transactionHash as `0x${string}`,
-        logIndex: (event.logIndex ?? 0) as number,
-        agentId: args.agentId as bigint,
-        controller: args.controller as `0x${string}`,
-        skillHash: args.skillHash as `0x${string}`,
-        metadataURI: (args.metadataURI ?? "") as string,
-      } satisfies IndexedAgentEvent;
+        isMint,
+        event,
+        args,
+      };
     })
+    .filter((e) => e.isMint)
+    .map(({ event, args }) => ({
+      eventName: "AgentRegistered" as const,
+      blockNumber: event.blockNumber as bigint,
+      transactionHash: event.transactionHash as `0x${string}`,
+      logIndex: (event.logIndex ?? 0) as number,
+      agentId: args.tokenId as bigint,
+      controller: args.to as `0x${string}`,
+      // ERC-8004 emits no metadataURI in the Transfer event; consumer must
+      // fetch tokenURI(tokenId) via SDK readAgent() for the URI.
+      metadataURI: "",
+    } satisfies IndexedAgentEvent))
     .sort((a, b) => {
       if (a.blockNumber !== b.blockNumber) {
         return Number(a.blockNumber - b.blockNumber);

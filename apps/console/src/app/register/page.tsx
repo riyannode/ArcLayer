@@ -51,7 +51,7 @@ export default function RegisterChooserPage() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-[#C5A67C]">→</span>
-                  WorkProof receipt minted
+                  ERC-8183 settlement recorded
                 </li>
               </ul>
             </div>

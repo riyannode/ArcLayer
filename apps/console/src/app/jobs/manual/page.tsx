@@ -27,6 +27,7 @@ import {
   DELIVERY_TIMES,
   DIFFICULTIES,
   JOB_TEMPLATES,
+  inferAgentCategory,
   inferManualJobCategory,
   getManualJobDisplay,
   categoryFromSlug,
@@ -35,8 +36,8 @@ import {
   type ManualJobDisplay,
 } from '@/lib/manualJobs';
 
-const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
-const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'success', 6: 'error' };
+const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Completed'] as const;
+const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'success' };
 
 function isValidAddress(value: string) {
   return /^0x[a-fA-F0-9]{40}$/.test(value.trim());
@@ -123,7 +124,7 @@ function JobsPage() {
   const categoryStats = useMemo(() => {
     return MANUAL_CATEGORIES.map((category) => {
       const jobCount = jobs.filter((job) => jobDisplays.get(job.id)?.category === category.key).length;
-      const agentCount = agents.filter((agent) => inferManualJobCategory({ id: '', agentId: agent.agentId, client: '', worker: '', evaluator: '', budget: '0', fundedAmount: '0', createdAt: '', jobSpecHash: '', deliverableURI: '', proofMetadataURI: '', approved: false, status: 0 }, agent) === category.key).length;
+      const agentCount = agents.filter((agent) => inferAgentCategory(agent) === category.key).length;
       return { ...category, jobCount, agentCount };
     });
   }, [jobs, agents, jobDisplays]);
@@ -306,12 +307,14 @@ function JobsPage() {
         createdAt: new Date().toISOString(),
       };
       setTxState('Submitting createJob transaction\u2026');
+      // ERC-8183 official: createJob(provider, evaluator, expiredAt, description, hook)
+      const expiredAt = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60);
       const hash = await writeContractAsync(
         buildCreateJobConfig(
-          BigInt(createForm.agentId),
           createForm.worker.trim() as `0x${string}`,
           createForm.evaluator.trim() as `0x${string}`,
-          JSON.stringify(structuredSpec)
+          expiredAt,
+          JSON.stringify(structuredSpec),
         )
       );
       setTxState(`Waiting for ${hash.slice(0, 10)}\u2026`);
@@ -644,7 +647,7 @@ function JobsPage() {
                         <div className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Worker {shortenAddress(job.worker)}</div>
                         <div className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Client {shortenAddress(job.evaluator)}</div>
                       </div>
-                      <div className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.85)]">WorkProof {job.proofMetadataURI ? 'available' : job.status === 5 ? 'pending metadata' : 'not minted yet'}</div>
+                      <div className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Settlement {job.proofMetadataURI ? 'recorded' : job.status === 4 ? 'pending' : 'not yet'}</div>
                     </div>
                   );
                 })
@@ -954,7 +957,7 @@ function JobsPage() {
 
             <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(10,10,10,0.6)] p-5 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
               {isConnected
-                ? '\u2713 Wallet connected. Manual flow: Select Agent \u2192 Create Job \u2192 Deposit/Fund Vault \u2192 Submit Milestones \u2192 Approve or Dispute \u2192 Settle Payment \u2192 WorkProof minted.'
+                ? '\u2713 Wallet connected. Manual flow: Select Agent \u2192 Create Job \u2192 Fund \u2192 Submit Deliverable \u2192 Complete \u2192 Settlement recorded.'
                 : '\u26a0 Connect wallet to submit protocol writes.'}
             </div>
           </section>

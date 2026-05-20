@@ -59,7 +59,7 @@ const TYPE_COLORS: Record<FeedItem['type'], string> = {
   error: 'bg-red-500/15 text-red-300 border-red-500/30',
 };
 
-const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
+const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Completed'] as const;
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -185,6 +185,11 @@ export default function AgentProfilePage() {
   return (
     <div className="aureo-page">
       <div className="aureo-shell">
+        {/* Legacy / Experimental Banner */}
+        <div className="mb-4 rounded border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-center font-mono text-[11px] text-amber-300">
+          ⚠ Legacy / Experimental ArcLayer A2A Layer — Not part of the official Arc specification.
+          Official flow: <a href="/protocol" className="underline text-[#C5A67C] hover:text-[#EAE4D8]">ERC-8004 · ERC-8183 · x402</a>
+        </div>
         {/* Hero */}
         <div className="aureo-detail-hero mb-8 p-5 md:p-7 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div className="flex items-start gap-5">
@@ -335,7 +340,7 @@ export default function AgentProfilePage() {
                 <div className="rounded border border-white/10 bg-white/[0.02] p-4">
                   <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Source</p>
                   <p className="mt-2 font-mono text-[11px] leading-5 text-[#b5b5b5] invisible">
-Reputation updates from x402 payments and WorkProof.
+Reputation updates from x402 payments and completed ERC-8183 jobs.
                   </p>
                 </div>
               </section>
@@ -418,9 +423,9 @@ Reputation updates from x402 payments and WorkProof.
                   )}
                 </div>
 
-                {/* WorkProof / escrow receipts */}
+                {/* Job completion receipts */}
                 <div>
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C] mb-3">WorkProof Receipts</p>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C] mb-3">Settlement Receipts</p>
                   {proofs.length > 0 ? (
                     <div className="space-y-2">
                       {proofs.map((p) => (
@@ -440,7 +445,7 @@ Reputation updates from x402 payments and WorkProof.
                     </div>
                   ) : (
                     <p className="rounded border border-white/10 bg-white/[0.02] p-4 font-mono text-[11px] text-[#555]">
-                      No WorkProof receipts minted for this agent yet.
+                      No settlement receipts recorded for this agent yet.
                     </p>
                   )}
                 </div>

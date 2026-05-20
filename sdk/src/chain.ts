@@ -1,23 +1,10 @@
 import { http, fallback, createPublicClient, getContract } from "viem";
-import { CONTRACTS } from "./addresses";
+import { ARC_EXPLORER, ARC_RPC_URLS, CONTRACTS } from "./addresses";
 import {
-  AGENT_REGISTRY_ABI,
-  JOB_ESCROW_ABI,
-  MILESTONE_ESCROW_ABI,
-  REPUTATION_ORACLE_ABI,
-  WORK_PROOF_ABI,
+  ERC8004_IDENTITY_REGISTRY_ABI,
+  ERC8183_AGENTIC_COMMERCE_ABI,
+  USDC_ABI,
 } from "./abi";
-
-// Ordered by measured latency (Arc Testnet, May 2026):
-// dRPC ~65ms, rpc.testnet ~463ms, quicknode ~463ms, blockdaemon ~473ms.
-// `viem.fallback` uses this order — fastest healthy endpoint wins,
-// others act as automatic failover.
-export const ARC_RPC_URLS = [
-  "https://rpc.drpc.testnet.arc.network",
-  "https://rpc.testnet.arc.network",
-  "https://rpc.quicknode.testnet.arc.network",
-  "https://rpc.blockdaemon.testnet.arc.network",
-] as const;
 
 export const arcTestnet = {
   id: 5042002,
@@ -25,13 +12,13 @@ export const arcTestnet = {
   network: "arc-testnet",
   // Arc native gas token is USDC. Native interface uses 18 decimals
   // (vs ERC-20 USDC 6 decimals). See ARC_NATIVE_USDC_DECIMALS in addresses.ts.
-  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+  nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
   rpcUrls: {
     default: { http: [...ARC_RPC_URLS] },
     public: { http: [...ARC_RPC_URLS] },
   },
   blockExplorers: {
-    default: { name: "ArcScan", url: "https://testnet.arcscan.app" },
+    default: { name: "ArcScan", url: ARC_EXPLORER },
   },
 } as const;
 
@@ -40,32 +27,35 @@ export const publicClient = createPublicClient({
   transport: fallback(ARC_RPC_URLS.map((url) => http(url))),
 });
 
-export const milestoneEscrow = getContract({
-  address: CONTRACTS.MILESTONE_ESCROW,
-  abi: MILESTONE_ESCROW_ABI,
+/** Official ERC-8004 Identity Registry on Arc Testnet. */
+export const erc8004IdentityRegistry = getContract({
+  address: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+  abi: ERC8004_IDENTITY_REGISTRY_ABI,
   client: publicClient,
 });
 
-export const agentRegistry = getContract({
-  address: CONTRACTS.AGENT_REGISTRY,
-  abi: AGENT_REGISTRY_ABI,
+/** Official ERC-8183 Agentic Commerce on Arc Testnet. */
+export const erc8183AgenticCommerce = getContract({
+  address: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+  abi: ERC8183_AGENTIC_COMMERCE_ABI,
   client: publicClient,
 });
 
-export const jobEscrow = getContract({
-  address: CONTRACTS.JOB_ESCROW,
-  abi: JOB_ESCROW_ABI,
+/** Arc ERC-20 USDC interface — 6 decimals. */
+export const usdc = getContract({
+  address: CONTRACTS.USDC,
+  abi: USDC_ABI,
   client: publicClient,
 });
 
-export const workProof = getContract({
-  address: CONTRACTS.WORK_PROOF,
-  abi: WORK_PROOF_ABI,
-  client: publicClient,
-});
-
-export const reputationOracle = getContract({
-  address: CONTRACTS.REPUTATION_ORACLE,
-  abi: REPUTATION_ORACLE_ABI,
-  client: publicClient,
-});
+// Legacy aliases during migration. These now point to official Arc contracts.
+/** @deprecated Use erc8004IdentityRegistry. */
+export const agentRegistry = erc8004IdentityRegistry;
+/** @deprecated Use erc8183AgenticCommerce. */
+export const jobEscrow = erc8183AgenticCommerce;
+/** @deprecated No WorkProof in official Arc/Circle reference mode. */
+export const workProof = undefined;
+/** @deprecated No ReputationOracle in official Arc/Circle reference mode. */
+export const reputationOracle = undefined;
+/** @deprecated No MilestoneEscrow in official Arc/Circle reference mode. */
+export const milestoneEscrow = undefined;

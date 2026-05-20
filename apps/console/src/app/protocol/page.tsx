@@ -6,10 +6,9 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { ARC_EXPLORER, formatUSDC, shortenAddress } from '@/lib/contracts';
 import { displayAgentLabel, formatSkillLabel, parseAgentName, parseAgentSkill, shortAgentId } from '@/lib/agentName';
 import { fetchIndexerJson, type DashboardOverview } from '@/lib/indexer';
-import { WORK_PROOF_ADDRESS } from '@/lib/x402/constants';
 
-const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
-const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'success', 6: 'error' };
+const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Completed'] as const;
+const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'success' };
 
 const RPC_ENDPOINTS = [
   { label: 'rpc.testnet.arc.network', url: 'https://rpc.testnet.arc.network' },
@@ -73,8 +72,8 @@ export default function Dashboard() {
   const [agentSort, setAgentSort] = useState<'top' | 'jobs' | 'newest' | 'name'>('top');
   const [showAllAgents, setShowAllAgents] = useState(false);
   const [jobSearch, setJobSearch] = useState('');
-  const [jobStatusFilter, setJobStatusFilter] = useState<'all' | '0' | '1' | '2' | '3' | '4' | '5'>('all');
-  const [jobSort, setJobSort] = useState<'relevant' | 'newest' | 'budgetDesc' | 'budgetAsc' | 'depositDesc' | 'settledFirst'>('relevant');
+  const [jobStatusFilter, setJobStatusFilter] = useState<'all' | '0' | '1' | '2' | '3' | '4'>('all');
+  const [jobSort, setJobSort] = useState<'relevant' | 'newest' | 'budgetDesc' | 'budgetAsc' | 'depositDesc' | 'completedFirst'>('relevant');
   const [showAllJobs, setShowAllJobs] = useState(false);
   const pulseRef = useRef<HTMLSpanElement>(null);
 
@@ -188,7 +187,7 @@ export default function Dashboard() {
       if (jobSort === 'budgetDesc') return Number(BigInt(b.budget) - BigInt(a.budget));
       if (jobSort === 'budgetAsc') return Number(BigInt(a.budget) - BigInt(b.budget));
       if (jobSort === 'depositDesc') return Number(BigInt(b.fundedAmount) - BigInt(a.fundedAmount));
-      if (jobSort === 'settledFirst') return (b.status === 5 ? 1 : 0) - (a.status === 5 ? 1 : 0) || Number(BigInt(b.id) - BigInt(a.id));
+      if (jobSort === 'completedFirst') return (b.status === 4 ? 1 : 0) - (a.status === 4 ? 1 : 0) || Number(BigInt(b.id) - BigInt(a.id));
       return (relevance[a.status] ?? 9) - (relevance[b.status] ?? 9) || Number(BigInt(b.id) - BigInt(a.id));
     });
   }, [jobs, jobSearch, jobStatusFilter, jobSort, agentById]);
@@ -218,7 +217,7 @@ export default function Dashboard() {
               <Link href="/" className="btn-primary px-4 py-2 text-[10.5px]">HOME X402</Link>
               <Link href="/jobs/manual" className="btn-secondary px-4 py-2 text-[10.5px]">CREATE JOB</Link>
               <Link href="/register" className="btn-bordered px-4 py-2 text-[10.5px]">REGISTER AGENT</Link>
-              <Link href="/a2a" className="btn-bordered px-4 py-2 text-[10.5px]">OPEN A2A</Link>
+
             </div>
           </div>
           <div className="flex items-center gap-3 self-start md:self-auto">
@@ -242,7 +241,7 @@ export default function Dashboard() {
         <div className="mb-8 grid grid-cols-1 gap-3 lg:grid-cols-[0.95fr_1.15fr_0.9fr]">
           <Panel title="LIVE MODULES" sub="Core services">
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {['Agent Registry', 'Settlement Vault', 'WorkProof', 'A2A Registry', 'Reputation', 'Indexer'].map((name) => (
+              {['ERC-8004 IdentityRegistry', 'ERC-8183 AgenticCommerce', 'USDC', 'x402', 'Indexer'].map((name) => (
                 <div key={name} className="flex items-center gap-2 rounded-sm border border-[#B8CD7E]/15 bg-[#B8CD7E]/[0.035] px-3 py-2 font-mono text-[10.5px] text-[rgba(234,228,216,0.9)]">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#B8CD7E]" aria-hidden="true" />
                   <span>{name}</span>
@@ -258,7 +257,7 @@ export default function Dashboard() {
           >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <RailCard title="Arc Native x402" status="LIVE" text="Pay once for a single agent call." href="/" cta="Open homepage ticket" />
-              <RailCard title="Escrow Jobs" status="LIVE" text="Fund a job, approve the result, and release payment." href="/jobs/manual" cta="Create job" />
+              <RailCard title="ERC-8183 Jobs" status="LIVE" text="Budget, fund, submit, and complete official AgenticCommerce jobs." href="/jobs/manual" cta="Create job" />
             </div>
           </Panel>
 
@@ -311,14 +310,13 @@ export default function Dashboard() {
         {/* Demo proof: canonical completed E2E */}
         <div className="mt-6 flex flex-col gap-3 border border-[#B8CD7E]/20 bg-[#B8CD7E]/[0.035] p-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="aureo-mono-label mb-2" style={{ color: '#B8CD7E' }}>COMPLETED E2E PROOF</div>
+            <div className="aureo-mono-label mb-2" style={{ color: '#B8CD7E' }}>COMPLETED ERC-8183 JOB</div>
             <p className="font-mono text-[12px] leading-6 text-[#EAE4D8]">
-              Job <span className="text-[#C5A67C]">#19</span> settled on Arc testnet · WorkProof <span className="text-[#C5A67C]">#3</span> minted to worker.
+              Job <span className="text-[#C5A67C]">#19</span> completed on Arc testnet through ERC-8183 AgenticCommerce.
             </p>
             <div className="mt-2 flex flex-wrap gap-3">
               <Link href="/job/19" className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C5A67C] hover:text-[#EAE4D8]">View Job →</Link>
-              <a href={`${ARC_EXPLORER}/token/${WORK_PROOF_ADDRESS}?a=3`} target="_blank" rel="noopener noreferrer" className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C5A67C] hover:text-[#EAE4D8]">View WorkProof →</a>
-              <a href={`${ARC_EXPLORER}/address/${WORK_PROOF_ADDRESS}`} target="_blank" rel="noopener noreferrer" className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C5A67C] hover:text-[#EAE4D8]">View Contract →</a>
+              <a href={`${ARC_EXPLORER}/address/0x0747EEfA70d8bAb5364d7baD8D00603CC3dDD9b6`} target="_blank" rel="noopener noreferrer" className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C5A67C] hover:text-[#EAE4D8]">View ERC-8183 Contract →</a>
             </div>
           </div>
           <span className="chip-status success self-start md:self-auto">SETTLED</span>
@@ -349,8 +347,7 @@ export default function Dashboard() {
                 <option value="1">Budgeted</option>
                 <option value="2">Funded</option>
                 <option value="3">Submitted</option>
-                <option value="4">Evaluated</option>
-                <option value="5">Settled</option>
+                <option value="4">Completed</option>
               </select>
               <select
                 value={jobSort}
@@ -362,7 +359,7 @@ export default function Dashboard() {
                 <option value="budgetDesc">Highest budget</option>
                 <option value="budgetAsc">Lowest budget</option>
                 <option value="depositDesc">Highest deposit</option>
-                <option value="settledFirst">Settled first</option>
+                <option value="completedFirst">Completed first</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -543,7 +540,7 @@ export default function Dashboard() {
           <div className="mt-8">
               <Panel title="WALLET · PARTICIPATION" sub={`${connectedJobs.length} as buyer / agent / approver`}>
               {connectedJobs.length === 0 ? (
-                <Empty msg="No JobEscrow records found for this wallet yet." />
+                  <Empty msg="No ERC-8183 job records found for this wallet yet." />
               ) : (
                 <div className="space-y-2">
                   {connectedJobs.map((job) => (
@@ -601,12 +598,9 @@ export default function Dashboard() {
               <div>
                 <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.5)]">CONTRACTS · ARC TESTNET</div>
                 <div className="mt-2 space-y-1.5 font-mono text-[10px] text-[rgba(234,228,216,0.85)]">
-                  <ContractRow label="AgentRegistry" addr="0xB263336055dD65FF501e36CA39941760D943703C" />
-                  <ContractRow label="JobEscrow" addr="0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225" />
-                  <ContractRow label="WorkProof" addr={WORK_PROOF_ADDRESS} />
-                  <ContractRow label="ReputationOracle" addr="0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c" />
-                  <ContractRow label="Settlement Vault" addr="0x21ddF0d74B231144960026B9f1A9203a966ec0B5" />
-                  <ContractRow label="BondConfig" addr="0x3BFf61a88a45bF44f119B359b4EDeD386Ce4Ee76" />
+                  <ContractRow label="ERC-8004 IdentityRegistry" addr="0x8004A81842B275BbC0462441026d4af50fC83008" />
+                  <ContractRow label="ERC-8183 AgenticCommerce" addr="0x0747EEfA70d8bAb5364d7baD8D00603CC3dDD9b6" />
+                  <ContractRow label="USDC" addr="0x360852E7f8E3E9C3B78F941937120c884E3d8720" />
                 </div>
               </div>
             </div>

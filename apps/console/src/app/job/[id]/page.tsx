@@ -7,8 +7,7 @@ import { waitForTransactionReceipt } from '@wagmi/core';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import {
-  buildEvaluateJobConfig,
-  buildSettleJobConfig,
+  buildCompleteJobConfig,
   buildSubmitDeliverableConfig,
 } from '@arclayer/sdk';
 import { CONTRACTS, formatUSDC, getExplorerAddressUrl, shortenAddress } from '@/lib/contracts';
@@ -16,13 +15,13 @@ import { config } from '@/lib/wagmi';
 import { fetchIndexerJson, INDEXER_BASE_URL, type JobDetail, waitForIndexer, loadJobDetail, type DataSource } from '@/lib/indexer';
 import { IndexerDegradedBanner } from '@/components/IndexerDegradedBanner';
 
-const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
+const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Completed'] as const;
 
 function parseJobId(value: string | undefined) {
   return value && /^\d+$/.test(value) ? value : null;
 }
 
-type Action = 'submit' | 'approve' | 'reject' | 'settle' | 'approve_settle' | null;
+type Action = 'submit' | 'complete' | null;
 
 type DeliverablePreview = {
   agentId?: string;
@@ -77,7 +76,6 @@ export default function JobDetailPage() {
   const [txState, setTxState] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<Action>(null);
   const [deliverableURI, setDeliverableURI] = useState('ipfs://deliverable-next');
-  const [proofMetadataURI, setProofMetadataURI] = useState('ipfs://proof-next');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [preview, setPreview] = useState<DeliverablePreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -139,91 +137,40 @@ export default function JobDetailPage() {
       setActiveAction('submit');
       setTxState('Submitting deliverable…');
       const hash = await writeContractAsync(
-        buildSubmitDeliverableConfig(BigInt(jobId), deliverableURI, proofMetadataURI)
+        buildSubmitDeliverableConfig(BigInt(jobId), deliverableURI)
       );
       await waitForTransactionReceipt(config, { hash });
       setTxState('Receipt confirmed. Waiting for indexer refresh…');
       const next = await waitForIndexer<JobDetail>(
         `/jobs/${jobId}`,
-        (p) => p.job.deliverableURI === deliverableURI && p.job.proofMetadataURI === proofMetadataURI
+        (p) => p.job.deliverableURI === deliverableURI || p.job.deliverable === deliverableURI
       );
       setPayload(next);
       setTxState('Deliverable submitted and indexed.');
-    } catch (e) { setTxState(e instanceof Error ? e.message : 'submitDeliverable failed.'); }
+    } catch (e) { setTxState(e instanceof Error ? e.message : 'submit failed.'); }
     finally { setActiveAction(null); }
   }
 
-  async function handleEvaluate(approved: boolean) {
+  async function handleComplete() {
     if (!jobId) return;
     try {
-      setActiveAction(approved ? 'approve' : 'reject');
-      setTxState(approved ? 'Approving deliverable…' : 'Rejecting deliverable…');
-      const hash = await writeContractAsync(buildEvaluateJobConfig(BigInt(jobId), approved));
+      setActiveAction('complete');
+      setTxState('Completing job with ERC-8183 complete(jobId, reasonHash, "0x")…');
+      const hash = await writeContractAsync(buildCompleteJobConfig(BigInt(jobId), 'approved'));
       await waitForTransactionReceipt(config, { hash });
       setTxState('Receipt confirmed. Waiting for indexer refresh…');
       const next = await waitForIndexer<JobDetail>(
         `/jobs/${jobId}`,
-        (p) => p.job.approved === approved && p.job.status === 4
+        (p) => p.job.status === 4
       );
       setPayload(next);
-      setTxState(approved ? 'Deliverable approved and indexed.' : 'Deliverable rejected and indexed.');
-    } catch (e) { setTxState(e instanceof Error ? e.message : 'evaluate failed.'); }
+      setTxState('Job completed and indexed.');
+    } catch (e) { setTxState(e instanceof Error ? e.message : 'complete failed.'); }
     finally { setActiveAction(null); }
-  }
-
-  async function handleSettle() {
-    if (!jobId) return;
-    try {
-      setActiveAction('settle');
-      setTxState('Settling job…');
-      const hash = await writeContractAsync(buildSettleJobConfig(BigInt(jobId)));
-      await waitForTransactionReceipt(config, { hash });
-      setTxState('Receipt confirmed. Waiting for indexer refresh…');
-      const next = await waitForIndexer<JobDetail>(
-        `/jobs/${jobId}`,
-        (p) => p.job.status === 5 && p.proof !== null
-      );
-      setPayload(next);
-      setTxState('Job settled and indexed.');
-    } catch (e) { setTxState(e instanceof Error ? e.message : 'settle failed.'); }
-    finally { setActiveAction(null); }
-  }
-
-  // Hybrid γ: one-click flow — evaluate(true) then settle().
-  // Two wallet signatures, one button. Used by the buyer/evaluator after
-  // reviewing the IPFS deliverable preview.
-  async function handleApproveAndSettle() {
-    if (!jobId) return;
-    try {
-      setActiveAction('approve_settle');
-      // 1. evaluate(true)
-      setTxState('Step 1/2: signing approve…');
-      const evalHash = await writeContractAsync(buildEvaluateJobConfig(BigInt(jobId), true));
-      setTxState('Step 1/2: waiting for approve receipt…');
-      await waitForTransactionReceipt(config, { hash: evalHash });
-
-      // 2. settle()
-      setTxState('Step 2/2: signing settle…');
-      const settleHash = await writeContractAsync(buildSettleJobConfig(BigInt(jobId)));
-      setTxState('Step 2/2: waiting for settle receipt…');
-      await waitForTransactionReceipt(config, { hash: settleHash });
-
-      setTxState('Both txs mined. Waiting for indexer refresh…');
-      const next = await waitForIndexer<JobDetail>(
-        `/jobs/${jobId}`,
-        (p) => p.job.status === 5 && p.proof !== null
-      );
-      setPayload(next);
-      setTxState(`Settled. WorkProof #${next.proof?.tokenId ?? '?'} minted.`);
-    } catch (e) {
-      setTxState(e instanceof Error ? `approve&settle failed: ${e.message}` : 'approve&settle failed.');
-    } finally { setActiveAction(null); }
   }
 
   const statusChipClass = job
-    ? job.status === 5 ? 'chip-status success'
-      : job.status === 6 ? 'chip-status error'
-      : 'chip-status pending'
+    ? job.status === 4 ? 'chip-status success' : 'chip-status pending'
     : 'chip-status';
 
   return (
@@ -239,7 +186,7 @@ export default function JobDetailPage() {
               Job <span className="italic text-[#C5A67C]">#{jobId || '0'}</span>
             </h1>
             <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#b5b5b5] invisible">
-              JobEscrow record projected by the indexer from on-chain events and linked WorkProof.
+              ERC-8183 AgenticCommerce job projected by the ArcLayer indexer.
             </p>
           </div>
           <div
@@ -266,8 +213,8 @@ export default function JobDetailPage() {
           {[
             ['STATUS', job ? JOB_STATUS[job.status] : isLoading ? '…' : '—', statusChipClass],
             ['FUNDED', job ? `${formatUSDC(BigInt(job.fundedAmount))} USDC` : isLoading ? '…' : '0.00 USDC'],
-            ['APPROVED', job ? (job.approved ? 'Yes' : 'No') : isLoading ? '…' : '—'],
-            ['PROOF', proof ? `#${proof.tokenId}` : isLoading ? '…' : 'pending'],
+            ['DELIVERABLE', job?.deliverableURI || job?.deliverable ? 'Submitted' : isLoading ? '…' : 'pending'],
+            ['SETTLEMENT', job?.status === 4 ? 'Completed' : isLoading ? '…' : 'pending'],
           ].map(([label, value, chip], i) => (
             <div key={label as string} className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)', animation: `fadeInUp 0.4s ${i * 0.04}s both cubic-bezier(0.16, 1, 0.3, 1)` }}>
               <p className="aureo-mono-label">{label as string}</p>
@@ -287,10 +234,10 @@ export default function JobDetailPage() {
             <div className="mt-5 space-y-2.5">
               {[
                 ['client', job ? shortenAddress(job.client) : isLoading ? '…' : '—'],
-                ['worker', job ? shortenAddress(job.worker) : isLoading ? '…' : '—'],
+                ['provider', job ? shortenAddress(job.worker) : isLoading ? '…' : '—'],
                 ['evaluator', job ? shortenAddress(job.evaluator) : isLoading ? '…' : '—'],
                 ['agent', job ? `#${job.agentId}` : isLoading ? '…' : '—'],
-                ['spec hash', job ? `${job.jobSpecHash.slice(0, 10)}…${job.jobSpecHash.slice(-8)}` : isLoading ? '…' : '—'],
+                ['description', job ? `${job.jobSpecHash.slice(0, 10)}…${job.jobSpecHash.slice(-8)}` : isLoading ? '…' : '—'],
                 ['created', job ? new Date(Number(job.createdAt) * 1000).toLocaleString() : isLoading ? '…' : '—'],
               ].map(([label, value]) => (
                 <div key={label} className="ledger-row flex items-center justify-between border border-white/10 bg-black/20 px-4 py-2.5">
@@ -305,13 +252,13 @@ export default function JobDetailPage() {
               rel="noopener noreferrer"
               className="mt-5 inline-flex font-mono text-[11px] tracking-[0.14em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
             >
-              VIEW CONTRACT ↗
+              VIEW ERC-8183 ↗
             </a>
           </section>
 
           <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">ARTIFACTS</div>
-            <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Deliverable &amp; proof</h2>
+            <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Deliverable &amp; settlement</h2>
             <div className="mt-5 space-y-3">
               <ArtifactRow
                 label="Deliverable URI"
@@ -319,9 +266,8 @@ export default function JobDetailPage() {
                 href={ipfsToHttp(job?.deliverableURI)}
               />
               <ArtifactRow
-                label="Proof metadata URI"
-                value={job?.proofMetadataURI || (isLoading ? '…' : 'No proof metadata.')}
-                href={ipfsToHttp(job?.proofMetadataURI)}
+                label="Deliverable hash"
+                value={job?.deliverable || (isLoading ? '…' : 'No deliverable hash.')}
               />
 
               {/* Submitted work preview */}
@@ -399,17 +345,17 @@ export default function JobDetailPage() {
               )}
 
               <div className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
-                <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>MINTED PROOF</p>
+                <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>OFFICIAL ERC-8183 SETTLEMENT</p>
                 {proof ? (
                   <div className="mt-2 space-y-1 font-mono text-[11px] text-[#b5b5b5]">
-                    <p className="text-[#C5A67C]">Token #{proof.tokenId}</p>
+                    <p className="text-[#C5A67C]">Record #{proof.tokenId}</p>
                     <p>payer {shortenAddress(proof.payer)}</p>
                     <p>amount {formatUSDC(BigInt(proof.amountPaid))} USDC</p>
-                    <p>minted {new Date(Number(proof.mintedAt) * 1000).toLocaleString()}</p>
+                    <p>recorded {new Date(Number(proof.mintedAt) * 1000).toLocaleString()}</p>
                   </div>
                 ) : (
                   <p className="mt-2 font-mono text-[11.5px] text-[#a0a0a0]">
-                    {isLoading ? 'Loading proof…' : 'No work proof minted for this job.'}
+                    {isLoading ? 'Loading…' : 'No ERC-8183 completion recorded for this job.'}
                   </p>
                 )}
               </div>
@@ -417,16 +363,14 @@ export default function JobDetailPage() {
           </section>
         </div>
 
-        {/* Actions — status-aware. The buyer-flow is: Funded→Submitted (auto by service)
-            → Submitted (Approve&Settle) → Settled. Manual override stays available. */}
+        {/* Actions — official ERC-8183 flow only: submit(jobId, deliverable, "0x") → complete(jobId, reasonHash, "0x"). */}
         <section className="aureo-panel mt-6 p-4 md:p-6">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <div className="aureo-mono-label mb-2">ACTIONS · {job ? JOB_STATUS[job.status] : '…'}</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">
-                {job?.status === 5 ? 'Settlement complete' :
-                 job?.status === 4 ? (job.approved ? 'Settle to release payout' : 'Rejected — no settlement') :
-                 job?.status === 3 ? 'Review deliverable, then approve & settle' :
+                {job?.status === 4 ? 'Settlement complete' :
+                 job?.status === 3 ? 'Review deliverable, then complete'  :
                  job?.status === 2 ? 'Funded — awaiting agent submission' :
                  'Job lifecycle controls'}
               </h2>
@@ -447,7 +391,7 @@ export default function JobDetailPage() {
               you are{' '}
               {address.toLowerCase() === job.client.toLowerCase() && <span className="text-[#C5A67C]">CLIENT </span>}
               {address.toLowerCase() === job.evaluator.toLowerCase() && <span className="text-[#B8CD7E]">EVALUATOR </span>}
-              {address.toLowerCase() === job.worker.toLowerCase() && <span className="text-[#9eb8ff]">WORKER </span>}
+              {address.toLowerCase() === job.worker.toLowerCase() && <span className="text-[#9eb8ff]">PROVIDER </span>}
               {address.toLowerCase() !== job.client.toLowerCase() &&
                address.toLowerCase() !== job.evaluator.toLowerCase() &&
                address.toLowerCase() !== job.worker.toLowerCase() && <span>· not a participant</span>}
@@ -458,57 +402,32 @@ export default function JobDetailPage() {
           <div className="mt-5 space-y-3">
             {job?.status === 3 && previewError && isEvaluator && (
               <div className="p-3 font-mono text-[11px] tracking-[0.04em]" style={{ border: '1px solid rgba(245, 200, 100, 0.35)', background: 'rgba(245, 200, 100, 0.06)', color: '#f5c864' }}>
-                ⚠️ Preview unavailable — you can still approve on-chain if you trust the submitted URI.
+                ⚠️ Preview unavailable — you can still complete on-chain if you trust the submitted URI/hash.
               </div>
             )}
             {job?.status === 3 && isEvaluator && (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr]">
-                <button
-                  onClick={handleApproveAndSettle}
-                  disabled={!isConnected || activeAction !== null}
-                  className="btn-primary"
-                  title="Sign 2 txs: evaluate(true) + settle()"
-                >
-                  {activeAction === 'approve_settle' ? 'PROCESSING…' : '✓ APPROVE & SETTLE'}
-                </button>
-                <button
-                  onClick={() => handleEvaluate(false)}
-                  disabled={!isConnected || activeAction !== null}
-                  className="btn-bordered"
-                  style={{ borderColor: 'rgba(230, 130, 130, 0.4)', color: '#e68282' }}
-                >
-                  {activeAction === 'reject' ? 'REJECTING…' : '✕ REJECT'}
-                </button>
-              </div>
+              <button
+                onClick={handleComplete}
+                disabled={!isConnected || activeAction !== null}
+                className="btn-primary w-full"
+                title="ERC-8183 complete(jobId, reasonHash, 0x)"
+              >
+                {activeAction === 'complete' ? 'COMPLETING…' : '✓ COMPLETE JOB'}
+              </button>
             )}
             {job?.status === 3 && !isEvaluator && isConnected && (
               <div className="p-3 font-mono text-[11px] tracking-[0.04em] text-[#a0a0a0]" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
                 {isWorker
-                  ? '⏳ Deliverable submitted. Waiting for evaluator to approve.'
-                  : '👁  Read-only — only the evaluator can approve or reject this job.'}
+                  ? '⏳ Deliverable submitted. Waiting for evaluator to complete via ERC-8183.'
+                  : '👁 Read-only — only the evaluator can complete this ERC-8183 job.'}
               </div>
             )}
 
-            {job?.status === 4 && job.approved && (isEvaluator || isClient) && (
-              <button
-                onClick={handleSettle}
-                disabled={!isConnected || activeAction !== null}
-                className="btn-primary w-full"
-              >
-                {activeAction === 'settle' ? 'SETTLING…' : '⟶ SETTLE (release payout + mint WorkProof)'}
-              </button>
-            )}
-            {job?.status === 4 && job.approved && !isEvaluator && !isClient && isConnected && (
-              <div className="p-3 font-mono text-[11px] tracking-[0.04em] text-[#a0a0a0]" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
-                ⏳ Approved. Waiting for client/evaluator to settle and release payout.
-              </div>
-            )}
-
-            {job?.status === 5 && proof && (
+            {job?.status === 4 && (
               <div className="p-4" style={{ border: '1px solid rgba(184, 205, 126, 0.35)', background: 'rgba(184, 205, 126, 0.06)' }}>
-                <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>SETTLED</p>
+                <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>COMPLETED</p>
                 <p className="mt-2 font-mono text-[12px] text-[#EAE4D8]">
-                  {formatUSDC(BigInt(proof.amountPaid))} USDC paid to worker · WorkProof #{proof.tokenId} minted
+                  ERC-8183 AgenticCommerce completion recorded.
                 </p>
               </div>
             )}
@@ -516,43 +435,29 @@ export default function JobDetailPage() {
             {job && job.status < 3 && (
               <p className="font-mono text-[11.5px] text-[#a0a0a0]">
                 {job.status === 2
-                  ? '✓ Funded. The service worker will auto-submit the deliverable after the next /run call.'
-                  : 'Job not yet funded. Buyer must complete x402 payment first.'}
+                  ? '✓ Funded. The service provider should submit deliverable via ERC-8183 submit().'
+                  : 'Job not yet funded. Use setBudget, USDC approve, then fund(jobId, 0x).'}
               </p>
             )}
           </div>
 
-          {/* ADVANCED override — manual submitDeliverable, kept for ops/debug */}
+          {/* ADVANCED override — manual ERC-8183 submit(), kept for ops/debug */}
           <div className="mt-6 border-t border-white/10 pt-4">
             <button
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="font-mono text-[10.5px] tracking-[0.16em] text-[#a0a0a0] transition-colors hover:text-[#C5A67C]"
             >
-              {showAdvanced ? '▾' : '▸'} ADVANCED · MANUAL OVERRIDE
+              {showAdvanced ? '▾' : '▸'} ADVANCED · ERC-8183 MANUAL SUBMIT
             </button>
             {showAdvanced && (
               <div className="mt-3 grid grid-cols-1 gap-6 lg:grid-cols-[1.1fr_0.9fr]">
                 <div className="space-y-3">
-                  <p className="font-mono text-[10.5px] text-[#a0a0a0]">submitDeliverable (worker only)</p>
-                  <input value={deliverableURI} onChange={(e) => setDeliverableURI(e.target.value)} placeholder="ipfs://deliverable" className="input-mono" />
-                  <input value={proofMetadataURI} onChange={(e) => setProofMetadataURI(e.target.value)} placeholder="ipfs://proof-metadata" className="input-mono" />
+                  <p className="font-mono text-[10.5px] text-[#a0a0a0]">submit(jobId, deliverable, 0x) · provider only</p>
+                  <input value={deliverableURI} onChange={(e) => setDeliverableURI(e.target.value)} placeholder="ipfs://deliverable-hash-or-uri" className="input-mono" />
                   <button onClick={handleSubmitDeliverable} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
-                    {activeAction === 'submit' ? 'SUBMITTING…' : 'SUBMIT DELIVERABLE'}
+                    {activeAction === 'submit' ? 'SUBMITTING…' : 'SUBMIT HASH'}
                   </button>
                 </div>
-                {(isEvaluator || isClient) && (
-                  <div className="space-y-3">
-                    <p className="font-mono text-[10.5px] text-[#a0a0a0]">individual evaluator/settle txs</p>
-                    {isEvaluator && (
-                      <button onClick={() => handleEvaluate(true)} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
-                        {activeAction === 'approve' ? 'APPROVING…' : 'EVALUATE · APPROVE only'}
-                      </button>
-                    )}
-                    <button onClick={handleSettle} disabled={!isConnected || activeAction !== null} className="btn-bordered w-full">
-                      {activeAction === 'settle' ? 'SETTLING…' : 'SETTLE only'}
-                    </button>
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -585,3 +490,4 @@ function ArtifactRow({ label, value, href }: { label: string; value: string; hre
     </div>
   );
 }
+

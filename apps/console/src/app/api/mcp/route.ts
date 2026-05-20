@@ -1,34 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { encodeFunctionData, keccak256, stringToHex, toHex, type Hex } from 'viem';
-import { AGENT_REGISTRY_ABI, JOB_ESCROW_ABI } from '@arclayer/sdk';
+import { encodeFunctionData, keccak256, stringToHex, toBytes, toHex, type Hex } from 'viem';
+import { AGENT_REGISTRY_ABI, JOB_ESCROW_ABI, CONTRACTS, ARC_TOKENS } from '@arclayer/sdk';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 /**
- * ArcLayer MCP-style JSON endpoint.
+ * ArcLayer MCP-style JSON endpoint — Pure Arc Reference Mode.
  *
- * Goal: any LLM/agent runtime can hit a single URL and discover what ArcLayer
- * exposes — list/read tools + tx-instruction builders. We do NOT auto-sign
- * anything. The runtime/wallet signs.
+ * Uses official Circle-deployed contracts:
+ *   - ERC-8004 IdentityRegistry (0x8004A818…) — agent registration
+ *   - ERC-8183 AgenticCommerce (0x0747EEf…) — job lifecycle
  *
  * Three call shapes:
  *   GET  /api/mcp                              → manifest + tool list
- *   GET  /api/mcp?tool=list_agents             → invoke read tool
+ *   GET  /api/mcp?tool=<name>&arg1=val1        → invoke read tool
  *   POST /api/mcp  { method, params }          → JSON-RPC 2.0 style
  *   POST /api/mcp  { tool, args }              → simple shape
  */
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://arclayers.xyz';
 const ARC_CHAIN_ID = 5042002;
-const CONTRACTS = {
-  USDC: '0x3600000000000000000000000000000000000000',
-  AGENT_REGISTRY: '0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21',
-  JOB_ESCROW: '0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225',
-  WORK_PROOF: '0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5',
-  REPUTATION_ORACLE: '0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c',
-} as const;
+const ARC_RPC = 'https://rpc.testnet.arc.network';
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
 
@@ -41,6 +35,7 @@ const TOOLS: Record<
     handler: ToolHandler;
   }
 > = {
+  // ─── READ TOOLS ───────────────────────────────────────────────────────────────
   list_agents: {
     description: 'List all registered agents from the indexer.',
     args: [{ name: 'limit', type: 'number', description: 'Optional max count' }],
@@ -55,12 +50,12 @@ const TOOLS: Record<
     },
   },
   get_agent: {
-    description: 'Get a single agent by agentId.',
-    args: [{ name: 'agentId', type: 'string', required: true }],
+    description: 'Get a single agent by tokenId (ERC-8004 NFT ID).',
+    args: [{ name: 'tokenId', type: 'string', required: true }],
     kind: 'read',
     handler: async (args) => {
-      const id = String(args.agentId || '').trim();
-      if (!id) throw new Error('agentId required');
+      const id = String(args.tokenId || '').trim();
+      if (!id) throw new Error('tokenId required');
       const res = await fetch(new URL(`/api/indexer/agents/${encodeURIComponent(id)}`, BASE_URL), { cache: 'no-store' });
       if (!res.ok) throw new Error(`indexer ${res.status}`);
       return res.json();
@@ -69,7 +64,7 @@ const TOOLS: Record<
   list_jobs: {
     description: 'List jobs from the indexer. Supports status filter.',
     args: [
-      { name: 'status', type: 'string', description: 'open | funded | submitted | settled' },
+      { name: 'status', type: 'string', description: 'created | funded | submitted | completed' },
       { name: 'limit', type: 'number' },
     ],
     kind: 'read',
@@ -96,7 +91,7 @@ const TOOLS: Record<
     },
   },
   protocol_overview: {
-    description: 'Aggregate totals from indexer: agents, jobs, proofs, volume.',
+    description: 'Aggregate totals from indexer: agents, jobs, volume.',
     args: [],
     kind: 'read',
     handler: async () => {
@@ -104,29 +99,23 @@ const TOOLS: Record<
       return res.json();
     },
   },
+
+  // ─── TX INSTRUCTION TOOLS (ERC-8004: Agent Registration) ──────────────────────
   register_agent_calldata: {
     description:
-      'Build calldata for AgentRegistry.registerAgent(). Returns tx instructions; the caller signs and sends with their own wallet.',
+      'Build calldata for ERC-8004 IdentityRegistry.register(metadataURI). Mints an agent NFT. Returns tx instructions; the caller signs and sends.',
     args: [
-      { name: 'name', type: 'string', required: true, description: 'Agent display name (used to derive agentId).' },
-      { name: 'skill', type: 'string', required: true, description: 'Primary skill label (used to derive skillHash).' },
-      { name: 'metadataURI', type: 'string', required: true, description: 'Public manifest URL (HTTPS preferred).' },
+      { name: 'metadataURI', type: 'string', required: true, description: 'Public agent manifest URL (HTTPS or IPFS).' },
     ],
     kind: 'tx_instruction',
     handler: async (args) => {
-      const name = String(args.name || '').trim();
-      const skill = String(args.skill || '').trim();
       const metadataURI = String(args.metadataURI || '').trim();
-      if (!name || !skill || !metadataURI) throw new Error('name, skill, metadataURI required');
-
-      const agentIdHash = keccak256(stringToHex(name.toLowerCase()));
-      const agentId = BigInt(agentIdHash);
-      const skillHash = keccak256(stringToHex(skill));
+      if (!metadataURI) throw new Error('metadataURI required');
 
       const data = encodeFunctionData({
         abi: AGENT_REGISTRY_ABI as any,
-        functionName: 'registerAgent',
-        args: [agentId, skillHash, metadataURI],
+        functionName: 'register',
+        args: [metadataURI],
       });
 
       return {
@@ -135,55 +124,51 @@ const TOOLS: Record<
         data,
         value: '0x0',
         derived: {
-          agentId: agentId.toString(),
-          agentIdHex: toHex(agentId),
-          skillHash,
+          note: 'tokenId is emitted in the Transfer(from=0x0, to, tokenId) event in the tx receipt.',
         },
         signing: {
           how: 'Send this transaction from your controller wallet on Arc Testnet (chainId 5042002).',
-          rpc: 'https://rpc.drpc.testnet.arc.network',
-          gasHint: '~250000',
+          rpc: ARC_RPC,
+          gasHint: '~200000',
         },
         notes: [
-          'agentId is keccak256(lowercase(name)) cast to uint256.',
-          'skillHash is keccak256(skill).',
-          'metadataURI should be a public manifest (e.g. /.well-known/arclayer-agent.json).',
+          'ERC-8004 IdentityRegistry — register(string metadataURI) mints a new agent NFT.',
+          'The tokenId is derived from the Transfer event (from=address(0)).',
+          'metadataURI should point to a public agent manifest (e.g. /.well-known/agent.json).',
           'ArcLayer never holds your private key. Sign + broadcast yourself.',
         ],
       };
     },
   },
+
+  // ─── TX INSTRUCTION TOOLS (ERC-8183: Job Lifecycle) ───────────────────────────
   create_job_calldata: {
     description:
-      'Build calldata for JobEscrow.createJob(). Returns tx instructions; the caller signs and sends. Worker MUST be different from the connected wallet (msg.sender).',
+      'Build calldata for ERC-8183 AgenticCommerce.createJob(provider, evaluator, expiredAt, description, hook). Returns tx instructions.',
     args: [
-      { name: 'agentId', type: 'string', required: true, description: 'Target agent (uint256).' },
-      { name: 'worker', type: 'string', required: true, description: 'Worker wallet address (must != client/msg.sender).' },
-      { name: 'evaluator', type: 'string', required: true, description: 'Evaluator wallet (UI label: "Client Address").' },
-      { name: 'jobSpec', type: 'string', required: true, description: 'Plain task spec; hashed into jobSpecHash.' },
+      { name: 'provider', type: 'string', required: true, description: 'Provider/worker wallet address.' },
+      { name: 'evaluator', type: 'string', required: true, description: 'Evaluator wallet address.' },
+      { name: 'expiredAt', type: 'string', required: true, description: 'Unix timestamp when job expires.' },
+      { name: 'description', type: 'string', required: true, description: 'Job description string.' },
+      { name: 'hook', type: 'string', description: 'Optional hook contract address (default: 0x0).' },
     ],
     kind: 'tx_instruction',
     handler: async (args) => {
-      const agentIdRaw = String(args.agentId || '').trim();
-      const worker = String(args.worker || '').trim();
+      const provider = String(args.provider || '').trim();
       const evaluator = String(args.evaluator || '').trim();
-      const jobSpec = String(args.jobSpec || '').trim();
-      if (!agentIdRaw || !worker || !evaluator || !jobSpec) {
-        throw new Error('agentId, worker, evaluator, jobSpec required');
+      const expiredAt = String(args.expiredAt || '').trim();
+      const description = String(args.description || '').trim();
+      const hook = String(args.hook || '0x0000000000000000000000000000000000000000').trim();
+      if (!provider || !evaluator || !expiredAt || !description) {
+        throw new Error('provider, evaluator, expiredAt, description required');
       }
-      if (!/^0x[a-fA-F0-9]{40}$/.test(worker)) throw new Error('worker is not a valid address');
+      if (!/^0x[a-fA-F0-9]{40}$/.test(provider)) throw new Error('provider is not a valid address');
       if (!/^0x[a-fA-F0-9]{40}$/.test(evaluator)) throw new Error('evaluator is not a valid address');
-      if (worker.toLowerCase() === evaluator.toLowerCase()) {
-        // not a contract revert but a UX foot-gun; flag but allow
-      }
-
-      const agentId = BigInt(agentIdRaw);
-      const jobSpecHash = keccak256(stringToHex(jobSpec));
 
       const data = encodeFunctionData({
         abi: JOB_ESCROW_ABI as any,
         functionName: 'createJob',
-        args: [agentId, worker as Hex, evaluator as Hex, jobSpecHash],
+        args: [provider as Hex, evaluator as Hex, BigInt(expiredAt), description, hook as Hex],
       });
 
       return {
@@ -191,39 +176,44 @@ const TOOLS: Record<
         to: CONTRACTS.JOB_ESCROW,
         data,
         value: '0x0',
-        derived: { agentId: agentId.toString(), jobSpecHash },
+        derived: {
+          note: 'jobId is emitted in the JobCreated event in the tx receipt.',
+        },
         signing: {
-          how: 'Send from the client wallet on Arc Testnet. After mining, call setBudget(jobId, amount) → USDC.approve(JobEscrow, amount) → fund(jobId, amount).',
-          rpc: 'https://rpc.drpc.testnet.arc.network',
+          how: 'Send from the client wallet on Arc Testnet.',
+          rpc: ARC_RPC,
           gasHint: '~300000',
         },
-        invariants: [
-          'createJob reverts if worker == msg.sender ("Worker is client").',
-          'You must follow with setBudget + USDC approve + fund before the worker can submit.',
+        lifecycle: [
+          '1. createJob → get jobId from JobCreated event',
+          '2. setBudget(jobId, amount)',
+          '3. USDC.approve(AgenticCommerce, amount)',
+          '4. fund(jobId, amount)',
+          '5. Provider calls submit(jobId, deliverableHash)',
+          '6. Evaluator calls complete(jobId)',
         ],
       };
     },
   },
   set_budget_calldata: {
     description:
-      'Build calldata for JobEscrow.setBudget(). Sets the USDC budget for a job. Must be called by the client before funding.',
+      'Build calldata for ERC-8183 AgenticCommerce.setBudget(jobId, amount, optParams). Sets the USDC budget for a job.',
     args: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'amount', type: 'string', required: true, description: 'Budget in USDC atomic units (6 decimals). E.g. "1000000" = 1 USDC.' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
     kind: 'tx_instruction',
     handler: async (args) => {
       const jobIdRaw = String(args.jobId || '').trim();
       const amountRaw = String(args.amount || '').trim();
+      const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
       if (!jobIdRaw || !amountRaw) throw new Error('jobId, amount required');
-
-      const jobId = BigInt(jobIdRaw);
-      const amount = BigInt(amountRaw);
 
       const data = encodeFunctionData({
         abi: JOB_ESCROW_ABI as any,
         functionName: 'setBudget',
-        args: [jobId, amount],
+        args: [BigInt(jobIdRaw), BigInt(amountRaw), optParams],
       });
 
       return {
@@ -231,10 +221,10 @@ const TOOLS: Record<
         to: CONTRACTS.JOB_ESCROW,
         data,
         value: '0x0',
-        derived: { jobId: jobId.toString(), budgetAtomic: amount.toString(), budgetUsdc: `${Number(amount) / 1e6} USDC` },
+        derived: { jobId: jobIdRaw, budgetAtomic: amountRaw, budgetUsdc: `${Number(amountRaw) / 1e6} USDC` },
         signing: {
           how: 'Send from the client wallet that created this job.',
-          rpc: 'https://rpc.drpc.testnet.arc.network',
+          rpc: ARC_RPC,
           gasHint: '~80000',
         },
       };
@@ -242,7 +232,7 @@ const TOOLS: Record<
   },
   approve_usdc_calldata: {
     description:
-      'Build calldata for USDC.approve(JobEscrow, amount). Must be called before fund() so the escrow can pull USDC.',
+      'Build calldata for USDC.approve(AgenticCommerce, amount). Must be called before fund().',
     args: [
       { name: 'amount', type: 'string', required: true, description: 'Amount in USDC atomic units (6 decimals).' },
     ],
@@ -251,12 +241,10 @@ const TOOLS: Record<
       const amountRaw = String(args.amount || '').trim();
       if (!amountRaw) throw new Error('amount required');
 
-      const amount = BigInt(amountRaw);
-
       const data = encodeFunctionData({
         abi: [{ name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] }] as any,
         functionName: 'approve',
-        args: [CONTRACTS.JOB_ESCROW as Hex, amount],
+        args: [CONTRACTS.JOB_ESCROW as Hex, BigInt(amountRaw)],
       });
 
       return {
@@ -264,10 +252,10 @@ const TOOLS: Record<
         to: CONTRACTS.USDC,
         data,
         value: '0x0',
-        derived: { spender: CONTRACTS.JOB_ESCROW, amountAtomic: amount.toString(), amountUsdc: `${Number(amount) / 1e6} USDC` },
+        derived: { spender: CONTRACTS.JOB_ESCROW, amountAtomic: amountRaw, amountUsdc: `${Number(amountRaw) / 1e6} USDC` },
         signing: {
-          how: 'Send from the client wallet that holds USDC. This approves JobEscrow to pull the specified amount.',
-          rpc: 'https://rpc.drpc.testnet.arc.network',
+          how: 'Send from the client wallet that holds USDC. This approves AgenticCommerce to pull the specified amount.',
+          rpc: ARC_RPC,
           gasHint: '~50000',
         },
       };
@@ -275,24 +263,21 @@ const TOOLS: Record<
   },
   fund_job_calldata: {
     description:
-      'Build calldata for JobEscrow.fund(jobId, amount). Pulls USDC from client into escrow. Requires prior USDC.approve().',
+      'Build calldata for ERC-8183 AgenticCommerce.fund(jobId, optParams). Pulls the previously set budget from client into escrow.',
     args: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
-      { name: 'amount', type: 'string', required: true, description: 'Amount in USDC atomic units (6 decimals).' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
     kind: 'tx_instruction',
     handler: async (args) => {
       const jobIdRaw = String(args.jobId || '').trim();
-      const amountRaw = String(args.amount || '').trim();
-      if (!jobIdRaw || !amountRaw) throw new Error('jobId, amount required');
-
-      const jobId = BigInt(jobIdRaw);
-      const amount = BigInt(amountRaw);
+      const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+      if (!jobIdRaw) throw new Error('jobId required');
 
       const data = encodeFunctionData({
         abi: JOB_ESCROW_ABI as any,
         functionName: 'fund',
-        args: [jobId, amount],
+        args: [BigInt(jobIdRaw), optParams],
       });
 
       return {
@@ -300,10 +285,10 @@ const TOOLS: Record<
         to: CONTRACTS.JOB_ESCROW,
         data,
         value: '0x0',
-        derived: { jobId: jobId.toString(), amountAtomic: amount.toString(), amountUsdc: `${Number(amount) / 1e6} USDC` },
+        derived: { jobId: jobIdRaw, fundingSource: 'current job budget', optParams },
         signing: {
-          how: 'Send from the client wallet. USDC.approve(JobEscrow, amount) must have been called first.',
-          rpc: 'https://rpc.drpc.testnet.arc.network',
+          how: 'Send from the client wallet. USDC.approve(AgenticCommerce, budget) must have been called first.',
+          rpc: ARC_RPC,
           gasHint: '~120000',
         },
         prerequisites: [
@@ -313,29 +298,25 @@ const TOOLS: Record<
       };
     },
   },
-  submit_deliverable_calldata: {
+  submit_job_calldata: {
     description:
-      'Build calldata for JobEscrow.submitDeliverable(). Called by the worker agent after completing the task.',
+      'Build calldata for ERC-8183 AgenticCommerce.submit(jobId, deliverableHash, optParams). Called by the provider after completing the task.',
     args: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
-      { name: 'deliverableURI', type: 'string', required: true, description: 'URI of the deliverable (IPFS or HTTPS).' },
-      { name: 'proofMetadataURI', type: 'string', required: true, description: 'URI of proof metadata (model, latency, tokens hash).' },
+      { name: 'deliverableHash', type: 'string', required: true, description: 'Keccak256 hash of the deliverable content.' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
     kind: 'tx_instruction',
     handler: async (args) => {
       const jobIdRaw = String(args.jobId || '').trim();
-      const deliverableURI = String(args.deliverableURI || '').trim();
-      const proofMetadataURI = String(args.proofMetadataURI || '').trim();
-      if (!jobIdRaw || !deliverableURI || !proofMetadataURI) {
-        throw new Error('jobId, deliverableURI, proofMetadataURI required');
-      }
-
-      const jobId = BigInt(jobIdRaw);
+      const deliverableHash = String(args.deliverableHash || '').trim();
+      const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+      if (!jobIdRaw || !deliverableHash) throw new Error('jobId, deliverableHash required');
 
       const data = encodeFunctionData({
         abi: JOB_ESCROW_ABI as any,
-        functionName: 'submitDeliverable',
-        args: [jobId, deliverableURI, proofMetadataURI],
+        functionName: 'submit',
+        args: [BigInt(jobIdRaw), deliverableHash as Hex, optParams],
       });
 
       return {
@@ -343,76 +324,56 @@ const TOOLS: Record<
         to: CONTRACTS.JOB_ESCROW,
         data,
         value: '0x0',
-        derived: { jobId: jobId.toString(), deliverableURI, proofMetadataURI },
+        derived: { jobId: jobIdRaw, deliverableHash },
         signing: {
-          how: 'Send from the worker wallet assigned to this job.',
-          rpc: 'https://rpc.drpc.testnet.arc.network',
+          how: 'Send from the provider wallet assigned to this job.',
+          rpc: ARC_RPC,
           gasHint: '~200000',
         },
         invariants: [
-          'Only the designated worker can submit.',
+          'Only the designated provider can submit.',
           'Job must be in funded state.',
         ],
       };
     },
   },
-  evaluate_job_calldata: {
+  complete_job_calldata: {
     description:
-      'Build calldata for JobEscrow.evaluate(jobId, approved). Called by the evaluator to approve or reject the deliverable.',
+      'Build calldata for ERC-8183 AgenticCommerce.complete(jobId, reason, optParams). Called by the evaluator to approve and settle the job. `reason` is a bytes32 (defaults to keccak256("approved")).',
     args: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
-      { name: 'approved', type: 'string', required: true, description: '"true" to approve, "false" to reject.' },
-    ],
-    kind: 'tx_instruction',
-    handler: async (args) => {
-      const jobIdRaw = String(args.jobId || '').trim();
-      const approvedRaw = String(args.approved || '').trim().toLowerCase();
-      if (!jobIdRaw || !approvedRaw) throw new Error('jobId, approved required');
-
-      const jobId = BigInt(jobIdRaw);
-      const approved = approvedRaw === 'true' || approvedRaw === '1';
-
-      const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
-        functionName: 'evaluate',
-        args: [jobId, approved],
-      });
-
-      return {
-        chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
-        data,
-        value: '0x0',
-        derived: { jobId: jobId.toString(), approved },
-        signing: {
-          how: 'Send from the evaluator wallet designated for this job.',
-          rpc: 'https://rpc.drpc.testnet.arc.network',
-          gasHint: '~100000',
-        },
-        invariants: [
-          'Only the evaluator can call evaluate.',
-          'Job must have a submitted deliverable.',
-        ],
-      };
-    },
-  },
-  settle_job_calldata: {
-    description:
-      'Build calldata for JobEscrow.settle(jobId). Settles the job: pays worker, takes fee, mints WorkProof NFT. Anyone can call after evaluation.',
-    args: [
-      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'reason', type: 'string', description: 'Reason string (will be keccak256-hashed) OR a 0x-prefixed 32-byte hash. Default keccak256("approved").' },
+      { name: 'reasonHash', type: 'string', description: 'Optional pre-computed bytes32 reason hash; takes precedence over `reason`.' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
     kind: 'tx_instruction',
     handler: async (args) => {
       const jobIdRaw = String(args.jobId || '').trim();
       if (!jobIdRaw) throw new Error('jobId required');
 
-      const jobId = BigInt(jobIdRaw);
+      const reasonHashRaw = String(args.reasonHash || '').trim();
+      const reasonRaw = String(args.reason || '').trim();
+      const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+
+      let resolvedReason: Hex;
+      if (reasonHashRaw) {
+        if (!/^0x[0-9a-fA-F]{64}$/.test(reasonHashRaw)) {
+          throw new Error('reasonHash must be 0x-prefixed 32-byte hex');
+        }
+        resolvedReason = reasonHashRaw as Hex;
+      } else if (reasonRaw) {
+        resolvedReason = (reasonRaw.startsWith('0x') && reasonRaw.length === 66
+          ? reasonRaw
+          : keccak256(toBytes(reasonRaw))) as Hex;
+      } else {
+        // Default = keccak256("approved")
+        resolvedReason = keccak256(toBytes('approved')) as Hex;
+      }
 
       const data = encodeFunctionData({
         abi: JOB_ESCROW_ABI as any,
-        functionName: 'settle',
-        args: [jobId],
+        functionName: 'complete',
+        args: [BigInt(jobIdRaw), resolvedReason, optParams],
       });
 
       return {
@@ -420,182 +381,167 @@ const TOOLS: Record<
         to: CONTRACTS.JOB_ESCROW,
         data,
         value: '0x0',
-        derived: { jobId: jobId.toString() },
+        derived: { jobId: jobIdRaw, reason: resolvedReason, optParams },
         signing: {
-          how: 'Anyone can call settle after the evaluator has approved. Sends USDC to worker + fee to protocol.',
-          rpc: 'https://rpc.drpc.testnet.arc.network',
-          gasHint: '~400000',
-        },
-        invariants: [
-          'Job must be evaluated (approved=true) before settle.',
-          'settle() mints a WorkProof NFT as receipt.',
-          'Gas is higher than other calls (~400k) — do not hardcode 300k.',
-        ],
-      };
-    },
-  },
-  refund_rejected_calldata: {
-    description:
-      'Build calldata for JobEscrow.refundRejected(jobId). Refunds full fundedAmount to client when evaluator rejected the deliverable. Use this when evaluate(jobId, false) was called instead of settle().',
-    args: [
-      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
-    ],
-    kind: 'tx_instruction',
-    handler: async (args) => {
-      const jobIdRaw = String(args.jobId || '').trim();
-      if (!jobIdRaw) throw new Error('jobId required');
-
-      const jobId = BigInt(jobIdRaw);
-
-      const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
-        functionName: 'refundRejected',
-        args: [jobId],
-      });
-
-      return {
-        chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
-        data,
-        value: '0x0',
-        derived: { jobId: jobId.toString() },
-        signing: {
-          how: 'Send from client OR evaluator wallet.',
-          rpc: 'https://rpc.drpc.testnet.arc.network',
+          how: 'Send from the evaluator wallet. Releases escrowed USDC to the provider.',
+          rpc: ARC_RPC,
           gasHint: '~150000',
         },
         invariants: [
-          'Job must be in Evaluated state with approved=false.',
-          'Refunds full fundedAmount back to client.',
-          'Use this instead of settle() when evaluate returned false.',
+          'Only the evaluator can call complete.',
+          'Job must have a submitted deliverable.',
+          'Releases escrowed USDC to provider upon completion.',
         ],
       };
     },
   },
-  cancel_job_calldata: {
+
+  // ─── ARC DOCS PROXY ───────────────────────────────────────────────────────────
+  arc_docs_search: {
     description:
-      'Build calldata for JobEscrow.cancelJob(jobId). Cancels a job before it is funded. Callable by client, worker, or owner.',
+      'Search Arc Network documentation. Proxies to the official Arc MCP server for doc retrieval.',
     args: [
-      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'query', type: 'string', required: true, description: 'Search query for Arc docs.' },
     ],
-    kind: 'tx_instruction',
+    kind: 'read',
     handler: async (args) => {
-      const jobIdRaw = String(args.jobId || '').trim();
-      if (!jobIdRaw) throw new Error('jobId required');
-
-      const jobId = BigInt(jobIdRaw);
-
-      const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
-        functionName: 'cancelJob',
-        args: [jobId],
-      });
-
+      const query = String(args.query || '').trim();
+      if (!query) throw new Error('query required');
+      // Proxy to official Arc docs — try llms.txt first
+      try {
+        const res = await fetch('https://developers.circle.com/llms.txt', { cache: 'no-store' });
+        const text = await res.text();
+        // Simple keyword search in llms.txt
+        const lines = text.split('\n');
+        const matches = lines.filter((l) => l.toLowerCase().includes(query.toLowerCase()));
+        return {
+          source: 'developers.circle.com/llms.txt',
+          query,
+          results: matches.slice(0, 20),
+          totalMatches: matches.length,
+          fullDocsUrl: 'https://docs.arc.io',
+          mcpServer: 'https://docs.arc.io/ai/mcp',
+        };
+      } catch (e: any) {
+        return { error: e.message, fallback: 'https://docs.arc.io' };
+      }
+    },
+  },
+  arc_network_info: {
+    description: 'Get Arc Network configuration: chain ID, RPC, contracts, explorer, faucet.',
+    args: [],
+    kind: 'read',
+    handler: async () => {
       return {
+        network: 'Arc Testnet',
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
-        data,
-        value: '0x0',
-        derived: { jobId: jobId.toString() },
-        signing: {
-          how: 'Send from client, worker, or contract owner.',
-          rpc: 'https://rpc.drpc.testnet.arc.network',
-          gasHint: '~80000',
+        rpc: ARC_RPC,
+        explorer: 'https://testnet.arcscan.app',
+        faucet: 'https://faucet.circle.com',
+        nativeGasToken: 'USDC (18 decimals)',
+        contracts: {
+          identityRegistry_ERC8004: CONTRACTS.AGENT_REGISTRY,
+          agenticCommerce_ERC8183: CONTRACTS.JOB_ESCROW,
+          usdc_ERC20: CONTRACTS.USDC,
+          eurc: ARC_TOKENS.EURC,
         },
-        invariants: [
-          'Only callable while job is in Created or Budgeted state (NOT after fund()).',
-          'After fund(), use refundRejected() flow instead.',
-        ],
+        cctpDomain: 26,
+        docs: {
+          main: 'https://docs.arc.io',
+          mcp: 'https://docs.arc.io/ai/mcp',
+          erc8004: 'https://docs.arc.io/arc/tutorials/register-your-first-ai-agent.md',
+          erc8183: 'https://docs.arc.io/arc/tutorials/create-your-first-erc-8183-job.md',
+          evmCompat: 'https://docs.arc.io/arc/references/evm-compatibility.md',
+        },
       };
     },
   },
 };
 
-function manifest() {
+// ─── MANIFEST ─────────────────────────────────────────────────────────────────
+function buildManifest() {
   return {
-    schema: 'arclayer.mcp/v1',
     name: 'ArcLayer MCP',
-    description: 'Read protocol state and build tx instructions. ArcLayer never auto-signs.',
-    base: BASE_URL,
-    network: { name: 'Arc Testnet', chainId: ARC_CHAIN_ID },
-    contracts: CONTRACTS,
-    invocation: {
-      get: `${BASE_URL}/api/mcp?tool=<tool>&arg1=value1`,
-      jsonRpc: { method: 'POST', body: { jsonrpc: '2.0', id: 1, method: '<tool>', params: { /* args */ } } },
-      simple: { method: 'POST', body: { tool: '<tool>', args: { /* args */ } } },
+    version: '2.0.0',
+    description:
+      'ArcLayer on-chain agent economy — Pure Arc Reference Mode. Uses official Circle ERC-8004 (IdentityRegistry) + ERC-8183 (AgenticCommerce) contracts on Arc Testnet.',
+    network: {
+      name: 'Arc Testnet',
+      chainId: ARC_CHAIN_ID,
+      rpc: ARC_RPC,
+      explorer: 'https://testnet.arcscan.app',
+      faucet: 'https://faucet.circle.com',
+    },
+    contracts: {
+      identityRegistry_ERC8004: CONTRACTS.AGENT_REGISTRY,
+      agenticCommerce_ERC8183: CONTRACTS.JOB_ESCROW,
+      usdc_ERC20: CONTRACTS.USDC,
+      eurc: ARC_TOKENS.EURC,
     },
     tools: Object.entries(TOOLS).map(([name, t]) => ({
       name,
-      kind: t.kind,
       description: t.description,
+      kind: t.kind,
       args: t.args,
     })),
+    docs: {
+      arc: 'https://docs.arc.io',
+      mcp: 'https://docs.arc.io/ai/mcp',
+      circle: 'https://developers.circle.com/llms.txt',
+    },
   };
 }
 
-function jsonRpcResult(id: unknown, result: unknown) {
-  return NextResponse.json({ jsonrpc: '2.0', id, result });
-}
-function jsonRpcError(id: unknown, code: number, message: string, status = 400) {
-  return NextResponse.json({ jsonrpc: '2.0', id, error: { code, message } }, { status });
-}
-
-async function invoke(tool: string, args: Record<string, unknown>) {
-  const t = TOOLS[tool];
-  if (!t) throw new Error(`unknown tool: ${tool}`);
-  return t.handler(args || {});
+// ─── HANDLER ──────────────────────────────────────────────────────────────────
+async function invokeTool(name: string, args: Record<string, unknown>) {
+  const tool = TOOLS[name];
+  if (!tool) {
+    return { error: `Unknown tool: ${name}. Available: ${Object.keys(TOOLS).join(', ')}` };
+  }
+  try {
+    const result = await tool.handler(args);
+    return { tool: name, kind: tool.kind, result };
+  } catch (e: any) {
+    return { tool: name, error: e.message || String(e) };
+  }
 }
 
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url);
-  const tool = url.searchParams.get('tool');
-  if (!tool) return NextResponse.json(manifest());
-  const args: Record<string, unknown> = {};
-  url.searchParams.forEach((v, k) => {
-    if (k === 'tool') return;
-    args[k] = /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v;
-  });
-  try {
-    const result = await invoke(tool, args);
-    return NextResponse.json({ ok: true, tool, result });
-  } catch (e) {
-    return NextResponse.json({ ok: false, tool, error: e instanceof Error ? e.message : 'error' }, { status: 400 });
+  const { searchParams } = new URL(req.url);
+  const toolName = searchParams.get('tool');
+
+  if (!toolName) {
+    return NextResponse.json(buildManifest());
   }
+
+  const args: Record<string, unknown> = {};
+  searchParams.forEach((v, k) => {
+    if (k !== 'tool') args[k] = v;
+  });
+
+  const out = await invokeTool(toolName, args);
+  return NextResponse.json(out);
 }
 
 export async function POST(req: NextRequest) {
-  let body: any = null;
+  let body: any;
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
-  }
-  if (!body || typeof body !== 'object') {
-    return NextResponse.json({ ok: false, error: 'body required' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
   // JSON-RPC 2.0 shape
-  if (body.jsonrpc === '2.0' && typeof body.method === 'string') {
-    try {
-      const result = await invoke(body.method, body.params || {});
-      return jsonRpcResult(body.id ?? null, result);
-    } catch (e) {
-      return jsonRpcError(body.id ?? null, -32000, e instanceof Error ? e.message : 'error');
-    }
+  if (body.method) {
+    const out = await invokeTool(body.method, body.params || {});
+    return NextResponse.json({ jsonrpc: '2.0', id: body.id ?? null, result: out });
   }
 
   // Simple shape
-  if (typeof body.tool === 'string') {
-    try {
-      const result = await invoke(body.tool, body.args || {});
-      return NextResponse.json({ ok: true, tool: body.tool, result });
-    } catch (e) {
-      return NextResponse.json(
-        { ok: false, tool: body.tool, error: e instanceof Error ? e.message : 'error' },
-        { status: 400 }
-      );
-    }
+  if (body.tool) {
+    const out = await invokeTool(body.tool, body.args || {});
+    return NextResponse.json(out);
   }
 
-  return NextResponse.json({ ok: false, error: 'expected { jsonrpc, method } or { tool, args }' }, { status: 400 });
+  return NextResponse.json({ error: 'Provide { tool, args } or { method, params }' }, { status: 400 });
 }

@@ -1,29 +1,70 @@
-import {
-  AGENT_REGISTRY_ABI,
-  CONTRACTS,
-  JOB_ESCROW_ABI,
-  REPUTATION_ORACLE_ABI,
-  WORK_PROOF_ABI,
-  publicClient,
-} from '@arclayer/sdk';
+/**
+ * indexer.ts — ArcLayer console indexer client.
+ *
+ * In Pure Arc reference mode the on-chain contracts (ERC-8004 + ERC-8183) do
+ * NOT expose the bespoke read functions the legacy ArcLayer custom contracts
+ * provided (`getAgent`, `getJobsByAgentId`, `WORK_PROOF`, `REPUTATION_ORACLE`,
+ * etc.). The indexer service is therefore the single source of truth for all
+ * derived/aggregated views. There is no on-chain RPC fallback — if the
+ * indexer is down, components must show a degraded state instead of trying
+ * to recompute aggregates client-side.
+ */
 
 export const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || '/api/indexer';
 
 export type IndexedJob = {
   id: string;
-  agentId: string;
   client: string;
-  worker: string;
+  provider: string;
   evaluator: string;
+  hook: string;
+  expiredAt: string;
+  description: string;
   budget: string;
   fundedAmount: string;
-  createdAt: string;
-  jobSpecHash: string;
-  deliverableURI: string;
-  proofMetadataURI: string;
-  approved: boolean;
+  createdAtBlock: string;
+  updatedAtBlock: string;
+  deliverable: string;
+  completionReason: string;
   status: number;
+  statusLabel: 'Created' | 'Budgeted' | 'Funded' | 'Submitted' | 'Completed';
+
+  // ── Legacy aliases (deprecated) — kept for in-flight UI components migrating
+  // to the official ERC-8183 schema. Populated by the fetch-time adapter
+  // `withLegacyJobAliases()`. New code should use the official fields above.
+  /** @deprecated Use `provider`. */
+  worker: string;
+  /** @deprecated No agent linkage in official ERC-8183 — use `provider` (agent address). */
+  agentId: string;
+  /** @deprecated Use `description`. */
+  jobSpecHash: string;
+  /** @deprecated Use `deliverable` (bytes32 hash). */
+  deliverableURI: string;
+  /** @deprecated No proof URI in official ERC-8183 reference flow. */
+  proofMetadataURI: string;
+  /** @deprecated Use `status === 4` and `completionReason`. */
+  approved: boolean;
+  /** @deprecated Use `createdAtBlock`. */
+  createdAt: string;
 };
+
+/**
+ * Fetch-time adapter — accepts a raw indexer job (official ERC-8183 fields)
+ * and decorates it with deprecated legacy aliases so legacy UI components
+ * compile during migration. Drop this once all consumers are migrated.
+ */
+export function withLegacyJobAliases(job: IndexedJob): IndexedJob {
+  return {
+    ...job,
+    worker: job.provider,
+    agentId: job.provider, // best-effort — official ERC-8183 has no agent linkage
+    jobSpecHash: job.description,
+    deliverableURI: job.deliverable,
+    proofMetadataURI: '',
+    approved: job.status === 4,
+    createdAt: job.createdAtBlock,
+  };
+}
 
 export type IndexedAgent = {
   agentId: string;
@@ -75,9 +116,10 @@ export type JobDetail = {
 };
 
 /**
- * Source tag for fallback-aware components. 'indexer' = served from cached
- * indexer service; 'rpc' = fetched directly from chain when indexer is down
- * or returned an error.
+ * Source tag retained for backwards-compat with components that branch on it.
+ * In Pure Arc reference mode the value is always 'indexer' because the RPC
+ * fallback path was removed (the official contracts don't expose the legacy
+ * aggregated views).
  */
 export type DataSource = 'indexer' | 'rpc';
 
@@ -111,23 +153,6 @@ export async function waitForIndexer<T>(
   throw new Error('Indexer refresh timed out.');
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RPC Fallback
-//
-// When the indexer is degraded (502 from the proxy, network timeout, or the
-// service returns 5xx), the detail pages should still render. These helpers
-// read the same data straight from contracts via the SDK's public client.
-//
-// Trade-offs vs indexer:
-//  • Slower: 1–6 RPC calls per page load (multicall amortizes most of it).
-//  • Lossy: only on-chain state, no off-chain enrichment (e.g. metadata URI
-//    resolution, autonomous-feed cross-references).
-//  • No event history: just current state.
-//
-// The wrapper functions try the indexer first, then fall back. The caller
-// gets a `source` tag so the UI can show a "degraded" banner.
-// ─────────────────────────────────────────────────────────────────────────────
-
 const INDEXER_HEALTH_PATH = '/health';
 
 /** Lightweight liveness check for the banner. Returns true if /health 200s. */
@@ -145,220 +170,12 @@ export async function pingIndexer(timeoutMs = 4000): Promise<boolean> {
   }
 }
 
-type AgentTuple = {
-  agentId: bigint;
-  skillHash: `0x${string}`;
-  metadataURI: string;
-  controller: `0x${string}`;
-  registeredAt: bigint;
-  reputationScore: bigint;
-  exists: boolean;
-};
-
-type JobTuple = readonly [
-  bigint,        // id
-  bigint,        // agentId
-  `0x${string}`, // client
-  `0x${string}`, // worker
-  `0x${string}`, // evaluator
-  bigint,        // budget
-  bigint,        // fundedAmount
-  bigint,        // createdAt
-  `0x${string}`, // jobSpecHash
-  string,        // deliverableURI
-  string,        // proofMetadataURI
-  boolean,       // approved
-  number,        // status
-];
-
-type ProofTuple = {
-  jobId: bigint;
-  agentId: bigint;
-  payer: `0x${string}`;
-  amountPaid: bigint;
-  mintedAt: bigint;
-  metadataURI: string;
-};
-
-function normalizeJob(t: JobTuple): IndexedJob {
-  return {
-    id: t[0].toString(),
-    agentId: t[1].toString(),
-    client: t[2],
-    worker: t[3],
-    evaluator: t[4],
-    budget: t[5].toString(),
-    fundedAmount: t[6].toString(),
-    createdAt: t[7].toString(),
-    jobSpecHash: t[8],
-    deliverableURI: t[9],
-    proofMetadataURI: t[10],
-    approved: t[11],
-    status: t[12],
-  };
-}
-
-function normalizeProof(tokenId: bigint, p: ProofTuple): IndexedProof {
-  return {
-    tokenId: tokenId.toString(),
-    jobId: p.jobId.toString(),
-    agentId: p.agentId.toString(),
-    payer: p.payer,
-    amountPaid: p.amountPaid.toString(),
-    mintedAt: p.mintedAt.toString(),
-    metadataURI: p.metadataURI,
-  };
-}
-
-async function fetchAgentDetailRpc(agentId: string): Promise<AgentDetail> {
-  const idBig = BigInt(agentId);
-
-  // 1) Agent profile + job IDs + proof token IDs + reputation score.
-  const [agent, jobIds, proofTokenIds, score] = await Promise.all([
-    publicClient.readContract({
-      address: CONTRACTS.AGENT_REGISTRY,
-      abi: AGENT_REGISTRY_ABI,
-      functionName: 'getAgent',
-      args: [idBig],
-    }) as Promise<AgentTuple>,
-    publicClient.readContract({
-      address: CONTRACTS.JOB_ESCROW,
-      abi: JOB_ESCROW_ABI,
-      functionName: 'getJobsByAgentId',
-      args: [idBig],
-    }) as Promise<readonly bigint[]>,
-    publicClient.readContract({
-      address: CONTRACTS.WORK_PROOF,
-      abi: WORK_PROOF_ABI,
-      functionName: 'getProofsByAgent',
-      args: [idBig],
-    }) as Promise<readonly bigint[]>,
-    publicClient
-      .readContract({
-        address: CONTRACTS.REPUTATION_ORACLE,
-        abi: REPUTATION_ORACLE_ABI,
-        functionName: 'getScore',
-        args: [idBig],
-      })
-      .catch(() => BigInt(0)) as Promise<bigint>,
-  ]);
-
-  if (!agent.exists) {
-    throw new Error('Agent not found.');
-  }
-
-  // 2) Hydrate jobs and proofs in parallel. Each is a single eth_call;
-  // viem will batch them automatically when the RPC supports multicall.
-  const [jobs, proofs] = await Promise.all([
-    Promise.all(
-      jobIds.map((jid) =>
-        publicClient
-          .readContract({
-            address: CONTRACTS.JOB_ESCROW,
-            abi: JOB_ESCROW_ABI,
-            functionName: 'jobs',
-            args: [jid],
-          })
-          .then((tuple) => normalizeJob(tuple as JobTuple)),
-      ),
-    ),
-    Promise.all(
-      proofTokenIds.map((tid) =>
-        publicClient
-          .readContract({
-            address: CONTRACTS.WORK_PROOF,
-            abi: WORK_PROOF_ABI,
-            functionName: 'getProof',
-            args: [tid],
-          })
-          .then((p) => normalizeProof(tid, p as ProofTuple)),
-      ),
-    ),
-  ]);
-
-  const indexedAgent: IndexedAgent = {
-    agentId: agent.agentId.toString(),
-    controller: agent.controller,
-    skillHash: agent.skillHash,
-    metadataURI: agent.metadataURI,
-    registeredAt: agent.registeredAt.toString(),
-    reputationScore: agent.reputationScore.toString(),
-    score: score.toString(),
-    jobs: jobIds.map((j) => j.toString()),
-    proofTokenIds: proofTokenIds.map((p) => p.toString()),
-  };
-
-  return { agent: indexedAgent, jobs, proofs };
-}
-
-async function fetchJobDetailRpc(jobId: string): Promise<JobDetail> {
-  const idBig = BigInt(jobId);
-
-  const [jobTuple, proofTokenId] = await Promise.all([
-    publicClient.readContract({
-      address: CONTRACTS.JOB_ESCROW,
-      abi: JOB_ESCROW_ABI,
-      functionName: 'jobs',
-      args: [idBig],
-    }) as Promise<JobTuple>,
-    publicClient.readContract({
-      address: CONTRACTS.WORK_PROOF,
-      abi: WORK_PROOF_ABI,
-      functionName: 'proofTokenByJobId',
-      args: [idBig],
-    }) as Promise<bigint>,
-  ]);
-
-  // jobs(id) on a non-existent ID returns the zero tuple; the .id field is 0.
-  if (jobTuple[0] === BigInt(0) && jobTuple[2] === '0x0000000000000000000000000000000000000000') {
-    throw new Error('Job not found.');
-  }
-
-  const job = normalizeJob(jobTuple);
-
-  let proof: IndexedProof | null = null;
-  if (proofTokenId !== BigInt(0)) {
-    const p = (await publicClient.readContract({
-      address: CONTRACTS.WORK_PROOF,
-      abi: WORK_PROOF_ABI,
-      functionName: 'getProof',
-      args: [proofTokenId],
-    })) as ProofTuple;
-    proof = normalizeProof(proofTokenId, p);
-  }
-
-  return { job, proof };
-}
-
-/**
- * Try the indexer first. Fall back to direct RPC reads on failure. Returns the
- * payload alongside a `source` tag so the caller can flag degraded data in UI.
- *
- * Distinguishes "not found" (404 from indexer or zero tuple from chain) from
- * "indexer down" (502 / network error) — only the latter triggers fallback.
- * 404 is rethrown so the page can render its empty state.
- */
 export async function loadAgentDetail(agentId: string): Promise<Sourced<AgentDetail>> {
-  try {
-    const data = await fetchIndexerJson<AgentDetail>(`/agents/${agentId}`);
-    return { data, source: 'indexer' };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : '';
-    if (msg.includes('not found')) throw err;
-    // Indexer is degraded — fall back to chain.
-    const data = await fetchAgentDetailRpc(agentId);
-    return { data, source: 'rpc' };
-  }
+  const data = await fetchIndexerJson<AgentDetail>(`/agents/${agentId}`);
+  return { data, source: 'indexer' };
 }
 
 export async function loadJobDetail(jobId: string): Promise<Sourced<JobDetail>> {
-  try {
-    const data = await fetchIndexerJson<JobDetail>(`/jobs/${jobId}`);
-    return { data, source: 'indexer' };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : '';
-    if (msg.includes('not found')) throw err;
-    const data = await fetchJobDetailRpc(jobId);
-    return { data, source: 'rpc' };
-  }
+  const data = await fetchIndexerJson<JobDetail>(`/jobs/${jobId}`);
+  return { data, source: 'indexer' };
 }

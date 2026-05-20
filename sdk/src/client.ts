@@ -1,231 +1,102 @@
 import type { Address } from "viem";
-import { agentRegistry, jobEscrow, milestoneEscrow, reputationOracle, workProof } from "./chain";
-import type {
-  AgentRecordTuple,
-  JobTuple,
-  MilestoneTuple,
-  ProjectTuple,
-  WorkProofTuple,
-} from "./types";
+import { erc8004IdentityRegistry, erc8183AgenticCommerce } from "./chain";
 
-export function projectFromTuple(project: ProjectTuple) {
+export type ArcAgentRecord = {
+  agentId: bigint;
+  tokenId: bigint;
+  controller: Address;
+  metadataURI: string;
+  exists: boolean;
+};
+
+export type ArcJobRecord = {
+  id: bigint;
+  client: Address;
+  provider: Address;
+  evaluator: Address;
+  description: string;
+  budget: bigint;
+  expiredAt: bigint;
+  status: number;
+  hook: Address;
+};
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
+
+/**
+ * Read official ERC-8004 identity token.
+ * ERC-8004 is ERC-721-like: ownerOf(tokenId), tokenURI(tokenId).
+ */
+export async function readAgent(agentId: bigint): Promise<ArcAgentRecord> {
+  const [controller, metadataURI] = await Promise.all([
+    erc8004IdentityRegistry.read.ownerOf([agentId]),
+    erc8004IdentityRegistry.read.tokenURI([agentId]),
+  ]);
+
   return {
-    id: project[0],
-    freelancer: project[1],
-    client: project[2],
-    totalAmount: project[3],
-    releasedAmount: project[4],
-    createdAt: project[5],
-    milestoneCount: Number(project[6]),
-    title: project[7],
-    description: project[8],
-    status: project[9],
+    agentId,
+    tokenId: agentId,
+    controller,
+    metadataURI,
+    exists: true,
   };
-}
-
-export function milestoneFromTuple(milestone: MilestoneTuple) {
-  return {
-    id: milestone[0],
-    projectId: milestone[1],
-    amount: milestone[2],
-    submittedAt: milestone[3],
-    releasedAt: milestone[4],
-    title: milestone[5],
-    deliverableURI: milestone[6],
-    status: milestone[7],
-  };
-}
-
-export function agentFromTuple(agent: AgentRecordTuple) {
-  return {
-    agentId: agent[0],
-    skillHash: agent[1],
-    metadataURI: agent[2],
-    controller: agent[3],
-    registeredAt: agent[4],
-    reputationScore: agent[5],
-    exists: agent[6],
-  };
-}
-
-export function agentFromRecord(
-  agent: {
-    agentId: bigint;
-    skillHash: `0x${string}`;
-    metadataURI: string;
-    controller: Address;
-    registeredAt: bigint;
-    reputationScore: bigint;
-    exists: boolean;
-  }
-) {
-  return {
-    agentId: agent.agentId,
-    skillHash: agent.skillHash,
-    metadataURI: agent.metadataURI,
-    controller: agent.controller,
-    registeredAt: agent.registeredAt,
-    reputationScore: agent.reputationScore,
-    exists: agent.exists,
-  };
-}
-
-export function jobFromTuple(job: JobTuple) {
-  return {
-    id: job[0],
-    agentId: job[1],
-    client: job[2],
-    worker: job[3],
-    evaluator: job[4],
-    budget: job[5],
-    fundedAmount: job[6],
-    createdAt: job[7],
-    jobSpecHash: job[8],
-    deliverableURI: job[9],
-    proofMetadataURI: job[10],
-    approved: job[11],
-    status: job[12],
-  };
-}
-
-export function jobFromRecord(
-  job: {
-    id: bigint;
-    agentId: bigint;
-    client: Address;
-    worker: Address;
-    evaluator: Address;
-    budget: bigint;
-    fundedAmount: bigint;
-    createdAt: bigint;
-    jobSpecHash: `0x${string}`;
-    deliverableURI: string;
-    proofMetadataURI: string;
-    approved: boolean;
-    status: number;
-  }
-) {
-  return {
-    id: job.id,
-    agentId: job.agentId,
-    client: job.client,
-    worker: job.worker,
-    evaluator: job.evaluator,
-    budget: job.budget,
-    fundedAmount: job.fundedAmount,
-    createdAt: job.createdAt,
-    jobSpecHash: job.jobSpecHash,
-    deliverableURI: job.deliverableURI,
-    proofMetadataURI: job.proofMetadataURI,
-    approved: job.approved,
-    status: job.status,
-  };
-}
-
-export function workProofFromTuple(proof: WorkProofTuple) {
-  return {
-    jobId: proof[0],
-    agentId: proof[1],
-    payer: proof[2],
-    amountPaid: proof[3],
-    mintedAt: proof[4],
-    metadataURI: proof[5],
-  };
-}
-
-export function workProofFromRecord(
-  proof: {
-    jobId: bigint;
-    agentId: bigint;
-    payer: Address;
-    amountPaid: bigint;
-    mintedAt: bigint;
-    metadataURI: string;
-  }
-) {
-  return {
-    jobId: proof.jobId,
-    agentId: proof.agentId,
-    payer: proof.payer,
-    amountPaid: proof.amountPaid,
-    mintedAt: proof.mintedAt,
-    metadataURI: proof.metadataURI,
-  };
-}
-
-export async function readProject(projectId: bigint) {
-  const project = await milestoneEscrow.read.projects([projectId]);
-  return projectFromTuple(project as ProjectTuple);
-}
-
-export async function readProjectMilestones(projectId: bigint, milestoneCount: number) {
-  const reads = Array.from({ length: milestoneCount }, (_, milestoneId) =>
-    milestoneEscrow.read.milestones([projectId, BigInt(milestoneId)])
-  );
-  const milestones = await Promise.all(reads);
-  return milestones.map((milestone) => milestoneFromTuple(milestone as MilestoneTuple));
-}
-
-export async function readUserProjects(user: Address) {
-  return milestoneEscrow.read.getUserProjects([user]);
-}
-
-export async function readAgent(agentId: bigint) {
-  const agent = await agentRegistry.read.getAgent([agentId]);
-  if (agent && typeof agent === "object" && "agentId" in agent) {
-    return agentFromRecord(
-      agent as unknown as {
-        agentId: bigint;
-        skillHash: `0x${string}`;
-        metadataURI: string;
-        controller: Address;
-        registeredAt: bigint;
-        reputationScore: bigint;
-        exists: boolean;
-      }
-    );
-  }
-  return agentFromTuple(agent as unknown as AgentRecordTuple);
 }
 
 export async function agentExists(agentId: bigint) {
-  return agentRegistry.read.exists([agentId]);
-}
-
-export async function readJob(jobId: bigint) {
-  const job = await jobEscrow.read.jobs([jobId]);
-  if (job && typeof job === "object" && "id" in job) {
-    return jobFromRecord(
-      job as unknown as {
-        id: bigint;
-        agentId: bigint;
-        client: Address;
-        worker: Address;
-        evaluator: Address;
-        budget: bigint;
-        fundedAmount: bigint;
-        createdAt: bigint;
-        jobSpecHash: `0x${string}`;
-        deliverableURI: string;
-        proofMetadataURI: string;
-        approved: boolean;
-        status: number;
-      }
-    );
+  try {
+    await erc8004IdentityRegistry.read.ownerOf([agentId]);
+    return true;
+  } catch {
+    return false;
   }
-  return jobFromTuple(job as unknown as JobTuple);
 }
 
+/** Read official ERC-8183 job by ID. */
+export async function readJob(jobId: bigint): Promise<ArcJobRecord> {
+  const job = await erc8183AgenticCommerce.read.getJob([jobId]);
+
+  if (Array.isArray(job)) {
+    return {
+      id: job[0],
+      client: job[1],
+      provider: job[2],
+      evaluator: job[3],
+      description: job[4],
+      budget: job[5],
+      expiredAt: job[6],
+      status: Number(job[7]),
+      hook: job[8],
+    };
+  }
+
+  const record = job as unknown as ArcJobRecord;
+  return {
+    id: record.id,
+    client: record.client,
+    provider: record.provider,
+    evaluator: record.evaluator,
+    description: record.description,
+    budget: record.budget,
+    expiredAt: record.expiredAt,
+    status: Number(record.status),
+    hook: record.hook,
+  };
+}
+
+/**
+ * ERC-8183 reference contract does not expose jobCounter/getUserJobs helpers.
+ * Use the indexer for lists.
+ */
 export async function readJobCounter() {
-  return jobEscrow.read.jobCounter();
+  throw new Error("ERC-8183 does not expose jobCounter; use the ArcLayer indexer");
 }
 
-export async function readUserJobs(user: Address) {
-  return jobEscrow.read.getUserJobs([user]);
+export async function readUserJobs(_user: Address) {
+  return [] as bigint[];
 }
 
-export async function readJobsByAgentId(agentId: bigint) {
-  return jobEscrow.read.getJobsByAgentId([agentId]);
+export async function readJobsByAgentId(_agentId: bigint) {
+  return [] as bigint[];
 }
 
 export async function readAgentJobs(agentId: bigint) {
@@ -234,44 +105,25 @@ export async function readAgentJobs(agentId: bigint) {
 }
 
 export async function readAllJobs() {
-  const jobCounter = await readJobCounter();
-  const jobIds = Array.from({ length: Number(jobCounter) }, (_, index) => BigInt(index + 1));
-  return Promise.all(jobIds.map((jobId) => readJob(jobId)));
+  return [] as ArcJobRecord[];
 }
 
-export async function readWorkProofTokenByJobId(jobId: bigint) {
-  return workProof.read.proofTokenByJobId([jobId]);
+/** Official Arc/Circle reference mode has no ArcLayer WorkProof contract. */
+export async function readWorkProofTokenByJobId(_jobId: bigint) {
+  return BigInt(0);
 }
 
-export async function readWorkProof(tokenId: bigint) {
-  const proof = await workProof.read.getProof([tokenId]);
-  if (proof && typeof proof === "object" && "jobId" in proof) {
-    return workProofFromRecord(
-      proof as unknown as {
-        jobId: bigint;
-        agentId: bigint;
-        payer: Address;
-        amountPaid: bigint;
-        mintedAt: bigint;
-        metadataURI: string;
-      }
-    );
-  }
-
-  return workProofFromTuple(proof as unknown as WorkProofTuple);
+export async function readWorkProof(_tokenId: bigint) {
+  return null;
 }
 
-export async function readWorkProofsByAgent(agentId: bigint) {
-  const tokenIds = await workProof.read.getProofsByAgent([agentId]);
-  const proofs = await Promise.all(tokenIds.map((tokenId) => readWorkProof(tokenId)));
-  return {
-    tokenIds,
-    proofs,
-  };
+export async function readWorkProofsByAgent(_agentId: bigint) {
+  return { tokenIds: [] as bigint[], proofs: [] as null[] };
 }
 
-export async function readReputationScore(agentId: bigint) {
-  return reputationOracle.read.getScore([agentId]);
+/** Official Arc/Circle reference mode has no ArcLayer ReputationOracle contract. */
+export async function readReputationScore(_agentId: bigint) {
+  return BigInt(0);
 }
 
 export async function readAgentProfile(agentId: bigint) {
@@ -290,3 +142,20 @@ export async function readAgentProfile(agentId: bigint) {
     proofs: proofBundle.proofs,
   };
 }
+
+/** @deprecated MilestoneEscrow is disabled in official Arc/Circle reference mode. */
+export async function readProject(_projectId: bigint) {
+  throw new Error("MilestoneEscrow is disabled in official Arc/Circle reference mode");
+}
+
+/** @deprecated MilestoneEscrow is disabled in official Arc/Circle reference mode. */
+export async function readProjectMilestones(_projectId: bigint, _milestoneCount: number) {
+  return [];
+}
+
+/** @deprecated MilestoneEscrow is disabled in official Arc/Circle reference mode. */
+export async function readUserProjects(_user: Address) {
+  return [] as bigint[];
+}
+
+

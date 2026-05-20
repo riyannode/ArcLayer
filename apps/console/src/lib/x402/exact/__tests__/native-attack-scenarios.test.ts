@@ -106,7 +106,7 @@ describe('Arc Native x402 attack scenarios', () => {
 
   it('rejects wrong asset before signature verification', () => {
     const body = deepClone(makeBody());
-    body.paymentRequirements.asset = OTHER;
+    body.paymentRequirements.asset = OTHER as typeof USDC_ADDRESS;
 
     const parsed = parseExactVerifyRequest(body);
 

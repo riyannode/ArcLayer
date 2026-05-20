@@ -106,7 +106,7 @@ function buildTypeScript(mode: LLMConnectMode) {
     `const REGISTRY = (process.env.AGENT_REGISTRY ?? '${registry}') as \`0x\$\{string\}\`;`,
     'const PRIVATE_KEY = process.env.PRIVATE_KEY as `0x${string}`;',
     '',
-    "const arcTestnet = { id: 5042002, name: 'Arc Testnet', nativeCurrency: { name: 'ARC', symbol: 'ARC', decimals: 18 }, rpcUrls: { default: { http: [RPC] } } } as const;",
+    "const arcTestnet = { id: 5042002, name: 'Arc Testnet', nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 18 }, rpcUrls: { default: { http: [RPC] } } } as const;",
     "const abi = [{ type: 'function', name: 'registerAgent', stateMutability: 'nonpayable', inputs: [{ name: 'agentId', type: 'bytes32' }, { name: 'skillHash', type: 'bytes32' }, { name: 'metadataURI', type: 'string' }], outputs: [] }] as const;",
     '',
     'export async function discoverAgents() {',

@@ -520,7 +520,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
               if (err.code === 4902 || /Unrecognized chain|Chain.*not configured/i.test(err.message ?? '')) {
                 const eth = (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
                 if (!eth) throw new Error('No injected wallet found');
-                await eth.request({ method: 'wallet_addEthereumChain', params: [{ chainId: `0x${id.toString(16)}`, chainName: 'Arc Testnet', nativeCurrency: { name: 'Arc', symbol: 'ARC', decimals: 18 }, rpcUrls: [ARC_RPC], blockExplorerUrls: ['https://testnet.arcscan.app'] }] });
+                await eth.request({ method: 'wallet_addEthereumChain', params: [{ chainId: `0x${id.toString(16)}`, chainName: 'Arc Testnet', nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 18 }, rpcUrls: [ARC_RPC], blockExplorerUrls: ['https://testnet.arcscan.app'] }] });
                 return;
               }
               throw e;

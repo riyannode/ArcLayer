@@ -4,6 +4,18 @@ export const ARC_CHAIN_ID = 5042002;
 export const ARC_EXPLORER = "https://testnet.arcscan.app";
 
 /**
+ * Canonical RPC endpoints for Arc Testnet.
+ * Primary: rpc.testnet.arc.network (Circle canonical)
+ * Fallbacks: dRPC, QuickNode, Blockdaemon
+ */
+export const ARC_RPC_URLS = [
+  "https://rpc.testnet.arc.network",
+  "https://rpc.drpc.testnet.arc.network",
+  "https://rpc.quicknode.testnet.arc.network",
+  "https://rpc.blockdaemon.testnet.arc.network",
+] as const;
+
+/**
  * USDC decimal model on Arc.
  *
  * Arc uses USDC as native gas token with TWO interfaces:
@@ -11,49 +23,74 @@ export const ARC_EXPLORER = "https://testnet.arcscan.app";
  * - ERC-20 (token contract 0x3600...): 6 decimals — used by transfer/approve/escrow/x402.
  *
  * NEVER mix raw values from the two interfaces without converting.
- * Ref: https://docs.arc.io — "Dual decimal USDC"
+ * Ref: https://docs.arc.io/arc/references/gas-and-fees.md
  */
 export const ARC_NATIVE_USDC_DECIMALS = 18;
 export const ARC_ERC20_USDC_DECIMALS = 6;
 
 /**
- * Official Arc reference contracts from docs.arc.io.
- *
- * These are the canonical ERC-8004 / ERC-8183 reference implementations
- * deployed by Circle on Arc Testnet. They are separate from ArcLayer's own
- * protocol contracts (CONTRACTS below).
- *
- * Use these when interacting with the official Arc agentic economy flows.
- * Do NOT replace ArcLayer's AGENT_REGISTRY / JOB_ESCROW with these.
+ * CCTP (Cross-Chain Transfer Protocol) domain for Arc.
+ * Used for bridging USDC via Circle's CCTP / App Kit.
+ * Ref: https://docs.arc.io/arc/references/contract-addresses.md
  */
-export const ARC_REFERENCE_CONTRACTS = {
-  /** ERC-8004 IdentityRegistry — register(string metadataURI) */
-  ERC8004_IDENTITY_REGISTRY: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
-  /** ERC-8183 AgenticCommerce — createJob/setBudget/fund/submit/complete */
-  ERC8183_AGENTIC_COMMERCE: "0x0747EEf0706327138c69792bF28Cd525089e4583",
-} as const;
+export const ARC_CCTP_DOMAIN = 26;
 
-export const CONTRACTS = {
+/**
+ * Token addresses on Arc Testnet.
+ */
+export const ARC_TOKENS = {
+  /** USDC ERC-20 — 6 decimals, used for approve/transfer/escrow */
   USDC: "0x3600000000000000000000000000000000000000",
-  ACHIEVEMENT: "0x7245B200ce09B515bd235f1eD262c2abb0890165",
-  INVOICE: "0x1Eb2Ed241Cb978f4BF02DA68E128D50AD7A53Fbf",
-  SUBSCRIPTION: "0x01028Ca35bE5c3dcE85F661C6528138bc3Ad9Fc1",
-  MILESTONE_ESCROW: "0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2",
-  AGENT_REGISTRY: "0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21",
-  JOB_ESCROW: "0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225",
-  WORK_PROOF: "0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5",
-  REPUTATION_ORACLE: "0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c",
+  /** EURC ERC-20 — Euro stablecoin on Arc */
+  EURC: "0x08210F9170F89Ab7658F0B5E3fF39b0E03C594D4",
 } as const;
 
 /**
- * A2A (Agent-to-Agent) stack — separate registry track from core CONTRACTS.
+ * Official Arc reference contracts deployed by Circle on Arc Testnet.
  *
- * CONTRACTS.AGENT_REGISTRY is the core registry used by JobEscrow / WorkProof /
- * ReputationOracle and the indexer. Do NOT confuse it with A2A_AGENT_REGISTRY:
- * the A2A stack is its own protocol surface for autonomous agent discovery,
- * receipts, reputation, and market mirroring.
+ * ERC-8004: Agent Identity Registry — register AI agents on-chain.
+ * ERC-8183: Agentic Commerce — create jobs, fund, submit, complete.
  *
- * Both registries coexist on Arc testnet (chainId 5042002).
+ * These are the ONLY contracts used for agent identity and job flows.
+ * Source: https://docs.arc.io/arc/references/contract-addresses.md
+ */
+export const CONTRACTS = {
+  /** ERC-8004 IdentityRegistry — register(string metadataURI) → tokenId */
+  ERC8004_IDENTITY_REGISTRY: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+  /** ERC-8183 AgenticCommerce — createJob/setBudget/fund/submit/complete */
+  ERC8183_AGENTIC_COMMERCE: "0x0747EEf0706327138c69792bF28Cd525089e4583",
+  /** USDC ERC-20 token (6 decimals) */
+  USDC: "0x3600000000000000000000000000000000000000",
+
+  /** @deprecated Use ERC8004_IDENTITY_REGISTRY. Kept only until UI/indexer migration is complete. */
+  AGENT_REGISTRY: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+  /** @deprecated Use ERC8183_AGENTIC_COMMERCE. Kept only until UI/indexer migration is complete. */
+  JOB_ESCROW: "0x0747EEf0706327138c69792bF28Cd525089e4583",
+  /** @deprecated Official Arc/Circle reference mode has no ArcLayer WorkProof contract. */
+  WORK_PROOF: ZERO_ADDRESS,
+  /** @deprecated Official Arc/Circle reference mode has no ArcLayer ReputationOracle contract. */
+  REPUTATION_ORACLE: ZERO_ADDRESS,
+  /** @deprecated Disabled in official Arc/Circle reference mode. */
+  ACHIEVEMENT: ZERO_ADDRESS,
+  /** @deprecated Disabled in official Arc/Circle reference mode. */
+  INVOICE: ZERO_ADDRESS,
+  /** @deprecated Disabled in official Arc/Circle reference mode. */
+  SUBSCRIPTION: ZERO_ADDRESS,
+  /** @deprecated Disabled in official Arc/Circle reference mode. */
+  MILESTONE_ESCROW: ZERO_ADDRESS,
+} as const;
+
+/**
+ * Legacy alias — kept for backward compat during migration.
+ * @deprecated Use CONTRACTS directly.
+ */
+export const ARC_REFERENCE_CONTRACTS = CONTRACTS;
+
+/**
+ * A2A (Agent-to-Agent) stack — separate registry track.
+ * These are ArcLayer's own A2A protocol contracts for autonomous agent
+ * discovery, receipts, reputation, and market mirroring.
+ * They coexist with official Arc contracts on testnet.
  */
 export const A2A_CONTRACTS = {
   A2A_AGENT_REGISTRY: "0xB263336055dD65FF501e36CA39941760D943703C",
@@ -63,4 +100,3 @@ export const A2A_CONTRACTS = {
   IGNIA: "0xd66971F9Da4c60DB4A061686F43dBf39Db5E2916",
   AGENT_REGISTRY_V2: "0x0465CeBC34698Aa156bcBB8d5c1caA39777dDb58",
 } as const;
-

@@ -31,7 +31,7 @@ export default function Footer() {
               </span>
             </div>
             <p className="mt-5 max-w-[360px] font-mono text-[11.5px] leading-6 text-[#EAE4D8]/85 invisible">
-                  x402 payment, USDC escrow, and WorkProof reputation infrastructure for agent builders and developers — on Arc.
+                  x402 payments, ERC-8004 identity, and ERC-8183 AgenticCommerce settlement on Arc.
             </p>
             <div className="mt-6 flex items-center gap-2">
               <span className="pulse-dot" />

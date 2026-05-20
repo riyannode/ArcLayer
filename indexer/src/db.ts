@@ -3,9 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import type { IndexedAgentEvent, IndexedJobEvent } from "@arclayer/sdk";
-import { buildJobProjection } from "./projections";
-import { readJob, readAgentProfile, readWorkProof, readWorkProofTokenByJobId } from "@arclayer/sdk";
-import { INDEXER_RPC, mapWithLimit, withTimeout } from "./rpc-limit";
+import { projectAgentsFromEvents, projectJobsFromEvents } from "./projections";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.INDEXER_DB_PATH || resolve(currentDir, "../data/arclayer-indexer.sqlite");
@@ -113,27 +111,10 @@ const upsertAgent = db.prepare(`
     proof_token_ids_json = excluded.proof_token_ids_json
 `);
 
-const upsertProof = db.prepare(`
-  INSERT INTO proofs (
-    token_id, job_id, agent_id, payer, amount_paid, minted_at, metadata_uri
-  ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  ON CONFLICT(token_id) DO UPDATE SET
-    job_id = excluded.job_id,
-    agent_id = excluded.agent_id,
-    payer = excluded.payer,
-    amount_paid = excluded.amount_paid,
-    minted_at = excluded.minted_at,
-    metadata_uri = excluded.metadata_uri
-`);
-
 const upsertMeta = db.prepare(`
   INSERT INTO meta (key, value) VALUES (?, ?)
   ON CONFLICT(key) DO UPDATE SET value = excluded.value
 `);
-
-export function writeMetaValue(key: string, value: string) {
-  upsertMeta.run(key, value);
-}
 
 const upsertJobEvent = db.prepare(`
   INSERT INTO job_events (event_key, job_id, agent_id, type, block_number, tx_hash, payload_json)
@@ -165,90 +146,56 @@ function serializeEventKey(event: { transactionHash: `0x${string}`; logIndex: nu
   return `${event.transactionHash}:${event.logIndex}`;
 }
 
+export function writeMetaValue(key: string, value: string) {
+  upsertMeta.run(key, value);
+}
+
+function normalizeJobForLegacySchema(job: ReturnType<typeof projectJobsFromEvents>[number]) {
+  return {
+    id: job.id,
+    agentId: "0",
+    client: job.client,
+    worker: job.provider,
+    evaluator: "0x0000000000000000000000000000000000000000",
+    budget: job.budget,
+    fundedAmount: job.fundedAmount,
+    createdAt: job.createdAtBlock,
+    jobSpecHash: job.description,
+    deliverableURI: job.deliverable,
+    proofMetadataURI: job.completionReason,
+    approved: job.status === 4,
+    status: job.status,
+  };
+}
+
+function normalizeAgentForLegacySchema(agent: ReturnType<typeof projectAgentsFromEvents>[number]) {
+  return {
+    agentId: agent.agentId,
+    controller: agent.controller,
+    skillHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+    metadataURI: agent.metadataURI,
+    registeredAt: agent.registeredAtBlock,
+    reputationScore: "0",
+    score: "0",
+    jobs: [] as string[],
+    proofTokenIds: [] as string[],
+  };
+}
+
 export async function syncProjectionStore(
   events: IndexedJobEvent[],
   agentEvents: IndexedAgentEvent[] = [],
 ) {
-  // ─── Targeted refresh (#1, #2) ─────────────────────────────────────────────
-  // Only refresh entities mentioned in this event batch instead of rebuilding
-  // every job/agent/proof from chain on every tick.
-  const touchedJobIds = Array.from(
-    new Set(
-      events
-        .map((e) => (e.jobId !== undefined && e.jobId !== null ? BigInt(e.jobId as bigint | string | number) : null))
-        .filter((id): id is bigint => id !== null && id > BigInt(0)),
-    ),
-  );
+  const projectedJobs = projectJobsFromEvents(events);
+  const jobWallets = new Set<string>();
+  for (const job of projectedJobs) {
+    if (job.client) jobWallets.add(job.client.toLowerCase());
+    if (job.provider) jobWallets.add(job.provider.toLowerCase());
+    if (job.evaluator) jobWallets.add(job.evaluator.toLowerCase());
+  }
 
-  const touchedAgentIds = Array.from(
-    new Set(
-      [
-        ...agentEvents.map((e) => BigInt(e.agentId)),
-        ...events
-          .map((e) => (e.agentId !== undefined && e.agentId !== null ? BigInt(e.agentId as bigint | string | number) : null))
-          .filter((id): id is bigint => id !== null && id > BigInt(0)),
-      ].map((id) => id.toString()),
-    ),
-  ).map((id) => BigInt(id));
-
-  // Fetch only the affected jobs (bounded concurrency + timeout).
-  const jobRecords = await mapWithLimit(touchedJobIds, INDEXER_RPC.CONCURRENCY, (id) =>
-    withTimeout(readJob(id), `readJob(${id})`),
-  );
-  const jobs = jobRecords
-    .filter((j): j is NonNullable<typeof j> => j !== null)
-    .map((job) => ({
-      id: job.id.toString(),
-      agentId: job.agentId.toString(),
-      client: job.client,
-      worker: job.worker,
-      evaluator: job.evaluator,
-      budget: job.budget.toString(),
-      fundedAmount: job.fundedAmount.toString(),
-      createdAt: job.createdAt.toString(),
-      jobSpecHash: job.jobSpecHash,
-      deliverableURI: job.deliverableURI,
-      proofMetadataURI: job.proofMetadataURI,
-      approved: job.approved,
-      status: job.status,
-    }));
-
-  // Fetch only the affected agents.
-  const agentProfiles = await mapWithLimit(touchedAgentIds, INDEXER_RPC.CONCURRENCY, (id) =>
-    withTimeout(readAgentProfile(id), `readAgentProfile(${id})`),
-  );
-  const agents = agentProfiles
-    .filter((p): p is NonNullable<typeof p> => p !== null)
-    .map((profile) => ({
-      agentId: profile.agent.agentId.toString(),
-      controller: profile.agent.controller,
-      skillHash: profile.agent.skillHash,
-      metadataURI: profile.agent.metadataURI,
-      registeredAt: profile.agent.registeredAt.toString(),
-      reputationScore: profile.agent.reputationScore.toString(),
-      score: profile.score.toString(),
-      jobs: profile.jobs.map((job) => job.id.toString()),
-      proofTokenIds: profile.proofTokenIds.map((tokenId) => tokenId.toString()),
-    }));
-
-  // Fetch proofs only for jobs touched in this batch.
-  const proofResults = await mapWithLimit(touchedJobIds, INDEXER_RPC.CONCURRENCY, async (jobId) => {
-    const tokenId = await withTimeout(readWorkProofTokenByJobId(jobId), `readWorkProofTokenByJobId(${jobId})`);
-    if (tokenId === BigInt(0)) return null;
-    const proof = await withTimeout(readWorkProof(tokenId), `readWorkProof(${tokenId})`);
-    return {
-      tokenId: tokenId.toString(),
-      jobId: proof.jobId.toString(),
-      agentId: proof.agentId.toString(),
-      payer: proof.payer,
-      amountPaid: proof.amountPaid.toString(),
-      mintedAt: proof.mintedAt.toString(),
-      metadataURI: proof.metadataURI,
-    };
-  });
-  const proofs = proofResults.filter((p): p is NonNullable<typeof p> => p !== null);
-
-  const jobGroups = buildJobProjection(events);
+  const jobs = projectedJobs.map(normalizeJobForLegacySchema);
+  const agents = projectAgentsFromEvents(agentEvents, jobWallets).map(normalizeAgentForLegacySchema);
 
   db.exec("BEGIN");
   try {
@@ -266,7 +213,7 @@ export async function syncProjectionStore(
         job.deliverableURI,
         job.proofMetadataURI,
         job.approved ? 1 : 0,
-        job.status
+        job.status,
       );
     }
 
@@ -280,34 +227,20 @@ export async function syncProjectionStore(
         agent.reputationScore,
         agent.score,
         stringifyJson(agent.jobs),
-        stringifyJson(agent.proofTokenIds)
+        stringifyJson(agent.proofTokenIds),
       );
     }
 
-    for (const proof of proofs) {
-      upsertProof.run(
-        proof.tokenId,
-        proof.jobId,
-        proof.agentId,
-        proof.payer,
-        proof.amountPaid,
-        proof.mintedAt,
-        proof.metadataURI
+    for (const event of events) {
+      upsertJobEvent.run(
+        serializeEventKey(event),
+        String(event.jobId ?? "0"),
+        String((event as any).provider ?? (event as any).client ?? "0"),
+        event.eventName,
+        event.blockNumber.toString(),
+        event.transactionHash,
+        stringifyJson(event),
       );
-    }
-
-    for (const batch of Object.values(jobGroups)) {
-      for (const event of batch) {
-        upsertJobEvent.run(
-          serializeEventKey(event),
-          String(event.jobId ?? "0"),
-          String(event.agentId ?? "0"),
-          event.eventName,
-          event.blockNumber.toString(),
-          event.transactionHash,
-          stringifyJson(event)
-        );
-      }
     }
 
     for (const event of agentEvents) {
@@ -317,12 +250,12 @@ export async function syncProjectionStore(
         event.eventName,
         event.blockNumber.toString(),
         event.transactionHash,
-        stringifyJson(event)
+        stringifyJson(event),
       );
     }
 
     upsertMeta.run("last_sync_at", Date.now().toString());
-    upsertMeta.run("event_count", events.length.toString());
+    upsertMeta.run("event_count", String(events.length + agentEvents.length));
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
@@ -336,13 +269,17 @@ export function readJobs() {
     agentId: row.agent_id as string,
     client: row.client as string,
     worker: row.worker as string,
+    provider: row.worker as string,
     evaluator: row.evaluator as string,
     budget: row.budget as string,
     fundedAmount: row.funded_amount as string,
     createdAt: row.created_at as string,
     jobSpecHash: row.job_spec_hash as string,
+    metadataURI: row.job_spec_hash as string,
     deliverableURI: row.deliverable_uri as string,
+    submissionURI: row.deliverable_uri as string,
     proofMetadataURI: row.proof_metadata_uri as string,
+    completionURI: row.proof_metadata_uri as string,
     approved: Boolean(row.approved),
     status: Number(row.status),
   }));
@@ -351,30 +288,18 @@ export function readJobs() {
 export function readJobById(jobId: string) {
   const row = db.prepare(`SELECT * FROM jobs WHERE id = ?`).get(jobId);
   if (!row) return null;
-  return {
-    id: row.id as string,
-    agentId: row.agent_id as string,
-    client: row.client as string,
-    worker: row.worker as string,
-    evaluator: row.evaluator as string,
-    budget: row.budget as string,
-    fundedAmount: row.funded_amount as string,
-    createdAt: row.created_at as string,
-    jobSpecHash: row.job_spec_hash as string,
-    deliverableURI: row.deliverable_uri as string,
-    proofMetadataURI: row.proof_metadata_uri as string,
-    approved: Boolean(row.approved),
-    status: Number(row.status),
-  };
+  return readJobs().find((job) => job.id === jobId) ?? null;
 }
 
 export function readAgents() {
-  return db.prepare(`SELECT * FROM agents ORDER BY CAST(score AS INTEGER) DESC, CAST(agent_id AS INTEGER) ASC`).all().map((row) => ({
+  return db.prepare(`SELECT * FROM agents ORDER BY CAST(agent_id AS INTEGER) DESC`).all().map((row) => ({
     agentId: row.agent_id as string,
+    tokenId: row.agent_id as string,
     controller: row.controller as string,
     skillHash: row.skill_hash as string,
     metadataURI: row.metadata_uri as string,
     registeredAt: row.registered_at as string,
+    registeredAtBlock: row.registered_at as string,
     reputationScore: row.reputation_score as string,
     score: row.score as string,
     jobs: parseJson<string[]>(row.jobs_json as string),
@@ -385,17 +310,7 @@ export function readAgents() {
 export function readAgentById(agentId: string) {
   const row = db.prepare(`SELECT * FROM agents WHERE agent_id = ?`).get(agentId);
   if (!row) return null;
-  return {
-    agentId: row.agent_id as string,
-    controller: row.controller as string,
-    skillHash: row.skill_hash as string,
-    metadataURI: row.metadata_uri as string,
-    registeredAt: row.registered_at as string,
-    reputationScore: row.reputation_score as string,
-    score: row.score as string,
-    jobs: parseJson<string[]>(row.jobs_json as string),
-    proofTokenIds: parseJson<string[]>(row.proof_token_ids_json as string),
-  };
+  return readAgents().find((agent) => agent.agentId === agentId) ?? null;
 }
 
 export function readProofs() {
@@ -440,7 +355,7 @@ export function readOverview() {
 
   const totalBudget = jobs.reduce((sum, job) => sum + BigInt(job.budget), BigInt(0));
   const totalFunded = jobs.reduce((sum, job) => sum + BigInt(job.fundedAmount), BigInt(0));
-  const settledJobs = jobs.filter((job) => job.status === 5).length;
+  const settledJobs = jobs.filter((job) => job.status === 4).length;
   const fundedJobs = jobs.filter((job) => BigInt(job.fundedAmount) > BigInt(0)).length;
 
   return {

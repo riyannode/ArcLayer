@@ -1,6 +1,12 @@
-import { type Address } from 'viem';
-import { CONTRACTS, MILESTONE_ESCROW_ABI } from './contracts';
-import { ESCROW_CONFIGURED, publicClient } from './escrow';
+/**
+ * escrow-indexer.ts — DEPRECATED legacy MilestoneEscrow event indexer.
+ *
+ * Pure Arc reference mode does not deploy a MilestoneEscrow contract; ERC-8183
+ * AgenticCommerce events are indexed by the dedicated indexer service. This
+ * stub keeps the import surface alive but always returns an empty event set.
+ */
+
+import type { Address } from 'viem';
 
 export type EscrowEventName =
   | 'ProjectCreated'
@@ -23,36 +29,6 @@ export type IndexedEscrowEvent = {
   deliverableURI?: string;
 };
 
-const EVENT_NAMES: EscrowEventName[] = [
-  'ProjectCreated',
-  'ProjectFunded',
-  'MilestoneSubmitted',
-  'MilestoneReleased',
-  'WorkProofMinted',
-];
-
-export async function fetchEscrowEvents(fromBlock: bigint = BigInt(0)): Promise<IndexedEscrowEvent[]> {
-  if (!ESCROW_CONFIGURED) return [];
-
-  const eventGroups = await Promise.all(
-    EVENT_NAMES.map((eventName) =>
-      publicClient.getContractEvents({
-        address: CONTRACTS.MILESTONE_ESCROW,
-        abi: MILESTONE_ESCROW_ABI,
-        eventName,
-        fromBlock,
-        toBlock: 'latest',
-      })
-    )
-  );
-
-  return eventGroups
-    .flat()
-    .map((event) => ({
-      eventName: event.eventName as EscrowEventName,
-      blockNumber: event.blockNumber,
-      transactionHash: event.transactionHash,
-      ...(event.args as Record<string, unknown>),
-    }))
-    .sort((a, b) => Number(a.blockNumber - b.blockNumber));
+export async function fetchEscrowEvents(_fromBlock: bigint = BigInt(0)): Promise<IndexedEscrowEvent[]> {
+  return [];
 }

@@ -8,10 +8,9 @@ import { ARC_EXPLORER } from '@/lib/contracts';
  * Proves the protocol is real, not marketing copy.
  */
 const contracts = [
-  { label: 'SETTLEMENT VAULT', addr: '0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225' },
-  { label: 'AGENT IDENTITY', addr: '0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21' },
-  { label: 'PROOF OF WORK', addr: '0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5' },
-  { label: 'MILESTONE', addr: '0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2' },
+  { label: 'ERC-8004 IDENTITY', addr: '0x8004A818BFB912233c491871b3d84c89A494BD9e' },
+  { label: 'ERC-8183 AGENTICCOMMERCE', addr: '0x0747EEf0706327138c69792bF28Cd525089e4583' },
+  { label: 'USDC', addr: '0x3600000000000000000000000000000000000000' },
 ];
 
 const ARC_NATIVE_TX = '0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264';

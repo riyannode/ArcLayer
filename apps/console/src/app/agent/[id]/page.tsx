@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { readContract, waitForTransactionReceipt } from '@wagmi/core';
-import { getAddress, type Hex } from 'viem';
+import { decodeEventLog, getAddress, type Hex } from 'viem';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { useRail, railQueryParams } from '@/components/rail/RailProvider';
@@ -71,8 +71,8 @@ type AgentDetail = {
   proofs: IndexedProof[];
 };
 
-const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
-const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'pending', 5: 'success', 6: 'error' };
+const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Completed'] as const;
+const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'success' };
 
 function parseAgentId(value: string | undefined) {
   return value && /^\d+$/.test(value) ? value : null;
@@ -212,18 +212,34 @@ export default function AgentProfilePage() {
       // payment — x402 verifies the resource access, JobEscrow records the
       // job for proof-of-work tracking.
       const amount = parseUSDC(runBudget);
-      const nextJobId = (await readContract(config, {
-        address: CONTRACTS.JOB_ESCROW,
-        abi: JOB_ESCROW_ABI,
-        functionName: 'jobCounter',
-      }) as bigint) + BigInt(1);
-      setRunState('2/5 Creating JobEscrow run for agent worker...');
+      // ERC-8183 official: there is no `jobCounter` view. Derive jobId from
+      // the `JobCreated` event emitted by createJob() in the next tx receipt.
+      setRunState('2/5 Creating job on AgenticCommerce escrow...');
       const serviceWorker = (process.env.NEXT_PUBLIC_WORKER_ADDR as `0x${string}` | undefined) ?? (agent.controller as `0x${string}`);
-      const createHash = await writeContractAsync(buildCreateJobConfig(BigInt(agentId), serviceWorker, address, runInput));
-      await waitForTransactionReceipt(config, { hash: createHash });
+      // Default expiry: 7 days from now (ERC-8183 expects a unix-second deadline).
+      const expiredAt = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60);
+      const createHash = await writeContractAsync(
+        buildCreateJobConfig(serviceWorker, address as `0x${string}`, expiredAt, runInput),
+      );
+      const createReceipt = await waitForTransactionReceipt(config, { hash: createHash });
+
+      // Parse JobCreated event to get the actual on-chain jobId.
+      let visibleJobId = BigInt(0);
+      for (const log of createReceipt.logs) {
+        if (log.address.toLowerCase() !== CONTRACTS.JOB_ESCROW.toLowerCase()) continue;
+        try {
+          const decoded = decodeEventLog({ abi: JOB_ESCROW_ABI, data: log.data, topics: log.topics });
+          if (decoded.eventName === 'JobCreated' && decoded.args && 'jobId' in decoded.args) {
+            visibleJobId = decoded.args.jobId as bigint;
+            break;
+          }
+        } catch { /* skip non-matching logs */ }
+      }
+      if (visibleJobId === BigInt(0)) {
+        throw new Error('JobCreated event not found in tx receipt');
+      }
 
       setRunState('3/5 Setting budget, approving USDC, funding job...');
-      const visibleJobId = nextJobId;
       const budgetHash = await writeContractAsync(buildSetBudgetConfig(visibleJobId, amount));
       await waitForTransactionReceipt(config, { hash: budgetHash });
       const approveHash = await writeContractAsync(buildApproveUsdcConfig(amount));
@@ -422,7 +438,7 @@ export default function AgentProfilePage() {
                 <Sparkline values={series} />
               </div>
               <p className="mt-2 font-mono text-[10.5px] leading-5 text-[#a0a0a0] invisible">
-                Reputation projected from ReputationOracle, coupled to paid WorkProof mints.
+                Reputation projected from completed ERC-8183 AgenticCommerce jobs.
               </p>
             </div>
           </section>
@@ -459,7 +475,7 @@ export default function AgentProfilePage() {
           </section>
 
           <section className="aureo-panel p-4 md:p-6">
-            <div className="aureo-mono-label mb-2">PROOF OF WORK</div>
+            <div className="aureo-mono-label mb-2">SETTLEMENT RECORDS</div>
             <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Soulbound history</h2>
             <div className="mt-5 space-y-3">
               {proofs.length > 0 ? (
@@ -477,7 +493,7 @@ export default function AgentProfilePage() {
                 ))
               ) : (
                 <p className="p-4 font-mono text-[11.5px] text-[#a0a0a0]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
-                  {isLoading ? 'Loading proofs…' : 'No WorkProofs minted for this agent yet.'}
+                  {isLoading ? 'Loading proofs…' : 'No settlement records for this agent yet.'}
                 </p>
               )}
             </div>

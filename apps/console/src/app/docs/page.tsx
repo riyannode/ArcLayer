@@ -66,23 +66,22 @@ const networkInfo = [
 ];
 
 const contracts = [
-  { label: 'AgentRegistry',    address: '0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21' },
-  { label: 'JobEscrow',        address: '0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225' },
-  { label: 'WorkProof',        address: '0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5' },
-  { label: 'ReputationOracle', address: '0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c' },
+  { label: 'ERC-8004 IdentityRegistry', address: '0x8004A81842B275BbC0462441026d4af50fC83008' },
+  { label: 'ERC-8183 AgenticCommerce', address: '0x0747EEfA70d8bAb5364d7baD8D00603CC3dDD9b6' },
+  { label: 'USDC', address: '0x360852E7f8E3E9C3B78F941937120c884E3d8720' },
 ];
 
 const integrationOrder = [
   'Add Arc Testnet to your wallet config.',
   'Connect wallet (wagmi / viem / Privy / RainbowKit / ethers).',
   'Read indexer overview to render protocol stats.',
-  'Register an agent: registerAgent(skillHash, metadataURI).',
-  'Create a job: createJob(agentId, worker, evaluator, taskDescription).',
-  'Fund escrow: setBudget → approve(USDC) → fund(jobId).',
-  'Worker submits deliverable: submitDeliverable(jobId, deliverableURI).',
-  'Client/evaluator approves work: evaluate(jobId, true).',
-  'Settle payment: settle(jobId)  // ~400k gas.',
-      'Show WorkProof + reputation after completion.',
+  'Register an agent identity: ERC-8004 register(metadataURI).',
+  'Create an ERC-8183 job and derive jobId.',
+  'Set budget: setBudget(jobId, amount, 0x).',
+  'Approve USDC, then fund(jobId, 0x).',
+  'Worker submits deliverable: submit(jobId, deliverableHash, 0x).',
+  'Client/evaluator completes: complete(jobId, reasonHash, 0x).',
+  'Use x402 for paid API/pay-per-call surfaces.',
 ];
 
 const exampleDescriptions: Record<string, string> = {
@@ -102,28 +101,28 @@ const { writeContractAsync } = useWriteContract();
 await writeContractAsync({
   address: CONTRACTS.AGENT_REGISTRY,
   abi: AGENT_REGISTRY_ABI,
-  functionName: 'registerAgent',
-  args: [skillHash, 'ipfs://agent-metadata'],
+  functionName: 'register',
+  args: ['ipfs://agent-metadata'],
 });`,
   },
   {
     title: 'Create a job with milestones',
     lang: 'typescript',
-    code: `import { CONTRACTS, JOB_ESCROW_ABI, parseUSDC } from '@arclayer/sdk';
+    code: `import { CONTRACTS, AGENTIC_COMMERCE_ABI, parseUSDC } from '@arclayer/sdk';
 
 await writeContractAsync({
-  address: CONTRACTS.JOB_ESCROW,
-  abi: JOB_ESCROW_ABI,
-  functionName: 'createJob',
-  args: [agentId, parseUSDC('1000'), 'ipfs://job-spec'],
+  address: CONTRACTS.AGENTIC_COMMERCE,
+  abi: AGENTIC_COMMERCE_ABI,
+  functionName: 'setBudget',
+  args: [jobId, parseUSDC('1000'), '0x'],
 });`,
   },
   {
     title: 'Read indexer overview',
     lang: 'typescript',
     code: `const res = await fetch('/api/indexer/overview');
-const { summary, jobs, agents, proofs } = await res.json();
-// summary.jobs, summary.agents, summary.proofs, summary.totalFunded`,
+const { summary, jobs, agents } = await res.json();
+// summary.jobs, summary.agents, summary.totalFunded`,
   },
 ];
 
@@ -132,30 +131,25 @@ const apiEndpoints = [
   { method: 'GET', path: '/api/indexer/jobs', desc: 'All jobs, newest first' },
   { method: 'GET', path: '/api/indexer/jobs/:id', desc: 'Single job detail + events' },
   { method: 'GET', path: '/api/indexer/agents', desc: 'All registered agents' },
-  { method: 'GET', path: '/api/indexer/agents/:id', desc: 'Agent profile + job history + proofs' },
-  { method: 'GET', path: '/api/indexer/proofs', desc: 'All work-proofs minted' },
+  { method: 'GET', path: '/api/indexer/agents/:id', desc: 'Agent profile + job history' },
 ];
 
 const aiSkillPrompt = `You are an AI coding agent integrating ArcLayer into an existing app.
 
-ArcLayer is a protocol/payment infrastructure layer for the agentic economy:
-- Agent registry for registering AI agents on-chain
-- Job escrow for assigning work to agents
-- Testnet USDC escrow payments
-- Job submission, evaluation, and settlement
-- WorkProof generation
-- Reputation based on completed jobs
+ArcLayer follows the official Arc reference (ERC-8004 + ERC-8183 + x402) on Arc Testnet:
+- ERC-8004 IdentityRegistry for on-chain agent identity (register / metadataURI)
+- ERC-8183 AgenticCommerce for job lifecycle (setBudget / fund / submit / complete)
+- USDC settlement (6 decimals)
+- x402 HTTP 402 paid pay-per-call surfaces
 - REST indexer APIs for fast reads
-- Optional x402 HTTP 402 paid-agent-run flow
 
 Network: Arc Testnet, chainId 5042002, RPC https://rpc.drpc.testnet.arc.network,
 explorer https://testnet.arcscan.app, USDC 0x3600000000000000000000000000000000000000 (6 decimals).
 
 Core contracts (import from @arclayer/sdk):
-- AgentRegistry    0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21
-- JobEscrow        0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225
-- WorkProof        0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5
-- ReputationOracle 0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c
+- ERC-8004 IdentityRegistry  0x8004A81842B275BbC0462441026d4af50fC83008
+- ERC-8183 AgenticCommerce   0x0747EEfA70d8bAb5364d7baD8D00603CC3dDD9b6
+- USDC                       0x360852E7f8E3E9C3B78F941937120c884E3d8720
 
 Integration goals:
 1. Detect existing wallet stack (wagmi, viem, ethers, Privy, RainbowKit, etc.).
@@ -181,13 +175,12 @@ Rules:
 - Stay testnet-friendly. Default to chain id 5042002.
 - Add helpful empty states and plain-English error messages.
 
-Flows:
-- Register agent: registerAgent(skillHash, metadataURI)
-- Create job:    createJob(agentId, worker, evaluator, taskDescription)
-- Fund:          setBudget(jobId, amount) -> approve(USDC, JOB_ESCROW, amount) -> fund(jobId, amount)
-- Submit:        submitDeliverable(jobId, deliverableURI)
-- Evaluate:      evaluate(jobId, approved)
-- Settle:        settle(jobId)   // ~400k gas, do not hardcode 300k
+Flows (official ERC-8004 + ERC-8183):
+- Register identity: register(metadataURI) on ERC-8004 IdentityRegistry
+- Set budget:        setBudget(jobId, amount, 0x)
+- Fund:              approve(USDC, AGENTIC_COMMERCE, amount) -> fund(jobId, 0x)
+- Submit:            submit(jobId, deliverableHash, 0x)
+- Complete:          complete(jobId, reasonHash, 0x)   // reasonHash defaults to keccak256("approved")
 
 Indexer endpoints:
 GET /api/indexer/overview
@@ -355,9 +348,9 @@ export default function DocsPage() {
             <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>ALSO SUPPORTED</div>
             <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>arc-escrow scheme</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
-              <li>· USDC-funded jobs via JobEscrow + WorkProof</li>
-              <li>· Worker submits → client/evaluator approves → settle</li>
-              <li>· WorkProof receipt minted on settle</li>
+              <li>· USDC-funded jobs via ERC-8183 AgenticCommerce</li>
+              <li>· Worker submits → client completes with reasonHash</li>
+              <li>· On-chain settlement on complete()</li>
               <li>· Use when work has milestones or evaluator review</li>
             </ul>
           </div>
@@ -430,7 +423,7 @@ export default function DocsPage() {
               <li>· Agent produces a deliverable (file, dataset, decision)</li>
               <li>· Client wants to review before paying</li>
               <li>· Reputation should follow completed work</li>
-                <li>· You need a WorkProof record</li>
+                <li>· You need a completed ERC-8183 job record</li>
             </ul>
           </div>
           <div className="border border-white/10 bg-black/30 p-5">
@@ -451,7 +444,7 @@ export default function DocsPage() {
             <li><span className="font-mono text-[#C5A67C]">03.</span> Fund Escrow — lock USDC</li>
             <li><span className="font-mono text-[#C5A67C]">04.</span> Submit Work — worker posts deliverable URI</li>
             <li><span className="font-mono text-[#C5A67C]">05.</span> Review Work</li>
-            <li><span className="font-mono text-[#C5A67C]">06.</span> Settle + mint WorkProof</li>
+            <li><span className="font-mono text-[#C5A67C]">06.</span> Complete job (settle)</li>
           </ol>
         </div>
 
@@ -461,7 +454,7 @@ export default function DocsPage() {
             <li>· UI label <code className="text-[#C5A67C]">Client Address</code> maps to the contract param <code className="text-[#C5A67C]">evaluator</code>.</li>
             <li>· <code className="text-[#C5A67C]">worker !== Client Address</code> — <code className="text-[#C5A67C]">createJob</code> reverts with &quot;Worker is client&quot; if they match.</li>
             <li>· Use <code className="text-[#C5A67C]">@arclayer/sdk</code> builders for writes; let the wallet estimate gas.</li>
-            <li>· Settlement mints a WorkProof receipt; reputation updates after the indexer syncs.</li>
+            <li>· Completion settles USDC to worker; indexer syncs the final status.</li>
           </ul>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/jobs" className="border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">

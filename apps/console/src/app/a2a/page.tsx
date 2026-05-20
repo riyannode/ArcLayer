@@ -324,6 +324,11 @@ function A2ADashboardPage() {
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-[#EAE4D8] selection:bg-[#C5A67C]/20">
+      {/* ─── Legacy / Experimental Banner ─────────────────────────────── */}
+      <div className="border-b border-amber-500/30 bg-amber-950/20 px-6 py-3 text-center font-mono text-[11px] text-amber-300">
+        ⚠ Legacy / Experimental ArcLayer A2A Layer — This surface uses custom protocols not part of the official Arc specification.
+        Official flow: <a href="/protocol" className="underline text-[#C5A67C] hover:text-[#EAE4D8]">ERC-8004 · ERC-8183 · x402</a>
+      </div>
       {/* ─── Header ───────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-10 border-b border-white/5 bg-[#0A0A0A]/95 px-6 py-4 ">
         <div className="mx-auto flex max-w-7xl items-center justify-between">

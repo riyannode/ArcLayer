@@ -107,7 +107,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     label: 'A2A Commerce',
     tagline: 'Inter-agent payments, service marketplace, x402',
     icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 4h6l3 5-6 12L3 9l3-5z" strokeLinecap="round" strokeLinejoin="round"/><path d="M9 4l3 5 3-5M3 9h18" strokeLinecap="round"/></svg>),
-    capabilities: ['x402 facilitator + verifier', 'Service discovery via manifest', 'Reputation-weighted routing', 'Receipt + WorkProof minting'],
+    capabilities: ['x402 facilitator + verifier', 'Service discovery via manifest', 'Reputation-weighted routing', 'Receipt + ERC-8183 settlement'],
     exampleAgents: ['Apolo · decision broker', 'Hermes · executor'],
     feeRange: '0.000001 USDC / call',
     status: 'LIVE',

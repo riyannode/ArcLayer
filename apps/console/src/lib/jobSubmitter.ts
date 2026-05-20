@@ -1,21 +1,15 @@
 /**
  * jobSubmitter — turn an off-chain agent run into an on-chain Submitted job.
  *
- * Flow:
+ * Pure Arc reference mode — uses official ERC-8183 AgenticCommerce contract:
  *   1. Build canonical deliverable JSON (output + run trace + agentId + jobId).
- *   2. Pin to Pinata → ipfs://<cid> (URI we put on chain as `deliverableURI`).
- *   3. Build a separate proofMetadata JSON (LLM model, latency, tokens, hash).
- *   4. Pin proofMetadata too → ipfs://<cid> (we put on chain as `proofMetadataURI`).
- *   5. Compute keccak256(canonical(deliverable)) so anyone can verify the
- *      pinned object matches what was committed.
- *   6. Sign + send JobEscrow.submitDeliverable(jobId, deliverableURI, proofURI)
+ *   2. Pin to Pinata → ipfs://<cid>.
+ *   3. Build proof metadata JSON (LLM model, latency, tokens, hash).
+ *   4. Pin proofMetadata → ipfs://<cid>.
+ *   5. Compute keccak256(canonical(deliverable)) as the deliverable hash.
+ *   6. Sign + send ERC-8183 submit(jobId, deliverableHash, optParams)
  *      from the service worker key. Wait for receipt.
  *   7. Return { txHash, deliverableCid, deliverableUri, deliverableHash, proofUri }.
- *
- * Pre-flight checks:
- *   - jobId exists, status == Funded (2), worker matches our service worker.
- *     Refusing here gives a clean error vs an opaque "Not worker" / "Not
- *     submitable" revert.
  */
 
 import {
@@ -41,15 +35,12 @@ export type SubmitResult = {
   proofUri: string;
 };
 
-// JobStatus enum (mirror of contract) — used for pre-flight checks.
+// ERC-8183 job status enum (mirrors contract).
 const JobStatus = {
   Created: 0,
-  Budgeted: 1,
-  Funded: 2,
-  Submitted: 3,
-  Evaluated: 4,
-  Settled: 5,
-  Cancelled: 6,
+  Funded: 1,
+  Submitted: 2,
+  Completed: 3,
 } as const;
 
 function makeRpcClients() {
@@ -59,50 +50,51 @@ function makeRpcClients() {
 }
 
 /**
- * Read the on-chain job tuple and assert it is in the right state for our
- * service worker to submit a deliverable. Throws with a descriptive code.
+ * Read the on-chain job via ERC-8183 getJob(jobId) and assert it is in the
+ * right state for our service worker to submit.
  *
- * Tuple layout (matches contract struct order):
- *   [id, agentId, client, worker, evaluator, budget, fundedAmount,
- *    createdAt, jobSpecHash, deliverableURI, proofMetadataURI, approved, status]
+ * ERC-8183 getJob returns:
+ *   { id, client, provider, evaluator, description, budget, expiredAt, status, hook }
  */
 async function assertJobReadyForSubmit(args: {
   jobId: bigint;
   expectedWorker: Hex;
 }): Promise<{ status: number }> {
   const { publicClient } = makeRpcClients();
-  const tuple = (await publicClient.readContract({
+  const job = (await publicClient.readContract({
     address: CONTRACTS.JOB_ESCROW,
     abi: JOB_ESCROW_ABI,
-    functionName: 'jobs',
+    functionName: 'getJob',
     args: [args.jobId],
-  })) as readonly unknown[];
+  })) as {
+    id: bigint;
+    client: Hex;
+    provider: Hex;
+    evaluator: Hex;
+    description: string;
+    budget: bigint;
+    expiredAt: bigint;
+    status: number;
+    hook: Hex;
+  };
 
-  if (!Array.isArray(tuple) || tuple.length < 13) {
-    throw new Error(`job_read_invalid: unexpected tuple shape for job ${args.jobId}`);
-  }
-
-  const client = tuple[2] as Hex;
-  const worker = tuple[3] as Hex;
-  const status = Number(tuple[12] as bigint | number);
-
-  if (client === '0x0000000000000000000000000000000000000000') {
+  if (!job || job.client === '0x0000000000000000000000000000000000000000') {
     throw new Error(`job_not_found: jobId ${args.jobId} does not exist on chain`);
   }
-  if (worker.toLowerCase() !== args.expectedWorker.toLowerCase()) {
+  if (job.provider.toLowerCase() !== args.expectedWorker.toLowerCase()) {
     throw new Error(
-      `job_worker_mismatch: jobId ${args.jobId} on-chain worker is ${worker}, ` +
-        `but our service worker is ${args.expectedWorker}. submitDeliverable would revert.`,
+      `job_worker_mismatch: jobId ${args.jobId} on-chain provider is ${job.provider}, ` +
+        `but our service worker is ${args.expectedWorker}. submit would revert.`,
     );
   }
-  if (status !== JobStatus.Funded) {
+  if (job.status !== JobStatus.Funded) {
     throw new Error(
-      `job_not_submitable: jobId ${args.jobId} status is ${status} (need ${JobStatus.Funded}=Funded). ` +
+      `job_not_submitable: jobId ${args.jobId} status is ${job.status} (need ${JobStatus.Funded}=Funded). ` +
         `The contract requires Funded → Submitted transition.`,
     );
   }
 
-  return { status };
+  return { status: job.status };
 }
 
 export async function submitDeliverableForRun(args: {
@@ -123,10 +115,7 @@ export async function submitDeliverableForRun(args: {
   // 2. Pre-flight: confirm on-chain state matches expectations.
   await assertJobReadyForSubmit({ jobId: args.jobId, expectedWorker: worker.address });
 
-  // 3. Build canonical deliverable JSON (this is what the buyer "bought").
-  //    Property order matters for hash reproducibility — JSON.stringify
-  //    preserves insertion order in modern JS, and we never re-serialize
-  //    on chain (the URI points at this exact CID).
+  // 3. Build canonical deliverable JSON.
   const deliverable = {
     schema: 'arclayer.deliverable.v1',
     agentId: args.agentId,
@@ -150,7 +139,7 @@ export async function submitDeliverableForRun(args: {
     },
   });
 
-  // 5. Build + pin proof metadata (LLM trace, hashes — for reputation later).
+  // 5. Build + pin proof metadata.
   const proofMetadata = {
     schema: 'arclayer.proof.v1',
     agentId: args.agentId,
@@ -175,7 +164,7 @@ export async function submitDeliverableForRun(args: {
     },
   });
 
-  // 6. Sign + send submitDeliverable from the worker key.
+  // 6. Sign + send ERC-8183 submit(jobId, deliverableHash, optParams).
   const { transport, publicClient } = makeRpcClients();
   const walletClient = createWalletClient({
     chain: arcTestnet,
@@ -186,8 +175,8 @@ export async function submitDeliverableForRun(args: {
   const txHash = await walletClient.writeContract({
     address: CONTRACTS.JOB_ESCROW,
     abi: JOB_ESCROW_ABI,
-    functionName: 'submitDeliverable',
-    args: [args.jobId, pinned.uri, proofPinned.uri],
+    functionName: 'submit',
+    args: [args.jobId, deliverableHash, '0x' as Hex],
   });
 
   const receipt = await publicClient.waitForTransactionReceipt({
@@ -197,7 +186,7 @@ export async function submitDeliverableForRun(args: {
 
   if (receipt.status !== 'success') {
     throw new Error(
-      `submit_tx_reverted: jobId ${args.jobId} submitDeliverable reverted in block ${receipt.blockNumber} (tx ${txHash}).`,
+      `submit_tx_reverted: jobId ${args.jobId} submit reverted in block ${receipt.blockNumber} (tx ${txHash}).`,
     );
   }
 

@@ -75,18 +75,28 @@ export function inferManualJobCategory(job: IndexedJob, agent?: IndexedAgent | n
 export function inferAgentCategory(agent: IndexedAgent): ManualCategory {
   const synthetic: IndexedJob = {
     id: '',
-    agentId: agent.agentId,
     client: '',
-    worker: '',
+    provider: '',
     evaluator: '',
+    hook: '',
+    expiredAt: '0',
+    description: '',
     budget: '0',
     fundedAmount: '0',
-    createdAt: '',
+    createdAtBlock: '',
+    updatedAtBlock: '',
+    deliverable: '',
+    completionReason: '',
+    status: 0,
+    statusLabel: 'Created',
+    // Legacy aliases
+    agentId: agent.agentId,
+    worker: '',
     jobSpecHash: '',
     deliverableURI: '',
     proofMetadataURI: '',
     approved: false,
-    status: 0,
+    createdAt: '',
   };
   return inferManualJobCategory(synthetic, agent);
 }

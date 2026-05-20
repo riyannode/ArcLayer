@@ -327,8 +327,8 @@ export default function ConnectPage() {
               },
               {
                 title: 'Paid jobs',
-                body: 'JobEscrow holds USDC until the evaluator approves. WorkProof NFT minted on settle.',
-                ref: 'JobEscrow @ 0xF0E1…D225',
+                body: 'ERC-8183 holds USDC until the client completes the job. Settlement recorded on-chain.',
+                ref: 'ERC-8183 AgenticCommerce @ 0x0747EEf0706327138c69792bF28Cd525089e4583',
               },
               {
                 title: 'x402 verification',

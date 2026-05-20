@@ -1,3 +1,14 @@
+/**
+ * Official Arc Network ABIs — ERC-8004 + ERC-8183.
+ *
+ * These are the canonical ABIs for Circle's deployed reference contracts
+ * on Arc Testnet. All agent identity and job flows use these.
+ *
+ * Source: https://docs.arc.io/arc/references/contract-addresses.md
+ */
+
+// ── USDC ERC-20 (minimal) ────────────────────────────────────────────────────
+
 export const USDC_ABI = [
   {
     name: "approve",
@@ -38,412 +49,15 @@ export const USDC_ABI = [
   },
 ] as const;
 
-export const MILESTONE_ESCROW_ABI = [
-  {
-    name: "createProject",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "client", type: "address" },
-      { name: "title", type: "string" },
-      { name: "description", type: "string" },
-      { name: "milestoneTitles", type: "string[]" },
-      { name: "milestoneAmounts", type: "uint256[]" },
-    ],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    name: "fundProject",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "projectId", type: "uint256" }],
-    outputs: [],
-  },
-  {
-    name: "submitMilestone",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "projectId", type: "uint256" },
-      { name: "milestoneId", type: "uint256" },
-      { name: "deliverableURI", type: "string" },
-    ],
-    outputs: [],
-  },
-  {
-    name: "approveMilestone",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "projectId", type: "uint256" },
-      { name: "milestoneId", type: "uint256" },
-    ],
-    outputs: [],
-  },
-  {
-    name: "cancelProject",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "projectId", type: "uint256" }],
-    outputs: [],
-  },
-  {
-    name: "projectCounter",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    name: "projects",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "", type: "uint256" }],
-    outputs: [
-      { name: "id", type: "uint256" },
-      { name: "freelancer", type: "address" },
-      { name: "client", type: "address" },
-      { name: "totalAmount", type: "uint256" },
-      { name: "releasedAmount", type: "uint256" },
-      { name: "createdAt", type: "uint256" },
-      { name: "milestoneCount", type: "uint256" },
-      { name: "title", type: "string" },
-      { name: "description", type: "string" },
-      { name: "status", type: "uint8" }
-    ]
-  },
-  {
-    name: "milestones",
-    type: "function",
-    stateMutability: "view",
-    inputs: [
-      { name: "", type: "uint256" },
-      { name: "", type: "uint256" }
-    ],
-    outputs: [
-      { name: "id", type: "uint256" },
-      { name: "projectId", type: "uint256" },
-      { name: "amount", type: "uint256" },
-      { name: "submittedAt", type: "uint256" },
-      { name: "releasedAt", type: "uint256" },
-      { name: "title", type: "string" },
-      { name: "deliverableURI", type: "string" },
-      { name: "status", type: "uint8" }
-    ]
-  },
-  {
-    name: "getUserProjects",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "user", type: "address" }],
-    outputs: [{ name: "", type: "uint256[]" }]
-  },
-  {
-    name: "ProjectCreated",
-    type: "event",
-    inputs: [
-      { name: "projectId", type: "uint256", indexed: true },
-      { name: "freelancer", type: "address", indexed: true },
-      { name: "client", type: "address", indexed: true },
-      { name: "totalAmount", type: "uint256", indexed: false }
-    ]
-  },
-  {
-    name: "ProjectFunded",
-    type: "event",
-    inputs: [
-      { name: "projectId", type: "uint256", indexed: true },
-      { name: "client", type: "address", indexed: true },
-      { name: "totalAmount", type: "uint256", indexed: false }
-    ]
-  },
-  {
-    name: "MilestoneSubmitted",
-    type: "event",
-    inputs: [
-      { name: "projectId", type: "uint256", indexed: true },
-      { name: "milestoneId", type: "uint256", indexed: true },
-      { name: "deliverableURI", type: "string", indexed: false }
-    ]
-  },
-  {
-    name: "MilestoneReleased",
-    type: "event",
-    inputs: [
-      { name: "projectId", type: "uint256", indexed: true },
-      { name: "milestoneId", type: "uint256", indexed: true },
-      { name: "freelancer", type: "address", indexed: true },
-      { name: "payout", type: "uint256", indexed: false },
-      { name: "fee", type: "uint256", indexed: false }
-    ]
-  },
-  {
-    name: "WorkProofMinted",
-    type: "event",
-    inputs: [
-      { name: "projectId", type: "uint256", indexed: true },
-      { name: "freelancer", type: "address", indexed: true },
-      { name: "totalAmount", type: "uint256", indexed: false }
-    ]
-  }
-] as const;
+// ── ERC-8004 Identity Registry ───────────────────────────────────────────────
 
-export const AGENT_REGISTRY_ABI = [
+export const ERC8004_IDENTITY_REGISTRY_ABI = [
   {
-    name: "registerAgent",
+    name: "register",
     type: "function",
     stateMutability: "nonpayable",
-    inputs: [
-      { name: "agentId", type: "uint256" },
-      { name: "skillHash", type: "bytes32" },
-      { name: "metadataURI", type: "string" },
-    ],
-    outputs: [],
-  },
-  {
-    name: "updateAgent",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "agentId", type: "uint256" },
-      { name: "skillHash", type: "bytes32" },
-      { name: "metadataURI", type: "string" },
-    ],
-    outputs: [],
-  },
-  {
-    name: "getAgent",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "agentId", type: "uint256" }],
-    outputs: [
-      {
-        components: [
-          { name: "agentId", type: "uint256" },
-          { name: "skillHash", type: "bytes32" },
-          { name: "metadataURI", type: "string" },
-          { name: "controller", type: "address" },
-          { name: "registeredAt", type: "uint256" },
-          { name: "reputationScore", type: "uint256" },
-          { name: "exists", type: "bool" },
-        ],
-        name: "",
-        type: "tuple",
-      },
-    ],
-  },
-  {
-    name: "exists",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "agentId", type: "uint256" }],
-    outputs: [{ name: "", type: "bool" }],
-  },
-  {
-    name: "AgentRegistered",
-    type: "event",
-    inputs: [
-      { name: "agentId", type: "uint256", indexed: true },
-      { name: "skillHash", type: "bytes32", indexed: true },
-      { name: "controller", type: "address", indexed: true },
-      { name: "metadataURI", type: "string", indexed: false },
-    ],
-  },
-] as const;
-
-export const JOB_ESCROW_ABI = [
-  {
-    name: "createJob",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "agentId", type: "uint256" },
-      { name: "worker", type: "address" },
-      { name: "evaluator", type: "address" },
-      { name: "jobSpecHash", type: "bytes32" },
-    ],
-    outputs: [{ name: "jobId", type: "uint256" }],
-  },
-  {
-    name: "setBudget",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "jobId", type: "uint256" },
-      { name: "budget", type: "uint256" },
-    ],
-    outputs: [],
-  },
-  {
-    name: "fund",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "jobId", type: "uint256" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [],
-  },
-  {
-    name: "submitDeliverable",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "jobId", type: "uint256" },
-      { name: "deliverableURI", type: "string" },
-      { name: "proofMetadataURI", type: "string" },
-    ],
-    outputs: [],
-  },
-  {
-    name: "evaluate",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "jobId", type: "uint256" },
-      { name: "approved", type: "bool" },
-    ],
-    outputs: [],
-  },
-  {
-    name: "settle",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "jobId", type: "uint256" }],
-    outputs: [],
-  },
-  {
-    name: "refundRejected",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "jobId", type: "uint256" }],
-    outputs: [],
-  },
-  {
-    name: "cancelJob",
-    type: "function",
-    stateMutability: "nonpayable",
-    inputs: [{ name: "jobId", type: "uint256" }],
-    outputs: [],
-  },
-  {
-    name: "jobCounter",
-    type: "function",
-    stateMutability: "view",
-    inputs: [],
+    inputs: [{ name: "metadataURI", type: "string" }],
     outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    name: "jobs",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "", type: "uint256" }],
-    outputs: [
-      { name: "id", type: "uint256" },
-      { name: "agentId", type: "uint256" },
-      { name: "client", type: "address" },
-      { name: "worker", type: "address" },
-      { name: "evaluator", type: "address" },
-      { name: "budget", type: "uint256" },
-      { name: "fundedAmount", type: "uint256" },
-      { name: "createdAt", type: "uint256" },
-      { name: "jobSpecHash", type: "bytes32" },
-      { name: "deliverableURI", type: "string" },
-      { name: "proofMetadataURI", type: "string" },
-      { name: "approved", type: "bool" },
-      { name: "status", type: "uint8" },
-    ],
-  },
-  {
-    name: "getUserJobs",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "user", type: "address" }],
-    outputs: [{ name: "", type: "uint256[]" }],
-  },
-  {
-    name: "getJobsByAgentId",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "agentId", type: "uint256" }],
-    outputs: [{ name: "", type: "uint256[]" }],
-  },
-  {
-    name: "JobCreated",
-    type: "event",
-    inputs: [
-      { name: "jobId", type: "uint256", indexed: true },
-      { name: "agentId", type: "uint256", indexed: true },
-      { name: "client", type: "address", indexed: true },
-      { name: "worker", type: "address", indexed: false },
-      { name: "evaluator", type: "address", indexed: false },
-      { name: "jobSpecHash", type: "bytes32", indexed: false },
-    ],
-  },
-  {
-    name: "JobFunded",
-    type: "event",
-    inputs: [
-      { name: "jobId", type: "uint256", indexed: true },
-      { name: "client", type: "address", indexed: true },
-      { name: "amount", type: "uint256", indexed: false },
-    ],
-  },
-  {
-    name: "DeliverableSubmitted",
-    type: "event",
-    inputs: [
-      { name: "jobId", type: "uint256", indexed: true },
-      { name: "deliverableURI", type: "string", indexed: false },
-    ],
-  },
-  {
-    name: "JobSettled",
-    type: "event",
-    inputs: [
-      { name: "jobId", type: "uint256", indexed: true },
-      { name: "agentId", type: "uint256", indexed: true },
-      { name: "worker", type: "address", indexed: true },
-      { name: "payout", type: "uint256", indexed: false },
-      { name: "fee", type: "uint256", indexed: false },
-    ],
-  },
-] as const;
-
-export const WORK_PROOF_ABI = [
-  {
-    name: "proofTokenByJobId",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "", type: "uint256" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    name: "getProofsByAgent",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "agentId", type: "uint256" }],
-    outputs: [{ name: "", type: "uint256[]" }],
-  },
-  {
-    name: "getProof",
-    type: "function",
-    stateMutability: "view",
-    inputs: [{ name: "tokenId", type: "uint256" }],
-    outputs: [
-      {
-        components: [
-          { name: "jobId", type: "uint256" },
-          { name: "agentId", type: "uint256" },
-          { name: "payer", type: "address" },
-          { name: "amountPaid", type: "uint256" },
-          { name: "mintedAt", type: "uint256" },
-          { name: "metadataURI", type: "string" },
-        ],
-        name: "",
-        type: "tuple",
-      },
-    ],
   },
   {
     name: "ownerOf",
@@ -460,24 +74,173 @@ export const WORK_PROOF_ABI = [
     outputs: [{ name: "", type: "string" }],
   },
   {
-    name: "WorkProofMinted",
+    name: "totalSupply",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "Transfer",
     type: "event",
     inputs: [
+      { name: "from", type: "address", indexed: true },
+      { name: "to", type: "address", indexed: true },
       { name: "tokenId", type: "uint256", indexed: true },
-      { name: "jobId", type: "uint256", indexed: true },
-      { name: "agentId", type: "uint256", indexed: true },
-      { name: "payer", type: "address", indexed: false },
-      { name: "amountPaid", type: "uint256", indexed: false },
     ],
   },
 ] as const;
 
-export const REPUTATION_ORACLE_ABI = [
+// ── ERC-8183 Agentic Commerce ────────────────────────────────────────────────
+
+export const ERC8183_AGENTIC_COMMERCE_ABI = [
   {
-    name: "getScore",
+    name: "createJob",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "provider", type: "address" },
+      { name: "evaluator", type: "address" },
+      { name: "expiredAt", type: "uint256" },
+      { name: "description", type: "string" },
+      { name: "hook", type: "address" },
+    ],
+    outputs: [{ name: "jobId", type: "uint256" }],
+  },
+  {
+    name: "setBudget",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "jobId", type: "uint256" },
+      { name: "amount", type: "uint256" },
+      { name: "optParams", type: "bytes" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "fund",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "jobId", type: "uint256" },
+      { name: "optParams", type: "bytes" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "submit",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "jobId", type: "uint256" },
+      { name: "deliverable", type: "bytes32" },
+      { name: "optParams", type: "bytes" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "complete",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "jobId", type: "uint256" },
+      { name: "reason", type: "bytes32" },
+      { name: "optParams", type: "bytes" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "getJob",
     type: "function",
     stateMutability: "view",
-    inputs: [{ name: "agentId", type: "uint256" }],
-    outputs: [{ name: "", type: "uint256" }],
+    inputs: [{ name: "jobId", type: "uint256" }],
+    outputs: [
+      {
+        type: "tuple",
+        components: [
+          { name: "id", type: "uint256" },
+          { name: "client", type: "address" },
+          { name: "provider", type: "address" },
+          { name: "evaluator", type: "address" },
+          { name: "description", type: "string" },
+          { name: "budget", type: "uint256" },
+          { name: "expiredAt", type: "uint256" },
+          { name: "status", type: "uint8" },
+          { name: "hook", type: "address" },
+        ],
+      },
+    ],
+  },
+  {
+    name: "JobCreated",
+    type: "event",
+    inputs: [
+      { name: "jobId", type: "uint256", indexed: true },
+      { name: "client", type: "address", indexed: true },
+      { name: "provider", type: "address", indexed: true },
+      { name: "evaluator", type: "address", indexed: false },
+      { name: "expiredAt", type: "uint256", indexed: false },
+      { name: "hook", type: "address", indexed: false },
+    ],
+  },
+  {
+    name: "BudgetSet",
+    type: "event",
+    inputs: [
+      { name: "jobId", type: "uint256", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    name: "JobFunded",
+    type: "event",
+    inputs: [
+      { name: "jobId", type: "uint256", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    name: "JobSubmitted",
+    type: "event",
+    inputs: [
+      { name: "jobId", type: "uint256", indexed: true },
+      { name: "deliverable", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    name: "JobCompleted",
+    type: "event",
+    inputs: [
+      { name: "jobId", type: "uint256", indexed: true },
+      { name: "reason", type: "bytes32", indexed: false },
+    ],
   },
 ] as const;
+
+// ── Legacy ABI aliases (deprecated) ─────────────────────────────────────────
+// These map old custom ArcLayer ABI names to official Arc equivalents.
+// Consumers importing AGENT_REGISTRY_ABI / JOB_ESCROW_ABI will get the
+// official ABI shape. Function signatures differ — callers MUST migrate.
+
+/**
+ * @deprecated Use ERC8004_IDENTITY_REGISTRY_ABI.
+ * NOTE: register() signature changed from registerAgent(uint256,bytes32,string)
+ * to register(string metadataURI). Callers must update.
+ */
+export const AGENT_REGISTRY_ABI = ERC8004_IDENTITY_REGISTRY_ABI;
+
+/**
+ * @deprecated Use ERC8183_AGENTIC_COMMERCE_ABI.
+ * NOTE: Function signatures changed significantly. Callers must update.
+ */
+export const JOB_ESCROW_ABI = ERC8183_AGENTIC_COMMERCE_ABI;
+
+/** @deprecated No WorkProof in official Arc/Circle mode. */
+export const WORK_PROOF_ABI = [] as const;
+
+/** @deprecated No ReputationOracle in official Arc/Circle mode. */
+export const REPUTATION_ORACLE_ABI = [] as const;
+
+/** @deprecated No MilestoneEscrow in official Arc/Circle mode. */
+export const MILESTONE_ESCROW_ABI = [] as const;
