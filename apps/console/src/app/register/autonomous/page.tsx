@@ -148,7 +148,7 @@ app.get('/.well-known/arclayer-agent.json', (_req, res) => {
 });
 
 app.post('/jobs/run', x402Middleware({
-  price: '0.01',
+  price: '0.000001',
   receiver,
   network: 'arc-testnet',
 }), async (req, res) => {

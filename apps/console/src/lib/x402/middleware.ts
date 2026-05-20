@@ -55,7 +55,7 @@ import type { PaymentRequirements, PaymentPayload } from './exact/types';
 // ─── Config ──────────────────────────────────────────────────────────────────
 
 export interface X402MiddlewareOptions {
-  /** Price in USDC atomic units (6 decimals). e.g. "10000" = $0.01 */
+  /** Price in USDC atomic units (6 decimals). e.g. "1" = $0.000001 */
   amount: string;
   /** Receiver address. Falls back to X402_RECEIVER_ADDRESS env. */
   payTo?: `0x${string}`;

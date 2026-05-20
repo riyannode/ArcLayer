@@ -3,8 +3,8 @@ import { withX402 } from '@/lib/x402';
 
 export const runtime = 'nodejs';
 
-// 0.40 USDC = 400000 atomic units (6 decimals)
-const AMOUNT_ATOMIC = '400000';
+// 0.000001 USDC = 1 atomic unit (6 decimals)
+const AMOUNT_ATOMIC = '1';
 const RESOURCE = '/api/x402/register-gate';
 
 async function handler(_req: NextRequest) {

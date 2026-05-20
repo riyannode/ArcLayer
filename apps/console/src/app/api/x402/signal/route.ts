@@ -5,7 +5,7 @@ import { withX402 } from '@/lib/x402';
  * GET /api/x402/signal — x402-gated A2A signal stream.
  *
  * Same data shape as /api/a2a/live-signal but requires x402 payment.
- * External agents pay 0.005 USDC per call. Internal UI uses the free endpoint.
+ * External agents pay 0.000001 USDC per call. Internal UI uses the free endpoint.
  *
  * Payment modes: arc-native (EIP-3009) | circle-gateway (batched).
  */
@@ -137,9 +137,9 @@ async function handler(_req: NextRequest): Promise<NextResponse> {
   }
 }
 
-// 0.005 USDC = 5000 atomic (6 decimals)
+// 0.000001 USDC = 1 atomic (6 decimals)
 export const GET = withX402(handler, {
-  amount: '5000',
+  amount: '1',
   resource: '/api/x402/signal',
   description: 'A2A signal stream — Pythia raw signal, Apolo decision, Hermes action',
 });

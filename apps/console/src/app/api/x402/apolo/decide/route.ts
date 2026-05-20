@@ -9,7 +9,7 @@ import {
 /**
  * POST /api/x402/apolo/decide
  *
- * x402-gated Apolo decision endpoint. Buyer pays 0.010 USDC and receives:
+ * x402-gated Apolo decision endpoint. Buyer pays 0.000001 USDC and receives:
  *   - decision (UP/DOWN/NEUTRAL) + status (APPROVED/REJECTED)
  *   - risk classification + confidence
  *   - rationale string

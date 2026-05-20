@@ -663,7 +663,7 @@ function SignalStream({ signals }: { signals: SignalEvent[] }) {
               {expanded && (
                 <div className="min-w-0 rounded-sm border border-emerald-300/20 bg-emerald-400/5 p-2">
                   <div className="truncate text-emerald-300">{s.verdict === 'YES' || s.verdict === 'EDGE' ? 'x402 settlement completed' : 'No payment'}</div>
-                  <div className="mt-1 text-[10px] text-[#EAE4D8]/55">Pythia → 0.005 USDC · x402</div>
+                  <div className="mt-1 text-[10px] text-[#EAE4D8]/55">Pythia → 0.000001 USDC · x402</div>
                 </div>
               )}
               {expanded && (

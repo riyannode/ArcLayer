@@ -254,7 +254,7 @@ export default function RegisterManualAgentPage() {
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[56px]">
               Register <span className="italic text-[#C5A67C]">manual</span> agent
             </h1>
-            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)] invisible">
               List your agent and get paid from escrow.
             </p>
           </div>
@@ -295,7 +295,7 @@ export default function RegisterManualAgentPage() {
           <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">STEP 1</div>
             <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent details</h2>
-            <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
+            <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.85)] invisible">
               AgentRegistry · registerAgent(keccak(name), skillHash, metadataURI)
             </code>
 
@@ -310,7 +310,7 @@ export default function RegisterManualAgentPage() {
                   autoComplete="off"
                   spellCheck={false}
                 />
-                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
+                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">
                   Choose a unique agent handle. The ID is created automatically.
                 </div>
                 <div className="mt-1.5 font-mono text-[10.5px]">
@@ -331,7 +331,7 @@ export default function RegisterManualAgentPage() {
                   className="input-mono"
                   autoComplete="off"
                 />
-                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
+                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">
                   Metadata label for the agent's capability.
                 </div>
               </div>
@@ -345,7 +345,7 @@ export default function RegisterManualAgentPage() {
                   className="input-mono"
                   autoComplete="off"
                 />
-                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
+                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">
                   Leave as default, or add an IPFS URL.
                 </div>
               </div>
@@ -381,7 +381,7 @@ export default function RegisterManualAgentPage() {
             >
               {isSubmitting ? 'REGISTERING…' : 'PAY & REGISTER'}
             </button>
-            <p className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.6)]">
+            <p className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.6)] invisible">
               Anti-spam fee: 0.40 USDC · Non-refundable · This fee prevents spam listings. It is not escrow funding.
             </p>
           </section>
@@ -399,7 +399,7 @@ export default function RegisterManualAgentPage() {
                 indexed
               </span>
             </div>
-            <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
+            <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)] invisible">
               Compact registered-agent list.
             </p>
 
@@ -497,12 +497,12 @@ export default function RegisterManualAgentPage() {
                   {agents.length > 0 ? (
                     <>
                       <p className="font-mono text-[11.5px] text-[#EAE4D8]">No agents match your search</p>
-                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.84)]">Try a different keyword or clear the filter.</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.84)] invisible">Try a different keyword or clear the filter.</p>
                     </>
                   ) : (
                     <>
                       <p className="font-mono text-[11.5px] text-[#EAE4D8]">No registered agents yet</p>
-                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.84)]">Complete Step 1 on the left. Your first registered agent will appear here automatically.</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.84)] invisible">Complete Step 1 on the left. Your first registered agent will appear here automatically.</p>
                     </>
                   )}
                 </div>
@@ -540,7 +540,7 @@ export default function RegisterManualAgentPage() {
                 <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">{s.n}</span>
                 <div>
                   <div className="text-[#EAE4D8]">{s.t}</div>
-                  <div className="text-[rgba(234,228,216,0.84)]">{s.d}</div>
+                  <div className="text-[rgba(234,228,216,0.84)] invisible">{s.d}</div>
                 </div>
               </li>
             ))}
@@ -549,7 +549,7 @@ export default function RegisterManualAgentPage() {
           <div className="mt-5 flex flex-col gap-3 md:flex-row">
             <div className="flex-1 rounded border border-white/5 bg-black/30 p-3">
               <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">Best for</div>
-              <p className="mt-1.5 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.8)]">
+              <p className="mt-1.5 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.8)] invisible">
                 For evaluator-verifiable services.
               </p>
             </div>

@@ -570,7 +570,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     }
   }, [step]);
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
-  const displayAmount = requirement?.amount ? formatUnits(BigInt(requirement.amount), 6) : '0.04';
+  const displayAmount = requirement?.amount ? formatUnits(BigInt(requirement.amount), 6) : '0.000001';
   // Rail lock: EOA → Arc Native only, Passkey → Circle Gateway only.
   const arcDisabledForPasskey = walletMode === 'passkey';
   const circleDisabledForEoa = walletMode === 'eoa';

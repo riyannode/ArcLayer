@@ -4,7 +4,7 @@ import { withX402 } from '@/lib/x402';
 /**
  * POST /api/x402/jobs/create — x402-gated job creation.
  *
- * External agents pay 0.05 USDC to submit a new job to the ArcLayer marketplace.
+ * External agents pay 0.000001 USDC to submit a new job to the ArcLayer marketplace.
  * Validates job spec, assigns jobId, returns confirmation.
  */
 
@@ -40,9 +40,9 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-// 0.05 USDC = 50000 atomic (6 decimals)
+// 0.000001 USDC = 1 atomic (6 decimals)
 export const POST = withX402(handler, {
-  amount: '50000',
+  amount: '1',
   resource: '/api/x402/jobs/create',
   description: 'Create a new job on ArcLayer marketplace',
 });
