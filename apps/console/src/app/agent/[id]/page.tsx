@@ -14,6 +14,8 @@ import { parseUSDC } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
 import { CopyButton } from '@/components/CopyButton';
 import { X402ActionGate } from '@/components/x402/X402ActionGate';
+import { IndexerDegradedBanner } from '@/components/IndexerDegradedBanner';
+import { loadAgentDetail, type DataSource } from '@/lib/indexer';
 
 const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || '/api/indexer';
 
@@ -140,6 +142,7 @@ export default function AgentProfilePage() {
   const { rail } = useRail();
   const agentId = parseAgentId(params.id);
   const [profile, setProfile] = useState<AgentDetail | null>(null);
+  const [dataSource, setDataSource] = useState<DataSource>('indexer');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [runInput, setRunInput] = useState('Run a paid test task through x402.');
@@ -153,10 +156,8 @@ export default function AgentProfilePage() {
       if (!agentId) { setError('Invalid agent id.'); setIsLoading(false); return; }
       try {
         setIsLoading(true); setError(null);
-        const r = await fetch(`${INDEXER_BASE_URL}/agents/${agentId}`, { cache: 'no-store' });
-        if (!r.ok) throw new Error(r.status === 404 ? 'Agent not found.' : `Indexer returned HTTP ${r.status}.`);
-        const next = (await r.json()) as AgentDetail;
-        if (!cancelled) setProfile(next);
+        const { data, source } = await loadAgentDetail(agentId);
+        if (!cancelled) { setProfile(data); setDataSource(source); }
       } catch (e) {
         if (!cancelled) { setError(e instanceof Error ? e.message : 'Failed to load agent profile.'); setProfile(null); }
       } finally { if (!cancelled) setIsLoading(false); }
@@ -340,6 +341,8 @@ export default function AgentProfilePage() {
         </div>
 
         <X402ActionGate lockedMessage="Pay x402 on homepage to unlock agent actions">
+        <IndexerDegradedBanner visible={dataSource === 'rpc'} className="mb-6" />
+
         <section className="mb-6 p-6" style={{ border: '1px solid rgba(197, 166, 124, 0.22)', background: 'rgba(10, 10, 10, 0.68)' }}>
           <div className="aureo-mono-label mb-2">X402 · BUYER RUN</div>
           <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Payment-required agent call</h2>

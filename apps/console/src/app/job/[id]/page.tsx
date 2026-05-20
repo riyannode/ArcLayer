@@ -13,7 +13,8 @@ import {
 } from '@arclayer/sdk';
 import { CONTRACTS, formatUSDC, getExplorerAddressUrl, shortenAddress } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
-import { fetchIndexerJson, INDEXER_BASE_URL, type JobDetail, waitForIndexer } from '@/lib/indexer';
+import { fetchIndexerJson, INDEXER_BASE_URL, type JobDetail, waitForIndexer, loadJobDetail, type DataSource } from '@/lib/indexer';
+import { IndexerDegradedBanner } from '@/components/IndexerDegradedBanner';
 
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Evaluated', 'Settled', 'Cancelled'] as const;
 
@@ -70,6 +71,7 @@ export default function JobDetailPage() {
   const { address, isConnected } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const [payload, setPayload] = useState<JobDetail | null>(null);
+  const [dataSource, setDataSource] = useState<DataSource>('indexer');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [txState, setTxState] = useState<string | null>(null);
@@ -87,8 +89,8 @@ export default function JobDetailPage() {
       if (!jobId) { setError('Invalid job id.'); setIsLoading(false); return; }
       try {
         setIsLoading(true); setError(null);
-        const next = await fetchIndexerJson<JobDetail>(`/jobs/${jobId}`);
-        if (!cancelled) setPayload(next);
+        const { data, source } = await loadJobDetail(jobId);
+        if (!cancelled) { setPayload(data); setDataSource(source); }
       } catch (e) {
         if (!cancelled) { setError(e instanceof Error ? e.message : 'Failed to load job.'); setPayload(null); }
       } finally { if (!cancelled) setIsLoading(false); }
@@ -256,6 +258,8 @@ export default function JobDetailPage() {
             <p className="font-mono text-[11.5px] text-[#f0c5c5]">{error}</p>
           </div>
         )}
+
+        <IndexerDegradedBanner visible={dataSource === 'rpc'} className="mb-6" />
 
         {/* KPIs */}
         <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
