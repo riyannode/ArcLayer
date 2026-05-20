@@ -8,7 +8,7 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { useX402AntiSpamPay } from '@/hooks/useX402AntiSpamPay';
 import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
-import { fetchIndexerJson, type IndexedAgent } from '@/lib/indexer';
+import { fetchIndexerJson, waitForIndexer, type IndexedAgent } from '@/lib/indexer';
 import { StatusBanner } from '@/components/StatusBanner';
 import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/components/protection';
 import { LLMAgentConnectKit } from '@/components/LLMAgentConnectKit';
@@ -54,6 +54,7 @@ export default function RegisterManualAgentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txState, setTxState] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<'idle' | 'pending' | 'synced' | 'error'>('idle');
+  const [indexerSynced, setIndexerSynced] = useState(false);
   const [form, setForm] = useState({
     name: '',
     skill: 'solidity-auditor',
@@ -176,6 +177,7 @@ export default function RegisterManualAgentPage() {
     if (nameStatus.state !== 'free') return;
     try {
       setIsSubmitting(true);
+      setIndexerSynced(false);
 
       // STEP A — Anti-spam x402 fee (0.40 USDC). Block before touching chain.
       setStatusTone('pending');
@@ -204,8 +206,14 @@ export default function RegisterManualAgentPage() {
       setTxState(`✓ Agent "${normalizedName}" registered as ${shortAgentId(agentId)}.`);
       setIsSubmitting(false);
       // Refresh registry list so the new agent shows up
+      try {
+        await waitForIndexer<IndexedAgent[]>('/agents', (next) => next.some((a) => a.agentId.toLowerCase() === agentId.toString().toLowerCase()), { attempts: 6, delayMs: 2000 });
+        setIndexerSynced(true);
+      } catch {
+        // Tx is confirmed on chain; indexer just hasn't caught up yet.
+      }
       void loadAgents();
-      setTimeout(() => router.push('/jobs'), 1500);
+      setTimeout(() => router.push(`/jobs/manual?agent=${agentId.toString()}`), 1500);
     } catch (e) {
       // x402 already paid (sunk cost) but registerAgent failed/rejected.
       const msg = e instanceof Error ? e.message : 'Agent registration failed.';
@@ -254,7 +262,7 @@ export default function RegisterManualAgentPage() {
             <button onClick={() => loadAgents()} className="btn-bordered">
               {isRefreshing ? 'REFRESHING…' : 'REFRESH'}
             </button>
-            <Link href="/jobs" className="btn-primary">GO TO JOBS</Link>
+            <Link href="/jobs/manual" className="btn-primary">GO TO MANUAL JOBS</Link>
           </div>
         </div>
 
@@ -271,7 +279,9 @@ export default function RegisterManualAgentPage() {
               statusTone === 'pending'
                 ? 'PENDING · CONFIRMATION'
                 : statusTone === 'synced'
-                  ? 'INDEXER · SYNCED'
+                  ? indexerSynced
+                    ? 'INDEXER · SYNCED'
+                    : 'TX CONFIRMED · Waiting for indexer'
                   : statusTone === 'error'
                     ? 'ACTION · ERROR'
                     : 'READY'
@@ -372,7 +382,7 @@ export default function RegisterManualAgentPage() {
               {isSubmitting ? 'REGISTERING…' : 'PAY & REGISTER'}
             </button>
             <p className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.6)]">
-              Anti-spam fee: 0.40 USDC · Non-refundable · Prevents spam listings
+              Anti-spam fee: 0.40 USDC · Non-refundable · This fee prevents spam listings. It is not escrow funding.
             </p>
           </section>
 
@@ -469,7 +479,7 @@ export default function RegisterManualAgentPage() {
                         >
                           Copy ID
                         </button>
-                        <Link href={`/jobs?agent=${encodeURIComponent(a.agentId)}`} className="btn-primary px-2.5 py-1.5 text-[9px]">
+                        <Link href={`/jobs/manual?agent=${encodeURIComponent(a.agentId)}`} className="btn-primary px-2.5 py-1.5 text-[9px]">
                           Use
                         </Link>
                         <Link href={`/agent/${a.agentId}`} className="font-mono text-[9px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
