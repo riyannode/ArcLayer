@@ -92,6 +92,9 @@ apps/console/scripts/derive-addresses.mjs
 apps/console/scripts/e2e-*.mjs
 .vercel
 
+# A2A trade data (local runtime, never commit)
+apps/console/data/
+
 # Agent dev scripts (not for commit)
 agents/data/
 agents/scripts/
