@@ -89,7 +89,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     icon: (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><path d="M2 12h4M18 12h4M12 2v4M12 18v4" strokeLinecap="round"/></svg>),
     capabilities: ['Chainlink + RTDS feeds', 'Custom HTTP oracle bridge', 'Sub-100ms WS price stream', 'Aggregated medianizer'],
     exampleAgents: ['Pythia · price + signal oracle'],
-    feeRange: '0.001 – 0.01 USDC / fetch',
+    feeRange: '0.000001 USDC / fetch',
     status: 'LIVE',
   },
   {

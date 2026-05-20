@@ -123,7 +123,7 @@ export function makePythiaSignalCharge(): AgentCharge {
     seller: 'Pythia',
     buyer: 'Apolo',
     service: 'BTC 5m signal',
-    amountUsdc: '0.001',
+    amountUsdc: '0.000001',
     payer: A2A_ADDR.APOLO,
     payee: A2A_ADDR.PYTHIA,
   });
@@ -134,7 +134,7 @@ export function makeApoloDecisionCharge(): AgentCharge {
     seller: 'Apolo',
     buyer: 'Hermes',
     service: 'risk + edge decision',
-    amountUsdc: '0.0002',
+    amountUsdc: '0.000001',
     payer: A2A_ADDR.HERMES,
     payee: A2A_ADDR.APOLO,
   });
@@ -145,7 +145,7 @@ export function makeHermesIntentCharge(): AgentCharge {
     seller: 'Hermes',
     buyer: 'Job',
     service: 'execution intent / action proof',
-    amountUsdc: '0.015',
+    amountUsdc: '0.000001',
     payer: A2A_ADDR.JOB_ESCROW,
     payee: A2A_ADDR.HERMES,
   });

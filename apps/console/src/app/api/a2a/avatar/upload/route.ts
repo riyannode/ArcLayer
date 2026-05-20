@@ -131,9 +131,9 @@ async function postHandler(req: NextRequest) {
   return NextResponse.json({ ok: true, url });
 }
 
-// 0.001 USDC = 1000 atomic (6 decimals). Avatar uploads consume storage and are paid actions.
+// 0.000001 USDC = 1 atomic (6 decimals). Avatar uploads consume storage and are paid actions.
 export const POST = withX402(postHandler, {
-  amount: '1000',
+  amount: '1',
   resource: '/api/a2a/avatar/upload',
   description: 'Upload an A2A agent avatar — storage anti-spam fee',
 });

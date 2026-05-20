@@ -749,7 +749,7 @@ function LiveA2AFlow({ receipt }: { receipt: FlowReceipt | null }) {
   const hermesCharge = charges.find((c) => c.seller === 'Hermes');
   const timeline = pythiaCharge?.lifecycle ?? [
     { label: 'REQUEST', ts: '', detail: 'Agent requested protected signal' },
-    { label: '402 REQUIRED', ts: '', detail: 'Pythia requires 0.001 USDC' },
+    { label: '402 REQUIRED', ts: '', detail: 'Pythia requires 0.000001 USDC' },
     { label: 'X-PAYMENT', ts: '', detail: 'Apolo signed x402 authorization' },
     { label: 'VERIFY', ts: '', detail: 'Facilitator verified payment' },
     { label: 'SETTLE', ts: '', detail: 'USDC settled on Arc' },
@@ -809,9 +809,9 @@ function LiveA2AFlow({ receipt }: { receipt: FlowReceipt | null }) {
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <ChargeCard charge={pythiaCharge} fallback={{ seller: 'Pythia', title: 'Pythia · Signal Oracle', service: 'BTC 5m signal', amount: '0.001', paidBy: 'Apolo', recipient: 'Pythia wallet', status: step >= 2 ? 'x402 verified' : 'waiting' }} />
-        <ChargeCard charge={apoloCharge} fallback={{ seller: 'Apolo', title: 'Apolo · Decision Agent', service: 'risk + edge decision', amount: '0.0002', paidBy: 'Hermes', recipient: 'Apolo wallet', status: step >= 4 ? 'x402 settled' : 'waiting' }} />
-        <ChargeCard charge={hermesCharge} fallback={{ seller: 'Hermes', title: 'Hermes · Autonomous Executor', service: 'execution intent / action proof', amount: '0.01', paidBy: 'Job/session', recipient: 'Hermes wallet', status: step >= 5 ? 'action logged' : 'waiting' }} />
+        <ChargeCard charge={pythiaCharge} fallback={{ seller: 'Pythia', title: 'Pythia · Signal Oracle', service: 'BTC 5m signal', amount: '0.000001', paidBy: 'Apolo', recipient: 'Pythia wallet', status: step >= 2 ? 'x402 verified' : 'waiting' }} />
+        <ChargeCard charge={apoloCharge} fallback={{ seller: 'Apolo', title: 'Apolo · Decision Agent', service: 'risk + edge decision', amount: '0.000001', paidBy: 'Hermes', recipient: 'Apolo wallet', status: step >= 4 ? 'x402 settled' : 'waiting' }} />
+        <ChargeCard charge={hermesCharge} fallback={{ seller: 'Hermes', title: 'Hermes · Autonomous Executor', service: 'execution intent / action proof', amount: '0.000001', paidBy: 'Job/session', recipient: 'Hermes wallet', status: step >= 5 ? 'action logged' : 'waiting' }} />
       </div>
 
       <div className="grid grid-cols-1 gap-px overflow-hidden rounded-sm border border-white/10 bg-[#C5A67C]/10 md:grid-cols-3">

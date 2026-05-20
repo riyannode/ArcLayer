@@ -4,7 +4,7 @@ import { withX402 } from '@/lib/x402';
 /**
  * POST /api/x402/jobs/quote — x402-gated quote request.
  *
- * External agents pay 0.01 USDC to request a price quote for a job.
+ * External agents pay 0.000001 USDC to request a price quote for a job.
  */
 
 export const runtime = 'nodejs';
@@ -39,9 +39,9 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-// 0.01 USDC = 10000 atomic (6 decimals)
+// 0.000001 USDC = 1 atomic (6 decimals)
 export const POST = withX402(handler, {
-  amount: '10000',
+  amount: '1',
   resource: '/api/x402/jobs/quote',
   description: 'Request a price quote for an ArcLayer job',
 });

@@ -18,7 +18,7 @@ import {
  *
  *   1. Pythia charges Apolo  0.005 USDC for the BTC 5m signal
  *   2. Apolo  charges Hermes 0.010 USDC for the risk + edge decision
- *   3. Hermes charges Job    0.015 USDC for the execution intent / action proof
+ *   3. Hermes charges Job    0.000001 USDC for the execution intent / action proof
  *
  * Each charge produces a full x402 lifecycle proof: 402-required → X-PAYMENT
  * authorization → facilitator verify → USDC settlement → resource unlock →

@@ -60,9 +60,9 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-// 0.010 USDC = 10000 atomic (6 decimals)
+// 0.000001 USDC = 1 atomic (6 decimals)
 export const POST = withX402(handler, {
-  amount: '10000',
+  amount: '1',
   resource: '/api/x402/apolo/decide',
   description: 'Apolo decision filter — risk gate + confidence over a fresh Pythia signal',
 });

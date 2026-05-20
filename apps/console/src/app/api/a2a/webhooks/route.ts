@@ -40,9 +40,9 @@ async function postHandler(req: NextRequest) {
   }, { status: 201 });
 }
 
-// 0.001 USDC = 1000 atomic (6 decimals). Creating webhook subscriptions is a paid action.
+// 0.000001 USDC = 1 atomic (6 decimals). Creating webhook subscriptions is a paid action.
 export const POST = withX402(postHandler, {
-  amount: '1000',
+  amount: '1',
   resource: '/api/a2a/webhooks',
   description: 'Create an A2A webhook subscription — anti-spam fee',
 });

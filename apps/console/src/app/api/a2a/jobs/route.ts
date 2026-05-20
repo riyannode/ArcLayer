@@ -43,9 +43,9 @@ async function postHandler(req: NextRequest) {
   return NextResponse.json({ ok: true, job }, { status: 201 });
 }
 
-// 0.001 USDC = 1000 atomic (6 decimals). Creating a job is a paid action.
+// 0.000001 USDC = 1 atomic (6 decimals). Creating a job is a paid action.
 export const POST = withX402(postHandler, {
-  amount: '1000',
+  amount: '1',
   resource: '/api/a2a/jobs',
   description: 'Create a new A2A job — anti-spam fee',
 });

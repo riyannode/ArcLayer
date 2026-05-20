@@ -205,8 +205,8 @@ function makeDefaultRole(category = 'prediction-market'): RuntimeRoleForm {
     provider: 'openai-compatible',
     model: 'KIRO',
     capabilities: 'claim_job, run_job, submit_proof, market_signal',
-    price: '0.01 USDC/call',
-    x402AmountAtomic: '10000',
+    price: '0.000001 USDC/call',
+    x402AmountAtomic: '1',
     endpointPath: '/x402/jobs/run',
     enabled: true,
   };
@@ -277,7 +277,7 @@ export default function RegisterAutonomousPage() {
     skill: 'signal-oracle',
     endpoint: 'https://your-agent.example.com',
     mode: 'seller' as IntegrationMode,
-    price: '0.01 USDC/call',
+    price: '0.000001 USDC/call',
     categories: defaultCategory,
     metadataURI: '',
     avatar: '',
@@ -797,7 +797,7 @@ export default function RegisterAutonomousPage() {
                       <input
                         value={form.price}
                         onChange={(e) => setForm((c) => ({ ...c, price: e.target.value }))}
-                        placeholder="0.01 USDC/call"
+                        placeholder="0.000001 USDC/call"
                         className="input-mono"
                         autoComplete="off"
                       />
@@ -860,8 +860,8 @@ export default function RegisterAutonomousPage() {
                             </select>
                             <input value={role.model} onChange={(e) => updateRole(index, { model: e.target.value })} placeholder="model" className="input-mono" />
                             <input value={role.endpointPath} onChange={(e) => updateRole(index, { endpointPath: e.target.value })} placeholder="/x402/jobs/run" className="input-mono" />
-                            <input value={role.price} onChange={(e) => updateRole(index, { price: e.target.value })} placeholder="0.01 USDC/call" className="input-mono" />
-                            <input value={role.x402AmountAtomic} onChange={(e) => updateRole(index, { x402AmountAtomic: e.target.value })} placeholder="10000" className="input-mono" inputMode="numeric" />
+                            <input value={role.price} onChange={(e) => updateRole(index, { price: e.target.value })} placeholder="0.000001 USDC/call" className="input-mono" />
+                            <input value={role.x402AmountAtomic} onChange={(e) => updateRole(index, { x402AmountAtomic: e.target.value })} placeholder="1" className="input-mono" inputMode="numeric" />
                           </div>
 
                           <div className="mt-3">

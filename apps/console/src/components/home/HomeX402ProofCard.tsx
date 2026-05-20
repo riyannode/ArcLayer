@@ -75,7 +75,7 @@ export default function HomeX402ProofCard() {
       <p className="mt-3 text-[10.5px] leading-relaxed text-[#a0a0a0]">
         ArcLayer includes a live x402 protected resource. Choose Arc Native or Circle Gateway
         to unlock a protected agent/API resource, then see duplicate receipt protection reject
-        reused payments. Each settlement is 0.01 USDC on Arc Testnet — verifiable on-chain.
+        reused payments. Each settlement is 0.000001 USDC on Arc Testnet — verifiable on-chain.
       </p>
 
       {/* CTAs */}

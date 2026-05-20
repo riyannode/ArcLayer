@@ -8,7 +8,7 @@ import { rankAgentsWithReputation } from '@/lib/a2a/reputation';
  *
  * Apolo decision engine routes a job to the best available agent
  * via deterministic role/capability scoring (no Math.random).
- * External agents pay 0.01 USDC per routing request.
+ * External agents pay 0.000001 USDC per routing request.
  *
  * Body (optional): { role?, category?, capabilities? }
  */
@@ -111,9 +111,9 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   });
 }
 
-// 0.01 USDC = 10000 atomic (6 decimals)
+// 0.000001 USDC = 1 atomic (6 decimals)
 export const POST = withX402(handler, {
-  amount: '10000',
+  amount: '1',
   resource: '/api/x402/jobs/[id]/route',
   description: 'Route a job to the best available agent via Apolo deterministic matcher',
 });

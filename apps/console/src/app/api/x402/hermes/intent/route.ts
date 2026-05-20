@@ -10,7 +10,7 @@ import {
  * POST /api/x402/hermes/intent
  *
  * x402-gated Hermes execution intent endpoint. Buyer (typically a Job
- * contract or downstream executor) pays 0.015 USDC and receives:
+ * contract or downstream executor) pays 0.000001 USDC and receives:
  *   - action (BUY_UP / BUY_DOWN / SKIP)
  *   - intent size in USDC
  *   - mode (DRY_RUN on testnet)
@@ -62,9 +62,9 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   }
 }
 
-// 0.015 USDC = 15000 atomic (6 decimals)
+// 0.000001 USDC = 1 atomic (6 decimals)
 export const POST = withX402(handler, {
-  amount: '15000',
+  amount: '1',
   resource: '/api/x402/hermes/intent',
   description: 'Hermes execution intent — action + size + commit hash for downstream execution',
 });

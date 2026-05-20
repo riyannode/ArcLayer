@@ -95,7 +95,7 @@ export function buildAgentNetwork({
       role: 'Decision Resolver (paid)',
       capability: ['x402 Seller', 'Risk Policy', 'Final Decision'],
       description:
-        'Paid decision engine. Consumes Ignia raw signals, applies risk + veto policy, and exposes APPROVED/DOWNGRADED/REJECTED decisions over x402. Charges 0.01 USDC per call. The only oracle agent buyers actually pay.',
+        'Paid decision engine. Consumes Ignia raw signals, applies risk + veto policy, and exposes APPROVED/DOWNGRADED/REJECTED decisions over x402. Charges 0.000001 USDC per call. The only oracle agent buyers actually pay.',
       status: isLive ? 'LIVE' : 'IDLE',
       wallet: onchain?.wallets?.pythia,
       agentId: apoloId,

@@ -13,7 +13,7 @@ import {
 
 export const runtime = 'nodejs';
 
-const DEFAULT_AMOUNT_ATOMIC = '10000';
+const DEFAULT_AMOUNT_ATOMIC = '1';
 const DEFAULT_PAY_TO = '0x4aA3402575b6D98EacE35A823EFa267F7365bdD2';
 
 function gatewayWalletAddress() {

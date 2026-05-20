@@ -151,9 +151,9 @@ async function postHandler(req: NextRequest): Promise<NextResponse> {
   });
 }
 
-// 0.001 USDC = 1000 atomic (6 decimals). GET remains free; publishing/updating a manifest is paid anti-spam.
+// 0.000001 USDC = 1 atomic (6 decimals). GET remains free; publishing/updating a manifest is paid anti-spam.
 export const POST = withX402(postHandler, {
-  amount: '1000',
+  amount: '1',
   resource: '/api/a2a/manifest',
   description: 'Publish or update an A2A agent manifest — anti-spam fee',
 });

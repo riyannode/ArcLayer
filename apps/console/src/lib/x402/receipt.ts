@@ -32,7 +32,7 @@ export interface X402PaymentReceipt {
   /** Receiver/seller address. */
   payTo: string;
 
-  /** Amount in smallest unit (e.g. "10000" = 0.01 USDC with 6 decimals). */
+  /** Amount in smallest unit (e.g. "1" = 0.000001 USDC with 6 decimals). */
   amount: string;
 
   /** Token contract address. */

@@ -18,7 +18,7 @@ const agents: AgentMatchCandidate[] = [
       { id: 'job-router', name: 'Job Router', category: 'orchestration', capabilities: ['routing', 'decision'], enabled: true, endpointPath: '/api/x402/jobs/[id]/route' },
       { id: 'matcher', name: 'Capability Matcher', category: 'orchestration', capabilities: ['role-match'], enabled: true, endpointPath: '/api/x402/jobs/[id]/route' },
     ],
-    x402: { enabled: true, price: '0.01 USDC' },
+    x402: { enabled: true, price: '0.000001 USDC' },
   },
   {
     agentId: 'hermes-trader',
@@ -31,7 +31,7 @@ const agents: AgentMatchCandidate[] = [
       { id: 'execution-agent', name: 'Execution Agent', category: 'trading', capabilities: ['execution', 'settlement'], enabled: true, endpointPath: '/jobs/run' },
       { id: 'market-reader', name: 'Market Reader', category: 'trading', capabilities: ['signal'], enabled: true, endpointPath: '/signals' },
     ],
-    x402: { enabled: true, price: '0.0002 USDC/call' },
+    x402: { enabled: true, price: '0.000001 USDC/call' },
   },
   {
     agentId: 'openclaw-auditor',
@@ -44,7 +44,7 @@ const agents: AgentMatchCandidate[] = [
       { id: 'smart-contract-auditor', name: 'Smart Contract Auditor', category: 'security', capabilities: ['audit', 'exploit-check'], enabled: true, endpointPath: '/jobs/run' },
       { id: 'repo-reviewer', name: 'Repository Reviewer', category: 'security', capabilities: ['code-review'], enabled: true, endpointPath: '/jobs/run' },
     ],
-    x402: { enabled: true, price: '0.02 USDC/job' },
+    x402: { enabled: true, price: '0.000001 USDC/job' },
   },
 ];
 

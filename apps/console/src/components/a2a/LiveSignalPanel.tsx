@@ -112,7 +112,7 @@ function SignalCard({ row }: { row: SignalRow }) {
             </div>
             <div className="flex justify-between font-mono text-[9px]">
               <span className="text-[#bdb1a0]">x402 paid</span>
-              <span className="text-emerald-300">0.01 USDC</span>
+              <span className="text-emerald-300">0.000001 USDC</span>
             </div>
           </div>
         </div>

@@ -95,7 +95,7 @@ export default function AgentFlowDiagram({ isLive, igniaActive, apoloActive, her
               <text x="500" y="105" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="10" fill="#A78BFA" letterSpacing="0.18em">RESOLVER · x402</text>
               <text x="500" y="132" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="22" fontWeight="600" fill="#EAE4D8">Apolo</text>
               <text x="500" y="156" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="10" fill="#9CA3AF">paid decision engine</text>
-              <text x="500" y="174" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="9" fill="#666">0.01 USDC · :4012</text>
+              <text x="500" y="174" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="9" fill="#666">0.000001 USDC · :4012</text>
               <circle cx="565" cy="95" r="4" fill={apoloActive ? '#A78BFA' : '#444'}>
                 {apoloActive && <animate attributeName="opacity" values="1;0.3;1" dur="1.6s" repeatCount="indefinite" />}
               </circle>
@@ -128,7 +128,7 @@ export default function AgentFlowDiagram({ isLive, igniaActive, apoloActive, her
           {/* Apolo → Hermes */}
           <line x1="580" y1="140" x2="640" y2="140" stroke="#C5A67C" strokeWidth="1.5" markerEnd="url(#arrowEnd)" opacity="0.85" />
           <text x="610" y="132" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="8" fill="#A78BFA">decision</text>
-          <text x="610" y="155" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="7" fill="#666">x402 · 0.01 USDC</text>
+          <text x="610" y="155" textAnchor="middle" fontFamily="ui-monospace, monospace" fontSize="7" fill="#666">x402 · 0.000001 USDC</text>
 
           {/* Hermes → Settlement */}
           <line x1="720" y1="200" x2="720" y2="240" stroke="#C5A67C" strokeWidth="1.5" markerEnd="url(#arrowEnd)" opacity="0.7" />
@@ -155,7 +155,7 @@ export default function AgentFlowDiagram({ isLive, igniaActive, apoloActive, her
         <div className="rounded border border-violet-500/15 bg-black/20 p-3">
           <p className="font-mono text-[9px] uppercase tracking-widest text-violet-300/80">2 · Apolo</p>
           <p className="mt-1 font-mono text-[10.5px] leading-[1.5] text-[#9CA3AF]">
-            Public-paid x402 endpoint. Buyers pay 0.01 USDC per call to fetch a final
+            Public-paid x402 endpoint. Buyers pay 0.000001 USDC per call to fetch a final
             APPROVED/DOWNGRADED/REJECTED decision. Applies risk policy + veto filters
             on top of Ignia's raw signals.
           </p>

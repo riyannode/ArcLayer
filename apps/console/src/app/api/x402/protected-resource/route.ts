@@ -3,7 +3,7 @@ import { withX402 } from '@/lib/x402';
 
 export const runtime = 'nodejs';
 
-const DEFAULT_AMOUNT_ATOMIC = '40000'; // 0.04 USDC, 6 decimals
+const DEFAULT_AMOUNT_ATOMIC = '1'; // 0.000001 USDC, 6 decimals
 const RESOURCE = '/api/x402/protected-resource';
 
 async function protectedHandler(_req: NextRequest) {
