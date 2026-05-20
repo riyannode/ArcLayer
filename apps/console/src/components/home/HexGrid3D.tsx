@@ -143,16 +143,9 @@ export default function HexGrid3D() {
   useEffect(() => {
     if (reducedMotionRef.current) return;
 
-    let hidden = document.hidden;
-    const onVisibility = () => { hidden = document.hidden; };
-    document.addEventListener('visibilitychange', onVisibility);
     const frameMs = 1000 / 24;
 
     const tick = (t: number) => {
-      if (hidden) {
-        rafRef.current = requestAnimationFrame(tick);
-        return;
-      }
       if (t - lastFrameRef.current < frameMs) {
         rafRef.current = requestAnimationFrame(tick);
         return;
@@ -205,9 +198,28 @@ export default function HexGrid3D() {
       rafRef.current = requestAnimationFrame(tick);
     };
 
-    rafRef.current = requestAnimationFrame(tick);
+    const start = () => {
+      if (rafRef.current != null || document.hidden) return;
+      prevTimeRef.current = null;
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    const stop = () => {
+      if (rafRef.current == null) return;
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    };
+
+    const onVisibility = () => {
+      if (document.hidden) stop();
+      else start();
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    start();
+
     return () => {
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      stop();
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);

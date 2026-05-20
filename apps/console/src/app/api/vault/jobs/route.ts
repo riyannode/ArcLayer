@@ -1,7 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { withWalletAuth } from '@/lib/auth/wallet-auth';
-import { keccak256, toHex } from 'viem';
+import { ARC_VAULT_ADDRESS, USDC_DECIMALS } from '@/lib/vault/constants';
+import arcVaultAbiJson from '@/lib/vault/abi/arc-vault.json';
+import { createPublicClient, decodeEventLog, getAddress, http, keccak256, parseUnits, toHex } from 'viem';
+
+const ARC_RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
+const arcVaultAbi = arcVaultAbiJson as Parameters<typeof decodeEventLog>[0]['abi'];
+
+async function verifyVaultCreateTx(input: {
+  txHash?: string;
+  expectedClient: `0x${string}`;
+  expectedAmount: bigint;
+  expectedSpecHash?: string;
+  expectedJobId?: string;
+}) {
+  if (!input.txHash || !/^0x[a-fA-F0-9]{64}$/.test(input.txHash)) {
+    return { ok: false as const, error: 'valid ArcVault create tx hash required' };
+  }
+
+  const client = createPublicClient({ transport: http(ARC_RPC) });
+  const receipt = await client.getTransactionReceipt({ hash: input.txHash as `0x${string}` }).catch(() => null);
+  if (!receipt) return { ok: false as const, error: 'create tx receipt not found' };
+  if (receipt.status !== 'success') return { ok: false as const, error: 'create tx reverted' };
+
+  for (const log of receipt.logs) {
+    if (log.address.toLowerCase() !== ARC_VAULT_ADDRESS.toLowerCase()) continue;
+    try {
+      const decoded = decodeEventLog({ abi: arcVaultAbi, data: log.data, topics: log.topics }) as unknown as {
+        eventName: string;
+        args: { jobId: bigint; client: `0x${string}`; totalAmount: bigint; specHash: `0x${string}` };
+      };
+      if (decoded.eventName !== 'JobCreated') continue;
+
+      const chainJobId = decoded.args.jobId.toString();
+      if (getAddress(decoded.args.client) !== getAddress(input.expectedClient)) {
+        return { ok: false as const, error: 'create tx client does not match authenticated wallet' };
+      }
+      if (decoded.args.totalAmount !== input.expectedAmount) {
+        return { ok: false as const, error: 'create tx totalAmount does not match request' };
+      }
+      if (input.expectedSpecHash && decoded.args.specHash.toLowerCase() !== input.expectedSpecHash.toLowerCase()) {
+        return { ok: false as const, error: 'create tx specHash does not match request' };
+      }
+      if (input.expectedJobId && chainJobId !== input.expectedJobId) {
+        return { ok: false as const, error: 'create tx jobId does not match request' };
+      }
+      return { ok: true as const, onChainJobId: chainJobId };
+    } catch {
+      // Skip non-ArcVault JobCreated logs.
+    }
+  }
+
+  return { ok: false as const, error: 'ArcVault JobCreated event not found in create tx' };
+}
 
 // GET /api/vault/jobs — read-only list jobs for wallet query param
 // POST /api/vault/jobs — create a new job (V1 deposit), wallet-auth protected
@@ -105,6 +157,22 @@ export const POST = withWalletAuth(async (req: NextRequest, { wallet }) => {
     }
   }
 
+  // M5: On-chain verification — verify ArcVault.createJob tx receipt before DB insert.
+  // This prevents spoofed onChainJobId / txHashes from being indexed.
+  const createTxHash = body.txHashes?.create || body.txHash;
+  const verification = await verifyVaultCreateTx({
+    txHash: createTxHash,
+    expectedClient: wallet,
+    expectedAmount: parseUnits(String(totalAmount), USDC_DECIMALS),
+    expectedSpecHash: body.specHash || undefined,
+    expectedJobId: body.onChainJobId || undefined,
+  });
+  if (!verification.ok) {
+    return NextResponse.json({ error: verification.error }, { status: 400 });
+  }
+  // Use verified on-chain job ID (overrides any client-supplied value)
+  const verifiedOnChainJobId = verification.onChainJobId;
+
   // Determine duration tier
   let durationTier = body.durationTier || 'single_payout';
   if (body.milestones.length > 1) durationTier = 'milestone';
@@ -122,8 +190,8 @@ export const POST = withWalletAuth(async (req: NextRequest, { wallet }) => {
     spec_hash: body.specHash || null,
     spec_json: body.specJson,
     deadline: body.jobDeadline || null,
-    on_chain_job_id: body.onChainJobId || null,
-    tx_hash_create: body.txHashes?.create || body.txHash || null,
+    on_chain_job_id: verifiedOnChainJobId,
+    tx_hash_create: createTxHash,
     tx_hash_deposit: body.txHashes?.deposit || null,
     tx_hash_approve: body.txHashes?.approve || null,
   }).select().single();

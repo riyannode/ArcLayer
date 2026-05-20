@@ -32,7 +32,7 @@ export const REOWN_PROJECT_ID = process.env.NEXT_PUBLIC_REOWN_PROJECT_ID || '';
  */
 export const wagmiAdapter = new WagmiAdapter({
   networks: [arcTestnetReown],
-  projectId: REOWN_PROJECT_ID || 'arclayer-placeholder',
+  projectId: REOWN_PROJECT_ID || '02b0a0a57219a15bbf95096ca03ec488',
   ssr: true,
 });
 
@@ -46,7 +46,7 @@ export const config = wagmiAdapter.wagmiConfig;
 createAppKit({
   adapters: [wagmiAdapter],
   networks: [arcTestnetReown],
-  projectId: REOWN_PROJECT_ID || 'arclayer-placeholder',
+  projectId: REOWN_PROJECT_ID || '02b0a0a57219a15bbf95096ca03ec488',
   metadata: {
     name: 'ArcLayer',
     description: 'Protocol layer for agentic economy',

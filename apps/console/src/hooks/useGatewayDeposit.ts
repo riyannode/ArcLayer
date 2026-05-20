@@ -34,7 +34,7 @@ import {
   USDC_ADDRESS,
 } from '@/lib/x402/constants';
 
-const ARC_RPC = 'https://rpc.testnet.arc.network';
+const ARC_RPC = process.env.NEXT_PUBLIC_ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
 const GATEWAY_WALLET = getAddress(GATEWAY_WALLET_ADDRESS);
 const USDC = getAddress(USDC_ADDRESS);
 

@@ -78,7 +78,7 @@ export async function verifyExactSettlementProof(
     return { ok: false, reason: 'invalid_amount', message: `Payment proof amount ${auth.value} does not match required ${paymentRequirements.amount}` };
   }
 
-  const rpcUrl = input.rpcUrl ?? process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network';
+  const rpcUrl = input.rpcUrl ?? process.env.ARC_RPC_URL ?? 'https://rpc.drpc.testnet.arc.network';
   const client = createPublicClient({ transport: http(rpcUrl) });
 
   // 1. Verify EIP-712 signature

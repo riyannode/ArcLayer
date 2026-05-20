@@ -42,7 +42,7 @@ export async function GET() {
   }
 
   try {
-    const client = createPublicClient({ transport: http(process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network') });
+    const client = createPublicClient({ transport: http(process.env.ARC_RPC_URL ?? 'https://rpc.drpc.testnet.arc.network') });
     const balance = await client.readContract({
       address: getAddress(USDC_ADDRESS),
       abi: ERC20_BALANCE_ABI,

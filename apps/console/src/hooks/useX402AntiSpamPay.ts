@@ -24,7 +24,7 @@ import { config } from '@/lib/wagmi';
 import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'viem';
 
 const ARC_CHAIN_ID = 5042002;
-const ARC_RPC = 'https://rpc.testnet.arc.network';
+const ARC_RPC = process.env.NEXT_PUBLIC_ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
 const USDC = getAddress('0x3600000000000000000000000000000000000000');
 
 const BALANCE_ABI = [

@@ -1,7 +1,12 @@
 'use client';
 
-import X402DemoPanel from '@/components/x402/X402DemoPanel';
+import dynamic from 'next/dynamic';
 import LiveLogStream from './LiveLogStream';
+
+const X402DemoPanel = dynamic(() => import('@/components/x402/X402DemoPanel'), {
+  ssr: false,
+  loading: () => <div className="h-[120px] animate-pulse rounded-lg bg-[rgba(234,228,216,0.04)]" />,
+});
 
 /**
  * Home hero — editorial serif headline, real deployed contracts strip,

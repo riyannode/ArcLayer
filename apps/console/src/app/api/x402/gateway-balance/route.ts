@@ -3,7 +3,7 @@ import { createPublicClient, http, getAddress, formatUnits } from 'viem';
 
 export const runtime = 'nodejs';
 
-const ARC_RPC = 'https://rpc.testnet.arc.network';
+const ARC_RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
 const GATEWAY_WALLET = '0x0077777d7EBA4688BDeF3E311b846F25870A19B9' as const;
 const USDC = '0x3600000000000000000000000000000000000000' as const;
 
