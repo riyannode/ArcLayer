@@ -17,6 +17,14 @@ import {
   writeMetaValue,
 } from "./db";
 
+// ─── Sync Lock ───────────────────────────────────────────────────────────────
+// Requirement #5: If previous sync is still running, skip the next tick.
+let syncInProgress = false;
+let lastSyncError: string | null = null;
+let lastSyncAt: number | null = null;
+let lastSyncDurationMs: number | null = null;
+let syncSkipCount = 0;
+
 function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
 }
@@ -106,34 +114,50 @@ function readAutonomousFeed(limit = 50) {
 }
 
 async function runSyncCycle() {
-  const fromBlockValue = readMetaValue("last_synced_block");
-  const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
-
-  const [{ events, latestBlock }, { events: agentEvts }] = await Promise.all([
-    fetchJobEvents(fromBlock),
-    fetchAgentEvents(fromBlock),
-  ]);
-
-  if (events.length > 0 || agentEvts.length > 0) {
-    await syncProjectionStore(events, agentEvts);
+  // ─── Sync Lock (#5) ──────────────────────────────────────────────────────
+  if (syncInProgress) {
+    syncSkipCount++;
+    console.log(`[indexer] sync skip (previous still running) count=${syncSkipCount}`);
+    return;
   }
 
-  // Always advance the cursor to latestBlock so empty ranges don't
-  // get re-scanned forever. Previous logic returned early on zero events
-  // which pinned fromBlock and produced an ever-growing re-scan window.
-  if (latestBlock >= fromBlock) {
-    writeMetaValue("last_synced_block", latestBlock.toString());
+  syncInProgress = true;
+  const t0 = Date.now();
+
+  try {
+    const fromBlockValue = readMetaValue("last_synced_block");
+    const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
+
+    const [{ events, latestBlock }, { events: agentEvts }] = await Promise.all([
+      fetchJobEvents(fromBlock),
+      fetchAgentEvents(fromBlock),
+    ]);
+
+    // ─── Skip rebuild if no new events (#1, #2) ────────────────────────────
+    if (events.length > 0 || agentEvts.length > 0) {
+      console.log(`[indexer] new events: jobs=${events.length} agents=${agentEvts.length} block=${latestBlock}`);
+      await syncProjectionStore(events, agentEvts);
+    }
+
+    // Always advance cursor so empty ranges don't get re-scanned
+    if (latestBlock >= fromBlock) {
+      writeMetaValue("last_synced_block", latestBlock.toString());
+    }
+
+    lastSyncError = null;
+    lastSyncAt = Date.now();
+    lastSyncDurationMs = Date.now() - t0;
+  } catch (error) {
+    lastSyncError = error instanceof Error ? error.message : String(error);
+    console.error("[indexer] sync error:", lastSyncError);
+  } finally {
+    syncInProgress = false;
   }
 }
 
 async function startPollingLoop() {
-  try {
-    await runSyncCycle();
-  } catch (error) {
-    console.error("Indexer polling error", error);
-  } finally {
-    setTimeout(startPollingLoop, POLL_INTERVAL_MS);
-  }
+  await runSyncCycle();
+  setTimeout(startPollingLoop, POLL_INTERVAL_MS);
 }
 
 startPollingLoop();
@@ -149,6 +173,21 @@ createServer((req, res) => {
   if (req.method === "OPTIONS") {
     res.statusCode = 204;
     res.end();
+    return;
+  }
+
+  // ─── Health endpoint (#6): always responds even if sync is failing ───────
+  if (url.pathname === "/health") {
+    writeJson(res, {
+      status: "ok",
+      syncInProgress,
+      lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : null,
+      lastSyncDurationMs,
+      lastSyncError,
+      syncSkipCount,
+      lastSyncedBlock: readMetaValue("last_synced_block"),
+      pollIntervalMs: POLL_INTERVAL_MS,
+    });
     return;
   }
 
@@ -236,7 +275,7 @@ createServer((req, res) => {
 
   writeJson(res, {
     ok: true,
-    endpoints: ["/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/autonomous-feed"],
+    endpoints: ["/health", "/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/autonomous-feed"],
     eventCount: Number(readMetaValue("event_count") || "0"),
     lastSyncedBlock: readMetaValue("last_synced_block"),
   });

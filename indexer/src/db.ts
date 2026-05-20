@@ -3,12 +3,9 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import type { IndexedAgentEvent, IndexedJobEvent } from "@arclayer/sdk";
-import {
-  buildAgentsProjection,
-  buildJobProjection,
-  buildJobsProjection,
-  buildProofsProjection,
-} from "./projections";
+import { buildJobProjection } from "./projections";
+import { readJob, readAgentProfile, readWorkProof, readWorkProofTokenByJobId } from "@arclayer/sdk";
+import { INDEXER_RPC, mapWithLimit, withTimeout } from "./rpc-limit";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.INDEXER_DB_PATH || resolve(currentDir, "../data/arclayer-indexer.sqlite");
@@ -172,13 +169,84 @@ export async function syncProjectionStore(
   events: IndexedJobEvent[],
   agentEvents: IndexedAgentEvent[] = [],
 ) {
-  const registeredAgentIds = agentEvents.map((event) => event.agentId);
+  // ─── Targeted refresh (#1, #2) ─────────────────────────────────────────────
+  // Only refresh entities mentioned in this event batch instead of rebuilding
+  // every job/agent/proof from chain on every tick.
+  const touchedJobIds = Array.from(
+    new Set(
+      events
+        .map((e) => (e.jobId !== undefined && e.jobId !== null ? BigInt(e.jobId as bigint | string | number) : null))
+        .filter((id): id is bigint => id !== null && id > BigInt(0)),
+    ),
+  );
 
-  const [jobs, agents, proofs] = await Promise.all([
-    buildJobsProjection(),
-    buildAgentsProjection(registeredAgentIds),
-    buildProofsProjection(),
-  ]);
+  const touchedAgentIds = Array.from(
+    new Set(
+      [
+        ...agentEvents.map((e) => BigInt(e.agentId)),
+        ...events
+          .map((e) => (e.agentId !== undefined && e.agentId !== null ? BigInt(e.agentId as bigint | string | number) : null))
+          .filter((id): id is bigint => id !== null && id > BigInt(0)),
+      ].map((id) => id.toString()),
+    ),
+  ).map((id) => BigInt(id));
+
+  // Fetch only the affected jobs (bounded concurrency + timeout).
+  const jobRecords = await mapWithLimit(touchedJobIds, INDEXER_RPC.CONCURRENCY, (id) =>
+    withTimeout(readJob(id), `readJob(${id})`),
+  );
+  const jobs = jobRecords
+    .filter((j): j is NonNullable<typeof j> => j !== null)
+    .map((job) => ({
+      id: job.id.toString(),
+      agentId: job.agentId.toString(),
+      client: job.client,
+      worker: job.worker,
+      evaluator: job.evaluator,
+      budget: job.budget.toString(),
+      fundedAmount: job.fundedAmount.toString(),
+      createdAt: job.createdAt.toString(),
+      jobSpecHash: job.jobSpecHash,
+      deliverableURI: job.deliverableURI,
+      proofMetadataURI: job.proofMetadataURI,
+      approved: job.approved,
+      status: job.status,
+    }));
+
+  // Fetch only the affected agents.
+  const agentProfiles = await mapWithLimit(touchedAgentIds, INDEXER_RPC.CONCURRENCY, (id) =>
+    withTimeout(readAgentProfile(id), `readAgentProfile(${id})`),
+  );
+  const agents = agentProfiles
+    .filter((p): p is NonNullable<typeof p> => p !== null)
+    .map((profile) => ({
+      agentId: profile.agent.agentId.toString(),
+      controller: profile.agent.controller,
+      skillHash: profile.agent.skillHash,
+      metadataURI: profile.agent.metadataURI,
+      registeredAt: profile.agent.registeredAt.toString(),
+      reputationScore: profile.agent.reputationScore.toString(),
+      score: profile.score.toString(),
+      jobs: profile.jobs.map((job) => job.id.toString()),
+      proofTokenIds: profile.proofTokenIds.map((tokenId) => tokenId.toString()),
+    }));
+
+  // Fetch proofs only for jobs touched in this batch.
+  const proofResults = await mapWithLimit(touchedJobIds, INDEXER_RPC.CONCURRENCY, async (jobId) => {
+    const tokenId = await withTimeout(readWorkProofTokenByJobId(jobId), `readWorkProofTokenByJobId(${jobId})`);
+    if (tokenId === BigInt(0)) return null;
+    const proof = await withTimeout(readWorkProof(tokenId), `readWorkProof(${tokenId})`);
+    return {
+      tokenId: tokenId.toString(),
+      jobId: proof.jobId.toString(),
+      agentId: proof.agentId.toString(),
+      payer: proof.payer,
+      amountPaid: proof.amountPaid.toString(),
+      mintedAt: proof.mintedAt.toString(),
+      metadataURI: proof.metadataURI,
+    };
+  });
+  const proofs = proofResults.filter((p): p is NonNullable<typeof p> => p !== null);
 
   const jobGroups = buildJobProjection(events);
 
@@ -203,18 +271,18 @@ export async function syncProjectionStore(
     }
 
     for (const agent of agents) {
-        upsertAgent.run(
-          agent.agentId,
-          agent.controller,
-          agent.skillHash,
-          agent.metadataURI,
-          agent.registeredAt,
-          agent.reputationScore,
-          agent.score,
-          stringifyJson(agent.jobs),
-          stringifyJson(agent.proofTokenIds)
-        );
-      }
+      upsertAgent.run(
+        agent.agentId,
+        agent.controller,
+        agent.skillHash,
+        agent.metadataURI,
+        agent.registeredAt,
+        agent.reputationScore,
+        agent.score,
+        stringifyJson(agent.jobs),
+        stringifyJson(agent.proofTokenIds)
+      );
+    }
 
     for (const proof of proofs) {
       upsertProof.run(

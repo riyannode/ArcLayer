@@ -1,5 +1,13 @@
-import { readAgentProfile, readAllJobs, readWorkProof, readWorkProofTokenByJobId } from "@arclayer/sdk";
+import {
+  readAgentProfile,
+  readAllJobs,
+  readJob,
+  readJobCounter,
+  readWorkProof,
+  readWorkProofTokenByJobId,
+} from "@arclayer/sdk";
 import type { IndexedJobEvent } from "@arclayer/sdk";
+import { INDEXER_RPC, mapWithLimit, withTimeout } from "./rpc-limit";
 
 export function buildJobProjection(events: IndexedJobEvent[]) {
   return events.reduce<Record<string, IndexedJobEvent[]>>((acc, event) => {
@@ -20,36 +28,55 @@ export function buildAgentEventProjection(events: IndexedJobEvent[]) {
 }
 
 export async function buildJobsProjection() {
-  const jobs = await readAllJobs();
-  return jobs.map((job) => ({
-    id: job.id.toString(),
-    agentId: job.agentId.toString(),
-    client: job.client,
-    worker: job.worker,
-    evaluator: job.evaluator,
-    budget: job.budget.toString(),
-    fundedAmount: job.fundedAmount.toString(),
-    createdAt: job.createdAt.toString(),
-    jobSpecHash: job.jobSpecHash,
-    deliverableURI: job.deliverableURI,
-    proofMetadataURI: job.proofMetadataURI,
-    approved: job.approved,
-    status: job.status,
-  }));
+  const jobCounter = await withTimeout(readJobCounter(), "readJobCounter");
+  const jobIds = Array.from({ length: Number(jobCounter) }, (_, index) => BigInt(index + 1));
+
+  const jobs = await mapWithLimit(jobIds, INDEXER_RPC.CONCURRENCY, (jobId) =>
+    withTimeout(readJob(jobId), `readJob(${jobId})`),
+  );
+
+  return jobs
+    .filter((job): job is NonNullable<typeof job> => job !== null)
+    .map((job) => ({
+      id: job.id.toString(),
+      agentId: job.agentId.toString(),
+      client: job.client,
+      worker: job.worker,
+      evaluator: job.evaluator,
+      budget: job.budget.toString(),
+      fundedAmount: job.fundedAmount.toString(),
+      createdAt: job.createdAt.toString(),
+      jobSpecHash: job.jobSpecHash,
+      deliverableURI: job.deliverableURI,
+      proofMetadataURI: job.proofMetadataURI,
+      approved: job.approved,
+      status: job.status,
+    }));
 }
 
 export async function buildJobDetailProjection(jobId: bigint) {
-  const jobs = await buildJobsProjection();
-  const job = jobs.find((entry) => entry.id === jobId.toString());
+  const job = await withTimeout(readJob(jobId), `readJob(${jobId})`).then((record) => ({
+    id: record.id.toString(),
+    agentId: record.agentId.toString(),
+    client: record.client,
+    worker: record.worker,
+    evaluator: record.evaluator,
+    budget: record.budget.toString(),
+    fundedAmount: record.fundedAmount.toString(),
+    createdAt: record.createdAt.toString(),
+    jobSpecHash: record.jobSpecHash,
+    deliverableURI: record.deliverableURI,
+    proofMetadataURI: record.proofMetadataURI,
+    approved: record.approved,
+    status: record.status,
+  })).catch(() => null);
 
-  if (!job) {
-    return null;
-  }
+  if (!job) return null;
 
-  const tokenId = await readWorkProofTokenByJobId(jobId);
+  const tokenId = await withTimeout(readWorkProofTokenByJobId(jobId), `readWorkProofTokenByJobId(${jobId})`).catch(() => BigInt(0));
   const proof =
     tokenId > BigInt(0)
-      ? await readWorkProof(tokenId).then((record) => ({
+      ? await withTimeout(readWorkProof(tokenId), `readWorkProof(${tokenId})`).then((record) => ({
           tokenId: tokenId.toString(),
           jobId: record.jobId.toString(),
           agentId: record.agentId.toString(),
@@ -57,7 +84,7 @@ export async function buildJobDetailProjection(jobId: bigint) {
           amountPaid: record.amountPaid.toString(),
           mintedAt: record.mintedAt.toString(),
           metadataURI: record.metadataURI,
-        }))
+        })).catch(() => null)
       : null;
 
   return {
@@ -67,19 +94,16 @@ export async function buildJobDetailProjection(jobId: bigint) {
 }
 
 export async function buildAgentsProjection(registeredAgentIds: bigint[] = []) {
-  const jobs = await readAllJobs();
-  const fromJobs = jobs.map((job) => job.agentId.toString());
+  // If caller passes IDs, refresh ONLY those agents. Full scan is retained only
+  // for manual/legacy callers that pass no IDs.
   const fromRegistry = registeredAgentIds.map((id) => id.toString());
+  const fromJobs = registeredAgentIds.length > 0
+    ? []
+    : (await readAllJobs().catch(() => [])).map((job) => job.agentId.toString());
   const uniqueAgentIds = Array.from(new Set([...fromRegistry, ...fromJobs])).map((id) => BigInt(id));
 
-  const profiles = await Promise.all(
-    uniqueAgentIds.map(async (agentId) => {
-      try {
-        return await readAgentProfile(agentId);
-      } catch {
-        return null;
-      }
-    }),
+  const profiles = await mapWithLimit(uniqueAgentIds, INDEXER_RPC.CONCURRENCY, (agentId) =>
+    withTimeout(readAgentProfile(agentId), `readAgentProfile(${agentId})`),
   );
 
   return profiles
@@ -116,23 +140,21 @@ export async function buildAgentDetailProjection(agentId: bigint, registeredAgen
 }
 
 export async function buildProofsProjection() {
-  const jobs = await readAllJobs();
-  const proofs = await Promise.all(
-    jobs.map(async (job) => {
-      const tokenId = await readWorkProofTokenByJobId(job.id);
-      if (tokenId === BigInt(0)) return null;
-      const proof = await readWorkProof(tokenId);
-      return {
-        tokenId: tokenId.toString(),
-        jobId: proof.jobId.toString(),
-        agentId: proof.agentId.toString(),
-        payer: proof.payer,
-        amountPaid: proof.amountPaid.toString(),
-        mintedAt: proof.mintedAt.toString(),
-        metadataURI: proof.metadataURI,
-      };
-    })
-  );
+  const jobs = await buildJobsProjection();
+  const proofs = await mapWithLimit(jobs, INDEXER_RPC.CONCURRENCY, async (job) => {
+    const tokenId = await withTimeout(readWorkProofTokenByJobId(BigInt(job.id)), `readWorkProofTokenByJobId(${job.id})`);
+    if (tokenId === BigInt(0)) return null;
+    const proof = await withTimeout(readWorkProof(tokenId), `readWorkProof(${tokenId})`);
+    return {
+      tokenId: tokenId.toString(),
+      jobId: proof.jobId.toString(),
+      agentId: proof.agentId.toString(),
+      payer: proof.payer,
+      amountPaid: proof.amountPaid.toString(),
+      mintedAt: proof.mintedAt.toString(),
+      metadataURI: proof.metadataURI,
+    };
+  });
 
   return proofs.filter((proof): proof is NonNullable<typeof proof> => proof !== null);
 }
