@@ -11,7 +11,9 @@ export const arcTestnetReown = defineChain({
   caipNetworkId: 'eip155:5042002',
   chainNamespace: 'eip155',
   name: 'Arc Testnet',
-  nativeCurrency: { name: 'Arc', symbol: 'ARC', decimals: 18 },
+  // Arc native gas token is USDC (18 decimals on the native interface).
+  // ERC-20 USDC at 0x3600...0000 uses 6 decimals — never mix the two.
+  nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
   rpcUrls: {
     default: { http: ARC_RPC_URLS },
   },

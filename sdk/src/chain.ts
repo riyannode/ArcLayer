@@ -23,6 +23,8 @@ export const arcTestnet = {
   id: 5042002,
   name: "Arc Testnet",
   network: "arc-testnet",
+  // Arc native gas token is USDC. Native interface uses 18 decimals
+  // (vs ERC-20 USDC 6 decimals). See ARC_NATIVE_USDC_DECIMALS in addresses.ts.
   nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
   rpcUrls: {
     default: { http: [...ARC_RPC_URLS] },

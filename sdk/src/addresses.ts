@@ -3,6 +3,36 @@ export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as cons
 export const ARC_CHAIN_ID = 5042002;
 export const ARC_EXPLORER = "https://testnet.arcscan.app";
 
+/**
+ * USDC decimal model on Arc.
+ *
+ * Arc uses USDC as native gas token with TWO interfaces:
+ * - Native (gas/balance): 18 decimals — used by msg.value, native balance, gas estimation.
+ * - ERC-20 (token contract 0x3600...): 6 decimals — used by transfer/approve/escrow/x402.
+ *
+ * NEVER mix raw values from the two interfaces without converting.
+ * Ref: https://docs.arc.io — "Dual decimal USDC"
+ */
+export const ARC_NATIVE_USDC_DECIMALS = 18;
+export const ARC_ERC20_USDC_DECIMALS = 6;
+
+/**
+ * Official Arc reference contracts from docs.arc.io.
+ *
+ * These are the canonical ERC-8004 / ERC-8183 reference implementations
+ * deployed by Circle on Arc Testnet. They are separate from ArcLayer's own
+ * protocol contracts (CONTRACTS below).
+ *
+ * Use these when interacting with the official Arc agentic economy flows.
+ * Do NOT replace ArcLayer's AGENT_REGISTRY / JOB_ESCROW with these.
+ */
+export const ARC_REFERENCE_CONTRACTS = {
+  /** ERC-8004 IdentityRegistry — register(string metadataURI) */
+  ERC8004_IDENTITY_REGISTRY: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+  /** ERC-8183 AgenticCommerce — createJob/setBudget/fund/submit/complete */
+  ERC8183_AGENTIC_COMMERCE: "0x0747EEf0706327138c69792bF28Cd525089e4583",
+} as const;
+
 export const CONTRACTS = {
   USDC: "0x3600000000000000000000000000000000000000",
   ACHIEVEMENT: "0x7245B200ce09B515bd235f1eD262c2abb0890165",

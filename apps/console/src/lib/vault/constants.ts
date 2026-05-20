@@ -10,6 +10,15 @@ export function isZeroAddress(address: string) {
 // Re-export from x402 constants for convenience
 export { USDC_ADDRESS, ARC_TESTNET_CHAIN_ID } from '@/lib/x402/constants';
 
+/**
+ * USDC decimals for ERC-20 token operations (transfer, approve, escrow, x402).
+ *
+ * NOTE: Arc has TWO USDC interfaces:
+ * - ERC-20 contract (this constant, 6 decimals) — used by JobEscrow, x402, vault
+ * - Native gas interface (18 decimals) — used by msg.value, getBalance, gas
+ *
+ * Mirrored in @arclayer/sdk as ARC_ERC20_USDC_DECIMALS.
+ */
 export const USDC_DECIMALS = 6;
 
 // Job status enum matching contract

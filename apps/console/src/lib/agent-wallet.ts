@@ -48,6 +48,8 @@ const CHAIN_ID = arcTestnet.id;
 const USDC = '0x3600000000000000000000000000000000000000' as const;
 const JOB_ESCROW = '0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225' as const;
 
+// USDC ERC-20 decimals — used for transfer/approve/escrow operations.
+// Native gas interface uses 18 decimals (see getEthBalance below). Do not mix.
 const USDC_DECIMALS = 6;
 const MAX_GAS_PER_TX = BigInt(500_000);
 
@@ -149,6 +151,12 @@ export async function getUsdcAllowance(owner?: Address, spender?: Address): Prom
   return { atomic: allowance, formatted: formatUnits(allowance, USDC_DECIMALS) };
 }
 
+/**
+ * Native gas balance on Arc.
+ *
+ * Arc native gas token is USDC, but the NATIVE interface uses 18 decimals
+ * (not 6 like the ERC-20 contract). This is intentional per Arc spec.
+ */
 export async function getEthBalance(address?: Address): Promise<{ atomic: bigint; formatted: string }> {
   const addr = address || agentAddress();
   const pc = publicClient();

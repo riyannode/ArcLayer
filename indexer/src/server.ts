@@ -1,7 +1,8 @@
 import { createServer, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
-import { DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS } from "./config";
+import { DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS, INDEX_ARC_REFERENCE_ERC8183 } from "./config";
 import { fetchAgentEvents, fetchJobEvents } from "./ingest";
+import { fetchArcErc8183Events, updateKnownAgentAddresses, type ArcErc8183Event } from "./arc-erc8183-ingest";
 import {
   readAgentById,
   readAgentEvents,
@@ -24,6 +25,12 @@ let lastSyncError: string | null = null;
 let lastSyncAt: number | null = null;
 let lastSyncDurationMs: number | null = null;
 let syncSkipCount = 0;
+
+// ─── Phase 6: Arc ERC-8183 secondary indexer state ───────────────────────────
+let arcErc8183Events: ArcErc8183Event[] = [];
+let lastArcErc8183Sync: number | null = null;
+let lastArcErc8183Block: bigint = BigInt(0);
+let arcErc8183Error: string | null = null;
 
 function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
@@ -139,6 +146,41 @@ async function runSyncCycle() {
       await syncProjectionStore(events, agentEvts);
     }
 
+    // ─── Phase 6: Refresh known-agent allowlist for ERC-8183 filter ──────────
+    // After ingesting AgentRegistered events, update the dynamic allowlist
+    // so subsequent ERC-8183 sweeps include jobs involving these controllers.
+    if (agentEvts.length > 0 || arcErc8183Events.length === 0) {
+      try {
+        const allAgents = readAgents();
+        updateKnownAgentAddresses(allAgents.map((a) => a.controller));
+      } catch (e) {
+        console.warn("[indexer] could not refresh known agents:", e);
+      }
+    }
+
+    // ─── Phase 6: Secondary fetch — official Arc ERC-8183 (filtered) ─────────
+    if (INDEX_ARC_REFERENCE_ERC8183) {
+      try {
+        const arcFromBlockValue = readMetaValue("arc_erc8183_last_block");
+        const arcFromBlock = arcFromBlockValue ? BigInt(arcFromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
+        const { events: arcEvents, latestBlock: arcLatest } = await fetchArcErc8183Events(arcFromBlock);
+        if (arcEvents.length > 0) {
+          // Append to in-memory ring (cap at 1000 most-recent for /api/arc-erc8183)
+          arcErc8183Events = [...arcErc8183Events, ...arcEvents].slice(-1000);
+          console.log(`[indexer] arc-erc8183 filtered events: ${arcEvents.length} block=${arcLatest}`);
+        }
+        if (arcLatest >= arcFromBlock) {
+          writeMetaValue("arc_erc8183_last_block", arcLatest.toString());
+          lastArcErc8183Block = arcLatest;
+        }
+        lastArcErc8183Sync = Date.now();
+        arcErc8183Error = null;
+      } catch (e) {
+        arcErc8183Error = e instanceof Error ? e.message : String(e);
+        console.error("[indexer] arc-erc8183 sync error:", arcErc8183Error);
+      }
+    }
+
     // Always advance cursor so empty ranges don't get re-scanned
     if (latestBlock >= fromBlock) {
       writeMetaValue("last_synced_block", latestBlock.toString());
@@ -187,6 +229,31 @@ createServer((req, res) => {
       syncSkipCount,
       lastSyncedBlock: readMetaValue("last_synced_block"),
       pollIntervalMs: POLL_INTERVAL_MS,
+      arcErc8183: {
+        enabled: INDEX_ARC_REFERENCE_ERC8183,
+        lastSync: lastArcErc8183Sync ? new Date(lastArcErc8183Sync).toISOString() : null,
+        lastBlock: lastArcErc8183Block.toString(),
+        bufferedEvents: arcErc8183Events.length,
+        error: arcErc8183Error,
+      },
+    });
+    return;
+  }
+
+  // ─── Phase 6: Arc ERC-8183 (filtered) feed ────────────────────────────────
+  if (url.pathname === "/api/arc-erc8183") {
+    writeJson(res, {
+      enabled: INDEX_ARC_REFERENCE_ERC8183,
+      events: arcErc8183Events.map((e) => ({
+        ...e,
+        jobId: e.jobId.toString(),
+        blockNumber: e.blockNumber.toString(),
+        amount: e.amount?.toString(),
+        expiredAt: e.expiredAt?.toString(),
+      })),
+      count: arcErc8183Events.length,
+      lastSync: lastArcErc8183Sync ? new Date(lastArcErc8183Sync).toISOString() : null,
+      lastBlock: lastArcErc8183Block.toString(),
     });
     return;
   }

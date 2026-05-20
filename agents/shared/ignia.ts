@@ -13,6 +13,8 @@ import { arcTestnet } from './x402-client.js';
 export const USDC_ADDRESS = '0x3600000000000000000000000000000000000000' as const;
 export const IGNIA_ADDRESS = (process.env.IGNIA_ADDRESS ?? '0xd66971F9Da4c60DB4A061686F43dBf39Db5E2916') as Address;
 export const ARC_RPC_URL = process.env.ARC_RPC_URL ?? 'https://rpc.drpc.testnet.arc.network';
+// ERC-20 USDC decimals (6) — for token transfers/approvals.
+// Native gas interface uses 18 decimals — see Arc docs dual-decimal model.
 export const USDC_DECIMALS = 6;
 
 export enum IgniaSide {

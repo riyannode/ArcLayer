@@ -26,3 +26,13 @@ export const CIRCLE_BATCHING_NAME = 'GatewayWalletBatched' as const;
 export const CIRCLE_BATCHING_VERSION = '1' as const;
 export const GATEWAY_WALLET_ADDRESS = '0x0077777d7EBA4688BDeF3E311b846F25870A19B9' as const;
 export const DEFAULT_GATEWAY_DEPOSIT_USDC = '1.00' as const;
+
+/**
+ * x402 payment amounts use ERC-20 USDC (6 decimals).
+ * Example: amount "10000" = 0.01 USDC.
+ *
+ * The native gas interface (msg.value, getBalance) uses 18 decimals.
+ * x402 never touches native gas — it only uses EIP-3009 TransferWithAuthorization
+ * on the ERC-20 USDC contract (0x3600...).
+ */
+export const X402_USDC_DECIMALS = 6;

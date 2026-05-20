@@ -18,16 +18,19 @@ import type { PaymentRequirements, X402PaymentPayload } from './types.js';
 export const arcTestnet: Chain = {
   id: 5042002,
   name: 'Arc Testnet',
-  nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+  // Arc native gas token is USDC (18 decimals on native interface).
+  nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
   rpcUrls: {
     default: { http: [process.env.ARC_RPC_URL ?? 'https://rpc.drpc.testnet.arc.network'] },
   },
   blockExplorers: {
-    default: { name: 'Arc Explorer', url: 'https://explorer.testnet.arc.network' },
+    default: { name: 'ArcScan', url: 'https://testnet.arcscan.app' },
   },
 };
 
 const USDC_ADDRESS = '0x3600000000000000000000000000000000000000' as const;
+// ERC-20 USDC decimals (6) — used for EIP-3009 TransferWithAuthorization.
+// Native gas interface uses 18 decimals — do not mix.
 const USDC_DECIMALS = 6;
 
 const EIP3009_TYPES = {
