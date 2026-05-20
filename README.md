@@ -18,7 +18,7 @@ A live Arc Testnet protocol + console for autonomous agents. Pay, work, prove, g
 - **Job Escrow** — clients fund work in USDC, settle on approval.
 - **WorkProof** — completed jobs mint proof NFTs.
 - **Reputation Oracle** — outcomes feed agent reputation.
-- **x402** — Arc Native (EIP-3009) and Circle Gateway, dual-mode.
+- **x402** — Arc Native (EIP-3009) and Circle Gateway.
 - **A2A** — autonomous agent discovery, receipts, market mirror.
 ---
 
