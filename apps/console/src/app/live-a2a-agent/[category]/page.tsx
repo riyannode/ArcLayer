@@ -68,7 +68,7 @@ export default function LiveA2AAgentCategoryPage({ params }: PageProps) {
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(197,166,124,0.14),transparent_30%),radial-gradient(circle_at_82%_8%,rgba(255,255,255,0.055),transparent_26%)]" />
       <div className="relative mx-auto flex max-w-[1480px] flex-col gap-6 pt-8 pb-12 sm:pt-12">
         <header className="rounded-sm border border-[#C5A67C]/15 bg-[#0A0A0A]/90 p-5">
-          <Link href="/live-a2a-agent" className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C] hover:text-[#F5F0E5]">← External Agent Bridge</Link>
+          <Link href="/live-a2a-agent" className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C] hover:text-[#F5F0E5]">← PM2 Market-Agent Bridge</Link>
           <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">Agent Category</div>

@@ -111,7 +111,7 @@ export async function insertBridgeEvent(input: BridgeEventInput) {
   const { data, error } = await supabase
     .from('agent_bridge_events')
     .insert(row)
-    .select('id, session_id, runtime_id, agent_id, role, type, event_type, payload, payload_hash, metadata, source, dry_run, job_id, category, created_at')
+.select('id, session_id, runtime_id, agent_id, role, type, event_type, payload, payload_hash, metadata, source, dry_run, job_id, category, created_at')
     .single();
   if (error) throw new Error(error.message);
 
@@ -142,7 +142,7 @@ export async function insertBridgeEvent(input: BridgeEventInput) {
 export async function listBridgeEvents(filters: { sessionId?: string | null; role?: string | null; agentId?: string | null; runtimeId?: string | null; jobId?: string | null; category?: string | null; limit?: number }) {
   let q = getSupabaseAdmin()
     .from('agent_bridge_events')
-    .select('id, session_id, runtime_id, agent_id, role, type, event_type, payload, payload_hash, metadata, source, dry_run, job_id, category, created_at')
+.select('id, session_id, runtime_id, agent_id, role, type, event_type, payload, payload_hash, metadata, source, dry_run, job_id, category, created_at')
     .order('created_at', { ascending: false })
     .limit(Math.min(Math.max(filters.limit ?? 50, 1), 200));
   if (filters.sessionId) q = q.eq('session_id', filters.sessionId);

@@ -3,6 +3,8 @@ export type BridgeEvent = {
   session_id: string;
   runtime_id?: string | null;
   agent_id?: string | null;
+  job_id?: string | null;
+  category?: string | null;
   role: string;
   type?: string;
   event_type?: string;
@@ -41,11 +43,11 @@ export const EXTERNAL_AGENT_ROLE_LABELS: Record<string, string> = {
   registered_agent: 'Registered Agent',
   verification: 'Verification',
   executor: 'Dry-Run Executor',
-  oracle: 'Oracle / Market Snapshot',
-  analyzer: 'LLM Analyzer',
+  oracle: 'Oracle / Raw Market Snapshot',
+  analyzer: 'Local / LLM Analyzer',
   momentum_resolver: 'Momentum Resolver',
   scalping_resolver: 'Scalping Resolver',
-  evaluator: 'Evaluator',
+  evaluator: 'Risk Evaluator',
   spot_trader: 'Spot Trader',
   prediction_market_trader: 'Prediction Market Trader',
   arbitrage_bot: 'Arbitrage Bot',
@@ -58,7 +60,7 @@ export const EXTERNAL_AGENT_ROLE_LABELS: Record<string, string> = {
 
 export function roleLabel(role: string) {
   return EXTERNAL_AGENT_ROLE_LABELS[role] || role.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-};
+}
 
 export function eventType(event: BridgeEvent) {
   return event.event_type || event.type || 'bridge_event';

@@ -1,13 +1,39 @@
-# Agora Hackathon Polymarket PM2 Bots
+# ArcLayer PM2 Market-Agent Bridge
 
-Clean DRY_RUN-only external runtime demo for ArcLayer External Agent Bridge.
+Hackathon PM2 market-agent runtime proof: external PM2 bots make market decisions while ArcLayer acts as the protocol bridge for identity, x402 access, bridge events, receipts, payload hashes, and proof history on Arc.
 
-Flow:
+This is **not** a generic external LLM demo and not a real trading executor.
+
+## Flow
+
+```text
+external PM2 bot
+  -> raw Polymarket BTC 15m data
+  -> local/optional-LLM analysis
+  -> risk evaluation
+  -> DRY_RUN decision intent
+  -> x402 bridge-access
+  -> bridge event + payloadHash + runtimeId
+  -> receipt/history
+  -> /live-a2a-agent frontend viewer
+```
 
 1. `oracle-bot.js` fetches ArcLayer raw BTC 15m Polymarket market/orderbook/candles feed and posts `role=oracle`.
-2. `analyzer-bot.js` reads latest bridge session, optionally uses a local-only LLM key, and posts `role=analyzer`.
+2. `analyzer-bot.js` reads latest bridge session, uses local deterministic logic or an optional local LLM provider, and posts `role=analyzer`.
 3. `evaluator-bot.js` evaluates analyzer output outside ArcLayer and posts `role=evaluator`.
 4. `executor-bot.js` posts a DRY_RUN execution intent only. It never places real trades.
+5. ArcLayer stores the bridge event, `payloadHash`, `runtimeId`, `job_id`/category metadata, receipt/history, and x402 unlock status.
+6. `POST /api/x402/bridge-access` returns `402` without payment and returns the unlocked bridge session/receipt after valid payment.
+7. `/live-a2a-agent` shows the full flow.
+
+## Architecture boundary
+
+- **ArcLayer is the protocol bridge.**
+- **Bots run anywhere.**
+- **Bots own strategy, local LLM keys, and execution.**
+- **ArcLayer handles identity, x402, events, receipts, payload hashes, and history.**
+
+`apps/console` stays the protocol/data layer: raw market data, bridge events, x402, receipts, and viewer surfaces only. It does not include real trade execution, a private-key executor, or hardcoded trading strategy.
 
 ## Setup
 
@@ -17,6 +43,16 @@ cp .env.example .env
 # Fill ARCLAYER_API_KEY + ARCLAYER_AGENT_ID locally. Never commit .env.
 npm install dotenv
 ```
+
+Optional local LLM:
+
+```bash
+LLM_BASE_URL=http://localhost:20128/v1
+LLM_MODEL=KIRO
+LLM_API_KEY=local-only-key
+```
+
+`LLM_API_KEY` is sent only to the configured local/OpenAI-compatible LLM provider. It is never sent to ArcLayer or Supabase and must never be printed.
 
 ## Run one-shot smoke
 
@@ -31,7 +67,7 @@ node executor-bot.js
 
 ```bash
 pm2 start ecosystem.config.cjs
-pm2 logs agora-oracle-bot --lines 30
+pm2 logs arclayer-pm2-oracle-bot --lines 30
 ```
 
 ## Safety
@@ -39,4 +75,4 @@ pm2 logs agora-oracle-bot --lines 30
 - `.env` is ignored by repo policy; `.env.example` contains placeholders only.
 - `DRY_RUN=true` is required. Setting `DRY_RUN=false` throws.
 - No LLM API key, private key, exchange key, or wallet private key is sent to ArcLayer or Supabase.
-- ArcLayer stores only `agent_id`, `runtime_id`, `session_id`, `category`, event payload hashes, and non-sensitive metadata.
+- ArcLayer stores only non-sensitive bridge metadata: `agent_id`, `runtime_id`, `session_id`, `job_id`, `category`, role, event payload hashes, receipts, and timestamps.

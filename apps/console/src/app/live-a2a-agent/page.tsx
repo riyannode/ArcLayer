@@ -68,15 +68,15 @@ export default function LiveA2AAgentPage() {
         <header className="overflow-hidden rounded-sm border border-[#C5A67C]/15 bg-[#0A0A0A]/90">
           <div className="flex flex-col gap-4 border-b border-white/10 px-5 py-5 lg:flex-row lg:items-center">
             <div className="min-w-0">
-              <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">ARCLAYER · EXTERNAL AGENT BRIDGE</div>
-              <h1 className="mt-2 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5] sm:text-4xl">External Agent Bridge</h1>
-              <p className="mt-2 max-w-4xl text-sm text-[#EAE4D8]/70">Agents run anywhere. ArcLayer handles jobs, auth, x402, bridge events, receipts, and reputation.</p>
+              <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">ARCLAYER · PM2 MARKET-AGENT BRIDGE</div>
+              <h1 className="mt-2 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5] sm:text-4xl">Hackathon PM2 Market-Agent Runtime Proof</h1>
+              <p className="mt-2 max-w-4xl text-sm text-[#EAE4D8]/70">Autonomous PM2 bots make market decisions from raw Polymarket BTC 15m data. ArcLayer handles identity, x402 access, bridge events, receipts, and proof history on Arc.</p>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Chip>Agent Runtime</Chip>
+              <Chip>PM2 Runtime</Chip>
               <Chip>Bridge Event</Chip>
               <Chip>Receipt</Chip>
-              <Chip>Job</Chip>
+              <Chip>Payload Hash</Chip>
               <Chip>x402 Access</Chip>
             </div>
           </div>
@@ -91,7 +91,7 @@ export default function LiveA2AAgentPage() {
         <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="rounded-sm border border-[#C5A67C]/20 bg-[#C5A67C]/[0.04] p-4">
             <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Raw Polymarket BTC 15m Data Feed</div>
-            <p className="mt-2 text-sm text-[#EAE4D8]/65">ArcLayer exposes normalized raw resources only. External PM2 bots own LLM analysis, momentum/scalping logic, evaluation, and mock execution.</p>
+            <p className="mt-2 text-sm text-[#EAE4D8]/65">ArcLayer exposes normalized raw resources only. External PM2 bots own strategy, optional local LLM analysis, risk evaluation, and DRY_RUN intent output.</p>
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
               {[
                 ['/api/data/polymarket/btc-15m', 'Market'],
@@ -107,7 +107,7 @@ export default function LiveA2AAgentPage() {
           </div>
           <div className="rounded-sm border border-white/10 bg-black/25 p-4">
             <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">x402 Bridge Access</div>
-            <p className="mt-2 text-sm text-[#EAE4D8]/65">Unlock latest agent session/resource via <span className="font-mono text-[#F5F0E5]">/api/x402/bridge-access</span>. Without X-PAYMENT this should return 402.</p>
+            <p className="mt-2 text-sm text-[#EAE4D8]/65">Unlock latest market-agent session/resource via <span className="font-mono text-[#F5F0E5]">/api/x402/bridge-access</span>. Without X-PAYMENT this should return 402.</p>
             <button onClick={unlockAgentSession} className="mt-4 rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/15">
               Unlock Agent Session
             </button>
@@ -116,7 +116,7 @@ export default function LiveA2AAgentPage() {
         </section>
 
         <section className="rounded-sm border border-white/10 bg-black/25 p-4">
-          <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Dynamic role label cards</div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Dynamic session.roles pipeline</div>
           <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
             {EXAMPLE_PM2_PIPELINE_ROLES.map((role) => (
               <div key={role} className="rounded-sm border border-white/10 bg-white/[0.03] p-3">
