@@ -213,7 +213,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .eq('id', params.id)
     .maybeSingle();
 
-  if (fetchErr || !job) return NextResponse.json({ ok: false, error: 'job_not_found' }, { status: 404 });
+  if (fetchErr) {
+    console.error('[submit] a2a_jobs fetch error:', fetchErr.message);
+    return NextResponse.json({ ok: false, error: 'db_error' }, { status: 500 });
+  }
+  if (!job) return NextResponse.json({ ok: false, error: 'job_not_found' }, { status: 404 });
 
   if ((job as A2AJobRow).is_onchain && (job as A2AJobRow).onchain_job_id) {
     try {

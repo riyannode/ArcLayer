@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => {
   };
   return {
     rows,
+    selectError: null as { message: string } | null,
     client,
     submitA2AJob: vi.fn(),
     requireApiKey: vi.fn(),
@@ -36,6 +37,7 @@ function makeBuilder() {
       return builder;
     },
     maybeSingle() {
+      if (mocks.selectError) return Promise.resolve({ data: null, error: mocks.selectError });
       const row = Array.from(mocks.rows.values()).find((item) => filters.every((f) => item[f.field] === f.value));
       return Promise.resolve({ data: row ?? null, error: null });
     },
@@ -140,6 +142,7 @@ function validBody(overrides: Record<string, unknown> = {}) {
 describe('A2A submit route ERC-8183 verification', () => {
   beforeEach(() => {
     mocks.rows.clear();
+    mocks.selectError = null;
     vi.clearAllMocks();
     mocks.requireApiKey.mockResolvedValue({ key: { agentId: 'agent-1' } });
     mocks.applyRateLimit.mockReturnValue(null);
@@ -149,6 +152,27 @@ describe('A2A submit route ERC-8183 verification', () => {
     mocks.client.getTransaction.mockResolvedValue({ from: provider });
     mocks.extractJobSubmittedFromReceipt.mockReturnValue({ jobId: 42n, deliverable: deliverableHash });
     mocks.getERC8183Job.mockResolvedValue({ id: 42n, provider, status: 3 });
+  });
+
+  it('returns db_error when Supabase job select fails', async () => {
+    mocks.selectError = { message: 'column a2a_jobs.is_onchain does not exist' };
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await post({ output: 'done', proof: { ok: true } });
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ ok: false, error: 'db_error' });
+    expect(errorSpy).toHaveBeenCalledWith('[submit] a2a_jobs fetch error:', mocks.selectError.message);
+    expect(mocks.submitA2AJob).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('returns job_not_found only when Supabase row is absent', async () => {
+    const res = await post({ output: 'done', proof: { ok: true } });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ ok: false, error: 'job_not_found' });
+    expect(mocks.submitA2AJob).not.toHaveBeenCalled();
   });
 
   it('keeps legacy submit flow for non-onchain jobs', async () => {

@@ -61,7 +61,7 @@ export class ArcLayerApi {
   private async request<T>(input: string | URL, init: RequestInit & { auth: boolean }): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set('content-type', 'application/json');
-    if (init.auth) headers.set('x-arclayer-api-key', this.apiKey);
+    if (init.auth) headers.set('authorization', `Bearer ${this.apiKey}`);
     const response = await fetch(input, { ...init, headers });
     const text = await response.text();
     const json = text ? JSON.parse(text) : {};

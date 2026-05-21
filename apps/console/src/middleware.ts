@@ -8,6 +8,20 @@ const ALLOWED_ORIGINS = new Set([
 ]);
 
 const CANONICAL_ORIGIN = 'https://arclayers.xyz';
+const MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
+
+function isMaintenanceAllowedPath(pathname: string): boolean {
+  return (
+    pathname === '/maintenance' ||
+    pathname.startsWith('/api/') ||
+    pathname.startsWith('/_next/') ||
+    pathname === '/favicon.ico' ||
+    pathname === '/icon-192.png' ||
+    pathname === '/icon-512.png' ||
+    pathname === '/robots.txt' ||
+    pathname === '/sitemap.xml'
+  );
+}
 
 /**
  * Build CORS headers. ALWAYS sets Access-Control-Allow-Origin explicitly to
@@ -28,12 +42,19 @@ function corsHeaders(origin: string | null): Record<string, string> {
 
 export function middleware(req: NextRequest) {
   const origin = req.headers.get('origin');
+  const { pathname } = req.nextUrl;
 
   if (req.method === 'OPTIONS') {
     if (origin && !ALLOWED_ORIGINS.has(origin)) {
       return new NextResponse(null, { status: 403 });
     }
     return new NextResponse(null, { status: 204, headers: corsHeaders(origin) });
+  }
+
+  if (MAINTENANCE_MODE && !isMaintenanceAllowedPath(pathname)) {
+    const url = req.nextUrl.clone();
+    url.pathname = '/maintenance';
+    return NextResponse.rewrite(url);
   }
 
   const res = NextResponse.next();
@@ -43,5 +64,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/api/:path*'],
+  matcher: ['/api/:path*', '/((?!.*\\..*).*)'],
 };

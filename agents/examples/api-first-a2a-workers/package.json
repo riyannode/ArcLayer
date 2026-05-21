@@ -6,6 +6,7 @@
   "description": "API-first ArcLayer A2A external worker runtime example for creator, submitter, and evaluator roles.",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "node --test dist/*.test.js",
     "start": "node dist/index.js",
     "dev": "tsx src/index.ts",
     "start:creator": "WORKER_ROLE=creator tsx src/index.ts",
