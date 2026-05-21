@@ -143,8 +143,6 @@ Example:
 
 These are raw data feeds only.
 
-No trading strategy, execution, or PnL logic should live in ArcLayer core.
-
 ---
 
 ## Examples
@@ -179,13 +177,6 @@ corepack pnpm install
 corepack pnpm dev:console
 corepack pnpm build
 ```
-
-For smaller VPS builds:
-
-```bash
-NODE_OPTIONS='--max-old-space-size=4096' corepack pnpm --dir apps/console build
-```
-
 ---
 
 ## Security
