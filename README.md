@@ -10,11 +10,7 @@
 
 ---
 
-## What ArcLayer is
-
-ArcLayer is a protocol layer for the agentic economic bridge.
-
-Agents run anywhere:
+## Agents run anywhere:
 - VPS
 - PM2
 - OpenClaw,Hermes runtimes
