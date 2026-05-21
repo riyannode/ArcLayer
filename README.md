@@ -74,39 +74,19 @@ Active addresses are in [`sdk/src/addresses.ts`](./sdk/src/addresses.ts).
 
 ---
 
-## Live contract status
+## Network
 
-ArcLayer is live on Arc Testnet. Core and A2A contracts are source-verified on ArcScan / Blockscout.
+| Field | Value |
+|---|---|
+| Chain | Arc Testnet |
+| Chain ID | `5042002` |
+| RPC | `https://rpc.testnet.arc.network` |
+| Explorer | `https://testnet.arcscan.app` |
+| USDC | `0x3600000000000000000000000000000000000000` |
 
-| Contract | Address | Status | Owner |
-|---|---|---|---|
-| Achievement | `0x7245B200ce09B515bd235f1eD262c2abb0890165` | Verified | `0xaa68E429319d065Ce9fD5842497A8dBEc786075A` |
-| MilestoneEscrow | `0x78EA9f30744923924Fd56FcbB74D3733Ca4848f2` | Verified | `0xaa68E429319d065Ce9fD5842497A8dBEc786075A` |
-| AgentRegistry | `0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21` | Verified | Timelock |
-| JobEscrow | `0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225` | Verified | Timelock |
-| WorkProof | `0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5` | Verified | Timelock |
-| ReputationOracle | `0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c` | Verified | Read-only oracle surface |
-| A2AAgentRegistry | `0xB263336055dD65FF501e36CA39941760D943703C` | Verified | `0xaa68E429319d065Ce9fD5842497A8dBEc786075A` |
-| A2AReputationRegistry | `0x9c97CAE866397d94e295632B3BFCF342ea20f1Cc` | Verified | `0xaa68E429319d065Ce9fD5842497A8dBEc786075A` |
-| A2AReceiptRegistry | `0x5F591465D0C2fe20A28D2539dFBB2B00716397B7` | Verified | `0xaa68E429319d065Ce9fD5842497A8dBEc786075A` |
-| MarketMirrorRegistry | `0xec5910926925941c451C97A8bd2c4Ba7bD173195` | Verified | Legacy/demo market layer |
-| Ignia | `0xd66971F9Da4c60DB4A061686F43dBf39Db5E2916` | Verified | Legacy/demo market layer |
-| AgentRegistryV2 | `0x0465CeBC34698Aa156bcBB8d5c1caA39777dDb58` | Verified | `0xaa68E429319d065Ce9fD5842497A8dBEc786075A` |
+Active addresses are maintained in [`sdk/src/addresses.ts`](./sdk/src/addresses.ts).
 
-Timelock owner: `0x7663926a72269e81a60302e9C65B0b325a2641Ae`
-
-Timelock delay: `86400 seconds` / `24 hours`
-
-Core protocol contracts are protected by Timelock governance. Admin actions on AgentRegistry, JobEscrow, and WorkProof cannot execute instantly.
-
-Legacy exported addresses:
-
-- Invoice: `0x1Eb2Ed241Cb978f4BF02DA68E128D50AD7A53Fbf`
-- Subscription: `0x01028Ca35bE5c3dcE85F661C6528138bc3Ad9Fc1`
-
-Invoice and Subscription are exported for legacy compatibility only. They are not part of the current active ArcLayer product surface.
-
----
+Older demo deployments are kept for history only and are not part of the current core product surface.
 
 ## PM2 Market-Agent Bridge API
 
