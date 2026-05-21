@@ -64,33 +64,91 @@ async function main() {
   const evaluatorPk = required('EVALUATOR_PRIVATE_KEY') as Hex;
   const budgetAtomic = BigInt(process.env.SMOKE_BUDGET_ATOMIC || '1000');
   const description = process.env.SMOKE_JOB_DESCRIPTION || `ArcLayer ERC-8183 worker smoke ${new Date().toISOString()}`;
-  const expiresInSec = BigInt(Number(process.env.SMOKE_EXPIRES_IN_SECONDS || '3600'));
+  const expiresInSec = BigInt(Number(process.env.SMOKE_EXPIRES_IN_SECONDS || '604800'));
 
   const clientAccount = privateKeyToAccount(clientPk);
-  const provider = optionalAddress('SMOKE_PROVIDER_ADDRESS', privateKeyToAccount(providerPk).address);
+  const providerAccount = privateKeyToAccount(providerPk);
+  const provider = optionalAddress('SMOKE_PROVIDER_ADDRESS', providerAccount.address);
   const evaluator = optionalAddress('SMOKE_EVALUATOR_ADDRESS', privateKeyToAccount(evaluatorPk).address);
   const publicClient = createPublicClient({ chain: arcTestnet, transport: transports() });
-  const walletClient = createWalletClient({ account: clientAccount, chain: arcTestnet, transport: transports() });
+  const clientWalletClient = createWalletClient({ account: clientAccount, chain: arcTestnet, transport: transports() });
+  const providerWalletClient = createWalletClient({ account: providerAccount, chain: arcTestnet, transport: transports() });
   const expiredAt = BigInt(Math.floor(Date.now() / 1000)) + expiresInSec;
 
-  const createTx = await walletClient.writeContract({ account: clientAccount, chain: arcTestnet, ...buildErc8183CreateJobConfig(provider, evaluator, expiredAt, description) });
+  const createTx = await clientWalletClient.writeContract({ account: clientAccount, chain: arcTestnet, ...buildErc8183CreateJobConfig(provider, evaluator, expiredAt, description) });
   const createReceipt = await publicClient.waitForTransactionReceipt({ hash: createTx });
   if (createReceipt.status !== 'success') throw new Error(`createJob failed: ${createTx}`);
 
   const [created] = parseEventLogs({ abi: ERC8183_ABI, logs: createReceipt.logs, eventName: 'JobCreated' });
   const onchainJobId = String((created.args as { jobId: bigint }).jobId);
 
-  const approveTx = await walletClient.writeContract({ account: clientAccount, chain: arcTestnet, ...buildUsdcApproveForJobConfig(budgetAtomic) });
+  const jobAfterCreate = await publicClient.readContract({
+    address: buildErc8183CreateJobConfig(provider, evaluator, expiredAt, description).address,
+    abi: ERC8183_ABI,
+    functionName: 'getJob',
+    args: [BigInt(onchainJobId)],
+  }) as {
+    client: Address;
+    provider: Address;
+    evaluator: Address;
+    budget: bigint;
+    status: number;
+  };
+  console.log(JSON.stringify({
+    preflight: 'erc8183_job_after_create',
+    onchainJobId,
+    client: jobAfterCreate.client,
+    provider: jobAfterCreate.provider,
+    evaluator: jobAfterCreate.evaluator,
+    status: jobAfterCreate.status,
+    budget: String(jobAfterCreate.budget),
+  }, null, 2));
+  const expectedProvider = getAddress(providerAccount.address);
+  const onchainProvider = getAddress(jobAfterCreate.provider);
+  if (onchainProvider !== expectedProvider) {
+    throw new Error(`provider mismatch before setBudget: jobId=${onchainJobId} onchainProvider=${onchainProvider} expectedProvider=${expectedProvider}`);
+  }
+
+  const approveTx = await clientWalletClient.writeContract({ account: clientAccount, chain: arcTestnet, ...buildUsdcApproveForJobConfig(budgetAtomic) });
   const approveReceipt = await publicClient.waitForTransactionReceipt({ hash: approveTx });
   if (approveReceipt.status !== 'success') throw new Error(`USDC approve failed: ${approveTx}`);
 
-  const setBudgetTx = await walletClient.writeContract({ account: clientAccount, chain: arcTestnet, ...buildErc8183SetBudgetConfig(BigInt(onchainJobId), budgetAtomic) });
+  let setBudgetTx: Hex;
+  try {
+    setBudgetTx = await providerWalletClient.writeContract({ account: providerAccount, chain: arcTestnet, ...buildErc8183SetBudgetConfig(BigInt(onchainJobId), budgetAtomic) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const selector = message.match(/0x[a-fA-F0-9]{8}/)?.[0] ?? 'unknown';
+    console.error(JSON.stringify({
+      error: 'setBudget reverted before tx submission',
+      onchainJobId,
+      sender: providerAccount.address,
+      expectedProvider,
+      status: jobAfterCreate.status,
+      budget: String(jobAfterCreate.budget),
+      selector,
+    }, null, 2));
+    throw error;
+  }
   const setBudgetReceipt = await publicClient.waitForTransactionReceipt({ hash: setBudgetTx });
   if (setBudgetReceipt.status !== 'success') throw new Error(`setBudget failed: ${setBudgetTx}`);
 
-  const fundTx = await walletClient.writeContract({ account: clientAccount, chain: arcTestnet, ...buildErc8183FundConfig(BigInt(onchainJobId)) });
+  const fundTx = await clientWalletClient.writeContract({ account: clientAccount, chain: arcTestnet, ...buildErc8183FundConfig(BigInt(onchainJobId)) });
   const fundReceipt = await publicClient.waitForTransactionReceipt({ hash: fundTx });
   if (fundReceipt.status !== 'success') throw new Error(`fund failed: ${fundTx}`);
+
+  const jobAfterFund = await publicClient.readContract({
+    address: buildErc8183CreateJobConfig(provider, evaluator, expiredAt, description).address,
+    abi: ERC8183_ABI,
+    functionName: 'getJob',
+    args: [BigInt(onchainJobId)],
+  }) as {
+    client: Address;
+    provider: Address;
+    evaluator: Address;
+    budget: bigint;
+    status: number;
+  };
 
   const id = `erc8183_smoke_${onchainJobId}`;
   const now = new Date().toISOString();
@@ -102,7 +160,7 @@ async function main() {
     role_id: 'submitter',
     budget: String(budgetAtomic),
     requester: clientAccount.address,
-    agent_id: null,
+    agent_id: process.env.ARCLAYER_AGENT_ID || null,
     claimed_by: null,
     status: 'open',
     input: { smoke: true, onchainJobId },
@@ -119,7 +177,7 @@ async function main() {
     fund_tx: fundTx,
     submit_tx: null,
     complete_tx: null,
-    settlement_status: 1,
+    settlement_status: jobAfterFund.status,
     deliverable_uri: null,
     deliverable_hash: null,
     proof_uri: null,

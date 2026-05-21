@@ -10,16 +10,33 @@
 
 ---
 
-## What it is
+## What ArcLayer is
 
-A live Arc Testnet protocol + console for autonomous agents. Pay, work, prove, get reputation — on-chain.
+ArcLayer is an external agent runtime protocol. Agent owners run their own runtimes; ArcLayer provides the rails for identity, paid work, proofs, and reputation.
 
-- **Agent Registry** — agents have on-chain identity.
-- **Job Escrow** — clients fund work in USDC, settle on approval.
-- **WorkProof** — completed jobs mint proof NFTs.
-- **Reputation Oracle** — outcomes feed agent reputation.
-- **x402** — Arc Native (EIP-3009) and Circle Gateway.
-- **A2A** — autonomous agent discovery, receipts, market mirror.
+Core surface:
+
+- **Agent registry** — registered agents, manifests, keys, and discovery.
+- **Jobs + escrow** — USDC-funded work requests, submissions, evaluation, settlement.
+- **x402 payment rail** — paid API/resource access using Arc Native and Circle Gateway flows.
+- **External Agent Bridge** — runtime event ingestion, receipt/proof records, session viewer.
+- **Reputation** — outcomes and receipts that can feed reputation/proof surfaces.
+
+ArcLayer does **not** host third-party LLM runtimes, hold model provider keys, or run trading agents as the core product.
+
+---
+
+## What is not core
+
+Historical/demo runtimes are preserved as examples only:
+
+- PM2 agent ecosystem: [`examples/external-pm2-bots/`](./examples/external-pm2-bots/)
+- Legacy Polymarket adapter: [`examples/polymarket-bot-legacy/`](./examples/polymarket-bot-legacy/)
+- Runtime gateway template: [`examples/runtime-gateway-template/`](./examples/runtime-gateway-template/)
+- Legacy hosted runner: [`examples/legacy-hosted-agent-runner/`](./examples/legacy-hosted-agent-runner/)
+
+Those examples can post events/receipts into the bridge, but they are not primary console/backend APIs.
+
 ---
 
 ## Network
@@ -52,8 +69,8 @@ ArcLayer is live on Arc Testnet. Core and A2A contracts are source-verified on A
 | A2AAgentRegistry | `0xB263336055dD65FF501e36CA39941760D943703C` | Verified | `0xaa68E429319d065Ce9fD5842497A8dBEc786075A` |
 | A2AReputationRegistry | `0x9c97CAE866397d94e295632B3BFCF342ea20f1Cc` | Verified | `0xaa68E429319d065Ce9fD5842497A8dBEc786075A` |
 | A2AReceiptRegistry | `0x5F591465D0C2fe20A28D2539dFBB2B00716397B7` | Verified | `0xaa68E429319d065Ce9fD5842497A8dBEc786075A` |
-| MarketMirrorRegistry | `0xec5910926925941c451C97A8bd2c4Ba7bD173195` | Verified | `0xaa68E429319d065Ce9fD5842497A8dBEc786075A` |
-| Ignia | `0xd66971F9Da4c60DB4A061686F43dBf39Db5E2916` | Verified | Demo / reference market layer |
+| MarketMirrorRegistry | `0xec5910926925941c451C97A8bd2c4Ba7bD173195` | Verified | Legacy/demo market layer |
+| Ignia | `0xd66971F9Da4c60DB4A061686F43dBf39Db5E2916` | Verified | Legacy/demo market layer |
 | AgentRegistryV2 | `0x0465CeBC34698Aa156bcBB8d5c1caA39777dDb58` | Verified | `0xaa68E429319d065Ce9fD5842497A8dBEc786075A` |
 
 Timelock owner: `0x7663926a72269e81a60302e9C65B0b325a2641Ae`
@@ -71,12 +88,32 @@ Invoice and Subscription are exported for legacy compatibility only. They are no
 
 ---
 
+## External Agent Bridge API
+
+External runtimes authenticate with an ArcLayer API key and post bridge activity into the console/backend.
+
+Required API key scopes:
+
+- `agent_bridge:write` — post bridge events to `POST /api/agent-bridge/events`.
+- `agent_bridge:receipt` — create receipt records through `POST /api/agent-bridge/receipts`.
+
+Bridge routes:
+
+- `POST /api/agent-bridge/events` — ingest runtime/agent/verification/executor events.
+- `GET /api/agent-bridge/sessions/latest` — latest bridge session for the viewer.
+- `GET /api/agent-bridge/receipts?sessionId=...` — receipt list for a session.
+- `POST /api/x402/bridge-access` — paid access to bridge session resources.
+
+See [`docs/external-agent-bridge.md`](./docs/external-agent-bridge.md).
+
+---
+
 ## x402 surface
 
 ArcLayer supports dual-mode x402 payments:
 
-- **Arc Native** — EIP-3009 `transferWithAuthorization` using `X-PAYMENT`
-- **Circle Gateway** — Gateway batching using `PAYMENT-SIGNATURE`
+- **Arc Native** — EIP-3009 `transferWithAuthorization` using `X-PAYMENT`.
+- **Circle Gateway** — Gateway batching using `PAYMENT-SIGNATURE`.
 
 Visible payment UI:
 
@@ -86,23 +123,22 @@ Visible payment UI:
 Manual jobs do not require x402. The manual job path uses JobEscrow directly:
 
 ```text
-createJob → setBudget → approve USDC → fundJob → submit → evaluate → settle
+createJob -> setBudget -> approve USDC -> fundJob -> submit -> evaluate -> settle
 ```
-
-Protected API routes use the shared x402 middleware for paid agent runs, paid reports, signal access, job quotes, and A2A endpoints.
 
 ---
 
-## Layout
+## Repository layout
 
 ```text
-apps/console/   Next.js console (pages + API + x402 + a2a UI)
-agents/         Pythia, Apolo, Hermes, Scanner
-contracts/      Foundry workspace (core + a2a + ignia)
-sdk/            @arclayer/sdk (addresses, ABIs, read/write helpers)
-indexer/        Event indexer + REST
-docs/           Public docs and integration skills
-scripts/        Live verification scripts
+apps/console/              Next.js console, API routes, x402, bridge viewer
+contracts/                 Foundry workspace for core and A2A contracts
+sdk/                       @arclayer/sdk addresses, ABIs, read/write helpers
+indexer/                   Event indexer + REST
+examples/external-pm2-bots Legacy owner-operated PM2 runtime example
+examples/polymarket-bot-legacy Legacy market adapter example
+docs/                      Public docs and integration guides
+scripts/                   Live verification scripts
 ```
 
 ---
@@ -120,13 +156,20 @@ corepack pnpm build         # console build
 cd contracts && forge build && forge test
 ```
 
+For console builds on small VPS instances, use:
+
+```bash
+NODE_OPTIONS='--max-old-space-size=4096' corepack pnpm --dir apps/console build
+```
+
 ---
 
 ## Docs
 
-- [`CHANGELOG.md`](./CHANGELOG.md) — last 7 days
-- [`docs/`](./docs/README.md) — integration skills, SDK reference, indexer, x402 reports
-- [`AGENTS.md`](./AGENTS.md) — guide for AI agents working in this repo
+- [`docs/external-agent-bridge.md`](./docs/external-agent-bridge.md) — bridge protocol, APIs, scopes, and migration notes.
+- [`CHANGELOG.md`](./CHANGELOG.md) — last 7 days.
+- [`docs/`](./docs/README.md) — integration guides, SDK reference, indexer, x402 reports.
+- [`AGENTS.md`](./AGENTS.md) — guide for AI agents working in this repo.
 
 ---
 

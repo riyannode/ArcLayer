@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
-import { createPublicClient, fallback, getAddress, http, isHex, type Address, type Hex } from 'viem';
+import { createPublicClient, fallback, getAddress, http, isHex, type Address, type Hex, type TransactionReceipt } from 'viem';
 import { ARC_RPC_URLS, arcTestnet } from '@arclayer/sdk';
 import { submitA2AJob } from '@/lib/a2a/jobs';
 import { requireApiKey } from '@/lib/a2a/auth';
@@ -57,6 +57,14 @@ function sameAddress(a: string, b: string): boolean {
   return getAddress(a as Address) === getAddress(b as Address);
 }
 
+function receiptLogDiagnostics(receipt: Pick<TransactionReceipt, 'transactionHash' | 'logs'>) {
+  return {
+    transactionHash: receipt.transactionHash,
+    logAddresses: [...new Set(receipt.logs.map((log) => getAddress(log.address)))],
+    topic0Values: [...new Set(receipt.logs.map((log) => log.topics[0]).filter(Boolean))],
+  };
+}
+
 async function handleOnchainSubmit(params: { jobId: string; agentId: string; body: SubmitBody; job: A2AJobRow }) {
   const { jobId, agentId, body, job } = params;
   const missing = missingRequiredOnchainFields(body);
@@ -90,7 +98,10 @@ async function handleOnchainSubmit(params: { jobId: string; agentId: string; bod
   try {
     submittedEvent = extractJobSubmittedFromReceipt(receipt);
   } catch (error) {
-    console.error('[submit] JobSubmitted event parse error:', error);
+    console.error('[submit] JobSubmitted event parse error:', {
+      error: error instanceof Error ? error.message : String(error),
+      ...receiptLogDiagnostics(receipt),
+    });
     return jsonError('job_submitted_event_not_found', 400);
   }
 
