@@ -3,6 +3,11 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import type { IndexedAgentEvent, IndexedJobEvent } from "@arclayer/sdk";
+import {
+  createSupabaseRestClientFromEnv,
+  syncA2AJobsFromERC8183Events,
+  type ERC8183IndexedLifecycleEvent,
+} from "./a2a-lifecycle-sync";
 import { projectAgentsFromEvents, projectJobsFromEvents } from "./projections";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -240,6 +245,19 @@ export async function syncProjectionStore(
         event.blockNumber.toString(),
         event.transactionHash,
         stringifyJson(event),
+      );
+    }
+
+    const supabase = createSupabaseRestClientFromEnv();
+    if (supabase) {
+      await syncA2AJobsFromERC8183Events(
+        events
+          .filter((event) => ["JobCreated", "BudgetSet", "JobFunded", "JobSubmitted", "JobCompleted"].includes(event.eventName))
+          .map((event) => ({
+            ...event,
+            transactionHash: event.transactionHash,
+          })) as ERC8183IndexedLifecycleEvent[],
+        supabase,
       );
     }
 
