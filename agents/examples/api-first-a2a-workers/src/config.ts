@@ -36,7 +36,7 @@ export const config = {
   concurrency: Math.max(1, num('CONCURRENCY', 1)),
   maxLlmCallsPerJob: Math.max(0, num('MAX_LLM_CALLS_PER_JOB', 1)),
   llmProvider: process.env.LLM_PROVIDER || 'pioneer',
-  pioneerBaseUrl: process.env.PIONEER_BASE_URL || 'https://agent.pioneer.ai',
+  pioneerBaseUrl: process.env.PIONEER_BASE_URL || 'https://api.pioneer.ai',
   pioneerApiKey: process.env.PIONEER_API_KEY || '',
   pioneerModel: process.env.PIONEER_MODEL || 'arc-a2a-worker',
   maxTokens: num('MAX_TOKENS', 800),

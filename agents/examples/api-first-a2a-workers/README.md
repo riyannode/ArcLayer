@@ -25,6 +25,8 @@ $EDITOR agents/examples/api-first-a2a-workers/.env
 corepack pnpm --dir agents/examples/api-first-a2a-workers build
 ```
 
+Pioneer uses the OpenAI-compatible API base URL `https://api.pioneer.ai`; worker chat requests resolve to `https://api.pioneer.ai/v1/chat/completions`.
+
 ## Run locally
 
 ```bash
