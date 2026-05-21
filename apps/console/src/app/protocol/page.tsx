@@ -118,13 +118,28 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
+    const loadOverviewWhenVisible = () => {
+      if (!document.hidden) void loadOverview({ silent: true });
+    };
+    const probeRpcsWhenVisible = () => {
+      if (!document.hidden) void probeAllRpcs();
+    };
+    const onVisibility = () => {
+      if (!document.hidden) {
+        void loadOverview({ silent: true });
+        void probeAllRpcs();
+      }
+    };
+
     loadOverview();
     probeAllRpcs();
-    const indexerTick = window.setInterval(() => loadOverview({ silent: true }), 10000);
-    const rpcTick = window.setInterval(() => probeAllRpcs(), 15000);
+    const indexerTick = window.setInterval(loadOverviewWhenVisible, 30000);
+    const rpcTick = window.setInterval(probeRpcsWhenVisible, 30000);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.clearInterval(indexerTick);
       window.clearInterval(rpcTick);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 

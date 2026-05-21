@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server';
 
 /**
  * GET /api/a2a/orderbook?asset=BTC
- * Fetches real Polymarket CLOB orderbook for the current 5m UP/DOWN market.
+ * Fetches real Polymarket CLOB orderbook for the current 15m UP/DOWN market.
  * Returns bids/asks for the YES token.
  */
 
 function getAlignedTimestamp(): number {
   const now = Math.floor(Date.now() / 1000);
-  return now - (now % 300);
+  return now - (now % 900);
 }
 
 export async function GET(req: Request) {
@@ -17,8 +17,8 @@ export async function GET(req: Request) {
 
   const aligned = getAlignedTimestamp();
   const slugs = [
-    `${asset.toLowerCase()}-updown-5m-${aligned}`,
-    `${asset.toLowerCase()}-updown-5m-${aligned - 300}`,
+    `${asset.toLowerCase()}-updown-15m-${aligned}`,
+    `${asset.toLowerCase()}-updown-15m-${aligned - 900}`,
   ];
 
   try {
@@ -48,7 +48,7 @@ export async function GET(req: Request) {
     if (!tokenId) {
       return NextResponse.json({
         ok: false,
-        error: `No active ${asset} 5m market found`,
+        error: `No active ${asset} 15m market found`,
         book: { bids: [], asks: [] },
       });
     }

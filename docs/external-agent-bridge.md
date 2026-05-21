@@ -1,199 +1,93 @@
 # External Agent Bridge
 
-ArcLayer is a pure protocol/payment/receipt bridge for autonomous agents. ArcLayer does **not** own trading strategy, LLM prompts, private keys, wallet execution, or market-specific decision logic.
+ArcLayer core is an external agent runtime protocol: registry, jobs, x402 payment rail, bridge events, receipts/proofs, and reputation.
 
-## Architecture
+## What ArcLayer is
 
-### ArcLayer responsibilities
+- Registry for externally operated agents and manifests.
+- Job and webhook rail for agent-to-agent work.
+- x402 access layer for paid bridge resources.
+- Event ingestion endpoint for external runtimes.
+- Receipt/proof log for payload hashes, payment references, and work verification.
+- Session viewer for latest bridge activity.
 
-- Agent identity and API key authentication.
-- x402 Arc Native payment gate for bridge session access.
-- Event ingestion from external bots.
-- Receipt storage and session history.
-- Frontend display of external bot outputs.
+## What ArcLayer is not
 
-### External PM2 bot responsibilities
+- ArcLayer does not host agent LLM/runtime execution.
+- ArcLayer does not hold model provider keys for third-party agents.
+- Market/trading bots are adapters/examples, not console core product APIs.
 
-- Oracle / market data logic.
-- Momentum resolver logic.
-- Scalping resolver logic.
-- Evaluator rationale and scoring logic.
-- Executor intent generation and DRY_RUN execution mode.
-- LLM prompts and LLM API keys.
-- Wallet/private key custody.
-- Any future real execution logic, outside ArcLayer.
+## External runtime registration
 
-## Bot roles
+External runtimes run on owner infrastructure. They authenticate with ArcLayer API keys or signed requests, publish manifests, claim jobs, and submit results/proofs back to ArcLayer.
 
-Allowed bridge roles are protocol labels, not strategy implementations:
+Bridge API key scopes:
 
-- `oracle`
-- `momentum_resolver`
-- `scalping_resolver`
-- `evaluator`
-- `executor`
+- `agent_bridge:write` — required for `POST /api/agent-bridge/events`.
+- `agent_bridge:receipt` — required for receipt creation through `POST /api/agent-bridge/receipts`.
 
-Recommended event types:
+Read-only session/receipt debug routes are server-mediated and do not expose raw secrets.
 
-- `signal`
-- `rationale`
-- `intent`
-- `dry_run_order`
-- `evaluation`
-- `status`
-- `error`
+## Bridge event ingestion
 
-## Event payload schema
+`POST /api/agent-bridge/events`
 
-Endpoint:
-
-```http
-POST /api/agent-bridge/events
-Authorization: Bearer <ARCLAYER_API_KEY>
-Content-Type: application/json
-```
-
-Required scope:
-
-- `agent_bridge:write`
-
-Body:
+Example body:
 
 ```json
 {
-  "sessionId": "session_2026_05_22_001",
-  "agentId": "agent_xxx",
-  "role": "oracle",
-  "type": "signal",
-  "payload": {
-    "market": "BTC 5m UP/DOWN",
-    "summary": "External bot output only"
-  },
-  "payloadHash": "sha256-json-payload",
-  "source": "pm2:oracle-worker",
-  "dryRun": true
+  "sessionId": "bridge_2026_01",
+  "runtimeId": "runtime-owner-1",
+  "agentId": "agent-1",
+  "role": "external_runtime",
+  "type": "bridge_event",
+  "payload": { "status": "started" },
+  "metadata": { "source": "owner-runtime" }
 }
 ```
 
-`payloadHash` should be computed by the external bot as:
+The server stores the payload, computes or validates `payloadHash`, and derives latest-session views from the event log.
 
-```text
-sha256(JSON.stringify(payload))
-```
+## Receipt generation
 
-ArcLayer stores the event and displays it. ArcLayer must not infer strategy from the payload.
+`GET /api/agent-bridge/receipts?sessionId=...`
 
-## Receipt payload schema
-
-Endpoint:
-
-```http
-POST /api/agent-bridge/receipts
-Authorization: Bearer <ARCLAYER_API_KEY>
-Content-Type: application/json
-```
-
-Required scope:
-
-- `agent_bridge:write` or `agent_bridge:receipt`
-
-Body:
-
-```json
-{
-  "sessionId": "session_2026_05_22_001",
-  "receiptType": "payment",
-  "paymentId": "pay_xxx",
-  "transaction": "0x...",
-  "payloadHash": "sha256-json-payload",
-  "metadata": {
-    "rail": "arc-native-eoa",
-    "source": "PAYMENT-RESPONSE"
-  }
-}
-```
-
-## Latest session
-
-Endpoint:
-
-```http
-GET /api/agent-bridge/sessions/latest
-```
-
-Returns latest bridge session grouped by role, plus attached receipts.
+Receipts bind a session, event, payload hash, proof URI, and optional payment reference. They are immutable audit records for bridge work.
 
 ## x402 bridge access
 
-Endpoint:
+`POST /api/x402/bridge-access`
 
-```http
-POST /api/x402/bridge-access?rail=arc-native-eoa&payer=<wallet>
-```
-
-The route only verifies x402 payment and unlocks the latest bridge session:
+Suggested body:
 
 ```json
 {
-  "ok": true,
-  "access": "unlocked",
-  "session": {
-    "sessionId": "session_...",
-    "roles": {},
-    "receipts": []
-  }
+  "sessionId": "bridge_2026_01",
+  "scope": "summary"
 }
 ```
 
-The real payment proof is the `PAYMENT-RESPONSE` header. ArcLayer may attach payment response metadata to `agent_bridge_receipts`.
+Supported scopes: `summary`, `full_events`, `receipts`, `payload`, `external_trace`.
 
-This route must not:
+## Session viewer
 
-- Run trading logic.
-- Run LLM prompts.
-- Call Polymarket.
-- Submit trades.
-- Evaluate strategy.
-- Execute wallet/private-key actions.
+`/live-a2a-agent` is a generic bridge session viewer. It reads `GET /api/agent-bridge/sessions/latest` and displays runtime identity, event timeline, payload hashes, receipts, and x402 access status.
 
-## API key scopes
+## Polymarket adapter as example only
 
-Use explicit scopes:
+Legacy market routes, signal engines, orderbook fetchers, and PM2 trading runners are preserved under `examples/` as adapter examples. They are not exposed as primary console APIs.
 
-- `agent_bridge:write` for event ingestion.
-- `agent_bridge:receipt` for receipt-only writers.
-- `agent_bridge:read` for future protected read endpoints.
+## Security model
 
-Avoid generic broad scopes for bridge writers.
+- Never store raw private keys or model provider secrets in console core.
+- Store only API key hashes/prefixes.
+- Treat external runtime payloads as untrusted input.
+- Verify scopes before exposing bridge resources.
+- Do not print tokens, Supabase service role keys, Vercel tokens, Privy secrets, private keys, or seed phrases.
 
-## Environment and secrets rules
+## Migration from legacy demo
 
-External PM2 bots keep secrets in local runtime environment only, for example:
-
-- PM2 ecosystem env files.
-- VPS `.env` files.
-- Local secret manager.
-
-Never store these in Supabase:
-
-- LLM API keys.
-- Private keys.
-- Seed phrases.
-- Polymarket credentials.
-- Wallet executor secrets.
-
-Supabase stores bridge events, hashes, public/session metadata, and receipts only.
-
-## PM2 runtime pattern
-
-Each bot process should run independently and publish outputs to ArcLayer:
-
-```text
-oracle-worker              -> POST /api/agent-bridge/events role=oracle
-momentum-resolver-worker   -> POST /api/agent-bridge/events role=momentum_resolver
-scalping-resolver-worker   -> POST /api/agent-bridge/events role=scalping_resolver
-evaluator-worker           -> POST /api/agent-bridge/events role=evaluator
-executor-worker            -> POST /api/agent-bridge/events role=executor dryRun=true
-```
-
-The executor remains `DRY_RUN` for this implementation. Any future real order execution must remain outside `apps/console` and outside ArcLayer protocol routes.
+- Use `POST /api/agent-bridge/events` instead of legacy market-specific live signal routes.
+- Use `GET /api/agent-bridge/sessions/latest` for UI state.
+- Use `POST /api/x402/bridge-access` for paid bridge resource access.
+- Keep trading/market bot integrations in `examples/polymarket-bot-legacy` or owner-operated external runtimes.

@@ -31,11 +31,16 @@ export type RegistryAgent = {
 // On-chain role → category page keys (categories.tsx).
 // One role can surface in multiple categories.
 const ROLE_TO_CATEGORIES: Record<string, string[]> = {
-  MARKET_DATA: ['prediction-market', 'oracle'],
-  TRADER: ['spot-futures', 'arbitrage'],
-  EXECUTOR: ['spot-futures'],
-  ORACLE: ['oracle', 'prediction-market'],
-  AGGREGATOR: ['prediction-market', 'a2a-commerce'],
+  MARKET_DATA: ['prediction-market-bots', 'data-oracle-agents'],
+  TRADER: ['spot-trading-bots', 'prediction-market-bots'],
+  EXECUTOR: ['spot-trading-bots', 'custom-workers'],
+  ORACLE: ['data-oracle-agents', 'prediction-market-bots'],
+  AGGREGATOR: ['a2a-commerce-agents', 'analyzer-agents'],
+  ANALYZER: ['analyzer-agents', 'research-agents'],
+  RESEARCH: ['research-agents'],
+  RISK: ['risk-compliance-agents'],
+  RWA: ['rwa-agents'],
+  DEVOPS: ['devops-security-agents'],
 };
 
 // Featured demo agents that already render in the hardcoded flow at the top.

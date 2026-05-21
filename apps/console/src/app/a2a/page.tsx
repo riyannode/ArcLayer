@@ -229,9 +229,9 @@ function A2ADashboardPage() {
     try {
       const cacheBust = Date.now();
       const [ovRes, ocRes, fdRes, regRes] = await Promise.all([
-        fetch(`/api/indexer/overview?t=${cacheBust}`, { cache: 'no-store' }),
+        fetch('/api/indexer/overview'),
         fetch(`/api/a2a/status?t=${cacheBust}`, { cache: 'no-store' }),
-        fetch(`/api/indexer/autonomous-feed?limit=50&t=${cacheBust}`, { cache: 'no-store' }),
+        fetch('/api/indexer/autonomous-feed?limit=50'),
         fetch(`/api/a2a/agents?t=${cacheBust}`, { cache: 'no-store' }),
       ]);
       if (!ovRes.ok) throw new Error(`indexer ${ovRes.status}`);

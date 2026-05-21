@@ -7,11 +7,7 @@
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "a2a:runner": "tsx scripts/agent-market-runner.ts",
-    "a2a:runner:once": "tsx scripts/agent-market-runner.ts --once",
-    "a2a:pnl": "tsx scripts/update-trade-pnl.ts",
-    "a2a:pnl:once": "tsx scripts/update-trade-pnl.ts --once"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@arclayer/sdk": "workspace:*",

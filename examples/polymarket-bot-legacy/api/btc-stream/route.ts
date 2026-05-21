@@ -3,14 +3,14 @@ import { NextResponse } from 'next/server';
 /**
  * GET /api/a2a/btc-stream?asset=BTC|ETH
  *
- * Live spot price + 5m-aligned "Price to Beat" + candle history.
+ * Live spot price + 15m-aligned "Price to Beat" + candle history.
  * Used by the LiveMarketPanel widget on /live-a2a-agent.
  *
  * Sources:
  *   • Coinbase spot:    public, no key, fast.
  *   • Coinbase candles: 1m granularity, last ~25 minutes.
  *
- * "Price to Beat" = open price of the current 5m window (Polymarket convention).
+ * "Price to Beat" = open price of the current 15m window (hackathon demo convention).
  */
 
 export const dynamic = 'force-dynamic';
@@ -23,8 +23,8 @@ const PRODUCT_BY_ASSET: Record<'BTC' | 'ETH', string> = {
   ETH: 'ETH-USD',
 };
 
-function fiveMinAlignedSec(now = Math.floor(Date.now() / 1000)): number {
-  return now - (now % 300);
+function fifteenMinAlignedSec(now = Math.floor(Date.now() / 1000)): number {
+  return now - (now % 900);
 }
 
 async function fetchSpot(product: string, signal: AbortSignal): Promise<number | null> {
@@ -39,9 +39,9 @@ async function fetchSpot(product: string, signal: AbortSignal): Promise<number |
 }
 
 async function fetchCandles(product: string, signal: AbortSignal): Promise<Candle[]> {
-  // Last 25 min of 1m candles → 25 points
+  // Last 45 min of 1m candles → enough context for current/previous 15m windows.
   const end = Math.floor(Date.now() / 1000);
-  const start = end - 60 * 25;
+  const start = end - 60 * 45;
   const url = `https://api.exchange.coinbase.com/products/${product}/candles?granularity=60&start=${new Date(
     start * 1000,
   ).toISOString()}&end=${new Date(end * 1000).toISOString()}`;
@@ -70,10 +70,10 @@ export async function GET(req: Request) {
     ]);
     clearTimeout(timer);
 
-    const winStart = fiveMinAlignedSec();
-    const winEnd = winStart + 300;
+    const winStart = fifteenMinAlignedSec();
+    const winEnd = winStart + 900;
 
-    // Price to Beat = open of the candle at the 5m-aligned start of the window.
+    // Price to Beat = open of the candle at the 15m-aligned start of the window.
     // If unavailable, fall back to first candle inside the window.
     let priceToBeat: number | null = null;
     const inWindow = candles.filter((c) => c.t >= winStart && c.t < winEnd);

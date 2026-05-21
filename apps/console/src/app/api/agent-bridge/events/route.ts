@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireApiKey } from '@/lib/a2a/auth';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { insertBridgeEvent, listBridgeEvents, type BridgeEventInput } from '@/lib/agent-bridge/store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const ROLES = new Set(['oracle', 'momentum_resolver', 'scalping_resolver', 'evaluator', 'executor']);
-const TYPES = new Set(['market_snapshot', 'resolver_output', 'evaluation', 'execution_intent']);
+const TYPES = new Set(['session_started', 'bridge_event', 'work_proof', 'receipt_reference', 'market_snapshot', 'resolver_output', 'evaluation', 'execution_intent']);
+
+function isValidRole(role: string) {
+  return /^[a-z][a-z0-9_-]{1,63}$/.test(role);
+}
 
 function bad(error: string, status = 400, extra?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, error, ...(extra ?? {}) }, { status });
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireApiKey(req, 'agent_bridge:write');
+  const auth = await requireApiKey(req, API_KEY_SCOPES.AGENT_BRIDGE_WRITE);
   if (auth.error) return auth.error;
 
   let body: Partial<BridgeEventInput>;
@@ -30,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   if (!sessionId) return bad('missing_sessionId');
   if (!agentId) return bad('missing_agentId');
-  if (!ROLES.has(role)) return bad('invalid_role');
+  if (!isValidRole(role)) return bad('invalid_role');
   if (!TYPES.has(type)) return bad('invalid_type');
   if (body.payload === null || typeof body.payload !== 'object' || Array.isArray(body.payload)) return bad('invalid_payload');
 
@@ -40,12 +43,14 @@ export async function POST(req: NextRequest) {
   try {
     const event = await insertBridgeEvent({
       sessionId,
+      runtimeId: typeof body.runtimeId === 'string' ? body.runtimeId.trim() : null,
       agentId,
       role: role as BridgeEventInput['role'],
       type: type as BridgeEventInput['type'],
       payload: body.payload as Record<string, unknown>,
       payloadHash: typeof body.payloadHash === 'string' ? body.payloadHash : undefined,
-      source: typeof body.source === 'string' ? body.source : 'pm2-bot',
+      metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata as Record<string, unknown> : {},
+      source: typeof body.source === 'string' ? body.source : 'external-runtime',
       dryRun: body.dryRun !== false,
     });
     return NextResponse.json({ ok: true, eventId: event.id });
@@ -55,13 +60,20 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const auth = await requireApiKey(req, [API_KEY_SCOPES.AGENT_BRIDGE_WRITE, API_KEY_SCOPES.AGENT_BRIDGE_RECEIPT]);
+  if (auth.error) return auth.error;
+
   const { searchParams } = new URL(req.url);
-  const limit = Number(searchParams.get('limit') ?? '50');
+  const requestedLimit = Number(searchParams.get('limit') ?? '50');
+  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 50, 1), 100);
+  const sessionId = searchParams.get('sessionId');
+  const role = searchParams.get('role');
+
   try {
     const events = await listBridgeEvents({
-      sessionId: searchParams.get('sessionId'),
-      role: searchParams.get('role'),
-      limit: Number.isFinite(limit) ? limit : 50,
+      sessionId,
+      role,
+      limit,
     });
     return NextResponse.json({ ok: true, events });
   } catch (err) {
