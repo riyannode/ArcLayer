@@ -115,7 +115,7 @@ export async function revokeApiKey(keyId: string, agentId: string): Promise<bool
  */
 export async function requireApiKey(
   req: NextRequest,
-  requiredScope?: string,
+  requiredScope?: string | string[],
 ): Promise<{ key: VerifiedKey; error?: never } | { key?: never; error: NextResponse }> {
   const authHeader = req.headers.get('authorization') ?? '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
@@ -139,13 +139,16 @@ export async function requireApiKey(
     };
   }
 
-  if (requiredScope && !key.scopes.includes(requiredScope)) {
-    return {
-      error: NextResponse.json(
-        { ok: false, error: 'insufficient_scope', required: requiredScope, have: key.scopes },
-        { status: 403 },
-      ),
-    };
+  if (requiredScope) {
+    const requiredScopes = Array.isArray(requiredScope) ? requiredScope : [requiredScope];
+    if (!requiredScopes.some((scope) => key.scopes.includes(scope))) {
+      return {
+        error: NextResponse.json(
+          { ok: false, error: 'insufficient_scope', required: requiredScopes, have: key.scopes },
+          { status: 403 },
+        ),
+      };
+    }
   }
 
   return { key };

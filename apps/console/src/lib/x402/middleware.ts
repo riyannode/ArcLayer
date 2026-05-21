@@ -497,6 +497,23 @@ async function handleNative(
     amount: requirements.amount,
     paymentId,
   };
+
+  const bridgeSessionId = response.headers.get('X-Agent-Bridge-Session-Id');
+  if (bridgeSessionId) {
+    try {
+      const { insertBridgeReceipt } = await import('@/lib/agent-bridge/store');
+      await insertBridgeReceipt({
+        sessionId: bridgeSessionId,
+        receiptType: 'x402_arc_native',
+        paymentId,
+        transaction: settleResult.transaction ?? null,
+        payloadHash: response.headers.get('X-Agent-Bridge-Payload-Hash'),
+      });
+    } catch (err) {
+      console.error('[x402] failed to attach agent bridge receipt', err instanceof Error ? err.message : 'unknown');
+    }
+  }
+
   response.headers.set('PAYMENT-RESPONSE', encodePaymentResponse(paymentResponse));
   return response;
 }

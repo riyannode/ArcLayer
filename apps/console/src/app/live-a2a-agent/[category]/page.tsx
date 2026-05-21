@@ -3,6 +3,9 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAccount } from 'wagmi';
+import { useAppKit } from '@reown/appkit/react';
+import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'viem';
 import { RegisteredAgentsList } from '@/components/a2a/RegisteredAgentsList';
 import { filterAgentsByCategory, type RegistryAgent } from '@/lib/a2a/category-filter';
 import { AGENT_CATEGORIES } from '../categories';
@@ -99,6 +102,38 @@ type SignalEvent = {
   ts: string;
 };
 
+type PaidSignalResult = {
+  ok?: boolean;
+  access?: string;
+  session?: Record<string, unknown> | null;
+  finalAction?: string;
+  evaluator?: { rationale?: string; recommendedAction?: string; riskLevel?: string; score?: number };
+  executor?: { action?: string; sizeUsdc?: string; mode?: string };
+  payment?: { mode?: string; paymentId?: string; transaction?: string | null; payer?: string; amount?: string; network?: string } | null;
+  paymentResponse?: { paymentId?: string; transaction?: string | null; [key: string]: unknown };
+  savedTo?: string;
+  error?: string;
+};
+
+type Requirement = {
+  scheme: 'exact';
+  network: string;
+  asset: `0x${string}`;
+  amount: string;
+  payTo: `0x${string}`;
+  maxTimeoutSeconds?: number;
+  extra?: Record<string, unknown>;
+};
+
+type TradeHistoryRecord = {
+  asset?: 'BTC' | 'ETH';
+  marketSlug?: string;
+  snapshot?: { upPrice?: number; downPrice?: number; spread?: number; volume?: number | null };
+  pythia?: { rawSignal?: 'UP' | 'DOWN' | 'NEUTRAL'; confidence?: number; features?: string[]; reasoning?: string };
+  apolo?: { decision?: 'UP' | 'DOWN' | 'NEUTRAL'; status?: 'APPROVED' | 'REJECTED'; confidence?: number; risk?: 'LOW' | 'MEDIUM' | 'HIGH'; reason?: string; reasoning?: string };
+  hermes?: { action?: 'BUY_UP' | 'BUY_DOWN' | 'SKIP'; sizeUsdc?: string; mode?: 'DRY_RUN' | 'LIVE'; receipts?: Array<{ receiptId?: string; settlementTxHash?: string }> };
+};
+
 type AgentStat = { callsServed?: number; totalRevenue?: string; reputationScore?: number };
 type A2AStatusData = {
   agents?: {
@@ -149,11 +184,51 @@ function rowsToSignalEvents(rows: SignalRow[]): SignalEvent[] {
   return rows.map((row, i) => ({
     id: `${row.slug}-${i}-${Date.now()}`,
     verdict: verdictFromSignal(row),
-    market: `${row.asset} 5m · ${row.apolo.decision}`,
+    market: `${row.asset} 15m · ${row.apolo.decision}`,
     confidence: row.apolo.confidence,
     ts: new Date().toISOString().slice(11, 19),
   }));
 }
+
+function historyRecordToSignalRow(record: TradeHistoryRecord): SignalRow | null {
+  if (!record.asset || !record.marketSlug || !record.snapshot) return null;
+  return {
+    asset: record.asset,
+    slug: record.marketSlug,
+    market: {
+      upPrice: Number(record.snapshot.upPrice ?? 0.5),
+      downPrice: Number(record.snapshot.downPrice ?? 0.5),
+      spread: Number(record.snapshot.spread ?? 0),
+      volume: record.snapshot.volume ?? null,
+    },
+    ignia: {
+      rawSignal: record.pythia?.rawSignal ?? 'NEUTRAL',
+      confidence: Number(record.pythia?.confidence ?? 0),
+      features: record.pythia?.features ?? [],
+    },
+    apolo: {
+      decision: record.apolo?.decision ?? 'NEUTRAL',
+      status: record.apolo?.status ?? 'REJECTED',
+      confidence: Number(record.apolo?.confidence ?? 0),
+      risk: record.apolo?.risk ?? 'HIGH',
+      reason: record.apolo?.reason ?? record.apolo?.reasoning ?? 'Awaiting paid trading signal.',
+    },
+    hermes: {
+      action: record.hermes?.action ?? 'SKIP',
+      sizeUsdc: record.hermes?.sizeUsdc ?? '0.00',
+      mode: 'DRY_RUN',
+    },
+  };
+}
+
+const ARC_CHAIN_ID = 5042002;
+const ARC_RPC = 'https://rpc.drpc.testnet.arc.network';
+const USDC = getAddress('0x3600000000000000000000000000000000000000');
+const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
+
+function randomNonce(): Hex { return `0x${Array.from(crypto.getRandomValues(new Uint8Array(32))).map((b) => b.toString(16).padStart(2, '0')).join('')}` as Hex; }
+function b64(value: unknown) { return btoa(JSON.stringify(value)); }
+function decodeHeader(value: string | null): any | null { if (!value) return null; try { return JSON.parse(atob(value)); } catch { try { return JSON.parse(value); } catch { return null; } } }
 
 // ─── Reusable presentational pieces ──────────────────────────────────────────
 
@@ -848,6 +923,8 @@ function runWhenVisible(fn: () => void | Promise<void>) {
 }
 
 export default function LiveA2AAgentPageRoute() {
+  const { address, isConnected } = useAccount();
+  const { open: openWalletModal } = useAppKit();
   const [now, setNow] = useState('');
   const [markets, setMarkets] = useState<LiveMarket[]>([]);
   const [signalRows, setSignalRows] = useState<SignalRow[]>([]);
@@ -866,6 +943,8 @@ export default function LiveA2AAgentPageRoute() {
   const [a2aStatus, setA2aStatus] = useState<A2AStatusData | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [flowReceipt, setFlowReceipt] = useState<FlowReceipt | null>(null);
+  const [paidSignal, setPaidSignal] = useState<PaidSignalResult | null>(null);
+  const [paidSignalStep, setPaidSignalStep] = useState<'idle' | 'challenge' | 'signing' | 'paying' | 'done' | 'error'>('idle');
   const [registryAgents, setRegistryAgents] = useState<RegistryAgent[]>([]);
 
   const latestRow = signalRows[0] ?? null;
@@ -882,42 +961,71 @@ export default function LiveA2AAgentPageRoute() {
     return () => clearInterval(t);
   }, []);
 
-  // Markets + signals (20s, paused when tab is hidden)
+  // External PM2 bot bridge data (20s, paused when tab is hidden).
+  // ArcLayer only renders bridge events; strategy/evaluator logic lives outside apps/console.
   useEffect(() => {
     let alive = true;
     async function load() {
       try {
-        const [mRes, sRes] = await Promise.all([
-          fetch('/api/a2a/markets', { cache: 'no-store' }),
-          fetch('/api/a2a/live-signal', { cache: 'no-store' }),
+        const [latestRes, eventsRes] = await Promise.all([
+          fetch('/api/agent-bridge/sessions/latest', { cache: 'no-store' }),
+          fetch('/api/agent-bridge/events?limit=50', { cache: 'no-store' }),
         ]);
         if (!alive) return;
-        if (mRes.ok) {
-          const data = await mRes.json();
-          setMarkets(data.markets || []);
+
+        if (latestRes.ok) {
+          const data = await latestRes.json();
+          const session = data.session;
+          const oracle = session?.oracle?.payload ?? {};
+          const evaluator = session?.evaluator?.payload ?? {};
+          const executor = session?.executor?.payload ?? {};
+          const marketSlug = String(oracle.marketSlug ?? oracle.slug ?? session?.sessionId ?? 'external-pm2-session');
+          const asset = String(oracle.asset ?? 'BTC') === 'ETH' ? 'ETH' : 'BTC';
+          const row: SignalRow = {
+            asset,
+            slug: marketSlug,
+            market: {
+              upPrice: Number(oracle.upPrice ?? oracle.market?.upPrice ?? 0.5),
+              downPrice: Number(oracle.downPrice ?? oracle.market?.downPrice ?? 0.5),
+              spread: Number(oracle.spread ?? oracle.market?.spread ?? 0),
+              volume: typeof oracle.volume === 'number' ? oracle.volume : null,
+            },
+            ignia: {
+              rawSignal: String(session?.momentum?.payload?.action ?? evaluator.signal ?? 'NEUTRAL') as SignalRow['ignia']['rawSignal'],
+              confidence: Number(session?.momentum?.payload?.confidence ?? evaluator.confidence ?? 0),
+              features: ['external-pm2-bot', session?.sessionId].filter(Boolean) as string[],
+            },
+            apolo: {
+              decision: String(evaluator.finalAction ?? evaluator.decision ?? 'NEUTRAL') as SignalRow['apolo']['decision'],
+              status: evaluator.approved === false ? 'REJECTED' : 'APPROVED',
+              confidence: Number(evaluator.confidence ?? evaluator.score ?? 0),
+              risk: String(evaluator.riskLevel ?? evaluator.risk ?? 'MEDIUM') as SignalRow['apolo']['risk'],
+              reason: String(evaluator.rationale ?? 'Waiting for external PM2 evaluator output'),
+            },
+            hermes: {
+              action: String(executor.action ?? evaluator.finalAction ?? 'SKIP') as SignalRow['hermes']['action'],
+              sizeUsdc: String(executor.sizeUsdc ?? '0'),
+              mode: 'DRY_RUN',
+            },
+          };
+          setSignalRows(session ? [row] : []);
+          setMarkets(session ? [{ slug: marketSlug, question: `${asset} 15m external PM2 signal`, asset, upPrice: row.market.upPrice, downPrice: row.market.downPrice, volume: row.market.volume }] : []);
         }
-        if (sRes.ok) {
-          const data = await sRes.json();
-          const rows: SignalRow[] = data.rows || [];
-          setSignalRows(rows);
-          setSignalEvents((prev) => {
-            const fresh = rowsToSignalEvents(rows);
-            const merged = [...fresh, ...prev];
-            const uniq: SignalEvent[] = [];
-            const seen = new Set<string>();
-            for (const ev of merged) {
-              const key = `${ev.market}-${ev.ts}-${ev.verdict}`;
-              if (seen.has(key)) continue;
-              seen.add(key);
-              uniq.push(ev);
-              if (uniq.length >= 24) break;
-            }
-            return uniq;
-          });
+
+        if (eventsRes.ok) {
+          const data = await eventsRes.json();
+          const events = Array.isArray(data.events) ? data.events : [];
+          setSignalEvents(events.slice(0, 24).map((ev: any) => ({
+            id: ev.id,
+            verdict: ev.role === 'executor' ? 'YES' : ev.role === 'evaluator' ? 'EDGE' : 'REVIEW',
+            market: `${ev.role} · ${ev.type}`,
+            confidence: Number(ev.payload?.confidence ?? ev.payload?.score ?? 0),
+            ts: String(ev.created_at ?? new Date().toISOString()).slice(11, 19),
+          })));
           setScanCount((n) => n + 1);
         }
       } catch (err: any) {
-        if (alive) setErrors((e) => [`signals: ${err?.message}`, ...e].slice(0, 3));
+        if (alive) setErrors((e) => [`bridge: ${err?.message}`, ...e].slice(0, 3));
       }
     }
     runWhenVisible(load);
@@ -935,7 +1043,7 @@ export default function LiveA2AAgentPageRoute() {
       try {
         const cb = Date.now();
         const [ovRes, stRes] = await Promise.all([
-          fetch(`/api/indexer/overview?t=${cb}`, { cache: 'no-store' }),
+          fetch('/api/indexer/overview'),
           fetch(`/api/a2a/status?t=${cb}`, { cache: 'no-store' }),
         ]);
         if (!alive) return;
@@ -1137,33 +1245,68 @@ export default function LiveA2AAgentPageRoute() {
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  // Auto-run x402 flow receipt every 90s — low-frequency POST to avoid backend churn
-  // Receipt lights up green for ~8s then fades back to dark (idle) until next tx
-  useEffect(() => {
-    if (!isPredictionMarket) return;
-    let cancelled = false;
-    let fadeTimer: ReturnType<typeof setTimeout> | null = null;
-    async function poll() {
-      try {
-        const r = await fetch('/api/a2a/run-flow', { method: 'POST', cache: 'no-store' });
-        const data = (await r.json()) as FlowReceipt;
-        if (cancelled) return;
-        setFlowReceipt(data);
-        if (!r.ok || !data.ok) setErrors((e) => [`flow: ${data.error || r.statusText}`, ...e].slice(0, 3));
-        // After 8s, reset to idle (all dark) until next poll
-        if (fadeTimer) clearTimeout(fadeTimer);
-        fadeTimer = setTimeout(() => {
-          if (!cancelled) setFlowReceipt((prev) => prev ? { ...prev, activeStep: -1 } : prev);
-        }, 8000);
-      } catch (err: any) {
-        if (cancelled) return;
-        setErrors((e) => [`flow: ${err?.message}`, ...e].slice(0, 3));
+  // No automatic /api/a2a/run-flow POST here. Strategy execution is external PM2-only;
+  // paid x402 calls are user-triggered via /api/x402/bridge-access.
+
+  async function unlockAgentSession() {
+    try {
+      setPaidSignalStep('challenge');
+      setErrors([]);
+      if (!isConnected || !address) {
+        openWalletModal();
+        throw new Error('Connect wallet first to unlock bridge session.');
       }
+      const challengeUrl = `/api/x402/bridge-access?rail=arc-native-eoa&payer=${address}`;
+      const first = await fetch(challengeUrl, { method: 'POST' });
+      if (first.status !== 402) throw new Error(`Expected x402 challenge, got HTTP ${first.status}.`);
+      const paymentRequired = decodeHeader(first.headers.get('PAYMENT-REQUIRED'));
+      const req = paymentRequired?.accepts?.find((r: any) => r?.extra?.transferMethod === 'eip3009') ?? paymentRequired?.accepts?.[0];
+      if (!req) throw new Error('No Arc Native x402 payment requirement returned.');
+
+      setPaidSignalStep('signing');
+      const eth = (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
+      if (!eth) throw new Error('No injected wallet found.');
+      try {
+        await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: `0x${ARC_CHAIN_ID.toString(16)}` }] });
+      } catch (e) {
+        const err = e as { code?: number };
+        if (err.code !== 4902) throw e;
+        await eth.request({ method: 'wallet_addEthereumChain', params: [{ chainId: `0x${ARC_CHAIN_ID.toString(16)}`, chainName: 'Arc Testnet', nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 }, rpcUrls: ['https://rpc.testnet.arc.network'], blockExplorerUrls: ['https://testnet.arcscan.app'] }] });
+      }
+
+      const validBefore = String(Math.floor(Date.now() / 1000) + 600);
+      const nonce = randomNonce();
+      const acceptedExtra = req.extra ?? {};
+      const paymentPayload = {
+        x402Version: 2,
+        accepted: { ...req, asset: getAddress(req.asset), payTo: getAddress(req.payTo), extra: acceptedExtra },
+        payload: { signature: '0x' as Hex, authorization: { from: address, to: getAddress(req.payTo), value: req.amount, validAfter: '0', validBefore, nonce } },
+      };
+      paymentPayload.payload.signature = (await eth.request({
+        method: 'eth_signTypedData_v4',
+        params: [address, JSON.stringify({
+          types: {
+            EIP712Domain: [{ name: 'name', type: 'string' }, { name: 'version', type: 'string' }, { name: 'chainId', type: 'uint256' }, { name: 'verifyingContract', type: 'address' }],
+            TransferWithAuthorization: [{ name: 'from', type: 'address' }, { name: 'to', type: 'address' }, { name: 'value', type: 'uint256' }, { name: 'validAfter', type: 'uint256' }, { name: 'validBefore', type: 'uint256' }, { name: 'nonce', type: 'bytes32' }],
+          },
+          primaryType: 'TransferWithAuthorization',
+          domain: { name: 'USDC', version: '2', chainId: ARC_CHAIN_ID, verifyingContract: USDC },
+          message: { from: address, to: getAddress(req.payTo), value: `0x${BigInt(req.amount).toString(16)}`, validAfter: '0x0', validBefore: `0x${BigInt(validBefore).toString(16)}`, nonce },
+        })],
+      })) as Hex;
+
+      setPaidSignalStep('paying');
+      const paid = await fetch(challengeUrl, { method: 'POST', headers: { 'X-PAYMENT': b64(paymentPayload) } });
+      const body = await paid.json();
+      if (!paid.ok) throw new Error(body.message || body.error || `Bridge unlock failed with HTTP ${paid.status}.`);
+      const paymentResponse = decodeHeader(paid.headers.get('PAYMENT-RESPONSE')) ?? {};
+      setPaidSignal({ ...body, paymentResponse });
+      setPaidSignalStep('done');
+    } catch (err: any) {
+      setPaidSignalStep('error');
+      setErrors((e) => [`unlock: ${err?.message ?? 'failed'}`, ...e].slice(0, 3));
     }
-    runWhenVisible(poll);
-    const id = setInterval(() => runWhenVisible(poll), FLOW_POST_INTERVAL_MS);
-    return () => { cancelled = true; clearInterval(id); if (fadeTimer) clearTimeout(fadeTimer); };
-  }, [isPredictionMarket]);
+  }
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-5 text-[#EAE4D8] selection:bg-[#C5A67C]/20 sm:px-6 lg:px-8">
@@ -1234,12 +1377,35 @@ export default function LiveA2AAgentPageRoute() {
               <SignalStream signals={signalEvents} />
             </TerminalPanel>
 
-            <TerminalPanel title="Agent Graph" right={<Chip tone="cyan">PYTHIA → APOLO → HERMES</Chip>} className="min-h-[200px]">
+            <TerminalPanel title="Agent Graph" right={<Chip tone="cyan">Oracle → Momentum Resolver → Scalping Resolver → Evaluator → Executor</Chip>} className="min-h-[200px]">
               <AgentGraph latest={latestRow} />
             </TerminalPanel>
 
-            <TerminalPanel title="Featured Demo Flow · LIVE" right={<Chip tone="green">PYTHIA → APOLO → HERMES</Chip>} className="min-h-[260px]">
+            <TerminalPanel title="Agent Bridge Session" right={<Chip tone="green">EXTERNAL PM2 BOT OUTPUTS</Chip>} className="min-h-[260px]">
               <LiveA2AFlow receipt={flowReceipt} />
+              <div className="mt-4 rounded-sm border border-[#C5A67C]/20 bg-black/25 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#C5A67C]">Bridge Access / Session Unlock</div>
+                    <div className="mt-1 text-xs text-[#EAE4D8]/60">x402 unlock only. ArcLayer reads latest bridge session; strategy stays in external PM2 bots.</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={unlockAgentSession}
+                    disabled={paidSignalStep === 'challenge' || paidSignalStep === 'signing' || paidSignalStep === 'paying'}
+                    className="rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C] transition hover:bg-[#C5A67C]/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {paidSignalStep === 'idle' || paidSignalStep === 'done' || paidSignalStep === 'error' ? 'Unlock Agent Session' : paidSignalStep}
+                  </button>
+                </div>
+                {paidSignal ? (
+                  <div className="mt-3 grid gap-2 font-mono text-[10px] text-[#EAE4D8]/70 sm:grid-cols-2">
+                    <div>access: {paidSignal.access ?? 'unlocked'}</div>
+                    <div>paymentId: {paidSignal.paymentResponse?.paymentId ?? paidSignal.payment?.paymentId ?? 'n/a'}</div>
+                    <div className="sm:col-span-2">transaction: {paidSignal.paymentResponse?.transaction ?? paidSignal.payment?.transaction ?? 'n/a'}</div>
+                  </div>
+                ) : null}
+              </div>
             </TerminalPanel>
           </>
         ) : (
