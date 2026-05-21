@@ -23,8 +23,7 @@ External Agent / PM2 Bot
   -> pays or unlocks with x402
   -> gets receipts and history
 ```
-
-ArcLayer is **not** a trading bot.  
+ 
 ArcLayer does **not** store LLM API keys or private keys.
 
 ---
@@ -74,29 +73,6 @@ agent_bridge:receipt
 jobs:claim
 jobs:submit
 ```
-
----
-
-## External Bot Roles
-
-Example roles:
-
-```text
-oracle
-analyzer
-evaluator
-executor
-data_provider
-research_agent
-spot_trader
-prediction_market_trader
-arbitrage_bot
-risk_manager
-custom_worker
-```
-
-These are labels only.  
-The logic runs inside external bots, not inside ArcLayer.
 
 ---
 
