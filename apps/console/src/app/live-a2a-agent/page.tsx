@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { AgentBridgeFlowDiagram, AgentBridgeSessionPanel, BridgeReceiptsPanel, ExternalJobsPanel, type BridgeSession } from '@/components/agent-bridge';
+import { AgentBridgeFlowDiagram, AgentBridgeSessionPanel, BridgeReceiptsPanel, ExternalJobsPanel, EXAMPLE_PM2_PIPELINE_ROLES, EXTERNAL_AGENT_ROLE_LABELS, type BridgeSession } from '@/components/agent-bridge';
 import { RegisteredAgentsList } from '@/components/a2a/RegisteredAgentsList';
 import { AGENT_CATEGORIES } from './categories';
 
@@ -15,6 +15,7 @@ type LatestResponse = { ok: boolean; session: BridgeSession | null; error?: stri
 export default function LiveA2AAgentPage() {
   const [session, setSession] = useState<BridgeSession | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [unlockStatus, setUnlockStatus] = useState<string>('x402 payment required');
 
   useEffect(() => {
     let alive = true;
@@ -41,6 +42,25 @@ export default function LiveA2AAgentPage() {
     };
   }, []);
 
+  async function unlockAgentSession() {
+    setUnlockStatus('requesting /api/x402/bridge-access…');
+    try {
+      const res = await fetch('/api/x402/bridge-access?rail=arc-native-eoa', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 402) {
+        setUnlockStatus('x402 payment required; call this endpoint with X-PAYMENT to unlock');
+        return;
+      }
+      if (!res.ok || data.ok === false) {
+        setUnlockStatus(data.error || data.message || `unlock failed ${res.status}`);
+        return;
+      }
+      setUnlockStatus(`unlocked${data.paymentResponse?.transaction ? ` · ${data.paymentResponse.transaction}` : ''}`);
+    } catch (err) {
+      setUnlockStatus(err instanceof Error ? err.message : 'unlock request failed');
+    }
+  }
+
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-5 text-[#EAE4D8] selection:bg-[#C5A67C]/20 sm:px-6 lg:px-8">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(197,166,124,0.14),transparent_30%),radial-gradient(circle_at_82%_8%,rgba(255,255,255,0.055),transparent_26%)]" />
@@ -48,15 +68,15 @@ export default function LiveA2AAgentPage() {
         <header className="overflow-hidden rounded-sm border border-[#C5A67C]/15 bg-[#0A0A0A]/90">
           <div className="flex flex-col gap-4 border-b border-white/10 px-5 py-5 lg:flex-row lg:items-center">
             <div className="min-w-0">
-              <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">ARCLAYER · EXTERNAL AGENT BRIDGE</div>
-              <h1 className="mt-2 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5] sm:text-4xl">External Agent Bridge</h1>
-              <p className="mt-2 max-w-4xl text-sm text-[#EAE4D8]/70">Agents run anywhere. ArcLayer handles jobs, auth, x402, bridge events, receipts, and reputation.</p>
+              <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">ARCLAYER · PM2 MARKET-AGENT BRIDGE</div>
+              <h1 className="mt-2 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5] sm:text-4xl">Hackathon PM2 Market-Agent Runtime Proof</h1>
+              <p className="mt-2 max-w-4xl text-sm text-[#EAE4D8]/70">Autonomous PM2 bots make market decisions from raw Polymarket BTC 15m data. ArcLayer handles identity, x402 access, bridge events, receipts, and proof history on Arc.</p>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Chip>Agent Runtime</Chip>
+              <Chip>PM2 Runtime</Chip>
               <Chip>Bridge Event</Chip>
               <Chip>Receipt</Chip>
-              <Chip>Job</Chip>
+              <Chip>Payload Hash</Chip>
               <Chip>x402 Access</Chip>
             </div>
           </div>
@@ -67,6 +87,45 @@ export default function LiveA2AAgentPage() {
             <div className="bg-black/25 px-4 py-3"><div className="font-mono text-[10px] uppercase text-[#EAE4D8]/45">Access</div><div className="font-mono text-lg text-[#C5A67C]">/api/x402/bridge-access</div></div>
           </div>
         </header>
+
+        <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-sm border border-[#C5A67C]/20 bg-[#C5A67C]/[0.04] p-4">
+            <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Raw Polymarket BTC 15m Data Feed</div>
+            <p className="mt-2 text-sm text-[#EAE4D8]/65">ArcLayer exposes normalized raw resources only. External PM2 bots own strategy, optional local LLM analysis, risk evaluation, and DRY_RUN intent output.</p>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              {[
+                ['/api/data/polymarket/btc-15m', 'Market'],
+                ['/api/data/polymarket/btc-15m/orderbook', 'Orderbook'],
+                ['/api/data/polymarket/btc-15m/candles', 'Candles'],
+              ].map(([href, label]) => (
+                <a key={href} href={href} target="_blank" rel="noreferrer" className="rounded-sm border border-white/10 bg-black/30 p-3 font-mono text-[10px] uppercase tracking-[0.14em] text-[#F5F0E5] hover:border-[#C5A67C]/40">
+                  <span className="block text-[#C5A67C]">{label}</span>
+                  <span className="mt-1 block break-all text-[9px] normal-case tracking-normal text-[#EAE4D8]/45">{href}</span>
+                </a>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-sm border border-white/10 bg-black/25 p-4">
+            <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">x402 Bridge Access</div>
+            <p className="mt-2 text-sm text-[#EAE4D8]/65">Unlock latest market-agent session/resource via <span className="font-mono text-[#F5F0E5]">/api/x402/bridge-access</span>. Without X-PAYMENT this should return 402.</p>
+            <button onClick={unlockAgentSession} className="mt-4 rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/15">
+              Unlock Agent Session
+            </button>
+            <div className="mt-3 rounded-sm border border-white/10 bg-black/30 p-3 font-mono text-[10px] text-[#EAE4D8]/55">status: {unlockStatus}</div>
+          </div>
+        </section>
+
+        <section className="rounded-sm border border-white/10 bg-black/25 p-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Dynamic session.roles pipeline</div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {EXAMPLE_PM2_PIPELINE_ROLES.map((role) => (
+              <div key={role} className="rounded-sm border border-white/10 bg-white/[0.03] p-3">
+                <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#EAE4D8]/40">{role}</div>
+                <div className="mt-1 text-sm text-[#F5F0E5]">{EXTERNAL_AGENT_ROLE_LABELS[role] || 'External Agent Role'}</div>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <section className="rounded-sm border border-white/10 bg-black/25 p-4">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">

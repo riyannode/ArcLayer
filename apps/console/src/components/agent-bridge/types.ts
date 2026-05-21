@@ -3,6 +3,8 @@ export type BridgeEvent = {
   session_id: string;
   runtime_id?: string | null;
   agent_id?: string | null;
+  job_id?: string | null;
+  category?: string | null;
   role: string;
   type?: string;
   event_type?: string;
@@ -34,22 +36,22 @@ export type BridgeSession = {
   receipts: BridgeReceipt[];
 };
 
-export const EXAMPLE_PM2_PIPELINE_ROLES = ['oracle', 'momentum_resolver', 'scalping_resolver', 'evaluator', 'executor'] as const;
+export const EXAMPLE_PM2_PIPELINE_ROLES = ['oracle', 'analyzer', 'momentum_resolver', 'scalping_resolver', 'evaluator', 'executor'] as const;
 
 export const EXTERNAL_AGENT_ROLE_LABELS: Record<string, string> = {
   external_runtime: 'External Runtime',
   registered_agent: 'Registered Agent',
   verification: 'Verification',
-  executor: 'Executor',
-  oracle: 'Oracle',
+  executor: 'Dry-Run Executor',
+  oracle: 'Oracle / Raw Market Snapshot',
+  analyzer: 'Local / LLM Analyzer',
   momentum_resolver: 'Momentum Resolver',
   scalping_resolver: 'Scalping Resolver',
-  evaluator: 'Evaluator',
+  evaluator: 'Risk Evaluator',
   spot_trader: 'Spot Trader',
   prediction_market_trader: 'Prediction Market Trader',
   arbitrage_bot: 'Arbitrage Bot',
   research_agent: 'Research Agent',
-  analyzer: 'Analyzer',
   data_provider: 'Data Provider',
   risk_manager: 'Risk Manager',
   rwa_evaluator: 'RWA Evaluator',
@@ -58,7 +60,7 @@ export const EXTERNAL_AGENT_ROLE_LABELS: Record<string, string> = {
 
 export function roleLabel(role: string) {
   return EXTERNAL_AGENT_ROLE_LABELS[role] || role.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-};
+}
 
 export function eventType(event: BridgeEvent) {
   return event.event_type || event.type || 'bridge_event';

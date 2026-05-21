@@ -6,6 +6,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const TYPES = new Set(['session_started', 'bridge_event', 'work_proof', 'receipt_reference', 'market_snapshot', 'resolver_output', 'evaluation', 'execution_intent']);
+const ADMIN_SCOPES = new Set(['admin', 'agent_bridge:admin']);
 
 function isValidRole(role: string) {
   return /^[a-z][a-z0-9_-]{1,63}$/.test(role);
@@ -36,9 +37,10 @@ export async function POST(req: NextRequest) {
   if (!isValidRole(role)) return bad('invalid_role');
   if (!TYPES.has(type)) return bad('invalid_type');
   if (body.payload === null || typeof body.payload !== 'object' || Array.isArray(body.payload)) return bad('invalid_payload');
+  if (typeof body.payloadHash !== 'string' || !body.payloadHash.trim()) return bad('missing_payloadHash');
 
-  // API key authenticates the bot; agentId must match the key owner unless future admin scopes are added.
-  if (agentId !== auth.key.agentId) return bad('agent_id_mismatch', 403);
+  const hasAdminScope = auth.key.scopes.some((scope) => ADMIN_SCOPES.has(scope));
+  if (agentId !== auth.key.agentId && !hasAdminScope) return bad('agent_id_mismatch', 403);
 
   try {
     const event = await insertBridgeEvent({
@@ -52,6 +54,8 @@ export async function POST(req: NextRequest) {
       metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata as Record<string, unknown> : {},
       source: typeof body.source === 'string' ? body.source : 'external-runtime',
       dryRun: body.dryRun !== false,
+      jobId: typeof body.jobId === 'string' ? body.jobId.trim() : null,
+      category: typeof body.category === 'string' ? body.category.trim() : null,
     });
     return NextResponse.json({ ok: true, eventId: event.id });
   } catch (err) {
@@ -68,11 +72,19 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 50, 1), 100);
   const sessionId = searchParams.get('sessionId');
   const role = searchParams.get('role');
+  const agentId = searchParams.get('agentId');
+  const runtimeId = searchParams.get('runtimeId');
+  const jobId = searchParams.get('jobId');
+  const category = searchParams.get('category');
 
   try {
     const events = await listBridgeEvents({
       sessionId,
       role,
+      agentId,
+      runtimeId,
+      jobId,
+      category,
       limit,
     });
     return NextResponse.json({ ok: true, events });
