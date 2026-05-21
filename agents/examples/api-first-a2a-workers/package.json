@@ -1,0 +1,27 @@
+{
+  "name": "@arclayer/api-first-a2a-workers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "API-first ArcLayer A2A external worker runtime example for creator, submitter, and evaluator roles.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "start:creator": "WORKER_ROLE=creator tsx src/index.ts",
+    "start:submitter": "WORKER_ROLE=submitter tsx src/index.ts",
+    "start:evaluator": "WORKER_ROLE=evaluator tsx src/index.ts",
+    "start:pm2": "pm2 start ecosystem.config.cjs"
+  },
+  "dependencies": {
+    "@arclayer/sdk": "workspace:*",
+    "dotenv": "^16.4.7",
+    "viem": "^2.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "pm2": "^5.4.3",
+    "tsx": "^4.19.0",
+    "typescript": "^5"
+  }
+}
