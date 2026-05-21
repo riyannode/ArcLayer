@@ -35,6 +35,8 @@ export type BridgeEventRow = {
   metadata?: Record<string, unknown> | null;
   source?: string | null;
   dry_run?: boolean | null;
+  job_id?: string | null;
+  category?: string | null;
   created_at: string;
 };
 
@@ -69,6 +71,8 @@ export interface BridgeEventInput {
   metadata?: Record<string, unknown> | null;
   source?: string;
   dryRun?: boolean;
+  jobId?: string | null;
+  category?: string | null;
 }
 
 export interface BridgeReceiptInput {
@@ -100,24 +104,53 @@ export async function insertBridgeEvent(input: BridgeEventInput) {
     metadata: input.metadata ?? {},
     source: input.source || 'external-runtime',
     dry_run: input.dryRun !== false,
+    job_id: input.jobId ?? null,
+    category: input.category ?? null,
   };
-  const { data, error } = await getSupabaseAdmin()
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
     .from('agent_bridge_events')
     .insert(row)
-    .select('id, session_id, runtime_id, agent_id, role, type, event_type, payload, payload_hash, metadata, source, dry_run, created_at')
+.select('id, session_id, runtime_id, agent_id, role, type, event_type, payload, payload_hash, metadata, source, dry_run, job_id, category, created_at')
     .single();
   if (error) throw new Error(error.message);
+
+  if (input.runtimeId) {
+    const runtimeMetadata = {
+      ...(input.metadata ?? {}),
+      source: input.source || 'external-runtime',
+    };
+    const { error: runtimeError } = await supabase
+      .from('external_agent_runtimes')
+      .upsert({
+        runtime_id: input.runtimeId,
+        agent_id: input.agentId,
+        role: input.role,
+        category: input.category ?? null,
+        endpoint: input.source || null,
+        status: 'active',
+        metadata: runtimeMetadata,
+        last_seen_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'runtime_id' });
+    if (runtimeError) throw new Error(runtimeError.message);
+  }
+
   return data;
 }
 
-export async function listBridgeEvents(filters: { sessionId?: string | null; role?: string | null; limit?: number }) {
+export async function listBridgeEvents(filters: { sessionId?: string | null; role?: string | null; agentId?: string | null; runtimeId?: string | null; jobId?: string | null; category?: string | null; limit?: number }) {
   let q = getSupabaseAdmin()
     .from('agent_bridge_events')
-    .select('id, session_id, runtime_id, agent_id, role, type, event_type, payload, payload_hash, metadata, source, dry_run, created_at')
+.select('id, session_id, runtime_id, agent_id, role, type, event_type, payload, payload_hash, metadata, source, dry_run, job_id, category, created_at')
     .order('created_at', { ascending: false })
     .limit(Math.min(Math.max(filters.limit ?? 50, 1), 200));
   if (filters.sessionId) q = q.eq('session_id', filters.sessionId);
   if (filters.role) q = q.eq('role', filters.role);
+  if (filters.agentId) q = q.eq('agent_id', filters.agentId);
+  if (filters.runtimeId) q = q.eq('runtime_id', filters.runtimeId);
+  if (filters.jobId) q = q.eq('job_id', filters.jobId);
+  if (filters.category) q = q.eq('category', filters.category);
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   return data ?? [];
