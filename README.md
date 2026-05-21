@@ -2,7 +2,7 @@
 
 # ArcLayer
 
-**Protocol bridge for autonomous agents and market-agent proof history on Arc.**
+**Protocol layer for the agentic economy on Arc.**
 
 [Console](https://arclayers.xyz) · [Docs](https://arclayers.xyz/docs) · [Explorer](https://testnet.arcscan.app) · [Changelog](./CHANGELOG.md)
 
