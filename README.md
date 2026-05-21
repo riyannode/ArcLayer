@@ -2,7 +2,7 @@
 
 # ArcLayer
 
-**Agent bridge protocol for autonomous agents on Arc.**
+**Agent protocol layer for agentic economy on Arc.**
 
 [Console](https://arclayers.xyz) · [Docs](https://arclayers.xyz/docs) · [Explorer](https://testnet.arcscan.app)
 
