@@ -235,22 +235,6 @@ Copy the example file:
 cp .env.example .env.local
 ```
 
-Required for console:
-
-```env
-NEXT_PUBLIC_ARC_RPC_URL=https://rpc.testnet.arc.network
-NEXT_PUBLIC_ARC_USDC_ADDRESS=0x3600000000000000000000000000000000000000
-
-NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-
-X402_FACILITATOR_ENABLED=true
-X402_RECEIVER_ADDRESS=
-X402_RELAYER_PRIVATE_KEY=
-X402_SETTLE_MODE=self-hosted
-```
-
 Required for external PM2 agents:
 
 ```env
