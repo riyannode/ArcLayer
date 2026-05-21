@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  createPublicClient,
-  http,
-  parseAbiItem,
   recoverMessageAddress,
-  type Hex,
 } from 'viem';
+import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
 import {
   parseManifest,
   upsertManifest,
@@ -18,14 +15,7 @@ import { withX402 } from '@/lib/x402';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
-const AGENT_REGISTRY = '0xB263336055dD65FF501e36CA39941760D943703C' as Hex;
-const FROM_BLOCK = BigInt(process.env.AGENT_REGISTRY_FROM_BLOCK || '0');
 const MAX_TIMESTAMP_SKEW_SEC = 5 * 60; // ±5min
-
-const AGENT_REGISTERED = parseAbiItem(
-  'event AgentRegistered(uint256 indexed agentId, bytes32 indexed skillHash, address indexed controller, string metadataURI)'
-);
 
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -41,26 +31,16 @@ export async function GET(req: Request) {
 }
 
 /**
- * Look up the on-chain controller for an agentId by scanning AgentRegistered logs.
- * Returns null if the agent has never registered (TOFU window).
+ * Official ERC-8004 identity controller lookup.
+ * The canonical agentId is the ERC-721 tokenId minted by register(metadataURI),
+ * so controller ownership must come from ownerOf(agentId), not legacy AgentRegistered logs.
+ * Returns null when the token is not minted yet (TOFU/pending manifest window).
  */
 async function getOnchainController(agentId: string): Promise<string | null> {
   try {
-    const client = createPublicClient({ transport: http(RPC) });
-    const idBig = BigInt(agentId);
-    const logs = await client.getLogs({
-      address: AGENT_REGISTRY,
-      event: AGENT_REGISTERED,
-      args: { agentId: idBig },
-      fromBlock: FROM_BLOCK,
-      toBlock: 'latest',
-    });
-    if (logs.length === 0) return null;
-    // Latest registration wins (controller could update via re-register).
-    const latest = logs.sort((a, b) => Number(b.blockNumber ?? BigInt(0)) - Number(a.blockNumber ?? BigInt(0)))[0];
-    return latest.args.controller?.toLowerCase() ?? null;
+    return (await getERC8004OwnerOf(agentId)).toLowerCase();
   } catch (err) {
-    console.error('[manifest.api] controller lookup failed', err);
+    console.warn('[manifest.api] ERC-8004 ownerOf lookup returned no controller', err);
     return null;
   }
 }

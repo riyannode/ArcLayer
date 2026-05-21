@@ -3,12 +3,13 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { readContract, waitForTransactionReceipt } from '@wagmi/core';
-import { keccak256, stringToBytes } from 'viem';
+import { waitForTransactionReceipt } from '@wagmi/core';
+import { keccak256, stringToBytes, type Address } from 'viem';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { useArcSign } from '@/hooks/useArcSign';
-import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
+import { buildRegisterAgentConfig } from '@arclayer/sdk';
+import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
 import { StatusBanner } from '@/components/StatusBanner';
 import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/components/protection';
 import { LLMAgentConnectKit } from '@/components/LLMAgentConnectKit';
@@ -183,8 +184,9 @@ const ONCHAIN_CHECKLIST = [
   'Verify discovery on /a2a after indexer sync',
 ];
 
-function buildManifestPointerURI(agentId: bigint) {
-  return `arclayer://manifest/${agentId.toString()}`;
+function buildPendingManifestURI(controller: string | undefined, slug: string) {
+  if (!controller || !slug) return '';
+  return `arclayer://manifest/pending/${controller}/${encodeURIComponent(slug)}`;
 }
 
 function toManifestMode(mode: IntegrationMode): 'seller' | 'buyer' | 'dual' {
@@ -312,9 +314,8 @@ export default function RegisterAutonomousPage() {
     }
   }, [form.name]);
 
-  const generatedMetadataURI = derivedAgentId
-    ? buildManifestPointerURI(derivedAgentId)
-    : '';
+  const normalizedAgentName = normalizeAgentName(form.name);
+  const generatedMetadataURI = buildPendingManifestURI(address, normalizedAgentName);
   const effectiveMetadataURI = form.metadataURI.trim() || generatedMetadataURI;
   const endpointLooksReady = /^https:\/\//.test(form.endpoint.trim()) && !form.endpoint.includes('your-agent.example.com');
   const enabledRoles = useMemo(() => roles.filter((role) => role.enabled).map(normalizeRole), [roles]);
@@ -361,30 +362,12 @@ export default function RegisterAutonomousPage() {
       return;
     }
 
-    setNameStatus({ state: 'checking' });
-    const handle = setTimeout(async () => {
-      try {
-        const id = nameToAgentId(norm);
-        // ERC-8004 official: check ownership via ownerOf — if it reverts, the
-        // tokenId (= agentId) is unminted and therefore "free".
-        let exists = false;
-        try {
-          const owner = (await readContract(config, {
-            abi: AGENT_REGISTRY_ABI,
-            address: CONTRACTS.AGENT_REGISTRY,
-            functionName: 'ownerOf',
-            args: [id],
-          })) as string;
-          exists = !!owner && owner !== '0x0000000000000000000000000000000000000000';
-        } catch {
-          exists = false;
-        }
-        setNameStatus({ state: exists ? 'taken' : 'free', agentId: id });
-      } catch (e) {
-        setNameStatus({ state: 'invalid', reason: e instanceof Error ? e.message : 'Lookup failed.' });
-      }
-    }, 350);
-    return () => clearTimeout(handle);
+    try {
+      const id = nameToAgentId(norm);
+      setNameStatus({ state: 'free', agentId: id });
+    } catch (e) {
+      setNameStatus({ state: 'invalid', reason: e instanceof Error ? e.message : 'Name format validation failed.' });
+    }
   }, [form.name]);
 
   async function handleCopyStarter() {
@@ -432,21 +415,24 @@ export default function RegisterAutonomousPage() {
       setIsSubmitting(true);
       setStatusTone('pending');
       setTxState('Submitting register transaction…');
-      const agentId = nameStatus.agentId;
       const normalizedName = normalizeAgentName(form.name);
-      const hash = await writeContractAsync(buildRegisterAgentConfig(agentId, form.skill, effectiveMetadataURI));
+      const registerMetadataURI = form.metadataURI.trim() || buildPendingManifestURI(address, normalizedName);
+      if (!registerMetadataURI) throw new Error('Connect wallet to build pending manifest metadata URI.');
+      const hash = await writeContractAsync(buildRegisterAgentConfig(registerMetadataURI));
       setTxState(`Waiting for ${hash.slice(0, 10)}…`);
-      await waitForTransactionReceipt(config, { hash });
+      const receipt = await waitForTransactionReceipt(config, { hash });
+      const mintedAgentId = extractERC8004MintedTokenIdFromReceipt(receipt, address as Address | undefined);
+      const mintedAgentIdString = mintedAgentId.toString();
 
-      if (effectiveMetadataURI.startsWith('arclayer://manifest/')) {
-        setTxState('Signing and publishing Agent Manifest V1…');
+      if (registerMetadataURI.startsWith('arclayer://manifest/')) {
+        setTxState(`Minted Agent ID ${mintedAgentIdString}. Signing and publishing Agent Manifest V1…`);
         const nowIso = new Date().toISOString();
         const manifestRoles = enabledRoles;
         const manifestCategories = Array.from(new Set(manifestRoles.map((role) => role.category).concat(splitCsv(form.categories))));
         const manifest = {
           schema: 'arclayer.agent/v1',
           version: 1,
-          agentId: agentId.toString(),
+          agentId: mintedAgentIdString,
           name: normalizedName,
           role: primaryRole.id,
           description: `${normalizedName} external multi-role runtime on ArcLayer.`,
@@ -481,7 +467,7 @@ export default function RegisterAutonomousPage() {
         };
         const manifestHash = keccak256(stringToBytes(canonicalize(manifest)));
         const ts = Math.floor(Date.now() / 1000);
-        const message = ['ArcLayer Manifest v1', `agentId=${agentId.toString()}`, `hash=${manifestHash}`, `ts=${ts}`].join('\n');
+        const message = ['ArcLayer Manifest v1', `agentId=${mintedAgentIdString}`, `hash=${manifestHash}`, `ts=${ts}`].join('\n');
         const signature = await signMessageAsync({ message });
         const res = await fetch('/api/a2a/manifest', {
           method: 'POST',
@@ -495,8 +481,8 @@ export default function RegisterAutonomousPage() {
       }
 
       setStatusTone('synced');
-      setTxState(`✓ External runtime "${normalizedName}" registered + manifest published as ${shortAgentId(agentId)}. Redirecting to A2A…`);
-      setTimeout(() => router.push(`/a2a?focus=${encodeURIComponent(agentId.toString())}`), 1500);
+      setTxState(`✓ External runtime "${normalizedName}" registered + manifest published as ${shortAgentId(mintedAgentId)}. Redirecting to A2A…`);
+      setTimeout(() => router.push(`/a2a?focus=${encodeURIComponent(mintedAgentIdString)}`), 1500);
     } catch (e) {
       setTxState(e instanceof Error ? e.message : 'External runtime registration failed.');
       setStatusTone('error');
@@ -746,8 +732,8 @@ export default function RegisterAutonomousPage() {
                     />
                     <div className="mt-1.5 font-mono text-[10.5px] invisible">
                       {nameStatus.state === 'idle' && <span className="text-[rgba(234,228,216,0.78)]">Use lowercase. Minimum 2 characters.</span>}
-                      {nameStatus.state === 'checking' && <span className="text-cyan-300">Checking on chain…</span>}
-                      {nameStatus.state === 'free' && <span className="text-[#B8CD7E]">✓ &quot;{normalizeAgentName(form.name)}&quot; is available</span>}
+                      {nameStatus.state === 'checking' && <span className="text-cyan-300">Checking name format…</span>}
+                      {nameStatus.state === 'free' && <span className="text-[#B8CD7E]">✓ &quot;{normalizeAgentName(form.name)}&quot; format is valid</span>}
                       {nameStatus.state === 'taken' && <span className="text-[#f0c5c5]">✕ &quot;{normalizeAgentName(form.name)}&quot; is already registered</span>}
                       {nameStatus.state === 'invalid' && <span className="text-[#f0c5c5]">✕ {nameStatus.reason}</span>}
                     </div>
