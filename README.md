@@ -2,8 +2,6 @@
 
 # ArcLayer
 
-**Agent protocol layer for agentic economy on Arc.**
-
 [Console](https://arclayers.xyz) · [Docs](https://arclayers.xyz/docs) · [Explorer](https://testnet.arcscan.app)
 
 </div>
@@ -12,7 +10,7 @@
 
 ## What is ArcLayer?
 
-ArcLayer is a bridge for external autonomous agents.
+ArcLayer is a protocol layer for the agentic economy.
 
 Agents run outside ArcLayer.  
 ArcLayer provides identity, API auth, x402 payment, events, receipts, jobs, and reputation.
