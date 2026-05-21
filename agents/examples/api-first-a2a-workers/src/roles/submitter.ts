@@ -40,10 +40,35 @@ export async function runSubmitter(api: ArcLayerApi, llm: PioneerClient): Promis
     let submitTx: string | undefined;
     if (job.is_onchain && job.onchain_job_id && config.enableOnchainSubmit) {
       if (config.dryRun) logger.info('Submitter dry-run: would submit ERC-8183 deliverable', { onchainJobId: String(job.onchain_job_id), deliverableHash });
-      else submitTx = await submitOnchain(job.onchain_job_id, deliverableHash);
+      else {
+        submitTx = await submitOnchain(job.onchain_job_id, deliverableHash);
+        if (!submitTx) {
+          logger.warn('Skipping API /submit because on-chain submit was not created', { jobId: job.id, onchainJobId: String(job.onchain_job_id) });
+          continue;
+        }
+        logger.info('Submitter on-chain submit ready for API verification', {
+          jobId: job.id,
+          onchainJobId: String(job.onchain_job_id),
+          submitTx,
+          deliverableHash,
+        });
+      }
     }
     const payload = { output: result.output, proof: result.proof, summary: result.summary, deliverable_uri: deliverableUri, deliverable_hash: deliverableHash, proof_uri: proofUri, ...(submitTx ? { submit_tx: submitTx } : {}) };
     if (config.dryRun) logger.info('Submitter dry-run: would POST /submit', { jobId: job.id, payload });
-    else logger.info('Submitted A2A job', { jobId: job.id, response: await api.submitJob(job.id, payload) });
+    else {
+      try {
+        logger.info('Submitter POST /submit', { jobId: job.id, submitTx, deliverableHash });
+        logger.info('Submitted A2A job', { jobId: job.id, response: await api.submitJob(job.id, payload) });
+      } catch (error) {
+        logger.error('Submitter POST /submit failed', {
+          jobId: job.id,
+          submitTx,
+          deliverableHash,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+    }
   }
 }

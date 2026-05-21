@@ -5,8 +5,11 @@ import { insertBridgeEvent, listBridgeEvents, type BridgeEventInput } from '@/li
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const ROLES = new Set(['external_runtime', 'registered_agent', 'verification', 'executor', 'oracle', 'momentum_resolver', 'scalping_resolver', 'evaluator']);
 const TYPES = new Set(['session_started', 'bridge_event', 'work_proof', 'receipt_reference', 'market_snapshot', 'resolver_output', 'evaluation', 'execution_intent']);
+
+function isValidRole(role: string) {
+  return /^[a-z][a-z0-9_-]{1,63}$/.test(role);
+}
 
 function bad(error: string, status = 400, extra?: Record<string, unknown>) {
   return NextResponse.json({ ok: false, error, ...(extra ?? {}) }, { status });
@@ -30,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   if (!sessionId) return bad('missing_sessionId');
   if (!agentId) return bad('missing_agentId');
-  if (!ROLES.has(role)) return bad('invalid_role');
+  if (!isValidRole(role)) return bad('invalid_role');
   if (!TYPES.has(type)) return bad('invalid_type');
   if (body.payload === null || typeof body.payload !== 'object' || Array.isArray(body.payload)) return bad('invalid_payload');
 
@@ -57,13 +60,20 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const auth = await requireApiKey(req, [API_KEY_SCOPES.AGENT_BRIDGE_WRITE, API_KEY_SCOPES.AGENT_BRIDGE_RECEIPT]);
+  if (auth.error) return auth.error;
+
   const { searchParams } = new URL(req.url);
-  const limit = Number(searchParams.get('limit') ?? '50');
+  const requestedLimit = Number(searchParams.get('limit') ?? '50');
+  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 50, 1), 100);
+  const sessionId = searchParams.get('sessionId');
+  const role = searchParams.get('role');
+
   try {
     const events = await listBridgeEvents({
-      sessionId: searchParams.get('sessionId'),
-      role: searchParams.get('role'),
-      limit: Number.isFinite(limit) ? limit : 50,
+      sessionId,
+      role,
+      limit,
     });
     return NextResponse.json({ ok: true, events });
   } catch (err) {

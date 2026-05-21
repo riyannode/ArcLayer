@@ -126,7 +126,7 @@ export type DataSource = 'indexer' | 'rpc';
 export type Sourced<T> = { data: T; source: DataSource };
 
 export async function fetchIndexerJson<T>(path: string) {
-  const response = await fetch(`${INDEXER_BASE_URL}${path}`, { cache: 'no-store' });
+  const response = await fetch(`${INDEXER_BASE_URL}${path}`);
   if (!response.ok) {
     throw new Error(response.status === 404 ? 'Resource not found.' : `Indexer returned HTTP ${response.status}.`);
   }

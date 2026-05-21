@@ -1,8 +1,61 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 
-export type BridgeRole = 'external_runtime' | 'registered_agent' | 'verification' | 'executor' | 'oracle' | 'momentum_resolver' | 'scalping_resolver' | 'evaluator';
+export type BridgeRole =
+  | 'external_runtime'
+  | 'registered_agent'
+  | 'verification'
+  | 'executor'
+  | 'oracle'
+  | 'momentum_resolver'
+  | 'scalping_resolver'
+  | 'evaluator'
+  | 'spot_trader'
+  | 'prediction_market_trader'
+  | 'arbitrage_bot'
+  | 'research_agent'
+  | 'analyzer'
+  | 'data_provider'
+  | 'risk_manager'
+  | 'rwa_evaluator'
+  | 'custom_worker'
+  | (string & {});
 export type BridgeEventType = 'session_started' | 'bridge_event' | 'work_proof' | 'receipt_reference' | 'market_snapshot' | 'resolver_output' | 'evaluation' | 'execution_intent';
+
+export type BridgeEventRow = {
+  id: string;
+  session_id: string;
+  runtime_id?: string | null;
+  agent_id?: string | null;
+  role: string;
+  type?: string | null;
+  event_type?: string | null;
+  payload: Record<string, unknown>;
+  payload_hash: string;
+  metadata?: Record<string, unknown> | null;
+  source?: string | null;
+  dry_run?: boolean | null;
+  created_at: string;
+};
+
+export type BridgeReceiptRow = {
+  id: string;
+  session_id: string;
+  receipt_type: string;
+  payment_id?: string | null;
+  payment_ref?: string | null;
+  transaction?: string | null;
+  payload_hash: string;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type BridgeSession = {
+  sessionId: string;
+  roles: Record<string, BridgeEventRow | null>;
+  events: BridgeEventRow[];
+  receipts: BridgeReceiptRow[];
+};
 export type BridgeReceiptType = 'x402_arc_native' | 'x402_circle_gateway' | 'dry_run';
 
 export interface BridgeEventInput {
@@ -98,19 +151,23 @@ export async function listBridgeReceipts(sessionId: string) {
   return data ?? [];
 }
 
-export async function latestBridgeSession() {
+export async function latestBridgeSession(): Promise<BridgeSession | null> {
   const events = await listBridgeEvents({ limit: 100 });
   const latestSessionId = events[0]?.session_id;
   if (!latestSessionId) return null;
-  const sessionEvents = (await listBridgeEvents({ sessionId: latestSessionId, limit: 100 })).reverse();
-  const receipts = await listBridgeReceipts(latestSessionId);
-  const pick = (role: BridgeRole) => sessionEvents.filter((e) => e.role === role).at(-1) ?? null;
+
+  const sessionEvents = (await listBridgeEvents({ sessionId: latestSessionId, limit: 100 })).reverse() as BridgeEventRow[];
+  const receipts = (await listBridgeReceipts(latestSessionId)) as BridgeReceiptRow[];
+  const roles: Record<string, BridgeEventRow | null> = {};
+
+  for (const event of sessionEvents) {
+    if (!event.role) continue;
+    roles[event.role] = event;
+  }
+
   return {
     sessionId: latestSessionId,
-    runtime: pick('external_runtime'),
-    agent: pick('registered_agent'),
-    verification: pick('verification'),
-    executor: pick('executor'),
+    roles,
     events: sessionEvents,
     receipts,
   };

@@ -33,11 +33,19 @@ export async function GET(request: NextRequest) {
     });
 
     const body = await upstream.text();
+    // Cache successful indexer reads at the edge for 10s with a 30s SWR window.
+    // Indexer service polls Arc Testnet every 15s, so 10s edge cache is the
+    // largest window that cannot serve stale-relative-to-source data, and SWR
+    // smooths over upstream stalls without blocking renders.
+    // Errors and non-2xx responses bypass the cache.
+    const cacheControl = upstream.ok
+      ? 'public, s-maxage=10, stale-while-revalidate=30'
+      : 'no-store';
     return new NextResponse(body, {
       status: upstream.status,
       headers: {
         'content-type': upstream.headers.get('content-type') || 'application/json',
-        'cache-control': 'no-store',
+        'cache-control': cacheControl,
       },
     });
   } catch (err) {
