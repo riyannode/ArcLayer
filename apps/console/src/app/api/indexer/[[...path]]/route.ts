@@ -15,6 +15,8 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const INDEXER_INTERNAL_URL = process.env.INDEXER_INTERNAL_URL || 'http://localhost:3535';
+const READ_ONLY_INDEXER_CACHE = 'public, s-maxage=10, stale-while-revalidate=30';
+const INDEXER_DISABLED = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
 
 function upstreamPath(request: NextRequest) {
   const raw = request.nextUrl.pathname.replace(/^\/api\/indexer\/?/, '');
@@ -23,7 +25,21 @@ function upstreamPath(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const target = `${INDEXER_INTERNAL_URL}${upstreamPath(request)}`;
+  const path = upstreamPath(request);
+
+  if (INDEXER_DISABLED) {
+    return NextResponse.json(
+      { ok: false, error: 'Indexer disabled during maintenance.', path },
+      {
+        status: 503,
+        headers: {
+          'cache-control': 'public, s-maxage=60, stale-while-revalidate=300',
+        },
+      },
+    );
+  }
+
+  const target = `${INDEXER_INTERNAL_URL}${path}`;
 
   try {
     const upstream = await fetch(target, {
@@ -37,13 +53,17 @@ export async function GET(request: NextRequest) {
       status: upstream.status,
       headers: {
         'content-type': upstream.headers.get('content-type') || 'application/json',
-        'cache-control': 'no-store',
+        'cache-control': READ_ONLY_INDEXER_CACHE,
       },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Indexer upstream unreachable.';
+    console.error('[api/indexer] upstream failed', {
+      path,
+      error: message,
+    });
     return NextResponse.json(
-      { error: 'Indexer upstream unreachable.', detail: message, target },
+      { error: 'Indexer upstream unreachable.', detail: message },
       { status: 502 },
     );
   }
