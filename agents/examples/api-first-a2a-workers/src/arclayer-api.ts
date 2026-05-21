@@ -14,7 +14,16 @@ export type A2AJob = {
   summary?: string | null;
   is_onchain?: boolean | null;
   onchain_job_id?: string | number | bigint | null;
+  provider?: string | null;
+  evaluator?: string | null;
+  budget_atomic?: string | number | bigint | null;
+  fund_tx?: string | null;
+  submit_tx?: string | null;
+  complete_tx?: string | null;
+  settlement_status?: string | number | null;
+  deliverable_uri?: string | null;
   deliverable_hash?: string | null;
+  proof_uri?: string | null;
 };
 
 type Query = Record<string, string | number | boolean | undefined | null>;

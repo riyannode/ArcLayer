@@ -15,14 +15,18 @@ function walletClient(privateKey: string) {
   return { account, client: createWalletClient({ account, chain: arcTestnet, transport: fallback(transports()) }) };
 }
 
+export function addressFromPrivateKey(privateKey: string): `0x${string}` {
+  return privateKeyToAccount(privateKey as Hex).address;
+}
+
 export async function submitOnchain(jobId: string | number | bigint, deliverableHash: Hex): Promise<Hex> {
   const { account, client } = walletClient(config.workerPrivateKey);
   logger.info('Submitting ERC-8183 deliverable', { onchainJobId: String(jobId), account: account.address });
-  return client.writeContract({ account, ...buildSubmitDeliverableConfig(BigInt(jobId), deliverableHash) });
+  return client.writeContract({ account, chain: arcTestnet, ...buildSubmitDeliverableConfig(BigInt(jobId), deliverableHash) });
 }
 
 export async function completeOnchain(jobId: string | number | bigint, reasonHash: Hex): Promise<Hex> {
   const { account, client } = walletClient(config.evaluatorPrivateKey);
   logger.info('Completing ERC-8183 job', { onchainJobId: String(jobId), account: account.address });
-  return client.writeContract({ account, ...buildCompleteJobConfig(BigInt(jobId), reasonHash) });
+  return client.writeContract({ account, chain: arcTestnet, ...buildCompleteJobConfig(BigInt(jobId), reasonHash) });
 }

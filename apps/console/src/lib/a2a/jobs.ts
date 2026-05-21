@@ -21,6 +21,18 @@ export type A2AJob = {
   createdAt: string;
   claimedAt?: string;
   submittedAt?: string;
+  is_onchain?: boolean | null;
+  onchain_job_id?: string | null;
+  provider?: string | null;
+  evaluator?: string | null;
+  budget_atomic?: string | null;
+  fund_tx?: string | null;
+  submit_tx?: string | null;
+  complete_tx?: string | null;
+  settlement_status?: string | number | null;
+  deliverable_uri?: string | null;
+  deliverable_hash?: string | null;
+  proof_uri?: string | null;
 };
 
 type CreateJobInput = {
@@ -73,11 +85,23 @@ function rowToJob(row: Record<string, unknown>): A2AJob {
     createdAt: row.created_at as string,
     claimedAt: (row.claimed_at as string) || undefined,
     submittedAt: (row.submitted_at as string) || undefined,
+    is_onchain: (row.is_onchain as boolean | null) ?? null,
+    onchain_job_id: row.onchain_job_id == null ? null : String(row.onchain_job_id),
+    provider: (row.provider as string | null) ?? null,
+    evaluator: (row.evaluator as string | null) ?? null,
+    budget_atomic: row.budget_atomic == null ? null : String(row.budget_atomic),
+    fund_tx: (row.fund_tx as string | null) ?? null,
+    submit_tx: (row.submit_tx as string | null) ?? null,
+    complete_tx: (row.complete_tx as string | null) ?? null,
+    settlement_status: (row.settlement_status as string | number | null) ?? null,
+    deliverable_uri: (row.deliverable_uri as string | null) ?? null,
+    deliverable_hash: (row.deliverable_hash as string | null) ?? null,
+    proof_uri: (row.proof_uri as string | null) ?? null,
   };
 }
 
 export async function listA2AJobs(
-  filters: { status?: string | null; agentId?: string | null; roleId?: string | null; category?: string | null; limit?: number; offset?: number } = {}
+  filters: { status?: string | null; agentId?: string | null; roleId?: string | null; category?: string | null; evaluator?: string | null; provider?: string | null; limit?: number; offset?: number } = {}
 ): Promise<A2AJob[]> {
   const supabase = getSupabaseAdmin();
   let query = supabase.from(TABLE).select('*').order('created_at', { ascending: false });
@@ -86,6 +110,8 @@ export async function listA2AJobs(
   if (filters.agentId) query = query.or(`agent_id.eq.${filters.agentId},claimed_by.eq.${filters.agentId}`);
   if (filters.roleId) query = query.eq('role_id', filters.roleId);
   if (filters.category) query = query.eq('category', filters.category);
+  if (filters.evaluator) query = query.ilike('evaluator', filters.evaluator);
+  if (filters.provider) query = query.ilike('provider', filters.provider);
 
   const limit = filters.limit ?? 50;
   const offset = filters.offset ?? 0;

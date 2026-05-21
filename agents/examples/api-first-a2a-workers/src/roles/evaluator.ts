@@ -3,7 +3,11 @@ import { config } from '../config.js';
 import { PioneerClient } from '../pioneer-client.js';
 import { contentHash, stableJson } from '../utils/hash.js';
 import { logger } from '../utils/logger.js';
-import { completeOnchain } from '../wallet.js';
+import { addressFromPrivateKey, completeOnchain } from '../wallet.js';
+
+function sameAddress(a?: string | null, b?: string | null): boolean {
+  return Boolean(a && b && a.toLowerCase() === b.toLowerCase());
+}
 
 function promptFor(job: A2AJob): string {
   return `Evaluate ArcLayer A2A job ${job.id}. Return approval reason.
@@ -12,7 +16,20 @@ Proof: ${stableJson(job.proof ?? {})}`;
 }
 
 export async function runEvaluator(api: ArcLayerApi, llm: PioneerClient): Promise<void> {
-  const jobs = (await api.listJobs({ status: 'submitted', roleId: 'evaluator' })).slice(0, config.maxJobsPerRun);
+  const evaluatorAddress = config.evaluatorPrivateKey ? addressFromPrivateKey(config.evaluatorPrivateKey) : undefined;
+  const jobs = (await api.listJobs({ status: 'submitted', ...(evaluatorAddress ? { evaluator: evaluatorAddress } : {}) }))
+    .filter((job) => {
+      if (!job.is_onchain || !job.onchain_job_id) {
+        logger.info('Skipping legacy/off-chain submitted job', { jobId: job.id, isOnchain: job.is_onchain, onchainJobId: job.onchain_job_id });
+        return false;
+      }
+      if (job.evaluator && evaluatorAddress && !sameAddress(job.evaluator, evaluatorAddress)) {
+        logger.info('Skipping on-chain job assigned to different evaluator', { jobId: job.id, evaluator: job.evaluator, workerEvaluator: evaluatorAddress });
+        return false;
+      }
+      return true;
+    })
+    .slice(0, config.maxJobsPerRun);
   if (jobs.length === 0) {
     logger.info('No evaluator jobs found');
     return;

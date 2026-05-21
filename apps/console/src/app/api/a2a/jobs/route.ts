@@ -15,6 +15,8 @@ export async function GET(req: NextRequest) {
     agentId: url.searchParams.get('agentId'),
     roleId: url.searchParams.get('roleId'),
     category: url.searchParams.get('category'),
+    evaluator: url.searchParams.get('evaluator'),
+    provider: url.searchParams.get('provider'),
   });
   return NextResponse.json({ ok: true, jobs });
 }
