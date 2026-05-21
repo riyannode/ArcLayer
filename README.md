@@ -248,7 +248,7 @@ Optional local LLM:
 
 ```env
 LLM_API_KEY=
-LLM_BASE_URL=http://localhost:20128/v1
+LLM_BASE_URL=
 LLM_MODEL=
 ```
 
