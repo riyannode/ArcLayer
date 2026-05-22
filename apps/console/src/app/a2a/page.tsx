@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useWriteContract } from 'wagmi';
 import { config } from '@/lib/wagmi';
+import { indexerUrl } from '@/lib/indexer';
 import type { Hex } from 'viem';
 
 const AGENT_REGISTRY_ADDRESS = '0xB263336055dD65FF501e36CA39941760D943703C' as const;
@@ -229,9 +230,9 @@ function A2ADashboardPage() {
     try {
       const cacheBust = Date.now();
       const [ovRes, ocRes, fdRes, regRes] = await Promise.all([
-        fetch('/api/indexer/overview'),
+        fetch(indexerUrl('/overview')),
         fetch(`/api/a2a/status?t=${cacheBust}`, { cache: 'no-store' }),
-        fetch('/api/indexer/autonomous-feed?limit=50'),
+        fetch(indexerUrl('/autonomous-feed?limit=50')),
         fetch(`/api/a2a/agents?t=${cacheBust}`, { cache: 'no-store' }),
       ]);
       if (!ovRes.ok) throw new Error(`indexer ${ovRes.status}`);

@@ -17,7 +17,7 @@ import { X402ActionGate } from '@/components/x402/X402ActionGate';
 import { IndexerDegradedBanner } from '@/components/IndexerDegradedBanner';
 import { loadAgentDetail, type DataSource } from '@/lib/indexer';
 
-const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || '/api/indexer';
+const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || 'https://indexer.arclayers.xyz';
 
 const ARC_CHAIN_ID = 5042002;
 const USDC = getAddress('0x3600000000000000000000000000000000000000');

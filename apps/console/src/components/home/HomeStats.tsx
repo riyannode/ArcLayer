@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { indexerUrl } from '@/lib/indexer';
 
 export type HomeStat = { label: string; value: string; suffix: string };
 
@@ -11,7 +12,7 @@ const fallbackStats: HomeStat[] = [
 ];
 
 /**
- * Home stats strip — pulls real numbers from /api/indexer/overview with
+ * Home stats strip — pulls real numbers from https://indexer.arclayers.xyz/overview with
  * graceful fallback. Three columns with AUREO editorial numerals.
  */
 export default function HomeStats() {
@@ -22,7 +23,7 @@ export default function HomeStats() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/indexer/overview', { cache: 'no-store' });
+        const res = await fetch(indexerUrl('/overview'), { cache: 'no-store' });
         if (!res.ok) throw new Error('indexer not ready');
         const data = await res.json();
         if (cancelled) return;
