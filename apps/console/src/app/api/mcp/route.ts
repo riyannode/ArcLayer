@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { encodeFunctionData, keccak256, stringToHex, toBytes, toHex, type Hex } from 'viem';
 import { AGENT_REGISTRY_ABI, JOB_ESCROW_ABI, CONTRACTS, ARC_TOKENS } from '@arclayer/sdk';
+import { indexerUrl } from '@/lib/indexer';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,6 @@ export const revalidate = 0;
  *   POST /api/mcp  { tool, args }              → simple shape
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://arclayers.xyz';
 const ARC_CHAIN_ID = 5042002;
 const ARC_RPC = 'https://rpc.testnet.arc.network';
 
@@ -42,8 +42,7 @@ const TOOLS: Record<
     kind: 'read',
     handler: async (args) => {
       const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(500, args.limit)) : undefined;
-      const url = new URL('/api/indexer/agents', BASE_URL);
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetch(indexerUrl('/agents'), { cache: 'no-store' });
       const json = await res.json().catch(() => ({}));
       const list = Array.isArray(json) ? json : json.agents || json.data || [];
       return { agents: limit ? list.slice(0, limit) : list, total: list.length };
@@ -56,7 +55,7 @@ const TOOLS: Record<
     handler: async (args) => {
       const id = String(args.tokenId || '').trim();
       if (!id) throw new Error('tokenId required');
-      const res = await fetch(new URL(`/api/indexer/agents/${encodeURIComponent(id)}`, BASE_URL), { cache: 'no-store' });
+      const res = await fetch(indexerUrl(`/agents/${encodeURIComponent(id)}`), { cache: 'no-store' });
       if (!res.ok) throw new Error(`indexer ${res.status}`);
       return res.json();
     },
@@ -71,7 +70,7 @@ const TOOLS: Record<
     handler: async (args) => {
       const status = typeof args.status === 'string' ? args.status.toLowerCase() : undefined;
       const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(500, args.limit)) : undefined;
-      const res = await fetch(new URL('/api/indexer/jobs', BASE_URL), { cache: 'no-store' });
+      const res = await fetch(indexerUrl('/jobs'), { cache: 'no-store' });
       const json = await res.json().catch(() => ({}));
       let list: any[] = Array.isArray(json) ? json : json.jobs || json.data || [];
       if (status) list = list.filter((j) => String(j.status || '').toLowerCase().includes(status));
@@ -85,7 +84,7 @@ const TOOLS: Record<
     handler: async (args) => {
       const id = String(args.jobId || '').trim();
       if (!id) throw new Error('jobId required');
-      const res = await fetch(new URL(`/api/indexer/jobs/${encodeURIComponent(id)}`, BASE_URL), { cache: 'no-store' });
+      const res = await fetch(indexerUrl(`/jobs/${encodeURIComponent(id)}`), { cache: 'no-store' });
       if (!res.ok) throw new Error(`indexer ${res.status}`);
       return res.json();
     },
@@ -95,7 +94,7 @@ const TOOLS: Record<
     args: [],
     kind: 'read',
     handler: async () => {
-      const res = await fetch(new URL('/api/indexer/overview', BASE_URL), { cache: 'no-store' });
+      const res = await fetch(indexerUrl('/overview'), { cache: 'no-store' });
       return res.json();
     },
   },

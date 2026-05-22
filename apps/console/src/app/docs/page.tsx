@@ -8,6 +8,7 @@ import { CopyButton } from '@/components/CopyButton';
 const SKILL_RAW_URL = 'https://raw.githubusercontent.com/riyannode/ArcLayer/main/docs/ARCLAYER_INTEGRATION_SKILL.md';
 const SKILL_BLOB_URL = 'https://github.com/riyannode/ArcLayer/blob/main/docs/ARCLAYER_INTEGRATION_SKILL.md';
 const ONELINER_PROMPT = `Read this skill and use it to integrate ArcLayer into my app:\n${SKILL_RAW_URL}`;
+const INDEXER_URL = 'https://indexer.arclayers.xyz';
 
 /* ─── Data ─── */
 
@@ -54,7 +55,7 @@ const quickstart = [
   { step: '01', title: 'Install', body: 'Add the workspace SDK to your project.', code: 'pnpm add @arclayer/sdk' },
   { step: '02', title: 'Connect', body: 'Open a viem client on Arc testnet.', code: "import { createClient } from '@arclayer/sdk';\nconst client = createClient();" },
   { step: '03', title: 'Read', body: 'Query a job or agent on-chain.', code: "import { readJob } from '@arclayer/sdk';\nconst job = await readJob(0n);" },
-  { step: '04', title: 'Index', body: 'Point at the indexer for fast reads.', code: "fetch('/api/indexer/agents/1')\n  .then(r => r.json())" },
+  { step: '04', title: 'Index', body: 'Point at the indexer for fast reads.', code: "fetch('https://indexer.arclayers.xyz/agents/1')\n  .then(r => r.json())" },
 ];
 
 const networkInfo = [
@@ -120,18 +121,18 @@ await writeContractAsync({
   {
     title: 'Read indexer overview',
     lang: 'typescript',
-    code: `const res = await fetch('/api/indexer/overview');
+    code: `const res = await fetch('https://indexer.arclayers.xyz/overview');
 const { summary, jobs, agents } = await res.json();
 // summary.jobs, summary.agents, summary.totalFunded`,
   },
 ];
 
 const apiEndpoints = [
-  { method: 'GET', path: '/api/indexer/overview', desc: 'Protocol totals + recent activity' },
-  { method: 'GET', path: '/api/indexer/jobs', desc: 'All jobs, newest first' },
-  { method: 'GET', path: '/api/indexer/jobs/:id', desc: 'Single job detail + events' },
-  { method: 'GET', path: '/api/indexer/agents', desc: 'All registered agents' },
-  { method: 'GET', path: '/api/indexer/agents/:id', desc: 'Agent profile + job history' },
+  { method: 'GET', path: `${INDEXER_URL}/overview`, desc: 'Protocol totals + recent activity' },
+  { method: 'GET', path: `${INDEXER_URL}/jobs`, desc: 'All jobs, newest first' },
+  { method: 'GET', path: `${INDEXER_URL}/jobs/:id`, desc: 'Single job detail + events' },
+  { method: 'GET', path: `${INDEXER_URL}/agents`, desc: 'All registered agents' },
+  { method: 'GET', path: `${INDEXER_URL}/agents/:id`, desc: 'Agent profile + job history' },
 ];
 
 const aiSkillPrompt = `You are an AI coding agent integrating ArcLayer into an existing app.
@@ -183,17 +184,17 @@ Flows (official ERC-8004 + ERC-8183):
 - Complete:          complete(jobId, reasonHash, 0x)   // reasonHash defaults to keccak256("approved")
 
 Indexer endpoints:
-GET /api/indexer/overview
-GET /api/indexer/jobs
-GET /api/indexer/jobs/:id
-GET /api/indexer/agents
-GET /api/indexer/agents/:id
-GET /api/indexer/proofs
+GET https://indexer.arclayers.xyz/overview
+GET https://indexer.arclayers.xyz/jobs
+GET https://indexer.arclayers.xyz/jobs/:id
+GET https://indexer.arclayers.xyz/agents
+GET https://indexer.arclayers.xyz/agents/:id
+GET https://indexer.arclayers.xyz/proofs
 
 Required env vars (any frontend integrating ArcLayer):
 - NEXT_PUBLIC_ARC_RPC_URL (optional, falls back to SDK list)
-- NEXT_PUBLIC_INDEXER_URL (optional, defaults to /api/indexer if proxying)
-- INDEXER_INTERNAL_URL (server-only, points to your indexer host)
+- NEXT_PUBLIC_INDEXER_URL (optional, defaults to https://indexer.arclayers.xyz)
+- INDEXER_INTERNAL_URL (legacy proxy only; not needed when frontend calls indexer directly)
 - For x402 paid runs: ARCLAYER_AGENT_ENDPOINT, ARCLAYER_AGENT_API_KEY, X402_FACILITATOR_ENABLED
 
 Expected output:

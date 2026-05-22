@@ -23,6 +23,16 @@ function upstreamPath(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  if (process.env.VERCEL) {
+    return NextResponse.json(
+      {
+        error: 'indexer_disabled_on_vercel',
+        detail: 'Use VPS-hosted console/indexer endpoint. This route is disabled on Vercel.',
+      },
+      { status: 410 },
+    );
+  }
+
   const target = `${INDEXER_INTERNAL_URL}${upstreamPath(request)}`;
 
   try {

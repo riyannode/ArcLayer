@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { indexerUrl } from '@/lib/indexer';
 
 /**
  * LiveLogStream — terminal-style event tail that reads real protocol data
- * from /api/indexer/overview and turns recent jobs/agents/proofs into
+ * from https://indexer.arclayers.xyz/overview and turns recent jobs/agents/proofs into
  * chronological log lines.
  *
  * Goal: show *real* happening, not fake ticker. We derive lines from:
@@ -68,7 +69,7 @@ export default function LiveLogStream() {
 
     const poll = async () => {
       try {
-        const res = await fetch('/api/indexer/overview', { cache: 'no-store' });
+        const res = await fetch(indexerUrl('/overview'), { cache: 'no-store' });
         if (!res.ok) throw new Error('not ready');
         const data = await res.json();
         if (cancelled) return;
