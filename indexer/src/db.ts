@@ -28,9 +28,7 @@ let lastA2AJobSyncError: string | null = null;
 let lastAgentProjectionDebug: ReturnType<typeof buildAgentProjectionDebug> = {
   storedAgentEventCount: 0,
   agentEventSourceBreakdown: {},
-  rawImportedAgentEventCount: 0,
   rawErc8004AgentEventCount: 0,
-  projectedImportedAgentCountBeforeInsert: 0,
   projectedErc8004AgentCountBeforeInsert: 0,
   filteredOutErc8004AgentCount: 0,
   sampleFilteredErc8004Agents: [],
@@ -534,22 +532,16 @@ export function readOverview() {
   const totalBudgetAtomic = totalBudget.toString();
   const totalFundedAtomic = totalFunded.toString();
 
-  const importedAgents = 0;
   const erc8004Agents = agents.filter((agent) => agent.source === "erc8004_identity_registry").length;
 
   return {
     summary: {
       eventCount,
       jobs: jobs.length,
-      agents: importedAgents + erc8004Agents,
-      meta: {
-        importedAgentCount: importedAgents,
-        erc8004AgentCount: erc8004Agents,
-      },
+      agents: erc8004Agents,
       agentBreakdown: {
-        importedAgentCount: importedAgents,
         erc8004AgentCount: erc8004Agents,
-        totalAgentCount: importedAgents + erc8004Agents,
+        totalAgentCount: erc8004Agents,
       },
       jobBreakdown: {
         erc8183: jobs.length,
@@ -571,7 +563,6 @@ export function readOverview() {
 }
 
 export function readCounts() {
-  const importedAgentCount = readAgents("imported").length;
   const erc8004AgentCount = readAgents("erc8004").length;
   const erc8183JobCount = readJobs().length;
   const storedAgentEventCount = (db.prepare(`SELECT COUNT(*) AS count FROM agent_events`).get() as { count: number }).count;
@@ -581,19 +572,15 @@ export function readCounts() {
     storedAgentEventCount,
     storedJobEventCount,
     agentEventSourceBreakdown: projectionDebug.agentEventSourceBreakdown,
-    rawImportedAgentEventCount: projectionDebug.rawImportedAgentEventCount,
     rawErc8004AgentEventCount: projectionDebug.rawErc8004AgentEventCount,
-    projectedImportedAgentCount: projectionDebug.projectedImportedAgentCountBeforeInsert,
     projectedErc8004AgentCount: projectionDebug.projectedErc8004AgentCountBeforeInsert,
-    projectedImportedAgentCountBeforeInsert: projectionDebug.projectedImportedAgentCountBeforeInsert,
     projectedErc8004AgentCountBeforeInsert: projectionDebug.projectedErc8004AgentCountBeforeInsert,
     filteredOutErc8004AgentCount: projectionDebug.filteredOutErc8004AgentCount,
     sampleFilteredErc8004Agents: projectionDebug.sampleFilteredErc8004Agents,
-    importedAgentCount,
     erc8004AgentCount,
     erc8183JobCount,
-    visibleAgentCount: importedAgentCount + erc8004AgentCount,
-    totalAgentCount: importedAgentCount + erc8004AgentCount,
+    visibleAgentCount: erc8004AgentCount,
+    totalAgentCount: erc8004AgentCount,
   };
 }
 

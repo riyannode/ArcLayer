@@ -1,12 +1,13 @@
 import { decodeEventLog, getAddress, type Address, type Log } from "viem";
 import { CONTRACTS, ERC8183_AGENTIC_COMMERCE_ABI } from "@arclayer/sdk";
 
-export enum ERC8183JobStatus {
-  Created = 0,
-  BudgetSet = 1,
-  Funded = 2,
-  Submitted = 3,
-  Completed = 4,
+export enum ERC8183PublicJobStatus {
+  Open = 0,
+  Funded = 1,
+  Submitted = 2,
+  Completed = 3,
+  Rejected = 4,
+  Expired = 5,
 }
 
 type Hex = `0x${string}`;
@@ -122,7 +123,7 @@ export function lifecycleUpdatePayload(event: ERC8183IndexedLifecycleEvent): Rec
         onchain_job_id: event.jobId.toString(),
         provider: getAddress(event.provider),
         evaluator: getAddress(event.evaluator),
-        settlement_status: ERC8183JobStatus.Created,
+        settlement_status: ERC8183PublicJobStatus.Open,
       };
       if (event.budget !== undefined) payload.budget_atomic = event.budget.toString();
       return payload;
@@ -130,25 +131,25 @@ export function lifecycleUpdatePayload(event: ERC8183IndexedLifecycleEvent): Rec
     case "BudgetSet":
       return {
         budget_atomic: event.amount.toString(),
-        settlement_status: ERC8183JobStatus.BudgetSet,
+        settlement_status: ERC8183PublicJobStatus.Open,
       };
     case "JobFunded":
       return {
         ...(event.transactionHash ? { fund_tx: event.transactionHash } : {}),
-        settlement_status: ERC8183JobStatus.Funded,
+        settlement_status: ERC8183PublicJobStatus.Funded,
       };
     case "JobSubmitted":
       return {
         ...(event.transactionHash ? { submit_tx: event.transactionHash } : {}),
         deliverable_hash: event.deliverable,
-        settlement_status: ERC8183JobStatus.Submitted,
+        settlement_status: ERC8183PublicJobStatus.Submitted,
         status: "submitted",
         submitted_at: isoFromBlockTimestamp(event.blockTimestamp),
       };
     case "JobCompleted":
       return {
         ...(event.transactionHash ? { complete_tx: event.transactionHash } : {}),
-        settlement_status: ERC8183JobStatus.Completed,
+        settlement_status: ERC8183PublicJobStatus.Completed,
       };
     default:
       return null;

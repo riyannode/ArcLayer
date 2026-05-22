@@ -97,9 +97,7 @@ export function projectJobsFromEvents(events: IndexedJobEvent[]) {
 export type AgentProjectionDebug = {
   storedAgentEventCount: number;
   agentEventSourceBreakdown: Record<string, number>;
-  rawImportedAgentEventCount: number;
   rawErc8004AgentEventCount: number;
-  projectedImportedAgentCountBeforeInsert: number;
   projectedErc8004AgentCountBeforeInsert: number;
   filteredOutErc8004AgentCount: number;
   sampleFilteredErc8004Agents: Array<{ agentId: string; controller: string; metadataURI: string; reason: string }>;
@@ -107,10 +105,6 @@ export type AgentProjectionDebug = {
 
 export function sourceForAgentEvent(event: IndexedAgentEvent) {
   return ((event as any).source as string | undefined) ?? "erc8004_identity_registry";
-}
-
-function isImportedArcLayerAgent(event: IndexedAgentEvent) {
-  return sourceForAgentEvent(event) === "imported_arclayer_registry";
 }
 
 function dedupeAgentEvents(events: IndexedAgentEvent[]) {
@@ -121,7 +115,6 @@ function dedupeAgentEvents(events: IndexedAgentEvent[]) {
 }
 
 function getAgentFilterReason(event: IndexedAgentEvent, arcJobWallets?: Set<string>): string | null {
-  if (isImportedArcLayerAgent(event)) return "imported_arclayer_registry";
   if (!arcWalletFilterActive()) return "wallet_filter_inactive";
 
   const source = sourceForAgentEvent(event);
@@ -161,9 +154,7 @@ export function buildAgentProjectionDebug(
   return {
     storedAgentEventCount: events.length,
     agentEventSourceBreakdown,
-    rawImportedAgentEventCount: events.filter((event) => sourceForAgentEvent(event) === "imported_arclayer_registry").length,
     rawErc8004AgentEventCount: events.filter((event) => sourceForAgentEvent(event) === "erc8004_identity_registry").length,
-    projectedImportedAgentCountBeforeInsert: projected.filter((event) => sourceForAgentEvent(event) === "imported_arclayer_registry").length,
     projectedErc8004AgentCountBeforeInsert: projected.filter((event) => sourceForAgentEvent(event) === "erc8004_identity_registry").length,
     filteredOutErc8004AgentCount: filtered.length,
     sampleFilteredErc8004Agents: filtered.slice(0, 5).map((event) => ({

@@ -36,7 +36,7 @@ import {
   type ManualJobDisplay,
 } from '@/lib/manualJobs';
 
-const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Completed'] as const;
+const JOB_STATUS = ['Open', 'Funded', 'Submitted', 'Completed', 'Rejected', 'Expired'] as const;
 const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'success' };
 
 function isValidAddress(value: string) {
@@ -76,13 +76,13 @@ function JobsPage() {
     category: initialCategory,
     title: '',
     agentId: '',
-    worker: '',
+    provider: '',
     evaluator: '',
     jobSpec: '',
     duration: '24 hours',
     difficulty: 'Medium',
   });
-  const [workerTouched, setWorkerTouched] = useState(false);
+  const [providerTouched, setProviderTouched] = useState(false);
   const [evaluatorTouched, setEvaluatorTouched] = useState(false);
   const [fundForm, setFundForm] = useState({ jobId: '', budget: '1', amount: '1' });
   const [depositTouched, setDepositTouched] = useState(false);
@@ -141,7 +141,7 @@ function JobsPage() {
       if (myJobsOnly && lower) {
         if (
           j.client.toLowerCase() !== lower &&
-          j.worker.toLowerCase() !== lower &&
+          j.provider.toLowerCase() !== lower &&
           j.evaluator.toLowerCase() !== lower
         ) {
           return false;
@@ -152,7 +152,7 @@ function JobsPage() {
       const name = agent ? displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI }) : shortAgentId(j.agentId);
       const skill = agent ? (formatSkillLabel(parseAgentSkill(agent.metadataURI)) || parseAgentSkill(agent.metadataURI) || '') : '';
       const status = JOB_STATUS[j.status] || '';
-      return [`#${j.id}`, j.id, j.agentId, shortAgentId(j.agentId), j.worker, j.client, j.evaluator, name, skill, status, display.category, display.title, display.description]
+      return [`#${j.id}`, j.id, j.agentId, shortAgentId(j.agentId), j.provider, j.client, j.evaluator, name, skill, status, display.category, display.title, display.description]
         .some((v) => String(v).toLowerCase().includes(q));
     });
     return rows.sort((a, b) => {
@@ -169,12 +169,12 @@ function JobsPage() {
 
   // Auto-fill worker with the selected agent's controller (most common case).
   useEffect(() => {
-    if (!workerTouched && selectedAgent) {
+    if (!providerTouched && selectedAgent) {
       setCreateForm((current) =>
-        current.worker === selectedAgent.controller ? current : { ...current, worker: selectedAgent.controller }
+        current.worker === selectedAgent.controller ? current : { ...current, provider: selectedAgent.controller }
       );
     }
-  }, [selectedAgent, workerTouched]);
+  }, [selectedAgent, providerTouched]);
 
   // Auto-fill client address (evaluator) with the connected wallet.
   useEffect(() => {
@@ -263,14 +263,9 @@ function JobsPage() {
       setTxState('Job title is required.');
       return;
     }
-    if (!createForm.agentId) {
+    if (!isValidAddress(createForm.provider)) {
       setStatusTone('error');
-      setTxState('Register an agent first, then select it here.');
-      return;
-    }
-    if (!isValidAddress(createForm.worker)) {
-      setStatusTone('error');
-      setTxState('Worker address must be a valid 0x wallet.');
+      setTxState('Provider address must be a valid 0x wallet.');
       return;
     }
     if (!isValidAddress(createForm.evaluator)) {
@@ -283,7 +278,7 @@ function JobsPage() {
       setTxState('Task Description cannot be empty.');
       return;
     }
-    if (createForm.worker.toLowerCase() === createForm.evaluator.toLowerCase()) {
+    if (createForm.provider.toLowerCase() === createForm.evaluator.toLowerCase()) {
       setStatusTone('error');
       setTxState('Worker and client cannot be the same address.');
       notify(NOTICE_WORKER_EQUALS_CLIENT);
@@ -302,7 +297,7 @@ function JobsPage() {
         duration: createForm.duration,
         difficulty: createForm.difficulty,
         agentId: createForm.agentId,
-        worker: createForm.worker.trim(),
+        provider: createForm.provider.trim(),
         client: createForm.evaluator.trim(),
         createdAt: new Date().toISOString(),
       };
@@ -311,7 +306,7 @@ function JobsPage() {
       const expiredAt = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60);
       const hash = await writeContractAsync(
         buildCreateJobConfig(
-          createForm.worker.trim() as `0x${string}`,
+          createForm.provider.trim() as `0x${string}`,
           createForm.evaluator.trim() as `0x${string}`,
           expiredAt,
           JSON.stringify(structuredSpec),
@@ -325,7 +320,7 @@ function JobsPage() {
         (payload) => payload.some(
           (j) =>
             j.agentId === createForm.agentId &&
-            j.worker.toLowerCase() === createForm.worker.toLowerCase() &&
+            j.provider.toLowerCase() === createForm.provider.toLowerCase() &&
             j.evaluator.toLowerCase() === createForm.evaluator.toLowerCase()
         )
       );
@@ -333,7 +328,7 @@ function JobsPage() {
       const createdJob = [...next].reverse().find(
         (j) =>
           j.agentId === createForm.agentId &&
-          j.worker.toLowerCase() === createForm.worker.toLowerCase() &&
+          j.provider.toLowerCase() === createForm.provider.toLowerCase() &&
           j.evaluator.toLowerCase() === createForm.evaluator.toLowerCase()
       );
       setStatusTone('synced');
@@ -372,7 +367,7 @@ function JobsPage() {
       const a = await writeContractAsync(buildApproveUsdcConfig(amount));
       await waitForTransactionReceipt(config, { hash: a });
 
-      setTxState('Funding Settlement Vault\u2026');
+      setTxState('Funding ERC-8183 funding\u2026');
       const f = await writeContractAsync(buildFundJobConfig(jobId, amount));
       await waitForTransactionReceipt(config, { hash: f });
 
@@ -383,7 +378,7 @@ function JobsPage() {
       );
       setJobs(next);
       setStatusTone('synced');
-      setTxState('Budget set, USDC approved, and Deposit Amount funded into the Settlement Vault.');
+      setTxState('Budget set, USDC approved, and Deposit Amount funded into the ERC-8183 funding.');
     } catch (e) {
       setTxState(e instanceof Error ? e.message : 'Funding flow failed.');
       setStatusTone('error');
@@ -392,7 +387,7 @@ function JobsPage() {
     }
   }
 
-  const customWorker = !!(selectedAgent && createForm.worker && createForm.worker.toLowerCase() !== selectedAgent.controller.toLowerCase());
+  const customWorker = !!(selectedAgent && createForm.provider && createForm.provider.toLowerCase() !== selectedAgent.controller.toLowerCase());
   const customClient = !!(address && createForm.evaluator && createForm.evaluator.toLowerCase() !== address.toLowerCase());
 
   return (
@@ -404,13 +399,13 @@ function JobsPage() {
             Manual <span className="italic text-[#C5A67C]">Job</span>
           </h1>
           <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)] invisible">
-            Pick an agent, assign a task, set a USDC budget, and lock funds in the Settlement Vault.
+            Pick an agent, assign a task, set a USDC budget, and lock funds in the ERC-8183 funding.
           </p>
         </div>
 
         <div className="mb-5 overflow-x-auto border-y border-white/10 py-2">
           <nav className="flex min-w-max gap-2" aria-label="Manual job sections">
-            {[['Overview', '#overview'], ['Categories', '#categories'], ['Job Board', '#job-board'], ['Create Job', '#create-job'], ['Approve & Fund', '#fund-job'], ['Advanced Escrow', '#advanced-escrow']].map(([label, href]) => (
+            {[['Overview', '#overview'], ['Categories', '#categories'], ['Job Board', '#job-board'], ['Create Job', '#create-job'], ['Approve & Fund', '#fund-job'], ['ERC-8183 funding', '#advanced-escrow']].map(([label, href]) => (
               <a key={href} href={href} className="btn-bordered px-3 py-2 text-[9.5px]">{label}</a>
             ))}
           </nav>
@@ -741,7 +736,7 @@ function JobsPage() {
                   <select
                     value={createForm.agentId}
                     onChange={(e) => {
-                      setWorkerTouched(false);
+                      setProviderTouched(false);
                       setCreateForm((c) => ({ ...c, agentId: e.target.value }));
                     }}
                     className="input-mono"
@@ -797,10 +792,10 @@ function JobsPage() {
                     )}
                   </div>
                   <input
-                    value={createForm.worker}
+                    value={createForm.provider}
                     onChange={(e) => {
-                      setWorkerTouched(true);
-                      setCreateForm((c) => ({ ...c, worker: e.target.value }));
+                      setProviderTouched(true);
+                      setCreateForm((c) => ({ ...c, provider: e.target.value }));
                     }}
                     placeholder={selectedAgent ? selectedAgent.controller : '0x... worker wallet'}
                     className="input-mono"
@@ -835,14 +830,14 @@ function JobsPage() {
                   <textarea
                     value={createForm.jobSpec}
                     onChange={(e) => setCreateForm((c) => ({ ...c, jobSpec: e.target.value }))}
-                    placeholder={'Example: Audit the Settlement Vault and deliver an IPFS report.'}
+                    placeholder={'Example: Audit the ERC-8183 funding and deliver an IPFS report.'}
                     className="input-mono min-h-[120px]"
                   />
                 </div>
 
               </div>
 
-              {createForm.worker && createForm.evaluator && createForm.worker.toLowerCase() === createForm.evaluator.toLowerCase() && (
+              {createForm.provider && createForm.evaluator && createForm.provider.toLowerCase() === createForm.evaluator.toLowerCase() && (
                 <InlineProtectionNotice {...NOTICE_WORKER_EQUALS_CLIENT} className="mt-4" />
               )}
 
@@ -874,7 +869,7 @@ function JobsPage() {
 
             <section id="fund-job" className="aureo-panel scroll-mt-4 p-4 md:p-6">
               <div className="aureo-mono-label mb-2">STEP 2</div>
-              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Approve &amp; fund Settlement Vault</h2>
+              <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Approve &amp; fund ERC-8183 funding</h2>
               <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)] invisible">
                 Lock USDC until work is approved.
               </p>
@@ -947,7 +942,7 @@ function JobsPage() {
             </section>
 
             <details id="advanced-escrow" className="aureo-panel scroll-mt-4 p-4 md:p-6">
-              <summary className="cursor-pointer font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C]">Advanced Escrow Tools</summary>
+              <summary className="cursor-pointer font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C]">ERC-8183 funding Tools</summary>
               <div className="mt-4 space-y-4">
                 <VaultDepositPanel />
                 <MilestoneProgressPanel />

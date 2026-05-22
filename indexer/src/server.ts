@@ -1,5 +1,5 @@
 import { createServer, type ServerResponse } from "node:http";
-import { DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS } from "./config";
+import { ARC_REFERENCE_WALLET_FILTER, DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS } from "./config";
 import { fetchAgentEvents, fetchJobEvents } from "./ingest";
 import { arcWalletFilterActive } from "./projections";
 import { getReferenceFilters, refreshReferenceFiltersFromSupabase } from "./reference-filters";
@@ -112,11 +112,8 @@ createServer((req, res) => {
       filterActive: arcWalletFilterActive(),
       storedAgentEventCount: counts.storedAgentEventCount,
       agentEventSourceBreakdown: counts.agentEventSourceBreakdown,
-      rawImportedAgentEventCount: counts.rawImportedAgentEventCount,
       rawErc8004AgentEventCount: counts.rawErc8004AgentEventCount,
-      projectedImportedAgentCount: counts.projectedImportedAgentCount,
       projectedErc8004AgentCount: counts.projectedErc8004AgentCount,
-      projectedImportedAgentCountBeforeInsert: counts.projectedImportedAgentCountBeforeInsert,
       projectedErc8004AgentCountBeforeInsert: counts.projectedErc8004AgentCountBeforeInsert,
       filteredOutErc8004AgentCount: counts.filteredOutErc8004AgentCount,
       sampleFilteredErc8004Agents: counts.sampleFilteredErc8004Agents,
@@ -244,3 +241,8 @@ createServer((req, res) => {
 }).listen(INDEXER_PORT, () => {
   console.log(`ArcLayer indexer (Arc Reference Mode) listening on http://localhost:${INDEXER_PORT}`);
 });
+if (process.env.NODE_ENV === "production" && ARC_REFERENCE_WALLET_FILTER.length === 0) {
+  throw new Error(
+    "[indexer] Startup aborted: ARC_REFERENCE_WALLET_FILTER is required in production and cannot be empty.",
+  );
+}

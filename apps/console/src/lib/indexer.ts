@@ -33,43 +33,15 @@ export type IndexedJob = {
   completionReason: string;
   status: number;
   statusLabel: 'Open' | 'Funded' | 'Submitted' | 'Completed' | 'Rejected' | 'Expired';
-
-  // ── Legacy aliases (deprecated) — kept for in-flight UI components migrating
-  // to the official ERC-8183 schema. Populated by the fetch-time adapter
-  // `withLegacyJobAliases()`. New code should use the official fields above.
-  /** @deprecated Use `provider`. */
+  /** Transitional compatibility for components still rendering legacy field names. */
   worker: string;
-  /** @deprecated No agent linkage in official ERC-8183 — use `provider` (agent address). */
-  agentId: string;
-  /** @deprecated Use `description`. */
+  agentId?: string;
   jobSpecHash: string;
-  /** @deprecated Use `deliverable` (bytes32 hash). */
   deliverableURI: string;
-  /** @deprecated No proof URI in official ERC-8183 reference flow. */
   proofMetadataURI: string;
-  /** @deprecated Use `status === 3` and `completionReason`. */
   approved: boolean;
-  /** @deprecated Use `createdAtBlock`. */
   createdAt: string;
 };
-
-/**
- * Fetch-time adapter — accepts a raw indexer job (official ERC-8183 fields)
- * and decorates it with deprecated legacy aliases so legacy UI components
- * compile during migration. Drop this once all consumers are migrated.
- */
-export function withLegacyJobAliases(job: IndexedJob): IndexedJob {
-  return {
-    ...job,
-    worker: job.provider,
-    agentId: job.provider, // best-effort — official ERC-8183 has no agent linkage
-    jobSpecHash: job.description,
-    deliverableURI: job.deliverable,
-    proofMetadataURI: '',
-    approved: job.status === 3,
-    createdAt: job.createdAtBlock,
-  };
-}
 
 export type IndexedAgent = {
   agentId: string;

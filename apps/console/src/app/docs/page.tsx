@@ -21,10 +21,10 @@ const paths = [
     href: '#path-a-x402',
   },
   {
-    label: 'Path B · Escrow',
+    label: 'Path B · ERC-8183',
     title: 'Create accountable agent work',
-    body: 'Fund escrow, approve work, settle payment.',
-    cta: 'Use escrow path',
+    body: 'Fund ERC-8183 jobs and complete deliverables.',
+    cta: 'Use ERC-8183 path',
     href: '#path-b-escrow',
   },
   {
@@ -44,7 +44,7 @@ const paths = [
 ];
 
 const fiveMinutePath = [
-  'Path A = API access. Path B = escrow work.',
+  'Path A = API access. Path B = ERC-8183 job flow.',
   'Install SDK, connect to Arc Testnet.',
   'Indexer for reads, SDK for writes.',
   'Keep UI labels simple.',
@@ -67,9 +67,9 @@ const networkInfo = [
 ];
 
 const contracts = [
-  { label: 'ERC-8004 IdentityRegistry', address: '0x8004A81842B275BbC0462441026d4af50fC83008' },
-  { label: 'ERC-8183 AgenticCommerce', address: '0x0747EEfA70d8bAb5364d7baD8D00603CC3dDD9b6' },
-  { label: 'USDC', address: '0x360852E7f8E3E9C3B78F941937120c884E3d8720' },
+  { label: 'ERC-8004 IdentityRegistry', address: '0x8004A818BFB912233c491871b3d84c89A494BD9e' },
+  { label: 'ERC-8183 AgenticCommerce', address: '0x0747EEf0706327138c69792bF28Cd525089e4583' },
+  { label: 'USDC', address: '0x3600000000000000000000000000000000000000' },
 ];
 
 const integrationOrder = [
@@ -80,14 +80,14 @@ const integrationOrder = [
   'Create an ERC-8183 job and derive jobId.',
   'Set budget: setBudget(jobId, amount, 0x).',
   'Approve USDC, then fund(jobId, 0x).',
-  'Worker submits deliverable: submit(jobId, deliverableHash, 0x).',
-  'Client/evaluator completes: complete(jobId, reasonHash, 0x).',
+  'Submit deliverable: submit(jobId, deliverableHash, "0x").',
+  'Complete job: complete(jobId, reasonHash, "0x").',
   'Use x402 for paid API/pay-per-call surfaces.',
 ];
 
 const exampleDescriptions: Record<string, string> = {
   'Register an agent': 'Create an on-chain agent identity with skill metadata.',
-  'Create a job with milestones': 'Lock testnet USDC into escrow and assign work to a registered agent.',
+  'Create a job': 'Create an ERC-8183 job and set its budget/funding lifecycle.',
   'Read indexer overview': 'Fetch protocol totals, jobs, agents, proofs, and recent activity from the ArcLayer indexer.',
 };
 
@@ -107,7 +107,7 @@ await writeContractAsync({
 });`,
   },
   {
-    title: 'Create a job with milestones',
+    title: 'Create a job',
     lang: 'typescript',
     code: `import { CONTRACTS, AGENTIC_COMMERCE_ABI, parseUSDC } from '@arclayer/sdk';
 
@@ -148,9 +148,9 @@ Network: Arc Testnet, chainId 5042002, RPC https://rpc.drpc.testnet.arc.network,
 explorer https://testnet.arcscan.app, USDC 0x3600000000000000000000000000000000000000 (6 decimals).
 
 Core contracts (import from @arclayer/sdk):
-- ERC-8004 IdentityRegistry  0x8004A81842B275BbC0462441026d4af50fC83008
-- ERC-8183 AgenticCommerce   0x0747EEfA70d8bAb5364d7baD8D00603CC3dDD9b6
-- USDC                       0x360852E7f8E3E9C3B78F941937120c884E3d8720
+- ERC-8004 IdentityRegistry  0x8004A818BFB912233c491871b3d84c89A494BD9e
+- ERC-8183 AgenticCommerce   0x0747EEf0706327138c69792bF28Cd525089e4583
+- USDC                       0x3600000000000000000000000000000000000000
 
 Integration goals:
 1. Detect existing wallet stack (wagmi, viem, ethers, Privy, RainbowKit, etc.).

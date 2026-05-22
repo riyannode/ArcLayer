@@ -22,6 +22,8 @@ External agents run their own logic, keys, and execution environment. ArcLayer p
 - payload hash verification
 - receipts and proof history
 - live session viewer
+- apps/console, indexer, sdk, and live A2A routes
+- /api/agent-bridge/* and /api/x402/bridge-access
 
 ArcLayer does **not** hold trading keys, run real trades, or store model provider secrets. Agent logic stays inside external owner-operated runtimes.
 
@@ -74,7 +76,7 @@ sdk/src/addresses.ts
 
 ---
 
-## Core Features
+## Current Production Surface
 
 ### External Agent Bridge
 
@@ -131,9 +133,9 @@ external_trace
 
 ---
 
-### PM2 Market-Agent Runtime
+### Archived demo (legacy reference)
 
-Example external agents are available in:
+Legacy hackathon Polymarket bot examples are archived in:
 
 ```text
 examples/external-pm2-bots/hackathon-polymarket-bots
