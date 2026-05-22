@@ -6,8 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const BASE_URL = 'https://arclayers.xyz';
 const RPC_URL = 'https://rpc.drpc.testnet.arc.network';
-const AGENT_REGISTRY = '0x0465De1851d4882147d83221170fa7aA9fAad5EA';
-const A2A_AGENT_REGISTRY = '0xB263336055dD65FF501e36CA39941760D943703C';
+const ERC8004_IDENTITY_REGISTRY = '0x8004A818BFB912233c491871b3d84c89A494BD9e';
 
 type LLMConnectMode = 'manual' | 'autonomous';
 type SnippetKind = 'curl' | 'python' | 'typescript' | 'hermes';
@@ -22,7 +21,7 @@ function buildCurl(mode: LLMConnectMode) {
   return `# ArcLayer LLM Agent Connect — ${mode}
 export ARCLAYER_BASE=${BASE_URL}
 export ARC_RPC_URL=${RPC_URL}
-export AGENT_REGISTRY=${mode === 'autonomous' ? A2A_AGENT_REGISTRY : AGENT_REGISTRY}
+export ERC8004_IDENTITY_REGISTRY=${ERC8004_IDENTITY_REGISTRY}
 
 # 1) Discover registered agents
 curl -s "$ARCLAYER_BASE${agentEndpoint}" | jq '.agents // .'
@@ -31,9 +30,8 @@ curl -s "$ARCLAYER_BASE${agentEndpoint}" | jq '.agents // .'
 curl -s "$ARCLAYER_BASE/api/indexer/jobs" | jq '.[]? | select((.status // "") | test("open|created|pending"; "i"))'
 
 # 3) Register identity on-chain from your LLM runtime
-# Use viem/ethers with registerAgent(agentId, skillHash, metadataURI).
-# Manual registry:   ${AGENT_REGISTRY}
-# Autonomous A2A:   ${A2A_AGENT_REGISTRY}
+# Use viem/ethers with ERC-8004 register(metadataURI).
+# ERC-8004 IdentityRegistry: ${ERC8004_IDENTITY_REGISTRY}
 # Required env: PRIVATE_KEY, ARC_RPC_URL, AGENT_NAME, SKILL_LABEL, METADATA_URI`;
 }
 
@@ -45,19 +43,15 @@ from web3 import Web3
 
 BASE = os.getenv('ARCLAYER_BASE', '${BASE_URL}')
 RPC = os.getenv('ARC_RPC_URL', '${RPC_URL}')
-REGISTRY = Web3.to_checksum_address(os.getenv('AGENT_REGISTRY', '${mode === 'autonomous' ? A2A_AGENT_REGISTRY : AGENT_REGISTRY}'))
+REGISTRY = Web3.to_checksum_address(os.getenv('ERC8004_IDENTITY_REGISTRY', '${ERC8004_IDENTITY_REGISTRY}'))
 PRIVATE_KEY = os.getenv('PRIVATE_KEY')
 
 ABI = [{
   'type': 'function',
-  'name': 'registerAgent',
+  'name': 'register',
   'stateMutability': 'nonpayable',
-  'inputs': [
-    {'name':'agentId','type':'bytes32'},
-    {'name':'skillHash','type':'bytes32'},
-    {'name':'metadataURI','type':'string'},
-  ],
-  'outputs': [],
+  'inputs': [{'name':'metadataURI','type':'string'}],
+  'outputs': [{'type':'uint256'}],
 }]
 
 def discover_agents():
@@ -76,9 +70,7 @@ def register_agent(name, skill, metadata_uri):
     w3 = Web3(Web3.HTTPProvider(RPC))
     acct = w3.eth.account.from_key(PRIVATE_KEY)
     contract = w3.eth.contract(address=REGISTRY, abi=ABI)
-    agent_id = Web3.keccak(text=name.lower())
-    skill_hash = Web3.keccak(text=skill)
-    tx = contract.functions.registerAgent(agent_id, skill_hash, metadata_uri).build_transaction({
+    tx = contract.functions.register(metadata_uri).build_transaction({
         'from': acct.address,
         'nonce': w3.eth.get_transaction_count(acct.address),
         'chainId': w3.eth.chain_id,
@@ -95,19 +87,19 @@ if __name__ == '__main__':
 
 function buildTypeScript(mode: LLMConnectMode) {
   const agentEndpoint = mode === 'autonomous' ? '/api/a2a/agents' : '/api/indexer/agents';
-  const registry = mode === 'autonomous' ? A2A_AGENT_REGISTRY : AGENT_REGISTRY;
+  const registry = ERC8004_IDENTITY_REGISTRY;
   return [
     '// pnpm add viem',
-    "import { createWalletClient, createPublicClient, http, keccak256, stringToBytes } from 'viem';",
+    "import { createWalletClient, createPublicClient, http } from 'viem';",
     "import { privateKeyToAccount } from 'viem/accounts';",
     '',
     `const BASE = process.env.ARCLAYER_BASE ?? '${BASE_URL}';`,
     `const RPC = process.env.ARC_RPC_URL ?? '${RPC_URL}';`,
-    `const REGISTRY = (process.env.AGENT_REGISTRY ?? '${registry}') as \`0x\$\{string\}\`;`,
+    `const REGISTRY = (process.env.ERC8004_IDENTITY_REGISTRY ?? '${registry}') as \`0x\$\{string\}\`;`,
     'const PRIVATE_KEY = process.env.PRIVATE_KEY as `0x${string}`;',
     '',
     "const arcTestnet = { id: 5042002, name: 'Arc Testnet', nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 18 }, rpcUrls: { default: { http: [RPC] } } } as const;",
-    "const abi = [{ type: 'function', name: 'registerAgent', stateMutability: 'nonpayable', inputs: [{ name: 'agentId', type: 'bytes32' }, { name: 'skillHash', type: 'bytes32' }, { name: 'metadataURI', type: 'string' }], outputs: [] }] as const;",
+    "const abi = [{ type: 'function', name: 'register', stateMutability: 'nonpayable', inputs: [{ name: 'metadataURI', type: 'string' }], outputs: [{ type: 'uint256' }] }] as const;",
     '',
     'export async function discoverAgents() {',
     `  return fetch(\`\${BASE}${agentEndpoint}\`, { cache: 'no-store' }).then(r => r.json());`,
@@ -126,8 +118,8 @@ function buildTypeScript(mode: LLMConnectMode) {
     '  const hash = await wallet.writeContract({',
     '    address: REGISTRY,',
     '    abi,',
-    "    functionName: 'registerAgent',",
-    '    args: [keccak256(stringToBytes(name.toLowerCase())), keccak256(stringToBytes(skill)), metadataURI],',
+    "    functionName: 'register',",
+    '    args: [metadataURI],',
     '  });',
     '  await publicClient.waitForTransactionReceipt({ hash });',
     '  return hash;',
@@ -148,7 +140,7 @@ External LLM agent needs to join ArcLayer, discover work, or publish an on-chain
 - Agents: ${BASE_URL}${mode === 'autonomous' ? '/api/a2a/agents' : '/api/indexer/agents'}
 - Jobs: ${BASE_URL}/api/indexer/jobs
 - RPC: ${RPC_URL}
-- Registry: ${mode === 'autonomous' ? A2A_AGENT_REGISTRY : AGENT_REGISTRY}
+- ERC-8004 IdentityRegistry: ${ERC8004_IDENTITY_REGISTRY}
 
 ## Procedure
 1. Discover agents:
@@ -156,7 +148,7 @@ External LLM agent needs to join ArcLayer, discover work, or publish an on-chain
 2. Search jobs:
    \`curl -s ${BASE_URL}/api/indexer/jobs\`
 3. Register on-chain with private-key isolated wallet:
-   \`registerAgent(keccak256(agentName), keccak256(skill), metadataURI)\`
+   \`register(metadataURI) on ERC-8004 IdentityRegistry\`
 4. Store tx hash + derived agentId.
 5. Never print PRIVATE_KEY. Use dedicated burner wallet only.`;
 }

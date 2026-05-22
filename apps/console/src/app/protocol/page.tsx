@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useArcWallet } from '@/hooks/useArcWallet';
-import { ARC_EXPLORER, formatUSDC, shortenAddress } from '@/lib/contracts';
+import { ARC_EXPLORER, CONTRACTS, formatUSDC, shortenAddress } from '@/lib/contracts';
 import { displayAgentLabel, formatSkillLabel, parseAgentName, parseAgentSkill, shortAgentId } from '@/lib/agentName';
 import { fetchIndexerJson, type DashboardOverview } from '@/lib/indexer';
 
@@ -162,7 +162,14 @@ export default function Dashboard() {
     return (a.latency ?? 9999) < (b.latency ?? 9999) ? a : b;
   }) : null;
 
-  const agentById = useMemo(() => new Map(agents.map((a) => [a.agentId, a])), [agents]);
+  const agentById = useMemo(() => {
+    const map = new Map<string, (typeof agents)[number]>();
+    for (const agent of agents) {
+      map.set(agent.agentId, agent);
+      if (agent.tokenId) map.set(agent.tokenId, agent);
+    }
+    return map;
+  }, [agents]);
 
   const filteredAgents = useMemo(() => {
     const q = agentSearch.trim().toLowerCase();
@@ -170,7 +177,7 @@ export default function Dashboard() {
       if (!q) return true;
       const name = parseAgentName(a.metadataURI) || '';
       const skill = formatSkillLabel(parseAgentSkill(a.metadataURI)) || parseAgentSkill(a.metadataURI) || '';
-      return [name, skill, a.controller, a.agentId, shortAgentId(a.agentId)].some((v) => v.toLowerCase().includes(q));
+      return [name, skill, a.controller, a.agentId, a.tokenId || '', shortAgentId(a.tokenId || a.agentId)].some((v) => v.toLowerCase().includes(q));
     });
     return rows.sort((a, b) => {
       if (agentSort === 'jobs') return b.jobs.length - a.jobs.length || Number(BigInt(b.score) - BigInt(a.score));
@@ -331,7 +338,7 @@ export default function Dashboard() {
             </p>
             <div className="mt-2 flex flex-wrap gap-3">
               <Link href="/job/19" className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C5A67C] hover:text-[#EAE4D8]">View Job →</Link>
-              <a href={`${ARC_EXPLORER}/address/0x0747EEfA70d8bAb5364d7baD8D00603CC3dDD9b6`} target="_blank" rel="noopener noreferrer" className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C5A67C] hover:text-[#EAE4D8]">View ERC-8183 Contract →</a>
+              <a href={`${ARC_EXPLORER}/address/${CONTRACTS.ERC8183_AGENTIC_COMMERCE}`} target="_blank" rel="noopener noreferrer" className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C5A67C] hover:text-[#EAE4D8]">View ERC-8183 Contract →</a>
             </div>
           </div>
           <span className="chip-status success self-start md:self-auto">SETTLED</span>
@@ -504,14 +511,15 @@ export default function Dashboard() {
               ) : (
                 visibleAgents.map((a) => {
                   const name = parseAgentName(a.metadataURI);
-                  const label = name || `Agent ${shortAgentId(a.agentId)}`;
+                  const publicAgentId = a.tokenId || a.agentId;
+                  const label = name || `Agent ${shortAgentId(publicAgentId)}`;
                   const skill = formatSkillLabel(parseAgentSkill(a.metadataURI));
                   return (
                     <div key={a.agentId} className="ledger-row flex flex-col gap-2 border border-white/10 bg-black/20 px-3 py-2.5 hover:border-[#C5A67C]/40 md:flex-row md:items-center md:justify-between md:gap-4">
                       <div className="min-w-0 flex-1">
                         <div className="font-mono text-[12px] truncate" style={{ color: '#EAE4D8' }}>{label}</div>
                         <div className="mt-0.5 font-mono text-[10px] truncate" style={{ color: 'rgba(234, 228, 216, 0.48)' }}>
-                          {skill ? <>{skill} · </> : null}ID <span title={a.agentId}>{shortAgentId(a.agentId)}</span> · controller {shortenAddress(a.controller)}
+                          {skill ? <>{skill} · </> : null}ID <span title={publicAgentId}>{shortAgentId(publicAgentId)}</span> · controller {shortenAddress(a.controller)}
                         </div>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
@@ -519,16 +527,16 @@ export default function Dashboard() {
                         <span className="tag-pill">{a.jobs.length} {a.jobs.length === 1 ? 'job' : 'jobs'}</span>
                         <button
                           type="button"
-                          onClick={() => copyToClipboard(a.agentId)}
+                          onClick={() => copyToClipboard(publicAgentId)}
                           className="btn-bordered px-2.5 py-1.5 text-[9px]"
-                          title={`Copy full ID: ${a.agentId}`}
+                          title={`Copy agent ID: ${publicAgentId}`}
                         >
                           Copy ID
                         </button>
                         <Link href={`/jobs?agent=${encodeURIComponent(a.agentId)}`} className="btn-primary px-2.5 py-1.5 text-[9px]">
                           Use
                         </Link>
-                        <Link href={`/agent/${a.agentId}`} className="font-mono text-[9px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
+                        <Link href={`/agent/${encodeURIComponent(a.agentId)}`} className="font-mono text-[9px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
                           Details →
                         </Link>
                       </div>
@@ -613,9 +621,9 @@ export default function Dashboard() {
               <div>
                 <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.5)]">CONTRACTS · ARC TESTNET</div>
                 <div className="mt-2 space-y-1.5 font-mono text-[10px] text-[rgba(234,228,216,0.85)]">
-                  <ContractRow label="ERC-8004 IdentityRegistry" addr="0x8004A81842B275BbC0462441026d4af50fC83008" />
-                  <ContractRow label="ERC-8183 AgenticCommerce" addr="0x0747EEfA70d8bAb5364d7baD8D00603CC3dDD9b6" />
-                  <ContractRow label="USDC" addr="0x360852E7f8E3E9C3B78F941937120c884E3d8720" />
+                  <ContractRow label="ERC-8004 IdentityRegistry" addr={CONTRACTS.ERC8004_IDENTITY_REGISTRY} />
+                  <ContractRow label="ERC-8183 AgenticCommerce" addr={CONTRACTS.ERC8183_AGENTIC_COMMERCE} />
+                  <ContractRow label="USDC" addr={CONTRACTS.USDC} />
                 </div>
               </div>
             </div>
