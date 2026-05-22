@@ -28,6 +28,7 @@ export type BudgetSetEvent = {
 export type JobFundedEvent = {
   eventName: "JobFunded";
   jobId: bigint;
+  amount?: bigint;
 };
 
 export type JobSubmittedEvent = {
