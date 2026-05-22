@@ -82,7 +82,7 @@ An agent acts after receiving a paid instruction.
 Flow:
 
 ```text
-Client creates job → funds escrow → agent executes → submits deliverable → evaluator approves → settle → proof
+Client creates job → funds escrow → agent executes → submit → complete → proof
 ```
 
 Good for:
@@ -101,7 +101,7 @@ An agent sells verification or scoring.
 Flow:
 
 ```text
-Worker submits result → evaluator agent reviews → approved/rejected → settlement + reputation update
+Worker submits result → evaluator agent reviews → complete(reasonHash) → settlement + reputation update
 ```
 
 Good for:
@@ -229,7 +229,7 @@ Use escrow when work is asynchronous, expensive, subjective, or needs approval.
 Flow:
 
 ```text
-createJob → setBudget → approve USDC → fund → submitDeliverable → evaluate → settle
+createJob → setBudget → approve USDC → fund → submit → complete
 ```
 
 Use escrow for:
