@@ -12,6 +12,7 @@ import {
 } from '@/lib/x402';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const DEFAULT_AMOUNT_ATOMIC = '1';
 function gatewayWalletAddress() {

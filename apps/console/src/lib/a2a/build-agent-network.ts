@@ -53,7 +53,7 @@ export function buildAgentNetwork({
         ...receipts.map((p) => ({
           id: `proof-${p.tokenId}`,
           ts: new Date(Number(p.mintedAt || '0') * 1000).toISOString(),
-          agent: 'agent',
+          agent: meta?.name || `Agent ${regId.slice(0, 8)}`,
           type: 'payment' as const,
           label: `Receipt #${p.tokenId} minted for job #${p.jobId}`,
           detail: `${Number(p.amountPaid || '0') / 1e6} USDC paid`,
@@ -61,7 +61,7 @@ export function buildAgentNetwork({
         ...jobs.map((job) => ({
           id: `job-${job.id}`,
           ts: new Date(Number(job.createdAt || '0') * 1000).toISOString(),
-          agent: 'agent',
+          agent: meta?.name || `Agent ${regId.slice(0, 8)}`,
           type: 'decision' as const,
           label: `Job #${job.id} ${job.status === 3 ? 'completed' : 'created'}`,
           detail: `${Number(job.fundedAmount || job.budget || '0') / 1e6} USDC budget`,

@@ -189,7 +189,7 @@ createServer((req, res) => {
 
     writeJson(res, {
       agent,
-      jobs: readJobs().filter((job) => job.worker === agent.controller || job.client === agent.controller),
+      jobs: readJobs().filter((job) => job.provider === agent.controller || job.client === agent.controller),
       proofs: readProofs().filter((proof) => proof.agentId === id),
     });
     return;

@@ -420,25 +420,30 @@ function buildStoredAgentProjectionDebug() {
 }
 
 export function readJobs() {
-  return db.prepare(`SELECT * FROM jobs ORDER BY CAST(id AS INTEGER) DESC`).all().map((row) => ({
-    id: row.id as string,
-    agentId: row.agent_id as string,
-    client: row.client as string,
-    worker: row.worker as string,
-    provider: row.worker as string,
-    evaluator: row.evaluator as string,
-    budget: row.budget as string,
-    fundedAmount: row.funded_amount as string,
-    createdAt: row.created_at as string,
-    jobSpecHash: row.job_spec_hash as string,
-    metadataURI: row.job_spec_hash as string,
-    deliverableURI: row.deliverable_uri as string,
-    submissionURI: row.deliverable_uri as string,
-    proofMetadataURI: row.proof_metadata_uri as string,
-    completionURI: row.proof_metadata_uri as string,
-    approved: Boolean(row.approved),
-    status: Number(row.status),
-  }));
+  return db.prepare(`SELECT * FROM jobs ORDER BY CAST(id AS INTEGER) DESC`).all().map((row) => {
+    const status = Number(row.status);
+    return {
+      id: row.id as string,
+      client: row.client as string,
+      provider: row.worker as string,
+      evaluator: row.evaluator as string,
+      description: row.job_spec_hash as string,
+      budget: row.budget as string,
+      fundedAmount: row.funded_amount as string,
+      deliverable: row.deliverable_uri as string,
+      completionReason: row.proof_metadata_uri as string,
+      status,
+      statusLabel: ["Open", "Funded", "Submitted", "Completed", "Rejected", "Expired"][status] ?? String(status),
+      createdAt: row.created_at as string,
+      legacyAliases: {
+        worker: row.worker as string,
+        jobSpecHash: row.job_spec_hash as string,
+        deliverableURI: row.deliverable_uri as string,
+        proofMetadataURI: row.proof_metadata_uri as string,
+        approved: Boolean(row.approved),
+      },
+    };
+  });
 }
 
 export function readJobById(jobId: string) {
