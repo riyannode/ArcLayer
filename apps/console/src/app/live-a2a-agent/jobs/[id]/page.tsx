@@ -4,7 +4,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, use, useEffect, useMemo, useState } from 'react';
 import { ActiveDecisionDetail, buildPredictionMarketDecisionNodes, PredictionMarketDecisionBoard, type BridgeSession, type DecisionNode } from '@/components/agent-bridge';
-import { BtcCandlestickPanel, PolymarketBtc15mPanel, PolymarketOrderbookPanel } from '@/components/market/PolymarketPanels';
+import { PolymarketBtc15mPanel, PolymarketOrderbookPanel, PolymarketStyleBtcChart } from '@/components/market/PolymarketPanels';
+import { useCryptoUpDownLive } from '@/hooks/useCryptoUpDownLive';
 
 type A2AJob = { id: string; title?: string; description?: string; category?: string; roleId?: string; budget?: string; status?: string; requester?: string; agentId?: string; claimedBy?: string; createdAt?: string; updatedAt?: string };
 type LatestResponse = { ok: boolean; session: BridgeSession | null; error?: string; message?: string };
@@ -21,6 +22,8 @@ function LiveA2AJobDetailContent({ params }: PageProps) {
   const [session, setSession] = useState<BridgeSession | null>(null);
   const [selected, setSelected] = useState<DecisionNode | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const isPrediction = job?.category === 'prediction-market-bots' || routeCategory === 'prediction-market-bots';
+  const { data: marketSnapshot, loading: marketLoading, error: marketError } = useCryptoUpDownLive('BTC', isPrediction);
 
   useEffect(() => {
     let alive = true;
@@ -42,7 +45,6 @@ function LiveA2AJobDetailContent({ params }: PageProps) {
 
   const defaultNode = useMemo(() => buildPredictionMarketDecisionNodes(session)[2] ?? null, [session]);
   const activeNode = selected ?? defaultNode;
-  const isPrediction = job?.category === 'prediction-market-bots' || routeCategory === 'prediction-market-bots';
 
   return (
     <main className="min-h-screen bg-[#050505] px-4 py-10 text-[#EAE4D8] sm:px-6 lg:px-8">
@@ -56,7 +58,7 @@ function LiveA2AJobDetailContent({ params }: PageProps) {
         </header>
         {error ? <div className="rounded-sm border border-red-400/25 bg-red-950/20 p-3 text-sm text-red-200">{error}</div> : null}
         {job ? <section className="grid gap-2 rounded-sm border border-white/10 bg-white/[0.03] p-4 text-xs text-[#EAE4D8]/60 sm:grid-cols-2 lg:grid-cols-4"><Row label="category" value={job.category || 'generic'} /><Row label="role" value={job.roleId || 'any'} /><Row label="budget" value={job.budget || '0.00'} /><Row label="status" value={job.status} /><Row label="requester" value={short(job.requester)} /><Row label="assigned agent" value={short(job.agentId || job.claimedBy)} /><Row label="created" value={job.createdAt ? new Date(job.createdAt).toLocaleString() : undefined} /><Row label="updated" value={job.updatedAt ? new Date(job.updatedAt).toLocaleString() : undefined} /></section> : null}
-        {isPrediction ? <><section className="grid gap-3 lg:grid-cols-3"><PolymarketBtc15mPanel /><PolymarketOrderbookPanel /><BtcCandlestickPanel /></section><PredictionMarketDecisionBoard session={session} onSelectNode={setSelected} /><ActiveDecisionDetail node={activeNode} /></> : <section className="rounded-sm border border-white/10 bg-black/25 p-4"><div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Job Workspace</div><p className="mt-2 text-sm text-[#EAE4D8]/65">Clean external-agent job view. Matching agents and latest bridge state appear when tagged by runtime.</p><div className="mt-4 grid gap-2 text-xs text-[#EAE4D8]/55 sm:grid-cols-3"><div>events: <span className="font-mono text-[#C5A67C]">{session?.events.filter((event) => event.job_id === id).length ?? 0}</span></div><div>receipts: <span className="font-mono text-[#C5A67C]">{session?.receipts.length ?? 0}</span></div><div>session: <span className="font-mono text-[#C5A67C]">{short(session?.sessionId)}</span></div></div></section>}
+        {isPrediction ? <><section className="grid gap-3 lg:grid-cols-2"><PolymarketBtc15mPanel snapshot={marketSnapshot} loading={marketLoading} error={marketError} /><PolymarketOrderbookPanel snapshot={marketSnapshot} loading={marketLoading} /></section><PolymarketStyleBtcChart snapshot={marketSnapshot} loading={marketLoading} error={marketError} /><PredictionMarketDecisionBoard session={session} onSelectNode={setSelected} /><ActiveDecisionDetail node={activeNode} /></> : <section className="rounded-sm border border-white/10 bg-black/25 p-4"><div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Job Workspace</div><p className="mt-2 text-sm text-[#EAE4D8]/65">Clean external-agent job view. Matching agents and latest bridge state appear when tagged by runtime.</p><div className="mt-4 grid gap-2 text-xs text-[#EAE4D8]/55 sm:grid-cols-3"><div>events: <span className="font-mono text-[#C5A67C]">{session?.events.filter((event) => event.job_id === id).length ?? 0}</span></div><div>receipts: <span className="font-mono text-[#C5A67C]">{session?.receipts.length ?? 0}</span></div><div>session: <span className="font-mono text-[#C5A67C]">{short(session?.sessionId)}</span></div></div></section>}
       </div>
     </main>
   );
