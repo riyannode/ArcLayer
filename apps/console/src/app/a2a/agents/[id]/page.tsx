@@ -12,7 +12,7 @@ import type {
   RegisteredAgent,
 } from '@/types/agent-network';
 import { buildAgentNetwork } from '@/lib/a2a/build-agent-network';
-import { fetchIndexerJson } from '@/lib/indexer';
+import { fetchIndexerJson, indexerUrl } from '@/lib/indexer';
 import type { AgentDetail, IndexedJob, IndexedProof } from '@/lib/indexer';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest';
 import { AvatarUploader } from '@/components/agent/AvatarUploader';
@@ -118,9 +118,9 @@ export default function AgentProfilePage() {
 
       // Fetch network data to build agent list (same as /a2a page)
       const [ovRes, ocRes, fdRes, regRes] = await Promise.all([
-        fetch('/api/indexer/overview'),
+        fetch(indexerUrl('/overview')),
         fetch(`/api/a2a/status?t=${cacheBust}`, { cache: 'no-store' }),
-        fetch('/api/indexer/autonomous-feed?limit=50'),
+        fetch(indexerUrl('/autonomous-feed?limit=50')),
         fetch(`/api/a2a/agents?t=${cacheBust}`, { cache: 'no-store' }),
       ]);
 

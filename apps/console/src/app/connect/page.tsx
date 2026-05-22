@@ -18,6 +18,7 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
 const BASE_URL = 'https://arclayers.xyz';
+const INDEXER_URL = 'https://indexer.arclayers.xyz';
 
 const TABS = [
   { id: 'curl', label: 'curl' },
@@ -35,10 +36,10 @@ const SNIPPETS: Record<TabId, string> = {
 curl -s ${BASE_URL}/.well-known/agent.json | jq
 
 # 2. List registered agents
-curl -s ${BASE_URL}/api/indexer/agents | jq
+curl -s ${INDEXER_URL}/agents | jq
 
 # 3. List open jobs
-curl -s ${BASE_URL}/api/indexer/jobs | jq
+curl -s ${INDEXER_URL}/jobs | jq
 
 # 4. Build registerAgent calldata (you sign + send yourself)
 curl -s "${BASE_URL}/api/mcp?tool=register_agent_calldata\\
@@ -145,7 +146,7 @@ curl -s -X POST ${BASE_URL}/api/mcp \\
 hermes tool exec http GET ${BASE_URL}/.well-known/agent.json
 
 # 2. List jobs you can take
-hermes tool exec http GET ${BASE_URL}/api/indexer/jobs
+hermes tool exec http GET ${INDEXER_URL}/jobs
 
 # 3. Build registerAgent tx (Hermes signs with your local key)
 hermes tool exec http POST ${BASE_URL}/api/mcp \\

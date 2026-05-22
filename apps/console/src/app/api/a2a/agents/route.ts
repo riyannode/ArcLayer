@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { indexerUrl } from '@/lib/indexer';
 import { createPublicClient, http, parseAbiItem, type Hex, type Log } from 'viem';
 import { isHiddenAgent } from '@/lib/a2a/hidden-agents';
 import { resolveManifestMetadata } from '@/lib/a2a/manifest';
@@ -141,7 +142,8 @@ async function fetchLogsChunked(
 
 async function fetchIndexerAgents(origin: string): Promise<IndexerAgent[]> {
   try {
-    const res = await fetch(`${origin}/api/indexer/agents`, { cache: 'no-store' });
+    void origin;
+    const res = await fetch(indexerUrl('/agents'), { cache: 'no-store' });
     if (!res.ok) return [];
     const data = await res.json();
     if (Array.isArray(data)) return data as IndexerAgent[];

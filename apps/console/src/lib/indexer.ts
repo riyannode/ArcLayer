@@ -10,7 +10,12 @@
  * to recompute aggregates client-side.
  */
 
-export const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || '/api/indexer';
+export const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || 'https://indexer.arclayers.xyz';
+
+export function indexerUrl(path: string) {
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  return `${INDEXER_BASE_URL}${normalized}`;
+}
 
 export type IndexedJob = {
   id: string;
@@ -135,7 +140,7 @@ export type DataSource = 'indexer' | 'rpc';
 export type Sourced<T> = { data: T; source: DataSource };
 
 export async function fetchIndexerJson<T>(path: string) {
-  const response = await fetch(`${INDEXER_BASE_URL}${path}`);
+  const response = await fetch(indexerUrl(path));
   if (!response.ok) {
     throw new Error(response.status === 404 ? 'Resource not found.' : `Indexer returned HTTP ${response.status}.`);
   }
@@ -167,7 +172,7 @@ const INDEXER_HEALTH_PATH = '/health';
 /** Lightweight liveness check for the banner. Returns true if /health 200s. */
 export async function pingIndexer(timeoutMs = 4000): Promise<boolean> {
   try {
-    const res = await fetch(`${INDEXER_BASE_URL}${INDEXER_HEALTH_PATH}`, {
+    const res = await fetch(indexerUrl(INDEXER_HEALTH_PATH), {
       cache: 'no-store',
       signal: AbortSignal.timeout(timeoutMs),
     });
