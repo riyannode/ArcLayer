@@ -168,8 +168,8 @@ export default function StatusPage() {
           <Card title="Latest Session">
             <div className="mb-2 flex justify-end"><StatusPill state={sessionOnline ? 'Online' : session ? 'Stale' : 'Unavailable'} /></div>
             <Row label="sessionId" value={shortHash(session?.sessionId)} tone="strong" />
-            <Row label="events count" value={session?.events.length ?? 0} />
-            <Row label="receipts count" value={session?.receipts.length ?? 0} />
+            <Row label="events count" value={session?.totals?.events ?? session?.events.length ?? 0} />
+            <Row label="receipts count" value={session?.totals?.receipts ?? session?.receipts.length ?? 0} />
             <Row label="last updated" value={formatAge(latestAt)} />
           </Card>
 

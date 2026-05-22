@@ -57,6 +57,11 @@ export type BridgeSession = {
   roles: Record<string, BridgeEventRow | null>;
   events: BridgeEventRow[];
   receipts: BridgeReceiptRow[];
+  totals: {
+    events: number;
+    receipts: number;
+    roles: number;
+  };
 };
 export type BridgeReceiptType = 'x402_arc_native' | 'x402_circle_gateway' | 'dry_run';
 
@@ -184,16 +189,45 @@ export async function listBridgeReceipts(sessionId: string) {
   return data ?? [];
 }
 
+async function countBridgeEvents(sessionId: string) {
+  const { count, error } = await getSupabaseAdmin()
+    .from('agent_bridge_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('session_id', sessionId);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+async function countBridgeReceipts(sessionId: string) {
+  const { count, error } = await getSupabaseAdmin()
+    .from('agent_bridge_receipts')
+    .select('id', { count: 'exact', head: true })
+    .eq('session_id', sessionId);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
+
+async function countBridgeRoles(sessionId: string) {
+  const events = await listBridgeEvents({ sessionId, limit: 200 });
+  return new Set(events.map((event) => event.role).filter(Boolean)).size;
+}
+
 export async function latestBridgeSession(): Promise<BridgeSession | null> {
   const events = await listBridgeEvents({ limit: 100 });
   const latestSessionId = events[0]?.session_id;
   if (!latestSessionId) return null;
 
-  const sessionEvents = (await listBridgeEvents({ sessionId: latestSessionId, limit: 100 })).reverse() as BridgeEventRow[];
-  const receipts = (await listBridgeReceipts(latestSessionId)) as BridgeReceiptRow[];
+  const [sessionEvents, receipts, totalEvents, totalReceipts, totalRoles] = await Promise.all([
+    listBridgeEvents({ sessionId: latestSessionId, limit: 100 }),
+    listBridgeReceipts(latestSessionId),
+    countBridgeEvents(latestSessionId),
+    countBridgeReceipts(latestSessionId),
+    countBridgeRoles(latestSessionId),
+  ]);
+  const orderedEvents = [...sessionEvents].reverse() as BridgeEventRow[];
   const roles: Record<string, BridgeEventRow | null> = {};
 
-  for (const event of sessionEvents) {
+  for (const event of orderedEvents) {
     if (!event.role) continue;
     roles[event.role] = event;
   }
@@ -201,7 +235,12 @@ export async function latestBridgeSession(): Promise<BridgeSession | null> {
   return {
     sessionId: latestSessionId,
     roles,
-    events: sessionEvents,
-    receipts,
+    events: orderedEvents,
+    receipts: receipts as BridgeReceiptRow[],
+    totals: {
+      events: totalEvents,
+      receipts: totalReceipts,
+      roles: totalRoles,
+    },
   };
 }
