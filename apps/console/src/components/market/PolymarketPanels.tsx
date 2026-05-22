@@ -29,13 +29,19 @@ function useJson<T>(endpoint: string) { const [data, setData] = useState<T | nul
 export function PolymarketBtc15mPanel() {
   const endpoint = '/api/data/polymarket/btc-15m';
   const data = useJson<MarketData>(endpoint);
+  const upPrice = typeof data?.upPrice === 'number' && Number.isFinite(data.upPrice) ? data.upPrice : null;
+  const downPrice = typeof data?.downPrice === 'number' && Number.isFinite(data.downPrice) ? data.downPrice : null;
+  const hasUpPrice = upPrice !== null;
+  const hasDownPrice = downPrice !== null;
+  const upWidth = upPrice !== null ? `${Math.max(0, Math.min(100, upPrice * 100))}%` : '0%';
   return <PanelShell title="Polymarket BTC 15m" endpoint={endpoint}>
-    <div className="font-mono text-xs text-zinc-400">{data?.marketSlug || 'btc-updown-15m-1779443100'}</div>
+    <div className="font-mono text-xs text-zinc-400">{data?.marketSlug || 'market unavailable'}</div>
     <div className="mt-3 rounded-lg border border-zinc-800 bg-[#0D0E10] p-3">
       <div className="flex h-9 overflow-hidden rounded-md border border-zinc-700">
-        <div className="flex items-center justify-center bg-emerald-500/25 text-xs font-semibold text-emerald-300" style={{ width: pct(data?.upPrice) === '—' ? '50%' : `${(data?.upPrice ?? 0.5) * 100}%` }}>UP {pct(data?.upPrice)}</div>
+        <div className="flex items-center justify-center bg-emerald-500/25 text-xs font-semibold text-emerald-300 transition-[width]" style={{ width: upWidth }}>UP {pct(data?.upPrice)}</div>
         <div className="flex-1 bg-red-500/20 text-right text-xs font-semibold text-red-300"><span className="pr-2 leading-9">DOWN {pct(data?.downPrice)}</span></div>
       </div>
+      {!hasUpPrice || !hasDownPrice ? <div className="mt-2 text-xs text-amber-300">Live probability unavailable</div> : null}
       <div className="mt-2 text-xs text-zinc-400">window: {time(data?.windowStart)} → {time(data?.windowEnd)}</div>
       <div className="mt-1 font-mono text-xs text-zinc-500">hash: {short(data?.payloadHash)}</div>
     </div>

@@ -34,6 +34,11 @@ export type BridgeSession = {
   roles: Record<string, BridgeEvent | null>;
   events: BridgeEvent[];
   receipts: BridgeReceipt[];
+  totals?: {
+    events: number;
+    receipts: number;
+    roles: number;
+  };
 };
 
 export const EXAMPLE_PM2_PIPELINE_ROLES = ['oracle', 'analyzer', 'momentum_resolver', 'scalping_resolver', 'evaluator', 'executor'] as const;
