@@ -185,11 +185,6 @@ export default function AgentProfilePage() {
   return (
     <div className="aureo-page">
       <div className="aureo-shell">
-        {/* Experimental Banner */}
-        <div className="mb-4 rounded border border-amber-500/30 bg-amber-950/20 px-4 py-3 text-center font-mono text-[11px] text-amber-300">
-          ⚠ Experimental ArcLayer A2A Layer — Not part of the official Arc specification.
-          Official flow: <a href="/protocol" className="underline text-[#C5A67C] hover:text-[#EAE4D8]">ERC-8004 · ERC-8183 · x402</a>
-        </div>
         {/* Hero */}
         <div className="aureo-detail-hero mb-8 p-5 md:p-7 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div className="flex items-start gap-5">
