@@ -37,6 +37,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS agents (
     agent_id TEXT PRIMARY KEY,
+    token_id TEXT NOT NULL DEFAULT '',
     controller TEXT NOT NULL,
     skill_hash TEXT NOT NULL,
     metadata_uri TEXT NOT NULL,
@@ -93,6 +94,7 @@ db.exec(`
 `);
 
 for (const statement of [
+  "ALTER TABLE agents ADD COLUMN token_id TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE agents ADD COLUMN source TEXT NOT NULL DEFAULT 'erc8004_identity_registry'",
   "ALTER TABLE agents ADD COLUMN chain_id TEXT NOT NULL DEFAULT '5042002'",
   "ALTER TABLE agents ADD COLUMN registry_address TEXT NOT NULL DEFAULT ''",
@@ -133,10 +135,11 @@ const upsertJob = db.prepare(`
 
 const upsertAgent = db.prepare(`
   INSERT INTO agents (
-    agent_id, controller, skill_hash, metadata_uri, registered_at, reputation_score, score, jobs_json, proof_token_ids_json,
+    agent_id, token_id, controller, skill_hash, metadata_uri, registered_at, reputation_score, score, jobs_json, proof_token_ids_json,
     source, chain_id, registry_address, contract_address, tx_hash, block_number, imported_at, updated_at
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(agent_id) DO UPDATE SET
+    token_id = excluded.token_id,
     controller = excluded.controller,
     skill_hash = excluded.skill_hash,
     metadata_uri = excluded.metadata_uri,
@@ -217,8 +220,10 @@ function normalizeAgentForLegacySchema(agent: ReturnType<typeof projectAgentsFro
     : "erc8004_identity_registry";
   const now = new Date().toISOString();
   const registryAddress = source === "imported_arclayer_registry" ? OLD_ARCLAYER_AGENT_REGISTRY_ADDRESS : ARC_ERC8004_ADDRESS;
+  const tokenId = String(agent.tokenId ?? agent.agentId);
   return {
-    agentId: agent.agentId,
+    agentId: `${source}:${tokenId}`,
+    tokenId,
     controller: agent.controller,
     skillHash: (agent as any).skillHash ?? "0x0000000000000000000000000000000000000000000000000000000000000000",
     metadataURI: agent.metadataURI,
@@ -309,6 +314,7 @@ export async function syncProjectionStore(
     for (const agent of agents) {
       upsertAgent.run(
         agent.agentId,
+        agent.tokenId,
         agent.controller,
         agent.skillHash,
         agent.metadataURI,
@@ -385,9 +391,9 @@ export function readAgents(source: "all" | "imported" | "erc8004" = "all") {
     : source === "erc8004"
       ? "WHERE source = 'erc8004_identity_registry'"
       : "";
-  return db.prepare(`SELECT * FROM agents ${where} ORDER BY CAST(agent_id AS INTEGER) DESC`).all().map((row) => ({
+  return db.prepare(`SELECT * FROM agents ${where} ORDER BY CAST(COALESCE(NULLIF(token_id, ''), agent_id) AS INTEGER) DESC`).all().map((row) => ({
     agentId: row.agent_id as string,
-    tokenId: row.agent_id as string,
+    tokenId: ((row.token_id as string | undefined) || row.agent_id) as string,
     controller: row.controller as string,
     skillHash: row.skill_hash as string,
     metadataURI: row.metadata_uri as string,
@@ -411,9 +417,9 @@ export function readAgents(source: "all" | "imported" | "erc8004" = "all") {
 }
 
 export function readAgentById(agentId: string) {
-  const row = db.prepare(`SELECT * FROM agents WHERE agent_id = ?`).get(agentId);
-  if (!row) return null;
-  return readAgents().find((agent) => agent.agentId === agentId) ?? null;
+  const exact = readAgents().find((agent) => agent.agentId === agentId);
+  if (exact) return exact;
+  return readAgents().find((agent) => agent.tokenId === agentId) ?? null;
 }
 
 export function readProofs() {
@@ -468,21 +474,22 @@ export function readOverview() {
     summary: {
       eventCount,
       jobs: jobs.length,
-      // Production AGENTS stat counts canonical ERC-8004 ArcLayer identities only.
-      // Imported old ArcLayer records remain visible in /agents but do not inflate the top stat.
-      agents: erc8004Agents,
+      agents: importedAgents + erc8004Agents,
+      meta: {
+        importedAgentCount: importedAgents,
+        erc8004AgentCount: erc8004Agents,
+      },
       agentBreakdown: {
-        imported: importedAgents,
-        importedVisible: importedAgents,
-        erc8004: erc8004Agents,
-        erc8004Counted: erc8004Agents,
-        totalVisible: agents.length,
-        total: erc8004Agents,
+        importedAgentCount: importedAgents,
+        erc8004AgentCount: erc8004Agents,
+        totalAgentCount: importedAgents + erc8004Agents,
       },
       jobBreakdown: {
         erc8183: jobs.length,
       },
       proofs: proofs.length,
+      budgetedUsdc: totalBudget.toString(),
+      fundedUsdc: totalFunded.toString(),
       totalBudget: totalBudget.toString(),
       totalFunded: totalFunded.toString(),
       settledJobs,
@@ -503,7 +510,7 @@ export function readCounts() {
     erc8004AgentCount,
     erc8183JobCount,
     visibleAgentCount: importedAgentCount + erc8004AgentCount,
-    totalAgentCount: erc8004AgentCount,
+    totalAgentCount: importedAgentCount + erc8004AgentCount,
   };
 }
 

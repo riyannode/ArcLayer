@@ -105,8 +105,11 @@ export function projectAgentsFromEvents(
   /** Pass indexed job wallets so agents connected to ArcLayer jobs are retained */
   arcJobWallets?: Set<string>,
 ) {
+  const sourceForEvent = (event: IndexedAgentEvent) =>
+    ((event as any).source as string | undefined) ?? "erc8004_identity_registry";
+
   const byId = events.reduce<Record<string, IndexedAgentEvent>>((acc, event) => {
-    acc[String(event.agentId)] = event;
+    acc[`${sourceForEvent(event)}:${String(event.agentId)}`] = event;
     return acc;
   }, {});
 
@@ -135,7 +138,7 @@ export function projectAgentsFromEvents(
       registeredAtBlock: String(event.blockNumber),
       transactionHash: event.transactionHash,
       skillHash: event.skillHash,
-      source: (event as any).source ?? "erc8004_identity_registry",
+      source: sourceForEvent(event),
       chainId: (event as any).chainId ?? 5042002,
       registryAddress: (event as any).registryAddress,
       contractAddress: (event as any).contractAddress,

@@ -76,6 +76,8 @@ export type IndexedAgent = {
   score: string;
   jobs: string[];
   proofTokenIds: string[];
+  tokenId?: string;
+  source?: 'imported_arclayer_registry' | 'erc8004_identity_registry' | string;
 };
 
 export type IndexedProof = {
@@ -94,10 +96,17 @@ export type DashboardOverview = {
     jobs: number;
     agents: number;
     proofs: number;
+    budgetedUsdc?: string;
+    fundedUsdc?: string;
     totalBudget: string;
     totalFunded: string;
     settledJobs: number;
     fundedJobs: number;
+    meta?: {
+      importedAgentCount?: number;
+      erc8004AgentCount?: number;
+    };
+    agentBreakdown?: Record<string, number>;
   };
   jobs: IndexedJob[];
   agents: IndexedAgent[];

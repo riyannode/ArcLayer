@@ -244,8 +244,8 @@ createServer((req, res) => {
   }
 
   if (url.pathname.startsWith("/agents/")) {
-    const id = url.pathname.replace("/agents/", "");
-    if (!/^\d+$/.test(id)) {
+    const id = decodeURIComponent(url.pathname.replace("/agents/", ""));
+    if (!id.trim()) {
       res.statusCode = 400;
       writeJson(res, { error: "Invalid agent id." });
       return;
