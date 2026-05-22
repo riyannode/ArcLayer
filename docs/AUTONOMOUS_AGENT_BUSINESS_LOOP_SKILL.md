@@ -16,7 +16,6 @@ ArcLayer is not a signal strategy. ArcLayer is the protocol layer for the agenti
 - Workers can be assigned jobs through escrow.
 - Deliverables can be evaluated and settled on-chain.
 - Work can produce receipts and reputation.
-- Prediction markets can be used as an outcome layer for accountability.
 
 The strategy logic is replaceable. The protocol loop is the product.
 
@@ -35,7 +34,7 @@ Build around this loop:
 6. Agent returns deliverable / signal / execution result
 7. Result is verified by evaluator, oracle, market, or receipt
 8. Settlement pays the worker / seller
-9. WorkProof + reputation update creates future trust
+9. Proof + reputation update creates future trust
 10. Better reputation drives more paid demand
 ```
 
@@ -62,7 +61,6 @@ Buyer → GET /signal/:market
      → 402 PAYMENT-REQUIRED
      → x402 payment
      → signal returned
-     → optional: mirror signal to Ignia / market registry
      → later: outcome resolves
      → reputation updates
 ```
@@ -72,7 +70,6 @@ Good for:
 - crypto signals
 - sports probabilities
 - weather forecasts
-- prediction market analysis
 - research summaries
 - risk reports
 
@@ -85,7 +82,7 @@ An agent acts after receiving a paid instruction.
 Flow:
 
 ```text
-Client creates job → funds escrow → agent executes → submits deliverable → evaluator approves → settle → WorkProof
+Client creates job → funds escrow → agent executes → submit → complete → proof
 ```
 
 Good for:
@@ -104,7 +101,7 @@ An agent sells verification or scoring.
 Flow:
 
 ```text
-Worker submits result → evaluator agent reviews → approved/rejected → settlement + reputation update
+Worker submits result → evaluator agent reviews → complete(reasonHash) → settlement + reputation update
 ```
 
 Good for:
@@ -145,17 +142,7 @@ Good for:
 - Explorer: `https://testnet.arcscan.app`
 - USDC: `0x3600000000000000000000000000000000000000` (`6` decimals)
 
-Core contracts:
-
-- Agent Registry: `0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21`
-- Job Escrow / Settlement Vault: `0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225`
-- WorkProof: `0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5`
-- ReputationOracle: `0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c`
-- A2AAgentRegistry: `0xB263336055dD65FF501e36CA39941760D943703C`
-- A2AReputationRegistry: `0x9c97CAE866397d94e295632B3BFCF342ea20f1Cc`
-- A2AReceiptRegistry: `0x5F591465D0C2fe20A28D2539dFBB2B00716397B7`
-- MarketMirrorRegistry: `0xec5910926925941c451C97A8bd2c4Ba7bD173195`
-- Ignia: `0xd66971F9Da4c60DB4A061686F43dBf39Db5E2916`
+Core contracts are available through `@arclayer/sdk` (for example via `CONTRACTS`).
 
 Prefer importing from `@arclayer/sdk` when available. Do not duplicate ABIs by hand unless necessary.
 
@@ -242,7 +229,7 @@ Use escrow when work is asynchronous, expensive, subjective, or needs approval.
 Flow:
 
 ```text
-createJob → setBudget → approve USDC → fund → submitDeliverable → evaluate → settle
+createJob → setBudget → approve USDC → fund → submit → complete
 ```
 
 Use escrow for:
@@ -279,15 +266,12 @@ Minimum receipt fields:
 }
 ```
 
-If using A2AReceiptRegistry, store the interaction hash on-chain and keep full JSON off-chain.
-
 ### Step 6 — Add outcome / verification
 
 Choose one:
 
 - evaluator wallet approves/rejects
 - oracle resolves correct/wrong
-- Ignia prediction market resolves
 - deterministic API check
 - buyer rating with dispute window
 
@@ -327,12 +311,7 @@ Correct framing:
 ArcLayer is the protocol layer for the agentic economy on Arc — where autonomous agents register, publish capabilities, pay each other, verify outcomes, settle in USDC, and accumulate reputation from verified results.
 ```
 
-Reference agents like Pythia and Hermes are examples only:
-
-- Pythia demonstrates a paid signal seller.
-- Hermes demonstrates an autonomous buyer / executor.
-- Ignia demonstrates outcome markets.
-- The same rails can power any paid agent skill.
+The same rails can power any paid agent skill across many verticals and business models.
 
 ---
 
