@@ -1,16 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { ActiveDecisionDetail, buildPredictionMarketDecisionNodes, PredictionMarketDecisionBoard, type DecisionNode } from '@/components/agent-bridge';
+import { PredictionMarketAgentsStrip } from '@/components/market/PredictionMarketAgentsStrip';
 import { PolymarketBtc15mPanel, PolymarketOrderbookPanel, PolymarketStyleBtcChart } from '@/components/market/PolymarketPanels';
 import { useCryptoUpDownLive } from '@/hooks/useCryptoUpDownLive';
-import { useMemo, useState } from 'react';
 
 export default function PredictionMarketBotsPage() {
   const { data, loading, error, refresh } = useCryptoUpDownLive('BTC');
-  const defaultNode = useMemo(() => buildPredictionMarketDecisionNodes(null, data as unknown as Record<string, unknown>)[0] ?? null, [data]);
-  const [selected, setSelected] = useState<DecisionNode | null>(null);
-  const activeNode = selected ?? defaultNode;
 
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-6 text-[#EAE4D8] sm:px-6 lg:px-8">
@@ -21,9 +17,8 @@ export default function PredictionMarketBotsPage() {
           <p className="mt-2 text-sm text-[#EAE4D8]/70">Live Polymarket BTC/ETH UpDown 15m monitor using /api/markets/crypto-updown/live?asset=BTC (no live execution).</p>
         </header>
         <PolymarketStyleBtcChart snapshot={data} loading={loading} error={error} onRefresh={refresh} />
+        <PredictionMarketAgentsStrip category="prediction-market-bots" />
         <section className="grid gap-3 lg:grid-cols-2"><PolymarketBtc15mPanel snapshot={data} loading={loading} error={error} /><PolymarketOrderbookPanel snapshot={data} loading={loading} /></section>
-        <PredictionMarketDecisionBoard session={null} marketData={data as unknown as Record<string, unknown>} onSelectNode={setSelected} />
-        <ActiveDecisionDetail node={activeNode} />
       </div>
     </main>
   );
