@@ -1,82 +1,46 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useCryptoUpDownLive } from '@/hooks/useCryptoUpDownLive';
 
-type MarketData = { ok?: boolean; marketSlug?: string; upPrice?: number; downPrice?: number; windowStart?: number; windowEnd?: number; payloadHash?: string; error?: string };
-type OrderbookData = { ok?: boolean; up?: { mid?: number | null; bids?: unknown[]; asks?: unknown[] }; down?: { mid?: number | null; bids?: unknown[]; asks?: unknown[] }; payloadHash?: string; error?: string };
-type CandlePoint = { p?: number; price?: number; close?: number; t?: number; timestamp?: number };
-type CandlesData = { ok?: boolean; points?: CandlePoint[]; history?: CandlePoint[]; candles?: CandlePoint[]; payloadHash?: string; error?: string };
+function num(value?: number | null, digits = 2, prefix = '') { return typeof value === 'number' && Number.isFinite(value) ? `${prefix}${value.toFixed(digits)}` : '—'; }
+function pct(value?: number | null) { return typeof value === 'number' && Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '—'; }
+function t(sec?: number) { return sec ? new Date(sec * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'; }
 
-function short(value?: string | null) { if (!value) return '—'; return value.length > 18 ? `${value.slice(0, 10)}…${value.slice(-6)}` : value; }
-function pct(value?: number | null) { if (typeof value !== 'number' || !Number.isFinite(value)) return '—'; return `${(value * 100).toFixed(1)}%`; }
-function time(value?: number) { if (!value) return '—'; return new Date(value * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
-
-function PanelShell({ title, endpoint, children }: { title: string; endpoint: string; children: React.ReactNode }) {
-  return <section className="rounded-xl border border-zinc-800 bg-[#111214] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-    <div className="mb-3 flex items-center justify-between">
-      <div>
-        <div className="text-[13px] font-semibold text-zinc-100">{title}</div>
-        <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-500">API</div>
-      </div>
-      <a href={endpoint} target="_blank" rel="noreferrer" className="rounded-md border border-zinc-700 px-2 py-1 font-mono text-[10px] text-zinc-300">Open</a>
-    </div>
-    {children}
-  </section>;
-}
-
-function useJson<T>(endpoint: string) { const [data, setData] = useState<T | null>(null); useEffect(() => { let alive = true; async function load() { const res = await fetch(endpoint, { cache: 'no-store' }); const json = await res.json().catch(() => ({})); if (alive) setData(json as T); } load(); const id = setInterval(load, 15000); return () => { alive = false; clearInterval(id); }; }, [endpoint]); return data; }
+function PanelShell({ title, children }: { title: string; children: React.ReactNode }) { return <section className="rounded-xl border border-zinc-800 bg-[#111214] p-4"><div className="mb-3 text-[13px] font-semibold text-zinc-100">{title}</div>{children}</section>; }
 
 export function PolymarketBtc15mPanel() {
-  const endpoint = '/api/data/polymarket/btc-15m';
-  const data = useJson<MarketData>(endpoint);
-  const upPrice = typeof data?.upPrice === 'number' && Number.isFinite(data.upPrice) ? data.upPrice : null;
-  const downPrice = typeof data?.downPrice === 'number' && Number.isFinite(data.downPrice) ? data.downPrice : null;
-  const hasUpPrice = upPrice !== null;
-  const hasDownPrice = downPrice !== null;
-  const upWidth = upPrice !== null ? `${Math.max(0, Math.min(100, upPrice * 100))}%` : '0%';
-  return <PanelShell title="Polymarket BTC 15m" endpoint={endpoint}>
+  const { data } = useCryptoUpDownLive('BTC');
+  return <PanelShell title="Polymarket BTC 15m">
     <div className="font-mono text-xs text-zinc-400">{data?.marketSlug || 'market unavailable'}</div>
-    <div className="mt-3 rounded-lg border border-zinc-800 bg-[#0D0E10] p-3">
-      <div className="flex h-9 overflow-hidden rounded-md border border-zinc-700">
-        <div className="flex items-center justify-center bg-emerald-500/25 text-xs font-semibold text-emerald-300 transition-[width]" style={{ width: upWidth }}>UP {pct(data?.upPrice)}</div>
-        <div className="flex-1 bg-red-500/20 text-right text-xs font-semibold text-red-300"><span className="pr-2 leading-9">DOWN {pct(data?.downPrice)}</span></div>
-      </div>
-      {!hasUpPrice || !hasDownPrice ? <div className="mt-2 text-xs text-amber-300">Live probability unavailable</div> : null}
-      <div className="mt-2 text-xs text-zinc-400">window: {time(data?.windowStart)} → {time(data?.windowEnd)}</div>
-      <div className="mt-1 font-mono text-xs text-zinc-500">hash: {short(data?.payloadHash)}</div>
+    <div className="mt-2 text-xs text-zinc-500">{data?.question || '—'}</div>
+    <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+      <div className="rounded border border-zinc-700 p-2 text-emerald-300">UP {pct(data?.outcomes.up.probability)}</div>
+      <div className="rounded border border-zinc-700 p-2 text-red-300">DOWN {pct(data?.outcomes.down.probability)}</div>
     </div>
+    <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-300"><div>Live {num(data?.livePrice, 2, '$')}</div><div>Target {num(data?.targetPrice, 2, '$')}</div><div>Distance {num(data?.distanceFromTarget, 2, '$')}</div><div>Direction {data?.directionNow || '—'}</div></div>
+    <div className="mt-2 text-xs text-zinc-500">window: {t(data?.windowStart)} → {t(data?.windowEnd)}</div>
   </PanelShell>;
 }
 
 export function PolymarketOrderbookPanel() {
-  const endpoint = '/api/data/polymarket/btc-15m/orderbook';
-  const data = useJson<OrderbookData>(endpoint);
-  const rows = (['up', 'down'] as const).map((side) => ({ side, mid: pct(data?.[side]?.mid), bids: data?.[side]?.bids?.length ?? 0, asks: data?.[side]?.asks?.length ?? 0 }));
-  return <PanelShell title="Orderbook" endpoint={endpoint}>
-    <div className="space-y-2">
-      {rows.map((r) => <div key={r.side} className="rounded-lg border border-zinc-800 bg-[#0D0E10] p-3">
-        <div className="mb-1 font-mono text-[11px] uppercase text-zinc-300">{r.side}</div>
-        <div className="grid grid-cols-3 text-xs text-zinc-400"><span>mid <b className="text-zinc-100">{r.mid}</b></span><span>bids <b className="text-emerald-300">{r.bids}</b></span><span>asks <b className="text-red-300">{r.asks}</b></span></div>
-      </div>)}
-      <div className="font-mono text-xs text-zinc-500">hash: {short(data?.payloadHash)}</div>
-    </div>
+  const { data } = useCryptoUpDownLive('BTC');
+  return <PanelShell title="UP / DOWN CLOB Orderbook">
+    {(['up', 'down'] as const).map((side) => { const b = data?.orderbook[side]; return <div key={side} className="mb-2 rounded border border-zinc-800 p-2 text-xs"><div className="mb-1 font-mono uppercase text-zinc-300">{side}</div><div className="grid grid-cols-2 gap-1 text-zinc-400"><div>Best bid <span className="text-emerald-300">{pct(b?.bestBid)}</span></div><div>Best ask <span className="text-red-300">{pct(b?.bestAsk)}</span></div><div>Spread {pct(b?.spread)}</div><div>Depth {num((b?.bidDepth || 0) + (b?.askDepth || 0), 2)}</div></div></div>; })}
   </PanelShell>;
 }
 
 export function BtcCandlestickPanel() {
-  const endpoint = '/api/data/polymarket/btc-15m/candles';
-  const data = useJson<CandlesData>(endpoint);
-  const points = useMemo(() => (data?.candles || data?.points || data?.history || []).slice(-24), [data]);
-  return <PanelShell title="BTC Candlestick" endpoint={endpoint}>
-    <div className="rounded-lg border border-zinc-800 bg-[#0D0E10] p-3">
-      <div className="flex h-28 items-end gap-1">
-        {points.length === 0 ? <div className="self-center text-xs text-zinc-500">No candle points yet</div> : points.map((point, idx) => {
-          const price = Number(point.close ?? point.p ?? point.price ?? 0);
-          const height = Math.max(8, Math.min(100, price * 100));
-          return <div key={`${point.t || point.timestamp || idx}`} className="w-2 rounded-sm bg-cyan-300/80" style={{ height }} />;
-        })}
-      </div>
-      <div className="mt-2 font-mono text-xs text-zinc-500">points {points.length} · hash {short(data?.payloadHash)}</div>
+  const { data } = useCryptoUpDownLive('BTC');
+  const candles = useMemo(() => (data?.candles1m || []).slice(-40), [data]);
+  const min = Math.min(...candles.map((c) => c.low), data?.targetPrice ?? Number.POSITIVE_INFINITY);
+  const max = Math.max(...candles.map((c) => c.high), data?.targetPrice ?? Number.NEGATIVE_INFINITY);
+  const range = Math.max(1, max - min);
+  const y = (price: number) => `${((price - min) / range) * 100}%`;
+  return <PanelShell title="BTC 1m Candlestick">
+    <div className="relative h-44 rounded border border-zinc-800 bg-[#0D0E10] p-2">
+      {typeof data?.targetPrice === 'number' ? <div className="absolute left-0 right-0 border-t border-amber-300/60" style={{ bottom: y(data.targetPrice) }} /> : null}
+      <div className="flex h-full items-end gap-1">{candles.map((c) => <div key={c.timestamp} className={`relative w-2 ${c.close >= c.open ? 'text-emerald-300' : 'text-red-300'}`}><div className="absolute left-1/2 w-px -translate-x-1/2 bg-current" style={{ bottom: y(c.low), height: `calc(${y(c.high)} - ${y(c.low)})` }} /><div className="absolute w-full bg-current" style={{ bottom: y(Math.min(c.open, c.close)), height: `calc(${y(Math.max(c.open, c.close))} - ${y(Math.min(c.open, c.close))} + 2px)` }} /></div>)}</div>
     </div>
   </PanelShell>;
 }
