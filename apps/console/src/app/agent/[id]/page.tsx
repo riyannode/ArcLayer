@@ -8,7 +8,7 @@ import { decodeEventLog, getAddress, type Hex } from 'viem';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { useRail, railQueryParams } from '@/components/rail/RailProvider';
-import { CONTRACTS, JOB_ESCROW_ABI, buildApproveUsdcConfig, buildCreateJobConfig, buildFundJobConfig, buildSetBudgetConfig } from '@arclayer/sdk';
+import { CONTRACTS, ERC8183_AGENTIC_COMMERCE_ABI, buildApproveUsdcConfig, buildCreateJobConfig, buildFundJobConfig, buildSetBudgetConfig } from '@arclayer/sdk';
 import { formatUSDC, shortenAddress } from '@/lib/contracts';
 import { parseUSDC } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
@@ -32,6 +32,7 @@ type IndexedJob = {
   agentId: string;
   client: string;
   worker: string;
+  provider: string;
   evaluator: string;
   budget: string;
   fundedAmount: string;
@@ -71,8 +72,8 @@ type AgentDetail = {
   proofs: IndexedProof[];
 };
 
-const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Completed'] as const;
-const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'success' };
+const JOB_STATUS = ['Open', 'Funded', 'Submitted', 'Completed', 'Rejected', 'Expired'] as const;
+const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'success', 4: 'error', 5: 'pending' };
 
 function parseAgentId(value: string | undefined) {
   return value && /^\d+$/.test(value) ? value : null;
@@ -207,9 +208,9 @@ export default function AgentProfilePage() {
       // Pick native USDC requirement (skip Gateway-batched if rail===native).
       const req = accepts.find((a) => !a.extra?.name || a.extra?.name === 'USDC') || accepts[0];
 
-      // ─── Step 2: Optional JobEscrow funding (on-chain provenance) ──────
+      // ─── Step 2: Optional ERC-8183 AgenticCommerce funding (on-chain provenance) ──────
       // Funds the job for indexer/protocol audit trail. Independent of x402
-      // payment — x402 verifies the resource access, JobEscrow records the
+      // payment — x402 verifies the resource access, ERC-8183 AgenticCommerce records the
       // job for proof-of-work tracking.
       const amount = parseUSDC(runBudget);
       // ERC-8183 official: there is no `jobCounter` view. Derive jobId from
@@ -226,9 +227,9 @@ export default function AgentProfilePage() {
       // Parse JobCreated event to get the actual on-chain jobId.
       let visibleJobId = BigInt(0);
       for (const log of createReceipt.logs) {
-        if (log.address.toLowerCase() !== CONTRACTS.JOB_ESCROW.toLowerCase()) continue;
+        if (log.address.toLowerCase() !== CONTRACTS.ERC8183_AGENTIC_COMMERCE.toLowerCase()) continue;
         try {
-          const decoded = decodeEventLog({ abi: JOB_ESCROW_ABI, data: log.data, topics: log.topics });
+          const decoded = decodeEventLog({ abi: ERC8183_AGENTIC_COMMERCE_ABI, data: log.data, topics: log.topics });
           if (decoded.eventName === 'JobCreated' && decoded.args && 'jobId' in decoded.args) {
             visibleJobId = decoded.args.jobId as bigint;
             break;
@@ -330,7 +331,7 @@ export default function AgentProfilePage() {
       });
       const payload = await paid.json();
       if (!paid.ok) throw new Error(payload.message || payload.error || `Paid run failed with HTTP ${paid.status}.`);
-      setRunState(`Job #${visibleJobId.toString()} settled. JobEscrow tx: ${fundHash.slice(0, 10)}... | Run: ${payload.run?.status ?? 'submitted'}.`);
+      setRunState(`Job #${visibleJobId.toString()} settled. AgenticCommerce tx: ${fundHash.slice(0, 10)}... | Run: ${payload.run?.status ?? 'submitted'}.`);
     } catch (e) {
       setRunState(e instanceof Error ? e.message : 'Paid run failed.');
     } finally {
@@ -461,7 +462,7 @@ export default function AgentProfilePage() {
                       <span className="font-mono text-[11px] text-[#C5A67C]">{formatUSDC(BigInt(job.budget))} USDC</span>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#a0a0a0]">
-                      <span>worker {shortenAddress(job.worker)}</span>
+                      <span>provider {shortenAddress(job.provider)}</span>
                       <span className={`chip-status ${JOB_TONE[job.status] ?? 'pending'}`}>{JOB_STATUS[job.status] || job.status}</span>
                     </div>
                   </Link>

@@ -15,7 +15,7 @@ import { config } from '@/lib/wagmi';
 import { fetchIndexerJson, INDEXER_BASE_URL, type JobDetail, waitForIndexer, loadJobDetail, type DataSource } from '@/lib/indexer';
 import { IndexerDegradedBanner } from '@/components/IndexerDegradedBanner';
 
-const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Completed'] as const;
+const JOB_STATUS = ['Open', 'Funded', 'Submitted', 'Completed', 'Rejected', 'Expired'] as const;
 
 function parseJobId(value: string | undefined) {
   return value && /^\d+$/.test(value) ? value : null;
@@ -103,18 +103,18 @@ export default function JobDetailPage() {
   // Role checks for UI gating
   const isEvaluator = !!(job && address && address.toLowerCase() === job.evaluator.toLowerCase());
   const isClient = !!(job && address && address.toLowerCase() === job.client.toLowerCase());
-  const isWorker = !!(job && address && address.toLowerCase() === job.worker.toLowerCase());
+  const isWorker = !!(job && address && address.toLowerCase() === job.provider.toLowerCase());
 
   // Auto-fetch deliverable JSON only when a real IPFS CID or HTTPS URL is submitted.
   useEffect(() => {
     let cancelled = false;
-    if (isPlaceholderURI(job?.deliverableURI)) {
+    if (isPlaceholderURI(job?.deliverable)) {
       setPreview(null);
       setPreviewError(null);
       setPreviewLoading(false);
       return;
     }
-    const url = ipfsToHttp(job?.deliverableURI);
+    const url = ipfsToHttp(job?.deliverable);
     if (!url) { setPreview(null); setPreviewError(null); return; }
     setPreviewLoading(true);
     setPreviewError(null);
@@ -129,7 +129,7 @@ export default function JobDetailPage() {
       })
       .finally(() => { if (!cancelled) setPreviewLoading(false); });
     return () => { cancelled = true; };
-  }, [job?.deliverableURI]);
+  }, [job?.deliverable]);
 
   async function handleSubmitDeliverable() {
     if (!jobId) return;
@@ -143,7 +143,7 @@ export default function JobDetailPage() {
       setTxState('Receipt confirmed. Waiting for indexer refresh…');
       const next = await waitForIndexer<JobDetail>(
         `/jobs/${jobId}`,
-        (p) => p.job.deliverableURI === deliverableURI || p.job.deliverable === deliverableURI
+        (p) => p.job.deliverable === deliverableURI || p.job.deliverable === deliverableURI
       );
       setPayload(next);
       setTxState('Deliverable submitted and indexed.');
@@ -161,7 +161,7 @@ export default function JobDetailPage() {
       setTxState('Receipt confirmed. Waiting for indexer refresh…');
       const next = await waitForIndexer<JobDetail>(
         `/jobs/${jobId}`,
-        (p) => p.job.status === 4
+        (p) => p.job.status === 3
       );
       setPayload(next);
       setTxState('Job completed and indexed.');
@@ -170,7 +170,7 @@ export default function JobDetailPage() {
   }
 
   const statusChipClass = job
-    ? job.status === 4 ? 'chip-status success' : 'chip-status pending'
+    ? job.status === 3 ? 'chip-status success' : job.status === 4 ? 'chip-status error' : 'chip-status pending'
     : 'chip-status';
 
   return (
@@ -213,8 +213,8 @@ export default function JobDetailPage() {
           {[
             ['STATUS', job ? JOB_STATUS[job.status] : isLoading ? '…' : '—', statusChipClass],
             ['FUNDED', job ? `${formatUSDC(BigInt(job.fundedAmount))} USDC` : isLoading ? '…' : '0.00 USDC'],
-            ['DELIVERABLE', job?.deliverableURI || job?.deliverable ? 'Submitted' : isLoading ? '…' : 'pending'],
-            ['SETTLEMENT', job?.status === 4 ? 'Completed' : isLoading ? '…' : 'pending'],
+            ['DELIVERABLE', job?.deliverable || job?.deliverable ? 'Submitted' : isLoading ? '…' : 'pending'],
+            ['SETTLEMENT', job?.status === 3 ? 'Completed' : job?.status === 4 ? 'Rejected' : job?.status === 5 ? 'Expired' : isLoading ? '…' : 'pending'],
           ].map(([label, value, chip], i) => (
             <div key={label as string} className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)', animation: `fadeInUp 0.4s ${i * 0.04}s both cubic-bezier(0.16, 1, 0.3, 1)` }}>
               <p className="aureo-mono-label">{label as string}</p>
@@ -234,10 +234,9 @@ export default function JobDetailPage() {
             <div className="mt-5 space-y-2.5">
               {[
                 ['client', job ? shortenAddress(job.client) : isLoading ? '…' : '—'],
-                ['provider', job ? shortenAddress(job.worker) : isLoading ? '…' : '—'],
+                ['provider', job ? shortenAddress(job.provider) : isLoading ? '…' : '—'],
                 ['evaluator', job ? shortenAddress(job.evaluator) : isLoading ? '…' : '—'],
-                ['agent', job ? `#${job.agentId}` : isLoading ? '…' : '—'],
-                ['description', job ? `${job.jobSpecHash.slice(0, 10)}…${job.jobSpecHash.slice(-8)}` : isLoading ? '…' : '—'],
+                ['description', job?.description ? job.description : isLoading ? '…' : '—'],
                 ['created', job ? new Date(Number(job.createdAt) * 1000).toLocaleString() : isLoading ? '…' : '—'],
               ].map(([label, value]) => (
                 <div key={label} className="ledger-row flex items-center justify-between border border-white/10 bg-black/20 px-4 py-2.5">
@@ -247,7 +246,7 @@ export default function JobDetailPage() {
               ))}
             </div>
             <a
-              href={getExplorerAddressUrl(CONTRACTS.JOB_ESCROW)}
+              href={getExplorerAddressUrl(CONTRACTS.ERC8183_AGENTIC_COMMERCE)}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-5 inline-flex font-mono text-[11px] tracking-[0.14em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
@@ -262,8 +261,8 @@ export default function JobDetailPage() {
             <div className="mt-5 space-y-3">
               <ArtifactRow
                 label="Deliverable URI"
-                value={job?.deliverableURI || (isLoading ? '…' : 'No deliverable submitted.')}
-                href={ipfsToHttp(job?.deliverableURI)}
+                value={job?.deliverable || (isLoading ? '…' : 'No deliverable submitted.')}
+                href={ipfsToHttp(job?.deliverable)}
               />
               <ArtifactRow
                 label="Deliverable hash"
@@ -271,23 +270,23 @@ export default function JobDetailPage() {
               />
 
               {/* Submitted work preview */}
-              {job?.deliverableURI && (
+              {job?.deliverable && (
                 <div className="p-4" style={{ border: '1px solid rgba(184, 205, 126, 0.25)', background: 'rgba(184, 205, 126, 0.04)' }}>
                   <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>SUBMITTED WORK PREVIEW</p>
 
                   {/* Always show the raw URI + copy */}
                   <div className="mt-2 flex items-center gap-2">
-                    <code className="flex-1 truncate font-mono text-[10.5px] text-[#b5b5b5]">{job.deliverableURI}</code>
+                    <code className="flex-1 truncate font-mono text-[10.5px] text-[#b5b5b5]">{job.deliverable}</code>
                     <button
-                      onClick={() => navigator.clipboard.writeText(job.deliverableURI)}
+                      onClick={() => navigator.clipboard.writeText(job.deliverable)}
                       className="shrink-0 font-mono text-[9px] tracking-[0.14em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
                       title="Copy URI"
                     >
                       COPY
                     </button>
-                    {ipfsToHttp(job.deliverableURI) && !isPlaceholderURI(job.deliverableURI) && (
+                    {ipfsToHttp(job.deliverable) && !isPlaceholderURI(job.deliverable) && (
                       <a
-                        href={ipfsToHttp(job.deliverableURI)!}
+                        href={ipfsToHttp(job.deliverable)!}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="shrink-0 font-mono text-[9px] tracking-[0.14em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
@@ -298,7 +297,7 @@ export default function JobDetailPage() {
                   </div>
 
                   {/* Placeholder URI — explain clearly */}
-                  {isPlaceholderURI(job.deliverableURI) && (
+                  {isPlaceholderURI(job.deliverable) && (
                     <p className="mt-3 font-mono text-[11px] text-[#f5c864]">
                       No valid work file submitted yet. Please submit a real IPFS CID or HTTPS link.
                     </p>
@@ -310,7 +309,7 @@ export default function JobDetailPage() {
                   )}
 
                   {/* Fetch error — human-readable */}
-                  {previewError && !isPlaceholderURI(job.deliverableURI) && (
+                  {previewError && !isPlaceholderURI(job.deliverable) && (
                     <div className="mt-3">
                       <p className="font-mono text-[11px] text-[#f0c5c5]">
                         Preview unavailable. The submitted work link could not be opened.
@@ -369,9 +368,9 @@ export default function JobDetailPage() {
             <div>
               <div className="aureo-mono-label mb-2">ACTIONS · {job ? JOB_STATUS[job.status] : '…'}</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">
-                {job?.status === 4 ? 'Settlement complete' :
-                 job?.status === 3 ? 'Review deliverable, then complete'  :
-                 job?.status === 2 ? 'Funded — awaiting agent submission' :
+                {job?.status === 3 ? 'Settlement complete' :
+                 job?.status === 2 ? 'Review deliverable, then complete'  :
+                 job?.status === 1 ? 'Funded — awaiting provider submission' :
                  'Job lifecycle controls'}
               </h2>
             </div>
@@ -391,21 +390,21 @@ export default function JobDetailPage() {
               you are{' '}
               {address.toLowerCase() === job.client.toLowerCase() && <span className="text-[#C5A67C]">CLIENT </span>}
               {address.toLowerCase() === job.evaluator.toLowerCase() && <span className="text-[#B8CD7E]">EVALUATOR </span>}
-              {address.toLowerCase() === job.worker.toLowerCase() && <span className="text-[#9eb8ff]">PROVIDER </span>}
+              {address.toLowerCase() === job.provider.toLowerCase() && <span className="text-[#9eb8ff]">PROVIDER </span>}
               {address.toLowerCase() !== job.client.toLowerCase() &&
                address.toLowerCase() !== job.evaluator.toLowerCase() &&
-               address.toLowerCase() !== job.worker.toLowerCase() && <span>· not a participant</span>}
+               address.toLowerCase() !== job.provider.toLowerCase() && <span>· not a participant</span>}
             </div>
           )}
 
           {/* PRIMARY: status-driven actions */}
           <div className="mt-5 space-y-3">
-            {job?.status === 3 && previewError && isEvaluator && (
+            {job?.status === 2 && previewError && isEvaluator && (
               <div className="p-3 font-mono text-[11px] tracking-[0.04em]" style={{ border: '1px solid rgba(245, 200, 100, 0.35)', background: 'rgba(245, 200, 100, 0.06)', color: '#f5c864' }}>
                 ⚠️ Preview unavailable — you can still complete on-chain if you trust the submitted URI/hash.
               </div>
             )}
-            {job?.status === 3 && isEvaluator && (
+            {job?.status === 2 && isEvaluator && (
               <button
                 onClick={handleComplete}
                 disabled={!isConnected || activeAction !== null}
@@ -415,7 +414,7 @@ export default function JobDetailPage() {
                 {activeAction === 'complete' ? 'COMPLETING…' : '✓ COMPLETE JOB'}
               </button>
             )}
-            {job?.status === 3 && !isEvaluator && isConnected && (
+            {job?.status === 2 && !isEvaluator && isConnected && (
               <div className="p-3 font-mono text-[11px] tracking-[0.04em] text-[#a0a0a0]" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
                 {isWorker
                   ? '⏳ Deliverable submitted. Waiting for evaluator to complete via ERC-8183.'
@@ -423,7 +422,7 @@ export default function JobDetailPage() {
               </div>
             )}
 
-            {job?.status === 4 && (
+            {job?.status === 3 && (
               <div className="p-4" style={{ border: '1px solid rgba(184, 205, 126, 0.35)', background: 'rgba(184, 205, 126, 0.06)' }}>
                 <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>COMPLETED</p>
                 <p className="mt-2 font-mono text-[12px] text-[#EAE4D8]">
@@ -432,9 +431,9 @@ export default function JobDetailPage() {
               </div>
             )}
 
-            {job && job.status < 3 && (
+            {job && job.status < 2 && (
               <p className="font-mono text-[11.5px] text-[#a0a0a0]">
-                {job.status === 2
+                {job.status === 1
                   ? '✓ Funded. The service provider should submit deliverable via ERC-8183 submit().'
                   : 'Job not yet funded. Use setBudget, USDC approve, then fund(jobId, 0x).'}
               </p>

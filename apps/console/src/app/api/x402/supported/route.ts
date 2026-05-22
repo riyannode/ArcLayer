@@ -12,10 +12,9 @@ import {
 } from '@/lib/x402';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 const DEFAULT_AMOUNT_ATOMIC = '1';
-const DEFAULT_PAY_TO = '0x4aA3402575b6D98EacE35A823EFa267F7365bdD2';
-
 function gatewayWalletAddress() {
   return process.env.X402_GATEWAY_WALLET_ADDRESS || getArcTestnetGatewayConfig().gatewayWallet;
 }
@@ -23,7 +22,8 @@ function gatewayWalletAddress() {
 export function GET() {
   const maxTimeoutSeconds = Number(process.env.X402_REQUIREMENT_TTL_SECONDS || '300');
   const amount = process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC;
-  const payTo = process.env.X402_RECEIVER_ADDRESS || process.env.X402_PAY_TO || DEFAULT_PAY_TO;
+  const payTo = process.env.X402_RECEIVER_ADDRESS || process.env.X402_PAY_TO;
+  if (!payTo) throw new Error('Missing X402_RECEIVER_ADDRESS or X402_PAY_TO');
 
   const arcNativeExact = {
     x402Version: X402_VERSION_V2,

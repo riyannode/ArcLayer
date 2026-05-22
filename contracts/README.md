@@ -1,49 +1,10 @@
-# ArcLayer Contracts
+# Contracts
 
-Foundry workspace. Live on Arc Testnet (`5042002`).
+Production path tracks Arc/Circle-aligned integrations only.
 
-## Modules
+## Current
+- Use Arc ERC-8004 IdentityRegistry and ERC-8183 AgenticCommerce via SDK addresses.
+- Do not add new production dependencies on legacy custom contracts.
 
-**Core protocol**
-- `AgentRegistry.sol`
-- `JobEscrow.sol`
-- `WorkProof.sol`
-- `ReputationOracle.sol`
-- `MilestoneEscrow.sol`
-- `Achievement.sol`
-
-**A2A / Ignia stack**
-- `A2AAgentRegistry.sol`
-- `A2AReceiptRegistry.sol`
-- `A2AReputationRegistry.sol`
-- `MarketMirrorRegistry.sol`
-- `Ignia.sol`
-- `AgentRegistryV2.sol`
-- `ArcVault.sol`
-- `BondConfig.sol`
-
-## Live addresses
-
-See [`../sdk/src/addresses.ts`](../sdk/src/addresses.ts) — single source of truth.
-
-## Flow
-
-```text
-createJob → setBudget → approve USDC → fund
-         → submitDeliverable → evaluate → settle
-         → mints WorkProof to worker
-```
-
-## Commands
-
-```bash
-forge build
-forge test
-
-# Deploy core
-USDC=0x3600000000000000000000000000000000000000 \
-  forge script script/DeployArcLayer.s.sol \
-  --rpc-url https://rpc.testnet.arc.network --broadcast
-```
-
-After deploy, update [`../sdk/src/addresses.ts`](../sdk/src/addresses.ts).
+## Legacy archive
+Legacy custom contracts were moved to `contracts/legacy/` for historical reference.

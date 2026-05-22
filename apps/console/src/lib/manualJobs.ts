@@ -88,7 +88,7 @@ export function inferAgentCategory(agent: IndexedAgent): ManualCategory {
     deliverable: '',
     completionReason: '',
     status: 0,
-    statusLabel: 'Created',
+    statusLabel: 'Open',
     // Legacy aliases
     agentId: agent.agentId,
     worker: '',

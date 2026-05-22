@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { encodeFunctionData, keccak256, stringToHex, toBytes, toHex, type Hex } from 'viem';
-import { AGENT_REGISTRY_ABI, JOB_ESCROW_ABI, CONTRACTS, ARC_TOKENS } from '@arclayer/sdk';
+import { ERC8004_IDENTITY_REGISTRY_ABI, ERC8183_AGENTIC_COMMERCE_ABI, CONTRACTS, ARC_TOKENS } from '@arclayer/sdk';
 import { indexerUrl } from '@/lib/indexer';
 
 export const runtime = 'nodejs';
@@ -112,14 +112,14 @@ const TOOLS: Record<
       if (!metadataURI) throw new Error('metadataURI required');
 
       const data = encodeFunctionData({
-        abi: AGENT_REGISTRY_ABI as any,
+        abi: ERC8004_IDENTITY_REGISTRY_ABI as any,
         functionName: 'register',
         args: [metadataURI],
       });
 
       return {
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.AGENT_REGISTRY,
+        to: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
         data,
         value: '0x0',
         derived: {
@@ -165,14 +165,14 @@ const TOOLS: Record<
       if (!/^0x[a-fA-F0-9]{40}$/.test(evaluator)) throw new Error('evaluator is not a valid address');
 
       const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
         functionName: 'createJob',
         args: [provider as Hex, evaluator as Hex, BigInt(expiredAt), description, hook as Hex],
       });
 
       return {
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         data,
         value: '0x0',
         derived: {
@@ -210,14 +210,14 @@ const TOOLS: Record<
       if (!jobIdRaw || !amountRaw) throw new Error('jobId, amount required');
 
       const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
         functionName: 'setBudget',
         args: [BigInt(jobIdRaw), BigInt(amountRaw), optParams],
       });
 
       return {
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         data,
         value: '0x0',
         derived: { jobId: jobIdRaw, budgetAtomic: amountRaw, budgetUsdc: `${Number(amountRaw) / 1e6} USDC` },
@@ -243,7 +243,7 @@ const TOOLS: Record<
       const data = encodeFunctionData({
         abi: [{ name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] }] as any,
         functionName: 'approve',
-        args: [CONTRACTS.JOB_ESCROW as Hex, BigInt(amountRaw)],
+        args: [CONTRACTS.ERC8183_AGENTIC_COMMERCE as Hex, BigInt(amountRaw)],
       });
 
       return {
@@ -251,7 +251,7 @@ const TOOLS: Record<
         to: CONTRACTS.USDC,
         data,
         value: '0x0',
-        derived: { spender: CONTRACTS.JOB_ESCROW, amountAtomic: amountRaw, amountUsdc: `${Number(amountRaw) / 1e6} USDC` },
+        derived: { spender: CONTRACTS.ERC8183_AGENTIC_COMMERCE, amountAtomic: amountRaw, amountUsdc: `${Number(amountRaw) / 1e6} USDC` },
         signing: {
           how: 'Send from the client wallet that holds USDC. This approves AgenticCommerce to pull the specified amount.',
           rpc: ARC_RPC,
@@ -274,14 +274,14 @@ const TOOLS: Record<
       if (!jobIdRaw) throw new Error('jobId required');
 
       const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
         functionName: 'fund',
         args: [BigInt(jobIdRaw), optParams],
       });
 
       return {
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         data,
         value: '0x0',
         derived: { jobId: jobIdRaw, fundingSource: 'current job budget', optParams },
@@ -313,14 +313,14 @@ const TOOLS: Record<
       if (!jobIdRaw || !deliverableHash) throw new Error('jobId, deliverableHash required');
 
       const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
         functionName: 'submit',
         args: [BigInt(jobIdRaw), deliverableHash as Hex, optParams],
       });
 
       return {
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         data,
         value: '0x0',
         derived: { jobId: jobIdRaw, deliverableHash },
@@ -370,14 +370,14 @@ const TOOLS: Record<
       }
 
       const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
         functionName: 'complete',
         args: [BigInt(jobIdRaw), resolvedReason, optParams],
       });
 
       return {
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         data,
         value: '0x0',
         derived: { jobId: jobIdRaw, reason: resolvedReason, optParams },
@@ -439,8 +439,8 @@ const TOOLS: Record<
         faucet: 'https://faucet.circle.com',
         nativeGasToken: 'USDC (18 decimals)',
         contracts: {
-          identityRegistry_ERC8004: CONTRACTS.AGENT_REGISTRY,
-          agenticCommerce_ERC8183: CONTRACTS.JOB_ESCROW,
+          identityRegistry_ERC8004: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+          agenticCommerce_ERC8183: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
           usdc_ERC20: CONTRACTS.USDC,
           eurc: ARC_TOKENS.EURC,
         },
@@ -472,8 +472,8 @@ function buildManifest() {
       faucet: 'https://faucet.circle.com',
     },
     contracts: {
-      identityRegistry_ERC8004: CONTRACTS.AGENT_REGISTRY,
-      agenticCommerce_ERC8183: CONTRACTS.JOB_ESCROW,
+      identityRegistry_ERC8004: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+      agenticCommerce_ERC8183: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       usdc_ERC20: CONTRACTS.USDC,
       eurc: ARC_TOKENS.EURC,
     },

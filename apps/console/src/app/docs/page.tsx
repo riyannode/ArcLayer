@@ -100,7 +100,7 @@ import { useWriteContract } from 'wagmi';
 
 const { writeContractAsync } = useWriteContract();
 await writeContractAsync({
-  address: CONTRACTS.AGENT_REGISTRY,
+  address: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
   abi: AGENT_REGISTRY_ABI,
   functionName: 'register',
   args: ['ipfs://agent-metadata'],
