@@ -137,7 +137,7 @@ export async function fetchAgentEvents(
     latestBlock,
   );
 
-  const events = collected
+  const mintEvents = collected
     .filter((event: any) => event.eventName === "Transfer")
     .map((event: any) => {
       const args = (event.args ?? {}) as Record<string, unknown>;
@@ -149,20 +149,36 @@ export async function fetchAgentEvents(
         args,
       };
     })
-    .filter((e) => e.isMint)
-    .map(({ event, args }) => ({
+    .filter((e) => e.isMint);
+
+  const events = (await Promise.all(mintEvents.map(async ({ event, args }) => {
+    const agentId = args.tokenId as bigint;
+    let metadataURI = "";
+    try {
+      metadataURI = await publicClient.readContract({
+        address: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+        abi: ERC8004_IDENTITY_REGISTRY_ABI,
+        functionName: "tokenURI",
+        args: [agentId],
+      }) as string;
+    } catch {
+      metadataURI = "";
+    }
+
+    return {
       eventName: "AgentRegistered" as const,
       blockNumber: event.blockNumber as bigint,
       transactionHash: event.transactionHash as `0x${string}`,
       logIndex: (event.logIndex ?? 0) as number,
-      agentId: args.tokenId as bigint,
+      agentId,
       controller: args.to as `0x${string}`,
-      metadataURI: "",
+      metadataURI,
       source: "erc8004_identity_registry",
       chainId: 5042002,
       registryAddress: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
       contractAddress: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
-    } satisfies IndexedAgentEvent & Record<string, unknown>))
+    } satisfies IndexedAgentEvent & Record<string, unknown>;
+  })))
     .sort((a, b) => {
       if (a.blockNumber !== b.blockNumber) {
         return Number(a.blockNumber - b.blockNumber);

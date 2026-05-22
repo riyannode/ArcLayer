@@ -107,6 +107,8 @@ export function projectAgentsFromEvents(
 ) {
   const sourceForEvent = (event: IndexedAgentEvent) =>
     ((event as any).source as string | undefined) ?? "erc8004_identity_registry";
+  const isImportedArcLayerAgent = (event: IndexedAgentEvent) =>
+    sourceForEvent(event) === "imported_arclayer_registry";
 
   const byId = events.reduce<Record<string, IndexedAgentEvent>>((acc, event) => {
     acc[`${sourceForEvent(event)}:${String(event.agentId)}`] = event;
@@ -115,6 +117,7 @@ export function projectAgentsFromEvents(
 
   return Object.values(byId)
     .filter((event) => {
+      if (isImportedArcLayerAgent(event)) return true;
       if (!arcWalletFilterActive()) return true;
       const ctrl = (event.controller ?? "").toLowerCase();
       // Keep if controller matches allowlist
@@ -123,8 +126,12 @@ export function projectAgentsFromEvents(
       if (arcJobWallets && arcJobWallets.has(ctrl)) return true;
       return false;
     })
-    .filter((event) => matchesReferenceAgentId(event.agentId, "arclayer"))
     .filter((event) => {
+      if (isImportedArcLayerAgent(event)) return true;
+      return matchesReferenceAgentId(event.agentId, "arclayer");
+    })
+    .filter((event) => {
+      if (isImportedArcLayerAgent(event)) return true;
       if (ARC_REFERENCE_METADATA_PREFIX_FILTER.length === 0) return true;
       const uri = event.metadataURI ?? "";
       if (!uri) return true;
