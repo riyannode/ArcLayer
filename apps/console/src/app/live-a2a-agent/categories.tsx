@@ -9,6 +9,11 @@ export type AgentCategory = {
   exampleAgents: string[];
   feeRange: string;
   status: 'LIVE' | 'COMING SOON';
+  pageFlow: {
+    title: string;
+    nodes: string[];
+    description: string;
+  };
 };
 
 const icon = (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" /></svg>);
@@ -23,6 +28,11 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     exampleAgents: ['Example PM2 Bot Pipeline', 'Prediction Market Trader'],
     feeRange: 'x402 per job/resource',
     status: 'LIVE',
+    pageFlow: {
+      title: 'Prediction-Market Execution Flow',
+      nodes: ['Market Data', 'Signal Model', 'Risk Filter', 'Execution Intent', 'Settlement Receipt'],
+      description: 'Production flow for probability-driven execution decisions tied to paid jobs and verifiable receipts.',
+    },
   },
   {
     key: 'spot-trading-bots',
@@ -33,6 +43,11 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     exampleAgents: ['Spot Trader', 'Risk Manager'],
     feeRange: 'job budget based',
     status: 'LIVE',
+    pageFlow: {
+      title: 'Spot Trading Workflow',
+      nodes: ['Market Signal', 'Risk Check', 'Execution Intent', 'Receipt', 'x402 Settlement'],
+      description: 'Spot strategies transform live market signals into safeguarded execution actions and settle through ArcLayer rails.',
+    },
   },
   {
     key: 'arbitrage-bots',
@@ -43,6 +58,11 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     exampleAgents: ['Arbitrage Bot', 'Data Provider'],
     feeRange: 'job budget based',
     status: 'LIVE',
+    pageFlow: {
+      title: 'Arbitrage Workflow',
+      nodes: ['Venue Data', 'Spread Detect', 'Route Score', 'Risk Gate', 'Opportunity Receipt'],
+      description: 'Arbitrage bots evaluate cross-venue pricing and capture opportunities with auditable job outcomes.',
+    },
   },
   {
     key: 'research-agents',
@@ -53,6 +73,11 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     exampleAgents: ['Research Agent', 'Analyzer'],
     feeRange: 'x402 per report',
     status: 'LIVE',
+    pageFlow: {
+      title: 'Research Delivery Workflow',
+      nodes: ['Research Task', 'Source Scan', 'LLM Summary', 'Evidence Hash', 'Report Receipt'],
+      description: 'Research agents deliver evidence-linked reports with a traceable provenance trail for every output.',
+    },
   },
   {
     key: 'analyzer-agents',
@@ -63,6 +88,11 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     exampleAgents: ['Analyzer', 'Evaluator'],
     feeRange: 'x402 per analysis',
     status: 'LIVE',
+    pageFlow: {
+      title: 'Analyzer Workflow',
+      nodes: ['Input Data', 'Analyzer', 'Score Output', 'Evaluation Receipt'],
+      description: 'Analyzer agents process structured inputs and publish scored outcomes with settlement-linked receipts.',
+    },
   },
   {
     key: 'data-oracle-agents',
@@ -73,6 +103,11 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     exampleAgents: ['Data Provider', 'Oracle'],
     feeRange: 'resource scope based',
     status: 'LIVE',
+    pageFlow: {
+      title: 'Oracle Publishing Workflow',
+      nodes: ['Raw Feed', 'Oracle Normalize', 'Payload Hash', 'Oracle Receipt'],
+      description: 'Oracle agents normalize upstream feeds and anchor deterministic payloads to job receipts.',
+    },
   },
   {
     key: 'risk-compliance-agents',
@@ -83,6 +118,11 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     exampleAgents: ['Risk Manager', 'Compliance Agent'],
     feeRange: 'x402 per check',
     status: 'LIVE',
+    pageFlow: {
+      title: 'Risk & Compliance Workflow',
+      nodes: ['Policy Input', 'Risk Gate', 'Compliance Result', 'Audit Receipt'],
+      description: 'Risk services enforce policy checks and produce auditable compliance outputs for client workflows.',
+    },
   },
   {
     key: 'rwa-agents',
@@ -93,6 +133,11 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     exampleAgents: ['RWA Evaluator', 'Evidence Worker'],
     feeRange: 'job budget based',
     status: 'LIVE',
+    pageFlow: {
+      title: 'RWA Evaluation Workflow',
+      nodes: ['Asset Input', 'Evidence Review', 'Valuation', 'RWA Receipt'],
+      description: 'RWA agents evaluate asset evidence and publish valuation outcomes with verifiable settlement records.',
+    },
   },
   {
     key: 'treasury-yield-bots',
@@ -103,6 +148,11 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     exampleAgents: ['Yield Analyst', 'Treasury Worker'],
     feeRange: 'job budget based',
     status: 'LIVE',
+    pageFlow: {
+      title: 'Treasury Yield Workflow',
+      nodes: ['Treasury State', 'Yield Scan', 'Allocation Plan', 'Receipt'],
+      description: 'Treasury bots convert portfolio state into yield allocation plans and produce execution receipts.',
+    },
   },
   {
     key: 'devops-security-agents',
@@ -113,6 +163,11 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     exampleAgents: ['Security Agent', 'DevOps Worker'],
     feeRange: 'x402 per task',
     status: 'LIVE',
+    pageFlow: {
+      title: 'DevOps Security Workflow',
+      nodes: ['Monitor Event', 'Security Analysis', 'Incident Result', 'Proof Receipt'],
+      description: 'Security agents process incidents and monitoring events into actionable, proof-backed outcomes.',
+    },
   },
   {
     key: 'a2a-commerce-agents',
@@ -123,6 +178,11 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     exampleAgents: ['Registered Agent', 'Commerce Worker'],
     feeRange: 'x402 per resource',
     status: 'LIVE',
+    pageFlow: {
+      title: 'A2A Commerce Workflow',
+      nodes: ['Service Request', 'Agent Match', 'x402 Access', 'Work Receipt'],
+      description: 'Commerce agents route requests to qualified workers with paid access control and confirmed completion.',
+    },
   },
   {
     key: 'custom-workers',
@@ -133,6 +193,11 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     exampleAgents: ['Custom Worker', 'External Runtime'],
     feeRange: 'configurable',
     status: 'LIVE',
+    pageFlow: {
+      title: 'Custom Worker Workflow',
+      nodes: ['Custom Input', 'Worker Runtime', 'Output Hash', 'Receipt'],
+      description: 'Custom workers execute owner-defined runtimes while preserving deterministic output references.',
+    },
   },
 ];
 

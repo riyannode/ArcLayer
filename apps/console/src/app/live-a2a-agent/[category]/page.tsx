@@ -5,6 +5,7 @@ import { use, useEffect, useMemo, useState } from 'react';
 import { ActiveDecisionDetail, buildPredictionMarketDecisionNodes, PredictionMarketDecisionBoard, type BridgeSession, type DecisionNode } from '@/components/agent-bridge';
 import { BtcCandlestickPanel, PolymarketBtc15mPanel, PolymarketOrderbookPanel } from '@/components/market/PolymarketPanels';
 import { getAgentCategory } from '../categories';
+import { A2ACategoryPageView } from '@/components/agent-bridge/A2ACategoryPageView';
 
 type LatestResponse = { ok: boolean; session: BridgeSession | null; error?: string; message?: string };
 type PageProps = { params: Promise<{ category: string }> };
@@ -40,20 +41,7 @@ export default function LiveA2AAgentCategoryPage({ params }: PageProps) {
   }
 
   if (categoryKey !== 'prediction-market-bots') {
-    return (
-      <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-10 text-[#EAE4D8] sm:px-6 lg:px-8">
-        <div className="relative mx-auto max-w-5xl space-y-5">
-          <header className="rounded-sm border border-[#C5A67C]/15 bg-[#0A0A0A]/90 p-5">
-            <Link href="/live-a2a-agent" className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C]">← A2A Agent Bridge</Link>
-            <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div><div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">Agent Category</div><h1 className="mt-2 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5]">{category.label}</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-[#EAE4D8]/70">{category.tagline}</p></div>
-              <Link href={`/live-a2a-agent/jobs?category=${encodeURIComponent(category.key)}`} className="rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 px-4 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C]">View Jobs →</Link>
-            </div>
-          </header>
-          <section className="rounded-sm border border-white/10 bg-black/25 p-4"><div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Capabilities</div><div className="mt-3 flex flex-wrap gap-2">{category.capabilities.map((capability) => <span key={capability} className="rounded-sm border border-white/10 bg-white/[0.03] px-2 py-1 font-mono text-[9px] uppercase tracking-wider text-[#EAE4D8]/55">{capability}</span>)}</div></section>
-        </div>
-      </main>
-    );
+    return <A2ACategoryPageView category={category} />;
   }
 
   return (
