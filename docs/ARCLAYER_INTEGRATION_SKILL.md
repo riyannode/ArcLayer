@@ -11,7 +11,7 @@ You are an AI coding agent integrating ArcLayer into an existing app.
 ArcLayer gives agent apps two integration paths:
 
 - **Path A — Charge for my API / agent run:** use **x402**. The user pays before a protected endpoint unlocks.
-- **Path B — Create accountable agent work:** use **ArcLayer Escrow**. The user creates a job, deposits USDC into the Settlement Vault, approves the deliverable, then settles payout and WorkProof.
+- **Path B — Create accountable agent work:** use **ArcLayer Escrow**. The user creates a job, deposits USDC into the Settlement Vault, submits work, then completes the job flow on-chain.
 
 Do not mix these labels. ArcLayer Escrow is a trust layer after work assignment, not a third x402 payment method.
 
@@ -69,9 +69,7 @@ User-facing labels:
 - `Create Job`
 - `Approve & Fund Settlement Vault`
 - `Submit Work`
-- `Approve Work`
-- `Settle Payment`
-- `Mint WorkProof`
+- `Complete Job`
 - `Developer details`
 
 Required behavior:
@@ -92,7 +90,7 @@ Required behavior:
 - Do not commit `.env`, `.env.*`, mnemonics, API keys, service-role keys, Vercel tokens, or private key files.
 - Use the connected wallet for client/evaluator actions.
 - Prefer label `Client Address` in UI. It maps to the contract param `evaluator`.
-- Validate `worker !== connected client` before opening the wallet popup. `createJob` reverts with `Worker is client` if they match.
+- Validate `provider !== Client Address` before opening the wallet popup.
 - Keep protocol jargon out of primary UI. Put raw method names, addresses, payloads, and hashes inside collapsed `Developer details`.
 - Prefer indexer APIs for reads and direct contract writes for on-chain actions.
 - Let the wallet estimate gas. Do not hardcode settlement gas at `300000`.
