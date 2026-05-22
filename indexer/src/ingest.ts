@@ -5,7 +5,7 @@ import {
   publicClient,
 } from "@arclayer/sdk";
 import type { IndexedAgentEvent, IndexedJobEvent } from "@arclayer/sdk";
-import { MAX_BLOCK_RANGE, OLD_ARCLAYER_AGENT_REGISTRY_ADDRESS } from "./config";
+import { MAX_BLOCK_RANGE,  } from "./config";
 
 // ── Official ERC-8183 AgenticCommerce events ────────────────────────────────
 
@@ -199,7 +199,7 @@ export async function fetchImportedArcLayerAgentEvents(
   }
 
   const collected = await fetchEventsChunked(
-    OLD_ARCLAYER_AGENT_REGISTRY_ADDRESS,
+    ,
     OLD_ARCLAYER_AGENT_REGISTRY_ABI,
     fromBlock,
     latestBlock,
@@ -220,8 +220,8 @@ export async function fetchImportedArcLayerAgentEvents(
         skillHash: args.skillHash as `0x${string}` | undefined,
         source: "imported_arclayer_registry",
         chainId: 5042002,
-        registryAddress: OLD_ARCLAYER_AGENT_REGISTRY_ADDRESS,
-        contractAddress: OLD_ARCLAYER_AGENT_REGISTRY_ADDRESS,
+        registryAddress: ,
+        contractAddress: ,
       } satisfies IndexedAgentEvent & Record<string, unknown>;
     })
     .sort((a, b) => {

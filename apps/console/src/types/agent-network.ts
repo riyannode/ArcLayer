@@ -43,7 +43,7 @@ export type Overview = {
 export type FeedItem = {
   id: string;
   ts: string;
-  agent: 'Pythia' | 'Ignia' | 'Apolo' | 'Hermes';
+  agent: string;
   type: 'signal' | 'payment' | 'decision' | 'trade' | 'balance' | 'error';
   label: string;
   detail: string;
@@ -97,7 +97,7 @@ export type NetworkAgent = {
   primaryAction: string;
   categories: AgentCategory[];
   activity: FeedItem[];
-  source: 'featured' | 'registry';
+   | 'registry';
   canHide: boolean;
   connectedTo?: string[];
 };

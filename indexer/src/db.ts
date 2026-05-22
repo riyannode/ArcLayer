@@ -10,7 +10,7 @@ import {
   type ERC8183IndexedLifecycleEvent,
 } from "./a2a-lifecycle-sync";
 import { buildAgentProjectionDebug, projectAgentsFromEvents, projectJobsFromEvents } from "./projections";
-import { ARC_ERC8004_ADDRESS, ARC_ERC8183_ADDRESS, OLD_ARCLAYER_AGENT_REGISTRY_ADDRESS } from "./config";
+import { ARC_ERC8004_ADDRESS, ARC_ERC8183_ADDRESS,  } from "./config";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.INDEXER_DB_PATH || resolve(currentDir, "../data/arclayer-indexer.sqlite");
@@ -253,7 +253,7 @@ function normalizeAgentForLegacySchema(agent: ReturnType<typeof projectAgentsFro
     ? "imported_arclayer_registry"
     : "erc8004_identity_registry";
   const now = new Date().toISOString();
-  const registryAddress = source === "imported_arclayer_registry" ? OLD_ARCLAYER_AGENT_REGISTRY_ADDRESS : ARC_ERC8004_ADDRESS;
+  const registryAddress = source === "imported_arclayer_registry" ?  : ARC_ERC8004_ADDRESS;
   const tokenId = String(agent.tokenId ?? agent.agentId);
   return {
     agentId: `${source}:${tokenId}`,

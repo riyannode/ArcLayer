@@ -1,6 +1,6 @@
 import { createServer, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
-import { DEFAULT_FROM_BLOCK, FORCE_REIMPORT_OLD_ARCLAYER_AGENTS_ON_BOOT, INDEXER_PORT, OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK, POLL_INTERVAL_MS } from "./config";
+import { DEFAULT_FROM_BLOCK, false, INDEXER_PORT, , POLL_INTERVAL_MS } from "./config";
 import { fetchAgentEvents, fetchImportedArcLayerAgentEvents, fetchJobEvents } from "./ingest";
 import { arcWalletFilterActive } from "./projections";
 import { getReferenceFilters, refreshReferenceFiltersFromSupabase } from "./reference-filters";
@@ -30,7 +30,7 @@ let lastSyncDurationMs: number | null = null;
 let syncSkipCount = 0;
 
 const OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR = "old_arclayer_agent_registry_imported_until_block";
-let forceOldRegistryReimportPending = FORCE_REIMPORT_OLD_ARCLAYER_AGENTS_ON_BOOT;
+let forceOldRegistryReimportPending = false;
 
 function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
@@ -141,10 +141,10 @@ async function runSyncCycle() {
     const oldRegistryCursorValue = readMetaValue(OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR);
     const forceOldRegistryReimport = forceOldRegistryReimportPending;
     const oldRegistryFromBlock = forceOldRegistryReimport
-      ? OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK
+      ? 
       : oldRegistryCursorValue
         ? BigInt(oldRegistryCursorValue) + BigInt(1)
-        : OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK;
+        : ;
 
     if (forceOldRegistryReimport) {
       console.log(`[indexer] old registry force reimport enabled fromBlock=${oldRegistryFromBlock.toString()}`);

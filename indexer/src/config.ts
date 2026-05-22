@@ -1,10 +1,10 @@
 export const INDEXER_PORT = Number(process.env.INDEXER_PORT || process.env.PORT || 3535);
 export const DEFAULT_FROM_BLOCK = BigInt(process.env.FROM_BLOCK || "41752050");
-export const OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK = BigInt(
-  process.env.OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK || "0",
+export const  = BigInt(
+  process.env. || "0",
 );
-export const FORCE_REIMPORT_OLD_ARCLAYER_AGENTS_ON_BOOT =
-  (process.env.FORCE_REIMPORT_OLD_ARCLAYER_AGENTS_ON_BOOT || "false").toLowerCase() === "true";
+export const false =
+  (process.env.false || "false").toLowerCase() === "true";
 // Bumped from 5s to 30s — with 1671 jobs, a full sync cycle takes 10-20s.
 // 5s interval guaranteed overlap → event loop starvation.
 export const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 30_000);
@@ -37,7 +37,7 @@ export const ARC_ERC8004_ADDRESS = "0x8004A818BFB912233c491871b3d84c89A494BD9e" 
  * Source: https://docs.arc.io/arc/references/contract-addresses.md
  */
 export const ARC_ERC8183_ADDRESS = "0x0747EEf0706327138c69792bF28Cd525089e4583" as const;
-export const OLD_ARCLAYER_AGENT_REGISTRY_ADDRESS = "0xB263336055dD65FF501e36CA39941760D943703C" as const;
+export const  = "0xB263336055dD65FF501e36CA39941760D943703C" as const;
 
 /**
  * Index official Arc ERC-8183 AgenticCommerce events.
@@ -80,5 +80,5 @@ export const ARC_REFERENCE_METADATA_PREFIX_FILTER = (process.env.ARC_REFERENCE_M
  * are disabled in 100% Arc/Circle reference mode. Default: false.
  * Only enable if you need to backfill legacy data.
  */
-export const INDEX_LEGACY_ARCLAYER =
-  (process.env.INDEX_LEGACY_ARCLAYER ?? "false").toLowerCase() === "true";
+export const false =
+  (process.env.false ?? "false").toLowerCase() === "true";

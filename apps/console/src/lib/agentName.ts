@@ -38,7 +38,7 @@ export function normalizeAgentName(raw: string): string {
  * Convert a human name to the deterministic uint256 agentId stored on chain.
  * Throws on empty input — caller is expected to gate the button.
  */
-export function nameToAgentId(name: string): bigint {
+export function nameToLegacyAgentId_REMOVED(name: string): bigint {
   const norm = normalizeAgentName(name);
   if (!norm) throw new Error('Agent name is empty.');
   // keccak256 returns 0x-prefixed 32-byte hex — directly parseable as uint256.
@@ -101,7 +101,7 @@ export function formatSkillLabel(skill: string | null | undefined): string | nul
 }
 
 /** Heuristic: numeric ids (1, 2, 3…) are legacy demo registrations. */
-export function isLegacyNumericId(id: bigint | string | number): boolean {
+export function isLegacyNumericId_REMOVED(id: bigint | string | number): boolean {
   const n = typeof id === 'bigint' ? id : BigInt(id);
   // keccak-derived ids are effectively guaranteed to be > 2^200. Any id
   // smaller than 2^32 is almost certainly a hand-picked demo number.
@@ -111,7 +111,7 @@ export function isLegacyNumericId(id: bigint | string | number): boolean {
 /** Short visual id "#9f3c…7a21" for hash-based agentIds. */
 export function shortAgentId(id: bigint | string | number): string {
   const n = typeof id === 'bigint' ? id : BigInt(id);
-  if (isLegacyNumericId(n)) return `#${n.toString()}`;
+  if (isLegacyNumericId_REMOVED(n)) return `#${n.toString()}`;
   const hex = n.toString(16).padStart(64, '0');
   return `#${hex.slice(0, 4)}…${hex.slice(-4)}`;
 }

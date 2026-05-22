@@ -17,7 +17,7 @@ import { config } from '@/lib/wagmi';
 import {
   buildAgentMetadataURI,
   displayAgentLabel,
-  nameToAgentId,
+  nameToLegacyAgentId_REMOVED,
   normalizeAgentName,
   parseAgentName,
   shortAgentId,
@@ -101,7 +101,7 @@ export default function RegisterManualAgentPage() {
 
   const derivedAgentId = useMemo(() => {
     try {
-      return form.name.trim() ? nameToAgentId(form.name) : null;
+      return form.name.trim() ? nameToLegacyAgentId_REMOVED(form.name) : null;
     } catch {
       return null;
     }
@@ -158,7 +158,7 @@ export default function RegisterManualAgentPage() {
     setNameStatus({ state: 'checking' });
     const handle = setTimeout(async () => {
       try {
-        const id = nameToAgentId(norm);
+        const id = nameToLegacyAgentId_REMOVED(norm);
         // ERC-8004 official: check ownership via ownerOf — if it reverts, the
         // tokenId (= agentId) is unminted and therefore "free".
         let exists = false;
