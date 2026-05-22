@@ -57,6 +57,7 @@ export default function LiveA2AAgentCategoryPage({ params }: PageProps) {
           {error ? <div className="mt-4 rounded-sm border border-red-400/25 bg-red-950/20 p-3 text-sm text-red-200">Bridge session endpoint failed: {error}</div> : null}
         </header>
         <section className="grid gap-3 lg:grid-cols-3"><PolymarketBtc15mPanel /><PolymarketOrderbookPanel /><BtcCandlestickPanel /></section>
+        <PolymarketBtc15mLive />
         <PredictionMarketDecisionBoard session={session} onSelectNode={setSelected} />
         <ActiveDecisionDetail node={activeNode} />
       </div>
