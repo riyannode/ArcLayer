@@ -21,7 +21,7 @@ function PanelShell({ title, children }: { title: string; children: React.ReactN
   return <section className="rounded-xl border border-zinc-800 bg-[#111214] p-4"><div className="mb-3 text-[13px] font-semibold text-zinc-100">{title}</div>{children}</section>;
 }
 
-export function PolymarketBtc15mPanel({ snapshot, loading, error }: { snapshot: LiveSnapshot | null; loading?: boolean; error?: string | null }) {
+export function PolymarketBtc15mPanel({ snapshot = null, loading, error }: { snapshot?: LiveSnapshot | null; loading?: boolean; error?: string | null }) {
   const livePrice = snapshot?.livePrice;
   const targetPrice = snapshot?.targetPrice;
   const upPrice = snapshot?.outcomes.up.probability;
@@ -37,7 +37,7 @@ export function PolymarketBtc15mPanel({ snapshot, loading, error }: { snapshot: 
   </PanelShell>;
 }
 
-export function PolymarketOrderbookPanel({ snapshot, loading }: { snapshot: LiveSnapshot | null; loading?: boolean }) {
+export function PolymarketOrderbookPanel({ snapshot = null, loading }: { snapshot?: LiveSnapshot | null; loading?: boolean }) {
   const upBook = snapshot?.orderbook.up;
   const downBook = snapshot?.orderbook.down;
   return <PanelShell title="UP / DOWN CLOB Orderbook">
@@ -46,7 +46,7 @@ export function PolymarketOrderbookPanel({ snapshot, loading }: { snapshot: Live
   </PanelShell>;
 }
 
-export function PolymarketStyleBtcChart({ snapshot, loading, error, onRefresh }: { snapshot: LiveSnapshot | null; loading?: boolean; error?: string | null; onRefresh?: () => void }) {
+export function PolymarketStyleBtcChart({ snapshot = null, loading, error, onRefresh }: { snapshot?: LiveSnapshot | null; loading?: boolean; error?: string | null; onRefresh?: () => void }) {
   const candles = snapshot?.candles1m ?? [];
   const hasCandles = candles.length > 0;
   const targetPrice = snapshot?.targetPrice ?? null;
@@ -75,4 +75,9 @@ export function PolymarketStyleBtcChart({ snapshot, loading, error, onRefresh }:
     {snapshot?.candleError ? <div className="mt-3 text-xs text-amber-300">Live candle source unavailable: {snapshot.candleError}</div> : null}
     <div className="relative mt-6 h-[330px] overflow-hidden rounded-xl border border-slate-700/40 bg-[#11161B]">{loading ? <div className="flex h-full items-center justify-center text-sm text-slate-400">Loading live candle data…</div> : error ? <div className="flex h-full items-center justify-center text-sm text-red-300">{error}</div> : !hasCandles ? <div className="flex h-full items-center justify-center text-sm text-slate-400">Waiting for live candle data</div> : <svg viewBox={`0 0 ${width} ${height}`} className="h-full w-full" preserveAspectRatio="none">{axisValues.map((price) => { const yy = y(price); return <g key={price}><line x1={leftPad} x2={width - rightPad} y1={yy} y2={yy} stroke="rgba(71,85,105,0.45)" strokeWidth="1" /><text x={width - rightPad + 8} y={yy + 4} fill="rgba(148,163,184,0.75)" fontSize="11" fontWeight="700">{price.toFixed(2)}</text></g>; })}{targetY !== null ? <g><line x1={leftPad} x2={width - rightPad} y1={targetY} y2={targetY} stroke="#EF4444" strokeWidth="1" strokeDasharray="2 3" /></g> : null}{candles.map((c, i) => { const x = leftPad + i * (chartW / Math.max(candles.length - 1, 1)); const openY = y(c.open); const closeY = y(c.close); const highY = y(c.high); const lowY = y(c.low); const up = c.close >= c.open; const color = up ? '#22C55E' : '#EF4444'; const bodyY = Math.min(openY, closeY); const bodyH = Math.max(Math.abs(closeY - openY), 3); return <g key={`${c.timestamp}-${i}`}><line x1={x} x2={x} y1={highY} y2={lowY} stroke={color} strokeWidth="1.5" /><rect x={x - candleW / 2} y={bodyY} width={candleW} height={bodyH} fill={color} rx="1" /></g>; })}</svg>}</div>
   </section>;
+}
+
+
+export function BtcCandlestickPanel({ snapshot = null, loading, error }: { snapshot?: LiveSnapshot | null; loading?: boolean; error?: string | null }) {
+  return <PolymarketStyleBtcChart snapshot={snapshot} loading={loading} error={error} />;
 }

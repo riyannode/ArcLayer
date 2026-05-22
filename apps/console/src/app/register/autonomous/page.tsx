@@ -199,7 +199,7 @@ function splitCsv(value: string): string[] {
   return value.split(',').map((x) => x.trim()).filter(Boolean);
 }
 
-function makeDefaultRole(category = 'prediction-market-bots'): RuntimeRoleForm {
+function makeDefaultRole(category = 'prediction-market'): RuntimeRoleForm {
   return {
     id: 'signal-oracle',
     name: 'Signal Oracle',
@@ -262,8 +262,8 @@ function canonicalize(value: unknown): string {
 
 export default function RegisterAutonomousPage() {
   const router = useRouter();
-  const [initialCategory, setInitialCategory] = useState('prediction-market-bots');
-  const defaultCategory = AGENT_CATEGORIES.some((c) => c.key === initialCategory) ? initialCategory : 'prediction-market-bots';
+  const [initialCategory, setInitialCategory] = useState('prediction-market');
+  const defaultCategory = AGENT_CATEGORIES.some((c) => c.key === initialCategory) ? initialCategory : 'prediction-market';
   const { isConnected, address } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const { signMessageAsync } = useArcSign();
