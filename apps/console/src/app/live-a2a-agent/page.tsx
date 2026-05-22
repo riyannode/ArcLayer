@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { AgentBridgeFlowDiagram, AgentBridgeSessionPanel, BridgeReceiptsPanel, ExternalJobsPanel, type BridgeSession } from '@/components/agent-bridge';
+import { AgentBridgeFlowDiagram, AgentBridgeSessionPanel, BotHealthPanel, BridgeReceiptsPanel, ExternalJobsPanel, LlmOutputPanel, ReceiptBreakdownPanel, SessionTimelinePanel, type BridgeSession } from '@/components/agent-bridge';
 import { RegisteredAgentsList } from '@/components/a2a/RegisteredAgentsList';
 import { AGENT_CATEGORIES } from './categories';
 import { BtcCandlestickPanel, PolymarketBtc15mPanel, PolymarketOrderbookPanel } from '@/components/market/PolymarketPanels';
@@ -97,6 +97,8 @@ export default function LiveA2AAgentPage() {
               <p className="mt-2 max-w-4xl text-sm text-[#EAE4D8]/70">External agents run anywhere. ArcLayer handles x402 access, bridge events, receipts, payload hashes, and proof history on Arc.</p>
             </div>
             <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Link href="/live-a2a-agent/proof" className="rounded-sm border border-emerald-300/35 bg-emerald-400/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-emerald-300 hover:bg-emerald-400/15">Proof Page →</Link>
+              <Link href="/status" className="rounded-sm border border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#EAE4D8]/65 hover:border-[#C5A67C]/35 hover:text-[#C5A67C]">Status</Link>
               <Chip>Bridge Events</Chip>
               <Chip>Receipts</Chip>
               <Chip>Payload Hash</Chip>
@@ -151,6 +153,10 @@ export default function LiveA2AAgentPage() {
 
         <RegisteredAgentsList categoryKey="custom-workers" categoryLabel="Registered External Agents" />
         <ExternalJobsPanel title="Available Jobs" />
+        <BotHealthPanel session={session} />
+        <ReceiptBreakdownPanel session={session} />
+        <SessionTimelinePanel session={session} />
+        <LlmOutputPanel session={session} />
         <AgentBridgeSessionPanel session={session} error={error} />
         <AgentBridgeFlowDiagram session={session} />
         <BridgeReceiptsPanel session={session} />
