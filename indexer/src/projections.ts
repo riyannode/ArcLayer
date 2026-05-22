@@ -67,10 +67,12 @@ export function projectJobsFromEvents(events: IndexedJobEvent[]) {
     const fundedEvents = jobEvents.filter((event) => event.eventName === "JobFunded") as any[];
     const submitted = [...jobEvents].reverse().find((event) => event.eventName === "JobSubmitted") as any;
     const completed = [...jobEvents].reverse().find((event) => event.eventName === "JobCompleted") as any;
+    const rejected = [...jobEvents].reverse().find((event) => event.eventName === "JobRejected") as any;
+    const expired = [...jobEvents].reverse().find((event) => event.eventName === "JobExpired") as any;
 
     const totalFunded = fundedEvents.reduce((sum, event) => sum + BigInt(event.amount ?? 0), BigInt(0));
     const budget = BigInt(latestBudget?.amount ?? 0);
-    const status = completed ? 3 : submitted ? 2 : totalFunded > BigInt(0) ? 1 : 0;
+    const status = expired ? 5 : rejected ? 4 : completed ? 3 : submitted ? 2 : totalFunded > BigInt(0) ? 1 : 0;
     const statusLabel = ["Open", "Funded", "Submitted", "Completed", "Rejected", "Expired"][status];
 
     return {
@@ -89,14 +91,6 @@ export function projectJobsFromEvents(events: IndexedJobEvent[]) {
       completionReason: completed?.reason ?? "0x0000000000000000000000000000000000000000000000000000000000000000",
       status,
       statusLabel,
-      legacyAliases: {
-        worker: created?.provider ?? "0x0000000000000000000000000000000000000000",
-        agentId: created?.provider ?? "0x0000000000000000000000000000000000000000",
-        jobSpecHash: created?.description ?? "",
-        deliverableURI: submitted?.deliverable ?? "",
-        proofMetadataURI: "",
-        approved: false,
-      },
       createdAt: String(created?.blockNumber ?? jobEvents[0]?.blockNumber ?? 0),
       events: jobEvents,
     };

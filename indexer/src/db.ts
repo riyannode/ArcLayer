@@ -243,7 +243,7 @@ function normalizeJobForLegacySchema(job: ReturnType<typeof projectJobsFromEvent
     jobSpecHash: job.description,
     deliverableURI: job.deliverable,
     proofMetadataURI: job.completionReason,
-    approved: job.status === 4,
+    approved: job.status === 3,
     status: job.status,
   };
 }

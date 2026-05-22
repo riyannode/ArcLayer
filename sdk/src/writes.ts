@@ -6,34 +6,9 @@ export function hashProtocolString(value: string) {
   return keccak256(toBytes(value.trim()));
 }
 
-/**
- * Official ERC-8004 agent registration.
- * Arc/Circle reference signature: register(string metadataURI) → uint256 tokenId.
- */
-export function buildRegisterAgentConfig(metadataURI: string): {
-  address: typeof CONTRACTS.ERC8004_IDENTITY_REGISTRY;
-  abi: typeof ERC8004_IDENTITY_REGISTRY_ABI;
-  functionName: "register";
-  args: readonly [string];
-};
-
-/**
- * @deprecated Legacy compatibility overload. agentId + skill are ignored because
- * ERC-8004 derives tokenId on-chain and only accepts metadataURI.
- */
-export function buildRegisterAgentConfig(agentId: bigint, skill: string, metadataURI: string): {
-  address: typeof CONTRACTS.ERC8004_IDENTITY_REGISTRY;
-  abi: typeof ERC8004_IDENTITY_REGISTRY_ABI;
-  functionName: "register";
-  args: readonly [string];
-};
-
 export function buildRegisterAgentConfig(
-  metadataOrAgentId: string | bigint,
-  _skill?: string,
-  legacyMetadataURI?: string,
+  metadataURI: string,
 ) {
-  const metadataURI = typeof metadataOrAgentId === "string" ? metadataOrAgentId : legacyMetadataURI;
   if (!metadataURI) throw new Error("metadataURI is required for ERC-8004 register");
   return {
     address: CONTRACTS.ERC8004_IDENTITY_REGISTRY,

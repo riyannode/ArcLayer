@@ -2,7 +2,7 @@ import type { A2AOnChain, AutonomousFeed, NetworkAgent, Overview, RegisteredAgen
 
 function jobsForAgent(overview: Overview | null, agentId?: string) {
   if (!overview || !agentId) return 0;
-  return overview.jobs.filter((job) => job.agentId?.toLowerCase() === agentId.toLowerCase()).length;
+  return overview.jobs.filter((job) => job.provider?.toLowerCase() === agentId.toLowerCase()).length;
 }
 
 function jobClientsForAgent(overview: Overview | null, agentId?: string) {
@@ -10,7 +10,7 @@ function jobClientsForAgent(overview: Overview | null, agentId?: string) {
   return Array.from(
     new Set(
       overview.jobs
-        .filter((job) => job.agentId?.toLowerCase() === agentId.toLowerCase() && job.client)
+        .filter((job) => job.provider?.toLowerCase() === agentId.toLowerCase() && job.client)
         .map((job) => `${job.client.slice(0, 6)}…${job.client.slice(-4)}`)
     )
   ).slice(0, 2);
@@ -46,14 +46,14 @@ export function buildAgentNetwork({
       if (hiddenIds?.has(regId)) continue;
 
       const completed = jobsForAgent(overview, regId);
-      const receipts = overview?.proofs.filter((p) => p.agentId?.toLowerCase() === regKey) ?? [];
-      const jobs = overview?.jobs.filter((job) => job.agentId?.toLowerCase() === regKey) ?? [];
+      const receipts = (overview?.proofs as any[] | undefined)?.filter((p) => String(p.agentId || "").toLowerCase() === regKey) ?? [];
+      const jobs = overview?.jobs.filter((job) => job.provider?.toLowerCase() === regKey) ?? [];
       const volumeRaw = receipts.reduce((sum, p) => sum + BigInt(p.amountPaid || '0'), BigInt(0)).toString();
       const activity = [
         ...receipts.map((p) => ({
           id: `proof-${p.tokenId}`,
           ts: new Date(Number(p.mintedAt || '0') * 1000).toISOString(),
-          agent: 'Apolo' as const,
+          agent: 'agent',
           type: 'payment' as const,
           label: `Receipt #${p.tokenId} minted for job #${p.jobId}`,
           detail: `${Number(p.amountPaid || '0') / 1e6} USDC paid`,
@@ -61,9 +61,9 @@ export function buildAgentNetwork({
         ...jobs.map((job) => ({
           id: `job-${job.id}`,
           ts: new Date(Number(job.createdAt || '0') * 1000).toISOString(),
-          agent: 'Apolo' as const,
+          agent: 'agent',
           type: 'decision' as const,
-          label: `Job #${job.id} ${job.approved ? 'approved' : 'created'}`,
+          label: `Job #${job.id} ${job.status === 3 ? 'completed' : 'created'}`,
           detail: `${Number(job.fundedAmount || job.budget || '0') / 1e6} USDC budget`,
         })),
       ].sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts)).slice(0, 8);

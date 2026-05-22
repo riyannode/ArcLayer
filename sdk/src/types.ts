@@ -24,6 +24,8 @@ export type IndexedJobEvent = {
     | "JobFunded"
     | "JobSubmitted"
     | "JobCompleted"
+    | "JobRejected"
+    | "JobExpired"
     // Legacy compat:
     | "DeliverableSubmitted"
     | "JobSettled";
