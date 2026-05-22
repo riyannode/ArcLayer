@@ -54,9 +54,9 @@ export default function LiveA2AAgentPage() {
             </div>
           </div>
           <div className="grid gap-px bg-white/10 md:grid-cols-4">
-            <div className="bg-black/25 px-4 py-3"><div className="font-mono text-[10px] uppercase text-[#EAE4D8]/45">Events</div><div className="font-mono text-lg text-[#C5A67C]">{session?.events.length ?? 0}</div></div>
-            <div className="bg-black/25 px-4 py-3"><div className="font-mono text-[10px] uppercase text-[#EAE4D8]/45">Receipts</div><div className="font-mono text-lg text-emerald-300">{session?.receipts.length ?? 0}</div></div>
-            <div className="bg-black/25 px-4 py-3"><div className="font-mono text-[10px] uppercase text-[#EAE4D8]/45">Roles</div><div className="font-mono text-lg text-[#D7C7AA]">{Object.keys(session?.roles ?? {}).length}</div></div>
+            <div className="bg-black/25 px-4 py-3"><div className="font-mono text-[10px] uppercase text-[#EAE4D8]/45">Events</div><div className="font-mono text-lg text-[#C5A67C]">{session?.totals?.events ?? session?.events.length ?? 0}</div></div>
+            <div className="bg-black/25 px-4 py-3"><div className="font-mono text-[10px] uppercase text-[#EAE4D8]/45">Receipts</div><div className="font-mono text-lg text-emerald-300">{session?.totals?.receipts ?? session?.receipts.length ?? 0}</div></div>
+            <div className="bg-black/25 px-4 py-3"><div className="font-mono text-[10px] uppercase text-[#EAE4D8]/45">Roles</div><div className="font-mono text-lg text-[#D7C7AA]">{session?.totals?.roles ?? Object.keys(session?.roles ?? {}).length}</div></div>
             <div className="bg-black/25 px-4 py-3"><div className="font-mono text-[10px] uppercase text-[#EAE4D8]/45">Bridge</div><div className="font-mono text-lg text-[#C5A67C]">{error ? 'Degraded' : 'Live'}</div></div>
           </div>
         </header>
