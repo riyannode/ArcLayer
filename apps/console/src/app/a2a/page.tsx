@@ -2,22 +2,8 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { waitForTransactionReceipt } from '@wagmi/core';
-import { useWriteContract } from 'wagmi';
-import { config } from '@/lib/wagmi';
 import { indexerUrl } from '@/lib/indexer';
-import type { Hex } from 'viem';
 
-const AGENT_REGISTRY_ADDRESS = '0xB263336055dD65FF501e36CA39941760D943703C' as const;
-const AGENT_REGISTRY_ABI = [
-  {
-    type: 'function',
-    name: 'deactivateAgent',
-    stateMutability: 'nonpayable',
-    inputs: [{ name: 'agentId', type: 'bytes32' }],
-    outputs: [],
-  },
-] as const;
 import type {
   A2AOnChain,
   AgentCategory,
@@ -190,33 +176,6 @@ function A2ADashboardPage() {
     });
   }, []);
 
-  const { writeContractAsync } = useWriteContract();
-  const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
-
-  const deactivateAgent = useCallback(async (agent: NetworkAgent) => {
-    if (!agent.id || !agent.id.startsWith('0x')) {
-      alert(`Cannot deactivate: invalid agent ID format.\nThis agent isn't registered on-chain.`);
-      return;
-    }
-    try {
-      setDeactivatingId(agent.id);
-      const txHash = await writeContractAsync({
-        address: AGENT_REGISTRY_ADDRESS,
-        abi: AGENT_REGISTRY_ABI,
-        functionName: 'deactivateAgent',
-        args: [agent.id as Hex],
-      });
-      await waitForTransactionReceipt(config, { hash: txHash });
-      alert(`✓ ${agent.name} deactivated on-chain.\n\nTx: ${txHash}`);
-      hideAgent(agent.id);
-    } catch (err: any) {
-      const msg = err?.shortMessage || err?.message || 'Unknown error';
-      alert(`Deactivation failed:\n${msg}\n\nNote: Only the agent controller can deactivate.`);
-    } finally {
-      setDeactivatingId(null);
-    }
-  }, [writeContractAsync, hideAgent]);
-
   const unhideAgent = useCallback((agentId: string) => {
     setHiddenIds((prev) => {
       const next = new Set(prev);
@@ -325,11 +284,6 @@ function A2ADashboardPage() {
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-[#EAE4D8] selection:bg-[#C5A67C]/20">
-      {/* ─── Legacy / Experimental Banner ─────────────────────────────── */}
-      <div className="border-b border-amber-500/30 bg-amber-950/20 px-6 py-3 text-center font-mono text-[11px] text-amber-300">
-        ⚠ Legacy / Experimental ArcLayer A2A Layer — This surface uses custom protocols not part of the official Arc specification.
-        Official flow: <a href="/protocol" className="underline text-[#C5A67C] hover:text-[#EAE4D8]">ERC-8004 · ERC-8183 · x402</a>
-      </div>
       {/* ─── Header ───────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-10 border-b border-white/5 bg-[#0A0A0A]/95 px-6 py-4 ">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
@@ -459,7 +413,7 @@ function A2ADashboardPage() {
         </footer>
       </div>
 
-      <AgentDetailDrawer agent={selectedAgent} onClose={() => setSelectedAgentId(null)} onHide={hideAgent} onDeactivate={deactivateAgent} isDeactivating={deactivatingId === selectedAgent?.id} />
+      <AgentDetailDrawer agent={selectedAgent} onClose={() => setSelectedAgentId(null)} onHide={hideAgent} />
     </main>
   );
 }

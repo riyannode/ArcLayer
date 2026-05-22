@@ -1,5 +1,5 @@
 import type { IndexedAgentEvent, IndexedJobEvent } from "@arclayer/sdk";
-import { ARC_REFERENCE_METADATA_PREFIX_FILTER } from "./config";
+import { ARC_REFERENCE_AGENT_ID_FILTER, ARC_REFERENCE_METADATA_PREFIX_FILTER } from "./config";
 import {
   matchesReferenceAgentId,
   matchesReferenceWallet,
@@ -120,22 +120,16 @@ export function projectAgentsFromEvents(
       if (isImportedArcLayerAgent(event)) return true;
       if (!arcWalletFilterActive()) return true;
       const ctrl = (event.controller ?? "").toLowerCase();
-      // Keep if controller matches allowlist
-      if (matchesArcWallet(ctrl)) return true;
-      // Keep if controller appears in any indexed ArcLayer job
-      if (arcJobWallets && arcJobWallets.has(ctrl)) return true;
-      return false;
-    })
-    .filter((event) => {
-      if (isImportedArcLayerAgent(event)) return true;
-      return matchesReferenceAgentId(event.agentId, "arclayer");
-    })
-    .filter((event) => {
-      if (isImportedArcLayerAgent(event)) return true;
-      if (ARC_REFERENCE_METADATA_PREFIX_FILTER.length === 0) return true;
+      const walletMatch = matchesArcWallet(ctrl);
+      const walletInRetainedJobs = Boolean(arcJobWallets && arcJobWallets.has(ctrl));
+      const agentIdMatch = ARC_REFERENCE_AGENT_ID_FILTER.length > 0
+        ? matchesReferenceAgentId(event.agentId, "arclayer")
+        : false;
       const uri = event.metadataURI ?? "";
-      if (!uri) return true;
-      return ARC_REFERENCE_METADATA_PREFIX_FILTER.some((prefix) => uri.startsWith(prefix));
+      const metadataMatch = ARC_REFERENCE_METADATA_PREFIX_FILTER.length > 0
+        ? ARC_REFERENCE_METADATA_PREFIX_FILTER.some((prefix) => uri.startsWith(prefix))
+        : false;
+      return walletMatch || walletInRetainedJobs || agentIdMatch || metadataMatch;
     })
     .map((event) => ({
       agentId: String(event.agentId),

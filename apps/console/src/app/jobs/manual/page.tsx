@@ -43,6 +43,22 @@ function isValidAddress(value: string) {
   return /^0x[a-fA-F0-9]{40}$/.test(value.trim());
 }
 
+function normalizeJobsResponse(payload: unknown): IndexedJob[] {
+  if (Array.isArray(payload)) return payload as IndexedJob[];
+  if (payload && typeof payload === 'object' && Array.isArray((payload as { jobs?: unknown[] }).jobs)) {
+    return (payload as { jobs: IndexedJob[] }).jobs;
+  }
+  return [];
+}
+
+function normalizeAgentsResponse(payload: unknown): IndexedAgent[] {
+  if (Array.isArray(payload)) return payload as IndexedAgent[];
+  if (payload && typeof payload === 'object' && Array.isArray((payload as { agents?: unknown[] }).agents)) {
+    return (payload as { agents: IndexedAgent[] }).agents;
+  }
+  return [];
+}
+
 export default function JobsPageRoute() {
   return (
     <Suspense fallback={null}>
@@ -197,16 +213,23 @@ function JobsPage() {
   async function loadJobs() {
     setIsRefreshing(true);
     try {
-      const [nextJobs, nextAgents] = await Promise.all([
-        fetchIndexerJson<IndexedJob[]>('/jobs'),
-        fetchIndexerJson<IndexedAgent[]>('/agents'),
+      const [nextJobsRaw, nextAgentsRaw] = await Promise.all([
+        fetchIndexerJson<IndexedJob[] | { jobs: IndexedJob[] }>('/jobs'),
+        fetchIndexerJson<IndexedAgent[] | { agents: IndexedAgent[] }>('/agents'),
       ]);
+      const nextJobs = normalizeJobsResponse(nextJobsRaw);
+      const nextAgents = normalizeAgentsResponse(nextAgentsRaw);
       setJobs(nextJobs);
       setAgents(nextAgents);
       setCreateForm((current) => ({
         ...current,
         agentId: current.agentId || preselectedAgentId || nextAgents[0]?.agentId || '',
       }));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Indexer is unavailable. Showing degraded state.');
+      setJobs([]);
+      setAgents([]);
     } finally {
       setIsRefreshing(false);
     }
@@ -219,10 +242,12 @@ function JobsPage() {
         setIsLoading(true);
         setError(null);
         setStatusTone('pending');
-        const [nextJobs, nextAgents] = await Promise.all([
-          fetchIndexerJson<IndexedJob[]>('/jobs'),
-          fetchIndexerJson<IndexedAgent[]>('/agents'),
+        const [nextJobsRaw, nextAgentsRaw] = await Promise.all([
+          fetchIndexerJson<IndexedJob[] | { jobs: IndexedJob[] }>('/jobs'),
+          fetchIndexerJson<IndexedAgent[] | { agents: IndexedAgent[] }>('/agents'),
         ]);
+        const nextJobs = normalizeJobsResponse(nextJobsRaw);
+        const nextAgents = normalizeAgentsResponse(nextAgentsRaw);
         if (!cancelled) {
           setJobs(nextJobs);
           setAgents(nextAgents);
@@ -234,7 +259,9 @@ function JobsPage() {
         }
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : 'Failed to load jobs.');
+          setError(e instanceof Error ? e.message : 'Indexer is unavailable. Showing degraded state.');
+          setJobs([]);
+          setAgents([]);
           setStatusTone('error');
         }
       } finally {
@@ -615,7 +642,7 @@ function JobsPage() {
                         <div>
                           <div className="mb-1 flex flex-wrap gap-2">
                             <span className="chip-status pending">{display.category}</span>
-                            {!display.isStructured && <span className="chip-status">Legacy</span>}
+                            {!display.isStructured && <span className="chip-status">ArcLayer Agent</span>}
                           </div>
                           <Link href={`/job/${job.id}`} className="font-mono text-[12.5px] text-[#EAE4D8] hover:text-[#C5A67C]">{display.title}</Link>
                           <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">

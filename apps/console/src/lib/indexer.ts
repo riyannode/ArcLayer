@@ -139,12 +139,33 @@ export type DataSource = 'indexer' | 'rpc';
 
 export type Sourced<T> = { data: T; source: DataSource };
 
-export async function fetchIndexerJson<T>(path: string) {
-  const response = await fetch(indexerUrl(path));
-  if (!response.ok) {
-    throw new Error(response.status === 404 ? 'Resource not found.' : `Indexer returned HTTP ${response.status}.`);
+export async function fetchIndexerJson<T>(path: string, timeoutMs = 8000): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(indexerUrl(path), {
+      cache: 'no-store',
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new Error('Indexer request timed out.');
+    }
+    throw new Error('Unable to reach indexer service.');
   }
-  return (await response.json()) as T;
+  if (!response.ok) {
+    if (response.status === 404) throw new Error('Resource not found.');
+    if (response.status >= 500) throw new Error(`Indexer service unavailable (HTTP ${response.status}).`);
+    throw new Error(`Indexer request failed (HTTP ${response.status}).`);
+  }
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().includes('application/json')) {
+    throw new Error('Indexer returned a non-JSON response.');
+  }
+  try {
+    return (await response.json()) as T;
+  } catch {
+    throw new Error('Indexer returned invalid JSON.');
+  }
 }
 
 export async function waitForIndexer<T>(

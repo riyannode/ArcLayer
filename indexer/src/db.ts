@@ -199,10 +199,10 @@ export function writeMetaValue(key: string, value: string) {
 function normalizeJobForLegacySchema(job: ReturnType<typeof projectJobsFromEvents>[number]) {
   return {
     id: job.id,
-    agentId: "0",
+    agentId: job.agentId || job.provider,
     client: job.client,
     worker: job.provider,
-    evaluator: "0x0000000000000000000000000000000000000000",
+    evaluator: job.evaluator,
     budget: job.budget,
     fundedAmount: job.fundedAmount,
     createdAt: job.createdAtBlock,
