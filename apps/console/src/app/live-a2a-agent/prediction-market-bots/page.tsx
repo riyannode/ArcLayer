@@ -1,16 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
-import { ActiveDecisionDetail, buildPredictionMarketDecisionNodes, PredictionMarketDecisionBoard, type BridgeSession, type DecisionNode } from '@/components/agent-bridge';
 import { BtcCandlestickPanel, PolymarketBtc15mPanel, PolymarketOrderbookPanel } from '@/components/market/PolymarketPanels';
 
 export default function PredictionMarketBotsPage() {
-  const [session] = useState<BridgeSession | null>(null);
-  const [selected, setSelected] = useState<DecisionNode | null>(null);
-  const defaultNode = useMemo(() => buildPredictionMarketDecisionNodes(session)[2] ?? null, [session]);
-  const activeNode = selected ?? defaultNode;
-
   return (
     <main className="min-h-screen overflow-x-hidden bg-[#050505] px-4 py-6 text-[#EAE4D8] sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
@@ -20,8 +13,6 @@ export default function PredictionMarketBotsPage() {
           <p className="mt-2 text-sm text-[#EAE4D8]/70">Live Polymarket BTC/ETH UpDown 15m monitor with decision and receipt placeholders (no live execution).</p>
         </header>
         <section className="grid gap-3 lg:grid-cols-3"><PolymarketBtc15mPanel /><PolymarketOrderbookPanel /><BtcCandlestickPanel /></section>
-        <PredictionMarketDecisionBoard session={session} onSelectNode={setSelected} />
-        <ActiveDecisionDetail node={activeNode} />
       </div>
     </main>
   );
