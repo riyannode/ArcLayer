@@ -5,33 +5,57 @@ import type { LiveSnapshot } from '@/lib/markets/polymarket/types';
 
 type ApiResponse = { ok: boolean; data?: LiveSnapshot; error?: string };
 
-export function useCryptoUpDownLive(asset: 'BTC' | 'ETH' = 'BTC') {
+export function useCryptoUpDownLive(asset: 'BTC' | 'ETH' = 'BTC', enabled = true) {
   const [data, setData] = useState<LiveSnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!enabled) return;
     try {
       const res = await fetch(`/api/markets/crypto-updown/live?asset=${asset}`, { cache: 'no-store' });
-      const json = await res.json() as ApiResponse;
+      const json = (await res.json()) as ApiResponse;
       if (!res.ok || !json.ok || !json.data) throw new Error(json.error || 'fetch_failed');
-      setData(json.data); setError(null);
-    } catch (e) { setError(e instanceof Error ? e.message : 'network_error'); }
-    finally { setLoading(false); }
-  }, [asset]);
+      setData(json.data);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'network_error');
+    } finally {
+      setLoading(false);
+    }
+  }, [asset, enabled]);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
+
     let id: ReturnType<typeof setInterval> | null = null;
-    const loop = () => {
-      refresh();
+
+    const startPolling = () => {
+      void refresh();
       if (id) clearInterval(id);
-      if (!document.hidden) id = setInterval(refresh, 5000);
+      if (!document.hidden) id = setInterval(() => void refresh(), 30_000);
     };
-    loop();
-    const onVisibility = () => loop();
+
+    startPolling();
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (id) clearInterval(id);
+        id = null;
+        return;
+      }
+      startPolling();
+    };
+
     document.addEventListener('visibilitychange', onVisibility);
-    return () => { if (id) clearInterval(id); document.removeEventListener('visibilitychange', onVisibility); };
-  }, [refresh]);
+    return () => {
+      if (id) clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [enabled, refresh]);
 
   return { data, loading, error, refresh };
 }

@@ -2,7 +2,16 @@ import type { Asset, GammaMarket } from './types';
 
 const WINDOW_SEC = 900;
 
-function parseArray(raw?: string) { try { const parsed = JSON.parse(raw || '[]'); return Array.isArray(parsed) ? parsed.map(String) : []; } catch { return []; } }
+function parseMaybeArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value !== 'string') return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
 
 export function alignedWindow(nowMs = Date.now()) {
   const now = Math.floor(nowMs / 1000);
@@ -16,14 +25,20 @@ export async function fetchActiveUpDownMarket(asset: Asset) {
     const slug = `${asset.toLowerCase()}-updown-15m-${ws}`;
     const res = await fetch(`https://gamma-api.polymarket.com/markets?slug=${slug}`, { cache: 'no-store', signal: AbortSignal.timeout(9000) });
     if (!res.ok) continue;
-    const markets = await res.json() as GammaMarket[];
+    const markets = (await res.json()) as GammaMarket[];
     const market = Array.isArray(markets) ? markets[0] : null;
     if (!market) continue;
-    const prices = parseArray(market.outcomePrices);
-    const tokens = parseArray(market.clobTokenIds);
+    const prices = parseMaybeArray(market.outcomePrices);
+    const tokens = parseMaybeArray(market.clobTokenIds);
     return {
-      asset, marketSlug: market.slug || slug, question: market.question || `${asset} Up or Down - 15m`, conditionId: market.conditionId || null,
-      windowStart: ws, windowEnd: ws + WINDOW_SEC, currentWindowStart: start, currentWindowEnd: end,
+      asset,
+      marketSlug: market.slug || slug,
+      question: market.question || `${asset} Up or Down - 15m`,
+      conditionId: market.conditionId || null,
+      windowStart: ws,
+      windowEnd: ws + WINDOW_SEC,
+      currentWindowStart: start,
+      currentWindowEnd: end,
       outcomes: {
         up: { label: 'UP', probability: Number(prices[0] ?? NaN), tokenId: tokens[0] || null },
         down: { label: 'DOWN', probability: Number(prices[1] ?? NaN), tokenId: tokens[1] || null },

@@ -22,7 +22,8 @@ function LiveA2AJobDetailContent({ params }: PageProps) {
   const [session, setSession] = useState<BridgeSession | null>(null);
   const [selected, setSelected] = useState<DecisionNode | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { data: marketSnapshot, loading: marketLoading, error: marketError } = useCryptoUpDownLive('BTC');
+  const isPrediction = job?.category === 'prediction-market-bots' || routeCategory === 'prediction-market-bots';
+  const { data: marketSnapshot, loading: marketLoading, error: marketError } = useCryptoUpDownLive('BTC', isPrediction);
 
   useEffect(() => {
     let alive = true;
@@ -44,7 +45,6 @@ function LiveA2AJobDetailContent({ params }: PageProps) {
 
   const defaultNode = useMemo(() => buildPredictionMarketDecisionNodes(session)[2] ?? null, [session]);
   const activeNode = selected ?? defaultNode;
-  const isPrediction = job?.category === 'prediction-market-bots' || routeCategory === 'prediction-market-bots';
 
   return (
     <main className="min-h-screen bg-[#050505] px-4 py-10 text-[#EAE4D8] sm:px-6 lg:px-8">
