@@ -10,7 +10,7 @@ import {
   type ERC8183IndexedLifecycleEvent,
 } from "./a2a-lifecycle-sync";
 import { buildAgentProjectionDebug, projectAgentsFromEvents, projectJobsFromEvents } from "./projections";
-import { ARC_ERC8004_ADDRESS, ARC_ERC8183_ADDRESS, OLD_ARCLAYER_AGENT_REGISTRY_ADDRESS } from "./config";
+import { ARC_ERC8004_ADDRESS, ARC_ERC8183_ADDRESS } from "./config";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.INDEXER_DB_PATH || resolve(currentDir, "../data/arclayer-indexer.sqlite");
@@ -230,30 +230,28 @@ export function writeMetaValue(key: string, value: string) {
   upsertMeta.run(key, value);
 }
 
-function normalizeJobForLegacySchema(job: ReturnType<typeof projectJobsFromEvents>[number]) {
+function normalizeJobForCompatibilitySchema(job: ReturnType<typeof projectJobsFromEvents>[number]) {
   return {
     id: job.id,
     agentId: "0",
     client: job.client,
     worker: job.provider,
-    evaluator: "0x0000000000000000000000000000000000000000",
+    evaluator: job.evaluator,
     budget: job.budget,
     fundedAmount: job.fundedAmount,
     createdAt: job.createdAtBlock,
     jobSpecHash: job.description,
     deliverableURI: job.deliverable,
     proofMetadataURI: job.completionReason,
-    approved: job.status === 4,
+    approved: job.status === 3,
     status: job.status,
   };
 }
 
-function normalizeAgentForLegacySchema(agent: ReturnType<typeof projectAgentsFromEvents>[number]) {
-  const source = (agent as any).source === "imported_arclayer_registry"
-    ? "imported_arclayer_registry"
-    : "erc8004_identity_registry";
+function normalizeAgentForCompatibilitySchema(agent: ReturnType<typeof projectAgentsFromEvents>[number]) {
+  const source = "erc8004_identity_registry";
   const now = new Date().toISOString();
-  const registryAddress = source === "imported_arclayer_registry" ? OLD_ARCLAYER_AGENT_REGISTRY_ADDRESS : ARC_ERC8004_ADDRESS;
+  const registryAddress = ARC_ERC8004_ADDRESS;
   const tokenId = String(agent.tokenId ?? agent.agentId);
   return {
     agentId: `${source}:${tokenId}`,
@@ -321,9 +319,9 @@ export async function syncProjectionStore(
       if (job.evaluator) jobWallets.add(job.evaluator.toLowerCase());
     }
 
-    const jobs = projectedJobs.map(normalizeJobForLegacySchema);
+    const jobs = projectedJobs.map(normalizeJobForCompatibilitySchema);
     const agentProjectionDebug = buildAgentProjectionDebug(allAgentEvents, jobWallets);
-    const agents = projectAgentsFromEvents(allAgentEvents, jobWallets).map(normalizeAgentForLegacySchema);
+    const agents = projectAgentsFromEvents(allAgentEvents, jobWallets).map(normalizeAgentForCompatibilitySchema);
 
     db.exec("DELETE FROM jobs");
     db.exec("DELETE FROM agents");
@@ -422,25 +420,30 @@ function buildStoredAgentProjectionDebug() {
 }
 
 export function readJobs() {
-  return db.prepare(`SELECT * FROM jobs ORDER BY CAST(id AS INTEGER) DESC`).all().map((row) => ({
-    id: row.id as string,
-    agentId: row.agent_id as string,
-    client: row.client as string,
-    worker: row.worker as string,
-    provider: row.worker as string,
-    evaluator: row.evaluator as string,
-    budget: row.budget as string,
-    fundedAmount: row.funded_amount as string,
-    createdAt: row.created_at as string,
-    jobSpecHash: row.job_spec_hash as string,
-    metadataURI: row.job_spec_hash as string,
-    deliverableURI: row.deliverable_uri as string,
-    submissionURI: row.deliverable_uri as string,
-    proofMetadataURI: row.proof_metadata_uri as string,
-    completionURI: row.proof_metadata_uri as string,
-    approved: Boolean(row.approved),
-    status: Number(row.status),
-  }));
+  return db.prepare(`SELECT * FROM jobs ORDER BY CAST(id AS INTEGER) DESC`).all().map((row) => {
+    const status = Number(row.status);
+    return {
+      id: row.id as string,
+      client: row.client as string,
+      provider: row.worker as string,
+      evaluator: row.evaluator as string,
+      description: row.job_spec_hash as string,
+      budget: row.budget as string,
+      fundedAmount: row.funded_amount as string,
+      deliverable: row.deliverable_uri as string,
+      completionReason: row.proof_metadata_uri as string,
+      status,
+      statusLabel: ["Open", "Funded", "Submitted", "Completed", "Rejected", "Expired"][status] ?? String(status),
+      createdAt: row.created_at as string,
+      legacyAliases: {
+        worker: row.worker as string,
+        jobSpecHash: row.job_spec_hash as string,
+        deliverableURI: row.deliverable_uri as string,
+        proofMetadataURI: row.proof_metadata_uri as string,
+        approved: Boolean(row.approved),
+      },
+    };
+  });
 }
 
 export function readJobById(jobId: string) {
@@ -450,11 +453,9 @@ export function readJobById(jobId: string) {
 }
 
 export function readAgents(source: "all" | "imported" | "erc8004" = "all") {
-  const where = source === "imported"
-    ? "WHERE source = 'imported_arclayer_registry'"
-    : source === "erc8004"
-      ? "WHERE source = 'erc8004_identity_registry'"
-      : "";
+  const where = source === "erc8004" || source === "imported"
+    ? "WHERE source = 'erc8004_identity_registry'"
+    : "";
   return db.prepare(`SELECT * FROM agents ${where} ORDER BY CAST(COALESCE(NULLIF(token_id, ''), agent_id) AS INTEGER) DESC`).all().map((row) => ({
     agentId: row.agent_id as string,
     tokenId: ((row.token_id as string | undefined) || row.agent_id) as string,
@@ -476,7 +477,7 @@ export function readAgents(source: "all" | "imported" | "erc8004" = "all") {
     blockNumber: row.block_number as string,
     importedAt: row.imported_at as string,
     updatedAt: row.updated_at as string,
-    displayType: row.source === "imported_arclayer_registry" ? "ArcLayer Agent" : "ERC-8004 Agent",
+    displayType: "ERC-8004 Agent",
   }));
 }
 
@@ -528,12 +529,12 @@ export function readOverview() {
 
   const totalBudget = jobs.reduce((sum, job) => sum + BigInt(job.budget), BigInt(0));
   const totalFunded = jobs.reduce((sum, job) => sum + BigInt(job.fundedAmount), BigInt(0));
-  const settledJobs = jobs.filter((job) => job.status === 4).length;
+  const settledJobs = jobs.filter((job) => job.status === 3).length;
   const fundedJobs = jobs.filter((job) => BigInt(job.fundedAmount) > BigInt(0)).length;
   const totalBudgetAtomic = totalBudget.toString();
   const totalFundedAtomic = totalFunded.toString();
 
-  const importedAgents = agents.filter((agent) => agent.source === "imported_arclayer_registry").length;
+  const importedAgents = 0;
   const erc8004Agents = agents.filter((agent) => agent.source === "erc8004_identity_registry").length;
 
   return {

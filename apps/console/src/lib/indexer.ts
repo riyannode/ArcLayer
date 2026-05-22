@@ -32,7 +32,7 @@ export type IndexedJob = {
   deliverable: string;
   completionReason: string;
   status: number;
-  statusLabel: 'Created' | 'Budgeted' | 'Funded' | 'Submitted' | 'Completed';
+  statusLabel: 'Open' | 'Funded' | 'Submitted' | 'Completed' | 'Rejected' | 'Expired';
 
   // ── Legacy aliases (deprecated) — kept for in-flight UI components migrating
   // to the official ERC-8183 schema. Populated by the fetch-time adapter
@@ -47,7 +47,7 @@ export type IndexedJob = {
   deliverableURI: string;
   /** @deprecated No proof URI in official ERC-8183 reference flow. */
   proofMetadataURI: string;
-  /** @deprecated Use `status === 4` and `completionReason`. */
+  /** @deprecated Use `status === 3` and `completionReason`. */
   approved: boolean;
   /** @deprecated Use `createdAtBlock`. */
   createdAt: string;
@@ -66,7 +66,7 @@ export function withLegacyJobAliases(job: IndexedJob): IndexedJob {
     jobSpecHash: job.description,
     deliverableURI: job.deliverable,
     proofMetadataURI: '',
-    approved: job.status === 4,
+    approved: job.status === 3,
     createdAt: job.createdAtBlock,
   };
 }

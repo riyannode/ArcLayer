@@ -1,7 +1,6 @@
 import { createServer, type ServerResponse } from "node:http";
-import { readFileSync } from "node:fs";
-import { DEFAULT_FROM_BLOCK, FORCE_REIMPORT_OLD_ARCLAYER_AGENTS_ON_BOOT, INDEXER_PORT, OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK, POLL_INTERVAL_MS } from "./config";
-import { fetchAgentEvents, fetchImportedArcLayerAgentEvents, fetchJobEvents } from "./ingest";
+import { DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS } from "./config";
+import { fetchAgentEvents, fetchJobEvents } from "./ingest";
 import { arcWalletFilterActive } from "./projections";
 import { getReferenceFilters, refreshReferenceFiltersFromSupabase } from "./reference-filters";
 import {
@@ -29,96 +28,11 @@ let lastSyncAt: number | null = null;
 let lastSyncDurationMs: number | null = null;
 let syncSkipCount = 0;
 
-const OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR = "old_arclayer_agent_registry_imported_until_block";
-let forceOldRegistryReimportPending = FORCE_REIMPORT_OLD_ARCLAYER_AGENTS_ON_BOOT;
 
 function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
 }
 
-type AutonomousFeedItem = {
-  id: string;
-  ts: string;
-  agent: "Pythia" | "Hermes";
-  type: "signal" | "payment" | "decision" | "trade" | "balance" | "error";
-  label: string;
-  detail: string;
-  tx?: string;
-};
-
-function readLogLines(path: string, maxLines = 400) {
-  try {
-    return readFileSync(path, "utf8").trim().split("\n").slice(-maxLines);
-  } catch {
-    return [];
-  }
-}
-
-function parseLogLine(line: string, agent: "Pythia" | "Hermes"): AutonomousFeedItem | null {
-  const match = line.match(/^(\d+\|[^|]+\| )?(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}):\s*(.*)$/);
-  if (!match) return null;
-  const ts = `${match[2].replace(" ", "T")}Z`;
-  const msg = match[3];
-  const tx = msg.match(/0x[a-fA-F0-9]{64}/)?.[0];
-  let type: AutonomousFeedItem["type"] = "decision";
-  let label = msg;
-
-  if (msg.includes("Signal served")) {
-    type = "signal";
-    label = msg.replace(/^\[Pythia\]\s*/, "");
-  } else if (msg.includes("Signal received")) {
-    type = "signal";
-    label = msg.replace(/^\[Hermes\]\s*/, "");
-  } else if (msg.includes("Payment tx")) {
-    type = "payment";
-    label = "x402 signal payment settled";
-  } else if (msg.includes("Ignia trade tx")) {
-    type = "trade";
-    label = "Ignia prediction trade executed";
-  } else if (msg.includes("Executing YES") || msg.includes("Executing NO") || msg.includes("HOLD")) {
-    type = "decision";
-    label = msg.replace(/^\[Hermes\]\s*/, "");
-  } else if (msg.includes("USDC balance") || msg.includes("Portfolio")) {
-    type = "balance";
-    label = msg.replace(/^\[Hermes\]\s*/, "");
-  } else if (msg.includes("failed") || msg.includes("timeout") || msg.includes("error")) {
-    type = "error";
-    label = msg.replace(/^\[Hermes\]\s*/, "").replace(/^\[Pythia\]\s*/, "");
-  } else if (!msg.includes("[Hermes]") && !msg.includes("[Pythia]")) {
-    return null;
-  }
-
-  return {
-    id: `${agent}-${ts}-${label.slice(0, 32)}`,
-    ts,
-    agent,
-    type,
-    label,
-    detail: msg,
-    tx,
-  };
-}
-
-function readAutonomousFeed(limit = 50) {
-  const pythia = readLogLines("/root/.pm2/logs/pythia-out.log")
-    .map((line) => parseLogLine(line, "Pythia"))
-    .filter(Boolean) as AutonomousFeedItem[];
-  const hermes = readLogLines("/root/.pm2/logs/hermes-autonomous-out.log")
-    .map((line) => parseLogLine(line, "Hermes"))
-    .filter(Boolean) as AutonomousFeedItem[];
-  const items = [...pythia, ...hermes]
-    .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))
-    .slice(0, Math.max(1, Math.min(limit, 100)));
-
-  return {
-    agents: {
-      pythia: { role: "signal oracle", log: "/root/.pm2/logs/pythia-out.log" },
-      hermes: { role: "autonomous trader", log: "/root/.pm2/logs/hermes-autonomous-out.log" },
-    },
-    items,
-    latest: items[0]?.ts || null,
-  };
-}
 
 async function runSyncCycle() {
   if (syncInProgress) {
@@ -138,40 +52,23 @@ async function runSyncCycle() {
 
     const fromBlockValue = readMetaValue("last_synced_block");
     const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
-    const oldRegistryCursorValue = readMetaValue(OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR);
-    const forceOldRegistryReimport = forceOldRegistryReimportPending;
-    const oldRegistryFromBlock = forceOldRegistryReimport
-      ? OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK
-      : oldRegistryCursorValue
-        ? BigInt(oldRegistryCursorValue) + BigInt(1)
-        : OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK;
 
-    if (forceOldRegistryReimport) {
-      console.log(`[indexer] old registry force reimport enabled fromBlock=${oldRegistryFromBlock.toString()}`);
-    }
-
-    const [jobResult, erc8004Result, importedResult] = await Promise.all([
+    const [jobResult, erc8004Result] = await Promise.all([
       fetchJobEvents(fromBlock),
       fetchAgentEvents(fromBlock),
-      fetchImportedArcLayerAgentEvents(oldRegistryFromBlock),
     ]);
     const events = jobResult.events;
-    const agentEvts = [...importedResult.events, ...erc8004Result.events];
+    const agentEvts = [...erc8004Result.events];
     const latestBlock = [jobResult.latestBlock, erc8004Result.latestBlock]
       .reduce((max, block) => (block > max ? block : max), BigInt(0));
 
-    console.log(`[indexer] old registry import fromBlock=${oldRegistryFromBlock.toString()} events=${importedResult.events.length}`);
-    console.log(`[indexer] sync projection: jobs=${events.length} importedAgents=${importedResult.events.length} erc8004Agents=${erc8004Result.events.length} block=${latestBlock}`);
+    console.log(`[indexer] sync projection: jobs=${events.length} erc8004Agents=${erc8004Result.events.length} block=${latestBlock}`);
     const syncResult = await syncProjectionStore(events, agentEvts);
 
     // Always advance cursor so empty ranges don't get re-scanned
     if (latestBlock >= fromBlock) {
       writeMetaValue("last_synced_block", latestBlock.toString());
     }
-    if (importedResult.latestBlock >= oldRegistryFromBlock) {
-      writeMetaValue(OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR, importedResult.latestBlock.toString());
-    }
-    forceOldRegistryReimportPending = false;
 
     lastSyncError = syncResult.lastSyncError;
     lastSyncAt = Date.now();
@@ -292,7 +189,7 @@ createServer((req, res) => {
 
     writeJson(res, {
       agent,
-      jobs: readJobs().filter((job) => job.worker === agent.controller || job.client === agent.controller),
+      jobs: readJobs().filter((job) => job.provider === agent.controller || job.client === agent.controller),
       proofs: readProofs().filter((proof) => proof.agentId === id),
     });
     return;
@@ -336,17 +233,11 @@ createServer((req, res) => {
     return;
   }
 
-  if (url.pathname === "/autonomous-feed") {
-    const limit = Number(url.searchParams.get("limit") || "50");
-    const feed = readAutonomousFeed(limit);
-    writeJson(res, feed);
-    return;
-  }
 
   writeJson(res, {
     ok: true,
     mode: "arc-reference-100%",
-    endpoints: ["/health", "/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug", "/autonomous-feed"],
+    endpoints: ["/health", "/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug"],
     eventCount: Number(readMetaValue("event_count") || "0"),
     lastSyncedBlock: readMetaValue("last_synced_block"),
   });

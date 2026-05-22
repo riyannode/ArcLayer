@@ -1,26 +1,19 @@
 export type Job = {
   id: string;
-  agentId: string;
   client: string;
-  worker: string;
+  provider: string;
+  evaluator: string;
   budget: string;
   fundedAmount: string;
   createdAt: string;
-  deliverableURI: string;
-  proofMetadataURI: string;
-  approved: boolean;
+  description: string;
+  deliverable: string;
+  completionReason: string;
   status: number;
 };
 
-export type Proof = {
-  tokenId: string;
-  jobId: string;
-  agentId: string;
-  payer: string;
-  amountPaid: string;
-  mintedAt: string;
-  metadataURI: string;
-};
+
+export type Proof = Record<string, unknown>;
 
 export type Overview = {
   summary: {
@@ -43,7 +36,7 @@ export type Overview = {
 export type FeedItem = {
   id: string;
   ts: string;
-  agent: 'Pythia' | 'Ignia' | 'Apolo' | 'Hermes';
+  agent: string;
   type: 'signal' | 'payment' | 'decision' | 'trade' | 'balance' | 'error';
   label: string;
   detail: string;
@@ -72,7 +65,6 @@ export type RegisteredAgentMetadata = {
 
 export type RegisteredAgent = {
   agentId: string;
-  skillHash: string;
   metadataURI: string;
   controller: string;
   registeredAtBlock?: string;
@@ -97,7 +89,7 @@ export type NetworkAgent = {
   primaryAction: string;
   categories: AgentCategory[];
   activity: FeedItem[];
-  source: 'featured' | 'registry';
+  source: 'registry';
   canHide: boolean;
   connectedTo?: string[];
 };
@@ -117,8 +109,7 @@ export type A2AOnChain = {
   chainId: number;
   contracts: Record<string, string>;
   agents: Record<string, { agentId: string; role: string; stats: AgentStats | null }>;
-  wallets: { pythia: string; hermes: string };
   balances: { usdc: { hermes: string | null; pythia: string | null } };
-  markets: { totalIgnia: number | null; totalMirrors: number | null };
+  markets: { totalMarkets: number | null; totalMirrors: number | null };
   timestamp: string;
 };
