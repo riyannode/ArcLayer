@@ -101,42 +101,94 @@ export function projectJobsFromEvents(events: IndexedJobEvent[]) {
   });
 }
 
+export type AgentProjectionDebug = {
+  storedAgentEventCount: number;
+  agentEventSourceBreakdown: Record<string, number>;
+  rawImportedAgentEventCount: number;
+  rawErc8004AgentEventCount: number;
+  projectedImportedAgentCountBeforeInsert: number;
+  projectedErc8004AgentCountBeforeInsert: number;
+  filteredOutErc8004AgentCount: number;
+  sampleFilteredErc8004Agents: Array<{ agentId: string; controller: string; metadataURI: string; reason: string }>;
+};
+
+export function sourceForAgentEvent(event: IndexedAgentEvent) {
+  return ((event as any).source as string | undefined) ?? "erc8004_identity_registry";
+}
+
+function isImportedArcLayerAgent(event: IndexedAgentEvent) {
+  return sourceForAgentEvent(event) === "imported_arclayer_registry";
+}
+
+function dedupeAgentEvents(events: IndexedAgentEvent[]) {
+  return Object.values(events.reduce<Record<string, IndexedAgentEvent>>((acc, event) => {
+    acc[`${sourceForAgentEvent(event)}:${String(event.agentId)}`] = event;
+    return acc;
+  }, {}));
+}
+
+function getAgentFilterReason(event: IndexedAgentEvent, arcJobWallets?: Set<string>): string | null {
+  if (isImportedArcLayerAgent(event)) return "imported_arclayer_registry";
+  if (!arcWalletFilterActive()) return "wallet_filter_inactive";
+
+  const source = sourceForAgentEvent(event);
+  const ctrl = (event.controller ?? "").toLowerCase();
+  const uri = event.metadataURI ?? "";
+  const rawAgentId = String(event.agentId);
+  const sourceAgentId = `${source}:${rawAgentId}`;
+  const agentIdMatch = referenceAgentIdFilterActive()
+    ? matchesReferenceAgentId(rawAgentId, "arclayer") || matchesReferenceAgentId(sourceAgentId, "arclayer")
+    : false;
+  const metadataMatch = ARC_REFERENCE_METADATA_PREFIX_FILTER.length > 0 && uri
+    ? ARC_REFERENCE_METADATA_PREFIX_FILTER.some((prefix) => uri.startsWith(prefix))
+    : false;
+
+  if (matchesArcWallet(ctrl)) return "controller_wallet_match";
+  if (arcJobWallets?.has(ctrl)) return "arc_job_wallet_match";
+  if (agentIdMatch) return "agent_id_match";
+  if (metadataMatch) return "metadata_prefix_match";
+  return null;
+}
+
+export function buildAgentProjectionDebug(
+  events: IndexedAgentEvent[],
+  arcJobWallets?: Set<string>,
+): AgentProjectionDebug {
+  const deduped = dedupeAgentEvents(events);
+  const agentEventSourceBreakdown = events.reduce<Record<string, number>>((acc, event) => {
+    const source = sourceForAgentEvent(event);
+    acc[source] = (acc[source] ?? 0) + 1;
+    return acc;
+  }, {});
+  const projected = deduped.filter((event) => getAgentFilterReason(event, arcJobWallets) !== null);
+  const filtered = deduped.filter(
+    (event) => sourceForAgentEvent(event) === "erc8004_identity_registry" && getAgentFilterReason(event, arcJobWallets) === null,
+  );
+
+  return {
+    storedAgentEventCount: events.length,
+    agentEventSourceBreakdown,
+    rawImportedAgentEventCount: events.filter((event) => sourceForAgentEvent(event) === "imported_arclayer_registry").length,
+    rawErc8004AgentEventCount: events.filter((event) => sourceForAgentEvent(event) === "erc8004_identity_registry").length,
+    projectedImportedAgentCountBeforeInsert: projected.filter((event) => sourceForAgentEvent(event) === "imported_arclayer_registry").length,
+    projectedErc8004AgentCountBeforeInsert: projected.filter((event) => sourceForAgentEvent(event) === "erc8004_identity_registry").length,
+    filteredOutErc8004AgentCount: filtered.length,
+    sampleFilteredErc8004Agents: filtered.slice(0, 5).map((event) => ({
+      agentId: String(event.agentId),
+      controller: event.controller ?? "",
+      metadataURI: event.metadataURI ?? "",
+      reason: "no controller wallet, job wallet, agent id, or metadata prefix match",
+    })),
+  };
+}
+
 export function projectAgentsFromEvents(
   events: IndexedAgentEvent[],
   /** Pass indexed job wallets so agents connected to ArcLayer jobs are retained */
   arcJobWallets?: Set<string>,
 ) {
-  const sourceForEvent = (event: IndexedAgentEvent) =>
-    ((event as any).source as string | undefined) ?? "erc8004_identity_registry";
-  const isImportedArcLayerAgent = (event: IndexedAgentEvent) =>
-    sourceForEvent(event) === "imported_arclayer_registry";
-
-  const byId = events.reduce<Record<string, IndexedAgentEvent>>((acc, event) => {
-    acc[`${sourceForEvent(event)}:${String(event.agentId)}`] = event;
-    return acc;
-  }, {});
-
-  return Object.values(byId)
-    .filter((event) => {
-      if (isImportedArcLayerAgent(event)) return true;
-      if (!arcWalletFilterActive()) return true;
-
-      const ctrl = (event.controller ?? "").toLowerCase();
-      const uri = event.metadataURI ?? "";
-      const agentIdMatch = referenceAgentIdFilterActive()
-        ? matchesReferenceAgentId(event.agentId, "arclayer")
-        : false;
-      const metadataMatch = ARC_REFERENCE_METADATA_PREFIX_FILTER.length > 0 && uri
-        ? ARC_REFERENCE_METADATA_PREFIX_FILTER.some((prefix) => uri.startsWith(prefix))
-        : false;
-
-      return (
-        matchesArcWallet(ctrl) ||
-        (arcJobWallets ? arcJobWallets.has(ctrl) : false) ||
-        agentIdMatch ||
-        metadataMatch
-      );
-    })
+  return dedupeAgentEvents(events)
+    .filter((event) => getAgentFilterReason(event, arcJobWallets) !== null)
     .map((event) => ({
       agentId: String(event.agentId),
       tokenId: String(event.agentId),
@@ -145,7 +197,7 @@ export function projectAgentsFromEvents(
       registeredAtBlock: String(event.blockNumber),
       transactionHash: event.transactionHash,
       skillHash: event.skillHash,
-      source: sourceForEvent(event),
+      source: sourceForAgentEvent(event),
       chainId: (event as any).chainId ?? 5042002,
       registryAddress: (event as any).registryAddress,
       contractAddress: (event as any).contractAddress,
