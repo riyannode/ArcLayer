@@ -176,11 +176,136 @@ function useJson<T>(endpoint: string, intervalMs = 15_000) {
   return { data, error };
 }
 
-function BitcoinMark() { return <div />; }
-function Countdown({ end }: { end?: number }) { return <div>{end}</div>; }
-function syntheticCandles(): CandlePoint[] { return []; }
-function CandleChart({ data }: { data?: CandlesData | null }) { return <div>{data?.ok ? 'ok' : ''}</div>; }
-function OrderBook({ data }: { data?: OrderbookData | null }) { return <div>{data?.ok ? 'ok' : ''}</div>; }
+function BitcoinMark() {
+  return (
+    <div className="flex h-[72px] w-[72px] items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-amber-600 shadow-[0_0_45px_rgba(245,158,11,0.28)]">
+      <svg viewBox="0 0 64 64" className="h-11 w-11 text-white" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M36.2 8.1l-1.4 5.4c3.9.9 6.8 2.7 7.2 6.2.3 2.5-.9 4.5-3 5.7 3.5 1.1 5.7 3.3 5.1 7.4-.8 5.2-5.2 7-11 6.7l-1.5 6H28l1.5-5.9c-.9-.2-1.8-.4-2.8-.6l-1.5 6h-3.7l1.5-6-7.4-1.9 1.9-4.3s2.7.8 2.7.7c1 .2 1.5-.4 1.7-.9l4.1-16.4c0-.8-.3-1.8-1.8-2.2.1 0-2.7-.7-2.7-.7l1-4.1 7.5 1.9 1.4-5.4h3.6l-1.4 5.3 2.6.6 1.4-5.5h3.6zM29.4 29.9l-1.8 7.2c2.9.7 9 2.2 9.9-1.5.9-3.9-5.2-4.9-8.1-5.7zm2.7-10.9l-1.7 6.5c2.4.6 7.5 1.9 8.3-1.5.8-3.4-4.2-4.4-6.6-5z"
+        />
+      </svg>
+    </div>
+  );
+}
+
+function Countdown({ end }: { end?: number }) {
+  const [now, setNow] = useState(() => Math.floor(Date.now() / 1000));
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Math.floor(Date.now() / 1000)), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const left = Math.max(0, (end ?? now) - now);
+  const mins = Math.floor(left / 60);
+  const secs = left % 60;
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#07111f]/75 px-7 py-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+      <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-400">Market closes in</div>
+      <div className="mt-2 font-mono text-3xl font-bold tracking-[0.18em] text-rose-400">
+        {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
+      </div>
+      <div className="mt-1 grid grid-cols-2 gap-5 font-mono text-[10px] uppercase text-slate-500">
+        <span>Mins</span>
+        <span>Secs</span>
+      </div>
+    </div>
+  );
+}
+
+function syntheticCandles(): CandlePoint[] {
+  const base = 77_240;
+  return Array.from({ length: 54 }, (_, i) => {
+    const wave = Math.sin(i / 4) * 130 + Math.cos(i / 7) * 80;
+    const open = base + wave + (i % 5) * 12;
+    const close = open + Math.sin(i * 1.8) * 95;
+    const high = Math.max(open, close) + 40 + (i % 4) * 18;
+    const low = Math.min(open, close) - 35 - (i % 3) * 20;
+    return { t: i, open, high, low, close };
+  });
+}
+
+function CandleChart({ data }: { data?: CandlesData | null }) {
+  const candles = useMemo(() => {
+    const raw = data?.candles || data?.points || data?.history || [];
+    const normalized = raw
+      .slice(-64)
+      .map((p, i) => {
+        const price = Number(p.close ?? p.p ?? p.price ?? 0);
+        const open = Number(p.open ?? price);
+        const close = Number(p.close ?? price);
+        const high = Number(p.high ?? Math.max(open, close));
+        const low = Number(p.low ?? Math.min(open, close));
+        return { t: p.t ?? p.timestamp ?? i, open, high, low, close };
+      })
+      .filter((point) => Number.isFinite(point.close) && point.close > 0);
+
+    return normalized.length > 4 ? normalized : syntheticCandles();
+  }, [data]);
+
+  const values = candles
+    .flatMap((c) => [c.high, c.low])
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  const min = values.length ? Math.min(...values) : 0;
+  const max = values.length ? Math.max(...values) : 1;
+  const range = Math.max(1, max - min);
+  const width = 980;
+  const height = 320;
+  const pad = 26;
+  const step = (width - pad * 2) / candles.length;
+  const y = (v: number) => pad + ((max - v) / range) * (height - pad * 2);
+  const last = candles[candles.length - 1]?.close ?? 0;
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#07111f]/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+      <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+        <div className="font-mono text-sm text-slate-200">
+          BTC/USD · 15m · INDEX
+          <span className="ml-4 text-emerald-400">C {usd(last)}</span>
+        </div>
+        <div className="rounded-lg bg-emerald-500 px-3 py-1 font-mono text-xs font-bold text-white">{usd(last)}</div>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-[360px] w-full">
+        <rect width={width} height={height} fill="#06101d" />
+        {candles.map((c, i) => {
+          const x = pad + i * step + step / 2;
+          const open = Number(c.open ?? 0);
+          const close = Number(c.close ?? open);
+          const high = Number(c.high ?? Math.max(open, close));
+          const low = Number(c.low ?? Math.min(open, close));
+          const up = close >= open;
+          const color = up ? '#22c55e' : '#ef4444';
+          const bodyY = Math.min(y(open), y(close));
+          const bodyH = Math.max(3, Math.abs(y(open) - y(close)));
+          const bodyW = Math.max(4, Math.min(10, step * 0.62));
+          return (
+            <g key={`${c.t}-${i}`}>
+              <line x1={x} y1={y(high)} x2={x} y2={y(low)} stroke={color} strokeWidth="1.5" />
+              <rect x={x - bodyW / 2} y={bodyY} width={bodyW} height={bodyH} rx="1" fill={color} />
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function OrderBook({ data }: { data?: OrderbookData | null }) {
+  const asks = (data?.up?.asks || data?.asks || []).slice(0, 5);
+  const bids = (data?.up?.bids || data?.bids || []).slice(0, 5);
+
+  return (
+    <section className="rounded-2xl border border-white/10 bg-[#07111f]/75 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-bold text-slate-100">Order Book</h2>
+        <div className="font-mono text-xs text-slate-500">hash {short(data?.payloadHash)}</div>
+      </div>
+      <div className="font-mono text-sm text-slate-300">asks: {asks.length} · bids: {bids.length}</div>
+    </section>
+  );
+}
 
 function PolymarketBtc15mLive() {
   const market = useJson<MarketData>('/api/data/polymarket/btc-15m');
@@ -191,13 +316,18 @@ function PolymarketBtc15mLive() {
   const targetPrice = market.data?.targetPrice ?? 78_150;
 
   return (
-    <section>
-      <BitcoinMark />
-      <Countdown end={market.data?.windowEnd} />
-      <div>{formatTime(market.data?.windowStart)} – {formatTime(market.data?.windowEnd)}</div>
-      <div>{usd(currentPrice)} {usd(targetPrice)} {short(orderbook.data?.payloadHash)} {pct(0.5)}</div>
+    <section className="rounded-2xl border border-[#C5A67C]/20 bg-black/20 p-5">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-4"><BitcoinMark /><div><h2 className="text-xl font-bold text-white">BTC Up or Down 15m</h2><p className="text-xs text-slate-400">{formatTime(market.data?.windowStart)} – {formatTime(market.data?.windowEnd)} ET</p></div></div>
+        <Countdown end={market.data?.windowEnd} />
+      </div>
+      <div className="mb-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-slate-200">Current: {usd(currentPrice)}</div>
+        <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-slate-200">Target: {usd(targetPrice)}</div>
+      </div>
       <CandleChart data={candles.data} />
-      <OrderBook data={orderbook.data} />
+      <div className="mt-4"><OrderBook data={orderbook.data} /></div>
+      {(market.error || orderbook.error || candles.error) ? <div className="mt-3 text-xs text-red-300">Warning: {market.error || orderbook.error || candles.error}</div> : null}
     </section>
   );
 }
