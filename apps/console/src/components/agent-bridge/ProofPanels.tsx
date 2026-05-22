@@ -132,7 +132,7 @@ export function ReceiptBreakdownPanel({ session }: { session: BridgeSession | nu
     x402_arc_native: receipts.filter((r) => r.receipt_type === 'x402_arc_native').length,
     x402_circle_gateway: receipts.filter((r) => r.receipt_type === 'x402_circle_gateway').length,
   };
-  const latest = receipts.at(-1) ?? null;
+  const latest = [...receipts].reverse().find((r) => r.receipt_type === 'x402_arc_native' && r.transaction) ?? receipts.at(-1) ?? null;
   return (
     <div className="rounded-sm border border-white/10 bg-black/25 p-4">
       <div className="mb-4 font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Receipt Breakdown · Settlement Evidence</div>
@@ -146,7 +146,7 @@ export function ReceiptBreakdownPanel({ session }: { session: BridgeSession | nu
       </div>
       <div className="mt-3 grid gap-2 rounded-sm border border-white/10 bg-black/20 p-3 text-xs text-[#EAE4D8]/60 md:grid-cols-3">
         <div>latest payment_id: <span className="font-mono text-[#C5A67C]">{shortHash(latest?.payment_id || latest?.payment_ref)}</span></div>
-        <div>latest tx: <span className="font-mono text-[#C5A67C]">{shortHash(latest?.transaction)}</span></div>
+        <div>latest x402 tx: <span className="font-mono text-[#C5A67C]">{shortHash(latest?.transaction)}</span></div>
         <div>{latest?.transaction ? <a href={`${ARCSCAN_TX}${latest.transaction}`} target="_blank" rel="noreferrer" className="font-mono text-[#C5A67C] underline-offset-4 hover:underline">ArcScan link ↗</a> : <span>ArcScan link: <span className="font-mono text-[#EAE4D8]/35">—</span></span>}</div>
       </div>
     </div>
