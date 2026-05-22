@@ -181,7 +181,7 @@ function syntheticCandles(): CandlePoint[] { return []; }
 function CandleChart({ data }: { data?: CandlesData | null }) { return <div>{data?.ok ? 'ok' : ''}</div>; }
 function OrderBook({ data }: { data?: OrderbookData | null }) { return <div>{data?.ok ? 'ok' : ''}</div>; }
 
-export function PolymarketBtc15mLive() {
+function PolymarketBtc15mLive() {
   const market = useJson<MarketData>('/api/data/polymarket/btc-15m');
   const orderbook = useJson<OrderbookData>('/api/data/polymarket/btc-15m/orderbook');
   const candles = useJson<CandlesData>('/api/data/polymarket/btc-15m/candles');
