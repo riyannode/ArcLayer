@@ -35,7 +35,7 @@ export type IndexedJob = {
   statusLabel: 'Open' | 'Funded' | 'Submitted' | 'Completed' | 'Rejected' | 'Expired';
   /** Transitional compatibility for components still rendering legacy field names. */
   worker: string;
-  agentId?: string;
+  agentId: string;
   jobSpecHash: string;
   deliverableURI: string;
   proofMetadataURI: string;
@@ -54,7 +54,7 @@ export type IndexedAgent = {
   jobs: string[];
   proofTokenIds: string[];
   tokenId?: string;
-  source?: 'imported_arclayer_registry' | 'erc8004_identity_registry' | string;
+  source?: 'erc8004_identity_registry' | string;
 };
 
 export type IndexedProof = {
@@ -82,7 +82,6 @@ export type DashboardOverview = {
     settledJobs: number;
     fundedJobs: number;
     meta?: {
-      importedAgentCount?: number;
       erc8004AgentCount?: number;
     };
     agentBreakdown?: Record<string, number>;

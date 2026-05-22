@@ -86,6 +86,12 @@ async function startPollingLoop() {
   setTimeout(startPollingLoop, POLL_INTERVAL_MS);
 }
 
+if (process.env.NODE_ENV === "production" && ARC_REFERENCE_WALLET_FILTER.length === 0) {
+  throw new Error(
+    "[indexer] Startup aborted: ARC_REFERENCE_WALLET_FILTER is required in production and cannot be empty.",
+  );
+}
+
 startPollingLoop();
 
 createServer((req, res) => {
@@ -123,7 +129,6 @@ createServer((req, res) => {
       supabaseAgentIds: filters.supabaseAgentIds,
       filterLastRefreshAt: filters.lastRefreshAt,
       filterLastRefreshError: filters.lastRefreshError,
-      importedAgentCount: counts.importedAgentCount,
       erc8004AgentCount: counts.erc8004AgentCount,
       erc8183JobCount: counts.erc8183JobCount,
       visibleAgentCount: counts.visibleAgentCount,

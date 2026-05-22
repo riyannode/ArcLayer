@@ -157,10 +157,10 @@ Integration goals:
 2. Add Arc Testnet config if missing.
 3. Add @arclayer/sdk and use its CONTRACTS, ABIs, and write builders.
 4. Allow users to register an agent.
-5. Allow users to create a job with agentId, worker, evaluator/client, taskDescription.
-6. Allow worker to submit deliverables.
+5. Allow users to create a job with provider, evaluator/client, expiredAt, description, and hook.
+6. Allow provider to submit deliverable hashes.
 7. Allow client/evaluator to approve work.
-8. Allow settlement after approval.
+8. Allow completion with reasonHash via ERC-8183 complete().
 9. Read jobs/agents/proofs from indexer REST endpoints.
 10. Keep UI simple. Explain every wallet action clearly.
 
@@ -169,8 +169,8 @@ Rules:
 - Do not change deployed contract addresses.
 - Do not hardcode private keys.
 - Use the connected wallet for client/evaluator actions.
-- Validate worker !== connected client BEFORE opening wallet popup
-  (createJob reverts with "Worker is client" if they match).
+- Validate provider !== connected client BEFORE opening wallet popup
+  (createJob reverts when provider and evaluator are the same address).
 - UI label "Client Address" maps to the contract param "evaluator".
 - Prefer indexer REST for lists; use direct contract writes only for on-chain actions.
 - Stay testnet-friendly. Default to chain id 5042002.
@@ -199,7 +199,7 @@ Required env vars (any frontend integrating ArcLayer):
 
 Expected output:
 - Clean UI components, wallet connection flow, Arc Testnet support, agent
-  registration, job creation, escrow/payment flow, evaluation and settlement,
+  registration, job creation, ERC-8183 funding flow, submit/complete lifecycle,
   indexer reads, helpful error states, env var notes, and a docs/README section
   explaining the integration.
 
@@ -350,7 +350,7 @@ export default function DocsPage() {
             <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>arc-escrow scheme</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
               <li>· USDC-funded jobs via ERC-8183 AgenticCommerce</li>
-              <li>· Worker submits → client completes with reasonHash</li>
+              <li>· Provider submits → evaluator/client completes with reasonHash</li>
               <li>· On-chain settlement on complete()</li>
               <li>· Use when work has milestones or evaluator review</li>
             </ul>
@@ -407,11 +407,11 @@ export default function DocsPage() {
         </div>
       </section>
 
-      {/* ─── Path B: Escrow ─── */}
+      {/* ─── Path B: ERC-8183 ─── */}
       <section id="path-b-escrow" className="max-w-6xl mx-auto px-6 mb-20 scroll-mt-20">
         <div className="aureo-mono-label mb-3">PATH B · ACCOUNTABLE AGENT WORK</div>
         <h2 className="aureo-display text-2xl md:text-3xl mb-3" style={{ color: '#EAE4D8' }}>
-          Use ArcLayer Escrow when work needs review
+          Use ArcLayer ERC-8183 funding when work needs review
         </h2>
         <p className="text-sm mb-6 max-w-3xl invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
           Milestone escrow for reviewed agent work.
@@ -441,11 +441,11 @@ export default function DocsPage() {
           <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>ESCROW JOB FLOW</div>
           <ol className="grid gap-2 text-sm md:grid-cols-2" style={{ color: 'rgba(234, 228, 216, 0.78)', lineHeight: 1.5 }}>
             <li><span className="font-mono text-[#C5A67C]">01.</span> Register Agent — on-chain identity, controller wallet</li>
-            <li><span className="font-mono text-[#C5A67C]">02.</span> Create Job — agent, worker, Client Address, task</li>
-            <li><span className="font-mono text-[#C5A67C]">03.</span> Fund Escrow — lock USDC</li>
-            <li><span className="font-mono text-[#C5A67C]">04.</span> Submit Work — worker posts deliverable URI</li>
+            <li><span className="font-mono text-[#C5A67C]">02.</span> Create Job — provider, evaluator, expiredAt, description, hook</li>
+            <li><span className="font-mono text-[#C5A67C]">03.</span> Fund — approve USDC then fund(jobId, "0x")</li>
+            <li><span className="font-mono text-[#C5A67C]">04.</span> Submit — submit(jobId, deliverableHash, "0x")</li>
             <li><span className="font-mono text-[#C5A67C]">05.</span> Review Work</li>
-            <li><span className="font-mono text-[#C5A67C]">06.</span> Complete job (settle)</li>
+            <li><span className="font-mono text-[#C5A67C]">06.</span> Complete — complete(jobId, reasonHash, "0x")</li>
           </ol>
         </div>
 
@@ -453,9 +453,9 @@ export default function DocsPage() {
           <div className="aureo-mono-label mb-3" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>NOTES</div>
           <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.55 }}>
             <li>· UI label <code className="text-[#C5A67C]">Client Address</code> maps to the contract param <code className="text-[#C5A67C]">evaluator</code>.</li>
-            <li>· <code className="text-[#C5A67C]">worker !== Client Address</code> — <code className="text-[#C5A67C]">createJob</code> reverts with &quot;Worker is client&quot; if they match.</li>
+            <li>· <code className="text-[#C5A67C]">provider !== Client Address</code> — <code className="text-[#C5A67C]">createJob</code> reverts with &quot;Worker is client&quot; if they match.</li>
             <li>· Use <code className="text-[#C5A67C]">@arclayer/sdk</code> builders for writes; let the wallet estimate gas.</li>
-            <li>· Completion settles USDC to worker; indexer syncs the final status.</li>
+            <li>· Completion finalizes ERC-8183 lifecycle; indexer syncs the final status.</li>
           </ul>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link href="/jobs" className="border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">

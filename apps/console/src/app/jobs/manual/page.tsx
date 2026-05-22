@@ -37,7 +37,7 @@ import {
 } from '@/lib/manualJobs';
 
 const JOB_STATUS = ['Open', 'Funded', 'Submitted', 'Completed', 'Rejected', 'Expired'] as const;
-const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'success' };
+const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'success', 4: '', 5: '' };
 
 function isValidAddress(value: string) {
   return /^0x[a-fA-F0-9]{40}$/.test(value.trim());
@@ -91,7 +91,7 @@ function JobsPage() {
   // Filter / sort state for job list
   const [jobSearch, setJobSearch] = useState('');
   const [jobCategoryFilter, setJobCategoryFilter] = useState<'All' | ManualCategory>('All');
-  const [jobStatusFilter, setJobStatusFilter] = useState<'all' | '0' | '1' | '2' | '3' | '4' | '5' | '6'>('all');
+  const [jobStatusFilter, setJobStatusFilter] = useState<'all' | '0' | '1' | '2' | '3' | '4' | '5'>('all');
   const [jobSort, setJobSort] = useState<'relevant' | 'newest' | 'budgetDesc' | 'budgetAsc' | 'settledFirst'>('relevant');
   const [myJobsOnly, setMyJobsOnly] = useState(false);
   const [showAllJobs, setShowAllJobs] = useState(false);
@@ -133,7 +133,7 @@ function JobsPage() {
     const q = jobSearch.trim().toLowerCase();
     const lower = address?.toLowerCase() ?? '';
     // Relevance: actionable first (Submitted > Evaluated > Funded > Budgeted > Created), terminal last.
-    const relevance: Record<number, number> = { 3: 0, 4: 1, 2: 2, 1: 3, 0: 4, 5: 5, 6: 6 };
+    const relevance: Record<number, number> = { 3: 0, 2: 1, 1: 2, 0: 3, 4: 4, 5: 5 };
     const rows = jobs.filter((j) => {
       const display = jobDisplays.get(j.id) ?? getManualJobDisplay(j, agentById.get(j.agentId) ?? null);
       if (jobCategoryFilter !== 'All' && display.category !== jobCategoryFilter) return false;
@@ -159,7 +159,7 @@ function JobsPage() {
       if (jobSort === 'newest') return Number(BigInt(b.id) - BigInt(a.id));
       if (jobSort === 'budgetDesc') return Number(BigInt(b.budget) - BigInt(a.budget));
       if (jobSort === 'budgetAsc') return Number(BigInt(a.budget) - BigInt(b.budget));
-      if (jobSort === 'settledFirst') return (b.status === 5 ? 1 : 0) - (a.status === 5 ? 1 : 0) || Number(BigInt(b.id) - BigInt(a.id));
+      if (jobSort === 'settledFirst') return (b.status === 3 ? 1 : 0) - (a.status === 3 ? 1 : 0) || Number(BigInt(b.id) - BigInt(a.id));
       // 'relevant': actionable first, then newest
       return (relevance[a.status] ?? 9) - (relevance[b.status] ?? 9) || Number(BigInt(b.id) - BigInt(a.id));
     });
@@ -167,11 +167,11 @@ function JobsPage() {
 
   const visibleJobs = showAllJobs ? filteredJobs : filteredJobs.slice(0, 5);
 
-  // Auto-fill worker with the selected agent's controller (most common case).
+  // Auto-fill provider with the selected agent's controller (most common case).
   useEffect(() => {
     if (!providerTouched && selectedAgent) {
       setCreateForm((current) =>
-        current.worker === selectedAgent.controller ? current : { ...current, provider: selectedAgent.controller }
+        current.provider === selectedAgent.controller ? current : { ...current, provider: selectedAgent.controller }
       );
     }
   }, [selectedAgent, providerTouched]);
@@ -280,7 +280,7 @@ function JobsPage() {
     }
     if (createForm.provider.toLowerCase() === createForm.evaluator.toLowerCase()) {
       setStatusTone('error');
-      setTxState('Worker and client cannot be the same address.');
+      setTxState('Provider and evaluator cannot be the same address.');
       notify(NOTICE_WORKER_EQUALS_CLIENT);
       return;
     }
@@ -378,7 +378,7 @@ function JobsPage() {
       );
       setJobs(next);
       setStatusTone('synced');
-      setTxState('Budget set, USDC approved, and Deposit Amount funded into the ERC-8183 funding.');
+      setTxState('Budget set, USDC approved, and Amount funded into ERC-8183 funding.');
     } catch (e) {
       setTxState(e instanceof Error ? e.message : 'Funding flow failed.');
       setStatusTone('error');
@@ -387,7 +387,7 @@ function JobsPage() {
     }
   }
 
-  const customWorker = !!(selectedAgent && createForm.provider && createForm.provider.toLowerCase() !== selectedAgent.controller.toLowerCase());
+  const customProvider = !!(selectedAgent && createForm.provider && createForm.provider.toLowerCase() !== selectedAgent.controller.toLowerCase());
   const customClient = !!(address && createForm.evaluator && createForm.evaluator.toLowerCase() !== address.toLowerCase());
 
   return (
@@ -421,9 +421,9 @@ function JobsPage() {
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-l-2 border-[#C5A67C]/40 pl-4 font-mono text-[10.5px] text-[rgba(234,228,216,0.84)]">
             <span>Pick an agent, assign a task, lock USDC.</span>
             <span className="text-[rgba(234,228,216,0.85)]">&middot;</span>
-            <span>x402 is not job funding.</span>
+            <span>x402 is not ERC-8183 funding.</span>
             <span className="text-[rgba(234,228,216,0.85)]">&middot;</span>
-            <span>Escrow = approve, fund, release USDC.</span>
+            <span>ERC-8183 funding = approve, fund, complete lifecycle.</span>
           </div>
         </section>
 
@@ -490,7 +490,7 @@ function JobsPage() {
           <section id="job-board" className="aureo-panel scroll-mt-4 p-4 md:p-6">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <div className="aureo-mono-label mb-2">LIVE ESCROW JOBS</div>
+                <div className="aureo-mono-label mb-2">LIVE ERC-8183 JOBS</div>
                 <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Job cards</h2>
               </div>
               <span className="font-mono text-[11px] text-[#EAE4D8]">
@@ -500,7 +500,7 @@ function JobsPage() {
               </span>
             </div>
             <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)] invisible">
-              Create, fund, review, and settle jobs.
+              Create, fund, submit, and complete jobs.
             </p>
 
             {/* Filter / sort bar */}
@@ -509,7 +509,7 @@ function JobsPage() {
                 <input
                   value={jobSearch}
                   onChange={(e) => setJobSearch(e.target.value)}
-                  placeholder="Search job ID, agent, worker, client…"
+                  placeholder="Search job ID, agent, provider, client…"
                   className="input-mono flex-1"
                   autoComplete="off"
                   spellCheck={false}
@@ -524,14 +524,14 @@ function JobsPage() {
                   <option value="newest">Newest</option>
                   <option value="budgetDesc">Highest budget</option>
                   <option value="budgetAsc">Lowest budget</option>
-                  <option value="settledFirst">Settled first</option>
+                  <option value="settledFirst">Completed first</option>
                 </select>
                 <button
                   type="button"
                   onClick={() => setMyJobsOnly((v) => !v)}
                   disabled={!address}
                   className={`btn-bordered px-3 py-2 text-[10px] ${myJobsOnly ? 'border-[#C5A67C] text-[#C5A67C]' : ''}`}
-                  title={address ? 'Show jobs where this wallet is client, worker, or evaluator' : 'Connect wallet to filter your jobs'}
+                  title={address ? 'Show jobs where this wallet is client, provider, or evaluator' : 'Connect wallet to filter your jobs'}
                 >
                   MY JOBS
                 </button>
@@ -554,8 +554,8 @@ function JobsPage() {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <span className="w-full font-mono text-[9px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.65)]">Escrow state</span>
-                {(['all', '0', '1', '2', '3', '4', '5', '6'] as const).map((status) => (
+                <span className="w-full font-mono text-[9px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.65)]">ERC-8183 status</span>
+                {(['all', '0', '1', '2', '3', '4', '5'] as const).map((status) => (
                   <button
                     key={status}
                     type="button"
@@ -639,10 +639,10 @@ function JobsPage() {
                         </div>
                       </div>
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
-                        <div className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Worker {shortenAddress(job.worker)}</div>
+                        <div className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Provider {shortenAddress(job.provider)}</div>
                         <div className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Client {shortenAddress(job.evaluator)}</div>
                       </div>
-                      <div className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Settlement {job.proofMetadataURI ? 'recorded' : job.status === 4 ? 'pending' : 'not yet'}</div>
+                      <div className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.85)]">Settlement {job.proofMetadataURI || job.status === 3 || (job.completionReason && job.completionReason !== '0x0000000000000000000000000000000000000000000000000000000000000000') ? 'recorded' : 'not yet'}</div>
                     </div>
                   );
                 })
@@ -787,8 +787,8 @@ function JobsPage() {
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
                     <label className="block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">WORKER ADDRESS</label>
-                    {customWorker && (
-                      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#C5A67C]">Custom worker</span>
+                    {customProvider && (
+                      <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#C5A67C]">Custom provider</span>
                     )}
                   </div>
                   <input
@@ -797,13 +797,13 @@ function JobsPage() {
                       setProviderTouched(true);
                       setCreateForm((c) => ({ ...c, provider: e.target.value }));
                     }}
-                    placeholder={selectedAgent ? selectedAgent.controller : '0x... worker wallet'}
+                    placeholder={selectedAgent ? selectedAgent.controller : '0x... provider wallet'}
                     className="input-mono"
                   />
                   <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
-                    {selectedAgent && !customWorker
+                    {selectedAgent && !customProvider
                       ? 'Auto-filled from selected agent.'
-                      : 'Worker and client cannot be the same address.'}
+                      : 'Provider and evaluator cannot be the same address.'}
                   </div>
                 </div>
 
@@ -850,7 +850,7 @@ function JobsPage() {
                   Developer details
                 </summary>
                 <div className="mt-2 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.85)] invisible">
-                  <code className="text-[rgba(234,228,216,0.85)]">createJob(agentId, worker, evaluator, taskDescription)</code> — &ldquo;Client Address&rdquo; maps to the <code className="text-[rgba(234,228,216,0.85)]">evaluator</code> contract parameter.
+                  <code className="text-[rgba(234,228,216,0.85)]">createJob(provider, evaluator, expiredAt, description, hook)</code> — &ldquo;Client Address&rdquo; maps to the <code className="text-[rgba(234,228,216,0.85)]">evaluator</code> contract parameter.
                 </div>
               </details>
 
@@ -921,7 +921,7 @@ function JobsPage() {
                     <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)]">Funding Preview</div>
                     <div className="mt-2 grid gap-2 md:grid-cols-2">
                       <div className="font-mono text-[10.5px] text-[#EAE4D8]">Status {JOB_STATUS[selectedFundingJob.status]}</div>
-                      <div className="font-mono text-[10.5px] text-[#EAE4D8]">Worker {shortenAddress(selectedFundingJob.worker)}</div>
+                      <div className="font-mono text-[10.5px] text-[#EAE4D8]">Provider {shortenAddress(selectedFundingJob.provider)}</div>
                     </div>
                   </div>
                 )}

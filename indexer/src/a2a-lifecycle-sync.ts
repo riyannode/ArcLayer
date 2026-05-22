@@ -10,6 +10,17 @@ export enum ERC8183PublicJobStatus {
   Expired = 5,
 }
 
+// Backward-compat alias for existing tests/imports.
+export const ERC8183JobStatus = {
+  Created: ERC8183PublicJobStatus.Open,
+  BudgetSet: ERC8183PublicJobStatus.Open,
+  Funded: ERC8183PublicJobStatus.Funded,
+  Submitted: ERC8183PublicJobStatus.Submitted,
+  Completed: ERC8183PublicJobStatus.Completed,
+  Rejected: ERC8183PublicJobStatus.Rejected,
+  Expired: ERC8183PublicJobStatus.Expired,
+} as const;
+
 type Hex = `0x${string}`;
 
 export type JobCreatedEvent = {
