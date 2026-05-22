@@ -73,7 +73,7 @@ export function ExternalJobsPanel({ categoryKey, title = 'Available Jobs' }: { c
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {jobs.map((job) => (
-            <Link key={job.id} href={`/a2a/jobs/${encodeURIComponent(job.id)}`} className="rounded-sm border border-white/10 bg-white/[0.03] p-3 transition hover:border-[#C5A67C]/35 hover:bg-[#C5A67C]/[0.04]">
+            <Link key={job.id} href={`/live-a2a-agent/jobs/${encodeURIComponent(job.id)}${job.category || categoryKey ? `?category=${encodeURIComponent(job.category || categoryKey || '')}` : ''}`} className="rounded-sm border border-white/10 bg-white/[0.03] p-3 transition hover:border-[#C5A67C]/35 hover:bg-[#C5A67C]/[0.04]">
               <div className="flex items-start justify-between gap-2">
                 <h3 className="line-clamp-2 font-mono text-sm font-bold uppercase tracking-[0.12em] text-[#F5F0E5]">{job.title}</h3>
                 <span className="rounded-sm border border-emerald-300/25 bg-emerald-400/10 px-2 py-1 font-mono text-[9px] uppercase text-emerald-300">{job.status}</span>
