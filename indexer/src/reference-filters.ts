@@ -14,7 +14,7 @@ type ReferenceFilters = {
 
 const state: ReferenceFilters = {
   wallets: [...ENV_WALLET_FILTER],
-  agentIds: [...ENV_AGENT_ID_FILTER],
+  agentIds: ENV_AGENT_ID_FILTER.map((id) => id.toLowerCase()),
   supabaseWallets: 0,
   supabaseAgentIds: 0,
   lastRefreshAt: null,
@@ -29,8 +29,20 @@ function normalizeWallet(value: unknown): string | null {
 
 function normalizeAgentId(value: unknown): string | null {
   if (value === null || value === undefined) return null;
-  const text = String(value).trim();
+  const text = String(value).trim().toLowerCase();
   return text ? text : null;
+}
+
+function referenceAgentIdCandidates(value: unknown): string[] {
+  const id = normalizeAgentId(value);
+  if (!id) return [];
+  const raw = id.includes(":") ? id.split(":").pop() || id : id;
+  return Array.from(new Set([
+    raw,
+    id,
+    `erc8004_identity_registry:${raw}`,
+    `imported_arclayer_registry:${raw}`,
+  ]));
 }
 
 async function fetchSupabaseRows(table: string, select: string): Promise<any[]> {
@@ -70,7 +82,7 @@ async function fetchA2AJobRows(): Promise<{ rows: any[]; fallbackError: string |
 
 export async function refreshReferenceFiltersFromSupabase(): Promise<ReferenceFilters> {
   const walletSet = new Set(ENV_WALLET_FILTER);
-  const agentIdSet = new Set(ENV_AGENT_ID_FILTER);
+  const agentIdSet = new Set(ENV_AGENT_ID_FILTER.map((id) => id.toLowerCase()));
   let supabaseWallets = 0;
   let supabaseAgentIds = 0;
 
@@ -160,6 +172,6 @@ export function matchesReferenceWallet(addr: unknown, scope: "arclayer" | "arcne
 export function matchesReferenceAgentId(agentId: unknown, scope: "arclayer" | "arcnetwork" = "arclayer"): boolean {
   if (scope === "arcnetwork") return true;
   if (!referenceAgentIdFilterActive()) return true;
-  const id = normalizeAgentId(agentId);
-  return id ? state.agentIds.includes(id) : false;
+  const candidates = referenceAgentIdCandidates(agentId);
+  return candidates.some((id) => state.agentIds.includes(id));
 }

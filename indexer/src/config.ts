@@ -1,7 +1,7 @@
 export const INDEXER_PORT = Number(process.env.INDEXER_PORT || process.env.PORT || 3535);
 export const DEFAULT_FROM_BLOCK = BigInt(process.env.FROM_BLOCK || "41752050");
 export const OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK = BigInt(
-  process.env.OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK || DEFAULT_FROM_BLOCK.toString(),
+  process.env.OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK || "0",
 );
 export const FORCE_REIMPORT_OLD_ARCLAYER_AGENTS_ON_BOOT =
   (process.env.FORCE_REIMPORT_OLD_ARCLAYER_AGENTS_ON_BOOT || "false").toLowerCase() === "true";
