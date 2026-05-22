@@ -55,6 +55,19 @@ async function fetchSupabaseRows(table: string, select: string): Promise<any[]> 
   return Array.isArray(json) ? json : [];
 }
 
+async function fetchA2AJobRows(): Promise<{ rows: any[]; fallbackError: string | null }> {
+  try {
+    return { rows: await fetchSupabaseRows("a2a_jobs", "provider,evaluator,claimed_by"), fallbackError: null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("a2a_jobs:400")) throw error;
+    return {
+      rows: await fetchSupabaseRows("a2a_jobs", "provider,evaluator"),
+      fallbackError: "a2a_jobs claimed_by fallback: a2a_jobs:400",
+    };
+  }
+}
+
 export async function refreshReferenceFiltersFromSupabase(): Promise<ReferenceFilters> {
   const walletSet = new Set(ENV_WALLET_FILTER);
   const agentIdSet = new Set(ENV_AGENT_ID_FILTER);
@@ -63,30 +76,41 @@ export async function refreshReferenceFiltersFromSupabase(): Promise<ReferenceFi
 
   try {
     // Agent identities registered through ArcLayer UI/API.
-    for (const row of await fetchSupabaseRows("agent_manifests", "agent_id,controller,signer")) {
-      const agentId = normalizeAgentId(row.agent_id);
-      if (agentId) {
-        agentIdSet.add(agentId);
-        supabaseAgentIds++;
-      }
-      for (const key of ["controller", "signer"]) {
-        const wallet = normalizeWallet(row[key]);
-        if (wallet) {
-          walletSet.add(wallet);
-          supabaseWallets++;
+    try {
+      for (const row of await fetchSupabaseRows("agent_manifests", "agent_id,controller,signer")) {
+        const agentId = normalizeAgentId(row.agent_id);
+        if (agentId) {
+          agentIdSet.add(agentId);
+          supabaseAgentIds++;
+        }
+        for (const key of ["controller", "signer"]) {
+          const wallet = normalizeWallet(row[key]);
+          if (wallet) {
+            walletSet.add(wallet);
+            supabaseWallets++;
+          }
         }
       }
+    } catch (error) {
+      throw error;
     }
 
-    // ArcLayer-created ERC-8183 jobs mirrored by API-first workers / UI.
-    for (const row of await fetchSupabaseRows("a2a_jobs", "provider,evaluator,claimed_by")) {
-      for (const key of ["provider", "evaluator", "claimed_by"]) {
-        const wallet = normalizeWallet(row[key]);
-        if (wallet) {
-          walletSet.add(wallet);
-          supabaseWallets++;
+    let a2aFallbackError: string | null = null;
+    try {
+      const result = await fetchA2AJobRows();
+      a2aFallbackError = result.fallbackError;
+      // ArcLayer-created ERC-8183 jobs mirrored by API-first workers / UI.
+      for (const row of result.rows) {
+        for (const key of ["provider", "evaluator", "claimed_by"]) {
+          const wallet = normalizeWallet(row[key]);
+          if (wallet) {
+            walletSet.add(wallet);
+            supabaseWallets++;
+          }
         }
       }
+    } catch (error) {
+      a2aFallbackError = error instanceof Error ? error.message : String(error);
     }
 
     state.wallets = [...walletSet];
@@ -94,7 +118,7 @@ export async function refreshReferenceFiltersFromSupabase(): Promise<ReferenceFi
     state.supabaseWallets = supabaseWallets;
     state.supabaseAgentIds = supabaseAgentIds;
     state.lastRefreshAt = new Date().toISOString();
-    state.lastRefreshError = null;
+    state.lastRefreshError = a2aFallbackError;
   } catch (error) {
     state.wallets = [...walletSet];
     state.agentIds = [...agentIdSet];
