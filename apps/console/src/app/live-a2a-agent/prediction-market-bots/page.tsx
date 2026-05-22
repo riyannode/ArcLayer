@@ -2,12 +2,36 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { PolymarketBtc15mPanel, PolymarketOrderbookPanel } from '@/components/market/PolymarketPanels';
 
 type Session = { id: string; createdAt?: string; mode?: string };
 type Event = { role?: string; type?: string; createdAt?: string; payloadHash?: string };
 type Receipt = { id?: string; amount?: string; status?: string; createdAt?: string };
 
+function useCryptoUpDownLive(_symbol: 'BTC') {
+  return { up: null as number | null, down: null as number | null };
+}
+
+function PolymarketStyleBtcChart() {
+  return (
+    <section className="rounded-md border border-white/10 bg-[#0A0A0A]/90 p-5">
+      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C]">BTC Chart</div>
+      <div className="mt-3 h-[220px] rounded-md border border-white/10 bg-black/30" />
+    </section>
+  );
+}
+
+function PredictionMarketAgentsStrip() {
+  return (
+    <section className="rounded-md border border-white/10 bg-[#0A0A0A]/90 p-4">
+      <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C]">Prediction Agents</div>
+      <div className="mt-2 text-xs text-[#EAE4D8]/65">Oracle · Analyzer · Evaluator · Executor</div>
+    </section>
+  );
+}
+
 export default function PredictionMarketBotsPage() {
+  useCryptoUpDownLive('BTC');
   const [session, setSession] = useState<Session | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [receipts, setReceipts] = useState<Receipt[]>([]);
@@ -43,6 +67,12 @@ export default function PredictionMarketBotsPage() {
           <Link href="/live-a2a-agent" className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C]">← A2A Agent Bridge</Link>
           <h1 className="mt-3 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5]">Prediction Market Bots</h1>
         </header>
+        <PolymarketStyleBtcChart />
+        <PredictionMarketAgentsStrip />
+        <section className="grid gap-3 lg:grid-cols-2">
+          <PolymarketBtc15mPanel />
+          <PolymarketOrderbookPanel />
+        </section>
         <section className="rounded-md border border-white/10 bg-[#0A0A0A]/90 p-4">
           <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C]">A2A Live Activity</div>
           {!hasLiveData ? (
