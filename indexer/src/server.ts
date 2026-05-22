@@ -246,8 +246,3 @@ createServer((req, res) => {
 }).listen(INDEXER_PORT, () => {
   console.log(`ArcLayer indexer (Arc Reference Mode) listening on http://localhost:${INDEXER_PORT}`);
 });
-if (process.env.NODE_ENV === "production" && ARC_REFERENCE_WALLET_FILTER.length === 0) {
-  throw new Error(
-    "[indexer] Startup aborted: ARC_REFERENCE_WALLET_FILTER is required in production and cannot be empty.",
-  );
-}
