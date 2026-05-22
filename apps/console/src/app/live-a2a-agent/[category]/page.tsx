@@ -11,8 +11,9 @@ type LatestResponse = { ok: boolean; session: BridgeSession | null; error?: stri
 
 type PageProps = { params: Promise<{ category: string }> };
 
-function categoryFromMetadata(metadata: Record<string, unknown> | null | undefined) {
-  const value = metadata?.category;
+function eventCategory(event: { category?: string | null; metadata?: Record<string, unknown> | null }) {
+  if (event.category) return event.category;
+  const value = event.metadata?.category;
   return typeof value === 'string' ? value : null;
 }
 
@@ -48,7 +49,7 @@ export default function LiveA2AAgentCategoryPage({ params }: PageProps) {
   }, []);
 
   const categoryEvents = useMemo(() => {
-    return (session?.events ?? []).filter((event) => categoryFromMetadata(event.metadata) === categoryKey);
+    return (session?.events ?? []).filter((event) => eventCategory(event) === categoryKey);
   }, [session, categoryKey]);
 
   if (!category) {
@@ -68,7 +69,7 @@ export default function LiveA2AAgentCategoryPage({ params }: PageProps) {
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(197,166,124,0.14),transparent_30%),radial-gradient(circle_at_82%_8%,rgba(255,255,255,0.055),transparent_26%)]" />
       <div className="relative mx-auto flex max-w-[1480px] flex-col gap-6 pt-8 pb-12 sm:pt-12">
         <header className="rounded-sm border border-[#C5A67C]/15 bg-[#0A0A0A]/90 p-5">
-          <Link href="/live-a2a-agent" className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C] hover:text-[#F5F0E5]">← PM2 Market-Agent Bridge</Link>
+          <Link href="/live-a2a-agent" className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C] hover:text-[#F5F0E5]">← A2A Agent Bridge</Link>
           <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">Agent Category</div>
@@ -93,14 +94,14 @@ export default function LiveA2AAgentCategoryPage({ params }: PageProps) {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Latest Bridge Events</div>
-              <p className="mt-1 text-sm text-[#EAE4D8]/60">Events for this category only when external runtimes include metadata.category.</p>
+              <p className="mt-1 text-sm text-[#EAE4D8]/60">Events for this category from top-level category or metadata.category.</p>
             </div>
             <span className="rounded-sm border border-white/10 px-2 py-1 font-mono text-[10px] text-[#EAE4D8]/60">{categoryEvents.length} events</span>
           </div>
           {error ? (
             <div className="rounded-sm border border-red-400/25 bg-red-950/20 p-4 text-sm text-red-200">Bridge session endpoint failed: {error}</div>
           ) : categoryEvents.length === 0 ? (
-            <div className="rounded-sm border border-dashed border-white/10 p-4 text-sm text-[#EAE4D8]/55">No bridge events tagged with metadata.category={category.key} yet.</div>
+            <div className="rounded-sm border border-dashed border-white/10 p-4 text-sm text-[#EAE4D8]/55">No bridge events tagged with category={category.key} yet.</div>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {categoryEvents.map((event) => (

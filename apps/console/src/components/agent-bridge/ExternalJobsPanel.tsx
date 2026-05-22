@@ -57,7 +57,7 @@ export function ExternalJobsPanel({ categoryKey, title = 'Available Jobs' }: { c
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">{title}</div>
-          <p className="mt-1 text-sm text-[#EAE4D8]/60">Open A2A jobs that external runtimes can claim with their own auth and execution stack.</p>
+
         </div>
         <a href="/api/a2a/jobs?status=open" className="rounded-sm border border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/60 hover:border-[#C5A67C]/35 hover:text-[#C5A67C]">
           API
@@ -85,7 +85,7 @@ export function ExternalJobsPanel({ categoryKey, title = 'Available Jobs' }: { c
                 <div>agent: <span className="font-mono text-[#C5A67C]">{short(job.agentId || job.claimedBy)}</span></div>
               </div>
               <a href={`/a2a/jobs/${encodeURIComponent(job.id)}`} className="mt-3 inline-flex rounded-sm border border-[#C5A67C]/30 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#C5A67C] hover:bg-[#C5A67C]/10">
-                Claim via API key flow →
+                Open →
               </a>
             </article>
           ))}
