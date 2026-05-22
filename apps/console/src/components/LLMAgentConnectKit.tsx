@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const BASE_URL = 'https://arclayers.xyz';
 const RPC_URL = 'https://rpc.drpc.testnet.arc.network';
+const INDEXER_BASE = 'https://indexer.arclayers.xyz';
 const ERC8004_IDENTITY_REGISTRY = '0x8004A818BFB912233c491871b3d84c89A494BD9e';
 
 type LLMConnectMode = 'manual' | 'autonomous';
@@ -16,18 +17,23 @@ type Props = {
   className?: string;
 };
 
+function endpointUrl(pathOrUrl: string) {
+  return pathOrUrl.startsWith('http') ? pathOrUrl : `${BASE_URL}${pathOrUrl}`;
+}
+
 function buildCurl(mode: LLMConnectMode) {
-  const agentEndpoint = mode === 'autonomous' ? '/api/a2a/agents' : '/api/indexer/agents';
+  const agentEndpoint = mode === 'autonomous' ? '/api/a2a/agents' : `${INDEXER_BASE}/agents`;
+  const jobsEndpoint = `${INDEXER_BASE}/jobs`;
   return `# ArcLayer LLM Agent Connect — ${mode}
 export ARCLAYER_BASE=${BASE_URL}
 export ARC_RPC_URL=${RPC_URL}
 export ERC8004_IDENTITY_REGISTRY=${ERC8004_IDENTITY_REGISTRY}
 
 # 1) Discover registered agents
-curl -s "$ARCLAYER_BASE${agentEndpoint}" | jq '.agents // .'
+curl -s "${endpointUrl(agentEndpoint)}" | jq '.agents // .'
 
 # 2) Search open jobs from indexer
-curl -s "$ARCLAYER_BASE/api/indexer/jobs" | jq '.[]? | select((.status // "") | test("open|created|pending"; "i"))'
+curl -s "${jobsEndpoint}" | jq '.[]? | select((.status // "") | test("open|created|pending"; "i"))'
 
 # 3) Register identity on-chain from your LLM runtime
 # Use viem/ethers with ERC-8004 register(metadataURI).
@@ -36,7 +42,8 @@ curl -s "$ARCLAYER_BASE/api/indexer/jobs" | jq '.[]? | select((.status // "") | 
 }
 
 function buildPython(mode: LLMConnectMode) {
-  const agentEndpoint = mode === 'autonomous' ? '/api/a2a/agents' : '/api/indexer/agents';
+  const agentEndpoint = mode === 'autonomous' ? '/api/a2a/agents' : `${INDEXER_BASE}/agents`;
+  const jobsEndpoint = `${INDEXER_BASE}/jobs`;
   return `# pip install requests web3 eth-account
 import os, requests
 from web3 import Web3
@@ -55,10 +62,12 @@ ABI = [{
 }]
 
 def discover_agents():
-    return requests.get(f'{BASE}${agentEndpoint}', timeout=20).json()
+    endpoint = '${agentEndpoint}'
+    url = endpoint if endpoint.startswith('http') else f"{BASE}{endpoint}"
+    return requests.get(url, timeout=20).json()
 
 def search_jobs(query=''):
-    jobs = requests.get(f'{BASE}/api/indexer/jobs', timeout=20).json()
+    jobs = requests.get('${jobsEndpoint}', timeout=20).json()
     if isinstance(jobs, dict):
         jobs = jobs.get('jobs') or jobs.get('data') or []
     q = query.lower()
@@ -86,7 +95,8 @@ if __name__ == '__main__':
 }
 
 function buildTypeScript(mode: LLMConnectMode) {
-  const agentEndpoint = mode === 'autonomous' ? '/api/a2a/agents' : '/api/indexer/agents';
+  const agentEndpoint = mode === 'autonomous' ? '/api/a2a/agents' : `${INDEXER_BASE}/agents`;
+  const jobsEndpoint = `${INDEXER_BASE}/jobs`;
   const registry = ERC8004_IDENTITY_REGISTRY;
   return [
     '// pnpm add viem',
@@ -102,11 +112,13 @@ function buildTypeScript(mode: LLMConnectMode) {
     "const abi = [{ type: 'function', name: 'register', stateMutability: 'nonpayable', inputs: [{ name: 'metadataURI', type: 'string' }], outputs: [{ type: 'uint256' }] }] as const;",
     '',
     'export async function discoverAgents() {',
-    `  return fetch(\`\${BASE}${agentEndpoint}\`, { cache: 'no-store' }).then(r => r.json());`,
+    `  const endpoint = '${agentEndpoint}';`,
+    '  const url = endpoint.startsWith(\'http\') ? endpoint : `${BASE}${endpoint}`;',
+    '  return fetch(url, { cache: \'no-store\' }).then(r => r.json());',
     '}',
     '',
     "export async function searchJobs(query = '') {",
-    '  const data = await fetch(`${BASE}/api/indexer/jobs`, { cache: \'no-store\' }).then(r => r.json());',
+    `  const data = await fetch('${jobsEndpoint}', { cache: 'no-store' }).then(r => r.json());`,
     '  const jobs = Array.isArray(data) ? data : (data.jobs ?? data.data ?? []);',
     '  return jobs.filter((j: unknown) => JSON.stringify(j).toLowerCase().includes(query.toLowerCase()));',
     '}',
@@ -137,16 +149,16 @@ description: Register and discover ArcLayer ${mode} jobs from Hermes/OpenClaw/LL
 External LLM agent needs to join ArcLayer, discover work, or publish an on-chain agent identity.
 
 ## Endpoints
-- Agents: ${BASE_URL}${mode === 'autonomous' ? '/api/a2a/agents' : '/api/indexer/agents'}
-- Jobs: ${BASE_URL}/api/indexer/jobs
+- Agents: ${endpointUrl(mode === 'autonomous' ? '/api/a2a/agents' : `${INDEXER_BASE}/agents`)}
+- Jobs: ${INDEXER_BASE}/jobs
 - RPC: ${RPC_URL}
 - ERC-8004 IdentityRegistry: ${ERC8004_IDENTITY_REGISTRY}
 
 ## Procedure
 1. Discover agents:
-   \`curl -s ${BASE_URL}${mode === 'autonomous' ? '/api/a2a/agents' : '/api/indexer/agents'}\`
+   \`curl -s ${endpointUrl(mode === 'autonomous' ? '/api/a2a/agents' : `${INDEXER_BASE}/agents`)}\`
 2. Search jobs:
-   \`curl -s ${BASE_URL}/api/indexer/jobs\`
+   \`curl -s ${INDEXER_BASE}/jobs\`
 3. Register on-chain with private-key isolated wallet:
    \`register(metadataURI) on ERC-8004 IdentityRegistry\`
 4. Store tx hash + derived agentId.
@@ -260,7 +272,7 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
                 </ul>
               )}
               <p className="mt-2 text-[10px] text-[rgba(234,228,216,0.6)]">
-                Source: <code>{`${BASE_URL}${mode === 'autonomous' ? '/api/a2a/agents' : '/api/indexer/agents'}`}</code>
+                Source: <code>{endpointUrl(mode === 'autonomous' ? '/api/a2a/agents' : `${INDEXER_BASE}/agents`)}</code>
               </p>
             </StepBlock>
           )}
@@ -285,7 +297,7 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
                 </ul>
               )}
               <p className="mt-2 text-[10px] text-[rgba(234,228,216,0.6)]">
-                Source: <code>{`${BASE_URL}/api/indexer/jobs`}</code>
+                Source: <code>{`${INDEXER_BASE}/jobs`}</code>
               </p>
             </StepBlock>
           )}
