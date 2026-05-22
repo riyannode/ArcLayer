@@ -8,6 +8,7 @@ import {
   getLastA2AJobSyncError,
   readAgentById,
   readAgentEvents,
+  readAgentProjectionDebug,
   readAgents,
   readCounts,
   readJobById,
@@ -145,6 +146,10 @@ async function runSyncCycle() {
         ? BigInt(oldRegistryCursorValue) + BigInt(1)
         : OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK;
 
+    if (forceOldRegistryReimport) {
+      console.log(`[indexer] old registry force reimport enabled fromBlock=${oldRegistryFromBlock.toString()}`);
+    }
+
     const [jobResult, erc8004Result, importedResult] = await Promise.all([
       fetchJobEvents(fromBlock),
       fetchAgentEvents(fromBlock),
@@ -209,6 +214,15 @@ createServer((req, res) => {
       mode: "production",
       filterActive: arcWalletFilterActive(),
       storedAgentEventCount: counts.storedAgentEventCount,
+      agentEventSourceBreakdown: counts.agentEventSourceBreakdown,
+      rawImportedAgentEventCount: counts.rawImportedAgentEventCount,
+      rawErc8004AgentEventCount: counts.rawErc8004AgentEventCount,
+      projectedImportedAgentCount: counts.projectedImportedAgentCount,
+      projectedErc8004AgentCount: counts.projectedErc8004AgentCount,
+      projectedImportedAgentCountBeforeInsert: counts.projectedImportedAgentCountBeforeInsert,
+      projectedErc8004AgentCountBeforeInsert: counts.projectedErc8004AgentCountBeforeInsert,
+      filteredOutErc8004AgentCount: counts.filteredOutErc8004AgentCount,
+      sampleFilteredErc8004Agents: counts.sampleFilteredErc8004Agents,
       storedJobEventCount: counts.storedJobEventCount,
       walletCount: filters.wallets.length,
       supabaseWallets: filters.supabaseWallets,
@@ -304,6 +318,18 @@ createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/agent-debug") {
+    const agentEvents = readAgentEvents();
+    writeJson(res, {
+      sources: readCounts().agentEventSourceBreakdown,
+      sampleAgentEvents: agentEvents.slice(0, 5),
+      referenceFilters: getReferenceFilters(),
+      projectionDebug: readAgentProjectionDebug(),
+      agentsCount: readAgents().length,
+    });
+    return;
+  }
+
   if (url.pathname === "/autonomous-feed") {
     const limit = Number(url.searchParams.get("limit") || "50");
     const feed = readAutonomousFeed(limit);
@@ -314,7 +340,7 @@ createServer((req, res) => {
   writeJson(res, {
     ok: true,
     mode: "arc-reference-100%",
-    endpoints: ["/health", "/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/autonomous-feed"],
+    endpoints: ["/health", "/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug", "/autonomous-feed"],
     eventCount: Number(readMetaValue("event_count") || "0"),
     lastSyncedBlock: readMetaValue("last_synced_block"),
   });
