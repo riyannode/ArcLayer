@@ -236,7 +236,7 @@ function normalizeJobForCompatibilitySchema(job: ReturnType<typeof projectJobsFr
     agentId: "0",
     client: job.client,
     worker: job.provider,
-    evaluator: "0x0000000000000000000000000000000000000000",
+    evaluator: job.evaluator,
     budget: job.budget,
     fundedAmount: job.fundedAmount,
     createdAt: job.createdAtBlock,
@@ -390,7 +390,7 @@ export async function syncProjectionStore(
   try {
     await syncA2AJobsFromERC8183Events(
       events
-        .filter((event) => ["JobCreated", "BudgetSet", "JobFunded", "JobSubmitted", "JobCompleted", "JobRejected", "JobExpired"].includes(event.eventName))
+        .filter((event) => ["JobCreated", "BudgetSet", "JobFunded", "JobSubmitted", "JobCompleted"].includes(event.eventName))
         .map((event) => ({
           ...event,
           transactionHash: event.transactionHash,

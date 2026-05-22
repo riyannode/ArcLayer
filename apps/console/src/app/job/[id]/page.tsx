@@ -369,8 +369,8 @@ export default function JobDetailPage() {
               <div className="aureo-mono-label mb-2">ACTIONS · {job ? JOB_STATUS[job.status] : '…'}</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">
                 {job?.status === 3 ? 'Settlement complete' :
-                 job?.status === 3 ? 'Review deliverable, then complete'  :
-                 job?.status === 2 ? 'Funded — awaiting agent submission' :
+                 job?.status === 2 ? 'Review deliverable, then complete'  :
+                 job?.status === 1 ? 'Funded — awaiting provider submission' :
                  'Job lifecycle controls'}
               </h2>
             </div>
@@ -399,12 +399,12 @@ export default function JobDetailPage() {
 
           {/* PRIMARY: status-driven actions */}
           <div className="mt-5 space-y-3">
-            {job?.status === 3 && previewError && isEvaluator && (
+            {job?.status === 2 && previewError && isEvaluator && (
               <div className="p-3 font-mono text-[11px] tracking-[0.04em]" style={{ border: '1px solid rgba(245, 200, 100, 0.35)', background: 'rgba(245, 200, 100, 0.06)', color: '#f5c864' }}>
                 ⚠️ Preview unavailable — you can still complete on-chain if you trust the submitted URI/hash.
               </div>
             )}
-            {job?.status === 3 && isEvaluator && (
+            {job?.status === 2 && isEvaluator && (
               <button
                 onClick={handleComplete}
                 disabled={!isConnected || activeAction !== null}
@@ -414,7 +414,7 @@ export default function JobDetailPage() {
                 {activeAction === 'complete' ? 'COMPLETING…' : '✓ COMPLETE JOB'}
               </button>
             )}
-            {job?.status === 3 && !isEvaluator && isConnected && (
+            {job?.status === 2 && !isEvaluator && isConnected && (
               <div className="p-3 font-mono text-[11px] tracking-[0.04em] text-[#a0a0a0]" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
                 {isWorker
                   ? '⏳ Deliverable submitted. Waiting for evaluator to complete via ERC-8183.'
@@ -431,9 +431,9 @@ export default function JobDetailPage() {
               </div>
             )}
 
-            {job && job.status < 3 && (
+            {job && job.status < 2 && (
               <p className="font-mono text-[11.5px] text-[#a0a0a0]">
-                {job.status === 2
+                {job.status === 1
                   ? '✓ Funded. The service provider should submit deliverable via ERC-8183 submit().'
                   : 'Job not yet funded. Use setBudget, USDC approve, then fund(jobId, 0x).'}
               </p>

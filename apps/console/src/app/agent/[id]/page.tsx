@@ -331,7 +331,7 @@ export default function AgentProfilePage() {
       });
       const payload = await paid.json();
       if (!paid.ok) throw new Error(payload.message || payload.error || `Paid run failed with HTTP ${paid.status}.`);
-      setRunState(`Job #${visibleJobId.toString()} settled. JobEscrow tx: ${fundHash.slice(0, 10)}... | Run: ${payload.run?.status ?? 'submitted'}.`);
+      setRunState(`Job #${visibleJobId.toString()} settled. AgenticCommerce tx: ${fundHash.slice(0, 10)}... | Run: ${payload.run?.status ?? 'submitted'}.`);
     } catch (e) {
       setRunState(e instanceof Error ? e.message : 'Paid run failed.');
     } finally {

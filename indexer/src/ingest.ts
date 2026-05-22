@@ -15,8 +15,6 @@ const JOB_EVENT_NAMES = [
   "JobFunded",
   "JobSubmitted",
   "JobCompleted",
-  "JobRejected",
-  "JobExpired",
 ] as const;
 
 const JOB_EVENT_ABIS = ERC8183_AGENTIC_COMMERCE_ABI.filter(
