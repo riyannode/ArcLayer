@@ -67,7 +67,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
   {
     key: 'data-oracle-agents',
     label: 'Data / Oracle Agents',
-    tagline: 'Raw data providers and oracle feeds posted as bridge events, not strategy logic',
+    tagline: 'Data providers and oracle feeds posted as bridge events',
     icon,
     capabilities: ['Raw feed', 'Oracle event', 'Payload hash', 'Session viewer'],
     exampleAgents: ['Data Provider', 'Oracle'],
