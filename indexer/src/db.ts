@@ -9,6 +9,7 @@ import {
   type ERC8183IndexedLifecycleEvent,
 } from "./a2a-lifecycle-sync";
 import { projectAgentsFromEvents, projectJobsFromEvents } from "./projections";
+import { ARC_ERC8004_ADDRESS, ARC_ERC8183_ADDRESS, OLD_ARCLAYER_AGENT_REGISTRY_ADDRESS } from "./config";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.INDEXER_DB_PATH || resolve(currentDir, "../data/arclayer-indexer.sqlite");
@@ -43,7 +44,15 @@ db.exec(`
     reputation_score TEXT NOT NULL,
     score TEXT NOT NULL,
     jobs_json TEXT NOT NULL,
-    proof_token_ids_json TEXT NOT NULL
+    proof_token_ids_json TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'erc8004_identity_registry',
+    chain_id TEXT NOT NULL DEFAULT '5042002',
+    registry_address TEXT NOT NULL DEFAULT '',
+    contract_address TEXT NOT NULL DEFAULT '',
+    tx_hash TEXT NOT NULL DEFAULT '',
+    block_number TEXT NOT NULL DEFAULT '',
+    imported_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
   );
 
   CREATE TABLE IF NOT EXISTS proofs (
@@ -68,7 +77,8 @@ db.exec(`
     type TEXT NOT NULL,
     block_number TEXT NOT NULL,
     tx_hash TEXT NOT NULL,
-    payload_json TEXT NOT NULL
+    payload_json TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'erc8183_agentic_commerce'
   );
 
   CREATE TABLE IF NOT EXISTS agent_events (
@@ -77,9 +87,29 @@ db.exec(`
     type TEXT NOT NULL,
     block_number TEXT NOT NULL,
     tx_hash TEXT NOT NULL,
-    payload_json TEXT NOT NULL
+    payload_json TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'erc8004_identity_registry'
   );
 `);
+
+for (const statement of [
+  "ALTER TABLE agents ADD COLUMN source TEXT NOT NULL DEFAULT 'erc8004_identity_registry'",
+  "ALTER TABLE agents ADD COLUMN chain_id TEXT NOT NULL DEFAULT '5042002'",
+  "ALTER TABLE agents ADD COLUMN registry_address TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE agents ADD COLUMN contract_address TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE agents ADD COLUMN tx_hash TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE agents ADD COLUMN block_number TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE agents ADD COLUMN imported_at TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE agents ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
+  "ALTER TABLE job_events ADD COLUMN source TEXT NOT NULL DEFAULT 'erc8183_agentic_commerce'",
+  "ALTER TABLE agent_events ADD COLUMN source TEXT NOT NULL DEFAULT 'erc8004_identity_registry'",
+]) {
+  try {
+    db.exec(statement);
+  } catch {
+    // Column already exists.
+  }
+}
 
 const upsertJob = db.prepare(`
   INSERT INTO jobs (
@@ -103,8 +133,9 @@ const upsertJob = db.prepare(`
 
 const upsertAgent = db.prepare(`
   INSERT INTO agents (
-    agent_id, controller, skill_hash, metadata_uri, registered_at, reputation_score, score, jobs_json, proof_token_ids_json
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    agent_id, controller, skill_hash, metadata_uri, registered_at, reputation_score, score, jobs_json, proof_token_ids_json,
+    source, chain_id, registry_address, contract_address, tx_hash, block_number, imported_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(agent_id) DO UPDATE SET
     controller = excluded.controller,
     skill_hash = excluded.skill_hash,
@@ -113,7 +144,14 @@ const upsertAgent = db.prepare(`
     reputation_score = excluded.reputation_score,
     score = excluded.score,
     jobs_json = excluded.jobs_json,
-    proof_token_ids_json = excluded.proof_token_ids_json
+    proof_token_ids_json = excluded.proof_token_ids_json,
+    source = excluded.source,
+    chain_id = excluded.chain_id,
+    registry_address = excluded.registry_address,
+    contract_address = excluded.contract_address,
+    tx_hash = excluded.tx_hash,
+    block_number = excluded.block_number,
+    updated_at = excluded.updated_at
 `);
 
 const upsertMeta = db.prepare(`
@@ -122,8 +160,8 @@ const upsertMeta = db.prepare(`
 `);
 
 const upsertJobEvent = db.prepare(`
-  INSERT INTO job_events (event_key, job_id, agent_id, type, block_number, tx_hash, payload_json)
-  VALUES (?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO job_events (event_key, job_id, agent_id, type, block_number, tx_hash, payload_json, source)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(event_key) DO UPDATE SET
     payload_json = excluded.payload_json,
     block_number = excluded.block_number,
@@ -131,8 +169,8 @@ const upsertJobEvent = db.prepare(`
 `);
 
 const upsertAgentEvent = db.prepare(`
-  INSERT INTO agent_events (event_key, agent_id, type, block_number, tx_hash, payload_json)
-  VALUES (?, ?, ?, ?, ?, ?)
+  INSERT INTO agent_events (event_key, agent_id, type, block_number, tx_hash, payload_json, source)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(event_key) DO UPDATE SET
     payload_json = excluded.payload_json,
     block_number = excluded.block_number,
@@ -174,16 +212,29 @@ function normalizeJobForLegacySchema(job: ReturnType<typeof projectJobsFromEvent
 }
 
 function normalizeAgentForLegacySchema(agent: ReturnType<typeof projectAgentsFromEvents>[number]) {
+  const source = (agent as any).source === "imported_arclayer_registry"
+    ? "imported_arclayer_registry"
+    : "erc8004_identity_registry";
+  const now = new Date().toISOString();
+  const registryAddress = source === "imported_arclayer_registry" ? OLD_ARCLAYER_AGENT_REGISTRY_ADDRESS : ARC_ERC8004_ADDRESS;
   return {
     agentId: agent.agentId,
     controller: agent.controller,
-    skillHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+    skillHash: (agent as any).skillHash ?? "0x0000000000000000000000000000000000000000000000000000000000000000",
     metadataURI: agent.metadataURI,
     registeredAt: agent.registeredAtBlock,
     reputationScore: "0",
     score: "0",
     jobs: [] as string[],
     proofTokenIds: [] as string[],
+    source,
+    chainId: String((agent as any).chainId ?? 5042002),
+    registryAddress,
+    contractAddress: registryAddress,
+    txHash: (agent as any).transactionHash ?? "",
+    blockNumber: (agent as any).registeredAtBlock ?? "",
+    importedAt: now,
+    updatedAt: now,
   };
 }
 
@@ -191,19 +242,52 @@ export async function syncProjectionStore(
   events: IndexedJobEvent[],
   agentEvents: IndexedAgentEvent[] = [],
 ) {
-  const projectedJobs = projectJobsFromEvents(events);
-  const jobWallets = new Set<string>();
-  for (const job of projectedJobs) {
-    if (job.client) jobWallets.add(job.client.toLowerCase());
-    if (job.provider) jobWallets.add(job.provider.toLowerCase());
-    if (job.evaluator) jobWallets.add(job.evaluator.toLowerCase());
-  }
-
-  const jobs = projectedJobs.map(normalizeJobForLegacySchema);
-  const agents = projectAgentsFromEvents(agentEvents, jobWallets).map(normalizeAgentForLegacySchema);
-
   db.exec("BEGIN");
   try {
+    for (const event of events) {
+      upsertJobEvent.run(
+        serializeEventKey(event),
+        String(event.jobId ?? "0"),
+        String((event as any).provider ?? (event as any).client ?? "0"),
+        event.eventName,
+        event.blockNumber.toString(),
+        event.transactionHash,
+        stringifyJson({ ...event, source: "erc8183_agentic_commerce", chainId: 5042002, contractAddress: ARC_ERC8183_ADDRESS }),
+        "erc8183_agentic_commerce",
+      );
+    }
+
+    for (const event of agentEvents) {
+      upsertAgentEvent.run(
+        serializeEventKey(event),
+        event.agentId.toString(),
+        event.eventName,
+        event.blockNumber.toString(),
+        event.transactionHash,
+        stringifyJson(event),
+        ((event as any).source as string | undefined) ?? "erc8004_identity_registry",
+      );
+    }
+
+    const allJobEvents = db.prepare(`SELECT payload_json FROM job_events`).all()
+      .map((row) => parseJson((row as { payload_json: string }).payload_json) as IndexedJobEvent);
+    const allAgentEvents = db.prepare(`SELECT payload_json FROM agent_events`).all()
+      .map((row) => parseJson((row as { payload_json: string }).payload_json) as IndexedAgentEvent);
+
+    const projectedJobs = projectJobsFromEvents(allJobEvents);
+    const jobWallets = new Set<string>();
+    for (const job of projectedJobs) {
+      if (job.client) jobWallets.add(job.client.toLowerCase());
+      if (job.provider) jobWallets.add(job.provider.toLowerCase());
+      if (job.evaluator) jobWallets.add(job.evaluator.toLowerCase());
+    }
+
+    const jobs = projectedJobs.map(normalizeJobForLegacySchema);
+    const agents = projectAgentsFromEvents(allAgentEvents, jobWallets).map(normalizeAgentForLegacySchema);
+
+    db.exec("DELETE FROM jobs");
+    db.exec("DELETE FROM agents");
+
     for (const job of jobs) {
       upsertJob.run(
         job.id,
@@ -233,18 +317,14 @@ export async function syncProjectionStore(
         agent.score,
         stringifyJson(agent.jobs),
         stringifyJson(agent.proofTokenIds),
-      );
-    }
-
-    for (const event of events) {
-      upsertJobEvent.run(
-        serializeEventKey(event),
-        String(event.jobId ?? "0"),
-        String((event as any).provider ?? (event as any).client ?? "0"),
-        event.eventName,
-        event.blockNumber.toString(),
-        event.transactionHash,
-        stringifyJson(event),
+        agent.source,
+        agent.chainId,
+        agent.registryAddress,
+        agent.contractAddress,
+        agent.txHash,
+        agent.blockNumber,
+        agent.importedAt,
+        agent.updatedAt,
       );
     }
 
@@ -261,26 +341,16 @@ export async function syncProjectionStore(
       );
     }
 
-    for (const event of agentEvents) {
-      upsertAgentEvent.run(
-        serializeEventKey(event),
-        event.agentId.toString(),
-        event.eventName,
-        event.blockNumber.toString(),
-        event.transactionHash,
-        stringifyJson(event),
-      );
-    }
-
     upsertMeta.run("last_sync_at", Date.now().toString());
-    upsertMeta.run("event_count", String(events.length + agentEvents.length));
+    const storedJobEvents = (db.prepare(`SELECT COUNT(*) AS count FROM job_events`).get() as { count: number }).count;
+    const storedAgentEvents = (db.prepare(`SELECT COUNT(*) AS count FROM agent_events`).get() as { count: number }).count;
+    upsertMeta.run("event_count", String(storedJobEvents + storedAgentEvents));
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
   }
 }
-
 export function readJobs() {
   return db.prepare(`SELECT * FROM jobs ORDER BY CAST(id AS INTEGER) DESC`).all().map((row) => ({
     id: row.id as string,
@@ -309,8 +379,13 @@ export function readJobById(jobId: string) {
   return readJobs().find((job) => job.id === jobId) ?? null;
 }
 
-export function readAgents() {
-  return db.prepare(`SELECT * FROM agents ORDER BY CAST(agent_id AS INTEGER) DESC`).all().map((row) => ({
+export function readAgents(source: "all" | "imported" | "erc8004" = "all") {
+  const where = source === "imported"
+    ? "WHERE source = 'imported_arclayer_registry'"
+    : source === "erc8004"
+      ? "WHERE source = 'erc8004_identity_registry'"
+      : "";
+  return db.prepare(`SELECT * FROM agents ${where} ORDER BY CAST(agent_id AS INTEGER) DESC`).all().map((row) => ({
     agentId: row.agent_id as string,
     tokenId: row.agent_id as string,
     controller: row.controller as string,
@@ -322,6 +397,16 @@ export function readAgents() {
     score: row.score as string,
     jobs: parseJson<string[]>(row.jobs_json as string),
     proofTokenIds: parseJson<string[]>(row.proof_token_ids_json as string),
+    source: row.source as string,
+    chainId: row.chain_id as string,
+    registryAddress: row.registry_address as string,
+    contractAddress: row.contract_address as string,
+    transactionHash: row.tx_hash as string,
+    txHash: row.tx_hash as string,
+    blockNumber: row.block_number as string,
+    importedAt: row.imported_at as string,
+    updatedAt: row.updated_at as string,
+    displayType: row.source === "imported_arclayer_registry" ? "ArcLayer Agent" : "ERC-8004 Agent",
   }));
 }
 
@@ -376,11 +461,27 @@ export function readOverview() {
   const settledJobs = jobs.filter((job) => job.status === 4).length;
   const fundedJobs = jobs.filter((job) => BigInt(job.fundedAmount) > BigInt(0)).length;
 
+  const importedAgents = agents.filter((agent) => agent.source === "imported_arclayer_registry").length;
+  const erc8004Agents = agents.filter((agent) => agent.source === "erc8004_identity_registry").length;
+
   return {
     summary: {
       eventCount,
       jobs: jobs.length,
-      agents: agents.length,
+      // Production AGENTS stat counts canonical ERC-8004 ArcLayer identities only.
+      // Imported old ArcLayer records remain visible in /agents but do not inflate the top stat.
+      agents: erc8004Agents,
+      agentBreakdown: {
+        imported: importedAgents,
+        importedVisible: importedAgents,
+        erc8004: erc8004Agents,
+        erc8004Counted: erc8004Agents,
+        totalVisible: agents.length,
+        total: erc8004Agents,
+      },
+      jobBreakdown: {
+        erc8183: jobs.length,
+      },
       proofs: proofs.length,
       totalBudget: totalBudget.toString(),
       totalFunded: totalFunded.toString(),
@@ -390,6 +491,19 @@ export function readOverview() {
     jobs,
     agents,
     proofs,
+  };
+}
+
+export function readCounts() {
+  const importedAgentCount = readAgents("imported").length;
+  const erc8004AgentCount = readAgents("erc8004").length;
+  const erc8183JobCount = readJobs().length;
+  return {
+    importedAgentCount,
+    erc8004AgentCount,
+    erc8183JobCount,
+    visibleAgentCount: importedAgentCount + erc8004AgentCount,
+    totalAgentCount: erc8004AgentCount,
   };
 }
 
