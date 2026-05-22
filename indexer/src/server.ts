@@ -320,12 +320,18 @@ createServer((req, res) => {
 
   if (url.pathname === "/agent-debug") {
     const agentEvents = readAgentEvents();
+    const projectionDebug = readAgentProjectionDebug();
     writeJson(res, {
       sources: readCounts().agentEventSourceBreakdown,
       sampleAgentEvents: agentEvents.slice(0, 5),
       referenceFilters: getReferenceFilters(),
-      projectionDebug: readAgentProjectionDebug(),
+      projectionDebug,
+      rawErc8004AgentEventCount: projectionDebug.rawErc8004AgentEventCount,
+      projectedErc8004AgentCount: projectionDebug.projectedErc8004AgentCountBeforeInsert,
+      erc8004AgentCount: projectionDebug.projectedErc8004AgentCountBeforeInsert,
+      totalAgentCount: readAgents().length,
       agentsCount: readAgents().length,
+      lastSyncError: null,
     });
     return;
   }

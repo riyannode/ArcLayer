@@ -1,4 +1,5 @@
-import type { IndexedAgentEvent, IndexedJobEvent } from "@arclayer/sdk";
+import { ARC_ERC20_USDC_DECIMALS, type IndexedAgentEvent, type IndexedJobEvent } from "@arclayer/sdk";
+import { formatUnits } from "viem";
 import { ARC_REFERENCE_METADATA_PREFIX_FILTER } from "./config";
 import {
   matchesReferenceAgentId,
@@ -275,6 +276,8 @@ export async function buildOverviewProjection(
   const totalFunded = jobs.reduce((sum, job) => sum + BigInt(job.fundedAmount), BigInt(0));
   const completedJobs = jobs.filter((job) => job.status === 4).length;
   const fundedJobs = jobs.filter((job) => BigInt(job.fundedAmount) > BigInt(0)).length;
+  const totalBudgetAtomic = totalBudget.toString();
+  const totalFundedAtomic = totalFunded.toString();
 
   return {
     summary: {
@@ -282,8 +285,12 @@ export async function buildOverviewProjection(
       jobs: jobs.length,
       agents: agents.length,
       proofs: proofs.length,
-      totalBudget: totalBudget.toString(),
-      totalFunded: totalFunded.toString(),
+      budgetedUsdc: formatUnits(totalBudget, ARC_ERC20_USDC_DECIMALS),
+      fundedUsdc: formatUnits(totalFunded, ARC_ERC20_USDC_DECIMALS),
+      totalBudgetAtomic,
+      totalFundedAtomic,
+      totalBudget: totalBudgetAtomic,
+      totalFunded: totalFundedAtomic,
       settledJobs: completedJobs,
       fundedJobs,
     },

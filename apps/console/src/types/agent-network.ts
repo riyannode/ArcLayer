@@ -27,6 +27,10 @@ export type Overview = {
     jobs: number;
     agents: number;
     proofs: number;
+    budgetedUsdc?: string;
+    fundedUsdc?: string;
+    totalBudgetAtomic?: string;
+    totalFundedAtomic?: string;
     totalBudget: string;
     totalFunded: string;
     settledJobs: number;
