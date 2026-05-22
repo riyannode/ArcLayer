@@ -261,13 +261,13 @@ After each write, poll the relevant indexer endpoint until the new state appears
 
 ```ts
 import {
-  buildRegisterConfig,
+  buildRegisterAgentConfig,
   buildCreateJobConfig,
   buildSetBudgetConfig,
   buildApproveUsdcConfig,
   buildFundJobConfig,
-  buildSubmitConfig,
-  buildCompleteConfig,
+  buildSubmitDeliverableConfig,
+  buildCompleteJobConfig,
 } from '@arclayer/sdk';
 ```
 
