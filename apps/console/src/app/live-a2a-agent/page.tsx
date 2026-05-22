@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type { BridgeSession } from '@/components/agent-bridge';
 import { AGENT_CATEGORIES } from './categories';
-import { BtcCandlestickPanel, PolymarketBtc15mPanel, PolymarketOrderbookPanel } from '@/components/market/PolymarketPanels';
 
 type LatestResponse = { ok: boolean; session: BridgeSession | null; error?: string; message?: string };
 
@@ -61,13 +60,6 @@ export default function LiveA2AAgentPage() {
             <div className="bg-black/25 px-4 py-3"><div className="font-mono text-[10px] uppercase text-[#EAE4D8]/45">Bridge</div><div className="font-mono text-lg text-[#C5A67C]">{error ? 'Degraded' : 'Live'}</div></div>
           </div>
         </header>
-
-        <section className="grid gap-3 lg:grid-cols-3">
-          <PolymarketBtc15mPanel />
-          <PolymarketOrderbookPanel />
-          <BtcCandlestickPanel />
-        </section>
-
         <section className="rounded-sm border border-white/10 bg-black/25 p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Agent Categories</div>

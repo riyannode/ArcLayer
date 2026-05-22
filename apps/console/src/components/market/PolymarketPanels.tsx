@@ -132,7 +132,7 @@ export function BtcCandlestickPanel() {
     <PanelShell title="BTC Candlestick" endpoint={endpoint}>
       {error ? <div className="text-xs text-red-200">{error}</div> : null}
       <div className="flex h-20 items-end gap-1 rounded-sm border border-white/10 bg-white/[0.03] p-2">
-        {points.length === 0 ? <div className="text-xs text-[#EAE4D8]/45">loading candles…</div> : points.map((point, index) => {
+        {points.length === 0 ? <div className="text-xs text-[#EAE4D8]/45">No candle points yet</div> : points.map((point, index) => {
           const price = Number(point.close ?? point.p ?? point.price ?? 0);
           const height = Math.max(12, Math.min(72, price * 72));
           return <div key={`${point.t || point.timestamp || index}`} className="flex-1 bg-[#C5A67C]/70" style={{ height }} title={`${price}`} />;
