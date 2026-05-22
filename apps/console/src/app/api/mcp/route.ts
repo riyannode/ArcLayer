@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { encodeFunctionData, keccak256, stringToHex, toBytes, toHex, type Hex } from 'viem';
-import { AGENT_REGISTRY_ABI, JOB_ESCROW_ABI, CONTRACTS, ARC_TOKENS } from '@arclayer/sdk';
+import { ERC8004_IDENTITY_REGISTRY_ABI, ERC8183_AGENTIC_COMMERCE_ABI, CONTRACTS, ARC_TOKENS } from '@arclayer/sdk';
 import { indexerUrl } from '@/lib/indexer';
 
 export const runtime = 'nodejs';
@@ -112,7 +112,7 @@ const TOOLS: Record<
       if (!metadataURI) throw new Error('metadataURI required');
 
       const data = encodeFunctionData({
-        abi: AGENT_REGISTRY_ABI as any,
+        abi: ERC8004_IDENTITY_REGISTRY_ABI as any,
         functionName: 'register',
         args: [metadataURI],
       });
@@ -165,7 +165,7 @@ const TOOLS: Record<
       if (!/^0x[a-fA-F0-9]{40}$/.test(evaluator)) throw new Error('evaluator is not a valid address');
 
       const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
         functionName: 'createJob',
         args: [provider as Hex, evaluator as Hex, BigInt(expiredAt), description, hook as Hex],
       });
@@ -210,7 +210,7 @@ const TOOLS: Record<
       if (!jobIdRaw || !amountRaw) throw new Error('jobId, amount required');
 
       const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
         functionName: 'setBudget',
         args: [BigInt(jobIdRaw), BigInt(amountRaw), optParams],
       });
@@ -274,7 +274,7 @@ const TOOLS: Record<
       if (!jobIdRaw) throw new Error('jobId required');
 
       const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
         functionName: 'fund',
         args: [BigInt(jobIdRaw), optParams],
       });
@@ -313,7 +313,7 @@ const TOOLS: Record<
       if (!jobIdRaw || !deliverableHash) throw new Error('jobId, deliverableHash required');
 
       const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
         functionName: 'submit',
         args: [BigInt(jobIdRaw), deliverableHash as Hex, optParams],
       });
@@ -370,7 +370,7 @@ const TOOLS: Record<
       }
 
       const data = encodeFunctionData({
-        abi: JOB_ESCROW_ABI as any,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
         functionName: 'complete',
         args: [BigInt(jobIdRaw), resolvedReason, optParams],
       });

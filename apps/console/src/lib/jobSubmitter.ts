@@ -21,7 +21,7 @@ import {
   toBytes,
   type Hex,
 } from 'viem';
-import { ARC_RPC_URLS, CONTRACTS, JOB_ESCROW_ABI, arcTestnet } from '@arclayer/sdk';
+import { ARC_RPC_URLS, CONTRACTS, ERC8183_AGENTIC_COMMERCE_ABI, arcTestnet } from '@arclayer/sdk';
 import { getWorkerForAgent } from './workerKeys';
 import { pinJSON } from './pinataClient';
 
@@ -63,7 +63,7 @@ async function assertJobReadyForSubmit(args: {
   const { publicClient } = makeRpcClients();
   const job = (await publicClient.readContract({
     address: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
-    abi: JOB_ESCROW_ABI,
+    abi: ERC8183_AGENTIC_COMMERCE_ABI,
     functionName: 'getJob',
     args: [args.jobId],
   })) as {
@@ -174,7 +174,7 @@ export async function submitDeliverableForRun(args: {
 
   const txHash = await walletClient.writeContract({
     address: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
-    abi: JOB_ESCROW_ABI,
+    abi: ERC8183_AGENTIC_COMMERCE_ABI,
     functionName: 'submit',
     args: [args.jobId, deliverableHash, '0x' as Hex],
   });

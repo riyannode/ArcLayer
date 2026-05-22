@@ -82,7 +82,7 @@ export function projectJobsFromEvents(events: IndexedJobEvent[]) {
       evaluator: created?.evaluator ?? "0x0000000000000000000000000000000000000000",
       hook: created?.hook ?? "0x0000000000000000000000000000000000000000",
       expiredAt: String(created?.expiredAt ?? 0),
-      description: created?.description ?? "",
+      description: "",
       budget: budget.toString(),
       fundedAmount: totalFunded.toString(),
       createdAtBlock: String(created?.blockNumber ?? jobEvents[0]?.blockNumber ?? 0),

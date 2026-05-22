@@ -218,29 +218,3 @@ export const ERC8183_AGENTIC_COMMERCE_ABI = [
   },
 ] as const;
 
-// ── Legacy ABI aliases (deprecated) ─────────────────────────────────────────
-// These map old custom ArcLayer ABI names to official Arc equivalents.
-// Consumers importing AGENT_REGISTRY_ABI / JOB_ESCROW_ABI will get the
-// official ABI shape. Function signatures differ — callers MUST migrate.
-
-/**
- * @deprecated Use ERC8004_IDENTITY_REGISTRY_ABI.
- * NOTE: register() signature changed from registerAgent(uint256,bytes32,string)
- * to register(string metadataURI). Callers must update.
- */
-export const AGENT_REGISTRY_ABI = ERC8004_IDENTITY_REGISTRY_ABI;
-
-/**
- * @deprecated Use ERC8183_AGENTIC_COMMERCE_ABI.
- * NOTE: Function signatures changed significantly. Callers must update.
- */
-export const JOB_ESCROW_ABI = ERC8183_AGENTIC_COMMERCE_ABI;
-
-/** @deprecated No WorkProof in official Arc/Circle mode. */
-export const WORK_PROOF_ABI = [] as const;
-
-/** @deprecated No ReputationOracle in official Arc/Circle mode. */
-export const REPUTATION_ORACLE_ABI = [] as const;
-
-/** @deprecated No MilestoneEscrow in official Arc/Circle mode. */
-export const MILESTONE_ESCROW_ABI = [] as const;

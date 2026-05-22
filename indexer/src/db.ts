@@ -230,7 +230,7 @@ export function writeMetaValue(key: string, value: string) {
   upsertMeta.run(key, value);
 }
 
-function normalizeJobForLegacySchema(job: ReturnType<typeof projectJobsFromEvents>[number]) {
+function normalizeJobForCompatibilitySchema(job: ReturnType<typeof projectJobsFromEvents>[number]) {
   return {
     id: job.id,
     agentId: "0",
@@ -248,7 +248,7 @@ function normalizeJobForLegacySchema(job: ReturnType<typeof projectJobsFromEvent
   };
 }
 
-function normalizeAgentForLegacySchema(agent: ReturnType<typeof projectAgentsFromEvents>[number]) {
+function normalizeAgentForCompatibilitySchema(agent: ReturnType<typeof projectAgentsFromEvents>[number]) {
   const source = "erc8004_identity_registry";
   const now = new Date().toISOString();
   const registryAddress = ARC_ERC8004_ADDRESS;
@@ -319,9 +319,9 @@ export async function syncProjectionStore(
       if (job.evaluator) jobWallets.add(job.evaluator.toLowerCase());
     }
 
-    const jobs = projectedJobs.map(normalizeJobForLegacySchema);
+    const jobs = projectedJobs.map(normalizeJobForCompatibilitySchema);
     const agentProjectionDebug = buildAgentProjectionDebug(allAgentEvents, jobWallets);
-    const agents = projectAgentsFromEvents(allAgentEvents, jobWallets).map(normalizeAgentForLegacySchema);
+    const agents = projectAgentsFromEvents(allAgentEvents, jobWallets).map(normalizeAgentForCompatibilitySchema);
 
     db.exec("DELETE FROM jobs");
     db.exec("DELETE FROM agents");
@@ -390,7 +390,7 @@ export async function syncProjectionStore(
   try {
     await syncA2AJobsFromERC8183Events(
       events
-        .filter((event) => ["JobCreated", "BudgetSet", "JobFunded", "JobSubmitted", "JobCompleted"].includes(event.eventName))
+        .filter((event) => ["JobCreated", "BudgetSet", "JobFunded", "JobSubmitted", "JobCompleted", "JobRejected", "JobExpired"].includes(event.eventName))
         .map((event) => ({
           ...event,
           transactionHash: event.transactionHash,
