@@ -193,8 +193,8 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
   const loadAgents = useCallback(async () => {
     setDiscovery((d) => ({ ...d, loading: true, error: null }));
     try {
-      const endpoint = mode === 'autonomous' ? '/api/a2a/agents' : '/api/indexer/agents';
-      const res = await fetch(endpoint);
+      const endpoint = mode === 'autonomous' ? '/api/a2a/agents' : `${INDEXER_BASE}/agents`;
+      const res = await fetch(endpoint, { cache: 'no-store' });
       const data = await res.json();
       const agents = Array.isArray(data) ? data : data.agents || data.result?.agents || [];
       setDiscovery((d) => ({ ...d, loading: false, agents }));
@@ -206,7 +206,7 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
   const loadJobs = useCallback(async () => {
     setDiscovery((d) => ({ ...d, jobsLoading: true, jobsError: null }));
     try {
-      const res = await fetch('/api/indexer/jobs');
+      const res = await fetch(`${INDEXER_BASE}/jobs`, { cache: 'no-store' });
       const data = await res.json();
       const jobs = Array.isArray(data) ? data : data.jobs || data.result?.jobs || [];
       setDiscovery((d) => ({ ...d, jobsLoading: false, jobs }));
