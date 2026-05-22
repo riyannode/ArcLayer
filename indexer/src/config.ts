@@ -1,5 +1,8 @@
 export const INDEXER_PORT = Number(process.env.INDEXER_PORT || process.env.PORT || 3535);
 export const DEFAULT_FROM_BLOCK = BigInt(process.env.FROM_BLOCK || "41752050");
+export const OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK = BigInt(
+  process.env.OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK || DEFAULT_FROM_BLOCK.toString(),
+);
 // Bumped from 5s to 30s — with 1671 jobs, a full sync cycle takes 10-20s.
 // 5s interval guaranteed overlap → event loop starvation.
 export const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 30_000);

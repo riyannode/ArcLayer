@@ -1,6 +1,6 @@
 import { createServer, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
-import { DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS } from "./config";
+import { DEFAULT_FROM_BLOCK, INDEXER_PORT, OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK, POLL_INTERVAL_MS } from "./config";
 import { fetchAgentEvents, fetchImportedArcLayerAgentEvents, fetchJobEvents } from "./ingest";
 import { arcWalletFilterActive } from "./projections";
 import { getReferenceFilters, refreshReferenceFiltersFromSupabase } from "./reference-filters";
@@ -26,6 +26,8 @@ let lastSyncError: string | null = null;
 let lastSyncAt: number | null = null;
 let lastSyncDurationMs: number | null = null;
 let syncSkipCount = 0;
+
+const OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR = "old_arclayer_agent_registry_imported_until_block";
 
 function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
@@ -133,15 +135,19 @@ async function runSyncCycle() {
 
     const fromBlockValue = readMetaValue("last_synced_block");
     const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
+    const oldRegistryCursorValue = readMetaValue(OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR);
+    const oldRegistryFromBlock = oldRegistryCursorValue
+      ? BigInt(oldRegistryCursorValue) + BigInt(1)
+      : OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK;
 
     const [jobResult, erc8004Result, importedResult] = await Promise.all([
       fetchJobEvents(fromBlock),
       fetchAgentEvents(fromBlock),
-      fetchImportedArcLayerAgentEvents(fromBlock),
+      fetchImportedArcLayerAgentEvents(oldRegistryFromBlock),
     ]);
     const events = jobResult.events;
     const agentEvts = [...importedResult.events, ...erc8004Result.events];
-    const latestBlock = [jobResult.latestBlock, erc8004Result.latestBlock, importedResult.latestBlock]
+    const latestBlock = [jobResult.latestBlock, erc8004Result.latestBlock]
       .reduce((max, block) => (block > max ? block : max), BigInt(0));
 
     console.log(`[indexer] sync projection: jobs=${events.length} importedAgents=${importedResult.events.length} erc8004Agents=${erc8004Result.events.length} block=${latestBlock}`);
@@ -150,6 +156,9 @@ async function runSyncCycle() {
     // Always advance cursor so empty ranges don't get re-scanned
     if (latestBlock >= fromBlock) {
       writeMetaValue("last_synced_block", latestBlock.toString());
+    }
+    if (importedResult.latestBlock >= oldRegistryFromBlock) {
+      writeMetaValue(OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR, importedResult.latestBlock.toString());
     }
 
     lastSyncError = null;
