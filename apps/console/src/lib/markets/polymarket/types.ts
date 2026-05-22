@@ -1,0 +1,5 @@
+export type Asset = 'BTC' | 'ETH';
+export type GammaMarket = { slug: string; question?: string; conditionId?: string; outcomePrices?: string; outcomes?: string; clobTokenIds?: string };
+export type OutcomeBook = { bids: Array<{ price: number; size: number }>; asks: Array<{ price: number; size: number }>; bestBid: number | null; bestAsk: number | null; spread: number | null; bidDepth: number; askDepth: number };
+export type Candle1m = { timestamp: number; open: number; high: number; low: number; close: number };
+export type LiveSnapshot = { asset: Asset; marketSlug: string; question: string; conditionId: string | null; windowStart: number; windowEnd: number; targetPrice: number | null; livePrice: number | null; distanceFromTarget: number | null; directionNow: 'UP' | 'DOWN' | 'FLAT' | 'UNKNOWN'; outcomes: { up: { label: string; probability: number | null; tokenId: string | null }; down: { label: string; probability: number | null; tokenId: string | null } }; orderbook: { up: OutcomeBook; down: OutcomeBook }; candles1m: Candle1m[]; capturedAt: string; rawEvidenceHash: string };
