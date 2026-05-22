@@ -3,6 +3,8 @@ export const DEFAULT_FROM_BLOCK = BigInt(process.env.FROM_BLOCK || "41752050");
 export const OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK = BigInt(
   process.env.OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK || DEFAULT_FROM_BLOCK.toString(),
 );
+export const FORCE_REIMPORT_OLD_ARCLAYER_AGENTS_ON_BOOT =
+  (process.env.FORCE_REIMPORT_OLD_ARCLAYER_AGENTS_ON_BOOT || "false").toLowerCase() === "true";
 // Bumped from 5s to 30s — with 1671 jobs, a full sync cycle takes 10-20s.
 // 5s interval guaranteed overlap → event loop starvation.
 export const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 30_000);

@@ -1,10 +1,11 @@
 import { createServer, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
-import { DEFAULT_FROM_BLOCK, INDEXER_PORT, OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK, POLL_INTERVAL_MS } from "./config";
+import { DEFAULT_FROM_BLOCK, FORCE_REIMPORT_OLD_ARCLAYER_AGENTS_ON_BOOT, INDEXER_PORT, OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK, POLL_INTERVAL_MS } from "./config";
 import { fetchAgentEvents, fetchImportedArcLayerAgentEvents, fetchJobEvents } from "./ingest";
 import { arcWalletFilterActive } from "./projections";
 import { getReferenceFilters, refreshReferenceFiltersFromSupabase } from "./reference-filters";
 import {
+  getLastA2AJobSyncError,
   readAgentById,
   readAgentEvents,
   readAgents,
@@ -28,6 +29,7 @@ let lastSyncDurationMs: number | null = null;
 let syncSkipCount = 0;
 
 const OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR = "old_arclayer_agent_registry_imported_until_block";
+let forceOldRegistryReimportPending = FORCE_REIMPORT_OLD_ARCLAYER_AGENTS_ON_BOOT;
 
 function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
@@ -136,9 +138,12 @@ async function runSyncCycle() {
     const fromBlockValue = readMetaValue("last_synced_block");
     const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
     const oldRegistryCursorValue = readMetaValue(OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR);
-    const oldRegistryFromBlock = oldRegistryCursorValue
-      ? BigInt(oldRegistryCursorValue) + BigInt(1)
-      : OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK;
+    const forceOldRegistryReimport = forceOldRegistryReimportPending;
+    const oldRegistryFromBlock = forceOldRegistryReimport
+      ? OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK
+      : oldRegistryCursorValue
+        ? BigInt(oldRegistryCursorValue) + BigInt(1)
+        : OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK;
 
     const [jobResult, erc8004Result, importedResult] = await Promise.all([
       fetchJobEvents(fromBlock),
@@ -150,8 +155,9 @@ async function runSyncCycle() {
     const latestBlock = [jobResult.latestBlock, erc8004Result.latestBlock]
       .reduce((max, block) => (block > max ? block : max), BigInt(0));
 
+    console.log(`[indexer] old registry import fromBlock=${oldRegistryFromBlock.toString()} events=${importedResult.events.length}`);
     console.log(`[indexer] sync projection: jobs=${events.length} importedAgents=${importedResult.events.length} erc8004Agents=${erc8004Result.events.length} block=${latestBlock}`);
-    await syncProjectionStore(events, agentEvts);
+    const syncResult = await syncProjectionStore(events, agentEvts);
 
     // Always advance cursor so empty ranges don't get re-scanned
     if (latestBlock >= fromBlock) {
@@ -160,8 +166,9 @@ async function runSyncCycle() {
     if (importedResult.latestBlock >= oldRegistryFromBlock) {
       writeMetaValue(OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR, importedResult.latestBlock.toString());
     }
+    forceOldRegistryReimportPending = false;
 
-    lastSyncError = null;
+    lastSyncError = syncResult.lastSyncError;
     lastSyncAt = Date.now();
     lastSyncDurationMs = Date.now() - t0;
   } catch (error) {
@@ -201,6 +208,8 @@ createServer((req, res) => {
       status: "ok",
       mode: "production",
       filterActive: arcWalletFilterActive(),
+      storedAgentEventCount: counts.storedAgentEventCount,
+      storedJobEventCount: counts.storedJobEventCount,
       walletCount: filters.wallets.length,
       supabaseWallets: filters.supabaseWallets,
       supabaseAgentIds: filters.supabaseAgentIds,
@@ -213,7 +222,7 @@ createServer((req, res) => {
       totalAgentCount: counts.totalAgentCount,
       lastSyncedBlock: Number(readMetaValue("last_synced_block") || "0"),
       lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : (readMetaValue("last_sync_at") ? new Date(Number(readMetaValue("last_sync_at"))).toISOString() : null),
-      lastSyncError,
+      lastSyncError: lastSyncError ?? getLastA2AJobSyncError(),
     });
     return;
   }

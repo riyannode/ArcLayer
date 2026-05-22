@@ -18,6 +18,12 @@ mkdirSync(dirname(dbPath), { recursive: true });
 
 const db = new DatabaseSync(dbPath);
 
+let lastA2AJobSyncError: string | null = null;
+
+export function getLastA2AJobSyncError() {
+  return lastA2AJobSyncError;
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY,
@@ -246,7 +252,7 @@ function normalizeAgentForLegacySchema(agent: ReturnType<typeof projectAgentsFro
 export async function syncProjectionStore(
   events: IndexedJobEvent[],
   agentEvents: IndexedAgentEvent[] = [],
-) {
+): Promise<{ lastSyncError: string | null }> {
   db.exec("BEGIN");
   try {
     for (const event of events) {
@@ -334,19 +340,6 @@ export async function syncProjectionStore(
       );
     }
 
-    const supabase = createSupabaseRestClientFromEnv();
-    if (supabase) {
-      await syncA2AJobsFromERC8183Events(
-        events
-          .filter((event) => ["JobCreated", "BudgetSet", "JobFunded", "JobSubmitted", "JobCompleted"].includes(event.eventName))
-          .map((event) => ({
-            ...event,
-            transactionHash: event.transactionHash,
-          })) as ERC8183IndexedLifecycleEvent[],
-        supabase,
-      );
-    }
-
     upsertMeta.run("last_sync_at", Date.now().toString());
     const storedJobEvents = (db.prepare(`SELECT COUNT(*) AS count FROM job_events`).get() as { count: number }).count;
     const storedAgentEvents = (db.prepare(`SELECT COUNT(*) AS count FROM agent_events`).get() as { count: number }).count;
@@ -355,6 +348,27 @@ export async function syncProjectionStore(
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;
+  }
+
+  lastA2AJobSyncError = null;
+  const supabase = createSupabaseRestClientFromEnv();
+  if (!supabase) return { lastSyncError: null };
+
+  try {
+    await syncA2AJobsFromERC8183Events(
+      events
+        .filter((event) => ["JobCreated", "BudgetSet", "JobFunded", "JobSubmitted", "JobCompleted"].includes(event.eventName))
+        .map((event) => ({
+          ...event,
+          transactionHash: event.transactionHash,
+        })) as ERC8183IndexedLifecycleEvent[],
+      supabase,
+    );
+    return { lastSyncError: null };
+  } catch (error) {
+    lastA2AJobSyncError = error instanceof Error ? error.message : String(error);
+    console.warn(`[indexer] a2a supabase sync warning: ${lastA2AJobSyncError}`);
+    return { lastSyncError: lastA2AJobSyncError };
   }
 }
 export function readJobs() {
@@ -505,7 +519,11 @@ export function readCounts() {
   const importedAgentCount = readAgents("imported").length;
   const erc8004AgentCount = readAgents("erc8004").length;
   const erc8183JobCount = readJobs().length;
+  const storedAgentEventCount = (db.prepare(`SELECT COUNT(*) AS count FROM agent_events`).get() as { count: number }).count;
+  const storedJobEventCount = (db.prepare(`SELECT COUNT(*) AS count FROM job_events`).get() as { count: number }).count;
   return {
+    storedAgentEventCount,
+    storedJobEventCount,
     importedAgentCount,
     erc8004AgentCount,
     erc8183JobCount,

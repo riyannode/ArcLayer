@@ -157,7 +157,7 @@ export default function ManualJobCategoryPage() {
                       <div>
                         <div className="mb-1 flex flex-wrap gap-2">
                           <span className="chip-status pending">{display.category}</span>
-                          {!display.isStructured && <span className="chip-status">Legacy</span>}
+                          {!display.isStructured && <span className="chip-status">Classic</span>}
                           <span className={`chip-status ${JOB_TONE[job.status] ?? ''}`}>{JOB_STATUS[job.status] ?? 'Unknown'}</span>
                         </div>
                         <Link href={`/job/${job.id}`} className="font-mono text-[12px] text-[#EAE4D8] hover:text-[#C5A67C]">{display.title}</Link>

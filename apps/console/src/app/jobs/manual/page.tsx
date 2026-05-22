@@ -615,7 +615,7 @@ function JobsPage() {
                         <div>
                           <div className="mb-1 flex flex-wrap gap-2">
                             <span className="chip-status pending">{display.category}</span>
-                            {!display.isStructured && <span className="chip-status">Legacy</span>}
+                            {!display.isStructured && <span className="chip-status">Classic</span>}
                           </div>
                           <Link href={`/job/${job.id}`} className="font-mono text-[12.5px] text-[#EAE4D8] hover:text-[#C5A67C]">{display.title}</Link>
                           <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">

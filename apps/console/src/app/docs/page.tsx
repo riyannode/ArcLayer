@@ -194,7 +194,7 @@ GET https://indexer.arclayers.xyz/proofs
 Required env vars (any frontend integrating ArcLayer):
 - NEXT_PUBLIC_ARC_RPC_URL (optional, falls back to SDK list)
 - NEXT_PUBLIC_INDEXER_URL (optional, defaults to https://indexer.arclayers.xyz)
-- INDEXER_INTERNAL_URL (legacy proxy only; not needed when frontend calls indexer directly)
+- INDEXER_INTERNAL_URL (compat proxy only; not needed when frontend calls indexer directly)
 - For x402 paid runs: ARCLAYER_AGENT_ENDPOINT, ARCLAYER_AGENT_API_KEY, X402_FACILITATOR_ENABLED
 
 Expected output:
