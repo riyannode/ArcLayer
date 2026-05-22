@@ -11,7 +11,7 @@ You are an AI coding agent integrating ArcLayer into an existing app.
 ArcLayer gives agent apps two integration paths:
 
 - **Path A — Charge for my API / agent run:** use **x402**. The user pays before a protected endpoint unlocks.
-- **Path B — Create accountable agent work:** use **ArcLayer Escrow**. The user creates a job, deposits USDC into the Settlement Vault, approves the deliverable, then settles payout and WorkProof.
+- **Path B — Create accountable agent work:** use **ArcLayer Escrow**. The user creates a job, deposits USDC into the Settlement Vault, submits work, then completes the job flow on-chain.
 
 Do not mix these labels. ArcLayer Escrow is a trust layer after work assignment, not a third x402 payment method.
 
@@ -26,14 +26,7 @@ Do not mix these labels. ArcLayer Escrow is a trust layer after work assignment,
 - Explorer: `https://testnet.arcscan.app`
 - USDC: `0x3600000000000000000000000000000000000000` (`6` decimals)
 
-Core deployed contracts:
-
-- Agent Registry: `0x9fe01a9AF637402c53B23571a0EbDA6b2127DC21`
-- Job Escrow / Settlement Vault: `0xF0E1B0709A012AdE0b73596fDC8FA0CE037Dd225`
-- WorkProof: `0xf4c4aaff0AAC4F22De4a3CD497Db6803279fFEb5`
-- ReputationOracle: `0x4D3296F4F3e9135042EfFF8134631dbF359aDb8c`
-
-Prefer importing addresses, ABIs, chain config, and write builders from `@arclayer/sdk` instead of duplicating them.
+Core deployed contracts and addresses must be sourced from `@arclayer/sdk` (`CONTRACTS`) so integrations always track official deployments.
 
 ---
 
@@ -76,19 +69,16 @@ User-facing labels:
 - `Create Job`
 - `Approve & Fund Settlement Vault`
 - `Submit Work`
-- `Approve Work`
-- `Settle Payment`
-- `Mint WorkProof`
+- `Complete Job`
 - `Developer details`
 
 Required behavior:
 
 1. Register or select an agent.
-2. Create a job with `agentId`, `worker`, `evaluator`, and `taskDescription`.
-3. Set budget, approve USDC, and fund the Settlement Vault.
-4. Worker submits deliverable.
-5. Client/evaluator approves or rejects.
-6. Settle payment and mint WorkProof after approval.
+2. Create a job with `provider`, `evaluator`, `expiredAt`, `description`, and `hook`.
+3. Set budget, approve USDC for AgenticCommerce, and fund the Settlement Vault.
+4. Worker/provider submits deliverable hash.
+5. Complete the job with completion reason hash.
 
 ---
 
@@ -100,7 +90,7 @@ Required behavior:
 - Do not commit `.env`, `.env.*`, mnemonics, API keys, service-role keys, Vercel tokens, or private key files.
 - Use the connected wallet for client/evaluator actions.
 - Prefer label `Client Address` in UI. It maps to the contract param `evaluator`.
-- Validate `worker !== connected client` before opening the wallet popup. `createJob` reverts with `Worker is client` if they match.
+- Validate `provider !== Client Address` before opening the wallet popup.
 - Keep protocol jargon out of primary UI. Put raw method names, addresses, payloads, and hashes inside collapsed `Developer details`.
 - Prefer indexer APIs for reads and direct contract writes for on-chain actions.
 - Let the wallet estimate gas. Do not hardcode settlement gas at `300000`.
@@ -185,41 +175,41 @@ Avoid copy:
 ### 1. Register agent
 
 ```ts
-registerAgent(agentId, skillHash, metadataURI)
+register(metadataURI)
 ```
 
-Explain that the connected wallet becomes the agent controller. Show pending tx, confirmed tx, indexer sync, agent ID, controller, metadata URI, and explorer link.
+Explain that the connected wallet becomes the agent controller. Show pending tx, confirmed tx, indexer sync, agent ID/controller info from indexer, metadata URI, and explorer link.
 
 ### 2. Create job
 
 ```ts
-createJob(agentId, worker, evaluator, taskDescription)
+createJob(provider, evaluator, expiredAt, description, hook)
 ```
 
 UX labels:
 
-- `agentId` → `Agent`
-- `worker` → `Worker wallet`
+- `provider` → `Worker wallet`
 - `evaluator` → `Client Address`
-- `taskDescription` → `Task description`
+- `expiredAt` → `Expiry time`
+- `description` → `Task description`
+- `hook` → `Hook data (optional)`
 
 Validation:
 
-- `agentId` must be present.
-- `worker` must be a valid address.
+- `provider` must be a valid address.
 - `Client Address` must be a valid address.
-- `worker !== Client Address`.
+- `provider !== Client Address`.
 
 Suggested warning:
 
-> Worker and client cannot be the same address. The worker receives payout — use the agent's controller or a dedicated worker wallet.
+> Worker and client cannot be the same address. The worker receives payout — use the provider wallet or a dedicated worker wallet.
 
 ### 3. Fund Settlement Vault
 
 ```ts
-setBudget(jobId, amount)
-approve(USDC, JOB_ESCROW, amount)
-fund(jobId, amount)
+setBudget(jobId, amount, "0x")
+approve(USDC, AgenticCommerce, amount)
+fund(jobId, "0x")
 ```
 
 Copy:
@@ -230,26 +220,18 @@ Copy:
 ### 4. Submit work
 
 ```ts
-submitDeliverable(jobId, deliverableURI)
+submit(jobId, deliverableHash, "0x")
 ```
 
-Deliverable can be `ipfs://`, `https://`, or another durable URI.
+Deliverable hash should reference durable payload content (for example IPFS CID hash or canonical artifact hash).
 
-### 5. Approve work
+### 5. Complete job
 
 ```ts
-evaluate(jobId, approved)
+complete(jobId, reasonHash, "0x")
 ```
 
-Label as `Approve Work` / `Reject Work`, not raw `evaluate()`.
-
-### 6. Settle payment
-
-```ts
-settle(jobId)
-```
-
-Explain that settlement pays the worker and mints a WorkProof NFT.
+Use clear UX labels such as `Complete Job` and explain `reasonHash` as the completion/evaluation reason digest.
 
 ---
 
@@ -283,8 +265,7 @@ import {
   buildApproveUsdcConfig,
   buildFundJobConfig,
   buildSubmitDeliverableConfig,
-  buildEvaluateJobConfig,
-  buildSettleJobConfig,
+  buildCompleteJobConfig,
 } from '@arclayer/sdk';
 ```
 
