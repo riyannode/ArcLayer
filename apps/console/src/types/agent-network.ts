@@ -97,7 +97,7 @@ export type NetworkAgent = {
   primaryAction: string;
   categories: AgentCategory[];
   activity: FeedItem[];
-   | 'registry';
+  source: 'registry';
   canHide: boolean;
   connectedTo?: string[];
 };

@@ -5,7 +5,7 @@ import {
   publicClient,
 } from "@arclayer/sdk";
 import type { IndexedAgentEvent, IndexedJobEvent } from "@arclayer/sdk";
-import { MAX_BLOCK_RANGE,  } from "./config";
+import { MAX_BLOCK_RANGE } from "./config";
 
 // ── Official ERC-8183 AgenticCommerce events ────────────────────────────────
 
@@ -29,18 +29,6 @@ const JOB_EVENT_ABIS = ERC8183_AGENTIC_COMMERCE_ABI.filter(
 const AGENT_EVENT_NAMES = ["Transfer"] as const;
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-const OLD_ARCLAYER_AGENT_REGISTRY_ABI = [
-  {
-    type: "event",
-    name: "AgentRegistered",
-    inputs: [
-      { indexed: true, name: "agentId", type: "uint256" },
-      { indexed: true, name: "skillHash", type: "bytes32" },
-      { indexed: true, name: "controller", type: "address" },
-      { indexed: false, name: "metadataURI", type: "string" },
-    ],
-  },
-] as const;
 
 const AGENT_EVENT_ABIS = ERC8004_IDENTITY_REGISTRY_ABI.filter(
   (item): item is typeof item & { type: "event"; name: typeof AGENT_EVENT_NAMES[number] } =>
@@ -183,49 +171,6 @@ export async function fetchAgentEvents(
       if (a.blockNumber !== b.blockNumber) {
         return Number(a.blockNumber - b.blockNumber);
       }
-      return a.logIndex - b.logIndex;
-    });
-
-  return { events, latestBlock };
-}
-
-export async function fetchImportedArcLayerAgentEvents(
-  fromBlock: bigint = BigInt(0),
-): Promise<FetchAgentEventsResult> {
-  const latestBlock = await publicClient.getBlockNumber();
-
-  if (fromBlock > latestBlock) {
-    return { events: [], latestBlock };
-  }
-
-  const collected = await fetchEventsChunked(
-    ,
-    OLD_ARCLAYER_AGENT_REGISTRY_ABI,
-    fromBlock,
-    latestBlock,
-  );
-
-  const events = collected
-    .filter((event: any) => event.eventName === "AgentRegistered")
-    .map((event: any) => {
-      const args = (event.args ?? {}) as Record<string, unknown>;
-      return {
-        eventName: "AgentRegistered" as const,
-        blockNumber: event.blockNumber as bigint,
-        transactionHash: event.transactionHash as `0x${string}`,
-        logIndex: (event.logIndex ?? 0) as number,
-        agentId: args.agentId as bigint,
-        controller: args.controller as `0x${string}`,
-        metadataURI: (args.metadataURI as string | undefined) ?? "",
-        skillHash: args.skillHash as `0x${string}` | undefined,
-        source: "imported_arclayer_registry",
-        chainId: 5042002,
-        registryAddress: ,
-        contractAddress: ,
-      } satisfies IndexedAgentEvent & Record<string, unknown>;
-    })
-    .sort((a, b) => {
-      if (a.blockNumber !== b.blockNumber) return Number(a.blockNumber - b.blockNumber);
       return a.logIndex - b.logIndex;
     });
 

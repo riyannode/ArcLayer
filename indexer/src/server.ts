@@ -1,7 +1,7 @@
 import { createServer, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
-import { DEFAULT_FROM_BLOCK, false, INDEXER_PORT, , POLL_INTERVAL_MS } from "./config";
-import { fetchAgentEvents, fetchImportedArcLayerAgentEvents, fetchJobEvents } from "./ingest";
+import { DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS } from "./config";
+import { fetchAgentEvents, fetchJobEvents } from "./ingest";
 import { arcWalletFilterActive } from "./projections";
 import { getReferenceFilters, refreshReferenceFiltersFromSupabase } from "./reference-filters";
 import {
@@ -29,8 +29,6 @@ let lastSyncAt: number | null = null;
 let lastSyncDurationMs: number | null = null;
 let syncSkipCount = 0;
 
-const OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR = "old_arclayer_agent_registry_imported_until_block";
-let forceOldRegistryReimportPending = false;
 
 function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
@@ -138,40 +136,23 @@ async function runSyncCycle() {
 
     const fromBlockValue = readMetaValue("last_synced_block");
     const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
-    const oldRegistryCursorValue = readMetaValue(OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR);
-    const forceOldRegistryReimport = forceOldRegistryReimportPending;
-    const oldRegistryFromBlock = forceOldRegistryReimport
-      ? 
-      : oldRegistryCursorValue
-        ? BigInt(oldRegistryCursorValue) + BigInt(1)
-        : ;
 
-    if (forceOldRegistryReimport) {
-      console.log(`[indexer] old registry force reimport enabled fromBlock=${oldRegistryFromBlock.toString()}`);
-    }
-
-    const [jobResult, erc8004Result, importedResult] = await Promise.all([
+    const [jobResult, erc8004Result] = await Promise.all([
       fetchJobEvents(fromBlock),
       fetchAgentEvents(fromBlock),
-      fetchImportedArcLayerAgentEvents(oldRegistryFromBlock),
     ]);
     const events = jobResult.events;
-    const agentEvts = [...importedResult.events, ...erc8004Result.events];
+    const agentEvts = [...erc8004Result.events];
     const latestBlock = [jobResult.latestBlock, erc8004Result.latestBlock]
       .reduce((max, block) => (block > max ? block : max), BigInt(0));
 
-    console.log(`[indexer] old registry import fromBlock=${oldRegistryFromBlock.toString()} events=${importedResult.events.length}`);
-    console.log(`[indexer] sync projection: jobs=${events.length} importedAgents=${importedResult.events.length} erc8004Agents=${erc8004Result.events.length} block=${latestBlock}`);
+    console.log(`[indexer] sync projection: jobs=${events.length} erc8004Agents=${erc8004Result.events.length} block=${latestBlock}`);
     const syncResult = await syncProjectionStore(events, agentEvts);
 
     // Always advance cursor so empty ranges don't get re-scanned
     if (latestBlock >= fromBlock) {
       writeMetaValue("last_synced_block", latestBlock.toString());
     }
-    if (importedResult.latestBlock >= oldRegistryFromBlock) {
-      writeMetaValue(OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR, importedResult.latestBlock.toString());
-    }
-    forceOldRegistryReimportPending = false;
 
     lastSyncError = syncResult.lastSyncError;
     lastSyncAt = Date.now();

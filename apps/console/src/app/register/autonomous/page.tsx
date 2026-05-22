@@ -14,7 +14,7 @@ import { StatusBanner } from '@/components/StatusBanner';
 import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/components/protection';
 import { LLMAgentConnectKit } from '@/components/LLMAgentConnectKit';
 import { config } from '@/lib/wagmi';
-import { nameToAgentId, normalizeAgentName, shortAgentId } from '@/lib/agentName';
+import { normalizeAgentName, shortAgentId } from '@/lib/agentName';
 import { AGENT_CATEGORIES } from '@/app/live-a2a-agent/categories';
 
 type NameStatus =
@@ -306,13 +306,6 @@ export default function RegisterAutonomousPage() {
   );
   const isLiveHostSelected = expandedHostOption?.status === 'live';
 
-  const derivedAgentId = useMemo(() => {
-    try {
-      return form.name.trim() ? nameToAgentId(form.name) : null;
-    } catch {
-      return null;
-    }
-  }, [form.name]);
 
   const normalizedAgentName = normalizeAgentName(form.name);
   const generatedMetadataURI = buildPendingManifestURI(address, normalizedAgentName);
@@ -363,8 +356,7 @@ export default function RegisterAutonomousPage() {
     }
 
     try {
-      const id = nameToAgentId(norm);
-      setNameStatus({ state: 'free', agentId: id });
+      setNameStatus({ state: 'free', agentId: BigInt(0) });
     } catch (e) {
       setNameStatus({ state: 'invalid', reason: e instanceof Error ? e.message : 'Name format validation failed.' });
     }
@@ -875,14 +867,6 @@ export default function RegisterAutonomousPage() {
                       {roleValidationError || `✓ ${enabledRoles.length} role(s) ready for manifest + matcher metadata.`}
                     </div>
                   </div>
-
-                  {derivedAgentId !== null && (
-                    <div className="rounded-none border border-cyan-500/20 bg-cyan-950/[0.05] px-4 py-3">
-                      <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-cyan-300/80">Derived Agent ID (local hint)</div>
-                      <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{shortAgentId(derivedAgentId)}</div>
-                      <div className="mt-1 break-all font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.78)]">{derivedAgentId.toString()}</div>
-                    </div>
-                  )}
                 </div>
 
                 {!isConnected && (

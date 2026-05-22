@@ -2,6 +2,8 @@ export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as cons
 export const ARC_CHAIN_ID = 5042002;
 export const ARC_EXPLORER = "https://testnet.arcscan.app";
 export const ARC_RPC_URLS = ["https://rpc.testnet.arc.network","https://rpc.drpc.testnet.arc.network"] as const;
+export const ARC_NATIVE_USDC_DECIMALS = 18;
+export const ARC_ERC20_USDC_DECIMALS = 6;
 export const ARC_CCTP_DOMAIN = 26;
 
 export const ARC_TOKENS = {

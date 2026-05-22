@@ -247,7 +247,7 @@ export default function JobDetailPage() {
               ))}
             </div>
             <a
-              href={getExplorerAddressUrl(CONTRACTS.JOB_ESCROW)}
+              href={getExplorerAddressUrl(CONTRACTS.ERC8183_AGENTIC_COMMERCE)}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-5 inline-flex font-mono text-[11px] tracking-[0.14em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"

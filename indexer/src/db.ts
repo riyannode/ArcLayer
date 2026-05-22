@@ -10,7 +10,7 @@ import {
   type ERC8183IndexedLifecycleEvent,
 } from "./a2a-lifecycle-sync";
 import { buildAgentProjectionDebug, projectAgentsFromEvents, projectJobsFromEvents } from "./projections";
-import { ARC_ERC8004_ADDRESS, ARC_ERC8183_ADDRESS,  } from "./config";
+import { ARC_ERC8004_ADDRESS, ARC_ERC8183_ADDRESS } from "./config";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.INDEXER_DB_PATH || resolve(currentDir, "../data/arclayer-indexer.sqlite");
@@ -249,11 +249,9 @@ function normalizeJobForLegacySchema(job: ReturnType<typeof projectJobsFromEvent
 }
 
 function normalizeAgentForLegacySchema(agent: ReturnType<typeof projectAgentsFromEvents>[number]) {
-  const source = (agent as any).source === "imported_arclayer_registry"
-    ? "imported_arclayer_registry"
-    : "erc8004_identity_registry";
+  const source = "erc8004_identity_registry";
   const now = new Date().toISOString();
-  const registryAddress = source === "imported_arclayer_registry" ?  : ARC_ERC8004_ADDRESS;
+  const registryAddress = ARC_ERC8004_ADDRESS;
   const tokenId = String(agent.tokenId ?? agent.agentId);
   return {
     agentId: `${source}:${tokenId}`,
@@ -450,11 +448,9 @@ export function readJobById(jobId: string) {
 }
 
 export function readAgents(source: "all" | "imported" | "erc8004" = "all") {
-  const where = source === "imported"
-    ? "WHERE source = 'imported_arclayer_registry'"
-    : source === "erc8004"
-      ? "WHERE source = 'erc8004_identity_registry'"
-      : "";
+  const where = source === "erc8004" || source === "imported"
+    ? "WHERE source = 'erc8004_identity_registry'"
+    : "";
   return db.prepare(`SELECT * FROM agents ${where} ORDER BY CAST(COALESCE(NULLIF(token_id, ''), agent_id) AS INTEGER) DESC`).all().map((row) => ({
     agentId: row.agent_id as string,
     tokenId: ((row.token_id as string | undefined) || row.agent_id) as string,
@@ -476,7 +472,7 @@ export function readAgents(source: "all" | "imported" | "erc8004" = "all") {
     blockNumber: row.block_number as string,
     importedAt: row.imported_at as string,
     updatedAt: row.updated_at as string,
-    displayType: row.source === "imported_arclayer_registry" ? "ArcLayer Agent" : "ERC-8004 Agent",
+    displayType: "ERC-8004 Agent",
   }));
 }
 
@@ -528,12 +524,12 @@ export function readOverview() {
 
   const totalBudget = jobs.reduce((sum, job) => sum + BigInt(job.budget), BigInt(0));
   const totalFunded = jobs.reduce((sum, job) => sum + BigInt(job.fundedAmount), BigInt(0));
-  const settledJobs = jobs.filter((job) => job.status === 4).length;
+  const settledJobs = jobs.filter((job) => job.status === 3).length;
   const fundedJobs = jobs.filter((job) => BigInt(job.fundedAmount) > BigInt(0)).length;
   const totalBudgetAtomic = totalBudget.toString();
   const totalFundedAtomic = totalFunded.toString();
 
-  const importedAgents = agents.filter((agent) => agent.source === "imported_arclayer_registry").length;
+  const importedAgents = 0;
   const erc8004Agents = agents.filter((agent) => agent.source === "erc8004_identity_registry").length;
 
   return {

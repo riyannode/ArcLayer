@@ -121,22 +121,3 @@ export function buildCompleteJobConfig(jobId: bigint, reason: `0x${string}` | st
   };
 }
 
-/** @deprecated ERC-8183 uses complete(jobId, reason, optParams), not evaluate(bool). */
-export function buildEvaluateJobConfig(jobId: bigint, approved: boolean) {
-  return buildCompleteJobConfig(jobId, approved ? "approved" : "rejected");
-}
-
-/** @deprecated ERC-8183 uses complete(jobId, reason, optParams), not settle(). */
-export function buildSettleJobConfig(jobId: bigint) {
-  return buildCompleteJobConfig(jobId, "settled");
-}
-
-/** @deprecated No refundRejected() in official ERC-8183 reference flow. */
-export function buildRefundRejectedJobConfig(jobId: bigint) {
-  return buildCompleteJobConfig(jobId, "rejected");
-}
-
-/** @deprecated No cancelJob() in official ERC-8183 reference flow. */
-export function buildCancelJobConfig(jobId: bigint) {
-  return buildCompleteJobConfig(jobId, "cancelled");
-}

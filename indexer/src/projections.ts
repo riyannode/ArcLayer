@@ -70,8 +70,8 @@ export function projectJobsFromEvents(events: IndexedJobEvent[]) {
 
     const totalFunded = fundedEvents.reduce((sum, event) => sum + BigInt(event.amount ?? 0), BigInt(0));
     const budget = BigInt(latestBudget?.amount ?? 0);
-    const status = completed ? 4 : submitted ? 3 : totalFunded > BigInt(0) ? 2 : latestBudget ? 1 : 0;
-    const statusLabel = ["Created", "Budgeted", "Funded", "Submitted", "Completed"][status];
+    const status = completed ? 3 : submitted ? 2 : totalFunded > BigInt(0) ? 1 : 0;
+    const statusLabel = ["Open", "Funded", "Submitted", "Completed", "Rejected", "Expired"][status];
 
     return {
       id,
@@ -89,13 +89,14 @@ export function projectJobsFromEvents(events: IndexedJobEvent[]) {
       completionReason: completed?.reason ?? "0x0000000000000000000000000000000000000000000000000000000000000000",
       status,
       statusLabel,
-      // Legacy aliases (deprecated) — kept for frontend migration
-      worker: created?.provider ?? "0x0000000000000000000000000000000000000000",
-      agentId: created?.provider ?? "0x0000000000000000000000000000000000000000",
-      jobSpecHash: created?.description ?? "",
-      deliverableURI: submitted?.deliverable ?? "",
-      proofMetadataURI: "",
-      approved: status === 4,
+      legacyAliases: {
+        worker: created?.provider ?? "0x0000000000000000000000000000000000000000",
+        agentId: created?.provider ?? "0x0000000000000000000000000000000000000000",
+        jobSpecHash: created?.description ?? "",
+        deliverableURI: submitted?.deliverable ?? "",
+        proofMetadataURI: "",
+        approved: false,
+      },
       createdAt: String(created?.blockNumber ?? jobEvents[0]?.blockNumber ?? 0),
       events: jobEvents,
     };
@@ -274,7 +275,7 @@ export async function buildOverviewProjection(
 
   const totalBudget = jobs.reduce((sum, job) => sum + BigInt(job.budget), BigInt(0));
   const totalFunded = jobs.reduce((sum, job) => sum + BigInt(job.fundedAmount), BigInt(0));
-  const completedJobs = jobs.filter((job) => job.status === 4).length;
+  const completedJobs = jobs.filter((job) => job.status === 3).length;
   const fundedJobs = jobs.filter((job) => BigInt(job.fundedAmount) > BigInt(0)).length;
   const totalBudgetAtomic = totalBudget.toString();
   const totalFundedAtomic = totalFunded.toString();

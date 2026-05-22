@@ -119,7 +119,7 @@ const TOOLS: Record<
 
       return {
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.AGENT_REGISTRY,
+        to: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
         data,
         value: '0x0',
         derived: {
@@ -172,7 +172,7 @@ const TOOLS: Record<
 
       return {
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         data,
         value: '0x0',
         derived: {
@@ -217,7 +217,7 @@ const TOOLS: Record<
 
       return {
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         data,
         value: '0x0',
         derived: { jobId: jobIdRaw, budgetAtomic: amountRaw, budgetUsdc: `${Number(amountRaw) / 1e6} USDC` },
@@ -243,7 +243,7 @@ const TOOLS: Record<
       const data = encodeFunctionData({
         abi: [{ name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] }] as any,
         functionName: 'approve',
-        args: [CONTRACTS.JOB_ESCROW as Hex, BigInt(amountRaw)],
+        args: [CONTRACTS.ERC8183_AGENTIC_COMMERCE as Hex, BigInt(amountRaw)],
       });
 
       return {
@@ -251,7 +251,7 @@ const TOOLS: Record<
         to: CONTRACTS.USDC,
         data,
         value: '0x0',
-        derived: { spender: CONTRACTS.JOB_ESCROW, amountAtomic: amountRaw, amountUsdc: `${Number(amountRaw) / 1e6} USDC` },
+        derived: { spender: CONTRACTS.ERC8183_AGENTIC_COMMERCE, amountAtomic: amountRaw, amountUsdc: `${Number(amountRaw) / 1e6} USDC` },
         signing: {
           how: 'Send from the client wallet that holds USDC. This approves AgenticCommerce to pull the specified amount.',
           rpc: ARC_RPC,
@@ -281,7 +281,7 @@ const TOOLS: Record<
 
       return {
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         data,
         value: '0x0',
         derived: { jobId: jobIdRaw, fundingSource: 'current job budget', optParams },
@@ -320,7 +320,7 @@ const TOOLS: Record<
 
       return {
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         data,
         value: '0x0',
         derived: { jobId: jobIdRaw, deliverableHash },
@@ -377,7 +377,7 @@ const TOOLS: Record<
 
       return {
         chainId: ARC_CHAIN_ID,
-        to: CONTRACTS.JOB_ESCROW,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         data,
         value: '0x0',
         derived: { jobId: jobIdRaw, reason: resolvedReason, optParams },
@@ -439,8 +439,8 @@ const TOOLS: Record<
         faucet: 'https://faucet.circle.com',
         nativeGasToken: 'USDC (18 decimals)',
         contracts: {
-          identityRegistry_ERC8004: CONTRACTS.AGENT_REGISTRY,
-          agenticCommerce_ERC8183: CONTRACTS.JOB_ESCROW,
+          identityRegistry_ERC8004: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+          agenticCommerce_ERC8183: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
           usdc_ERC20: CONTRACTS.USDC,
           eurc: ARC_TOKENS.EURC,
         },
@@ -472,8 +472,8 @@ function buildManifest() {
       faucet: 'https://faucet.circle.com',
     },
     contracts: {
-      identityRegistry_ERC8004: CONTRACTS.AGENT_REGISTRY,
-      agenticCommerce_ERC8183: CONTRACTS.JOB_ESCROW,
+      identityRegistry_ERC8004: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+      agenticCommerce_ERC8183: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       usdc_ERC20: CONTRACTS.USDC,
       eurc: ARC_TOKENS.EURC,
     },

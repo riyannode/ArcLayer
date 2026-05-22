@@ -226,7 +226,7 @@ export default function AgentProfilePage() {
       // Parse JobCreated event to get the actual on-chain jobId.
       let visibleJobId = BigInt(0);
       for (const log of createReceipt.logs) {
-        if (log.address.toLowerCase() !== CONTRACTS.JOB_ESCROW.toLowerCase()) continue;
+        if (log.address.toLowerCase() !== CONTRACTS.ERC8183_AGENTIC_COMMERCE.toLowerCase()) continue;
         try {
           const decoded = decodeEventLog({ abi: JOB_ESCROW_ABI, data: log.data, topics: log.topics });
           if (decoded.eventName === 'JobCreated' && decoded.args && 'jobId' in decoded.args) {

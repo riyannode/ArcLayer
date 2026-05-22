@@ -3,11 +3,11 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { readContract, waitForTransactionReceipt } from '@wagmi/core';
+import { waitForTransactionReceipt } from '@wagmi/core';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { useX402AntiSpamPay } from '@/hooks/useX402AntiSpamPay';
-import { AGENT_REGISTRY_ABI, buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
+import { buildRegisterAgentConfig, CONTRACTS } from '@arclayer/sdk';
 import { fetchIndexerJson, waitForIndexer, type IndexedAgent } from '@/lib/indexer';
 import { StatusBanner } from '@/components/StatusBanner';
 import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/components/protection';
@@ -17,7 +17,6 @@ import { config } from '@/lib/wagmi';
 import {
   buildAgentMetadataURI,
   displayAgentLabel,
-  nameToLegacyAgentId_REMOVED,
   normalizeAgentName,
   parseAgentName,
   shortAgentId,
@@ -26,8 +25,7 @@ import {
 type NameStatus =
   | { state: 'idle' }
   | { state: 'checking' }
-  | { state: 'free'; agentId: bigint }
-  | { state: 'taken'; agentId: bigint }
+  | { state: 'ready' }
   | { state: 'invalid'; reason: string };
 
 export default function RegisterManualAgentPage() {
@@ -99,13 +97,6 @@ export default function RegisterManualAgentPage() {
 
   const visibleAgents = showAllAgents ? filteredAgents : filteredAgents.slice(0, 5);
 
-  const derivedAgentId = useMemo(() => {
-    try {
-      return form.name.trim() ? nameToLegacyAgentId_REMOVED(form.name) : null;
-    } catch {
-      return null;
-    }
-  }, [form.name]);
 
   const effectiveMetadataURI =
     form.metadataURI.trim() || (form.name.trim() ? buildAgentMetadataURI(form.name, form.skill) : '');
@@ -155,34 +146,11 @@ export default function RegisterManualAgentPage() {
       return;
     }
 
-    setNameStatus({ state: 'checking' });
-    const handle = setTimeout(async () => {
-      try {
-        const id = nameToLegacyAgentId_REMOVED(norm);
-        // ERC-8004 official: check ownership via ownerOf — if it reverts, the
-        // tokenId (= agentId) is unminted and therefore "free".
-        let exists = false;
-        try {
-          const owner = (await readContract(config, {
-            abi: AGENT_REGISTRY_ABI,
-            address: CONTRACTS.AGENT_REGISTRY,
-            functionName: 'ownerOf',
-            args: [id],
-          })) as string;
-          exists = !!owner && owner !== '0x0000000000000000000000000000000000000000';
-        } catch {
-          exists = false;
-        }
-        setNameStatus({ state: exists ? 'taken' : 'free', agentId: id });
-      } catch (e) {
-        setNameStatus({ state: 'invalid', reason: e instanceof Error ? e.message : 'Lookup failed.' });
-      }
-    }, 350);
-    return () => clearTimeout(handle);
+    setNameStatus({ state: 'ready' });
   }, [form.name]);
 
   async function handleRegisterAgent() {
-    if (nameStatus.state !== 'free') return;
+    if (nameStatus.state !== 'ready') return;
     try {
       setIsSubmitting(true);
       setIndexerSynced(false);
@@ -216,7 +184,7 @@ export default function RegisterManualAgentPage() {
       const TRANSFER_TOPIC =
         '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
       const ZERO_TOPIC = `0x${'0'.repeat(64)}` as const;
-      const registryAddr = CONTRACTS.AGENT_REGISTRY.toLowerCase();
+      const registryAddr = CONTRACTS.ERC8004_IDENTITY_REGISTRY.toLowerCase();
       const mintLog = receipt.logs.find(
         (log) =>
           log.address.toLowerCase() === registryAddr &&
@@ -316,7 +284,7 @@ export default function RegisterManualAgentPage() {
                     ? 'ACTION · ERROR'
                     : 'READY'
             }
-            body={txState || (isRefreshing ? 'Refreshing registered agents.' : 'Ready for registerAgent flow.')}
+            body={txState || (isRefreshing ? 'Refreshing registered agents.' : 'Ready for register flow.')}
           />
         </div>
 
@@ -346,8 +314,8 @@ export default function RegisterManualAgentPage() {
                 <div className="mt-1.5 font-mono text-[10.5px] invisible">
                   {nameStatus.state === 'idle' && <span className="text-[rgba(234,228,216,0.78)]">Use lowercase. Minimum 2 characters.</span>}
                   {nameStatus.state === 'checking' && <span className="text-[#C5A67C]">Checking on chain…</span>}
-                  {nameStatus.state === 'free' && <span className="text-[#B8CD7E]">✓ "{normalizeAgentName(form.name)}" is available</span>}
-                  {nameStatus.state === 'taken' && <span className="text-[#f0c5c5]">✕ "{normalizeAgentName(form.name)}" is already registered</span>}
+                  {nameStatus.state === 'ready' && <span className="text-[#B8CD7E]">✓ "{normalizeAgentName(form.name)}" is available</span>}
+                  {false && <span className="text-[#f0c5c5]">✕ "{normalizeAgentName(form.name)}" is already registered</span>}
                   {nameStatus.state === 'invalid' && <span className="text-[#f0c5c5]">✕ {nameStatus.reason}</span>}
                 </div>
               </div>
@@ -379,14 +347,6 @@ export default function RegisterManualAgentPage() {
                   Leave as default, or add an IPFS URL.
                 </div>
               </div>
-
-              {derivedAgentId !== null && (
-                <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] px-4 py-3">
-                  <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)]">Derived Agent ID (local hint)</div>
-                  <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{shortAgentId(derivedAgentId)}</div>
-                  <div className="mt-1 break-all font-mono text-[10px] leading-5 text-[rgba(234,228,216,0.78)]">{derivedAgentId.toString()}</div>
-                </div>
-              )}
             </div>
 
             {!isConnected && (
@@ -395,12 +355,12 @@ export default function RegisterManualAgentPage() {
 
             <button
               onClick={handleRegisterAgent}
-              disabled={!isConnected || isSubmitting || nameStatus.state !== 'free'}
+              disabled={!isConnected || isSubmitting || nameStatus.state !== 'ready'}
               className="btn-primary mt-5"
               title={
                 !isConnected
                   ? 'Connect wallet first.'
-                  : nameStatus.state === 'taken'
+                  : false
                     ? 'Name already registered.'
                     : nameStatus.state === 'checking'
                       ? 'Verifying availability…'

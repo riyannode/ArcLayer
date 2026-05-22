@@ -62,7 +62,7 @@ async function assertJobReadyForSubmit(args: {
 }): Promise<{ status: number }> {
   const { publicClient } = makeRpcClients();
   const job = (await publicClient.readContract({
-    address: CONTRACTS.JOB_ESCROW,
+    address: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
     abi: JOB_ESCROW_ABI,
     functionName: 'getJob',
     args: [args.jobId],
@@ -173,7 +173,7 @@ export async function submitDeliverableForRun(args: {
   });
 
   const txHash = await walletClient.writeContract({
-    address: CONTRACTS.JOB_ESCROW,
+    address: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
     abi: JOB_ESCROW_ABI,
     functionName: 'submit',
     args: [args.jobId, deliverableHash, '0x' as Hex],
