@@ -1,12 +1,14 @@
 import { createServer, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
-import { DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS, ARC_REFERENCE_WALLET_FILTER } from "./config";
-import { fetchAgentEvents, fetchJobEvents } from "./ingest";
+import { DEFAULT_FROM_BLOCK, INDEXER_PORT, OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK, POLL_INTERVAL_MS } from "./config";
+import { fetchAgentEvents, fetchImportedArcLayerAgentEvents, fetchJobEvents } from "./ingest";
 import { arcWalletFilterActive } from "./projections";
+import { getReferenceFilters, refreshReferenceFiltersFromSupabase } from "./reference-filters";
 import {
   readAgentById,
   readAgentEvents,
   readAgents,
+  readCounts,
   readJobById,
   readJobEvents,
   readJobs,
@@ -24,6 +26,8 @@ let lastSyncError: string | null = null;
 let lastSyncAt: number | null = null;
 let lastSyncDurationMs: number | null = null;
 let syncSkipCount = 0;
+
+const OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR = "old_arclayer_agent_registry_imported_until_block";
 
 function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
@@ -124,22 +128,37 @@ async function runSyncCycle() {
   const t0 = Date.now();
 
   try {
+    const filters = await refreshReferenceFiltersFromSupabase();
+    if (filters.lastRefreshError) {
+      console.warn(`[indexer] reference filter refresh skipped: ${filters.lastRefreshError}`);
+    }
+
     const fromBlockValue = readMetaValue("last_synced_block");
     const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
+    const oldRegistryCursorValue = readMetaValue(OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR);
+    const oldRegistryFromBlock = oldRegistryCursorValue
+      ? BigInt(oldRegistryCursorValue) + BigInt(1)
+      : OLD_ARCLAYER_AGENT_REGISTRY_FROM_BLOCK;
 
-    const [{ events, latestBlock }, { events: agentEvts }] = await Promise.all([
+    const [jobResult, erc8004Result, importedResult] = await Promise.all([
       fetchJobEvents(fromBlock),
       fetchAgentEvents(fromBlock),
+      fetchImportedArcLayerAgentEvents(oldRegistryFromBlock),
     ]);
+    const events = jobResult.events;
+    const agentEvts = [...importedResult.events, ...erc8004Result.events];
+    const latestBlock = [jobResult.latestBlock, erc8004Result.latestBlock]
+      .reduce((max, block) => (block > max ? block : max), BigInt(0));
 
-    if (events.length > 0 || agentEvts.length > 0) {
-      console.log(`[indexer] new events: jobs=${events.length} agents=${agentEvts.length} block=${latestBlock}`);
-      await syncProjectionStore(events, agentEvts);
-    }
+    console.log(`[indexer] sync projection: jobs=${events.length} importedAgents=${importedResult.events.length} erc8004Agents=${erc8004Result.events.length} block=${latestBlock}`);
+    await syncProjectionStore(events, agentEvts);
 
     // Always advance cursor so empty ranges don't get re-scanned
     if (latestBlock >= fromBlock) {
       writeMetaValue("last_synced_block", latestBlock.toString());
+    }
+    if (importedResult.latestBlock >= oldRegistryFromBlock) {
+      writeMetaValue(OLD_ARCLAYER_AGENT_REGISTRY_IMPORT_CURSOR, importedResult.latestBlock.toString());
     }
 
     lastSyncError = null;
@@ -175,30 +194,26 @@ createServer((req, res) => {
   }
 
   if (url.pathname === "/health") {
-    const filterActive = arcWalletFilterActive();
-    const isProd = process.env.NODE_ENV === "production";
+    const counts = readCounts();
+    const filters = getReferenceFilters();
     writeJson(res, {
+      ok: true,
       status: "ok",
-      mode: filterActive ? "arclayer-filtered" : "arc-reference-global",
-      arcLayerWalletFilter: {
-        active: filterActive,
-        walletCount: ARC_REFERENCE_WALLET_FILTER.length,
-        warning:
-          !filterActive && isProd
-            ? "global official Arc reference indexing mode; not filtered to ArcLayer-owned activity"
-            : null,
-      },
-      contracts: {
-        erc8004: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
-        erc8183: "0x0747EEf0706327138c69792bF28Cd525089e4583",
-      },
-      syncInProgress,
-      lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : null,
-      lastSyncDurationMs,
+      mode: "production",
+      filterActive: arcWalletFilterActive(),
+      walletCount: filters.wallets.length,
+      supabaseWallets: filters.supabaseWallets,
+      supabaseAgentIds: filters.supabaseAgentIds,
+      filterLastRefreshAt: filters.lastRefreshAt,
+      filterLastRefreshError: filters.lastRefreshError,
+      importedAgentCount: counts.importedAgentCount,
+      erc8004AgentCount: counts.erc8004AgentCount,
+      erc8183JobCount: counts.erc8183JobCount,
+      visibleAgentCount: counts.visibleAgentCount,
+      totalAgentCount: counts.totalAgentCount,
+      lastSyncedBlock: Number(readMetaValue("last_synced_block") || "0"),
+      lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : (readMetaValue("last_sync_at") ? new Date(Number(readMetaValue("last_sync_at"))).toISOString() : null),
       lastSyncError,
-      syncSkipCount,
-      lastSyncedBlock: readMetaValue("last_synced_block"),
-      pollIntervalMs: POLL_INTERVAL_MS,
     });
     return;
   }
@@ -231,13 +246,15 @@ createServer((req, res) => {
   }
 
   if (url.pathname === "/agents") {
-    writeJson(res, readAgents());
+    const requestedSource = url.searchParams.get("source") || "all";
+    const source = requestedSource === "imported" || requestedSource === "erc8004" ? requestedSource : "all";
+    writeJson(res, readAgents(source));
     return;
   }
 
   if (url.pathname.startsWith("/agents/")) {
-    const id = url.pathname.replace("/agents/", "");
-    if (!/^\d+$/.test(id)) {
+    const id = decodeURIComponent(url.pathname.replace("/agents/", ""));
+    if (!id.trim()) {
       res.statusCode = 400;
       writeJson(res, { error: "Invalid agent id." });
       return;
