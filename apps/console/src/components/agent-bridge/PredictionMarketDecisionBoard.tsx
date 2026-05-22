@@ -74,11 +74,11 @@ function isStale(event?: BridgeEvent | null) {
   return Date.now() - Date.parse(event.created_at) > 20 * 60_000;
 }
 
-function eventStatus(event: BridgeEvent | null, rejected = false): NodeState {
+function eventStatus(event: BridgeEvent | null, latestEvent: BridgeEvent | null, rejected = false): NodeState {
   if (rejected) return 'rejected';
   if (!event) return 'pending';
   if (isStale(event)) return 'stale';
-  return 'completed';
+  return latestEvent && event.id === latestEvent.id ? 'active' : 'completed';
 }
 
 function receiptStatus(receipt: BridgeReceipt | null): NodeState {
@@ -102,6 +102,10 @@ export function buildPredictionMarketDecisionNodes(session: BridgeSession | null
   const evaluatorRejected = evaluator ? evalPayload.approved === false : false;
   const riskRejected = Boolean(riskPayload.noTradeReason);
   const rejected = riskRejected || evaluatorRejected;
+  const latestEvent = [oracle, risk, evaluator, executor]
+    .filter((event): event is BridgeEvent => Boolean(event))
+    .filter((event) => !isStale(event))
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at))[0] ?? null;
 
   const receiptNode = (key: FlowKey, title: string, proof: string, typeLabel: string, receipt: BridgeReceipt | null): DecisionNode => ({
     key,
@@ -126,14 +130,14 @@ export function buildPredictionMarketDecisionNodes(session: BridgeSession | null
 
   return [
     {
-      key: 'oracle', title: 'ORACLE', role: 'oracle', status: eventStatus(oracle), accent: 'cyan', event: oracle,
+      key: 'oracle', title: 'ORACLE', role: 'oracle', status: eventStatus(oracle, latestEvent), accent: 'cyan', event: oracle,
       payloadHash: oracle?.payload_hash ?? asText(marketData?.payloadHash),
       summary: asText(oracle?.payload?.llmSummary && typeof oracle.payload.llmSummary === 'object' ? (oracle.payload.llmSummary as Record<string, unknown>).summary : oracle?.payload?.summary),
       fields: [['source', 'raw market data'], ['market', asText(marketData?.marketSlug || oracle?.payload?.marketSlug)], ['UP', numPct(marketData?.upPrice || oracle?.payload?.upPrice)], ['DOWN', numPct(marketData?.downPrice || oracle?.payload?.downPrice)], ['last', oracle?.created_at ? new Date(oracle.created_at).toLocaleTimeString() : '—'], ['hash', shortHash(oracle?.payload_hash ?? asText(marketData?.payloadHash))]],
     },
     receiptNode('receipt1', 'RECEIPT 1', 'oracle proof', 'market_snapshot', receipt1),
     {
-      key: 'risk', title: 'RISK GATE', role: risk?.role ?? 'analyzer', status: eventStatus(risk, riskRejected), accent: riskRejected ? 'red' : 'purple', event: risk,
+      key: 'risk', title: 'RISK GATE', role: risk?.role ?? 'analyzer', status: eventStatus(risk, latestEvent, riskRejected), accent: riskRejected ? 'red' : 'purple', event: risk,
       payloadHash: risk?.payload_hash,
       summary: asText(riskPayload.summary || riskPayload.noTradeReason || 'LLM/analyzer risk'),
       rationale: Array.isArray(riskPayload.rationale) ? riskPayload.rationale.map(asText).slice(0, 3) : [],
@@ -141,7 +145,7 @@ export function buildPredictionMarketDecisionNodes(session: BridgeSession | null
     },
     receiptNode('receipt2', 'RECEIPT 2', 'risk gate proof', 'resolver_output / risk_output', receipt2),
     {
-      key: 'evaluator', title: 'EVALUATOR', role: 'evaluator', status: eventStatus(evaluator, evaluatorRejected), accent: evaluatorRejected ? 'red' : 'green', event: evaluator,
+      key: 'evaluator', title: 'EVALUATOR', role: 'evaluator', status: eventStatus(evaluator, latestEvent, evaluatorRejected), accent: evaluatorRejected ? 'red' : 'green', event: evaluator,
       payloadHash: evaluator?.payload_hash,
       summary: evaluator ? (evalPayload.approved === false ? 'Rejected' : evalPayload.approved === true ? 'Approved' : 'Evaluation') : 'Evaluator pending',
       rationale: [evalPayload.reason, evalPayload.checks, evalPayload.flags].flat().map(asText).filter((x) => x !== '—').slice(0, 3),
@@ -149,7 +153,7 @@ export function buildPredictionMarketDecisionNodes(session: BridgeSession | null
     },
     receiptNode('receipt3', 'RECEIPT 3', 'evaluator proof', 'evaluation output', receipt3),
     {
-      key: 'executor', title: 'EXECUTOR', role: 'executor', status: rejected ? 'pending' : eventStatus(executor), accent: 'neutral', event: executor,
+      key: 'executor', title: 'EXECUTOR', role: 'executor', status: rejected ? 'pending' : eventStatus(executor, latestEvent), accent: 'neutral', event: executor,
       payloadHash: executor?.payload_hash,
       summary: asText(execPayload.reason || 'Final intent · DRY_RUN'),
       fields: [['DRY_RUN', 'true'], ['action', asText(execPayload.action)], ['mockTrade', asText(execPayload.mockTrade)], ['safety', asText(execPayload.safety)], ['model', asText(execPayload.llmModel)], ['fallback', execPayload.usedFallback ? 'yes' : 'no']],
@@ -201,6 +205,7 @@ export function PredictionMarketDecisionBoard({ session, marketData, onSelectNod
   }
 
   const rejected = discard?.status === 'rejected';
+  const lastFlowIndex = main.reduce((last, node, index) => (['completed', 'active', 'rejected'].includes(node.status) ? index : last), -1);
 
   return (
     <section className="rounded-sm border border-white/10 bg-[#050505] p-4 shadow-2xl shadow-black/30">
@@ -223,7 +228,7 @@ export function PredictionMarketDecisionBoard({ session, marketData, onSelectNod
         {main.map((node, index) => (
           <div key={node.key} className="contents">
             <NodeCard node={node} selected={selected.key === node.key} onClick={() => select(node)} />
-            {index < main.length - 1 ? <Edge active={!rejected || index < 2 || index >= 4} /> : null}
+            {index < main.length - 1 ? <Edge active={index < lastFlowIndex} reject={rejected && index >= lastFlowIndex} /> : null}
           </div>
         ))}
       </div>

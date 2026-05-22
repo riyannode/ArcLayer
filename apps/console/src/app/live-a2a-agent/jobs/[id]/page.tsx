@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { use, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, use, useEffect, useMemo, useState } from 'react';
 import { ActiveDecisionDetail, buildPredictionMarketDecisionNodes, PredictionMarketDecisionBoard, type BridgeSession, type DecisionNode } from '@/components/agent-bridge';
 import { BtcCandlestickPanel, PolymarketBtc15mPanel, PolymarketOrderbookPanel } from '@/components/market/PolymarketPanels';
 
@@ -12,8 +13,10 @@ type PageProps = { params: Promise<{ id: string }> };
 function short(value?: string | null) { return !value ? '—' : value.length > 22 ? `${value.slice(0, 12)}…${value.slice(-6)}` : value; }
 function Row({ label, value }: { label: string; value?: string | null }) { return <div>{label}: <span className="font-mono text-[#C5A67C]">{value || '—'}</span></div>; }
 
-export default function LiveA2AJobDetailPage({ params }: PageProps) {
+function LiveA2AJobDetailContent({ params }: PageProps) {
   const { id } = use(params);
+  const searchParams = useSearchParams();
+  const routeCategory = searchParams.get('category');
   const [job, setJob] = useState<A2AJob | null>(null);
   const [session, setSession] = useState<BridgeSession | null>(null);
   const [selected, setSelected] = useState<DecisionNode | null>(null);
@@ -39,7 +42,7 @@ export default function LiveA2AJobDetailPage({ params }: PageProps) {
 
   const defaultNode = useMemo(() => buildPredictionMarketDecisionNodes(session)[2] ?? null, [session]);
   const activeNode = selected ?? defaultNode;
-  const isPrediction = job?.category === 'prediction-market-bots';
+  const isPrediction = job?.category === 'prediction-market-bots' || routeCategory === 'prediction-market-bots';
 
   return (
     <main className="min-h-screen bg-[#050505] px-4 py-10 text-[#EAE4D8] sm:px-6 lg:px-8">
@@ -56,5 +59,13 @@ export default function LiveA2AJobDetailPage({ params }: PageProps) {
         {isPrediction ? <><section className="grid gap-3 lg:grid-cols-3"><PolymarketBtc15mPanel /><PolymarketOrderbookPanel /><BtcCandlestickPanel /></section><PredictionMarketDecisionBoard session={session} onSelectNode={setSelected} /><ActiveDecisionDetail node={activeNode} /></> : <section className="rounded-sm border border-white/10 bg-black/25 p-4"><div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Job Workspace</div><p className="mt-2 text-sm text-[#EAE4D8]/65">Clean external-agent job view. Matching agents and latest bridge state appear when tagged by runtime.</p><div className="mt-4 grid gap-2 text-xs text-[#EAE4D8]/55 sm:grid-cols-3"><div>events: <span className="font-mono text-[#C5A67C]">{session?.events.filter((event) => event.job_id === id).length ?? 0}</span></div><div>receipts: <span className="font-mono text-[#C5A67C]">{session?.receipts.length ?? 0}</span></div><div>session: <span className="font-mono text-[#C5A67C]">{short(session?.sessionId)}</span></div></div></section>}
       </div>
     </main>
+  );
+}
+
+export default function LiveA2AJobDetailPage(props: PageProps) {
+  return (
+    <Suspense fallback={null}>
+      <LiveA2AJobDetailContent {...props} />
+    </Suspense>
   );
 }

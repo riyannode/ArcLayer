@@ -1,16 +1,28 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { AGENT_CATEGORIES } from '../categories';
 import type { ExternalJob } from '@/components/agent-bridge/ExternalJobsPanel';
 
 function short(value?: string | null) { return !value ? '—' : value.length > 18 ? `${value.slice(0, 10)}…${value.slice(-4)}` : value; }
 
-export default function A2AJobsPage() {
+function validCategory(value: string | null) {
+  if (!value) return 'all';
+  return AGENT_CATEGORIES.some((item) => item.key === value) ? value : 'all';
+}
+
+function A2AJobsContent() {
+  const searchParams = useSearchParams();
+  const routeCategory = searchParams.get('category');
   const [jobs, setJobs] = useState<ExternalJob[]>([]);
-  const [category, setCategory] = useState<string>('all');
+  const [category, setCategory] = useState<string>(() => validCategory(routeCategory));
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCategory(validCategory(routeCategory));
+  }, [routeCategory]);
 
   useEffect(() => {
     let alive = true;
@@ -65,5 +77,13 @@ export default function A2AJobsPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function A2AJobsPage() {
+  return (
+    <Suspense fallback={null}>
+      <A2AJobsContent />
+    </Suspense>
   );
 }
