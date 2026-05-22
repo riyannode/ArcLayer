@@ -2,7 +2,8 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import type { IndexedAgentEvent, IndexedJobEvent } from "@arclayer/sdk";
+import { ARC_ERC20_USDC_DECIMALS, type IndexedAgentEvent, type IndexedJobEvent } from "@arclayer/sdk";
+import { formatUnits } from "viem";
 import {
   createSupabaseRestClientFromEnv,
   syncA2AJobsFromERC8183Events,
@@ -17,6 +18,11 @@ const dbPath = process.env.INDEXER_DB_PATH || resolve(currentDir, "../data/arcla
 mkdirSync(dirname(dbPath), { recursive: true });
 
 const db = new DatabaseSync(dbPath);
+db.exec(`
+  PRAGMA journal_mode = WAL;
+  PRAGMA synchronous = NORMAL;
+  PRAGMA busy_timeout = 5000;
+`);
 
 let lastA2AJobSyncError: string | null = null;
 let lastAgentProjectionDebug: ReturnType<typeof buildAgentProjectionDebug> = {
@@ -524,6 +530,8 @@ export function readOverview() {
   const totalFunded = jobs.reduce((sum, job) => sum + BigInt(job.fundedAmount), BigInt(0));
   const settledJobs = jobs.filter((job) => job.status === 4).length;
   const fundedJobs = jobs.filter((job) => BigInt(job.fundedAmount) > BigInt(0)).length;
+  const totalBudgetAtomic = totalBudget.toString();
+  const totalFundedAtomic = totalFunded.toString();
 
   const importedAgents = agents.filter((agent) => agent.source === "imported_arclayer_registry").length;
   const erc8004Agents = agents.filter((agent) => agent.source === "erc8004_identity_registry").length;
@@ -546,10 +554,12 @@ export function readOverview() {
         erc8183: jobs.length,
       },
       proofs: proofs.length,
-      budgetedUsdc: totalBudget.toString(),
-      fundedUsdc: totalFunded.toString(),
-      totalBudget: totalBudget.toString(),
-      totalFunded: totalFunded.toString(),
+      budgetedUsdc: formatUnits(totalBudget, ARC_ERC20_USDC_DECIMALS),
+      fundedUsdc: formatUnits(totalFunded, ARC_ERC20_USDC_DECIMALS),
+      totalBudgetAtomic,
+      totalFundedAtomic,
+      totalBudget: totalBudgetAtomic,
+      totalFunded: totalFundedAtomic,
       settledJobs,
       fundedJobs,
     },
