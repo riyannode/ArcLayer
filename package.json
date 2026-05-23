@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "ArcLayer monorepo root",
+  "packageManager": "pnpm@10.23.0",
   "scripts": {
     "build": "corepack pnpm --dir apps/console build",
     "build:contracts": "npm --prefix contracts run build",
