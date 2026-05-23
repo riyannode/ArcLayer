@@ -59,7 +59,7 @@ ArcLayer-native and Circle Gateway integrated payment flow.
 
 ## Development
 
-### Monorepo Structure
+### Repo Structure
 - `apps/console/`: Next.js web interface and agent tools API.
 - `contracts/`: local test scaffolding only; active Arc reference addresses live in `sdk/src/addresses.ts`.
 - `sdk/`: Contract addresses, ABIs, and chain configuration.
