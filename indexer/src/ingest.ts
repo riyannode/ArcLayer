@@ -5,7 +5,6 @@ import {
   publicClient,
 } from "@arclayer/sdk";
 import type { IndexedAgentEvent, IndexedJobEvent } from "@arclayer/sdk";
-import { MAX_BLOCK_RANGE } from "./config";
 
 // ── Official ERC-8183 AgenticCommerce events ────────────────────────────────
 
@@ -38,32 +37,28 @@ const AGENT_EVENT_ABIS = ERC8004_IDENTITY_REGISTRY_ABI.filter(
 
 export type FetchJobEventsResult = {
   events: IndexedJobEvent[];
-  latestBlock: bigint;
 };
 
 export type FetchAgentEventsResult = {
   events: IndexedAgentEvent[];
-  latestBlock: bigint;
 };
 
-async function fetchEventsChunked(
+export async function getLatestBlock() {
+  return publicClient.getBlockNumber();
+}
+
+async function fetchEventsInRange(
   address: `0x${string}`,
   abi: readonly unknown[],
   fromBlock: bigint,
-  latestBlock: bigint,
+  toBlock: bigint,
 ): Promise<any[]> {
-  const collected: any[] = [];
-  for (let start = fromBlock; start <= latestBlock; start += MAX_BLOCK_RANGE + BigInt(1)) {
-    const end = start + MAX_BLOCK_RANGE > latestBlock ? latestBlock : start + MAX_BLOCK_RANGE;
-    const chunk = await publicClient.getContractEvents({
-      address,
-      abi: abi as any,
-      fromBlock: start,
-      toBlock: end,
-    });
-    collected.push(...chunk);
-  }
-  return collected;
+  return publicClient.getContractEvents({
+    address,
+    abi: abi as any,
+    fromBlock,
+    toBlock,
+  });
 }
 
 /**
@@ -72,18 +67,17 @@ async function fetchEventsChunked(
  */
 export async function fetchJobEvents(
   fromBlock: bigint = BigInt(0),
+  toBlock: bigint,
 ): Promise<FetchJobEventsResult> {
-  const latestBlock = await publicClient.getBlockNumber();
-
-  if (fromBlock > latestBlock) {
-    return { events: [], latestBlock };
+  if (fromBlock > toBlock) {
+    return { events: [] };
   }
 
-  const collected = await fetchEventsChunked(
+  const collected = await fetchEventsInRange(
     CONTRACTS.ERC8183_AGENTIC_COMMERCE,
     ERC8183_AGENTIC_COMMERCE_ABI,
     fromBlock,
-    latestBlock,
+    toBlock,
   );
 
   const events = collected
@@ -102,7 +96,7 @@ export async function fetchJobEvents(
       return a.logIndex - b.logIndex;
     });
 
-  return { events, latestBlock };
+  return { events };
 }
 
 /**
@@ -111,18 +105,17 @@ export async function fetchJobEvents(
  */
 export async function fetchAgentEvents(
   fromBlock: bigint = BigInt(0),
+  toBlock: bigint,
 ): Promise<FetchAgentEventsResult> {
-  const latestBlock = await publicClient.getBlockNumber();
-
-  if (fromBlock > latestBlock) {
-    return { events: [], latestBlock };
+  if (fromBlock > toBlock) {
+    return { events: [] };
   }
 
-  const collected = await fetchEventsChunked(
+  const collected = await fetchEventsInRange(
     CONTRACTS.ERC8004_IDENTITY_REGISTRY,
     ERC8004_IDENTITY_REGISTRY_ABI,
     fromBlock,
-    latestBlock,
+    toBlock,
   );
 
   const mintEvents = collected
@@ -174,7 +167,7 @@ export async function fetchAgentEvents(
       return a.logIndex - b.logIndex;
     });
 
-  return { events, latestBlock };
+  return { events };
 }
 
 // Re-export for backwards compatibility with any external importers.

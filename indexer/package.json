@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc --noEmit",
-    "start": "node --import tsx src/server.ts",
+    "build": "corepack pnpm --dir ../sdk exec tsup ../indexer/src/server.ts --format esm --platform node --target node22 --out-dir ../indexer/dist --clean --splitting false && node -e \"const fs=require('fs');const p='dist/server.js';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace(/from \\\"sqlite\\\"/g,'from \\\"node:sqlite\\\"'));\"",
+    "start": "node dist/server.js",
+    "dev": "node --import tsx src/server.ts",
     "test": "node --import tsx --test src/**/*.test.ts"
   },
   "dependencies": {
@@ -15,6 +16,7 @@
   },
   "devDependencies": {
     "@types/node": "^22",
-    "typescript": "^5"
+    "typescript": "^5",
+    "tsup": "^8.3.5"
   }
 }

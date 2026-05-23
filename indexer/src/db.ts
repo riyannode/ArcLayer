@@ -9,7 +9,7 @@ import {
   syncA2AJobsFromERC8183Events,
   type ERC8183IndexedLifecycleEvent,
 } from "./a2a-lifecycle-sync";
-import { buildAgentProjectionDebug, projectAgentsFromEvents, projectJobsFromEvents } from "./projections";
+import { projectAgentsFromEvents, projectJobsFromEvents } from "./projections";
 import { ARC_ERC8004_ADDRESS, ARC_ERC8183_ADDRESS } from "./config";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
@@ -25,16 +25,6 @@ db.exec(`
 `);
 
 let lastA2AJobSyncError: string | null = null;
-let lastAgentProjectionDebug: ReturnType<typeof buildAgentProjectionDebug> = {
-  storedAgentEventCount: 0,
-  agentEventSourceBreakdown: {},
-  rawImportedAgentEventCount: 0,
-  rawErc8004AgentEventCount: 0,
-  projectedImportedAgentCountBeforeInsert: 0,
-  projectedErc8004AgentCountBeforeInsert: 0,
-  filteredOutErc8004AgentCount: 0,
-  sampleFilteredErc8004Agents: [],
-};
 
 export function getLastA2AJobSyncError() {
   return lastA2AJobSyncError;
@@ -42,13 +32,17 @@ export function getLastA2AJobSyncError() {
 
 export function readAgentProjectionDebug() {
   const storedAgentEventCount = (db.prepare(`SELECT COUNT(*) AS count FROM agent_events`).get() as { count: number }).count;
-  if (storedAgentEventCount > 0 && lastAgentProjectionDebug.storedAgentEventCount === 0) {
-    lastAgentProjectionDebug = buildStoredAgentProjectionDebug();
-  }
+  const rawErc8004AgentEventCount = (db.prepare(`SELECT COUNT(*) AS count FROM agent_events WHERE source = 'erc8004_identity_registry'`).get() as { count: number }).count;
+  const projectedErc8004AgentCountBeforeInsert = (db.prepare(`SELECT COUNT(*) AS count FROM agents WHERE source = 'erc8004_identity_registry'`).get() as { count: number }).count;
   return {
-    ...lastAgentProjectionDebug,
-    agentEventSourceBreakdown: { ...lastAgentProjectionDebug.agentEventSourceBreakdown },
-    sampleFilteredErc8004Agents: [...lastAgentProjectionDebug.sampleFilteredErc8004Agents],
+    storedAgentEventCount,
+    agentEventSourceBreakdown: { erc8004_identity_registry: rawErc8004AgentEventCount },
+    rawImportedAgentEventCount: 0,
+    rawErc8004AgentEventCount,
+    projectedImportedAgentCountBeforeInsert: 0,
+    projectedErc8004AgentCountBeforeInsert,
+    filteredOutErc8004AgentCount: 0,
+    sampleFilteredErc8004Agents: [],
   };
 }
 
@@ -281,10 +275,13 @@ export async function syncProjectionStore(
 ): Promise<{ lastSyncError: string | null }> {
   db.exec("BEGIN");
   try {
+    const affectedJobIds = new Set<string>();
     for (const event of events) {
+      const jobId = String(event.jobId ?? "0");
+      affectedJobIds.add(jobId);
       upsertJobEvent.run(
         serializeEventKey(event),
-        String(event.jobId ?? "0"),
+        jobId,
         String((event as any).provider ?? (event as any).client ?? "0"),
         event.eventName,
         event.blockNumber.toString(),
@@ -294,10 +291,13 @@ export async function syncProjectionStore(
       );
     }
 
+    const affectedAgentIds = new Set<string>();
     for (const event of agentEvents) {
+      const agentId = event.agentId.toString();
+      affectedAgentIds.add(agentId);
       upsertAgentEvent.run(
         serializeEventKey(event),
-        event.agentId.toString(),
+        agentId,
         event.eventName,
         event.blockNumber.toString(),
         event.transactionHash,
@@ -306,77 +306,39 @@ export async function syncProjectionStore(
       );
     }
 
-    const allJobEvents = db.prepare(`SELECT payload_json FROM job_events`).all()
-      .map((row) => parseJson((row as { payload_json: string }).payload_json) as IndexedJobEvent);
-    const allAgentEvents = db.prepare(`SELECT payload_json FROM agent_events`).all()
-      .map((row) => parseJson((row as { payload_json: string }).payload_json) as IndexedAgentEvent);
-
-    const projectedJobs = projectJobsFromEvents(allJobEvents);
-    const jobWallets = new Set<string>();
-    for (const job of projectedJobs) {
-      if (job.client) jobWallets.add(job.client.toLowerCase());
-      if (job.provider) jobWallets.add(job.provider.toLowerCase());
-      if (job.evaluator) jobWallets.add(job.evaluator.toLowerCase());
+    for (const jobId of affectedJobIds) {
+      const jobEvents = db.prepare(`SELECT payload_json FROM job_events WHERE job_id = ? ORDER BY CAST(block_number AS INTEGER), tx_hash`).all(jobId)
+        .map((row) => parseJson((row as { payload_json: string }).payload_json) as IndexedJobEvent);
+      const projectedJob = projectJobsFromEvents(jobEvents)[0];
+      if (!projectedJob) continue;
+      const job = normalizeJobForCompatibilitySchema(projectedJob);
+      upsertJob.run(job.id, job.agentId, job.client, job.worker, job.evaluator, job.budget, job.fundedAmount, job.createdAt, job.jobSpecHash, job.deliverableURI, job.proofMetadataURI, job.approved ? 1 : 0, job.status);
     }
 
-    const jobs = projectedJobs.map(normalizeJobForCompatibilitySchema);
-    const agentProjectionDebug = buildAgentProjectionDebug(allAgentEvents, jobWallets);
-    const agents = projectAgentsFromEvents(allAgentEvents, jobWallets).map(normalizeAgentForCompatibilitySchema);
+    if (affectedAgentIds.size > 0 || events.length > 0) {
+      const allJobs = db.prepare(`SELECT client, worker, evaluator FROM jobs`).all() as Array<{ client: string; worker: string; evaluator: string }>;
+      const jobWallets = new Set<string>();
+      for (const row of allJobs) {
+        if (row.client) jobWallets.add(row.client.toLowerCase());
+        if (row.worker) jobWallets.add(row.worker.toLowerCase());
+        if (row.evaluator) jobWallets.add(row.evaluator.toLowerCase());
+      }
 
-    db.exec("DELETE FROM jobs");
-    db.exec("DELETE FROM agents");
+      for (const agentId of affectedAgentIds) {
+        const allEventsForAgent = db.prepare(`SELECT payload_json FROM agent_events WHERE agent_id = ? ORDER BY CAST(block_number AS INTEGER), tx_hash`).all(agentId)
+          .map((row) => parseJson((row as { payload_json: string }).payload_json) as IndexedAgentEvent);
+        const projectedAgent = projectAgentsFromEvents(allEventsForAgent, jobWallets)[0];
+        if (!projectedAgent) continue;
+        const agent = normalizeAgentForCompatibilitySchema(projectedAgent);
+        upsertAgent.run(agent.agentId, agent.tokenId, agent.controller, agent.skillHash, agent.metadataURI, agent.registeredAt, agent.reputationScore, agent.score, stringifyJson(agent.jobs), stringifyJson(agent.proofTokenIds), agent.source, agent.chainId, agent.registryAddress, agent.contractAddress, agent.txHash, agent.blockNumber, agent.importedAt, agent.updatedAt);
+      }
 
-    for (const job of jobs) {
-      upsertJob.run(
-        job.id,
-        job.agentId,
-        job.client,
-        job.worker,
-        job.evaluator,
-        job.budget,
-        job.fundedAmount,
-        job.createdAt,
-        job.jobSpecHash,
-        job.deliverableURI,
-        job.proofMetadataURI,
-        job.approved ? 1 : 0,
-        job.status,
-      );
-    }
-
-    for (const agent of agents) {
-      upsertAgent.run(
-        agent.agentId,
-        agent.tokenId,
-        agent.controller,
-        agent.skillHash,
-        agent.metadataURI,
-        agent.registeredAt,
-        agent.reputationScore,
-        agent.score,
-        stringifyJson(agent.jobs),
-        stringifyJson(agent.proofTokenIds),
-        agent.source,
-        agent.chainId,
-        agent.registryAddress,
-        agent.contractAddress,
-        agent.txHash,
-        agent.blockNumber,
-        agent.importedAt,
-        agent.updatedAt,
-      );
     }
 
     upsertMeta.run("last_sync_at", Date.now().toString());
     const storedJobEvents = (db.prepare(`SELECT COUNT(*) AS count FROM job_events`).get() as { count: number }).count;
     const storedAgentEvents = (db.prepare(`SELECT COUNT(*) AS count FROM agent_events`).get() as { count: number }).count;
     upsertMeta.run("event_count", String(storedJobEvents + storedAgentEvents));
-    lastAgentProjectionDebug = {
-      ...agentProjectionDebug,
-      storedAgentEventCount: storedAgentEvents,
-      agentEventSourceBreakdown: { ...agentProjectionDebug.agentEventSourceBreakdown },
-      sampleFilteredErc8004Agents: [...agentProjectionDebug.sampleFilteredErc8004Agents],
-    };
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
@@ -403,20 +365,6 @@ export async function syncProjectionStore(
     console.warn(`[indexer] a2a supabase sync warning: ${lastA2AJobSyncError}`);
     return { lastSyncError: lastA2AJobSyncError };
   }
-}
-
-function buildStoredAgentProjectionDebug() {
-  const allJobEvents = db.prepare(`SELECT payload_json FROM job_events`).all()
-    .map((row) => parseJson((row as { payload_json: string }).payload_json) as IndexedJobEvent);
-  const allAgentEvents = db.prepare(`SELECT payload_json FROM agent_events`).all()
-    .map((row) => parseJson((row as { payload_json: string }).payload_json) as IndexedAgentEvent);
-  const jobWallets = new Set<string>();
-  for (const job of projectJobsFromEvents(allJobEvents)) {
-    if (job.client) jobWallets.add(job.client.toLowerCase());
-    if (job.provider) jobWallets.add(job.provider.toLowerCase());
-    if (job.evaluator) jobWallets.add(job.evaluator.toLowerCase());
-  }
-  return buildAgentProjectionDebug(allAgentEvents, jobWallets);
 }
 
 export function readJobs() {
