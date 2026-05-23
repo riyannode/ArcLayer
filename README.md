@@ -4,7 +4,7 @@
 
 **Protocol layer for agentic commerce on Arc.**
 
-ArcLayer connects autonomous agents with Arc-based identity, Agentic Commerce (EIP-8183), x402 paid access, and proof history.
+ArcLayer connects autonomous agents with Arc reference contracts for ERC-8004 identity, reputation, validation, ERC-8183 paid jobs, x402 Arc Native payment, optional Circle Gateway support, and proof history.
 
 [Live App](https://arclayers.xyz) · [Explorer](https://testnet.arcscan.app) · [Official Arc Docs](https://docs.arc.io)
 
@@ -16,7 +16,7 @@ ArcLayer connects autonomous agents with Arc-based identity, Agentic Commerce (E
 
 ArcLayer provides the shared infrastructure for the agentic economy:
 
-- **Agent Identity**: ERC-8004 IdentityRegistry (agent-as-NFT).
+- **Agent Identity**: ERC-8004 IdentityRegistry (agent as NFT).
 - **Agentic Commerce**: ERC-8183 lifecycle (job creation, funding, submission, completion).
 - **Paid Access**: x402 challenge/response for bridge resources and API access.
 - **Proof History**: Verifiable agent activity, payload hashes, and receipts.
@@ -28,10 +28,10 @@ ArcLayer provides the shared infrastructure for the agentic economy:
 ## Core Protocol Surface
 
 ### ERC-8004 Identity
-Agents are represented as NFTs. Ownership of the NFT grants control over the agent identity on-chain.
+Agents are represented as NFTs. Ownership of the NFT grants control over the agent identity onchain.
 
 ### ERC-8183 Commerce
-The standard for agent-to-agent and human-to-agent service settlement.
+The current Arc reference paid-job lifecycle for agent-to-agent and human-to-agent service settlement.
 1. `createJob(provider, evaluator, expiredAt, description, hook)`
 2. `setBudget(jobId, amount, "0x")`
 3. `fund(jobId, "0x")` (after USDC approval)
@@ -39,7 +39,7 @@ The standard for agent-to-agent and human-to-agent service settlement.
 5. `complete(jobId, reasonHash, "0x")`
 
 ### x402 Paid Access
-ArcLayer-native and Circle Gateway integrated payment flow.
+Arc Native x402 payment with optional Circle Gateway support where needed.
 - Returns `402 Payment Required` for protected resources.
 - Supports EIP-3009 transfer authorizations for gasless payments.
 
@@ -59,7 +59,7 @@ ArcLayer-native and Circle Gateway integrated payment flow.
 
 ## Development
 
-### Monorepo Structure
+### Repo Structure
 - `apps/console/`: Next.js web interface and agent tools API.
 - `contracts/`: local test scaffolding only; active Arc reference addresses live in `sdk/src/addresses.ts`.
 - `sdk/`: Contract addresses, ABIs, and chain configuration.
@@ -81,11 +81,25 @@ npm run ci     # Run full validation suite
 ```
 
 ### Agent Tools API
-ArcLayer provides an "MCP-style" JSON tools interface at `/api/mcp`.
-*Note: This is an ArcLayer-specific tools API, not the official Arc MCP server (which is at https://docs.arc.io/mcp).*
+ArcLayer provides a custom MCP-style JSON tools interface at `/api/mcp`.
+*Note: The official Arc MCP server is https://docs.arc.io/mcp. ArcLayer `/api/mcp` is ArcLayer-specific and not the official Arc MCP server.*
 
 ---
 
+### Arc Reference Mode (Current)
+ArcLayer currently runs on Arc reference contracts for ERC-8004 agent identity, reputation, validation, ERC-8183 paid jobs, and x402 payments on Arc Testnet USDC.
+
+- ERC-8004 IdentityRegistry
+- ERC-8004 ReputationRegistry
+- ERC-8004 ValidationRegistry
+- ERC-8183 AgenticCommerce
+- x402 Arc Native payment
+- Optional Circle Gateway support (where documented)
+- PM2 external agent bridge
+- Bridge receipts, payload hashes, and live proof history
+
+### Human-to-Agent Vault (Planned Custom Module)
+Human-to-Agent Vault is a planned custom ArcLayer module for milestone-based human-to-agent work, dispute handling, and resolver-backed settlement.
 
 ## Security Boundary
 

@@ -70,11 +70,3 @@ export const usdc = getContract({
 // Legacy aliases during migration. These now point to official Arc contracts.
 /** @deprecated Use erc8004IdentityRegistry. */
 export const agentRegistry = erc8004IdentityRegistry;
-/** @deprecated Use erc8183AgenticCommerce. */
-export const jobEscrow = erc8183AgenticCommerce;
-/** @deprecated No WorkProof in official Arc/Circle reference mode. */
-export const workProof = undefined;
-/** @deprecated No ReputationOracle in official Arc/Circle reference mode. */
-export const reputationOracle = undefined;
-/** @deprecated No MilestoneEscrow in official Arc/Circle reference mode. */
-export const milestoneEscrow = undefined;

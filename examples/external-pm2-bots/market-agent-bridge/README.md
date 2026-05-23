@@ -9,7 +9,7 @@ This is **not** a generic external LLM demo and not a real trading executor.
 ```text
 external PM2 bot
   -> raw Polymarket BTC 15m data
-  -> local/optional-LLM analysis
+  -> LLM analysis
   -> risk evaluation
   -> DRY_RUN decision intent
   -> x402 bridge-access
@@ -47,8 +47,8 @@ npm install dotenv
 Optional local LLM:
 
 ```bash
-LLM_BASE_URL=http://localhost:20128/v1
-LLM_MODEL=KIRO
+LLM_BASE_URL=
+LLM_MODEL=
 LLM_API_KEY=local-only-key
 ```
 

@@ -122,7 +122,7 @@ INSERT INTO public.vault_config (key, value) VALUES
   ('arbiter_fee_bps', '500'::jsonb),
   ('ai_resolver_confidence_threshold', '0.92'::jsonb),
   ('ai_resolver_model', '"KIRO"'::jsonb),
-  ('ai_resolver_endpoint', '"http://localhost:20128/v1"'::jsonb)
+  ('ai_resolver_endpoint', '""'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
 -- ─── Resolver Decisions Log (audit trail) ──────────────────────────────

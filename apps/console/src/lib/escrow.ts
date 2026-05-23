@@ -1,8 +1,8 @@
 /**
- * escrow.ts — DEPRECATED legacy MilestoneEscrow shim.
+ * escrow.ts — Human-to-Agent Vault / future custom module compatibility shim.
  *
  * Pure Arc reference mode uses ERC-8183 AgenticCommerce for job lifecycle
- * instead of a custom MilestoneEscrow contract. This file exists only to
+ * in production reference mode. This file exists only to
  * keep import paths from breaking; all values are inert.
  */
 

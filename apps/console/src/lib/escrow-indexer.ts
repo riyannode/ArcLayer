@@ -1,7 +1,7 @@
 /**
- * escrow-indexer.ts — DEPRECATED legacy MilestoneEscrow event indexer.
+ * escrow-indexer.ts — Human-to-Agent Vault / future custom module event stub.
  *
- * Pure Arc reference mode does not deploy a MilestoneEscrow contract; ERC-8183
+ * Pure Arc reference mode does not deploy Human-to-Agent Vault contracts by default; ERC-8183
  * AgenticCommerce events are indexed by the dedicated indexer service. This
  * stub keeps the import surface alive but always returns an empty event set.
  */
@@ -13,7 +13,6 @@ export type EscrowEventName =
   | 'ProjectFunded'
   | 'MilestoneSubmitted'
   | 'MilestoneReleased'
-  | 'WorkProofMinted';
 
 export type IndexedEscrowEvent = {
   eventName: EscrowEventName;
