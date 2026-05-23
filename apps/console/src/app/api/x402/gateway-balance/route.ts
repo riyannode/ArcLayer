@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createPublicClient, getAddress, http } from 'viem';
+import { createPublicClient, formatUnits, getAddress, http } from 'viem';
 import { GATEWAY_WALLET_ADDRESS, USDC_ADDRESS } from '@/lib/x402/constants';
 
 export const runtime = 'nodejs';
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({
-      depositedUsdc: deposited.toString(),
+      depositedUsdc: formatUnits(deposited, 6),
       depositedAtomic: deposited.toString(),
       method: 'gateway-wallet',
     });
