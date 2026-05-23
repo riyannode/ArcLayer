@@ -228,12 +228,11 @@ function A2ADashboardPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const cacheBust = Date.now();
       const [ovRes, ocRes, fdRes, regRes] = await Promise.all([
         fetch(indexerUrl('/overview')),
-        fetch(`/api/a2a/status?t=${cacheBust}`, { cache: 'no-store' }),
+        fetch('/api/a2a/status'),
         fetch(indexerUrl('/autonomous-feed?limit=50')),
-        fetch(`/api/a2a/agents?t=${cacheBust}`, { cache: 'no-store' }),
+        fetch('/api/a2a/agents'),
       ]);
       if (!ovRes.ok) throw new Error(`indexer ${ovRes.status}`);
       const ovData: Overview = await ovRes.json();
@@ -281,7 +280,7 @@ function A2ADashboardPage() {
     let cancelled = false;
     const loadVisible = () => { if (!document.hidden && !cancelled) void fetchData(); };
     void fetchData();
-    const interval = setInterval(loadVisible, 30000);
+    const interval = setInterval(loadVisible, 60000);
     const onVisibility = () => { if (!document.hidden) void fetchData(); };
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
