@@ -9,7 +9,7 @@ This is **not** a generic external LLM demo and not a real trading executor.
 ```text
 external PM2 bot
   -> raw Polymarket BTC 15m data
-  -> local/optional-LLM analysis
+  -> LLM analysis
   -> risk evaluation
   -> DRY_RUN decision intent
   -> x402 bridge-access
