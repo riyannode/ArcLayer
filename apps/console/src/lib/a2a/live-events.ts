@@ -4,6 +4,22 @@ import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 const EVENTS_TABLE = 'agent_live_events';
 const PRESENCE_TABLE = 'agent_presence';
 
+
+function getVisibleAgentIdSet(): Set<string> | null {
+  const raw =
+    process.env.A2A_VISIBLE_AGENT_IDS ||
+    process.env.NEXT_PUBLIC_A2A_VISIBLE_AGENT_IDS ||
+    '';
+  const ids = raw.split(',').map((v) => v.trim()).filter(Boolean);
+  return ids.length > 0 ? new Set(ids) : null;
+}
+
+function isVisibleAgentId(agentId: string): boolean {
+  const visible = getVisibleAgentIdSet();
+  if (!visible) return true;
+  return visible.has(String(agentId));
+}
+
 export type AgentLiveEventType =
   | 'heartbeat'
   | 'x402_paid'
@@ -130,7 +146,8 @@ async function agentIdsForCategory(category: string): Promise<string[]> {
       const manifest = item.manifest;
       return manifest.categories?.includes(category) || manifest.roles?.some((role) => role.category === category);
     })
-    .map((item) => item.agentId);
+    .map((item) => item.agentId)
+    .filter((agentId) => isVisibleAgentId(agentId));
 }
 
 export async function listAgentLiveEventsByCategory(category: string, limit = 50) {
@@ -175,7 +192,7 @@ export async function listAgentPresenceByCategory(category: string) {
     return manifest.categories?.includes(category) || manifest.roles?.some((role) => role.category === category);
   });
 
-  const ids = matching.map((item) => item.agentId);
+  const ids = matching.map((item) => item.agentId).filter((agentId) => isVisibleAgentId(agentId));
   if (ids.length === 0) return [];
 
   const supabase = getSupabaseAdmin();
@@ -190,7 +207,7 @@ export async function listAgentPresenceByCategory(category: string) {
     console.error('[a2a.presence] list error', error.message);
   }
 
-  return matching.map((item) => {
+  return matching.filter((item) => isVisibleAgentId(item.agentId)).map((item) => {
     const row = byId.get(item.agentId);
     return {
       agentId: item.agentId,

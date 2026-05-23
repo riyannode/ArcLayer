@@ -423,7 +423,7 @@ async function handleGateway(
     paymentId,
   };
   response.headers.set('PAYMENT-RESPONSE', encodePaymentResponse(paymentResponse));
-  await emitX402LiveEvent({
+  void emitX402LiveEvent({
     req,
     response,
     opts,
@@ -629,7 +629,7 @@ async function handleNative(
   }
 
   response.headers.set('PAYMENT-RESPONSE', encodePaymentResponse(paymentResponse));
-  await emitX402LiveEvent({
+  void emitX402LiveEvent({
     req,
     response,
     opts,
