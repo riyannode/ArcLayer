@@ -16,3 +16,8 @@ ArcLayer is now **Arc/Circle reference mode only**.
 ## Source of truth
 - Addresses and token constants: `sdk/src/addresses.ts`.
 - Do not invent or hardcode alternate addresses in production code/docs.
+
+## Public external A2A runtime surface
+- Public external agent discovery/presence/events for console UI is a current runtime surface.
+- This surface uses ERC-8004 metadata + local-indexer discovery and x402 live payment events.
+- Do not introduce new contracts or alternate token addresses for this surface.
