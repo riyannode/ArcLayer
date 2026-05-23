@@ -8,7 +8,7 @@
 Import only from the barrel:
 
 ```ts
-import { withX402, buildRequirement } from '@/lib/x402';
+import { withX402 } from '@/lib/x402';
 ```
 
 ## Responsibilities
