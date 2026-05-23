@@ -1,3 +1,4 @@
+import { listLocalIndexerAgentIdsByCategory } from '@/lib/a2a/local-indexer-roster';
 import { listStoredManifests } from '@/lib/a2a/roster';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 
@@ -140,6 +141,12 @@ export async function upsertAgentPresence(input: AgentPresenceInput): Promise<{ 
 }
 
 async function agentIdsForCategory(category: string): Promise<string[]> {
+  const source = process.env.A2A_AGENT_ROSTER_SOURCE || 'local-indexer';
+  if (source !== 'global') {
+    const ids = await listLocalIndexerAgentIdsByCategory(category);
+    return ids.filter((agentId) => isVisibleAgentId(agentId));
+  }
+
   const manifests = await listStoredManifests();
   return manifests
     .filter((item) => {
@@ -186,13 +193,7 @@ export async function listAgentLiveEventsByCategory(category: string, limit = 50
 }
 
 export async function listAgentPresenceByCategory(category: string) {
-  const manifests = await listStoredManifests();
-  const matching = manifests.filter((item) => {
-    const manifest = item.manifest;
-    return manifest.categories?.includes(category) || manifest.roles?.some((role) => role.category === category);
-  });
-
-  const ids = matching.map((item) => item.agentId).filter((agentId) => isVisibleAgentId(agentId));
+  const ids = await agentIdsForCategory(category);
   if (ids.length === 0) return [];
 
   const supabase = getSupabaseAdmin();
@@ -207,11 +208,11 @@ export async function listAgentPresenceByCategory(category: string) {
     console.error('[a2a.presence] list error', error.message);
   }
 
-  return matching.filter((item) => isVisibleAgentId(item.agentId)).map((item) => {
-    const row = byId.get(item.agentId);
+  return ids.map((agentId) => {
+    const row = byId.get(agentId);
     return {
-      agentId: item.agentId,
-      agentName: row?.agent_name ?? item.manifest.name,
+      agentId,
+      agentName: row?.agent_name ?? null,
       status: row?.status ?? 'offline',
       lastHeartbeatAt: row?.last_heartbeat_at ?? null,
       lastEventType: row?.last_event_type ?? null,

@@ -6,12 +6,26 @@ if (!token) {
   process.exit(1);
 }
 
-const bots = [
+const defaults = [
   ['19803', 'ArcLayer Prediction Analyzer'],
   ['19804', 'ArcLayer Prediction Evaluator'],
   ['19805', 'ArcLayer Prediction Executor'],
   ['19806', 'ArcLayer Prediction Oracle'],
 ];
+
+const rawAgentIds = process.env.PREDICTION_AGENT_IDS?.trim() || '';
+const bots = rawAgentIds
+  ? rawAgentIds
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map((entry) => {
+        const [agentId, ...nameParts] = entry.split(':');
+        return [agentId?.trim(), nameParts.join(':').trim()] as const;
+      })
+      .filter(([agentId]) => agentId)
+      .map(([agentId, name]) => [agentId, name || `Agent ${agentId}`])
+  : defaults;
 
 async function post(path, body) {
   const res = await fetch(`${origin}${path}`, {

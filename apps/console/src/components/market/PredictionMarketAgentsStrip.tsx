@@ -171,7 +171,7 @@ export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots
       {error ? (
         <div className="rounded border border-red-400/20 bg-red-950/20 p-2 text-xs text-red-200">{error}</div>
       ) : agents.length === 0 ? (
-        <div className="rounded border border-dashed border-white/10 bg-white/[0.02] p-3 text-center font-mono text-[11px] text-[#81796E]">No prediction market agents registered yet.</div>
+        <div className="rounded border border-dashed border-white/10 bg-white/[0.02] p-3 text-center font-mono text-[11px] text-[#81796E]">No local registered agents found.</div>
       ) : (
         <div className="flex max-h-[210px] gap-2 overflow-x-auto pb-1">
           {agents.map((agent) => {
