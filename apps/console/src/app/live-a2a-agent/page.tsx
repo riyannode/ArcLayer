@@ -7,9 +7,6 @@ import { AGENT_CATEGORIES } from './categories';
 
 type LatestResponse = { ok: boolean; session: BridgeSession | null; error?: string; message?: string };
 
-function Chip({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-[#C5A67C]">{children}</span>;
-}
 
 export default function LiveA2AAgentPage() {
   const [session, setSession] = useState<BridgeSession | null>(null);
@@ -47,10 +44,6 @@ export default function LiveA2AAgentPage() {
               <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">ARCLAYER · EXTERNAL AGENT RUNTIME</div>
               <h1 className="mt-2 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5] sm:text-4xl">A2A AGENT BRIDGE</h1>
               <p className="mt-2 max-w-4xl text-sm text-[#EAE4D8]/70">External agents run anywhere. ArcLayer handles x402 access, bridge events, receipts, payload hashes, and proof history on Arc.</p>
-            </div>
-            <div className="ml-auto flex flex-wrap items-center gap-2">
-              <Link href="/status" className="rounded-sm border border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[#EAE4D8]/65 hover:border-[#C5A67C]/35 hover:text-[#C5A67C]">Status</Link>
-              <Chip>Live Data</Chip><Chip>Jobs</Chip><Chip>x402</Chip><Chip>Receipts</Chip>
             </div>
           </div>
           <div className="grid gap-px bg-white/10 md:grid-cols-4">
