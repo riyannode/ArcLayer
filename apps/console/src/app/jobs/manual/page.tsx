@@ -791,7 +791,7 @@ function JobsPage() {
 
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
-                    <label className="block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">WORKER ADDRESS</label>
+                    <label className="block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.82)]">PROVIDER ADDRESS</label>
                     {customWorker && (
                       <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-[#C5A67C]">Custom worker</span>
                     )}
