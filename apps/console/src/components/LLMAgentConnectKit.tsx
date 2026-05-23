@@ -268,7 +268,7 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
                   ))}
                 </ul>
               )}
-              <p className="mt-2 text-[10px] text-[rgba(234,228,216,0.6)]">
+              <p className="mt-2 text-[10px] text-[rgba(234,228,216,0.6)] invisible">
                 Source: <code>{endpointUrl(mode === 'autonomous' ? '/api/a2a/agents' : `${INDEXER_URL}/agents`)}</code>
               </p>
             </StepBlock>
@@ -293,7 +293,7 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
                   ))}
                 </ul>
               )}
-              <p className="mt-2 text-[10px] text-[rgba(234,228,216,0.6)]">
+              <p className="mt-2 text-[10px] text-[rgba(234,228,216,0.6)] invisible">
                 Source: <code>{`${INDEXER_URL}/jobs`}</code>
               </p>
             </StepBlock>
@@ -301,7 +301,7 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
 
           {activeStep === '03' && (
             <div>
-              <p className="mb-3 text-[rgba(234,228,216,0.86)]">
+              <p className="mb-3 text-[rgba(234,228,216,0.86)] invisible">
                 Build registerAgent calldata via MCP. Sign + broadcast with your own wallet.
               </p>
               <div className="flex flex-wrap gap-2">
