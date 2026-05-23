@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import type { NetworkAgent, FeedItem } from '@/types/agent-network';
+import { useX402PaidFetch } from '@/hooks/useX402PaidFetch';
 
 const TYPE_COLORS: Record<FeedItem['type'], string> = {
   signal: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
@@ -86,7 +87,18 @@ export function AgentDetailDrawer({
   isDeactivating?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const paidFetch = useX402PaidFetch();
+  const [fullReportLoading, setFullReportLoading] = useState(false);
+  const [paidRunLoading, setPaidRunLoading] = useState(false);
+  const [fullReportError, setFullReportError] = useState<string | null>(null);
+  const [paidRunError, setPaidRunError] = useState<string | null>(null);
+  const [fullReportTxHash, setFullReportTxHash] = useState<string | null>(null);
+  const [paidRunTxHash, setPaidRunTxHash] = useState<string | null>(null);
+  const [fullReportResult, setFullReportResult] = useState<unknown>(null);
+  const [paidRunResult, setPaidRunResult] = useState<unknown>(null);
   if (!agent) return null;
+
+  const endpointAgentId = agent.agentId || agent.id;
 
   const x402Receipts = agent.activity.filter((item) => item.tx || item.type === 'payment' || item.label.toLowerCase().includes('x402') || item.label.toLowerCase().includes('apolo'));
 
@@ -173,6 +185,83 @@ export function AgentDetailDrawer({
               {action}
             </button>
           ))}
+        </div>
+
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="rounded border border-violet-500/20 bg-violet-500/[0.04] p-3">
+            <button
+              type="button"
+              disabled={fullReportLoading}
+              onClick={async () => {
+                setFullReportLoading(true);
+                setFullReportError(null);
+                setFullReportTxHash(null);
+                try {
+                  const response = await paidFetch(`/api/x402/agents/${endpointAgentId}/full-report`, {
+                    method: 'GET',
+                  });
+                  const txHash = response.headers.get('x-payment-tx-hash');
+                  setFullReportTxHash(txHash);
+                  const data = await response.json();
+                  setFullReportResult(data);
+                } catch (error) {
+                  setFullReportError(error instanceof Error ? error.message : 'Failed to fetch full paid report.');
+                  setFullReportResult(null);
+                } finally {
+                  setFullReportLoading(false);
+                }
+              }}
+              className="rounded border border-violet-400/40 bg-violet-500/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-violet-200 hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {fullReportLoading ? 'Loading…' : 'Full paid report'}
+            </button>
+            {fullReportError && <p className="mt-2 font-mono text-[11px] text-red-300">{fullReportError}</p>}
+            {fullReportTxHash && <p className="mt-2 break-all font-mono text-[11px] text-violet-200">Payment tx: {fullReportTxHash}</p>}
+            {fullReportResult && (
+              <pre className="mt-2 max-h-48 overflow-auto rounded border border-white/10 bg-black/30 p-2 font-mono text-[10px] text-[#EAE4D8]">
+                {JSON.stringify(fullReportResult, null, 2)}
+              </pre>
+            )}
+          </div>
+
+          <div className="rounded border border-cyan-500/20 bg-cyan-500/[0.04] p-3">
+            <button
+              type="button"
+              disabled={paidRunLoading}
+              onClick={async () => {
+                setPaidRunLoading(true);
+                setPaidRunError(null);
+                setPaidRunTxHash(null);
+                try {
+                  const response = await paidFetch(`/api/agents/${endpointAgentId}/run`, {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({}),
+                  });
+                  const txHash = response.headers.get('x-payment-tx-hash');
+                  setPaidRunTxHash(txHash);
+                  const data = await response.json();
+                  setPaidRunResult(data);
+                } catch (error) {
+                  setPaidRunError(error instanceof Error ? error.message : 'Failed to execute paid run.');
+                  setPaidRunResult(null);
+                } finally {
+                  setPaidRunLoading(false);
+                }
+              }}
+              className="rounded border border-cyan-400/40 bg-cyan-500/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {paidRunLoading ? 'Loading…' : 'Paid run'}
+            </button>
+            {paidRunError && <p className="mt-2 font-mono text-[11px] text-red-300">{paidRunError}</p>}
+            {paidRunTxHash && <p className="mt-2 break-all font-mono text-[11px] text-cyan-200">Payment tx: {paidRunTxHash}</p>}
+            {paidRunResult && (
+              <pre className="mt-2 max-h-48 overflow-auto rounded border border-white/10 bg-black/30 p-2 font-mono text-[10px] text-[#EAE4D8]">
+                {JSON.stringify(paidRunResult, null, 2)}
+              </pre>
+            )}
+          </div>
         </div>
 
         {agent.canHide && onHide && (

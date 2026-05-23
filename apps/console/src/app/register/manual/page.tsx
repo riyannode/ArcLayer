@@ -111,6 +111,16 @@ function RegisterManualAgentPageContent() {
 
   const visibleAgents = showAllAgents ? filteredAgents : filteredAgents.slice(0, 5);
 
+  const antiSpamFeeLabel = useMemo(() => {
+    const atomic = process.env.NEXT_PUBLIC_X402_REGISTER_GATE_AMOUNT_ATOMIC;
+    if (!atomic) return 'anti-spam fee';
+    const parsed = Number(atomic);
+    if (!Number.isFinite(parsed) || parsed <= 0) return 'anti-spam fee';
+    const amount = parsed / 1e6;
+    const amountLabel = amount >= 1 ? amount.toFixed(2) : amount.toFixed(3);
+    return `anti-spam fee (${amountLabel} USDC)`;
+  }, []);
+
 
   const effectiveMetadataURI =
     form.metadataURI.trim() || (form.name.trim() ? buildAgentMetadataURI(form.name, form.skill) : '');
@@ -179,9 +189,9 @@ function RegisterManualAgentPageContent() {
       setIsSubmitting(true);
       setIndexerSynced(false);
 
-      // STEP A — Anti-spam x402 fee (0.40 USDC). Block before touching chain.
+      // STEP A — Anti-spam x402 fee. Block before touching chain.
       setStatusTone('pending');
-      setTxState('Step 1/2 · Paying anti-spam fee (0.40 USDC)…');
+      setTxState(`Step 1/2 · Paying ${antiSpamFeeLabel}…`);
       const payResult = await payAntiSpam();
       if (!payResult.ok) {
         setStatusTone('error');

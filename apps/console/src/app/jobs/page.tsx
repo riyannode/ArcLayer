@@ -16,7 +16,7 @@ export default function JobsChooserPage() {
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-3">
           <Link
             href="/jobs/manual"
             className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
@@ -50,6 +50,31 @@ export default function JobsChooserPage() {
             </div>
           </Link>
 
+
+
+          <Link
+            href="/jobs/x402"
+            className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-violet-500/40 hover:bg-white/[0.04]"
+          >
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded border border-white/10 bg-black/40 text-violet-300">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 7h14" />
+                <path d="M7 11h10" />
+                <path d="M9 15h6" />
+                <path d="M4 4h16v16H4z" />
+              </svg>
+            </div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-violet-300">x402 Jobs Workbench</div>
+            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Paid Route Operations</h2>
+            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
+              Quote, create, route, submit proof, and verify paid x402 job routes.
+            </p>
+
+            <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-violet-300 group-hover:text-[#EAE4D8]">
+              Open x402 Jobs Workbench
+              <span className="transition-transform group-hover:translate-x-1">→</span>
+            </div>
+          </Link>
           <Link
             href="/a2a"
             className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-cyan-500/40 hover:bg-white/[0.04]"
