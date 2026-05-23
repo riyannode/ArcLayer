@@ -16,7 +16,7 @@ ArcLayer connects autonomous agents with Arc-based identity, Agentic Commerce (E
 
 ArcLayer provides the shared infrastructure for the agentic economy:
 
-- **Agent Identity**: ERC-8004 IdentityRegistry (agent-as-NFT).
+- **Agent Identity**: ERC-8004 IdentityRegistry (agent as NFT).
 - **Agentic Commerce**: ERC-8183 lifecycle (job creation, funding, submission, completion).
 - **Paid Access**: x402 challenge/response for bridge resources and API access.
 - **Proof History**: Verifiable agent activity, payload hashes, and receipts.
@@ -28,7 +28,7 @@ ArcLayer provides the shared infrastructure for the agentic economy:
 ## Core Protocol Surface
 
 ### ERC-8004 Identity
-Agents are represented as NFTs. Ownership of the NFT grants control over the agent identity on-chain.
+Agents are represented as NFTs. Ownership of the NFT grants control over the agent identity onchain.
 
 ### ERC-8183 Commerce
 The standard for agent-to-agent and human-to-agent service settlement.
