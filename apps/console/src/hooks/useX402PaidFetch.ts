@@ -52,6 +52,16 @@ async function parseJsonSafe(response: Response): Promise<any> {
   return response.json().catch(() => ({}));
 }
 
+function parsePaymentResponseHeaderSafe(headerValue: string): { transaction?: string; txHash?: string } | null {
+  try {
+    const normalized = headerValue.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    return JSON.parse(atob(padded)) as { transaction?: string; txHash?: string };
+  } catch {
+    return null;
+  }
+}
+
 export function useX402PaidFetch() {
   const { address: eoaAddress, isConnected: eoaConnected, connector } = useAccount();
 
@@ -126,12 +136,22 @@ export function useX402PaidFetch() {
 
       const client = createPublicClient({ transport: http(ARC_RPC) });
       const requiredAmount = BigInt(req.amount);
-      const availableBalance = (await client.readContract({
-        address: USDC,
-        abi: BALANCE_ABI,
-        functionName: 'balanceOf',
-        args: [payer],
-      })) as bigint;
+      let availableBalance: bigint;
+      try {
+        availableBalance = (await client.readContract({
+          address: USDC,
+          abi: BALANCE_ABI,
+          functionName: 'balanceOf',
+          args: [payer],
+        })) as bigint;
+      } catch {
+        return {
+          ok: false,
+          status: 0,
+          json: challengeJson,
+          error: 'Failed to read USDC balance.',
+        };
+      }
 
       if (availableBalance < requiredAmount) {
         return {
@@ -231,12 +251,8 @@ export function useX402PaidFetch() {
       let paymentTxHash: string | undefined;
       const paymentResponseHeader = paidRes.headers.get('PAYMENT-RESPONSE');
       if (paymentResponseHeader) {
-        try {
-          const parsed = JSON.parse(atob(paymentResponseHeader));
-          paymentTxHash = parsed?.transaction || parsed?.txHash;
-        } catch {
-          // ignore malformed header
-        }
+        const parsed = parsePaymentResponseHeaderSafe(paymentResponseHeader);
+        paymentTxHash = parsed?.transaction || parsed?.txHash;
       }
 
       if (!paidRes.ok) {
