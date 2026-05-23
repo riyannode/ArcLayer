@@ -66,6 +66,10 @@ export interface X402MiddlewareOptions {
   maxTimeoutSeconds?: number;
   /** Description shown to client. */
   description?: string;
+  /** Optional live UI agent id for payment notifications. */
+  liveAgentId?: string;
+  /** Optional live UI agent name for payment notifications. */
+  liveAgentName?: string;
 }
 
 function resolvePayTo(override?: `0x${string}`): `0x${string}` {
@@ -80,6 +84,49 @@ function resolvePayTo(override?: `0x${string}`): `0x${string}` {
     throw new Error('Missing X402_RECEIVER_ADDRESS, X402_PAY_TO, or X402_DEFAULT_PAY_TO');
   }
   return getAddress(env) as `0x${string}`;
+}
+
+
+
+async function emitX402LiveEvent(params: {
+  req: NextRequest;
+  response?: NextResponse;
+  opts: X402MiddlewareOptions;
+  mode: 'arc-native' | 'circle-gateway';
+  paymentId: string;
+  payer?: string | null;
+  transaction?: string | null;
+  amount: string;
+}) {
+  const agentId =
+    params.opts.liveAgentId ||
+    params.response?.headers.get('X-ArcLayer-Agent-Id') ||
+    params.req.headers.get('x-arclayer-agent-id');
+
+  if (!agentId) return;
+
+  try {
+    const { recordAgentLiveEvent } = await import('@/lib/a2a/live-events');
+    await recordAgentLiveEvent({
+      agentId,
+      agentName: params.opts.liveAgentName ?? params.response?.headers.get('X-ArcLayer-Agent-Name') ?? null,
+      eventType: 'x402_paid',
+      title: 'x402 paid',
+      summary: `x402 ${params.mode} payment settled`,
+      txHash: params.transaction ?? null,
+      amountAtomic: params.amount,
+      currency: 'USDC',
+      trace: ['x402_paid'],
+      metadata: {
+        mode: params.mode,
+        paymentId: params.paymentId,
+        payer: params.payer ?? null,
+        resource: params.opts.resource,
+      },
+    });
+  } catch (err) {
+    console.error('[x402] failed to emit live event', err instanceof Error ? err.message : 'unknown');
+  }
 }
 
 // ─── Requirements builders ───────────────────────────────────────────────────
@@ -376,6 +423,16 @@ async function handleGateway(
     paymentId,
   };
   response.headers.set('PAYMENT-RESPONSE', encodePaymentResponse(paymentResponse));
+  void emitX402LiveEvent({
+    req,
+    response,
+    opts,
+    mode: 'circle-gateway',
+    paymentId,
+    payer,
+    transaction: settleResult.transaction ?? null,
+    amount: requirements.amount,
+  });
   return response;
 }
 
@@ -572,6 +629,16 @@ async function handleNative(
   }
 
   response.headers.set('PAYMENT-RESPONSE', encodePaymentResponse(paymentResponse));
+  void emitX402LiveEvent({
+    req,
+    response,
+    opts,
+    mode: 'arc-native',
+    paymentId,
+    payer: authorization.from as string,
+    transaction: settleResult.transaction ?? null,
+    amount: requirements.amount,
+  });
   return response;
 }
 
