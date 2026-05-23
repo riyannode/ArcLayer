@@ -265,7 +265,7 @@ export default function AgentProfilePage() {
             chainName: 'Arc Testnet',
             // Arc native gas token is USDC (18 decimals native interface).
             nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
-            rpcUrls: ['https://rpc.testnet.arc.network'],
+            rpcUrls: ['https://rpc.drpc.testnet.arc.network'],
             blockExplorerUrls: ['https://testnet.arcscan.app'],
           }],
         });

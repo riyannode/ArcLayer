@@ -11,7 +11,6 @@ const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Completed'] a
 const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'success' };
 
 const RPC_ENDPOINTS = [
-  { label: 'rpc.testnet.arc.network', url: 'https://rpc.testnet.arc.network' },
   { label: 'blockdaemon', url: 'https://rpc.blockdaemon.testnet.arc.network' },
   { label: 'drpc', url: 'https://rpc.drpc.testnet.arc.network' },
   { label: 'quicknode', url: 'https://rpc.quicknode.testnet.arc.network' },

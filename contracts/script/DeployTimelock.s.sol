@@ -11,7 +11,7 @@ import "@openzeppelin/contracts/governance/TimelockController.sol";
  * Usage:
  *   OWNER=0x9dc3f8F2E2Aa59F9300D9B40D16725317F52B074 \
  *   forge script script/DeployTimelock.s.sol \
- *     --rpc-url https://rpc.testnet.arc.network \
+ *     --rpc-url https://rpc.drpc.testnet.arc.network \
  *     --broadcast --private-key $OWNER_PK
  *
  * Parameters (env):

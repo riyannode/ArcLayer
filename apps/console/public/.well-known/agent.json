@@ -10,8 +10,8 @@
     "name": "Arc Testnet",
     "chainId": 5042002,
     "explorer": "https://testnet.arcscan.app",
-    "rpc": "https://rpc.testnet.arc.network",
-    "canonicalRpc": "https://rpc.testnet.arc.network",
+    "rpc": "https://rpc.drpc.testnet.arc.network",
+    "canonicalRpc": "https://rpc.drpc.testnet.arc.network",
     "fallbackRpcs": [
       "https://rpc.drpc.testnet.arc.network",
       "https://rpc.quicknode.testnet.arc.network",
