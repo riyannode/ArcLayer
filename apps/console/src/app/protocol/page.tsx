@@ -333,7 +333,7 @@ export default function Dashboard() {
         <div className="mt-6 flex flex-col gap-3 border border-[#B8CD7E]/20 bg-[#B8CD7E]/[0.035] p-4 md:flex-row md:items-center md:justify-between">
           <div>
             <div className="aureo-mono-label mb-2" style={{ color: '#B8CD7E' }}>COMPLETED ERC-8183 JOB</div>
-            <p className="font-mono text-[12px] leading-6 text-[#EAE4D8]">
+            <p className="font-mono text-[12px] leading-6 text-[#EAE4D8] invisible">
               Job <span className="text-[#C5A67C]">#19</span> completed on Arc testnet through ERC-8183 AgenticCommerce.
             </p>
             <div className="mt-2 flex flex-wrap gap-3">

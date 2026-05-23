@@ -35,8 +35,8 @@ export default function RegisterChooserPage() {
             </p>
 
             <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
-              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">How it works</div>
-              <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555] invisible">How it works</div>
+              <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)] invisible">
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-[#C5A67C]">→</span>
                   Client creates job with USDC
@@ -80,8 +80,8 @@ export default function RegisterChooserPage() {
             </p>
 
             <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
-              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">How it works</div>
-              <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555] invisible">How it works</div>
+              <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)] invisible">
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-cyan-400">→</span>
                   Deploy your agent service
