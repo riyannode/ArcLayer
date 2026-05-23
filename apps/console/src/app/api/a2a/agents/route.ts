@@ -4,6 +4,7 @@ import { createPublicClient, http, parseAbiItem, type Hex, type Log } from 'viem
 import { isHiddenAgent } from '@/lib/a2a/hidden-agents';
 import { resolveManifestMetadata } from '@/lib/a2a/manifest';
 import { listStoredManifests } from '@/lib/a2a/roster';
+import { listRegisteredExternalAgents } from '@/lib/a2a/external-registry';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -193,7 +194,7 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const source = searchParams.get('source') || 'indexer';
+  const source = searchParams.get('source') || process.env.A2A_AGENT_ROSTER_SOURCE || 'local-indexer';
   const categoryFilter = searchParams.get('category') || null;
   const scanChain = source === 'chain';
   const client = scanChain ? createPublicClient({ transport: http(RPC) }) : null;
@@ -309,7 +310,13 @@ export async function GET(request: Request) {
       });
     }
 
-    const autonomousAgents = Array.from(merged.values());
+    let autonomousAgents = Array.from(merged.values());
+
+    if (source === 'registered-only') {
+      const approvedExternal = await listRegisteredExternalAgents();
+      const approvedById = new Map(approvedExternal.map((agent) => [String(agent.agentId).toLowerCase(), agent]));
+      autonomousAgents = autonomousAgents.filter((agent) => approvedById.has(String(agent.agentId).toLowerCase()));
+    }
 
     return NextResponse.json({
       registry: AGENT_REGISTRY,

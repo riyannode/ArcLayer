@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { insertBridgeEvent, listBridgeEvents, type BridgeEventInput } from '@/lib/agent-bridge/store';
+import { isRegisteredExternalAgentId } from '@/lib/a2a/external-registry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,6 +35,10 @@ export async function POST(req: NextRequest) {
 
   if (!sessionId) return bad('missing_sessionId');
   if (!agentId) return bad('missing_agentId');
+  if (!(await isRegisteredExternalAgentId(agentId))) {
+    console.warn(`[a2a] rejected unregistered external agent agentId=${agentId}`);
+    return bad('unregistered_external_agent', 403);
+  }
   if (!isValidRole(role)) return bad('invalid_role');
   if (!TYPES.has(type)) return bad('invalid_type');
   if (body.payload === null || typeof body.payload !== 'object' || Array.isArray(body.payload)) return bad('invalid_payload');

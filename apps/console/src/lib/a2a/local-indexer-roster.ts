@@ -129,7 +129,7 @@ async function listLocalIndexerAgentsByCategoryUncached(category: string) {
   const base = process.env.A2A_LOCAL_INDEXER_URL?.replace(/\/+$/, '');
   if (!base) throw new Error('A2A_LOCAL_INDEXER_URL missing');
 
-  const res = await fetchWithTimeout(`${base}/agents?source=erc8004`, INDEXER_FETCH_TIMEOUT_MS);
+  const res = await fetchWithTimeout(`${base}/agents`, INDEXER_FETCH_TIMEOUT_MS);
   if (!res.ok) {
     throw new Error(`local indexer HTTP ${res.status}`);
   }

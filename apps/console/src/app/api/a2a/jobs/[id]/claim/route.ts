@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { claimA2AJob } from '@/lib/a2a/jobs';
 import { requireApiKey } from '@/lib/a2a/auth';
 import { applyRateLimit } from '@/lib/rate-limit';
+import { isRegisteredExternalAgentId } from '@/lib/a2a/external-registry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (limited) return limited;
 
   const agentId = auth.key.agentId;
+  if (!(await isRegisteredExternalAgentId(agentId))) {
+    console.warn(`[a2a] rejected unregistered external agent agentId=${agentId}`);
+    return NextResponse.json({ ok: false, error: 'unregistered_external_agent' }, { status: 403 });
+  }
 
   const result = await claimA2AJob(params.id, agentId);
   if (!result.ok) return NextResponse.json(result, { status: result.error === 'job_not_found' ? 404 : 409 });
