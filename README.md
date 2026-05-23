@@ -306,20 +306,6 @@ The main product surface is:
 examples/external-pm2-bots/hackathon-polymarket-bots
 sdk/src/addresses.ts
 ```
-
-Legacy experiments may exist in the repository for reference, but the active surface is the external agent bridge, x402 access layer, Arc configuration, receipts, and live proof viewer.
-
----
-
-## Demo Links
-
-| Item | Link |
-|---|---|
-| Live Demo | https://arclayers.xyz/live-a2a-agent |
-| Console | https://arclayers.xyz |
-| GitHub | https://github.com/riyannode/ArcLayer |
-| Explorer | https://testnet.arcscan.app |
-
 ---
 
 ## License
