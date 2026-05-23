@@ -47,8 +47,8 @@ npm install dotenv
 Optional local LLM:
 
 ```bash
-LLM_BASE_URL=http://localhost:20128/v1
-LLM_MODEL=KIRO
+LLM_BASE_URL=
+LLM_MODEL=
 LLM_API_KEY=local-only-key
 ```
 
