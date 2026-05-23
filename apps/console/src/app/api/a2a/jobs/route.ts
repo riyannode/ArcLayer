@@ -7,8 +7,18 @@ import { withX402 } from '@/lib/x402';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+const JOBS_TTL_MS = 30_000;
+const JOBS_CACHE_CONTROL = 'public, s-maxage=30, stale-while-revalidate=120';
+const jobsCache = new Map<string, { expiresAt: number; payload: unknown }>();
 
 export async function GET(req: NextRequest) {
+  const cacheKey = req.url;
+  const cached = jobsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return NextResponse.json(cached.payload, {
+      headers: { 'Cache-Control': JOBS_CACHE_CONTROL },
+    });
+  }
   const url = new URL(req.url);
   const jobs = await listA2AJobs({
     status: url.searchParams.get('status'),
@@ -18,7 +28,11 @@ export async function GET(req: NextRequest) {
     evaluator: url.searchParams.get('evaluator'),
     provider: url.searchParams.get('provider'),
   });
-  return NextResponse.json({ ok: true, jobs });
+  const payload = { ok: true, jobs };
+  jobsCache.set(cacheKey, { expiresAt: Date.now() + JOBS_TTL_MS, payload });
+  return NextResponse.json(payload, {
+    headers: { 'Cache-Control': JOBS_CACHE_CONTROL },
+  });
 }
 
 async function postHandler(req: NextRequest) {

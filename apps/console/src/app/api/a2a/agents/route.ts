@@ -7,6 +7,7 @@ import { listStoredManifests } from '@/lib/a2a/roster';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+const AGENTS_CACHE_CONTROL = 'public, s-maxage=30, stale-while-revalidate=120';
 
 const RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
 const AGENT_REGISTRY = '0xB263336055dD65FF501e36CA39941760D943703C' as Hex;
@@ -192,28 +193,35 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const source = searchParams.get('source') || 'indexer';
   const categoryFilter = searchParams.get('category') || null;
-  const client = createPublicClient({ transport: http(RPC) });
+  const scanChain = source === 'chain';
+  const client = scanChain ? createPublicClient({ transport: http(RPC) }) : null;
 
   try {
     const storedManifests = await listStoredManifests();
     const manifestById = new Map(storedManifests.map((item) => [String(item.agentId).toLowerCase(), item]));
     const allowedAgentIds = new Set(manifestById.keys());
 
-    const latestBlock = await client.getBlockNumber();
-    const fromBlock = FROM_BLOCK > latestBlock ? latestBlock : FROM_BLOCK;
-    const { logs, chunks } = await fetchLogsChunked(client, fromBlock, latestBlock);
-
     const latestById = new Map<string, RegisteredLog>();
-    for (const log of logs) {
-      const agentId = log.args.agentId?.toString();
-      if (agentId) latestById.set(agentId, log);
+    let visibleLogs: RegisteredLog[] = [];
+    let latestBlock: bigint | null = null;
+    let fromBlock: bigint | null = null;
+    let chunks = 0;
+    if (scanChain && client) {
+      latestBlock = await client.getBlockNumber();
+      fromBlock = FROM_BLOCK > latestBlock ? latestBlock : FROM_BLOCK;
+      const chainScan = await fetchLogsChunked(client, fromBlock, latestBlock);
+      chunks = chainScan.chunks;
+      for (const log of chainScan.logs) {
+        const agentId = log.args.agentId?.toString();
+        if (agentId) latestById.set(agentId, log);
+      }
+      visibleLogs = Array.from(latestById.values()).filter((log) => {
+        const agentId = log.args.agentId?.toString() || '';
+        return agentId && !isHiddenAgent(agentId) && allowedAgentIds.has(agentId.toLowerCase());
+      });
     }
-
-    const visibleLogs = Array.from(latestById.values()).filter((log) => {
-      const agentId = log.args.agentId?.toString() || '';
-      return agentId && !isHiddenAgent(agentId) && allowedAgentIds.has(agentId.toLowerCase());
-    });
 
     const agents = await mapWithConcurrency(visibleLogs, METADATA_CONCURRENCY, async (log) => {
       const metadataURI = log.args.metadataURI || '';
@@ -312,12 +320,15 @@ export async function GET(request: Request) {
       totalAutonomous: autonomousAgents.length,
       categoryFilter,
       scan: {
-        fromBlock: fromBlock.toString(),
-        toBlock: latestBlock.toString(),
+        fromBlock: fromBlock ? fromBlock.toString() : null,
+        toBlock: latestBlock ? latestBlock.toString() : null,
         chunks,
         maxRange: MAX_BLOCK_RANGE.toString(),
+        source,
       },
       timestamp: new Date().toISOString(),
+    }, {
+      headers: { 'Cache-Control': AGENTS_CACHE_CONTROL },
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'registry_sync_failed';
@@ -332,10 +343,11 @@ export async function GET(request: Request) {
           toBlock: null,
           chunks: 0,
           maxRange: MAX_BLOCK_RANGE.toString(),
+          source,
         },
         error: message,
       },
-      { status: 200 },
+      { status: 200, headers: { 'Cache-Control': AGENTS_CACHE_CONTROL } },
     );
   }
 }

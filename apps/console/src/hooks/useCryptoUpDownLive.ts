@@ -13,7 +13,7 @@ export function useCryptoUpDownLive(asset: 'BTC' | 'ETH' = 'BTC', enabled = true
   const refresh = useCallback(async () => {
     if (!enabled) return;
     try {
-      const res = await fetch(`/api/markets/crypto-updown/live?asset=${asset}`, { cache: 'no-store' });
+      const res = await fetch(`/api/markets/crypto-updown/live?asset=${asset}`);
       const json = (await res.json()) as ApiResponse;
       if (!res.ok || !json.ok || !json.data) throw new Error(json.error || 'fetch_failed');
       setData(json.data);
@@ -36,7 +36,7 @@ export function useCryptoUpDownLive(asset: 'BTC' | 'ETH' = 'BTC', enabled = true
     const startPolling = () => {
       void refresh();
       if (id) clearInterval(id);
-      if (!document.hidden) id = setInterval(() => void refresh(), 30_000);
+      if (!document.hidden) id = setInterval(() => void refresh(), 60_000);
     };
 
     startPolling();

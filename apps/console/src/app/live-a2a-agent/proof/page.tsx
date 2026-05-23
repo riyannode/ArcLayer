@@ -28,7 +28,7 @@ export default function A2AProductionProofPage() {
     let alive = true;
     async function load() {
       try {
-        const res = await fetch('/api/agent-bridge/sessions/latest', { cache: 'no-store' });
+        const res = await fetch('/api/agent-bridge/sessions/latest');
         const data = (await res.json()) as LatestResponse;
         if (!alive) return;
         if (!res.ok || !data.ok) {
@@ -41,11 +41,20 @@ export default function A2AProductionProofPage() {
         if (alive) setError(err instanceof Error ? err.message : 'network_error');
       }
     }
-    load();
-    const t = setInterval(load, 10_000);
+    const loadVisible = () => {
+      if (document.hidden) return;
+      void load();
+    };
+    void load();
+    const t = setInterval(loadVisible, 30_000);
+    const onVisibility = () => {
+      if (!document.hidden) void load();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       alive = false;
       clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 

@@ -32,7 +32,7 @@ export function ExternalJobsPanel({ categoryKey, title = 'Available Jobs' }: { c
         setError(null);
         const qs = new URLSearchParams({ status: 'open' });
         if (categoryKey) qs.set('category', categoryKey);
-        const res = await fetch(`/api/a2a/jobs?${qs.toString()}`, { cache: 'no-store' });
+        const res = await fetch(`/api/a2a/jobs?${qs.toString()}`);
         const data = await res.json().catch(() => ({ jobs: [] }));
         if (!res.ok || data?.ok === false) throw new Error(data?.message || data?.error || `HTTP ${res.status}`);
         if (!cancelled) setJobs(Array.isArray(data.jobs) ? data.jobs : []);
@@ -45,11 +45,20 @@ export function ExternalJobsPanel({ categoryKey, title = 'Available Jobs' }: { c
         if (!cancelled) setLoading(false);
       }
     }
-    load();
-    const id = setInterval(load, 15_000);
+    const loadVisible = () => {
+      if (document.hidden) return;
+      void load();
+    };
+    void load();
+    const id = setInterval(loadVisible, 45_000);
+    const onVisibility = () => {
+      if (!document.hidden) void load();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       cancelled = true;
       clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [categoryKey]);
 
