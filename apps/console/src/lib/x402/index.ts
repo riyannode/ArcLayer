@@ -5,7 +5,6 @@
  *   1. Arc Native (EIP-3009 transferWithAuthorization, self-hosted relayer)
  *   2. Circle Gateway (batched EIP-3009 via Circle facilitator)
  *
- * Legacy `arc-escrow` scheme has been removed.
  */
 
 export * from './types';

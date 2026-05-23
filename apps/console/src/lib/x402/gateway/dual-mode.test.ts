@@ -123,8 +123,8 @@ describe('isBatchPayment routing', () => {
     expect(isBatchPayment(req)).toBe(false);
   });
 
-  it('returns false for arc-escrow (legacy) requirements', () => {
-    const req = { scheme: 'arc-escrow', extra: undefined };
+  it('returns false for non-exact (legacy) requirements', () => {
+    const req = { scheme: 'legacy-unsupported', extra: undefined };
     expect(isBatchPayment(req)).toBe(false);
   });
 
@@ -268,7 +268,7 @@ describe('/supported response shape', () => {
 
     const legacyEscrow = {
       x402Version: X402_VERSION,
-      scheme: 'arc-escrow',
+      scheme: 'legacy-unsupported',
       network: 'arc-testnet',
       asset: USDC_ADDRESS,
       extra: {},
@@ -310,7 +310,7 @@ describe('/supported response shape', () => {
     expect(isBatchPayment(arcNative)).toBe(false);
   });
 
-  it('Legacy arc-escrow option is NOT detected as batch payment', () => {
+  it('Legacy non-exact option is NOT detected as batch payment', () => {
     const resp = buildSupportedResponse();
     const legacy = resp.accepts[2];
     expect(isBatchPayment(legacy)).toBe(false);
