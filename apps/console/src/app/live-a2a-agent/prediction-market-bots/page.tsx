@@ -56,7 +56,7 @@ export default function PredictionMarketBotsPage() {
         <header className="rounded-md border border-[#C5A67C]/15 bg-[#0A0A0A]/90 p-5">
           <Link href="/live-a2a-agent" className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C]">← A2A Agent Bridge</Link>
           <h1 className="mt-3 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5]">Prediction Market Bots</h1>
-          <p className="mt-2 text-sm text-[#EAE4D8]/70">Live Polymarket BTC/ETH UpDown 15m monitor using /api/markets/crypto-updown/live?asset=BTC (no live execution).</p>
+          <p className="mt-2 text-sm text-[#EAE4D8]/70 invisible">Live Polymarket BTC/ETH UpDown 15m monitor using /api/markets/crypto-updown/live?asset=BTC (no live execution).</p>
         </header>
 
         <section className="rounded-md border border-[#C5A67C]/15 bg-[#0A0A0A]/90 p-4">
