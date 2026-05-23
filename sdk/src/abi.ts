@@ -91,6 +91,72 @@ export const ERC8004_IDENTITY_REGISTRY_ABI = [
   },
 ] as const;
 
+
+// ── ERC-8004 Reputation Registry ─────────────────────────────────────────────
+
+export const ERC8004_REPUTATION_REGISTRY_ABI = [
+  {
+    name: "giveFeedback",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "agentTokenId", type: "uint256" },
+      { name: "score", type: "int128" },
+      { name: "category", type: "uint8" },
+      { name: "comment", type: "string" },
+      { name: "metadataURI", type: "string" },
+      { name: "proofURI", type: "string" },
+      { name: "context", type: "string" },
+      { name: "ref", type: "bytes32" },
+    ],
+    outputs: [],
+  },
+] as const;
+
+// ── ERC-8004 Validation Registry ─────────────────────────────────────────────
+
+export const ERC8004_VALIDATION_REGISTRY_ABI = [
+  {
+    name: "validationRequest",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "validator", type: "address" },
+      { name: "agentTokenId", type: "uint256" },
+      { name: "taskUri", type: "string" },
+      { name: "requestHash", type: "bytes32" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "validationResponse",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "requestHash", type: "bytes32" },
+      { name: "status", type: "uint8" },
+      { name: "resultUri", type: "string" },
+      { name: "resultHash", type: "bytes32" },
+      { name: "reason", type: "string" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "getValidationStatus",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "requestHash", type: "bytes32" }],
+    outputs: [
+      { name: "validatorAddress", type: "address" },
+      { name: "agentId", type: "uint256" },
+      { name: "response", type: "uint8" },
+      { name: "responseHash", type: "bytes32" },
+      { name: "tag", type: "string" },
+      { name: "lastUpdate", type: "uint256" },
+    ],
+  },
+] as const;
+
 // ── ERC-8183 Agentic Commerce ────────────────────────────────────────────────
 
 export const ERC8183_AGENTIC_COMMERCE_ABI = [

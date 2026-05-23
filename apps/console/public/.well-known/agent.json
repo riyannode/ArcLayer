@@ -31,10 +31,14 @@
   },
   "contracts": {
     "ERC8004IdentityRegistry": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+    "ERC8004ReputationRegistry": "0x8004B663056A597Dffe9eCcC1965A193B7388713",
+    "ERC8004ValidationRegistry": "0x8004Cb1BF31DAf7788923b405b754f57acEB4272",
     "ERC8183AgenticCommerce": "0x0747EEf0706327138c69792bF28Cd525089e4583"
   },
   "capabilities": [
     "erc-8004-agent-identity",
+    "erc-8004-reputation",
+    "erc-8004-validation",
     "erc-8183-agentic-commerce",
     "usdc-native-gas",
     "cctp-domain-26",
