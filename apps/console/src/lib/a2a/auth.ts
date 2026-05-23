@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { NextRequest, NextResponse } from 'next/server';
+import { getExternalAgent } from '@/lib/a2a/external-registry';
 
 const TABLE = 'a2a_api_keys';
 
@@ -108,6 +109,17 @@ export async function revokeApiKey(keyId: string, agentId: string): Promise<bool
   return true;
 }
 
+
+async function enforceExternalRegistry(agentId: string): Promise<NextResponse | null> {
+  if (process.env.A2A_ENFORCE_EXTERNAL_REGISTRY !== 'true') return null;
+  const entry = await getExternalAgent(agentId);
+  if (!entry || entry.status !== 'approved') {
+    console.log(`[a2a] rejected unregistered external agent agentId=${agentId}`);
+    return NextResponse.json({ ok: false, error: 'external_agent_not_approved' }, { status: 403 });
+  }
+  return null;
+}
+
 // ─── Middleware ───────────────────────────────────────────────────────────────
 
 /**
@@ -145,6 +157,9 @@ export async function requireApiKey(
       ),
     };
   }
+
+  const registryError = await enforceExternalRegistry(key.agentId);
+  if (registryError) return { error: registryError };
 
   if (requiredScope) {
     const requiredScopes = Array.isArray(requiredScope) ? requiredScope : [requiredScope];
