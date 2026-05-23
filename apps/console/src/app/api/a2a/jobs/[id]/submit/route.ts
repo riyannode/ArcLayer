@@ -8,6 +8,7 @@ import { applyRateLimit } from '@/lib/rate-limit';
 import { recordDelivery } from '@/lib/a2a/reputation';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { ERC8183JobStatus, extractJobSubmittedFromReceipt, getERC8183Job } from '@/lib/a2a/onchain';
+import { requireRegisteredExternalAgent } from '@/lib/a2a/external-registry';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -216,6 +217,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== 'object') return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
+
+  if (!(await requireRegisteredExternalAgent(auth.key.agentId))) {
+    console.warn(`[a2a] rejected unregistered external agent agentId=${auth.key.agentId}`);
+    return NextResponse.json({ ok: false, error: 'unregistered_external_agent' }, { status: 403 });
+  }
 
   const supabase = getSupabaseAdmin();
   const { data: job, error: fetchErr } = await supabase

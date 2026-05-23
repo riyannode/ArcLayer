@@ -4,6 +4,7 @@ import { createPublicClient, http, parseAbiItem, type Hex, type Log } from 'viem
 import { isHiddenAgent } from '@/lib/a2a/hidden-agents';
 import { resolveManifestMetadata } from '@/lib/a2a/manifest';
 import { listStoredManifests } from '@/lib/a2a/roster';
+import { listRegisteredExternalAgents } from '@/lib/a2a/external-registry';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -193,8 +194,42 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const source = searchParams.get('source') || 'indexer';
+  const source = searchParams.get('source') || process.env.A2A_AGENT_ROSTER_SOURCE || 'local-indexer';
   const categoryFilter = searchParams.get('category') || null;
+
+  if (source === 'registered-only') {
+    const approvedExternal = await listRegisteredExternalAgents();
+    return NextResponse.json({
+      registry: 'external-registry',
+      agents: approvedExternal.map((agent) => ({
+        agentId: agent.agentId,
+        owner: agent.owner || agent.address || '',
+        controller: agent.address || agent.owner || '',
+        role: 'REGISTERED_EXTERNAL_AGENT',
+        roleId: null,
+        endpoint: agent.endpoint || '',
+        metadataURI: '',
+        source: agent.source || 'external-registry',
+        onchain: false,
+        metadata: {
+          name: agent.name,
+          role: 'REGISTERED_EXTERNAL_AGENT',
+          autonomous: true,
+          endpoint: agent.endpoint,
+          capability: agent.capabilities || [],
+          skills: agent.capabilities || [],
+        },
+      })),
+      totalRegistered: approvedExternal.length,
+      totalVisible: approvedExternal.length,
+      totalAutonomous: approvedExternal.length,
+      totalHidden: 0,
+      scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
+      categoryFilter,
+      timestamp: new Date().toISOString(),
+    }, { headers: { 'Cache-Control': AGENTS_CACHE_CONTROL } });
+  }
+
   const scanChain = source === 'chain';
   const client = scanChain ? createPublicClient({ transport: http(RPC) }) : null;
 
