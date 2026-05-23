@@ -35,14 +35,14 @@ function makeSupabase(existingJobIds = new Set(["42"])) {
   };
 }
 
-test("BudgetSet updates budget_atomic and settlement_status = 1", () => {
+test("BudgetSet updates budget_atomic and settlement_status = 0", () => {
   assert.deepEqual(lifecycleUpdatePayload({ eventName: "BudgetSet", jobId: 42n, amount: 123456n }), {
     budget_atomic: "123456",
-    settlement_status: ERC8183JobStatus.BudgetSet,
+    settlement_status: ERC8183JobStatus.Open,
   });
 });
 
-test("JobFunded updates fund_tx and settlement_status = 2", () => {
+test("JobFunded updates fund_tx and settlement_status = 1", () => {
   assert.deepEqual(lifecycleUpdatePayload({ eventName: "JobFunded", jobId: 42n, transactionHash: tx }), {
     fund_tx: tx,
     settlement_status: ERC8183JobStatus.Funded,
@@ -67,7 +67,7 @@ test("JobSubmitted updates tx, deliverable hash, status and submitted_at", () =>
   });
 });
 
-test("JobCompleted updates complete_tx and settlement_status = 4 without internal completed status", () => {
+test("JobCompleted updates complete_tx and settlement_status = 3 without internal completed status", () => {
   assert.deepEqual(lifecycleUpdatePayload({ eventName: "JobCompleted", jobId: 42n, transactionHash: tx }), {
     complete_tx: tx,
     settlement_status: ERC8183JobStatus.Completed,
@@ -87,7 +87,7 @@ test("JobCreated marks onchain row and preserves bigint values as strings", () =
     provider,
     evaluator,
     budget_atomic: "1000000",
-    settlement_status: ERC8183JobStatus.Created,
+    settlement_status: ERC8183JobStatus.Open,
   });
 });
 

@@ -2,11 +2,14 @@ import { decodeEventLog, getAddress, type Address, type Log } from "viem";
 import { CONTRACTS, ERC8183_AGENTIC_COMMERCE_ABI } from "@arclayer/sdk";
 
 export enum ERC8183JobStatus {
-  Created = 0,
-  BudgetSet = 1,
-  Funded = 2,
-  Submitted = 3,
-  Completed = 4,
+  Open = 0,
+  Funded = 1,
+  Submitted = 2,
+  Completed = 3,
+  Rejected = 4,
+  Expired = 5,
+  Created = Open,
+  BudgetSet = Open,
 }
 
 type Hex = `0x${string}`;
@@ -122,7 +125,7 @@ export function lifecycleUpdatePayload(event: ERC8183IndexedLifecycleEvent): Rec
         onchain_job_id: event.jobId.toString(),
         provider: getAddress(event.provider),
         evaluator: getAddress(event.evaluator),
-        settlement_status: ERC8183JobStatus.Created,
+        settlement_status: ERC8183JobStatus.Open,
       };
       if (event.budget !== undefined) payload.budget_atomic = event.budget.toString();
       return payload;
@@ -130,7 +133,7 @@ export function lifecycleUpdatePayload(event: ERC8183IndexedLifecycleEvent): Rec
     case "BudgetSet":
       return {
         budget_atomic: event.amount.toString(),
-        settlement_status: ERC8183JobStatus.BudgetSet,
+        settlement_status: ERC8183JobStatus.Open,
       };
     case "JobFunded":
       return {
