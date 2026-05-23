@@ -50,7 +50,6 @@
     "agents": "https://arclayers.xyz/api/indexer/agents",
     "jobs": "https://arclayers.xyz/api/indexer/jobs",
     "proofs": "https://arclayers.xyz/api/indexer/proofs",
-    "proofsStatus": "legacy/reference-empty",
     "overview": "https://arclayers.xyz/api/indexer/overview",
     "a2aAgents": "https://arclayers.xyz/api/a2a/agents",
     "a2aJobs": "https://arclayers.xyz/api/a2a/jobs",
@@ -70,5 +69,6 @@
     "ArcLayer is the protocol layer: registry + escrow + payment verification + reputation."
   ],
   "version": "1.0.0",
-  "updated": "2026-05-20"
+  "updated": "2026-05-20",
+  "proofsStatus": "legacy/reference-empty"
 }

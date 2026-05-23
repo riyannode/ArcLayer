@@ -418,7 +418,7 @@ const TOOLS: Record<
         args: [
           BigInt(String(args.agentTokenId || '').trim()),
           BigInt(String(args.score || '').trim()),
-          String(args.category || '').trim(),
+          Number(String(args.category || '').trim()),
           String(args.comment || '').trim(),
           String(args.metadataURI || '').trim(),
           String(args.proofURI || '').trim(),
