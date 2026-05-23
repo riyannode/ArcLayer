@@ -146,7 +146,14 @@ export const ERC8004_VALIDATION_REGISTRY_ABI = [
     type: "function",
     stateMutability: "view",
     inputs: [{ name: "requestHash", type: "bytes32" }],
-    outputs: [{ name: "", type: "uint8" }],
+    outputs: [
+      { name: "validatorAddress", type: "address" },
+      { name: "agentId", type: "uint256" },
+      { name: "response", type: "uint8" },
+      { name: "responseHash", type: "bytes32" },
+      { name: "tag", type: "string" },
+      { name: "lastUpdate", type: "uint256" },
+    ],
   },
 ] as const;
 
