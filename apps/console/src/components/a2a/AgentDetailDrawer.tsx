@@ -87,7 +87,7 @@ export function AgentDetailDrawer({
   isDeactivating?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
-  const paidFetch = useX402PaidFetch();
+  const { paidFetch } = useX402PaidFetch();
   const [fullReportLoading, setFullReportLoading] = useState(false);
   const [paidRunLoading, setPaidRunLoading] = useState(false);
   const [fullReportError, setFullReportError] = useState<string | null>(null);
@@ -198,13 +198,16 @@ export function AgentDetailDrawer({
                 setFullReportError(null);
                 setFullReportTxHash(null);
                 try {
-                  const response = await paidFetch(`/api/x402/agents/${endpointAgentId}/full-report`, {
+                  const result = await paidFetch(`/api/x402/agents/${endpointAgentId}/full-report`, {
                     method: 'GET',
                   });
-                  const txHash = response.headers.get('x-payment-tx-hash');
-                  setFullReportTxHash(txHash);
-                  const data = await response.json();
-                  setFullReportResult(data);
+                  if (!result.ok) {
+                    setFullReportError(result.error || `HTTP ${result.status}`);
+                    setFullReportResult(result.json ?? null);
+                    return;
+                  }
+                  setFullReportTxHash(result.paymentTxHash ?? null);
+                  setFullReportResult(result.json);
                 } catch (error) {
                   setFullReportError(error instanceof Error ? error.message : 'Failed to fetch full paid report.');
                   setFullReportResult(null);
@@ -234,15 +237,18 @@ export function AgentDetailDrawer({
                 setPaidRunError(null);
                 setPaidRunTxHash(null);
                 try {
-                  const response = await paidFetch(`/api/agents/${endpointAgentId}/run`, {
+                  const result = await paidFetch(`/api/agents/${endpointAgentId}/run`, {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
                     body: JSON.stringify({}),
                   });
-                  const txHash = response.headers.get('x-payment-tx-hash');
-                  setPaidRunTxHash(txHash);
-                  const data = await response.json();
-                  setPaidRunResult(data);
+                  if (!result.ok) {
+                    setPaidRunError(result.error || `HTTP ${result.status}`);
+                    setPaidRunResult(result.json ?? null);
+                    return;
+                  }
+                  setPaidRunTxHash(result.paymentTxHash ?? null);
+                  setPaidRunResult(result.json);
                 } catch (error) {
                   setPaidRunError(error instanceof Error ? error.message : 'Failed to execute paid run.');
                   setPaidRunResult(null);

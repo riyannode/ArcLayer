@@ -117,7 +117,7 @@ function RegisterManualAgentPageContent() {
     const parsed = Number(atomic);
     if (!Number.isFinite(parsed) || parsed <= 0) return 'anti-spam fee';
     const amount = parsed / 1e6;
-    const amountLabel = amount >= 1 ? amount.toFixed(2) : amount.toFixed(3);
+    const amountLabel = amount.toFixed(6).replace(/\.0+$|(?<=\.\d*[1-9])0+$/g, '');
     return `anti-spam fee (${amountLabel} USDC)`;
   }, []);
 
