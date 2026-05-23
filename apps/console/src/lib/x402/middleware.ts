@@ -69,8 +69,15 @@ export interface X402MiddlewareOptions {
 
 function resolvePayTo(override?: `0x${string}`): `0x${string}` {
   if (override) return getAddress(override) as `0x${string}`;
-  const env = process.env.X402_RECEIVER_ADDRESS || process.env.X402_PAY_TO;
-  if (!env) throw new Error('Missing X402_RECEIVER_ADDRESS or X402_PAY_TO');
+  const env = [
+    process.env.X402_RECEIVER_ADDRESS,
+    process.env.X402_PAY_TO,
+    process.env.X402_DEFAULT_PAY_TO,
+  ].find((value) => typeof value === 'string' && value.trim().length > 0)?.trim();
+
+  if (!env) {
+    throw new Error('Missing X402_RECEIVER_ADDRESS, X402_PAY_TO, or X402_DEFAULT_PAY_TO');
+  }
   return getAddress(env) as `0x${string}`;
 }
 
