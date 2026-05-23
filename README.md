@@ -51,7 +51,7 @@ ArcLayer-native and Circle Gateway integrated payment flow.
 |---|---|
 | Chain Name | Arc Testnet |
 | Chain ID | `5042002` |
-| RPC | `https://rpc.testnet.arc.network` |
+| RPC | `https://rpc.drpc.testnet.arc.network` |
 | Explorer | `https://testnet.arcscan.app` |
 | USDC | `0x3600000000000000000000000000000000000000` (from `sdk/src/addresses.ts`) |
 
