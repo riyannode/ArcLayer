@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <meta name="description" content="ArcLayer — payment infrastructure for AI agents." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta property="og:title" content="ArcLayer · Payment infrastructure for agents ready to ship" />
-          <meta property="og:description" content="x402 payments, escrow, and reputation for any agent or API." />
+          <meta property="og:description" content="x402 payments, paid jobs, and reputation for any agent." />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="/icon-512.png" />
         <title>ArcLayer · Payment infrastructure for agents ready to ship</title>
