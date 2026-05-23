@@ -273,7 +273,7 @@ export default function RegisterAutonomousPage() {
   const [txState, setTxState] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<'idle' | 'pending' | 'synced' | 'error'>('idle');
   const [copied, setCopied] = useState(false);
-  const [expandedHost, setExpandedHost] = useState<RuntimeHost | null>(null);
+  const [expandedHost, setExpandedHost] = useState<RuntimeHost | null>('self-hosted');
   const [waitlistEmail, setWaitlistEmail] = useState('');
   const [waitlistSent, setWaitlistSent] = useState<RuntimeHost | null>(null);
   const [form, setForm] = useState({
@@ -708,8 +708,7 @@ export default function RegisterAutonomousPage() {
               </div>
             </div>
 
-            {isLiveHostSelected && (
-              <div className="aureo-panel p-4 md:p-6">
+            <div className="aureo-panel p-4 md:p-6">
                 <div className="aureo-mono-label mb-2">STEP 3 · RUNTIME METADATA</div>
                 <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent registration</h2>
                 <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)] invisible">
@@ -903,15 +902,6 @@ export default function RegisterAutonomousPage() {
                   {isSubmitting ? 'REGISTERING…' : 'Register Autonomous Agent'}
                 </button>
               </div>
-            )}
-
-            {!expandedHost && (
-              <div className="rounded border border-white/10 bg-black/30 p-5 text-center">
-                <p className="font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)] invisible">
-                  ← Pick a runtime host above to continue.
-                </p>
-              </div>
-            )}
 
             {expandedHost && !isLiveHostSelected && (
               <div className="rounded border border-amber-500/20 bg-amber-950/[0.04] p-5">
@@ -920,6 +910,7 @@ export default function RegisterAutonomousPage() {
                 </p>
               </div>
             )}
+
           </section>
 
           <aside className="space-y-5">
