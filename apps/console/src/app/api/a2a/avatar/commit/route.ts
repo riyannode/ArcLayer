@@ -4,6 +4,7 @@ import { recoverMessageAddress } from 'viem';
 import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
 import { buildManifestMessage, manifestHash, parseManifest, upsertManifest } from '@/lib/a2a/manifest';
 
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
