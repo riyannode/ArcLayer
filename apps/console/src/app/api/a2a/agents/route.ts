@@ -99,6 +99,9 @@ async function fetchMetadata(uri: string, agentId?: string): Promise<AgentMetada
       categories: resolved.categories,
       autonomous: resolved.autonomous,
       avatar: resolved.avatar,
+      endpoint: resolved.endpoint,
+      mode: resolved.mode,
+      price: resolved.price,
     };
   }
 
@@ -276,7 +279,7 @@ export async function GET(request: Request) {
         controller: stored.controller || '',
         role: manifest.role || 'REGISTERED_AGENT',
         roleId: null,
-        endpoint: '',
+        endpoint: manifest.endpoint || '',
         metadataURI: `arclayer://manifest/${encodeURIComponent(stored.agentId)}`,
         registeredAtBlock: null,
         source: 'web_manifest',
@@ -289,6 +292,9 @@ export async function GET(request: Request) {
           categories: manifest.categories,
           autonomous: true,
           avatar: manifest.avatar,
+          endpoint: manifest.endpoint,
+          mode: manifest.mode,
+          price: manifest.price,
           skills: manifest.capabilities,
           x402: manifest.x402?.enabled ? 'enabled' : undefined,
         },
