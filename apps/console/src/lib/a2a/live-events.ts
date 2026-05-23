@@ -1,0 +1,205 @@
+import { listStoredManifests } from '@/lib/a2a/roster';
+import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
+
+const EVENTS_TABLE = 'agent_live_events';
+const PRESENCE_TABLE = 'agent_presence';
+
+export type AgentLiveEventType =
+  | 'heartbeat'
+  | 'x402_paid'
+  | 'llm_reasoned'
+  | 'job_claimed'
+  | 'job_run'
+  | 'proof_submitted'
+  | 'error';
+
+export type AgentPresenceStatus = 'online' | 'idle' | 'offline' | 'error';
+
+export type AgentLiveEventInput = {
+  agentId: string;
+  agentName?: string | null;
+  eventType: AgentLiveEventType;
+  title?: string | null;
+  summary?: string | null;
+  txHash?: string | null;
+  amountAtomic?: string | null;
+  currency?: string | null;
+  decision?: string | null;
+  confidence?: number | null;
+  trace?: string[];
+  metadata?: Record<string, unknown>;
+};
+
+export type AgentPresenceInput = {
+  agentId: string;
+  agentName?: string | null;
+  status?: AgentPresenceStatus;
+  lastEventType?: string | null;
+  lastEventSummary?: string | null;
+};
+
+function cleanString(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeStatus(value: unknown): AgentPresenceStatus {
+  if (value === 'online' || value === 'idle' || value === 'offline' || value === 'error') return value;
+  return 'online';
+}
+
+function normalizeTrace(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).slice(0, 24);
+}
+
+export async function recordAgentLiveEvent(input: AgentLiveEventInput): Promise<{ ok: true } | { ok: false; error: string }> {
+  const agentId = cleanString(input.agentId);
+  if (!agentId) return { ok: false, error: 'missing_agent_id' };
+
+  const eventType = cleanString(input.eventType);
+  if (!eventType) return { ok: false, error: 'missing_event_type' };
+
+  const supabase = getSupabaseAdmin();
+
+  const row = {
+    agent_id: agentId,
+    agent_name: cleanString(input.agentName),
+    event_type: eventType,
+    title: cleanString(input.title),
+    summary: cleanString(input.summary),
+    tx_hash: cleanString(input.txHash),
+    amount_atomic: cleanString(input.amountAtomic),
+    currency: cleanString(input.currency),
+    decision: cleanString(input.decision),
+    confidence: typeof input.confidence === 'number' && Number.isFinite(input.confidence) ? input.confidence : null,
+    trace: normalizeTrace(input.trace),
+    metadata: input.metadata && typeof input.metadata === 'object' ? input.metadata : {},
+  };
+
+  const { error } = await supabase.from(EVENTS_TABLE).insert(row);
+  if (error) {
+    console.error('[a2a.live-events] insert error', error.message);
+    return { ok: false, error: error.message };
+  }
+
+  await upsertAgentPresence({
+    agentId,
+    agentName: input.agentName ?? null,
+    status: eventType === 'error' ? 'error' : 'online',
+    lastEventType: eventType,
+    lastEventSummary: input.summary ?? input.title ?? eventType,
+  });
+
+  return { ok: true };
+}
+
+export async function upsertAgentPresence(input: AgentPresenceInput): Promise<{ ok: true } | { ok: false; error: string }> {
+  const agentId = cleanString(input.agentId);
+  if (!agentId) return { ok: false, error: 'missing_agent_id' };
+
+  const now = new Date().toISOString();
+  const supabase = getSupabaseAdmin();
+
+  const { error } = await supabase.from(PRESENCE_TABLE).upsert(
+    {
+      agent_id: agentId,
+      agent_name: cleanString(input.agentName),
+      status: normalizeStatus(input.status),
+      last_heartbeat_at: now,
+      last_event_type: cleanString(input.lastEventType),
+      last_event_summary: cleanString(input.lastEventSummary),
+      updated_at: now,
+    },
+    { onConflict: 'agent_id' },
+  );
+
+  if (error) {
+    console.error('[a2a.presence] upsert error', error.message);
+    return { ok: false, error: error.message };
+  }
+
+  return { ok: true };
+}
+
+async function agentIdsForCategory(category: string): Promise<string[]> {
+  const manifests = await listStoredManifests();
+  return manifests
+    .filter((item) => {
+      const manifest = item.manifest;
+      return manifest.categories?.includes(category) || manifest.roles?.some((role) => role.category === category);
+    })
+    .map((item) => item.agentId);
+}
+
+export async function listAgentLiveEventsByCategory(category: string, limit = 50) {
+  const agentIds = await agentIdsForCategory(category);
+  if (agentIds.length === 0) return [];
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from(EVENTS_TABLE)
+    .select('id, agent_id, agent_name, event_type, title, summary, tx_hash, amount_atomic, currency, decision, confidence, trace, metadata, created_at')
+    .in('agent_id', agentIds)
+    .order('created_at', { ascending: false })
+    .limit(Math.max(1, Math.min(limit, 200)));
+
+  if (error) {
+    console.error('[a2a.live-events] list error', error.message);
+    return [];
+  }
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    agentId: row.agent_id,
+    agentName: row.agent_name,
+    eventType: row.event_type,
+    title: row.title,
+    summary: row.summary,
+    txHash: row.tx_hash,
+    amountAtomic: row.amount_atomic,
+    currency: row.currency,
+    decision: row.decision,
+    confidence: row.confidence,
+    trace: Array.isArray(row.trace) ? row.trace : [],
+    metadata: row.metadata ?? {},
+    createdAt: row.created_at,
+  }));
+}
+
+export async function listAgentPresenceByCategory(category: string) {
+  const manifests = await listStoredManifests();
+  const matching = manifests.filter((item) => {
+    const manifest = item.manifest;
+    return manifest.categories?.includes(category) || manifest.roles?.some((role) => role.category === category);
+  });
+
+  const ids = matching.map((item) => item.agentId);
+  if (ids.length === 0) return [];
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from(PRESENCE_TABLE)
+    .select('agent_id, agent_name, status, last_heartbeat_at, last_event_type, last_event_summary, updated_at')
+    .in('agent_id', ids);
+
+  const byId = new Map((data ?? []).map((row) => [row.agent_id, row]));
+
+  if (error) {
+    console.error('[a2a.presence] list error', error.message);
+  }
+
+  return matching.map((item) => {
+    const row = byId.get(item.agentId);
+    return {
+      agentId: item.agentId,
+      agentName: row?.agent_name ?? item.manifest.name,
+      status: row?.status ?? 'offline',
+      lastHeartbeatAt: row?.last_heartbeat_at ?? null,
+      lastEventType: row?.last_event_type ?? null,
+      lastEventSummary: row?.last_event_summary ?? null,
+      updatedAt: row?.updated_at ?? null,
+    };
+  });
+}
