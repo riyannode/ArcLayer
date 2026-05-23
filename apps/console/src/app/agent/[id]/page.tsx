@@ -205,8 +205,13 @@ export default function AgentProfilePage() {
         extra?: Record<string, unknown>;
       };
       const accepts = challenge.accepts as Requirement[];
-      // Pick native USDC requirement (skip Gateway-batched if rail===native).
+      if (rail === 'gateway') {
+        throw new Error('Gateway agent run not available');
+      }
       const req = accepts.find((a) => !a.extra?.name || a.extra?.name === 'USDC') || accepts[0];
+      if (!req) {
+        throw new Error('Gateway agent run not available.');
+      }
 
       // ─── Step 2: Optional ERC-8183 AgenticCommerce funding (on-chain provenance) ──────
       // Funds the job for indexer/protocol audit trail. Independent of x402
@@ -319,13 +324,13 @@ export default function AgentProfilePage() {
       })) as Hex;
 
       // ─── Step 4: Retry with X-PAYMENT header ───────────────────────────
+      const paymentHeader = b64(paymentPayload);
       setRunState('5/5 Posting paid run with X-PAYMENT (server verifies + settles)...');
-      const xPaymentHeader = b64(paymentPayload);
       const paid = await fetch(challengeUrl, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'X-PAYMENT': xPaymentHeader,
+          'X-PAYMENT': paymentHeader,
         },
         body: JSON.stringify({ input: runInput, jobId: visibleJobId.toString() }),
       });
