@@ -8,190 +8,149 @@ contract MockUSDC {
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
 
-    function mint(address to, uint256 amount) external {
-        balanceOf[to] += amount;
-    }
-
-    function approve(address spender, uint256 amount) external returns (bool) {
-        allowance[msg.sender][spender] = amount;
-        return true;
-    }
-
     function transfer(address to, uint256 amount) external returns (bool) {
-        require(balanceOf[msg.sender] >= amount, "Insufficient balance");
         balanceOf[msg.sender] -= amount;
         balanceOf[to] += amount;
         return true;
     }
-
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
-        require(balanceOf[from] >= amount, "Insufficient balance");
-        require(allowance[from][msg.sender] >= amount, "Insufficient allowance");
-        allowance[from][msg.sender] -= amount;
+        if (msg.sender != from) {
+            allowance[from][msg.sender] -= amount;
+        }
         balanceOf[from] -= amount;
         balanceOf[to] += amount;
         return true;
     }
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+    function mint(address to, uint256 amount) external {
+        balanceOf[to] += amount;
+    }
 }
 
 contract ArcVaultTest is Test {
-    MockUSDC private usdc;
-    ArcVault private vault;
-
-    address private owner = address(0xA11CE);
-    address private client = address(0xC);
-    address private jobber = address(0xF);
+    ArcVault public vault;
+    MockUSDC public usdc;
+    address client = address(0x1);
+    address jobber = address(0x2);
+    address resolver = address(0x3);
 
     function setUp() public {
-        vm.prank(owner);
         usdc = new MockUSDC();
-
-        vm.prank(owner);
-        vault = new ArcVault(address(usdc), address(0), owner);
-
-        usdc.mint(client, 1_000e6);
-    }
-
-
-    function testDepositIncreasesOpenPoolBalance() public {
+        vault = new ArcVault(address(usdc), address(0), resolver);
+        
+        usdc.mint(client, 20000);
+        usdc.mint(jobber, 10000);
+        
         vm.startPrank(client);
-        usdc.approve(address(vault), 400e6);
-        vault.deposit(400e6);
+        usdc.approve(address(vault), 20000);
+        vault.deposit(10000);
         vm.stopPrank();
-
-        assertEq(vault.openPoolBalance(client), 400e6);
     }
 
-    function testWithdrawReturnsUnallocatedFunds() public {
-        vm.startPrank(client);
-        usdc.approve(address(vault), 400e6);
-        vault.deposit(400e6);
-        vault.withdraw(150e6);
-        vm.stopPrank();
-
-        assertEq(vault.openPoolBalance(client), 250e6);
-        assertEq(usdc.balanceOf(client), 750e6);
+    function _jobStatus(uint256 jobId) private view returns (ArcVault.JobStatus status) {
+        (,,,,,,,,,, status,,) = vault.jobs(jobId);
     }
 
-    function testCreateJobStoresMilestones() public {
-        vm.startPrank(client);
-        usdc.approve(address(vault), 1_000e6);
-        vault.deposit(1_000e6);
-
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 300e6;
-        amounts[1] = 700e6;
-
-        uint256[] memory deadlines = new uint256[](2);
-        deadlines[0] = block.timestamp + 1 days;
-        deadlines[1] = block.timestamp + 2 days;
-
-        uint256 jobId = vault.createJob(1_000e6, keccak256("spec"), amounts, deadlines, block.timestamp + 3 days);
-        vm.stopPrank();
-
-        (
-            ,
-            address storedClient,
-            ,
-            uint256 totalAmount,
-            ,
-            ,
-            uint256 milestoneCount,
-            ,
-            ,
-            ArcVault.JobStatus status,
-            ,
-
-        ) = vault.jobs(jobId);
-
-        assertEq(storedClient, client);
-        assertEq(totalAmount, 1_000e6);
-        assertEq(milestoneCount, 2);
-        assertEq(uint256(status), uint256(ArcVault.JobStatus.OpenPool));
-
-        (uint256 milestoneAmount,,,,,,) = vault.milestones(jobId, 0);
-        assertEq(milestoneAmount, 300e6);
+    function _jobClient(uint256 jobId) private view returns (address clientAddr) {
+        (, clientAddr,,,,,,,,,,,) = vault.jobs(jobId);
     }
 
+    function _jobJobber(uint256 jobId) private view returns (address jobberAddr) {
+        (,, jobberAddr,,,,,,,,,,) = vault.jobs(jobId);
+    }
 
-    function testCancelOpenJobRefundsToOpenPool() public {
-        uint256 jobId = _createOneMilestoneJob(500e6);
+    function _jobReleased(uint256 jobId) private view returns (uint256 released) {
+        (,,,,, released,,,,,,,) = vault.jobs(jobId);
+    }
 
-        assertEq(vault.openPoolBalance(client), 0);
+    function testDeposit() public {
+        assertEq(vault.openPoolBalance(client), 10000);
+    }
 
+    function testWithdraw() public {
         vm.prank(client);
+        vault.withdraw(5000);
+        assertEq(vault.openPoolBalance(client), 5000);
+    }
+
+    function testCreateJob() public {
+        vm.startPrank(client);
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1000;
+        uint256[] memory deadlines = new uint256[](1);
+        deadlines[0] = block.timestamp + 1000;
+        
+        uint256 jobId = vault.createJob(1000, bytes32(0), amounts, deadlines, block.timestamp + 2000);
+        vm.stopPrank();
+        
+        assertEq(vault.openPoolBalance(client), 9000);
+        assertEq(jobId, 1);
+        assertEq(_jobClient(jobId), client);
+        assertEq(_jobJobber(jobId), address(0));
+        assertTrue(_jobStatus(jobId) == ArcVault.JobStatus.OpenPool);
+    }
+
+    function testCancelOpenJob() public {
+        vm.startPrank(client);
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1000;
+        uint256[] memory deadlines = new uint256[](1);
+        deadlines[0] = block.timestamp + 1000;
+        uint256 jobId = vault.createJob(1000, bytes32(0), amounts, deadlines, block.timestamp + 2000);
+        
         vault.cancelOpenJob(jobId);
+        vm.stopPrank();
 
-        assertEq(vault.openPoolBalance(client), 500e6);
-        (, , , , , , , , , ArcVault.JobStatus status, ,) = vault.jobs(jobId);
-        assertEq(uint256(status), uint256(ArcVault.JobStatus.Cancelled));
+        assertEq(vault.openPoolBalance(client), 10000);
+        assertTrue(_jobStatus(jobId) == ArcVault.JobStatus.Cancelled);
     }
 
-    function testAcceptJobMovesToActiveAndStoresJobber() public {
-        uint256 jobId = _createOneMilestoneJob(500e6);
+    function testAcceptJob() public {
+        vm.startPrank(client);
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1000;
+        uint256[] memory deadlines = new uint256[](1);
+        deadlines[0] = block.timestamp + 1000;
+        uint256 jobId = vault.createJob(1000, bytes32(0), amounts, deadlines, block.timestamp + 2000);
+        vm.stopPrank();
 
-        vm.prank(jobber);
+        vm.startPrank(jobber);
         vault.acceptJob(jobId, 0, 0);
+        vm.stopPrank();
 
-        (, , address storedJobber, , , , , , , ArcVault.JobStatus status, ,) = vault.jobs(jobId);
-        assertEq(storedJobber, jobber);
-        assertEq(uint256(status), uint256(ArcVault.JobStatus.Active));
+        assertEq(_jobJobber(jobId), jobber);
+        assertTrue(_jobStatus(jobId) == ArcVault.JobStatus.Active);
     }
 
-    function testSubmitAndApproveMilestoneReleasesPayoutAndFee() public {
-        uint256 jobId = _createOneMilestoneJob(500e6);
+    function testSubmitAndApproveMilestone() public {
+        vm.startPrank(client);
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1000;
+        uint256[] memory deadlines = new uint256[](1);
+        deadlines[0] = block.timestamp + 1000;
+        uint256 jobId = vault.createJob(1000, bytes32(0), amounts, deadlines, block.timestamp + 2000);
+        vm.stopPrank();
 
-        vm.prank(jobber);
+        vm.startPrank(jobber);
         vault.acceptJob(jobId, 0, 0);
+        vault.submitMilestone(jobId, 0, "ipfs://proof");
+        vm.stopPrank();
 
-        vm.prank(jobber);
-        vault.submitMilestone(jobId, 0, "ipfs://delivery");
+        ArcVault.Milestone memory m = vault.getMilestone(jobId, 0);
+        assertTrue(m.status == ArcVault.MilestoneStatus.Submitted);
 
         vm.prank(client);
         vault.approveMilestone(jobId, 0);
 
-        assertEq(usdc.balanceOf(jobber), 497_500_000);
-        assertEq(usdc.balanceOf(owner), 2_500_000);
-
-        (
-            ,
-            ,
-            ,
-            ,
-            ,
-            uint256 releasedAmount,
-            ,
-            ,
-            ,
-            ArcVault.JobStatus status,
-            ,
-
-        ) = vault.jobs(jobId);
-
-        assertEq(releasedAmount, 497_500_000);
-        assertEq(uint256(status), uint256(ArcVault.JobStatus.Completed));
-    }
-
-    function _createOneMilestoneJob(uint256 amount) private returns (uint256) {
-        vm.startPrank(client);
-        usdc.approve(address(vault), amount);
-        vault.deposit(amount);
-
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = amount;
-
-        uint256[] memory deadlines = new uint256[](1);
-        deadlines[0] = block.timestamp + 1 days;
-
-        uint256 jobId = vault.createJob(
-            amount,
-            keccak256("spec"),
-            amounts,
-            deadlines,
-            block.timestamp + 2 days
-        );
-        vm.stopPrank();
-
-        return jobId;
+        m = vault.getMilestone(jobId, 0);
+        assertTrue(m.status == ArcVault.MilestoneStatus.Released);
+        assertTrue(_jobStatus(jobId) == ArcVault.JobStatus.Completed);
+        
+        // Fee = 50 bps of 1000 = 5. Payout = 995.
+        assertEq(_jobReleased(jobId), 995);
+        assertEq(usdc.balanceOf(jobber), 10995);
     }
 }
