@@ -16,46 +16,46 @@ const paths = [
   {
     label: 'Path A · x402',
     title: 'Charge for my API',
-    body: 'Gate any API behind a payment.',
+    body: 'Gate API access with USDC payment.',
     cta: 'Use x402 path',
     href: '#path-a-x402',
   },
   {
     label: 'Path B · Paid Jobs',
     title: 'Create accountable agent work',
-    body: 'Fund paid jobs, review deliverables, and settle on-chain.',
+    body: 'Fund jobs, review work, settle on-chain.',
     cta: 'Use paid-jobs path',
     href: '#path-b-paid-jobs',
   },
   {
     label: 'Read protocol data',
     title: 'Index jobs and agents',
-    body: 'Read jobs, agents, and stats via REST.',
+    body: 'Read jobs, agents, and stats.',
     cta: 'Jump to REST API',
     href: '#rest-api',
   },
   {
     label: 'AI agent skill',
     title: 'Let AI integrate it',
-    body: 'Paste into any AI coding assistant.',
+    body: 'Paste one prompt into your coding agent.',
     cta: 'Copy AI skill',
     href: '#ai-skill',
   },
 ];
 
 const fiveMinutePath = [
-  'Path A = API access. Path B = paid jobs.',
-  'Install SDK, connect to Arc Testnet.',
-  'Indexer for reads, SDK for writes.',
-  'Keep UI labels simple.',
-  'Test one happy path on testnet.',
+  'Add Arc Testnet.',
+  'Connect wallet.',
+  'Install @arclayer/sdk.',
+  'Read indexer data.',
+  'Test one happy path.',
 ];
 
 const quickstart = [
-  { step: '01', title: 'Install', body: 'Add the workspace SDK to your project.', code: 'pnpm add @arclayer/sdk' },
-  { step: '02', title: 'Connect', body: 'Open a viem client on Arc testnet.', code: "import { createClient } from '@arclayer/sdk';\nconst client = createClient();" },
-  { step: '03', title: 'Read', body: 'Query a job or agent on-chain.', code: "import { readJob } from '@arclayer/sdk';\nconst job = await readJob(0n);" },
-  { step: '04', title: 'Index', body: 'Point at the indexer for fast reads.', code: "fetch('https://indexer.arclayers.xyz/agents/1')\n  .then(r => r.json())" },
+  { step: '01', title: 'Install', body: 'Install the SDK.', code: 'pnpm add @arclayer/sdk' },
+  { step: '02', title: 'Connect', body: 'Connect to Arc Testnet.', code: "import { createClient } from '@arclayer/sdk';\nconst client = createClient();" },
+  { step: '03', title: 'Read', body: 'Read jobs or agents.', code: "import { readJob } from '@arclayer/sdk';\nconst job = await readJob(0n);" },
+  { step: '04', title: 'Index', body: 'Use indexer REST for fast reads.', code: "fetch('https://indexer.arclayers.xyz/agents/1')\n  .then(r => r.json())" },
 ];
 
 const networkInfo = [
@@ -73,22 +73,22 @@ const contracts = [
 ];
 
 const integrationOrder = [
-  'Add Arc Testnet to your wallet config.',
-  'Connect wallet (wagmi / viem / Privy / RainbowKit / ethers).',
-  'Read indexer overview to render protocol stats.',
-  'Register an agent identity: ERC-8004 register(metadataURI).',
-  'Create an ERC-8183 job and derive jobId.',
-  'Set budget: setBudget(jobId, amount, 0x).',
-  'Approve USDC, then fund(jobId, 0x).',
-  'Worker submits deliverable: submit(jobId, deliverableHash, 0x).',
-  'Client/evaluator completes: complete(jobId, reasonHash, 0x).',
-  'Use x402 for paid API/pay-per-call surfaces.',
+  'Add Arc Testnet.',
+  'Connect wallet.',
+  'Install @arclayer/sdk.',
+  'Read indexer data.',
+  'Register agent.',
+  'Create paid job.',
+  'Set budget.',
+  'Approve and fund.',
+  'Submit work.',
+  'Complete job.',
 ];
 
 const exampleDescriptions: Record<string, string> = {
-  'Register an agent': 'Create an on-chain agent identity with skill metadata.',
-  'Create a paid job': 'Fund Arc Testnet USDC paid jobs and assign work to a registered agent.',
-  'Read indexer overview': 'Fetch protocol totals, jobs, agents, proofs, and recent activity from the ArcLayer indexer.',
+  'Register an agent': 'Create an on-chain agent identity.',
+  'Create a paid job': 'Create and fund a USDC paid job.',
+  'Read indexer overview': 'Read totals, jobs, agents, and activity.',
 };
 
 const examples = [
@@ -219,8 +219,8 @@ export default function DocsPage() {
         <h1 className="aureo-display text-5xl md:text-6xl mb-6" style={{ color: '#EAE4D8' }}>
           Build agents on <em className="italic" style={{ color: '#C5A67C' }}>Arc</em>
         </h1>
-        <p className="text-base max-w-2xl mb-8 invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-          Arc reference integrations for ERC-8004 identity/reputation/validation, ERC-8183 paid jobs, x402 Arc Native payment, optional Circle Gateway support, and PM2 bridge proofs.
+        <p className="text-base max-w-2xl mb-8" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+          Integrate x402 payments, ERC-8004 identity, ERC-8183 paid jobs, and indexer reads on Arc Testnet.
         </p>
 
         {/* Testnet warning strip */}
@@ -256,7 +256,7 @@ export default function DocsPage() {
             >
               <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>{p.label}</div>
               <div className="aureo-display text-2xl mb-2" style={{ color: '#EAE4D8' }}>{p.title}</div>
-              <p className="text-sm mb-4 invisible" style={{ color: 'rgba(234, 228, 216, 0.65)', lineHeight: 1.5 }}>{p.body}</p>
+              <p className="text-sm mb-4" style={{ color: 'rgba(234, 228, 216, 0.65)', lineHeight: 1.5 }}>{p.body}</p>
               <div className="text-xs uppercase tracking-[0.18em] font-medium transition group-hover:translate-x-0.5" style={{ color: '#C5A67C' }}>
                 {p.cta} →
               </div>
@@ -273,7 +273,7 @@ export default function DocsPage() {
             {fiveMinutePath.map((item, i) => (
               <div key={item} className="border border-white/8 bg-black/25 p-3">
                 <div className="font-mono text-[10px] mb-2" style={{ color: '#C5A67C' }}>0{i + 1}</div>
-                <p className="text-xs invisible" style={{ color: 'rgba(234, 228, 216, 0.72)', lineHeight: 1.5 }}>{item}</p>
+                <p className="text-xs" style={{ color: 'rgba(234, 228, 216, 0.72)', lineHeight: 1.5 }}>{item}</p>
               </div>
             ))}
           </div>
@@ -291,7 +291,7 @@ export default function DocsPage() {
             >
               <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>{q.step}</div>
               <div className="aureo-display text-xl mb-2" style={{ color: '#EAE4D8' }}>{q.title}</div>
-              <p className="text-sm mb-4 invisible" style={{ color: 'rgba(234, 228, 216, 0.65)', lineHeight: 1.5 }}>{q.body}</p>
+              <p className="text-sm mb-4" style={{ color: 'rgba(234, 228, 216, 0.65)', lineHeight: 1.5 }}>{q.body}</p>
               <pre className="text-xs p-3 overflow-x-auto border border-white/5 bg-black/40" style={{ color: '#C5A67C', fontFamily: 'var(--font-mono)', lineHeight: 1.5 }}>{q.code}</pre>
             </div>
           ))}
@@ -304,7 +304,7 @@ export default function DocsPage() {
         <h2 className="aureo-display text-2xl md:text-3xl mb-3" style={{ color: '#EAE4D8' }}>
           Accept paid agent requests
         </h2>
-        <p className="text-sm mb-6 max-w-3xl invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+        <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
           Charge USDC before API or agent access.
         </p>
 
@@ -361,18 +361,18 @@ export default function DocsPage() {
 
         <div className="border border-white/10 bg-black/30 p-5 mb-4">
           <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>FACILITATOR ENDPOINTS</div>
-          <div className="grid gap-2 text-xs font-mono invisible" style={{ color: 'rgba(234, 228, 216, 0.75)' }}>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/supported</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— list schemes (exact Arc Native + Circle Gateway)</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/protected-resource</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— returns 402 challenge, then verifies + settles inline on paid retry</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">HDR</span><span className="text-[#EAE4D8]">X-PAYMENT / PAYMENT-SIGNATURE</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— Arc Native uses X-PAYMENT; Circle Gateway uses PAYMENT-SIGNATURE</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/relayer-status</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— relayer address + USDC balance (Arc Native)</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/protected-resource</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— sample protected resource (dual-mode)</span></div>
+          <div className="grid gap-2 text-xs font-mono" style={{ color: 'rgba(234, 228, 216, 0.75)' }}>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/supported</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— list supported payment schemes</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/protected-resource</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— returns 402 challenge and verifies paid retry</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">HDR</span><span className="text-[#EAE4D8]">X-PAYMENT / PAYMENT-SIGNATURE</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— Arc Native uses X-PAYMENT; Circle uses PAYMENT-SIGNATURE</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/relayer-status</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— relayer address and USDC balance</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/protected-resource</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— dual-mode protected resource example</span></div>
           </div>
         </div>
 
         <div className="border border-white/10 bg-black/30 p-5 mb-4">
           <div className="aureo-mono-label mb-3" style={{ color: '#7CB5C5' }}>PRODUCTION VERIFICATION</div>
-          <p className="text-sm mb-3 invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.55 }}>
+          <p className="text-sm mb-3" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.55 }}>
             Both x402 payment paths have completed end-to-end on Arc Testnet (chainId 5042002, USDC <code className="text-[#C5A67C]">0x3600…0000</code>).
           </p>
           <div className="grid gap-3 md:grid-cols-2">
@@ -415,8 +415,8 @@ export default function DocsPage() {
         <h2 className="aureo-display text-2xl md:text-3xl mb-3" style={{ color: '#EAE4D8' }}>
           Use ERC-8183 paid jobs when work needs review
         </h2>
-        <p className="text-sm mb-6 max-w-3xl invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-          Reviewed paid jobs for accountable agent work.
+        <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+          Reviewed paid jobs with on-chain completion.
         </p>
 
         <div className="grid gap-4 md:grid-cols-2 mb-6">
@@ -473,8 +473,8 @@ export default function DocsPage() {
       {/* ─── AI Agent Integration Skill ─── */}
       <section id="ai-skill" className="max-w-6xl mx-auto px-6 mb-20 scroll-mt-20">
         <div className="aureo-mono-label mb-3">PROTOCOL · AI AGENT INTEGRATION</div>
-        <p className="text-sm mb-6 max-w-3xl invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-Paste into your AI agent to auto-wire ArcLayer.
+        <p className="text-sm mb-6 max-w-3xl" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+Paste this into your coding agent.
         </p>
 
         {/* Primary one-liner card */}
@@ -519,8 +519,8 @@ Paste into your AI agent to auto-wire ArcLayer.
         {/* For deployers card */}
         <div className="border border-[#C5A67C]/20 bg-gradient-to-br from-[rgba(197,166,124,0.06)] to-[rgba(5,5,5,0.5)] p-5 mb-6">
           <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>FOR DEPLOYERS</div>
-          <p className="text-sm mb-4 invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-Let your coding assistant integrate ArcLayer automatically.
+          <p className="text-sm mb-4" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
+Use the skill to wire ArcLayer faster.
           </p>
           <div className="flex flex-wrap gap-2">
             <CopyButton text={ONELINER_PROMPT} label="Copy AI Skill" />
@@ -651,7 +651,7 @@ Let your coding assistant integrate ArcLayer automatically.
                 <div>
                   <h3 className="aureo-display text-lg md:text-xl" style={{ color: '#EAE4D8' }}>{ex.title}</h3>
                   {exampleDescriptions[ex.title] && (
-                    <p className="text-xs mt-1 invisible" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>{exampleDescriptions[ex.title]}</p>
+                    <p className="text-xs mt-1" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>{exampleDescriptions[ex.title]}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
