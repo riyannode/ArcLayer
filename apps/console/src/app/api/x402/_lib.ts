@@ -5,6 +5,8 @@ import {
   parseExactVerifyRequest,
   recordGatewayPayment,
   deriveGatewayPaymentId,
+  claimGatewaySettlement,
+  consumeGatewayPayment,
   settleExactPayment,
   verifyExactEvmPayment,
   X402_VERSION_V2,
@@ -113,11 +115,29 @@ export async function settleDualPayment(req: Request) {
     const facilitator = getBatchFacilitatorClient();
     const requirements = parsed.paymentRequirements as unknown as Parameters<typeof facilitator.settle>[1];
     const proof = parsed.paymentPayload as unknown as Parameters<typeof facilitator.settle>[0];
+    const paymentId = deriveGatewayPaymentId(proof as unknown as Record<string, unknown>, requirements as unknown as Record<string, unknown>);
+    const claim = await claimGatewaySettlement({
+      paymentId,
+      payer: result.payer,
+      amount: String((requirements as { amount?: unknown }).amount ?? ''),
+      network: String((requirements as { network?: unknown }).network ?? ''),
+      payTo: String((requirements as { payTo?: unknown }).payTo ?? ''),
+      asset: String((requirements as { asset?: unknown }).asset ?? ''),
+      resource: String(((parsed.paymentPayload as Record<string, unknown>).resource as { url?: unknown } | undefined)?.url ?? '/api/x402'),
+      raw: proof as unknown as Record<string, unknown>,
+    });
+    if (!claim.acquired) {
+      return {
+        parsed,
+        result,
+        settleResult: { success: false, errorReason: `payment_${claim.reason}`, transaction: null, payer: result.payer },
+      };
+    }
     const settleResult = await facilitator.settle(proof, requirements);
 
     if (settleResult.success) {
       await recordGatewayPayment({
-        paymentId: deriveGatewayPaymentId(proof as unknown as Record<string, unknown>, requirements as unknown as Record<string, unknown>),
+        paymentId,
         payer: settleResult.payer ?? result.payer ?? 'unknown',
         amount: String((requirements as { amount?: unknown }).amount ?? ''),
         network: String((requirements as { network?: unknown }).network ?? ''),
@@ -125,6 +145,19 @@ export async function settleDualPayment(req: Request) {
         resource: String(((parsed.paymentPayload as Record<string, unknown>).resource as { url?: unknown } | undefined)?.url ?? '/api/x402'),
         status: 'settled',
       }).catch(() => undefined);
+      const consume = await consumeGatewayPayment(paymentId);
+      if (!consume.ok) {
+        return {
+          parsed,
+          result,
+          settleResult: {
+            success: false,
+            errorReason: consume.reason === 'replayed' ? 'payment_replayed' : 'payment_missing_after_settle',
+            transaction: settleResult.transaction ?? null,
+            payer: settleResult.payer ?? result.payer,
+          },
+        };
+      }
     }
 
     return { parsed, result, settleResult };

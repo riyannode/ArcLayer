@@ -32,6 +32,7 @@ import {
   deriveGatewayPaymentId,
   recordGatewayPayment,
   consumeGatewayPayment,
+  claimGatewaySettlement,
 } from './gateway/payment-store';
 import {
   claimNativePayment,
@@ -248,6 +249,7 @@ async function handleGateway(
 
   const requirements = buildGatewayRequirements(opts);
   const facilitator = getBatchFacilitatorClient();
+  const paymentId = deriveGatewayPaymentId(proof, requirements);
 
   // Verify
   const verifyResult = await facilitator.verify(proof as unknown as Parameters<typeof facilitator.verify>[0], requirements);
@@ -274,6 +276,24 @@ async function handleGateway(
     }
   }
 
+  const claim = await claimGatewaySettlement({
+    paymentId,
+    payer: earlyPayer ?? verifyResult.payer ?? undefined,
+    payTo: requirements.payTo,
+    amount: requirements.amount,
+    asset: requirements.asset,
+    network: requirements.network,
+    resource: opts.resource,
+    raw: proof,
+  });
+  if (!claim.acquired) {
+    if (earlyPayer) await releaseAccessSession(earlyPayer, opts.resource, 'circle-gateway');
+    return NextResponse.json(
+      { ok: false, error: `payment_${claim.reason}`, paymentId, message: 'Gateway payment already processed. Do not retry settlement.' },
+      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+
   // Settle
   const settleResult = await facilitator.settle(proof as unknown as Parameters<typeof facilitator.settle>[0], requirements);
   if (!settleResult.success) {
@@ -286,7 +306,6 @@ async function handleGateway(
   }
 
   // Record in Supabase
-  const paymentId = deriveGatewayPaymentId(proof, requirements);
   const payer = settleResult.payer ?? verifyResult.payer ?? 'unknown';
   try {
     await recordGatewayPayment({
@@ -303,7 +322,15 @@ async function handleGateway(
   }
 
   // Consume (replay protection)
-  await consumeGatewayPayment(paymentId);
+  const consume = await consumeGatewayPayment(paymentId);
+  if (!consume.ok) {
+    if (earlyPayer) await releaseAccessSession(earlyPayer, opts.resource, 'circle-gateway');
+    const status = consume.reason === 'replayed' ? 409 : 502;
+    return NextResponse.json(
+      { ok: false, error: consume.reason === 'replayed' ? 'payment_replayed' : 'payment_missing_after_settle', paymentId },
+      { status, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
 
   // Consume rail session (one-shot)
   if (railSessionId) consumeRailSession(railSessionId);

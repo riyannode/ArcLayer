@@ -6,6 +6,7 @@ import {
   CIRCLE_BATCHING_VERSION,
   GATEWAY_NETWORK_NAME,
   getArcTestnetGatewayConfig,
+  isGatewayEnabled,
   PAYMENT_REQUIRED_HEADER,
   USDC_ADDRESS,
   X402_VERSION_V2,
@@ -64,37 +65,42 @@ export function GET() {
     },
   };
 
+  const gatewayEnabled = isGatewayEnabled();
+  const kinds: Array<Record<string, unknown>> = [
+    {
+      x402Version: X402_VERSION_V2,
+      scheme: 'exact',
+      network: ARC_TESTNET_CAIP2_NETWORK,
+      extra: {
+        asset: USDC_ADDRESS,
+        assetSymbol: 'USDC',
+        decimals: 6,
+        eip712: { name: 'USDC', version: '2', chainId: ARC_TESTNET_CHAIN_ID, verifyingContract: USDC_ADDRESS },
+        transferMethod: 'eip3009',
+        maxTimeoutSeconds,
+      },
+    },
+  ];
+  if (gatewayEnabled) {
+    kinds.push({
+      x402Version: X402_VERSION_V2,
+      scheme: 'exact',
+      network: GATEWAY_NETWORK_NAME,
+      extra: {
+        asset: USDC_ADDRESS,
+        assetSymbol: 'USDC',
+        decimals: 6,
+        name: CIRCLE_BATCHING_NAME,
+        version: CIRCLE_BATCHING_VERSION,
+        verifyingContract: gatewayWalletAddress(),
+        maxTimeoutSeconds,
+      },
+    });
+  }
+
   return NextResponse.json({
-    kinds: [
-      {
-        x402Version: X402_VERSION_V2,
-        scheme: 'exact',
-        network: ARC_TESTNET_CAIP2_NETWORK,
-        extra: {
-          asset: USDC_ADDRESS,
-          assetSymbol: 'USDC',
-          decimals: 6,
-          eip712: { name: 'USDC', version: '2', chainId: ARC_TESTNET_CHAIN_ID, verifyingContract: USDC_ADDRESS },
-          transferMethod: 'eip3009',
-          maxTimeoutSeconds,
-        },
-      },
-      {
-        x402Version: X402_VERSION_V2,
-        scheme: 'exact',
-        network: GATEWAY_NETWORK_NAME,
-        extra: {
-          asset: USDC_ADDRESS,
-          assetSymbol: 'USDC',
-          decimals: 6,
-          name: CIRCLE_BATCHING_NAME,
-          version: CIRCLE_BATCHING_VERSION,
-          verifyingContract: gatewayWalletAddress(),
-          maxTimeoutSeconds,
-        },
-      },
-    ],
-    accepts: [arcNativeExact, gatewayBatched],
+    kinds,
+    accepts: gatewayEnabled ? [arcNativeExact, gatewayBatched] : [arcNativeExact],
     facilitator: 'ArcLayer',
     version: String(X402_VERSION_V2),
     headers: {
@@ -103,22 +109,32 @@ export function GET() {
       required: PAYMENT_REQUIRED_HEADER,
       response: 'PAYMENT-RESPONSE',
     },
-    networks: [
-      {
-        network: ARC_TESTNET_CAIP2_NETWORK,
-        name: 'Arc Testnet',
-        chainId: ARC_TESTNET_CHAIN_ID,
-        schemes: ['exact'],
-        assets: [{ symbol: 'USDC', address: USDC_ADDRESS, decimals: 6 }],
-      },
-      {
-        network: GATEWAY_NETWORK_NAME,
-        name: 'Circle Gateway Arc Testnet',
-        chainId: ARC_TESTNET_CHAIN_ID,
-        schemes: ['exact'],
-        assets: [{ symbol: 'USDC', address: USDC_ADDRESS, decimals: 6 }],
-        contracts: { gatewayWallet: gatewayWalletAddress() },
-      },
-    ],
+    networks: gatewayEnabled
+      ? [
+        {
+          network: ARC_TESTNET_CAIP2_NETWORK,
+          name: 'Arc Testnet',
+          chainId: ARC_TESTNET_CHAIN_ID,
+          schemes: ['exact'],
+          assets: [{ symbol: 'USDC', address: USDC_ADDRESS, decimals: 6 }],
+        },
+        {
+          network: GATEWAY_NETWORK_NAME,
+          name: 'Circle Gateway Arc Testnet',
+          chainId: ARC_TESTNET_CHAIN_ID,
+          schemes: ['exact'],
+          assets: [{ symbol: 'USDC', address: USDC_ADDRESS, decimals: 6 }],
+          contracts: { gatewayWallet: gatewayWalletAddress() },
+        },
+      ]
+      : [
+        {
+          network: ARC_TESTNET_CAIP2_NETWORK,
+          name: 'Arc Testnet',
+          chainId: ARC_TESTNET_CHAIN_ID,
+          schemes: ['exact'],
+          assets: [{ symbol: 'USDC', address: USDC_ADDRESS, decimals: 6 }],
+        },
+      ],
   });
 }
