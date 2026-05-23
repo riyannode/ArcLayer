@@ -1,5 +1,12 @@
 import { createServer, type ServerResponse } from "node:http";
-import { ARC_REFERENCE_WALLET_FILTER, DEFAULT_FROM_BLOCK, INDEXER_PORT, POLL_INTERVAL_MS } from "./config";
+import {
+  ARC_REFERENCE_AGENT_ID_FILTER,
+  ARC_REFERENCE_METADATA_PREFIX_FILTER,
+  ARC_REFERENCE_WALLET_FILTER,
+  DEFAULT_FROM_BLOCK,
+  INDEXER_PORT,
+  POLL_INTERVAL_MS,
+} from "./config";
 import { fetchAgentEvents, fetchJobEvents } from "./ingest";
 import { arcWalletFilterActive } from "./projections";
 import { getReferenceFilters, refreshReferenceFiltersFromSupabase } from "./reference-filters";
@@ -22,8 +29,15 @@ import {
 } from "./db";
 
 
-if (process.env.NODE_ENV === "production" && ARC_REFERENCE_WALLET_FILTER.length === 0) {
-  throw new Error("[indexer] ARC_REFERENCE_WALLET_FILTER must be set in production");
+if (
+  process.env.NODE_ENV === "production" &&
+  ARC_REFERENCE_WALLET_FILTER.length === 0 &&
+  ARC_REFERENCE_AGENT_ID_FILTER.length === 0 &&
+  ARC_REFERENCE_METADATA_PREFIX_FILTER.length === 0
+) {
+  throw new Error(
+    "[indexer] At least one attribution filter must be set in production: ARC_REFERENCE_WALLET_FILTER, ARC_REFERENCE_AGENT_ID_FILTER, ARC_REFERENCE_METADATA_PREFIX_FILTER",
+  );
 }
 
 // ─── Sync Lock ───────────────────────────────────────────────────────────────
