@@ -64,13 +64,35 @@ export function agentIdOf(agent: LocalIndexerAgent, manifest?: LocalAgentManifes
   return String(manifest?.agentId ?? agent.agentId ?? agent.id ?? '');
 }
 
+function normalizeIndexerBaseUrl(raw: string): string {
+  let val = raw.trim();
+  if (!val) return 'http://127.0.0.1:3535';
+  if (!val.startsWith('http://') && !val.startsWith('https://')) {
+    val = `http://${val}`;
+  }
+  return val.replace(/\/+$/, '');
+}
+
+function normalizeMetadataHost(raw: string): string {
+  const val = raw.trim();
+  if (!val) return 'agent.arclayers.xyz';
+  try {
+    if (val.startsWith('http://') || val.startsWith('https://')) {
+      return new URL(val).hostname.toLowerCase();
+    }
+    return val.replace(/\/+$/, '').toLowerCase();
+  } catch {
+    return val.replace(/\/+$/, '').toLowerCase();
+  }
+}
+
 function allowedMetadataHost(): string {
-  return process.env.A2A_AGENT_METADATA_HOST?.trim() || 'agent.arclayers.xyz';
+  return normalizeMetadataHost(process.env.A2A_AGENT_METADATA_HOST || '');
 }
 
 function isAllowedMetadataUri(uri: string): boolean {
   try {
-    return new URL(uri).hostname === allowedMetadataHost();
+    return new URL(uri).hostname.toLowerCase() === allowedMetadataHost();
   } catch {
     return false;
   }
@@ -126,8 +148,7 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Respons
 }
 
 async function listLocalIndexerAgentsByCategoryUncached(category: string) {
-  const base = process.env.A2A_LOCAL_INDEXER_URL?.replace(/\/+$/, '');
-  if (!base) throw new Error('A2A_LOCAL_INDEXER_URL missing');
+  const base = normalizeIndexerBaseUrl(process.env.A2A_LOCAL_INDEXER_URL || '');
 
   const res = await fetchWithTimeout(`${base}/agents`, INDEXER_FETCH_TIMEOUT_MS);
   if (!res.ok) {
@@ -184,6 +205,8 @@ async function listLocalIndexerAgentsByCategoryUncached(category: string) {
       connections: manifest.connections ?? [],
       updatedAt: manifest.updatedAt ?? null,
       manifest,
+      indexerUrl: base,
+      metadataHost: allowedMetadataHost(),
     });
   }
 
