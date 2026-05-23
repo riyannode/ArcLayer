@@ -9,10 +9,10 @@ const { spawnSync } = require("node:child_process");
 
 
 function runRoleOnce(role, timeoutMs) {
-  const roleDir = path.join(__dirname, "..", `${role}-bot`);
+  const scriptPath = path.join(__dirname, `${role}-bot.js`);
   console.log(`[oracle-chain] trigger ${role}`);
-  const result = spawnSync(process.execPath, ["bot.js"], {
-    cwd: roleDir,
+  const result = spawnSync(process.execPath, [scriptPath], {
+    cwd: __dirname,
     env: {
       ...process.env,
       RUN_FOREVER: "false",
