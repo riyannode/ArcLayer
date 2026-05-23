@@ -1,90 +1,140 @@
-import type { Asset, Candle1m, CandleFetchResult } from './types';
+import { createPublicClient, formatUnits, http, isAddress, type Address } from 'viem';
+import type { Asset, Candle1m, CandleFetchResult, ChainlinkPricePoint } from './types';
 
-function parseRows(rows: unknown, mapRow: (row: any) => Candle1m): Candle1m[] {
-  if (!Array.isArray(rows)) return [];
-  return rows
-    .map(mapRow)
-    .filter(
-      (c) =>
-        Number.isFinite(c.timestamp) &&
-        Number.isFinite(c.open) &&
-        Number.isFinite(c.high) &&
-        Number.isFinite(c.low) &&
-        Number.isFinite(c.close),
-    )
-    .sort((a, b) => a.timestamp - b.timestamp);
+const aggregatorV3Abi = [
+  {
+    type: 'function',
+    name: 'decimals',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint8' }],
+  },
+  {
+    type: 'function',
+    name: 'latestRoundData',
+    stateMutability: 'view',
+    inputs: [],
+    outputs: [
+      { name: 'roundId', type: 'uint80' },
+      { name: 'answer', type: 'int256' },
+      { name: 'startedAt', type: 'uint256' },
+      { name: 'updatedAt', type: 'uint256' },
+      { name: 'answeredInRound', type: 'uint80' },
+    ],
+  },
+  {
+    type: 'function',
+    name: 'getRoundData',
+    stateMutability: 'view',
+    inputs: [{ name: 'roundId', type: 'uint80' }],
+    outputs: [
+      { name: 'roundId', type: 'uint80' },
+      { name: 'answer', type: 'int256' },
+      { name: 'startedAt', type: 'uint256' },
+      { name: 'updatedAt', type: 'uint256' },
+      { name: 'answeredInRound', type: 'uint80' },
+    ],
+  },
+] as const;
+
+function getFeedAddress(asset: Asset): Address {
+  const candidate = asset === 'BTC' ? process.env.CHAINLINK_BTC_USD_FEED : process.env.CHAINLINK_ETH_USD_FEED;
+  if (!candidate) throw new Error(`chainlink_feed_missing_${asset}`);
+  if (!isAddress(candidate)) throw new Error(`chainlink_feed_invalid_${asset}`);
+  return candidate;
 }
 
-async function fetchBinanceCandles(asset: Asset, windowStart: number, windowEnd: number): Promise<Candle1m[]> {
-  const symbol = `${asset}USDT`;
-  const startTime = windowStart * 1000;
-  const endTime = Math.min(Date.now(), windowEnd * 1000);
+function buildCandles1m(points: ChainlinkPricePoint[], windowStart: number, windowEnd: number): Candle1m[] {
+  if (!points.length) return [];
 
-  const url = new URL('https://api.binance.com/api/v3/klines');
-  url.searchParams.set('symbol', symbol);
-  url.searchParams.set('interval', '1m');
-  url.searchParams.set('startTime', String(startTime));
-  url.searchParams.set('endTime', String(endTime));
-  url.searchParams.set('limit', '1000');
+  const sorted = [...points].sort((a, b) => a.timestamp - b.timestamp);
+  const firstTs = sorted[0].timestamp;
+  const lastTs = sorted[sorted.length - 1].timestamp;
+  const start = Math.max(windowStart, Math.floor(firstTs / 60) * 60);
+  const end = Math.min(windowEnd, Math.floor(lastTs / 60) * 60 + 59);
+  if (end < start) return [];
 
-  const res = await fetch(url.toString(), { cache: 'no-store', signal: AbortSignal.timeout(8000) });
-  if (!res.ok) throw new Error(`Binance ${res.status}`);
-
-  const rows = (await res.json()) as Array<[number, string, string, string, string]>;
-  return parseRows(rows, (r) => ({
-    timestamp: Math.floor(Number(r[0]) / 1000),
-    open: Number(r[1]),
-    high: Number(r[2]),
-    low: Number(r[3]),
-    close: Number(r[4]),
-  }));
-}
-
-async function fetchCoinbaseCandles(asset: Asset, windowStart: number, windowEnd: number): Promise<Candle1m[]> {
-  const product = asset === 'BTC' ? 'BTC-USD' : 'ETH-USD';
-  const startIso = new Date(windowStart * 1000).toISOString();
-  const endIso = new Date(Math.min(Date.now(), windowEnd * 1000)).toISOString();
-
-  const url = new URL(`https://api.exchange.coinbase.com/products/${product}/candles`);
-  url.searchParams.set('granularity', '60');
-  url.searchParams.set('start', startIso);
-  url.searchParams.set('end', endIso);
-
-  const res = await fetch(url.toString(), { cache: 'no-store', signal: AbortSignal.timeout(8000) });
-  if (!res.ok) throw new Error(`Coinbase ${res.status}`);
-
-  const rows = (await res.json()) as Array<[number, number, number, number, number, number]>;
-  return parseRows(rows, (r) => ({
-    timestamp: Number(r[0]),
-    low: Number(r[1]),
-    high: Number(r[2]),
-    open: Number(r[3]),
-    close: Number(r[4]),
-  }));
-}
-
-export async function fetchCandles1mForWindow(
-  asset: Asset,
-  windowStart: number,
-  windowEnd: number,
-): Promise<CandleFetchResult> {
-  const errors: string[] = [];
-
-  try {
-    const candles = await fetchBinanceCandles(asset, windowStart, windowEnd);
-    if (candles.length) return { candles, candleSource: 'binance', candleError: null };
-    errors.push('Binance returned empty candles');
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : 'Binance request failed');
+  const byMinute = new Map<number, ChainlinkPricePoint[]>();
+  for (const point of sorted) {
+    if (point.timestamp < start || point.timestamp > end) continue;
+    const bucket = Math.floor(point.timestamp / 60) * 60;
+    const existing = byMinute.get(bucket);
+    if (existing) existing.push(point);
+    else byMinute.set(bucket, [point]);
   }
 
-  try {
-    const candles = await fetchCoinbaseCandles(asset, windowStart, windowEnd);
-    if (candles.length) return { candles, candleSource: 'coinbase', candleError: errors.length ? errors.join('; ') : null };
-    errors.push('Coinbase returned empty candles');
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : 'Coinbase request failed');
+  const candles: Candle1m[] = [];
+  let previousClose: number | null = null;
+  for (let minute = Math.floor(start / 60) * 60; minute <= end; minute += 60) {
+    const pointsInMinute = byMinute.get(minute);
+    if (pointsInMinute && pointsInMinute.length) {
+      pointsInMinute.sort((a, b) => a.timestamp - b.timestamp);
+      const open = pointsInMinute[0].price;
+      const close = pointsInMinute[pointsInMinute.length - 1].price;
+      const high = Math.max(...pointsInMinute.map((p) => p.price));
+      const low = Math.min(...pointsInMinute.map((p) => p.price));
+      candles.push({ timestamp: minute, open, high, low, close });
+      previousClose = close;
+      continue;
+    }
+
+    if (previousClose !== null && minute >= windowStart && minute <= windowEnd) {
+      candles.push({ timestamp: minute, open: previousClose, high: previousClose, low: previousClose, close: previousClose });
+    }
   }
 
-  return { candles: [], candleSource: 'none', candleError: errors.length ? errors.join('; ') : 'Candle sources unavailable' };
+  return candles;
+}
+
+async function fetchChainlinkPricePointsForWindow(asset: Asset, windowStart: number, windowEnd: number): Promise<ChainlinkPricePoint[]> {
+  const rpcUrl = process.env.CHAINLINK_EVM_RPC_URL;
+  if (!rpcUrl) throw new Error('chainlink_rpc_missing');
+
+  const client = createPublicClient({ transport: http(rpcUrl) });
+  const address = getFeedAddress(asset);
+  const decimals = await client.readContract({ address, abi: aggregatorV3Abi, functionName: 'decimals' });
+  const latest = await client.readContract({ address, abi: aggregatorV3Abi, functionName: 'latestRoundData' });
+
+  const points: ChainlinkPricePoint[] = [];
+  let roundId = latest[0] as bigint;
+  const maxRounds = 1200;
+
+  for (let scanned = 0; scanned < maxRounds && roundId > 0n; scanned += 1) {
+    const data = scanned === 0 ? latest : await client.readContract({ address, abi: aggregatorV3Abi, functionName: 'getRoundData', args: [roundId] });
+
+    const answer = data[1] as bigint;
+    const updatedAt = Number(data[3]);
+    if (updatedAt > 0 && answer > 0n) {
+      const price = Number(formatUnits(answer, decimals));
+      if (Number.isFinite(price)) {
+        points.push({ timestamp: updatedAt, price, roundId: String(data[0]) });
+      }
+    }
+
+    if (updatedAt > 0 && updatedAt < windowStart - 900) {
+      break;
+    }
+
+    roundId -= 1n;
+  }
+
+  return points.filter((point) => point.timestamp >= windowStart - 900 && point.timestamp <= windowEnd + 900);
+}
+
+export async function fetchChainlinkCandles1mForWindow(asset: Asset, windowStart: number, windowEnd: number): Promise<CandleFetchResult> {
+  try {
+    const pricePoints = await fetchChainlinkPricePointsForWindow(asset, windowStart, windowEnd);
+    const candles = buildCandles1m(pricePoints, windowStart, windowEnd);
+    if (!candles.length) {
+      return { candles: [], candleSource: 'none', candleError: 'chainlink_no_rounds_for_window', pricePoints: [] };
+    }
+    return { candles, candleSource: 'chainlink', candleError: null, pricePoints };
+  } catch (error) {
+    return {
+      candles: [],
+      candleSource: 'none',
+      candleError: error instanceof Error ? error.message : 'chainlink_unavailable',
+      pricePoints: [],
+    };
+  }
 }

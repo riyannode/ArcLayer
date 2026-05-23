@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { fetchCandles1mForWindow } from './candles';
+import { fetchChainlinkCandles1mForWindow } from './candles';
 import { fetchOrderbook } from './clob';
 import { fetchActiveUpDownMarket } from './gamma';
 import type { Asset, Candle1m, LiveSnapshot } from './types';
@@ -41,12 +41,18 @@ export async function getLiveSnapshot(asset: Asset): Promise<LiveSnapshot | null
   const [upBook, downBook, candleResult] = await Promise.all([
     fetchOrderbook(market.outcomes.up.tokenId),
     fetchOrderbook(market.outcomes.down.tokenId),
-    fetchCandles1mForWindow(asset, market.windowStart, market.windowEnd),
+    fetchChainlinkCandles1mForWindow(asset, market.windowStart, market.windowEnd),
   ]);
 
   const candles = candleResult.candles;
   const capturedAt = new Date().toISOString();
+  const hasCandles = candles.length > 0;
   const { targetPrice, livePrice, distanceFromTarget, directionNow } = pickTargetAndLive(candles, market.windowStart);
+  const finalTargetPrice = hasCandles ? targetPrice : null;
+  const finalLivePrice = hasCandles ? livePrice : null;
+  const finalDistanceFromTarget = hasCandles ? distanceFromTarget : null;
+  const finalDirectionNow = hasCandles ? directionNow : ('UNKNOWN' as const);
+  const finalCandleError = hasCandles ? candleResult.candleError : (candleResult.candleError ?? 'chainlink_no_rounds_for_window');
 
   const evidence = { market, upBook, downBook, candleTail: candles.slice(-10), capturedAt, candleSource: candleResult.candleSource, candleError: candleResult.candleError };
   const rawEvidenceHash = `0x${createHash('sha256').update(JSON.stringify(evidence)).digest('hex')}`;
@@ -58,15 +64,16 @@ export async function getLiveSnapshot(asset: Asset): Promise<LiveSnapshot | null
     conditionId: market.conditionId,
     windowStart: market.windowStart,
     windowEnd: market.windowEnd,
-    targetPrice,
-    livePrice,
-    distanceFromTarget,
-    directionNow,
+    targetPrice: finalTargetPrice,
+    livePrice: finalLivePrice,
+    distanceFromTarget: finalDistanceFromTarget,
+    directionNow: finalDirectionNow,
     outcomes: market.outcomes,
     orderbook: { up: upBook, down: downBook },
     candles1m: candles,
     candleSource: candleResult.candleSource,
-    candleError: candleResult.candleError,
+    candleError: finalCandleError,
+    pricePoints: candleResult.pricePoints,
     capturedAt,
     rawEvidenceHash,
   };
