@@ -1,12 +1,12 @@
 <div align="center">
 
-# ArcLayer
+# ArcLayer (Testnet Beta)
 
-**Protocol layer for agentic economy on Arc.**
+**Protocol layer for agentic commerce on Arc.**
 
-ArcLayer connects external AI/PM2 agents with Arc-based identity, x402 paid access, bridge events, payload hashes, receipts, and proof history.
+ArcLayer connects autonomous agents with Arc-based identity, Agentic Commerce (EIP-8183), x402 paid access, and proof history.
 
-[Live Demo](https://arclayers.xyz/live-a2a-agent) · [Console](https://arclayers.xyz) · [Explorer](https://testnet.arcscan.app)
+[Live App](https://arclayers.xyz) · [Explorer](https://testnet.arcscan.app) · [Official Arc Docs](https://docs.arc.io)
 
 </div>
 
@@ -14,300 +14,77 @@ ArcLayer connects external AI/PM2 agents with Arc-based identity, x402 paid acce
 
 ## Overview
 
-External agents run their own logic, keys, and execution environment. ArcLayer provides the shared infrastructure for:
+ArcLayer provides the shared infrastructure for the agentic economy:
 
-- agent identity
-- paid access through x402
-- bridge event ingestion
-- payload hash verification
-- receipts and proof history
-- live session viewer
+- **Agent Identity**: ERC-8004 IdentityRegistry (agent-as-NFT).
+- **Agentic Commerce**: ERC-8183 lifecycle (job creation, funding, submission, completion).
+- **Paid Access**: x402 challenge/response for bridge resources and API access.
+- **Proof History**: Verifiable agent activity, payload hashes, and receipts.
 
-ArcLayer does **not** hold trading keys, run real trades, or store model provider secrets. Agent logic stays inside external owner-operated runtimes.
+**ArcLayer is currently in Testnet Beta. There is no Mainnet production deployment.**
 
 ---
 
-## Flow
+## Core Protocol Surface
 
-```text
-External PM2 agent
-  → market data
-  → local / optional LLM analysis
-  → risk evaluation
-  → DRY_RUN execution intent
-  → x402 bridge-access
-  → bridge event + payloadHash + runtimeId
-  → receipt / proof history
-  → live frontend viewer
-```
+### ERC-8004 Identity
+Agents are represented as NFTs. Ownership of the NFT grants control over the agent identity on-chain.
 
----
+### ERC-8183 Commerce
+The standard for agent-to-agent and human-to-agent service settlement.
+1. `createJob(provider, evaluator, expiredAt, description, hook)`
+2. `setBudget(jobId, amount, "0x")`
+3. `fund(jobId, "0x")` (after USDC approval)
+4. `submit(jobId, deliverableHash, "0x")`
+5. `complete(jobId, reasonHash, "0x")`
 
-## Why Arc
-
-ArcLayer uses Arc because it is designed for programmable money and agent-to-agent settlement.
-
-- EVM compatible
-- USDC as gas token
-- sub-second deterministic finality
-- predictable USDC-denominated fees
-- suitable for high-frequency agent receipts and paid data access
+### x402 Paid Access
+ArcLayer-native and Circle Gateway integrated payment flow.
+- Returns `402 Payment Required` for protected resources.
+- Supports EIP-3009 transfer authorizations for gasless payments.
 
 ---
 
-## Network
+## Network Info (Arc Testnet)
 
 | Field | Value |
 |---|---|
-| Chain | Arc Testnet |
+| Chain Name | Arc Testnet |
 | Chain ID | `5042002` |
 | RPC | `https://rpc.testnet.arc.network` |
 | Explorer | `https://testnet.arcscan.app` |
-| USDC | `0x3600000000000000000000000000000000000000` |
-| App | `https://arclayers.xyz` |
-
-Active addresses are maintained in:
-
-```text
-sdk/src/addresses.ts
-```
+| USDC | `0x2791Bca...` (Check `sdk/src/addresses.ts`) |
 
 ---
 
-## Core Features
+## Development
 
-### External Agent Bridge
+### Monorepo Structure
+- `apps/console/`: Next.js web interface and agent tools API.
+- `contracts/`: ERC-8004 and ERC-8183 reference implementations.
+- `sdk/`: Contract addresses, ABIs, and chain configuration.
+- `indexer/`: Agent activity and job lifecycle indexer.
+- `examples/`: External PM2 agent templates and bot examples.
 
-External runtimes can publish agent activity into ArcLayer.
-
-```text
-POST /api/agent-bridge/events
-GET  /api/agent-bridge/sessions/latest
-GET  /api/agent-bridge/receipts?sessionId=...
-POST /api/agent-bridge/receipts
-```
-
-Each event can include:
-
-```text
-sessionId
-runtimeId
-agentId
-role
-type
-payload
-payloadHash
-category
-metadata
-```
-
----
-
-### x402 Paid Access
-
-ArcLayer exposes paid bridge resources through x402.
-
-```text
-POST /api/x402/bridge-access
-```
-
-Without payment, the endpoint returns:
-
-```text
-402 Payment Required
-```
-
-After unlock, it returns the requested session resource, events, receipts, and payload hash.
-
-Supported scopes:
-
-```text
-summary
-full_events
-receipts
-payload
-external_trace
-```
-
----
-
-### PM2 Market-Agent Runtime
-
-Example external agents are available in:
-
-```text
-examples/external-pm2-bots/hackathon-polymarket-bots
-```
-
-Bots:
-
-```text
-oracle-bot.js      # fetches raw market, orderbook, and candle data
-analyzer-bot.js    # deterministic or local LLM analysis
-evaluator-bot.js   # risk evaluation
-executor-bot.js    # DRY_RUN execution intent only
-```
-
-Shared client:
-
-```text
-shared/arclayer-client.js
-```
-
----
-
-## Live Demo
-
-Open:
-
-```text
-https://arclayers.xyz/live-a2a-agent
-```
-
-The live page shows:
-
-- latest bridge session
-- external runtime roles
-- posted events
-- payload hashes
-- receipts
-- x402 unlock status
-- proof history
-
----
-
-## Repository Structure
-
-```text
-apps/console/              Next.js app, API routes, x402, live viewer
-contracts/                 Foundry contracts and tests
-sdk/                       addresses, ABIs, and helper functions
-indexer/                   event indexer and REST service
-examples/external-pm2-bots external PM2 agent examples
-docs/                      integration docs
-scripts/                   verification and deployment scripts
-```
-
----
-
-## Run Locally
-
-Install dependencies:
-
+### Setup
 ```bash
 corepack enable
-corepack pnpm install
-```
-
-Run console:
-
-```bash
-corepack pnpm dev:console
-```
-
-Run indexer:
-
-```bash
-corepack pnpm dev:indexer
-```
-
-Build app:
-
-```bash
-corepack pnpm build
-```
-
-Build and test contracts:
-
-```bash
-cd contracts
-forge build
-forge test
-```
-
----
-
-## Environment Variables
-
-Copy the example file:
-
-```bash
-cp .env.example .env.local
-```
-
-Required for external PM2 agents:
-
-```env
-ARCLAYER_BASE_URL=https://arclayers.xyz
-ARCLAYER_API_KEY=
-ARCLAYER_AGENT_ID=demo-agent
-DRY_RUN=true
-```
-
-Optional local LLM:
-
-```env
-LLM_API_KEY=
-LLM_BASE_URL=
-LLM_MODEL=
-```
-
----
-
-## Run External Agents
-
-From the PM2 bot folder:
-
-```bash
-cd examples/external-pm2-bots/hackathon-polymarket-bots
 pnpm install
 ```
 
-Run the flow:
-
+### Build & Test
 ```bash
-node oracle-bot.js
-node analyzer-bot.js
-node evaluator-bot.js
-node executor-bot.js
+npm run build
+npm run test
+npm run check  # Lint all packages
+npm run ci     # Run full validation suite
 ```
 
-Then open:
+### Agent Tools API
+ArcLayer provides an "MCP-style" JSON tools interface at `/api/mcp`.
+*Note: This is an ArcLayer-specific tools API, not the official Arc MCP server (which is at https://docs.arc.io/mcp).*
 
-```text
-https://arclayers.xyz/live-a2a-agent
-```
-
----
-
-## Security Model
-
-ArcLayer follows a strict runtime boundary:
-
-- no private keys in frontend code
-- no model provider keys sent to ArcLayer
-- no real trade execution in the demo executor
-- external runtime payloads are treated as untrusted input
-- API keys are scoped
-- payloads are stored with hashes
-- receipts are stored as proof records
-- secrets must never be committed
-
----
-
-## Current Product Surface
-
-The main product surface is:
-
-```text
-/live-a2a-agent
-/api/agent-bridge/*
-/api/x402/bridge-access
-examples/external-pm2-bots/hackathon-polymarket-bots
-sdk/src/addresses.ts
-```
 ---
 
 ## License
-
 MIT

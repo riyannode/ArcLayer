@@ -10,7 +10,10 @@ export const revalidate = 0;
 /**
  * ArcLayer MCP-style JSON endpoint — Pure Arc Reference Mode.
  *
- * Uses official Circle-deployed contracts:
+ * This is an "MCP-style ArcLayer Agent Tools API", not the official Arc MCP server.
+ * For the official Arc MCP server, visit https://docs.arc.io/mcp
+ *
+ * Uses Arc Reference Mode contracts:
  *   - ERC-8004 IdentityRegistry (0x8004A818…) — agent registration
  *   - ERC-8183 AgenticCommerce (0x0747EEf…) — job lifecycle
  *
@@ -407,23 +410,19 @@ const TOOLS: Record<
       const query = String(args.query || '').trim();
       if (!query) throw new Error('query required');
       // Proxy to official Arc docs — try llms.txt first
-      try {
-        const res = await fetch('https://developers.circle.com/llms.txt', { cache: 'no-store' });
-        const text = await res.text();
-        // Simple keyword search in llms.txt
-        const lines = text.split('\n');
-        const matches = lines.filter((l) => l.toLowerCase().includes(query.toLowerCase()));
-        return {
-          source: 'developers.circle.com/llms.txt',
-          query,
-          results: matches.slice(0, 20),
-          totalMatches: matches.length,
-          fullDocsUrl: 'https://docs.arc.io',
-          mcpServer: 'https://docs.arc.io/ai/mcp',
-        };
-      } catch (e: any) {
-        return { error: e.message, fallback: 'https://docs.arc.io' };
-      }
+      const res = await fetch('https://docs.arc.io/llms.txt', { cache: 'no-store' });
+      if (!res.ok) return { error: `fetch failed: ${res.status}`, fallback: 'https://docs.arc.io' };
+      const text = await res.text();
+      const lines = text.split('\n');
+      const matches = lines.filter((l) => l.toLowerCase().includes(query.toLowerCase()));
+      return {
+        source: 'https://docs.arc.io/llms.txt',
+        query,
+        results: matches.slice(0, 20),
+        totalMatches: matches.length,
+        fullDocsUrl: 'https://docs.arc.io',
+        mcpServer: 'https://docs.arc.io/mcp',
+      };
     },
   },
   arc_network_info: {
@@ -460,10 +459,10 @@ const TOOLS: Record<
 // ─── MANIFEST ─────────────────────────────────────────────────────────────────
 function buildManifest() {
   return {
-    name: 'ArcLayer MCP',
+    name: 'MCP-style ArcLayer Agent Tools API',
     version: '2.0.0',
     description:
-      'ArcLayer on-chain agent economy — Pure Arc Reference Mode. Uses official Circle ERC-8004 (IdentityRegistry) + ERC-8183 (AgenticCommerce) contracts on Arc Testnet.',
+      'ArcLayer on-chain agent economy tools — Pure Arc Reference Mode. NOTE: This is NOT the official Arc MCP server.',
     network: {
       name: 'Arc Testnet',
       chainId: ARC_CHAIN_ID,
@@ -485,8 +484,8 @@ function buildManifest() {
     })),
     docs: {
       arc: 'https://docs.arc.io',
-      mcp: 'https://docs.arc.io/ai/mcp',
-      circle: 'https://developers.circle.com/llms.txt',
+      llms: 'https://docs.arc.io/llms.txt',
+      mcp: 'https://docs.arc.io/mcp',
     },
   };
 }
