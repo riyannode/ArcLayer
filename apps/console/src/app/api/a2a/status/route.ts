@@ -9,6 +9,9 @@ import { createPublicClient, http, type Hex } from 'viem';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+const STATUS_TTL_MS = 30_000;
+const STATUS_CACHE_CONTROL = 'public, s-maxage=30, stale-while-revalidate=120';
+let statusCache: { expiresAt: number; payload: unknown } | null = null;
 
 const RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
 const CHAIN_ID = 5042002;
@@ -122,6 +125,11 @@ function fmtStats(result: PromiseSettledResult<RawStats>) {
 
 export async function GET() {
   try {
+    if (statusCache && statusCache.expiresAt > Date.now()) {
+      return NextResponse.json(statusCache.payload, {
+        headers: { 'Cache-Control': STATUS_CACHE_CONTROL },
+      });
+    }
     const client = createPublicClient({ transport: http(RPC) });
 
     const [pythiaStats, hermesStats, apoloStats, totalMirrors, marketCount, hermesUsdc, pythiaUsdc] = await Promise.allSettled([
@@ -167,7 +175,7 @@ export async function GET() {
       }) as Promise<bigint>,
     ]);
 
-    return NextResponse.json({
+    const payload = {
       chainId: CHAIN_ID,
       contracts: CONTRACTS,
       agents: {
@@ -199,11 +207,15 @@ export async function GET() {
         totalMirrors: totalMirrors.status === 'fulfilled' ? Number(totalMirrors.value) : null,
       },
       timestamp: new Date().toISOString(),
+    };
+    statusCache = { expiresAt: Date.now() + STATUS_TTL_MS, payload };
+    return NextResponse.json(payload, {
+      headers: { 'Cache-Control': STATUS_CACHE_CONTROL },
     });
   } catch (err: any) {
     return NextResponse.json(
       { error: 'Failed to read on-chain state', detail: err?.message },
-      { status: 502 }
+      { status: 502, headers: { 'Cache-Control': STATUS_CACHE_CONTROL } }
     );
   }
 }
