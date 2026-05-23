@@ -246,7 +246,7 @@ export async function latestBridgeSession(): Promise<BridgeSession | null> {
       continue;
     }
 
-    if (bridgeRoleEventPriority(event) > bridgeRoleEventPriority(current)) {
+    if (bridgeRoleEventPriority(event) >= bridgeRoleEventPriority(current)) {
       roles[event.role] = event;
     }
   }
