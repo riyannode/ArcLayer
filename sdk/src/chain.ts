@@ -2,6 +2,8 @@ import { http, fallback, createPublicClient, getContract } from "viem";
 import { ARC_EXPLORER, ARC_RPC_URLS, CONTRACTS } from "./addresses";
 import {
   ERC8004_IDENTITY_REGISTRY_ABI,
+  ERC8004_REPUTATION_REGISTRY_ABI,
+  ERC8004_VALIDATION_REGISTRY_ABI,
   ERC8183_AGENTIC_COMMERCE_ABI,
   USDC_ABI,
 } from "./abi";
@@ -34,6 +36,20 @@ export const publicClient = createPublicClient({
 export const erc8004IdentityRegistry = getContract({
   address: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
   abi: ERC8004_IDENTITY_REGISTRY_ABI,
+  client: publicClient,
+});
+
+/** Official ERC-8004 Reputation Registry on Arc Testnet. */
+export const erc8004ReputationRegistry = getContract({
+  address: CONTRACTS.ERC8004_REPUTATION_REGISTRY,
+  abi: ERC8004_REPUTATION_REGISTRY_ABI,
+  client: publicClient,
+});
+
+/** Official ERC-8004 Validation Registry on Arc Testnet. */
+export const erc8004ValidationRegistry = getContract({
+  address: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+  abi: ERC8004_VALIDATION_REGISTRY_ABI,
   client: publicClient,
 });
 

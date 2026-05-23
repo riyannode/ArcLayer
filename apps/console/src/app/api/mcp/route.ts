@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { encodeFunctionData, keccak256, stringToHex, toBytes, toHex, type Hex } from 'viem';
-import { ERC8004_IDENTITY_REGISTRY_ABI, ERC8183_AGENTIC_COMMERCE_ABI, CONTRACTS, ARC_TOKENS } from '@arclayer/sdk';
+import { ERC8004_IDENTITY_REGISTRY_ABI, ERC8004_REPUTATION_REGISTRY_ABI, ERC8004_VALIDATION_REGISTRY_ABI, ERC8183_AGENTIC_COMMERCE_ABI, CONTRACTS, ARC_TOKENS } from '@arclayer/sdk';
 import { indexerUrl } from '@/lib/indexer';
 
 export const runtime = 'nodejs';
@@ -398,6 +398,125 @@ const TOOLS: Record<
     },
   },
 
+  give_feedback_calldata: {
+    description: 'Build calldata for ERC-8004 ReputationRegistry.giveFeedback(agentTokenId, score, category, comment, metadataURI, proofURI, context, ref).',
+    args: [
+      { name: 'agentTokenId', type: 'string', required: true },
+      { name: 'score', type: 'string', required: true },
+      { name: 'category', type: 'string', required: true },
+      { name: 'comment', type: 'string', required: true },
+      { name: 'metadataURI', type: 'string', required: true },
+      { name: 'proofURI', type: 'string', required: true },
+      { name: 'context', type: 'string', required: true },
+      { name: 'ref', type: 'string', required: true },
+    ],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const data = encodeFunctionData({
+        abi: ERC8004_REPUTATION_REGISTRY_ABI as any,
+        functionName: 'giveFeedback',
+        args: [
+          BigInt(String(args.agentTokenId || '').trim()),
+          BigInt(String(args.score || '').trim()),
+          String(args.category || '').trim(),
+          String(args.comment || '').trim(),
+          String(args.metadataURI || '').trim(),
+          String(args.proofURI || '').trim(),
+          String(args.context || '').trim(),
+          String(args.ref || '').trim(),
+        ],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8004_REPUTATION_REGISTRY,
+        data,
+        value: '0x0',
+        signing: {
+          how: 'Send from the feedback author wallet on Arc Testnet.',
+          rpc: ARC_RPC,
+        },
+      };
+    },
+  },
+  validation_request_calldata: {
+    description: 'Build calldata for ERC-8004 ValidationRegistry.validationRequest(validator, agentTokenId, taskUri, requestHash).',
+    args: [
+      { name: 'validator', type: 'string', required: true },
+      { name: 'agentTokenId', type: 'string', required: true },
+      { name: 'taskUri', type: 'string', required: true },
+      { name: 'requestHash', type: 'string', required: true },
+    ],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const data = encodeFunctionData({
+        abi: ERC8004_VALIDATION_REGISTRY_ABI as any,
+        functionName: 'validationRequest',
+        args: [
+          String(args.validator || '').trim() as Hex,
+          BigInt(String(args.agentTokenId || '').trim()),
+          String(args.taskUri || '').trim(),
+          String(args.requestHash || '').trim() as Hex,
+        ],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+        data,
+        value: '0x0',
+        signing: {
+          how: 'Send from requester/controller wallet on Arc Testnet.',
+          rpc: ARC_RPC,
+        },
+      };
+    },
+  },
+  validation_response_calldata: {
+    description: 'Build calldata for ERC-8004 ValidationRegistry.validationResponse(requestHash, status, resultUri, resultHash, reason).',
+    args: [
+      { name: 'requestHash', type: 'string', required: true },
+      { name: 'status', type: 'string', required: true },
+      { name: 'resultUri', type: 'string', required: true },
+      { name: 'resultHash', type: 'string', required: true },
+      { name: 'reason', type: 'string', required: true },
+    ],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const data = encodeFunctionData({
+        abi: ERC8004_VALIDATION_REGISTRY_ABI as any,
+        functionName: 'validationResponse',
+        args: [
+          String(args.requestHash || '').trim() as Hex,
+          Number(String(args.status || '').trim()),
+          String(args.resultUri || '').trim(),
+          String(args.resultHash || '').trim() as Hex,
+          String(args.reason || '').trim(),
+        ],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+        data,
+        value: '0x0',
+        signing: {
+          how: 'Send from assigned validator wallet on Arc Testnet.',
+          rpc: ARC_RPC,
+        },
+      };
+    },
+  },
+  validation_status_read: {
+    description: 'Instruction-only read helper for ValidationRegistry.getValidationStatus([requestHash]).',
+    args: [{ name: 'requestHash', type: 'string', required: true }],
+    kind: 'read',
+    handler: async (args) => ({
+      method: 'getValidationStatus',
+      contract: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+      abiFunction: 'getValidationStatus(bytes32 requestHash)',
+      note: 'Use your own Arc Testnet RPC client to call this read method.',
+      args: [String(args.requestHash || '').trim()],
+    }),
+  },
+
   // ─── ARC DOCS PROXY ───────────────────────────────────────────────────────────
   arc_docs_search: {
     description:
@@ -439,6 +558,8 @@ const TOOLS: Record<
         nativeGasToken: 'USDC (18 decimals)',
         contracts: {
           identityRegistry_ERC8004: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+          reputationRegistry_ERC8004: CONTRACTS.ERC8004_REPUTATION_REGISTRY,
+          validationRegistry_ERC8004: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
           agenticCommerce_ERC8183: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
           usdc_ERC20: CONTRACTS.USDC,
           eurc: ARC_TOKENS.EURC,
@@ -473,6 +594,8 @@ function buildManifest() {
     },
     contracts: {
       identityRegistry_ERC8004: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+      reputationRegistry_ERC8004: CONTRACTS.ERC8004_REPUTATION_REGISTRY,
+      validationRegistry_ERC8004: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
       agenticCommerce_ERC8183: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       usdc_ERC20: CONTRACTS.USDC,
       eurc: ARC_TOKENS.EURC,
