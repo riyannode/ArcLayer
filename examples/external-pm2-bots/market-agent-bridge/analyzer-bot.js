@@ -1,106 +1,168 @@
-require('dotenv/config');
-const { latestSession, postEvent } = require('./shared/arclayer-client');
+require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 
-function hasLocalLlmKey() {
-  const key = process.env.LLM_API_KEY || '';
-  return Boolean(key && !key.toLowerCase().includes('replace'));
-}
+const { callLLM } = require("./shared/llm-client");
+const { latestSession, postEvent, postReceipt } = require("./shared/arclayer-client");
+const { bpsSignal, clamp } = require("./shared/market-logic");
+const { runForever } = require("./shared/runner");
+const { payForBridgeAccess } = require("./shared/x402-client");
 
-function deterministicAnalyze(session) {
-  const oracle = session?.roles?.oracle;
-  const market = oracle?.payload?.market;
-  const up = Number(market?.upPrice ?? 0.5);
-  const down = Number(market?.downPrice ?? 0.5);
-  const spread = Math.abs(up - down);
-  const suggestedDirection = spread < 0.015 ? 'NEUTRAL' : up > down ? 'UP' : 'DOWN';
-  const confidence = Math.min(90, Math.max(50, Math.round(50 + spread * 1000)));
+function sanitizeAnalysis(raw, fallbackSignal) {
+  const allowed = new Set(["UP", "DOWN", "NEUTRAL"]);
+  const direction = allowed.has(raw?.suggestedDirection) ? raw.suggestedDirection : fallbackSignal.suggestedDirection;
+  const confidence = clamp(Number(raw?.confidence ?? fallbackSignal.confidence), 0, 95);
+
   return {
-    source: 'deterministic-local-dry-run',
-    summary: `Local analyzer read BTC 15m raw feed; ${suggestedDirection} edge=${spread.toFixed(3)}.`,
+    source: raw?.source || "llm-analyzer",
+    suggestedDirection: direction,
     confidence,
-    rationale: [
-      'Uses ArcLayer raw Polymarket BTC 15m feed only',
-      'LLM key remains local when configured',
-      'No trading strategy or executor private key lives in apps/console',
+    entryMode: raw?.entryMode || fallbackSignal.entryMode,
+    regime: raw?.regime || fallbackSignal.regime,
+    summary: String(raw?.summary || `BPS analysis suggests ${direction} with confidence ${confidence}.`),
+    rationale: Array.isArray(raw?.rationale) ? raw.rationale.slice(0, 8) : [
+      "BPS threshold and microstructure signal evaluated.",
+      "Orderbook spread, depth, and candle momentum checked."
     ],
-    suggestedDirection,
-    noTradeReason: suggestedDirection === 'NEUTRAL' ? 'Spread below 1.5 percentage point threshold.' : null,
-    llmConfigured: hasLocalLlmKey(),
+    noTradeReason: raw?.noTradeReason || (direction === "NEUTRAL" ? "No clear directional edge." : null),
+    riskFlags: Array.from(new Set([...(fallbackSignal.riskFlags || []), ...((Array.isArray(raw?.riskFlags) ? raw.riskFlags : []))])),
+    signal: fallbackSignal
   };
 }
 
-async function analyzeWithLocalLlm(session, fallback) {
-  if (!hasLocalLlmKey()) return fallback;
+async function runOnce() {
+  const data = await latestSession();
+  const session = data.session;
 
-  const llmBaseUrl = process.env.LLM_BASE_URL || process.env.LOCAL_LLM_BASE_URL;
-  if (!llmBaseUrl) return fallback;
-  const baseUrl = llmBaseUrl.replace(/\/$/, '');
-  const model = process.env.LLM_MODEL || 'KIRO';
-  const oraclePayload = session?.roles?.oracle?.payload || {};
-  const prompt = [
-    'You are a local-only dry-run market analyzer for an ArcLayer external PM2 market agent bridge example.',
-    'Analyze the raw Polymarket BTC 15m payload and return compact JSON only.',
-    'No real trade execution. No private keys. Do not include secrets.',
-    'Schema: {"summary":string,"confidence":number,"suggestedDirection":"UP"|"DOWN"|"NEUTRAL","rationale":string[],"noTradeReason":string|null}',
-    `Raw oracle payload: ${JSON.stringify(oraclePayload).slice(0, 6000)}`,
-  ].join('\n');
+  if (!session?.sessionId) {
+    throw new Error("No latest bridge session. Run oracle first.");
+  }
 
-  try {
-    const res = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${process.env.LLM_API_KEY}`,
-        'content-type': 'application/json',
-        accept: 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        temperature: 0.1,
-        messages: [
-          { role: 'system', content: 'Return JSON only. Never reveal or transform API keys.' },
-          { role: 'user', content: prompt },
-        ],
-      }),
-    });
-    if (!res.ok) throw new Error(`local LLM provider returned ${res.status}`);
-    const data = await res.json();
-    const content = data?.choices?.[0]?.message?.content || '';
-    const parsed = JSON.parse(content.replace(/^```json\s*/i, '').replace(/```$/i, '').trim());
-    return {
-      ...fallback,
-      ...parsed,
-      source: 'local-llm-dry-run',
-      llmConfigured: true,
-      rationale: Array.isArray(parsed.rationale) ? parsed.rationale.slice(0, 5) : fallback.rationale,
-    };
-  } catch (error) {
-    return {
-      ...fallback,
-      source: 'deterministic-local-dry-run',
-      llmFallbackReason: error.message,
-    };
+  const oraclePayload = session.roles?.oracle?.payload || {};
+  const raw = oraclePayload.raw || oraclePayload;
+  const fallbackSignal = bpsSignal({
+    market: raw.market || {},
+    orderbook: raw.orderbook || {},
+    candles: raw.candles || {}
+  });
+
+  const fallback = sanitizeAnalysis({
+    source: "analyzer-fallback",
+    suggestedDirection: fallbackSignal.suggestedDirection,
+    confidence: fallbackSignal.confidence,
+    entryMode: fallbackSignal.entryMode,
+    regime: fallbackSignal.regime,
+    summary: `Fallback BPS analysis: ${fallbackSignal.suggestedDirection}, confidence=${fallbackSignal.confidence}.`,
+    rationale: [
+      `marketEdgeBps=${fallbackSignal.edge.marketEdgeBps}`,
+      `momentumBps=${fallbackSignal.edge.momentumBps}`,
+      `spreadBps=${fallbackSignal.book.spreadBps}`,
+      `depthUsdc=${fallbackSignal.book.depthUsdc}`
+    ],
+    noTradeReason: fallbackSignal.suggestedDirection === "NEUTRAL" ? "No clear edge from price and momentum." : null,
+    riskFlags: fallbackSignal.riskFlags
+  }, fallbackSignal);
+
+  const llm = await callLLM({
+    fallback,
+    system: `
+You are an autonomous prediction-market analyst.
+Return JSON only.
+Never reveal secrets.
+Never output real transaction instructions.
+Use the BPS signal, candle momentum, book spread, depth, and imbalance.
+Schema:
+{
+  "source": "llm-analyzer",
+  "suggestedDirection": "UP" | "DOWN" | "NEUTRAL",
+  "confidence": number,
+  "entryMode": "momentum" | "sideway_micro_scalp",
+  "regime": "NORMAL" | "BREAKOUT",
+  "summary": string,
+  "rationale": string[],
+  "riskFlags": string[],
+  "noTradeReason": string | null
+}
+`,
+    prompt: `
+Analyze the latest external oracle session.
+
+BPS / microstructure signal:
+${JSON.stringify(fallbackSignal)}
+
+Oracle payload:
+${JSON.stringify(oraclePayload).slice(0, 12000)}
+`
+  });
+
+  const payload = sanitizeAnalysis(llm, fallbackSignal);
+
+  const posted = await postEvent({
+    sessionId: session.sessionId,
+    role: "analyzer",
+    type: "resolver_output",
+    runtimeId: process.env.RUNTIME_ID || "pm2-llm-analyzer-bot",
+    payload
+  });
+
+  await postReceipt({
+    sessionId: session.sessionId,
+    payloadHash: posted.payloadHash,
+    metadata: {
+      role: "analyzer",
+      eventType: "resolver_output",
+      eventId: posted.eventId || null
+    }
+  });
+
+  if (process.env.X402_AUTOPAY === "true") {
+    try {
+      const payment = await payForBridgeAccess({
+        sessionId: session.sessionId,
+        scope: process.env.X402_SCOPE || "summary"
+      });
+
+      if (!payment.ok) {
+        console.log(`[x402][analyzer] skipped: ${payment.error || payment.message || "unknown"}`);
+        if (process.env.X402_AUTOPAY_REQUIRED === "true") throw new Error(payment.error || "x402_autopay_failed");
+        return;
+      }
+
+      console.log(`[x402][analyzer] paid bridge access tx=${payment.transaction || "n/a"} payer=${payment.payer || "n/a"}`);
+
+      await postEvent({
+        sessionId: session.sessionId,
+        role: "analyzer",
+        type: "receipt_reference",
+        runtimeId: process.env.RUNTIME_ID || "pm2-llm-analyzer-bot",
+        payload: {
+          source: "x402-autopay",
+          paidByRole: "analyzer",
+          resource: "/api/x402/bridge-access",
+          scope: process.env.X402_SCOPE || "summary",
+          payer: payment.payer || null,
+          payTo: payment.payTo || null,
+          amount: payment.amount || null,
+          transaction: payment.transaction || null,
+          paymentId: payment.paymentId || null,
+          mode: payment.mode || "arc-native",
+          unlockedSessionId: payment.sessionId || session.sessionId,
+          unlockedPayloadHash: payment.payloadHash || null,
+          eventId: posted.eventId || null
+        },
+        metadata: {
+          role: "analyzer",
+          x402Autopay: true,
+          paidAfterEventId: posted.eventId || null
+        }
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[x402][analyzer] autopay failed: ${message}`);
+      if (process.env.X402_AUTOPAY_REQUIRED === "true") throw err;
+    }
   }
 }
 
-async function analyze(session) {
-  const fallback = deterministicAnalyze(session);
-  return analyzeWithLocalLlm(session, fallback);
-}
-
-async function main() {
-  const data = await latestSession();
-  if (!data.session?.sessionId) throw new Error('no latest bridge session; run oracle-bot first');
-  const payload = await analyze(data.session);
-  await postEvent({
-    sessionId: data.session.sessionId,
-    role: 'analyzer',
-    type: 'resolver_output',
-    runtimeId: process.env.RUNTIME_ID || 'pm2-analyzer-bot',
-    payload,
-  });
-}
-
-main().catch((err) => {
-  console.error(`[analyzer] ${err.message}`);
+runForever("analyzer", runOnce).catch((err) => {
+  console.error(`[analyzer] fatal: ${err.message}`);
   process.exitCode = 1;
 });
