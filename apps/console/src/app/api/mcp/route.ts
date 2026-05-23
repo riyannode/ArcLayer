@@ -401,7 +401,7 @@ const TOOLS: Record<
   // ─── ARC DOCS PROXY ───────────────────────────────────────────────────────────
   arc_docs_search: {
     description:
-      'Search Arc Network documentation. Proxies to the official Arc MCP server for doc retrieval.',
+      'Search Arc Network documentation by scanning https://docs.arc.io/llms.txt.',
     args: [
       { name: 'query', type: 'string', required: true, description: 'Search query for Arc docs.' },
     ],
@@ -446,7 +446,8 @@ const TOOLS: Record<
         cctpDomain: 26,
         docs: {
           main: 'https://docs.arc.io',
-          mcp: 'https://docs.arc.io/ai/mcp',
+          mcpDocs: 'https://docs.arc.io/ai/mcp',
+          mcpServer: 'https://docs.arc.io/mcp',
           erc8004: 'https://docs.arc.io/arc/tutorials/register-your-first-ai-agent.md',
           erc8183: 'https://docs.arc.io/arc/tutorials/create-your-first-erc-8183-job.md',
           evmCompat: 'https://docs.arc.io/arc/references/evm-compatibility.md',

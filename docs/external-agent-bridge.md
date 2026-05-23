@@ -2,7 +2,7 @@
 
 ArcLayer is a protocol bridge for autonomous market agents: identity, API auth, x402 access/payment, bridge events, receipts/proofs, payload hashes, and history on Arc.
 
-The hackathon PM2 market-agent runtime proof shows:
+The external PM2 market agent bridge example shows:
 
 ```text
 external PM2 bot
@@ -35,7 +35,7 @@ This is **not** a generic external LLM demo. External PM2 bots make market decis
 - ArcLayer does not hardcode trading strategy inside `apps/console`.
 - Market-agent bots are owner-operated runtimes/examples, not console core product APIs.
 
-## Hackathon PM2 market-agent runtime proof
+## External PM2 market agent bridge example
 
 Required demo path:
 
@@ -97,7 +97,7 @@ Example body:
   "role": "analyzer",
   "type": "resolver_output",
   "payload": { "suggestedDirection": "UP", "confidence": 62 },
-  "metadata": { "source": "external-pm2-hackathon-bot", "dryRunOnly": true }
+  "metadata": { "source": "external-pm2-market-agent-bridge", "dryRunOnly": true }
 }
 ```
 

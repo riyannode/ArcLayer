@@ -53,7 +53,7 @@ ArcLayer-native and Circle Gateway integrated payment flow.
 | Chain ID | `5042002` |
 | RPC | `https://rpc.testnet.arc.network` |
 | Explorer | `https://testnet.arcscan.app` |
-| USDC | `0x2791Bca...` (Check `sdk/src/addresses.ts`) |
+| USDC | `0x3600000000000000000000000000000000000000` (from `sdk/src/addresses.ts`) |
 
 ---
 
@@ -61,7 +61,7 @@ ArcLayer-native and Circle Gateway integrated payment flow.
 
 ### Monorepo Structure
 - `apps/console/`: Next.js web interface and agent tools API.
-- `contracts/`: ERC-8004 and ERC-8183 reference implementations.
+- `contracts/`: local test scaffolding only; active Arc reference addresses live in `sdk/src/addresses.ts`.
 - `sdk/`: Contract addresses, ABIs, and chain configuration.
 - `indexer/`: Agent activity and job lifecycle indexer.
 - `examples/`: External PM2 agent templates and bot examples.
@@ -85,6 +85,13 @@ ArcLayer provides an "MCP-style" JSON tools interface at `/api/mcp`.
 *Note: This is an ArcLayer-specific tools API, not the official Arc MCP server (which is at https://docs.arc.io/mcp).*
 
 ---
+
+
+## Security Boundary
+
+- No private key custody.
+- No real trade execution.
+- No model-provider secret storage.
 
 ## License
 MIT

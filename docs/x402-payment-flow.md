@@ -14,6 +14,7 @@ ArcLayer uses the x402 protocol for agent-to-agent and agent-to-service payments
 
 ## Challenge/Response
 1. Request: `GET /api/resource`
-2. Response: `402 Payment Required` + `X-Payment-Challenge`
-3. Payment: Agent sends USDC to receiver.
-4. Retry: Request with `X-Payment: <hash/signature>`.
+2. No payment: `402 Payment Required` with headers `X-402-Version` and `PAYMENT-REQUIRED`.
+3. Arc Native retry header: `X-PAYMENT: <payment-payload>`.
+4. Circle Gateway retry header: `PAYMENT-SIGNATURE: <signature>`.
+5. Success responses include `PAYMENT-RESPONSE`.

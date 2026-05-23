@@ -7,7 +7,7 @@ function executionIntent(session) {
   return {
     action: approved ? 'DRY_RUN_ONLY' : 'SKIP',
     mode: 'DRY_RUN',
-    reason: approved ? 'Evaluator approved, but hackathon executor never places real trades.' : 'Evaluator rejected or missing approval.',
+    reason: approved ? 'Evaluator approved, but external PM2 bridge executor never places real trades.' : 'Evaluator rejected or missing approval.',
     mockTrade: approved ? { venue: 'polymarket', market: 'BTC 15m UP/DOWN', notionalUsdc: '0.00', realExecution: false } : null,
   };
 }

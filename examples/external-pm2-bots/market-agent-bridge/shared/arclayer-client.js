@@ -2,7 +2,7 @@ const crypto = require('node:crypto');
 
 const BASE_URL = (process.env.ARCLAYER_BASE_URL || 'https://arclayers.xyz').replace(/\/$/, '');
 const API_KEY = process.env.ARCLAYER_API_KEY || '';
-const AGENT_ID = process.env.ARCLAYER_AGENT_ID || 'hackathon-demo-agent';
+const AGENT_ID = process.env.ARCLAYER_AGENT_ID || 'external-pm2-market-agent';
 const DRY_RUN = process.env.DRY_RUN !== 'false';
 const CATEGORY = 'prediction-market';
 
@@ -27,7 +27,7 @@ async function latestSession() {
 }
 
 async function postEvent({ role, type, payload, runtimeId, sessionId, metadata = {}, source }) {
-  if (!DRY_RUN) throw new Error('This hackathon demo is DRY_RUN only. Set DRY_RUN=true.');
+  if (!DRY_RUN) throw new Error('This external PM2 market agent bridge example is DRY_RUN only. Set DRY_RUN=true.');
   if (!API_KEY || API_KEY.includes('REPLACE')) throw new Error('Missing ARCLAYER_API_KEY placeholder not allowed for posting.');
   const body = {
     sessionId: sessionId || currentSessionId(),
@@ -37,10 +37,10 @@ async function postEvent({ role, type, payload, runtimeId, sessionId, metadata =
     type,
     payload,
     payloadHash: sha256(payload),
-    source: source || 'external-pm2-hackathon-bot',
+    source: source || 'external-pm2-market-agent-bridge',
     dryRun: true,
     category: CATEGORY,
-    metadata: { ...metadata, demo: 'agora-agents-hackathon', dryRunOnly: true },
+    metadata: { ...metadata, demo: 'external pm2 market agent bridge', dryRunOnly: true },
   };
   const res = await fetch(`${BASE_URL}/api/agent-bridge/events`, {
     method: 'POST',
