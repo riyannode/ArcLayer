@@ -1,7 +1,6 @@
 /**
  * x402 Dual-Mode Types — Arc Native (EIP-3009) + Circle Gateway.
  *
- * Legacy arc-escrow types removed. Only `exact` scheme remains.
  */
 
 export type X402Scheme = 'exact';
