@@ -69,3 +69,13 @@ export async function isRegisteredExternalAgentId(agentId: string): Promise<bool
   const agents = await listRegisteredExternalAgents();
   return agents.some((agent) => normalize(agent.agentId) === normalized);
 }
+
+export function externalRegistryEnforcementEnabled(): boolean {
+  return process.env.A2A_AGENT_ROSTER_SOURCE === 'registered-only' ||
+    process.env.A2A_ENFORCE_EXTERNAL_REGISTRY === 'true';
+}
+
+export async function requireRegisteredExternalAgent(agentId: string): Promise<boolean> {
+  if (!externalRegistryEnforcementEnabled()) return true;
+  return isRegisteredExternalAgentId(agentId);
+}
