@@ -1,6 +1,6 @@
-# ArcLayer Production Bot Architecture (Jakarta VPS)
+# ArcLayer Production Bot Architecture VPS
 
-This example reflects the multi-agent prediction market setup deployed on the Jakarta production cluster.
+This example reflects the multi-agent prediction market setup deployed on VPS pm2 the production cluster.
 
 ## Architecture Overview
 
@@ -9,7 +9,7 @@ The system runs 4 independent agents orchestrated via PM2. Each agent operates a
 ### Agents
 | Agent | Role | Model | LLM Base URL |
 | :--- | :--- | :--- | :--- |
-| **Analyzer** | Market Data Processing | `0d7ff9e1-8063-49df-99c9-1c6d716a4a76` | `https://api.pioneer.ai/v1` |
+| **Analyzer** | Market Data Processing | `deepseek/deepseek-v4-pro` | `https://api.pioneer.ai/v1` |
 | **Evaluator** | Market Condition Scoring | `deepseek/deepseek-v4-pro` | `https://api.blockchain.info/ai/api/v1` |
 | **Executor** | Order Routing/Execution | `XiaomiMiMo/MiMo-V2.5-Pro` | `https://api.pioneer.ai/v1` |
 | **Oracle** | Data Truth Sourcing | `XiaomiMiMo/MiMo-V2.5-Pro` | `https://api.pioneer.ai/v1` |
