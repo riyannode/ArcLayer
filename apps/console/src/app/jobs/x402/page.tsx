@@ -20,26 +20,32 @@ const INITIAL_ACTION_STATE: ActionState = {
 export default function X402JobsWorkbenchPage() {
   const { paidFetch } = useX402PaidFetch();
 
-  const [quoteDescription, setQuoteDescription] = useState('');
+  const [quoteJobDescription, setQuoteJobDescription] = useState('');
+  const [quoteUrgency, setQuoteUrgency] = useState<'normal' | 'medium' | 'high'>('normal');
   const [quoteState, setQuoteState] = useState<ActionState>(INITIAL_ACTION_STATE);
 
-  const [createProvider, setCreateProvider] = useState('');
-  const [createEvaluator, setCreateEvaluator] = useState('');
-  const [createExpiredAt, setCreateExpiredAt] = useState('');
+  const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
-  const [createHook, setCreateHook] = useState('0x');
+  const [createBudget, setCreateBudget] = useState('');
+  const [createRequester, setCreateRequester] = useState('');
   const [createState, setCreateState] = useState<ActionState>(INITIAL_ACTION_STATE);
 
   const [routeJobId, setRouteJobId] = useState('');
-  const [routeProvider, setRouteProvider] = useState('');
+  const [routeRole, setRouteRole] = useState('');
+  const [routeCategory, setRouteCategory] = useState('');
+  const [routeCapabilitiesCsv, setRouteCapabilitiesCsv] = useState('');
   const [routeState, setRouteState] = useState<ActionState>(INITIAL_ACTION_STATE);
 
   const [proofJobId, setProofJobId] = useState('');
-  const [deliverableHash, setDeliverableHash] = useState('');
+  const [proofAgentId, setProofAgentId] = useState('');
+  const [proofProofType, setProofProofType] = useState('');
+  const [proofProofData, setProofProofData] = useState('');
+  const [proofSummary, setProofSummary] = useState('');
   const [proofState, setProofState] = useState<ActionState>(INITIAL_ACTION_STATE);
 
   const [verifyJobId, setVerifyJobId] = useState('');
-  const [reasonHash, setReasonHash] = useState('');
+  const [verifyReceiptId, setVerifyReceiptId] = useState('');
+  const [verifyVerifierAgent, setVerifyVerifierAgent] = useState('');
   const [verifyState, setVerifyState] = useState<ActionState>(INITIAL_ACTION_STATE);
 
   async function runPaidPost(path: string, body: unknown, setState: (next: ActionState) => void) {
@@ -76,12 +82,20 @@ export default function X402JobsWorkbenchPage() {
             className="space-y-3"
             onSubmit={(event: FormEvent) => {
               event.preventDefault();
-              void runPaidPost('/api/x402/jobs/quote', { description: quoteDescription }, setQuoteState);
+              void runPaidPost('/api/x402/jobs/quote', { jobDescription: quoteJobDescription, urgency: quoteUrgency }, setQuoteState);
             }}
           >
             <div>
-              <label className={labelClass}>description</label>
-              <input required value={quoteDescription} onChange={(e) => setQuoteDescription(e.target.value)} className={fieldClass} />
+              <label className={labelClass}>jobDescription</label>
+              <input required value={quoteJobDescription} onChange={(e) => setQuoteJobDescription(e.target.value)} className={fieldClass} />
+            </div>
+            <div>
+              <label className={labelClass}>urgency</label>
+              <select value={quoteUrgency} onChange={(e) => setQuoteUrgency(e.target.value as 'normal' | 'medium' | 'high')} className={fieldClass}>
+                <option value="normal">normal</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+              </select>
             </div>
             <button disabled={quoteState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{quoteState.loading ? 'Quoting…' : 'Quote job'}</button>
           </form>
@@ -92,45 +106,61 @@ export default function X402JobsWorkbenchPage() {
             className="space-y-3"
             onSubmit={(event: FormEvent) => {
               event.preventDefault();
-              void runPaidPost('/api/x402/jobs/create', { provider: createProvider, evaluator: createEvaluator, expiredAt: createExpiredAt, description: createDescription, hook: createHook }, setCreateState);
+              void runPaidPost('/api/x402/jobs/create', { title: createTitle, description: createDescription, budget: createBudget, requester: createRequester }, setCreateState);
             }}
           >
-            {[
-              ['provider', createProvider, setCreateProvider],
-              ['evaluator', createEvaluator, setCreateEvaluator],
-              ['expiredAt', createExpiredAt, setCreateExpiredAt],
-              ['description', createDescription, setCreateDescription],
-              ['hook', createHook, setCreateHook],
-            ].map(([label, value, setter]) => (
-              <div key={label as string}>
-                <label className={labelClass}>{label as string}</label>
-                <input required value={value as string} onChange={(e) => (setter as (v: string) => void)(e.target.value)} className={fieldClass} />
-              </div>
-            ))}
+            <div><label className={labelClass}>title</label><input required value={createTitle} onChange={(e) => setCreateTitle(e.target.value)} className={fieldClass} /></div>
+            <div><label className={labelClass}>description</label><input required value={createDescription} onChange={(e) => setCreateDescription(e.target.value)} className={fieldClass} /></div>
+            <div><label className={labelClass}>budget</label><input value={createBudget} onChange={(e) => setCreateBudget(e.target.value)} className={fieldClass} /></div>
+            <div><label className={labelClass}>requester</label><input value={createRequester} onChange={(e) => setCreateRequester(e.target.value)} className={fieldClass} /></div>
             <button disabled={createState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{createState.loading ? 'Creating…' : 'Create job'}</button>
           </form>
         </ActionPanel>
 
         <ActionPanel title="3) Route job" state={routeState}>
-          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void runPaidPost(`/api/x402/jobs/${routeJobId}/route`, { provider: routeProvider }, setRouteState); }}>
+          <form className="space-y-3" onSubmit={(e) => {
+            e.preventDefault();
+            void runPaidPost(`/api/x402/jobs/${routeJobId}/route`, {
+              role: routeRole,
+              category: routeCategory,
+              capabilities: routeCapabilitiesCsv.split(',').map((x) => x.trim()).filter(Boolean),
+            }, setRouteState);
+          }}>
             <div><label className={labelClass}>job id</label><input required value={routeJobId} onChange={(e) => setRouteJobId(e.target.value)} className={fieldClass} /></div>
-            <div><label className={labelClass}>provider</label><input required value={routeProvider} onChange={(e) => setRouteProvider(e.target.value)} className={fieldClass} /></div>
+            <div><label className={labelClass}>role</label><input value={routeRole} onChange={(e) => setRouteRole(e.target.value)} className={fieldClass} /></div>
+            <div><label className={labelClass}>category</label><input value={routeCategory} onChange={(e) => setRouteCategory(e.target.value)} className={fieldClass} /></div>
+            <div><label className={labelClass}>capabilitiesCsv</label><input value={routeCapabilitiesCsv} onChange={(e) => setRouteCapabilitiesCsv(e.target.value)} className={fieldClass} /></div>
             <button disabled={routeState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{routeState.loading ? 'Routing…' : 'Route job'}</button>
           </form>
         </ActionPanel>
 
         <ActionPanel title="4) Submit proof" state={proofState}>
-          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void runPaidPost(`/api/x402/jobs/${proofJobId}/submit-proof`, { deliverableHash }, setProofState); }}>
+          <form className="space-y-3" onSubmit={(e) => {
+            e.preventDefault();
+            void runPaidPost(`/api/x402/jobs/${proofJobId}/submit-proof`, {
+              agentId: proofAgentId,
+              proofType: proofProofType,
+              proofData: proofProofData,
+              summary: proofSummary,
+            }, setProofState);
+          }}>
             <div><label className={labelClass}>job id</label><input required value={proofJobId} onChange={(e) => setProofJobId(e.target.value)} className={fieldClass} /></div>
-            <div><label className={labelClass}>deliverableHash</label><input required value={deliverableHash} onChange={(e) => setDeliverableHash(e.target.value)} className={fieldClass} /></div>
+            <div><label className={labelClass}>agentId</label><input required value={proofAgentId} onChange={(e) => setProofAgentId(e.target.value)} className={fieldClass} /></div>
+            <div><label className={labelClass}>proofType</label><input value={proofProofType} onChange={(e) => setProofProofType(e.target.value)} className={fieldClass} /></div>
+            <div><label className={labelClass}>proofData</label><input required value={proofProofData} onChange={(e) => setProofProofData(e.target.value)} className={fieldClass} /></div>
+            <div><label className={labelClass}>summary</label><input value={proofSummary} onChange={(e) => setProofSummary(e.target.value)} className={fieldClass} /></div>
             <button disabled={proofState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{proofState.loading ? 'Submitting…' : 'Submit proof'}</button>
           </form>
         </ActionPanel>
 
         <ActionPanel title="5) Verify proof" state={verifyState}>
-          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void runPaidPost(`/api/x402/jobs/${verifyJobId}/verify`, { reasonHash }, setVerifyState); }}>
+          <form className="space-y-3" onSubmit={(e) => {
+            e.preventDefault();
+            void runPaidPost(`/api/x402/jobs/${verifyJobId}/verify`, { receiptId: verifyReceiptId, verifierAgent: verifyVerifierAgent }, setVerifyState);
+          }}>
             <div><label className={labelClass}>job id</label><input required value={verifyJobId} onChange={(e) => setVerifyJobId(e.target.value)} className={fieldClass} /></div>
-            <div><label className={labelClass}>reasonHash</label><input required value={reasonHash} onChange={(e) => setReasonHash(e.target.value)} className={fieldClass} /></div>
+            <div><label className={labelClass}>receiptId</label><input required value={verifyReceiptId} onChange={(e) => setVerifyReceiptId(e.target.value)} className={fieldClass} /></div>
+            <div><label className={labelClass}>verifierAgent</label><input value={verifyVerifierAgent} onChange={(e) => setVerifyVerifierAgent(e.target.value)} className={fieldClass} /></div>
             <button disabled={verifyState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{verifyState.loading ? 'Verifying…' : 'Verify proof'}</button>
           </form>
         </ActionPanel>
