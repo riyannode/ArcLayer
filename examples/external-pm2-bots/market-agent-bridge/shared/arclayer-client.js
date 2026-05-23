@@ -51,6 +51,7 @@ async function latestSession() {
   for (const event of sessionEvents) {
     const role = event.role || (event.type === "resolver_output" ? "analyzer" : (event.type === "evaluation" ? "evaluator" : null));
     if (!role) continue;
+    // Prefer actual data types over references
     const isRef = event.type === "receipt_reference";
     if (roles[role] && isRef) continue;
     roles[role] = event;
