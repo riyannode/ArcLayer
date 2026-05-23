@@ -1,6 +1,7 @@
+import { createHmac } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { recoverMessageAddress, type Hex } from 'viem';
-import { createPublicClient, http, parseAbiItem } from 'viem';
+import { recoverMessageAddress } from 'viem';
+import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { withX402 } from '@/lib/x402';
 
@@ -8,36 +9,16 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const runtime = 'nodejs';
 
-const RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
-const AGENT_REGISTRY = '0xB263336055dD65FF501e36CA39941760D943703C' as Hex;
-const FROM_BLOCK = BigInt(process.env.AGENT_REGISTRY_FROM_BLOCK || '0');
 const MAX_TIMESTAMP_SKEW_SEC = 5 * 60;
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB
 const ALLOWED_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const BUCKET = 'agent-avatars';
 
-const AGENT_REGISTERED = parseAbiItem(
-  'event AgentRegistered(uint256 indexed agentId, bytes32 indexed skillHash, address indexed controller, string metadataURI)'
-);
-
 async function getOnchainController(agentId: string): Promise<string | null> {
   try {
-    const client = createPublicClient({ transport: http(RPC) });
-    const idBig = BigInt(agentId);
-    const logs = await client.getLogs({
-      address: AGENT_REGISTRY,
-      event: AGENT_REGISTERED,
-      args: { agentId: idBig },
-      fromBlock: FROM_BLOCK,
-      toBlock: 'latest',
-    });
-    if (logs.length === 0) return null;
-    const latest = logs.sort(
-      (a, b) => Number(b.blockNumber ?? BigInt(0)) - Number(a.blockNumber ?? BigInt(0))
-    )[0];
-    return latest.args.controller?.toLowerCase() ?? null;
+    return (await getERC8004OwnerOf(agentId)).toLowerCase();
   } catch (err) {
-    console.error('[avatar.upload] controller lookup failed', err);
+    console.warn('[avatar.upload] ERC-8004 ownerOf lookup returned no controller', err);
     return null;
   }
 }
@@ -48,6 +29,22 @@ function extFromMime(mime: string): string {
   if (mime === 'image/webp') return 'webp';
   if (mime === 'image/gif') return 'gif';
   return 'bin';
+}
+
+function buildAvatarCommitToken(agentId: string, url: string): string {
+  const secret = process.env.AVATAR_COMMIT_SECRET;
+  if (!secret) {
+    throw new Error('avatar_commit_secret_missing');
+  }
+
+  const payload = {
+    agentId,
+    url,
+    exp: Math.floor(Date.now() / 1000) + 10 * 60,
+  };
+  const payloadBase64Url = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = createHmac('sha256', secret).update(payloadBase64Url).digest('base64url');
+  return `${payloadBase64Url}.${signature}`;
 }
 
 async function postHandler(req: NextRequest) {
@@ -88,7 +85,6 @@ async function postHandler(req: NextRequest) {
     return NextResponse.json({ error: 'signature timestamp out of bounds' }, { status: 400 });
   }
 
-  // Verify signer === on-chain controller
   const message = `ArcLayer Avatar Upload\nagentId=${agentId}\nts=${tsNum}`;
   let signer: string;
   try {
@@ -105,7 +101,6 @@ async function postHandler(req: NextRequest) {
     return NextResponse.json({ error: 'signer is not the on-chain controller' }, { status: 403 });
   }
 
-  // Upload to Supabase Storage
   const supabase = getSupabaseAdmin();
   const ext = extFromMime(file.type);
   const path = `${agentId}/${Date.now()}.${ext}`;
@@ -128,10 +123,14 @@ async function postHandler(req: NextRequest) {
     return NextResponse.json({ error: 'failed to resolve public URL' }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, url });
+  try {
+    const avatarCommitToken = buildAvatarCommitToken(agentId, url);
+    return NextResponse.json({ ok: true, url, avatarCommitToken });
+  } catch {
+    return NextResponse.json({ error: 'avatar_commit_secret_missing' }, { status: 500 });
+  }
 }
 
-// 0.000001 USDC = 1 atomic (6 decimals). Avatar uploads consume storage and are paid actions.
 export const POST = withX402(postHandler, {
   amount: '1',
   resource: '/api/a2a/avatar/upload',
