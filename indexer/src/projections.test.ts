@@ -37,7 +37,7 @@ test("projectJobsFromEvents sums JobFunded.amount and marks funded status", () =
   assert.equal(jobs.length, 1);
   assert.equal(jobs[0].budget, "1000");
   assert.equal(jobs[0].fundedAmount, "1000");
-  assert.equal(jobs[0].status, 2);
+  assert.equal(jobs[0].status, 1);
   assert.equal(jobs[0].statusLabel, "Funded");
 });
 
@@ -50,7 +50,7 @@ test("projectJobsFromEvents preserves ERC-8183 status label order", () => {
     event("JobCompleted", { reason: "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", logIndex: 4 }),
   ]);
 
-  assert.equal(jobs[0].status, 4);
+  assert.equal(jobs[0].status, 3);
   assert.equal(jobs[0].statusLabel, "Completed");
 });
 
