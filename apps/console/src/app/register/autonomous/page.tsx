@@ -801,7 +801,7 @@ export default function RegisterAutonomousPage() {
                         className="input-mono"
                         autoComplete="off"
                       />
-                      <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
+                      <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">
                         Final registration requires signing.
                       </div>
                     </div>
@@ -811,7 +811,7 @@ export default function RegisterAutonomousPage() {
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <div className="aureo-mono-label mb-1">MULTI-ROLE RUNTIME</div>
-                        <div className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.78)]">
+                        <div className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.78)] invisible">
                           Expose multiple callable roles.
                         </div>
                       </div>
