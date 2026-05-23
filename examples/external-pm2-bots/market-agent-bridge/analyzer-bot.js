@@ -32,7 +32,9 @@ function deterministicAnalyze(session) {
 async function analyzeWithLocalLlm(session, fallback) {
   if (!hasLocalLlmKey()) return fallback;
 
-  const baseUrl = (process.env.LLM_BASE_URL || process.env.LOCAL_LLM_BASE_URL || 'http://localhost:20128/v1').replace(/\/$/, '');
+  const llmBaseUrl = process.env.LLM_BASE_URL || process.env.LOCAL_LLM_BASE_URL;
+  if (!llmBaseUrl) return fallback;
+  const baseUrl = llmBaseUrl.replace(/\/$/, '');
   const model = process.env.LLM_MODEL || 'KIRO';
   const oraclePayload = session?.roles?.oracle?.payload || {};
   const prompt = [
