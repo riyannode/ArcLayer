@@ -7,7 +7,7 @@
     "build": "corepack pnpm --dir apps/console build",
     "build:contracts": "npm --prefix contracts run build",
     "test": "npm --prefix contracts run test",
-    "check": "corepack pnpm --dir apps/console run lint && corepack pnpm --dir indexer run lint",
+    "check": "corepack pnpm --dir apps/console build && corepack pnpm --dir indexer build",
     "test:console": "corepack pnpm --dir apps/console run test",
     "test:indexer": "corepack pnpm --dir indexer run test",
     "test:contracts": "npm --prefix contracts run test",
