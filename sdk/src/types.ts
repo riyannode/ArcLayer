@@ -49,12 +49,12 @@ export type IndexedJobEvent = {
 
 // ── Legacy tuples (deprecated, kept as type aliases for migration) ──────────
 
-/** @deprecated MilestoneEscrow disabled in official Arc/Circle mode. */
+/** @deprecated Human-to-Agent Vault/custom module tuple, not active in Arc/Circle mode. */
 export type ProjectTuple = readonly [
   bigint, Address, Address, bigint, bigint, bigint, bigint, string, string, number,
 ];
 
-/** @deprecated MilestoneEscrow disabled in official Arc/Circle mode. */
+/** @deprecated Human-to-Agent Vault/custom module tuple, not active in Arc/Circle mode. */
 export type MilestoneTuple = readonly [
   bigint, bigint, bigint, bigint, bigint, string, string, number,
 ];
@@ -70,11 +70,6 @@ export type JobTuple = readonly [
   `0x${string}`, string, string, boolean, number,
 ];
 
-/** @deprecated No WorkProof in official Arc/Circle mode. */
-export type WorkProofTuple = readonly [
-  bigint, bigint, Address, bigint, bigint, string,
-];
-
 /** @deprecated Old escrow event shape; replaced by IndexedJobEvent. */
 export type IndexedEscrowEvent = {
   eventName:
@@ -82,7 +77,7 @@ export type IndexedEscrowEvent = {
     | "ProjectFunded"
     | "MilestoneSubmitted"
     | "MilestoneReleased"
-    | "WorkProofMinted";
+;
   blockNumber: bigint;
   transactionHash: `0x${string}`;
   projectId?: bigint;

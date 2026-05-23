@@ -9,10 +9,9 @@ Runs a full job cycle with 3 burner wallets:
 ```text
 createJob → setBudget → approve USDC → fund
          → submitDeliverable → evaluate → settle
-         → mints WorkProof to worker
 ```
 
-Roles: client, worker, evaluator. Each run mints a soulbound `WorkProof` ERC721 NFT to the worker.
+Roles: client, provider, evaluator.
 
 ```bash
 bash scripts/job-cycle-live.sh

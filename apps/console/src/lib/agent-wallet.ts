@@ -394,7 +394,7 @@ export async function evaluateJob(jobId: bigint | string, approved: boolean): Pr
 
 /**
  * Settle a job after evaluation.
- * Sends USDC to worker + fee to protocol, mints WorkProof NFT.
+ * Sends USDC to provider + fee to protocol in Arc ERC-8183 flows.
  * Can be called by anyone.
  */
 export async function settleJob(jobId: bigint | string): Promise<TxResult> {

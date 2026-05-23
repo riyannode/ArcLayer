@@ -108,19 +108,6 @@ export async function readAllJobs() {
   return [] as ArcJobRecord[];
 }
 
-/** Official Arc/Circle reference mode has no ArcLayer WorkProof contract. */
-export async function readWorkProofTokenByJobId(_jobId: bigint) {
-  return BigInt(0);
-}
-
-export async function readWorkProof(_tokenId: bigint) {
-  return null;
-}
-
-export async function readWorkProofsByAgent(_agentId: bigint) {
-  return { tokenIds: [] as bigint[], proofs: [] as null[] };
-}
-
 /** Official Arc/Circle reference mode has no ArcLayer ReputationOracle contract. */
 export async function readReputationScore(_agentId: bigint) {
   return BigInt(0);
@@ -161,33 +148,30 @@ export async function readValidationStatus(requestHash: Hex) {
 }
 
 export async function readAgentProfile(agentId: bigint) {
-  const [agent, score, jobs, proofBundle] = await Promise.all([
+  const [agent, score, jobs] = await Promise.all([
     readAgent(agentId),
     readReputationScore(agentId),
     readAgentJobs(agentId),
-    readWorkProofsByAgent(agentId),
   ]);
 
   return {
     agent,
     score,
     jobs,
-    proofTokenIds: proofBundle.tokenIds,
-    proofs: proofBundle.proofs,
   };
 }
 
-/** @deprecated MilestoneEscrow is disabled in official Arc/Circle reference mode. */
+/** @deprecated Human-to-Agent Vault reads are not available in Arc/Circle reference mode. */
 export async function readProject(_projectId: bigint) {
-  throw new Error("MilestoneEscrow is disabled in official Arc/Circle reference mode");
+  throw new Error("Human-to-Agent Vault reads are not available in Arc/Circle reference mode");
 }
 
-/** @deprecated MilestoneEscrow is disabled in official Arc/Circle reference mode. */
+/** @deprecated Human-to-Agent Vault reads are not available in Arc/Circle reference mode. */
 export async function readProjectMilestones(_projectId: bigint, _milestoneCount: number) {
   return [];
 }
 
-/** @deprecated MilestoneEscrow is disabled in official Arc/Circle reference mode. */
+/** @deprecated Human-to-Agent Vault reads are not available in Arc/Circle reference mode. */
 export async function readUserProjects(_user: Address) {
   return [] as bigint[];
 }
