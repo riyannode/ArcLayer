@@ -659,12 +659,12 @@ function JobsPage() {
                   {jobs.length > 0 ? (
                     <>
                       <p className="font-mono text-[11.5px] text-[#EAE4D8]">No jobs match your filter</p>
-                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">Try a different keyword or clear the filter.</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">Try a different keyword or clear the filter.</p>
                     </>
                   ) : (
                     <>
                       <p className="font-mono text-[11.5px] text-[#EAE4D8]">No indexed jobs yet</p>
-                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">Create the first funded job.</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">Create the first funded job.</p>
                     </>
                   )}
                 </div>

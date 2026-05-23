@@ -543,7 +543,7 @@ function RegisterManualAgentPageContent() {
         <LLMAgentConnectKit mode="manual" className="mt-6" />
 
         <section className="aureo-panel mt-6 p-4 md:p-6">
-          <div className="aureo-mono-label mb-2">HOW IT WORKS</div>
+          <div className="aureo-mono-label mb-2 invisible">HOW IT WORKS</div>
           <h2 className="aureo-display text-[22px] text-[#EAE4D8]">Manual job lifecycle</h2>
 
           <ol className="mt-4 grid gap-3 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)] md:grid-cols-5">

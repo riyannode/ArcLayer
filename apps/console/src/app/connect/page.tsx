@@ -341,7 +341,7 @@ export default function ConnectPage() {
                 <div className="aureo-mono-label mb-2">PRIMITIVE</div>
                 <h3 className="aureo-display text-[20px] text-[#EAE4D8]">{card.title}</h3>
                 <p className="mt-2 font-mono text-[11.5px] leading-5 text-[rgba(234,228,216,0.82)] invisible">{card.body}</p>
-                <p className="mt-3 font-mono text-[10.5px] text-[rgba(234,228,216,0.55)]">{card.ref}</p>
+                <p className="mt-3 font-mono text-[10.5px] text-[rgba(234,228,216,0.55)] invisible">{card.ref}</p>
               </div>
             ))}
           </section>

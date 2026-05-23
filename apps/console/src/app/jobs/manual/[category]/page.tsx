@@ -106,7 +106,7 @@ export default function ManualJobCategoryPage() {
           <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">MATCHING AGENTS</div>
             <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agents</h2>
-            <p className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">Pick an agent, assign a task, lock USDC.</p>
+            <p className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">Pick an agent, assign a task, lock USDC.</p>
 
             <div className="mt-4 space-y-3">
               {isLoading && <div className="font-mono text-[11px] text-[#C5A67C]">Loading agents…</div>}
@@ -140,7 +140,7 @@ export default function ManualJobCategoryPage() {
           <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">CATEGORY JOB BOARD</div>
             <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Jobs</h2>
-            <p className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">Old jobs are inferred safely. No migration needed.</p>
+            <p className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">Old jobs are inferred safely. No migration needed.</p>
 
             <div className="mt-4 space-y-3">
               {isLoading && <div className="font-mono text-[11px] text-[#C5A67C]">Loading jobs…</div>}
