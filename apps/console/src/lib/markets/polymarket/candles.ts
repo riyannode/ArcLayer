@@ -86,7 +86,7 @@ function buildCandles1m(points: ChainlinkPricePoint[], windowStart: number, wind
   return candles;
 }
 
-async function fetchChainlinkPricePointsForWindow(asset: Asset, windowStart: number, windowEnd: number): Promise<ChainlinkPricePoint[]> {
+async function fetchChainlinkPricePointsForWindow(asset: Asset, windowStart: number, windowEnd: number): Promise<{ points: ChainlinkPricePoint[]; diagnostics: string[] }> {
   const rpcUrl = process.env.CHAINLINK_EVM_RPC_URL;
   if (!rpcUrl) throw new Error('chainlink_rpc_missing');
 
@@ -96,11 +96,30 @@ async function fetchChainlinkPricePointsForWindow(asset: Asset, windowStart: num
   const latest = await client.readContract({ address, abi: aggregatorV3Abi, functionName: 'latestRoundData' });
 
   const points: ChainlinkPricePoint[] = [];
+  const diagnostics: string[] = [];
   let roundId = latest[0] as bigint;
   const maxRounds = 1200;
+  const maxReadFailures = 32;
+  let readFailures = 0;
 
   for (let scanned = 0; scanned < maxRounds && roundId > 0n; scanned += 1) {
-    const data = scanned === 0 ? latest : await client.readContract({ address, abi: aggregatorV3Abi, functionName: 'getRoundData', args: [roundId] });
+    let data: typeof latest;
+    if (scanned === 0) {
+      data = latest;
+    } else {
+      try {
+        data = await client.readContract({ address, abi: aggregatorV3Abi, functionName: 'getRoundData', args: [roundId] });
+      } catch {
+        readFailures += 1;
+        if (readFailures <= 3) diagnostics.push(`chainlink_round_read_failed_${roundId.toString()}`);
+        if (readFailures >= maxReadFailures) {
+          diagnostics.push('chainlink_round_read_failure_limit_reached');
+          break;
+        }
+        roundId -= 1n;
+        continue;
+      }
+    }
 
     const answer = data[1] as bigint;
     const updatedAt = Number(data[3]);
@@ -118,17 +137,20 @@ async function fetchChainlinkPricePointsForWindow(asset: Asset, windowStart: num
     roundId -= 1n;
   }
 
-  return points.filter((point) => point.timestamp >= windowStart - 900 && point.timestamp <= windowEnd + 900);
+  return {
+    points: points.filter((point) => point.timestamp >= windowStart - 900 && point.timestamp <= windowEnd + 900),
+    diagnostics,
+  };
 }
 
 export async function fetchChainlinkCandles1mForWindow(asset: Asset, windowStart: number, windowEnd: number): Promise<CandleFetchResult> {
   try {
-    const pricePoints = await fetchChainlinkPricePointsForWindow(asset, windowStart, windowEnd);
+    const { points: pricePoints, diagnostics } = await fetchChainlinkPricePointsForWindow(asset, windowStart, windowEnd);
     const candles = buildCandles1m(pricePoints, windowStart, windowEnd);
     if (!candles.length) {
       return { candles: [], candleSource: 'none', candleError: 'chainlink_no_rounds_for_window', pricePoints: [] };
     }
-    return { candles, candleSource: 'chainlink', candleError: null, pricePoints };
+    return { candles, candleSource: 'chainlink', candleError: diagnostics.length ? diagnostics.join('; ') : null, pricePoints };
   } catch (error) {
     return {
       candles: [],
