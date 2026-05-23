@@ -16,7 +16,7 @@ export default function JobsChooserPage() {
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-3">
           <Link
             href="/jobs/manual"
             className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
@@ -50,7 +50,38 @@ export default function JobsChooserPage() {
             </div>
           </Link>
 
+
+
           <Link
+            href="/jobs/x402"
+            className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-emerald-500/40 hover:bg-white/[0.04]"
+          >
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded border border-white/10 bg-black/40 text-emerald-400">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 3v18" />
+                <path d="M17 8H9.5a2.5 2.5 0 0 0 0 5h5a2.5 2.5 0 0 1 0 5H7" />
+              </svg>
+            </div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-emerald-400">x402 Jobs</div>
+            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">x402 Jobs Workbench</h2>
+            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)] invisible">
+              Create and run x402-backed job flows.
+            </p>
+
+            <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">Route</div>
+              <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
+                <li className="flex items-start gap-2"><span className="mt-0.5 text-emerald-400">→</span>Open x402 workbench</li>
+                <li className="flex items-start gap-2"><span className="mt-0.5 text-emerald-400">→</span>Pay per protected route</li>
+                <li className="flex items-start gap-2"><span className="mt-0.5 text-emerald-400">→</span>Review x402 responses</li>
+              </ul>
+            </div>
+
+            <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-emerald-400 group-hover:text-[#EAE4D8]">
+              Open x402 Workbench
+              <span className="transition-transform group-hover:translate-x-1">→</span>
+            </div>
+          </Link>          <Link
             href="/a2a"
             className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-cyan-500/40 hover:bg-white/[0.04]"
           >

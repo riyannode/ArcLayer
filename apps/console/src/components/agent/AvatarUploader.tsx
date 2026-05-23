@@ -6,6 +6,7 @@ import { useArcSign } from '@/hooks/useArcSign';
 import { keccak256, stringToBytes } from 'viem';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest';
 import { X402ActionGate } from '@/components/x402/X402ActionGate';
+import { useX402PaidFetch } from '@/hooks/useX402PaidFetch';
 
 type Props = {
   agentId: string;
@@ -35,6 +36,7 @@ export function AvatarUploader({ agentId, currentAvatar, ownerAddress, manifestD
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const { paidFetch } = useX402PaidFetch();
 
   const isOwner =
     !!address && !!ownerAddress && address.toLowerCase() === ownerAddress.toLowerCase();
@@ -69,17 +71,16 @@ export function AvatarUploader({ agentId, currentAvatar, ownerAddress, manifestD
       const ts = Math.floor(Date.now() / 1000);
       const message = ['ArcLayer Manifest v1', `agentId=${agentId}`, `hash=${hash}`, `ts=${ts}`].join('\n');
       const signature = await signMessageAsync({ message });
-      const res = await fetch('/api/a2a/manifest', {
+      const result = await paidFetch('/api/a2a/manifest', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ manifest, signature, ts }),
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || 'Manifest update failed');
+      if (!result.ok) {
+        throw new Error(result.error || result.json?.error || 'Manifest update failed');
       }
     },
-    [agentId, manifestData, signMessageAsync]
+    [agentId, manifestData, paidFetch, signMessageAsync]
   );
 
   const handleFile = useCallback(

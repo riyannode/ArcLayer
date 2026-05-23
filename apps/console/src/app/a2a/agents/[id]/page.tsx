@@ -16,6 +16,7 @@ import { fetchIndexerJson, indexerUrl } from '@/lib/indexer';
 import type { AgentDetail, IndexedJob, IndexedProof } from '@/lib/indexer';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest';
 import { AvatarUploader } from '@/components/agent/AvatarUploader';
+import { useX402PaidFetch } from '@/hooks/useX402PaidFetch';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -108,6 +109,10 @@ export default function AgentProfilePage() {
   const [manifestController, setManifestController] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [fullReport, setFullReport] = useState<Record<string, unknown> | null>(null);
+  const [fullReportError, setFullReportError] = useState<string | null>(null);
+  const [fullReportLoading, setFullReportLoading] = useState(false);
+  const { paidFetch } = useX402PaidFetch();
 
   const fetchAgent = useCallback(async () => {
     if (!agentId) { setError('Missing agent ID.'); setIsLoading(false); return; }
@@ -171,6 +176,22 @@ export default function AgentProfilePage() {
       setIsLoading(false);
     }
   }, [agentId]);
+
+
+  const fetchFullReport = useCallback(async () => {
+    if (!agentId) return;
+    setFullReportLoading(true);
+    setFullReportError(null);
+    try {
+      const response = await paidFetch(`/api/x402/agents/${agentId}/full-report`, { method: 'GET' });
+      if (!response.ok) throw new Error(response.error || 'Failed to load full report.');
+      setFullReport((response.json?.report ?? response.json) as Record<string, unknown>);
+    } catch (err) {
+      setFullReportError(err instanceof Error ? err.message : 'Failed to load full report.');
+    } finally {
+      setFullReportLoading(false);
+    }
+  }, [agentId, paidFetch]);
 
   useEffect(() => { fetchAgent(); }, [fetchAgent]);
 
@@ -337,6 +358,26 @@ export default function AgentProfilePage() {
                   <p className="mt-2 font-mono text-[11px] leading-5 text-[#b5b5b5] invisible">
 Reputation updates from x402 payments and completed ERC-8183 jobs.
                   </p>
+                </div>
+
+                <div className="rounded border border-white/10 bg-black/20 p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">Paid report</p>
+                    <button
+                      type="button"
+                      onClick={fetchFullReport}
+                      disabled={fullReportLoading}
+                      className="rounded border border-cyan-400/40 px-3 py-1 font-mono text-[10px] tracking-[0.12em] text-cyan-300 transition-colors hover:border-cyan-300 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {fullReportLoading ? 'LOADING…' : 'FULL REPUTATION REPORT'}
+                    </button>
+                  </div>
+                  {fullReportError && <p className="font-mono text-[11px] text-[#f0b7b7]">{fullReportError}</p>}
+                  {fullReport && (
+                    <pre className="overflow-x-auto rounded border border-white/10 bg-black/40 p-3 font-mono text-[10px] leading-5 text-[#c7e8ff]">
+                      {JSON.stringify(fullReport, null, 2)}
+                    </pre>
+                  )}
                 </div>
               </section>
             )}

@@ -34,7 +34,7 @@ export function GET() {
     decimals: 6,
     amount,
     payTo,
-    facilitator: '/api/x402',
+    facilitator: '/api/x402/supported',
     maxTimeoutSeconds,
     extra: {
       name: 'USDC',
@@ -52,7 +52,7 @@ export function GET() {
     decimals: 6,
     amount,
     payTo,
-    facilitator: '/api/x402',
+    facilitator: '/api/x402/supported',
     maxTimeoutSeconds,
     extra: {
       name: CIRCLE_BATCHING_NAME,
@@ -95,7 +95,7 @@ export function GET() {
       },
     ],
     accepts: [arcNativeExact, gatewayBatched],
-    facilitator: 'ArcLayer',
+    facilitator: '/api/x402/supported',
     version: String(X402_VERSION_V2),
     headers: {
       arcNative: 'X-PAYMENT',
