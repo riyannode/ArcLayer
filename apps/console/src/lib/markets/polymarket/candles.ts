@@ -80,7 +80,7 @@ export async function fetchCandles1mForWindow(
 
   try {
     const candles = await fetchCoinbaseCandles(asset, windowStart, windowEnd);
-    if (candles.length) return { candles, candleSource: 'coinbase', candleError: errors.length ? errors.join('; ') : null };
+    if (candles.length) return { candles, candleSource: 'coinbase', candleError: null };
     errors.push('Coinbase returned empty candles');
   } catch (error) {
     errors.push(error instanceof Error ? error.message : 'Coinbase request failed');
