@@ -3,6 +3,15 @@ import { withX402 } from '@/lib/x402';
 
 export const runtime = 'nodejs';
 
+
+const PREDICTION_BOT_NAMES: Record<string, string> = {
+  '19803': 'ArcLayer Prediction Analyzer',
+  '19804': 'ArcLayer Prediction Evaluator',
+  '19805': 'ArcLayer Prediction Executor',
+  '19806': 'ArcLayer Prediction Oracle',
+};
+
+
 function parseAgentId(req: NextRequest) {
   const parts = req.nextUrl.pathname.split('/').filter(Boolean);
   const idToken = parts[parts.length - 2];
@@ -41,5 +50,7 @@ export async function POST(req: NextRequest) {
     amount: process.env.X402_AGENT_RUN_AMOUNT_ATOMIC || '1',
     resource: `/api/agents/${agentId}/run`,
     description: 'x402-protected agent run endpoint',
+    liveAgentId: String(agentId),
+    liveAgentName: PREDICTION_BOT_NAMES[String(agentId)] || `Agent ${agentId}`,
   })(req);
 }
