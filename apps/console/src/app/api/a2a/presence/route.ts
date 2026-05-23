@@ -28,15 +28,28 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category')?.trim() || 'prediction-market-bots';
 
-  const presence = await listAgentPresenceByCategory(category);
+  try {
+    const presence = await listAgentPresenceByCategory(category);
 
-  return NextResponse.json({
-    ok: true,
-    category,
-    total: presence.length,
-    presence,
-    timestamp: new Date().toISOString(),
-  });
+    return NextResponse.json({
+      ok: true,
+      source: process.env.A2A_AGENT_ROSTER_SOURCE || 'local-indexer',
+      category,
+      total: presence.length,
+      presence,
+      timestamp: new Date().toISOString(),
+    });
+  } catch {
+    return NextResponse.json({
+      ok: false,
+      source: 'local-indexer',
+      category,
+      total: 0,
+      presence: [],
+      error: 'local_indexer_unavailable',
+      timestamp: new Date().toISOString(),
+    });
+  }
 }
 
 export async function POST(request: Request) {

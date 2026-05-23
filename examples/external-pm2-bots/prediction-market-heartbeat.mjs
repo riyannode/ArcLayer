@@ -21,7 +21,7 @@ const bots = rawAgentIds
       .filter(Boolean)
       .map((entry) => {
         const [agentId, ...nameParts] = entry.split(':');
-        return [agentId?.trim(), nameParts.join(':').trim()] as const;
+        return [agentId ? agentId.trim() : '', nameParts.join(':').trim()];
       })
       .filter(([agentId]) => agentId)
       .map(([agentId, name]) => [agentId, name || `Agent ${agentId}`])
