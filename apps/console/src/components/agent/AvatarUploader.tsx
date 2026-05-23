@@ -3,9 +3,9 @@
 import { useCallback, useRef, useState } from 'react';
 import { useAccount } from 'wagmi';
 import { useArcSign } from '@/hooks/useArcSign';
+import { useX402PaidFetch } from '@/hooks/useX402PaidFetch';
 import { keccak256, stringToBytes } from 'viem';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest';
-import { X402ActionGate } from '@/components/x402/X402ActionGate';
 
 type Props = {
   agentId: string;
@@ -31,6 +31,7 @@ function canonicalize(value: unknown): string {
 export function AvatarUploader({ agentId, currentAvatar, ownerAddress, manifestData, onUpdated }: Props) {
   const { address } = useAccount();
   const { signMessageAsync } = useArcSign();
+  const { paidFetch } = useX402PaidFetch();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,48 +40,41 @@ export function AvatarUploader({ agentId, currentAvatar, ownerAddress, manifestD
   const isOwner =
     !!address && !!ownerAddress && address.toLowerCase() === ownerAddress.toLowerCase();
 
-  const updateManifestAvatar = useCallback(
-    async (newUrl: string | null) => {
-      if (!manifestData) {
-        throw new Error('Manifest data missing — cannot update.');
-      }
-      const nowIso = new Date().toISOString();
-      const manifest: Record<string, unknown> = {
-        schema: 'arclayer.agent/v1',
-        version: 1,
-        agentId,
-        name: manifestData.name,
-        role: manifestData.role,
-        description: manifestData.description,
-        capability: manifestData.capability,
-        categories: manifestData.categories,
-        createdAt: manifestData.createdAt,
-        updatedAt: nowIso,
-      };
-      if (manifestData.endpoint) manifest.endpoint = manifestData.endpoint;
-      if (manifestData.mode) manifest.mode = manifestData.mode;
-      if (manifestData.price) manifest.price = manifestData.price;
-      if (manifestData.tags?.length) manifest.tags = manifestData.tags;
-      if (manifestData.links) manifest.links = manifestData.links;
-      if (manifestData.x402) manifest.x402 = manifestData.x402;
-      if (newUrl) manifest.avatar = newUrl;
+  const buildUpdatedManifest = useCallback((newUrl: string | null) => {
+    if (!manifestData) {
+      throw new Error('Manifest data missing — cannot update.');
+    }
+    const nowIso = new Date().toISOString();
+    const manifest: Record<string, unknown> = {
+      schema: 'arclayer.agent/v1',
+      version: 1,
+      agentId,
+      name: manifestData.name,
+      role: manifestData.role,
+      description: manifestData.description,
+      capability: manifestData.capability,
+      categories: manifestData.categories,
+      createdAt: manifestData.createdAt,
+      updatedAt: nowIso,
+    };
+    if (manifestData.endpoint) manifest.endpoint = manifestData.endpoint;
+    if (manifestData.mode) manifest.mode = manifestData.mode;
+    if (manifestData.price) manifest.price = manifestData.price;
+    if (manifestData.tags?.length) manifest.tags = manifestData.tags;
+    if (manifestData.links) manifest.links = manifestData.links;
+    if (manifestData.x402) manifest.x402 = manifestData.x402;
+    if (newUrl) manifest.avatar = newUrl;
+    return manifest;
+  }, [agentId, manifestData]);
 
-      const hash = keccak256(stringToBytes(canonicalize(manifest)));
-      const ts = Math.floor(Date.now() / 1000);
-      const message = ['ArcLayer Manifest v1', `agentId=${agentId}`, `hash=${hash}`, `ts=${ts}`].join('\n');
-      const signature = await signMessageAsync({ message });
-      const res = await fetch('/api/a2a/manifest', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ manifest, signature, ts }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.error || 'Manifest update failed');
-      }
-    },
-    [agentId, manifestData, signMessageAsync]
-  );
+  const signManifestUpdate = useCallback(async (manifest: Record<string, unknown>) => {
+    setStatus('Signing updated manifest…');
+    const hash = keccak256(stringToBytes(canonicalize(manifest)));
+    const ts = Math.floor(Date.now() / 1000);
+    const message = ['ArcLayer Manifest v1', `agentId=${agentId}`, `hash=${hash}`, `ts=${ts}`].join('\n');
+    const signature = await signMessageAsync({ message });
+    return { signature, ts };
+  }, [agentId, signMessageAsync]);
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -97,25 +91,47 @@ export function AvatarUploader({ agentId, currentAvatar, ownerAddress, manifestD
         return;
       }
       setBusy(true);
-      setStatus('Signing upload request…');
       try {
-        const ts = Math.floor(Date.now() / 1000);
-        const message = `ArcLayer Avatar Upload\nagentId=${agentId}\nts=${ts}`;
-        const signature = await signMessageAsync({ message });
+        setStatus('Signing avatar upload…');
+        const uploadTs = Math.floor(Date.now() / 1000);
+        const uploadMessage = `ArcLayer Avatar Upload\nagentId=${agentId}\nts=${uploadTs}`;
+        const uploadSignature = await signMessageAsync({ message: uploadMessage });
 
-        setStatus('Uploading photo…');
+        setStatus('Paying avatar upload anti-spam fee…');
         const fd = new FormData();
         fd.append('agentId', agentId);
-        fd.append('signature', signature);
-        fd.append('ts', String(ts));
+        fd.append('signature', uploadSignature);
+        fd.append('ts', String(uploadTs));
         fd.append('file', file);
-        const upRes = await fetch('/api/a2a/avatar/upload', { method: 'POST', body: fd });
-        const upBody = await upRes.json().catch(() => ({}));
-        if (!upRes.ok) throw new Error(upBody?.error || 'Upload failed');
-        const newUrl: string = upBody.url;
 
-        setStatus('Updating manifest…');
-        await updateManifestAvatar(newUrl);
+        const uploadResult = await paidFetch('/api/a2a/avatar/upload', {
+          method: 'POST',
+          body: fd,
+        });
+        if (!uploadResult.ok) {
+          throw new Error(uploadResult.error || 'Upload failed');
+        }
+
+        setStatus('Uploading avatar…');
+        const newUrl = uploadResult.json?.url as string | undefined;
+        const avatarCommitToken = uploadResult.json?.avatarCommitToken as string | undefined;
+        if (!newUrl || !avatarCommitToken) {
+          throw new Error('Upload response missing avatar commit token or URL');
+        }
+
+        const manifest = buildUpdatedManifest(newUrl);
+        const { signature, ts } = await signManifestUpdate(manifest);
+
+        setStatus('Saving avatar manifest…');
+        const commitRes = await fetch('/api/a2a/avatar/commit', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ manifest, signature, ts, avatarCommitToken }),
+        });
+        if (!commitRes.ok) {
+          const body = await commitRes.json().catch(() => ({}));
+          throw new Error(body?.error || 'Avatar commit failed');
+        }
 
         setStatus('✓ Photo updated.');
         onUpdated(newUrl);
@@ -126,16 +142,27 @@ export function AvatarUploader({ agentId, currentAvatar, ownerAddress, manifestD
         setBusy(false);
       }
     },
-    [agentId, isOwner, onUpdated, signMessageAsync, updateManifestAvatar]
+    [agentId, buildUpdatedManifest, isOwner, onUpdated, paidFetch, signManifestUpdate, signMessageAsync]
   );
 
   const handleRemove = useCallback(async () => {
     if (!isOwner || !currentAvatar) return;
     if (!confirm('Remove this photo from the agent profile?')) return;
     setBusy(true);
-    setStatus('Updating manifest…');
     try {
-      await updateManifestAvatar(null);
+      const manifest = buildUpdatedManifest(null);
+      const { signature, ts } = await signManifestUpdate(manifest);
+
+      setStatus('Paying manifest update anti-spam fee…');
+      const result = await paidFetch('/api/a2a/manifest', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ manifest, signature, ts }),
+      });
+      if (!result.ok) {
+        throw new Error(result.error || 'Manifest update failed');
+      }
+
       setStatus('✓ Photo removed.');
       onUpdated(null);
       setTimeout(() => setStatus(null), 2000);
@@ -144,7 +171,7 @@ export function AvatarUploader({ agentId, currentAvatar, ownerAddress, manifestD
     } finally {
       setBusy(false);
     }
-  }, [currentAvatar, isOwner, onUpdated, updateManifestAvatar]);
+  }, [buildUpdatedManifest, currentAvatar, isOwner, onUpdated, paidFetch, signManifestUpdate]);
 
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
@@ -162,7 +189,6 @@ export function AvatarUploader({ agentId, currentAvatar, ownerAddress, manifestD
   }
 
   return (
-    <X402ActionGate lockedMessage="Pay x402 on homepage to upload avatar">
     <div className="mt-2 flex flex-col gap-1">
       <div
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -199,6 +225,5 @@ export function AvatarUploader({ agentId, currentAvatar, ownerAddress, manifestD
       />
       {status && <p className="font-mono text-[10px] text-[#999]">{status}</p>}
     </div>
-    </X402ActionGate>
   );
 }
