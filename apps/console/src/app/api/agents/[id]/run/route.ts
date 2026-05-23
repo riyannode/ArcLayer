@@ -51,6 +51,6 @@ export async function POST(req: NextRequest) {
     resource: `/api/agents/${agentId}/run`,
     description: 'x402-protected agent run endpoint',
     liveAgentId: String(agentId),
-    liveAgentName: PREDICTION_BOT_NAMES[String(agentId)],
+    liveAgentName: PREDICTION_BOT_NAMES[String(agentId)] || `Agent ${agentId}`,
   })(req);
 }

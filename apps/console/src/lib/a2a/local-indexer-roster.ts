@@ -50,6 +50,12 @@ export type LocalAgentManifest = {
   updatedAt?: string;
 };
 
+const INDEXER_FETCH_TIMEOUT_MS = 5_000;
+const METADATA_FETCH_TIMEOUT_MS = 5_000;
+const CACHE_TTL_MS = 30_000;
+
+const categoryCache = new Map<string, { expiresAt: number; value: Awaited<ReturnType<typeof listLocalIndexerAgentsByCategoryUncached>> }>();
+
 export function metadataUriOf(agent: LocalIndexerAgent): string | null {
   return agent.metadataURI ?? agent.metadataUri ?? null;
 }
@@ -98,15 +104,32 @@ function passesOptionalVisibleFilter(agentId: string): boolean {
   return visible.has(String(agentId));
 }
 
-export async function listLocalIndexerAgentsByCategory(category: string) {
+function cacheKeyForCategory(category: string): string {
+  const indexer = process.env.A2A_LOCAL_INDEXER_URL?.trim() || '';
+  const host = process.env.A2A_AGENT_METADATA_HOST?.trim() || 'agent.arclayers.xyz';
+  const visible = process.env.A2A_VISIBLE_AGENT_IDS || process.env.NEXT_PUBLIC_A2A_VISIBLE_AGENT_IDS || '';
+  return [category, indexer, host, visible].join('|');
+}
+
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      cache: 'no-store',
+      next: { revalidate: 0 },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function listLocalIndexerAgentsByCategoryUncached(category: string) {
   const base = process.env.A2A_LOCAL_INDEXER_URL?.replace(/\/+$/, '');
   if (!base) throw new Error('A2A_LOCAL_INDEXER_URL missing');
 
-  const res = await fetch(`${base}/agents?source=erc8004`, {
-    cache: 'no-store',
-    next: { revalidate: 0 },
-  });
-
+  const res = await fetchWithTimeout(`${base}/agents?source=erc8004`, INDEXER_FETCH_TIMEOUT_MS);
   if (!res.ok) {
     throw new Error(`local indexer HTTP ${res.status}`);
   }
@@ -128,10 +151,12 @@ export async function listLocalIndexerAgentsByCategory(category: string) {
     if (!metadataURI) continue;
     if (!isAllowedMetadataUri(metadataURI)) continue;
 
-    const manifestRes = await fetch(metadataURI, {
-      cache: 'no-store',
-      next: { revalidate: 0 },
-    });
+    let manifestRes: Response;
+    try {
+      manifestRes = await fetchWithTimeout(metadataURI, METADATA_FETCH_TIMEOUT_MS);
+    } catch {
+      continue;
+    }
 
     if (!manifestRes.ok) continue;
 
@@ -163,6 +188,19 @@ export async function listLocalIndexerAgentsByCategory(category: string) {
   }
 
   return output;
+}
+
+export async function listLocalIndexerAgentsByCategory(category: string) {
+  const key = cacheKeyForCategory(category);
+  const now = Date.now();
+  const cached = categoryCache.get(key);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+
+  const value = await listLocalIndexerAgentsByCategoryUncached(category);
+  categoryCache.set(key, { value, expiresAt: now + CACHE_TTL_MS });
+  return value;
 }
 
 export async function listLocalIndexerAgentIdsByCategory(category: string): Promise<string[]> {
