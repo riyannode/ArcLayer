@@ -227,9 +227,28 @@ export async function latestBridgeSession(): Promise<BridgeSession | null> {
   const orderedEvents = [...sessionEvents].reverse() as BridgeEventRow[];
   const roles: Record<string, BridgeEventRow | null> = {};
 
+  function bridgeRoleEventPriority(event: BridgeEventRow) {
+    const type = event.event_type || event.type;
+    if (type === 'market_snapshot') return 100;
+    if (type === 'resolver_output') return 100;
+    if (type === 'evaluation') return 100;
+    if (type === 'execution_intent') return 100;
+    if (type === 'receipt_reference') return 10;
+    return 50;
+  }
+
   for (const event of orderedEvents) {
     if (!event.role) continue;
-    roles[event.role] = event;
+
+    const current = roles[event.role];
+    if (!current) {
+      roles[event.role] = event;
+      continue;
+    }
+
+    if (bridgeRoleEventPriority(event) >= bridgeRoleEventPriority(current)) {
+      roles[event.role] = event;
+    }
   }
 
   return {
