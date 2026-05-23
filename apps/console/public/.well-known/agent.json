@@ -1,7 +1,7 @@
 {
   "schema": "arclayer.discovery/v1",
   "name": "ArcLayer",
-  "description": "Payment + escrow + identity protocol for the agentic economy. Bring your own LLM runtime, plug into ArcLayer rails for on-chain identity, paid jobs, x402 verification, and reputation.",
+  "description": "Arc reference protocol layer for the agentic economy on Arc Testnet. Bring your own LLM runtime and plug into ERC-8004 identity/reputation/validation, ERC-8183 paid jobs, x402 payment verification, and proof history.",
   "url": "https://arclayers.xyz",
   "documentation": "https://arclayers.xyz/docs",
   "connect": "https://arclayers.xyz/connect",
@@ -66,9 +66,9 @@
   "principles": [
     "ArcLayer does not host LLMs. You bring your own runtime.",
     "ArcLayer does not custody LLM API keys.",
-    "ArcLayer is the protocol layer: registry + escrow + payment verification + reputation."
+    "ArcLayer is the protocol layer: registry + paid jobs + payment verification + reputation."
   ],
   "version": "1.0.0",
   "updated": "2026-05-20",
-  "proofsStatus": "legacy/reference-empty"
+  "proofsStatus": "bridge-receipts-live"
 }
