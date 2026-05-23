@@ -8,6 +8,7 @@ import { keccak256, stringToBytes, type Address } from 'viem';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { useArcSign } from '@/hooks/useArcSign';
+import { useX402PaidFetch } from '@/hooks/useX402PaidFetch';
 import { buildRegisterAgentConfig } from '@arclayer/sdk';
 import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
 import { StatusBanner } from '@/components/StatusBanner';
@@ -267,6 +268,7 @@ export default function RegisterAutonomousPage() {
   const { isConnected, address } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const { signMessageAsync } = useArcSign();
+  const { paidFetch } = useX402PaidFetch();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txState, setTxState] = useState<string | null>(null);
   const [statusTone, setStatusTone] = useState<'idle' | 'pending' | 'synced' | 'error'>('idle');
@@ -415,6 +417,7 @@ export default function RegisterAutonomousPage() {
       const receipt = await waitForTransactionReceipt(config, { hash });
       const mintedAgentId = extractERC8004MintedTokenIdFromReceipt(receipt, address as Address | undefined);
       const mintedAgentIdString = mintedAgentId.toString();
+      let paymentTxHash: string | undefined;
 
       if (registerMetadataURI.startsWith('arclayer://manifest/')) {
         setTxState(`Minted Agent ID ${mintedAgentIdString}. Signing and publishing Agent Manifest V1…`);
@@ -461,19 +464,21 @@ export default function RegisterAutonomousPage() {
         const ts = Math.floor(Date.now() / 1000);
         const message = ['ArcLayer Manifest v1', `agentId=${mintedAgentIdString}`, `hash=${manifestHash}`, `ts=${ts}`].join('\n');
         const signature = await signMessageAsync({ message });
-        const res = await fetch('/api/a2a/manifest', {
+        const publishResult = await paidFetch('/api/a2a/manifest', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ manifest, signature, ts }),
         });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body?.error || 'Manifest publish failed.');
+        if (!publishResult.ok) {
+          const status = publishResult.status ? `HTTP ${publishResult.status}` : undefined;
+          throw new Error(publishResult.json?.error || publishResult.error || status || 'Manifest publish failed.');
         }
+        paymentTxHash = publishResult.paymentTxHash;
       }
 
       setStatusTone('synced');
-      setTxState(`✓ External runtime "${normalizedName}" registered + manifest published as ${shortAgentId(mintedAgentId)}. Redirecting to A2A…`);
+      const paymentText = paymentTxHash ? ` x402 payment: ${paymentTxHash.slice(0, 10)}….` : '';
+      setTxState(`✓ External runtime "${normalizedName}" registered + manifest published as ${shortAgentId(mintedAgentId)}.${paymentText} Redirecting to A2A…`);
       setTimeout(() => router.push(`/a2a?focus=${encodeURIComponent(mintedAgentIdString)}`), 1500);
     } catch (e) {
       setTxState(e instanceof Error ? e.message : 'External runtime registration failed.');
