@@ -1,5 +1,5 @@
 import { keccak256, toBytes } from "viem";
-import { ERC8004_IDENTITY_REGISTRY_ABI, ERC8183_AGENTIC_COMMERCE_ABI, USDC_ABI } from "./abi";
+import { ERC8004_IDENTITY_REGISTRY_ABI, ERC8004_REPUTATION_REGISTRY_ABI, ERC8004_VALIDATION_REGISTRY_ABI, ERC8183_AGENTIC_COMMERCE_ABI, USDC_ABI } from "./abi";
 import { CONTRACTS, ZERO_ADDRESS } from "./addresses";
 
 export function hashProtocolString(value: string) {
@@ -96,3 +96,55 @@ export function buildCompleteJobConfig(jobId: bigint, reason: `0x${string}` | st
   };
 }
 
+
+
+export function buildGiveFeedbackConfig(
+  agentTokenId: bigint,
+  score: bigint,
+  category: number,
+  comment: string,
+  metadataURI: string,
+  proofURI: string,
+  context: string,
+  ref: `0x${string}`,
+) {
+  return {
+    address: CONTRACTS.ERC8004_REPUTATION_REGISTRY,
+    abi: ERC8004_REPUTATION_REGISTRY_ABI,
+    functionName: "giveFeedback" as const,
+    args: [agentTokenId, score, category, comment, metadataURI, proofURI, context, ref] as const,
+  };
+}
+
+export function buildValidationRequestConfig(validator: `0x${string}`, agentTokenId: bigint, taskUri: string, requestHash: `0x${string}`) {
+  return {
+    address: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+    abi: ERC8004_VALIDATION_REGISTRY_ABI,
+    functionName: "validationRequest" as const,
+    args: [validator, agentTokenId, taskUri, requestHash] as const,
+  };
+}
+
+export function buildValidationResponseConfig(
+  requestHash: `0x${string}`,
+  status: number,
+  resultUri: string,
+  resultHash: `0x${string}`,
+  reason: string,
+) {
+  return {
+    address: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+    abi: ERC8004_VALIDATION_REGISTRY_ABI,
+    functionName: "validationResponse" as const,
+    args: [requestHash, status, resultUri, resultHash, reason] as const,
+  };
+}
+
+export function buildGetValidationStatusConfig(requestHash: `0x${string}`) {
+  return {
+    address: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+    abi: ERC8004_VALIDATION_REGISTRY_ABI,
+    functionName: "getValidationStatus" as const,
+    args: [requestHash] as const,
+  };
+}
