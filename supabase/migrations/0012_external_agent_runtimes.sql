@@ -1,4 +1,4 @@
--- External Agent Runtime registry for hackathon bridge demo.
+-- External Agent Runtime registry for external PM2 market agent bridge example.
 -- Stores runtime identity/metadata only. Never store LLM API keys, private keys, exchange keys, or bot secrets.
 
 create table if not exists public.external_agent_runtimes (

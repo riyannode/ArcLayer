@@ -1,6 +1,6 @@
-# ArcLayer PM2 Market-Agent Bridge
+# ArcLayer External PM2 Market Agent Bridge
 
-Hackathon PM2 market-agent runtime proof: external PM2 bots make market decisions while ArcLayer acts as the protocol bridge for identity, x402 access, bridge events, receipts, payload hashes, and proof history on Arc.
+External PM2 market agent bridge example: external PM2 bots make market decisions while ArcLayer acts as the protocol bridge for identity, x402 access, bridge events, receipts, payload hashes, and proof history on Arc.
 
 This is **not** a generic external LLM demo and not a real trading executor.
 
@@ -38,7 +38,7 @@ external PM2 bot
 ## Setup
 
 ```bash
-cd examples/external-pm2-bots/hackathon-polymarket-bots
+cd examples/external-pm2-bots/market-agent-bridge
 cp .env.example .env
 # Fill ARCLAYER_API_KEY + ARCLAYER_AGENT_ID locally. Never commit .env.
 npm install dotenv
