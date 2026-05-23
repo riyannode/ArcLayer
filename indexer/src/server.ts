@@ -5,10 +5,14 @@ import {
   ARC_REFERENCE_WALLET_FILTER,
   DEFAULT_FROM_BLOCK,
   INDEXER_PORT,
+  INDEX_ARC_REFERENCE_ERC8004,
+  INDEX_ARC_REFERENCE_ERC8183,
+  MAX_BLOCK_RANGE,
   POLL_INTERVAL_MS,
 } from "./config";
-import { fetchAgentEvents, fetchJobEvents } from "./ingest";
+import { fetchAgentEvents, fetchJobEvents, getLatestBlock } from "./ingest";
 import { arcWalletFilterActive } from "./projections";
+import { calculateToBlock } from "./sync-range";
 import { getReferenceFilters, refreshReferenceFiltersFromSupabase } from "./reference-filters";
 import {
   getLastA2AJobSyncError,
@@ -48,12 +52,13 @@ let lastSyncDurationMs: number | null = null;
 let syncSkipCount = 0;
 
 
+
 function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
 }
 
 
-async function runSyncCycle() {
+export async function runSyncCycle() {
   if (syncInProgress) {
     syncSkipCount++;
     console.log(`[indexer] sync skip (previous still running) count=${syncSkipCount}`);
@@ -72,21 +77,25 @@ async function runSyncCycle() {
     const fromBlockValue = readMetaValue("last_synced_block");
     const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
 
-    const [jobResult, erc8004Result] = await Promise.all([
-      fetchJobEvents(fromBlock),
-      fetchAgentEvents(fromBlock),
-    ]);
-    const events = jobResult.events;
-    const agentEvts = [...erc8004Result.events];
-    const latestBlock = [jobResult.latestBlock, erc8004Result.latestBlock]
-      .reduce((max, block) => (block > max ? block : max), BigInt(0));
+    const chainLatestBlock = await getLatestBlock();
+    const toBlock = calculateToBlock(fromBlock, chainLatestBlock, MAX_BLOCK_RANGE);
 
-    console.log(`[indexer] sync projection: jobs=${events.length} erc8004Agents=${erc8004Result.events.length} block=${latestBlock}`);
+    let events: Awaited<ReturnType<typeof fetchJobEvents>>["events"] = [];
+    if (INDEX_ARC_REFERENCE_ERC8183) {
+      events = (await fetchJobEvents(fromBlock, toBlock)).events;
+    }
+
+    let agentEvts: Awaited<ReturnType<typeof fetchAgentEvents>>["events"] = [];
+    if (INDEX_ARC_REFERENCE_ERC8004) {
+      agentEvts = (await fetchAgentEvents(fromBlock, toBlock)).events;
+    }
+
+    console.log(`[indexer] sync projection: jobs=${events.length} erc8004Agents=${agentEvts.length} block=${toBlock}`);
     const syncResult = await syncProjectionStore(events, agentEvts);
 
     // Always advance cursor so empty ranges don't get re-scanned
-    if (latestBlock >= fromBlock) {
-      writeMetaValue("last_synced_block", latestBlock.toString());
+    if (toBlock >= fromBlock) {
+      writeMetaValue("last_synced_block", toBlock.toString());
     }
 
     lastSyncError = syncResult.lastSyncError;
