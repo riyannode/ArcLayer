@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
@@ -41,8 +41,9 @@ const MANUAL_SKILL_OPTIONS = [
 
 const DEFAULT_MANUAL_SKILL = 'solidity-auditor';
 
-export default function RegisterManualAgentPage() {
+function RegisterManualAgentPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isConnected } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const { pay: payAntiSpam } = useX402AntiSpamPay({
@@ -145,14 +146,14 @@ export default function RegisterManualAgentPage() {
   }, []);
 
   useEffect(() => {
-    const requestedSkill = new URLSearchParams(window.location.search).get('skill');
+    const requestedSkill = searchParams.get('skill');
     if (!requestedSkill) return;
     const matchedSkill = MANUAL_SKILL_OPTIONS.find((option) => option.value === requestedSkill);
     if (!matchedSkill) return;
     setForm((current) => (
       current.skill === matchedSkill.value ? current : { ...current, skill: matchedSkill.value }
     ));
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     const norm = normalizeAgentName(form.name);
@@ -583,5 +584,13 @@ export default function RegisterManualAgentPage() {
         </section>
       </div>
     </div>
+  );
+}
+
+export default function RegisterManualAgentPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterManualAgentPageContent />
+    </Suspense>
   );
 }
