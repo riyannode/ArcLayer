@@ -1,5 +1,5 @@
-import type { Address } from "viem";
-import { erc8004IdentityRegistry, erc8183AgenticCommerce } from "./chain";
+import type { Address, Hex } from "viem";
+import { erc8004IdentityRegistry, erc8004ValidationRegistry, erc8183AgenticCommerce } from "./chain";
 
 export type ArcAgentRecord = {
   agentId: bigint;
@@ -124,6 +124,40 @@ export async function readWorkProofsByAgent(_agentId: bigint) {
 /** Official Arc/Circle reference mode has no ArcLayer ReputationOracle contract. */
 export async function readReputationScore(_agentId: bigint) {
   return BigInt(0);
+}
+
+
+export async function readValidationStatus(requestHash: Hex) {
+  const status = await erc8004ValidationRegistry.read.getValidationStatus([requestHash]);
+
+  if (Array.isArray(status)) {
+    return {
+      validatorAddress: status[0],
+      agentId: status[1],
+      response: Number(status[2]),
+      responseHash: status[3],
+      tag: status[4],
+      lastUpdate: status[5],
+    };
+  }
+
+  const record = status as unknown as {
+    validatorAddress?: Address;
+    agentId?: bigint;
+    response?: number | bigint;
+    responseHash?: Hex;
+    tag?: string;
+    lastUpdate?: bigint;
+  };
+
+  return {
+    validatorAddress: record.validatorAddress ?? ZERO_ADDRESS,
+    agentId: record.agentId ?? BigInt(0),
+    response: Number(record.response ?? 0),
+    responseHash: record.responseHash ?? ('0x' as Hex),
+    tag: record.tag ?? '',
+    lastUpdate: record.lastUpdate ?? BigInt(0),
+  };
 }
 
 export async function readAgentProfile(agentId: bigint) {

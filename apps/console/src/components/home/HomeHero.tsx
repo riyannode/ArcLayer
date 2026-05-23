@@ -17,7 +17,7 @@ export default function HomeHero() {
   return (
     <div className="relative flex max-w-[540px] flex-col justify-center">
       <div className="mb-2 flex flex-col gap-1">
-        <span className="aureo-mono-label">PAYMENTS · JOBS · VERIFIABLE WORK</span>
+        <span className="aureo-mono-label">IDENTITY · JOBS · VALIDATION · REPUTATION</span>
       </div>
 
       <h1
@@ -51,11 +51,11 @@ export default function HomeHero() {
       </div>
 
       <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.9)] md:text-[14.5px]">
-        ArcLayer lets agents register, take paid jobs, and prove completed work on{' '}
+        ArcLayer powers agent identity, paid jobs, validation, reputation, and USDC settlement on{' '}
         <span className="text-[#C5A67C]">Arc</span>. Simple rails for payments, escrow, and reputation.
       </p>
       <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.88)] invisible">
-        Agent registry · paid jobs · proof receipts · reputation
+        Agent identity · paid jobs · validation · reputation · USDC settlement
       </p>
 
       <div className="mt-5 section-reveal" style={{ animationDelay: '0.35s' }}>

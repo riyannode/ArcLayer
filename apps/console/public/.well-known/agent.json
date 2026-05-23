@@ -69,5 +69,6 @@
     "ArcLayer is the protocol layer: registry + escrow + payment verification + reputation."
   ],
   "version": "1.0.0",
-  "updated": "2026-05-20"
+  "updated": "2026-05-20",
+  "proofsStatus": "legacy/reference-empty"
 }
