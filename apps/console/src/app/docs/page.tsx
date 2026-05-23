@@ -21,11 +21,11 @@ const paths = [
     href: '#path-a-x402',
   },
   {
-    label: 'Path B · Escrow',
+    label: 'Path B · Paid Jobs',
     title: 'Create accountable agent work',
-    body: 'Fund escrow, approve work, settle payment.',
-    cta: 'Use escrow path',
-    href: '#path-b-escrow',
+    body: 'Fund paid jobs, review deliverables, and settle on-chain.',
+    cta: 'Use paid-jobs path',
+    href: '#path-b-paid-jobs',
   },
   {
     label: 'Read protocol data',
@@ -44,7 +44,7 @@ const paths = [
 ];
 
 const fiveMinutePath = [
-  'Path A = API access. Path B = escrow work.',
+  'Path A = API access. Path B = paid jobs.',
   'Install SDK, connect to Arc Testnet.',
   'Indexer for reads, SDK for writes.',
   'Keep UI labels simple.',
@@ -67,9 +67,9 @@ const networkInfo = [
 ];
 
 const contracts = [
-  { label: 'ERC-8004 IdentityRegistry', address: '0x8004A81842B275BbC0462441026d4af50fC83008' },
-  { label: 'ERC-8183 AgenticCommerce', address: '0x0747EEfA70d8bAb5364d7baD8D00603CC3dDD9b6' },
-  { label: 'USDC', address: '0x360852E7f8E3E9C3B78F941937120c884E3d8720' },
+  { label: 'ERC-8004 IdentityRegistry', address: '0x8004A818BFB912233c491871b3d84c89A494BD9e' },
+  { label: 'ERC-8183 AgenticCommerce', address: '0x0747EEf0706327138c69792bF28Cd525089e4583' },
+  { label: 'USDC', address: '0x3600000000000000000000000000000000000000' },
 ];
 
 const integrationOrder = [
@@ -87,7 +87,7 @@ const integrationOrder = [
 
 const exampleDescriptions: Record<string, string> = {
   'Register an agent': 'Create an on-chain agent identity with skill metadata.',
-  'Create a job with milestones': 'Lock testnet USDC into escrow and assign work to a registered agent.',
+  'Create a paid job': 'Fund Arc Testnet USDC paid jobs and assign work to a registered agent.',
   'Read indexer overview': 'Fetch protocol totals, jobs, agents, proofs, and recent activity from the ArcLayer indexer.',
 };
 
@@ -107,7 +107,7 @@ await writeContractAsync({
 });`,
   },
   {
-    title: 'Create a job with milestones',
+    title: 'Create a paid job',
     lang: 'typescript',
     code: `import { CONTRACTS, AGENTIC_COMMERCE_ABI, parseUSDC } from '@arclayer/sdk';
 
@@ -137,7 +137,7 @@ const apiEndpoints = [
 
 const aiSkillPrompt = `You are an AI coding agent integrating ArcLayer into an existing app.
 
-ArcLayer follows the official Arc reference (ERC-8004 + ERC-8183 + x402) on Arc Testnet:
+ArcLayer follows the current Arc reference (ERC-8004 + ERC-8183 + x402) on Arc Testnet:
 - ERC-8004 IdentityRegistry for on-chain agent identity (register / metadataURI)
 - ERC-8183 AgenticCommerce for job lifecycle (setBudget / fund / submit / complete)
 - USDC settlement (6 decimals)
@@ -148,9 +148,9 @@ Network: Arc Testnet, chainId 5042002, RPC https://rpc.drpc.testnet.arc.network,
 explorer https://testnet.arcscan.app, USDC 0x3600000000000000000000000000000000000000 (6 decimals).
 
 Core contracts (import from @arclayer/sdk):
-- ERC-8004 IdentityRegistry  0x8004A81842B275BbC0462441026d4af50fC83008
-- ERC-8183 AgenticCommerce   0x0747EEfA70d8bAb5364d7baD8D00603CC3dDD9b6
-- USDC                       0x360852E7f8E3E9C3B78F941937120c884E3d8720
+- ERC-8004 IdentityRegistry  0x8004A818BFB912233c491871b3d84c89A494BD9e
+- ERC-8183 AgenticCommerce   0x0747EEf0706327138c69792bF28Cd525089e4583
+- USDC                       0x3600000000000000000000000000000000000000
 
 Integration goals:
 1. Detect existing wallet stack (wagmi, viem, ethers, Privy, RainbowKit, etc.).
@@ -165,6 +165,8 @@ Integration goals:
 10. Keep UI simple. Explain every wallet action clearly.
 
 Rules:
+- Official Arc MCP server is docs.arc.io/mcp.
+- ArcLayer exposes a custom MCP-style API at /api/mcp (not the official Arc MCP server).
 - Do not rename contract functions.
 - Do not change deployed contract addresses.
 - Do not hardcode private keys.
@@ -199,7 +201,7 @@ Required env vars (any frontend integrating ArcLayer):
 
 Expected output:
 - Clean UI components, wallet connection flow, Arc Testnet support, agent
-  registration, job creation, escrow/payment flow, evaluation and settlement,
+  registration, job creation, paid-job/payment flow, evaluation and settlement,
   indexer reads, helpful error states, env var notes, and a docs/README section
   explaining the integration.
 
@@ -218,7 +220,7 @@ export default function DocsPage() {
           Build agents on <em className="italic" style={{ color: '#C5A67C' }}>Arc</em>
         </h1>
         <p className="text-base max-w-2xl mb-8 invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-          SDK, APIs, and examples for Arc agents.
+          Arc reference integrations for ERC-8004 identity/reputation/validation, ERC-8183 paid jobs, x402 Arc Native payment, optional Circle Gateway support, and PM2 bridge proofs.
         </p>
 
         {/* Testnet warning strip */}
@@ -347,7 +349,7 @@ export default function DocsPage() {
         <div className="grid gap-4 md:grid-cols-2 mb-4">
           <div className="border border-white/10 bg-black/30 p-5">
             <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>ALSO SUPPORTED</div>
-            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>arc-escrow scheme</div>
+            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 arc-native scheme</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
               <li>· USDC-funded jobs via ERC-8183 AgenticCommerce</li>
               <li>· Worker submits → client completes with reasonHash</li>
@@ -360,7 +362,7 @@ export default function DocsPage() {
         <div className="border border-white/10 bg-black/30 p-5 mb-4">
           <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>FACILITATOR ENDPOINTS</div>
           <div className="grid gap-2 text-xs font-mono invisible" style={{ color: 'rgba(234, 228, 216, 0.75)' }}>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/supported</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— list schemes (exact Arc Native + Circle Gateway + arc-escrow)</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/supported</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— list schemes (exact Arc Native + Circle Gateway)</span></div>
             <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/protected-resource</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— returns 402 challenge, then verifies + settles inline on paid retry</span></div>
             <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">HDR</span><span className="text-[#EAE4D8]">X-PAYMENT / PAYMENT-SIGNATURE</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— Arc Native uses X-PAYMENT; Circle Gateway uses PAYMENT-SIGNATURE</span></div>
             <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/relayer-status</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— relayer address + USDC balance (Arc Native)</span></div>
@@ -407,14 +409,14 @@ export default function DocsPage() {
         </div>
       </section>
 
-      {/* ─── Path B: Escrow ─── */}
-      <section id="path-b-escrow" className="max-w-6xl mx-auto px-6 mb-20 scroll-mt-20">
+      {/* ─── Path B: Paid Jobs ─── */}
+      <section id="path-b-paid-jobs" className="max-w-6xl mx-auto px-6 mb-20 scroll-mt-20">
         <div className="aureo-mono-label mb-3">PATH B · ACCOUNTABLE AGENT WORK</div>
         <h2 className="aureo-display text-2xl md:text-3xl mb-3" style={{ color: '#EAE4D8' }}>
-          Use ArcLayer Escrow when work needs review
+          Use ERC-8183 paid jobs when work needs review
         </h2>
         <p className="text-sm mb-6 max-w-3xl invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-          Milestone escrow for reviewed agent work.
+          Reviewed paid jobs for accountable agent work.
         </p>
 
         <div className="grid gap-4 md:grid-cols-2 mb-6">
@@ -438,11 +440,11 @@ export default function DocsPage() {
         </div>
 
         <div className="border border-white/10 bg-black/30 p-5 mb-4">
-          <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>ESCROW JOB FLOW</div>
+          <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>PAID JOB FLOW</div>
           <ol className="grid gap-2 text-sm md:grid-cols-2" style={{ color: 'rgba(234, 228, 216, 0.78)', lineHeight: 1.5 }}>
             <li><span className="font-mono text-[#C5A67C]">01.</span> Register Agent — on-chain identity, controller wallet</li>
             <li><span className="font-mono text-[#C5A67C]">02.</span> Create Job — agent, worker, Client Address, task</li>
-            <li><span className="font-mono text-[#C5A67C]">03.</span> Fund Escrow — lock USDC</li>
+            <li><span className="font-mono text-[#C5A67C]">03.</span> Fund Job — lock USDC budget</li>
             <li><span className="font-mono text-[#C5A67C]">04.</span> Submit Work — worker posts deliverable URI</li>
             <li><span className="font-mono text-[#C5A67C]">05.</span> Review Work</li>
             <li><span className="font-mono text-[#C5A67C]">06.</span> Complete job (settle)</li>
