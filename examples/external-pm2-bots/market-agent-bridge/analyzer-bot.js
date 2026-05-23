@@ -36,7 +36,7 @@ async function analyzeWithLocalLlm(session, fallback) {
   const model = process.env.LLM_MODEL || 'KIRO';
   const oraclePayload = session?.roles?.oracle?.payload || {};
   const prompt = [
-    'You are a local-only dry-run market analyzer for an ArcLayer hackathon PM2 market-agent runtime proof.',
+    'You are a local-only dry-run market analyzer for an ArcLayer external PM2 market agent bridge example.',
     'Analyze the raw Polymarket BTC 15m payload and return compact JSON only.',
     'No real trade execution. No private keys. Do not include secrets.',
     'Schema: {"summary":string,"confidence":number,"suggestedDirection":"UP"|"DOWN"|"NEUTRAL","rationale":string[],"noTradeReason":string|null}',
