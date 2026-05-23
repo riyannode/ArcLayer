@@ -63,27 +63,27 @@ async function fetchCoinbaseCandles(asset: Asset, windowStart: number, windowEnd
   }));
 }
 
-export async function fetchCandles1mForWindow(
+export async function fetchCandles1mForRange(
   asset: Asset,
-  windowStart: number,
-  windowEnd: number,
+  chartStart: number,
+  chartEnd: number,
 ): Promise<CandleFetchResult> {
   const errors: string[] = [];
 
   try {
-    const candles = await fetchBinanceCandles(asset, windowStart, windowEnd);
-    if (candles.length) return { candles, candleSource: 'binance', candleError: null };
-    errors.push('Binance returned empty candles');
-  } catch (error) {
-    errors.push(error instanceof Error ? error.message : 'Binance request failed');
-  }
-
-  try {
-    const candles = await fetchCoinbaseCandles(asset, windowStart, windowEnd);
+    const candles = await fetchCoinbaseCandles(asset, chartStart, chartEnd);
     if (candles.length) return { candles, candleSource: 'coinbase', candleError: null };
     errors.push('Coinbase returned empty candles');
   } catch (error) {
     errors.push(error instanceof Error ? error.message : 'Coinbase request failed');
+  }
+
+  try {
+    const candles = await fetchBinanceCandles(asset, chartStart, chartEnd);
+    if (candles.length) return { candles, candleSource: 'binance', candleError: null };
+    errors.push('Binance returned empty candles');
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : 'Binance request failed');
   }
 
   return { candles: [], candleSource: 'none', candleError: errors.length ? errors.join('; ') : 'Candle sources unavailable' };
