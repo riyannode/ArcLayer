@@ -4,7 +4,7 @@ export const DEFAULT_FROM_BLOCK = BigInt(fromBlockEnv);
 export const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 30_000);
 export const ARC_RPC_URL = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
 export const DATABASE_PATH = process.env.DATABASE_PATH || '';
-export const MAX_BLOCK_RANGE = BigInt(process.env.MAX_BLOCK_RANGE || 10_000);
+export const MAX_BLOCK_RANGE = BigInt(process.env.MAX_BLOCK_RANGE || 500);
 export const INDEXER_DB_PATH = process.env.INDEXER_DB_PATH || '';
 
 export const ARC_ERC8004_ADDRESS = '0x8004A818BFB912233c491871b3d84c89A494BD9e' as const;

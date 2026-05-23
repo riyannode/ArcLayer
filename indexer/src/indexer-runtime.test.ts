@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { calculateToBlock } from "./sync-range";
 import { syncProjectionStore, readJobs, readAgents } from "./db";
 import type { IndexedJobEvent, IndexedAgentEvent } from "@arclayer/sdk";
@@ -57,4 +59,46 @@ test("syncProjectionStore does not globally delete jobs/agents when processing o
 
   assert.deepEqual(beforeJobs, afterJobs);
   assert.deepEqual(beforeAgents, afterAgents);
+});
+
+
+test("built server entry loads without ERR_MODULE_NOT_FOUND", async (t) => {
+  if (!existsSync(new URL("../dist/server.js", import.meta.url))) {
+    t.skip("dist/server.js not built yet");
+    return;
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn("node", [new URL("../dist/server.js", import.meta.url).pathname], {
+      env: { ...process.env, INDEXER_PORT: "0", POLL_INTERVAL_MS: "60000" },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stderr = "";
+    let settled = false;
+    const done = (err?: Error) => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGTERM");
+      if (err) reject(err);
+      else resolve();
+    };
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+      if (stderr.includes("ERR_MODULE_NOT_FOUND")) {
+        done(new Error(stderr));
+      }
+    });
+
+    child.stdout.on("data", (chunk) => {
+      const out = chunk.toString();
+      if (out.includes("ArcLayer indexer")) done();
+    });
+
+    child.on("exit", (code) => {
+      if (!settled && code && code !== 0) done(new Error(stderr || `server exited ${code}`));
+    });
+
+    setTimeout(() => done(), 2000);
+  });
 });
