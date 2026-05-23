@@ -10,7 +10,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 
 const LOCAL = process.argv.includes('--local');
 const BASE = LOCAL ? 'http://localhost:3000' : 'https://arclayers.xyz';
-const RPC_URL = 'https://rpc.testnet.arc.network';
+const RPC_URL = 'https://rpc.drpc.testnet.arc.network';
 const CHAIN_ID = 5042002;
 const USDC = getAddress('0x3600000000000000000000000000000000000000');
 const NETWORK = 'eip155:5042002';

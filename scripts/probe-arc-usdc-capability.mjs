@@ -21,7 +21,7 @@
 
 const ARC = {
   chainId: 5042002,
-  rpc: process.env.ARC_RPC || 'https://rpc.testnet.arc.network',
+  rpc: process.env.ARC_RPC || 'https://rpc.drpc.testnet.arc.network',
   explorer: 'https://testnet.arcscan.app',
   usdc: '0x3600000000000000000000000000000000000000',
 };

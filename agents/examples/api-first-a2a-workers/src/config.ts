@@ -25,7 +25,7 @@ export const config = {
   arclayerBaseUrl: process.env.ARCLAYER_BASE_URL || 'https://arclayers.xyz',
   arclayerAgentId: process.env.ARCLAYER_AGENT_ID || '',
   arclayerApiKey: process.env.ARCLAYER_API_KEY || '',
-  arcRpcUrl: process.env.ARC_RPC_URL || 'https://rpc.testnet.arc.network',
+  arcRpcUrl: process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network',
   arcRpcFallbackUrl: process.env.ARC_RPC_FALLBACK_URL || 'https://rpc.drpc.testnet.arc.network',
   workerPrivateKey: process.env.WORKER_PRIVATE_KEY || '',
   evaluatorPrivateKey: process.env.EVALUATOR_PRIVATE_KEY || '',

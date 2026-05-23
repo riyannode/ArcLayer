@@ -30,7 +30,7 @@ function optionalAddress(name: string, fallback: Address): Address {
 }
 
 function transports() {
-  const urls = [process.env.ARC_RPC_URL || 'https://rpc.testnet.arc.network', process.env.ARC_RPC_FALLBACK_URL || 'https://rpc.drpc.testnet.arc.network'];
+  const urls = [process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network', process.env.ARC_RPC_FALLBACK_URL || 'https://rpc.drpc.testnet.arc.network'];
   return fallback(urls.map((url) => http(url, { timeout: 10_000 })));
 }
 

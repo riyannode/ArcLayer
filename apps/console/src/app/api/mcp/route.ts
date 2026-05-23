@@ -25,7 +25,7 @@ export const revalidate = 0;
  */
 
 const ARC_CHAIN_ID = 5042002;
-const ARC_RPC = 'https://rpc.testnet.arc.network';
+const ARC_RPC = 'https://rpc.drpc.testnet.arc.network';
 
 type ToolHandler = (args: Record<string, unknown>) => Promise<unknown>;
 
