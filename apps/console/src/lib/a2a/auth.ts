@@ -111,7 +111,10 @@ export async function revokeApiKey(keyId: string, agentId: string): Promise<bool
 
 
 async function enforceExternalRegistry(agentId: string): Promise<NextResponse | null> {
-  if (process.env.A2A_ENFORCE_EXTERNAL_REGISTRY !== 'true') return null;
+  const rosterSource = process.env.A2A_AGENT_ROSTER_SOURCE || 'local-indexer';
+  const enforcementEnabled = process.env.A2A_ENFORCE_EXTERNAL_REGISTRY === 'true' || rosterSource === 'registered-only';
+  if (!enforcementEnabled) return null;
+
   const entry = await getExternalAgent(agentId);
   if (!entry || entry.status !== 'approved') {
     console.log(`[a2a] rejected unregistered external agent agentId=${agentId}`);

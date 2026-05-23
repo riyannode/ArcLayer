@@ -4,6 +4,7 @@ import { createPublicClient, http, parseAbiItem, type Hex, type Log } from 'viem
 import { isHiddenAgent } from '@/lib/a2a/hidden-agents';
 import { resolveManifestMetadata } from '@/lib/a2a/manifest';
 import { listStoredManifests } from '@/lib/a2a/roster';
+import { listApprovedExternalAgents } from '@/lib/a2a/external-registry';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -195,10 +196,52 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const source = searchParams.get('source') || 'indexer';
   const categoryFilter = searchParams.get('category') || null;
+  const rosterSource = process.env.A2A_AGENT_ROSTER_SOURCE || 'local-indexer';
   const scanChain = source === 'chain';
   const client = scanChain ? createPublicClient({ transport: http(RPC) }) : null;
 
   try {
+    if (rosterSource === 'registered-only') {
+      const approved = await listApprovedExternalAgents();
+      const agents = approved.map((entry) => ({
+        agentId: entry.agentId,
+        owner: entry.owner || entry.address,
+        controller: entry.address,
+        role: 'REGISTERED_AGENT',
+        roleId: null,
+        endpoint: entry.endpoint || '',
+        metadataURI: '',
+        registeredAtBlock: null,
+        source: entry.source,
+        metadata: {
+          name: entry.name,
+          autonomous: true,
+          capability: entry.capabilities,
+          endpoint: entry.endpoint || '',
+        },
+      }));
+
+      return NextResponse.json({
+        registry: AGENT_REGISTRY,
+        agents,
+        totalRegistered: agents.length,
+        totalHidden: 0,
+        totalVisible: agents.length,
+        totalAutonomous: agents.length,
+        categoryFilter,
+        scan: {
+          fromBlock: null,
+          toBlock: null,
+          chunks: 0,
+          maxRange: MAX_BLOCK_RANGE.toString(),
+          source: 'registered-only',
+        },
+        timestamp: new Date().toISOString(),
+      }, {
+        headers: { 'Cache-Control': AGENTS_CACHE_CONTROL },
+      });
+    }
+
     const storedManifests = await listStoredManifests();
     const manifestById = new Map(storedManifests.map((item) => [String(item.agentId).toLowerCase(), item]));
     const allowedAgentIds = new Set(manifestById.keys());
