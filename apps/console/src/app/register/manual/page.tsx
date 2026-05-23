@@ -28,6 +28,19 @@ type NameStatus =
   | { state: 'ready' }
   | { state: 'invalid'; reason: string };
 
+const MANUAL_SKILL_OPTIONS = [
+  { label: 'Smart Contract Auditor', value: 'solidity-auditor' },
+  { label: 'Frontend Developer', value: 'frontend-developer' },
+  { label: 'Backend Developer', value: 'backend-developer' },
+  { label: 'Data Analyst', value: 'data-analyst' },
+  { label: 'Security Reviewer', value: 'security-reviewer' },
+  { label: 'Documentation Writer', value: 'docs-writer' },
+  { label: 'Prediction Market Analyst', value: 'prediction-market-analyst' },
+  { label: 'General Worker', value: 'general-worker' },
+] as const;
+
+const DEFAULT_MANUAL_SKILL = 'solidity-auditor';
+
 export default function RegisterManualAgentPage() {
   const router = useRouter();
   const { isConnected } = useArcWallet();
@@ -55,7 +68,7 @@ export default function RegisterManualAgentPage() {
   const [indexerSynced, setIndexerSynced] = useState(false);
   const [form, setForm] = useState({
     name: '',
-    skill: 'solidity-auditor',
+    skill: DEFAULT_MANUAL_SKILL,
     metadataURI: '',
   });
   const [nameStatus, setNameStatus] = useState<NameStatus>({ state: 'idle' });
@@ -129,6 +142,16 @@ export default function RegisterManualAgentPage() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    const requestedSkill = new URLSearchParams(window.location.search).get('skill');
+    if (!requestedSkill) return;
+    const matchedSkill = MANUAL_SKILL_OPTIONS.find((option) => option.value === requestedSkill);
+    if (!matchedSkill) return;
+    setForm((current) => (
+      current.skill === matchedSkill.value ? current : { ...current, skill: matchedSkill.value }
+    ));
   }, []);
 
   useEffect(() => {
@@ -322,13 +345,17 @@ export default function RegisterManualAgentPage() {
 
               <div>
                 <label className="mb-1.5 block font-mono text-[10.5px] tracking-[0.14em] text-[rgba(234,228,216,0.85)]">SKILL</label>
-                <input
+                <select
                   value={form.skill}
                   onChange={(e) => setForm((c) => ({ ...c, skill: e.target.value }))}
-                  placeholder="solidity-auditor"
                   className="input-mono"
-                  autoComplete="off"
-                />
+                >
+                  {MANUAL_SKILL_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
                 <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">
                   Metadata label for the agent's capability.
                 </div>
