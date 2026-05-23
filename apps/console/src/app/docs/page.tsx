@@ -413,7 +413,7 @@ export default function DocsPage() {
       <section id="path-b-paid-jobs" className="max-w-6xl mx-auto px-6 mb-20 scroll-mt-20">
         <div className="aureo-mono-label mb-3">PATH B · ACCOUNTABLE AGENT WORK</div>
         <h2 className="aureo-display text-2xl md:text-3xl mb-3" style={{ color: '#EAE4D8' }}>
-          Use ArcLayer Escrow when work needs review
+          Use ERC-8183 paid jobs when work needs review
         </h2>
         <p className="text-sm mb-6 max-w-3xl invisible" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
           Reviewed paid jobs for accountable agent work.
@@ -440,11 +440,11 @@ export default function DocsPage() {
         </div>
 
         <div className="border border-white/10 bg-black/30 p-5 mb-4">
-          <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>ESCROW JOB FLOW</div>
+          <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>PAID JOB FLOW</div>
           <ol className="grid gap-2 text-sm md:grid-cols-2" style={{ color: 'rgba(234, 228, 216, 0.78)', lineHeight: 1.5 }}>
             <li><span className="font-mono text-[#C5A67C]">01.</span> Register Agent — on-chain identity, controller wallet</li>
             <li><span className="font-mono text-[#C5A67C]">02.</span> Create Job — agent, worker, Client Address, task</li>
-            <li><span className="font-mono text-[#C5A67C]">03.</span> Fund Escrow — lock USDC</li>
+            <li><span className="font-mono text-[#C5A67C]">03.</span> Fund Job — lock USDC budget</li>
             <li><span className="font-mono text-[#C5A67C]">04.</span> Submit Work — worker posts deliverable URI</li>
             <li><span className="font-mono text-[#C5A67C]">05.</span> Review Work</li>
             <li><span className="font-mono text-[#C5A67C]">06.</span> Complete job (settle)</li>
