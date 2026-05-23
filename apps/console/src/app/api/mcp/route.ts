@@ -188,11 +188,11 @@ const TOOLS: Record<
         },
         lifecycle: [
           '1. createJob → get jobId from JobCreated event',
-          '2. setBudget(jobId, amount)',
+          '2. provider calls setBudget(jobId, amount, "0x")',
           '3. USDC.approve(AgenticCommerce, amount)',
-          '4. fund(jobId, amount)',
-          '5. Provider calls submit(jobId, deliverableHash)',
-          '6. Evaluator calls complete(jobId)',
+          '4. fund(jobId, "0x")',
+          '5. submit(jobId, deliverableHash, "0x")',
+          '6. complete(jobId, reasonHash, "0x")',
         ],
       };
     },
@@ -225,7 +225,7 @@ const TOOLS: Record<
         value: '0x0',
         derived: { jobId: jobIdRaw, budgetAtomic: amountRaw, budgetUsdc: `${Number(amountRaw) / 1e6} USDC` },
         signing: {
-          how: 'Send from the client wallet that created this job.',
+          how: 'Send from the provider wallet assigned to this job.',
           rpc: ARC_RPC,
           gasHint: '~80000',
         },

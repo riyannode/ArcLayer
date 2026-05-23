@@ -29,19 +29,21 @@ export const ERC8183_USDC_DECIMALS = 6;
  * 1 USDC = 1_000_000. Do not mix with Arc native USDC gas balances (18 decimals).
  */
 export enum ERC8183JobStatus {
-  Created = 0,
-  BudgetSet = 1,
-  Funded = 2,
-  Submitted = 3,
-  Completed = 4,
+  Open = 0,
+  Funded = 1,
+  Submitted = 2,
+  Completed = 3,
+  Rejected = 4,
+  Expired = 5,
 }
 
 export const ERC8183_STATUS_LABELS: Record<ERC8183JobStatus, string> = {
-  [ERC8183JobStatus.Created]: 'Created',
-  [ERC8183JobStatus.BudgetSet]: 'BudgetSet',
+  [ERC8183JobStatus.Open]: 'Open',
   [ERC8183JobStatus.Funded]: 'Funded',
   [ERC8183JobStatus.Submitted]: 'Submitted',
   [ERC8183JobStatus.Completed]: 'Completed',
+  [ERC8183JobStatus.Rejected]: 'Rejected',
+  [ERC8183JobStatus.Expired]: 'Expired',
 };
 
 export function getERC8183StatusLabel(status: number | bigint | null | undefined): string {
