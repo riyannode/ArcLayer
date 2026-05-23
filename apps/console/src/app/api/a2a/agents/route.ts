@@ -3,6 +3,7 @@ import { indexerUrl } from '@/lib/indexer';
 import { createPublicClient, http, parseAbiItem, type Hex, type Log } from 'viem';
 import { isHiddenAgent } from '@/lib/a2a/hidden-agents';
 import { resolveManifestMetadata } from '@/lib/a2a/manifest';
+import { listStoredManifests } from '@/lib/a2a/roster';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -43,6 +44,10 @@ type AgentMetadata = {
   endpoint?: string;
   mode?: 'seller' | 'buyer' | 'dual';
   price?: string;
+  skills?: string[];
+  endpoints?: string[];
+  x402?: string;
+  mcp?: string;
 };
 
 type IndexerAgent = {
@@ -72,6 +77,16 @@ function isSafeHttpUri(uri: string) {
   }
 }
 
+function isArcLayersProfileUri(uri: string) {
+  if (!isSafeHttpUri(uri)) return false;
+  try {
+    const url = new URL(ipfsToGateway(uri));
+    return url.protocol === 'https:' && url.hostname === 'arclayers.xyz';
+  } catch {
+    return false;
+  }
+}
+
 async function fetchMetadata(uri: string, agentId?: string): Promise<AgentMetadata | null> {
   // Try manifest resolver first (handles arclayer://manifest/ and arclayer://agent/ schemes).
   const resolved = await resolveManifestMetadata(uri, agentId);
@@ -84,10 +99,13 @@ async function fetchMetadata(uri: string, agentId?: string): Promise<AgentMetada
       categories: resolved.categories,
       autonomous: resolved.autonomous,
       avatar: resolved.avatar,
+      endpoint: resolved.endpoint,
+      mode: resolved.mode,
+      price: resolved.price,
     };
   }
 
-  if (!uri || !isSafeHttpUri(uri)) return null;
+  if (!uri || !isArcLayersProfileUri(uri)) return null;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2500);
   try {
@@ -107,6 +125,11 @@ async function fetchMetadata(uri: string, agentId?: string): Promise<AgentMetada
       capability: Array.isArray(json.capability) ? json.capability.filter((x: unknown) => typeof x === 'string').slice(0, 8) : undefined,
       categories: Array.isArray(json.categories) ? json.categories.filter((x: unknown) => typeof x === 'string').slice(0, 6) : undefined,
       autonomous: typeof json.autonomous === 'boolean' ? json.autonomous : undefined,
+      avatar: typeof json.avatar === 'string' ? json.avatar : undefined,
+      skills: Array.isArray(json.skills) ? json.skills.filter((x: unknown) => typeof x === 'string').slice(0, 16) : undefined,
+      endpoints: Array.isArray(json.endpoints) ? json.endpoints.filter((x: unknown) => typeof x === 'string').slice(0, 16) : undefined,
+      x402: typeof json.x402 === 'string' ? json.x402 : undefined,
+      mcp: typeof json.mcp === 'string' ? json.mcp : undefined,
     };
   } catch {
     return null;
@@ -173,6 +196,10 @@ export async function GET(request: Request) {
   const client = createPublicClient({ transport: http(RPC) });
 
   try {
+    const storedManifests = await listStoredManifests();
+    const manifestById = new Map(storedManifests.map((item) => [String(item.agentId).toLowerCase(), item]));
+    const allowedAgentIds = new Set(manifestById.keys());
+
     const latestBlock = await client.getBlockNumber();
     const fromBlock = FROM_BLOCK > latestBlock ? latestBlock : FROM_BLOCK;
     const { logs, chunks } = await fetchLogsChunked(client, fromBlock, latestBlock);
@@ -185,7 +212,7 @@ export async function GET(request: Request) {
 
     const visibleLogs = Array.from(latestById.values()).filter((log) => {
       const agentId = log.args.agentId?.toString() || '';
-      return agentId && !isHiddenAgent(agentId);
+      return agentId && !isHiddenAgent(agentId) && allowedAgentIds.has(agentId.toLowerCase());
     });
 
     const agents = await mapWithConcurrency(visibleLogs, METADATA_CONCURRENCY, async (log) => {
@@ -215,7 +242,11 @@ export async function GET(request: Request) {
     });
 
     const origin = new URL(request.url).origin;
-    const indexerAgents = await mapWithConcurrency(await fetchIndexerAgents(origin), METADATA_CONCURRENCY, async (agent) => {
+    const allowlistedIndexerAgents = (await fetchIndexerAgents(origin)).filter((agent) =>
+      allowedAgentIds.has(String(agent.agentId).toLowerCase())
+    );
+
+    const indexerAgents = await mapWithConcurrency(allowlistedIndexerAgents, METADATA_CONCURRENCY, async (agent) => {
       const metadata = await fetchMetadata(agent.metadataURI || '', agent.agentId);
       return {
         agentId: agent.agentId,
@@ -239,8 +270,37 @@ export async function GET(request: Request) {
     for (const agent of indexerAgents) merged.set(String(agent.agentId).toLowerCase(), agent);
     for (const agent of agents) merged.set(String(agent.agentId).toLowerCase(), agent);
 
-    // All A2A registry agents are autonomous by contract design. Indexer agents are merged
-    // so /a2a can show every registered agent, including inactive/manual registrations.
+    for (const [normalizedId, stored] of manifestById.entries()) {
+      if (merged.has(normalizedId)) continue;
+      const manifest = stored.manifest;
+      merged.set(normalizedId, {
+        agentId: stored.agentId,
+        owner: stored.controller || '',
+        controller: stored.controller || '',
+        role: manifest.role || 'REGISTERED_AGENT',
+        roleId: null,
+        endpoint: manifest.endpoint || '',
+        metadataURI: `arclayer://manifest/${encodeURIComponent(stored.agentId)}`,
+        registeredAtBlock: null,
+        source: 'web_manifest',
+        onchain: false,
+        metadata: {
+          name: manifest.name,
+          role: manifest.role,
+          description: manifest.description,
+          capability: manifest.capability,
+          categories: manifest.categories,
+          autonomous: true,
+          avatar: manifest.avatar,
+          endpoint: manifest.endpoint,
+          mode: manifest.mode,
+          price: manifest.price,
+          skills: manifest.capabilities,
+          x402: manifest.x402?.enabled ? 'enabled' : undefined,
+        },
+      });
+    }
+
     const autonomousAgents = Array.from(merged.values());
 
     return NextResponse.json({
