@@ -86,8 +86,8 @@ ArcLayer provides a custom MCP-style JSON tools interface at `/api/mcp`.
 
 ---
 
-### Arc Reference Mode (Current)
-ArcLayer currently runs on Arc reference contracts for ERC-8004 agent identity, reputation, validation, ERC-8183 paid jobs, and x402 payments on Arc Testnet USDC.
+### Arc network
+ArcLayer currently runs on Arc network contracts for ERC-8004 agent identity, reputation, validation, ERC-8183 paid jobs, and x402 payments on Arc Testnet USDC.
 
 - ERC-8004 IdentityRegistry
 - ERC-8004 ReputationRegistry
