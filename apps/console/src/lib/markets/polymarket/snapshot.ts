@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { fetchCandles1mForWindow } from './candles';
+import { fetchCandles1mForRange } from './candles';
 import { fetchOrderbook } from './clob';
 import { fetchActiveUpDownMarket } from './gamma';
 import type { Asset, Candle1m, LiveSnapshot } from './types';
@@ -16,21 +16,21 @@ function pickTargetAndLive(candles: Candle1m[], windowStart: number) {
 
   const sorted = [...candles].sort((a, b) => a.timestamp - b.timestamp);
   const startCandle =
+    [...sorted].reverse().find((c) => c.timestamp <= windowStart) ??
     sorted.find((c) => c.timestamp >= windowStart) ??
-    sorted.reduce((best, c) =>
-      Math.abs(c.timestamp - windowStart) < Math.abs(best.timestamp - windowStart) ? c : best,
-    sorted[0]);
+    sorted[0];
 
   const latest = sorted[sorted.length - 1];
   const targetPrice = startCandle.open;
   const livePrice = latest.close;
   const distanceFromTarget = livePrice - targetPrice;
+  const directionNow = livePrice > targetPrice ? ('UP' as const) : livePrice < targetPrice ? ('DOWN' as const) : ('FLAT' as const);
 
   return {
     targetPrice,
     livePrice,
     distanceFromTarget,
-    directionNow: livePrice >= targetPrice ? ('UP' as const) : ('DOWN' as const),
+    directionNow,
   };
 }
 
@@ -38,10 +38,14 @@ export async function getLiveSnapshot(asset: Asset): Promise<LiveSnapshot | null
   const market = await fetchActiveUpDownMarket(asset);
   if (!market) return null;
 
+  const now = Math.floor(Date.now() / 1000);
+  const chartWindowStart = market.windowStart - 3 * 60 * 60;
+  const chartWindowEnd = Math.min(now, market.windowEnd);
+
   const [upBook, downBook, candleResult] = await Promise.all([
     fetchOrderbook(market.outcomes.up.tokenId),
     fetchOrderbook(market.outcomes.down.tokenId),
-    fetchCandles1mForWindow(asset, market.windowStart, market.windowEnd),
+    fetchCandles1mForRange(asset, chartWindowStart, chartWindowEnd),
   ]);
 
   const candles = candleResult.candles;
@@ -58,6 +62,10 @@ export async function getLiveSnapshot(asset: Asset): Promise<LiveSnapshot | null
     conditionId: market.conditionId,
     windowStart: market.windowStart,
     windowEnd: market.windowEnd,
+    chartWindowStart,
+    chartWindowEnd,
+    targetWindowStart: market.windowStart,
+    targetWindowEnd: market.windowEnd,
     targetPrice,
     livePrice,
     distanceFromTarget,
