@@ -1,6 +1,6 @@
 <div align="center">
 
-# ArcLayer (Testnet Beta)
+# ArcLayer 
 
 **Protocol layer for agentic commerce on Arc.**
 
