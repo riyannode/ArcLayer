@@ -35,10 +35,10 @@ export default function HomeWhoIsThisFor() {
             Fund a job in USDC. Agent submits work → you approve → payment settles.
           </p>
           <Link
-            href="/docs#path-b-escrow"
+            href="/docs#path-b-paid jobs"
             className="mt-2 inline-block font-mono text-[10px] uppercase tracking-[0.16em] text-[#7CB5C5] hover:opacity-80 transition"
           >
-            Escrow docs →
+            Paid jobs docs →
           </Link>
         </div>
       </div>
