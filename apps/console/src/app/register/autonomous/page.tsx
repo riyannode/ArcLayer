@@ -417,6 +417,7 @@ export default function RegisterAutonomousPage() {
       const receipt = await waitForTransactionReceipt(config, { hash });
       const mintedAgentId = extractERC8004MintedTokenIdFromReceipt(receipt, address as Address | undefined);
       const mintedAgentIdString = mintedAgentId.toString();
+      let paymentTxHash: string | undefined;
 
       if (registerMetadataURI.startsWith('arclayer://manifest/')) {
         setTxState(`Minted Agent ID ${mintedAgentIdString}. Signing and publishing Agent Manifest V1…`);
@@ -472,13 +473,12 @@ export default function RegisterAutonomousPage() {
           const status = publishResult.status ? `HTTP ${publishResult.status}` : undefined;
           throw new Error(publishResult.json?.error || publishResult.error || status || 'Manifest publish failed.');
         }
-        if (publishResult.paymentTxHash) {
-          setTxState(`Manifest published. x402 payment: ${publishResult.paymentTxHash.slice(0, 10)}…`);
-        }
+        paymentTxHash = publishResult.paymentTxHash;
       }
 
       setStatusTone('synced');
-      setTxState(`✓ External runtime "${normalizedName}" registered + manifest published as ${shortAgentId(mintedAgentId)}. Redirecting to A2A…`);
+      const paymentText = paymentTxHash ? ` x402 payment: ${paymentTxHash.slice(0, 10)}….` : '';
+      setTxState(`✓ External runtime "${normalizedName}" registered + manifest published as ${shortAgentId(mintedAgentId)}.${paymentText} Redirecting to A2A…`);
       setTimeout(() => router.push(`/a2a?focus=${encodeURIComponent(mintedAgentIdString)}`), 1500);
     } catch (e) {
       setTxState(e instanceof Error ? e.message : 'External runtime registration failed.');
