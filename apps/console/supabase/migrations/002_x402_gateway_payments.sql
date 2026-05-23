@@ -2,6 +2,17 @@
 -- Persistent replay protection for Gateway payments. Survives Vercel cold starts.
 --
 -- Lifecycle:
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
 --   verify  → record `status='verified'`
 --   settle  → upsert `status='settled' | 'accepted_pending_settlement'`
 --   protected resource consume → atomic `consumed_at = now()` (replay-safe)
