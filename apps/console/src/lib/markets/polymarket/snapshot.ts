@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { fetchBinanceCandles1mForWindow } from './candles';
+import { fetchCandles1mForWindow } from './candles';
 import { fetchOrderbook } from './clob';
 import { fetchActiveUpDownMarket } from './gamma';
 import type { Asset, Candle1m, LiveSnapshot } from './types';
@@ -38,16 +38,17 @@ export async function getLiveSnapshot(asset: Asset): Promise<LiveSnapshot | null
   const market = await fetchActiveUpDownMarket(asset);
   if (!market) return null;
 
-  const [upBook, downBook, candles] = await Promise.all([
+  const [upBook, downBook, candleResult] = await Promise.all([
     fetchOrderbook(market.outcomes.up.tokenId),
     fetchOrderbook(market.outcomes.down.tokenId),
-    fetchBinanceCandles1mForWindow(asset, market.windowStart, market.windowEnd),
+    fetchCandles1mForWindow(asset, market.windowStart, market.windowEnd),
   ]);
 
+  const candles = candleResult.candles;
   const capturedAt = new Date().toISOString();
   const { targetPrice, livePrice, distanceFromTarget, directionNow } = pickTargetAndLive(candles, market.windowStart);
 
-  const evidence = { market, upBook, downBook, candleTail: candles.slice(-10), capturedAt };
+  const evidence = { market, upBook, downBook, candleTail: candles.slice(-10), capturedAt, candleSource: candleResult.candleSource, candleError: candleResult.candleError };
   const rawEvidenceHash = `0x${createHash('sha256').update(JSON.stringify(evidence)).digest('hex')}`;
 
   return {
@@ -64,6 +65,8 @@ export async function getLiveSnapshot(asset: Asset): Promise<LiveSnapshot | null
     outcomes: market.outcomes,
     orderbook: { up: upBook, down: downBook },
     candles1m: candles,
+    candleSource: candleResult.candleSource,
+    candleError: candleResult.candleError,
     capturedAt,
     rawEvidenceHash,
   };
