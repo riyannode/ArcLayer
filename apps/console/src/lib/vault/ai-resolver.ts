@@ -22,7 +22,7 @@ export type AiResolverOutput = {
   };
 };
 
-const DEFAULT_ENDPOINT = process.env.AI_RESOLVER_ENDPOINT || 'http://localhost:20128/v1';
+const AI_RESOLVER_ENDPOINT = process.env.AI_RESOLVER_ENDPOINT;
 const DEFAULT_MODEL = process.env.AI_RESOLVER_MODEL || 'KIRO';
 const DEFAULT_THRESHOLD = Number(process.env.AI_RESOLVER_CONFIDENCE_THRESHOLD || '0.92');
 
@@ -59,9 +59,14 @@ export async function runAiResolver(input: AiResolverInput): Promise<{
   output: AiResolverOutput;
   autoFinal: boolean;
 }> {
+  if (!AI_RESOLVER_ENDPOINT) {
+    throw new Error('AI_RESOLVER_ENDPOINT is not configured');
+  }
+
+  const endpoint = AI_RESOLVER_ENDPOINT.replace(/\/$/, '');
   const prompt = `You are ArcLayer Tier-0 AI Resolver. Decide ONLY based on immutable job spec and evidence.\n\nRules:\n- If jobber submitted nothing / unusable empty deliverable, decision=refund.\n- If spec asks exact objective deliverables and submitted evidence clearly matches, decision=release.\n- If evidence is partial, decision=split with bps.\n- If subjective, ambiguous, missing evidence, or confidence < threshold, decision=escalate.\n- Never reward scope creep. Client dissatisfaction beyond original spec is not a valid rejection.\n- Return strict JSON only. No markdown.\n\nThreshold for auto-final: ${DEFAULT_THRESHOLD}.\n\nInput JSON:\n${JSON.stringify(input, null, 2)}\n\nOutput schema:\n{\n  "decision": "release | refund | split | escalate",\n  "confidence": 0.0,\n  "reason": "short explanation",\n  "matchedCriteria": ["..."],\n  "missingEvidence": ["..."],\n  "recommendedSplit": { "clientBps": 0, "jobberBps": 10000 }\n}`;
 
-  const res = await fetch(`${DEFAULT_ENDPOINT.replace(/\/$/, '')}/chat/completions`, {
+  const res = await fetch(`${endpoint}/chat/completions`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
