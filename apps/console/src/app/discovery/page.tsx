@@ -13,19 +13,31 @@ type DiscoveryAgent = AgentMatchCandidate & {
   onchain: unknown;
 };
 
+
+function toUniqueStringList(...values: unknown[]): string[] {
+  const merged = values.flatMap((value) => (Array.isArray(value) ? value : []));
+  const normalized = merged
+    .filter((item): item is string => typeof item === 'string')
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+  return Array.from(new Set(normalized));
+}
+
 function normalizeAgent(agent: RawAgent): DiscoveryAgent | null {
   const id = agent?.agentId ?? agent?.id;
   if (!id) return null;
 
-  const skills =
-    agent?.metadata?.skills ??
-    agent?.metadata?.categories ??
-    agent?.skills ??
-    [];
+  const capability = toUniqueStringList(
+    agent?.metadata?.capability,
+    agent?.metadata?.skills,
+    agent?.capability,
+    agent?.skills,
+  );
 
-  const categories = Array.isArray(skills)
-    ? skills.filter((skill) => typeof skill === 'string' && skill.trim().length > 0)
-    : [];
+  const categories = toUniqueStringList(
+    agent?.metadata?.categories,
+    agent?.categories,
+  );
 
   return {
     agentId: String(id),
@@ -33,7 +45,7 @@ function normalizeAgent(agent: RawAgent): DiscoveryAgent | null {
     role: agent?.metadata?.role ?? agent?.role ?? 'AGENT',
     description: agent?.metadata?.description ?? agent?.description ?? '',
     endpoint: agent?.endpoint ?? agent?.metadata?.endpoint ?? '',
-    capability: categories,
+    capability,
     categories,
     roles: Array.isArray(agent?.roles) ? agent.roles : [],
     x402: agent?.x402,
@@ -46,7 +58,7 @@ function normalizeAgent(agent: RawAgent): DiscoveryAgent | null {
 async function parseAgentsResponse(res: Response): Promise<RawAgent[]> {
   const data = await res.json();
   if (Array.isArray(data)) return data;
-  if (data?.ok && Array.isArray(data?.agents)) return data.agents;
+  if (Array.isArray(data?.agents)) return data.agents;
   return [];
 }
 
