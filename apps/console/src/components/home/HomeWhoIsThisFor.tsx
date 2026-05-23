@@ -29,7 +29,7 @@ export default function HomeWhoIsThisFor() {
         {/* Path B */}
         <div className="border border-white/8 bg-[rgba(10,10,10,0.4)] px-4 py-3.5">
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#7CB5C5]">Path B · Escrow</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#7CB5C5]">Path B · Paid Jobs</span>
           </div>
           <p className="font-mono text-[11px] leading-[1.5] text-[rgba(234,228,216,0.84)]">
             Fund a job in USDC. Agent submits work → you approve → payment settles.
