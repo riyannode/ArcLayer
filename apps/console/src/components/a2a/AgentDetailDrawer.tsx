@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useX402PaidFetch } from '@/hooks/useX402PaidFetch';
 import Link from 'next/link';
 import type { NetworkAgent, FeedItem } from '@/types/agent-network';
 
@@ -86,6 +87,10 @@ export function AgentDetailDrawer({
   isDeactivating?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+
+  const { paidFetch } = useX402PaidFetch();
+  const [fullReportState, setFullReportState] = useState<{ loading: boolean; error: string | null; txHash: string | null; json: unknown | null }>({ loading: false, error: null, txHash: null, json: null });
+  const [runState, setRunState] = useState<{ loading: boolean; error: string | null; txHash: string | null; json: unknown | null }>({ loading: false, error: null, txHash: null, json: null });
   if (!agent) return null;
 
   const x402Receipts = agent.activity.filter((item) => item.tx || item.type === 'payment' || item.label.toLowerCase().includes('x402') || item.label.toLowerCase().includes('apolo'));
@@ -163,17 +168,60 @@ export function AgentDetailDrawer({
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {['Create Job', 'Request Signal', 'x402 Pay', copied ? '✓ Copied' : 'Copy Wallet'].map((action) => (
-            <button
-              key={action}
-              type="button"
-              onClick={action.includes('Copy') || action.includes('Copied') ? copyWallet : undefined}
-              className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-[#C5A67C] hover:border-[#C5A67C]/40"
-            >
-              {action}
-            </button>
-          ))}
+          <button
+            type="button"
+            onClick={async () => {
+              setFullReportState({ loading: true, error: null, txHash: null, json: null });
+              const result = await paidFetch(`/api/x402/agents/${agent.id}/full-report`, { method: 'GET' });
+              setFullReportState({ loading: false, error: result.error ?? null, txHash: result.paymentTxHash ?? null, json: result.json });
+            }}
+            disabled={fullReportState.loading}
+            className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-[#C5A67C] hover:border-[#C5A67C]/40 disabled:opacity-50"
+          >
+            {fullReportState.loading ? 'Loading report…' : 'Full paid report'}
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              setRunState({ loading: true, error: null, txHash: null, json: null });
+              const result = await paidFetch(`/api/agents/${agent.id}/run`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({}),
+              });
+              setRunState({ loading: false, error: result.error ?? null, txHash: result.paymentTxHash ?? null, json: result.json });
+            }}
+            disabled={runState.loading}
+            className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-[#C5A67C] hover:border-[#C5A67C]/40 disabled:opacity-50"
+          >
+            {runState.loading ? 'Running…' : 'Paid run'}
+          </button>
+          <button
+            type="button"
+            onClick={copyWallet}
+            className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-[#C5A67C] hover:border-[#C5A67C]/40"
+          >
+            {copied ? '✓ Copied' : 'Copy Wallet'}
+          </button>
         </div>
+
+        {(fullReportState.error || fullReportState.txHash || fullReportState.json !== null) && (
+          <div className="mt-3 rounded border border-white/10 bg-black/30 p-3">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Full paid report result</p>
+            {fullReportState.error && <p className="mt-2 text-xs text-red-300">{fullReportState.error}</p>}
+            {fullReportState.txHash && <p className="mt-2 text-xs text-[#B8CD7E]">Payment tx hash: <span className="font-mono break-all">{fullReportState.txHash}</span></p>}
+            {fullReportState.json !== null && <pre className="mt-2 max-h-56 overflow-auto rounded border border-white/10 bg-black/40 p-2 font-mono text-[10px] text-[#EAE4D8]">{JSON.stringify(fullReportState.json, null, 2)}</pre>}
+          </div>
+        )}
+
+        {(runState.error || runState.txHash || runState.json !== null) && (
+          <div className="mt-3 rounded border border-white/10 bg-black/30 p-3">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Paid run result</p>
+            {runState.error && <p className="mt-2 text-xs text-red-300">{runState.error}</p>}
+            {runState.txHash && <p className="mt-2 text-xs text-[#B8CD7E]">Payment tx hash: <span className="font-mono break-all">{runState.txHash}</span></p>}
+            {runState.json !== null && <pre className="mt-2 max-h-56 overflow-auto rounded border border-white/10 bg-black/40 p-2 font-mono text-[10px] text-[#EAE4D8]">{JSON.stringify(runState.json, null, 2)}</pre>}
+          </div>
+        )}
 
         {agent.canHide && onHide && (
           <div className="mt-4 rounded border border-red-500/15 bg-red-950/[0.05] p-3">

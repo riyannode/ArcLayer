@@ -16,7 +16,7 @@ export default function JobsChooserPage() {
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-3">
           <Link
             href="/jobs/manual"
             className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
@@ -84,6 +84,30 @@ export default function JobsChooserPage() {
               <span className="transition-transform group-hover:translate-x-1">→</span>
             </div>
           </Link>
+          <Link
+            href="/jobs/x402"
+            className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
+          >
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded border border-white/10 bg-black/40 text-[#C5A67C]">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 7h10" />
+                <path d="M7 12h10" />
+                <path d="M7 17h10" />
+                <path d="M4 4h16v16H4z" />
+              </svg>
+            </div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">x402 Job</div>
+            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">x402 Jobs Workbench</h2>
+            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
+              Quote, create, route, submit proof, and verify paid job routes.
+            </p>
+
+            <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-[#C5A67C] group-hover:text-[#EAE4D8]">
+              Open x402 Workbench
+              <span className="transition-transform group-hover:translate-x-1">→</span>
+            </div>
+          </Link>
+
         </div>
       </div>
     </div>

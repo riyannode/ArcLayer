@@ -28,6 +28,11 @@ type NameStatus =
   | { state: 'ready' }
   | { state: 'invalid'; reason: string };
 
+
+const registerFeeAtomicEnv = process.env.NEXT_PUBLIC_X402_REGISTER_GATE_AMOUNT_ATOMIC;
+const registerFeeAtomic = registerFeeAtomicEnv && /^\d+$/.test(registerFeeAtomicEnv) ? registerFeeAtomicEnv : null;
+const registerFeeLabel = registerFeeAtomic ? `${(Number(registerFeeAtomic) / 1e6).toFixed(2)} USDC` : 'anti-spam fee';
+
 export default function RegisterManualAgentPage() {
   const router = useRouter();
   const { isConnected } = useArcWallet();
@@ -155,9 +160,9 @@ export default function RegisterManualAgentPage() {
       setIsSubmitting(true);
       setIndexerSynced(false);
 
-      // STEP A — Anti-spam x402 fee (0.40 USDC). Block before touching chain.
+      // STEP A — Anti-spam x402 fee. Block before touching chain.
       setStatusTone('pending');
-      setTxState('Step 1/2 · Paying anti-spam fee (0.40 USDC)…');
+      setTxState(`Step 1/2 · Paying ${registerFeeLabel}…`);
       const payResult = await payAntiSpam();
       if (!payResult.ok) {
         setStatusTone('error');
@@ -366,13 +371,13 @@ export default function RegisterManualAgentPage() {
                       ? 'Verifying availability…'
                       : nameStatus.state === 'invalid'
                         ? nameStatus.reason
-                        : 'Pay 0.40 USDC anti-spam fee, then sign register transaction. Agent ID is created on-chain after registration.'
+                        : 'Pay anti-spam fee, then sign register transaction. Agent ID is created on-chain after registration.'
               }
             >
               {isSubmitting ? 'REGISTERING…' : 'PAY & REGISTER'}
             </button>
             <p className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.6)] invisible">
-              Anti-spam fee: 0.40 USDC · Non-refundable · This fee prevents spam listings. It is not escrow funding.
+              Anti-spam fee · Non-refundable · This fee prevents spam listings. It is not escrow funding.
             </p>
           </section>
 
