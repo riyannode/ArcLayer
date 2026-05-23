@@ -52,6 +52,27 @@ contract ArcVaultTest is Test {
         usdc.mint(client, 1_000e6);
     }
 
+
+    function testDepositIncreasesOpenPoolBalance() public {
+        vm.startPrank(client);
+        usdc.approve(address(vault), 400e6);
+        vault.deposit(400e6);
+        vm.stopPrank();
+
+        assertEq(vault.openPoolBalance(client), 400e6);
+    }
+
+    function testWithdrawReturnsUnallocatedFunds() public {
+        vm.startPrank(client);
+        usdc.approve(address(vault), 400e6);
+        vault.deposit(400e6);
+        vault.withdraw(150e6);
+        vm.stopPrank();
+
+        assertEq(vault.openPoolBalance(client), 250e6);
+        assertEq(usdc.balanceOf(client), 750e6);
+    }
+
     function testCreateJobStoresMilestones() public {
         vm.startPrank(client);
         usdc.approve(address(vault), 1_000e6);
@@ -90,6 +111,31 @@ contract ArcVaultTest is Test {
 
         (uint256 milestoneAmount,,,,,,) = vault.milestones(jobId, 0);
         assertEq(milestoneAmount, 300e6);
+    }
+
+
+    function testCancelOpenJobRefundsToOpenPool() public {
+        uint256 jobId = _createOneMilestoneJob(500e6);
+
+        assertEq(vault.openPoolBalance(client), 0);
+
+        vm.prank(client);
+        vault.cancelOpenJob(jobId);
+
+        assertEq(vault.openPoolBalance(client), 500e6);
+        (, , , , , , , , , ArcVault.JobStatus status, ,) = vault.jobs(jobId);
+        assertEq(uint256(status), uint256(ArcVault.JobStatus.Cancelled));
+    }
+
+    function testAcceptJobMovesToActiveAndStoresJobber() public {
+        uint256 jobId = _createOneMilestoneJob(500e6);
+
+        vm.prank(jobber);
+        vault.acceptJob(jobId, 0, 0);
+
+        (, , address storedJobber, , , , , , , ArcVault.JobStatus status, ,) = vault.jobs(jobId);
+        assertEq(storedJobber, jobber);
+        assertEq(uint256(status), uint256(ArcVault.JobStatus.Active));
     }
 
     function testSubmitAndApproveMilestoneReleasesPayoutAndFee() public {
