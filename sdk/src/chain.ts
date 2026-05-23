@@ -6,6 +6,9 @@ import {
   USDC_ABI,
 } from "./abi";
 
+const ARC_RPC_URL = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.ARC_RPC_URL;
+const arcRpcUrls = ARC_RPC_URL ? [ARC_RPC_URL, ...ARC_RPC_URLS.filter((url) => url !== ARC_RPC_URL)] : [...ARC_RPC_URLS];
+
 export const arcTestnet = {
   id: 5042002,
   name: "Arc Testnet",
@@ -14,8 +17,8 @@ export const arcTestnet = {
   // (vs ERC-20 USDC 6 decimals). See ARC_NATIVE_USDC_DECIMALS in addresses.ts.
   nativeCurrency: { name: "USD Coin", symbol: "USDC", decimals: 18 },
   rpcUrls: {
-    default: { http: [...ARC_RPC_URLS] },
-    public: { http: [...ARC_RPC_URLS] },
+    default: { http: [...arcRpcUrls] },
+    public: { http: [...arcRpcUrls] },
   },
   blockExplorers: {
     default: { name: "ArcScan", url: ARC_EXPLORER },
@@ -24,7 +27,7 @@ export const arcTestnet = {
 
 export const publicClient = createPublicClient({
   chain: arcTestnet,
-  transport: fallback(ARC_RPC_URLS.map((url) => http(url))),
+  transport: fallback(arcRpcUrls.map((url) => http(url))),
 });
 
 /** Official ERC-8004 Identity Registry on Arc Testnet. */

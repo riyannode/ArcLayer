@@ -9,7 +9,7 @@
  * @deprecated Use `fetchJobEvents` from `./ingest` instead.
  */
 
-import { fetchJobEvents, type FetchJobEventsResult } from "./ingest";
+import { fetchJobEvents, getLatestBlock, type FetchJobEventsResult } from "./ingest";
 
 export type ArcErc8183Event = FetchJobEventsResult["events"][number];
 
@@ -28,6 +28,7 @@ export function updateKnownAgentAddresses(_addresses: string[]) {
 export async function fetchArcErc8183Events(
   fromBlock: bigint = BigInt(0),
 ): Promise<FetchArcErc8183Result> {
-  const { events, latestBlock } = await fetchJobEvents(fromBlock);
+  const latestBlock = await getLatestBlock();
+  const { events } = await fetchJobEvents(fromBlock, latestBlock);
   return { events: events as unknown as ArcErc8183Event[], latestBlock };
 }
