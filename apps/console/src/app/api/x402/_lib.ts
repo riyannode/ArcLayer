@@ -133,7 +133,32 @@ export async function settleDualPayment(req: Request) {
         settleResult: { success: false, errorReason: `payment_${claim.reason}`, transaction: null, payer: result.payer },
       };
     }
-    const settleResult = await facilitator.settle(proof, requirements);
+    let settleResult: Awaited<ReturnType<typeof facilitator.settle>>;
+    try {
+      settleResult = await facilitator.settle(proof, requirements);
+    } catch (error) {
+      await recordGatewayPayment({
+        paymentId,
+        payer: result.payer ?? 'unknown',
+        amount: String((requirements as { amount?: unknown }).amount ?? ''),
+        network: String((requirements as { network?: unknown }).network ?? ''),
+        transaction: undefined,
+        resource: String(((parsed.paymentPayload as Record<string, unknown>).resource as { url?: unknown } | undefined)?.url ?? '/api/x402'),
+        status: 'failed',
+      }).catch(() => undefined);
+      throw error;
+    }
+    if (!settleResult.success) {
+      await recordGatewayPayment({
+        paymentId,
+        payer: settleResult.payer ?? result.payer ?? 'unknown',
+        amount: String((requirements as { amount?: unknown }).amount ?? ''),
+        network: String((requirements as { network?: unknown }).network ?? ''),
+        transaction: settleResult.transaction ?? null,
+        resource: String(((parsed.paymentPayload as Record<string, unknown>).resource as { url?: unknown } | undefined)?.url ?? '/api/x402'),
+        status: 'failed',
+      }).catch(() => undefined);
+    }
 
     if (settleResult.success) {
       await recordGatewayPayment({

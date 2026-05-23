@@ -295,8 +295,32 @@ async function handleGateway(
   }
 
   // Settle
-  const settleResult = await facilitator.settle(proof as unknown as Parameters<typeof facilitator.settle>[0], requirements);
+  let settleResult: Awaited<ReturnType<typeof facilitator.settle>>;
+  try {
+    settleResult = await facilitator.settle(proof as unknown as Parameters<typeof facilitator.settle>[0], requirements);
+  } catch (error) {
+    await recordGatewayPayment({
+      paymentId,
+      payer: earlyPayer ?? verifyResult.payer ?? 'unknown',
+      amount: requirements.amount,
+      network: requirements.network,
+      transaction: undefined,
+      resource: opts.resource,
+      status: 'failed',
+    }).catch(() => undefined);
+    if (earlyPayer) await releaseAccessSession(earlyPayer, opts.resource, 'circle-gateway');
+    throw error;
+  }
   if (!settleResult.success) {
+    await recordGatewayPayment({
+      paymentId,
+      payer: settleResult.payer ?? earlyPayer ?? verifyResult.payer ?? 'unknown',
+      amount: requirements.amount,
+      network: requirements.network,
+      transaction: settleResult.transaction ?? undefined,
+      resource: opts.resource,
+      status: 'failed',
+    }).catch(() => undefined);
     console.error(`[x402-gw] Settlement failed: ${opts.resource} — ${settleResult.errorReason}`);
     if (earlyPayer) await releaseAccessSession(earlyPayer, opts.resource, 'circle-gateway');
     return NextResponse.json(
