@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { PredictionMarketAgentsStrip } from '@/components/market/PredictionMarketAgentsStrip';
-import { PolymarketBtc15mPanel, PolymarketOrderbookPanel, PolymarketStyleBtcChart } from '@/components/market/PolymarketPanels';
+import { PolymarketOrderbookPanel, PolymarketStyleBtcChart } from '@/components/market/PolymarketPanels';
 import { useCryptoUpDownLive } from '@/hooks/useCryptoUpDownLive';
 
 type RawEvent = Record<string, unknown>;
@@ -66,9 +66,12 @@ export default function PredictionMarketBotsPage() {
           {sessionError ? <div className="mt-3 rounded border border-red-400/25 bg-red-950/20 p-2 text-xs text-red-200">Session load failed: {sessionError}</div> : null}
         </section>
 
-        <PolymarketStyleBtcChart snapshot={data} loading={loading} error={error} onRefresh={refresh} />
+        <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+          <PolymarketStyleBtcChart snapshot={data} loading={loading} error={error} onRefresh={refresh} />
+          <PolymarketOrderbookPanel snapshot={data} loading={loading} />
+        </section>
+
         <PredictionMarketAgentsStrip category="prediction-market-bots" />
-        <section className="grid gap-3 lg:grid-cols-2"><PolymarketBtc15mPanel snapshot={data} loading={loading} error={error} /><PolymarketOrderbookPanel snapshot={data} loading={loading} /></section>
 
       </div>
     </main>
