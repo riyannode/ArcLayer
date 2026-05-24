@@ -33,7 +33,15 @@ This inventory reflects canonical migrations in both locations:
 
 ## Vault
 
-- Vault schema/field patches in `apps/console/supabase/migrations/007_vault_system.sql`, `008_vault_onchain_fields.sql`, and `009_vault_onchain_schema_patch.sql`.
+- `public.vault_jobs` from `apps/console/supabase/migrations/007_vault_system.sql`.
+- `public.vault_milestones` from `apps/console/supabase/migrations/007_vault_system.sql`.
+- `public.vault_disputes` from `apps/console/supabase/migrations/007_vault_system.sql`.
+- `public.bond_tiers` from `apps/console/supabase/migrations/007_vault_system.sql`.
+- `public.vault_config` from `apps/console/supabase/migrations/007_vault_system.sql`.
+- `public.resolver_decisions` from `apps/console/supabase/migrations/007_vault_system.sql`.
+- `public.jobber_reputation` from `apps/console/supabase/migrations/007_vault_system.sql`.
+- `public.client_reputation` from `apps/console/supabase/migrations/007_vault_system.sql`.
+- on-chain field and schema patches from `apps/console/supabase/migrations/008_vault_onchain_fields.sql` and `apps/console/supabase/migrations/009_vault_onchain_schema_patch.sql`.
 
 ## Live A2A UI
 
