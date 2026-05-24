@@ -53,9 +53,9 @@ import {
 } from './rail-session';
 import {
   buildResourcePaymentKey,
+  claimResourcePayment,
   getResourcePayment,
   markResourcePaymentSettled,
-  putResourcePayment,
 } from './resource-payment-store';
 import type { PaymentRequirements, PaymentPayload } from './exact/types';
 
@@ -454,6 +454,7 @@ async function handleNative(
   const reqBody = await req.clone().json().catch(() => ({} as Record<string, unknown>));
   const scope = typeof reqBody.scope === 'string' && reqBody.scope.trim().length > 0 ? reqBody.scope.trim() : 'summary';
   const inputSessionId = typeof reqBody.sessionId === 'string' && reqBody.sessionId.trim().length > 0 ? reqBody.sessionId.trim() : null;
+  const role = typeof reqBody.role === 'string' && reqBody.role.trim().length > 0 ? reqBody.role.trim().toLowerCase() : 'executor';
 
   // ─── Rail session guard ─────────────────────────────────────────────────────
   const railSessionId = getRailSessionId(proof);
@@ -540,6 +541,32 @@ async function handleNative(
     );
   }
 
+  const resourcePaymentKey = buildResourcePaymentKey({
+    sessionId: inputSessionId ?? 'missing_session',
+    scope,
+    role,
+    resource: opts.resource,
+  });
+  const existingResourcePayment = await getResourcePayment(resourcePaymentKey);
+  if (existingResourcePayment?.status === 'settled') {
+    return NextResponse.json(
+      {
+        ok: true,
+        error: 'session_already_paid',
+        sessionId: existingResourcePayment.sessionId,
+        scope: existingResourcePayment.scope,
+        role: existingResourcePayment.role,
+        paymentId: existingResourcePayment.paymentId,
+        transaction: existingResourcePayment.transaction ?? null,
+        payer: existingResourcePayment.payer,
+        payTo: existingResourcePayment.payTo,
+        amount: existingResourcePayment.amount,
+        mode: 'arc-native',
+      },
+      { status: 200, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+
   // ─── VERIFY-FIRST PATTERN: Execute handler BEFORE settlement ──────────────
   // Rationale: If handler fails (DB error, timeout, panic), user should NOT be
   // charged. Settlement is irreversible on-chain. Handler success is the gate.
@@ -565,6 +592,51 @@ async function handleNative(
     return response; // Pass through handler's error response without settling
   }
 
+  const paymentId = deriveNativePaymentId({
+    network: requirements.network,
+    asset: requirements.asset,
+    from: authorization.from as string,
+    nonce: authorization.nonce as string,
+  });
+  const claim = await claimResourcePayment({
+    paymentKey: resourcePaymentKey,
+    sessionId: inputSessionId ?? 'missing_session',
+    scope,
+    role,
+    payer: String(authorization.from),
+    resource: opts.resource,
+    payTo: String(requirements.payTo),
+    amount: requirements.amount,
+    mode: 'arc-native',
+    status: 'pending',
+    paymentId,
+    transaction: null,
+  });
+  if (claim.kind === 'settled') {
+    return NextResponse.json(
+      {
+        ok: true,
+        error: 'session_already_paid',
+        sessionId: claim.record.sessionId,
+        scope: claim.record.scope,
+        role: claim.record.role,
+        paymentId: claim.record.paymentId,
+        transaction: claim.record.transaction ?? null,
+        payer: claim.record.payer,
+        payTo: claim.record.payTo,
+        amount: claim.record.amount,
+        mode: 'arc-native',
+      },
+      { status: 200, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+  if (claim.kind === 'pending') {
+    return NextResponse.json(
+      { ok: false, error: 'payment_in_flight', message: 'Payment is already being processed for this resource/session/scope/role.' },
+      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+
   // ─── Settle on-chain via relayer (only after handler success) ──────────────
   const settleResult = await settleExactPayment({
     paymentPayload: proof as unknown as PaymentPayload,
@@ -580,38 +652,6 @@ async function handleNative(
         { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
       );
     }
-  }
-
-  // ─── Derive paymentId and consume (replay protection) ─────────────────────
-  const paymentId = deriveNativePaymentId({
-    network: requirements.network,
-    asset: requirements.asset,
-    from: authorization.from as string,
-    nonce: authorization.nonce as string,
-  });
-  const resourcePaymentKey = buildResourcePaymentKey({
-    sessionId: inputSessionId ?? 'missing_session',
-    scope,
-    payer: String(authorization.from),
-    resource: opts.resource,
-  });
-  const existingResourcePayment = await getResourcePayment(resourcePaymentKey);
-  if (existingResourcePayment?.status === 'settled') {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: 'session_already_paid',
-        sessionId: existingResourcePayment.sessionId,
-        scope: existingResourcePayment.scope,
-        paymentId: existingResourcePayment.paymentId,
-        transaction: existingResourcePayment.transaction ?? null,
-        payer: existingResourcePayment.payer,
-        payTo: existingResourcePayment.payTo,
-        amount: existingResourcePayment.amount,
-        mode: 'arc-native',
-      },
-      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
   }
 
   const consumed = await consumeNativePayment(paymentId);
@@ -646,20 +686,7 @@ async function handleNative(
   };
 
   const bridgeSessionId = response.headers.get('X-Agent-Bridge-Session-Id');
-  if (bridgeSessionId) {
-    await putResourcePayment({
-      paymentKey: resourcePaymentKey,
-      sessionId: bridgeSessionId,
-      scope,
-      payer: String(authorization.from),
-      resource: opts.resource,
-      payTo: String(requirements.payTo),
-      amount: requirements.amount,
-      mode: 'arc-native',
-      status: 'pending',
-      paymentId,
-      transaction: settleResult.transaction ?? null,
-    });
+  if (bridgeSessionId && inputSessionId === 'missing_session') {
     await markResourcePaymentSettled(resourcePaymentKey, {
       paymentId,
       transaction: settleResult.transaction ?? null,

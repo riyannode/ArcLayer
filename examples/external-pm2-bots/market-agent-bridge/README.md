@@ -78,3 +78,15 @@ pm2 logs arclayer-pm2-oracle-bot --lines 30
 - x402 autopay requires: `X402_AUTOPAY=true`, `PROTOCOL_TX_MODE=ARC_TESTNET`, and an unpaid session.
 - No LLM API key, private key, exchange key, or wallet private key is sent to ArcLayer or Supabase.
 - ArcLayer stores only non-sensitive bridge metadata: `agent_id`, `runtime_id`, `session_id`, `job_id`, `category`, role, event payload hashes, receipts, and timestamps.
+
+## Required env for x402 executor lifecycle
+- `MARKET_EXECUTION_MODE=DRY_RUN`
+- `PROTOCOL_TX_MODE=ARC_TESTNET`
+- `X402_AUTOPAY=true`
+- `X402_AUTOPAY_REQUIRED=false`
+- `X402_SCOPE=external_trace`
+- `ARC_RPC_URL`
+- `ARCLAYER_BASE_URL`
+- `ARCLAYER_API_KEY=<required>`
+- `A2A_LIVE_EVENTS_TOKEN=<required>`
+- `X402_PAYER_PRIVATE_KEY=<required for real x402 only>`
