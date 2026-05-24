@@ -2,7 +2,7 @@ require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 const fs = require('node:fs');
 const path = require('node:path');
 const { callLLM } = require("./shared/llm-client");
-const { latestSession, postEvent, postReceipt, safePostLiveEvent, sha256, getJson, hasExecutorX402Proof } = require("./shared/arclayer-client");
+const { latestSession, postEvent, postReceipt, safePostLiveEvent, sha256, getJson, hasExecutorX402EventOnly, hasExecutorX402Proof } = require("./shared/arclayer-client");
 const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
 
@@ -33,6 +33,12 @@ async function runOnce() {
       console.log(`[x402][executor] lock_exists session=${session.sessionId} scope=${scope}, skip`);
       return;
     }
+    // Event-based skip: check if any executor already posted receipt_reference for this session
+    const preflightEvents = await getJson(`/api/agent-bridge/events?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
+    if (hasExecutorX402EventOnly({ sessionId: session.sessionId, events: preflightEvents.events || [] })) {
+      console.log(`[x402][executor] event_exists session=${session.sessionId}, skip payment`);
+      return;
+    }
     const payment = await payForBridgeAccess({ sessionId: session.sessionId, scope, role: 'executor' });
     if (!payment.ok) return;
     if (payment.alreadyPaid) {
@@ -48,6 +54,12 @@ async function runOnce() {
     }
     const txHash = payment.txHash || payment.transaction || null;
     const paymentId = payment.paymentId || null;
+    // Re-check events before posting proofs (race guard: another process may have posted)
+    const postflightEvents = await getJson(`/api/agent-bridge/events?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
+    if (hasExecutorX402EventOnly({ sessionId: session.sessionId, events: postflightEvents.events || [] })) {
+      console.log(`[x402][executor] event_appeared session=${session.sessionId} tx=${txHash}, skip proof posting`);
+      return;
+    }
     const receiptEventPayload = { source: 'x402-autopay', scope, role: 'executor', txHash, transaction: txHash, paymentId };
     const receiptRef = await postEvent({ sessionId: session.sessionId, role: 'executor', type: 'receipt_reference', runtimeId: process.env.RUNTIME_ID || 'pm2-llm-executor-bot', payload: receiptEventPayload, metadata: { source: 'x402-autopay' } });
     await postReceipt({ sessionId: session.sessionId, receiptType: 'x402_arc_native', payloadHash: sha256(receiptEventPayload), metadata: { role: 'executor', scope, source: 'x402-autopay', txHash, paymentId, bridgePayloadHash: receiptRef.payloadHash, protocolTxMode: 'arc_testnet' } });

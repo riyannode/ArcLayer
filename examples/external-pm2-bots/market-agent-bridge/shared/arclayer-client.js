@@ -71,6 +71,25 @@ function buildRoleState(events) {
   return roles;
 }
 
+/**
+ * Lightweight check: does the session already have ANY executor receipt_reference
+ * x402 bridge event? Checks only events (no receipt/live round-trip).
+ * Used for duplicate prevention before posting proofs.
+ */
+function hasExecutorX402EventOnly({ sessionId, events }) {
+  return (events || []).some((e) => {
+    const n = normalizeEvent(e);
+    const p = e.payload || {};
+    const tx = p.txHash || p.transaction || e.txHash || e.transaction;
+    return n.role === 'executor' &&
+      n.type === 'receipt_reference' &&
+      n.sessionId === sessionId &&
+      (p.scope || '').toString() === 'external_trace' &&
+      (p.source || e.source || '').toString() === 'x402-autopay' &&
+      isValidTxHash(tx);
+  });
+}
+
 function hasExecutorX402Proof({ sessionId, events, receipts, liveEvents }) {
   const eventProofs = (events || []).filter((e) => {
     const n = normalizeEvent(e);
@@ -260,4 +279,4 @@ async function safePostLiveEvent(eventType, details = {}) {
   return data;
 }
 
-module.exports = { BASE_URL, AGENT_ID, sha256, currentSessionId, getJson, hasExecutorX402Proof, latestSession, postEvent, postReceipt, safePostLiveEvent };
+module.exports = { BASE_URL, AGENT_ID, sha256, currentSessionId, getJson, hasExecutorX402EventOnly, hasExecutorX402Proof, latestSession, postEvent, postReceipt, safePostLiveEvent };

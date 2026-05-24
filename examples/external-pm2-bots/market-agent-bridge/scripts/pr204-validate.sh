@@ -103,7 +103,7 @@ mkdir -p .x402-locks
 rm -f "$CHAIN_LOG" "$EVENTS_JSON" "$VERIFIER_OUT"
 
 echo "== run one-entrypoint oracle chain =="
-timeout 240s env RUN_FOREVER=false STARTUP_DELAY_MS=0 node oracle-bot.js | tee "$CHAIN_LOG"
+timeout 240s env RUN_FOREVER=false STARTUP_DELAY_MS=0 node oracle-bot.js | tee "$CHAIN_LOG" || true
 echo "== chain summary =="
 grep -Ei 'selected session|skip session|oracle-chain|analyzer|evaluator|executor|approved|rejected|x402|tx=0x|receipt_reference|x402_payment_proof|live-event|payment_in_flight|already_paid|rail_session_not_found|Missing analyzer output' "$CHAIN_LOG" | tail -250 || true
 
