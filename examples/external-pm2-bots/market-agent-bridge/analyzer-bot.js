@@ -5,6 +5,7 @@ const { hasRoleContentEvent, latestSession, postEvent, postReceipt } = require("
 const { bpsSignal, clamp } = require("./shared/market-logic");
 const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
+const { acquireRoleLock, releaseRoleLock } = require("./shared/role-lock");
 
 function sanitizeAnalysis(raw, fallbackSignal) {
   const allowed = new Set(["UP", "DOWN", "NEUTRAL"]);
@@ -36,11 +37,19 @@ async function runOnce() {
     throw new Error("No latest bridge session. Run oracle first.");
   }
 
-  // Skip if analyzer already processed this session
-  if (hasRoleContentEvent({ sessionId: session.sessionId, events: session.events, role: 'analyzer', type: 'resolver_output' })) {
-    console.log(`[analyzer] skip session=${session.sessionId} reason=role_already_processed`);
+  // Acquire role lock — atomic filesystem lock prevents concurrent
+  // analyzer processes from processing the same session.
+  let rlp = acquireRoleLock(session.sessionId, 'analyzer');
+  if (!rlp) {
+    console.log(`[analyzer] lock_exists session=${session.sessionId} role=analyzer, skip`);
     return;
   }
+  try {
+    // Skip if analyzer already processed this session (API-based guard)
+    if (hasRoleContentEvent({ sessionId: session.sessionId, events: session.events, role: 'analyzer', type: 'resolver_output' })) {
+      console.log(`[analyzer] skip session=${session.sessionId} reason=role_already_processed`);
+      return;
+    }
 
   const oraclePayload = session.roles?.oracle?.payload || {};
   const raw = oraclePayload.raw || oraclePayload;
@@ -166,6 +175,9 @@ ${JSON.stringify(oraclePayload).slice(0, 12000)}
       console.error(`[x402][analyzer] autopay failed: ${message}`);
       if (process.env.X402_AUTOPAY_REQUIRED === "true") throw err;
     }
+  }
+} finally {
+    releaseRoleLock(rlp);
   }
 }
 

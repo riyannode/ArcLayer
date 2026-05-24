@@ -60,6 +60,24 @@ pkill -f "oracle-bot.js" 2>/dev/null || true
 pkill -f "analyzer-bot.js" 2>/dev/null || true
 pkill -f "evaluator-bot.js" 2>/dev/null || true
 pkill -f "executor-bot.js" 2>/dev/null || true
+sleep 3
+
+echo "== process audit =="
+BOT_PROCS="oracle-bot.js|analyzer-bot.js|evaluator-bot.js|executor-bot.js"
+SHELL_PID="$$"
+echo "parent_shell_pid=${SHELL_PID}"
+MATCHING_PIDS="$(pgrep -f "$BOT_PROCS" 2>/dev/null || true)"
+if [[ -n "$MATCHING_PIDS" ]]; then
+  echo "BLOCKER: stray bot processes still running after kill+wait"
+  echo "pids=$MATCHING_PIDS"
+  ps -o pid,cmd -p $MATCHING_PIDS 2>/dev/null || true
+  echo "Kill them manually before retry."
+  exit 1
+fi
+echo "all_bot_pids=clean"
+
+rm -rf .x402-locks
+mkdir -p .x402-locks
 
 echo "== env sanity =="
 chmod 600 .env
@@ -96,9 +114,6 @@ set_env_value X402_AUTOPAY true
 set -a
 source .env
 set +a
-
-rm -rf .x402-locks
-mkdir -p .x402-locks
 
 rm -f "$CHAIN_LOG" "$EVENTS_JSON" "$VERIFIER_OUT"
 
@@ -169,17 +184,116 @@ EXECUTOR_X402_COUNT="$(
   ' "$EVENTS_JSON"
 )"
 
-if [[ "$EXECUTOR_X402_COUNT" -gt 1 ]]; then
+echo "== role-count gates =="
+
+count_events() {
+  local role="$1"
+  local type="$2"
+  local scope_filter="${3:-}"
+  jq -r --arg s "$SESSION_ID" --arg r "$role" --arg t "$type" --arg sc "$scope_filter" '
+    def sid: (.sessionId // .session_id // .payload.unlockedSessionId // "");
+    def role: (.role // .metadata.role // .payload.role // "");
+    def typ: (.type // .eventType // .event_type // "");
+    [
+      (.events // [])[]
+      | select(sid == $s)
+      | select(role == $r)
+      | select(typ == $t)
+      | if ($sc != "") then select((.payload.source // "") == $sc) else . end
+    ] | length
+  ' "$EVENTS_JSON"
+}
+
+ANALYZER_RESOLVER_OUTPUT_COUNT="$(count_events analyzer resolver_output '')"
+ANALYZER_X402_COUNT="$(count_events analyzer receipt_reference x402-autopay)"
+EVALUATOR_EVALUATION_COUNT="$(count_events evaluator evaluation '')"
+EVALUATOR_X402_COUNT="$(count_events evaluator receipt_reference x402-autopay)"
+EXECUTOR_EXECUTION_INTENT_COUNT="$(count_events executor execution_intent '')"
+
+echo "ANALYZER_RESOLVER_OUTPUT_COUNT=${ANALYZER_RESOLVER_OUTPUT_COUNT}"
+echo "ANALYZER_X402_COUNT=${ANALYZER_X402_COUNT}"
+echo "EVALUATOR_EVALUATION_COUNT=${EVALUATOR_EVALUATION_COUNT}"
+echo "EVALUATOR_X402_COUNT=${EVALUATOR_X402_COUNT}"
+echo "EXECUTOR_EXECUTION_INTENT_COUNT=${EXECUTOR_EXECUTION_INTENT_COUNT}"
+echo "EXECUTOR_X402_COUNT=${EXECUTOR_X402_COUNT}"
+
+# Detect duplicate x402 by role+scope
+DUPLICATES="$(jq --arg s "$SESSION_ID" '
+  def sid: (.sessionId // .session_id // .payload.unlockedSessionId // "");
+  def role: (.role // .metadata.role // .payload.role // "");
+  def typ: (.type // .eventType // .event_type // "");
+  [
+    (.events // [])[]
+    | select(sid == $s)
+    | select(typ == "receipt_reference" and (.payload.source // "") == "x402-autopay")
+    | {role: role, scope: (.payload.scope // ""), tx: (.payload.txHash // .payload.transaction // ""), paymentId: (.payload.paymentId // "")}
+  ]
+  | group_by(.role + "|" + .scope)
+  | map({key: (.[0].role + "|" + .[0].scope), count: length, txs: map(.tx)})
+  | map(select(.count > 1))
+' "$EVENTS_JSON")"
+echo "DUPLICATE_X402_BY_ROLE_SCOPE=${DUPLICATES}"
+
+BLOCKER=false
+REASON=""
+
+if [[ "$ANALYZER_RESOLVER_OUTPUT_COUNT" -ne 1 ]]; then
+  BLOCKER=true
+  REASON="${REASON}analyzer_resolver_output_count=${ANALYZER_RESOLVER_OUTPUT_COUNT} "
+fi
+if [[ "$ANALYZER_X402_COUNT" -gt 1 ]]; then
+  BLOCKER=true
+  REASON="${REASON}analyzer_x402_count=${ANALYZER_X402_COUNT} "
+fi
+if [[ "$EVALUATOR_EVALUATION_COUNT" -ne 1 ]]; then
+  BLOCKER=true
+  REASON="${REASON}evaluator_evaluation_count=${EVALUATOR_EVALUATION_COUNT} "
+fi
+if [[ "$EVALUATOR_X402_COUNT" -gt 1 ]]; then
+  BLOCKER=true
+  REASON="${REASON}evaluator_x402_count=${EVALUATOR_X402_COUNT} "
+fi
+if [[ "$EXECUTOR_EXECUTION_INTENT_COUNT" -ne 1 ]]; then
+  BLOCKER=true
+  REASON="${REASON}executor_execution_intent_count=${EXECUTOR_EXECUTION_INTENT_COUNT} "
+fi
+
+# Executor x402: 1 if evaluator approved, 0 if rejected
+# We detect rejection by checking if evaluator evaluation has approved=false
+EVALUATOR_APPROVED="$(jq -r --arg s "$SESSION_ID" '
+  def sid: (.sessionId // .session_id // .payload.unlockedSessionId // "");
+  def role: (.role // .metadata.role // .payload.role // "");
+  def typ: (.type // .eventType // .event_type // "");
+  [.events // [] | select(sid == $s and role == "evaluator" and typ == "evaluation")]
+  | last
+  | .payload.approved // false
+' "$EVENTS_JSON")"
+
+if [[ "$EVALUATOR_APPROVED" == "true" ]]; then
+  if [[ "$EXECUTOR_X402_COUNT" -ne 1 ]]; then
+    BLOCKER=true
+    REASON="${REASON}executor_x402_count=${EXECUTOR_X402_COUNT}_expected_1 "
+  fi
+else
+  if [[ "$EXECUTOR_X402_COUNT" -ne 0 ]]; then
+    BLOCKER=true
+    REASON="${REASON}executor_x402_count=${EXECUTOR_X402_COUNT}_expected_0_rejected "
+  fi
+fi
+
+if [[ "$DUPLICATES" != "[]" && -n "$DUPLICATES" ]]; then
+  BLOCKER=true
+  REASON="${REASON}duplicate_x402_by_role_scope "
+fi
+
+if [[ "$BLOCKER" == "true" ]]; then
   echo "VERDICT=BLOCKER"
-  echo "REASON=executor_x402_count_gt_1"
+  echo "REASON=${REASON}"
   exit 1
 fi
 
-if [[ "$EXECUTOR_X402_COUNT" -eq 0 ]]; then
-  echo "VERDICT=FAILED"
-  echo "REASON=no_executor_x402_tx"
-  exit 1
-fi
+echo "VERDICT=PASS"
+echo "REASON=all_role_counts_good"
 
 TX="$(
   jq -r --arg s "$SESSION_ID" '

@@ -5,10 +5,7 @@ const { callLLM } = require("./shared/llm-client");
 const { hasRoleContentEvent, latestSession, postEvent, postReceipt, safePostLiveEvent, sha256, getJson, hasExecutorX402EventOnly, hasExecutorX402Proof } = require("./shared/arclayer-client");
 const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
-
-function lockPath(sessionId, scope) { return path.resolve(__dirname, '.x402-locks', `${sessionId}-${scope}.lock`); }
-function acquireLock(sessionId, scope) { fs.mkdirSync(path.resolve(__dirname, '.x402-locks'), { recursive: true }); const lp = lockPath(sessionId, scope); try { const fd = fs.openSync(lp, 'wx'); fs.closeSync(fd); return lp; } catch (err) { if (err && err.code === 'EEXIST') return null; throw err; } }
-function releaseLock(lp) { try { if (lp) fs.unlinkSync(lp); } catch {} }
+const { acquireRoleLock, releaseRoleLock } = require("./shared/role-lock");
 
 async function runOnce() {
   const { session } = await latestSession({ requiredRoles: ['analyzer', 'evaluator'] });
@@ -16,8 +13,16 @@ async function runOnce() {
   const analyzerPayload = session.roles?.analyzer?.payload;
   const evaluatorPayload = session.roles?.evaluator?.payload;
 
-  // Skip if executor already has execution_intent for this session
-  if (hasRoleContentEvent({ sessionId: session.sessionId, events: session.events, role: 'executor', type: 'execution_intent' })) {
+  // Acquire role lock — atomic filesystem lock prevents concurrent
+  // executor processes from processing the same session.
+  let rlp = acquireRoleLock(session.sessionId, 'executor');
+  if (!rlp) {
+    console.log(`[executor] lock_exists session=${session.sessionId} role=executor, skip`);
+    return;
+  }
+  try {
+    // Skip if executor already has execution_intent for this session
+    if (hasRoleContentEvent({ sessionId: session.sessionId, events: session.events, role: 'executor', type: 'execution_intent' })) {
     console.log(`[executor] skip session=${session.sessionId} reason=role_already_processed`);
     return;
   }
@@ -34,7 +39,10 @@ async function runOnce() {
   const scope = 'external_trace';
   let lp;
   try {
-    lp = acquireLock(session.sessionId, scope);
+    const SCOPE_LOCK_DIR = require('node:path').resolve(__dirname, '.x402-locks');
+    const scopeLp = require('node:path').join(SCOPE_LOCK_DIR, `${session.sessionId}-${scope}.lock`);
+    require('node:fs').mkdirSync(SCOPE_LOCK_DIR, { recursive: true });
+    try { const fd = require('node:fs').openSync(scopeLp, 'wx'); require('node:fs').closeSync(fd); lp = scopeLp; } catch (err) { if (err && err.code === 'EEXIST') lp = null; else throw err; }
     if (!lp) {
       console.log(`[x402][executor] lock_exists session=${session.sessionId} scope=${scope}, skip`);
       return;
@@ -81,7 +89,10 @@ async function runOnce() {
       reasoning: 'executor external_trace x402 autopay'
     });
     if (!liveResult.ok) throw new Error(liveResult.message || liveResult.error || 'live_event_failed');
-  } finally { releaseLock(lp); }
+  } finally { try { if (lp) require('node:fs').unlinkSync(lp); } catch {} }
+} finally {
+  releaseRoleLock(rlp);
+}
 }
 
 runForever("executor", runOnce).catch((err) => { console.error(`[executor] fatal: ${err.message}`); process.exitCode = 1; });
