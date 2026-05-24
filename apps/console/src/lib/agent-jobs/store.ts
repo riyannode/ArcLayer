@@ -99,23 +99,27 @@ export interface ListAgentJobsFilter {
 
 /**
  * Recursive stable JSON stringify for deterministic payload hashing.
- * Sorts keys at every nesting level recursively.
+ * Canonicalizes all nesting levels so payloads with different insertion order
+ * produce identical hashes.
+ *
+ * Example:
+ *   stableStringify({a:{z:1,b:2}}) === stableStringify({a:{b:2,z:1}})
  */
-function stableStringify(obj: unknown): string {
-  if (obj === null || obj === undefined) return JSON.stringify(obj);
-  if (typeof obj === 'object' && !Array.isArray(obj)) {
-    const sorted = Object.keys(obj as Record<string, unknown>)
-      .sort()
-      .reduce((acc: Record<string, unknown>, key: string) => {
-        acc[key] = (obj as Record<string, unknown>)[key];
-        return acc;
-      }, {});
-    return JSON.stringify(sorted, null, 0);
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
   }
-  if (Array.isArray(obj)) {
-    return `[${obj.map(stableStringify).join(',')}]`;
+
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
   }
-  return JSON.stringify(obj);
+
+  const obj = value as Record<string, unknown>;
+  const entries = Object.keys(obj)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`);
+
+  return `{${entries.join(',')}}`;
 }
 
 function sha256Hex(input: string): string {
