@@ -52,6 +52,7 @@ import {
   type AllowedRail,
 } from './rail-session';
 import {
+  assertResourcePaymentStoreReady,
   buildResourcePaymentKey,
   claimResourcePayment,
   getResourcePayment,
@@ -474,6 +475,23 @@ async function handleNative(
       { ok: false, error: 'invalid_role', message: 'role must be one of: analyzer, evaluator, executor.' },
       { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
     );
+  }
+
+  // ─── Resource payment store readiness guard ─────────────────────────────────
+  // Do not settle any bridge-access payment if the idempotency table is
+  // unreachable. This prevents duplicate on-chain payments when the
+  // deployment is missing Supabase credentials or the table hasn't been
+  // created yet.
+  if (process.env.PROTOCOL_TX_MODE === 'ARC_TESTNET' && opts.resource?.includes('/api/x402/bridge-access')) {
+    try {
+      await assertResourcePaymentStoreReady();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'x402_resource_payments_unavailable';
+      return NextResponse.json(
+        { ok: false, error: 'x402_resource_payments_unavailable', message },
+        { status: 503, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
   }
 
   // ─── Rail session guard ─────────────────────────────────────────────────────

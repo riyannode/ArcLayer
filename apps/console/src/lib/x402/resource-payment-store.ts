@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { supabaseAdmin } from './supabaseClient';
+import { supabaseAdmin, getSupabaseAdmin } from './supabaseClient';
 
 export interface ResourcePaymentRecord {
   paymentKey: string;
@@ -26,7 +26,10 @@ function isProdArcTestnetMode(): boolean {
 }
 
 function ensureDbAvailable() {
-  if (!supabaseAdmin) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+    throw new Error(isProdArcTestnetMode() ? 'x402_resource_payments_unavailable' : 'supabase_unavailable');
+  }
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     throw new Error(isProdArcTestnetMode() ? 'x402_resource_payments_unavailable' : 'supabase_unavailable');
   }
 }
@@ -46,6 +49,21 @@ function mapRecord(data: Record<string, unknown>): ResourcePaymentRecord {
     paymentId: String(data.payment_id ?? ''),
     transaction: (data.transaction as string | null | undefined) ?? null,
   };
+}
+
+export async function assertResourcePaymentStoreReady(): Promise<void> {
+  // Verify env vars are set (supabaseAdmin Proxy would throw on access, but we
+  // check explicitly to give a clear error message before any DB call)
+  ensureDbAvailable();
+
+  // Perform a cheap SELECT to prove the table is reachable in this deployment.
+  // We catch Proxy-thrown errors from supabaseAdmin by calling getSupabaseAdmin()
+  // explicitly before accessing the table — the Proxy wraps the same function.
+  const client = getSupabaseAdmin();
+  const { error } = await client.from('x402_resource_payments').select('payment_key', { count: 'exact', head: true }).limit(1);
+  if (error) {
+    throw new Error(`x402_resource_payments_unavailable: ${error.message}`);
+  }
 }
 
 export async function getResourcePayment(key: string): Promise<ResourcePaymentRecord | null> {
@@ -72,11 +90,21 @@ export async function claimResourcePayment(record: ResourcePaymentRecord): Promi
     transaction: record.transaction ?? null,
   });
 
-  if (!error) return { kind: 'claimed' };
+  if (!error) {
+    console.log(
+      `[x402][resource-payment] claimed sessionId=${record.sessionId} scope=${record.scope} role=${record.role} resource=${record.resource} paymentKey=${record.paymentKey.slice(0, 12)} kind=claimed`,
+    );
+    return { kind: 'claimed' };
+  }
 
   const existing = await getResourcePayment(record.paymentKey);
   if (!existing) throw error;
-  if (existing.status === 'settled') return { kind: 'settled', record: existing };
+  if (existing.status === 'settled') {
+    console.log(
+      `[x402][resource-payment] settled sessionId=${record.sessionId} scope=${record.scope} role=${record.role} resource=${record.resource} paymentKey=${record.paymentKey.slice(0, 12)} kind=settled`,
+    );
+    return { kind: 'settled', record: existing };
+  }
   if (existing.status === 'failed') {
     const { error: retryError } = await supabaseAdmin
       .from('x402_resource_payments')
@@ -91,8 +119,16 @@ export async function claimResourcePayment(record: ResourcePaymentRecord): Promi
       })
       .eq('payment_key', record.paymentKey)
       .eq('status', 'failed');
-    if (!retryError) return { kind: 'claimed' };
+    if (!retryError) {
+      console.log(
+        `[x402][resource-payment] retry-from-failed sessionId=${record.sessionId} scope=${record.scope} role=${record.role} resource=${record.resource} paymentKey=${record.paymentKey.slice(0, 12)} kind=claimed`,
+      );
+      return { kind: 'claimed' };
+    }
   }
+  console.log(
+    `[x402][resource-payment] pending sessionId=${record.sessionId} scope=${record.scope} role=${record.role} resource=${record.resource} paymentKey=${record.paymentKey.slice(0, 12)} kind=pending`,
+  );
   return { kind: 'pending', record: existing };
 }
 
