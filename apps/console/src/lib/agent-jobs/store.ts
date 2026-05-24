@@ -6,7 +6,7 @@
  *                                                                         ↘ failed
  *   created → cancelled / expired
  *
- * All status transitions write agent_job_events.
+ * All status transitions use conditional UPDATE for race safety.
  * Settlement is idempotent via x402_resource_payments integration.
  */
 
@@ -97,8 +97,25 @@ export interface ListAgentJobsFilter {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Recursive stable JSON stringify for deterministic payload hashing.
+ * Sorts keys at every nesting level recursively.
+ */
 function stableStringify(obj: unknown): string {
-  return JSON.stringify(obj, Object.keys(obj as Record<string, unknown>).sort());
+  if (obj === null || obj === undefined) return JSON.stringify(obj);
+  if (typeof obj === 'object' && !Array.isArray(obj)) {
+    const sorted = Object.keys(obj as Record<string, unknown>)
+      .sort()
+      .reduce((acc: Record<string, unknown>, key: string) => {
+        acc[key] = (obj as Record<string, unknown>)[key];
+        return acc;
+      }, {});
+    return JSON.stringify(sorted, null, 0);
+  }
+  if (Array.isArray(obj)) {
+    return `[${obj.map(stableStringify).join(',')}]`;
+  }
+  return JSON.stringify(obj);
 }
 
 function sha256Hex(input: string): string {
@@ -201,9 +218,19 @@ export async function createAgentJob(input: {
     .single();
 
   if (error) throw new Error(`createAgentJob failed: ${error.message}`);
-  return mapJobRow(data);
 
-  // Note: event log is handled by the DB trigger on status change
+  // Add created event
+  await db.from('agent_job_events').insert({
+    job_id: jobId,
+    event_type: 'created',
+    actor_agent_id: input.buyerAgentId,
+    status_before: null,
+    status_after: 'created',
+    payload_hash: inputPayloadHash,
+    metadata: { jobType: input.jobType, priceAtomic: input.priceAtomic ?? '0' },
+  });
+
+  return mapJobRow(data);
 }
 
 export async function listAgentJobs(filter: ListAgentJobsFilter = {}): Promise<AgentJob[]> {
@@ -280,42 +307,52 @@ export async function claimAgentJob(input: {
   return mapJobRow(row);
 }
 
+/**
+ * Atomic conditional update: only updates if status='claimed' AND worker_id matches.
+ * Returns conflict error if no row matched the condition.
+ */
 export async function markJobRunning(input: {
   jobId: string;
   workerId: string;
 }): Promise<AgentJob> {
   const db = ensureDb();
-
-  // First verify worker owns the claim
-  const { data: current } = await db
-    .from('agent_jobs')
-    .select('status, worker_id')
-    .eq('job_id', input.jobId)
-    .maybeSingle();
-
-  if (!current) throw new Error(`markJobRunning: job ${input.jobId} not found`);
-  if (current.worker_id !== input.workerId) {
-    throw new Error(`markJobRunning: worker mismatch — job claimed by ${current.worker_id}`);
-  }
-  if (current.status !== 'claimed') {
-    throw new Error(`markJobRunning: job ${input.jobId} is in status ${current.status}, expected claimed`);
-  }
+  const now = new Date().toISOString();
 
   const { data, error } = await db
     .from('agent_jobs')
     .update({
       status: 'running',
-      started_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      started_at: now,
+      updated_at: now,
     })
     .eq('job_id', input.jobId)
+    .eq('worker_id', input.workerId)
+    .eq('status', 'claimed')
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`markJobRunning failed: ${error.message}`);
+  if (!data) {
+    // Check why — worker mismatch or status mismatch
+    const { data: current } = await db
+      .from('agent_jobs')
+      .select('status, worker_id')
+      .eq('job_id', input.jobId)
+      .maybeSingle();
+
+    if (!current) throw new Error(`markJobRunning: job ${input.jobId} not found`);
+    if (String(current.worker_id) !== input.workerId) {
+      throw new Error(`markJobRunning: worker mismatch — job claimed by ${current.worker_id}`);
+    }
+    throw new Error(`markJobRunning: job ${input.jobId} is status ${current.status}, conflict`);
+  }
+
   return mapJobRow(data);
 }
 
+/**
+ * Atomic conditional update: only updates if status in ['claimed','running'] AND worker_id matches.
+ */
 export async function submitAgentJob(input: {
   jobId: string;
   workerId: string;
@@ -324,25 +361,12 @@ export async function submitAgentJob(input: {
 }): Promise<AgentJob> {
   const db = ensureDb();
 
-  const { data: current } = await db
-    .from('agent_jobs')
-    .select('status, worker_id')
-    .eq('job_id', input.jobId)
-    .maybeSingle();
-
-  if (!current) throw new Error(`submitAgentJob: job ${input.jobId} not found`);
-  if (current.worker_id !== input.workerId) {
-    throw new Error(`submitAgentJob: worker mismatch — job claimed by ${current.worker_id}`);
-  }
-  if (current.status !== 'claimed' && current.status !== 'running') {
-    throw new Error(`submitAgentJob: job ${input.jobId} is status ${current.status}, expected claimed or running`);
-  }
-
   const resultPayloadHash = sha256Hex(stableStringify(input.resultPayload));
   const proofPayloadHash = input.proofPayload
     ? sha256Hex(stableStringify(input.proofPayload))
     : null;
 
+  const now = new Date().toISOString();
   const { data, error } = await db
     .from('agent_jobs')
     .update({
@@ -351,17 +375,36 @@ export async function submitAgentJob(input: {
       result_payload_hash: resultPayloadHash,
       proof_payload: input.proofPayload ?? null,
       proof_payload_hash: proofPayloadHash,
-      submitted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      submitted_at: now,
+      updated_at: now,
     })
     .eq('job_id', input.jobId)
+    .eq('worker_id', input.workerId)
+    .in('status', ['claimed', 'running'])
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`submitAgentJob failed: ${error.message}`);
+  if (!data) {
+    const { data: current } = await db
+      .from('agent_jobs')
+      .select('status, worker_id')
+      .eq('job_id', input.jobId)
+      .maybeSingle();
+
+    if (!current) throw new Error(`submitAgentJob: job ${input.jobId} not found`);
+    if (String(current.worker_id) !== input.workerId) {
+      throw new Error(`submitAgentJob: worker mismatch — job claimed by ${current.worker_id}`);
+    }
+    throw new Error(`submitAgentJob: job ${input.jobId} is status ${current.status}, expected claimed or running`);
+  }
+
   return mapJobRow(data);
 }
 
+/**
+ * Atomic conditional update: only updates if status='submitted'.
+ */
 export async function verifyAgentJob(input: {
   jobId: string;
   verifierAgentId: string;
@@ -370,17 +413,6 @@ export async function verifyAgentJob(input: {
   metadata?: Record<string, unknown>;
 }): Promise<AgentJob> {
   const db = ensureDb();
-
-  const { data: current } = await db
-    .from('agent_jobs')
-    .select('status')
-    .eq('job_id', input.jobId)
-    .maybeSingle();
-
-  if (!current) throw new Error(`verifyAgentJob: job ${input.jobId} not found`);
-  if (current.status !== 'submitted') {
-    throw new Error(`verifyAgentJob: job ${input.jobId} is status ${current.status}, expected submitted`);
-  }
 
   const newStatus = input.approved ? 'verified' : 'failed';
   const now = new Date().toISOString();
@@ -395,17 +427,28 @@ export async function verifyAgentJob(input: {
     .from('agent_jobs')
     .update(update)
     .eq('job_id', input.jobId)
+    .eq('status', 'submitted')
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`verifyAgentJob failed: ${error.message}`);
+  if (!data) {
+    const { data: current } = await db
+      .from('agent_jobs')
+      .select('status')
+      .eq('job_id', input.jobId)
+      .maybeSingle();
+
+    if (!current) throw new Error(`verifyAgentJob: job ${input.jobId} not found`);
+    throw new Error(`verifyAgentJob: job ${input.jobId} is status ${current.status}, expected submitted`);
+  }
 
   // Write verification event
   await db.from('agent_job_events').insert({
     job_id: input.jobId,
     event_type: 'verification',
     actor_agent_id: input.verifierAgentId,
-    status_before: current.status,
+    status_before: 'submitted',
     status_after: newStatus,
     metadata: input.metadata ?? {},
   });
@@ -413,12 +456,20 @@ export async function verifyAgentJob(input: {
   return mapJobRow(data);
 }
 
+/**
+ * Mark job as settlement_pending.
+ * - Validates buyerAgentId matches.
+ * - If already settlement_pending, return existing as no-op.
+ * - If verified, update atomically.
+ * - Rejects all other statuses.
+ */
 export async function markJobSettlementPending(input: {
   jobId: string;
   buyerAgentId: string;
 }): Promise<AgentJob> {
   const db = ensureDb();
 
+  // First check current state
   const { data: current } = await db
     .from('agent_jobs')
     .select('status, buyer_agent_id')
@@ -426,6 +477,25 @@ export async function markJobSettlementPending(input: {
     .maybeSingle();
 
   if (!current) throw new Error(`markJobSettlementPending: job ${input.jobId} not found`);
+
+  // Validate buyer
+  if (String(current.buyer_agent_id) !== input.buyerAgentId) {
+    throw new Error(
+      `markJobSettlementPending: buyer mismatch — job buyer is ${current.buyer_agent_id}, caller is ${input.buyerAgentId}`
+    );
+  }
+
+  // If already settlement_pending, no-op
+  if (current.status === 'settlement_pending') {
+    const { data: existing } = await db
+      .from('agent_jobs')
+      .select('*')
+      .eq('job_id', input.jobId)
+      .single();
+    return mapJobRow(existing);
+  }
+
+  // Only allow from verified
   if (current.status !== 'verified') {
     throw new Error(`markJobSettlementPending: job ${input.jobId} is status ${current.status}, expected verified`);
   }
@@ -439,13 +509,26 @@ export async function markJobSettlementPending(input: {
       updated_at: now,
     })
     .eq('job_id', input.jobId)
+    .eq('buyer_agent_id', input.buyerAgentId)
+    .eq('status', 'verified')
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`markJobSettlementPending failed: ${error.message}`);
+  if (!data) {
+    throw new Error(`markJobSettlementPending: job ${input.jobId} lost race, status changed from verified`);
+  }
+
   return mapJobRow(data);
 }
 
+/**
+ * Mark job as settled.
+ * - Validates buyerAgentId matches.
+ * - Idempotent: if already settled with same paymentId/txHash, return existing.
+ * - Conflict: if settled with different paymentId/txHash.
+ * - Atomic update: only where status in ['verified','settlement_pending'] AND buyer_agent_id matches.
+ */
 export async function markJobSettled(input: {
   jobId: string;
   buyerAgentId: string;
@@ -456,6 +539,7 @@ export async function markJobSettled(input: {
 }): Promise<AgentJob> {
   const db = ensureDb();
 
+  // Check current state for idempotency/conflict
   const { data: current } = await db
     .from('agent_jobs')
     .select('status, settlement_payment_id, settlement_tx_hash, buyer_agent_id')
@@ -464,8 +548,19 @@ export async function markJobSettled(input: {
 
   if (!current) throw new Error(`markJobSettled: job ${input.jobId} not found`);
 
+  // Validate buyer
+  if (String(current.buyer_agent_id) !== input.buyerAgentId) {
+    throw new Error(
+      `markJobSettled: buyer mismatch — job buyer is ${current.buyer_agent_id}, caller is ${input.buyerAgentId}`
+    );
+  }
+
   // Idempotency: already settled with same paymentId/txHash
-  if (current.settlement_payment_id === input.paymentId && current.settlement_tx_hash === input.txHash && current.status === 'settled') {
+  if (
+    current.status === 'settled' &&
+    String(current.settlement_payment_id) === input.paymentId &&
+    String(current.settlement_tx_hash) === input.txHash
+  ) {
     const { data: existing } = await db
       .from('agent_jobs')
       .select('*')
@@ -481,11 +576,7 @@ export async function markJobSettled(input: {
     );
   }
 
-  // Only allow settle from verified or settlement_pending
-  if (current.status !== 'verified' && current.status !== 'settlement_pending') {
-    throw new Error(`markJobSettled: job ${input.jobId} is status ${current.status}, expected verified or settlement_pending`);
-  }
-
+  // Atomic update: only where status in ['verified','settlement_pending'] AND buyer matches
   const now = new Date().toISOString();
   const { data, error } = await db
     .from('agent_jobs')
@@ -499,10 +590,15 @@ export async function markJobSettled(input: {
       updated_at: now,
     })
     .eq('job_id', input.jobId)
+    .eq('buyer_agent_id', input.buyerAgentId)
+    .in('status', ['verified', 'settlement_pending'])
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`markJobSettled failed: ${error.message}`);
+  if (!data) {
+    throw new Error(`markJobSettled: job ${input.jobId} lost race, status no longer in [verified, settlement_pending]`);
+  }
 
   // Write settlement event
   await db.from('agent_job_events').insert({
@@ -526,20 +622,6 @@ export async function failAgentJob(input: {
 }): Promise<AgentJob> {
   const db = ensureDb();
 
-  const { data: current } = await db
-    .from('agent_jobs')
-    .select('status, worker_id')
-    .eq('job_id', input.jobId)
-    .maybeSingle();
-
-  if (!current) throw new Error(`failAgentJob: job ${input.jobId} not found`);
-  if (current.worker_id !== input.workerId) {
-    throw new Error(`failAgentJob: worker mismatch — job claimed by ${current.worker_id}`);
-  }
-  if (current.status === 'settled' || current.status === 'verified') {
-    throw new Error(`failAgentJob: cannot fail job ${input.jobId} in status ${current.status}`);
-  }
-
   const now = new Date().toISOString();
   const { data, error } = await db
     .from('agent_jobs')
@@ -549,10 +631,26 @@ export async function failAgentJob(input: {
       updated_at: now,
     })
     .eq('job_id', input.jobId)
+    .eq('worker_id', input.workerId)
+    .filter('status', 'not.in', '("settled","verified")')
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) throw new Error(`failAgentJob failed: ${error.message}`);
+  if (!data) {
+    const { data: current } = await db
+      .from('agent_jobs')
+      .select('status, worker_id')
+      .eq('job_id', input.jobId)
+      .maybeSingle();
+
+    if (!current) throw new Error(`failAgentJob: job ${input.jobId} not found`);
+    if (String(current.worker_id) !== input.workerId) {
+      throw new Error(`failAgentJob: worker mismatch — job claimed by ${current.worker_id}`);
+    }
+    throw new Error(`failAgentJob: cannot fail job ${input.jobId} in status ${current.status}`);
+  }
+
   return mapJobRow(data);
 }
 

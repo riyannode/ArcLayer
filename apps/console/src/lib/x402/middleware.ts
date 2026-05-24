@@ -621,6 +621,58 @@ async function handleNative(
       amount: existingResourcePayment.amount,
       paymentId: existingResourcePayment.paymentId,
     };
+
+    // Call onSettled if provided — idempotent, safe on job settlement retry
+    if (opts.onSettled) {
+      try {
+        await opts.onSettled({
+          req,
+          response: NextResponse.json(
+            {
+              ok: true,
+              error: 'session_already_paid',
+              sessionId: existingResourcePayment.sessionId,
+              scope: existingResourcePayment.scope,
+              role: existingResourcePayment.role,
+              paymentId: existingResourcePayment.paymentId,
+              transaction: existingResourcePayment.transaction ?? null,
+              payer: existingResourcePayment.payer,
+              payTo: existingResourcePayment.payTo,
+              amount: existingResourcePayment.amount,
+              mode: 'arc-native',
+            },
+            {
+              status: 200,
+              headers: {
+                'X-402-Version': String(X402_VERSION_V2),
+                'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse),
+              },
+            },
+          ),
+          mode: 'arc-native',
+          paymentId: existingResourcePayment.paymentId,
+          transaction: existingResourcePayment.transaction ?? null,
+          payer: existingResourcePayment.payer,
+          payTo: existingResourcePayment.payTo,
+          amount: existingResourcePayment.amount,
+          resource: opts.resource,
+        });
+      } catch (settledErr) {
+        const msg = settledErr instanceof Error ? settledErr.message : 'onSettled hook failed';
+        console.error(`[x402] onSettled hook failed for ${opts.resource}:`, msg);
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'job_settlement_record_failed',
+            message: msg,
+            paymentId: existingResourcePayment.paymentId,
+            transaction: existingResourcePayment.transaction ?? null,
+          },
+          { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
+      }
+    }
+
     return NextResponse.json(
       {
         ok: true,
@@ -701,6 +753,58 @@ async function handleNative(
       amount: claim.record.amount,
       paymentId: claim.record.paymentId,
     };
+
+    // Call onSettled if provided — idempotent, safe on job settlement retry
+    if (opts.onSettled) {
+      try {
+        await opts.onSettled({
+          req,
+          response: NextResponse.json(
+            {
+              ok: true,
+              error: 'session_already_paid',
+              sessionId: claim.record.sessionId,
+              scope: claim.record.scope,
+              role: claim.record.role,
+              paymentId: claim.record.paymentId,
+              transaction: claim.record.transaction ?? null,
+              payer: claim.record.payer,
+              payTo: claim.record.payTo,
+              amount: claim.record.amount,
+              mode: 'arc-native',
+            },
+            {
+              status: 200,
+              headers: {
+                'X-402-Version': String(X402_VERSION_V2),
+                'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse),
+              },
+            },
+          ),
+          mode: 'arc-native',
+          paymentId: claim.record.paymentId,
+          transaction: claim.record.transaction ?? null,
+          payer: claim.record.payer,
+          payTo: claim.record.payTo,
+          amount: claim.record.amount,
+          resource: opts.resource,
+        });
+      } catch (settledErr) {
+        const msg = settledErr instanceof Error ? settledErr.message : 'onSettled hook failed';
+        console.error(`[x402] onSettled hook failed for ${opts.resource}:`, msg);
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'job_settlement_record_failed',
+            message: msg,
+            paymentId: claim.record.paymentId,
+            transaction: claim.record.transaction ?? null,
+          },
+          { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
+      }
+    }
+
     return NextResponse.json(
       {
         ok: true,
@@ -776,7 +880,27 @@ async function handleNative(
     transaction: settleResult.transaction ?? null,
   });
 
-  // ─── Call onSettled hook after settlement success ───────────────────
+  const consumed = await consumeNativePayment(paymentId);
+  if (consumed.ok === false) {
+    const reason = consumed.reason;
+    if (reason === 'replayed') {
+      return NextResponse.json(
+        { ok: false, error: 'payment_replayed', message: 'This payment has already been consumed.', paymentId },
+        { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+    // missing/not_settled — settle just succeeded above, so this shouldn't happen
+    // but guard anyway. Do NOT mark resource payment failed — settlement already
+    // succeeded on-chain and was marked settled.
+    return NextResponse.json(
+      { ok: false, error: 'native_payment_not_consumed', reason, paymentId },
+      { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+
+  // ─── Call onSettled AFTER consumeNativePayment succeeds ────────────
+  // Order: markResourcePaymentSettled → consumeNativePayment → onSettled
+  // This ensures job settlement only fires after on-chain consume is confirmed.
   if (opts.onSettled) {
     try {
       await opts.onSettled({
@@ -804,24 +928,6 @@ async function handleNative(
         { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
       );
     }
-  }
-
-  const consumed = await consumeNativePayment(paymentId);
-  if (consumed.ok === false) {
-    const reason = consumed.reason;
-    if (reason === 'replayed') {
-      return NextResponse.json(
-        { ok: false, error: 'payment_replayed', message: 'This payment has already been consumed.', paymentId },
-        { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-    // missing/not_settled — settle just succeeded above, so this shouldn't happen
-    // but guard anyway. Do NOT mark resource payment failed — settlement already
-    // succeeded on-chain and was marked settled.
-    return NextResponse.json(
-      { ok: false, error: 'native_payment_not_consumed', reason, paymentId },
-      { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
   }
 
   // Consume rail session (one-shot)
