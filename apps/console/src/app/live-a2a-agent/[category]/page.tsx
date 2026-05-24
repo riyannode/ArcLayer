@@ -1,15 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { use, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getAgentCategory } from '../categories';
 import { A2ACategoryPageView } from '@/components/agent-bridge/A2ACategoryPageView';
 
-type PageProps = { params: Promise<{ category: string }> };
+type PageProps = { params: { category: string } };
 
 export default function LiveA2AAgentCategoryPage({ params }: PageProps) {
-  const { category: categoryKey } = use(params);
+  const categoryKey = params.category;
   const category = getAgentCategory(categoryKey);
   const router = useRouter();
 
