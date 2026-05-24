@@ -7,21 +7,32 @@ const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
 
 function lockPath(sessionId, scope) { return path.resolve(__dirname, '.x402-locks', `${sessionId}-${scope}.lock`); }
-function acquireLock(sessionId, scope) { fs.mkdirSync(path.resolve(__dirname, '.x402-locks'), { recursive: true }); const lp = lockPath(sessionId, scope); const fd = fs.openSync(lp, 'wx'); fs.closeSync(fd); return lp; }
+function acquireLock(sessionId, scope) { fs.mkdirSync(path.resolve(__dirname, '.x402-locks'), { recursive: true }); const lp = lockPath(sessionId, scope); try { const fd = fs.openSync(lp, 'wx'); fs.closeSync(fd); return lp; } catch (err) { if (err && err.code === 'EEXIST') return null; throw err; } }
 function releaseLock(lp) { try { if (lp) fs.unlinkSync(lp); } catch {} }
 
 async function runOnce() {
   const { session } = await latestSession();
   if (!session?.sessionId) throw new Error('No latest bridge session.');
-  const payload = { source: 'llm-executor', action: 'DRY_RUN_ONLY', mode: 'DRY_RUN', reason: 'Dry-run only' };
+  const analyzerPayload = session.roles?.analyzer?.payload;
+  const evaluatorPayload = session.roles?.evaluator?.payload;
+  if (!analyzerPayload) throw new Error('Missing analyzer output.');
+  if (!evaluatorPayload) throw new Error('Missing evaluator output.');
+  if (typeof evaluatorPayload.approved !== 'boolean') throw new Error('Invalid evaluator approval shape.');
+
+  const payload = { source: 'llm-executor', action: 'DRY_RUN_ONLY', mode: 'DRY_RUN', reason: evaluatorPayload.approved ? 'Dry-run only' : 'Skipped: evaluator rejected' };
   const posted = await postEvent({ sessionId: session.sessionId, role: 'executor', type: 'execution_intent', runtimeId: process.env.RUNTIME_ID || 'pm2-llm-executor-bot', payload });
   await postReceipt({ sessionId: session.sessionId, payloadHash: posted.payloadHash, metadata: { role: 'executor' } });
 
+  if (!evaluatorPayload.approved) return;
   if (process.env.X402_AUTOPAY !== 'true' || process.env.PROTOCOL_TX_MODE !== 'ARC_TESTNET') return;
   const scope = 'external_trace';
   let lp;
   try {
     lp = acquireLock(session.sessionId, scope);
+    if (!lp) {
+      console.log(`[x402][executor] lock_exists session=${session.sessionId} scope=${scope}, skip`);
+      return;
+    }
     const payment = await payForBridgeAccess({ sessionId: session.sessionId, scope, role: 'executor' });
     if (!payment.ok) return;
     if (payment.alreadyPaid) {

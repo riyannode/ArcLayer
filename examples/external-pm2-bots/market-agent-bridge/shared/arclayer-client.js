@@ -7,24 +7,64 @@ const AGENT_ID = process.env.ARCLAYER_AGENT_ID || "llm-market-agent";
 
 function sha256(payload) { return `0x${crypto.createHash("sha256").update(JSON.stringify(payload || {})).digest("hex")}`; }
 function currentSessionId() { const bucket = Math.floor(Date.now() / (15 * 60 * 1000)) * 15 * 60; return `btc15m_${bucket}`; }
+
+function isValidTxHash(value) { return typeof value === 'string' && /^0x[a-fA-F0-9]{64}$/.test(value); }
+
+function buildRoleState(events) {
+  const roles = {};
+  for (const event of events) {
+    const role = (event.role || '').toString();
+    if (!role) continue;
+    roles[role] = { payload: event.payload || {}, type: event.type || event.eventType || null, eventId: event.id || event.eventId || null };
+  }
+  return roles;
+}
+
+function hasExecutorX402Proof({ sessionId, events, receipts, liveEvents }) {
+  const eventProofs = (events || []).filter((e) => {
+    const p = e.payload || {};
+    const tx = p.txHash || p.transaction || e.txHash || e.transaction;
+    return (e.role || '').toString().toLowerCase() === 'executor' &&
+      (e.type || e.eventType || '').toString().toLowerCase() === 'receipt_reference' &&
+      (e.session_id || e.sessionId || '').toString() === sessionId &&
+      (p.scope || '').toString() === 'external_trace' &&
+      (p.source || e.source || '').toString() === 'x402-autopay' &&
+      isValidTxHash(tx);
+  });
+  if (!eventProofs.length) return false;
+  const txSet = new Set(eventProofs.map((e) => ((e.payload || {}).txHash || (e.payload || {}).transaction || e.txHash || e.transaction).toLowerCase()));
+  const receiptProof = (receipts || []).some((r) => {
+    const type = (r.receipt_type || r.receiptType || '').toString().toLowerCase();
+    const m = r.metadata || {};
+    const tx = (m.txHash || r.transaction || r.tx_hash || '').toString().toLowerCase();
+    return (type === 'x402_payment_proof' || type === 'x402_arc_native') && m.role === 'executor' && m.scope === 'external_trace' && m.source === 'x402-autopay' && txSet.has(tx);
+  });
+  if (receiptProof) return true;
+  return (liveEvents || []).some((e) => {
+    const m = e.metadata || {};
+    const sid = (m.sessionId || '').toString();
+    const tx = (e.txHash || m.txHash || '').toString().toLowerCase();
+    return (e.eventType || '').toString() === 'x402_paid' && sid === sessionId && txSet.has(tx);
+  });
+}
 async function getJson(route, options = {}) { const headers = { accept: "application/json" }; if (options.authenticated) headers.authorization = `Bearer ${API_KEY}`; const res = await fetch(`${BASE_URL}${route}`, { headers }); const data = await res.json().catch(() => ({})); if (!res.ok || data.ok === false) throw new Error(`${route} failed: ${res.status} ${data.error || data.message || ""}`.trim()); return data; }
 
 async function latestSession() {
-  const eventsData = await getJson(`/api/agent-bridge/events?limit=200&ts=${Date.now()}`, { authenticated: true });
-  const events = (eventsData.events || []).filter((event) => (event.agent_id || event.agentId || (event.agent && event.agent.id)) === AGENT_ID);
+  const [eventsData, liveData] = await Promise.all([
+    getJson(`/api/agent-bridge/events?limit=200&ts=${Date.now()}`, { authenticated: true }),
+    getJson(`/api/a2a/live-events?category=prediction-market-bots&limit=500&ts=${Date.now()}`, { authenticated: true }).catch(() => ({ events: [] }))
+  ]);
+  const allEvents = (eventsData.events || []).filter((event) => (event.agent_id || event.agentId || (event.agent && event.agent.id)) === AGENT_ID);
+  const liveEvents = Array.isArray(liveData.events) ? liveData.events : (Array.isArray(liveData.data) ? liveData.data : []);
   const grouped = new Map();
-  for (const event of events) { const sid = event.session_id || event.sessionId; if (!sid) continue; const bucket = grouped.get(sid) || []; bucket.push(event); grouped.set(sid, bucket); }
+  for (const event of allEvents) { const sid = event.session_id || event.sessionId; if (!sid) continue; const bucket = grouped.get(sid) || []; bucket.push(event); grouped.set(sid, bucket); }
   for (const sid of [currentSessionId(), ...Array.from(grouped.keys())]) {
+    const sessionEvents = (grouped.get(sid) || []).slice().reverse();
     const receiptsData = await getJson(`/api/agent-bridge/receipts?sessionId=${encodeURIComponent(sid)}&ts=${Date.now()}`, { authenticated: true });
     const receipts = receiptsData.receipts || [];
-    const hasExecutorX402 = receipts.some((r) => {
-      const type = r.receipt_type || r.receiptType;
-      const meta = r.metadata || {};
-      const tx = meta.txHash || r.transaction || r.tx_hash;
-      return (type === 'x402_payment_proof' || type === 'x402_arc_native') && meta.role === 'executor' && meta.scope === 'external_trace' && meta.source === 'x402-autopay' && typeof tx === 'string' && tx.startsWith('0x');
-    });
-    if (hasExecutorX402) continue;
-    return { ok: true, session: { sessionId: sid, roles: {}, events: events.filter((e) => (e.session_id || e.sessionId) === sid).reverse(), receipts } };
+    const sessionLive = liveEvents.filter((e) => (e.metadata?.sessionId || '') === sid || (e.sessionId || '') === sid);
+    if (hasExecutorX402Proof({ sessionId: sid, events: sessionEvents, receipts, liveEvents: sessionLive })) continue;
+    return { ok: true, session: { sessionId: sid, roles: buildRoleState(sessionEvents), events: sessionEvents, receipts } };
   }
   return { ok: true, session: null };
 }

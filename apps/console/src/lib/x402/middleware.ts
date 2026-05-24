@@ -646,11 +646,21 @@ async function handleNative(
   }
 
   // ─── Settle on-chain via relayer (only after handler success) ──────────────
-  const settleResult = await settleExactPayment({
-    paymentPayload: proof as unknown as PaymentPayload,
-    paymentRequirements: requirements,
-    selfHosted: true,
-  });
+  let settleResult;
+  try {
+    settleResult = await settleExactPayment({
+      paymentPayload: proof as unknown as PaymentPayload,
+      paymentRequirements: requirements,
+      selfHosted: true,
+    });
+  } catch (settleErr) {
+    const message = settleErr instanceof Error ? settleErr.message : 'unknown_settle_error';
+    await markResourcePaymentFailed(resourcePaymentKey, `settle_exception:${message}`);
+    return NextResponse.json(
+      { ok: false, error: 'settlement_failed', reason: 'settle_exception', message },
+      { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
 
   if (!settleResult.success) {
     if (!settleResult.alreadySettled) {
