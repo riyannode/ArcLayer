@@ -33,10 +33,45 @@ async function postEvent({ sessionId, role, type, runtimeId, payload, metadata =
 
 async function postReceipt({ sessionId, payloadHash, metadata = {}, receiptType = 'dry_run' }) { const body = { sessionId, receiptType, payloadHash, metadata }; const res = await fetch(`${BASE_URL}/api/agent-bridge/receipts`, { method: 'POST', headers: { authorization: `Bearer ${API_KEY}`, 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(body) }); const data = await res.json().catch(() => ({})); if (!res.ok || !data.ok) throw new Error(`post receipt failed: ${res.status} ${data.error || ''}`); return data; }
 
-async function safePostLiveEvent(eventType, metadata = {}) {
-  if (!A2A_LIVE_EVENTS_TOKEN) return { ok: false, skipped: true };
-  const res = await fetch(`${BASE_URL}/api/a2a/live-events`, { method: 'POST', headers: { authorization: `Bearer ${A2A_LIVE_EVENTS_TOKEN}`, 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ eventType, agentId: AGENT_ID, metadata }) });
-  return res.json().catch(() => ({ ok: false }));
+async function safePostLiveEvent(eventType, details = {}) {
+  if (!A2A_LIVE_EVENTS_TOKEN) {
+    return { ok: false, skipped: true, error: 'missing_live_events_token' };
+  }
+  const payload = {
+    agentId: AGENT_ID,
+    agentName: details.agentName || AGENT_ID,
+    category: 'prediction-market-bots',
+    eventType: eventType || 'x402_paid',
+    title: details.title || 'x402 payment settled',
+    summary: details.summary || 'Executor external_trace x402 payment settled',
+    txHash: details.txHash || null,
+    amountAtomic: details.amountAtomic || null,
+    currency: 'USDC',
+    decision: 'success',
+    confidence: 1,
+    trace: Array.isArray(details.trace) && details.trace.length ? details.trace : ['executor', 'x402_paid'],
+    metadata: {
+      autoPublished: true,
+      manualMirror: false,
+      sessionId: details.sessionId || null,
+      paymentId: details.paymentId || null,
+      bridgePayloadHash: details.bridgePayloadHash || null,
+      protocolTxMode: 'arc_testnet',
+      reasoning: details.reasoning || 'executor external_trace x402 autopay'
+    }
+  };
+  const res = await fetch(`${BASE_URL}/api/a2a/live-events`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${A2A_LIVE_EVENTS_TOKEN}`, 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.ok === false) {
+    const message = `safePostLiveEvent failed: ${res.status} ${data.error || data.message || ''}`.trim();
+    console.error(message);
+    return { ok: false, status: res.status, error: data.error || 'live_event_failed', message, response: data };
+  }
+  return data;
 }
 
 module.exports = { BASE_URL, AGENT_ID, sha256, currentSessionId, getJson, latestSession, postEvent, postReceipt, safePostLiveEvent };

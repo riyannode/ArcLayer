@@ -58,6 +58,7 @@ import {
   markResourcePaymentSettled,
 } from './resource-payment-store';
 import type { PaymentRequirements, PaymentPayload } from './exact/types';
+import { supabaseAdmin } from './supabaseClient';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -456,6 +457,13 @@ async function handleNative(
   const inputSessionId = typeof reqBody.sessionId === 'string' && reqBody.sessionId.trim().length > 0 ? reqBody.sessionId.trim() : null;
   const role = typeof reqBody.role === 'string' && reqBody.role.trim().length > 0 ? reqBody.role.trim().toLowerCase() : 'executor';
 
+  if (!inputSessionId) {
+    return NextResponse.json(
+      { ok: false, error: 'invalid_session', message: 'sessionId is required for x402 bridge-access payments.' },
+      { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+
   // ─── Rail session guard ─────────────────────────────────────────────────────
   const railSessionId = getRailSessionId(proof);
   if (railSessionId) {
@@ -542,7 +550,7 @@ async function handleNative(
   }
 
   const resourcePaymentKey = buildResourcePaymentKey({
-    sessionId: inputSessionId ?? 'missing_session',
+    sessionId: inputSessionId,
     scope,
     role,
     resource: opts.resource,
@@ -600,7 +608,7 @@ async function handleNative(
   });
   const claim = await claimResourcePayment({
     paymentKey: resourcePaymentKey,
-    sessionId: inputSessionId ?? 'missing_session',
+    sessionId: inputSessionId,
     scope,
     role,
     payer: String(authorization.from),
@@ -645,8 +653,13 @@ async function handleNative(
   });
 
   if (!settleResult.success) {
-    // If already settled, still allow through (idempotent)
     if (!settleResult.alreadySettled) {
+      if (supabaseAdmin) {
+        await supabaseAdmin
+          .from('x402_resource_payments')
+          .update({ status: 'failed' })
+          .eq('payment_key', resourcePaymentKey);
+      }
       return NextResponse.json(
         { ok: false, error: 'settlement_failed', reason: settleResult.errorReason, message: settleResult.errorMessage },
         { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
@@ -685,13 +698,12 @@ async function handleNative(
     paymentId,
   };
 
+  await markResourcePaymentSettled(resourcePaymentKey, {
+    paymentId,
+    transaction: settleResult.transaction ?? null,
+  });
+
   const bridgeSessionId = response.headers.get('X-Agent-Bridge-Session-Id');
-  if (bridgeSessionId && inputSessionId === 'missing_session') {
-    await markResourcePaymentSettled(resourcePaymentKey, {
-      paymentId,
-      transaction: settleResult.transaction ?? null,
-    });
-  }
   if (bridgeSessionId) {
     try {
       const { insertBridgeReceipt } = await import('@/lib/agent-bridge/store');

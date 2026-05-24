@@ -27,7 +27,18 @@ async function runOnce() {
     const receiptEventPayload = { source: 'x402-autopay', scope, role: 'executor', txHash: payment.txHash || payment.transaction || null, transaction: payment.txHash || payment.transaction || null, paymentId: payment.paymentId || null };
     const receiptRef = await postEvent({ sessionId: session.sessionId, role: 'executor', type: 'receipt_reference', runtimeId: process.env.RUNTIME_ID || 'pm2-llm-executor-bot', payload: receiptEventPayload, metadata: { source: 'x402-autopay' } });
     await postReceipt({ sessionId: session.sessionId, receiptType: 'x402_payment_proof', payloadHash: sha256(receiptEventPayload), metadata: { role: 'executor', scope, source: 'x402-autopay', txHash: payment.txHash || payment.transaction || null, paymentId: payment.paymentId || null, bridgePayloadHash: receiptRef.payloadHash } });
-    await safePostLiveEvent('x402_paid', { autoPublished: true, manualMirror: false, sessionId: session.sessionId, paymentId: payment.paymentId || null, bridgePayloadHash: receiptRef.payloadHash, protocolTxMode: 'arc_testnet', reasoning: 'executor external_trace x402 autopay' });
+    const liveResult = await safePostLiveEvent('x402_paid', {
+      sessionId: session.sessionId,
+      paymentId: payment.paymentId || null,
+      bridgePayloadHash: receiptRef.payloadHash,
+      txHash: payment.txHash || payment.transaction || null,
+      amountAtomic: payment.amount || null,
+      title: 'Executor x402 paid',
+      summary: 'Executor external_trace x402 payment settled',
+      trace: ['executor', 'receipt_reference', 'x402_payment_proof', 'x402_paid'],
+      reasoning: 'executor external_trace x402 autopay'
+    });
+    if (!liveResult.ok) throw new Error(liveResult.message || liveResult.error || 'live_event_failed');
   } finally { releaseLock(lp); }
 }
 

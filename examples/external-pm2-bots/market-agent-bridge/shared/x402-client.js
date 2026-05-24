@@ -48,7 +48,8 @@ async function payForBridgeAccess({
   sessionId,
   scope = process.env.X402_SCOPE || "external_trace",
   resource = DEFAULT_RESOURCE,
-  method = "POST"
+  method = "POST",
+  role = "executor"
 } = {}) {
   const privateKey = normalizePrivateKey(process.env.X402_PAYER_PRIVATE_KEY || process.env.WALLET_PRIVATE_KEY);
   if (!privateKey) {
@@ -64,6 +65,7 @@ async function payForBridgeAccess({
   const payer = getAddress(account.address);
   const body = {
     scope,
+    role,
     ...(sessionId ? { sessionId } : {})
   };
 
