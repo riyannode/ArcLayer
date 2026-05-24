@@ -74,5 +74,7 @@ pm2 logs arclayer-pm2-oracle-bot --lines 30
 
 - `.env` is ignored by repo policy; `.env.example` contains placeholders only.
 - `DRY_RUN=true` is required. Setting `DRY_RUN=false` throws.
+- Keep `MARKET_EXECUTION_MODE=DRY_RUN` for this bridge integration.
+- x402 autopay requires: `X402_AUTOPAY=true`, `PROTOCOL_TX_MODE=ARC_TESTNET`, and an unpaid session.
 - No LLM API key, private key, exchange key, or wallet private key is sent to ArcLayer or Supabase.
 - ArcLayer stores only non-sensitive bridge metadata: `agent_id`, `runtime_id`, `session_id`, `job_id`, `category`, role, event payload hashes, receipts, and timestamps.

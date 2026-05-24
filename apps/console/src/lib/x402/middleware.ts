@@ -51,6 +51,12 @@ import {
   consumeRailSession,
   type AllowedRail,
 } from './rail-session';
+import {
+  buildResourcePaymentKey,
+  getResourcePayment,
+  markResourcePaymentSettled,
+  putResourcePayment,
+} from './resource-payment-store';
 import type { PaymentRequirements, PaymentPayload } from './exact/types';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -445,6 +451,9 @@ async function handleNative(
   req: NextRequest,
 ): Promise<NextResponse> {
   const requirements = buildNativeRequirements(opts);
+  const reqBody = await req.clone().json().catch(() => ({} as Record<string, unknown>));
+  const scope = typeof reqBody.scope === 'string' && reqBody.scope.trim().length > 0 ? reqBody.scope.trim() : 'summary';
+  const inputSessionId = typeof reqBody.sessionId === 'string' && reqBody.sessionId.trim().length > 0 ? reqBody.sessionId.trim() : null;
 
   // ─── Rail session guard ─────────────────────────────────────────────────────
   const railSessionId = getRailSessionId(proof);
@@ -580,6 +589,30 @@ async function handleNative(
     from: authorization.from as string,
     nonce: authorization.nonce as string,
   });
+  const resourcePaymentKey = buildResourcePaymentKey({
+    sessionId: inputSessionId ?? 'missing_session',
+    scope,
+    payer: String(authorization.from),
+    resource: opts.resource,
+  });
+  const existingResourcePayment = await getResourcePayment(resourcePaymentKey);
+  if (existingResourcePayment?.status === 'settled') {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'session_already_paid',
+        sessionId: existingResourcePayment.sessionId,
+        scope: existingResourcePayment.scope,
+        paymentId: existingResourcePayment.paymentId,
+        transaction: existingResourcePayment.transaction ?? null,
+        payer: existingResourcePayment.payer,
+        payTo: existingResourcePayment.payTo,
+        amount: existingResourcePayment.amount,
+        mode: 'arc-native',
+      },
+      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
 
   const consumed = await consumeNativePayment(paymentId);
   if (consumed.ok === false) {
@@ -613,6 +646,25 @@ async function handleNative(
   };
 
   const bridgeSessionId = response.headers.get('X-Agent-Bridge-Session-Id');
+  if (bridgeSessionId) {
+    await putResourcePayment({
+      paymentKey: resourcePaymentKey,
+      sessionId: bridgeSessionId,
+      scope,
+      payer: String(authorization.from),
+      resource: opts.resource,
+      payTo: String(requirements.payTo),
+      amount: requirements.amount,
+      mode: 'arc-native',
+      status: 'pending',
+      paymentId,
+      transaction: settleResult.transaction ?? null,
+    });
+    await markResourcePaymentSettled(resourcePaymentKey, {
+      paymentId,
+      transaction: settleResult.transaction ?? null,
+    });
+  }
   if (bridgeSessionId) {
     try {
       const { insertBridgeReceipt } = await import('@/lib/agent-bridge/store');

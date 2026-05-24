@@ -38,9 +38,26 @@ async function latestSession() {
   });
 
   const curId = currentSessionId();
-  const preferredSessionId = events.some(e => (e.session_id || e.sessionId) === curId)
-    ? curId
-    : (events[0] ? (events[0].session_id || events[0].sessionId) : null);
+  const grouped = new Map();
+  for (const event of events) {
+    const sid = event.session_id || event.sessionId;
+    if (!sid) continue;
+    const bucket = grouped.get(sid) || [];
+    bucket.push(event);
+    grouped.set(sid, bucket);
+  }
+  const candidateSessionIds = [curId, ...Array.from(grouped.keys()).filter((sid) => sid !== curId)];
+  let preferredSessionId = null;
+  for (const sid of candidateSessionIds) {
+    if (!sid) continue;
+    const receiptsData = await getJson(`/api/agent-bridge/receipts?sessionId=${encodeURIComponent(sid)}&ts=${Date.now()}`, { authenticated: true });
+    const receipts = receiptsData.receipts || [];
+    const paid = receipts.some((r) => r.receipt_type === "x402_arc_native" || r.receiptType === "x402_arc_native");
+    if (!paid) {
+      preferredSessionId = sid;
+      break;
+    }
+  }
 
   if (!preferredSessionId) return { ok: true, session: null };
 

@@ -134,6 +134,10 @@ ${JSON.stringify(evaluatorPayload).slice(0, 8000)}
   });
 
   if (process.env.X402_AUTOPAY === "true") {
+    if (process.env.PROTOCOL_TX_MODE !== "ARC_TESTNET") {
+      console.log("[x402][executor] skipped: PROTOCOL_TX_MODE must be ARC_TESTNET for x402 autopay.");
+      return;
+    }
     try {
       const payment = await payForBridgeAccess({
         sessionId: session.sessionId,
@@ -160,7 +164,8 @@ ${JSON.stringify(evaluatorPayload).slice(0, 8000)}
           payer: payment.payer || null,
           payTo: payment.payTo || null,
           amount: payment.amount || null,
-          transaction: payment.transaction || null,
+          transaction: payment.txHash || null,
+          txHash: payment.txHash || null,
           paymentId: payment.paymentId || null,
           mode: payment.mode || "arc-native",
           unlockedSessionId: payment.sessionId || session.sessionId,
@@ -172,8 +177,36 @@ ${JSON.stringify(evaluatorPayload).slice(0, 8000)}
           eventId: posted.eventId || null
         }
       });
+      await postReceipt({
+        sessionId: session.sessionId,
+        payloadHash: posted.payloadHash,
+        metadata: {
+          role: "executor",
+          type: "x402_payment_proof",
+          txHash: payment.txHash || null,
+          paymentId: payment.paymentId || null
+        }
+      });
+      await postEvent({
+        sessionId: session.sessionId,
+        role: "executor",
+        type: "x402_paid",
+        runtimeId: process.env.RUNTIME_ID || "pm2-llm-executor-bot",
+        payload: {
+          source: "x402-autopay",
+          txHash: payment.txHash || null,
+          paymentId: payment.paymentId || null,
+          mode: payment.mode || "arc-native"
+        }
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      const code = err && typeof err === "object" ? err.code : null;
+      const detail = err && typeof err === "object" ? err.detail : null;
+      if (code === "rail_session_not_found") {
+        console.error(`[x402] autopay rail_session_not_found sessionId=${detail?.sessionId || session.sessionId} scope=${detail?.scope || "external_trace"} reason=${detail?.reason || "unknown"}`);
+        if (process.env.X402_AUTOPAY_REQUIRED !== "true") return;
+      }
       console.error(`[x402] autopay failed: ${message}`);
       if (process.env.X402_AUTOPAY_REQUIRED === "true") throw err;
     }

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { withNative } from '@/lib/x402/middleware';
-import { latestBridgeSession, listBridgeEvents, listBridgeReceipts, makeSessionId, stablePayloadHash } from '@/lib/agent-bridge/store';
+import { latestBridgeSession, listBridgeEvents, listBridgeReceipts, stablePayloadHash } from '@/lib/agent-bridge/store';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,7 +12,17 @@ async function handler(req: NextRequest) {
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const requestedScope = typeof body.scope === 'string' && SCOPES.has(body.scope as BridgeScope) ? (body.scope as BridgeScope) : 'summary';
   const latest = await latestBridgeSession();
-  const sessionId = typeof body.sessionId === 'string' && body.sessionId.trim() ? body.sessionId.trim() : latest?.sessionId ?? makeSessionId('bridge_access');
+  const hasInputSession = typeof body.sessionId === 'string' && body.sessionId.trim().length > 0;
+  const sessionId = hasInputSession ? String(body.sessionId).trim() : latest?.sessionId ?? null;
+  if (!sessionId) {
+    return NextResponse.json({ ok: false, error: 'invalid_session', message: 'Missing bridge session id.' }, { status: 400 });
+  }
+  if (hasInputSession && latest?.sessionId !== sessionId) {
+    const existingEvents = await listBridgeEvents({ sessionId, limit: 1 });
+    if (!existingEvents.length) {
+      return NextResponse.json({ ok: false, error: 'rail_session_not_found', sessionId, scope: requestedScope, message: 'Bridge session was not found or already expired.' }, { status: 404 });
+    }
+  }
 
   const events = requestedScope === 'summary' ? latest?.events?.slice(-5) ?? [] : await listBridgeEvents({ sessionId, limit: 100 });
   const receipts = requestedScope === 'full_events' || requestedScope === 'receipts' || requestedScope === 'external_trace' ? await listBridgeReceipts(sessionId) : latest?.receipts ?? [];

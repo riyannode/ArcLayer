@@ -163,7 +163,10 @@ async function payForBridgeAccess({
   const paymentResponse = decodePaymentResponse(paid.headers.get("payment-response") || paid.headers.get("PAYMENT-RESPONSE"));
 
   if (!paid.ok || data.ok === false) {
-    throw new Error(`x402 paid request failed: ${paid.status} ${data.error || data.reason || data.message || "unknown"}`.trim());
+    const err = new Error(`x402 paid request failed: ${paid.status} ${data.error || data.reason || data.message || "unknown"}`.trim());
+    err.code = data.error || "x402_paid_failed";
+    err.detail = { sessionId: data.sessionId || sessionId || null, scope: data.scope || scope, reason: data.reason || data.message || null };
+    throw err;
   }
 
   return {
@@ -175,7 +178,8 @@ async function payForBridgeAccess({
     resource,
     sessionId: data.sessionId || sessionId || null,
     payloadHash: data.payloadHash || null,
-    transaction: paymentResponse?.transaction || null,
+    transaction: paymentResponse?.transaction || data.transaction || data.txHash || null,
+    txHash: paymentResponse?.transaction || data.transaction || data.txHash || null,
     paymentId: paymentResponse?.paymentId || null,
     mode: paymentResponse?.mode || "arc-native",
     paymentResponse,
