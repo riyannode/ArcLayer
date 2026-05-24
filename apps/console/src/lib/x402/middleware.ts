@@ -51,6 +51,14 @@ import {
   consumeRailSession,
   type AllowedRail,
 } from './rail-session';
+import {
+  assertResourcePaymentStoreReady,
+  buildResourcePaymentKey,
+  claimResourcePayment,
+  getResourcePayment,
+  markResourcePaymentSettled,
+  markResourcePaymentFailed,
+} from './resource-payment-store';
 import type { PaymentRequirements, PaymentPayload } from './exact/types';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
@@ -445,6 +453,46 @@ async function handleNative(
   req: NextRequest,
 ): Promise<NextResponse> {
   const requirements = buildNativeRequirements(opts);
+  const reqBody = await req.clone().json().catch(() => ({} as Record<string, unknown>));
+  const scope = typeof reqBody.scope === 'string' && reqBody.scope.trim().length > 0 ? reqBody.scope.trim() : null;
+  const inputSessionId = typeof reqBody.sessionId === 'string' && reqBody.sessionId.trim().length > 0 ? reqBody.sessionId.trim() : null;
+  const role = typeof reqBody.role === 'string' && ['analyzer', 'evaluator', 'executor'].includes(reqBody.role.trim().toLowerCase()) ? reqBody.role.trim().toLowerCase() : null;
+
+  if (!inputSessionId) {
+    return NextResponse.json(
+      { ok: false, error: 'invalid_session', message: 'sessionId is required for x402 bridge-access payments.' },
+      { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+  if (!scope) {
+    return NextResponse.json(
+      { ok: false, error: 'invalid_scope', message: 'scope is required and must be non-empty for x402 bridge-access payments.' },
+      { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+  if (!role) {
+    return NextResponse.json(
+      { ok: false, error: 'invalid_role', message: 'role must be one of: analyzer, evaluator, executor.' },
+      { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+
+  // ─── Resource payment store readiness guard ─────────────────────────────────
+  // Do not settle any bridge-access payment if the idempotency table is
+  // unreachable. This prevents duplicate on-chain payments when the
+  // deployment is missing Supabase credentials or the table hasn't been
+  // created yet.
+  if (process.env.PROTOCOL_TX_MODE === 'ARC_TESTNET' && opts.resource?.includes('/api/x402/bridge-access')) {
+    try {
+      await assertResourcePaymentStoreReady();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'x402_resource_payments_unavailable';
+      return NextResponse.json(
+        { ok: false, error: 'x402_resource_payments_unavailable', message },
+        { status: 503, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+  }
 
   // ─── Rail session guard ─────────────────────────────────────────────────────
   const railSessionId = getRailSessionId(proof);
@@ -531,6 +579,48 @@ async function handleNative(
     );
   }
 
+  const resourcePaymentKey = buildResourcePaymentKey({
+    sessionId: inputSessionId,
+    scope,
+    role,
+    resource: opts.resource,
+  });
+  const existingResourcePayment = await getResourcePayment(resourcePaymentKey);
+  if (existingResourcePayment?.status === 'settled') {
+    const paymentResponse = {
+      success: true,
+      mode: 'arc-native' as const,
+      transaction: existingResourcePayment.transaction ?? null,
+      network: ARC_TESTNET_CAIP2_NETWORK,
+      payer: existingResourcePayment.payer,
+      payTo: existingResourcePayment.payTo,
+      amount: existingResourcePayment.amount,
+      paymentId: existingResourcePayment.paymentId,
+    };
+    return NextResponse.json(
+      {
+        ok: true,
+        error: 'session_already_paid',
+        sessionId: existingResourcePayment.sessionId,
+        scope: existingResourcePayment.scope,
+        role: existingResourcePayment.role,
+        paymentId: existingResourcePayment.paymentId,
+        transaction: existingResourcePayment.transaction ?? null,
+        payer: existingResourcePayment.payer,
+        payTo: existingResourcePayment.payTo,
+        amount: existingResourcePayment.amount,
+        mode: 'arc-native',
+      },
+      {
+        status: 200,
+        headers: {
+          'X-402-Version': String(X402_VERSION_V2),
+          'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse),
+        },
+      },
+    );
+  }
+
   // ─── VERIFY-FIRST PATTERN: Execute handler BEFORE settlement ──────────────
   // Rationale: If handler fails (DB error, timeout, panic), user should NOT be
   // charged. Settlement is irreversible on-chain. Handler success is the gate.
@@ -556,16 +646,97 @@ async function handleNative(
     return response; // Pass through handler's error response without settling
   }
 
-  // ─── Settle on-chain via relayer (only after handler success) ──────────────
-  const settleResult = await settleExactPayment({
-    paymentPayload: proof as unknown as PaymentPayload,
-    paymentRequirements: requirements,
-    selfHosted: true,
+  const paymentId = deriveNativePaymentId({
+    network: requirements.network,
+    asset: requirements.asset,
+    from: authorization.from as string,
+    nonce: authorization.nonce as string,
   });
+  const claim = await claimResourcePayment({
+    paymentKey: resourcePaymentKey,
+    sessionId: inputSessionId,
+    scope,
+    role,
+    payer: String(authorization.from),
+    resource: opts.resource,
+    payTo: String(requirements.payTo),
+    amount: requirements.amount,
+    mode: 'arc-native',
+    status: 'pending',
+    paymentId,
+    transaction: null,
+  });
+  if (claim.kind === 'settled') {
+    const paymentResponse = {
+      success: true,
+      mode: 'arc-native' as const,
+      transaction: claim.record.transaction ?? null,
+      network: ARC_TESTNET_CAIP2_NETWORK,
+      payer: claim.record.payer,
+      payTo: claim.record.payTo,
+      amount: claim.record.amount,
+      paymentId: claim.record.paymentId,
+    };
+    return NextResponse.json(
+      {
+        ok: true,
+        error: 'session_already_paid',
+        sessionId: claim.record.sessionId,
+        scope: claim.record.scope,
+        role: claim.record.role,
+        paymentId: claim.record.paymentId,
+        transaction: claim.record.transaction ?? null,
+        payer: claim.record.payer,
+        payTo: claim.record.payTo,
+        amount: claim.record.amount,
+        mode: 'arc-native',
+      },
+      {
+        status: 200,
+        headers: {
+          'X-402-Version': String(X402_VERSION_V2),
+          'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse),
+        },
+      },
+    );
+  }
+  if (claim.kind === 'failed') {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'payment_state_failed',
+        message: 'Previous payment attempt for this resource/session/scope/role is in failed state and will not be retried automatically.'
+      },
+      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+  if (claim.kind === 'pending') {
+    return NextResponse.json(
+      { ok: false, error: 'payment_in_flight', message: 'Payment is already being processed for this resource/session/scope/role.' },
+      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+
+  // ─── Settle on-chain via relayer (only after handler success) ──────────────
+  let settleResult;
+  try {
+    settleResult = await settleExactPayment({
+      paymentPayload: proof as unknown as PaymentPayload,
+      paymentRequirements: requirements,
+      selfHosted: true,
+    });
+  } catch (settleErr) {
+    const message = settleErr instanceof Error ? settleErr.message : 'unknown_settle_error';
+    await markResourcePaymentFailed(resourcePaymentKey, `settle_exception:${message}`);
+    return NextResponse.json(
+      { ok: false, error: 'settlement_failed', reason: 'settle_exception', message },
+      { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
 
   if (!settleResult.success) {
-    // If already settled, still allow through (idempotent)
     if (!settleResult.alreadySettled) {
+      await markResourcePaymentFailed(resourcePaymentKey, settleResult.errorReason ?? settleResult.errorMessage ?? 'settlement_failed');
       return NextResponse.json(
         { ok: false, error: 'settlement_failed', reason: settleResult.errorReason, message: settleResult.errorMessage },
         { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
@@ -573,12 +744,12 @@ async function handleNative(
     }
   }
 
-  // ─── Derive paymentId and consume (replay protection) ─────────────────────
-  const paymentId = deriveNativePaymentId({
-    network: requirements.network,
-    asset: requirements.asset,
-    from: authorization.from as string,
-    nonce: authorization.nonce as string,
+  // Settlement succeeded or was already settled on-chain.
+  // Mark settled immediately BEFORE consumeNativePayment to ensure the row
+  // status reflects on-chain reality regardless of downstream outcomes.
+  await markResourcePaymentSettled(resourcePaymentKey, {
+    paymentId,
+    transaction: settleResult.transaction ?? null,
   });
 
   const consumed = await consumeNativePayment(paymentId);
@@ -591,7 +762,8 @@ async function handleNative(
       );
     }
     // missing/not_settled — settle just succeeded above, so this shouldn't happen
-    // but guard anyway
+    // but guard anyway. Do NOT mark resource payment failed — settlement already
+    // succeeded on-chain and was marked settled.
     return NextResponse.json(
       { ok: false, error: 'native_payment_not_consumed', reason, paymentId },
       { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
@@ -622,6 +794,13 @@ async function handleNative(
         paymentId,
         transaction: settleResult.transaction ?? null,
         payloadHash: response.headers.get('X-Agent-Bridge-Payload-Hash'),
+        metadata: {
+          role,
+          scope,
+          source: 'x402-autopay',
+          payer: authorization.from,
+          protocolTxMode: 'arc_testnet',
+        },
       });
     } catch (err) {
       console.error('[x402] failed to attach agent bridge receipt', err instanceof Error ? err.message : 'unknown');

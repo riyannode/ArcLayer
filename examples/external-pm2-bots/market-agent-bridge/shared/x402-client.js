@@ -34,6 +34,35 @@ function randomNonce() {
   return `0x${crypto.randomBytes(32).toString("hex")}`;
 }
 
+/**
+ * Deterministic nonce for EIP-3009 TransferWithAuthorization.
+ * Uses SHA-256 of (resource|sessionId|scope|role|payer|asset|payTo|amount|chainId).
+ * Only used for Arc native exact EIP-3009 payments (not Circle Gateway, Permit2, Solana).
+ * When X402_DETERMINISTIC_NONCE === "false", falls back to randomNonce().
+ */
+function deterministicNonce({ resource, sessionId, scope, role, payer, asset, payTo, amount, chainId }) {
+  const raw = `${resource}|${sessionId}|${scope}|${role}|${payer.toLowerCase()}|${asset.toLowerCase()}|${payTo.toLowerCase()}|${amount}|${chainId}`;
+  return `0x${crypto.createHash("sha256").update(raw).digest("hex")}`;
+}
+
+function deterministicNonceFor(accepted, { sessionId, scope, role, payer }) {
+  if (process.env.X402_DETERMINISTIC_NONCE === "false") return null;
+  if (accepted.scheme !== "exact") return null;
+  if (!String(accepted.network || "").includes("5042002")) return null;
+  if (accepted.extra?.transferMethod !== "eip3009") return null;
+  return deterministicNonce({
+    resource: `${process.env.ARCLAYER_BASE_URL || "https://arclayers.xyz"}/api/x402/bridge-access`,
+    sessionId: sessionId || "",
+    scope: scope || "",
+    role: role || "",
+    payer: payer || "",
+    asset: getAddress(accepted.asset),
+    payTo: getAddress(accepted.payTo),
+    amount: String(accepted.amount),
+    chainId: 5042002,
+  });
+}
+
 function pickNativeRequirement(accepts) {
   if (!Array.isArray(accepts)) return null;
   return accepts.find((a) =>
@@ -48,8 +77,21 @@ async function payForBridgeAccess({
   sessionId,
   scope = process.env.X402_SCOPE || "external_trace",
   resource = DEFAULT_RESOURCE,
-  method = "POST"
+  method = "POST",
+  role = "executor"
 } = {}) {
+  if (!module.parent || process.env.X402_LOG_DEFAULT_ROLE === "true") {
+    // Detect if role was supplied by caller
+    const stack = new Error().stack || "";
+    const callerIsDefault = stack.includes("payForBridgeAccess");
+    // Only log when role was NOT explicitly passed (detected by checking if role equals our default)
+    // We can't detect this with 100% accuracy in JS, so log a soft warning
+  }
+  // Ensure all x402 calls include explicit role
+  if (role === "executor" && !sessionId?.includes("executor")) {
+    // This is likely a default, not explicit. Log warning once.
+    console.log("[x402] role omitted; defaulting role=executor — caller should pass explicit role");
+  }
   const privateKey = normalizePrivateKey(process.env.X402_PAYER_PRIVATE_KEY || process.env.WALLET_PRIVATE_KEY);
   if (!privateKey) {
     return {
@@ -64,6 +106,7 @@ async function payForBridgeAccess({
   const payer = getAddress(account.address);
   const body = {
     scope,
+    role,
     ...(sessionId ? { sessionId } : {})
   };
 
@@ -100,7 +143,8 @@ async function payForBridgeAccess({
 
   const validAfter = "0";
   const validBefore = String(Math.floor(Date.now() / 1000) + Number(req.maxTimeoutSeconds || 300));
-  const nonce = randomNonce();
+  const detNonce = deterministicNonceFor(accepted, { sessionId, scope, role, payer });
+  const nonce = detNonce || randomNonce();
   const asset = getAddress(req.asset);
   const payTo = getAddress(req.payTo);
 
@@ -162,8 +206,38 @@ async function payForBridgeAccess({
   const data = await paid.json().catch(() => ({}));
   const paymentResponse = decodePaymentResponse(paid.headers.get("payment-response") || paid.headers.get("PAYMENT-RESPONSE"));
 
+  const responseTx = paymentResponse?.transaction || data.transaction || data.txHash || null;
+  const responsePaymentId = paymentResponse?.paymentId || data.paymentId || null;
+  if (data.error === "session_already_paid") {
+    return {
+      ok: true,
+      alreadyPaid: true,
+      transaction: responseTx,
+      txHash: responseTx,
+      paymentId: responsePaymentId,
+      sessionId: data.sessionId || sessionId || null,
+      scope: data.scope || scope,
+      role: data.role || role
+    };
+  }
+
+  if (paid.status === 409 && (data.error === 'payment_in_flight' || data.reason === 'payment_in_flight')) {
+    return {
+      ok: false,
+      skipped: true,
+      error: 'payment_in_flight',
+      sessionId: data.sessionId || sessionId || null,
+      scope: data.scope || scope,
+      role: data.role || role,
+      detail: data
+    };
+  }
+
   if (!paid.ok || data.ok === false) {
-    throw new Error(`x402 paid request failed: ${paid.status} ${data.error || data.reason || data.message || "unknown"}`.trim());
+    const err = new Error(`x402 paid request failed: ${paid.status} ${data.error || data.reason || data.message || "unknown"}`.trim());
+    err.code = data.error || "x402_paid_failed";
+    err.detail = { sessionId: data.sessionId || sessionId || null, scope: data.scope || scope, reason: data.reason || data.message || null };
+    throw err;
   }
 
   return {
@@ -175,8 +249,9 @@ async function payForBridgeAccess({
     resource,
     sessionId: data.sessionId || sessionId || null,
     payloadHash: data.payloadHash || null,
-    transaction: paymentResponse?.transaction || null,
-    paymentId: paymentResponse?.paymentId || null,
+    transaction: responseTx,
+    txHash: responseTx,
+    paymentId: responsePaymentId,
     mode: paymentResponse?.mode || "arc-native",
     paymentResponse,
     response: data

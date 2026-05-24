@@ -1,10 +1,11 @@
 require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 
 const { callLLM } = require("./shared/llm-client");
-const { latestSession, postEvent, postReceipt } = require("./shared/arclayer-client");
+const { hasRoleContentEvent, latestSession, postEvent, postReceipt } = require("./shared/arclayer-client");
 const { bpsSignal, clamp } = require("./shared/market-logic");
 const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
+const { acquireRoleLock, releaseRoleLock } = require("./shared/role-lock");
 
 function sanitizeAnalysis(raw, fallbackSignal) {
   const allowed = new Set(["UP", "DOWN", "NEUTRAL"]);
@@ -29,12 +30,26 @@ function sanitizeAnalysis(raw, fallbackSignal) {
 }
 
 async function runOnce() {
-  const data = await latestSession();
+  const data = await latestSession({ requiredRoles: ['oracle'] });
   const session = data.session;
 
   if (!session?.sessionId) {
     throw new Error("No latest bridge session. Run oracle first.");
   }
+
+  // Acquire role lock — atomic filesystem lock prevents concurrent
+  // analyzer processes from processing the same session.
+  let rlp = acquireRoleLock(session.sessionId, 'analyzer');
+  if (!rlp) {
+    console.log(`[analyzer] lock_exists session=${session.sessionId} role=analyzer, skip`);
+    return;
+  }
+  try {
+    // Skip if analyzer already processed this session (API-based guard)
+    if (hasRoleContentEvent({ sessionId: session.sessionId, events: session.events, role: 'analyzer', type: 'resolver_output' })) {
+      console.log(`[analyzer] skip session=${session.sessionId} reason=role_already_processed`);
+      return;
+    }
 
   const oraclePayload = session.roles?.oracle?.payload || {};
   const raw = oraclePayload.raw || oraclePayload;
@@ -103,6 +118,11 @@ ${JSON.stringify(oraclePayload).slice(0, 12000)}
     payload
   });
 
+  if (posted.deduped) {
+    console.log(`[analyzer] deduped content event session=${session.sessionId}, skip downstream`);
+    return;
+  }
+
   await postReceipt({
     sessionId: session.sessionId,
     payloadHash: posted.payloadHash,
@@ -117,7 +137,8 @@ ${JSON.stringify(oraclePayload).slice(0, 12000)}
     try {
       const payment = await payForBridgeAccess({
         sessionId: session.sessionId,
-        scope: process.env.X402_SCOPE || "summary"
+        scope: process.env.X402_SCOPE || "summary",
+        role: "analyzer"
       });
 
       if (!payment.ok) {
@@ -159,6 +180,9 @@ ${JSON.stringify(oraclePayload).slice(0, 12000)}
       console.error(`[x402][analyzer] autopay failed: ${message}`);
       if (process.env.X402_AUTOPAY_REQUIRED === "true") throw err;
     }
+  }
+} finally {
+    releaseRoleLock(rlp);
   }
 }
 
