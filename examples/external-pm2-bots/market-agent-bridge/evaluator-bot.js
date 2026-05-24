@@ -1,4 +1,5 @@
-require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
+const { loadRoleEnv } = require("./shared/env-loader");
+loadRoleEnv("evaluator");
 
 const { callLLM } = require("./shared/llm-client");
 const { hasRoleContentEvent, latestSession, postEvent, postReceipt } = require("./shared/arclayer-client");
@@ -33,7 +34,8 @@ async function runOnce() {
   const session = data.session;
 
   if (!session?.sessionId) {
-    throw new Error("No latest bridge session. Run oracle/analyzer first.");
+    console.log("[evaluator] skip reason=no_bridge_session");
+    return;
   }
 
   // Acquire role lock — atomic filesystem lock prevents concurrent
@@ -54,7 +56,8 @@ async function runOnce() {
   const analyzerPayload = session.roles?.analyzer?.payload || {};
 
   if (!analyzerPayload?.suggestedDirection) {
-    throw new Error("Missing analyzer output. Run analyzer first.");
+    console.log("[evaluator] skip reason=no_analyzer_output");
+    return;
   }
 
   const deterministic = evaluateRisk({ analyzerPayload, oraclePayload });

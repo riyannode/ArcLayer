@@ -37,11 +37,26 @@ external PM2 bot
 
 ## Setup
 
+### Environment files
+
 ```bash
 cd examples/external-pm2-bots/market-agent-bridge
-cp .env.example .env
-# Fill ARCLAYER_API_KEY + ARCLAYER_AGENT_ID locally. Never commit .env.
+cp .env.common.example .env.common
+cp .env.oracle.example .env.oracle
+cp .env.analyzer.example .env.analyzer
+cp .env.evaluator.example .env.evaluator
+cp .env.executor.example .env.executor
+# Fill ARCLAYER_API_KEY + role-specific envs locally. Never commit .env.*.
 npm install dotenv
+```
+
+Bot startup loads `.env.common` first, then `.env.<role>` overrides it.
+PM2 ecosystem config controls mode keys (`EVENT_CHAIN_ENABLED`, `RUN_FOREVER`).
+
+For external agent setup (custom agent ID):
+
+```bash
+cp .env.external-agent.example .env.<custom-role>
 ```
 
 Optional local LLM:
@@ -63,11 +78,40 @@ node evaluator-bot.js
 node executor-bot.js
 ```
 
-## Run with PM2
+## Independent mode (4 processes)
 
 ```bash
-pm2 start ecosystem.config.cjs
-pm2 logs arclayer-pm2-oracle-bot --lines 30
+pm2 delete oracle-bot analyzer-bot evaluator-bot executor-bot 2>/dev/null || true
+pm2 start ecosystem.independent.config.cjs
+pm2 save
+pm2 status
+```
+
+Expected:
+- PM2 has exactly 4 processes.
+- oracle-bot runs forever.
+- analyzer-bot runs forever and waits for oracle market_snapshot.
+- evaluator-bot runs forever and waits for analyzer resolver_output.
+- executor-bot runs forever and waits for evaluator evaluation.
+- oracle does not spawn children because `EVENT_CHAIN_ENABLED=false`.
+
+## Chain mode (1 process, oracle spawns children)
+
+```bash
+pm2 delete oracle-bot analyzer-bot evaluator-bot executor-bot 2>/dev/null || true
+pm2 start ecosystem.chain.config.cjs
+pm2 save
+```
+
+Expected:
+- PM2 has only oracle-bot.
+- oracle spawns analyzer/evaluator/executor once per cycle via `spawnSync`.
+- Do not run independent mode and chain mode at the same time.
+
+## One-shot smoke (no PM2)
+
+```bash
+EVENT_CHAIN_ENABLED=false RUN_FOREVER=false node oracle-bot.js
 ```
 
 ## Safety
@@ -143,3 +187,12 @@ The caller receives `{ ok: false, skipped: true, error: 'payment_in_flight' }`.
 - `ARCLAYER_API_KEY=<required>`
 - `A2A_LIVE_EVENTS_TOKEN=<required>`
 - `X402_PAYER_PRIVATE_KEY=<required for real x402 only>`
+
+## Warnings
+
+- Do not run **chain mode** and **independent mode** at the same time.
+- Do not run old shared `.env` mode unless `LEGACY_SHARED_ENV=true`.
+- `MARKET_EXECUTION_MODE` must remain `DRY_RUN` for no-trade executor.
+- `X402_AUTOPAY=true` enables live x402 payments.
+- Each external bot must use unique `ARCLAYER_AGENT_ID`, `RUNTIME_ID`, and wallet key.
+- Do not put `EVENT_CHAIN_ENABLED` in `.env.oracle`; use ecosystem config for mode control.
