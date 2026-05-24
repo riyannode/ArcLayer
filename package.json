@@ -10,7 +10,9 @@
   "description": "ArcLayer monorepo root",
   "packageManager": "pnpm@10.23.0",
   "scripts": {
-    "build": "corepack pnpm --dir apps/console build",
+    "dev": "pnpm --filter ./apps/console dev",
+    "build": "pnpm --filter ./apps/console build",
+    "lint": "pnpm --filter ./apps/console lint",
     "build:contracts": "npm --prefix contracts run build",
     "test": "npm --prefix contracts run test",
     "check": "npm run build:sdk && corepack pnpm --dir apps/console build && corepack pnpm --dir indexer build",
