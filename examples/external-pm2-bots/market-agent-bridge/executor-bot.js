@@ -1,4 +1,5 @@
-require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
+const { loadRoleEnv } = require("./shared/env-loader");
+loadRoleEnv("executor");
 const fs = require('node:fs');
 const path = require('node:path');
 const { callLLM } = require("./shared/llm-client");
@@ -9,7 +10,10 @@ const { acquireRoleLock, releaseRoleLock } = require("./shared/role-lock");
 
 async function runOnce() {
   const { session } = await latestSession({ requiredRoles: ['analyzer', 'evaluator'] });
-  if (!session?.sessionId) throw new Error('No latest bridge session.');
+  if (!session?.sessionId) {
+    console.log('[executor] skip reason=no_bridge_session');
+    return;
+  }
   const analyzerPayload = session.roles?.analyzer?.payload;
   const evaluatorPayload = session.roles?.evaluator?.payload;
 
@@ -27,7 +31,10 @@ async function runOnce() {
     return;
   }
   if (!analyzerPayload) throw new Error('Missing analyzer output.');
-  if (!evaluatorPayload) throw new Error('Missing evaluator output.');
+  if (!evaluatorPayload) {
+    console.log('[executor] skip reason=no_evaluator_output');
+    return;
+  }
   if (typeof evaluatorPayload.approved !== 'boolean') throw new Error('Invalid evaluator approval shape.');
 
   const payload = { source: 'llm-executor', action: 'DRY_RUN_ONLY', mode: 'DRY_RUN', reason: evaluatorPayload.approved ? 'Dry-run only' : 'Skipped: evaluator rejected' };
