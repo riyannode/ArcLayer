@@ -139,8 +139,10 @@ function bpsSignal({ market, orderbook, candles }) {
 }
 
 function evaluateRisk({ analyzerPayload, oraclePayload }) {
-  const minConfidence = Number(process.env.MIN_CONFIDENCE || 60);
-  const maxSpread = Number(process.env.MAX_SPREAD || 0.08);
+  const minConfidence = Number(process.env.EVALUATOR_MIN_CONFIDENCE || process.env.MIN_CONFIDENCE || 60);
+  const maxSpreadBps = Number(process.env.EVALUATOR_MAX_SPREAD_BPS || 800);
+  const allowWideSpread = process.env.EVALUATOR_ALLOW_WIDE_SPREAD === 'true';
+  const maxSpread = maxSpreadBps / 10000;
   const minLiquidityUsdc = Number(process.env.MIN_LIQUIDITY_USDC || 25);
 
   const direction = analyzerPayload?.suggestedDirection || "NEUTRAL";
@@ -153,20 +155,29 @@ function evaluateRisk({ analyzerPayload, oraclePayload }) {
   if (book?.spread !== null && Number(book?.spread) > maxSpread) flags.add("WIDE_SPREAD");
   if (Number(book?.depthUsdc || 0) < minLiquidityUsdc) flags.add("LOW_LIQUIDITY");
 
-  const hardBlocks = ["NO_CLEAR_DIRECTION", "WIDE_SPREAD", "LOW_LIQUIDITY"];
+  const hardBlocks = ["NO_CLEAR_DIRECTION", "LOW_LIQUIDITY"];
+  if (!allowWideSpread) hardBlocks.push("WIDE_SPREAD");
   const approved = hardBlocks.every((flag) => !flags.has(flag)) && confidence >= minConfidence;
 
   return {
     approved,
+    confidence,
     riskLevel: approved ? (confidence >= 75 ? "LOW" : "MEDIUM") : "HIGH",
     flags: Array.from(flags),
+    thresholdsUsed: {
+      minConfidence,
+      maxSpreadBps,
+      allowWideSpread,
+      minLiquidityUsdc
+    },
     checks: [
       "DRY_RUN_ONLY",
       "NO_PRIVATE_KEY_USAGE",
       "NO_REAL_TRADE_EXECUTION",
       `MIN_CONFIDENCE_${minConfidence}`,
-      `MAX_SPREAD_${maxSpread}`,
-      `MIN_LIQUIDITY_USDC_${minLiquidityUsdc}`
+      `MAX_SPREAD_BPS_${maxSpreadBps}`,
+      `MIN_LIQUIDITY_USDC_${minLiquidityUsdc}`,
+      `ALLOW_WIDE_SPREAD_${allowWideSpread}`
     ]
   };
 }

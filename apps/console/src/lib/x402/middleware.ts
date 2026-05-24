@@ -557,6 +557,16 @@ async function handleNative(
   });
   const existingResourcePayment = await getResourcePayment(resourcePaymentKey);
   if (existingResourcePayment?.status === 'settled') {
+    const paymentResponse = {
+      success: true,
+      mode: 'arc-native' as const,
+      transaction: existingResourcePayment.transaction ?? null,
+      network: ARC_TESTNET_CAIP2_NETWORK,
+      payer: existingResourcePayment.payer,
+      payTo: existingResourcePayment.payTo,
+      amount: existingResourcePayment.amount,
+      paymentId: existingResourcePayment.paymentId,
+    };
     return NextResponse.json(
       {
         ok: true,
@@ -571,7 +581,13 @@ async function handleNative(
         amount: existingResourcePayment.amount,
         mode: 'arc-native',
       },
-      { status: 200, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      {
+        status: 200,
+        headers: {
+          'X-402-Version': String(X402_VERSION_V2),
+          'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse),
+        },
+      },
     );
   }
 
@@ -621,6 +637,16 @@ async function handleNative(
     transaction: null,
   });
   if (claim.kind === 'settled') {
+    const paymentResponse = {
+      success: true,
+      mode: 'arc-native' as const,
+      transaction: claim.record.transaction ?? null,
+      network: ARC_TESTNET_CAIP2_NETWORK,
+      payer: claim.record.payer,
+      payTo: claim.record.payTo,
+      amount: claim.record.amount,
+      paymentId: claim.record.paymentId,
+    };
     return NextResponse.json(
       {
         ok: true,
@@ -635,7 +661,13 @@ async function handleNative(
         amount: claim.record.amount,
         mode: 'arc-native',
       },
-      { status: 200, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      {
+        status: 200,
+        headers: {
+          'X-402-Version': String(X402_VERSION_V2),
+          'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse),
+        },
+      },
     );
   }
   if (claim.kind === 'pending') {
@@ -719,6 +751,13 @@ async function handleNative(
         paymentId,
         transaction: settleResult.transaction ?? null,
         payloadHash: response.headers.get('X-Agent-Bridge-Payload-Hash'),
+        metadata: {
+          role,
+          scope,
+          source: 'x402-autopay',
+          payer: authorization.from,
+          protocolTxMode: 'arc_testnet',
+        },
       });
     } catch (err) {
       console.error('[x402] failed to attach agent bridge receipt', err instanceof Error ? err.message : 'unknown');

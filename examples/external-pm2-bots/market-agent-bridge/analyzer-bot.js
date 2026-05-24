@@ -29,7 +29,7 @@ function sanitizeAnalysis(raw, fallbackSignal) {
 }
 
 async function runOnce() {
-  const data = await latestSession();
+  const data = await latestSession({ requiredRoles: ['oracle'] });
   const session = data.session;
 
   if (!session?.sessionId) {

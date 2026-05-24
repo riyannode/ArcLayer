@@ -28,7 +28,7 @@ function sanitizeEvaluation(raw, deterministic) {
 }
 
 async function runOnce() {
-  const data = await latestSession();
+  const data = await latestSession({ requiredRoles: ['analyzer'] });
   const session = data.session;
 
   if (!session?.sessionId) {
