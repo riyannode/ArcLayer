@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       jobId: typeof body.jobId === 'string' ? body.jobId.trim() : null,
       category: typeof body.category === 'string' ? body.category.trim() : null,
     });
-    return NextResponse.json({ ok: true, eventId: event.id });
+    return NextResponse.json({ ok: true, eventId: event.id, deduped: event.deduped });
   } catch (err) {
     return bad('insert_failed', 500, { message: err instanceof Error ? err.message : 'unknown' });
   }
