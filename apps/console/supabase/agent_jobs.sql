@@ -95,9 +95,8 @@ BEGIN
   -- Atomically claim one available job using SKIP LOCKED
   SELECT * INTO v_job
   FROM public.agent_jobs
-  WHERE status = 'created'
-     OR (status = 'claimed' AND claim_expires_at < now())
-    AND (p_job_type = '' OR job_type = p_job_type)
+  WHERE ( status = 'created' OR (status = 'claimed' AND claim_expires_at < now()) )
+    AND (COALESCE(p_job_type, '') = '' OR job_type = p_job_type)
   ORDER BY created_at ASC
   LIMIT 1
   FOR UPDATE SKIP LOCKED;
