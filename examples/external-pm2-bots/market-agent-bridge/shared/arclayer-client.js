@@ -115,6 +115,16 @@ async function postLiveEvent(payload) {
   return data;
 }
 
+async function safePostLiveEvent(payload) {
+  try {
+    return await postLiveEvent(payload);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[live-events] post failed: ${message}`);
+    return null;
+  }
+}
+
 async function postReceipt({ sessionId, payloadHash, metadata = {} }) {
   if (!API_KEY) throw new Error("Missing ARCLAYER_API_KEY");
   const body = {
@@ -134,4 +144,4 @@ async function postReceipt({ sessionId, payloadHash, metadata = {} }) {
   return data;
 }
 
-module.exports = { BASE_URL, AGENT_ID, DRY_RUN, CATEGORY, sha256, currentSessionId, getJson, latestSession, postEvent, postReceipt, postLiveEvent };
+module.exports = { BASE_URL, AGENT_ID, DRY_RUN, CATEGORY, sha256, currentSessionId, getJson, latestSession, postEvent, postReceipt, postLiveEvent, safePostLiveEvent };

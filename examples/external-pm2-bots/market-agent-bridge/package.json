@@ -4,9 +4,15 @@
   "type": "commonjs",
   "scripts": {
     "smoke": "node oracle-bot.js && node analyzer-bot.js && node evaluator-bot.js && node executor-bot.js",
-    "pm2:start": "pm2 start ecosystem.config.cjs"
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "verify:deps": "node -e \"console.log(require.resolve('dotenv')); console.log(require.resolve('viem'))\"",
+    "verify:oracle": "RUN_FOREVER=false STARTUP_DELAY_MS=0 node oracle-bot.js",
+    "verify:analyzer": "RUN_FOREVER=false STARTUP_DELAY_MS=0 node analyzer-bot.js",
+    "verify:evaluator": "RUN_FOREVER=false STARTUP_DELAY_MS=0 node evaluator-bot.js",
+    "verify:executor": "RUN_FOREVER=false STARTUP_DELAY_MS=0 node executor-bot.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "viem": "^2.33.3"
   }
 }

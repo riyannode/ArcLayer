@@ -2,77 +2,91 @@
 
 External PM2 market agent bridge example: external PM2 bots make market decisions while ArcLayer acts as the protocol bridge for identity, x402 access, bridge events, receipts, payload hashes, and proof history on Arc.
 
-This is **not** a generic external LLM demo and not a real trading executor.
+## Current production shape
 
-## Flow
+- External bots run on VPS/PM2 outside ArcLayer.
+- ArcLayer receives bridge writes (`/api/agent-bridge/events`, `/api/agent-bridge/receipts`) using `ARCLAYER_API_KEY`.
+- ArcLayer presence/rail UI reads public runtime state from:
+  - `/api/a2a/presence`
+  - `/api/a2a/live-events`
+- Live Decision Rail renders success (green), rejected/failed (red), x402 tx hash, and LLM reasoning from metadata.
 
-```text
-external PM2 bot
-  -> raw Polymarket BTC 15m data
-  -> LLM analysis
-  -> risk evaluation
-  -> DRY_RUN decision intent
-  -> x402 bridge-access
-  -> bridge event + payloadHash + runtimeId
-  -> receipt/history
-  -> /live-a2a-agent frontend viewer
+## Required Vercel env
+
+- `A2A_LIVE_EVENTS_TOKEN` (production token used by `/api/a2a/live-events` write endpoint).
+
+## Required VPS .env
+
+Copy `.env.example` to `.env`, then fill values locally.
+
+```bash
+cp .env.example .env
 ```
 
-1. `oracle-bot.js` fetches ArcLayer raw BTC 15m Polymarket market/orderbook/candles feed and posts `role=oracle`.
-2. `analyzer-bot.js` reads latest bridge session, uses local deterministic logic or an optional local LLM provider, and posts `role=analyzer`.
-3. `evaluator-bot.js` evaluates analyzer output outside ArcLayer and posts `role=evaluator`.
-4. `executor-bot.js` posts a DRY_RUN execution intent only. It never places real trades.
-5. ArcLayer stores the bridge event, `payloadHash`, `runtimeId`, `job_id`/category metadata, receipt/history, and x402 unlock status.
-6. `POST /api/x402/bridge-access` returns `402` without payment and returns the unlocked bridge session/receipt after valid payment.
-7. `/live-a2a-agent` shows the full flow.
+Critical notes:
+- `ARCLAYER_API_KEY` must be full raw `ak_...` value.
+- Supabase `key_prefix` is not a usable API key.
+- `A2A_LIVE_EVENTS_TOKEN` must match Vercel production env.
+- `DRY_RUN=true` is required for this prediction-market example.
+- `X402_AUTOPAY=false` by default; only enable for Arc Testnet validation.
+- Never commit `.env`.
 
-## Architecture boundary
+## Supabase tables used
 
-- **ArcLayer is the protocol bridge.**
-- **Bots run anywhere.**
-- **Bots own strategy, local LLM keys, and execution.**
-- **ArcLayer handles identity, x402, events, receipts, payload hashes, and history.**
+- `public.a2a_api_keys`
+- `public.agent_presence`
+- `public.agent_live_events`
 
-`apps/console` stays the protocol/data layer: raw market data, bridge events, x402, receipts, and viewer surfaces only. It does not include real trade execution, a private-key executor, or hardcoded trading strategy.
+## Bridge API key setup
 
-## Setup
+- Store raw `ak_...` once in local VPS `.env` as `ARCLAYER_API_KEY`.
+- Database stores only `key_hash` and `key_prefix`.
+- Required scopes:
+  - `agent_bridge:write`
+  - `agent_bridge:receipt`
+
+## PM2 runtime
 
 ```bash
 cd examples/external-pm2-bots/market-agent-bridge
-cp .env.example .env
-# Fill ARCLAYER_API_KEY + ARCLAYER_AGENT_ID locally. Never commit .env.
-npm install dotenv
-```
-
-Optional local LLM:
-
-```bash
-LLM_BASE_URL=
-LLM_MODEL=
-LLM_API_KEY=local-only-key
-```
-
-`LLM_API_KEY` is sent only to the configured local/OpenAI-compatible LLM provider. It is never sent to ArcLayer or Supabase and must never be printed.
-
-## Run one-shot smoke
-
-```bash
-node oracle-bot.js
-node analyzer-bot.js
-node evaluator-bot.js
-node executor-bot.js
-```
-
-## Run with PM2
-
-```bash
+npm install
+npm run verify:deps
 pm2 start ecosystem.config.cjs
-pm2 logs arclayer-pm2-oracle-bot --lines 30
+pm2 save
+pm2 list
 ```
 
-## Safety
+## Presence heartbeat
 
-- `.env` is ignored by repo policy; `.env.example` contains placeholders only.
-- `DRY_RUN=true` is required. Setting `DRY_RUN=false` throws.
-- No LLM API key, private key, exchange key, or wallet private key is sent to ArcLayer or Supabase.
-- ArcLayer stores only non-sensitive bridge metadata: `agent_id`, `runtime_id`, `session_id`, `job_id`, `category`, role, event payload hashes, receipts, and timestamps.
+- UI online/offline state depends on `/api/a2a/presence` heartbeat freshness.
+- PM2 process state alone does not guarantee UI online status.
+
+## Live Decision Rail
+
+- Fed by `/api/a2a/live-events`.
+- Success steps are green.
+- Rejected/failed steps are red.
+- `txHash` is shown for `x402_paid` when available.
+- `metadata.reasoning` is shown as **LLM Reasoning**.
+
+## Production validation commands
+
+```bash
+cd examples/external-pm2-bots/market-agent-bridge
+npm install
+npm run verify:deps
+
+set -a
+source .env
+set +a
+
+curl -sS "$ARCLAYER_BASE_URL/api/a2a/agents/by-category?category=prediction-market-bots" | jq '{ok, source, total, error, message}'
+
+curl -sS "$ARCLAYER_BASE_URL/api/a2a/presence?category=prediction-market-bots" | jq '.presence[] | {agentId, status, lastHeartbeatAt, lastEventType, lastEventSummary}'
+
+curl -sS -H "authorization: Bearer $ARCLAYER_API_KEY" "$ARCLAYER_BASE_URL/api/agent-bridge/events?limit=20" | jq '.events[] | {sessionId, agentId, role, type, createdAt}'
+
+curl -sS "$ARCLAYER_BASE_URL/api/a2a/live-events?category=prediction-market-bots&limit=10" | jq '.events[] | {agentId, eventType, decision, summary, txHash, amountAtomic, currency, metadata, createdAt}'
+
+pm2 list
+```

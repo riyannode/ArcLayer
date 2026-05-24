@@ -1,7 +1,7 @@
 require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 
 const { callLLM } = require("./shared/llm-client");
-const { latestSession, postEvent, postReceipt, postLiveEvent } = require("./shared/arclayer-client");
+const { latestSession, postEvent, postReceipt, postLiveEvent, safePostLiveEvent } = require("./shared/arclayer-client");
 const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
 
@@ -133,7 +133,7 @@ ${JSON.stringify(evaluatorPayload).slice(0, 8000)}
     }
   });
 
-  await postLiveEvent({
+  await safePostLiveEvent({
     category: "prediction-market-bots",
     eventType: payload.action === "SKIP" ? "decision_rejected" : "run_job",
     agentId: "llm-market-executor",

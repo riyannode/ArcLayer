@@ -1,7 +1,7 @@
 require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 
 const { callLLM } = require("./shared/llm-client");
-const { latestSession, postEvent, postReceipt, postLiveEvent } = require("./shared/arclayer-client");
+const { latestSession, postEvent, postReceipt, safePostLiveEvent } = require("./shared/arclayer-client");
 const { evaluateRisk } = require("./shared/market-logic");
 const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
@@ -104,7 +104,7 @@ ${JSON.stringify(oraclePayload).slice(0, 8000)}
     }
   });
 
-  await postLiveEvent({
+  await safePostLiveEvent({
     category: "prediction-market-bots",
     eventType: payload.approved ? "decision_approved" : "decision_rejected",
     agentId: "llm-market-evaluator",
