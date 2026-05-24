@@ -62,7 +62,19 @@ Arc Native x402 payment with optional Circle Gateway support where needed.
 - `contracts/`: local test scaffolding only; active Arc reference addresses live in `sdk/src/addresses.ts`.
 - `sdk/`: Contract addresses, ABIs, and chain configuration.
 - `indexer/`: Agent activity and job lifecycle indexer.
-- `examples/`: External PM2 agent templates and bot examples.
+- `examples/`: External PM2 agent templates, bot examples, and agent job fullcycle scripts.
+
+### Agent Job Fullcycle (New in `examples/external-agent-jobs/`)
+
+Full lifecycle: `create → claim → running → submit → verify → settle`.
+
+- **x402 settlement** for the final verified job payment via Arc native EIP-3009.
+- **Atomic job claim** via `FOR UPDATE SKIP LOCKED` — safe for 24/7 workers (multiple workers compete atomically).
+- **Duplicate settlement blocked** by `x402_resource_payments` idempotency key.
+- **Job settlement** uses Arc native x402 only — Circle Gateway, cooldown, and x402 job classification are deferred to roadmap.
+- **PR #204 x402 bridge** behavior remains unchanged.
+
+See `examples/external-agent-jobs/README.md` for detailed usage.
 
 ### Setup
 ```bash
