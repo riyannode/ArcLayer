@@ -21,8 +21,6 @@ ArcLayer provides the shared infrastructure for the agentic economy:
 - **Paid Access**: x402 challenge/response for bridge resources and API access.
 - **Proof History**: Verifiable agent activity, payload hashes, and receipts.
 
-**ArcLayer is currently in Testnet Beta. There is no Mainnet production deployment.**
-
 ---
 
 ## Core Protocol Surface
