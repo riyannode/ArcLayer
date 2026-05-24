@@ -73,7 +73,7 @@ export async function getResourcePayment(key: string): Promise<ResourcePaymentRe
   return data ? mapRecord(data) : null;
 }
 
-export async function claimResourcePayment(record: ResourcePaymentRecord): Promise<{ kind: 'claimed' } | { kind: 'settled'; record: ResourcePaymentRecord } | { kind: 'pending'; record: ResourcePaymentRecord }> {
+export async function claimResourcePayment(record: ResourcePaymentRecord): Promise<{ kind: 'claimed' } | { kind: 'settled'; record: ResourcePaymentRecord } | { kind: 'pending'; record: ResourcePaymentRecord } | { kind: 'failed'; record: ResourcePaymentRecord }> {
   ensureDbAvailable();
   const { error } = await supabaseAdmin.from('x402_resource_payments').insert({
     payment_key: record.paymentKey,
@@ -106,25 +106,10 @@ export async function claimResourcePayment(record: ResourcePaymentRecord): Promi
     return { kind: 'settled', record: existing };
   }
   if (existing.status === 'failed') {
-    const { error: retryError } = await supabaseAdmin
-      .from('x402_resource_payments')
-      .update({
-        status: 'pending',
-        payment_id: record.paymentId,
-        transaction: null,
-        payer: record.payer.toLowerCase(),
-        pay_to: record.payTo,
-        amount: record.amount,
-        mode: record.mode,
-      })
-      .eq('payment_key', record.paymentKey)
-      .eq('status', 'failed');
-    if (!retryError) {
-      console.log(
-        `[x402][resource-payment] retry-from-failed sessionId=${record.sessionId} scope=${record.scope} role=${record.role} resource=${record.resource} paymentKey=${record.paymentKey.slice(0, 12)} kind=claimed`,
-      );
-      return { kind: 'claimed' };
-    }
+    console.log(
+      `[x402][resource-payment] failed sessionId=${record.sessionId} scope=${record.scope} role=${record.role} resource=${record.resource} paymentKey=${record.paymentKey.slice(0, 12)} kind=failed`,
+    );
+    return { kind: 'failed', record: existing };
   }
   console.log(
     `[x402][resource-payment] pending sessionId=${record.sessionId} scope=${record.scope} role=${record.role} resource=${record.resource} paymentKey=${record.paymentKey.slice(0, 12)} kind=pending`,

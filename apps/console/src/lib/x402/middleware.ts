@@ -700,6 +700,16 @@ async function handleNative(
       },
     );
   }
+  if (claim.kind === 'failed') {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'payment_state_failed',
+        message: 'Previous payment attempt for this resource/session/scope/role is in failed state and will not be retried automatically.'
+      },
+      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
   if (claim.kind === 'pending') {
     return NextResponse.json(
       { ok: false, error: 'payment_in_flight', message: 'Payment is already being processed for this resource/session/scope/role.' },
@@ -734,6 +744,14 @@ async function handleNative(
     }
   }
 
+  // Settlement succeeded or was already settled on-chain.
+  // Mark settled immediately BEFORE consumeNativePayment to ensure the row
+  // status reflects on-chain reality regardless of downstream outcomes.
+  await markResourcePaymentSettled(resourcePaymentKey, {
+    paymentId,
+    transaction: settleResult.transaction ?? null,
+  });
+
   const consumed = await consumeNativePayment(paymentId);
   if (consumed.ok === false) {
     const reason = consumed.reason;
@@ -744,8 +762,8 @@ async function handleNative(
       );
     }
     // missing/not_settled — settle just succeeded above, so this shouldn't happen
-    // but guard anyway
-    await markResourcePaymentFailed(resourcePaymentKey, `consume_failed:${reason}`);
+    // but guard anyway. Do NOT mark resource payment failed — settlement already
+    // succeeded on-chain and was marked settled.
     return NextResponse.json(
       { ok: false, error: 'native_payment_not_consumed', reason, paymentId },
       { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
@@ -765,11 +783,6 @@ async function handleNative(
     amount: requirements.amount,
     paymentId,
   };
-
-  await markResourcePaymentSettled(resourcePaymentKey, {
-    paymentId,
-    transaction: settleResult.transaction ?? null,
-  });
 
   const bridgeSessionId = response.headers.get('X-Agent-Bridge-Session-Id');
   if (bridgeSessionId) {
