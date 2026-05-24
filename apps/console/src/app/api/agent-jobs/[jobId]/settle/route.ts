@@ -70,9 +70,6 @@ export const POST = (() => {
         amount: priceAtomic,
         resource: `/api/agent-jobs/${jobId}/settle`,
         allowedRails: ['arc-native-eoa'],
-        sessionId: `job:${jobId}`,
-        scope: 'job_settlement',
-        role: 'buyer',
         onSettled: async (ctx) => {
           await markJobSettled({
             jobId,
