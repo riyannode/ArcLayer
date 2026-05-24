@@ -76,6 +76,22 @@ function buildRoleState(events) {
  * x402 bridge event? Checks only events (no receipt/live round-trip).
  * Used for duplicate prevention before posting proofs.
  */
+/**
+ * Generic helper: check if a role already has a content-type event for this session.
+ * Uses normalizeEvent() for field normalization.
+ * Returns true only when event is a content event (not receipt_reference)
+ * matching sessionId, role, and type.
+ */
+function hasRoleContentEvent({ sessionId, events, role, type }) {
+  return (events || []).some((e) => {
+    const n = normalizeEvent(e);
+    if (n.sessionId !== sessionId) return false;
+    if (n.role !== role) return false;
+    if (n.type !== type) return false;
+    return CONTENT_EVENT_TYPES.has(n.type);
+  });
+}
+
 function hasExecutorX402EventOnly({ sessionId, events }) {
   return (events || []).some((e) => {
     const n = normalizeEvent(e);
@@ -279,4 +295,4 @@ async function safePostLiveEvent(eventType, details = {}) {
   return data;
 }
 
-module.exports = { BASE_URL, AGENT_ID, sha256, currentSessionId, getJson, hasExecutorX402EventOnly, hasExecutorX402Proof, latestSession, postEvent, postReceipt, safePostLiveEvent };
+module.exports = { BASE_URL, AGENT_ID, sha256, currentSessionId, getJson, hasRoleContentEvent, hasExecutorX402EventOnly, hasExecutorX402Proof, latestSession, postEvent, postReceipt, safePostLiveEvent };

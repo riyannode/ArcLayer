@@ -34,6 +34,35 @@ function randomNonce() {
   return `0x${crypto.randomBytes(32).toString("hex")}`;
 }
 
+/**
+ * Deterministic nonce for EIP-3009 TransferWithAuthorization.
+ * Uses SHA-256 of (resource|sessionId|scope|role|payer|asset|payTo|amount|chainId).
+ * Only used for Arc native exact EIP-3009 payments (not Circle Gateway, Permit2, Solana).
+ * When X402_DETERMINISTIC_NONCE === "false", falls back to randomNonce().
+ */
+function deterministicNonce({ resource, sessionId, scope, role, payer, asset, payTo, amount, chainId }) {
+  const raw = `${resource}|${sessionId}|${scope}|${role}|${payer.toLowerCase()}|${asset.toLowerCase()}|${payTo.toLowerCase()}|${amount}|${chainId}`;
+  return `0x${crypto.createHash("sha256").update(raw).digest("hex")}`;
+}
+
+function deterministicNonceFor(accepted, { sessionId, scope, role, payer }) {
+  if (process.env.X402_DETERMINISTIC_NONCE === "false") return null;
+  if (accepted.scheme !== "exact") return null;
+  if (!String(accepted.network || "").includes("5042002")) return null;
+  if (accepted.extra?.transferMethod !== "eip3009") return null;
+  return deterministicNonce({
+    resource: `${process.env.ARCLAYER_BASE_URL || "https://arclayers.xyz"}/api/x402/bridge-access`,
+    sessionId: sessionId || "",
+    scope: scope || "",
+    role: role || "",
+    payer: payer || "",
+    asset: getAddress(accepted.asset),
+    payTo: getAddress(accepted.payTo),
+    amount: String(accepted.amount),
+    chainId: 5042002,
+  });
+}
+
 function pickNativeRequirement(accepts) {
   if (!Array.isArray(accepts)) return null;
   return accepts.find((a) =>
@@ -114,7 +143,8 @@ async function payForBridgeAccess({
 
   const validAfter = "0";
   const validBefore = String(Math.floor(Date.now() / 1000) + Number(req.maxTimeoutSeconds || 300));
-  const nonce = randomNonce();
+  const detNonce = deterministicNonceFor(accepted, { sessionId, scope, role, payer });
+  const nonce = detNonce || randomNonce();
   const asset = getAddress(req.asset);
   const payTo = getAddress(req.payTo);
 
@@ -188,6 +218,18 @@ async function payForBridgeAccess({
       sessionId: data.sessionId || sessionId || null,
       scope: data.scope || scope,
       role: data.role || role
+    };
+  }
+
+  if (paid.status === 409 && (data.error === 'payment_in_flight' || data.reason === 'payment_in_flight')) {
+    return {
+      ok: false,
+      skipped: true,
+      error: 'payment_in_flight',
+      sessionId: data.sessionId || sessionId || null,
+      scope: data.scope || scope,
+      role: data.role || role,
+      detail: data
     };
   }
 

@@ -1,7 +1,7 @@
 require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 
 const { callLLM } = require("./shared/llm-client");
-const { latestSession, postEvent, postReceipt } = require("./shared/arclayer-client");
+const { hasRoleContentEvent, latestSession, postEvent, postReceipt } = require("./shared/arclayer-client");
 const { bpsSignal, clamp } = require("./shared/market-logic");
 const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
@@ -34,6 +34,12 @@ async function runOnce() {
 
   if (!session?.sessionId) {
     throw new Error("No latest bridge session. Run oracle first.");
+  }
+
+  // Skip if analyzer already processed this session
+  if (hasRoleContentEvent({ sessionId: session.sessionId, events: session.events, role: 'analyzer', type: 'resolver_output' })) {
+    console.log(`[analyzer] skip session=${session.sessionId} reason=role_already_processed`);
+    return;
   }
 
   const oraclePayload = session.roles?.oracle?.payload || {};

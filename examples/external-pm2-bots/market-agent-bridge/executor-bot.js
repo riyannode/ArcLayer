@@ -2,7 +2,7 @@ require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 const fs = require('node:fs');
 const path = require('node:path');
 const { callLLM } = require("./shared/llm-client");
-const { latestSession, postEvent, postReceipt, safePostLiveEvent, sha256, getJson, hasExecutorX402EventOnly, hasExecutorX402Proof } = require("./shared/arclayer-client");
+const { hasRoleContentEvent, latestSession, postEvent, postReceipt, safePostLiveEvent, sha256, getJson, hasExecutorX402EventOnly, hasExecutorX402Proof } = require("./shared/arclayer-client");
 const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
 
@@ -15,6 +15,12 @@ async function runOnce() {
   if (!session?.sessionId) throw new Error('No latest bridge session.');
   const analyzerPayload = session.roles?.analyzer?.payload;
   const evaluatorPayload = session.roles?.evaluator?.payload;
+
+  // Skip if executor already has execution_intent for this session
+  if (hasRoleContentEvent({ sessionId: session.sessionId, events: session.events, role: 'executor', type: 'execution_intent' })) {
+    console.log(`[executor] skip session=${session.sessionId} reason=role_already_processed`);
+    return;
+  }
   if (!analyzerPayload) throw new Error('Missing analyzer output.');
   if (!evaluatorPayload) throw new Error('Missing evaluator output.');
   if (typeof evaluatorPayload.approved !== 'boolean') throw new Error('Invalid evaluator approval shape.');

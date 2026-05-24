@@ -79,6 +79,55 @@ pm2 logs arclayer-pm2-oracle-bot --lines 30
 - No LLM API key, private key, exchange key, or wallet private key is sent to ArcLayer or Supabase.
 - ArcLayer stores only non-sensitive bridge metadata: `agent_id`, `runtime_id`, `session_id`, `job_id`, `category`, role, event payload hashes, receipts, and timestamps.
 
+## Idempotency & Duplicate Prevention
+
+### One role = one content event per session
+
+Each bot role (analyzer, evaluator, executor) performs its content action
+and x402 payment **at most once per session**. This is enforced at three layers:
+
+1. **Bot-side gating** — `hasRoleContentEvent()` in `shared/arclayer-client.js`
+   checks if the role already has a content-type event (`resolver_output`,
+   `evaluation`, `execution_intent`) for the current session. If found, the bot
+   skips processing entirely before posting events or paying.
+
+2. **Server-side idempotency** — The PR #204 middleware uses a
+   `resource|sessionId|scope|role` payment key to prevent duplicate settlement
+   at the backend.
+
+3. **On-chain deterministic nonce** — See below.
+
+### Deterministic nonce
+
+By default, `shared/x402-client.js` generates a deterministic EIP-3009 nonce
+for Arc native exact payments (`scheme === "exact"`, network includes `"5042002"`,
+`transferMethod === "eip3009"`). The nonce is a SHA-256 hash of:
+`resource|sessionId|scope|role|payer|asset|payTo|amount|chainId`.
+
+This means a retry with the same session/role/payer produces the same `bytes32`
+nonce. If the first authorization was already settled on-chain, the second
+attempt is rejected by the facilitator as `Eip3009NonceAlreadyUsed` — no
+duplicate on-chain transfer.
+
+**Environment variable:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `X402_DETERMINISTIC_NONCE` | `true` (unset) | Set to `false` to fall back to random nonce (manual experiments only) |
+
+**Scope of deterministic nonce:**
+- ✅ Arc native exact EIP-3009 (rail `arc-native-eoa`, network 5042002)
+- ❌ Circle Gateway offchain/nanopayment mode
+- ❌ Permit2
+- ❌ Solana
+- ❌ Non-EIP3009 payment modes
+
+### 409 payment_in_flight
+
+When the backend returns HTTP 409 with `error: "payment_in_flight"`, the bot
+treats this as a non-fatal skip. It does not retry payment in the same cycle.
+The caller receives `{ ok: false, skipped: true, error: 'payment_in_flight' }`.
+
 ## Required env for x402 executor lifecycle
 - `MARKET_EXECUTION_MODE=DRY_RUN`
 - `PROTOCOL_TX_MODE=ARC_TESTNET`
