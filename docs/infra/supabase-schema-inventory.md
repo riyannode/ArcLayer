@@ -1,38 +1,45 @@
 # Supabase schema inventory
 
-This inventory reflects the SQL migrations under `apps/console/supabase/migrations` in Arc/Circle reference mode.
+This inventory reflects canonical migrations in both locations:
+- `supabase/migrations`
+- `apps/console/supabase/migrations`
 
 ## Core A2A / Arc identity
 
-- `public.agent_live_events` — live external agent discovery/presence event stream for console UI runtime history.
-- `public.agent_presence` — latest presence heartbeat/state per external agent.
+- `public.agent_manifests` from `supabase/migrations/0001_agent_manifests.sql`.
+- `public.a2a_jobs` from `supabase/migrations/0008_a2a_jobs.sql`.
+- `public.a2a_api_keys` from `supabase/migrations/0009_a2a_api_keys.sql`.
+- `public.a2a_jobs` on-chain lifecycle columns/patches from `supabase/migrations/0010_a2a_jobs_onchain_lifecycle.sql`.
 
 ## A2A webhooks
 
-- No dedicated Supabase webhook table is currently defined by migrations in this repository.
+- `public.a2a_webhooks` from `supabase/migrations/20260519_phase14_webhooks.sql`.
+- `public.a2a_webhook_deliveries` from `supabase/migrations/20260519_phase14_webhooks.sql`.
 
 ## External agent bridge / PM2 runtime history
 
-- `public.agent_bridge_events` — normalized bridge events emitted by external PM2/runtime agents.
-- `public.agent_bridge_receipts` — receipt/ack trail for bridge event handling.
+- `public.agent_bridge_events` from `supabase/migrations/0011_agent_bridge_events_receipts.sql`.
+- `public.agent_bridge_receipts` from `supabase/migrations/0011_agent_bridge_events_receipts.sql`.
+- `public.external_agent_runtimes` from `supabase/migrations/0012_external_agent_runtimes.sql`.
+- `apps/console/supabase/migrations/011_agent_bridge_events.sql` exists as a legacy/stale console-side variant compared to the root `supabase/migrations` schema set.
 
 ## x402 / payment guards
 
-- `public.x402_gateway_payments` — x402 Circle gateway payment records.
-- `public.x402_native_payments` — x402 Arc/native payment records.
-- `public.x402_access_sessions` — paid access/session grants tied to x402 payment proofs.
-- `public.user_rail_preferences` — user-level payment rail lock preferences.
-- `public.job_rail_locks` — job-level payment rail lock state.
+- `public.x402_gateway_payments` from `apps/console/supabase/migrations/002_x402_gateway_payments.sql`.
+- `public.x402_native_payments` from `apps/console/supabase/migrations/003_x402_native_payments.sql`.
+- replay guard patches from `apps/console/supabase/migrations/004_x402_payment_replay_guards.sql`.
+- `public.user_rail_preferences` and `public.job_rail_locks` from `apps/console/supabase/migrations/005_x402_rail_lock.sql`.
+- `public.x402_access_sessions` from `apps/console/supabase/migrations/006_x402_access_sessions.sql`.
 
 ## Vault
 
-- Vault system migrations (`007`, `008`, `009`) currently apply policy/field patches and grants; they do not define a new top-level table in this repository snapshot.
+- Vault schema/field patches in `apps/console/supabase/migrations/007_vault_system.sql`, `008_vault_onchain_fields.sql`, and `009_vault_onchain_schema_patch.sql`.
 
 ## Live A2A UI
 
-- `public.agent_live_events` — event timeline backing the live UI.
-- `public.agent_presence` — online/offline and heartbeat-backed presence state for UI.
+- `public.agent_live_events` from `apps/console/supabase/migrations/20260523_agent_live_events.sql`.
+- `public.agent_presence` from `apps/console/supabase/migrations/20260523_agent_live_events.sql`.
 
 ## Removed
 
-- `public.a2a_trades` (from removed migration `010_a2a_trades.sql`) — legacy Pythia/Apollo/Hermes trade history store with `TradeRecord` JSON payloads; no longer part of the active schema set.
+- `public.a2a_trades` from deleted `apps/console/supabase/migrations/010_a2a_trades.sql`.
