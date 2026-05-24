@@ -78,6 +78,29 @@ export interface X402MiddlewareOptions {
   liveAgentId?: string;
   /** Optional live UI agent name for payment notifications. */
   liveAgentName?: string;
+  /**
+   * Optional post-settlement hook for agent job settlement.
+   * Called after markResourcePaymentSettled succeeds.
+   * If onSettled throws, returns 502 job_settlement_record_failed.
+   * NOT called for replayed/missing consumeNativePayment.
+   */
+  onSettled?: (ctx: {
+    req: NextRequest;
+    response: NextResponse;
+    mode: 'arc-native' | 'circle-gateway';
+    paymentId: string;
+    transaction: string | null;
+    payer: string | null;
+    payTo: string;
+    amount: string;
+    resource: string;
+  }) => Promise<void>;
+  /**
+   * Allowed payment rails for this route.
+   * Default: both arc-native-eoa and circle-gateway-passkey are allowed.
+   * Set to ['arc-native-eoa'] to reject Circle Gateway payments.
+   */
+  allowedRails?: Array<'arc-native-eoa' | 'circle-gateway-passkey'>;
 }
 
 function resolvePayTo(override?: `0x${string}`): `0x${string}` {
@@ -456,7 +479,8 @@ async function handleNative(
   const reqBody = await req.clone().json().catch(() => ({} as Record<string, unknown>));
   const scope = typeof reqBody.scope === 'string' && reqBody.scope.trim().length > 0 ? reqBody.scope.trim() : null;
   const inputSessionId = typeof reqBody.sessionId === 'string' && reqBody.sessionId.trim().length > 0 ? reqBody.sessionId.trim() : null;
-  const role = typeof reqBody.role === 'string' && ['analyzer', 'evaluator', 'executor'].includes(reqBody.role.trim().toLowerCase()) ? reqBody.role.trim().toLowerCase() : null;
+  const ALLOWED_ROLES = ['analyzer', 'evaluator', 'executor', 'buyer', 'provider', 'worker', 'settler'];
+  const role = typeof reqBody.role === 'string' && ALLOWED_ROLES.includes(reqBody.role.trim().toLowerCase()) ? reqBody.role.trim().toLowerCase() : null;
 
   if (!inputSessionId) {
     return NextResponse.json(
@@ -472,17 +496,17 @@ async function handleNative(
   }
   if (!role) {
     return NextResponse.json(
-      { ok: false, error: 'invalid_role', message: 'role must be one of: analyzer, evaluator, executor.' },
+      { ok: false, error: 'invalid_role', message: 'role must be one of: analyzer, evaluator, executor, buyer, provider, worker, settler.' },
       { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
     );
   }
 
   // ─── Resource payment store readiness guard ─────────────────────────────────
-  // Do not settle any bridge-access payment if the idempotency table is
-  // unreachable. This prevents duplicate on-chain payments when the
-  // deployment is missing Supabase credentials or the table hasn't been
-  // created yet.
-  if (process.env.PROTOCOL_TX_MODE === 'ARC_TESTNET' && opts.resource?.includes('/api/x402/bridge-access')) {
+  // Do not settle any bridge-access or agent-job payment if the idempotency
+  // table is unreachable.
+  const isBridgeAccess = opts.resource?.includes('/api/x402/bridge-access');
+  const isAgentJobSettle = opts.resource?.includes('/api/agent-jobs/') && opts.resource?.includes('/settle');
+  if (process.env.PROTOCOL_TX_MODE === 'ARC_TESTNET' && (isBridgeAccess || isAgentJobSettle)) {
     try {
       await assertResourcePaymentStoreReady();
     } catch (err) {
@@ -752,6 +776,36 @@ async function handleNative(
     transaction: settleResult.transaction ?? null,
   });
 
+  // ─── Call onSettled hook after settlement success ───────────────────
+  if (opts.onSettled) {
+    try {
+      await opts.onSettled({
+        req,
+        response,
+        mode: 'arc-native',
+        paymentId,
+        transaction: settleResult.transaction ?? null,
+        payer: authorization.from as string,
+        payTo: requirements.payTo,
+        amount: requirements.amount,
+        resource: opts.resource,
+      });
+    } catch (settledErr) {
+      const msg = settledErr instanceof Error ? settledErr.message : 'onSettled hook failed';
+      console.error(`[x402] onSettled hook failed for ${opts.resource}:`, msg);
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'job_settlement_record_failed',
+          message: msg,
+          paymentId,
+          transaction: settleResult.transaction ?? null,
+        },
+        { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+  }
+
   const consumed = await consumeNativePayment(paymentId);
   if (consumed.ok === false) {
     const reason = consumed.reason;
@@ -844,6 +898,18 @@ export function withX402(
     if (!extracted) {
       console.log(`[x402] 402 Payment Required: ${opts.resource}`);
       return paymentRequiredResponse(opts, req);
+    }
+
+    // ─── Allowed rails gate ────────────────────────────────────────────
+    if (opts.allowedRails) {
+      const incomingMode = extracted.mode === 'gateway' ? 'circle-gateway-passkey' : 'arc-native-eoa';
+      if (!opts.allowedRails.includes(incomingMode as 'arc-native-eoa' | 'circle-gateway-passkey')) {
+        console.log(`[x402] rail ${incomingMode} not allowed for ${opts.resource}, allowed set:`, opts.allowedRails);
+        return NextResponse.json(
+          { ok: false, error: 'rail_not_allowed', message: `Payment rail ${incomingMode} is not allowed for this resource. Allowed: ${opts.allowedRails.join(', ')}` },
+          { status: 403, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
+      }
     }
 
     // Route to appropriate handler
