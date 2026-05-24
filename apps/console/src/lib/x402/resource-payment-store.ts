@@ -77,6 +77,22 @@ export async function claimResourcePayment(record: ResourcePaymentRecord): Promi
   const existing = await getResourcePayment(record.paymentKey);
   if (!existing) throw error;
   if (existing.status === 'settled') return { kind: 'settled', record: existing };
+  if (existing.status === 'failed') {
+    const { error: retryError } = await supabaseAdmin
+      .from('x402_resource_payments')
+      .update({
+        status: 'pending',
+        payment_id: record.paymentId,
+        transaction: null,
+        payer: record.payer.toLowerCase(),
+        pay_to: record.payTo,
+        amount: record.amount,
+        mode: record.mode,
+      })
+      .eq('payment_key', record.paymentKey)
+      .eq('status', 'failed');
+    if (!retryError) return { kind: 'claimed' };
+  }
   return { kind: 'pending', record: existing };
 }
 
@@ -86,5 +102,17 @@ export async function markResourcePaymentSettled(key: string, settlement: { tran
   if (settlement.transaction !== undefined) update.transaction = settlement.transaction;
   if (settlement.paymentId !== undefined) update.payment_id = settlement.paymentId;
   const { error } = await supabaseAdmin.from('x402_resource_payments').update(update).eq('payment_key', key);
+  if (error) throw error;
+}
+
+export async function markResourcePaymentFailed(key: string, reason?: string): Promise<void> {
+  ensureDbAvailable();
+  const { error } = await supabaseAdmin
+    .from('x402_resource_payments')
+    .update({
+      status: 'failed',
+      metadata: reason ? { reason } : {},
+    })
+    .eq('payment_key', key);
   if (error) throw error;
 }

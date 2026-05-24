@@ -24,6 +24,10 @@ async function runOnce() {
     lp = acquireLock(session.sessionId, scope);
     const payment = await payForBridgeAccess({ sessionId: session.sessionId, scope, role: 'executor' });
     if (!payment.ok) return;
+    if (payment.alreadyPaid) {
+      console.log(`[x402][executor] already_paid session=${session.sessionId} tx=${payment.txHash || payment.transaction || 'n/a'}`);
+      return;
+    }
     const receiptEventPayload = { source: 'x402-autopay', scope, role: 'executor', txHash: payment.txHash || payment.transaction || null, transaction: payment.txHash || payment.transaction || null, paymentId: payment.paymentId || null };
     const receiptRef = await postEvent({ sessionId: session.sessionId, role: 'executor', type: 'receipt_reference', runtimeId: process.env.RUNTIME_ID || 'pm2-llm-executor-bot', payload: receiptEventPayload, metadata: { source: 'x402-autopay' } });
     await postReceipt({ sessionId: session.sessionId, receiptType: 'x402_payment_proof', payloadHash: sha256(receiptEventPayload), metadata: { role: 'executor', scope, source: 'x402-autopay', txHash: payment.txHash || payment.transaction || null, paymentId: payment.paymentId || null, bridgePayloadHash: receiptRef.payloadHash } });

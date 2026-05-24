@@ -56,9 +56,9 @@ import {
   claimResourcePayment,
   getResourcePayment,
   markResourcePaymentSettled,
+  markResourcePaymentFailed,
 } from './resource-payment-store';
 import type { PaymentRequirements, PaymentPayload } from './exact/types';
-import { supabaseAdmin } from './supabaseClient';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -654,12 +654,7 @@ async function handleNative(
 
   if (!settleResult.success) {
     if (!settleResult.alreadySettled) {
-      if (supabaseAdmin) {
-        await supabaseAdmin
-          .from('x402_resource_payments')
-          .update({ status: 'failed' })
-          .eq('payment_key', resourcePaymentKey);
-      }
+      await markResourcePaymentFailed(resourcePaymentKey, settleResult.errorReason ?? settleResult.errorMessage ?? 'settlement_failed');
       return NextResponse.json(
         { ok: false, error: 'settlement_failed', reason: settleResult.errorReason, message: settleResult.errorMessage },
         { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
@@ -678,6 +673,7 @@ async function handleNative(
     }
     // missing/not_settled — settle just succeeded above, so this shouldn't happen
     // but guard anyway
+    await markResourcePaymentFailed(resourcePaymentKey, `consume_failed:${reason}`);
     return NextResponse.json(
       { ok: false, error: 'native_payment_not_consumed', reason, paymentId },
       { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
