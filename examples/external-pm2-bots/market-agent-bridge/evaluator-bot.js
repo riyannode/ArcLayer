@@ -1,7 +1,7 @@
 require("dotenv").config({ path: require("path").resolve(__dirname, ".env") });
 
 const { callLLM } = require("./shared/llm-client");
-const { latestSession, postEvent, postReceipt } = require("./shared/arclayer-client");
+const { latestSession, postEvent, postReceipt, postLiveEvent } = require("./shared/arclayer-client");
 const { evaluateRisk } = require("./shared/market-logic");
 const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
@@ -101,6 +101,27 @@ ${JSON.stringify(oraclePayload).slice(0, 8000)}
       role: "evaluator",
       eventType: "evaluation",
       eventId: posted.eventId || null
+    }
+  });
+
+  await postLiveEvent({
+    category: "prediction-market-bots",
+    eventType: payload.approved ? "decision_approved" : "decision_rejected",
+    agentId: "llm-market-evaluator",
+    agentName: "ArcLayer Market Evaluator",
+    title: payload.approved ? "Decision approved" : "Decision rejected",
+    summary: payload.reason,
+    decision: payload.approved ? "approved" : "rejected",
+    confidence: typeof analyzerPayload?.confidence === "number" ? analyzerPayload.confidence : null,
+    trace: ["tick_feed", "scan", "misprice_detect", "fair_prob_model", "arb_check", "llm_reasoned"],
+    metadata: {
+      status: payload.approved ? "success" : "rejected",
+      sessionId: session.sessionId,
+      role: "evaluator",
+      reasoning: payload.reason,
+      riskLevel: payload.riskLevel,
+      checks: payload.checks,
+      flags: payload.flags
     }
   });
 

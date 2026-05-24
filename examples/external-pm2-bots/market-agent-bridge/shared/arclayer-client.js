@@ -5,6 +5,7 @@ const API_KEY = process.env.ARCLAYER_API_KEY || "";
 const AGENT_ID = process.env.ARCLAYER_AGENT_ID || "llm-market-agent";
 const DRY_RUN = process.env.DRY_RUN !== "false";
 const CATEGORY = "prediction-market";
+const LIVE_EVENTS_TOKEN = process.env.A2A_LIVE_EVENTS_TOKEN || "";
 
 function sha256(payload) {
   return `0x${crypto.createHash("sha256").update(JSON.stringify(payload || {})).digest("hex")}`;
@@ -93,6 +94,27 @@ async function postEvent({ sessionId, role, type, runtimeId, payload, metadata =
   return { ...data, sessionId: body.sessionId, payloadHash: body.payloadHash };
 }
 
+
+async function postLiveEvent(payload) {
+  if (!LIVE_EVENTS_TOKEN) {
+    console.warn("[live-events] missing A2A_LIVE_EVENTS_TOKEN; skipping live event post");
+    return null;
+  }
+  const res = await fetch(`${BASE_URL}/api/a2a/live-events`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${LIVE_EVENTS_TOKEN}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(payload || {})
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.ok === false) {
+    throw new Error(`post live event failed: ${res.status} ${data.error || data.message || ""}`.trim());
+  }
+  return data;
+}
+
 async function postReceipt({ sessionId, payloadHash, metadata = {} }) {
   if (!API_KEY) throw new Error("Missing ARCLAYER_API_KEY");
   const body = {
@@ -112,4 +134,4 @@ async function postReceipt({ sessionId, payloadHash, metadata = {} }) {
   return data;
 }
 
-module.exports = { BASE_URL, AGENT_ID, DRY_RUN, CATEGORY, sha256, currentSessionId, getJson, latestSession, postEvent, postReceipt };
+module.exports = { BASE_URL, AGENT_ID, DRY_RUN, CATEGORY, sha256, currentSessionId, getJson, latestSession, postEvent, postReceipt, postLiveEvent };
