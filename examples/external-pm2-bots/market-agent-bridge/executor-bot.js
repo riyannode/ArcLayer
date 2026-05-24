@@ -32,6 +32,10 @@ async function runOnce() {
 
   const payload = { source: 'llm-executor', action: 'DRY_RUN_ONLY', mode: 'DRY_RUN', reason: evaluatorPayload.approved ? 'Dry-run only' : 'Skipped: evaluator rejected' };
   const posted = await postEvent({ sessionId: session.sessionId, role: 'executor', type: 'execution_intent', runtimeId: process.env.RUNTIME_ID || 'pm2-llm-executor-bot', payload });
+  if (posted.deduped) {
+    console.log(`[executor] deduped content event session=${session.sessionId}, skip downstream`);
+    return;
+  }
   await postReceipt({ sessionId: session.sessionId, receiptType: 'x402_arc_native', payloadHash: posted.payloadHash, metadata: { role: 'executor' } });
 
   if (!evaluatorPayload.approved) return;

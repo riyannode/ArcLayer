@@ -91,11 +91,15 @@ and x402 payment **at most once per session**. This is enforced at three layers:
    `evaluation`, `execution_intent`) for the current session. If found, the bot
    skips processing entirely before posting events or paying.
 
-2. **Server-side idempotency** — The PR #204 middleware uses a
-   `resource|sessionId|scope|role` payment key to prevent duplicate settlement
-   at the backend.
+2. **Server-side content event dedup** — The `agent_bridge_events` table has a
+   partial unique index on `event_dedupe_key` (SHA-256 of
+   `v1|sessionId|agentId|role|eventType`). Only content events
+   (`market_snapshot`, `resolver_output`, `evaluation`, `execution_intent`) get a
+   non-null dedupe key. This ensures at most one content event per agent/role/session
+   regardless of bot process races.
 
-3. **On-chain deterministic nonce** — See below.
+3. **Server-side payment idempotency** — The `x402_resource_payments` table
+   prevents duplicate x402 settlement per resource/session/scope/role key.
 
 ### Deterministic nonce
 

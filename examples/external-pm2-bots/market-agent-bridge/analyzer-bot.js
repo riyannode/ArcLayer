@@ -118,6 +118,11 @@ ${JSON.stringify(oraclePayload).slice(0, 12000)}
     payload
   });
 
+  if (posted.deduped) {
+    console.log(`[analyzer] deduped content event session=${session.sessionId}, skip downstream`);
+    return;
+  }
+
   await postReceipt({
     sessionId: session.sessionId,
     payloadHash: posted.payloadHash,

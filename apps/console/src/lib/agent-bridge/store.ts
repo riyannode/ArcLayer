@@ -22,6 +22,30 @@ export type BridgeRole =
   | (string & {});
 export type BridgeEventType = 'session_started' | 'bridge_event' | 'work_proof' | 'receipt_reference' | 'market_snapshot' | 'resolver_output' | 'evaluation' | 'execution_intent';
 
+/** Content event types that get a server-side dedupe key */
+const CONTENT_EVENT_TYPES = new Set<BridgeEventType>(['market_snapshot', 'resolver_output', 'evaluation', 'execution_intent']);
+
+/**
+ * Build a deterministic dedupe key for content bridge events.
+ *
+ * v1 dedupes one content event per agent/role/session for PR204 demo validation.
+ * Future resource marketplace flow should use v2 with upstreamPayloadHash/resourceId/jobId.
+ *
+ * event_dedupe_key = sha256("v1|" + sessionId + "|" + agentId + "|" + role + "|" + eventType)
+ *
+ * Only content events (market_snapshot, resolver_output, evaluation, execution_intent)
+ * get a dedupe key. receipt_reference events return null — they are deduped via
+ * the x402_resource_payments table instead.
+ *
+ * agentId is required in the key so external agents are not blocked
+ * from publishing their own outputs.
+ */
+export function buildBridgeEventDedupeKey(input: { sessionId: string; agentId: string; role: string; type: BridgeEventType }): string | null {
+  if (!CONTENT_EVENT_TYPES.has(input.type)) return null;
+  const raw = `v1|${input.sessionId}|${input.agentId}|${input.role}|${input.type}`;
+  return `0x${createHash('sha256').update(raw).digest('hex')}`;
+}
+
 export type BridgeEventRow = {
   id: string;
   session_id: string;
@@ -32,6 +56,7 @@ export type BridgeEventRow = {
   event_type?: string | null;
   payload: Record<string, unknown>;
   payload_hash: string;
+  event_dedupe_key?: string | null;
   metadata?: Record<string, unknown> | null;
   source?: string | null;
   dry_run?: boolean | null;
@@ -97,8 +122,17 @@ export function makeSessionId(prefix = 'bridge'): string {
   return `${prefix}_${Date.now()}_${randomUUID().slice(0, 8)}`;
 }
 
-export async function insertBridgeEvent(input: BridgeEventInput) {
-  const row = {
+export async function insertBridgeEvent(input: BridgeEventInput): Promise<BridgeEventRow & { deduped: boolean }> {
+  // Compute dedupe key server-side from sessionId, agentId, role, type
+  // Do NOT trust client-provided dedupe key
+  const dedupeKey = buildBridgeEventDedupeKey({
+    sessionId: input.sessionId,
+    agentId: input.agentId,
+    role: input.role,
+    type: input.type,
+  });
+
+  const row: Record<string, unknown> = {
     session_id: input.sessionId,
     runtime_id: input.runtimeId ?? null,
     agent_id: input.agentId,
@@ -112,42 +146,64 @@ export async function insertBridgeEvent(input: BridgeEventInput) {
     job_id: input.jobId ?? null,
     category: input.category ?? null,
   };
+  // Only set event_dedupe_key for content events (receipt_reference stays null)
+  if (dedupeKey) {
+    row.event_dedupe_key = dedupeKey;
+  }
+
   const supabase = getSupabaseAdmin();
+  const selectFields = 'id, session_id, runtime_id, agent_id, role, type, event_type, payload, payload_hash, event_dedupe_key, metadata, source, dry_run, job_id, category, created_at';
   const { data, error } = await supabase
     .from('agent_bridge_events')
     .insert(row)
-.select('id, session_id, runtime_id, agent_id, role, type, event_type, payload, payload_hash, metadata, source, dry_run, job_id, category, created_at')
+    .select(selectFields)
     .single();
-  if (error) throw new Error(error.message);
 
-  if (input.runtimeId) {
-    const runtimeMetadata = {
-      ...(input.metadata ?? {}),
-      source: input.source || 'external-runtime',
-    };
-    const { error: runtimeError } = await supabase
-      .from('external_agent_runtimes')
-      .upsert({
-        runtime_id: input.runtimeId,
-        agent_id: input.agentId,
-        role: input.role,
-        category: input.category ?? null,
-        endpoint: input.source || null,
-        status: 'active',
-        metadata: runtimeMetadata,
-        last_seen_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'runtime_id' });
-    if (runtimeError) throw new Error(runtimeError.message);
+  if (!error && data) {
+    if (input.runtimeId) {
+      const runtimeMetadata = {
+        ...(input.metadata ?? {}),
+        source: input.source || 'external-runtime',
+      };
+      const { error: runtimeError } = await supabase
+        .from('external_agent_runtimes')
+        .upsert({
+          runtime_id: input.runtimeId,
+          agent_id: input.agentId,
+          role: input.role,
+          category: input.category ?? null,
+          endpoint: input.source || null,
+          status: 'active',
+          metadata: runtimeMetadata,
+          last_seen_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'runtime_id' });
+      if (runtimeError) throw new Error(runtimeError.message);
+    }
+    return { ...data, deduped: false };
   }
 
-  return data;
+  // Handle duplicate key conflict on event_dedupe_key
+  if (error && dedupeKey && error.message?.includes('duplicate key') || (error as any)?.code === '23505') {
+    // Select existing row by dedupe key and return it as a deduped result
+    const { data: existing } = await supabase
+      .from('agent_bridge_events')
+      .select(selectFields)
+      .eq('event_dedupe_key', dedupeKey)
+      .maybeSingle();
+    if (existing) {
+      return { ...existing, deduped: true };
+    }
+  }
+
+  if (error) throw new Error(error.message);
+  throw new Error('insert_failed_empty_response');
 }
 
 export async function listBridgeEvents(filters: { sessionId?: string | null; role?: string | null; agentId?: string | null; runtimeId?: string | null; jobId?: string | null; category?: string | null; limit?: number }) {
   let q = getSupabaseAdmin()
     .from('agent_bridge_events')
-.select('id, session_id, runtime_id, agent_id, role, type, event_type, payload, payload_hash, metadata, source, dry_run, job_id, category, created_at')
+    .select('id, session_id, runtime_id, agent_id, role, type, event_type, payload, payload_hash, event_dedupe_key, metadata, source, dry_run, job_id, category, created_at')
     .order('created_at', { ascending: false })
     .limit(Math.min(Math.max(filters.limit ?? 50, 1), 200));
   if (filters.sessionId) q = q.eq('session_id', filters.sessionId);
