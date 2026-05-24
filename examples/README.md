@@ -1,39 +1,51 @@
-# ArcLayer Production Bot Architecture VPS
+# External PM2 Market Agent Bridge
 
-This example reflects the multi-agent prediction market setup deployed on VPS pm2 the production cluster.
+Multi-agent prediction market bot running on VPS via PM2.
 
-## Architecture Overview
+## Architecture
 
-The system runs 4 independent agents orchestrated via PM2. Each agent operates autonomously using a dedicated LLM inference pipeline.
+4 independent agents, each with dedicated LLM and wallet config:
 
-### Agents
-| Agent | Role | Model | LLM Base URL |
-| :--- | :--- | :--- | :--- |
-| **Analyzer** | Market Data Processing | `deepseek/deepseek-v4-pro` | `https://api.pioneer.ai/v1` |
-| **Evaluator** | Market Condition Scoring | `deepseek/deepseek-v4-pro` | `https://api.blockchain.info/ai/api/v1` |
-| **Executor** | Order Routing/Execution | `XiaomiMiMo/MiMo-V2.5-Pro` | `https://api.pioneer.ai/v1` |
-| **Oracle** | Data Truth Sourcing | `XiaomiMiMo/MiMo-V2.5-Pro` | `https://api.pioneer.ai/v1` |
+| Bot | Role | Mode |
+|:---|:---|:---|
+| **Oracle** | Fetches raw Polymarket BTC 15m feed | `RUN_FOREVER=true` |
+| **Analyzer** | LLM market analysis | `RUN_FOREVER=true` |
+| **Evaluator** | Risk evaluation | `RUN_FOREVER=true` |
+| **Executor** | DRY_RUN execution intent | `RUN_FOREVER=true` |
 
-## Deployment Strategy
+## Modes
 
-*   **Process Manager**: PM2 handles process lifecycle, auto-restart on crash, and logging.
-*   **Isolation**: Each agent runs in its own directory with a private `.env` file containing its specific API credentials and Controller Private Key.
-*   **Inference Pipeline**: All bots utilize a shared `shared/llm-client.js` module that implements:
-    *   `AbortController` for strict request timeout management.
-    *   Regex-based `extractJson` to sanitize raw LLM text streams into structured output.
-    *   Fallback logic (configurable via `USE_LLM` flag).
-*   **Verification**: All agents publish metadata via `arclayers.xyz` using Agent Manifest V1, signed by their respective on-chain controllers.
-
-## Configuration Template
+### Independent (default)
+4 separate PM2 processes, each runs forever. Oracle does NOT spawn children.
 
 ```bash
-# Template for /root/arclayer-llm-pm2-bots-role-x402/{bot-name}/.env
-LLM_BASE_URL=...
-LLM_MODEL=...
-LLM_API_KEY=...
-USE_LLM=true
-# Private Keys managed separately in secure environment files
+pm2 start ecosystem.independent.config.cjs
 ```
 
-## Security Note
-Private keys and API credentials are never committed to the repository. They are stored in isolated environment files within the deployment environment.
+### Chain
+1 PM2 process (oracle only). Oracle spawns children per cycle via spawnSync.
+
+```bash
+pm2 start ecosystem.chain.config.cjs
+```
+
+Do not run both modes at the same time.
+
+## Env loading
+
+Each bot loads `.env.common` first, then `.env.<role>` overrides it.
+PM2 ecosystem config controls mode keys (`EVENT_CHAIN_ENABLED`, `RUN_FOREVER`).
+
+```bash
+cp .env.common.example .env.common
+cp .env.oracle.example .env.oracle
+cp .env.analyzer.example .env.analyzer
+cp .env.evaluator.example .env.evaluator
+cp .env.executor.example .env.executor
+```
+
+## Security
+
+- `.env.*` gitignored; only `.env.*.example` tracked.
+- No API keys, private keys, or wallet keys in repo.
+- Each bot uses unique `ARCLAYER_AGENT_ID`, `RUNTIME_ID`, and x402 wallet.
