@@ -117,7 +117,8 @@ ${JSON.stringify(oraclePayload).slice(0, 12000)}
     try {
       const payment = await payForBridgeAccess({
         sessionId: session.sessionId,
-        scope: process.env.X402_SCOPE || "summary"
+        scope: process.env.X402_SCOPE || "summary",
+        role: "analyzer"
       });
 
       if (!payment.ok) {

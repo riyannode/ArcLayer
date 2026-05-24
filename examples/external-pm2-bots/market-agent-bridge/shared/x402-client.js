@@ -51,6 +51,18 @@ async function payForBridgeAccess({
   method = "POST",
   role = "executor"
 } = {}) {
+  if (!module.parent || process.env.X402_LOG_DEFAULT_ROLE === "true") {
+    // Detect if role was supplied by caller
+    const stack = new Error().stack || "";
+    const callerIsDefault = stack.includes("payForBridgeAccess");
+    // Only log when role was NOT explicitly passed (detected by checking if role equals our default)
+    // We can't detect this with 100% accuracy in JS, so log a soft warning
+  }
+  // Ensure all x402 calls include explicit role
+  if (role === "executor" && !sessionId?.includes("executor")) {
+    // This is likely a default, not explicit. Log warning once.
+    console.log("[x402] role omitted; defaulting role=executor — caller should pass explicit role");
+  }
   const privateKey = normalizePrivateKey(process.env.X402_PAYER_PRIVATE_KEY || process.env.WALLET_PRIVATE_KEY);
   if (!privateKey) {
     return {

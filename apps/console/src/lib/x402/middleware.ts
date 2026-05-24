@@ -453,13 +453,25 @@ async function handleNative(
 ): Promise<NextResponse> {
   const requirements = buildNativeRequirements(opts);
   const reqBody = await req.clone().json().catch(() => ({} as Record<string, unknown>));
-  const scope = typeof reqBody.scope === 'string' && reqBody.scope.trim().length > 0 ? reqBody.scope.trim() : 'summary';
+  const scope = typeof reqBody.scope === 'string' && reqBody.scope.trim().length > 0 ? reqBody.scope.trim() : null;
   const inputSessionId = typeof reqBody.sessionId === 'string' && reqBody.sessionId.trim().length > 0 ? reqBody.sessionId.trim() : null;
-  const role = typeof reqBody.role === 'string' && reqBody.role.trim().length > 0 ? reqBody.role.trim().toLowerCase() : 'executor';
+  const role = typeof reqBody.role === 'string' && ['analyzer', 'evaluator', 'executor'].includes(reqBody.role.trim().toLowerCase()) ? reqBody.role.trim().toLowerCase() : null;
 
   if (!inputSessionId) {
     return NextResponse.json(
       { ok: false, error: 'invalid_session', message: 'sessionId is required for x402 bridge-access payments.' },
+      { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+  if (!scope) {
+    return NextResponse.json(
+      { ok: false, error: 'invalid_scope', message: 'scope is required and must be non-empty for x402 bridge-access payments.' },
+      { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+    );
+  }
+  if (!role) {
+    return NextResponse.json(
+      { ok: false, error: 'invalid_role', message: 'role must be one of: analyzer, evaluator, executor.' },
       { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
     );
   }
