@@ -166,7 +166,8 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const updatePayload: Record<string, unknown> = {
     complete_tx: completeTx,
     settlement_status: ERC8183JobStatus.Completed,
-    status: 'submitted',
+    status: 'completed',
+    completed_at: new Date().toISOString(),
   };
 
   if (input.evaluation !== undefined) updatePayload.evaluation = input.evaluation;
