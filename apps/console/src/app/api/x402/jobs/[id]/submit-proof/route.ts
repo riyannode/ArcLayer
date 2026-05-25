@@ -52,4 +52,5 @@ export const POST = withX402(handler, {
   amount: '1',
   resource: '/api/x402/jobs/[id]/submit-proof',
   description: 'Submit work proof for a completed job',
+  requireResourceContext: false,
 });
