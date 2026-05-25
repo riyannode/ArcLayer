@@ -233,12 +233,14 @@ export function useX402AntiSpamPay({ resource, onProgress }: UseX402AntiSpamPayO
       return { ok: false, error: `Payment rejected: ${reason}` };
     }
 
-    // PAYMENT-RESPONSE header carries txHash
+    // PAYMENT-RESPONSE header carries txHash (base64url-encoded by middleware)
     const respHeader = settleRes.headers.get('PAYMENT-RESPONSE');
     let txHash: string | undefined;
     if (respHeader) {
       try {
-        const parsed = JSON.parse(atob(respHeader));
+        const normalized = respHeader.replace(/-/g, '+').replace(/_/g, '/');
+        const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+        const parsed = JSON.parse(atob(padded));
         txHash = parsed?.transaction || parsed?.txHash;
       } catch {
         /* ignore */

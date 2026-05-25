@@ -57,4 +57,5 @@ export const POST = withX402(handler, {
   amount: '20000',
   resource: '/api/x402/jobs/[id]/verify',
   description: 'Verify work result for a completed job',
+  requireResourceContext: false,
 });

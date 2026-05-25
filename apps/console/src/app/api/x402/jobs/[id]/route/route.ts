@@ -116,4 +116,5 @@ export const POST = withX402(handler, {
   amount: '1',
   resource: '/api/x402/jobs/[id]/route',
   description: 'Route a job to the best available agent via Apolo deterministic matcher',
+  requireResourceContext: false,
 });

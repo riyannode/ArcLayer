@@ -44,4 +44,5 @@ export const POST = withX402(handler, {
   amount: '1',
   resource: '/api/x402/jobs/quote',
   description: 'Request a price quote for an ArcLayer job',
+  requireResourceContext: false,
 });

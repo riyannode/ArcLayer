@@ -136,4 +136,6 @@ export const POST = withX402(postHandler, {
   amount: '1',
   resource: '/api/a2a/manifest',
   description: 'Publish or update an A2A agent manifest — anti-spam fee',
+  requireResourceContext: false,
+  settleBeforeHandler: true,
 });
