@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { PredictionAgentLiveRail } from './PredictionAgentLiveRail';
+import AgentCards from './prediction-agents/AgentCards';
+import NodeGraph from './prediction-agents/NodeGraph';
+import type { PredictionAgentInput } from './prediction-agents/predictionAgentTypes';
 
 type Agent = {
   agentId: string;
@@ -41,18 +43,6 @@ type AgentLiveEvent = {
   createdAt: string;
 };
 
-function short(v?: string | null) {
-  if (!v) return '—';
-  return v.length > 24 ? `${v.slice(0, 14)}…${v.slice(-6)}` : v;
-}
-
-function syncedLabel(updatedAt?: string) {
-  if (!updatedAt) return 'unsynced';
-  const d = new Date(updatedAt);
-  if (Number.isNaN(d.getTime())) return 'unsynced';
-  return `synced ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-}
-
 function isOnline(p?: AgentPresence) {
   if (!p?.lastHeartbeatAt || p.status !== 'online') return false;
   const t = new Date(p.lastHeartbeatAt).getTime();
@@ -74,6 +64,32 @@ function ageLabel(value?: string | null) {
   const min = Math.floor(sec / 60);
   if (min < 60) return `${min}m ago`;
   return `${Math.floor(min / 60)}h ago`;
+}
+
+function toPredictionAgentInputs(
+  agents: Agent[],
+  presenceByAgent: Map<string, AgentPresence>,
+  latestEventByAgent: Map<string, AgentLiveEvent>,
+): PredictionAgentInput[] {
+  return agents.map((agent) => {
+    const presence = presenceByAgent.get(agent.agentId);
+    const latest = latestEventByAgent.get(agent.agentId);
+    const online = isOnline(presence);
+    const recentX402 = latest?.eventType === 'x402_paid' && isRecentEvent(latest);
+
+    return {
+      id: agent.agentId,
+      agentId: agent.agentId,
+      name: agent.name || agent.agentId,
+      role: agent.role || agent.roles?.[0]?.name || 'agent',
+      category: recentX402 ? 'paid' : agent.x402?.enabled ? 'x402' : 'registered',
+      endpoint: agent.endpoint ?? null,
+      caps: agent.capabilities || [],
+      event: latest?.summary || latest?.title || presence?.lastEventSummary || presence?.lastEventType || 'waiting',
+      seen: ageLabel(presence?.lastHeartbeatAt ?? agent.updatedAt ?? presence?.updatedAt),
+      status: online ? 'active' : agent.updatedAt ? 'synced' : 'unsynced',
+    };
+  });
 }
 
 export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots' }: { category?: string }) {
@@ -152,62 +168,25 @@ export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots
     }
     return map;
   }, [events]);
+  const uiAgents = useMemo(
+    () => toPredictionAgentInputs(agents, presenceByAgent, latestEventByAgent),
+    [agents, presenceByAgent, latestEventByAgent],
+  );
 
   return (
-    <section className="rounded-xl border border-white/10 bg-[#0A0A0A]/80 p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Registered Prediction Agents</div>
-          <div className="mt-1 text-xs text-[#EAE4D8]/55">{agents.length} registered for {category}</div>
-        </div>
-
-        <a href="/register/autonomous?category=prediction-market-bots" className="rounded-sm border border-[#C5A67C]/30 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#C5A67C]">
+    <section className="space-y-4">
+      <div className="flex justify-end">
+        <a href="/register/autonomous?category=prediction-market-bots" className="rounded-sm border border-[#ff9100]/30 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#ff9100]">
           Register Bot →
         </a>
       </div>
 
-      <PredictionAgentLiveRail latestEvent={events[0] ?? null} />
-
       {error ? (
         <div className="rounded border border-red-400/20 bg-red-950/20 p-2 text-xs text-red-200">{error}</div>
-      ) : agents.length === 0 ? (
-        <div className="rounded border border-dashed border-white/10 bg-white/[0.02] p-3 text-center font-mono text-[11px] text-[#81796E]">No local registered agents found.</div>
-      ) : (
-        <div className="flex max-h-[210px] gap-2 overflow-x-auto pb-1">
-          {agents.map((agent) => {
-            const p = presenceByAgent.get(agent.agentId);
-            const latest = latestEventByAgent.get(agent.agentId);
-            const online = isOnline(p);
-            const recentX402 = latest?.eventType === 'x402_paid' && isRecentEvent(latest);
-            return (
-              <article key={agent.agentId} className={[
-                'min-w-[185px] max-w-[215px] rounded border bg-white/[0.03] p-3 transition',
-                recentX402 ? 'border-emerald-300/60 shadow-[0_0_22px_rgba(52,211,153,0.25)] animate-pulse' : 'border-white/10',
-              ].join(' ')}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-[#F5F0E5]">{agent.name || short(agent.agentId)}</div>
-                    <div className="mt-1 truncate font-mono text-[10px] uppercase text-[#81796E]">{agent.role || agent.roles?.[0]?.name || 'agent'}</div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className={online ? 'h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_12px_rgba(52,211,153,0.9)] animate-pulse' : 'h-2 w-2 rounded-full bg-white/20'} />
-                    {latest?.eventType === 'x402_paid' ? <span className="shrink-0 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 font-mono text-[9px] text-emerald-300">paid</span> : <span className="shrink-0 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2 py-0.5 font-mono text-[9px] text-emerald-300">{agent.x402?.enabled ? 'x402' : 'reg'}</span>}
-                  </div>
-                </div>
+      ) : null}
 
-                <div className="mt-3 space-y-1 font-mono text-[10px] text-[#8A8378]">
-                  <div className="truncate">id {short(agent.agentId)}</div>
-                  <div className="truncate">endpoint {short(agent.endpoint)}</div>
-                  <div className="truncate">caps {(agent.capabilities || []).slice(0, 2).join(', ') || '—'}</div>
-                  <div className="truncate text-[#A69D90]">event {latest?.summary || latest?.title || p?.lastEventSummary || 'waiting'}</div>
-                  <div className="truncate text-[#81796E]">seen {ageLabel(p?.lastHeartbeatAt)}</div>
-                  <div className="truncate text-[#A69D90]">{syncedLabel(agent.updatedAt)}</div>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
+      <NodeGraph agents={uiAgents} />
+      <AgentCards agents={uiAgents} />
     </section>
   );
 }
