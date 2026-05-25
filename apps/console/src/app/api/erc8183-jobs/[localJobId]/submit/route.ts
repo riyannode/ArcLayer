@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash } from 'node:crypto';
 import { keccak256, toBytes } from 'viem';
 import { CONTRACTS } from '@arclayer/sdk';
 import { getErc8183JobByLocalId } from '@/lib/erc8183-jobs/store';
