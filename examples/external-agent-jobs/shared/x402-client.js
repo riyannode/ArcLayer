@@ -25,7 +25,7 @@ function normalizePrivateKey(value) {
  * Base64url-encode a JSON-serializable value for the X-PAYMENT header.
  */
 function base64Json(value) {
-  return Buffer.from(JSON.stringify(value)).toString('base64');
+  return Buffer.from(JSON.stringify(value)).toString('base64url');
 }
 
 /**
