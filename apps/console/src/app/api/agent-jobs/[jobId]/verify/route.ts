@@ -4,17 +4,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAgentJob } from '@/lib/agent-jobs/store';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ jobId: string }> | { jobId: string } },
 ) {
   try {
-    const auth = req.headers.get('authorization');
-    const apiKey = process.env.ARCLAYER_API_KEY;
-    if (!auth || !apiKey || auth.replace('Bearer ', '').trim() !== apiKey.trim()) {
-      return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
-    }
+    const auth = await requireApiKey(req, API_KEY_SCOPES.JOBS_VERIFY);
+    if (auth.error) return auth.error;
 
     const { jobId } = await params;
     const body = await req.json().catch(() => ({}));
@@ -22,6 +20,9 @@ export async function POST(
 
     if (!verifierAgentId || typeof verifierAgentId !== 'string') {
       return NextResponse.json({ ok: false, error: 'verifierAgentId is required' }, { status: 400 });
+    }
+    if (verifierAgentId !== auth.key.agentId) {
+      return NextResponse.json({ ok: false, error: 'agent_id_mismatch' }, { status: 403 });
     }
     if (typeof approved !== 'boolean') {
       return NextResponse.json({ ok: false, error: 'approved must be a boolean' }, { status: 400 });

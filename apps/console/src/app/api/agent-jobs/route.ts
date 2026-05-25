@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAgentJob, listAgentJobs } from '@/lib/agent-jobs/store';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import type { ListAgentJobsFilter } from '@/lib/agent-jobs/store';
 
 export async function GET(req: NextRequest) {
@@ -44,11 +45,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = req.headers.get('authorization');
-    const apiKey = process.env.ARCLAYER_API_KEY;
-    if (!auth || !apiKey || auth.replace('Bearer ', '').trim() !== apiKey.trim()) {
-      return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
-    }
+    const auth = await requireApiKey(req, API_KEY_SCOPES.JOBS_CREATE);
+    if (auth.error) return auth.error;
 
     const body = await req.json().catch(() => ({}));
     const { jobType, buyerAgentId, inputPayload, priceAtomic, marketId, deadlineAt, metadata } = body;
@@ -61,6 +59,10 @@ export async function POST(req: NextRequest) {
     }
     if (!inputPayload || typeof inputPayload !== 'object') {
       return NextResponse.json({ ok: false, error: 'inputPayload is required and must be an object' }, { status: 400 });
+    }
+
+    if (buyerAgentId !== auth.key.agentId) {
+      return NextResponse.json({ ok: false, error: 'agent_id_mismatch', field: 'buyerAgentId' }, { status: 403 });
     }
 
     const job = await createAgentJob({
