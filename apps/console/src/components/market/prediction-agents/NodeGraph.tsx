@@ -1,64 +1,101 @@
-'use client';
+"use client";
 
-import type { BackendAgentLike } from './predictionAgentTypes';
-import { normalizeAgents } from './predictionAgentTypes';
+import { normalizeAgents, type BackendAgentLike } from "./predictionAgentTypes";
 
-const STEPS = ['intent', 'signal', 'risk', 'execution', 'receipt'];
+interface NodeGraphProps {
+  agents: BackendAgentLike[];
+  activeStepIndex?: number;
+}
 
-export default function NodeGraph({ agents, activeStepIndex = 4 }: { agents: BackendAgentLike[]; activeStepIndex?: number }) {
+const stepLabels = ["ORACLE", "ANALYZER", "EVALUATOR", "MARKET", "EXECUTOR"];
+
+export default function NodeGraph({ agents, activeStepIndex = 2 }: NodeGraphProps) {
   const normalizedAgents = normalizeAgents(agents);
-  const liveAgents = normalizedAgents.filter((agent) => agent.status === 'synced' || agent.status === 'active').length;
+
+  const nodes = stepLabels.map((label, index) => {
+    const agent = normalizedAgents.find((item) => item.role === label || item.role.startsWith(label));
+    const active = index <= activeStepIndex;
+
+    return {
+      label,
+      active,
+      agent,
+    };
+  });
 
   return (
-    <section className="rounded-xl border border-[#1b1c23] bg-[#05060a]/95 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_20px_70px_rgba(0,0,0,0.35)]">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <section className="relative overflow-hidden rounded-2xl border border-orange-500/20 bg-[#070707] p-5 shadow-[0_0_50px_rgba(255,145,0,0.05)]">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,145,0,0.12),transparent_35%),radial-gradient(circle_at_80%_30%,rgba(255,255,255,0.06),transparent_28%)]" />
+
+      <div className="relative z-10 mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#ff9100]">Live Node Graph</div>
-          <div className="mt-1 text-xs text-zinc-500">A2A prediction-market decision flow synced from existing backend APIs</div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-orange-400/80">
+            Live Node Graph
+          </p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-zinc-100">
+            Prediction Market Agent Mesh
+          </h2>
         </div>
-        <div className="flex gap-2 font-mono text-[10px] uppercase tracking-[0.16em]">
-          <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-emerald-300">{liveAgents} live</span>
-          <span className="rounded-full border border-zinc-800 bg-zinc-950 px-3 py-1 text-zinc-500">{normalizedAgents.length} agents</span>
+        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+          {normalizedAgents.length} registered nodes
         </div>
       </div>
 
-      <div className="relative overflow-hidden rounded-lg border border-[#1b1c23] bg-[#090a0f]/80 p-4">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,145,0,0.11),transparent_30%),radial-gradient(circle_at_70%_60%,rgba(16,185,129,0.08),transparent_28%)]" />
-        <div className="relative grid gap-3 md:grid-cols-5">
-          {STEPS.map((step, index) => {
-            const active = index <= activeStepIndex;
-            return (
-              <div key={step} className="relative rounded-lg border border-[#20222b] bg-[#05060a]/85 p-3">
-                <div className={active ? 'mb-2 h-1 rounded-full bg-[#ff9100]' : 'mb-2 h-1 rounded-full bg-zinc-800'} />
-                <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">step {index + 1}</div>
-                <div className={active ? 'mt-1 text-sm font-semibold uppercase tracking-[0.12em] text-zinc-100' : 'mt-1 text-sm font-semibold uppercase tracking-[0.12em] text-zinc-600'}>{step}</div>
-                <div className="mt-2 text-[11px] leading-relaxed text-zinc-500">{describeStep(step)}</div>
+      <div className="relative z-10 grid gap-4 md:grid-cols-5">
+        {nodes.map((node, index) => (
+          <div key={node.label} className="relative">
+            {index < nodes.length - 1 ? (
+              <div className="pointer-events-none absolute left-[calc(50%+2rem)] top-8 hidden h-px w-[calc(100%-3rem)] bg-gradient-to-r from-orange-500/50 to-transparent md:block" />
+            ) : null}
+
+            <div
+              className={[
+                "relative min-h-[150px] rounded-xl border p-4 transition-all duration-300",
+                node.active
+                  ? "border-orange-500/40 bg-orange-500/[0.08] shadow-[0_0_24px_rgba(255,145,0,0.12)]"
+                  : "border-zinc-800 bg-zinc-950/60",
+              ].join(" ")}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span
+                  className={[
+                    "flex h-10 w-10 items-center justify-center rounded-full border font-mono text-xs font-bold",
+                    node.active
+                      ? "border-orange-400/50 bg-orange-400/10 text-orange-300"
+                      : "border-zinc-800 bg-zinc-900 text-zinc-600",
+                  ].join(" ")}
+                >
+                  {index + 1}
+                </span>
+                <span
+                  className={[
+                    "h-2.5 w-2.5 rounded-full",
+                    node.agent?.status === "synced" || node.agent?.status === "active"
+                      ? "bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.9)]"
+                      : "bg-zinc-700",
+                  ].join(" ")}
+                />
               </div>
-            );
-          })}
-        </div>
-      </div>
 
-      <div className="mt-3 grid gap-3 md:grid-cols-3">
-        {normalizedAgents.slice(0, 3).map((agent) => (
-          <div key={agent.id} className="rounded-lg border border-[#20222b] bg-[#090a0f]/75 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="truncate text-xs font-semibold text-zinc-200">{agent.name}</div>
-              <span className={agent.status === 'synced' || agent.status === 'active' ? 'h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.85)]' : 'h-2 w-2 rounded-full bg-zinc-700'} />
+              <div className="mt-4">
+                <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-orange-300">
+                  {node.label}
+                </div>
+                <div className="mt-2 truncate text-sm font-semibold text-zinc-100">
+                  {node.agent?.name ?? "Waiting Node"}
+                </div>
+                <div className="mt-2 line-clamp-2 text-xs leading-relaxed text-zinc-500">
+                  {node.agent?.event ?? "Waiting for registered prediction agent"}
+                </div>
+              </div>
+
+              <div className="mt-4 truncate font-mono text-[10px] text-zinc-600">
+                {node.agent?.endpoint ?? "external/pm2"}
+              </div>
             </div>
-            <div className="mt-2 truncate font-mono text-[10px] uppercase tracking-[0.16em] text-[#ff9100]">{agent.role}</div>
-            <div className="mt-2 truncate text-[11px] text-zinc-500">{agent.event}</div>
           </div>
         ))}
       </div>
     </section>
   );
-}
-
-function describeStep(step: string) {
-  if (step === 'intent') return 'external bot posts registered trading intent';
-  if (step === 'signal') return 'market signal is consumed from live page data';
-  if (step === 'risk') return 'agent confidence and limits are evaluated';
-  if (step === 'execution') return 'decision payload moves through A2A bridge';
-  return 'receipt and event history stay synced';
 }
