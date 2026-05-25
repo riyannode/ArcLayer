@@ -1,14 +1,30 @@
 "use client";
 
-import { normalizeAgents, type BackendAgentLike } from "./predictionAgentTypes";
+import { normalizeAgents, type AgentNode, type BackendAgentLike } from "./predictionAgentTypes";
 
 interface NodeGraphProps {
   agents: BackendAgentLike[];
   activeStepIndex?: number;
 }
 
+const FLOW_ROLE_ORDER = ["ORACLE", "ANALYZER", "EVALUATOR", "MARKET-AGENT", "AGENT", "EXECUTOR"];
+
+function flowIndex(agent: AgentNode): number {
+  const directIndex = FLOW_ROLE_ORDER.indexOf(agent.role);
+  if (directIndex >= 0) return directIndex;
+  return FLOW_ROLE_ORDER.length;
+}
+
+function orderFlowAgents(agents: AgentNode[]): AgentNode[] {
+  return [...agents].sort((a, b) => {
+    const roleDelta = flowIndex(a) - flowIndex(b);
+    if (roleDelta !== 0) return roleDelta;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 export default function NodeGraph({ agents }: NodeGraphProps) {
-  const normalizedAgents = normalizeAgents(agents).filter((agent) => agent.id && agent.name);
+  const normalizedAgents = orderFlowAgents(normalizeAgents(agents).filter((agent) => agent.id && agent.name));
   const liveCount = normalizedAgents.filter((agent) => agent.status === "synced" || agent.status === "active").length;
 
   return (
