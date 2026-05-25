@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { PredictionAgentLiveRail } from './PredictionAgentLiveRail';
 
 type Agent = {
   agentId: string;
@@ -166,7 +165,6 @@ export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots
         </a>
       </div>
 
-      <PredictionAgentLiveRail latestEvent={events[0] ?? null} />
 
       {error ? (
         <div className="rounded border border-red-400/20 bg-red-950/20 p-2 text-xs text-red-200">{error}</div>

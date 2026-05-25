@@ -6,12 +6,6 @@ if (!token) {
   process.exit(1);
 }
 
-const defaults = [
-  ['19803', 'ArcLayer Prediction Analyzer'],
-  ['19804', 'ArcLayer Prediction Evaluator'],
-  ['19805', 'ArcLayer Prediction Executor'],
-  ['19806', 'ArcLayer Prediction Oracle'],
-];
 
 const rawAgentIds = process.env.PREDICTION_AGENT_IDS?.trim() || '';
 const bots = rawAgentIds
@@ -25,7 +19,14 @@ const bots = rawAgentIds
       })
       .filter(([agentId]) => agentId)
       .map(([agentId, name]) => [agentId, name || `Agent ${agentId}`])
-  : defaults;
+  : [];
+
+if (bots.length === 0) {
+  console.error('PREDICTION_AGENT_IDS is required and must include at least one agent id (format: "id" or "id:name", comma-separated)');
+  process.exit(1);
+}
+
+
 
 async function post(path, body) {
   const res = await fetch(`${origin}${path}`, {
