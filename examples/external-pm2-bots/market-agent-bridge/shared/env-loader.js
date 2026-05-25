@@ -3,7 +3,6 @@ const fs = require("node:fs");
 const dotenv = require("dotenv");
 
 const RUNTIME_ENV_KEYS = [
-  "EVENT_CHAIN_ENABLED",
   "RUN_FOREVER",
   "STARTUP_DELAY_MS",
   "BOT_ENV_FILE",
