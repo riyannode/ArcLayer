@@ -297,6 +297,102 @@ export async function attachErc8183CompleteTx(input: {
   if (error) throw new Error(`attachErc8183CompleteTx failed: ${error.message}`);
 }
 
+// ─── Off-chain worker metadata ───────────────────────────────────────────────
+
+/**
+ * claimErc8183Job — off-chain worker metadata claim.
+ *
+ * Allowed only when erc8183_status = 'Funded' and status = 'created'.
+ * Sets status='claimed', worker_id, provider_agent_id, claimed_at, claim_expires_at.
+ * This is off-chain metadata only — the on-chain escrow is already funded.
+ */
+export async function claimErc8183Job(input: {
+  localJobId: string;
+  workerId: string;
+  providerAgentId: string;
+  claimTtlSeconds?: number;
+}): Promise<void> {
+  const db = ensureDb();
+  const now = new Date().toISOString();
+  const claimExpiresAt = new Date(
+    Date.now() + (input.claimTtlSeconds ?? 300) * 1000,
+  ).toISOString();
+
+  const { error } = await db
+    .from('agent_jobs')
+    .update({
+      status: 'claimed',
+      worker_id: input.workerId,
+      provider_agent_id: input.providerAgentId,
+      claimed_at: now,
+      claim_expires_at: claimExpiresAt,
+    })
+    .eq('job_id', input.localJobId)
+    .eq('settlement_mode', 'erc8183_escrow')
+    .eq('erc8183_status', 'Funded')
+    .eq('status', 'created');
+
+  if (error) {
+    throw new Error(`claimErc8183Job failed: ${error.message}`);
+  }
+
+  // Check if the update actually matched a row (atomic guard)
+  const { data: check } = await db
+    .from('agent_jobs')
+    .select('status, worker_id')
+    .eq('job_id', input.localJobId)
+    .single();
+
+  if (!check || check.status !== 'claimed' || check.worker_id !== input.workerId) {
+    throw new Error(
+      'erc8183_job_not_claimable — job must be in Funded/created state',
+    );
+  }
+}
+
+/**
+ * markErc8183JobRunning — off-chain worker metadata transition.
+ *
+ * Allowed only when status = 'claimed' and worker_id matches the caller.
+ * Sets status = 'running', started_at.
+ * This is off-chain metadata only.
+ */
+export async function markErc8183JobRunning(input: {
+  localJobId: string;
+  workerId: string;
+}): Promise<void> {
+  const db = ensureDb();
+  const now = new Date().toISOString();
+
+  const { error } = await db
+    .from('agent_jobs')
+    .update({
+      status: 'running',
+      started_at: now,
+    })
+    .eq('job_id', input.localJobId)
+    .eq('settlement_mode', 'erc8183_escrow')
+    .eq('status', 'claimed')
+    .eq('worker_id', input.workerId);
+
+  if (error) {
+    throw new Error(`markErc8183JobRunning failed: ${error.message}`);
+  }
+
+  // Verify the update took effect
+  const { data: check } = await db
+    .from('agent_jobs')
+    .select('status')
+    .eq('job_id', input.localJobId)
+    .single();
+
+  if (!check || check.status !== 'running') {
+    throw new Error(
+      'erc8183_job_not_running — job must be claimed by the same worker',
+    );
+  }
+}
+
 // ─── Status ───────────────────────────────────────────────────────────────────
 
 export async function updateErc8183Status(input: {
