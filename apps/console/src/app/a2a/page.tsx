@@ -226,10 +226,11 @@ function A2ADashboardPage() {
     });
   }, []);
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (options?: { summaryOnly?: boolean }) => {
     try {
+      const overviewPath = options?.summaryOnly ? '/overview/summary' : '/overview';
       const [ovRes, ocRes, fdRes, regRes] = await Promise.all([
-        fetch(indexerUrl('/overview')),
+        fetch(indexerUrl(overviewPath)),
         fetch('/api/a2a/status'),
         fetch(indexerUrl('/autonomous-feed?limit=50')),
         fetch('/api/a2a/agents'),
@@ -266,7 +267,14 @@ function A2ADashboardPage() {
         signalCount || prev[prev.length - 1] || 0,
       ]);
 
-      setOverview(ovData);
+      if (options?.summaryOnly) {
+        setOverview((prev) => {
+          if (!prev) return prev;
+          return { ...prev, summary: ovData.summary };
+        });
+      } else {
+        setOverview(ovData);
+      }
       if (ocData) setOnchain(ocData);
       setFeed(fdData);
       setRegisteredAgents(Array.isArray(regData.agents) ? regData.agents : []);
@@ -278,10 +286,10 @@ function A2ADashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const loadVisible = () => { if (!document.hidden && !cancelled) void fetchData(); };
-    void fetchData();
+    const loadVisible = () => { if (!document.hidden && !cancelled) void fetchData({ summaryOnly: true }); };
+    void fetchData({ summaryOnly: false });
     const interval = setInterval(loadVisible, 60000);
-    const onVisibility = () => { if (!document.hidden) void fetchData(); };
+    const onVisibility = () => { if (!document.hidden) void fetchData({ summaryOnly: true }); };
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       cancelled = true;
