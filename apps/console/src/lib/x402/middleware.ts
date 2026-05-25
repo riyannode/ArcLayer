@@ -133,6 +133,8 @@ function requiresNativeResourceContext(opts: X402MiddlewareOptions): boolean {
     (resource.includes('/api/agent-jobs/') && resource.includes('/settle'))
   );
 }
+/** @internal test export — do not use in production */
+export const testRequiresNativeResourceContext = requiresNativeResourceContext;
 
 
 async function emitX402LiveEvent(params: {
