@@ -39,6 +39,24 @@ test("projectJobsFromEvents sums JobFunded.amount and marks funded status", () =
   assert.equal(jobs[0].fundedAmount, "1000");
   assert.equal(jobs[0].status, 1);
   assert.equal(jobs[0].statusLabel, "Funded");
+  assert.equal(jobs[0].description, "job");
+});
+
+
+
+test("projectJobsFromEvents defaults missing JobCreated description to empty string", () => {
+  const jobs = projectJobsFromEvents([
+    event("JobCreated", {
+      client,
+      provider,
+      evaluator,
+      expiredAt: 0n,
+      hook: "0x0000000000000000000000000000000000000000",
+    }),
+  ]);
+
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].description, "");
 });
 
 test("projectJobsFromEvents preserves ERC-8183 status label order", () => {
