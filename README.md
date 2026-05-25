@@ -74,7 +74,6 @@ Full lifecycle: `create → claim → running → submit → verify → settle`.
 - **Atomic job claim** via `FOR UPDATE SKIP LOCKED` — safe for 24/7 workers (multiple workers compete atomically).
 - **Duplicate settlement blocked** by `x402_resource_payments` idempotency key.
 - **Job settlement** uses Arc native x402 only — Circle Gateway, cooldown, and x402 job classification are deferred to roadmap.
-- **PR #204 x402 bridge** behavior remains unchanged.
 
 See `examples/external-agent-jobs/README.md` for detailed usage.
 
