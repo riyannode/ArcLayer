@@ -4,14 +4,12 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { claimAgentJob } from '@/lib/agent-jobs/store';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 
 export async function POST(req: NextRequest) {
   try {
-    const auth = req.headers.get('authorization');
-    const apiKey = process.env.ARCLAYER_API_KEY;
-    if (!auth || !apiKey || auth.replace('Bearer ', '').trim() !== apiKey.trim()) {
-      return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
-    }
+    const auth = await requireApiKey(req, API_KEY_SCOPES.JOBS_CLAIM);
+    if (auth.error) return auth.error;
 
     const body = await req.json().catch(() => ({}));
     const { jobType, workerId, providerAgentId, claimTtlSeconds } = body;
@@ -21,6 +19,10 @@ export async function POST(req: NextRequest) {
     }
     if (!providerAgentId || typeof providerAgentId !== 'string') {
       return NextResponse.json({ ok: false, error: 'providerAgentId is required' }, { status: 400 });
+    }
+
+    if (workerId !== auth.key.agentId || providerAgentId !== auth.key.agentId) {
+      return NextResponse.json({ ok: false, error: 'agent_id_mismatch' }, { status: 403 });
     }
 
     const job = await claimAgentJob({

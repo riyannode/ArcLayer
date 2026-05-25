@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402/middleware';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { getAgentJob, markJobSettlementPending, markJobSettled } from '@/lib/agent-jobs/store';
 
 export const POST = (() => {
@@ -25,6 +26,9 @@ export const POST = (() => {
     if (!jobId) {
       return NextResponse.json({ ok: false, error: 'invalid_job_id' }, { status: 400 });
     }
+
+    const auth = await requireApiKey(req, API_KEY_SCOPES.JOBS_SETTLE);
+    if (auth.error) return auth.error;
 
     const job = await getAgentJob(jobId);
     if (!job) {
@@ -43,6 +47,9 @@ export const POST = (() => {
     const buyerAgentId = typeof body.buyerAgentId === 'string' ? body.buyerAgentId.trim() : null;
     if (!buyerAgentId) {
       return NextResponse.json({ ok: false, error: 'buyerAgentId is required' }, { status: 400 });
+    }
+    if (buyerAgentId !== auth.key.agentId) {
+      return NextResponse.json({ ok: false, error: 'agent_id_mismatch', field: 'buyerAgentId' }, { status: 403 });
     }
     if (job.buyer_agent_id !== buyerAgentId) {
       return NextResponse.json({ ok: false, error: 'buyer_mismatch' }, { status: 403 });
