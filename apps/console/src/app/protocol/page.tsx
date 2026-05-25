@@ -81,12 +81,17 @@ export default function Dashboard() {
       if (options?.silent) setIsRefreshing(true);
       else setIsLoading(true);
       setError(null);
+      const overviewPath = options?.silent ? '/overview/summary' : '/overview';
       const [next, eventsRes, rootRes] = await Promise.all([
-        fetchIndexerJson<DashboardOverview>('/overview'),
+        fetchIndexerJson<DashboardOverview>(overviewPath),
         fetchIndexerJson<JobEvent[]>('/job-events').catch(() => [] as JobEvent[]),
         fetchIndexerJson<{ lastSyncedBlock?: string; eventCount?: number }>('/').catch(() => ({} as { lastSyncedBlock?: string })),
       ]);
-      setOverview(next);
+      if (options?.silent) {
+        setOverview((prev) => (prev ? { ...prev, summary: next.summary } : prev));
+      } else {
+        setOverview(next);
+      }
       setEvents(Array.isArray(eventsRes) ? eventsRes.slice(0, 20) : []);
       if (rootRes?.lastSyncedBlock) setLastSyncedBlock(BigInt(rootRes.lastSyncedBlock));
     } catch (nextError) {
