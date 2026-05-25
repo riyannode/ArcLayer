@@ -268,11 +268,10 @@ function A2ADashboardPage() {
       ]);
 
       if (options?.summaryOnly) {
-        setOverview((prev) => prev ? { ...prev, summary: ovData.summary } : ({
-          summary: ovData.summary,
-          jobs: [],
-          proofs: [],
-        } as Overview));
+        setOverview((prev) => {
+          if (!prev) return prev;
+          return { ...prev, summary: ovData.summary };
+        });
       } else {
         setOverview(ovData);
       }
