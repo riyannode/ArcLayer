@@ -45,4 +45,5 @@ export const POST = withX402(handler, {
   amount: '1',
   resource: '/api/x402/jobs/create',
   description: 'Create a new job on ArcLayer marketplace',
+  requireResourceContext: false,
 });
