@@ -5,6 +5,7 @@ import { requireApiKey } from '@/lib/a2a/auth';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { ERC8183JobStatus, extractJobCompletedFromReceipt, getERC8183Job } from '@/lib/a2a/onchain';
+import { withA2AJobNamespace } from '@/lib/a2a/jobs';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -181,7 +182,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   return NextResponse.json({
     ok: true,
-    job: data,
+    job: withA2AJobNamespace(data as any),
     receipt: {
       jobId: params.id,
       onchainJobId,
