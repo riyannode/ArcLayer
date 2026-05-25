@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAgentJob } from '@/lib/agent-jobs/store';
+import { verifyAgentJob, withAgentJobNamespace } from '@/lib/agent-jobs/store';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 
 export async function POST(
@@ -36,7 +36,7 @@ export async function POST(
       metadata: metadata ?? undefined,
     });
 
-    return NextResponse.json({ ok: true, job });
+    return NextResponse.json({ ok: true, job: withAgentJobNamespace(job) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown';
     console.error('[agent-jobs] POST /verify failed:', msg);

@@ -95,6 +95,30 @@ export interface ListAgentJobsFilter {
   offset?: number;
 }
 
+/**
+ * Off-chain agent_jobs namespace metadata.
+ * Added to API responses to distinguish ArcLayer off-chain agent_jobs
+ * from ERC-8183 on-chain AgenticCommerce jobs.
+ */
+export type WithAgentJobNamespace<T> = T & {
+  job_source: 'offchain_agent_jobs';
+  status_namespace: 'agent_jobs';
+  settlement_rail: 'x402_arc_native';
+  lifecycle_label: 'ArcLayer off-chain job';
+  settlement_label: 'x402 Arc-native settlement';
+};
+
+export function withAgentJobNamespace<T extends AgentJob>(job: T): WithAgentJobNamespace<T> {
+  return {
+    ...job,
+    job_source: 'offchain_agent_jobs',
+    status_namespace: 'agent_jobs',
+    settlement_rail: 'x402_arc_native',
+    lifecycle_label: 'ArcLayer off-chain job',
+    settlement_label: 'x402 Arc-native settlement',
+  };
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**

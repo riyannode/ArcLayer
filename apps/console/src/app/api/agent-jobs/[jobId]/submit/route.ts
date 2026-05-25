@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { submitAgentJob } from '@/lib/agent-jobs/store';
+import { submitAgentJob, withAgentJobNamespace } from '@/lib/agent-jobs/store';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 
 export async function POST(
@@ -29,7 +29,7 @@ export async function POST(
     }
 
     const job = await submitAgentJob({ jobId, workerId, resultPayload, proofPayload: proofPayload ?? undefined });
-    return NextResponse.json({ ok: true, job });
+    return NextResponse.json({ ok: true, job: withAgentJobNamespace(job) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown';
     console.error('[agent-jobs] POST /submit failed:', msg);
