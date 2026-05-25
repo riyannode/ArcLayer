@@ -61,8 +61,10 @@ function pickNativeRequirement(accepts) {
         a &&
         a.scheme === 'exact' &&
         String(a.network || '').includes('5042002') &&
-        (!a.extra?.transferMethod || a.extra.transferMethod === 'eip3009'),
-    ) || accepts[0] || null
+        (!a.extra?.transferMethod || a.extra.transferMethod === 'eip3009') &&
+        a.asset &&
+        a.payTo
+    ) || null
   );
 }
 
