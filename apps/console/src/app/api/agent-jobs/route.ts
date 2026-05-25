@@ -4,7 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAgentJob, listAgentJobs } from '@/lib/agent-jobs/store';
+import { createAgentJob, listAgentJobs, withAgentJobNamespace } from '@/lib/agent-jobs/store';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import type { ListAgentJobsFilter } from '@/lib/agent-jobs/store';
 
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     if (offset) filter.offset = parseInt(offset, 10);
 
     const jobs = await listAgentJobs(filter);
-    return NextResponse.json({ ok: true, jobs });
+    return NextResponse.json({ ok: true, jobs: jobs.map(withAgentJobNamespace) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown';
     console.error('[agent-jobs] GET failed:', msg);
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       metadata: metadata ?? undefined,
     });
 
-    return NextResponse.json({ ok: true, job }, { status: 201 });
+    return NextResponse.json({ ok: true, job: withAgentJobNamespace(job) }, { status: 201 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown';
     console.error('[agent-jobs] POST failed:', msg);

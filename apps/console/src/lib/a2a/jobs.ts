@@ -37,6 +37,30 @@ export type A2AJob = {
   proof_uri?: string | null;
 };
 
+/**
+ * ERC-8183 on-chain job namespace metadata.
+ * Added to API responses to distinguish ERC-8183 on-chain AgenticCommerce jobs
+ * from ArcLayer off-chain agent_jobs.
+ */
+export type WithERC8183JobNamespace<T> = T & {
+  job_source: 'erc8183_onchain';
+  status_namespace: 'erc8183';
+  settlement_rail: 'erc8183_escrow';
+  lifecycle_label: 'ERC-8183 on-chain job';
+  settlement_label: 'ERC-8183 escrow completion';
+};
+
+export function withERC8183JobNamespace<T extends A2AJob>(job: T): WithERC8183JobNamespace<T> {
+  return {
+    ...job,
+    job_source: 'erc8183_onchain',
+    status_namespace: 'erc8183',
+    settlement_rail: 'erc8183_escrow',
+    lifecycle_label: 'ERC-8183 on-chain job',
+    settlement_label: 'ERC-8183 escrow completion',
+  };
+}
+
 type CreateJobInput = {
   title: string;
   description: string;
@@ -68,9 +92,9 @@ function nextJobId(input: CreateJobInput) {
   return `job_${stableHash({ input, seq: jobSeq, ts: Date.now() })}`;
 }
 
-/** Map DB row (snake_case) → A2AJob (camelCase) */
-function rowToJob(row: Record<string, unknown>): A2AJob {
-  return {
+/** Map DB row (snake_case) → A2AJob (camelCase) with ERC-8183 namespace */
+function rowToJob(row: Record<string, unknown>): WithERC8183JobNamespace<A2AJob> {
+  const job: A2AJob = {
     id: row.id as string,
     title: row.title as string,
     description: row.description as string,
@@ -102,6 +126,7 @@ function rowToJob(row: Record<string, unknown>): A2AJob {
     deliverable_hash: (row.deliverable_hash as string | null) ?? null,
     proof_uri: (row.proof_uri as string | null) ?? null,
   };
+  return withERC8183JobNamespace(job);
 }
 
 export async function listA2AJobs(

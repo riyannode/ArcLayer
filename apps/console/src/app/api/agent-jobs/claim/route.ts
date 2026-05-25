@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { claimAgentJob } from '@/lib/agent-jobs/store';
+import { claimAgentJob, withAgentJobNamespace } from '@/lib/agent-jobs/store';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 
 export async function POST(req: NextRequest) {
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'no_jobs_available' }, { status: 404 });
     }
 
-    return NextResponse.json({ ok: true, job });
+    return NextResponse.json({ ok: true, job: withAgentJobNamespace(job) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown';
     console.error('[agent-jobs] POST /claim failed:', msg);
