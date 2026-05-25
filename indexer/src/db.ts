@@ -518,6 +518,58 @@ export function readOverview() {
   };
 }
 
+
+export function readOverviewSummary() {
+  const eventCount = Number((db.prepare(`SELECT value FROM meta WHERE key = 'event_count'`).get() as { value?: string } | undefined)?.value || "0");
+
+  const jobRows = db.prepare(`SELECT budget, funded_amount, status FROM jobs`).all() as Array<{
+    budget: string;
+    funded_amount: string;
+    status: number;
+  }>;
+
+  const totalBudget = jobRows.reduce((sum, job) => sum + BigInt(job.budget || "0"), BigInt(0));
+  const totalFunded = jobRows.reduce((sum, job) => sum + BigInt(job.funded_amount || "0"), BigInt(0));
+  const settledJobs = jobRows.filter((job) => Number(job.status) === 3).length;
+  const fundedJobs = jobRows.filter((job) => BigInt(job.funded_amount || "0") > BigInt(0)).length;
+
+  const erc8004Agents = Number((db.prepare(`SELECT COUNT(*) AS count FROM agents WHERE source = 'erc8004_identity_registry'`).get() as { count: number }).count || 0);
+  const importedAgents = 0;
+  const proofCount = Number((db.prepare(`SELECT COUNT(*) AS count FROM proofs`).get() as { count: number }).count || 0);
+
+  const totalBudgetAtomic = totalBudget.toString();
+  const totalFundedAtomic = totalFunded.toString();
+
+  return {
+    summary: {
+      eventCount,
+      jobs: jobRows.length,
+      agents: importedAgents + erc8004Agents,
+      meta: {
+        importedAgentCount: importedAgents,
+        erc8004AgentCount: erc8004Agents,
+      },
+      agentBreakdown: {
+        importedAgentCount: importedAgents,
+        erc8004AgentCount: erc8004Agents,
+        totalAgentCount: importedAgents + erc8004Agents,
+      },
+      jobBreakdown: {
+        erc8183: jobRows.length,
+      },
+      proofs: proofCount,
+      budgetedUsdc: formatUnits(totalBudget, ARC_ERC20_USDC_DECIMALS),
+      fundedUsdc: formatUnits(totalFunded, ARC_ERC20_USDC_DECIMALS),
+      totalBudgetAtomic,
+      totalFundedAtomic,
+      totalBudget: totalBudgetAtomic,
+      totalFunded: totalFundedAtomic,
+      settledJobs,
+      fundedJobs,
+    },
+  };
+}
+
 export function readCounts() {
   const importedAgentCount = readAgents("imported").length;
   const erc8004AgentCount = readAgents("erc8004").length;
