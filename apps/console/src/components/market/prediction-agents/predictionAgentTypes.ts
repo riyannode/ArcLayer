@@ -128,9 +128,8 @@ function asString(value: unknown, fallback = ""): string {
   return fallback;
 }
 
-function normalizeRole(value: unknown, fallback: AgentRole): AgentRole {
+function normalizeRole(value: unknown): AgentRole {
   const raw = asString(value).toLowerCase();
-  if (!raw) return fallback;
 
   if (raw === "market-agent" || raw === "market_agent") return "MARKET-AGENT";
 
@@ -145,7 +144,7 @@ function normalizeRole(value: unknown, fallback: AgentRole): AgentRole {
     return direct as AgentRole;
   }
 
-  return ROLE_ALIASES[raw] ?? fallback;
+  return ROLE_ALIASES[raw] ?? "MARKET-AGENT";
 }
 
 function normalizeCategory(value: unknown): AgentCategory {
@@ -190,16 +189,8 @@ function normalizeSeen(value: unknown): string {
   return asString(value, "live");
 }
 
-export function normalizeAgent(raw: BackendAgentLike, index = 0): AgentNode {
-  const fallbackRoleOrder: AgentRole[] = [
-    "ORACLE",
-    "ANALYZER",
-    "EVALUATOR",
-    "MARKET-AGENT",
-    "EXECUTOR",
-  ];
-
-  const role = normalizeRole(raw.role ?? raw.type ?? raw.kind, fallbackRoleOrder[index % fallbackRoleOrder.length]);
+export function normalizeAgent(raw: BackendAgentLike): AgentNode {
+  const role = normalizeRole(raw.role ?? raw.type ?? raw.kind);
 
   const endpoint = asString(
     raw.endpoint ?? raw.url ?? raw.serviceUrl ?? raw.callbackUrl,
@@ -207,16 +198,13 @@ export function normalizeAgent(raw: BackendAgentLike, index = 0): AgentNode {
   );
 
   const id = asString(
-    raw.id ?? raw.agentId ?? raw.address ?? raw.wallet ?? `${role.toLowerCase()}-${index}`,
-    `${role.toLowerCase()}-${index}`,
+    raw.id ?? raw.agentId ?? raw.address ?? raw.wallet,
+    `${role.toLowerCase()}-${asString(raw.name ?? raw.displayName ?? raw.title, "agent").toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
   );
 
   return {
     id,
-    name: asString(
-      raw.name ?? raw.displayName ?? raw.title,
-      `ArcLayer ${role.replace("-", " ")}`,
-    ),
+    name: asString(raw.name ?? raw.displayName ?? raw.title, id),
     role,
     category: normalizeCategory(raw.category ?? raw.paymentMode ?? raw.paymentType ?? raw.scheme),
     endpoint,
@@ -228,5 +216,5 @@ export function normalizeAgent(raw: BackendAgentLike, index = 0): AgentNode {
 }
 
 export function normalizeAgents(agents: BackendAgentLike[] = []): AgentNode[] {
-  return agents.map((agent, index) => normalizeAgent(agent, index));
+  return agents.map((agent) => normalizeAgent(agent));
 }
