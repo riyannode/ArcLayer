@@ -117,6 +117,35 @@ describe('classifyPaymentFromProof', () => {
     ).toBe('native');
   });
 
+  it('is case-insensitive for name (lowercase usdc)', () => {
+    expect(
+      testClassifyPaymentFromProof({
+        accepted: { extra: { name: 'usdc' } },
+      }),
+    ).toBe('native');
+  });
+
+  it('is case-insensitive for name (lowercase gatewaywalletbatched)', () => {
+    expect(
+      testClassifyPaymentFromProof({
+        accepted: { extra: { name: 'gatewaywalletbatched' } },
+      }),
+    ).toBe('gateway');
+  });
+
+  it('is case-insensitive for transferMethod (mixed case)', () => {
+    expect(
+      testClassifyPaymentFromProof({
+        accepted: { extra: { transferMethod: 'EIP3009' } },
+      }),
+    ).toBe('native');
+    expect(
+      testClassifyPaymentFromProof({
+        accepted: { extra: { transferMethod: 'GATEWAY-BATCHED-EIP3009' } },
+      }),
+    ).toBe('gateway');
+  });
+
   it('returns null for unknown extra metadata', () => {
     expect(testClassifyPaymentFromProof(UNKNOWN_PROOF)).toBeNull();
   });

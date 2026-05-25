@@ -306,13 +306,13 @@ function classifyPaymentFromProof(proof: Record<string, unknown>): 'gateway' | '
   const extra = accepted?.extra as Record<string, unknown> | undefined;
   if (!extra) return null;
 
-  const transferMethod = extra.transferMethod as string | undefined;
-  const name = extra.name as string | undefined;
+  const transferMethod = typeof extra.transferMethod === 'string' ? extra.transferMethod.toLowerCase() : undefined;
+  const name = typeof extra.name === 'string' ? extra.name.toLowerCase() : undefined;
 
-  if (transferMethod === 'gateway-batched-eip3009' || name === 'GatewayWalletBatched') {
+  if (transferMethod === 'gateway-batched-eip3009' || name === 'gatewaywalletbatched') {
     return 'gateway';
   }
-  if (transferMethod === 'eip3009' || name === 'USDC') {
+  if (transferMethod === 'eip3009' || name === 'usdc') {
     return 'native';
   }
   return null;
