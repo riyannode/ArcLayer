@@ -6,13 +6,14 @@ import NodeGraph from './prediction-agents/NodeGraph';
 import type { PredictionAgentInput } from './prediction-agents/predictionAgentTypes';
 
 type Agent = {
-  agentId: string;
-  name: string;
-  role: string;
+  agentId?: string | number | null;
+  id?: string | number | null;
+  name?: string | null;
+  role?: string | null;
   endpoint?: string | null;
-  categories: string[];
-  roles?: Array<{ id: string; name: string; category: string; capabilities: string[] }>;
-  capabilities: string[];
+  categories?: string[];
+  roles?: Array<{ id?: string; name?: string; category?: string; capabilities?: string[] }>;
+  capabilities?: string[];
   x402?: { enabled?: boolean; price?: string } | null;
   updatedAt?: string;
 };
@@ -43,6 +44,11 @@ type AgentLiveEvent = {
   createdAt: string;
 };
 
+function agentKey(agent: Agent) {
+  const value = agent.agentId ?? agent.id;
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
 function isOnline(p?: AgentPresence) {
   if (!p?.lastHeartbeatAt || p.status !== 'online') return false;
   const t = new Date(p.lastHeartbeatAt).getTime();
@@ -71,24 +77,27 @@ function toPredictionAgentInputs(
   presenceByAgent: Map<string, AgentPresence>,
   latestEventByAgent: Map<string, AgentLiveEvent>,
 ): PredictionAgentInput[] {
-  return agents.map((agent) => {
-    const presence = presenceByAgent.get(agent.agentId);
-    const latest = latestEventByAgent.get(agent.agentId);
+  return agents.flatMap((agent) => {
+    const id = agentKey(agent);
+    if (!id) return [];
+
+    const presence = presenceByAgent.get(id);
+    const latest = latestEventByAgent.get(id);
     const online = isOnline(presence);
     const recentX402 = latest?.eventType === 'x402_paid' && isRecentEvent(latest);
 
-    return {
-      id: agent.agentId,
-      agentId: agent.agentId,
-      name: agent.name || agent.agentId,
-      role: agent.role || agent.roles?.[0]?.name || 'agent',
+    return [{
+      id,
+      agentId: id,
+      name: agent.name || id,
+      role: agent.role || agent.roles?.[0]?.name || agent.roles?.[0]?.id || 'agent',
       category: recentX402 ? 'paid' : agent.x402?.enabled ? 'x402' : 'registered',
       endpoint: agent.endpoint ?? null,
-      caps: agent.capabilities || [],
+      caps: agent.capabilities || agent.roles?.[0]?.capabilities || [],
       event: latest?.summary || latest?.title || presence?.lastEventSummary || presence?.lastEventType || 'waiting',
       seen: ageLabel(presence?.lastHeartbeatAt ?? agent.updatedAt ?? presence?.updatedAt),
       status: online ? 'active' : agent.updatedAt ? 'synced' : 'unsynced',
-    };
+    }];
   });
 }
 
