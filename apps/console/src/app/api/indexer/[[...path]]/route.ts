@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const INDEXER_INTERNAL_URL = process.env.INDEXER_INTERNAL_URL || 'http://43.156.160.127:3535';
+const INDEXER_INTERNAL_URL = process.env.INDEXER_INTERNAL_URL || 'http://localhost:3535';
 
 function upstreamPath(request: NextRequest) {
   const raw = request.nextUrl.pathname.replace(/^\/api\/indexer\/?/, '');
