@@ -1335,7 +1335,12 @@ export function withGateway(
   resource: string,
 ) {
   const amount = Math.round(parseFloat(price.replace('$', '')) * 1_000_000).toString();
-  return withX402(handler, { amount, resource, description: `Paid resource (${price} USDC)` });
+  return withX402(handler, {
+    amount,
+    resource,
+    description: `Paid resource (${price} USDC)`,
+    allowedRails: ['circle-gateway-passkey'],
+  });
 }
 
 /**
@@ -1347,5 +1352,9 @@ export function withNative(
   resource?: string,
 ) {
   const resolvedResource = opts.resource || resource || '/api/x402/protected-resource';
-  return withX402(handler, { ...opts, resource: resolvedResource });
+  return withX402(handler, {
+    ...opts,
+    resource: resolvedResource,
+    allowedRails: ['arc-native-eoa'],
+  });
 }
