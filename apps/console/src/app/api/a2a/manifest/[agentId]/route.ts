@@ -1,33 +1,21 @@
 import { NextResponse } from 'next/server';
-import { createPublicClient, http, parseAbiItem, type Hex } from 'viem';
 import { getManifest } from '@/lib/a2a/manifest';
+import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-const RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
-const AGENT_REGISTRY = '0xB263336055dD65FF501e36CA39941760D943703C' as Hex;
-const FROM_BLOCK = BigInt(process.env.AGENT_REGISTRY_FROM_BLOCK || '0');
-
-const AGENT_REGISTERED = parseAbiItem(
-  'event AgentRegistered(uint256 indexed agentId, bytes32 indexed skillHash, address indexed controller, string metadataURI)'
-);
-
+/**
+ * Official ERC-8004 identity controller lookup.
+ * The canonical agentId is the ERC-721 tokenId minted by register(metadataURI),
+ * so controller ownership must come from ownerOf(agentId), not legacy AgentRegistered logs.
+ * Returns null when the token is not minted yet (TOFU/pending manifest window).
+ */
 async function getOnchainController(agentId: string): Promise<string | null> {
   try {
-    const client = createPublicClient({ transport: http(RPC) });
-    const idBig = BigInt(agentId);
-    const logs = await client.getLogs({
-      address: AGENT_REGISTRY,
-      event: AGENT_REGISTERED,
-      args: { agentId: idBig },
-      fromBlock: FROM_BLOCK,
-      toBlock: 'latest',
-    });
-    if (logs.length === 0) return null;
-    const latest = logs.sort((a, b) => Number(b.blockNumber ?? BigInt(0)) - Number(a.blockNumber ?? BigInt(0)))[0];
-    return latest.args.controller?.toLowerCase() ?? null;
-  } catch {
+    return (await getERC8004OwnerOf(agentId)).toLowerCase();
+  } catch (err) {
+    console.warn('[manifest.api] ERC-8004 ownerOf lookup returned no controller', err);
     return null;
   }
 }
