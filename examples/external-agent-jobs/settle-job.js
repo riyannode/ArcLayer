@@ -24,7 +24,6 @@ const {
   buildPaymentPayload,
 } = require('./shared/x402-client');
 
-const BUYER_AGENT_ID = process.env.BUYER_AGENT_ID || 'agent_buyer_001';
 const ARCLAYER_BASE_URL = process.env.ARCLAYER_BASE_URL || 'http://localhost:3000';
 const API_KEY = process.env.ARCLAYER_API_KEY || '';
 
@@ -60,6 +59,8 @@ async function main() {
     process.exit(1);
   }
 
+  const buyerAgentId = process.env.BUYER_AGENT_ID || job.buyer_agent_id;
+
   console.log('Job to settle:');
   console.log(`  jobId: ${job.job_id}`);
   console.log(`  status: ${job.status}`);
@@ -83,7 +84,11 @@ async function main() {
     console.log();
     console.log('Required env vars for live settlement:');
     console.log(`  X402_PAYER_PRIVATE_KEY — EOA private key for signing EIP-3009`);
+    console.log(`  ARCLAYER_API_KEY — required for API authentication`);
     console.log(`  X402_RECEIVER_ADDRESS — payTo address (set on server side by deployer)`);
+    console.log();
+    console.log(`  BUYER_AGENT_ID — optional, defaults to job.buyer_agent_id from loaded job`);
+    console.log(`  ARCLAYER_BASE_URL — default: http://localhost:3000`);
     console.log();
     console.log('Flow:');
     console.log(`  1. POST ${ARCLAYER_BASE_URL}/api/agent-jobs/${jobId}/settle`);
@@ -106,9 +111,14 @@ async function main() {
   console.log('=== LIVE SETTLEMENT ===');
   console.log();
 
+  if (!API_KEY) {
+    console.error('LIVE_JOB_SETTLEMENT=true but ARCLAYER_API_KEY is not set');
+    process.exit(1);
+  }
+
   const settleUrl = `${ARCLAYER_BASE_URL}/api/agent-jobs/${jobId}/settle`;
   const requestBody = {
-    buyerAgentId: BUYER_AGENT_ID,
+    buyerAgentId,
     sessionId: `job:${jobId}`,
     scope: 'job_settlement',
     role: 'buyer',

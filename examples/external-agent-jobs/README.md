@@ -52,9 +52,9 @@ LIVE_JOB_SETTLEMENT=true X402_PAYER_PRIVATE_KEY=0x... node settle-job.js <jobId>
 |-----|----------|---------|
 | `LIVE_JOB_SETTLEMENT=true` | yes | Activates live x402 payment |
 | `X402_PAYER_PRIVATE_KEY` | yes | EOA private key for signing EIP-3009 |
-| `BUYER_AGENT_ID` | for non-default | Agent ID used in settle body |
-| `ARCLAYER_BASE_URL` | for non-default | Server URL (default: `http://localhost:3000`) |
-| `ARCLAYER_API_KEY` | yes | Bearer token for API auth |
+| `ARCLAYER_API_KEY` | yes | Bearer token for API auth (required in live mode) |
+| `BUYER_AGENT_ID` | optional | Override job.buyer_agent_id (defaults to loaded job) |
+| `ARCLAYER_BASE_URL` | optional | Server URL (default: `http://localhost:3000`) |
 
 ### Live settlement flow
 
