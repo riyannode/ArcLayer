@@ -276,7 +276,7 @@ function RegisterManualAgentPageContent() {
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[56px]">
               Register <span className="italic text-[#C5A67C]">manual</span> agent
             </h1>
-            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)] invisible">
+            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
               List your agent and get paid from escrow.
             </p>
           </div>
@@ -317,7 +317,7 @@ function RegisterManualAgentPageContent() {
           <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">STEP 1</div>
             <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agent details</h2>
-            <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.85)] invisible">
+            <code className="mt-2 block font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
               AgentRegistry · register(metadataURI)
             </code>
 
@@ -332,10 +332,10 @@ function RegisterManualAgentPageContent() {
                   autoComplete="off"
                   spellCheck={false}
                 />
-                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">
+                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
                   Choose a unique agent handle. The ID is created automatically.
                 </div>
-                <div className="mt-1.5 font-mono text-[10.5px] invisible">
+                <div className="mt-1.5 font-mono text-[10.5px]">
                   {nameStatus.state === 'idle' && <span className="text-[rgba(234,228,216,0.78)]">Use lowercase. Minimum 2 characters.</span>}
                   {nameStatus.state === 'checking' && <span className="text-[#C5A67C]">Checking on chain…</span>}
                   {nameStatus.state === 'ready' && <span className="text-[#B8CD7E]">✓ "{normalizeAgentName(form.name)}" is available</span>}
@@ -357,7 +357,7 @@ function RegisterManualAgentPageContent() {
                     </option>
                   ))}
                 </select>
-                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">
+                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
                   Metadata label for the agent's capability.
                 </div>
               </div>
@@ -371,7 +371,7 @@ function RegisterManualAgentPageContent() {
                   className="input-mono"
                   autoComplete="off"
                 />
-                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">
+                <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
                   Leave as default, or add an IPFS URL.
                 </div>
               </div>
@@ -399,7 +399,7 @@ function RegisterManualAgentPageContent() {
             >
               {isSubmitting ? 'REGISTERING…' : 'PAY & REGISTER'}
             </button>
-            <p className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.6)] invisible">
+            <p className="mt-2 font-mono text-[10px] text-[rgba(234,228,216,0.6)]">
               Anti-spam fee: 0.40 USDC · Non-refundable · This fee prevents spam listings. It is not escrow funding.
             </p>
           </section>
@@ -417,7 +417,7 @@ function RegisterManualAgentPageContent() {
                 indexed
               </span>
             </div>
-            <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)] invisible">
+            <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
               Compact registered-agent list.
             </p>
 
@@ -515,12 +515,12 @@ function RegisterManualAgentPageContent() {
                   {agents.length > 0 ? (
                     <>
                       <p className="font-mono text-[11.5px] text-[#EAE4D8]">No agents match your search</p>
-                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.84)] invisible">Try a different keyword or clear the filter.</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.84)]">Try a different keyword or clear the filter.</p>
                     </>
                   ) : (
                     <>
                       <p className="font-mono text-[11.5px] text-[#EAE4D8]">No registered agents yet</p>
-                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.84)] invisible">Complete Step 1 on the left. Your first registered agent will appear here automatically.</p>
+                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.84)]">Complete Step 1 on the left. Your first registered agent will appear here automatically.</p>
                     </>
                   )}
                 </div>
@@ -543,7 +543,7 @@ function RegisterManualAgentPageContent() {
         <LLMAgentConnectKit mode="manual" className="mt-6" />
 
         <section className="aureo-panel mt-6 p-4 md:p-6">
-          <div className="aureo-mono-label mb-2 invisible">HOW IT WORKS</div>
+          <div className="aureo-mono-label mb-2">HOW IT WORKS</div>
           <h2 className="aureo-display text-[22px] text-[#EAE4D8]">Manual job lifecycle</h2>
 
           <ol className="mt-4 grid gap-3 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.85)] md:grid-cols-5">
@@ -558,7 +558,7 @@ function RegisterManualAgentPageContent() {
                 <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/40 text-[10px] text-[#C5A67C]">{s.n}</span>
                 <div>
                   <div className="text-[#EAE4D8]">{s.t}</div>
-                  <div className="text-[rgba(234,228,216,0.84)] invisible">{s.d}</div>
+                  <div className="text-[rgba(234,228,216,0.84)]">{s.d}</div>
                 </div>
               </li>
             ))}
@@ -567,13 +567,13 @@ function RegisterManualAgentPageContent() {
           <div className="mt-5 flex flex-col gap-3 md:flex-row">
             <div className="flex-1 rounded border border-white/5 bg-black/30 p-3">
               <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">Best for</div>
-              <p className="mt-1.5 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.8)] invisible">
+              <p className="mt-1.5 font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.8)]">
                 For evaluator-verifiable services.
               </p>
             </div>
 
             <div className="flex-1 rounded border border-cyan-500/15 bg-cyan-950/[0.05] p-3">
-              <p className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.85)] invisible">
+              <p className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.85)]">
                 Want autonomous instead?{' '}
                 <Link href="/register/autonomous" className="text-cyan-400 hover:text-[#EAE4D8]">
                   Register an A2A agent →
