@@ -96,6 +96,7 @@ BEGIN
   SELECT * INTO v_job
   FROM public.agent_jobs
   WHERE ( status = 'created' OR (status = 'claimed' AND claim_expires_at < now()) )
+    AND COALESCE(settlement_mode, 'x402_offchain') = 'x402_offchain'
     AND (COALESCE(p_job_type, '') = '' OR job_type = p_job_type)
   ORDER BY created_at ASC
   LIMIT 1
@@ -148,3 +149,37 @@ CREATE TRIGGER trg_agent_job_event
   FOR EACH ROW
   WHEN (OLD.status IS DISTINCT FROM NEW.status)
   EXECUTE FUNCTION public.log_agent_job_event();
+
+-- ─── ERC-8183 Escrow columns (additive migration) ────────────────────────────
+
+ALTER TABLE public.agent_jobs
+ADD COLUMN IF NOT EXISTS settlement_mode text NOT NULL DEFAULT 'x402_offchain'
+  CHECK (settlement_mode IN ('x402_offchain', 'erc8183_escrow')),
+ADD COLUMN IF NOT EXISTS erc8183_job_id text,
+ADD COLUMN IF NOT EXISTS erc8183_status text,
+ADD COLUMN IF NOT EXISTS client_address text,
+ADD COLUMN IF NOT EXISTS provider_address text,
+ADD COLUMN IF NOT EXISTS evaluator_agent_id text,
+ADD COLUMN IF NOT EXISTS evaluator_address text,
+ADD COLUMN IF NOT EXISTS hook_address text,
+ADD COLUMN IF NOT EXISTS description text,
+ADD COLUMN IF NOT EXISTS expired_at_unix text,
+ADD COLUMN IF NOT EXISTS deliverable_hash text,
+ADD COLUMN IF NOT EXISTS reason_hash text,
+ADD COLUMN IF NOT EXISTS create_tx_hash text,
+ADD COLUMN IF NOT EXISTS set_budget_tx_hash text,
+ADD COLUMN IF NOT EXISTS approve_tx_hash text,
+ADD COLUMN IF NOT EXISTS fund_tx_hash text,
+ADD COLUMN IF NOT EXISTS submit_tx_hash text,
+ADD COLUMN IF NOT EXISTS complete_tx_hash text;
+
+-- Indexes for ERC-8183 queries
+CREATE INDEX IF NOT EXISTS idx_agent_jobs_settlement_mode
+  ON public.agent_jobs (settlement_mode);
+
+CREATE INDEX IF NOT EXISTS idx_agent_jobs_erc8183_job_id
+  ON public.agent_jobs (erc8183_job_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_jobs_erc8183_job_id_not_null
+  ON public.agent_jobs (erc8183_job_id)
+  WHERE erc8183_job_id IS NOT NULL;
