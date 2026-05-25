@@ -24,6 +24,7 @@ import {
   getAddress,
   http,
   parseGwei,
+  parseUnits,
   type Address,
   type Hex,
 } from 'viem';
@@ -38,6 +39,8 @@ import {
   markNativeSettled,
 } from './native-payment-store';
 import { verifyExactSettlementProof } from './verify-settlement-proof';
+
+const MIN_RELAYER_NATIVE_GAS = parseUnits('0.01', 18);
 
 const TRANSFER_WITH_AUTHORIZATION_ABI = [
   {
@@ -174,8 +177,8 @@ async function settleOnChain(input: SettleExactInput): Promise<SettleResponse> {
       address: account.address,
     });
 
-    // Need at least some gas — 0.01 USDC (10000 atomic units) as minimum
-    if (relayerBalance < BigInt(10000)) {
+    // Need at least some gas — 0.01 native USDC in 18-decimal base units
+    if (relayerBalance < MIN_RELAYER_NATIVE_GAS) {
       await markNativeFailed({ paymentId: paymentIdentifier, errorReason: 'relayer_unfunded', errorMessage: 'Relayer wallet has insufficient USDC for gas' }).catch(() => undefined);
       return { ...settleErr('relayer_unfunded', 'Relayer wallet has insufficient USDC for gas'), paymentIdentifier };
     }

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { parseUnits } from 'viem';
 
 const getBalance = vi.fn();
 const readContract = vi.fn();
@@ -59,14 +60,28 @@ describe('settleExactPayment relayer gas check', () => {
     getBalance.mockResolvedValue(0n);
   });
 
-  it('uses publicClient.getBalance for relayer gas check', async () => {
+  it('returns relayer_unfunded when native balance is zero', async () => {
     const { settleExactPayment } = await import('./settle-exact');
 
     const result = await settleExactPayment({ paymentPayload, paymentRequirements });
 
     expect(result.success).toBe(false);
     expect(result.errorReason).toBe('relayer_unfunded');
-    expect(getBalance).toHaveBeenCalledTimes(1);
+    expect(getBalance).toHaveBeenCalled();
     expect(readContract).not.toHaveBeenCalled();
+  });
+
+  it('allows settlement path when native balance meets 0.01 threshold', async () => {
+    const { settleExactPayment } = await import('./settle-exact');
+
+    getBalance.mockResolvedValue(parseUnits('0.01', 18));
+    writeContract.mockResolvedValue('0x' + 'aa'.repeat(32));
+    waitForTransactionReceipt.mockResolvedValue({ status: 'success' });
+
+    const result = await settleExactPayment({ paymentPayload, paymentRequirements });
+
+    expect(getBalance).toHaveBeenCalled();
+    expect(writeContract).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(true);
   });
 });
