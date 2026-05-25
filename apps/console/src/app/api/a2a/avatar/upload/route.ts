@@ -136,4 +136,5 @@ export const POST = withX402(postHandler, {
   resource: '/api/a2a/avatar/upload',
   description: 'Upload an A2A agent avatar — storage anti-spam fee',
   requireResourceContext: false,
+  settleBeforeHandler: true,
 });
