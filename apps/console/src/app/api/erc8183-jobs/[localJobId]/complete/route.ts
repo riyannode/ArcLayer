@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'node:crypto';
+import { keccak256, toBytes } from 'viem';
 import { CONTRACTS } from '@arclayer/sdk';
 import { getErc8183JobByLocalId } from '@/lib/erc8183-jobs/store';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
@@ -40,7 +40,7 @@ export async function POST(
     }
 
     const reason = body.reason ?? 'deliverable-approved';
-    const reasonHash: `0x${string}` = `0x${createHash('sha256').update(Buffer.from(reason, 'utf8')).digest('hex')}`;
+    const reasonHash: `0x${string}` = keccak256(toBytes(reason));
 
     const tx: TxInstruction = {
       address: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
