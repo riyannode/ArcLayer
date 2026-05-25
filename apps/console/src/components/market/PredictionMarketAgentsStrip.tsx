@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import AgentCards from './prediction-agents/AgentCards';
 import NodeGraph from './prediction-agents/NodeGraph';
 import type { BackendAgentLike } from './prediction-agents/predictionAgentTypes';
-import { PredictionAgentLiveRail } from './PredictionAgentLiveRail';
 
 type Agent = {
   agentId: string;
@@ -85,7 +84,7 @@ function toUploadedUiAgents(
       role: agent.role || agent.roles?.[0]?.name || 'agent',
       category: recentX402 ? 'paid' : 'x402',
       endpoint: agent.endpoint ?? undefined,
-      caps: (agent.capabilities || []).join(', '),
+      caps: agent.capabilities || [],
       event: latest?.summary || latest?.title || p?.lastEventSummary || p?.lastEventType || 'waiting',
       seen: ageLabel(p?.lastHeartbeatAt ?? agent.updatedAt ?? p?.updatedAt),
       status: online || agent.updatedAt ? 'synced' : 'unsynced',
@@ -180,24 +179,15 @@ export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots
 
   return (
     <section className="space-y-4">
-      <section className="rounded-xl border border-[#1b1c23] bg-[#05060a]/95 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_20px_70px_rgba(0,0,0,0.35)]">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#ff9100]">Live Decision Rail</div>
-            <div className="mt-1 text-xs text-zinc-500">{agents.length} registered for {category}</div>
-          </div>
+      <div className="flex justify-end">
+        <a href="/register/autonomous?category=prediction-market-bots" className="rounded-sm border border-[#ff9100]/30 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#ff9100]">
+          Register Bot →
+        </a>
+      </div>
 
-          <a href="/register/autonomous?category=prediction-market-bots" className="rounded-sm border border-[#ff9100]/30 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#ff9100]">
-            Register Bot →
-          </a>
-        </div>
-
-        <PredictionAgentLiveRail latestEvent={events[0] ?? null} />
-
-        {error ? (
-          <div className="mt-3 rounded border border-red-400/20 bg-red-950/20 p-2 text-xs text-red-200">{error}</div>
-        ) : null}
-      </section>
+      {error ? (
+        <div className="rounded border border-red-400/20 bg-red-950/20 p-2 text-xs text-red-200">{error}</div>
+      ) : null}
 
       <NodeGraph agents={uploadedUiAgents} activeStepIndex={4} />
       <AgentCards agents={uploadedUiAgents} />
