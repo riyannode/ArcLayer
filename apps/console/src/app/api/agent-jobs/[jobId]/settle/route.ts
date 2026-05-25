@@ -44,6 +44,19 @@ export const POST = (() => {
       return NextResponse.json({ ok: false, error: 'job_not_found' }, { status: 404 });
     }
 
+    // Block ERC-8183 escrow jobs — they use AgenticCommerce.complete(), not x402 settle
+    if (job.settlement_mode === 'erc8183_escrow') {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'erc8183_jobs_must_complete_onchain',
+          message:
+            'This job uses ERC-8183 escrow settlement. Use AgenticCommerce.complete(), not x402 settle.',
+        },
+        { status: 409 },
+      );
+    }
+
     // Validate status — allow verified or settlement_pending
     if (job.status !== 'verified' && job.status !== 'settlement_pending') {
       return NextResponse.json(

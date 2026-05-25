@@ -36,6 +36,7 @@ export interface AgentJob {
   job_id: string;
   job_type: string;
   market_id: string | null;
+  settlement_mode: 'x402_offchain' | 'erc8183_escrow';
   buyer_agent_id: string;
   provider_agent_id: string | null;
   worker_id: string | null;
@@ -156,6 +157,7 @@ function mapJobRow(row: Record<string, unknown>): AgentJob {
     job_id: String(row.job_id),
     job_type: String(row.job_type),
     market_id: row.market_id ? String(row.market_id) : null,
+    settlement_mode: (row.settlement_mode as 'x402_offchain' | 'erc8183_escrow') ?? 'x402_offchain',
     buyer_agent_id: String(row.buyer_agent_id),
     provider_agent_id: row.provider_agent_id ? String(row.provider_agent_id) : null,
     worker_id: row.worker_id ? String(row.worker_id) : null,

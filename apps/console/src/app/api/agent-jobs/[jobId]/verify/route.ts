@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAgentJob, withAgentJobNamespace } from '@/lib/agent-jobs/store';
+import { getAgentJob, verifyAgentJob, withAgentJobNamespace } from '@/lib/agent-jobs/store';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 
 export async function POST(
@@ -26,6 +26,20 @@ export async function POST(
     }
     if (typeof approved !== 'boolean') {
       return NextResponse.json({ ok: false, error: 'approved must be a boolean' }, { status: 400 });
+    }
+
+    // Block ERC-8183 escrow jobs — they use /api/erc8183-jobs/* routes
+    const existing = await getAgentJob(jobId);
+    if (existing && existing.settlement_mode === 'erc8183_escrow') {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'erc8183_jobs_use_erc8183_routes',
+          message:
+            'This job uses ERC-8183 escrow. Use /api/erc8183-jobs/* routes and AgenticCommerce.complete(), not legacy x402 job routes.',
+        },
+        { status: 409 },
+      );
     }
 
     const job = await verifyAgentJob({
