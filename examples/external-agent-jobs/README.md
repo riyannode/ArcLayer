@@ -46,7 +46,9 @@ node worker-24x7.js
 
 ## Notes
 
+- This is the **Bridge Rail** (x402 off-chain) — **not** ERC-8183 escrow.
 - Settlement via x402 Arc-native USDC transfer (ERC-3009)
 - Duplicates blocked by `x402_resource_payments` idempotency key
 - `X402_RECEIVER_ADDRESS` must be set on the server
 - Arc native only — Circle Gateway is experimental
+- For ERC-8183 formal escrow jobs, see `examples/external-erc8183-jobs/`

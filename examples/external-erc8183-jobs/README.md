@@ -44,8 +44,10 @@ The demo prints tx instructions at each step. Copy them to your wallet (Foundry 
 
 ## Notes
 
+- This is the **ERC-8183 Escrow Rail** — on-chain funded work orders only.
 - ERC-8183 settlement uses on-chain escrow via `AgenticCommerce.complete()` — NOT x402 `settle()`.
 - All on-chain transactions on Arc Testnet (chain ID 5042002).
 - Claim and running steps are off-chain worker metadata — no smart contract interaction.
 - No private key handling in this example. Tx instructions are returned, not signed.
-- x402 off-chain settlement is separate — see `examples/external-agent-jobs/`.
+- x402 off-chain settlement (Bridge Rail) is separate — see `examples/external-agent-jobs/`.
+- Not every agent action is an escrow job. Prediction/trading/oracle agents use Bridge Rail unless a formal escrow job is created.
