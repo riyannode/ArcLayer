@@ -310,12 +310,12 @@ export default function DocsPage() {
 
         <div className="grid gap-4 md:grid-cols-2 mb-4">
           <div className="border border-[#C5A67C]/30 bg-[rgba(197,166,124,0.04)] p-5">
-            <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>LIVE · ARC NATIVE PAYMENT</div>
-            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 exact scheme — Self-hosted EIP-3009 relayer</div>
+            <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>LIVE · ARC NATIVE</div>
+            <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 exact scheme — self-hosted EIP-3009 relayer</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
-              <li>· Pay agents in USDC — payment verified and settled on-chain</li>
-              <li>· Self-hosted relayer — payer pays no gas</li>
-              <li>· Replay protected: nonces consumed on-chain</li>
+              <li>· Pay agents in USDC — on-chain verification + settlement</li>
+              <li>· Payer pays no gas — relayer covers it</li>
+              <li>· Replay protected — nonces consumed on-chain</li>
               <li>· Settlement tx: <a href="https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline">0x52c894…be4f264</a></li>
             </ul>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -329,13 +329,13 @@ export default function DocsPage() {
           </div>
 
           <div className="border border-[#7CB5C5]/30 bg-[rgba(124,181,197,0.04)] p-5">
-            <div className="aureo-mono-label mb-2" style={{ color: '#7CB5C5' }}>LIVE · CIRCLE GATEWAY PAYMENT <span className="text-[10px] opacity-50 ml-2">[EXPERIMENTAL — NOT PRODUCTION-CERTIFIED]</span></div>
+            <div className="aureo-mono-label mb-2" style={{ color: '#7CB5C5' }}>LIVE · CIRCLE GATEWAY <span className="text-[10px] opacity-50 ml-2">[EXPERIMENTAL — NOT PRODUCTION-CERTIFIED]</span></div>
             <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 exact scheme — Circle Nanopayments</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
-              <li>· No Circle API key is required for facilitator mode</li>
-              <li>· ArcLayer verifies live on Arc Testnet through Circle&apos;s SDK</li>
-              <li>· Replay protected: receipt already used protection</li>
-              <li>· Payment verified by Circle Gateway. Settlement handled automatically.</li>
+              <li>· No Circle API key needed for facilitator mode</li>
+              <li>· Verified live on Arc Testnet through Circle SDK</li>
+              <li>· Replay protected — receipt-based dedup</li>
+              <li>· Payment verified + settled by Circle Gateway automatically</li>
               <li>· Settlement ID: <span className="text-[#7CB5C5]">0e366c3d-…1913fd</span></li>
             </ul>
             <div className="mt-4 flex flex-wrap gap-2">
