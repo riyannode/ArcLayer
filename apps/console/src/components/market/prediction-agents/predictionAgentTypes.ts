@@ -69,26 +69,38 @@ export interface AgentNode {
   status: AgentStatus;
 }
 
-export type BackendAgentLike = Partial<AgentNode> & {
+export type BackendAgentLike = {
+  id?: string;
   agentId?: string;
   address?: string;
   wallet?: string;
+  name?: string | null;
   displayName?: string;
   title?: string;
+  role?: string | AgentRole | null;
   type?: string;
   kind?: string;
+  category?: string | AgentCategory | null;
+  categories?: string[];
   paymentMode?: string;
   paymentType?: string;
   scheme?: string;
+  endpoint?: string | null;
   url?: string;
   serviceUrl?: string;
   callbackUrl?: string;
+  caps?: string | string[] | null;
   capabilities?: string[] | string;
   capability?: string;
+  event?: string | null;
+  lastEvent?: string | null;
+  summary?: string | null;
+  seen?: string | number | Date | null;
   lastSeen?: string | number | Date;
   lastSeenAt?: string | number | Date;
   updatedAt?: string | number | Date;
   createdAt?: string | number | Date;
+  status?: string | AgentStatus | null;
   syncStatus?: string;
   isSynced?: boolean;
 };
@@ -209,7 +221,7 @@ export function normalizeAgent(raw: BackendAgentLike, index = 0): AgentNode {
     category: normalizeCategory(raw.category ?? raw.paymentMode ?? raw.paymentType ?? raw.scheme),
     endpoint,
     caps: normalizeCaps(raw.caps ?? raw.capabilities ?? raw.capability),
-    event: asString(raw.event, "prediction-market-bots"),
+    event: asString(raw.event ?? raw.lastEvent ?? raw.summary, "prediction-market-bots"),
     seen: normalizeSeen(raw.seen ?? raw.lastSeen ?? raw.lastSeenAt ?? raw.updatedAt ?? raw.createdAt),
     status: normalizeStatus(raw.status ?? raw.syncStatus, raw.isSynced),
   };
