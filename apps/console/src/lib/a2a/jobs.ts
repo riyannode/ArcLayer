@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { dispatchWebhookEvent } from '@/lib/a2a/webhooks';
 
-export type A2AJobStatus = 'open' | 'claimed' | 'submitted';
+export type A2AJobStatus = 'open' | 'claimed' | 'submitted' | 'completed' | 'failed';
 
 export type A2AJob = {
   id: string;
@@ -21,6 +21,8 @@ export type A2AJob = {
   createdAt: string;
   claimedAt?: string;
   submittedAt?: string;
+  completedAt?: string;
+  failedAt?: string;
   is_onchain?: boolean | null;
   onchain_job_id?: string | null;
   provider?: string | null;
@@ -85,6 +87,8 @@ function rowToJob(row: Record<string, unknown>): A2AJob {
     createdAt: row.created_at as string,
     claimedAt: (row.claimed_at as string) || undefined,
     submittedAt: (row.submitted_at as string) || undefined,
+    completedAt: (row.completed_at as string) || undefined,
+    failedAt: (row.failed_at as string) || undefined,
     is_onchain: (row.is_onchain as boolean | null) ?? null,
     onchain_job_id: row.onchain_job_id == null ? null : String(row.onchain_job_id),
     provider: (row.provider as string | null) ?? null,
