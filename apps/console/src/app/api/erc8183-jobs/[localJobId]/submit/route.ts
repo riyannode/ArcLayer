@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'node:crypto';
+import { keccak256, toBytes } from 'viem';
 import { CONTRACTS } from '@arclayer/sdk';
 import { getErc8183JobByLocalId } from '@/lib/erc8183-jobs/store';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
@@ -19,8 +19,8 @@ function stableStringify(value: unknown): string {
   return `{${entries.join(',')}}`;
 }
 
-function keccak256Hex(input: string): `0x${string}` {
-  return `0x${createHash('sha256').update(Buffer.from(input, 'utf8')).digest('hex')}`;
+function deliverableHashHex(input: string): `0x${string}` {
+  return keccak256(toBytes(input));
 }
 
 export async function POST(
@@ -54,7 +54,7 @@ export async function POST(
 
     // Compute deterministic deliverable hash
     const canonicalResult = stableStringify(resultPayload);
-    const deliverableHash: `0x${string}` = keccak256Hex(canonicalResult);
+    const deliverableHash: `0x${string}` = deliverableHashHex(canonicalResult);
     const resultPayloadHash = createHash('sha256').update(Buffer.from(canonicalResult, 'utf8')).digest('hex');
 
     const tx: TxInstruction = {
