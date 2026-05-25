@@ -37,6 +37,49 @@ export type A2AJob = {
   proof_uri?: string | null;
 };
 
+/**
+ * Dynamic A2A job namespace metadata.
+ * Distinguishes ERC-8183 on-chain jobs from ArcLayer off-chain A2A jobs
+ * based on is_onchain / onchain_job_id fields.
+ *
+ * - On-chain (is_onchain=true or onchain_job_id set):
+ *     job_source: "erc8183_onchain"  status_namespace: "erc8183"
+ *     settlement_rail: "erc8183_escrow"
+ *
+ * - Off-chain A2A:
+ *     job_source: "offchain_a2a_jobs"  status_namespace: "a2a_jobs"
+ *     settlement_rail: "x402_arc_native"
+ */
+export type WithA2AJobNamespace<T> = T & {
+  job_source: 'erc8183_onchain' | 'offchain_a2a_jobs';
+  status_namespace: 'erc8183' | 'a2a_jobs';
+  settlement_rail: 'erc8183_escrow' | 'x402_arc_native';
+  lifecycle_label: 'ERC-8183 on-chain job' | 'ArcLayer off-chain A2A job';
+  settlement_label: 'ERC-8183 escrow completion' | 'x402 Arc-native settlement';
+};
+
+export function withA2AJobNamespace<T extends A2AJob>(job: T): WithA2AJobNamespace<T> {
+  const isOnChain = job.is_onchain === true || (job.onchain_job_id != null && job.onchain_job_id !== '');
+  if (isOnChain) {
+    return {
+      ...job,
+      job_source: 'erc8183_onchain',
+      status_namespace: 'erc8183',
+      settlement_rail: 'erc8183_escrow',
+      lifecycle_label: 'ERC-8183 on-chain job',
+      settlement_label: 'ERC-8183 escrow completion',
+    };
+  }
+  return {
+    ...job,
+    job_source: 'offchain_a2a_jobs',
+    status_namespace: 'a2a_jobs',
+    settlement_rail: 'x402_arc_native',
+    lifecycle_label: 'ArcLayer off-chain A2A job',
+    settlement_label: 'x402 Arc-native settlement',
+  };
+}
+
 type CreateJobInput = {
   title: string;
   description: string;
@@ -68,9 +111,9 @@ function nextJobId(input: CreateJobInput) {
   return `job_${stableHash({ input, seq: jobSeq, ts: Date.now() })}`;
 }
 
-/** Map DB row (snake_case) → A2AJob (camelCase) */
-function rowToJob(row: Record<string, unknown>): A2AJob {
-  return {
+/** Map DB row (snake_case) → A2AJob (camelCase) with dynamic A2A namespace */
+function rowToJob(row: Record<string, unknown>): WithA2AJobNamespace<A2AJob> {
+  const job: A2AJob = {
     id: row.id as string,
     title: row.title as string,
     description: row.description as string,
@@ -102,6 +145,7 @@ function rowToJob(row: Record<string, unknown>): A2AJob {
     deliverable_hash: (row.deliverable_hash as string | null) ?? null,
     proof_uri: (row.proof_uri as string | null) ?? null,
   };
+  return withA2AJobNamespace(job);
 }
 
 export async function listA2AJobs(
