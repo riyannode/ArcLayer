@@ -1,13 +1,22 @@
 /**
- * POST /api/agent-jobs/[jobId]/settle — Arc native x402 settlement for verified jobs
+ * POST /api/agent-jobs/[jobId]/settle — ArcLayer off-chain job settlement via x402 Arc-native payment
  *
  * Protected by withX402 middleware.
  * Arc native only — no Circle Gateway.
  * Idempotent via x402_resource_payments.
  *
+ * This is ArcLayer off-chain job settlement (x402 USDC transfer + Supabase status update).
+ * It is NOT ERC-8183 on-chain completion. ERC-8183 on-chain completion (submit() → complete())
+ * is a separate lifecycle handled by A2A/on-chain complete flow. See:
+ *   - /api/a2a/erc8183-complete  (A2A ERC-8183 on-chain complete)
+ *   - apps/console/src/app/job/[id]/page.tsx (ERC-8183 UI)
+ *
+ * Circle Gateway / Circle Skills-compatible payment support is experimental
+ * and not production-certified yet.
+ *
  * Flow:
  *   1. Extract jobId, validate status/price/buyer BEFORE x402 (pure check, no status mutation)
- *   2. withX402 verifies payment → runs handler → settles on-chain
+ *   2. withX402 verifies payment → runs handler → completes x402 Arc-native job settlement
  *   3. Inner handler marks settlement_pending (safe: x402 already verified payment)
  *   4. onSettled marks job settled after consumeNativePayment succeeds
  */

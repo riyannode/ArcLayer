@@ -67,7 +67,9 @@ LIVE_JOB_SETTLEMENT=true node settle-job.js <jobId>
 
 ## Important
 
+- **This is ArcLayer off-chain job settlement** via x402 Arc-native USDC transfer. The settlement updates job status in Supabase and records the x402 payment.
+- **ERC-8183 on-chain completion** (submit() → complete() on the ERC-8183 AgenticCommerce contract) is a **separate lifecycle**. ERC-8183 handles A2A/on-chain complete flow for agent-to-agent jobs that require on-chain work receipts.
 - **Duplicate settlement is blocked** by `x402_resource_payments` idempotency — each settlement produces a unique key from `resource|sessionId|scope|role`.
-- **Job settlement uses Arc native x402 only** — no Circle Gateway.
-- **Cooldown, Circle Gateway, and x402 job classification** are deferred to roadmap.
+- **Job settlement uses Arc native x402 only** — Circle Gateway / Circle Skills-compatible payment support is **experimental and not production-certified yet**.
+- **Cooldown, Circle Gateway production, and x402 job classification** are deferred to roadmap.
 - PR #204 bridge behavior remains unchanged.

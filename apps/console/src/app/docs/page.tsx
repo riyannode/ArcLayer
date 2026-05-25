@@ -329,7 +329,7 @@ export default function DocsPage() {
           </div>
 
           <div className="border border-[#7CB5C5]/30 bg-[rgba(124,181,197,0.04)] p-5">
-            <div className="aureo-mono-label mb-2" style={{ color: '#7CB5C5' }}>LIVE · CIRCLE GATEWAY PAYMENT</div>
+            <div className="aureo-mono-label mb-2" style={{ color: '#7CB5C5' }}>LIVE · CIRCLE GATEWAY PAYMENT <span className="text-[10px] opacity-50 ml-2">[EXPERIMENTAL — NOT PRODUCTION-CERTIFIED]</span></div>
             <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 exact scheme — Circle Nanopayments</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
               <li>· No Circle API key is required for facilitator mode</li>
@@ -356,6 +356,11 @@ export default function DocsPage() {
               <li>· On-chain settlement on complete()</li>
               <li>· Use when work has milestones or evaluator review</li>
             </ul>
+            <div className="mt-3 text-xs opacity-60 border-t border-white/10 pt-2" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>
+              Note: ERC-8183 on-chain completion is a <strong>separate lifecycle</strong> from ArcLayer off-chain job settlement (x402 settle).<br />
+              ERC-8183 handles on-chain job records via submit() → complete().<br />
+              ArcLayer off-chain job settlement via /api/agent-jobs/[jobId]/settle handles x402 Arc-native payment + status tracking in Supabase.
+            </div>
           </div>
         </div>
 
@@ -386,7 +391,7 @@ export default function DocsPage() {
               <div>Block: 42498828 · Buyer: <code className="text-[#C5A67C]">0x9fC73…8eE5</code></div>
             </div>
             <div className="border border-[#7CB5C5]/20 bg-black/30 p-4 text-xs" style={{ color: 'rgba(234, 228, 216, 0.8)', lineHeight: 1.6 }}>
-              <div className="aureo-mono-label mb-2" style={{ color: '#7CB5C5' }}>CIRCLE GATEWAY PAYMENT</div>
+              <div className="aureo-mono-label mb-2" style={{ color: '#7CB5C5' }}>CIRCLE GATEWAY PAYMENT <span className="text-[10px] opacity-50">[EXPERIMENTAL — NOT PRODUCTION-CERTIFIED]</span></div>
               <div>· Verify: pass</div>
               <div>· Settle: Circle Gateway pass</div>
               <div>· Unlock: pass</div>
@@ -403,6 +408,8 @@ export default function DocsPage() {
           <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.55 }}>
             <li>· Arc Native Payment ships a self-hosted relayer; operators must fund it with Arc USDC and native gas. Check <code className="text-[#C5A67C]">/api/x402/relayer-status</code> before relying on settle.</li>
             <li>· Circle Gateway Payment uses Circle&apos;s <code className="text-[#7CB5C5]">BatchFacilitatorClient</code>. The facilitator role is keyless; buyers must hold a USDC balance in their GatewayWallet (<code className="text-[#7CB5C5]">0x0077…19B9</code>) before signing a payment.</li>
+            <li>· <strong>Circle Gateway / Circle Skills-compatible payment is experimental and not production-certified yet.</strong></li>
+            <li>· ERC-8183 on-chain completion (submit() → complete()) is a <strong>separate lifecycle</strong> from ArcLayer off-chain job settlement (x402 settle). ERC-8183 handles on-chain job records; ArcLayer off-chain settlement handles x402 payment + Supabase status tracking.</li>
             <li>· EIP-712 domain reads <code className="text-[#C5A67C]">name</code> and <code className="text-[#C5A67C]">version</code> from the on-chain USDC contract; the Arc deployment reports <code className="text-[#C5A67C]">USDC</code> / <code className="text-[#C5A67C]">2</code>.</li>
             <li>· Testnet only. Mainnet rollout requires Arc mainnet keys and audited relayer ops.</li>
           </ul>
