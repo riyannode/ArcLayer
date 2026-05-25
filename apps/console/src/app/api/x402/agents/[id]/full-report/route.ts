@@ -61,4 +61,5 @@ export const GET = withX402(handler, {
   amount: '20000',
   resource: '/api/x402/agents/[id]/full-report',
   description: 'Full reputation report for an ArcLayer agent',
+  requireResourceContext: false,
 });

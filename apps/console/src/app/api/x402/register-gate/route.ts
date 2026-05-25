@@ -21,6 +21,7 @@ export const GET = withX402(handler, {
   amount: process.env.X402_REGISTER_GATE_AMOUNT_ATOMIC || AMOUNT_ATOMIC,
   resource: RESOURCE,
   description: 'Anti-spam registration fee — prevents spam agent listings on the marketplace.',
+  requireResourceContext: false,
 });
 
 export const POST = GET;
