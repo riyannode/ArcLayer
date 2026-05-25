@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAgentJob } from '@/lib/agent-jobs/store';
+import { getAgentJob, withAgentJobNamespace } from '@/lib/agent-jobs/store';
 
 export async function GET(
   _req: NextRequest,
@@ -17,7 +17,7 @@ export async function GET(
       return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
     }
 
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json({ ok: true, ...withAgentJobNamespace(result) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown';
     console.error('[agent-jobs] GET /[jobId] failed:', msg);

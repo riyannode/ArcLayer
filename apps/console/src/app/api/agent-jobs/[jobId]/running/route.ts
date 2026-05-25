@@ -3,7 +3,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { markJobRunning } from '@/lib/agent-jobs/store';
+import { markJobRunning, withAgentJobNamespace } from '@/lib/agent-jobs/store';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 
 export async function POST(
@@ -26,7 +26,7 @@ export async function POST(
     }
 
     const job = await markJobRunning({ jobId, workerId });
-    return NextResponse.json({ ok: true, job });
+    return NextResponse.json({ ok: true, job: withAgentJobNamespace(job) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown';
     console.error('[agent-jobs] POST /running failed:', msg);
