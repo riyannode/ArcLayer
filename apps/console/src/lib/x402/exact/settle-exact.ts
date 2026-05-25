@@ -169,12 +169,9 @@ async function settleOnChain(input: SettleExactInput): Promise<SettleResponse> {
   });
 
   try {
-    // Check relayer has gas (USDC is gas on Arc)
-    const relayerBalance = await publicClient.readContract({
-      address: asset,
-      abi: [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'account', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] }],
-      functionName: 'balanceOf',
-      args: [account.address],
+    // Check relayer has native Arc gas balance
+    const relayerBalance = await publicClient.getBalance({
+      address: account.address,
     });
 
     // Need at least some gas — 0.01 USDC (10000 atomic units) as minimum
