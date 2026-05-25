@@ -4,6 +4,33 @@ External PM2 market agent bridge example: external PM2 bots make market decision
 
 This is **not** a generic external LLM demo and not a real trading executor.
 
+## Architecture
+
+**Role-split PM2:** 4 independent processes, one per role.
+
+```
+oracle -> market_snapshot
+                  |
+          analyzer -> resolver_output
+                           |
+                   evaluator -> evaluation
+                                    |
+                            executor -> execution_intent + x402 autopay
+```
+
+- **oracle-bot.js** fetches ArcLayer raw BTC 15m Polymarket market/orderbook/candles feed and posts `role=oracle` `type=market_snapshot`.
+- **analyzer-bot.js** reads the latest oracle `market_snapshot` from the bridge, runs LLM analysis, and posts `role=analyzer` `type=resolver_output`.
+- **evaluator-bot.js** reads the analyzer `resolver_output`, evaluates risk, and posts `role=evaluator` `type=evaluation`.
+- **executor-bot.js** reads the evaluator `evaluation`, posts a DRY_RUN execution intent with x402 autopay receipt. It never places real trades.
+
+**Key principles:**
+- No controller spawns children. No `spawnSync`. No chain mode.
+- One role = one PM2 process.
+- One role = one manifest.
+- One role = one A2A API key.
+- ERC-8004 ID is only the identity reference/display, not the `ARCLAYER_AGENT_ID` used by job/bridge API.
+- x402 is route-level paid access, not a global gate for every API call.
+
 ## Flow
 
 ```text
@@ -18,13 +45,10 @@ external PM2 bot
   -> /live-a2a-agent frontend viewer
 ```
 
-1. `oracle-bot.js` fetches ArcLayer raw BTC 15m Polymarket market/orderbook/candles feed and posts `role=oracle`.
-2. `analyzer-bot.js` reads latest bridge session, uses local deterministic logic or an optional local LLM provider, and posts `role=analyzer`.
-3. `evaluator-bot.js` evaluates analyzer output outside ArcLayer and posts `role=evaluator`.
-4. `executor-bot.js` posts a DRY_RUN execution intent only. It never places real trades.
-5. ArcLayer stores the bridge event, `payloadHash`, `runtimeId`, `job_id`/category metadata, receipt/history, and x402 unlock status.
-6. `POST /api/x402/bridge-access` returns `402` without payment and returns the unlocked bridge session/receipt after valid payment.
-7. `/live-a2a-agent` shows the full flow.
+1. Each bot reads/writes to the ArcLayer bridge API using its own `ARCLAYER_AGENT_ID` and `ARCLAYER_API_KEY`.
+2. Downstream roles (analyzer, evaluator, executor) read upstream events by **category**, not by local agentId. This allows analyzer to read oracle events from `llm-market-oracle`, evaluator to read analyzer events from `llm-market-analyzer`, etc.
+3. ArcLayer stores the bridge event, `payloadHash`, `runtimeId`, category metadata, receipt/history, and x402 unlock status.
+4. `/live-a2a-agent` shows the full flow.
 
 ## Architecture boundary
 
@@ -46,39 +70,19 @@ cp .env.oracle.example .env.oracle
 cp .env.analyzer.example .env.analyzer
 cp .env.evaluator.example .env.evaluator
 cp .env.executor.example .env.executor
-# Fill ARCLAYER_API_KEY + role-specific envs locally. Never commit .env.*.
+# Fill ARCLAYER_API_KEY per role in each .env.<role> file.
+# Never commit .env.* files.
 npm install dotenv
 ```
 
 Bot startup loads `.env.common` first, then `.env.<role>` overrides it.
-PM2 ecosystem config controls mode keys (`EVENT_CHAIN_ENABLED`, `RUN_FOREVER`).
 
-For external agent setup (custom agent ID):
+`.env.common` contains shared settings only (base URL, category, interval, x402 defaults).
+Role-specific API keys and agent IDs go in each `.env.<role>` file.
 
-```bash
-cp .env.external-agent.example .env.<custom-role>
-```
+There is no `llm-market-agent` fallback. Each role uses its own `ARCLAYER_AGENT_ID` from its env file.
 
-Optional local LLM:
-
-```bash
-LLM_BASE_URL=
-LLM_MODEL=
-LLM_API_KEY=local-only-key
-```
-
-`LLM_API_KEY` is sent only to the configured local/OpenAI-compatible LLM provider. It is never sent to ArcLayer or Supabase and must never be printed.
-
-## Run one-shot smoke
-
-```bash
-node oracle-bot.js
-node analyzer-bot.js
-node evaluator-bot.js
-node executor-bot.js
-```
-
-## Independent mode (4 processes)
+### Start with PM2 (independent mode — 4 processes)
 
 ```bash
 pm2 delete oracle-bot analyzer-bot evaluator-bot executor-bot 2>/dev/null || true
@@ -89,39 +93,41 @@ pm2 status
 
 Expected:
 - PM2 has exactly 4 processes.
-- oracle-bot runs forever.
-- analyzer-bot runs forever and waits for oracle market_snapshot.
-- evaluator-bot runs forever and waits for analyzer resolver_output.
-- executor-bot runs forever and waits for evaluator evaluation.
-- oracle does not spawn children because `EVENT_CHAIN_ENABLED=false`.
-
-## Chain mode (1 process, oracle spawns children)
-
-```bash
-pm2 delete oracle-bot analyzer-bot evaluator-bot executor-bot 2>/dev/null || true
-pm2 start ecosystem.chain.config.cjs
-pm2 save
-```
-
-Expected:
-- PM2 has only oracle-bot.
-- oracle spawns analyzer/evaluator/executor once per cycle via `spawnSync`.
-- Do not run independent mode and chain mode at the same time.
+- oracle-bot runs forever posting `market_snapshot`.
+- analyzer-bot runs forever and waits for oracle `market_snapshot`.
+- evaluator-bot runs forever and waits for analyzer `resolver_output`.
+- executor-bot runs forever and waits for evaluator `evaluation`.
+- No controller spawns children. Each process is independent.
 
 ## One-shot smoke (no PM2)
 
 ```bash
-EVENT_CHAIN_ENABLED=false RUN_FOREVER=false node oracle-bot.js
+RUN_FOREVER=false node oracle-bot.js
+RUN_FOREVER=false node analyzer-bot.js
+RUN_FOREVER=false node evaluator-bot.js
+RUN_FOREVER=false node executor-bot.js
 ```
+
+## Required env for x402 executor lifecycle
+
+- `MARKET_EXECUTION_MODE=DRY_RUN`
+- `PROTOCOL_TX_MODE=ARC_TESTNET`
+- `X402_AUTOPAY=true`
+- `X402_AUTOPAY_REQUIRED=false`
+- `X402_SCOPE=external_trace`
+- `ARC_RPC_URL`
+- `ARCLAYER_BASE_URL`
+- `ARCLAYER_API_KEY=<required>`
+- `A2A_LIVE_EVENTS_TOKEN=<required>`
+- `X402_PAYER_PRIVATE_KEY=<required for real x402 only>`
 
 ## Safety
 
-- `.env` is ignored by repo policy; `.env.example` contains placeholders only.
-- `DRY_RUN=true` is required. Setting `DRY_RUN=false` throws.
-- Keep `MARKET_EXECUTION_MODE=DRY_RUN` for this bridge integration.
+- `.env` is ignored by repo policy; `.env.example` files contain placeholders only.
+- `MARKET_EXECUTION_MODE=DRY_RUN` is required. Setting `MARKET_EXECUTION_MODE=REAL` may throw.
 - x402 autopay requires: `X402_AUTOPAY=true`, `PROTOCOL_TX_MODE=ARC_TESTNET`, and an unpaid session.
 - No LLM API key, private key, exchange key, or wallet private key is sent to ArcLayer or Supabase.
-- ArcLayer stores only non-sensitive bridge metadata: `agent_id`, `runtime_id`, `session_id`, `job_id`, `category`, role, event payload hashes, receipts, and timestamps.
+- ArcLayer stores only non-sensitive bridge metadata: `agent_id`, `runtime_id`, `session_id`, `category`, role, event payload hashes, receipts, and timestamps.
 
 ## Idempotency & Duplicate Prevention
 
@@ -176,23 +182,9 @@ When the backend returns HTTP 409 with `error: "payment_in_flight"`, the bot
 treats this as a non-fatal skip. It does not retry payment in the same cycle.
 The caller receives `{ ok: false, skipped: true, error: 'payment_in_flight' }`.
 
-## Required env for x402 executor lifecycle
-- `MARKET_EXECUTION_MODE=DRY_RUN`
-- `PROTOCOL_TX_MODE=ARC_TESTNET`
-- `X402_AUTOPAY=true`
-- `X402_AUTOPAY_REQUIRED=false`
-- `X402_SCOPE=external_trace`
-- `ARC_RPC_URL`
-- `ARCLAYER_BASE_URL`
-- `ARCLAYER_API_KEY=<required>`
-- `A2A_LIVE_EVENTS_TOKEN=<required>`
-- `X402_PAYER_PRIVATE_KEY=<required for real x402 only>`
+## Safety Warnings
 
-## Warnings
-
-- Do not run **chain mode** and **independent mode** at the same time.
-- Do not run old shared `.env` mode unless `LEGACY_SHARED_ENV=true`.
+- Do not run with real trading keys or real funds.
 - `MARKET_EXECUTION_MODE` must remain `DRY_RUN` for no-trade executor.
 - `X402_AUTOPAY=true` enables live x402 payments.
 - Each external bot must use unique `ARCLAYER_AGENT_ID`, `RUNTIME_ID`, and wallet key.
-- Do not put `EVENT_CHAIN_ENABLED` in `.env.oracle`; use ecosystem config for mode control.

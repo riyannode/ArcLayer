@@ -1,49 +1,10 @@
 const { loadRoleEnv } = require("./shared/env-loader");
 loadRoleEnv("oracle");
-const path = require("path");
 
 const { callLLM } = require("./shared/llm-client");
 const { currentSessionId, getJson, postEvent, postReceipt } = require("./shared/arclayer-client");
 const { bpsSignal } = require("./shared/market-logic");
 const { runForever } = require("./shared/runner");
-const { spawnSync } = require("node:child_process");
-
-
-function runRoleOnce(role, timeoutMs) {
-  const scriptPath = path.join(__dirname, `${role}-bot.js`);
-  console.log(`[oracle-chain] trigger ${role}`);
-  const result = spawnSync(process.execPath, [scriptPath], {
-    cwd: __dirname,
-    env: {
-      ...process.env,
-      BOT_ROLE: role,
-      BOT_ENV_FILE: `.env.${role}`,
-      COMMON_ENV_FILE: process.env.COMMON_ENV_FILE || ".env.common",
-      RUN_FOREVER: "false",
-      STARTUP_DELAY_MS: "0"
-    },
-    stdio: "inherit",
-    timeout: timeoutMs
-  });
-
-  if (result.error) {
-    throw new Error(`${role} trigger failed: ${result.error.message}`);
-  }
-  if (result.status !== 0) {
-    throw new Error(`${role} exited with status ${result.status}`);
-  }
-  console.log(`[oracle-chain] ${role} completed`);
-}
-
-async function runDownstreamChain() {
-  if (process.env.EVENT_CHAIN_ENABLED !== "true") {
-    console.log("[oracle-chain] disabled EVENT_CHAIN_ENABLED=false");
-    return;
-  }
-  runRoleOnce("analyzer", Number(process.env.CHAIN_ANALYZER_TIMEOUT_MS || 90000));
-  runRoleOnce("evaluator", Number(process.env.CHAIN_EVALUATOR_TIMEOUT_MS || 90000));
-  runRoleOnce("executor", Number(process.env.CHAIN_EXECUTOR_TIMEOUT_MS || 90000));
-}
 
 async function runOnce() {
   const [market, orderbook, candles] = await Promise.all([
@@ -95,8 +56,7 @@ Schema:
   "source": "llm-oracle",
   "summary": string,
   "observations": string[]
-}
-`,
+}`,
     prompt: `
 Summarize this raw BTC 15m market payload for downstream autonomous agents.
 
@@ -133,8 +93,6 @@ ${JSON.stringify(rawPayload).slice(0, 12000)}
       eventId: posted.eventId || null
     }
   });
-
-  await runDownstreamChain();
 }
 
 runForever("oracle", runOnce).catch((err) => {
