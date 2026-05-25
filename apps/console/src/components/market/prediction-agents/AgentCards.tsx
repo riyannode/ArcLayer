@@ -1,30 +1,39 @@
-'use client';
+"use client";
 
-import type { AgentNode, BackendAgentLike } from './predictionAgentTypes';
-import { normalizeAgents } from './predictionAgentTypes';
+import { normalizeAgents, type AgentNode, type BackendAgentLike } from "./predictionAgentTypes";
 
-export default function AgentCards({ agents }: { agents: BackendAgentLike[] }) {
+interface AgentCardsProps {
+  agents: BackendAgentLike[];
+}
+
+export default function AgentCards({ agents }: AgentCardsProps) {
   const normalizedAgents = normalizeAgents(agents);
 
   return (
-    <section className="rounded-xl border border-[#1b1c23] bg-[#05060a]/95 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_20px_70px_rgba(0,0,0,0.35)]">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <section className="rounded-2xl border border-zinc-800/80 bg-[#080808] p-5">
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#ff9100]">Prediction Agent Cards</div>
-          <div className="mt-1 text-xs text-zinc-500">External bots registered into prediction-market-bots</div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.35em] text-orange-400/80">
+            Agent Cards
+          </p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-zinc-100">
+            Registered Prediction Bots
+          </h2>
         </div>
-        <div className="rounded-full border border-[#ff9100]/20 bg-[#ff9100]/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.16em] text-[#ffb86b]">
-          {normalizedAgents.length} nodes
+        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+          {normalizedAgents.length} cards
         </div>
       </div>
 
       {normalizedAgents.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-zinc-800 bg-[#090a0f]/80 p-4 text-center font-mono text-[11px] text-zinc-500">
-          No local registered agents found.
+        <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/50 p-5 text-center text-sm text-zinc-500">
+          No registered prediction-market-bots found.
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-5">
-          {normalizedAgents.map((agent) => <AgentCard key={agent.id} agent={agent} />)}
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          {normalizedAgents.map((agent) => (
+            <AgentCard key={agent.id} agent={agent} />
+          ))}
         </div>
       )}
     </section>
@@ -32,40 +41,45 @@ export default function AgentCards({ agents }: { agents: BackendAgentLike[] }) {
 }
 
 function AgentCard({ agent }: { agent: AgentNode }) {
-  const isPaid = agent.category === 'paid' || agent.paymentMode === 'paid';
-  const isSynced = agent.status === 'synced' || agent.status === 'active';
+  const isSynced = agent.status === "synced" || agent.status === "active";
 
   return (
-    <article className="group overflow-hidden rounded-lg border border-[#20222b] bg-[#090a0f]/90 p-3.5 shadow-md transition-all duration-200 hover:border-[#ff9100]/40 hover:bg-[#12141c]/90 hover:shadow-[0_0_24px_rgba(255,145,0,0.08)]">
+    <article className="rounded-xl border border-zinc-800 bg-[#0d0d0f] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.25)] transition hover:border-orange-500/35 hover:bg-[#111114]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-zinc-100">{agent.name}</div>
-          <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[#ff9100]">{agent.role}</div>
+          <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-orange-300">
+            {agent.role}
+          </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <span className={isSynced ? 'h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.85)]' : 'h-2 w-2 rounded-full bg-zinc-700'} />
-          <span className={isPaid ? 'rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 font-mono text-[9px] text-emerald-300' : 'rounded-full border border-[#ff9100]/25 bg-[#ff9100]/10 px-2 py-0.5 font-mono text-[9px] text-[#ffb86b]'}>
-            {isPaid ? 'paid' : 'x402'}
-          </span>
-        </div>
+        <span
+          className={[
+            "rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.16em]",
+            isSynced
+              ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-300"
+              : "border-zinc-700 bg-zinc-900 text-zinc-500",
+          ].join(" ")}
+        >
+          {agent.status}
+        </span>
       </div>
 
       <div className="mt-4 space-y-2 font-mono text-[10px] text-zinc-500">
-        <Meta label="id" value={agent.id} />
-        <Meta label="endpoint" value={agent.endpoint} />
-        <Meta label="caps" value={agent.caps} />
-        <Meta label="event" value={agent.event} strong />
-        <Meta label="seen" value={agent.seen} />
+        <Row label="id" value={agent.id} />
+        <Row label="type" value={agent.category} />
+        <Row label="caps" value={agent.caps} />
+        <Row label="event" value={agent.event} />
+        <Row label="seen" value={agent.seen} />
       </div>
     </article>
   );
 }
 
-function Meta({ label, value, strong = false }: { label: string; value: string; strong?: boolean }) {
+function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-[52px_minmax(0,1fr)] gap-2">
-      <span className="uppercase tracking-[0.16em] text-zinc-600">{label}</span>
-      <span className={strong ? 'truncate text-zinc-300' : 'truncate text-zinc-500'}>{value || '—'}</span>
+    <div className="grid grid-cols-[44px_minmax(0,1fr)] gap-2">
+      <span className="uppercase tracking-[0.16em] text-zinc-700">{label}</span>
+      <span className="truncate text-zinc-400">{value || "—"}</span>
     </div>
   );
 }
