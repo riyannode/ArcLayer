@@ -16,13 +16,13 @@ export type PredictionAgentInput = {
   id?: string | null;
   agentId?: string | null;
   name?: string | null;
-  role?: string | null;
-  category?: string | null;
-  endpoint?: string | null;
+  role?: unknown;
+  category?: unknown;
+  endpoint?: unknown;
   caps?: string[] | string | null;
-  event?: string | null;
-  seen?: string | null;
-  status?: string | null;
+  event?: unknown;
+  seen?: unknown;
+  status?: unknown;
 };
 
 const BLOCKED_PLACEHOLDER_NAMES = new Set(['arclayer llm market agent cluster']);
@@ -46,6 +46,7 @@ export const FLOW_ROLE_ORDER = ['ORACLE', 'ANALYZER', 'EVALUATOR', 'MARKET-AGENT
 
 function text(value: unknown, fallback = '—') {
   if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return fallback;
 }
 
@@ -62,7 +63,7 @@ function normalizeStatus(value: unknown): PredictionAgentStatus {
 }
 
 function normalizeCaps(value: PredictionAgentInput['caps']) {
-  if (Array.isArray(value)) return value.filter(Boolean).slice(0, 3).join(', ') || '—';
+  if (Array.isArray(value)) return value.map((item) => text(item, '')).filter(Boolean).slice(0, 3).join(', ') || '—';
   return text(value);
 }
 
@@ -91,7 +92,7 @@ export function normalizePredictionAgent(input: PredictionAgentInput): Predictio
   return isBlockedPlaceholder(agent) ? null : agent;
 }
 
-export function normalizePredictionAgents(inputs: PredictionAgentInput[]) {
+export function normalizePredictionAgents(inputs: PredictionAgentInput[] = []) {
   return inputs.flatMap((input) => {
     const agent = normalizePredictionAgent(input);
     return agent ? [agent] : [];
