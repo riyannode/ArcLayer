@@ -37,6 +37,7 @@ export type IndexedJobEvent = {
   evaluator?: Address;
   hook?: Address;
   expiredAt?: bigint;
+  description?: string;
   amount?: bigint;
   deliverable?: `0x${string}`;
   reason?: `0x${string}`;
