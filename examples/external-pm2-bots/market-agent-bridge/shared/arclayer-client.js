@@ -173,7 +173,7 @@ async function latestSession(options = {}) {
   const requiredRoles = options.requiredRoles || [];
   const [eventsData, liveData] = await Promise.all([
     getJson(`/api/agent-bridge/events?category=${encodeURIComponent(AGENT_CATEGORY)}&limit=200&ts=${Date.now()}`, { authenticated: true }),
-    getJson(`/api/a2a/live-events?category=prediction-market-bots&limit=500&ts=${Date.now()}`, { authenticated: true }).catch(() => ({ events: [] }))
+    getJson(`/api/a2a/live-events?category=${encodeURIComponent(AGENT_CATEGORY)}&limit=500&ts=${Date.now()}`, { authenticated: true }).catch(() => ({ events: [] }))
   ]);
   // Do NOT filter by local AGENT_ID — downstream roles must read events from other agent IDs
   // in the same category/session. Role matching is done by event.role and event.type.
@@ -283,7 +283,7 @@ async function safePostLiveEvent(eventType, details = {}) {
   const payload = {
     agentId: AGENT_ID,
     agentName: details.agentName || AGENT_ID,
-    category: 'prediction-market-bots',
+    category: AGENT_CATEGORY,
     eventType: eventType || 'x402_paid',
     title: details.title || 'x402 payment settled',
     summary: details.summary || 'Executor external_trace x402 payment settled',
