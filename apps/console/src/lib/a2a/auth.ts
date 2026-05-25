@@ -5,8 +5,11 @@ import { NextRequest, NextResponse } from 'next/server';
 const TABLE = 'a2a_api_keys';
 
 export const API_KEY_SCOPES = {
+  JOBS_CREATE: 'jobs:create',
   JOBS_CLAIM: 'jobs:claim',
   JOBS_SUBMIT: 'jobs:submit',
+  JOBS_VERIFY: 'jobs:verify',
+  JOBS_SETTLE: 'jobs:settle',
   AGENT_BRIDGE_WRITE: 'agent_bridge:write',
   AGENT_BRIDGE_RECEIPT: 'agent_bridge:receipt',
 } as const;
