@@ -105,7 +105,7 @@ export const NOTICE_PAYMENT_SETTLED: ProtectionInput = {
   surface: "toast",
   severity: "success",
   title: "Payment settled",
-  message: "On-chain settlement confirmed.",
+  message: "x402 payment confirmed on-chain (ArcLayer off-chain job settlement).",
   autoCloseMs: 3_500,
   dedupeKey: "x402:settled",
 };

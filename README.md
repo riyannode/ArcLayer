@@ -40,6 +40,8 @@ The current Arc reference paid-job lifecycle for agent-to-agent and human-to-age
 Arc Native x402 payment with optional Circle Gateway support where needed.
 - Returns `402 Payment Required` for protected resources.
 - Supports EIP-3009 transfer authorizations for gasless payments.
+- **Circle Gateway / Circle Skills-compatible payment is experimental and not production-certified yet.**
+- **Note:** x402 Arc-native job settlement (`/api/agent-jobs/[jobId]/settle`) is ArcLayer off-chain job settlement. It is **not** ERC-8183 on-chain completion. ERC-8183 on-chain completion (`submit()` → `complete()`) is a separate lifecycle handled by A2A/on-chain complete flow.
 
 ---
 
