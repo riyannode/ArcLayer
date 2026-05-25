@@ -1,4 +1,5 @@
 export type AgentRole =
+  | "AGENT"
   | "EXECUTOR"
   | "EVALUATOR"
   | "ANALYZER"
@@ -119,8 +120,12 @@ const ROLE_ALIASES: Record<string, AgentRole> = {
   "market-agent": "MARKET-AGENT",
   market_agent: "MARKET-AGENT",
   market: "MARKET-AGENT",
-  agent: "MARKET-AGENT",
+  agent: "AGENT",
 };
+
+const BLOCKED_PLACEHOLDER_AGENT_NAMES = new Set([
+  "arclayer llm market agent cluster",
+]);
 
 function asString(value: unknown, fallback = ""): string {
   if (typeof value === "string" && value.trim()) return value.trim();
@@ -131,10 +136,12 @@ function asString(value: unknown, fallback = ""): string {
 function normalizeRole(value: unknown): AgentRole {
   const raw = asString(value).toLowerCase();
 
+  if (!raw) return "AGENT";
   if (raw === "market-agent" || raw === "market_agent") return "MARKET-AGENT";
 
   const direct = raw.toUpperCase();
   if (
+    direct === "AGENT" ||
     direct === "EXECUTOR" ||
     direct === "EVALUATOR" ||
     direct === "ANALYZER" ||
@@ -144,7 +151,7 @@ function normalizeRole(value: unknown): AgentRole {
     return direct as AgentRole;
   }
 
-  return ROLE_ALIASES[raw] ?? "MARKET-AGENT";
+  return ROLE_ALIASES[raw] ?? "AGENT";
 }
 
 function normalizeCategory(value: unknown): AgentCategory {
@@ -189,6 +196,10 @@ function normalizeSeen(value: unknown): string {
   return asString(value, "live");
 }
 
+function isBlockedPlaceholderAgent(agent: AgentNode): boolean {
+  return BLOCKED_PLACEHOLDER_AGENT_NAMES.has(agent.name.trim().toLowerCase());
+}
+
 export function normalizeAgent(raw: BackendAgentLike): AgentNode {
   const role = normalizeRole(raw.role ?? raw.type ?? raw.kind);
 
@@ -216,5 +227,7 @@ export function normalizeAgent(raw: BackendAgentLike): AgentNode {
 }
 
 export function normalizeAgents(agents: BackendAgentLike[] = []): AgentNode[] {
-  return agents.map((agent) => normalizeAgent(agent));
+  return agents
+    .map((agent) => normalizeAgent(agent))
+    .filter((agent) => !isBlockedPlaceholderAgent(agent));
 }
