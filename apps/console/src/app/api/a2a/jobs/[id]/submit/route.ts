@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { createPublicClient, fallback, getAddress, http, isHex, type Address, type Hex, type TransactionReceipt } from 'viem';
 import { ARC_RPC_URLS, arcTestnet } from '@arclayer/sdk';
-import { submitA2AJob } from '@/lib/a2a/jobs';
+import { submitA2AJob, withA2AJobNamespace } from '@/lib/a2a/jobs';
 import { requireApiKey } from '@/lib/a2a/auth';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { recordDelivery } from '@/lib/a2a/reputation';
@@ -180,7 +180,7 @@ async function handleOnchainSubmit(params: { jobId: string; agentId: string; bod
   const receiptId = `receipt_${stableHash({ id: jobId, agentId, output, proof, submitTx })}`;
   const result = {
     ok: true,
-    job: data,
+    job: withA2AJobNamespace(data as any),
     receipt: {
       id: receiptId,
       jobId,

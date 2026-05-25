@@ -38,26 +38,45 @@ export type A2AJob = {
 };
 
 /**
- * ERC-8183 on-chain job namespace metadata.
- * Added to API responses to distinguish ERC-8183 on-chain AgenticCommerce jobs
- * from ArcLayer off-chain agent_jobs.
+ * Dynamic A2A job namespace metadata.
+ * Distinguishes ERC-8183 on-chain jobs from ArcLayer off-chain A2A jobs
+ * based on is_onchain / onchain_job_id fields.
+ *
+ * - On-chain (is_onchain=true or onchain_job_id set):
+ *     job_source: "erc8183_onchain"  status_namespace: "erc8183"
+ *     settlement_rail: "erc8183_escrow"
+ *
+ * - Off-chain A2A:
+ *     job_source: "offchain_a2a_jobs"  status_namespace: "a2a_jobs"
+ *     settlement_rail: "x402_arc_native"
  */
-export type WithERC8183JobNamespace<T> = T & {
-  job_source: 'erc8183_onchain';
-  status_namespace: 'erc8183';
-  settlement_rail: 'erc8183_escrow';
-  lifecycle_label: 'ERC-8183 on-chain job';
-  settlement_label: 'ERC-8183 escrow completion';
+export type WithA2AJobNamespace<T> = T & {
+  job_source: 'erc8183_onchain' | 'offchain_a2a_jobs';
+  status_namespace: 'erc8183' | 'a2a_jobs';
+  settlement_rail: 'erc8183_escrow' | 'x402_arc_native';
+  lifecycle_label: 'ERC-8183 on-chain job' | 'ArcLayer off-chain A2A job';
+  settlement_label: 'ERC-8183 escrow completion' | 'x402 Arc-native settlement';
 };
 
-export function withERC8183JobNamespace<T extends A2AJob>(job: T): WithERC8183JobNamespace<T> {
+export function withA2AJobNamespace<T extends A2AJob>(job: T): WithA2AJobNamespace<T> {
+  const isOnChain = job.is_onchain === true || (job.onchain_job_id != null && job.onchain_job_id !== '');
+  if (isOnChain) {
+    return {
+      ...job,
+      job_source: 'erc8183_onchain',
+      status_namespace: 'erc8183',
+      settlement_rail: 'erc8183_escrow',
+      lifecycle_label: 'ERC-8183 on-chain job',
+      settlement_label: 'ERC-8183 escrow completion',
+    };
+  }
   return {
     ...job,
-    job_source: 'erc8183_onchain',
-    status_namespace: 'erc8183',
-    settlement_rail: 'erc8183_escrow',
-    lifecycle_label: 'ERC-8183 on-chain job',
-    settlement_label: 'ERC-8183 escrow completion',
+    job_source: 'offchain_a2a_jobs',
+    status_namespace: 'a2a_jobs',
+    settlement_rail: 'x402_arc_native',
+    lifecycle_label: 'ArcLayer off-chain A2A job',
+    settlement_label: 'x402 Arc-native settlement',
   };
 }
 
@@ -92,8 +111,8 @@ function nextJobId(input: CreateJobInput) {
   return `job_${stableHash({ input, seq: jobSeq, ts: Date.now() })}`;
 }
 
-/** Map DB row (snake_case) → A2AJob (camelCase) with ERC-8183 namespace */
-function rowToJob(row: Record<string, unknown>): WithERC8183JobNamespace<A2AJob> {
+/** Map DB row (snake_case) → A2AJob (camelCase) with dynamic A2A namespace */
+function rowToJob(row: Record<string, unknown>): WithA2AJobNamespace<A2AJob> {
   const job: A2AJob = {
     id: row.id as string,
     title: row.title as string,
@@ -126,7 +145,7 @@ function rowToJob(row: Record<string, unknown>): WithERC8183JobNamespace<A2AJob>
     deliverable_hash: (row.deliverable_hash as string | null) ?? null,
     proof_uri: (row.proof_uri as string | null) ?? null,
   };
-  return withERC8183JobNamespace(job);
+  return withA2AJobNamespace(job);
 }
 
 export async function listA2AJobs(
