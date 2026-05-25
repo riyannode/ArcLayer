@@ -26,6 +26,7 @@ import {
   readJobs,
   readMetaValue,
   readOverview,
+  readOverviewSummary,
   readProofByJobId,
   readProofs,
   syncProjectionStore,
@@ -238,6 +239,11 @@ createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/overview/summary") {
+    writeJson(res, readOverviewSummary());
+    return;
+  }
+
   if (url.pathname === "/overview") {
     writeJson(res, readOverview());
     return;
@@ -265,7 +271,7 @@ createServer((req, res) => {
   writeJson(res, {
     ok: true,
     mode: "arc-reference-100%",
-    endpoints: ["/health", "/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug"],
+    endpoints: ["/health", "/overview/summary", "/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug"],
     eventCount: Number(readMetaValue("event_count") || "0"),
     lastSyncedBlock: readMetaValue("last_synced_block"),
   });
