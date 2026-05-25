@@ -3,7 +3,22 @@ const crypto = require("node:crypto");
 const BASE_URL = (process.env.ARCLAYER_BASE_URL || "https://arclayers.xyz").replace(/\/$/, "");
 const API_KEY = process.env.ARCLAYER_API_KEY || "";
 const A2A_LIVE_EVENTS_TOKEN = process.env.A2A_LIVE_EVENTS_TOKEN || "";
-const AGENT_ID = process.env.ARCLAYER_AGENT_ID || "llm-market-agent";
+
+// Strict AGENT_ID validation: support ARCLAYER_AGENT_ID and AGENT_ID
+// but fail if both exist and mismatch
+const _envAgentId = process.env.ARCLAYER_AGENT_ID || process.env.AGENT_ID || "";
+const _envAgentIdAlt = process.env.AGENT_ID || "";
+if (process.env.ARCLAYER_AGENT_ID && _envAgentIdAlt && process.env.ARCLAYER_AGENT_ID !== _envAgentIdAlt) {
+  throw new Error(`AGENT_ID mismatch: ARCLAYER_AGENT_ID="${process.env.ARCLAYER_AGENT_ID}" !== AGENT_ID="${_envAgentIdAlt}". Use only one.`);
+}
+if (!_envAgentId) {
+  throw new Error("ARCLAYER_AGENT_ID or AGENT_ID is required but missing");
+}
+if (!API_KEY) {
+  throw new Error("ARCLAYER_API_KEY is required but missing");
+}
+const AGENT_ID = _envAgentId;
+const AGENT_CATEGORY = process.env.AGENT_CATEGORY || "prediction-market-bots";
 
 function sha256(payload) { return `0x${crypto.createHash("sha256").update(JSON.stringify(payload || {})).digest("hex")}`; }
 function currentSessionId() { const bucket = Math.floor(Date.now() / (15 * 60 * 1000)) * 15 * 60; return `btc15m_${bucket}`; }
@@ -146,6 +161,10 @@ async function getJson(route, options = {}) {
 
 /**
  * Find latest session for the calling role.
+ * Uses category-based event fetching so downstream roles (analyzer, evaluator, executor)
+ * can read upstream events from other agent IDs in the same category/session.
+ * Role matching is based on event.role and event.type, not local agentId.
+ *
  * @param {Object} options
  * @param {string[]} [options.requiredRoles] - upstream roles the caller needs (e.g. ['analyzer'] for evaluator)
  * @returns {Promise<{ok:true, session:{sessionId,roles,events,receipts}|null}>}
@@ -153,10 +172,12 @@ async function getJson(route, options = {}) {
 async function latestSession(options = {}) {
   const requiredRoles = options.requiredRoles || [];
   const [eventsData, liveData] = await Promise.all([
-    getJson(`/api/agent-bridge/events?limit=200&ts=${Date.now()}`, { authenticated: true }),
-    getJson(`/api/a2a/live-events?category=prediction-market-bots&limit=500&ts=${Date.now()}`, { authenticated: true }).catch(() => ({ events: [] }))
+    getJson(`/api/agent-bridge/events?category=${encodeURIComponent(AGENT_CATEGORY)}&limit=200&ts=${Date.now()}`, { authenticated: true }),
+    getJson(`/api/a2a/live-events?category=${encodeURIComponent(AGENT_CATEGORY)}&limit=500&ts=${Date.now()}`, { authenticated: true }).catch(() => ({ events: [] }))
   ]);
-  const allEvents = (eventsData.events || []).filter((event) => (event.agent_id || event.agentId || (event.agent && event.agent.id)) === AGENT_ID);
+  // Do NOT filter by local AGENT_ID — downstream roles must read events from other agent IDs
+  // in the same category/session. Role matching is done by event.role and event.type.
+  const allEvents = eventsData.events || [];
   const liveEvents = Array.isArray(liveData.events) ? liveData.events : (Array.isArray(liveData.data) ? liveData.data : []);
 
   // Group events by normalized sessionId
@@ -224,6 +245,7 @@ async function postEvent({ sessionId, role, type, runtimeId, payload, metadata =
   const body = {
     sessionId: sessionId || currentSessionId(),
     agentId: AGENT_ID,
+    category: AGENT_CATEGORY,
     role,
     type,
     payload,
@@ -261,7 +283,7 @@ async function safePostLiveEvent(eventType, details = {}) {
   const payload = {
     agentId: AGENT_ID,
     agentName: details.agentName || AGENT_ID,
-    category: 'prediction-market-bots',
+    category: AGENT_CATEGORY,
     eventType: eventType || 'x402_paid',
     title: details.title || 'x402 payment settled',
     summary: details.summary || 'Executor external_trace x402 payment settled',
@@ -295,4 +317,4 @@ async function safePostLiveEvent(eventType, details = {}) {
   return data;
 }
 
-module.exports = { BASE_URL, AGENT_ID, sha256, currentSessionId, getJson, hasRoleContentEvent, hasExecutorX402EventOnly, hasExecutorX402Proof, latestSession, postEvent, postReceipt, safePostLiveEvent };
+module.exports = { BASE_URL, AGENT_ID, AGENT_CATEGORY, sha256, currentSessionId, getJson, hasRoleContentEvent, hasExecutorX402EventOnly, hasExecutorX402Proof, latestSession, postEvent, postReceipt, safePostLiveEvent };

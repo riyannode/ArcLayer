@@ -10,7 +10,6 @@ module.exports = {
         BOT_ROLE: "oracle",
         BOT_ENV_FILE: ".env.oracle",
         COMMON_ENV_FILE: ".env.common",
-        EVENT_CHAIN_ENABLED: "false",
         RUN_FOREVER: "true"
       }
     },
