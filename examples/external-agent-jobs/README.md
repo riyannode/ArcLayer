@@ -1,6 +1,6 @@
 # External Agent Jobs — Fullcycle Example
 
-Demonstrates the complete agent job lifecycle with Arc native x402 settlement:
+Demonstrates complete agent job lifecycle with Arc native x402 settlement:
 
 ```
 create → claim → running → submit → verify → settle (x402)
@@ -11,6 +11,8 @@ create → claim → running → submit → verify → settle (x402)
 ```bash
 cp .env.example .env
 # Edit .env with your values
+# Install dependencies
+npm install
 ```
 
 ## Quick Demo
@@ -19,8 +21,8 @@ cp .env.example .env
 node fullcycle-demo.js
 ```
 
-This creates, claims, runs, submits, verifies, and settles a job.
-Settlement only executes live x402 payment when `LIVE_JOB_SETTLEMENT=true`.
+Creates, claims, runs, submits, verifies, and settles a job.
+Settlement dry-run unless `LIVE_JOB_SETTLEMENT=true`.
 
 ## 24/7 Worker
 
@@ -28,48 +30,55 @@ Settlement only executes live x402 payment when `LIVE_JOB_SETTLEMENT=true`.
 node worker-24x7.js
 ```
 
-Polls for available jobs, claims, runs, and submits results.
-Safe to run multiple instances — atomic claim via `FOR UPDATE SKIP LOCKED`.
+Polls for available jobs, claims, runs, submits results.
+Safe multi-process — atomic claim via `FOR UPDATE SKIP LOCKED`.
 
 ## Manual Steps
 
 ```bash
-# Create a job
 node create-job.js
-
-# Claim the first available job
 node claim-once.js
-
-# Submit a result
 node submit-job.js <jobId>
-
-# Verify
 node verify-job.js <jobId>
-
-# Settle (requires x402 payment)
-LIVE_JOB_SETTLEMENT=true node settle-job.js <jobId>
+# Dry-run settlement:
+node settle-job.js <jobId>
+# Live settlement:
+LIVE_JOB_SETTLEMENT=true X402_PAYER_PRIVATE_KEY=0x... node settle-job.js <jobId>
 ```
+
+## Live Settlement Env Vars
+
+| Var | Required | Purpose |
+|-----|----------|---------|
+| `LIVE_JOB_SETTLEMENT=true` | yes | Activates live x402 payment |
+| `X402_PAYER_PRIVATE_KEY` | yes | EOA private key for signing EIP-3009 |
+| `BUYER_AGENT_ID` | for non-default | Agent ID used in settle body |
+| `ARCLAYER_BASE_URL` | for non-default | Server URL (default: `http://localhost:3000`) |
+| `ARCLAYER_API_KEY` | yes | Bearer token for API auth |
+
+### Live settlement flow
+
+1. POST to `/api/agent-jobs/{jobId}/settle` without payment → 402 with `accepts`
+2. Select Arc Native EIP-3009 requirement (`scheme: "exact"`, `network: "eip155:5042002"`)
+3. Sign `TransferWithAuthorization` using `X402_PAYER_PRIVATE_KEY`
+4. Second POST with `X-PAYMENT` header (base64 JSON payload)
+5. Decode `PAYMENT-RESPONSE` base64url header → print `paymentId` + `txHash`
+6. Exit non-zero if settlement fails or payment is rejected
 
 ## Status Flow
 
-| Status | Description |
-|--------|-------------|
-| `created` | Job created by buyer, waiting for worker claim |
-| `claimed` | Worker atomically claimed the job |
-| `running` | Worker is processing the job |
-| `submitted` | Worker submitted result |
-| `verified` | Verifier approved the result |
-| `settlement_pending` | Settlement initiated |
-| `settled` | Payment settled via x402 on-chain |
-| `failed` | Verification failed or error |
-| `cancelled` | Cancelled by buyer |
-| `expired` | Claim deadline passed |
+- `created` → `claimed` → `running` → `submitted` → `verified` → `settlement_pending` → `settled`
+- `verified` → `failed` | `created` → `cancelled` | `created` → `expired`
+
+## x402 Client
+
+`shared/x402-client.js` provides reusable EIP-3009 signing and payment header construction (bounded logic from PM2 bot's x402-client.js). Used by `settle-job.js` for live settlements.
 
 ## Important
 
-- **This is ArcLayer off-chain job settlement** via x402 Arc-native USDC transfer. The settlement updates job status in Supabase and records the x402 payment.
-- **ERC-8183 on-chain completion** (submit() → complete() on the ERC-8183 AgenticCommerce contract) is a **separate lifecycle**. ERC-8183 handles A2A/on-chain complete flow for agent-to-agent jobs that require on-chain work receipts.
-- **Duplicate settlement is blocked** by `x402_resource_payments` idempotency — each settlement produces a unique key from `resource|sessionId|scope|role`.
-- **Job settlement uses Arc native x402 only** — Circle Gateway / Circle Skills-compatible payment support is **experimental and not production-certified yet**.
-- **Cooldown, Circle Gateway production, and x402 job classification** are deferred to roadmap.
-- PR #204 bridge behavior remains unchanged.
+- Off-chain job settlement via x402 Arc-native USDC transfer. Updates Supabase job status + payment record.
+- ERC-8183 on-chain completion is a separate lifecycle (A2A/on-chain work receipts).
+- Duplicate settlement blocked by `x402_resource_payments` idempotency key.
+- Arc native only — Circle Gateway support is experimental.
+- X402_RECEIVER_ADDRESS must be set server-side (deployer responsibility).
+- PR #204 bridge behavior unchanged.
