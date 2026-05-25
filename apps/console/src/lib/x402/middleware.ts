@@ -6,7 +6,7 @@
  *
  * Flow:
  *   1. Request without payment header → 402 + PAYMENT-REQUIRED
- *   2. Request with PAYMENT-SIGNATURE (Gateway) or X-PAYMENT (Native) →
+ *   2. Request with PAYMENT-SIGNATURE (Arc Native x402 V2 or Circle Gateway) or X-PAYMENT (legacy Native) →
  *      verify → settle → run handler → return content + PAYMENT-RESPONSE
  *
  * Dual-mode: accepts both Circle Gateway batching AND Arc Native EIP-3009.
@@ -240,12 +240,34 @@ function encodePaymentResponse(value: unknown): string {
   return Buffer.from(JSON.stringify(value)).toString('base64url');
 }
 
-function extractPayment(req: NextRequest): { proof: Record<string, unknown>; mode: 'gateway' | 'native' } | null {
-  const gw = req.headers.get('payment-signature');
-  if (gw) {
-    const decoded = decodePaymentHeader(gw);
-    if (decoded && typeof decoded === 'object') return { proof: decoded as Record<string, unknown>, mode: 'gateway' };
+function extractPayment(req: NextRequest, opts?: X402MiddlewareOptions): { proof: Record<string, unknown>; mode: 'gateway' | 'native' } | null {
+  // PAYMENT-SIGNATURE (x402 V2 protocol — used by both Arc Native and Circle Gateway)
+  const paySig = req.headers.get('payment-signature');
+  if (paySig) {
+    const decoded = decodePaymentHeader(paySig);
+    if (decoded && typeof decoded === 'object') {
+      const proof = decoded as Record<string, unknown>;
+      // Classify from payload metadata
+      const classified = classifyPaymentFromProof(proof);
+      if (classified === 'gateway' || classified === 'native') {
+        return { proof, mode: classified };
+      }
+      // Unclassifiable payload — apply fallback from opts.allowedRails
+      if (opts?.allowedRails) {
+        if (opts.allowedRails.length === 1) {
+          if (opts.allowedRails[0] === 'arc-native-eoa') {
+            return { proof, mode: 'native' };
+          }
+          if (opts.allowedRails[0] === 'circle-gateway-passkey') {
+            return { proof, mode: 'gateway' };
+          }
+        }
+      }
+      // Absent or allows both rails — no extracted payment
+      return null;
+    }
   }
+  // X-PAYMENT (legacy Arc Native fallback)
   const native = req.headers.get('x-payment');
   if (native) {
     const decoded = decodePaymentHeader(native);
@@ -253,6 +275,8 @@ function extractPayment(req: NextRequest): { proof: Record<string, unknown>; mod
   }
   return null;
 }
+/** @internal test export — do not use in production */
+export const testExtractPayment = extractPayment;
 
 // ─── 402 Response ────────────────────────────────────────────────────────────
 
@@ -270,6 +294,31 @@ function getRailSessionId(proof: Record<string, unknown>): string | null {
   const value = extra?.railSessionId;
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
+
+/**
+ * Classify a PAYMENT-SIGNATURE payload by inspecting accepted.extra metadata.
+ * - transferMethod === "gateway-batched-eip3009" OR name === "GatewayWalletBatched" => gateway
+ * - transferMethod === "eip3009" OR name === "USDC" => native
+ * - otherwise => null (unclassifiable)
+ */
+function classifyPaymentFromProof(proof: Record<string, unknown>): 'gateway' | 'native' | null {
+  const accepted = proof.accepted as Record<string, unknown> | undefined;
+  const extra = accepted?.extra as Record<string, unknown> | undefined;
+  if (!extra) return null;
+
+  const transferMethod = typeof extra.transferMethod === 'string' ? extra.transferMethod.toLowerCase() : undefined;
+  const name = typeof extra.name === 'string' ? extra.name.toLowerCase() : undefined;
+
+  if (transferMethod === 'gateway-batched-eip3009' || name === 'gatewaywalletbatched') {
+    return 'gateway';
+  }
+  if (transferMethod === 'eip3009' || name === 'usdc') {
+    return 'native';
+  }
+  return null;
+}
+/** @internal test export — do not use in production */
+export const testClassifyPaymentFromProof = classifyPaymentFromProof;
 
 function paymentRequiredResponse(opts: X402MiddlewareOptions, req: NextRequest) {
   const requested = resolveRequestedRail(req);
@@ -1281,15 +1330,15 @@ async function handleNative(
  *   export const GET = withX402(handler, { amount: '1', resource: '/api/x402/protected-resource' });
  *
  * Supports both:
- *   - Circle Gateway (PAYMENT-SIGNATURE header) — batched settlement via Circle facilitator
- *   - Arc Native (X-PAYMENT header) — direct EIP-3009 transferWithAuthorization via relayer
+ *   - Circle Gateway (PAYMENT-SIGNATURE header with gateway-batched-eip3009 metadata) — batched settlement via Circle facilitator
+ *   - Arc Native (PAYMENT-SIGNATURE header with eip3009 metadata, or X-PAYMENT legacy header) — direct EIP-3009 transferWithAuthorization via relayer
  */
 export function withX402(
   handler: (req: NextRequest) => Promise<NextResponse>,
   opts: X402MiddlewareOptions,
 ) {
   return async (req: NextRequest): Promise<NextResponse> => {
-    const extracted = extractPayment(req);
+    const extracted = extractPayment(req, opts);
 
     // No payment → 402
     if (!extracted) {
