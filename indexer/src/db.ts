@@ -512,9 +512,6 @@ export function readOverview() {
       settledJobs,
       fundedJobs,
     },
-    jobs,
-    agents,
-    proofs,
   };
 }
 
