@@ -220,7 +220,7 @@ export default function DocsPage() {
           Build agents on <em className="italic" style={{ color: '#C5A67C' }}>Arc</em>
         </h1>
         <p className="text-base max-w-2xl mb-8" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.6 }}>
-          Integrate x402 payments, ERC-8004 identity, ERC-8183 paid jobs, and indexer reads on Arc Testnet.
+          x402 payments, ERC-8004 agent identity, ERC-8183 paid jobs, and indexer reads — all on Arc Testnet.
         </p>
 
         {/* Testnet warning strip */}
@@ -313,8 +313,8 @@ export default function DocsPage() {
             <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>LIVE · ARC NATIVE PAYMENT</div>
             <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 exact scheme — Self-hosted EIP-3009 relayer</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
-              <li>· Pay an agent in USDC, payment is verified and settled on-chain</li>
-              <li>· Self-hosted relayer settles for the payer (payer pays no gas)</li>
+              <li>· Pay agents in USDC — payment verified and settled on-chain</li>
+              <li>· Self-hosted relayer — payer pays no gas</li>
               <li>· Replay protected: nonces consumed on-chain</li>
               <li>· Settlement tx: <a href="https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline">0x52c894…be4f264</a></li>
             </ul>
@@ -351,7 +351,7 @@ export default function DocsPage() {
             <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>ALSO SUPPORTED</div>
             <div className="aureo-display text-lg mb-2" style={{ color: '#EAE4D8' }}>x402 arc-native scheme</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.5 }}>
-              <li>· USDC-funded jobs via ERC-8183 AgenticCommerce</li>
+              <li>· USDC-funded jobs through ERC-8183 AgenticCommerce</li>
               <li>· Worker submits → client completes with reasonHash</li>
               <li>· On-chain settlement on complete()</li>
               <li>· Use when work has milestones or evaluator review</li>
@@ -367,37 +367,31 @@ export default function DocsPage() {
         <div className="border border-white/10 bg-black/30 p-5 mb-4">
           <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>FACILITATOR ENDPOINTS</div>
           <div className="grid gap-2 text-xs font-mono" style={{ color: 'rgba(234, 228, 216, 0.75)' }}>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/supported</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— list supported payment schemes</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/protected-resource</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— returns 402 challenge and verifies paid retry</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">HDR</span><span className="text-[#EAE4D8]">X-PAYMENT / PAYMENT-SIGNATURE</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— Arc Native uses X-PAYMENT; Circle uses PAYMENT-SIGNATURE</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/relayer-status</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— relayer address and USDC balance</span></div>
-            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/protected-resource</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— dual-mode protected resource example</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/supported</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— supported payment schemes</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/protected-resource</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— returns 402 challenge, verifies paid retry</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">HDR</span><span className="text-[#EAE4D8]">X-PAYMENT / PAYMENT-SIGNATURE</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— Arc Native: X-PAYMENT, Circle: PAYMENT-SIGNATURE</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/relayer-status</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— relayer address + USDC balance</span></div>
+            <div className="flex items-start gap-3"><span className="w-12 text-[#C5A67C]">GET</span><span className="text-[#EAE4D8]">/api/x402/protected-resource</span><span className="hidden md:inline opacity-80 text-[#b5b5b5]">— dual-mode protected resource demo</span></div>
           </div>
         </div>
 
         <div className="border border-white/10 bg-black/30 p-5 mb-4">
           <div className="aureo-mono-label mb-3" style={{ color: '#7CB5C5' }}>PRODUCTION VERIFICATION</div>
           <p className="text-sm mb-3" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.55 }}>
-            Both x402 payment paths have completed end-to-end on Arc Testnet (chainId 5042002, USDC <code className="text-[#C5A67C]">0x3600…0000</code>).
+            Both x402 payment paths work end-to-end on Arc Testnet (chainId 5042002, USDC <code className="text-[#C5A67C]">0x3600…0000</code>).
           </p>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="border border-[#C5A67C]/20 bg-black/30 p-4 text-xs" style={{ color: 'rgba(234, 228, 216, 0.8)', lineHeight: 1.6 }}>
-              <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>ARC NATIVE PAYMENT</div>
-              <div>· Verify: pass</div>
-              <div>· Settle: on-chain pass</div>
-              <div>· Unlock: pass</div>
-              <div>· Receipt already used protection: pass</div>
-              <div className="mt-2">Settlement tx: <a href="https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline break-all">0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264</a></div>
+              <div className='aureo-mono-label mb-2' style={{ color: '#C5A67C' }}>ARC NATIVE PAYMENT</div>
+              <div>· Verify: pass · Settle: pass · Unlock: pass · Replay: pass</div>
+              <div className='mt-2'>Settlement tx: <a href="https://testnet.arcscan.app/tx/0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264" target="_blank" rel="noopener noreferrer" className="text-[#C5A67C] underline break-all">0x52c894303c75f932e9cb892acb177cdb832c05c5f5b073d952554f085be4f264</a></div>
               <div>Block: 42498828 · Buyer: <code className="text-[#C5A67C]">0x9fC73…8eE5</code></div>
             </div>
-            <div className="border border-[#7CB5C5]/20 bg-black/30 p-4 text-xs" style={{ color: 'rgba(234, 228, 216, 0.8)', lineHeight: 1.6 }}>
-              <div className="aureo-mono-label mb-2" style={{ color: '#7CB5C5' }}>CIRCLE GATEWAY PAYMENT <span className="text-[10px] opacity-50">[EXPERIMENTAL — NOT PRODUCTION-CERTIFIED]</span></div>
-              <div>· Verify: pass</div>
-              <div>· Settle: Circle Gateway pass</div>
-              <div>· Unlock: pass</div>
-              <div>· Receipt already used protection: pass</div>
-              <div className="mt-2">Settlement ID (Circle): <span className="text-[#7CB5C5] break-all">0e366c3d-8eb8-46cc-a07f-55350a1913fd</span></div>
-              <div>Payment receipt: <span className="text-[#7CB5C5] break-all">fa643dfcbce2b50f69207d7f6412a142d110e9cc95322695e70a228514dddf01</span></div>
+              <div className="border border-[#7CB5C5]/20 bg-black/30 p-4 text-xs" style={{ color: 'rgba(234, 228, 216, 0.8)', lineHeight: 1.6 }}>
+              <div className='aureo-mono-label mb-2' style={{ color: '#7CB5C5' }}>CIRCLE GATEWAY PAYMENT <span className="text-[10px] opacity-50">[EXPERIMENTAL]</span></div>
+              <div>· Verify: pass · Settle: pass · Unlock: pass · Replay: pass</div>
+              <div className="mt-2">Settlement ID: <span className="text-[#7CB5C5] break-all">0e366c3d-8eb8-46cc-a07f-55350a1913fd</span></div>
+              <div>Receipt: <span className="text-[#7CB5C5] break-all">fa643dfcbce2b50f69207d7f6412a142d110e9cc95322695e70a228514dddf01</span></div>
               <div>GatewayWallet: <code className="text-[#7CB5C5]">0x0077…19B9</code></div>
             </div>
           </div>
@@ -406,12 +400,12 @@ export default function DocsPage() {
         <div className="border border-white/10 bg-black/30 p-5">
           <div className="aureo-mono-label mb-2" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>NOTES</div>
           <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.7)', lineHeight: 1.55 }}>
-            <li>· Arc Native Payment ships a self-hosted relayer; operators must fund it with Arc USDC and native gas. Check <code className="text-[#C5A67C]">/api/x402/relayer-status</code> before relying on settle.</li>
-            <li>· Circle Gateway Payment uses Circle&apos;s <code className="text-[#7CB5C5]">BatchFacilitatorClient</code>. The facilitator role is keyless; buyers must hold a USDC balance in their GatewayWallet (<code className="text-[#7CB5C5]">0x0077…19B9</code>) before signing a payment.</li>
-            <li>· <strong>Circle Gateway / Circle Skills-compatible payment is experimental and not production-certified yet.</strong></li>
-            <li>· ERC-8183 on-chain completion (submit() → complete()) is a <strong>separate lifecycle</strong> from ArcLayer off-chain job settlement (x402 settle). ERC-8183 handles on-chain job records; ArcLayer off-chain settlement handles x402 payment + Supabase status tracking.</li>
-            <li>· EIP-712 domain reads <code className="text-[#C5A67C]">name</code> and <code className="text-[#C5A67C]">version</code> from the on-chain USDC contract; the Arc deployment reports <code className="text-[#C5A67C]">USDC</code> / <code className="text-[#C5A67C]">2</code>.</li>
-            <li>· Testnet only. Mainnet rollout requires Arc mainnet keys and audited relayer ops.</li>
+            <li>· Arc Native uses a self-hosted relayer — fund it with USDC + gas. Check <code className="text-[#C5A67C]">/api/x402/relayer-status</code> before settling.</li>
+            <li>· Circle Gateway uses <code className="text-[#7CB5C5]">BatchFacilitatorClient</code> — buyers need USDC in their GatewayWallet (<code className="text-[#7CB5C5]">0x0077…19B9</code>).</li>
+            <li>· <strong>Circle Gateway is experimental — not production-certified.</strong></li>
+            <li>· ERC-8183 on-chain jobs (submit → complete) are separate from ArcLayer off-chain x402 settlement. ERC-8183 handles on-chain records; x402 handles payment + status.</li>
+            <li>· EIP-712 domain reads <code className="text-[#C5A67C]">name</code>/<code className="text-[#C5A67C]">version</code> from USDC contract: <code className="text-[#C5A67C]">USDC</code> / <code className="text-[#C5A67C]">2</code>.</li>
+            <li>· Testnet only. Mainnet requires Arc mainnet keys + audited relayer ops.</li>
           </ul>
         </div>
       </section>
@@ -430,8 +424,8 @@ export default function DocsPage() {
           <div className="border border-[#C5A67C]/30 bg-[rgba(197,166,124,0.04)] p-5">
             <div className="aureo-mono-label mb-2" style={{ color: '#C5A67C' }}>WHEN TO USE</div>
             <ul className="text-sm space-y-1.5" style={{ color: 'rgba(234, 228, 216, 0.72)', lineHeight: 1.55 }}>
-              <li>· Agent produces a deliverable (file, dataset, decision)</li>
-              <li>· Client wants to review before paying</li>
+              <li>· Agent produces a deliverable — file, dataset, or decision</li>
+              <li>· Client reviews work before paying</li>
               <li>· Reputation should follow completed work</li>
                 <li>· You need a completed ERC-8183 job record</li>
             </ul>
@@ -449,12 +443,12 @@ export default function DocsPage() {
         <div className="border border-white/10 bg-black/30 p-5 mb-4">
           <div className="aureo-mono-label mb-3" style={{ color: '#C5A67C' }}>PAID JOB FLOW</div>
           <ol className="grid gap-2 text-sm md:grid-cols-2" style={{ color: 'rgba(234, 228, 216, 0.78)', lineHeight: 1.5 }}>
-            <li><span className="font-mono text-[#C5A67C]">01.</span> Register Agent — on-chain identity, controller wallet</li>
-            <li><span className="font-mono text-[#C5A67C]">02.</span> Create Job — agent, worker, Client Address, task</li>
-            <li><span className="font-mono text-[#C5A67C]">03.</span> Fund Job — lock USDC budget</li>
-            <li><span className="font-mono text-[#C5A67C]">04.</span> Submit Work — worker posts deliverable URI</li>
-            <li><span className="font-mono text-[#C5A67C]">05.</span> Review Work</li>
-            <li><span className="font-mono text-[#C5A67C]">06.</span> Complete job (settle)</li>
+            <li><span className="font-mono text-[#C5A67C]">01.</span> Register Agent — on-chain identity with controller wallet</li>
+            <li><span className="font-mono text-[#C5A67C]">02.</span> Create Job — set agent, worker, client, task</li>
+            <li><span className="font-mono text-[#C5A67C]">03.</span> Fund Job — lock USDC in escrow</li>
+            <li><span className="font-mono text-[#C5A67C]">04.</span> Submit Work — worker posts deliverable</li>
+            <li><span className="font-mono text-[#C5A67C]">05.</span> Review Work — client approves or rejects</li>
+            <li><span className="font-mono text-[#C5A67C]">06.</span> Complete job — USDC settles to worker</li>
           </ol>
         </div>
 
