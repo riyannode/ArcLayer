@@ -5,7 +5,13 @@
 
 set -euo pipefail
 
-SUPABASE_REF="thhjxonlxgbdyhzcomgl"
+SUPABASE_REF="${SUPABASE_PROJECT_REF:-}"
+
+if [ -z "$SUPABASE_REF" ]; then
+  echo "[check:schema] ERROR: SUPABASE_PROJECT_REF not set"
+  echo "  Usage: SUPABASE_PROJECT_REF=<ref> SUPABASE_SERVICE_ROLE_KEY=<key> bash scripts/check-schema.sh"
+  exit 1
+fi
 KEY="${SUPABASE_SERVICE_ROLE_KEY:-}"
 LOCAL="${LOCAL_CHECK:-}"
 
@@ -102,5 +108,72 @@ else:
     sys.exit(1)
 "
 
-RC=$?
-exit $RC
+COLUMN_RC=$?
+
+# --- RPC function check ---
+echo ""
+echo "[check:schema] Checking RPC functions..."
+
+RPC_SQL=$(cat <<'RPC_SQL'
+SELECT proname FROM pg_proc WHERE proname IN (
+  'x402_native_claim_payment',
+  'x402_native_consume_payment',
+  'x402_gateway_claim_settlement',
+  'x402_gateway_consume_payment'
+);
+RPC_SQL
+)
+
+RPC_PAYLOAD=$(python3 -c "import json,sys; print(json.dumps({'query': sys.stdin.read()}))" <<< "$RPC_SQL")
+
+RPC_RESPONSE=$(curl -sS -X POST \
+  "https://api.supabase.com/v1/projects/$SUPABASE_REF/database/query" \
+  -H "Authorization: Bearer *** \
+  -H "Content-Type: application/json" \
+  -d "$RPC_PAYLOAD")
+
+RPC_OK=true
+echo "$RPC_RESPONSE" | python3 -c "
+import sys, json
+
+rows = json.load(sys.stdin)
+if not isinstance(rows, list):
+    print(f'ERROR: unexpected response: {rows}')
+    sys.exit(1)
+
+present = set(r['proname'] for r in rows if isinstance(r, dict) and r.get('proname'))
+
+expected_funcs = [
+    'x402_native_claim_payment',
+    'x402_native_consume_payment',
+    'x402_gateway_claim_settlement',
+    'x402_gateway_consume_payment',
+]
+
+all_ok = True
+for fn in expected_funcs:
+    if fn in present:
+        print(f'  ✅ {fn}')
+    else:
+        print(f'  ❌ {fn} — MISSING')
+        all_ok = False
+
+if all_ok:
+    print()
+    print('✅ All RPC functions present.')
+    sys.exit(0)
+else:
+    print()
+    print('❌ Some RPC functions missing.')
+    sys.exit(1)
+"
+
+RPC_RC=$?
+
+echo ""
+if [ $COLUMN_RC -ne 0 ] || [ $RPC_RC -ne 0 ]; then
+  echo "[check:schema] ❌ Schema check FAILED (columns=$COLUMN_RC, rpc=$RPC_RC)"
+  exit 1
+fi
+echo "[check:schema] ✅ All checks passed"
+exit 0
