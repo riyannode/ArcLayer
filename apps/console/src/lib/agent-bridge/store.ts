@@ -293,14 +293,39 @@ async function countBridgeRoles(sessionId: string) {
 /**
  * List distinct bridge session IDs with event counts, newest first.
  *
- * Fetches a large window of events, dedupes by session_id client-side.
- * The ORDER BY created_at DESC ensures the most recently active sessions
- * appear first. Limit controls returned session count, not scan depth.
+ * Uses bridge_session_summary view when available (efficient GROUP BY).
+ * Falls back to scanning recent events if the view doesn't exist.
  */
-export async function listBridgeSessions(limit = 20): Promise<{ sessionId: string; eventCount: number }[]> {
+export async function listBridgeSessions(limit = 20): Promise<{ sessionId: string; eventCount: number; firstEventAt?: string; lastEventAt?: string }[]> {
   const supabase = getSupabaseAdmin();
-  // Scan 10000 rows to find distinct sessions — covers realistic traffic
-  // where a single session may dominate recent events
+
+  // Try the view first — efficient GROUP BY
+  const { data: viewData, error: viewError } = await supabase
+    .from('bridge_session_summary')
+    .select('session_id, event_count, first_event_at, last_event_at')
+    .order('last_event_at', { ascending: false })
+    .limit(limit);
+
+  // Only fall back on missing-relation errors (view not created yet).
+  // Permission errors, stale schema, or server failures must be surfaced.
+  if (viewError) {
+    if (viewError.code === '42P01' || viewError.code === 'PGRST205') {
+      // View does not exist — fall through to scan fallback.
+    } else {
+      throw new Error(`bridge_session_summary query failed: ${viewError.message} (${viewError.code})`);
+    }
+  } else if (viewData) {
+    return viewData
+      .filter((r) => r.session_id)
+      .map((r) => ({
+        sessionId: r.session_id,
+        eventCount: r.event_count ?? 0,
+        firstEventAt: r.first_event_at,
+        lastEventAt: r.last_event_at,
+      }));
+  }
+
+  // Fallback: scan recent events and dedupe client-side
   const { data, error } = await supabase
     .from('agent_bridge_events')
     .select('session_id')
@@ -309,7 +334,6 @@ export async function listBridgeSessions(limit = 20): Promise<{ sessionId: strin
 
   if (error) throw new Error(error.message);
 
-  // Dedupe client-side, preserving first (most recent) occurrence per session
   const sessionMap = new Map<string, number>();
   for (const row of data ?? []) {
     if (!sessionMap.has(row.session_id)) {
@@ -324,11 +348,29 @@ export async function listBridgeSessions(limit = 20): Promise<{ sessionId: strin
 }
 
 /**
- * Count distinct bridge sessions by fetching session_ids and deduping.
- * Accurate but scan-limited — suitable for overview/dashboard use.
+ * Count distinct bridge sessions.
+ * Uses bridge_session_summary view when available.
  */
 export async function countDistinctBridgeSessions(): Promise<number> {
   const supabase = getSupabaseAdmin();
+
+  // Try the view first
+  const { count: viewCount, error: viewError } = await supabase
+    .from('bridge_session_summary')
+    .select('*', { head: true, count: 'exact' });
+
+  // Only fall back on missing-relation errors.
+  if (viewError) {
+    if (viewError.code === '42P01' || viewError.code === 'PGRST205') {
+      // View does not exist — fall through to scan fallback.
+    } else {
+      throw new Error(`bridge_session_summary count failed: ${viewError.message} (${viewError.code})`);
+    }
+  } else if (viewCount !== null) {
+    return viewCount;
+  }
+
+  // Fallback: scan recent events
   const { data, error } = await supabase
     .from('agent_bridge_events')
     .select('session_id')
