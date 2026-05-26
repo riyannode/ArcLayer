@@ -57,7 +57,7 @@ const SCAN_BASE =
   process.env.NEXT_PUBLIC_ARC_SCAN_TX_BASE ||
   process.env.NEXT_PUBLIC_ARC_EXPLORER_TX_BASE ||
   process.env.NEXT_PUBLIC_TX_EXPLORER_BASE ||
-  '';
+  'https://testnet.arcscan.app/tx';
 const ROLE_ALIASES: Record<string, string> = {
   analyst: 'ANALYZER',
   analysis: 'ANALYZER',
@@ -223,7 +223,7 @@ function toPredictionAgentInputs(
       activityActive,
       proof: bridgeProofLabel(proof),
       proofHash: shortText(proofHash),
-      proofHashHref: scanHref(proofHash),
+      proofHashHref: '', // payload_hash is not a tx — ArcScan would show "not found"
       proofSeen: text(proof?.created_at),
       proofActive: Boolean(proof),
     }];
