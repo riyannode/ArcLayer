@@ -42,13 +42,69 @@ type AgentLiveEvent = {
   confidence?: number | null;
   trace?: string[];
   createdAt: string;
+  paymentId?: string | null;
+  paymentRef?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
+type BridgeEvent = Record<string, unknown>;
+type BridgeSession = {
+  roles?: Record<string, BridgeEvent | null>;
+} | null;
+
 const ACTIVITY_WINDOW_MS = 30_000;
+const SCAN_BASE =
+  process.env.NEXT_PUBLIC_ARC_SCAN_TX_BASE ||
+  process.env.NEXT_PUBLIC_ARC_EXPLORER_TX_BASE ||
+  process.env.NEXT_PUBLIC_TX_EXPLORER_BASE ||
+  '';
+const ROLE_ALIASES: Record<string, string> = {
+  analyst: 'ANALYZER',
+  analysis: 'ANALYZER',
+  analyzer: 'ANALYZER',
+  evaluator: 'EVALUATOR',
+  evaluation: 'EVALUATOR',
+  executor: 'EXECUTOR',
+  execute: 'EXECUTOR',
+  oracle: 'ORACLE',
+  market: 'MARKET-AGENT',
+  'market-agent': 'MARKET-AGENT',
+  market_agent: 'MARKET-AGENT',
+  agent: 'AGENT',
+};
 
 function agentKey(agent: Agent) {
   const value = agent.agentId ?? agent.id;
   return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+}
+
+function text(value: unknown, fallback = '—') {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'boolean') return String(value);
+  return fallback;
+}
+
+function shortText(value: unknown, head = 10, tail = 6) {
+  const raw = text(value, '');
+  if (!raw) return '—';
+  if (raw.length <= head + tail + 1) return raw;
+  return `${raw.slice(0, head)}…${raw.slice(-tail)}`;
+}
+
+function scanHref(value: unknown) {
+  const raw = text(value, '');
+  if (!SCAN_BASE || !/^0x[a-fA-F0-9]{64}$/.test(raw)) return '';
+  return `${SCAN_BASE.replace(/\/$/, '')}/${raw}`;
+}
+
+function normalizeRole(value: unknown) {
+  const raw = text(value, 'AGENT').toLowerCase();
+  return ROLE_ALIASES[raw] ?? raw.toUpperCase();
+}
+
+function roleKey(value: unknown) {
+  return normalizeRole(value).toLowerCase();
 }
 
 function isOnline(p?: AgentPresence) {
@@ -74,32 +130,87 @@ function ageLabel(value?: string | null) {
   return `${Math.floor(min / 60)}h ago`;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function activityTx(event?: AgentLiveEvent) {
+  const metadata = asRecord(event?.metadata);
+  return event?.txHash ?? metadata?.txHash ?? metadata?.transaction ?? metadata?.transactionHash ?? null;
+}
+
+function activityPaymentRef(event?: AgentLiveEvent) {
+  const metadata = asRecord(event?.metadata);
+  return event?.paymentId ?? event?.paymentRef ?? metadata?.paymentId ?? metadata?.paymentRef ?? metadata?.payment_id ?? metadata?.payment_ref ?? null;
+}
+
 function latestActivityLabel(event?: AgentLiveEvent) {
   if (!event) return 'idle';
-  if (event.txHash) return `${event.eventType} · tx ${event.txHash.slice(0, 10)}…`;
+  const tx = activityTx(event);
+  const paymentRef = activityPaymentRef(event);
+  if (tx) return `${event.eventType} · tx ${shortText(tx)}`;
+  if (paymentRef) return `${event.eventType} · payment ${shortText(paymentRef)}`;
   return event.summary || event.title || event.eventType || 'activity';
+}
+
+function bridgeProofLabel(event?: BridgeEvent | null) {
+  if (!event) return 'no bridge proof';
+  const eventType = text(event.event_type ?? event.type, 'bridge_event');
+  const payload = asRecord(event.payload);
+  const raw = asRecord(payload?.raw);
+  const market = asRecord(raw?.market);
+  const signalPreview = asRecord(payload?.signalPreview);
+  const signal = asRecord(payload?.signal);
+  const marketSlug = market?.marketSlug;
+  const direction = signalPreview?.suggestedDirection ?? signal?.suggestedDirection;
+  const confidence = signalPreview?.confidence ?? signal?.confidence ?? payload?.confidence;
+  const approved = payload?.approved;
+  const riskLevel = payload?.riskLevel;
+  const action = payload?.action;
+  const mode = payload?.mode;
+
+  if (marketSlug) return `${eventType} · ${text(marketSlug)}`;
+  if (direction || confidence) return `${eventType} · ${text(direction, 'NEUTRAL')} ${text(confidence, '')}`.trim();
+  if (approved !== undefined || riskLevel) return `${eventType} · ${text(approved)} risk ${text(riskLevel)}`;
+  if (action || mode) return `${eventType} · ${text(action)} ${text(mode, '')}`.trim();
+  return eventType;
+}
+
+function bridgeProofByRole(session?: BridgeSession) {
+  const roles = session?.roles ?? {};
+  const map = new Map<string, BridgeEvent>();
+  for (const [role, event] of Object.entries(roles)) {
+    if (event) map.set(roleKey(role), event);
+  }
+  return map;
 }
 
 function toPredictionAgentInputs(
   agents: Agent[],
   presenceByAgent: Map<string, AgentPresence>,
   latestEventByAgent: Map<string, AgentLiveEvent>,
+  proofByRole: Map<string, BridgeEvent>,
 ): PredictionAgentInput[] {
   return agents.flatMap((agent) => {
     const id = agentKey(agent);
     if (!id) return [];
 
+    const role = agent.role || agent.roles?.[0]?.name || agent.roles?.[0]?.id || 'agent';
+    const normalizedRole = normalizeRole(role);
+    const proof = proofByRole.get(normalizedRole.toLowerCase()) ?? null;
+    const proofHash = proof?.payload_hash;
     const presence = presenceByAgent.get(id);
     const latest = latestEventByAgent.get(id);
     const online = isOnline(presence);
     const activityActive = isRecentEvent(latest);
     const recentX402 = latest?.eventType === 'x402_paid' && activityActive;
+    const activityHash = activityTx(latest);
 
     return [{
       id,
       agentId: id,
       name: agent.name || id,
-      role: agent.role || agent.roles?.[0]?.name || agent.roles?.[0]?.id || 'agent',
+      role,
       category: recentX402 ? 'paid' : agent.x402?.enabled ? 'x402' : 'registered',
       endpoint: agent.endpoint ?? null,
       caps: agent.capabilities || agent.roles?.[0]?.capabilities || [],
@@ -107,13 +218,19 @@ function toPredictionAgentInputs(
       seen: ageLabel(presence?.lastHeartbeatAt),
       status: online ? 'active' : 'unsynced',
       activity: latestActivityLabel(latest),
+      activityHref: scanHref(activityHash),
       activitySeen: ageLabel(latest?.createdAt),
       activityActive,
+      proof: bridgeProofLabel(proof),
+      proofHash: shortText(proofHash),
+      proofHashHref: scanHref(proofHash),
+      proofSeen: text(proof?.created_at),
+      proofActive: Boolean(proof),
     }];
   });
 }
 
-export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots' }: { category?: string }) {
+export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots', bridgeSession = null }: { category?: string; bridgeSession?: BridgeSession }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [presence, setPresence] = useState<AgentPresence[]>([]);
   const [events, setEvents] = useState<AgentLiveEvent[]>([]);
@@ -189,9 +306,10 @@ export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots
     }
     return map;
   }, [events]);
+  const proofByRole = useMemo(() => bridgeProofByRole(bridgeSession), [bridgeSession]);
   const uiAgents = useMemo(
-    () => toPredictionAgentInputs(agents, presenceByAgent, latestEventByAgent),
-    [agents, presenceByAgent, latestEventByAgent],
+    () => toPredictionAgentInputs(agents, presenceByAgent, latestEventByAgent, proofByRole),
+    [agents, presenceByAgent, latestEventByAgent, proofByRole],
   );
 
   return (

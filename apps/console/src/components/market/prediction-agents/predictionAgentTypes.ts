@@ -11,8 +11,14 @@ export type PredictionAgentView = {
   seen: string;
   status: PredictionAgentStatus;
   activity: string;
+  activityHref: string;
   activitySeen: string;
   activityActive: boolean;
+  proof: string;
+  proofHash: string;
+  proofHashHref: string;
+  proofSeen: string;
+  proofActive: boolean;
 };
 
 export type PredictionAgentInput = {
@@ -27,8 +33,14 @@ export type PredictionAgentInput = {
   seen?: unknown;
   status?: unknown;
   activity?: unknown;
+  activityHref?: unknown;
   activitySeen?: unknown;
   activityActive?: unknown;
+  proof?: unknown;
+  proofHash?: unknown;
+  proofHashHref?: unknown;
+  proofSeen?: unknown;
+  proofActive?: unknown;
 };
 
 const BLOCKED_PLACEHOLDER_NAMES = new Set(['arclayer llm market agent cluster']);
@@ -100,8 +112,14 @@ export function normalizePredictionAgent(input: PredictionAgentInput): Predictio
     seen: text(input.seen, 'offline'),
     status: normalizeStatus(input.status),
     activity: text(input.activity, 'idle'),
+    activityHref: text(input.activityHref, ''),
     activitySeen: text(input.activitySeen, '—'),
     activityActive: bool(input.activityActive),
+    proof: text(input.proof, 'no proof'),
+    proofHash: text(input.proofHash, '—'),
+    proofHashHref: text(input.proofHashHref, ''),
+    proofSeen: text(input.proofSeen, '—'),
+    proofActive: bool(input.proofActive),
   } satisfies PredictionAgentView;
 
   return isBlockedPlaceholder(agent) ? null : agent;
