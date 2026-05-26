@@ -17,10 +17,10 @@ const ARC_CHAIN = {
   rpcUrls: { default: { http: [] }, public: { http: [] } },
 };
 
-// ── Contract addresses (Arc official testnet) ─────────────────────────────
+// ── Contract addresses (Arc official testnet) with env override ──────
 const CONTRACTS = {
-  AGENTIC_COMMERCE: '0x0747EEf0706327138c69792bF28Cd525089e4583',
-  USDC: '0x3600000000000000000000000000000000000000',
+  AGENTIC_COMMERCE: process.env.ERC8183_AGENTIC_COMMERCE_ADDRESS || '0x0747EEf0706327138c69792bF28Cd525089e4583',
+  USDC: process.env.USDC_ADDRESS || '0x3600000000000000000000000000000000000000',
 };
 
 // ── ABIs (minimal — only the functions we sign) ───────────────────────────
