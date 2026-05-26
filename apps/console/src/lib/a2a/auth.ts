@@ -1,4 +1,4 @@
-import { createHash, randomBytes, scrypt } from 'crypto';
+import { randomBytes, scrypt } from 'crypto';
 import { promisify } from 'util';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { NextRequest, NextResponse } from 'next/server';
@@ -78,39 +78,31 @@ export async function verifyApiKey(rawKey: string): Promise<VerifiedKey | null> 
   if (!rawKey || !rawKey.startsWith('ak_')) return null;
 
   const preferredHash = await hashKey(rawKey);
-  const candidateHashes = [preferredHash, hashKeyLegacySha256(rawKey)];
   const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('id, agent_id, scopes, revoked_at')
+    .eq('key_hash', preferredHash)
+    .maybeSingle();
 
-  for (const keyHash of candidateHashes) {
-    const { data, error } = await supabase
-      .from(TABLE)
-      .select('id, agent_id, scopes, revoked_at')
-      .eq('key_hash', keyHash)
-      .maybeSingle();
+  if (error) return null;
+  if (!data) return null;
+  if (data.revoked_at) return null;
 
-    if (error) return null;
-    if (!data) continue;
-    if (data.revoked_at) return null;
+  // Fire-and-forget last_used_at update.
+  supabase
+    .from(TABLE)
+    .update({
+      last_used_at: new Date().toISOString(),
+    })
+    .eq('id', data.id)
+    .then(() => {});
 
-    // Fire-and-forget last_used_at update. Legacy SHA-256 rows are upgraded
-    // to the current scrypt hash on first successful use.
-    supabase
-      .from(TABLE)
-      .update({
-        last_used_at: new Date().toISOString(),
-        ...(keyHash !== preferredHash ? { key_hash: preferredHash } : {}),
-      })
-      .eq('id', data.id)
-      .then(() => {});
-
-    return {
-      id: data.id,
-      agentId: data.agent_id,
-      scopes: data.scopes ?? [],
-    };
-  }
-
-  return null;
+  return {
+    id: data.id,
+    agentId: data.agent_id,
+    scopes: data.scopes ?? [],
+  };
 }
 
 // ─── Key revocation ───────────────────────────────────────────────────────────
@@ -204,8 +196,4 @@ async function hashKey(raw: string): Promise<string> {
     API_KEY_SCRYPT_PARAMS.p,
     Buffer.from(derived).toString('hex'),
   ].join('$');
-}
-
-function hashKeyLegacySha256(raw: string): string {
-  return createHash('sha256').update(raw).digest('hex');
 }
