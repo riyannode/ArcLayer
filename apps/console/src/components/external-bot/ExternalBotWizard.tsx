@@ -89,6 +89,8 @@ export default function ExternalBotWizard() {
   const [liveEventsToken, setLiveEventsToken] = useState('');
   const [payoutAddress, setPayoutAddress] = useState('');
   const [serviceEndpointUrl, setServiceEndpointUrl] = useState('');
+  // Optional: pre-minted token IDs to skip on-chain register
+  const [existingTokenIds, setExistingTokenIds] = useState<string[]>([]);
 
   // ── Hooks ──────────────────────────────────────────────────
   const { isConnected, address, mode } = useArcWallet();
@@ -145,16 +147,32 @@ export default function ExternalBotWizard() {
 
   const handleRolesConfirm = useCallback(() => {
     if (!template) return;
-    const rows: TxRow[] = template.roles.map((r) => ({
-      roleId: r.roleId,
-      agentId: r.defaultAgentId,
-      brandedName: r.defaultAgentId,
-      step: 'pending',
-    }));
+    const rows: TxRow[] = template.roles.map((r, i) => {
+      const existingId = existingTokenIds[i]?.trim();
+      if (existingId) {
+        // (fix existing tokens) Skip on-chain register, use existing token ID
+        return {
+          roleId: r.roleId,
+          agentId: existingId,
+          brandedName: r.defaultAgentId,
+          step: 'minted' as const,
+          mintedTokenId: existingId,
+        };
+      }
+      return {
+        roleId: r.roleId,
+        agentId: r.defaultAgentId,
+        brandedName: r.defaultAgentId,
+        step: 'pending',
+      };
+    });
     setTxRows(rows);
     setError(null);
-    setStep('wallet');
-  }, [template]);
+
+    // If all roles have existing token IDs, skip wallet+register → go to manifest
+    const allExisting = rows.every((r) => r.step === 'minted');
+    setStep(allExisting ? 'manifest' : 'wallet');
+  }, [template, existingTokenIds]);
 
   // ── Step 4: Wallet ──────────────────────────────────────────
   const handleWalletConfirm = useCallback(() => {
@@ -174,6 +192,10 @@ export default function ExternalBotWizard() {
 
     for (let i = 0; i < template.roles.length; i++) {
       const role = template.roles[i];
+
+      // (existing tokens) Skip rows that already have a minted token ID
+      if (newRows[i]?.step === 'minted') continue;
+
       newRows[i] = { ...newRows[i], step: 'signing' };
       setTxRows([...newRows]);
 
@@ -580,6 +602,31 @@ export default function ExternalBotWizard() {
             <div className="mt-1 font-mono text-[9px] text-[#EAE4D8]/40">
               Public HTTPS URL if your bot has an HTTP endpoint. Leave empty for PM2-only bots.
             </div>
+          </div>
+
+          {/* ── Existing token IDs (skip register) ──────── */}
+          <div className="mb-4 rounded-sm border border-cyan-500/20 bg-cyan-500/5 p-3">
+            <div className="font-mono text-[10px] text-cyan-300 mb-2">
+              Already have ERC-8004 token IDs? Paste them here to skip on-chain register.
+            </div>
+            {template.roles.map((r, i) => (
+              <div key={r.roleId} className="mb-2">
+                <label className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#EAE4D8]/50">
+                  {r.displayName} — Token ID (optional)
+                </label>
+                <input
+                  type="text"
+                  value={existingTokenIds[i] || ''}
+                  onChange={(e) => {
+                    const next = [...existingTokenIds];
+                    next[i] = e.target.value;
+                    setExistingTokenIds(next);
+                  }}
+                  className="mt-1 w-full rounded-sm border border-cyan-500/20 bg-black/40 px-3 py-2 font-mono text-sm text-[#EAE4D8]"
+                  placeholder={`e.g. 2414${7 + i}`}
+                />
+              </div>
+            ))}
           </div>
 
           {template.fixedBotRoleNames && (
