@@ -2,6 +2,11 @@
  * Build environment file bundles for external bot runtimes.
  *
  * Generates .env.common and per-role .env files for PM2/Docker/custom runtimes.
+ *
+ * agentId consistency (fix #3):
+ *   - ARCLAYER_AGENT_ID = minted ERC-8004 token ID (matches key agentId)
+ *   - RUNTIME_ID = branded name as prefix (e.g. hermes-oracle-runtime-01)
+ *   - ARCLAYER_ERC8004_ID = full on-chain reference
  */
 
 import type { ExternalBotTemplate } from './templates';
@@ -20,10 +25,12 @@ export function buildEnvBundle(input: {
   agentIds: string[];
   apiKeys: string[];
   erc8004Ids: string[];
+  /** Branded names for RUNTIME_ID prefix (e.g. hermes-oracle). If omitted, falls back to agentId. */
+  runtimeNames?: string[];
   liveEventsToken?: string;
   payoutAddress?: string;
 }): EnvBundle {
-  const { template, baseUrl, category, agentIds, apiKeys, erc8004Ids, liveEventsToken, payoutAddress } = input;
+  const { template, baseUrl, category, agentIds, apiKeys, erc8004Ids, runtimeNames, liveEventsToken, payoutAddress } = input;
 
   // ── .env.common ──────────────────────────────────────────────
   const commonLines: string[] = [
@@ -47,7 +54,10 @@ export function buildEnvBundle(input: {
 
   // ── Per-role .env files ──────────────────────────────────────
   const roleFiles: EnvKeyPair[] = template.roles.map((role, idx) => {
+    // (fix #3) ARCLAYER_AGENT_ID = minted token ID (matches key)
     const agentId = agentIds[idx] || role.defaultAgentId;
+    // (fix #4) RUNTIME_ID uses branded name prefix, not token ID
+    const runtimeName = runtimeNames?.[idx] || role.defaultAgentId;
     const apiKey = apiKeys[idx] || '';
     const erc8004 = erc8004Ids[idx] || '';
     const roleName = template.fixedBotRoleNames ? role.botRole : role.roleId;
@@ -56,7 +66,7 @@ export function buildEnvBundle(input: {
       `BOT_ROLE=${role.botRole}`,
       `ARCLAYER_AGENT_ID=${agentId}`,
       `ARCLAYER_API_KEY=${apiKey}`,
-      `RUNTIME_ID=${agentId}-runtime-01`,
+      `RUNTIME_ID=${runtimeName}-runtime-01`,
       `AGENT_CATEGORY=${category}`,
     ];
     if (erc8004) lines.push(`ARCLAYER_ERC8004_ID=${erc8004}`);

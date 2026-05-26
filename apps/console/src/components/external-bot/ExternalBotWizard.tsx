@@ -13,15 +13,22 @@
  *   7. Generate API Keys
  *   8. Runtime Export (env + PM2 command)
  *   9. Health Check
+ *
+ * agentId consistency (fix #3):
+ *   - After ERC-8004 mint, txRow.agentId = minted token ID
+ *   - Manifest uses minted token ID
+ *   - API key uses minted token ID
+ *   - Env ARCLAYER_AGENT_ID = minted token ID
+ *   - Branded name goes into RUNTIME_ID prefix only
+ *   - This ensures bridge event agentId matches key agentId
  */
 
 import { useState, useMemo, useCallback } from 'react';
 import { useAccount } from 'wagmi';
-import { keccak256, stringToBytes } from 'viem';
 import { waitForTransactionReceipt } from '@wagmi/core';
 
 import { AGENT_CATEGORIES, getAgentCategory } from '@/app/live-a2a-agent/categories';
-import { EXTERNAL_BOT_TEMPLATES, getTemplate, getTemplatesByCategory } from '@/lib/external-bot/templates';
+import { getTemplate, getTemplatesByCategory } from '@/lib/external-bot/templates';
 import { buildExternalBotManifest, type ManifestBuildInput } from '@/lib/external-bot/buildManifest';
 import { buildEnvBundle } from '@/lib/external-bot/buildEnvBundle';
 import { buildInstallCommand } from '@/lib/external-bot/buildInstallCommand';
@@ -34,13 +41,16 @@ import { useX402PaidFetch } from '@/hooks/useX402PaidFetch';
 import { buildRegisterAgentConfig } from '@arclayer/sdk';
 import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
 import { config } from '@/lib/wagmi';
-import type { AgentManifestV1 } from '@/lib/a2a/manifest';
+import { manifestHash, buildManifestMessage } from '@/lib/a2a/manifest';
 
 type Step = 'category' | 'template' | 'roles' | 'wallet' | 'register' | 'manifest' | 'keys' | 'export' | 'health';
 
 type TxRow = {
   roleId: string;
+  /** agentId used for manifest, keys, and env. After mint: set to mintedTokenId. */
   agentId: string;
+  /** Branded display name (e.g. hermes-oracle). Stays in RUNTIME_ID prefix only. */
+  brandedName: string;
   step: 'pending' | 'signing' | 'tx' | 'minted' | 'failed';
   txHash?: string;
   mintedTokenId?: string;
@@ -93,6 +103,13 @@ export default function ExternalBotWizard() {
 
   const stepIdx = STEPS.indexOf(step);
 
+  // ── Helpers ─────────────────────────────────────────────────
+  const getAgentId = useCallback((row: TxRow, fallback: string): string => {
+    // After mint: row.agentId = minted token ID, row.mintedTokenId also set
+    // Before mint: fall back to default agentId
+    return row.agentId || fallback;
+  }, []);
+
   // ── Step 1: Category ────────────────────────────────────────
   const handleSelectCategory = useCallback((key: string) => {
     setSelectedCategory(key);
@@ -118,7 +135,7 @@ export default function ExternalBotWizard() {
     return template.roles.map((r) => ({
       roleId: r.roleId,
       displayName: r.displayName,
-      agentId: r.defaultAgentId,
+      brandedName: r.defaultAgentId,
       botRole: r.botRole,
       capabilities: r.capabilities.join(', '),
       scopes: scopesForRole(r.scopes, template.recommendedMode).join(', '),
@@ -127,10 +144,10 @@ export default function ExternalBotWizard() {
 
   const handleRolesConfirm = useCallback(() => {
     if (!template) return;
-    // Init tx rows
     const rows: TxRow[] = template.roles.map((r) => ({
       roleId: r.roleId,
       agentId: r.defaultAgentId,
+      brandedName: r.defaultAgentId,
       step: 'pending',
     }));
     setTxRows(rows);
@@ -160,7 +177,7 @@ export default function ExternalBotWizard() {
       setTxRows([...newRows]);
 
       try {
-        // Register ERC-8004
+        // Register ERC-8004 with branded metadata URI
         const metadataURI = `arclayer://manifest/${role.defaultAgentId}`;
         newRows[i] = { ...newRows[i], step: 'tx' };
         setTxRows([...newRows]);
@@ -168,11 +185,15 @@ export default function ExternalBotWizard() {
         const hash = await writeContractAsync(buildRegisterAgentConfig(metadataURI));
         const receipt = await waitForTransactionReceipt(config, { hash });
         const mintedTokenId = extractERC8004MintedTokenIdFromReceipt(receipt, address);
+        const tokenId = mintedTokenId?.toString();
 
+        // (fix #3) After mint: agentId = minted token ID for consistency
+        // Branded name stays in brandedName for RUNTIME_ID prefix
         newRows[i] = {
           ...newRows[i],
+          agentId: tokenId || role.defaultAgentId,
           step: 'minted',
-          mintedTokenId: mintedTokenId?.toString() || 'unknown',
+          mintedTokenId: tokenId || 'unknown',
           txHash: hash,
         };
         setTxRows([...newRows]);
@@ -193,6 +214,8 @@ export default function ExternalBotWizard() {
   }, [template, address, txRows, writeContractAsync]);
 
   // ── Step 6: Publish Manifest (x402) ─────────────────────────
+  // (fix #1) method: POST (not PUT)
+  // (fix #2) use canonical manifestHash + buildManifestMessage from lib
   const handlePublishManifest = useCallback(async () => {
     if (!template || !address) return;
     setIsBusy(true);
@@ -201,8 +224,8 @@ export default function ExternalBotWizard() {
     const newRows = [...txRows];
 
     for (let i = 0; i < template.roles.length; i++) {
-      const agentId = newRows[i].mintedTokenId || template.roles[i].defaultAgentId;
       const role = template.roles[i];
+      const agentId = getAgentId(newRows[i], role.defaultAgentId);
 
       try {
         const input: ManifestBuildInput = {
@@ -216,23 +239,17 @@ export default function ExternalBotWizard() {
         };
 
         const manifest = buildExternalBotManifest(input);
-        const manifestStr = JSON.stringify(manifest, null, 2);
-        const hash = keccak256(stringToBytes(manifestStr));
 
-        // Sign manifest
+        // (fix #2) Use canonical manifestHash + buildManifestMessage from lib
+        const hash = manifestHash(manifest);
         const ts = Math.floor(Date.now() / 1000);
-        const signMsg = [
-          'ArcLayer Manifest v1',
-          `agentId=${agentId}`,
-          `hash=${hash}`,
-          `ts=${ts}`,
-        ].join('\n');
+        const message = buildManifestMessage({ agentId, manifestHash: hash, ts });
+        const signature = await signMessageAsync({ message });
 
-        const signature = await signMessageAsync({ message: signMsg });
-
-        // Publish via x402 paid fetch
+        // (fix #1) POST, not PUT
         const result = await paidFetch('/api/a2a/manifest', {
-          method: 'PUT',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             agentId,
             manifest,
@@ -240,13 +257,9 @@ export default function ExternalBotWizard() {
             signer: address,
             ts,
           }),
-          headers: { 'Content-Type': 'application/json' },
         });
 
-        newRows[i] = {
-          ...newRows[i],
-          manifestHash: hash,
-        };
+        newRows[i] = { ...newRows[i], manifestHash: hash };
         setTxRows([...newRows]);
       } catch (err) {
         setError(`Manifest publish failed for ${role.displayName}: ${err instanceof Error ? err.message : 'unknown'}`);
@@ -257,9 +270,10 @@ export default function ExternalBotWizard() {
 
     setIsBusy(false);
     setStep('keys');
-  }, [template, address, txRows, priceAtomic, payoutAddress, signMessageAsync, paidFetch]);
+  }, [template, address, txRows, priceAtomic, payoutAddress, signMessageAsync, paidFetch, getAgentId]);
 
   // ── Step 7: Generate API Keys ───────────────────────────────
+  // (fix #3) agentId = minted token ID (from txRow.agentId after register)
   const handleGenerateKeys = useCallback(async () => {
     if (!template || !address) return;
     setIsBusy(true);
@@ -268,8 +282,8 @@ export default function ExternalBotWizard() {
     const newRows = [...txRows];
 
     for (let i = 0; i < template.roles.length; i++) {
-      const agentId = newRows[i].mintedTokenId || template.roles[i].defaultAgentId;
       const role = template.roles[i];
+      const agentId = getAgentId(newRows[i], role.defaultAgentId);
 
       try {
         const ts = Math.floor(Date.now() / 1000);
@@ -299,10 +313,7 @@ export default function ExternalBotWizard() {
           throw new Error(data.error || 'key_gen_failed');
         }
 
-        newRows[i] = {
-          ...newRows[i],
-          apiKey: data.apiKey || data.key || 'generated',
-        };
+        newRows[i] = { ...newRows[i], apiKey: data.apiKey || data.key || 'generated' };
         setTxRows([...newRows]);
       } catch (err) {
         setError(`Key generation failed for ${role.displayName}: ${err instanceof Error ? err.message : 'unknown'}`);
@@ -313,15 +324,26 @@ export default function ExternalBotWizard() {
 
     setIsBusy(false);
     setStep('export');
-  }, [template, address, txRows, signMessageAsync]);
+  }, [template, address, txRows, signMessageAsync, getAgentId]);
 
   // ── Step 8: Export ──────────────────────────────────────────
+  // (fix #3) Env uses minted token ID as ARCLAYER_AGENT_ID
+  // (fix #4) Branded name goes into RUNTIME_ID prefix
+  // (fix #6) Generic template = coming soon, only PM2 is runnable
   const handleBuildExport = useCallback(() => {
     if (!template || !selectedCategory) return;
 
+    // (fix #3) Use txRow.agentId which = minted token ID after register
+    // This ensures env ARCLAYER_AGENT_ID matches key agentId
     const agentIds = txRows.map((r, i) => r.agentId || template.roles[i]?.defaultAgentId || '');
     const apiKeys = txRows.map((r) => r.apiKey || '');
-    const erc8004Ids = txRows.map((r) => r.mintedTokenId ? `erc8004_identity_registry:${r.mintedTokenId}` : '');
+    const erc8004Ids = txRows.map((r) =>
+      r.mintedTokenId ? `erc8004_identity_registry:${r.mintedTokenId}` : ''
+    );
+    // (fix #4) Pass branded names for RUNTIME_ID prefix
+    const runtimeNames = txRows.map((r, i) =>
+      r.brandedName || template.roles[i]?.defaultAgentId || ''
+    );
 
     const bundle = buildEnvBundle({
       template,
@@ -330,6 +352,7 @@ export default function ExternalBotWizard() {
       agentIds,
       apiKeys,
       erc8004Ids,
+      runtimeNames,
       liveEventsToken: liveEventsToken || undefined,
       payoutAddress: payoutAddress || undefined,
     });
@@ -340,8 +363,7 @@ export default function ExternalBotWizard() {
       roleNames: template.roles.map((r) => r.roleId),
     });
 
-    // Build full export string
-    let exportStr = '# ── Category: ' + categoryConfig?.label + ' ──\n';
+    let exportStr = '# ── Category: ' + (categoryConfig?.label || selectedCategory) + ' ──\n';
     exportStr += `# Template: ${template.name}\n\n`;
     exportStr += '## .env.common\n\n';
     exportStr += bundle.common.content + '\n';
@@ -424,6 +446,7 @@ export default function ExternalBotWizard() {
       )}
 
       {/* ── Step 2: Template Selection ─────────────────────────── */}
+      {/* (fix #5) Categories without templates show 'Template coming soon' */}
       {step === 'template' && (
         <div>
           <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-1">
@@ -433,7 +456,16 @@ export default function ExternalBotWizard() {
 
           {templates.length === 0 ? (
             <div className="rounded-sm border border-yellow-500/30 bg-yellow-500/5 p-4 text-sm text-yellow-300/80">
-              No templates yet for this category. Coming soon.
+              <div className="font-mono text-[10px] uppercase tracking-[0.18em] mb-1">Template coming soon</div>
+              This category does not have an onboarding template yet. Templates are being added per category.
+              Check back later or use the{' '}
+              <button
+                onClick={() => handleSelectCategory('custom-workers')}
+                className="underline text-[#C5A67C]"
+              >
+                Custom Worker
+              </button>{' '}
+              template for a generic setup.
             </div>
           ) : (
             <div className="space-y-3">
@@ -471,6 +503,13 @@ export default function ExternalBotWizard() {
               ))}
             </div>
           )}
+
+          <button
+            onClick={() => setStep('category')}
+            className="mt-4 px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/50 hover:text-[#EAE4D8]"
+          >
+            ← Back to categories
+          </button>
         </div>
       )}
 
@@ -495,7 +534,10 @@ export default function ExternalBotWizard() {
                         </span>
                       )}
                     </div>
-                    <div className="mt-1 font-mono text-[10px] text-[#EAE4D8]/50">Agent ID: {r.agentId}</div>
+                    <div className="mt-1 font-mono text-[10px] text-[#EAE4D8]/50">
+                      Agent ID: {r.brandedName}
+                      {template.fixedBotRoleNames && <span className="text-[#EAE4D8]/30 ml-1">(minted token ID used after register)</span>}
+                    </div>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {template.roles.find((x) => x.roleId === r.roleId)?.capabilities.map((c) => (
                         <span key={c} className="rounded-sm bg-white/5 px-1.5 py-0.5 font-mono text-[8px] text-[#EAE4D8]/50">
@@ -526,7 +568,8 @@ export default function ExternalBotWizard() {
           {template.fixedBotRoleNames && (
             <div className="rounded-sm border border-cyan-500/20 bg-cyan-500/5 p-3 mb-4">
               <div className="font-mono text-[10px] text-cyan-300">
-                ⚠ BOT_ROLE is fixed by runtime script. Internal role mapping (oracle/analyzer/evaluator/executor) must not be changed. Only ARCLAYER_AGENT_ID can be branded.
+                ⚠ BOT_ROLE is fixed by runtime script. Internal role mapping (oracle/analyzer/evaluator/executor)
+                must not be changed. ARCLAYER_AGENT_ID will use the minted ERC-8004 token ID for consistency.
               </div>
             </div>
           )}
@@ -565,18 +608,9 @@ export default function ExternalBotWizard() {
                   • {template.roles.length} ERC-8004 register transaction{template.roles.length > 1 ? 's' : ''}
                   • {template.roles.length} manifest sign + x402 publish
                   • {template.roles.length} API key sign + generate
-                  <div className="mt-1 font-mono text-[9px] text-[#EAE4D8]/40">
-                    Never paste private keys into ArcLayer. X402 payer key belongs on your VPS.
-                  </div>
                 </div>
               </div>
             )}
-
-            <div className="rounded-sm border border-yellow-500/20 bg-yellow-500/5 p-3">
-              <div className="font-mono text-[10px] text-yellow-300/80">
-                ⚠ Never paste private keys into ArcLayer forms. X402 payer private key belongs only on your VPS.
-              </div>
-            </div>
           </div>
 
           <button
@@ -719,13 +753,17 @@ export default function ExternalBotWizard() {
             Runtime Export
           </h2>
 
+          {/* Show generated API keys once */}
           {txRows.map((r, i) => r.apiKey && (
             <div key={r.roleId || i} className="mb-2 rounded-sm border border-white/10 bg-white/[0.02] p-3">
-              <div className="font-mono text-[10px] text-[#EAE4D8]/60">{r.agentId}</div>
+              <div className="font-mono text-[10px] text-[#EAE4D8]/60">
+                {r.brandedName} (ID: {r.agentId})
+              </div>
               <div className="mt-1 break-all font-mono text-xs text-[#C5A67C]">{r.apiKey}</div>
             </div>
           ))}
 
+          {/* Options for live events token + payout address */}
           {template && (
             <div className="mb-4">
               <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/70">
@@ -807,22 +845,25 @@ export default function ExternalBotWizard() {
             <div className="rounded-sm border border-cyan-500/20 bg-cyan-500/5 p-3">
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-300 mb-2">After running on VPS</div>
               <ul className="space-y-1 font-mono text-[10px] text-[#EAE4D8]/70">
-                <li>• Run the install command on your VPS</li>
-                <li>• Wait for PM2 processes to start</li>
-                <li>• Use &apos;pm2 logs&apos; to check each process</li>
-                <li>• Events appear in live viewer after first cycle</li>
+                <li>1. Run the install command on your VPS</li>
+                <li>2. Wait for PM2 processes to start</li>
+                <li>3. Use &apos;pm2 logs&apos; to check each process</li>
+                <li>4. Events appear in live viewer after first cycle (~15 min)</li>
+                <li>5. Verify bridge events: GET /api/agent-bridge/events?category={selectedCategory}</li>
+                <li>6. Verify receipts: GET /api/agent-bridge/receipts?sessionId=&lt;session&gt;</li>
               </ul>
             </div>
 
             <div className="rounded-sm border border-white/10 bg-white/[0.02] p-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/60 mb-2">Your Agent IDs</div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/60 mb-2">Agent Status</div>
               {txRows.map((r) => (
-                <div key={r.roleId} className="py-1">
-                  <span className="text-[#C5A67C]">{r.agentId}</span>
+                <div key={r.roleId} className="py-1 font-mono text-[10px]">
+                  <span className="text-[#C5A67C]">{r.brandedName}</span>
                   <span className="text-[#EAE4D8]/40 ml-2">
-                    {r.apiKey ? '✅ Key generated' : '❌ No key'}
+                    ID: {r.agentId}
+                    {r.mintedTokenId ? ' · ✅ Registered' : ' · ❌ Not registered'}
                     {r.manifestHash ? ' · ✅ Manifest published' : ''}
-                    {r.mintedTokenId ? ' · ✅ Registered' : ''}
+                    {r.apiKey ? ' · ✅ Key generated' : ' · ❌ No key'}
                   </span>
                 </div>
               ))}
@@ -851,7 +892,7 @@ export default function ExternalBotWizard() {
 
 function TxProgressTable({ rows, template, action }: {
   rows: TxRow[];
-  template: { roles: { displayName: string; }[] } | null | undefined;
+  template: { roles: { displayName: string }[] } | null | undefined;
   action: string;
 }) {
   return (
@@ -870,7 +911,7 @@ function TxProgressTable({ rows, template, action }: {
           <div key={r.roleId} className="flex items-center justify-between rounded-sm border border-white/10 bg-white/[0.02] p-3">
             <div>
               <div className="font-semibold text-sm text-[#EAE4D8]">{roleName}</div>
-              <div className="font-mono text-[9px] text-[#EAE4D8]/50">{r.agentId}</div>
+              <div className="font-mono text-[9px] text-[#EAE4D8]/50">ID: {r.agentId}</div>
               {r.txHash && <div className="font-mono text-[8px] text-[#EAE4D8]/30 mt-0.5">Tx: {r.txHash.slice(0, 16)}…</div>}
               {r.mintedTokenId && <div className="font-mono text-[9px] text-green-400/60 mt-0.5">Token: {r.mintedTokenId}</div>}
               {r.manifestHash && <div className="font-mono text-[9px] text-cyan-400/60 mt-0.5">Manifest: {r.manifestHash.slice(0, 16)}…</div>}
