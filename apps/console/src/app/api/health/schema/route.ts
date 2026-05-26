@@ -43,11 +43,12 @@ export async function GET() {
         results.push({
           table,
           column,
-          present: !error && error?.code !== 'PGRST116' && error?.code !== '42P01',
+          present: !error,
         });
 
-        if (error && error.code !== 'PGRST116') {
-          // Table or column not found
+        if (error) {
+          const pgErr = error as { code?: string; message?: string };
+          console.warn(`[health/schema] ${table}.${column} — ${pgErr.code ?? '?'}: ${pgErr.message ?? error}`);
         }
       }
     }
