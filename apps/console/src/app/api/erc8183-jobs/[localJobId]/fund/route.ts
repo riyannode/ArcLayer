@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CONTRACTS, ARC_TOKENS } from '@arclayer/sdk';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { getErc8183JobByLocalId } from '@/lib/erc8183-jobs/store';
+import { assertErc8183Participant } from '@/lib/erc8183-jobs/authz';
+import { escrowRail } from '@/lib/rails/responses';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
 
 export async function POST(
@@ -14,10 +16,14 @@ export async function POST(
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
       return NextResponse.json(
-        { ok: false, error: 'job_not_found', message: 'ERC-8183 job not found.' },
+        { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
         { status: 404 },
       );
     }
+
+    // Guard: only the buyer (client) can approve+fund the escrow
+    const fundAuthError = assertErc8183Participant(job, auth, ['buyer']);
+    if (fundAuthError) return fundAuthError;
 
     if (!job.erc8183JobId) {
       return NextResponse.json(

@@ -4,6 +4,8 @@ import {
   getErc8183JobByLocalId,
   claimErc8183Job,
 } from '@/lib/erc8183-jobs/store';
+import { assertErc8183Participant, isErc8183Admin } from '@/lib/erc8183-jobs/authz';
+import { escrowRail } from '@/lib/rails/responses';
 
 /**
  * POST /api/erc8183-jobs/[localJobId]/claim
@@ -21,10 +23,14 @@ export async function POST(
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
       return NextResponse.json(
-        { ok: false, error: 'job_not_found', message: 'ERC-8183 job not found.' },
+        { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
         { status: 404 },
       );
     }
+
+    // Guard: only the provider can claim this job
+    const claimAuthError = assertErc8183Participant(job, auth, ['provider']);
+    if (claimAuthError) return claimAuthError;
 
     // Guard: must be funded on-chain before off-chain claim
     if (job.erc8183Status !== 'Funded') {
@@ -55,14 +61,30 @@ export async function POST(
 
     if (!workerId || typeof workerId !== 'string') {
       return NextResponse.json(
-        { ok: false, error: 'workerId is required' },
+        { ok: false, ...escrowRail(), error: 'workerId is required' },
         { status: 400 },
       );
     }
     if (!providerAgentId || typeof providerAgentId !== 'string') {
       return NextResponse.json(
-        { ok: false, error: 'providerAgentId is required' },
+        { ok: false, ...escrowRail(), error: 'providerAgentId is required' },
         { status: 400 },
+      );
+    }
+
+    // Guard: providerAgentId in body must match authenticated key
+    if (isErc8183Admin(auth.key.scopes) === false && providerAgentId !== auth.key.agentId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          ...escrowRail(),
+          error: 'participant_mismatch',
+          expectedRole: 'provider',
+          expectedAgentId: providerAgentId,
+          authenticatedAgentId: auth.key.agentId,
+          hint: 'providerAgentId in claim body must match the authenticated key agentId.',
+        },
+        { status: 403 },
       );
     }
 
