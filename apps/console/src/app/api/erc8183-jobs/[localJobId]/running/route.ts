@@ -60,6 +60,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
+          ...escrowRail(),
           error: 'worker_id_mismatch',
           message: `Worker '${workerId}' does not match the claimed worker '${job.workerId}'.`,
         },
@@ -74,7 +75,7 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
-      settlementMode: 'erc8183_escrow',
+      ...escrowRail(),
       localJobId: params.localJobId,
       erc8183JobId: job.erc8183JobId,
       status: 'running',
@@ -86,7 +87,7 @@ export async function POST(
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('[erc8183-jobs] POST /running failed:', message);
     return NextResponse.json(
-      { ok: false, error: 'running_failed', message },
+      { ok: false, ...escrowRail(), error: 'running_failed', message },
       { status: 500 },
     );
   }

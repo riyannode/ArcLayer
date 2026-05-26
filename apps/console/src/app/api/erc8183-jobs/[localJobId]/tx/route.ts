@@ -266,8 +266,7 @@ export async function POST(
 
         return NextResponse.json({
           ok: true,
-          rail: 'escrow',
-          settlementMode: 'erc8183_escrow',
+          ...escrowRail(),
           localJobId: params.localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'set_budget',
@@ -354,8 +353,7 @@ export async function POST(
 
         return NextResponse.json({
           ok: true,
-          rail: 'escrow',
-          settlementMode: 'erc8183_escrow',
+          ...escrowRail(),
           localJobId: params.localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'approve',
@@ -390,8 +388,7 @@ export async function POST(
 
         return NextResponse.json({
           ok: true,
-          rail: 'escrow',
-          settlementMode: 'erc8183_escrow',
+          ...escrowRail(),
           localJobId: params.localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'fund',
@@ -425,8 +422,7 @@ export async function POST(
 
         return NextResponse.json({
           ok: true,
-          rail: 'escrow',
-          settlementMode: 'erc8183_escrow',
+          ...escrowRail(),
           localJobId: params.localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'submit',
@@ -459,8 +455,7 @@ export async function POST(
 
         return NextResponse.json({
           ok: true,
-          rail: 'escrow',
-          settlementMode: 'erc8183_escrow',
+          ...escrowRail(),
           localJobId: params.localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'complete',
