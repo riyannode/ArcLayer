@@ -63,7 +63,7 @@ Monitor these on Vercel Analytics or custom:
 
 ### API Key Compromised
 
-1. Revoke key: DELETE from `api_keys` in Supabase dashboard
+1. Revoke key: DELETE from `a2a_api_keys` in Supabase dashboard
 2. Rotate affected bot's key
 3. Monitor for unauthorized job mutations
 
@@ -95,7 +95,7 @@ Expect: create → set-budget → approve → fund → claim → running → sub
 
 Test:
 ```bash
-pnpm --filter examples exec tsx scripts/test-erc8183-full-cycle.ts
+node examples/external-erc8183-jobs/fullcycle-erc8183-demo.js
 ```
 
 ### Database Reset (dev only)
