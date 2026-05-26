@@ -306,7 +306,15 @@ export async function listBridgeSessions(limit = 20): Promise<{ sessionId: strin
     .order('last_event_at', { ascending: false })
     .limit(limit);
 
-  if (!viewError && viewData) {
+  // Only fall back on missing-relation errors (view not created yet).
+  // Permission errors, stale schema, or server failures must be surfaced.
+  if (viewError) {
+    if (viewError.code === '42P01' || viewError.code === 'PGRST205') {
+      // View does not exist — fall through to scan fallback.
+    } else {
+      throw new Error(`bridge_session_summary query failed: ${viewError.message} (${viewError.code})`);
+    }
+  } else if (viewData) {
     return viewData
       .filter((r) => r.session_id)
       .map((r) => ({
@@ -351,7 +359,14 @@ export async function countDistinctBridgeSessions(): Promise<number> {
     .from('bridge_session_summary')
     .select('*', { head: true, count: 'exact' });
 
-  if (!viewError && viewCount !== null) {
+  // Only fall back on missing-relation errors.
+  if (viewError) {
+    if (viewError.code === '42P01' || viewError.code === 'PGRST205') {
+      // View does not exist — fall through to scan fallback.
+    } else {
+      throw new Error(`bridge_session_summary count failed: ${viewError.message} (${viewError.code})`);
+    }
+  } else if (viewCount !== null) {
     return viewCount;
   }
 
