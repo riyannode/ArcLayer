@@ -78,6 +78,7 @@ export default function PredictionMarketBotsPage() {
 
   useEffect(() => {
     let active = true;
+    let timer: ReturnType<typeof setInterval> | null = null;
 
     async function loadA2AReadOnlyData() {
       try {
@@ -111,11 +112,36 @@ export default function PredictionMarketBotsPage() {
       }
     }
 
-    void loadA2AReadOnlyData();
-    const timer = setInterval(loadA2AReadOnlyData, 15_000);
+    const stopPolling = () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+
+    const startPolling = () => {
+      void loadA2AReadOnlyData();
+      stopPolling();
+      if (!document.hidden) {
+        timer = setInterval(() => void loadA2AReadOnlyData(), 15_000);
+      }
+    };
+
+    startPolling();
+
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+        return;
+      }
+      startPolling();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       active = false;
-      clearInterval(timer);
+      stopPolling();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, []);
 
