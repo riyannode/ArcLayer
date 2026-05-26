@@ -46,6 +46,7 @@ export async function POST(
     signature: String(body.signature ?? ''),
     timestamp: Number(body.timestamp),
     role: String(body.role ?? 'deriv-worker'),
+    requestId: String(body.requestId ?? ''),
     action: 'revoke_deriv_a2a_job_key',
   });
 

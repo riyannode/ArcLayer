@@ -47,6 +47,7 @@ export async function POST(
     signature: String(body.signature ?? ''),
     timestamp: Number(body.timestamp),
     role,
+    requestId: String(body.requestId ?? ''),
     action: 'create_deriv_a2a_job_key',
   });
 

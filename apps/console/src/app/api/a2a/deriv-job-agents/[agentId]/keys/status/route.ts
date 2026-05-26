@@ -40,14 +40,14 @@ export async function POST(
     });
   }
 
-  // Verify wallet ownership (signature not strictly needed for read, but
-  // we verify to prevent unauthorized enumeration of active keys)
+  // Verify wallet ownership — prevents unauthorized enumeration
   const auth = await verifyDerivJobKeyOwnerRequest({
     agentId,
     ownerAddress: String(body.ownerAddress ?? ''),
     signature: String(body.signature ?? ''),
     timestamp: Number(body.timestamp),
     role: String(body.role ?? 'deriv-worker'),
+    requestId: String(body.requestId ?? ''),
   });
 
   if (!auth.ok) return auth.response;
