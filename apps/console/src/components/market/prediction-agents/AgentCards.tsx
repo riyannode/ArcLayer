@@ -74,9 +74,6 @@ function AgentCard({ agent }: { agent: PredictionAgentView }) {
       </div>
 
       <div className="mt-4 space-y-2 font-mono text-[10px] text-zinc-500">
-        <Row label="id" value={agent.id} />
-        <Row label="type" value={agent.category} />
-        <Row label="caps" value={agent.caps} />
         <Row label="event" value={agent.event} />
         <LinkedRow label="pulse" value={agent.activityActive ? agent.activity : 'idle'} href={agent.activityHref} />
         {hasTx ? <LinkedRow label="tx" value={agent.tx} href={agent.txHref} /> : null}
