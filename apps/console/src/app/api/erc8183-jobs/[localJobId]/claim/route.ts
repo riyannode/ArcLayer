@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import {
   getErc8183JobByLocalId,
   claimErc8183Job,
@@ -8,20 +9,15 @@ import {
  * POST /api/erc8183-jobs/[localJobId]/claim
  *
  * Off-chain worker metadata claim for ERC-8183 escrow jobs.
- *
- * Allowed only when:
- *   - settlement_mode = 'erc8183_escrow'
- *   - erc8183_status = 'Funded'
- *   - status = 'created'
- *
- * Sets status='claimed', worker_id, provider_agent_id, claimed_at, claim_expires_at.
- * No smart contract call — on-chain escrow is already funded.
+ * Requires erc8183:claim scope.
  */
 export async function POST(
   req: NextRequest,
   { params }: { params: { localJobId: string } },
 ) {
   try {
+    const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_CLAIM);
+    if (auth.error) return auth.error;
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
       return NextResponse.json(

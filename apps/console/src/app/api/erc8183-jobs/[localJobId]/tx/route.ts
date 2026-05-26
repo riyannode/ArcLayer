@@ -12,11 +12,75 @@ import {
   attachErc8183CompleteTx,
   updateErc8183Status,
 } from '@/lib/erc8183-jobs/store';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import type { Hex } from 'viem';
+import type { Erc8183JobView } from '@/lib/erc8183-jobs/types';
+import type { ConfirmedReceipt } from '@/lib/erc8183-jobs/receipt';
 
 type TxType = 'set_budget' | 'approve' | 'fund' | 'submit' | 'complete';
 
 const VALID_TX_TYPES: TxType[] = ['set_budget', 'approve', 'fund', 'submit', 'complete'];
+
+/**
+ * Validate that an on-chain job's fields match the local job record.
+ * This prevents cross-job tx hash confusion.
+ */
+interface OnchainJobMatch {
+  client: string;
+  provider: string;
+  evaluator: string;
+  expiredAt: bigint;
+  hook: string;
+}
+function validateOnchainJobMatch(
+  onchain: OnchainJobMatch,
+  local: Erc8183JobView,
+  txType: string,
+): NextResponse | null {
+  const zeroAddress = '0x0000000000000000000000000000000000000000';
+
+  const localClient = (local.clientAddress ?? '').toLowerCase();
+  if (localClient && onchain.client.toLowerCase() !== localClient) {
+    return NextResponse.json(
+      { ok: false, error: 'onchain_client_mismatch', txType, message: `On-chain job client ${onchain.client} does not match local job client ${localClient}.` },
+      { status: 422 },
+    );
+  }
+
+  const localProvider = (local.providerAddress ?? '').toLowerCase();
+  if (localProvider && onchain.provider.toLowerCase() !== localProvider) {
+    return NextResponse.json(
+      { ok: false, error: 'onchain_provider_mismatch', txType, message: `On-chain job provider ${onchain.provider} does not match local job provider ${localProvider}.` },
+      { status: 422 },
+    );
+  }
+
+  const localEval = (local.evaluatorAddress ?? '').toLowerCase();
+  if (localEval && onchain.evaluator.toLowerCase() !== localEval && onchain.evaluator.toLowerCase() !== zeroAddress) {
+    return NextResponse.json(
+      { ok: false, error: 'onchain_evaluator_mismatch', txType, message: `On-chain job evaluator ${onchain.evaluator} does not match local job evaluator ${localEval} or zero address.` },
+      { status: 422 },
+    );
+  }
+
+  const localExpiredAt = local.expiredAtUnix ? BigInt(local.expiredAtUnix) : null;
+  if (localExpiredAt !== null && onchain.expiredAt !== localExpiredAt) {
+    return NextResponse.json(
+      { ok: false, error: 'onchain_expired_at_mismatch', txType, message: `On-chain job expiredAt ${onchain.expiredAt} does not match local job expiredAt ${localExpiredAt}.` },
+      { status: 422 },
+    );
+  }
+
+  const localHook = (local.hookAddress ?? zeroAddress).toLowerCase();
+  if (onchain.hook.toLowerCase() !== localHook) {
+    return NextResponse.json(
+      { ok: false, error: 'onchain_hook_mismatch', txType, message: `On-chain job hook ${onchain.hook} does not match local job hook ${localHook}.` },
+      { status: 422 },
+    );
+  }
+
+  return null; // all fields match
+}
 
 /**
  * POST /api/erc8183-jobs/[localJobId]/tx
@@ -37,6 +101,8 @@ export async function POST(
   { params }: { params: { localJobId: string } },
 ) {
   try {
+    const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_TX);
+    if (auth.error) return auth.error;
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
       return NextResponse.json(
@@ -54,8 +120,8 @@ export async function POST(
     }
 
     const body = await req.json();
-    const txType = body.tx_type as TxType | undefined;
-    const txHash = body.tx_hash as Hex | undefined;
+    const txType = (body.txType ?? body.tx_type) as TxType | undefined;
+    const txHash = (body.txHash ?? body.tx_hash) as Hex | undefined;
 
     if (!txType || !VALID_TX_TYPES.includes(txType)) {
       return NextResponse.json(
@@ -142,6 +208,10 @@ export async function POST(
           );
         }
 
+        // Provenance: validate on-chain job matches local job
+        const fundProvenanceError = validateOnchainJobMatch(onchainJob, job, 'fund');
+        if (fundProvenanceError) return fundProvenanceError;
+
         // Step 4: update from on-chain state
         await attachErc8183FundTx({
           localJobId: params.localJobId,
@@ -172,6 +242,10 @@ export async function POST(
           );
         }
 
+        // Provenance: validate on-chain job matches local job
+        const submitProvenanceError = validateOnchainJobMatch(onchainJob, job, 'submit');
+        if (submitProvenanceError) return submitProvenanceError;
+
         await attachErc8183SubmitTx({
           localJobId: params.localJobId,
           submitTxHash: txHash,
@@ -201,6 +275,10 @@ export async function POST(
             { status: 422 },
           );
         }
+
+        // Provenance: validate on-chain job matches local job
+        const completeProvenanceError = validateOnchainJobMatch(onchainJob, job, 'complete');
+        if (completeProvenanceError) return completeProvenanceError;
 
         await attachErc8183CompleteTx({
           localJobId: params.localJobId,

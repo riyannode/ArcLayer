@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { keccak256, toBytes } from 'viem';
 import { CONTRACTS } from '@arclayer/sdk';
-import { getErc8183JobByLocalId } from '@/lib/erc8183-jobs/store';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
+import { getErc8183JobByLocalId, attachErc8183PreparedComplete } from '@/lib/erc8183-jobs/store';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
 
 export async function POST(
@@ -9,6 +10,8 @@ export async function POST(
   { params }: { params: { localJobId: string } },
 ) {
   try {
+    const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_COMPLETE);
+    if (auth.error) return auth.error;
     const body = await req.json();
     const approved = body.approved !== false; // default true
 
@@ -41,6 +44,12 @@ export async function POST(
 
     const reason = body.reason ?? 'deliverable-approved';
     const reasonHash: `0x${string}` = keccak256(toBytes(reason));
+
+    // Persist reasonHash to local mirror before returning tx instruction
+    await attachErc8183PreparedComplete({
+      localJobId: params.localJobId,
+      reasonHash,
+    });
 
     const tx: TxInstruction = {
       address: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
