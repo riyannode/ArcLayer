@@ -58,6 +58,16 @@ function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
 }
 
+function toPublicIndexerErrorMessage(error: string | null): string | null {
+  return error ? "Indexer error (see server logs)" : null;
+}
+
+function toPublicReferenceFilters(filters: ReturnType<typeof getReferenceFilters>) {
+  return {
+    ...filters,
+    lastRefreshError: toPublicIndexerErrorMessage(filters.lastRefreshError),
+  };
+}
 
 export async function runSyncCycle() {
   if (syncInProgress) {
@@ -154,7 +164,7 @@ createServer((req, res) => {
       supabaseWallets: filters.supabaseWallets,
       supabaseAgentIds: filters.supabaseAgentIds,
       filterLastRefreshAt: filters.lastRefreshAt,
-      filterLastRefreshError: filters.lastRefreshError,
+      filterLastRefreshError: toPublicIndexerErrorMessage(filters.lastRefreshError),
       importedAgentCount: counts.importedAgentCount,
       erc8004AgentCount: counts.erc8004AgentCount,
       erc8183JobCount: counts.erc8183JobCount,
@@ -162,7 +172,7 @@ createServer((req, res) => {
       totalAgentCount: counts.totalAgentCount,
       lastSyncedBlock: Number(readMetaValue("last_synced_block") || "0"),
       lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : (readMetaValue("last_sync_at") ? new Date(Number(readMetaValue("last_sync_at"))).toISOString() : null),
-      lastSyncError: lastSyncError ?? getLastA2AJobSyncError(),
+      lastSyncError: toPublicIndexerErrorMessage(lastSyncError ?? getLastA2AJobSyncError()),
     });
     return;
   }
@@ -255,7 +265,7 @@ createServer((req, res) => {
     writeJson(res, {
       sources: readCounts().agentEventSourceBreakdown,
       sampleAgentEvents: agentEvents.slice(0, 5),
-      referenceFilters: getReferenceFilters(),
+      referenceFilters: toPublicReferenceFilters(getReferenceFilters()),
       projectionDebug,
       rawErc8004AgentEventCount: projectionDebug.rawErc8004AgentEventCount,
       projectedErc8004AgentCount: projectionDebug.projectedErc8004AgentCountBeforeInsert,
