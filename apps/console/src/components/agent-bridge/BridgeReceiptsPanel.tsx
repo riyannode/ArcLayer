@@ -1,5 +1,6 @@
 import type { BridgeSession } from './types';
 import { shortHash } from './types';
+import { ARC_SCAN_TX } from './explorer';
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return <div>{label}: <span className="font-mono text-[#C5A67C]">{shortHash(value)}</span></div>;
@@ -30,7 +31,7 @@ export function BridgeReceiptsPanel({ session }: { session: BridgeSession | null
                 <Field label="session_id" value={receipt.session_id} />
                 <div>created_at: <span className="font-mono text-[#C5A67C]">{new Date(receipt.created_at).toLocaleString()}</span></div>
                 {receipt.transaction ? (
-                  <a href={`https://testnet.arcscan.app/tx/${receipt.transaction}`} target="_blank" rel="noreferrer" className="font-mono text-[#C5A67C] underline-offset-4 hover:underline">ArcScan ↗</a>
+                  <a href={`${ARC_SCAN_TX}${receipt.transaction}`} target="_blank" rel="noreferrer" className="font-mono text-[#C5A67C] underline-offset-4 hover:underline">ArcScan ↗</a>
                 ) : <div>ArcScan: <span className="font-mono text-[#EAE4D8]/35">—</span></div>}
               </div>
             </div>

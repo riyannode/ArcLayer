@@ -1,9 +1,9 @@
 import type { BridgeEvent, BridgeReceipt, BridgeSession } from './types';
 import { eventType, roleLabel, shortHash } from './types';
+import { ARC_SCAN_TX } from './explorer';
 
 const CORE_ROLES = ['oracle', 'analyzer', 'evaluator', 'executor'] as const;
 const STALE_MS = 20 * 60 * 1000;
-const ARCSCAN_TX = 'https://testnet.arcscan.app/tx/';
 
 type CoreRole = (typeof CORE_ROLES)[number];
 
@@ -147,7 +147,7 @@ export function ReceiptBreakdownPanel({ session }: { session: BridgeSession | nu
       <div className="mt-3 grid gap-2 rounded-sm border border-white/10 bg-black/20 p-3 text-xs text-[#EAE4D8]/60 md:grid-cols-3">
         <div>latest payment_id: <span className="font-mono text-[#C5A67C]">{shortHash(latest?.payment_id || latest?.payment_ref)}</span></div>
         <div>latest x402 tx: <span className="font-mono text-[#C5A67C]">{shortHash(latest?.transaction)}</span></div>
-        <div>{latest?.transaction ? <a href={`${ARCSCAN_TX}${latest.transaction}`} target="_blank" rel="noreferrer" className="font-mono text-[#C5A67C] underline-offset-4 hover:underline">ArcScan link ↗</a> : <span>ArcScan link: <span className="font-mono text-[#EAE4D8]/35">—</span></span>}</div>
+        <div>{latest?.transaction ? <a href={`${ARC_SCAN_TX}${latest.transaction}`} target="_blank" rel="noreferrer" className="font-mono text-[#C5A67C] underline-offset-4 hover:underline">ArcScan link ↗</a> : <span>ArcScan link: <span className="font-mono text-[#EAE4D8]/35">—</span></span>}</div>
       </div>
     </div>
   );

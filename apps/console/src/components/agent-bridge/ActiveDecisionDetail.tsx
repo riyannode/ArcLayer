@@ -2,8 +2,7 @@
 
 import type { DecisionNode } from './PredictionMarketDecisionBoard';
 import { shortHash } from './types';
-
-const ARC_SCAN_TX = 'https://testnet.arcscan.app/tx/';
+import { ARC_SCAN_TX } from './explorer';
 
 export function ActiveDecisionDetail({ node }: { node: DecisionNode | null }) {
   if (!node) {

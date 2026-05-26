@@ -3,8 +3,7 @@
 import { useMemo, useState } from 'react';
 import type { BridgeEvent, BridgeReceipt, BridgeSession } from './types';
 import { eventType, shortHash } from './types';
-
-const ARC_SCAN_TX = 'https://testnet.arcscan.app/tx/';
+import { ARC_SCAN_TX } from './explorer';
 
 type NodeState = 'pending' | 'active' | 'completed' | 'rejected' | 'stale';
 type FlowKey = 'oracle' | 'receipt1' | 'risk' | 'receipt2' | 'evaluator' | 'receipt3' | 'executor' | 'discard';

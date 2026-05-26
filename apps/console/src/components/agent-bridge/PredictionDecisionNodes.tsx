@@ -1,8 +1,7 @@
 'use client';
 
 import type { DecisionNode } from './PredictionMarketDecisionBoardV2';
-
-const ARC_SCAN_TX = 'https://testnet.arcscan.app/tx/';
+import { ARC_SCAN_TX } from './explorer';
 
 const accentMap: Record<DecisionNode['accent'], string> = {
   blue: 'border-cyan-300/40 text-cyan-100',

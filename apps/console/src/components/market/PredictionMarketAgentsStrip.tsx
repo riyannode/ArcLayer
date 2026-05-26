@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { PredictionAgentLiveRail } from './PredictionAgentLiveRail';
+import { ARC_SCAN_TX } from '@/components/agent-bridge/explorer';
 
 type Agent = {
   agentId: string;
@@ -200,6 +201,9 @@ export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots
                   <div className="truncate">endpoint {short(agent.endpoint)}</div>
                   <div className="truncate">caps {(agent.capabilities || []).slice(0, 2).join(', ') || '—'}</div>
                   <div className="truncate text-[#A69D90]">event {latest?.summary || latest?.title || p?.lastEventSummary || 'waiting'}</div>
+                  {latest?.txHash && latest?.eventType === 'x402_paid' ? (
+                    <a href={`${ARC_SCAN_TX}${latest.txHash}`} target="_blank" rel="noreferrer" className="truncate text-emerald-300 underline-offset-4 hover:underline">tx {short(latest.txHash)} ↗</a>
+                  ) : null}
                   <div className="truncate text-[#81796E]">seen {ageLabel(p?.lastHeartbeatAt)}</div>
                   <div className="truncate text-[#A69D90]">{syncedLabel(agent.updatedAt)}</div>
                 </div>

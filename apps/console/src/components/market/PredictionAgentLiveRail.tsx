@@ -1,5 +1,7 @@
 'use client';
 
+import { ARC_SCAN_TX } from '@/components/agent-bridge/explorer';
+
 type AgentLiveEvent = {
   eventType: string;
   title?: string | null;
@@ -8,6 +10,9 @@ type AgentLiveEvent = {
   confidence?: number | null;
   trace?: string[];
   createdAt?: string;
+  txHash?: string | null;
+  amountAtomic?: string | null;
+  currency?: string | null;
 };
 
 const STEPS = [
@@ -31,18 +36,41 @@ function confidenceLabel(value?: number | null) {
   return `${Math.round(value * 100)}%`;
 }
 
+function shortHash(hash?: string | null) {
+  if (!hash || hash === '—') return null;
+  return hash.length > 20 ? `${hash.slice(0, 10)}…${hash.slice(-6)}` : hash;
+}
+
 export function PredictionAgentLiveRail({ latestEvent }: { latestEvent?: AgentLiveEvent | null }) {
   const trace = new Set(latestEvent?.trace ?? []);
   if (latestEvent?.eventType) trace.add(latestEvent.eventType);
+
+  const isPaid = latestEvent?.eventType === 'x402_paid';
+  const txLink = isPaid && latestEvent?.txHash
+    ? `${ARC_SCAN_TX}${latestEvent.txHash}`
+    : null;
 
   return (
     <div className="mb-3 rounded border border-[#C5A67C]/15 bg-black/30 p-3">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#C5A67C]">Live Decision Rail</div>
-        <div className="truncate font-mono text-[10px] text-[#EAE4D8]/55">
-          {latestEvent?.summary || latestEvent?.title || 'waiting for live agent event'}
-          {latestEvent?.decision ? ` · ${latestEvent.decision}` : ''}
-          {confidenceLabel(latestEvent?.confidence) ? ` · ${confidenceLabel(latestEvent?.confidence)}` : ''}
+        <div className="flex items-center gap-2 truncate font-mono text-[10px] text-[#EAE4D8]/55">
+          <span className="truncate">
+            {latestEvent?.summary || latestEvent?.title || 'waiting for live agent event'}
+            {latestEvent?.decision ? ` · ${latestEvent.decision}` : ''}
+            {confidenceLabel(latestEvent?.confidence) ? ` · ${confidenceLabel(latestEvent?.confidence)}` : ''}
+            {latestEvent?.amountAtomic && latestEvent?.currency ? ` · ${latestEvent.amountAtomic} ${latestEvent.currency}` : ''}
+          </span>
+          {txLink ? (
+            <a
+              href={txLink}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 rounded border border-emerald-300/40 bg-emerald-400/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-emerald-200 hover:bg-emerald-400/20"
+            >
+              Tx ↗
+            </a>
+          ) : null}
         </div>
       </div>
 
