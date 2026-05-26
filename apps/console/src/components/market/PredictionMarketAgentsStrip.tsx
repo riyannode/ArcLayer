@@ -42,6 +42,9 @@ type AgentLiveEvent = {
   confidence?: number | null;
   trace?: string[];
   createdAt: string;
+  paymentId?: string | null;
+  paymentRef?: string | null;
+  metadata?: Record<string, unknown> | null;
 };
 
 type BridgeEvent = Record<string, unknown>;
@@ -50,6 +53,11 @@ type BridgeSession = {
 } | null;
 
 const ACTIVITY_WINDOW_MS = 30_000;
+const SCAN_BASE =
+  process.env.NEXT_PUBLIC_ARC_SCAN_TX_BASE ||
+  process.env.NEXT_PUBLIC_ARC_EXPLORER_TX_BASE ||
+  process.env.NEXT_PUBLIC_TX_EXPLORER_BASE ||
+  '';
 const ROLE_ALIASES: Record<string, string> = {
   analyst: 'ANALYZER',
   analysis: 'ANALYZER',
@@ -82,6 +90,12 @@ function shortText(value: unknown, head = 10, tail = 6) {
   if (!raw) return '—';
   if (raw.length <= head + tail + 1) return raw;
   return `${raw.slice(0, head)}…${raw.slice(-tail)}`;
+}
+
+function scanHref(value: unknown) {
+  const raw = text(value, '');
+  if (!SCAN_BASE || !/^0x[a-fA-F0-9]{64}$/.test(raw)) return '';
+  return `${SCAN_BASE.replace(/\/$/, '')}/${raw}`;
 }
 
 function normalizeRole(value: unknown) {
@@ -120,9 +134,22 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+function activityTx(event?: AgentLiveEvent) {
+  const metadata = asRecord(event?.metadata);
+  return event?.txHash ?? metadata?.txHash ?? metadata?.transaction ?? metadata?.transactionHash ?? null;
+}
+
+function activityPaymentRef(event?: AgentLiveEvent) {
+  const metadata = asRecord(event?.metadata);
+  return event?.paymentId ?? event?.paymentRef ?? metadata?.paymentId ?? metadata?.paymentRef ?? metadata?.payment_id ?? metadata?.payment_ref ?? null;
+}
+
 function latestActivityLabel(event?: AgentLiveEvent) {
   if (!event) return 'idle';
-  if (event.txHash) return `${event.eventType} · tx ${event.txHash.slice(0, 10)}…`;
+  const tx = activityTx(event);
+  const paymentRef = activityPaymentRef(event);
+  if (tx) return `${event.eventType} · tx ${shortText(tx)}`;
+  if (paymentRef) return `${event.eventType} · payment ${shortText(paymentRef)}`;
   return event.summary || event.title || event.eventType || 'activity';
 }
 
@@ -171,11 +198,13 @@ function toPredictionAgentInputs(
     const role = agent.role || agent.roles?.[0]?.name || agent.roles?.[0]?.id || 'agent';
     const normalizedRole = normalizeRole(role);
     const proof = proofByRole.get(normalizedRole.toLowerCase()) ?? null;
+    const proofHash = proof?.payload_hash;
     const presence = presenceByAgent.get(id);
     const latest = latestEventByAgent.get(id);
     const online = isOnline(presence);
     const activityActive = isRecentEvent(latest);
     const recentX402 = latest?.eventType === 'x402_paid' && activityActive;
+    const activityHash = activityTx(latest);
 
     return [{
       id,
@@ -189,10 +218,12 @@ function toPredictionAgentInputs(
       seen: ageLabel(presence?.lastHeartbeatAt),
       status: online ? 'active' : 'unsynced',
       activity: latestActivityLabel(latest),
+      activityHref: scanHref(activityHash),
       activitySeen: ageLabel(latest?.createdAt),
       activityActive,
       proof: bridgeProofLabel(proof),
-      proofHash: shortText(proof?.payload_hash),
+      proofHash: shortText(proofHash),
+      proofHashHref: scanHref(proofHash),
       proofSeen: text(proof?.created_at),
       proofActive: Boolean(proof),
     }];
