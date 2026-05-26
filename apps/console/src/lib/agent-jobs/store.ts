@@ -88,6 +88,7 @@ export interface AgentJobWithEvents extends AgentJob {
 
 export interface ListAgentJobsFilter {
   status?: AgentJobStatus;
+  settlementMode?: 'x402_offchain' | 'erc8183_escrow';
   jobType?: string;
   marketId?: string;
   buyerAgentId?: string;
@@ -266,6 +267,8 @@ export async function createAgentJob(input: {
 export async function listAgentJobs(filter: ListAgentJobsFilter = {}): Promise<AgentJob[]> {
   const db = ensureDb();
   let query = db.from('agent_jobs').select('*');
+
+  query = query.eq('settlement_mode', filter.settlementMode ?? 'x402_offchain');
 
   if (filter.status) query = query.eq('status', filter.status);
   if (filter.jobType) query = query.eq('job_type', filter.jobType);
