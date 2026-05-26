@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAgentJob, listAgentJobs, withAgentJobNamespace } from '@/lib/agent-jobs/store';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
+import { offchainJobRail } from '@/lib/rails/responses';
 import type { ListAgentJobsFilter } from '@/lib/agent-jobs/store';
 
 export async function GET(req: NextRequest) {
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
     if (offset) filter.offset = parseInt(offset, 10);
 
     const jobs = await listAgentJobs(filter);
-    return NextResponse.json({ ok: true, jobs: jobs.map(withAgentJobNamespace) });
+    return NextResponse.json({ ok: true, ...offchainJobRail(), jobs: jobs.map(withAgentJobNamespace) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown';
     console.error('[agent-jobs] GET failed:', msg);

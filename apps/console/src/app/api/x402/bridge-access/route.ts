@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { withNative } from '@/lib/x402/middleware';
 import { latestBridgeSession, listBridgeEvents, listBridgeReceipts, stablePayloadHash } from '@/lib/agent-bridge/store';
+import { bridgeRail } from '@/lib/rails/responses';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -55,6 +56,7 @@ async function handler(req: NextRequest) {
 
   const response = NextResponse.json({
     ok: true,
+    ...bridgeRail(),
     access: 'unlocked',
     scope: requestedScope,
     role,

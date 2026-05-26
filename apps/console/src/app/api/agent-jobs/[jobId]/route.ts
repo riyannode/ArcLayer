@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAgentJob, withAgentJobNamespace } from '@/lib/agent-jobs/store';
-import { wrongRailEscrowError } from '@/lib/rails/responses';
+import { wrongRailEscrowError, offchainJobRail } from '@/lib/rails/responses';
 
 export async function GET(
   _req: NextRequest,
@@ -22,7 +22,7 @@ export async function GET(
       return NextResponse.json(wrongRailEscrowError(), { status: 409 });
     }
 
-    return NextResponse.json({ ok: true, ...withAgentJobNamespace(result) });
+    return NextResponse.json({ ok: true, ...offchainJobRail(), ...withAgentJobNamespace(result) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown';
     console.error('[agent-jobs] GET /[jobId] failed:', msg);
