@@ -3,6 +3,7 @@ import { getErc8183JobByLocalId } from '@/lib/erc8183-jobs/store';
 import {
   readTransactionReceipt,
   readOnchainJob,
+  getArcPublicClient,
 } from '@/lib/erc8183-jobs/receipt';
 import {
   attachErc8183SetBudgetTx,
@@ -15,6 +16,8 @@ import {
 import { assertErc8183Participant, isErc8183Admin } from '@/lib/erc8183-jobs/authz';
 import { escrowRail } from '@/lib/rails/responses';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
+import { USDC_ABI, CONTRACTS } from '@/lib/contracts';
+import { ARC_TOKENS } from '@arclayer/sdk';
 import type { Hex } from 'viem';
 import type { Erc8183JobView } from '@/lib/erc8183-jobs/types';
 import type { ConfirmedReceipt } from '@/lib/erc8183-jobs/receipt';
@@ -177,7 +180,35 @@ export async function POST(
     // Step 3-4: handle by tx type
     switch (txType) {
       case 'set_budget': {
-        // set_budget: on-chain status stays 'Open', just store tx hash
+        // Read on-chain job for provenance check
+        const onchainBudgetJob = await readOnchainJob(erc8183JobIdBigInt);
+        if (!onchainBudgetJob) {
+          return NextResponse.json(
+            { ok: false, ...escrowRail(), error: 'onchain_job_not_found', message: 'Job not found on-chain. The setBudget tx may have been sent to a different contract.' },
+            { status: 422 },
+          );
+        }
+
+        // Validate on-chain job fields match local job
+        const budgetProvenanceError = validateOnchainJobMatch(onchainBudgetJob, job, 'set_budget');
+        if (budgetProvenanceError) return budgetProvenanceError;
+
+        // Verify on-chain budget matches local priceAtomic
+        if (BigInt(onchainBudgetJob.budget) !== BigInt(job.priceAtomic)) {
+          return NextResponse.json(
+            {
+              ok: false,
+              ...escrowRail(),
+              error: 'onchain_budget_mismatch',
+              txType: 'set_budget',
+              expectedBudget: job.priceAtomic,
+              onchainBudget: onchainBudgetJob.budget.toString(),
+              message: `On-chain budget ${onchainBudgetJob.budget} does not match local priceAtomic ${job.priceAtomic}.`,
+            },
+            { status: 422 },
+          );
+        }
+
         await attachErc8183SetBudgetTx({
           localJobId: params.localJobId,
           setBudgetTxHash: txHash,
@@ -197,7 +228,42 @@ export async function POST(
       }
 
       case 'approve': {
-        // approve: on-chain status stays same, just store tx hash
+        // Verify USDC allowance was granted after the approve tx
+        const clientAddress = job.clientAddress;
+        let allowanceOk = false;
+        let actualAllowance = BigInt(0);
+        if (clientAddress) {
+          try {
+            const pc = getArcPublicClient();
+            actualAllowance = await pc.readContract({
+              address: ARC_TOKENS.USDC,
+              abi: USDC_ABI,
+              functionName: 'allowance',
+              args: [clientAddress as Hex, CONTRACTS.ERC8183_AGENTIC_COMMERCE],
+            }) as bigint;
+            allowanceOk = actualAllowance >= BigInt(job.priceAtomic);
+          } catch {
+            // If allowance check fails, still allow — the tx receipt proves approval
+            allowanceOk = true;
+          }
+        }
+
+        if (!allowanceOk) {
+          return NextResponse.json(
+            {
+              ok: false,
+              ...escrowRail(),
+              error: 'allowance_insufficient_after_approve',
+              txType: 'approve',
+              clientAddress,
+              requiredAllowance: job.priceAtomic,
+              actualAllowance: actualAllowance.toString(),
+              message: `USDC allowance after approve tx is insufficient. Required >= ${job.priceAtomic}, got ${actualAllowance}.`,
+            },
+            { status: 422 },
+          );
+        }
+
         await attachErc8183ApproveTx({
           localJobId: params.localJobId,
           approveTxHash: txHash,
