@@ -23,7 +23,7 @@
  *   - This ensures bridge event agentId matches key agentId
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
 
@@ -118,6 +118,18 @@ export default function ExternalBotWizard() {
     setError(null);
     setStep('template');
   }, []);
+
+  // Preselect category from URL ?category= on mount
+  // Handles category-aware entry points like /register/external-bot?category=prediction-market-bots
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const cat = params.get('category');
+      if (cat && AGENT_CATEGORIES.some((c) => c.key === cat)) {
+        handleSelectCategory(cat);
+      }
+    }
+  }, [handleSelectCategory]);
 
   // ── Step 2: Template ────────────────────────────────────────
   const templates = useMemo(() =>
