@@ -29,11 +29,21 @@ const {
 } = require('./shared/erc8183-job-client');
 
 const BUYER_AGENT_ID = process.env.BUYER_AGENT_ID || 'agent_buyer_001';
-const CLIENT_ADDRESS = process.env.CLIENT_ADDRESS || '0xClient';
 const PROVIDER_AGENT_ID = process.env.PROVIDER_AGENT_ID || 'agent_provider_001';
-const PROVIDER_ADDRESS = process.env.PROVIDER_ADDRESS || '0xProvider';
 const EVALUATOR_AGENT_ID = process.env.EVALUATOR_AGENT_ID || 'agent_evaluator_001';
-const EVALUATOR_ADDRESS = process.env.EVALUATOR_ADDRESS || '0xEvaluator';
+
+// P0.9: Fail fast on invalid addresses — no placeholder defaults
+function requiredAddress(name) {
+  const value = process.env[name];
+  if (!value || !/^0x[a-fA-F0-9]{40}$/.test(value)) {
+    throw new Error(`\n${name} must be a valid 0x address.\nSet ${name}=<address> in .env or export it.\n`);
+  }
+  return value;
+}
+const CLIENT_ADDRESS = requiredAddress('CLIENT_ADDRESS');
+const PROVIDER_ADDRESS = requiredAddress('PROVIDER_ADDRESS');
+const EVALUATOR_ADDRESS = requiredAddress('EVALUATOR_ADDRESS');
+
 const ARCLAYER_BASE_URL = process.env.ARCLAYER_BASE_URL || 'http://localhost:3000';
 
 function sleep(ms) {

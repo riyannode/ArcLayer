@@ -1,8 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CONTRACTS } from '@arclayer/sdk';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
-import { createLocalErc8183Job } from '@/lib/erc8183-jobs/store';
+import { createLocalErc8183Job, listErc8183Jobs } from '@/lib/erc8183-jobs/store';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
+import { escrowRail } from '@/lib/rails/responses';
+
+/**
+ * GET /api/erc8183-jobs — list ERC-8183 escrow jobs
+ */
+export async function GET(req: NextRequest) {
+  try {
+    const auth = await requireApiKey(req, [API_KEY_SCOPES.ERC8183_CREATE, API_KEY_SCOPES.ERC8183_TX]);
+    if (auth.error) return auth.error;
+
+    const { searchParams } = new URL(req.url);
+    const jobs = await listErc8183Jobs({
+      buyerAgentId: searchParams.get('buyerAgentId') ?? undefined,
+      status: searchParams.get('status') ?? undefined,
+      limit: Math.min(Number(searchParams.get('limit')) || 50, 200),
+    });
+
+    return NextResponse.json({
+      ok: true,
+      ...escrowRail(),
+      count: jobs.length,
+      jobs,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json(
+      { ok: false, error: 'list_failed', message },
+      { status: 500 },
+    );
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -54,7 +85,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      settlementMode: 'erc8183_escrow',
+      ...escrowRail(),
       nextAction: 'createJob',
       localJobId: job.localJobId,
       tx,
