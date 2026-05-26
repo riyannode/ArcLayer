@@ -22,7 +22,7 @@ export function A2ACategoryPageView({ category }: Props) {
             </div>
             <div className="flex gap-2">
               <Link href={`/live-a2a-agent/jobs?category=${encodeURIComponent(category.key)}`} className="rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 px-4 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C]">Open Jobs →</Link>
-              <Link href={`/register/autonomous?category=${encodeURIComponent(category.key)}`} className="rounded-sm border border-white/10 px-4 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/75 hover:border-[#C5A67C]/35 hover:text-[#C5A67C]">Register External Bot →</Link>
+              <Link href={`/register/external-bot?category=${encodeURIComponent(category.key)}`} className="rounded-sm border border-white/10 px-4 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/75 hover:border-[#C5A67C]/35 hover:text-[#C5A67C]">Register External Bot →</Link>
             </div>
           </div>
         </header>
