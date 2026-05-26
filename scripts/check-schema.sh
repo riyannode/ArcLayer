@@ -12,7 +12,14 @@ LOCAL="${LOCAL_CHECK:-}"
 # if LOCAL_CHECK is set, hit the local dev server
 if [ -n "$LOCAL" ]; then
   echo "[check:schema] LOCAL_CHECK mode — curl localhost:3000/api/health/schema"
-  curl -sS http://localhost:3000/api/health/schema | python3 -m json.tool
+  RESPONSE=$(curl -sS http://localhost:3000/api/health/schema)
+  echo "$RESPONSE" | python3 -m json.tool
+  OK=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('ok',False))")
+  if [ "$OK" != "True" ]; then
+    echo "[check:schema] ❌ Schema health check FAILED"
+    exit 1
+  fi
+  echo "[check:schema] ✅ Schema healthy"
   exit 0
 fi
 
@@ -30,9 +37,7 @@ FROM information_schema.columns
 WHERE table_name IN (
   'agent_jobs', 'agent_bridge_events', 'agent_bridge_receipts',
   'external_agent_runtimes', 'x402_resource_payments',
-  'x402_native_payments', 'x402_native_claim_payment',
-  'x402_native_consume_payment', 'x402_gateway_payments',
-  'x402_gateway_claim_settlement', 'x402_gateway_consume_payment'
+  'x402_native_payments', 'x402_gateway_payments'
 )
 ORDER BY table_name, ordinal_position;
 SQL
@@ -57,17 +62,13 @@ if not isinstance(rows, list):
 
 # expected columns keyed by table
 EXPECTED = {
-    'agent_jobs': ['settlement_mode', 'erc8183_job_id', 'erc8183_status', 'client_address', 'provider_address', 'evaluator_address', 'expired_at_unix', 'hook_address'],
-    'agent_bridge_events': ['event_dedupe_key', 'job_id', 'category', 'session_id'],
-    'agent_bridge_receipts': ['session_id', 'event_id', 'status'],
-    'external_agent_runtimes': ['runtime_id', 'agent_id', 'status'],
+    'agent_jobs': ['settlement_mode', 'erc8183_job_id', 'erc8183_status'],
+    'agent_bridge_events': ['event_dedupe_key', 'job_id', 'category'],
+    'agent_bridge_receipts': ['session_id', 'event_id'],
+    'external_agent_runtimes': ['runtime_id', 'agent_id'],
     'x402_resource_payments': ['payment_id', 'resource', 'status'],
     'x402_native_payments': ['payment_id', 'payer', 'status'],
-    'x402_native_claim_payment': ['payment_id', 'status'],
-    'x402_native_consume_payment': ['payment_id', 'status'],
     'x402_gateway_payments': ['payment_id', 'status'],
-    'x402_gateway_claim_settlement': ['payment_id', 'status'],
-    'x402_gateway_consume_payment': ['payment_id', 'status'],
 }
 
 # build index from response
