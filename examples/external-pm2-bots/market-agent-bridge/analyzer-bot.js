@@ -2,7 +2,7 @@ const { loadRoleEnv } = require("./shared/env-loader");
 loadRoleEnv("analyzer");
 
 const { callLLM } = require("./shared/llm-client");
-const { hasRoleContentEvent, latestSession, postEvent, postReceipt } = require("./shared/arclayer-client");
+const { hasRoleContentEvent, latestSession, postEvent, postReceipt, safePostLiveEvent } = require("./shared/arclayer-client");
 const { bpsSignal, clamp } = require("./shared/market-logic");
 const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
@@ -134,6 +134,30 @@ ${JSON.stringify(oraclePayload).slice(0, 12000)}
       eventId: posted.eventId || null
     }
   });
+
+  // Compact live event — public UI preview, NOT full rawPayload/orderbook/candles
+  {
+    const rationale0 = Array.isArray(payload.rationale) ? payload.rationale[0] : null;
+    await safePostLiveEvent("resolver_output", {
+      sessionId: session.sessionId,
+      title: `BTC 15m → ${payload.suggestedDirection} (${payload.confidence}%)`,
+      summary: (payload.summary || "").slice(0, 200),
+      confidence: payload.confidence ?? null,
+      decision: payload.suggestedDirection || null,
+      trace: ["oracle", "analyzer", "resolver_output"],
+      metadata: {
+        sessionId: session.sessionId,
+        role: "analyzer",
+        source: payload.source || (llm.usedFallback ? "fallback" : "llm"),
+        usedFallback: !!llm.usedFallback,
+        llmModel: llm.llmModel || null,
+        reasoningSummary: (payload.summary || "").slice(0, 100),
+        rationalePreview: rationale0,
+        bridgePayloadHash: posted.payloadHash,
+        protocolTxMode: "arc_testnet"
+      }
+    });
+  }
 
   if (process.env.X402_AUTOPAY === "true") {
     try {

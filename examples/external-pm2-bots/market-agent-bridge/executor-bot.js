@@ -45,6 +45,29 @@ async function runOnce() {
   }
   await postReceipt({ sessionId: session.sessionId, receiptType: 'x402_arc_native', payloadHash: posted.payloadHash, metadata: { role: 'executor' } });
 
+  // Compact live event — public UI preview
+  {
+    await safePostLiveEvent('execution_intent', {
+      sessionId: session.sessionId,
+      title: evaluatorPayload.approved ? 'DRY_RUN_ONLY' : 'SKIPPED',
+      summary: (payload.reason || payload.action || '').slice(0, 200),
+      confidence: evaluatorPayload.approved ? 0.95 : 0,
+      decision: evaluatorPayload.approved ? 'DRY_RUN' : 'SKIP',
+      trace: ['oracle', 'analyzer', 'evaluator', 'executor', 'execution_intent'],
+      metadata: {
+        sessionId: session.sessionId,
+        role: 'executor',
+        source: 'llm-executor',
+        usedFallback: false,
+        llmModel: null,
+        reasoningSummary: (payload.reason || payload.action || '').slice(0, 100),
+        rationalePreview: null,
+        bridgePayloadHash: posted.payloadHash,
+        protocolTxMode: 'arc_testnet'
+      }
+    });
+  }
+
   if (!evaluatorPayload.approved) return;
   if (process.env.X402_AUTOPAY !== 'true' || process.env.PROTOCOL_TX_MODE !== 'ARC_TESTNET') return;
   const scope = 'external_trace';

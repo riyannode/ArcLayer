@@ -280,27 +280,33 @@ async function safePostLiveEvent(eventType, details = {}) {
   if (!A2A_LIVE_EVENTS_TOKEN) {
     return { ok: false, skipped: true, error: 'missing_live_events_token' };
   }
+  const hasCustomMeta = details.metadata && typeof details.metadata === 'object';
   const payload = {
     agentId: AGENT_ID,
     agentName: details.agentName || AGENT_ID,
     category: AGENT_CATEGORY,
-    eventType: eventType || 'x402_paid',
-    title: details.title || 'x402 payment settled',
-    summary: details.summary || 'Executor external_trace x402 payment settled',
+    eventType: eventType || (hasCustomMeta ? 'unknown' : 'x402_paid'),
+    title: details.title || (hasCustomMeta ? 'Live event' : 'x402 payment settled'),
+    summary: details.summary || (hasCustomMeta ? '' : 'Executor external_trace x402 payment settled'),
     txHash: details.txHash || null,
     amountAtomic: details.amountAtomic || null,
-    currency: 'USDC',
-    decision: 'success',
-    confidence: 1,
-    trace: Array.isArray(details.trace) && details.trace.length ? details.trace : ['executor', 'x402_paid'],
+    currency: hasCustomMeta ? null : 'USDC',
+    decision: details.decision ?? (hasCustomMeta ? null : 'success'),
+    confidence: details.confidence ?? (hasCustomMeta ? null : 1),
+    trace: Array.isArray(details.trace) && details.trace.length ? details.trace : (hasCustomMeta ? [eventType] : ['executor', 'x402_paid']),
     metadata: {
       autoPublished: true,
       manualMirror: false,
-      sessionId: details.sessionId || null,
-      paymentId: details.paymentId || null,
-      bridgePayloadHash: details.bridgePayloadHash || null,
-      protocolTxMode: 'arc_testnet',
-      reasoning: details.reasoning || 'executor external_trace x402 autopay'
+      // Content event metadata (compact reasoning preview) — overrides everything
+      ...(details.metadata || {}),
+      // x402 backward compat: only when no custom metadata
+      ...(!hasCustomMeta ? {
+        sessionId: details.sessionId || null,
+        paymentId: details.paymentId || null,
+        bridgePayloadHash: details.bridgePayloadHash || null,
+        protocolTxMode: 'arc_testnet',
+        reasoning: details.reasoning || 'executor external_trace x402 autopay'
+      } : {})
     }
   };
   const res = await fetch(`${BASE_URL}/api/a2a/live-events`, {

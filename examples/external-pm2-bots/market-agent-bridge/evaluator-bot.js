@@ -2,7 +2,7 @@ const { loadRoleEnv } = require("./shared/env-loader");
 loadRoleEnv("evaluator");
 
 const { callLLM } = require("./shared/llm-client");
-const { hasRoleContentEvent, latestSession, postEvent, postReceipt } = require("./shared/arclayer-client");
+const { hasRoleContentEvent, latestSession, postEvent, postReceipt, safePostLiveEvent } = require("./shared/arclayer-client");
 const { evaluateRisk } = require("./shared/market-logic");
 const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
@@ -126,6 +126,30 @@ ${JSON.stringify(oraclePayload).slice(0, 8000)}
       eventId: posted.eventId || null
     }
   });
+
+  // Compact live event — public UI preview
+  {
+    const flag0 = Array.isArray(payload.flags) ? payload.flags[0] : null;
+    await safePostLiveEvent("evaluation", {
+      sessionId: session.sessionId,
+      title: payload.approved ? "✅ Approved (Dry-Run)" : "⛔ Rejected",
+      summary: (payload.reason || "").slice(0, 200),
+      confidence: payload.approved ? 1 : 0,
+      decision: payload.approved ? "APPROVED" : "REJECTED",
+      trace: ["oracle", "analyzer", "evaluator", "evaluation"],
+      metadata: {
+        sessionId: session.sessionId,
+        role: "evaluator",
+        source: payload.source || (llm.usedFallback ? "fallback" : "llm"),
+        usedFallback: !!llm.usedFallback,
+        llmModel: llm.llmModel || null,
+        reasoningSummary: (payload.reason || "").slice(0, 100),
+        rationalePreview: flag0,
+        bridgePayloadHash: posted.payloadHash,
+        protocolTxMode: "arc_testnet"
+      }
+    });
+  }
 
   if (process.env.X402_AUTOPAY === "true") {
     try {

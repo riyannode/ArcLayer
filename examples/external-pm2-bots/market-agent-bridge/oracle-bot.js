@@ -95,6 +95,30 @@ ${JSON.stringify(rawPayload).slice(0, 12000)}
     }
   });
 
+  // Compact live event — public UI preview, NOT full rawPayload
+  {
+    const obs0 = Array.isArray(llmSummary.observations) ? llmSummary.observations[0] : null;
+    await safePostLiveEvent("market_snapshot", {
+      sessionId: posted.sessionId,
+      title: "BTC 15m Snapshot",
+      summary: (llmSummary.summary || "Oracle snapshot").slice(0, 200),
+      confidence: signalPreview.confidence ?? null,
+      decision: signalPreview.suggestedDirection || null,
+      trace: ["oracle", "market_snapshot"],
+      metadata: {
+        sessionId: posted.sessionId,
+        role: "oracle",
+        source: llmSummary.source || (llmSummary.usedFallback ? "fallback" : "llm"),
+        usedFallback: !!llmSummary.usedFallback,
+        llmModel: llmSummary.llmModel || null,
+        reasoningSummary: (llmSummary.summary || "").slice(0, 100),
+        rationalePreview: obs0,
+        bridgePayloadHash: posted.payloadHash,
+        protocolTxMode: "arc_testnet"
+      }
+    });
+  }
+
   if (process.env.X402_AUTOPAY === "true") {
     try {
       const sessionId = posted.sessionId;
