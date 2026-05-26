@@ -2,5 +2,5 @@
   "buildCommand": "pnpm --dir sdk build && pnpm --dir apps/console build",
   "outputDirectory": "apps/console/.next",
   "framework": "nextjs",
-  "installCommand": "COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack enable && pnpm install --frozen-lockfile"
+  "installCommand": "COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack enable && pnpm install --no-frozen-lockfile"
 }
