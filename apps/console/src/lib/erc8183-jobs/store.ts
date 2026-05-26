@@ -164,6 +164,7 @@ export async function getErc8183JobByOnchainId(
     .from('agent_jobs')
     .select('*')
     .eq('erc8183_job_id', erc8183JobId)
+    .eq('settlement_mode', 'erc8183_escrow')
     .single();
 
   if (error) {
