@@ -241,6 +241,18 @@ async function latestSession(options = {}) {
   return { ok: true, session: null };
 }
 
+function extractPayloadHash(data) {
+  return data.payloadHash ||
+    data.payload_hash ||
+    data.event?.payloadHash ||
+    data.event?.payload_hash ||
+    data.row?.payloadHash ||
+    data.row?.payload_hash ||
+    data.data?.payloadHash ||
+    data.data?.payload_hash ||
+    null;
+}
+
 async function postEvent({ sessionId, role, type, runtimeId, payload, metadata = {}, source = 'external-llm-pm2-bot' }) {
   const body = {
     sessionId: sessionId || currentSessionId(),
@@ -261,7 +273,9 @@ async function postEvent({ sessionId, role, type, runtimeId, payload, metadata =
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || !data.ok) throw new Error(`post event failed: ${res.status} ${data.error || ''}`);
-  return { ...data, sessionId: body.sessionId, payloadHash: body.payloadHash };
+  const payloadHash = extractPayloadHash(data);
+  if (!payloadHash) throw new Error('post event failed: server response missing payloadHash');
+  return { ...data, sessionId: data.sessionId || data.session_id || body.sessionId, payloadHash };
 }
 
 async function postReceipt({ sessionId, payloadHash, metadata = {}, receiptType = 'x402_arc_native' }) {
