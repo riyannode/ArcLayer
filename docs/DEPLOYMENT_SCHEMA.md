@@ -133,6 +133,23 @@ CREATE TABLE IF NOT EXISTS x402_gateway_payments (
 
 > Note: `x402_native_claim_payment`, `x402_native_consume_payment`, `x402_gateway_claim_settlement`, and `x402_gateway_consume_payment` are **SQL functions** (not tables), defined in the migration files. They are called via `supabase.rpc()`. Do not create them as tables.
 
+## Bridge Session Summary View (optional)
+
+For high-volume agent bridge traffic, create:
+
+```sql
+CREATE OR REPLACE VIEW bridge_session_summary AS
+SELECT
+  session_id,
+  COUNT(*) AS event_count,
+  MIN(created_at) AS first_event_at,
+  MAX(created_at) AS last_event_at
+FROM agent_bridge_events
+GROUP BY session_id;
+```
+
+The store auto-detects the view and uses it via `listBridgeSessions()`. Falls back to scan-based dedup if the view doesn't exist.
+
 ## Verification
 
 ```sql
