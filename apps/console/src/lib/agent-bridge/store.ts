@@ -269,28 +269,52 @@ async function countBridgeRoles(sessionId: string) {
 }
 
 /**
- * List all distinct bridge session IDs with event counts, newest first.
+ * List distinct bridge session IDs with event counts, newest first.
+ *
+ * Fetches a large window of events, dedupes by session_id client-side.
+ * The ORDER BY created_at DESC ensures the most recently active sessions
+ * appear first. Limit controls returned session count, not scan depth.
  */
 export async function listBridgeSessions(limit = 20): Promise<{ sessionId: string; eventCount: number }[]> {
   const supabase = getSupabaseAdmin();
-  // Use raw count-grouped query via Supabase select with count
+  // Scan 10000 rows to find distinct sessions — covers realistic traffic
+  // where a single session may dominate recent events
   const { data, error } = await supabase
     .from('agent_bridge_events')
     .select('session_id')
     .order('created_at', { ascending: false })
-    .limit(1000);
+    .limit(10000);
 
   if (error) throw new Error(error.message);
 
-  // Group by session_id client-side
+  // Dedupe client-side, preserving first (most recent) occurrence per session
   const sessionMap = new Map<string, number>();
   for (const row of data ?? []) {
+    if (!sessionMap.has(row.session_id)) {
+      sessionMap.set(row.session_id, 0);
+    }
     sessionMap.set(row.session_id, (sessionMap.get(row.session_id) ?? 0) + 1);
   }
 
   return Array.from(sessionMap.entries())
     .slice(0, limit)
     .map(([sessionId, eventCount]) => ({ sessionId, eventCount }));
+}
+
+/**
+ * Count distinct bridge sessions by fetching session_ids and deduping.
+ * Accurate but scan-limited — suitable for overview/dashboard use.
+ */
+export async function countDistinctBridgeSessions(): Promise<number> {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('agent_bridge_events')
+    .select('session_id')
+    .order('created_at', { ascending: false })
+    .limit(10000);
+
+  if (error) throw new Error(error.message);
+  return new Set(data?.map((r) => r.session_id) ?? []).size;
 }
 
 export async function latestBridgeSession(): Promise<BridgeSession | null> {
