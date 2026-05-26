@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CONTRACTS } from '@arclayer/sdk';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { createLocalErc8183Job } from '@/lib/erc8183-jobs/store';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_CREATE);
+    if (auth.error) return auth.error;
     const body = await req.json();
 
     // Validate required fields

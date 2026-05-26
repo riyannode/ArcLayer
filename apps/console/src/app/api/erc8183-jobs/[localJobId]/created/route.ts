@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getErc8183JobByLocalId, attachErc8183CreateTx } from '@/lib/erc8183-jobs/store';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
+import {
+  getErc8183JobByLocalId,
+  attachErc8183CreateTx,
+} from '@/lib/erc8183-jobs/store';
 import {
   readTransactionReceipt,
   decodeJobCreatedFromReceipt,
@@ -15,14 +19,18 @@ import type { Hex } from 'viem';
  * Per plan Correction 6:
  *   1. Read transaction receipt
  *   2. Confirm receipt status = success
- *   3. Decode JobCreated event (mandatory for 'created' — not optional)
- *   4. Update erc8183_status = 'Open' + store erc8183_job_id + create_tx_hash
+ *   3. Decode JobCreated event (mandatory)
+ *   4. Validate decoded event fields match local job
+ *   5. Update erc8183_status = 'Open' + store erc8183_job_id + create_tx_hash
  */
 export async function POST(
   req: NextRequest,
   { params }: { params: { localJobId: string } },
 ) {
   try {
+    const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_CONFIRM);
+    if (auth.error) return auth.error;
+
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
       return NextResponse.json(
@@ -81,7 +89,73 @@ export async function POST(
 
     const erc8183JobId = decodedEvent.jobId.toString();
 
-    // Step 4: store results
+    // Step 4: validate decoded event fields match the local job
+    const localClient = (job.clientAddress ?? '').toLowerCase();
+    const decodedClient = decodedEvent.client.toLowerCase();
+    if (localClient && decodedClient !== localClient) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'event_client_mismatch',
+          message: `Decoded JobCreated.client ${decodedClient} does not match local job client ${localClient}.`,
+        },
+        { status: 422 },
+      );
+    }
+
+    const localProvider = (job.providerAddress ?? '').toLowerCase();
+    const decodedProvider = decodedEvent.provider.toLowerCase();
+    if (localProvider && decodedProvider !== localProvider) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'event_provider_mismatch',
+          message: `Decoded JobCreated.provider ${decodedProvider} does not match local job provider ${localProvider}.`,
+        },
+        { status: 422 },
+      );
+    }
+
+    const localEval = (job.evaluatorAddress ?? '').toLowerCase();
+    const decodedEval = decodedEvent.evaluator.toLowerCase();
+    const zeroAddress = '0x0000000000000000000000000000000000000000';
+    if (localEval && decodedEval !== localEval && decodedEval !== zeroAddress) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'event_evaluator_mismatch',
+          message: `Decoded JobCreated.evaluator ${decodedEval} does not match local job evaluator ${localEval} or zero address.`,
+        },
+        { status: 422 },
+      );
+    }
+
+    const localExpiredAt = job.expiredAtUnix ? BigInt(job.expiredAtUnix) : null;
+    if (localExpiredAt !== null && decodedEvent.expiredAt !== localExpiredAt) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'event_expired_at_mismatch',
+          message: `Decoded JobCreated.expiredAt ${decodedEvent.expiredAt} does not match local job expiredAt ${localExpiredAt}.`,
+        },
+        { status: 422 },
+      );
+    }
+
+    const localHook = (job.hookAddress ?? '0x0000000000000000000000000000000000000000').toLowerCase();
+    const decodedHook = decodedEvent.hook.toLowerCase();
+    if (decodedHook !== localHook) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'event_hook_mismatch',
+          message: `Decoded JobCreated.hook ${decodedHook} does not match local job hook ${localHook}.`,
+        },
+        { status: 422 },
+      );
+    }
+
+    // Step 5: store results
     await attachErc8183CreateTx({
       localJobId: params.localJobId,
       createTxHash,
