@@ -17,21 +17,21 @@ describe('sanitizeErrorMessage', () => {
 
   it('redacts bearer tokens and credentials', () => {
     const out = sanitizeErrorMessage(
-      new Error("Authorization failed: Bearer sk-secretsecret123 token=abcdefghi12345 api_key='ksk_supersecret999' password=hunter2")
+      new Error("Authorization failed: Bearer TEST_BEARER_TOKEN token=TEST_CREDENTIAL api_key='TEST_API_KEY' password=TEST_PASSWORD")
     );
     expect(out).toContain('Bearer [redacted]');
     expect(out).toContain('[redacted-credential]');
-    expect(out).not.toContain('sk-secretsecret123');
-    expect(out).not.toContain('abcdefghi12345');
-    expect(out).not.toContain('ksk_supersecret999');
-    expect(out).not.toContain('hunter2');
+    expect(out).not.toContain('TEST_BEARER_TOKEN');
+    expect(out).not.toContain('TEST_CREDENTIAL');
+    expect(out).not.toContain('TEST_API_KEY');
+    expect(out).not.toContain('TEST_PASSWORD');
   });
 
   it('redacts standalone key prefixes', () => {
-    const out = sanitizeErrorMessage(new Error('upstream rejected ksk_supersecret999 and pk_anothersecret999'));
+    const out = sanitizeErrorMessage(new Error('upstream rejected ksk_testkey12345 and pk_testkey67890'));
     expect(out).toContain('[redacted-key]');
-    expect(out).not.toContain('ksk_supersecret999');
-    expect(out).not.toContain('pk_anothersecret999');
+    expect(out).not.toContain('ksk_testkey12345');
+    expect(out).not.toContain('pk_testkey67890');
   });
 
   it('redacts absolute filesystem paths', () => {
