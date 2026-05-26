@@ -1,4 +1,5 @@
-import { wrongRailError, type RailType, type SettlementMode } from './responses';
+import { wrongRailError } from './responses';
+import type { RailType, SettlementMode } from './types';
 import type { NextResponse } from 'next/server';
 
 /**
