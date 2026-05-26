@@ -8,11 +8,6 @@ ArcLayer is now **Arc/Circle reference mode only**.
 - Tokens: Arc Testnet USDC + EURC from `sdk/src/addresses.ts`.
 - x402/Circle Gateway is supported; pay-to must come from env (`X402_RECEIVER_ADDRESS` or `X402_PAY_TO`).
 
-## Legacy policy
-- Legacy custom contracts and legacy A2A/Polymarket code are archive-only.
-- Keep any historical references only under `contracts/legacy/`, `examples/legacy/`, or `docs/archive/`.
-- Do not present legacy APIs or contract names as current protocol.
-
 ## Source of truth
 - Addresses and token constants: `sdk/src/addresses.ts`.
 - Do not invent or hardcode alternate addresses in production code/docs.
