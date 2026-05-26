@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'node:crypto';
 import { keccak256, toBytes } from 'viem';
 import { CONTRACTS } from '@arclayer/sdk';
-import { getErc8183JobByLocalId } from '@/lib/erc8183-jobs/store';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
+import { getErc8183JobByLocalId, attachErc8183PreparedSubmit } from '@/lib/erc8183-jobs/store';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
 
 /**
@@ -29,6 +30,8 @@ export async function POST(
   { params }: { params: { localJobId: string } },
 ) {
   try {
+    const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_SUBMIT);
+    if (auth.error) return auth.error;
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
       return NextResponse.json(
@@ -58,6 +61,24 @@ export async function POST(
     const deliverableHash: `0x${string}` = deliverableHashHex(canonicalResult);
     const resultPayloadHash = createHash('sha256').update(Buffer.from(canonicalResult, 'utf8')).digest('hex');
 
+    // Optional proof payload (e.g. reasoning trace, execution log)
+    const proofPayload = body.proofPayload ?? null;
+    let proofPayloadHash: string | null = null;
+    if (proofPayload) {
+      const canonicalProof = stableStringify(proofPayload);
+      proofPayloadHash = createHash('sha256').update(Buffer.from(canonicalProof, 'utf8')).digest('hex');
+    }
+
+    // Persist all proof data to local mirror before returning tx instruction
+    await attachErc8183PreparedSubmit({
+      localJobId: params.localJobId,
+      resultPayload,
+      resultPayloadHash,
+      proofPayload: proofPayload ?? {},
+      proofPayloadHash: proofPayloadHash ?? '',
+      deliverableHash,
+    });
+
     const tx: TxInstruction = {
       address: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       functionName: 'submit',
@@ -72,6 +93,7 @@ export async function POST(
       erc8183JobId: job.erc8183JobId,
       deliverableHash,
       resultPayloadHash,
+      proofPayloadHash,
       tx,
       message: 'Sign and broadcast submit tx, then POST /api/erc8183-jobs/[localJobId]/tx with tx_hash=submit.',
     });
