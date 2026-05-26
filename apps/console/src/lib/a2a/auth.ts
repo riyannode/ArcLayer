@@ -1,4 +1,5 @@
-import { randomBytes, scryptSync } from 'crypto';
+import { createHash, randomBytes, scrypt } from 'crypto';
+import { promisify } from 'util';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -26,7 +27,7 @@ export const API_KEY_SCOPES = {
 
 /**
  * Generate a new API key for an agent. Returns the raw key (shown once)
- * and stores only the SHA-256 hash in Supabase.
+ * and stores only a versioned slow hash in Supabase.
  */
 export async function createApiKey(input: {
   agentId: string;
@@ -35,7 +36,7 @@ export async function createApiKey(input: {
   createdBy: string;
 }): Promise<{ ok: true; key: string; keyPrefix: string; id: string } | { ok: false; error: string }> {
   const raw = `ak_${randomBytes(24).toString('base64url')}`;
-  const keyHash = hashKey(raw);
+  const keyHash = await hashKey(raw);
   const keyPrefix = raw.slice(0, 11); // "ak_" + 8 chars
 
   const supabase = getSupabaseAdmin();
@@ -76,30 +77,40 @@ export type VerifiedKey = {
 export async function verifyApiKey(rawKey: string): Promise<VerifiedKey | null> {
   if (!rawKey || !rawKey.startsWith('ak_')) return null;
 
-  const keyHash = hashKey(rawKey);
+  const preferredHash = await hashKey(rawKey);
+  const candidateHashes = [preferredHash, hashKeyLegacySha256(rawKey)];
   const supabase = getSupabaseAdmin();
 
-  const { data, error } = await supabase
-    .from(TABLE)
-    .select('id, agent_id, scopes, revoked_at')
-    .eq('key_hash', keyHash)
-    .maybeSingle();
+  for (const keyHash of candidateHashes) {
+    const { data, error } = await supabase
+      .from(TABLE)
+      .select('id, agent_id, scopes, revoked_at')
+      .eq('key_hash', keyHash)
+      .maybeSingle();
 
-  if (error || !data) return null;
-  if (data.revoked_at) return null;
+    if (error) return null;
+    if (!data) continue;
+    if (data.revoked_at) return null;
 
-  // Fire-and-forget last_used_at update
-  supabase
-    .from(TABLE)
-    .update({ last_used_at: new Date().toISOString() })
-    .eq('id', data.id)
-    .then(() => {});
+    // Fire-and-forget last_used_at update. Legacy SHA-256 rows are upgraded
+    // to the current scrypt hash on first successful use.
+    supabase
+      .from(TABLE)
+      .update({
+        last_used_at: new Date().toISOString(),
+        ...(keyHash !== preferredHash ? { key_hash: preferredHash } : {}),
+      })
+      .eq('id', data.id)
+      .then(() => {});
 
-  return {
-    id: data.id,
-    agentId: data.agent_id,
-    scopes: data.scopes ?? [],
-  };
+    return {
+      id: data.id,
+      agentId: data.agent_id,
+      scopes: data.scopes ?? [],
+    };
+  }
+
+  return null;
 }
 
 // ─── Key revocation ───────────────────────────────────────────────────────────
@@ -174,15 +185,27 @@ export async function requireApiKey(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+const scryptAsync = promisify(scrypt);
 const API_KEY_HASH_VERSION = 'scrypt_v1';
 const API_KEY_HASH_SALT = process.env.A2A_API_KEY_HASH_SALT ?? 'a2a_api_key_hash_salt_v1';
 const API_KEY_SCRYPT_PARAMS = { N: 1 << 15, r: 8, p: 1, dkLen: 64 } as const;
 
-function hashKey(raw: string): string {
-  const derived = scryptSync(raw, API_KEY_HASH_SALT, API_KEY_SCRYPT_PARAMS.dkLen, {
+async function hashKey(raw: string): Promise<string> {
+  const derived = await scryptAsync(raw, API_KEY_HASH_SALT, API_KEY_SCRYPT_PARAMS.dkLen, {
     N: API_KEY_SCRYPT_PARAMS.N,
     r: API_KEY_SCRYPT_PARAMS.r,
     p: API_KEY_SCRYPT_PARAMS.p,
-  }).toString('hex');
-  return `${API_KEY_HASH_VERSION}$${API_KEY_SCRYPT_PARAMS.N}$${API_KEY_SCRYPT_PARAMS.r}$${API_KEY_SCRYPT_PARAMS.p}$${derived}`;
+  });
+
+  return [
+    API_KEY_HASH_VERSION,
+    API_KEY_SCRYPT_PARAMS.N,
+    API_KEY_SCRYPT_PARAMS.r,
+    API_KEY_SCRYPT_PARAMS.p,
+    Buffer.from(derived).toString('hex'),
+  ].join('$');
+}
+
+function hashKeyLegacySha256(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex');
 }
