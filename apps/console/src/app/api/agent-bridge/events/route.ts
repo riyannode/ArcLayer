@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
-import { insertBridgeEvent, listBridgeEvents, type BridgeEventInput } from '@/lib/agent-bridge/store';
+import { insertBridgeEvent, listBridgeEvents, stablePayloadHash, type BridgeEventInput } from '@/lib/agent-bridge/store';
 import { requireRegisteredExternalAgent } from '@/lib/a2a/external-registry';
 
 export const runtime = 'nodejs';
@@ -42,7 +42,22 @@ export async function POST(req: NextRequest) {
   if (!isValidRole(role)) return bad('invalid_role');
   if (!TYPES.has(type)) return bad('invalid_type');
   if (body.payload === null || typeof body.payload !== 'object' || Array.isArray(body.payload)) return bad('invalid_payload');
-  if (typeof body.payloadHash !== 'string' || !body.payloadHash.trim()) return bad('missing_payloadHash');
+  // P0.7: Server-compute canonical hash and reject client-provided mismatch
+  const serverHash = stablePayloadHash(body.payload);
+  const clientHash = typeof body.payloadHash === 'string' ? body.payloadHash.trim() : '';
+  if (clientHash && clientHash !== serverHash) {
+    return NextResponse.json(
+      {
+        ok: false,
+        rail: 'bridge',
+        settlementMode: 'x402_offchain',
+        error: 'payload_hash_mismatch',
+        expectedPayloadHash: serverHash,
+        receivedPayloadHash: clientHash,
+      },
+      { status: 400 },
+    );
+  }
 
   const hasAdminScope = auth.key.scopes.some((scope) => ADMIN_SCOPES.has(scope));
   if (agentId !== auth.key.agentId && !hasAdminScope) return bad('agent_id_mismatch', 403);
@@ -55,7 +70,7 @@ export async function POST(req: NextRequest) {
       role: role as BridgeEventInput['role'],
       type: type as BridgeEventInput['type'],
       payload: body.payload as Record<string, unknown>,
-      payloadHash: typeof body.payloadHash === 'string' ? body.payloadHash : undefined,
+      payloadHash: serverHash,
       metadata: body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata as Record<string, unknown> : {},
       source: typeof body.source === 'string' ? body.source : 'external-runtime',
       dryRun: body.dryRun !== false,
