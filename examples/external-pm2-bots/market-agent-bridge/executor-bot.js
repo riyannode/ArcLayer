@@ -48,59 +48,64 @@ async function runOnce() {
   if (!evaluatorPayload.approved) return;
   if (process.env.X402_AUTOPAY !== 'true' || process.env.PROTOCOL_TX_MODE !== 'ARC_TESTNET') return;
   const scope = 'external_trace';
-  let lp;
-  try {
-    const SCOPE_LOCK_DIR = require('node:path').resolve(__dirname, '.x402-locks');
-    const scopeLp = require('node:path').join(SCOPE_LOCK_DIR, `${session.sessionId}-${scope}.lock`);
-    require('node:fs').mkdirSync(SCOPE_LOCK_DIR, { recursive: true });
-    try { const fd = require('node:fs').openSync(scopeLp, 'wx'); require('node:fs').closeSync(fd); lp = scopeLp; } catch (err) { if (err && err.code === 'EEXIST') lp = null; else throw err; }
-    if (!lp) {
-      console.log(`[x402][executor] lock_exists session=${session.sessionId} scope=${scope}, skip`);
-      return;
-    }
-    // Event-based skip: check if any executor already posted receipt_reference for this session
-    const preflightEvents = await getJson(`/api/agent-bridge/events?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
-    if (hasExecutorX402EventOnly({ sessionId: session.sessionId, events: preflightEvents.events || [] })) {
-      console.log(`[x402][executor] event_exists session=${session.sessionId}, skip payment`);
-      return;
-    }
-    const payment = await payForBridgeAccess({ sessionId: session.sessionId, scope, role: 'executor' });
-    if (!payment.ok) return;
-    if (payment.alreadyPaid) {
-      console.log(`[x402][executor] already_paid session=${session.sessionId} tx=${payment.txHash || payment.transaction || 'n/a'}`);
-      // Idempotency: check if proofs already exist before reposting
-      const existingEvents = await getJson(`/api/agent-bridge/events?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
-      const existingReceipts = await getJson(`/api/agent-bridge/receipts?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ receipts: [] }));
-      const existingLive = await getJson(`/api/a2a/live-events?category=prediction-market-bots&sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
-      if (hasExecutorX402Proof({ sessionId: session.sessionId, events: existingEvents.events || [], receipts: existingReceipts.receipts || [], liveEvents: existingLive.events || [] })) {
-        console.log(`[x402][executor] proofs already exist for session=${session.sessionId}, skip repost`);
+
+  async function payUpstreamRole(upstreamRole) {
+    let lp;
+    try {
+      const SCOPE_LOCK_DIR = require('node:path').resolve(__dirname, '.x402-locks');
+      const scopeLp = require('node:path').join(SCOPE_LOCK_DIR, `${session.sessionId}-${scope}-${upstreamRole}.lock`);
+      require('node:fs').mkdirSync(SCOPE_LOCK_DIR, { recursive: true });
+      try { const fd = require('node:fs').openSync(scopeLp, 'wx'); require('node:fs').closeSync(fd); lp = scopeLp; } catch (err) { if (err && err.code === 'EEXIST') lp = null; else throw err; }
+      if (!lp) {
+        console.log(`[x402][executor] lock_exists session=${session.sessionId} scope=${scope} role=${upstreamRole}, skip`);
         return;
       }
-    }
-    const txHash = payment.txHash || payment.transaction || null;
-    const paymentId = payment.paymentId || null;
-    // Re-check events before posting proofs (race guard: another process may have posted)
-    const postflightEvents = await getJson(`/api/agent-bridge/events?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
-    if (hasExecutorX402EventOnly({ sessionId: session.sessionId, events: postflightEvents.events || [] })) {
-      console.log(`[x402][executor] event_appeared session=${session.sessionId} tx=${txHash}, skip proof posting`);
-      return;
-    }
-    const receiptEventPayload = { source: 'x402-autopay', scope, role: 'executor', txHash, transaction: txHash, paymentId };
-    const receiptRef = await postEvent({ sessionId: session.sessionId, role: 'executor', type: 'receipt_reference', runtimeId: process.env.RUNTIME_ID || 'pm2-llm-executor-bot', payload: receiptEventPayload, metadata: { source: 'x402-autopay' } });
-    await postReceipt({ sessionId: session.sessionId, receiptType: 'x402_arc_native', payloadHash: sha256(receiptEventPayload), metadata: { role: 'executor', scope, source: 'x402-autopay', txHash, paymentId, bridgePayloadHash: receiptRef.payloadHash, protocolTxMode: 'arc_testnet' } });
-    const liveResult = await safePostLiveEvent('x402_paid', {
-      sessionId: session.sessionId,
-      paymentId,
-      bridgePayloadHash: receiptRef.payloadHash,
-      txHash,
-      amountAtomic: payment.amount || null,
-      title: 'Executor x402 paid',
-      summary: 'Executor external_trace x402 payment settled',
-      trace: ['executor', 'receipt_reference', 'x402_arc_native', 'x402_paid'],
-      reasoning: 'executor external_trace x402 autopay'
-    });
-    if (!liveResult.ok) throw new Error(liveResult.message || liveResult.error || 'live_event_failed');
-  } finally { try { if (lp) require('node:fs').unlinkSync(lp); } catch {} }
+      // Event-based skip: check if any payment already exists for this role+session
+      const preflightEvents = await getJson(`/api/agent-bridge/events?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
+      if (hasExecutorX402EventOnly({ sessionId: session.sessionId, events: preflightEvents.events || [] })) {
+        console.log(`[x402][executor] event_exists session=${session.sessionId} role=${upstreamRole}, skip payment`);
+        return;
+      }
+      const payment = await payForBridgeAccess({ sessionId: session.sessionId, scope, role: upstreamRole });
+      if (!payment.ok) return;
+      if (payment.alreadyPaid) {
+        console.log(`[x402][executor] already_paid session=${session.sessionId} role=${upstreamRole} tx=${payment.txHash || payment.transaction || 'n/a'}`);
+        const existingEvents = await getJson(`/api/agent-bridge/events?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
+        const existingReceipts = await getJson(`/api/agent-bridge/receipts?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ receipts: [] }));
+        const existingLive = await getJson(`/api/a2a/live-events?category=prediction-market-bots&sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
+        if (hasExecutorX402Proof({ sessionId: session.sessionId, events: existingEvents.events || [], receipts: existingReceipts.receipts || [], liveEvents: existingLive.events || [] })) {
+          console.log(`[x402][executor] proofs already exist for session=${session.sessionId} role=${upstreamRole}, skip repost`);
+          return;
+        }
+      }
+      const txHash = payment.txHash || payment.transaction || null;
+      const paymentId = payment.paymentId || null;
+      const postflightEvents = await getJson(`/api/agent-bridge/events?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
+      if (hasExecutorX402EventOnly({ sessionId: session.sessionId, events: postflightEvents.events || [] })) {
+        console.log(`[x402][executor] event_appeared session=${session.sessionId} tx=${txHash} role=${upstreamRole}, skip proof posting`);
+        return;
+      }
+      const receiptEventPayload = { source: 'x402-autopay', scope, paidByRole: upstreamRole, paidByExecutor: true, txHash, transaction: txHash, paymentId };
+      const receiptRef = await postEvent({ sessionId: session.sessionId, role: upstreamRole, type: 'receipt_reference', runtimeId: process.env.RUNTIME_ID || 'pm2-llm-executor-bot', payload: receiptEventPayload, metadata: { source: 'x402-autopay', paidByExecutor: true } });
+      await postReceipt({ sessionId: session.sessionId, receiptType: 'x402_arc_native', payloadHash: sha256(receiptEventPayload), metadata: { role: upstreamRole, scope, source: 'x402-autopay', paidByExecutor: true, txHash, paymentId, bridgePayloadHash: receiptRef.payloadHash, protocolTxMode: 'arc_testnet' } });
+      const roleLabel = upstreamRole.charAt(0).toUpperCase() + upstreamRole.slice(1);
+      const liveResult = await safePostLiveEvent('x402_paid', {
+        sessionId: session.sessionId,
+        paymentId,
+        bridgePayloadHash: receiptRef.payloadHash,
+        txHash,
+        amountAtomic: payment.amount || null,
+        title: `${roleLabel} x402 paid`,
+        summary: `${roleLabel} upstream x402 payment settled by executor`,
+        trace: ['executor', 'receipt_reference', 'x402_arc_native', 'x402_paid'],
+        reasoning: `executor upstream x402 autopay for ${upstreamRole}`
+      });
+      if (!liveResult.ok) throw new Error(liveResult.message || liveResult.error || 'live_event_failed');
+    } finally { try { if (lp) require('node:fs').unlinkSync(lp); } catch {} }
+  }
+
+  await payUpstreamRole('evaluator');
+  await payUpstreamRole('analyzer');
 } finally {
   releaseRoleLock(rlp);
 }
