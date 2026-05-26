@@ -243,7 +243,7 @@ async function registerBot(bot) {
   if (!keyRes.ok || !keyData.ok) throw new Error(`Key gen failed: ${JSON.stringify(keyData)}`);
   
   const apiKey = keyData.apiKey || keyData.key;
-  console.log(`  🔑 API Key: ${maskSecret(apiKey)}`);
+  console.log(`  🔑 API key generated successfully`);
   
   return { ...bot, address: account.address, apiKey, manifestHash: hash };
 }
