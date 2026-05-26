@@ -58,7 +58,7 @@ export default function LiveA2AAgentPage() {
             <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Agent Categories</div>
             <div className="flex gap-2">
               <Link href="/live-a2a-agent/jobs" className="rounded-sm border border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/65 hover:border-[#C5A67C]/35 hover:text-[#C5A67C]">Jobs →</Link>
-              <Link href="/register/autonomous" className="rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/15">Register Agent →</Link>
+              <Link href="/register/external-bot" className="rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/15">Register External Bot →</Link>
             </div>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
