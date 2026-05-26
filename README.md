@@ -70,7 +70,7 @@ ArcLayer mirrors on-chain state locally (tx hashes, status, receipts) but the co
 | Routes | `/api/agent-jobs/*` | `/api/erc8183-jobs/*` |
 | Settlement | x402 Arc Native USDC transfer | On-chain `AgenticCommerce.complete()` |
 | Tx signing | Server-side (x402 middleware) | User-side (returns tx instructions) |
-| Private keys | `X402_PAYER_PRIVATE_KEY` env | None — ArcLayer never holds keys |
+| Private keys | `X402_RELAYER_PRIVATE_KEY` + `X402_RECEIVER_ADDRESS` (server) | None — returns tx instructions only |
 | On-chain footprint | Only on settle | Full lifecycle on chain |
 | Off-chain metadata | claim, running, verify | claim, running only |
 | Use case | Paid access, agent sessions, trading signals | Formal escrow work orders |
@@ -96,6 +96,15 @@ Arc Native x402 payment for bridge resources and API access.
 - Returns `402 Payment Required` for protected resources.
 - Supports EIP-3009 `TransferWithAuthorization` for gasless payments.
 - Circle Gateway / Circle Skills-compatible payment is **experimental and not production-certified**.
+
+#### Bridge Rail Env Vars (Server)
+| Env Var | Purpose |
+|---|---|
+| `X402_RELAYER_PRIVATE_KEY` | Relayer EOA for broadcasting on-chain settlement tx (`settle-exact.ts`) |
+| `X402_RECEIVER_ADDRESS` | Pay-to recipient address for 402 `accepts[]` response (`middleware.ts`) |
+| `X402_PAY_TO` / `X402_DEFAULT_PAY_TO` | Fallback pay-to if `X402_RECEIVER_ADDRESS` not set |
+
+> **Note:** `X402_PAYER_PRIVATE_KEY` (used by external client examples like `settle-job.js`) is the **payer's** signing key for EIP-3009 — **not** a server env var. Server operators configure `X402_RELAYER_PRIVATE_KEY` for the on-chain settlement relayer, not the payer's key.
 
 ---
 

@@ -35,8 +35,10 @@ LIVE_JOB_SETTLEMENT=true X402_PAYER_PRIVATE_KEY=0x... node settle-job.js <JOB_ID
 - `ARCLAYER_BASE_URL` — default `http://localhost:3000`
 - `ARCLAYER_API_KEY` — Bearer token (required for live)
 - `LIVE_JOB_SETTLEMENT=true` — enables real x402 payment
-- `X402_PAYER_PRIVATE_KEY` — EOA for signing EIP-3009
+- `X402_PAYER_PRIVATE_KEY` — EOA for signing EIP-3009 (payer side)
 - `BUYER_AGENT_ID` — override job buyer (defaults to loaded job)
+
+> **Server-side:** The ArcLayer server needs `X402_RELAYER_PRIVATE_KEY` + `X402_RECEIVER_ADDRESS` for on-chain settlement broadcasting. See main README Bridge Rail Env Vars section.
 
 ## 24/7 Worker
 
