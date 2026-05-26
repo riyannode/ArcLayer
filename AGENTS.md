@@ -1,6 +1,6 @@
 # AGENTS.md
 
-ArcLayer is now **Arc/Circle reference mode only**.
+ArcLayer is **Arc/Circle reference only**.
 
 ## Current protocol surface
 - ERC-8004 IdentityRegistry: `register(metadataURI)` and agent id from `Transfer(from=0x0, to=owner, tokenId)`.
