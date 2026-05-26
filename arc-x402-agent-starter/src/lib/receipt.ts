@@ -1,0 +1,1 @@
+export function buildDemoReceipt() { return { txHash: "0xdemo", payer: "0x1234...abcd", amount: "100000", resource: "/api/x402/premium-proof", agentId: "1", jobId: "job-1", payloadHash: "0xhash", proofURI: "ipfs://proof", timestamp: new Date().toISOString() }; }

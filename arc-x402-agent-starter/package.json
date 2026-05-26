@@ -1,0 +1,26 @@
+{
+  "name": "arc-x402-agent-starter",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@reown/appkit": "latest",
+    "@reown/appkit-adapter-wagmi": "latest",
+    "@tanstack/react-query": "latest",
+    "@wagmi/core": "latest",
+    "@x402/core": "latest",
+    "@x402/evm": "latest",
+    "next": "15.3.3",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "viem": "latest",
+    "wagmi": "latest",
+    "x402-fetch": "latest",
+    "zod": "latest"
+  }
+}
