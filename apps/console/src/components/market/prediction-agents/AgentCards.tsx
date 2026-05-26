@@ -36,7 +36,7 @@ export default function AgentCards({ agents }: { agents: PredictionAgentInput[] 
 }
 
 function AgentCard({ agent }: { agent: PredictionAgentView }) {
-  const isLive = agent.status === 'active' || agent.status === 'synced';
+  const isLive = agent.status === 'active';
 
   return (
     <article className="rounded-xl border border-zinc-800 bg-[#0d0d0f] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.25)] transition hover:border-orange-500/35 hover:bg-[#111114]">
@@ -45,14 +45,23 @@ function AgentCard({ agent }: { agent: PredictionAgentView }) {
           <div className="truncate text-sm font-semibold text-zinc-100">{agent.name}</div>
           <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-orange-300">{agent.role}</div>
         </div>
-        <span
-          className={[
-            'rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.16em]',
-            isLive ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-zinc-700 bg-zinc-900 text-zinc-500',
-          ].join(' ')}
-        >
-          {agent.status}
-        </span>
+        <div className="flex items-center gap-2">
+          <span
+            className={[
+              'h-2.5 w-2.5 rounded-full',
+              agent.activityActive ? 'animate-pulse bg-orange-400 shadow-[0_0_14px_rgba(251,146,60,0.9)]' : 'bg-zinc-700',
+            ].join(' ')}
+            title={`activity: ${agent.activity}`}
+          />
+          <span
+            className={[
+              'rounded-full border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.16em]',
+              isLive ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-zinc-700 bg-zinc-900 text-zinc-500',
+            ].join(' ')}
+          >
+            {agent.status}
+          </span>
+        </div>
       </div>
 
       <div className="mt-4 space-y-2 font-mono text-[10px] text-zinc-500">
@@ -60,6 +69,7 @@ function AgentCard({ agent }: { agent: PredictionAgentView }) {
         <Row label="type" value={agent.category} />
         <Row label="caps" value={agent.caps} />
         <Row label="event" value={agent.event} />
+        <Row label="pulse" value={agent.activityActive ? agent.activity : 'idle'} />
         <Row label="seen" value={agent.seen} />
       </div>
     </article>
