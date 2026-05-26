@@ -220,6 +220,7 @@ function verifyKeyHash(raw: string, storedHash: string): boolean {
   if (!iterationsRaw || !digest || !salt || !expectedHex) return false;
   if (digest !== API_KEY_HASH_DIGEST) return false;
 
+  const pepper = getApiKeyPepper();
   const iterations = Number(iterationsRaw);
   if (!Number.isSafeInteger(iterations) || iterations <= 0) return false;
 
@@ -228,7 +229,7 @@ function verifyKeyHash(raw: string, storedHash: string): boolean {
 
   try {
     actual = pbkdf2Sync(
-      `${getApiKeyPepper()}:${raw}`,
+      `${pepper}:${raw}`,
       salt,
       iterations,
       API_KEY_HASH_KEYLEN,
