@@ -62,9 +62,9 @@ function isRecentEvent(event?: AgentLiveEvent, ms = 15_000) {
 }
 
 function ageLabel(value?: string | null) {
-  if (!value) return 'offline';
+  if (!value) return 'registered';
   const t = new Date(value).getTime();
-  if (!Number.isFinite(t)) return 'offline';
+  if (!Number.isFinite(t)) return 'registered';
   const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
   if (sec < 60) return `${sec}s ago`;
   const min = Math.floor(sec / 60);
@@ -85,6 +85,7 @@ function toPredictionAgentInputs(
     const latest = latestEventByAgent.get(id);
     const online = isOnline(presence);
     const recentX402 = latest?.eventType === 'x402_paid' && isRecentEvent(latest);
+    const hasLiveSignal = Boolean(presence?.lastHeartbeatAt || latest?.createdAt);
 
     return [{
       id,
@@ -94,9 +95,9 @@ function toPredictionAgentInputs(
       category: recentX402 ? 'paid' : agent.x402?.enabled ? 'x402' : 'registered',
       endpoint: agent.endpoint ?? null,
       caps: agent.capabilities || agent.roles?.[0]?.capabilities || [],
-      event: latest?.summary || latest?.title || presence?.lastEventSummary || presence?.lastEventType || 'waiting',
-      seen: ageLabel(presence?.lastHeartbeatAt ?? agent.updatedAt ?? presence?.updatedAt),
-      status: online ? 'active' : agent.updatedAt ? 'synced' : 'unsynced',
+      event: latest?.summary || latest?.title || presence?.lastEventSummary || presence?.lastEventType || 'registered — waiting for live event',
+      seen: ageLabel(presence?.lastHeartbeatAt ?? latest?.createdAt ?? agent.updatedAt ?? presence?.updatedAt),
+      status: online ? 'active' : hasLiveSignal || agents.length > 0 ? 'synced' : 'unsynced',
     }];
   });
 }

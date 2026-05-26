@@ -1,9 +1,14 @@
 'use client';
 
-import { normalizePredictionAgents, type PredictionAgentInput, type PredictionAgentView } from './predictionAgentTypes';
+import {
+  normalizePredictionAgents,
+  orderPredictionAgentsByFlow,
+  type PredictionAgentInput,
+  type PredictionAgentView,
+} from './predictionAgentTypes';
 
 export default function AgentCards({ agents }: { agents: PredictionAgentInput[] }) {
-  const cards = normalizePredictionAgents(agents);
+  const cards = orderPredictionAgentsByFlow(normalizePredictionAgents(agents));
 
   return (
     <section className="rounded-2xl border border-zinc-800/80 bg-[#080808] p-5">
