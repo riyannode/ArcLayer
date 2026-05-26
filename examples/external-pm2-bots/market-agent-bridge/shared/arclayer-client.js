@@ -249,7 +249,7 @@ async function postEvent({ sessionId, role, type, runtimeId, payload, metadata =
     role,
     type,
     payload,
-    payloadHash: sha256(payload),
+    // payloadHash omitted — server computes it via stablePayloadHash
     source,
     dryRun: true,
     metadata: { ...metadata, runtimeId }

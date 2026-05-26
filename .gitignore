@@ -100,3 +100,4 @@ apps/console/data/
 agents/data/
 agents/scripts/
 scripts/record-*.mjs
+.env*.local
