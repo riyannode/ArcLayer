@@ -24,11 +24,7 @@ export async function GET() {
       { table: 'external_agent_runtimes', columns: ['runtime_id', 'agent_id'] },
       { table: 'x402_resource_payments', columns: ['payment_id', 'resource', 'status'] },
       { table: 'x402_native_payments', columns: ['payment_id', 'payer', 'status'] },
-      { table: 'x402_native_claim_payment', columns: ['payment_id', 'status'] },
-      { table: 'x402_native_consume_payment', columns: ['payment_id', 'status'] },
       { table: 'x402_gateway_payments', columns: ['payment_id', 'status'] },
-      { table: 'x402_gateway_claim_settlement', columns: ['payment_id', 'status'] },
-      { table: 'x402_gateway_consume_payment', columns: ['payment_id', 'status'] },
     ];
 
     const results: ColumnCheck[] = [];
