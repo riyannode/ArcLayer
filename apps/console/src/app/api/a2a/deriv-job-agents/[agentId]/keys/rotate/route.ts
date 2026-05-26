@@ -48,6 +48,7 @@ export async function POST(
     signature: String(body.signature ?? ''),
     timestamp: Number(body.timestamp),
     role,
+    requestId: String(body.requestId ?? ''),
     action: 'rotate_deriv_a2a_job_key',
   });
 

@@ -1,7 +1,7 @@
 import { verifyMessage, getAddress, isAddress } from 'viem';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { getExternalAgent, type ExternalRegistryAgent } from './external-registry';
-import { createApiKey, revokeApiKey } from './auth';
+import { createApiKey } from './auth';
 import {
   getDerivJobKeyPolicy,
   DERIV_JOB_TYPE_DEFAULT,
@@ -222,9 +222,26 @@ export async function revokeActiveDerivA2aKeys(agentId: string): Promise<boolean
 
 /**
  * Revoke a single key by its DB id and agentId.
+ * Returns false if key doesn't exist or was already revoked.
  */
 export async function revokeDerivA2aKeyById(keyId: string, agentId: string): Promise<boolean> {
-  return revokeApiKey(keyId, agentId);
+  const supabase = getSupabaseAdmin();
+  const now = new Date().toISOString();
+
+  const { error, count } = await supabase
+    .from(TABLE)
+    .update({ revoked_at: now })
+    .eq('id', keyId)
+    .eq('agent_id', agentId)
+    .is('revoked_at', null)
+    .select('id', { count: 'exact', head: false });
+
+  if (error) {
+    console.error('[deriv-job-key] revokeById failed', error.message);
+    return false;
+  }
+
+  return (count ?? 0) > 0;
 }
 
 /**
