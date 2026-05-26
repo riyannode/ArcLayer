@@ -10,6 +10,9 @@ export type PredictionAgentView = {
   event: string;
   seen: string;
   status: PredictionAgentStatus;
+  activity: string;
+  activitySeen: string;
+  activityActive: boolean;
 };
 
 export type PredictionAgentInput = {
@@ -23,6 +26,9 @@ export type PredictionAgentInput = {
   event?: unknown;
   seen?: unknown;
   status?: unknown;
+  activity?: unknown;
+  activitySeen?: unknown;
+  activityActive?: unknown;
 };
 
 const BLOCKED_PLACEHOLDER_NAMES = new Set(['arclayer llm market agent cluster']);
@@ -48,6 +54,12 @@ function text(value: unknown, fallback = '—') {
   if (typeof value === 'string' && value.trim()) return value.trim();
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return fallback;
+}
+
+function bool(value: unknown) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') return value.toLowerCase() === 'true';
+  return false;
 }
 
 function normalizeRole(value: unknown) {
@@ -87,6 +99,9 @@ export function normalizePredictionAgent(input: PredictionAgentInput): Predictio
     event: text(input.event, 'waiting'),
     seen: text(input.seen, 'offline'),
     status: normalizeStatus(input.status),
+    activity: text(input.activity, 'idle'),
+    activitySeen: text(input.activitySeen, '—'),
+    activityActive: bool(input.activityActive),
   } satisfies PredictionAgentView;
 
   return isBlockedPlaceholder(agent) ? null : agent;
