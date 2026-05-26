@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto';
+import { randomBytes, scryptSync } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -174,6 +174,15 @@ export async function requireApiKey(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+const API_KEY_HASH_VERSION = 'scrypt_v1';
+const API_KEY_HASH_SALT = process.env.A2A_API_KEY_HASH_SALT ?? 'a2a_api_key_hash_salt_v1';
+const API_KEY_SCRYPT_PARAMS = { N: 1 << 15, r: 8, p: 1, dkLen: 64 } as const;
+
 function hashKey(raw: string): string {
-  return createHash('sha256').update(raw).digest('hex');
+  const derived = scryptSync(raw, API_KEY_HASH_SALT, API_KEY_SCRYPT_PARAMS.dkLen, {
+    N: API_KEY_SCRYPT_PARAMS.N,
+    r: API_KEY_SCRYPT_PARAMS.r,
+    p: API_KEY_SCRYPT_PARAMS.p,
+  }).toString('hex');
+  return `${API_KEY_HASH_VERSION}$${API_KEY_SCRYPT_PARAMS.N}$${API_KEY_SCRYPT_PARAMS.r}$${API_KEY_SCRYPT_PARAMS.p}$${derived}`;
 }
