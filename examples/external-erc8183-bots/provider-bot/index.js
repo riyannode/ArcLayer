@@ -1,22 +1,8 @@
 /**
- * Provider bot — claims ERC-8183 funded jobs, sets budget, executes, submits.
+ * Provider bot — two-phase ERC-8183 job worker.
  *
- * Correct ERC-8183 flow:
- *   1. Claim job (off-chain metadata)
- *   2. Set budget on-chain (contract restricts to provider)
- *   3. Mark running (off-chain metadata)
- *   4. Generate result + proof
- *   5. Submit deliverable on-chain
- *
- * Loop:
- *   1. Poll for jobs (providerAgentId matches, status=created)
- *   2. Claim job
- *   3. Sign + broadcast setBudget tx
- *   4. Mark running
- *   5. Generate echo result/proof
- *   6. Submit deliverable
- *   7. Sign + broadcast submit tx
- *   8. Confirm submit tx
+ * Phase 1: Set budget on open jobs (provider must set price on-chain)
+ * Phase 2: Claim + run + submit on funded jobs
  */
 require('dotenv').config({ path: __dirname + '/.env' });
 
@@ -26,7 +12,6 @@ const { required, requiredAddress, normalizePrivateKey } = require('../shared/en
 const { sleep } = require('../shared/sleep');
 const crypto = require('crypto');
 
-// ── Env ─────────────────────────────────────────────────────────────────
 const BASE_URL = required('ARCLAYER_BASE_URL');
 const PROVIDER_AGENT_ID = required('PROVIDER_AGENT_ID');
 const WORKER_ID = process.env.WORKER_ID || PROVIDER_AGENT_ID;
@@ -36,139 +21,128 @@ const ARC_RPC_URL = required('ARC_RPC_URL');
 const POLL_INTERVAL_MS = parseInt(process.env.JOB_POLL_INTERVAL_MS || '5000', 10);
 const AUTONOMOUS_TX = process.env.AUTONOMOUS_TX === 'true';
 const CLAIM_TTL_SECONDS = parseInt(process.env.CLAIM_TTL_SECONDS || '600', 10);
+const MAX_ACTIVE_JOBS = parseInt(process.env.MAX_ACTIVE_JOBS || '3', 10);
 
 const signer = createSigner({ privateKey: PROVIDER_PK, rpcUrl: ARC_RPC_URL });
 console.log(`Provider signer address: ${signer.address}`);
 
-const processedJobs = new Set();
+const processedIds = new Set();
 
-async function pollAndProcess() {
+// ── Phase 1: Set budget on Open jobs ──────────────────────────────────
+
+async function phaseSetBudget() {
+  let jobs;
   try {
-    let jobs;
+    const result = await api.listJobs({ status: 'created', limit: '50' });
+    jobs = Array.isArray(result) ? result : result?.jobs || result?.data || [];
+  } catch { jobs = []; }
+
+  for (const job of (Array.isArray(jobs) ? jobs : [])) {
+    const id = job.localJobId || job.id;
+    if (processedIds.has(`budget-${id}`)) continue;
+    if (job.erc8183Status !== 'Open' && job.erc8183_status !== 'Open') continue;
+    if (job.providerAgentId && job.providerAgentId !== PROVIDER_AGENT_ID) continue;
+
+    console.log(`\n[${new Date().toISOString()}] [BUDGET] Open job: ${id}`);
     try {
-      const result = await api.listJobs({ status: 'created', limit: '50' });
-      jobs = Array.isArray(result) ? result : result?.jobs || result?.data || [];
-    } catch {
-      jobs = [];
+      const budgetTx = await api.setBudget(id);
+      if (AUTONOMOUS_TX && budgetTx.tx) {
+        console.log(`   Signing setBudget tx...`);
+        const result = await signer.sendTx(budgetTx.tx);
+        console.log(`   setBudget tx: ${result.hash}`);
+        await sleep(2000);
+        const confirmed = await api.confirmTx(id, 'set_budget', result.hash);
+        console.log(`   setBudget confirmed! status: ${confirmed.erc8183Status}`);
+      }
+    } catch (err) {
+      console.error(`   [BUDGET] Failed:`, err.message);
     }
-
-    if (!Array.isArray(jobs)) jobs = [];
-
-    const myJobs = jobs.filter((job) => {
-      const id = job.localJobId || job.id;
-      return (
-        (job.providerAgentId === PROVIDER_AGENT_ID || !job.providerAgentId) &&
-        (job.erc8183_status === 'Created' || job.erc8183_status === 'Open') &&
-        !processedJobs.has(id)
-      );
-    });
-
-    if (myJobs.length === 0) return;
-
-    for (const job of myJobs) {
-      const localJobId = job.localJobId || job.id;
-      console.log(`\n[${new Date().toISOString()}] Found new job: ${localJobId} (${job.erc8183_status})`);
-      await processJob(localJobId);
-    }
-  } catch (err) {
-    console.error(`   Poll error:`, err.message);
+    processedIds.add(`budget-${id}`);
   }
 }
 
-async function processJob(localJobId) {
+// ── Phase 2: Claim + run + submit on Funded jobs ──────────────────────
+
+async function phaseClaimAndSubmit() {
+  let jobs = [];
+  let activeProcessed = 0;
   try {
-    // 1. Claim (off-chain)
-    console.log(`   Claiming...`);
-    const claimed = await api.claim(localJobId, {
-      workerId: WORKER_ID,
-      providerAgentId: PROVIDER_AGENT_ID,
-      claimTtlSeconds: CLAIM_TTL_SECONDS,
-    });
-    console.log(`   Claimed: status=${claimed.status}`);
+    // Fetch both 'created' and 'claimed' jobs separately (API doesn't support IN)
+    const [r1, r2] = await Promise.all([
+      api.listJobs({ status: 'created', limit: '50' }).catch(() => []),
+      api.listJobs({ status: 'claimed', limit: '50' }).catch(() => []),
+    ]);
+    const j1 = Array.isArray(r1) ? r1 : r1?.jobs || r1?.data || [];
+    const j2 = Array.isArray(r2) ? r2 : r2?.jobs || r2?.data || [];
+    jobs = j1.concat(j2);
+  } catch { jobs = []; }
 
-    // 2. Set budget on-chain (provider signs setBudget)
-    console.log(`   Getting setBudget tx instruction...`);
-    const budgetTx = await api.setBudget(localJobId);
-
-    if (AUTONOMOUS_TX) {
-      console.log(`   Signing setBudget tx...`);
-      const budgetResult = await signer.sendTx(budgetTx.tx);
-      console.log(`   setBudget tx: ${budgetResult.hash}`);
-      await sleep(2000);
-
-      const budgetConfirmed = await api.confirmTx(localJobId, 'set_budget', budgetResult.hash);
-      console.log(`   setBudget confirmed! status: ${budgetConfirmed.erc8183Status}`);
-    } else {
-      console.log(`   [MANUAL TX] setBudget: ${JSON.stringify(budgetTx.tx)}`);
-      return; // Wait for manual
+  for (const job of (Array.isArray(jobs) ? jobs : [])) {
+    const id = job.localJobId || job.id;
+    if (processedIds.has(`claim-${id}`)) continue;
+    if (job.erc8183Status !== 'Funded') continue;
+    if (job.providerAgentId && job.providerAgentId !== PROVIDER_AGENT_ID) continue;
+    if (activeProcessed >= MAX_ACTIVE_JOBS) {
+      console.log(`   [WORK] Hit MAX_ACTIVE_JOBS (${MAX_ACTIVE_JOBS}) — waiting for next cycle`);
+      break;
     }
+    activeProcessed++;
 
-    // 3. Mark running
-    console.log(`   Marking running...`);
-    const running = await api.markRunning(localJobId, WORKER_ID);
-    console.log(`   Running: status=${running.status}`);
+    const alreadyClaimed = job.status === 'claimed';
+    console.log(`\n[${new Date().toISOString()}] [WORK] ${alreadyClaimed ? 'Continue claimed' : 'New funded'} job: ${id}`);
 
-    // 4. Generate echo result
-    const resultPayload = {
-      workerId: WORKER_ID,
-      status: 'completed',
-      summary: 'Echo deliverable from provider bot.',
-      processedAt: new Date().toISOString(),
-      runId: crypto.randomUUID(),
-    };
-    const proofPayload = {
-      runtime: 'pm2',
-      durationMs: 500,
-      model: 'rules-echo',
-      provider: PROVIDER_AGENT_ID,
-    };
+    try {
+      // Claim (skip if already claimed)
+      if (!alreadyClaimed) {
+        const claimed = await api.claim(id, { workerId: WORKER_ID, providerAgentId: PROVIDER_AGENT_ID, claimTtlSeconds: CLAIM_TTL_SECONDS });
+        console.log(`   Claimed: status=${claimed.status}`);
+      } else {
+        console.log(`   Already claimed — skipping claim step`);
+      }
 
-    // 5. Submit
-    console.log(`   Submitting...`);
-    const submitted = await api.submit(localJobId, {
-      workerId: WORKER_ID,
-      resultPayload,
-      proofPayload,
-    });
-    console.log(`   deliverableHash: ${submitted.deliverableHash}`);
+      // Mark running
+      const running = await api.markRunning(id, WORKER_ID);
+      console.log(`   Running: status=${running.status}`);
 
-    // 6. Sign submit tx
-    if (AUTONOMOUS_TX) {
-      console.log(`   Signing submit tx...`);
-      const submitResult = await signer.sendTx(submitted.tx);
-      console.log(`   submit tx: ${submitResult.hash}`);
-      await sleep(2000);
+      // Echo deliverable
+      const resultPayload = { workerId: WORKER_ID, status: 'completed', summary: 'Echo from provider bot.', processedAt: new Date().toISOString(), runId: crypto.randomUUID() };
+      const proofPayload = { runtime: 'pm2', durationMs: 500, model: 'rules-echo', provider: PROVIDER_AGENT_ID };
 
-      const confirmed = await api.confirmTx(localJobId, 'submit', submitResult.hash);
-      console.log(`   Submit confirmed! status: ${confirmed.erc8183Status}`);
-    } else {
-      console.log(`   [MANUAL TX] submit: ${JSON.stringify(submitted.tx)}`);
+      // Submit
+      const submitted = await api.submit(id, { workerId: WORKER_ID, resultPayload, proofPayload });
+      console.log(`   deliverableHash: ${submitted.deliverableHash}`);
+
+      if (AUTONOMOUS_TX) {
+        const sResult = await signer.sendTx(submitted.tx);
+        console.log(`   submit tx: ${sResult.hash}`);
+        await sleep(2000);
+        const conf = await api.confirmTx(id, 'submit', sResult.hash);
+        console.log(`   Submit confirmed! status: ${conf.erc8183Status}`);
+      }
+      console.log(`   ✅ Job ${id} submitted`);
+    } catch (err) {
+      console.error(`   [WORK] Failed:`, err.message);
     }
-
-    processedJobs.add(localJobId);
-    console.log(`   ✅ Job ${localJobId} submitted`);
-
-  } catch (err) {
-    console.error(`   ❌ Job ${localJobId} failed:`, err.message);
-    if (err.body) console.error('   body:', JSON.stringify(err.body));
-    processedJobs.add(localJobId);
+    processedIds.add(`claim-${id}`);
   }
 }
+
+// ── Main loop ────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('=== ERC-8183 Provider Bot ===');
+  console.log('=== ERC-8183 Provider Bot (two-phase) ===');
   console.log(`URL: ${BASE_URL}`);
   console.log(`Provider: ${PROVIDER_AGENT_ID}`);
-  console.log(`Worker: ${WORKER_ID}`);
   console.log(`Address: ${PROVIDER_ADDRESS}`);
-  console.log(`Autonomous: ${AUTONOMOUS_TX}`);
-  console.log(`Poll interval: ${POLL_INTERVAL_MS}ms`);
 
-  await pollAndProcess();
-  setInterval(pollAndProcess, POLL_INTERVAL_MS);
+  // Run both phases
+  await phaseSetBudget();
+  await phaseClaimAndSubmit();
+
+  setInterval(async () => {
+    await phaseSetBudget();
+    await phaseClaimAndSubmit();
+  }, POLL_INTERVAL_MS);
 }
 
-main().catch((err) => {
-  console.error('Fatal:', err.message);
-  process.exit(1);
-});
+main().catch((err) => { console.error('Fatal:', err.message); process.exit(1); });

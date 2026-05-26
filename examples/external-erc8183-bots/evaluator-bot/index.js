@@ -24,6 +24,7 @@ const ARC_RPC_URL = required('ARC_RPC_URL');
 const POLL_INTERVAL_MS = parseInt(process.env.JOB_POLL_INTERVAL_MS || '5000', 10);
 const AUTONOMOUS_TX = process.env.AUTONOMOUS_TX === 'true';
 const EVALUATOR_MODE = process.env.EVALUATOR_MODE || 'rules';
+const MAX_ACTIVE_JOBS = parseInt(process.env.MAX_ACTIVE_JOBS || '3', 10);
 
 // ── Signer ──────────────────────────────────────────────────────────────
 const signer = createSigner({ privateKey: EVALUATOR_PK, rpcUrl: ARC_RPC_URL });
@@ -35,12 +36,13 @@ const processedJobs = new Set();
 // ── Evaluator strategies ────────────────────────────────────────────────
 
 function evaluateByRules(job, resultPayload, proofPayload) {
+  const workerId = resultPayload?.workerId || job.workerId || job.workerId;
   const checks = {
-    hasResult: Boolean(resultPayload),
-    hasProof: Boolean(proofPayload),
-    hasWorkerId: Boolean(resultPayload?.workerId),
-    hasTimestamps: Boolean(resultPayload?.processedAt),
-    hasRunId: Boolean(resultPayload?.runId),
+    hasResult: Boolean(resultPayload && Object.keys(resultPayload).length > 0),
+    hasProof: Boolean(proofPayload && Object.keys(proofPayload).length > 0),
+    hasWorkerId: Boolean(workerId),
+    hasOnChainTx: Boolean(job.submitTxHash || job.deliverableHash),
+    deliverableSubmitted: Boolean(job.deliverableHash || job.erc8183Status === 'Submitted'),
   };
 
   const allPassed = Object.values(checks).every(Boolean);
@@ -69,17 +71,23 @@ async function pollAndProcess() {
     const submittedJobs = jobs.filter((job) => {
       return (
         job.evaluatorAgentId === EVALUATOR_AGENT_ID &&
-        job.erc8183_status === 'Submitted' &&
+        job.erc8183Status === 'Submitted' &&
         !processedJobs.has(job.localJobId || job.id)
       );
     });
 
     if (submittedJobs.length === 0) return;
 
+    let processed = 0;
     for (const job of submittedJobs) {
+      if (processed >= MAX_ACTIVE_JOBS) {
+        console.log(`   Hit MAX_ACTIVE_JOBS (${MAX_ACTIVE_JOBS}) — more jobs queued for next cycle`);
+        break;
+      }
       const localJobId = job.localJobId || job.id;
       console.log(`\n[${new Date().toISOString()}] Found submitted job: ${localJobId}`);
       await evaluateAndComplete(localJobId);
+      processed++;
     }
   } catch (err) {
     console.error(`   Poll error:`, err.message);
@@ -89,7 +97,8 @@ async function pollAndProcess() {
 async function evaluateAndComplete(localJobId) {
   try {
     // 1. Get full job details
-    const job = await api.getJob(localJobId);
+    const resp = await api.getJob(localJobId);
+    const job = resp.job || resp;
     console.log(`   Job spec: ${job.description || 'n/a'}`);
 
     // 2. Extract result/proof
