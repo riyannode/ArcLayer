@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { CONTRACTS } from '@arclayer/sdk';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { createLocalErc8183Job, listErc8183Jobs } from '@/lib/erc8183-jobs/store';
+import { isErc8183Admin } from '@/lib/erc8183-jobs/authz';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
 import { escrowRail } from '@/lib/rails/responses';
 
@@ -40,6 +41,23 @@ export async function POST(req: NextRequest) {
     const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_CREATE);
     if (auth.error) return auth.error;
     const body = await req.json();
+
+    // Guard: buyerAgentId must match the authenticated key — prevents
+    // impersonation even with a valid erc8183:create-scoped API key
+    if (isErc8183Admin(auth.key.scopes) === false && body.buyerAgentId !== auth.key.agentId) {
+      return NextResponse.json(
+        {
+          ok: false,
+          ...escrowRail(),
+          error: 'participant_mismatch',
+          expectedRole: 'buyer',
+          expectedAgentId: body.buyerAgentId,
+          authenticatedAgentId: auth.key.agentId,
+          hint: 'buyerAgentId must match the authenticated API key agentId (or use an admin/erc8183:admin-scoped key).',
+        },
+        { status: 403 },
+      );
+    }
 
     // Validate required fields
     const required = [

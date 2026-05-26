@@ -12,6 +12,8 @@ import {
   attachErc8183CompleteTx,
   updateErc8183Status,
 } from '@/lib/erc8183-jobs/store';
+import { assertErc8183Participant, isErc8183Admin } from '@/lib/erc8183-jobs/authz';
+import { escrowRail } from '@/lib/rails/responses';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import type { Hex } from 'viem';
 import type { Erc8183JobView } from '@/lib/erc8183-jobs/types';
@@ -114,7 +116,7 @@ export async function POST(
     // Guard: erc8183_job_id must exist (createJob confirmed first)
     if (!job.erc8183JobId) {
       return NextResponse.json(
-        { ok: false, error: 'create_job_pending', message: 'createJob tx must be confirmed first. POST /api/erc8183-jobs/[localJobId]/created.' },
+        { ok: false, ...escrowRail(), error: 'create_job_pending', message: 'createJob tx must be confirmed first. POST /api/erc8183-jobs/[localJobId]/created.' },
         { status: 400 },
       );
     }
@@ -122,6 +124,22 @@ export async function POST(
     const body = await req.json();
     const txType = (body.txType ?? body.tx_type) as TxType | undefined;
     const txHash = (body.txHash ?? body.tx_hash) as Hex | undefined;
+
+    // Guard: txType-driven participant check
+    const txRoleMap: Record<string, string[]> = {
+      set_budget: ['provider'],
+      approve: ['buyer'],
+      fund: ['buyer'],
+      submit: ['worker', 'provider'],
+      complete: ['evaluator', 'buyer'],
+    };
+    if (txType && !isErc8183Admin(auth.key.scopes)) {
+      const allowed = txRoleMap[txType];
+      if (allowed) {
+        const txAuthError = assertErc8183Participant(job, auth, allowed as any);
+        if (txAuthError) return txAuthError;
+      }
+    }
 
     if (!txType || !VALID_TX_TYPES.includes(txType)) {
       return NextResponse.json(

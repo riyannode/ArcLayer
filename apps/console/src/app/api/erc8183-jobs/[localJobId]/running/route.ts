@@ -4,6 +4,8 @@ import {
   getErc8183JobByLocalId,
   markErc8183JobRunning,
 } from '@/lib/erc8183-jobs/store';
+import { assertErc8183Participant, isErc8183Admin } from '@/lib/erc8183-jobs/authz';
+import { escrowRail } from '@/lib/rails/responses';
 
 /**
  * POST /api/erc8183-jobs/[localJobId]/running
@@ -21,7 +23,7 @@ export async function POST(
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
       return NextResponse.json(
-        { ok: false, error: 'job_not_found', message: 'ERC-8183 job not found.' },
+        { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
         { status: 404 },
       );
     }
@@ -30,6 +32,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
+          ...escrowRail(),
           error: 'erc8183_job_not_claimed',
           message: `Job is in status '${job.status}', expected 'claimed'. Claim the job first via POST /api/erc8183-jobs/[localJobId]/claim.`,
         },
@@ -42,11 +45,17 @@ export async function POST(
 
     if (!workerId || typeof workerId !== 'string') {
       return NextResponse.json(
-        { ok: false, error: 'workerId is required' },
+        { ok: false, ...escrowRail(), error: 'workerId is required' },
         { status: 400 },
       );
     }
 
+    // Guard: only the assigned worker can mark the job as running
+    // Admin keys (erc8183:admin) bypass this check
+    const runningAuthError = assertErc8183Participant(job, auth, ['worker']);
+    if (runningAuthError) return runningAuthError;
+
+    // Guard: workerId must match the claimed worker
     if (workerId !== job.workerId) {
       return NextResponse.json(
         {

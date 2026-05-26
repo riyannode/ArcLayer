@@ -4,10 +4,12 @@ import {
   getErc8183JobByLocalId,
   attachErc8183CreateTx,
 } from '@/lib/erc8183-jobs/store';
+import { assertErc8183Participant } from '@/lib/erc8183-jobs/authz';
 import {
   readTransactionReceipt,
   decodeJobCreatedFromReceipt,
 } from '@/lib/erc8183-jobs/receipt';
+import { escrowRail } from '@/lib/rails/responses';
 import type { Hex } from 'viem';
 
 /**
@@ -34,10 +36,14 @@ export async function POST(
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
       return NextResponse.json(
-        { ok: false, error: 'job_not_found', message: 'ERC-8183 job not found.' },
+        { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
         { status: 404 },
       );
     }
+
+    // Guard: only the buyer can confirm the on-chain createJob tx
+    const createdAuthError = assertErc8183Participant(job, auth, ['buyer']);
+    if (createdAuthError) return createdAuthError;
 
     // Prevent re-attaching if already confirmed
     if (job.erc8183JobId) {
