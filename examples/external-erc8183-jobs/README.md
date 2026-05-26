@@ -39,7 +39,7 @@ The demo prints tx instructions at each step. Copy them to your wallet (Foundry 
 | Routes | `/api/agent-jobs/*` | `/api/erc8183-jobs/*` |
 | Settlement | x402 Arc Native USDC transfer | On-chain `AgenticCommerce.complete()` |
 | Tx signing | Server-side (x402 middleware) | User-side (returns tx instructions) |
-| Private key | `X402_PAYER_PRIVATE_KEY` env | None needed |
+| Private key | `X402_RELAYER_PRIVATE_KEY` + `X402_RECEIVER_ADDRESS` (server) | None needed |
 | Off-chain metadata | claim/running/verify | claim/running only |
 
 ## Notes
