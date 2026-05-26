@@ -114,8 +114,30 @@ export interface BridgeReceiptInput {
   metadata?: Record<string, unknown> | null;
 }
 
+/**
+ * Recursive canonical stringify — produces deterministic output
+ * regardless of object key insertion order.
+ */
+export function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
+  }
+  const obj = value as Record<string, unknown>;
+  const entries = Object.keys(obj)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(obj[key])}`);
+  return `{${entries.join(',')}}`;
+}
+
+/**
+ * Deterministic payload hash using canonical stable stringify.
+ * { a:1, b:2 } and { b:2, a:1 } produce the same hash.
+ */
 export function stablePayloadHash(payload: unknown): string {
-  return `0x${createHash('sha256').update(JSON.stringify(payload ?? {})).digest('hex')}`;
+  return `0x${createHash('sha256').update(stableStringify(payload ?? {})).digest('hex')}`;
 }
 
 export function makeSessionId(prefix = 'bridge'): string {
