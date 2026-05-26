@@ -13,6 +13,11 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const filter: ListAgentJobsFilter = {};
 
+    const settlementMode = searchParams.get('settlementMode');
+    if (settlementMode === 'x402_offchain' || settlementMode === 'erc8183_escrow') {
+      filter.settlementMode = settlementMode;
+    }
+
     const status = searchParams.get('status');
     if (status) filter.status = status as ListAgentJobsFilter['status'];
 
