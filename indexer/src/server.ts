@@ -58,6 +58,9 @@ function writeJson(res: ServerResponse, payload: unknown) {
   res.end(JSON.stringify(payload, null, 2));
 }
 
+function toPublicSyncErrorMessage(error: string | null): string | null {
+  return error ? "Sync error (see server logs)" : null;
+}
 
 export async function runSyncCycle() {
   if (syncInProgress) {
@@ -162,7 +165,7 @@ createServer((req, res) => {
       totalAgentCount: counts.totalAgentCount,
       lastSyncedBlock: Number(readMetaValue("last_synced_block") || "0"),
       lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : (readMetaValue("last_sync_at") ? new Date(Number(readMetaValue("last_sync_at"))).toISOString() : null),
-      lastSyncError: lastSyncError ?? getLastA2AJobSyncError(),
+      lastSyncError: toPublicSyncErrorMessage(lastSyncError ?? getLastA2AJobSyncError()),
     });
     return;
   }
