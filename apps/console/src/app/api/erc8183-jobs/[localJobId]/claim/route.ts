@@ -37,6 +37,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
+          ...escrowRail(),
           error: 'erc8183_job_not_funded',
           message:
             'Job must be funded on-chain (erc8183_status=Funded) before off-chain worker claim.',
@@ -49,6 +50,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
+          ...escrowRail(),
           error: 'erc8183_job_already_claimed',
           message: `Job is in status '${job.status}', expected 'created'.`,
         },
@@ -97,7 +99,7 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
-      settlementMode: 'erc8183_escrow',
+      ...escrowRail(),
       localJobId: params.localJobId,
       erc8183JobId: job.erc8183JobId,
       status: 'claimed',
@@ -110,7 +112,7 @@ export async function POST(
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('[erc8183-jobs] POST /claim failed:', message);
     return NextResponse.json(
-      { ok: false, error: 'claim_failed', message },
+      { ok: false, ...escrowRail(), error: 'claim_failed', message },
       { status: 500 },
     );
   }

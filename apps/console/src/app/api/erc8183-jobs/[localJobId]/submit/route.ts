@@ -48,7 +48,7 @@ export async function POST(
 
     if (!job.erc8183JobId) {
       return NextResponse.json(
-        { ok: false, error: 'create_job_pending', message: 'createJob tx must be confirmed first.' },
+        { ok: false, ...escrowRail(), error: 'create_job_pending', message: 'createJob tx must be confirmed first.' },
         { status: 400 },
       );
     }
@@ -57,7 +57,7 @@ export async function POST(
     const resultPayload = body.resultPayload;
     if (!resultPayload) {
       return NextResponse.json(
-        { ok: false, error: 'missing_result', message: 'resultPayload is required.' },
+        { ok: false, ...escrowRail(), error: 'missing_result', message: 'resultPayload is required.' },
         { status: 400 },
       );
     }
@@ -93,7 +93,7 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
-      settlementMode: 'erc8183_escrow',
+      ...escrowRail(),
       nextAction: 'submit',
       localJobId: params.localJobId,
       erc8183JobId: job.erc8183JobId,
@@ -106,7 +106,7 @@ export async function POST(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      { ok: false, error: 'submit_failed', message },
+      { ok: false, ...escrowRail(), error: 'submit_failed', message },
       { status: 500 },
     );
   }
