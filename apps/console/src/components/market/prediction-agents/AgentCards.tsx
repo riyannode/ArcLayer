@@ -37,6 +37,8 @@ export default function AgentCards({ agents }: { agents: PredictionAgentInput[] 
 
 function AgentCard({ agent }: { agent: PredictionAgentView }) {
   const isLive = agent.status === 'active';
+  const hasTx = Boolean(agent.txHref && agent.tx !== '—');
+  const hasReasoning = agent.reasoningSummary !== '—' || agent.reasoningWhy !== '—' || agent.reasoningSource !== '—';
 
   return (
     <article className="rounded-xl border border-zinc-800 bg-[#0d0d0f] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.25)] transition hover:border-orange-500/35 hover:bg-[#111114]">
@@ -77,8 +79,10 @@ function AgentCard({ agent }: { agent: PredictionAgentView }) {
         <Row label="caps" value={agent.caps} />
         <Row label="event" value={agent.event} />
         <LinkedRow label="pulse" value={agent.activityActive ? agent.activity : 'idle'} href={agent.activityHref} />
+        {hasTx ? <LinkedRow label="tx" value={agent.tx} href={agent.txHref} /> : null}
         <Row label="proof" value={agent.proofActive ? agent.proof : 'none'} />
-        <LinkedRow label="hash" value={agent.proofHash} href={agent.proofHashHref} />
+        {hasReasoning ? <Row label="llm" value={`${agent.reasoningFallback ? 'fallback' : 'llm'} · ${agent.reasoningSource}`} /> : null}
+        {agent.reasoningWhy !== '—' ? <Row label="why" value={agent.reasoningWhy} /> : null}
         <Row label="seen" value={agent.seen} />
       </div>
     </article>
@@ -89,7 +93,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid grid-cols-[44px_minmax(0,1fr)] gap-2">
       <span className="uppercase tracking-[0.16em] text-zinc-700">{label}</span>
-      <span className="truncate text-zinc-400">{value || '—'}</span>
+      <span className="truncate text-zinc-400" title={value}>{value || '—'}</span>
     </div>
   );
 }
@@ -99,11 +103,11 @@ function LinkedRow({ label, value, href }: { label: string; value: string; href?
     <div className="grid grid-cols-[44px_minmax(0,1fr)] gap-2">
       <span className="uppercase tracking-[0.16em] text-zinc-700">{label}</span>
       {href ? (
-        <a className="truncate text-orange-300 hover:text-orange-200" href={href}>
+        <a className="truncate text-orange-300 hover:text-orange-200" href={href} target="_blank" rel="noreferrer" title={value}>
           {value || '—'}
         </a>
       ) : (
-        <span className="truncate text-zinc-400">{value || '—'}</span>
+        <span className="truncate text-zinc-400" title={value}>{value || '—'}</span>
       )}
     </div>
   );
