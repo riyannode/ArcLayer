@@ -22,7 +22,8 @@
     "ci": "npm run check && npm run test:console && npm run test:indexer && npm run test:contracts",
     "dev:console": "corepack pnpm --dir apps/console dev",
     "dev:indexer": "corepack pnpm --dir indexer start",
-    "build:sdk": "corepack pnpm --dir sdk build"
+    "build:sdk": "corepack pnpm --dir sdk build",
+    "check:schema": "bash scripts/check-schema.sh"
   },
   "keywords": [],
   "author": "",
