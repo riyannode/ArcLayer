@@ -44,6 +44,8 @@ type AgentLiveEvent = {
   createdAt: string;
 };
 
+const ACTIVITY_WINDOW_MS = 30_000;
+
 function agentKey(agent: Agent) {
   const value = agent.agentId ?? agent.id;
   return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
@@ -55,7 +57,7 @@ function isOnline(p?: AgentPresence) {
   return Number.isFinite(t) && Date.now() - t < 30_000;
 }
 
-function isRecentEvent(event?: AgentLiveEvent, ms = 15_000) {
+function isRecentEvent(event?: AgentLiveEvent, ms = ACTIVITY_WINDOW_MS) {
   if (!event?.createdAt) return false;
   const t = new Date(event.createdAt).getTime();
   return Number.isFinite(t) && Date.now() - t < ms;
@@ -72,6 +74,12 @@ function ageLabel(value?: string | null) {
   return `${Math.floor(min / 60)}h ago`;
 }
 
+function latestActivityLabel(event?: AgentLiveEvent) {
+  if (!event) return 'idle';
+  if (event.txHash) return `${event.eventType} · tx ${event.txHash.slice(0, 10)}…`;
+  return event.summary || event.title || event.eventType || 'activity';
+}
+
 function toPredictionAgentInputs(
   agents: Agent[],
   presenceByAgent: Map<string, AgentPresence>,
@@ -84,7 +92,8 @@ function toPredictionAgentInputs(
     const presence = presenceByAgent.get(id);
     const latest = latestEventByAgent.get(id);
     const online = isOnline(presence);
-    const recentX402 = latest?.eventType === 'x402_paid' && isRecentEvent(latest);
+    const activityActive = isRecentEvent(latest);
+    const recentX402 = latest?.eventType === 'x402_paid' && activityActive;
 
     return [{
       id,
@@ -97,6 +106,9 @@ function toPredictionAgentInputs(
       event: latest?.summary || latest?.title || presence?.lastEventSummary || presence?.lastEventType || 'waiting for heartbeat',
       seen: ageLabel(presence?.lastHeartbeatAt),
       status: online ? 'active' : 'unsynced',
+      activity: latestActivityLabel(latest),
+      activitySeen: ageLabel(latest?.createdAt),
+      activityActive,
     }];
   });
 }
