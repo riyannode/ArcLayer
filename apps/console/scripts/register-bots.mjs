@@ -187,6 +187,12 @@ async function x402Post(account, url, body) {
   return paidJson;
 }
 
+function maskSecret(secret) {
+  if (!secret || typeof secret !== 'string') return '[redacted]';
+  if (secret.length <= 10) return `${secret.slice(0, 2)}…${secret.slice(-2)}`;
+  return `${secret.slice(0, 6)}…${secret.slice(-4)}`;
+}
+
 async function registerBot(bot) {
   console.log(`\n${'='.repeat(60)}`);
   console.log(`🤖 ${bot.role.toUpperCase()} (token ${bot.agentId})`);
@@ -237,7 +243,7 @@ async function registerBot(bot) {
   if (!keyRes.ok || !keyData.ok) throw new Error(`Key gen failed: ${JSON.stringify(keyData)}`);
   
   const apiKey = keyData.apiKey || keyData.key;
-  console.log(`  🔑 API Key: ${apiKey}`);
+  console.log(`  🔑 API Key: ${maskSecret(apiKey)}`);
   
   return { ...bot, address: account.address, apiKey, manifestHash: hash };
 }
