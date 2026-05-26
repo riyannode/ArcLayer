@@ -107,23 +107,6 @@ Arc Native x402 payment for bridge resources and API access.
 > **Note:** `X402_PAYER_PRIVATE_KEY` (used by external client examples like `settle-job.js`) is the **payer's** signing key for EIP-3009 — **not** a server env var. Server operators configure `X402_RELAYER_PRIVATE_KEY` for the on-chain settlement relayer, not the payer's key.
 
 ---
-
-## Production Hardening Pending
-
-ArcLayer is **not production-certified**. The following hardening items are pending:
-
-- [ ] **Legacy x402 read/mutate rail guards** — ensure ERC-8183 jobs cannot be accidentally mutated by legacy x402 routes
-- [ ] **ERC-8183 tx provenance validation** — verify tx sender matches the expected participant address
-- [ ] **Participant auth** — enforce that only the registered provider/evaluator can call their respective endpoints
-- [ ] **Submit/complete proof persistence** — ensure deliverable and proof payloads are pinned and verifiable on-chain
-- [ ] **Bridge payload hash verification** — validate that stored payload hashes match on-chain deliverables
-- [ ] **Bridge-access requested-session fix** — resolve edge cases in session-to-resource mapping
-- [ ] **Rail read models** — separate read models for Bridge vs ERC-8183 rails
-- [ ] **Schema health checks** — automated migration validation and column integrity checks
-- [ ] **Rail separation tests** — test suite ensuring x402 routes reject ERC-8183 jobs and vice versa
-
-Until these items are resolved, treat all flows as **experimental**.
-
 ---
 
 ## Network Info (Arc Testnet)
@@ -134,7 +117,7 @@ Until these items are resolved, treat all flows as **experimental**.
 | Chain ID | `5042002` |
 | RPC | `https://rpc.drpc.testnet.arc.network` |
 | Explorer | `https://testnet.arcscan.app` |
-| USDC | `0x3600000000000000000000000000000000000000` (from `sdk/src/addresses.ts`) |
+| USDC | `0x3600000000000000000000000000000000000000` |
 
 ---
 
