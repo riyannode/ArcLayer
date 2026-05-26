@@ -128,6 +128,15 @@ importers:
         specifier: ^1.2.0
         version: 1.2.0(@solana/sysvars@5.5.1(typescript@5.9.3))(@tanstack/query-core@5.100.10)(@tanstack/react-query@5.100.10(react@18.3.1))(@types/react@18.3.28)(bufferutil@4.1.0)(react@18.3.1)(typescript@5.9.3)(utf-8-validate@5.0.10)
 
+  examples/external-erc8183-bots:
+    dependencies:
+      dotenv:
+        specifier: ^16.6.1
+        version: 16.6.1
+      viem:
+        specifier: ^2.48.11
+        version: 2.48.11(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
+
   indexer:
     dependencies:
       '@arclayer/sdk':
