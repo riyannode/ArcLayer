@@ -361,6 +361,7 @@ export async function markJobRunning(input: {
     .eq('job_id', input.jobId)
     .eq('worker_id', input.workerId)
     .eq('status', 'claimed')
+    .eq('settlement_mode', 'x402_offchain')
     .select()
     .maybeSingle();
 
@@ -414,6 +415,7 @@ export async function submitAgentJob(input: {
     .eq('job_id', input.jobId)
     .eq('worker_id', input.workerId)
     .in('status', ['claimed', 'running'])
+    .eq('settlement_mode', 'x402_offchain')
     .select()
     .maybeSingle();
 
@@ -461,6 +463,7 @@ export async function verifyAgentJob(input: {
     .update(update)
     .eq('job_id', input.jobId)
     .eq('status', 'submitted')
+    .eq('settlement_mode', 'x402_offchain')
     .select()
     .maybeSingle();
 
@@ -544,6 +547,7 @@ export async function markJobSettlementPending(input: {
     .eq('job_id', input.jobId)
     .eq('buyer_agent_id', input.buyerAgentId)
     .eq('status', 'verified')
+    .eq('settlement_mode', 'x402_offchain')
     .select()
     .maybeSingle();
 
@@ -625,6 +629,7 @@ export async function markJobSettled(input: {
     .eq('job_id', input.jobId)
     .eq('buyer_agent_id', input.buyerAgentId)
     .in('status', ['verified', 'settlement_pending'])
+    .eq('settlement_mode', 'x402_offchain')
     .select()
     .maybeSingle();
 
@@ -666,6 +671,7 @@ export async function failAgentJob(input: {
     .eq('job_id', input.jobId)
     .eq('worker_id', input.workerId)
     .filter('status', 'not.in', '("settled","verified")')
+    .eq('settlement_mode', 'x402_offchain')
     .select()
     .maybeSingle();
 
