@@ -8,7 +8,13 @@ import { useCryptoUpDownLive } from '@/hooks/useCryptoUpDownLive';
 
 type RawEvent = Record<string, unknown>;
 type RawReceipt = Record<string, unknown>;
-type SessionPayload = { sessionId?: string; session_id?: string; events?: RawEvent[]; receipts?: RawReceipt[] } | null;
+type SessionPayload = {
+  sessionId?: string;
+  session_id?: string;
+  roles?: Record<string, RawEvent | null>;
+  events?: RawEvent[];
+  receipts?: RawReceipt[];
+} | null;
 type LatestSessionResponse = { ok: boolean; session: SessionPayload; error?: string; message?: string };
 
 export default function PredictionMarketBotsPage() {
@@ -18,6 +24,7 @@ export default function PredictionMarketBotsPage() {
 
   useEffect(() => {
     let active = true;
+    let timer: ReturnType<typeof setInterval> | null = null;
 
     async function loadSession() {
       try {
@@ -36,12 +43,35 @@ export default function PredictionMarketBotsPage() {
       }
     }
 
-    loadSession();
-    const timer = setInterval(loadSession, 15_000);
+    const stopPolling = () => {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+    };
+
+    const startPolling = () => {
+      void loadSession();
+      stopPolling();
+      if (!document.hidden) {
+        timer = setInterval(() => void loadSession(), 15_000);
+      }
+    };
+
+    startPolling();
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        stopPolling();
+        return;
+      }
+      startPolling();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       active = false;
-      clearInterval(timer);
+      stopPolling();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, []);
 
@@ -71,7 +101,7 @@ export default function PredictionMarketBotsPage() {
           <PolymarketOrderbookPanel snapshot={data} loading={loading} />
         </section>
 
-        <PredictionMarketAgentsStrip category="prediction-market-bots" />
+        <PredictionMarketAgentsStrip category="prediction-market-bots" bridgeSession={session} />
 
       </div>
     </main>

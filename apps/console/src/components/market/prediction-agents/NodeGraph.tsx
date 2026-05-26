@@ -10,6 +10,7 @@ export default function NodeGraph({ agents }: { agents: PredictionAgentInput[] }
   const nodes = orderPredictionAgentsByFlow(normalizePredictionAgents(agents));
   const live = nodes.filter((agent) => agent.status === 'active').length;
   const activePulse = nodes.filter((agent) => agent.activityActive).length;
+  const proofs = nodes.filter((agent) => agent.proofActive).length;
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-orange-500/20 bg-[#070707] p-5 shadow-[0_0_50px_rgba(255,145,0,0.05)]">
@@ -21,7 +22,7 @@ export default function NodeGraph({ agents }: { agents: PredictionAgentInput[] }
           <h2 className="mt-1 text-xl font-semibold tracking-tight text-zinc-100">Prediction Market Agent Mesh</h2>
         </div>
         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-          {live}/{nodes.length} live nodes · {activePulse} activity pulses
+          {live}/{nodes.length} live · {activePulse} pulse · {proofs} proof
         </div>
       </div>
 
@@ -63,6 +64,13 @@ export default function NodeGraph({ agents }: { agents: PredictionAgentInput[] }
                       <span
                         className={[
                           'h-2.5 w-2.5 rounded-full',
+                          agent.proofActive ? 'bg-sky-400 shadow-[0_0_14px_rgba(56,189,248,0.9)]' : 'bg-zinc-700',
+                        ].join(' ')}
+                        title={`bridge proof: ${agent.proof}`}
+                      />
+                      <span
+                        className={[
+                          'h-2.5 w-2.5 rounded-full',
                           agent.activityActive ? 'animate-pulse bg-orange-400 shadow-[0_0_14px_rgba(251,146,60,0.9)]' : 'bg-zinc-700',
                         ].join(' ')}
                         title={`activity: ${agent.activity}`}
@@ -80,7 +88,7 @@ export default function NodeGraph({ agents }: { agents: PredictionAgentInput[] }
                   <div className="mt-4">
                     <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-orange-300">{agent.role}</div>
                     <div className="mt-2 truncate text-sm font-semibold text-zinc-100">{agent.name}</div>
-                    <div className="mt-2 line-clamp-2 text-xs leading-relaxed text-zinc-500">{agent.activityActive ? agent.activity : agent.event}</div>
+                    <div className="mt-2 line-clamp-2 text-xs leading-relaxed text-zinc-500">{agent.proofActive ? agent.proof : agent.activityActive ? agent.activity : agent.event}</div>
                   </div>
 
                   <div className="mt-4 truncate font-mono text-[10px] text-zinc-600">{agent.endpoint}</div>
