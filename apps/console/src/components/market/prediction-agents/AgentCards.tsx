@@ -76,9 +76,9 @@ function AgentCard({ agent }: { agent: PredictionAgentView }) {
         <Row label="type" value={agent.category} />
         <Row label="caps" value={agent.caps} />
         <Row label="event" value={agent.event} />
-        <Row label="pulse" value={agent.activityActive ? agent.activity : 'idle'} />
+        <LinkedRow label="pulse" value={agent.activityActive ? agent.activity : 'idle'} href={agent.activityHref} />
         <Row label="proof" value={agent.proofActive ? agent.proof : 'none'} />
-        <Row label="hash" value={agent.proofHash} />
+        <LinkedRow label="hash" value={agent.proofHash} href={agent.proofHashHref} />
         <Row label="seen" value={agent.seen} />
       </div>
     </article>
@@ -90,6 +90,21 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="grid grid-cols-[44px_minmax(0,1fr)] gap-2">
       <span className="uppercase tracking-[0.16em] text-zinc-700">{label}</span>
       <span className="truncate text-zinc-400">{value || '—'}</span>
+    </div>
+  );
+}
+
+function LinkedRow({ label, value, href }: { label: string; value: string; href?: string }) {
+  return (
+    <div className="grid grid-cols-[44px_minmax(0,1fr)] gap-2">
+      <span className="uppercase tracking-[0.16em] text-zinc-700">{label}</span>
+      {href ? (
+        <a className="truncate text-orange-300 hover:text-orange-200" href={href}>
+          {value || '—'}
+        </a>
+      ) : (
+        <span className="truncate text-zinc-400">{value || '—'}</span>
+      )}
     </div>
   );
 }
