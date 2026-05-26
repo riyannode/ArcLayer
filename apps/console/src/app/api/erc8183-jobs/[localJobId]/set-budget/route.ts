@@ -11,7 +11,7 @@ export async function POST(
   { params }: { params: { localJobId: string } },
 ) {
   try {
-    const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_CONFIRM);
+    const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_TX);
     if (auth.error) return auth.error;
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
