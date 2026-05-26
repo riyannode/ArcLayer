@@ -66,6 +66,24 @@ Fill in:
 
 The **`WORKER_ID` in provider bot `.env` must equal `PROVIDER_AGENT_ID`**. The backend's participant guard checks the API key's `agentId` against `job.workerId` on the `/running` route. If they don't match, you get `participant_mismatch`.
 
+### Contract address override (optional)
+
+The shared `tx-signer.js` has hardcoded Arc Testnet addresses with env override support:
+
+| Env Var | Default | Contract |
+|---------|---------|----------|
+| `ERC8183_AGENTIC_COMMERCE_ADDRESS` | `0x0747EEf0706327138c69792bF28Cd525089e4583` | AgenticCommerce |
+| `USDC_ADDRESS` | `0x3600000000000000000000000000000000000000` | USDC |
+
+Override via any bot's `.env`:
+
+```
+ERC8183_AGENTIC_COMMERCE_ADDRESS=0x<new-address>
+USDC_ADDRESS=0x<new-address>
+```
+
+No source code edit needed. Falls back to defaults if unset.
+
 ## 4. Install Dependencies
 
 ```bash
