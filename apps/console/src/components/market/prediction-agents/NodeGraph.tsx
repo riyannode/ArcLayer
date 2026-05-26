@@ -8,7 +8,7 @@ import {
 
 export default function NodeGraph({ agents }: { agents: PredictionAgentInput[] }) {
   const nodes = orderPredictionAgentsByFlow(normalizePredictionAgents(agents));
-  const live = nodes.filter((agent) => agent.status === 'active' || agent.status === 'synced').length;
+  const live = nodes.filter((agent) => agent.status === 'active').length;
 
   return (
     <section className="relative overflow-hidden rounded-2xl border border-orange-500/20 bg-[#070707] p-5 shadow-[0_0_50px_rgba(255,145,0,0.05)]">
@@ -31,7 +31,7 @@ export default function NodeGraph({ agents }: { agents: PredictionAgentInput[] }
       ) : (
         <div className="relative z-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {nodes.map((agent, index) => {
-            const isLive = agent.status === 'active' || agent.status === 'synced';
+            const isLive = agent.status === 'active';
 
             return (
               <div key={agent.id} className="relative">
