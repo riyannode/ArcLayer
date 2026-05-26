@@ -1,17 +1,21 @@
 /**
- * Client bot — creates ERC-8183 escrow jobs.
+ * Client bot — creates ERC-8183 escrow jobs, funds after provider sets budget.
+ *
+ * Correct ERC-8183 flow:
+ *   1. Client creates job on-chain (createJob)
+ *   2. Provider sets budget (setBudget) — contract restricts to provider
+ *   3. Client approves USDC + funds
  *
  * Loop:
  *   1. Create local job via POST /api/erc8183-jobs
  *   2. Sign + broadcast createJob tx
  *   3. Confirm create tx to backend
- *   4. Set budget + sign setBudget
+ *   4. Poll until provider calls setBudget (erc8183_status = Funded)
  *   5. Approve USDC + sign approve
  *   6. Fund escrow + sign fund
  *   7. Confirm fund tx
  *   8. Wait JOB_CREATE_INTERVAL_MS
  */
-// ── Load env FIRST ──────────────────────────────────────────────────
 require('dotenv').config({ path: __dirname + '/.env' });
 
 const api = require('../shared/erc8183-http-client');
@@ -34,26 +38,20 @@ const JOB_EXPIRY_SECONDS = parseInt(process.env.JOB_EXPIRY_SECONDS || '86400', 1
 const JOB_CREATE_INTERVAL_MS = parseInt(process.env.JOB_CREATE_INTERVAL_MS || '60000', 10);
 const AUTONOMOUS_TX = process.env.AUTONOMOUS_TX === 'true';
 
-// ── Signer ──────────────────────────────────────────────────────────────
 const signer = createSigner({ privateKey: CLIENT_PK, rpcUrl: ARC_RPC_URL });
 
 let jobCounter = 0;
 
 async function createAndFundJob() {
   jobCounter++;
-  const jobId = `erc8183-auto-${Date.now()}-${jobCounter}`;
   console.log(`\n[${new Date().toISOString()}] Job #${jobCounter}: creating...`);
 
   try {
-    // 1. Check balance
     const balance = await signer.getUsdcBalance();
     const budgetAtomic = BigInt(JOB_BUDGET_ATOMIC);
     console.log(`   USDC balance: ${balance}, budget: ${budgetAtomic}`);
-    if (balance < budgetAtomic + 10000n) {
-      console.warn(`   WARN: Low USDC balance (${balance}), may fail approve/fund`);
-    }
 
-    // 2. Create local job
+    // 1. Create local job
     const created = await api.createJob({
       buyerAgentId: BUYER_AGENT_ID,
       clientAddress: CLIENT_ADDRESS,
@@ -70,37 +68,47 @@ async function createAndFundJob() {
     const localJobId = created.localJobId;
     console.log(`   Local job: ${localJobId}`);
 
-    // 3. Sign + broadcast createJob
     if (AUTONOMOUS_TX) {
+      // 2. Sign + broadcast createJob
       console.log(`   Signing createJob tx...`);
       const createResult = await signer.sendTx(created.tx);
       console.log(`   createJob tx: ${createResult.hash}`);
       await sleep(2000);
 
       const confirmed = await api.confirmCreateTx(localJobId, createResult.hash);
-      const erc8183JobId = confirmed.erc8183JobId;
-      console.log(`   createJob confirmed! erc8183_job_id: ${erc8183JobId}`);
+      console.log(`   createJob confirmed! erc8183_job_id: ${confirmed.erc8183JobId}`);
 
-      // 4. Set budget
-      console.log(`   Signing setBudget tx...`);
-      const budgetTx = await api.setBudget(localJobId);
-      const budgetResult = await signer.sendTx(budgetTx.tx);
-      console.log(`   setBudget tx: ${budgetResult.hash}`);
-      await sleep(2000);
+      // 3. Poll until provider sets budget (status = Funded)
+      console.log(`   Waiting for provider to setBudget...`);
+      const MAX_POLL = 60;
+      let funded = false;
+      for (let i = 0; i < MAX_POLL; i++) {
+        await sleep(2000);
+        try {
+          const job = await api.getJob(localJobId);
+          if (job.erc8183_status === 'Funded') {
+            funded = true;
+            break;
+          }
+        } catch {}
+      }
 
-      const budgetConfirmed = await api.confirmTx(localJobId, 'set_budget', budgetResult.hash);
-      console.log(`   setBudget confirmed! status: ${budgetConfirmed.erc8183Status}`);
+      if (!funded) {
+        console.warn(`   Provision timeout — job not funded by provider`);
+        return;
+      }
+      console.log(`   Provider set budget! Job is Funded.`);
 
-      // 5. Approve USDC + fund
-      console.log(`   Signing approve + fund txs...`);
+      // 4. Approve USDC + fund
+      console.log(`   Getting fund tx instructions...`);
       const fundTx = await api.fund(localJobId);
 
-      // Approve first
+      console.log(`   Signing approve tx...`);
       const approveResult = await signer.sendTx(fundTx.txs[0]);
       console.log(`   approve tx: ${approveResult.hash}`);
       await sleep(2000);
 
-      // Then fund
+      console.log(`   Signing fund tx...`);
       const fundResult = await signer.sendTx(fundTx.txs[1]);
       console.log(`   fund tx: ${fundResult.hash}`);
       await sleep(2000);
@@ -109,12 +117,8 @@ async function createAndFundJob() {
       console.log(`   Fund confirmed! status: ${fundConfirmed.erc8183Status}`);
       console.log(`   ✅ Job #${jobCounter} funded successfully`);
     } else {
-      // Manual mode
-      console.log(`   [MANUAL TX] createJob tx instruction:`);
-      console.log(`     ${JSON.stringify(created.tx)}`);
-      console.log(`   Set AUTONOMOUS_TX=true for auto-signing`);
+      console.log(`   [MANUAL TX] createJob: ${JSON.stringify(created.tx)}`);
     }
-
   } catch (err) {
     console.error(`   ❌ Job #${jobCounter} failed:`, err.message);
     if (err.body) console.error('   body:', JSON.stringify(err.body));
@@ -131,12 +135,8 @@ async function main() {
   console.log(`Autonomous: ${AUTONOMOUS_TX}`);
   console.log(`Interval: ${JOB_CREATE_INTERVAL_MS}ms`);
 
-  // Run first job immediately
   await createAndFundJob();
-
-  // Schedule
   setInterval(createAndFundJob, JOB_CREATE_INTERVAL_MS);
-  console.log(`\nNext job in ${JOB_CREATE_INTERVAL_MS}ms`);
 }
 
 main().catch((err) => {
