@@ -36,7 +36,8 @@ export function buildExternalBotManifest(input: ManifestBuildInput): AgentManife
     role: role.botRole,
     description: `${role.displayName}: ${role.capabilities.join(', ')}`,
     controller,
-    endpoint,
+    // Only set endpoint if it's a valid URL (backend rejects bare filenames)
+    ...(endpoint?.startsWith('http') ? { endpoint } : {}),
     mode,
     categories: [template.category],
     capability: role.capabilities,
@@ -47,6 +48,8 @@ export function buildExternalBotManifest(input: ManifestBuildInput): AgentManife
         name: role.displayName,
         category: template.category,
         capabilities: role.capabilities,
+        endpointPath: role.endpointPath,
+        enabled: true,
       },
     ],
     x402: {

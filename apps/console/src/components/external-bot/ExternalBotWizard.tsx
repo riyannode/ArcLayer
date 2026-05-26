@@ -88,6 +88,7 @@ export default function ExternalBotWizard() {
   const [isBusy, setIsBusy] = useState(false);
   const [liveEventsToken, setLiveEventsToken] = useState('');
   const [payoutAddress, setPayoutAddress] = useState('');
+  const [serviceEndpointUrl, setServiceEndpointUrl] = useState('');
 
   // ── Hooks ──────────────────────────────────────────────────
   const { isConnected, address, mode } = useArcWallet();
@@ -233,7 +234,7 @@ export default function ExternalBotWizard() {
           agentId,
           roleIndex: i,
           controller: address,
-          endpoint: role.endpointPath,
+          endpoint: serviceEndpointUrl || role.endpointPath,
           priceAtomic,
           payerWallet: payoutAddress || address,
         };
@@ -270,7 +271,7 @@ export default function ExternalBotWizard() {
 
     setIsBusy(false);
     setStep('keys');
-  }, [template, address, txRows, priceAtomic, payoutAddress, signMessageAsync, paidFetch, getAgentId]);
+  }, [template, address, txRows, priceAtomic, payoutAddress, serviceEndpointUrl, signMessageAsync, paidFetch, getAgentId]);
 
   // ── Step 7: Generate API Keys ───────────────────────────────
   // (fix #3) agentId = minted token ID (from txRow.agentId after register)
@@ -563,6 +564,22 @@ export default function ExternalBotWizard() {
               placeholder="1000"
             />
             <div className="mt-1 font-mono text-[9px] text-[#EAE4D8]/40">1000 = 0.001 USDC (6 decimals)</div>
+          </div>
+
+          <div className="mb-4">
+            <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/70">
+              Service Endpoint URL <span className="text-[#EAE4D8]/30">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={serviceEndpointUrl}
+              onChange={(e) => setServiceEndpointUrl(e.target.value)}
+              className="mt-1 w-full rounded-sm border border-white/10 bg-black/40 px-3 py-2 font-mono text-sm text-[#EAE4D8]"
+              placeholder="https://agent.example.com"
+            />
+            <div className="mt-1 font-mono text-[9px] text-[#EAE4D8]/40">
+              Public HTTPS URL if your bot has an HTTP endpoint. Leave empty for PM2-only bots.
+            </div>
           </div>
 
           {template.fixedBotRoleNames && (

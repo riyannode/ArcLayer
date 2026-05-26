@@ -106,6 +106,43 @@ describe('buildManifest', () => {
     });
     expect(manifest.mode).toBe('dual');
   });
+
+  it('omits endpoint when value is not a URL (bare filename)', () => {
+    const manifest = buildExternalBotManifest({
+      template: t,
+      agentId: '20166',
+      roleIndex: 2,
+      controller,
+      endpoint: 'evaluator-bot.js',
+      priceAtomic: '1000',
+    });
+    expect(manifest.endpoint).toBeUndefined();
+  });
+
+  it('includes endpoint when value is a valid HTTPS URL', () => {
+    const manifest = buildExternalBotManifest({
+      template: t,
+      agentId: '20167',
+      roleIndex: 3,
+      controller,
+      endpoint: 'https://agent.example.com/jobs/run',
+      priceAtomic: '1000',
+    });
+    expect(manifest.endpoint).toBe('https://agent.example.com/jobs/run');
+  });
+
+  it('includes endpointPath and enabled in role object', () => {
+    const manifest = buildExternalBotManifest({
+      template: t,
+      agentId: '20168',
+      roleIndex: 0,
+      controller,
+      endpoint: 'oracle-bot.js',
+      priceAtomic: '1000',
+    });
+    expect(manifest.roles?.[0].endpointPath).toBe('oracle-bot.js');
+    expect(manifest.roles?.[0].enabled).toBe(true);
+  });
 });
 
 describe('buildEnvBundle', () => {
