@@ -23,7 +23,7 @@ export async function GET(
 
     if (!events.length && !receipts.length) {
       return NextResponse.json(
-        { ok: false, error: 'session_not_found', sessionId, message: 'Bridge session not found.' },
+        { ok: false, ...bridgeRail(), error: 'session_not_found', sessionId, message: 'Bridge session not found.' },
         { status: 404 },
       );
     }
@@ -47,7 +47,7 @@ export async function GET(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      { ok: false, error: 'session_detail_failed', message },
+      { ok: false, ...bridgeRail(), error: 'session_detail_failed', message },
       { status: 500 },
     );
   }
