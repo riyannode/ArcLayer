@@ -143,6 +143,44 @@ describe('buildManifest', () => {
     expect(manifest.roles?.[0].endpointPath).toBe('oracle-bot.js');
     expect(manifest.roles?.[0].enabled).toBe(true);
   });
+
+  it('uses custom roleDisplayName when provided', () => {
+    const manifest = buildExternalBotManifest({
+      template: t,
+      agentId: '20169',
+      roleIndex: 0,
+      controller,
+      endpoint: 'oracle-bot.js',
+      priceAtomic: '1000',
+      roleDisplayName: 'My Custom Oracle',
+    });
+    expect(manifest.name).toContain('My Custom Oracle');
+    expect(manifest.description).toContain('My Custom Oracle');
+    expect(manifest.roles?.[0].name).toBe('My Custom Oracle');
+    // BOT_ROLE stays locked
+    expect(manifest.role).toBe('oracle');
+  });
+
+  it('uses custom roleBrandedName in metadata URI', () => {
+    // Simulate what the wizard does: brandedName used in metadataURI
+    const brandedName = 'my-custom-oracle';
+    const metadataURI = `arclayer://manifest/${brandedName}`;
+    expect(metadataURI).toBe('arclayer://manifest/my-custom-oracle');
+
+    // Manifest name still uses displayName, role stays locked
+    const manifest = buildExternalBotManifest({
+      template: t,
+      agentId: '20170',
+      roleIndex: 0,
+      controller,
+      endpoint: 'oracle-bot.js',
+      priceAtomic: '1000',
+      roleDisplayName: 'My Custom Oracle',
+      roleBrandedName: brandedName,
+    });
+    expect(manifest.role).toBe('oracle');
+    expect(manifest.name).toContain('My Custom Oracle');
+  });
 });
 
 describe('buildEnvBundle', () => {
@@ -188,6 +226,28 @@ describe('buildEnvBundle', () => {
     expect(oracle.content).toContain('ARCLAYER_AGENT_ID=20164');
     expect(oracle.content).toContain('RUNTIME_ID=hermes-oracle-runtime-01');
     expect(oracle.content).toContain('ARCLAYER_ERC8004_ID=erc8004_identity_registry:20164');
+  });
+
+  it('(edit roles) RUNTIME_ID uses custom brandedName', () => {
+    const bundle = buildEnvBundle({
+      template: t,
+      baseUrl: 'https://www.arclayers.xyz',
+      category: 'prediction-market-bots',
+      agentIds: ['20164', '20165', '20166', '20167'],
+      apiKeys: ['ak_1', 'ak_2', 'ak_3', 'ak_4'],
+      erc8004Ids: [
+        'erc8004_identity_registry:20164',
+        'erc8004_identity_registry:20165',
+        'erc8004_identity_registry:20166',
+        'erc8004_identity_registry:20167',
+      ],
+      runtimeNames: ['my-oracle', 'my-analyzer', 'my-evaluator', 'my-executor'],
+    });
+
+    const oracle = bundle.roleFiles[0];
+    expect(oracle.content).toContain('ARCLAYER_AGENT_ID=20164');
+    expect(oracle.content).toContain('RUNTIME_ID=my-oracle-runtime-01');
+    expect(oracle.content).not.toContain('RUNTIME_ID=hermes-oracle-runtime-01');
   });
 });
 

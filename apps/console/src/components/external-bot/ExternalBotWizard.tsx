@@ -59,6 +59,16 @@ type TxRow = {
   error?: string;
 };
 
+type EditableRole = {
+  roleId: string;
+  botRole: string;
+  displayName: string;
+  brandedName: string;
+  capabilities: string[];
+  endpointPath: string;
+  scopes: string[];
+};
+
 const STEPS: Step[] = ['category', 'template', 'roles', 'wallet', 'register', 'manifest', 'keys', 'export', 'health'];
 
 const STEP_LABELS: Record<Step, string> = {
@@ -89,6 +99,12 @@ export default function ExternalBotWizard() {
   const [liveEventsToken, setLiveEventsToken] = useState('');
   const [payoutAddress, setPayoutAddress] = useState('');
   const [serviceEndpointUrl, setServiceEndpointUrl] = useState('');
+
+  // ── Editable roles state (customizable in Step 3) ──────────
+  const [editableRoles, setEditableRoles] = useState<EditableRole[]>([]);
+  const [slugErrors, setSlugErrors] = useState<Record<string, string>>({});
+
+  const SLUG_REGEX = /^[a-z0-9-]{3,64}$/;
 
   // ── Hooks ──────────────────────────────────────────────────
   const { isConnected, address, mode } = useArcWallet();
@@ -139,6 +155,19 @@ export default function ExternalBotWizard() {
   const handleSelectTemplate = useCallback((tid: string) => {
     setSelectedTemplateId(tid);
     setError(null);
+    const t = getTemplate(tid);
+    if (t) {
+      setEditableRoles(t.roles.map((r) => ({
+        roleId: r.roleId,
+        botRole: r.botRole,
+        displayName: r.displayName,
+        brandedName: r.defaultAgentId,
+        capabilities: r.capabilities,
+        endpointPath: r.endpointPath,
+        scopes: r.scopes,
+      })));
+      setSlugErrors({});
+    }
     setStep('roles');
   }, []);
 
@@ -157,16 +186,28 @@ export default function ExternalBotWizard() {
 
   const handleRolesConfirm = useCallback(() => {
     if (!template) return;
-    const rows: TxRow[] = template.roles.map((r) => ({
+    // Validate slugs before confirming
+    const errors: Record<string, string> = {};
+    for (const er of editableRoles) {
+      if (!SLUG_REGEX.test(er.brandedName)) {
+        errors[er.roleId] = `Slug "${er.brandedName}" invalid. Lowercase, 3-64 chars, hyphen allowed.`;
+      }
+    }
+    setSlugErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      setError('Fix slug errors before proceeding.');
+      return;
+    }
+    const rows: TxRow[] = editableRoles.map((r) => ({
       roleId: r.roleId,
-      agentId: r.defaultAgentId,
-      brandedName: r.defaultAgentId,
+      agentId: r.brandedName,
+      brandedName: r.brandedName,
       step: 'pending',
     }));
     setTxRows(rows);
     setError(null);
     setStep('wallet');
-  }, [template]);
+  }, [template, editableRoles]);
 
   // ── Step 4: Wallet ──────────────────────────────────────────
   const handleWalletConfirm = useCallback(() => {
@@ -186,12 +227,13 @@ export default function ExternalBotWizard() {
 
     for (let i = 0; i < template.roles.length; i++) {
       const role = template.roles[i];
+      const edRole = editableRoles[i];
       newRows[i] = { ...newRows[i], step: 'signing' };
       setTxRows([...newRows]);
 
       try {
-        // Register ERC-8004 with branded metadata URI
-        const metadataURI = `arclayer://manifest/${role.defaultAgentId}`;
+        // Register ERC-8004 with custom branded metadata URI
+        const metadataURI = `arclayer://manifest/${(edRole?.brandedName || role.defaultAgentId)}`;
         newRows[i] = { ...newRows[i], step: 'tx' };
         setTxRows([...newRows]);
 
@@ -217,14 +259,14 @@ export default function ExternalBotWizard() {
           error: err instanceof Error ? err.message : 'register_failed',
         };
         setTxRows([...newRows]);
-        setError(`Register failed for ${role.displayName}: ${err instanceof Error ? err.message : 'unknown'}`);
+        setError(`Register failed for ${edRole?.displayName || role.displayName}: ${err instanceof Error ? err.message : 'unknown'}`);
         setIsBusy(false);
         return;
       }
     }
 
     setIsBusy(false);
-  }, [template, address, txRows, writeContractAsync]);
+  }, [template, address, txRows, editableRoles, writeContractAsync]);
 
   // ── Step 6: Publish Manifest (x402) ─────────────────────────
   // (fix #1) method: POST (not PUT)
@@ -238,6 +280,7 @@ export default function ExternalBotWizard() {
 
     for (let i = 0; i < template.roles.length; i++) {
       const role = template.roles[i];
+      const edRole = editableRoles[i];
       const agentId = getAgentId(newRows[i], role.defaultAgentId);
 
       try {
@@ -249,6 +292,8 @@ export default function ExternalBotWizard() {
           endpoint: serviceEndpointUrl || role.endpointPath,
           priceAtomic,
           payerWallet: payoutAddress || address,
+          roleDisplayName: edRole?.displayName,
+          roleBrandedName: edRole?.brandedName,
         };
 
         const manifest = buildExternalBotManifest(input);
@@ -275,7 +320,7 @@ export default function ExternalBotWizard() {
         newRows[i] = { ...newRows[i], manifestHash: hash };
         setTxRows([...newRows]);
       } catch (err) {
-        setError(`Manifest publish failed for ${role.displayName}: ${err instanceof Error ? err.message : 'unknown'}`);
+        setError(`Manifest publish failed for ${edRole?.displayName || role.displayName}: ${err instanceof Error ? err.message : 'unknown'}`);
         setIsBusy(false);
         return;
       }
@@ -283,7 +328,7 @@ export default function ExternalBotWizard() {
 
     setIsBusy(false);
     setStep('keys');
-  }, [template, address, txRows, priceAtomic, payoutAddress, serviceEndpointUrl, signMessageAsync, paidFetch, getAgentId]);
+  }, [template, address, txRows, priceAtomic, payoutAddress, serviceEndpointUrl, signMessageAsync, paidFetch, getAgentId, editableRoles]);
 
   // ── Step 7: Generate API Keys ───────────────────────────────
   // (fix #3) agentId = minted token ID (from txRow.agentId after register)
@@ -534,31 +579,84 @@ export default function ExternalBotWizard() {
           </h2>
           <p className="text-xs text-[#EAE4D8]/60 mb-4">{template.description}</p>
 
-          <div className="space-y-2 mb-4">
-            {roleRows.map((r) => (
+          <div className="space-y-3 mb-4">
+            {editableRoles.map((r) => (
               <div key={r.roleId} className="rounded-sm border border-white/10 bg-white/[0.02] p-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm text-[#EAE4D8]">{r.displayName}</span>
-                      {template.fixedBotRoleNames && (
-                        <span className="rounded-sm bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[8px] text-cyan-300">
-                          BOT_ROLE={r.botRole}
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-1 font-mono text-[10px] text-[#EAE4D8]/50">
-                      Agent ID: {r.brandedName}
-                      {template.fixedBotRoleNames && <span className="text-[#EAE4D8]/30 ml-1">(minted token ID used after register)</span>}
-                    </div>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {template.roles.find((x) => x.roleId === r.roleId)?.capabilities.map((c) => (
-                        <span key={c} className="rounded-sm bg-white/5 px-1.5 py-0.5 font-mono text-[8px] text-[#EAE4D8]/50">
-                          {c}
-                        </span>
-                      ))}
-                    </div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm text-[#EAE4D8]">{r.botRole}</span>
+                    {template.fixedBotRoleNames && (
+                      <span className="rounded-sm bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[8px] text-cyan-300">
+                        BOT_ROLE={r.botRole}
+                      </span>
+                    )}
                   </div>
+                </div>
+
+                {/* Display Name (editable) */}
+                <div className="mb-2">
+                  <label className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/60">
+                    Display Name
+                  </label>
+                  <input
+                    type="text"
+                    value={r.displayName}
+                    onChange={(e) => {
+                      setEditableRoles((prev) =>
+                        prev.map((pr) =>
+                          pr.roleId === r.roleId ? { ...pr, displayName: e.target.value } : pr
+                        )
+                      );
+                    }}
+                    className="mt-0.5 w-full rounded-sm border border-white/10 bg-black/40 px-2 py-1.5 font-mono text-xs text-[#EAE4D8]"
+                    placeholder="My Custom Oracle"
+                  />
+                </div>
+
+                {/* Runtime Slug (editable) */}
+                <div className="mb-2">
+                  <label className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/60">
+                    Runtime Slug
+                  </label>
+                  <input
+                    type="text"
+                    value={r.brandedName}
+                    onChange={(e) => {
+                      const val = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                      setEditableRoles((prev) =>
+                        prev.map((pr) =>
+                          pr.roleId === r.roleId ? { ...pr, brandedName: val } : pr
+                        )
+                      );
+                      // Clear error for this role if valid
+                      if (SLUG_REGEX.test(val) || val === '') {
+                        setSlugErrors((prev) => {
+                          const next = { ...prev };
+                          delete next[r.roleId];
+                          return next;
+                        });
+                      }
+                    }}
+                    className={`mt-0.5 w-full rounded-sm border px-2 py-1.5 font-mono text-xs text-[#EAE4D8] ${
+                      slugErrors[r.roleId] ? 'border-red-500/50 bg-red-500/10' : 'border-white/10 bg-black/40'
+                    }`}
+                    placeholder="my-custom-oracle"
+                  />
+                  {slugErrors[r.roleId] && (
+                    <div className="mt-1 font-mono text-[9px] text-red-400">{slugErrors[r.roleId]}</div>
+                  )}
+                  <div className="mt-1 font-mono text-[9px] text-[#EAE4D8]/40">
+                    RUNTIME_ID = {r.brandedName}-runtime-01
+                  </div>
+                </div>
+
+                {/* Capabilities (read-only) */}
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {r.capabilities.map((c) => (
+                    <span key={c} className="rounded-sm bg-white/5 px-1.5 py-0.5 font-mono text-[8px] text-[#EAE4D8]/50">
+                      {c}
+                    </span>
+                  ))}
                 </div>
               </div>
             ))}
@@ -597,18 +695,23 @@ export default function ExternalBotWizard() {
           {template.fixedBotRoleNames && (
             <div className="rounded-sm border border-cyan-500/20 bg-cyan-500/5 p-3 mb-4">
               <div className="font-mono text-[10px] text-cyan-300">
-                ⚠ BOT_ROLE is fixed by runtime script. Internal role mapping (oracle/analyzer/evaluator/executor)
-                must not be changed. ARCLAYER_AGENT_ID will use the minted ERC-8004 token ID for consistency.
+                ⚠ BOT_ROLE is fixed by runtime script. Display Name and Runtime Slug are customizable.
+                ARCLAYER_AGENT_ID will use the minted ERC-8004 token ID for consistency.
               </div>
             </div>
           )}
 
-          <button
-            onClick={handleRolesConfirm}
-            className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition-colors hover:bg-[#C5A67C]/20"
-          >
-            Confirm Roles →
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleRolesConfirm}
+              className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition-colors hover:bg-[#C5A67C]/20"
+            >
+              Confirm Roles →
+            </button>
+            <button onClick={() => setStep('template')} className="px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/50 hover:text-[#EAE4D8]">
+              ← Back to templates
+            </button>
+          </div>
         </div>
       )}
 
