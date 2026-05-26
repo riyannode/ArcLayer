@@ -4,6 +4,8 @@ import { keccak256, toBytes } from 'viem';
 import { CONTRACTS } from '@arclayer/sdk';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { getErc8183JobByLocalId, attachErc8183PreparedSubmit } from '@/lib/erc8183-jobs/store';
+import { assertErc8183Participant } from '@/lib/erc8183-jobs/authz';
+import { escrowRail } from '@/lib/rails/responses';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
 
 /**
@@ -35,10 +37,14 @@ export async function POST(
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
       return NextResponse.json(
-        { ok: false, error: 'job_not_found', message: 'ERC-8183 job not found.' },
+        { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
         { status: 404 },
       );
     }
+
+    // Guard: only the assigned worker or provider can submit results
+    const submitAuthError = assertErc8183Participant(job, auth, ['worker', 'provider']);
+    if (submitAuthError) return submitAuthError;
 
     if (!job.erc8183JobId) {
       return NextResponse.json(
