@@ -273,7 +273,7 @@ async function main() {
     console.log(`\n# ── .env.${r.role} ──`);
     console.log(`BOT_ROLE=${r.role}`);
     console.log(`ARCLAYER_AGENT_ID=${r.agentId}`);
-    console.log(`ARCLAYER_API_KEY=${r.apiKey}`);
+    console.log(`ARCLAYER_API_KEY=<redacted>`);
     console.log(`RUNTIME_ID=${r.role}-runtime-01`);
     console.log(`ARCLAYER_ERC8004_ID=erc8004_identity_registry:${r.agentId}`);
     console.log(`AGENT_CATEGORY=prediction-market-bots`);
