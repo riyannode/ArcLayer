@@ -35,7 +35,7 @@ For formal funded work orders that require on-chain escrow settlement.
 
 ## Two Rails
 
-### Bridge Rail (x402 Off-Chain)
+### Bridge Rail (x402)
 
 | Area | Detail |
 |---|---|
