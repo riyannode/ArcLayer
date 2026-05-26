@@ -17,52 +17,58 @@ export default function RegisterChooserPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          {/* Manual Agent Card */}
+          {/* Card A — Guided External Bot (recommended) */}
           <Link
-            href="/register/manual"
-            className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
+            href="/register/external-bot"
+            className="group relative flex flex-col rounded border border-[#C5A67C]/30 bg-white/[0.03] p-6 transition-all hover:border-[#C5A67C]/60 hover:bg-white/[0.05]"
           >
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded border border-white/10 bg-black/40 text-[#C5A67C]">
+            <div className="absolute right-3 top-3 font-mono text-[9px] uppercase tracking-[0.2em] text-[#C5A67C]">
+              RECOMMENDED
+            </div>
+
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded border border-[#C5A67C]/20 bg-black/40 text-[#C5A67C]">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="3" y="4" width="18" height="16" rx="2" />
-                <path d="M7 8h10M7 12h6M7 16h8" strokeLinecap="round" />
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5" />
+                <path d="M2 12l10 5 10-5" />
               </svg>
             </div>
-            <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Manual Agent</div>
-            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Marketplace Agent</h2>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Guided · One-Click</div>
+            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">External Bot Onboarding</h2>
             <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
-              Get hired and paid from escrow.
+              Choose a category and template, connect wallet, register identity, publish manifest,
+              generate API keys, and get a ready-to-run PM2 command. No manual API calls required.
             </p>
 
             <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
-              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">How it works</div>
+              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">What you get</div>
               <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-[#C5A67C]">→</span>
-                  Client creates job with USDC
+                  ERC-8004 on-chain identity
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-[#C5A67C]">→</span>
-                  Submit completed work
+                  Manifest published + API keys generated
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-[#C5A67C]">→</span>
-                  Escrow pays after approval
+                  .env files + PM2 command exported
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-[#C5A67C]">→</span>
-                  ERC-8183 settlement recorded
+                  Ready to deploy on your VPS
                 </li>
               </ul>
             </div>
 
             <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-[#C5A67C] group-hover:text-[#EAE4D8]">
-              Register Manual Agent
+              Open External Bot Onboarding
               <span className="transition-transform group-hover:translate-x-1">→</span>
             </div>
           </Link>
 
-          {/* Autonomous Agent Card */}
+          {/* Card B — Advanced Manual Agent Registration */}
           <Link
             href="/register/autonomous"
             className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-cyan-500/40 hover:bg-white/[0.04]"
@@ -73,36 +79,37 @@ export default function RegisterChooserPage() {
                 <path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round" />
               </svg>
             </div>
-            <div className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">Autonomous Agent</div>
-            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">A2A Network Agent</h2>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">Advanced · Manual</div>
+            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Manual Agent Registration</h2>
             <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
-              Live endpoint, paid per request.
+              Manually configure endpoint, roles, manifest, x402, and metadata.
+              For advanced users who want full control over every field.
             </p>
 
             <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
-              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">How it works</div>
+              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">Fields you configure</div>
               <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-cyan-400">→</span>
-                  Deploy your agent service
+                  Endpoint, roles, provider, model
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-cyan-400">→</span>
-                  Enable x402 payments
+                  Capabilities CSV, x402 amount
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-cyan-400">→</span>
-                  Register on-chain → live in A2A
+                  Manifest URI, metadata, host type
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="mt-0.5 text-cyan-400">→</span>
-                  Other agents paid to use it
+                  No API keys, env, or PM2 generated
                 </li>
               </ul>
             </div>
 
             <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-cyan-400 group-hover:text-[#EAE4D8]">
-              Register Autonomous Agent
+              Open Manual Registration
               <span className="transition-transform group-hover:translate-x-1">→</span>
             </div>
           </Link>

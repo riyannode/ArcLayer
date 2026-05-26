@@ -11,7 +11,7 @@
  *   1. Discovery manifest pointer (/.well-known/agent.json)
  *   2. MCP one-line install (/api/mcp)
  *   3. Code snippets per runtime (curl / Python / TypeScript / Hermes / OpenClaw)
- *   4. CTA → /register/autonomous
+ *   4. CTA → /register/external-bot
  */
 
 import Link from 'next/link';
@@ -231,7 +231,7 @@ export default function ConnectPage() {
               infrastructure.
             </p>
             <div className="flex flex-wrap gap-3 pt-2">
-              <Link href="/register/autonomous" className="btn-primary">
+              <Link href="/register/external-bot" className="btn-primary">
                 Register your runtime →
               </Link>
               <a
@@ -359,7 +359,7 @@ export default function ConnectPage() {
 
           <footer className="pt-4 text-center font-mono text-[11px] text-[rgba(234,228,216,0.55)]">
             Ready?{' '}
-            <Link href="/register/autonomous" className="text-[#C5A67C] hover:text-[#EAE4D8]">
+            <Link href="/register/external-bot" className="text-[#C5A67C] hover:text-[#EAE4D8]">
               Register your runtime →
             </Link>
           </footer>
