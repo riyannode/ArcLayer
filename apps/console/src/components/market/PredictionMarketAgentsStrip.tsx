@@ -134,6 +134,10 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+function asTextArray(value: unknown) {
+  return Array.isArray(value) ? value.map((item) => text(item, '')).filter(Boolean) : [];
+}
+
 function activityTx(event?: AgentLiveEvent) {
   const metadata = asRecord(event?.metadata);
   return event?.txHash ?? metadata?.txHash ?? metadata?.transaction ?? metadata?.transactionHash ?? null;
@@ -176,6 +180,25 @@ function bridgeProofLabel(event?: BridgeEvent | null) {
   return eventType;
 }
 
+function compactReasoning(event?: BridgeEvent | null) {
+  const payload = asRecord(event?.payload);
+  if (!payload) {
+    return { source: '—', summary: '—', why: '—', fallback: false };
+  }
+
+  const llmSummary = asRecord(payload.llmSummary);
+  const source = text(payload.source ?? llmSummary?.source, '—');
+  const summary = text(payload.summary ?? llmSummary?.summary ?? payload.reason ?? payload.noTradeReason, '—');
+  const rationale = asTextArray(payload.rationale);
+  const observations = asTextArray(llmSummary?.observations);
+  const riskFlags = asTextArray(payload.riskFlags ?? payload.flags);
+  const checks = asTextArray(payload.checks);
+  const why = rationale[0] || observations[0] || riskFlags[0] || checks[0] || text(payload.reason ?? payload.noTradeReason, '—');
+  const fallback = Boolean(payload.usedFallback ?? llmSummary?.usedFallback ?? source.includes('fallback'));
+
+  return { source, summary, why, fallback };
+}
+
 function bridgeProofByRole(session?: BridgeSession) {
   const roles = session?.roles ?? {};
   const map = new Map<string, BridgeEvent>();
@@ -198,7 +221,7 @@ function toPredictionAgentInputs(
     const role = agent.role || agent.roles?.[0]?.name || agent.roles?.[0]?.id || 'agent';
     const normalizedRole = normalizeRole(role);
     const proof = proofByRole.get(normalizedRole.toLowerCase()) ?? null;
-    const proofHash = proof?.payload_hash;
+    const reasoning = compactReasoning(proof);
     const presence = presenceByAgent.get(id);
     const latest = latestEventByAgent.get(id);
     const online = isOnline(presence);
@@ -214,18 +237,24 @@ function toPredictionAgentInputs(
       category: recentX402 ? 'paid' : agent.x402?.enabled ? 'x402' : 'registered',
       endpoint: agent.endpoint ?? null,
       caps: agent.capabilities || agent.roles?.[0]?.capabilities || [],
-      event: latest?.summary || latest?.title || presence?.lastEventSummary || presence?.lastEventType || 'waiting for heartbeat',
+      event: latest?.summary || latest?.title || presence?.lastEventSummary || presence?.lastEventType || 'waiting for live event',
       seen: ageLabel(presence?.lastHeartbeatAt),
       status: online ? 'active' : 'unsynced',
       activity: latestActivityLabel(latest),
       activityHref: scanHref(activityHash),
       activitySeen: ageLabel(latest?.createdAt),
       activityActive,
+      tx: shortText(activityHash),
+      txHref: scanHref(activityHash),
       proof: bridgeProofLabel(proof),
-      proofHash: shortText(proofHash),
-      proofHashHref: '', // payload_hash is not a tx — ArcScan would show "not found"
+      proofHash: '—',
+      proofHashHref: '',
       proofSeen: text(proof?.created_at),
       proofActive: Boolean(proof),
+      reasoningSource: reasoning.source,
+      reasoningSummary: reasoning.summary,
+      reasoningWhy: reasoning.why,
+      reasoningFallback: reasoning.fallback,
     }];
   });
 }
