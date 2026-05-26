@@ -113,7 +113,7 @@ export function RegisteredAgentsList({ categoryKey, categoryLabel }: { categoryK
           <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#C5A67C]">Other Agents in this Category</div>
           <p className="mt-1 text-sm text-[#EAE4D8]/60 invisible">Live registry discovery for {categoryLabel}. Featured demo flow stays pinned above.</p>
         </div>
-        <Link href={`/register/autonomous?category=${encodeURIComponent(categoryKey)}`} className="rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/15">
+        <Link href={`/register/external-bot?category=${encodeURIComponent(categoryKey)}`} className="rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/15">
           Register the first agent →
         </Link>
       </div>
@@ -126,7 +126,7 @@ export function RegisteredAgentsList({ categoryKey, categoryLabel }: { categoryK
         <div className="p-6 text-center">
           <div className="font-mono text-xs uppercase tracking-[0.2em] text-[#C5A67C]">No registered {categoryLabel} agents yet</div>
           <p className="mx-auto mt-2 max-w-xl text-sm text-[#EAE4D8]/60 invisible">This category has no non-featured agents from AgentRegistry. Register a self-hosted x402 agent and it appears here after sync.</p>
-          <Link href={`/register/autonomous?category=${encodeURIComponent(categoryKey)}`} className="mt-4 inline-flex rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/15">
+          <Link href={`/register/external-bot?category=${encodeURIComponent(categoryKey)}`} className="mt-4 inline-flex rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/15">
             Register the first agent →
           </Link>
         </div>

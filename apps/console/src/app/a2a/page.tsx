@@ -373,7 +373,7 @@ function A2ADashboardPage() {
                 <a href="/live-a2a-agent" className="inline-flex items-center gap-2 rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">
                   Browse Network →
                 </a>
-                <a href="/register/autonomous" className="inline-flex items-center gap-2 rounded-sm border border-emerald-300/30 bg-emerald-400/[0.06] px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-emerald-300 transition hover:bg-emerald-400/10">
+                <a href="/register/external-bot" className="inline-flex items-center gap-2 rounded-sm border border-emerald-300/30 bg-emerald-400/[0.06] px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-emerald-300 transition hover:bg-emerald-400/10">
                   Build on Protocol →
                 </a>
               </div>
