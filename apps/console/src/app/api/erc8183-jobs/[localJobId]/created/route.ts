@@ -49,7 +49,7 @@ export async function POST(
     if (job.erc8183JobId) {
       return NextResponse.json({
         ok: true,
-        settlementMode: 'erc8183_escrow',
+        ...escrowRail(),
         localJobId: params.localJobId,
         erc8183JobId: job.erc8183JobId,
         createTxHash: job.createTxHash,
@@ -62,7 +62,7 @@ export async function POST(
 
     if (!createTxHash || typeof createTxHash !== 'string' || !createTxHash.startsWith('0x')) {
       return NextResponse.json(
-        { ok: false, error: 'invalid_tx_hash', message: 'Valid createTxHash (0x-prefixed) is required.' },
+        { ok: false, ...escrowRail(), error: 'invalid_tx_hash', message: 'Valid createTxHash (0x-prefixed) is required.' },
         { status: 400 },
       );
     }
@@ -71,7 +71,7 @@ export async function POST(
     const receipt = await readTransactionReceipt(createTxHash);
     if (!receipt) {
       return NextResponse.json(
-        { ok: false, error: 'tx_not_found', message: 'Transaction not found. It may not have been mined yet. Retry after a few seconds.' },
+        { ok: false, ...escrowRail(), error: 'tx_not_found', message: 'Transaction not found. It may not have been mined yet. Retry after a few seconds.' },
         { status: 202 },
       );
     }
@@ -79,7 +79,7 @@ export async function POST(
     // Step 2: confirm receipt success
     if (receipt.status !== 'success') {
       return NextResponse.json(
-        { ok: false, error: 'tx_reverted', message: 'createJob transaction reverted on-chain.' },
+        { ok: false, ...escrowRail(), error: 'tx_reverted', message: 'createJob transaction reverted on-chain.' },
         { status: 422 },
       );
     }
@@ -88,7 +88,7 @@ export async function POST(
     const decodedEvent = decodeJobCreatedFromReceipt(receipt);
     if (!decodedEvent) {
       return NextResponse.json(
-        { ok: false, error: 'job_created_event_not_found', message: 'Could not decode JobCreated event from receipt logs. Verify the tx was sent to the correct AgenticCommerce contract.' },
+        { ok: false, ...escrowRail(), error: 'job_created_event_not_found', message: 'Could not decode JobCreated event from receipt logs. Verify the tx was sent to the correct AgenticCommerce contract.' },
         { status: 422 },
       );
     }
@@ -102,6 +102,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
+          ...escrowRail(),
           error: 'event_client_mismatch',
           message: `Decoded JobCreated.client ${decodedClient} does not match local job client ${localClient}.`,
         },
@@ -115,6 +116,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
+          ...escrowRail(),
           error: 'event_provider_mismatch',
           message: `Decoded JobCreated.provider ${decodedProvider} does not match local job provider ${localProvider}.`,
         },
@@ -129,6 +131,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
+          ...escrowRail(),
           error: 'event_evaluator_mismatch',
           message: `Decoded JobCreated.evaluator ${decodedEval} does not match local job evaluator ${localEval} or zero address.`,
         },
@@ -141,6 +144,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
+          ...escrowRail(),
           error: 'event_expired_at_mismatch',
           message: `Decoded JobCreated.expiredAt ${decodedEvent.expiredAt} does not match local job expiredAt ${localExpiredAt}.`,
         },
@@ -154,6 +158,7 @@ export async function POST(
       return NextResponse.json(
         {
           ok: false,
+          ...escrowRail(),
           error: 'event_hook_mismatch',
           message: `Decoded JobCreated.hook ${decodedHook} does not match local job hook ${localHook}.`,
         },
@@ -170,7 +175,7 @@ export async function POST(
 
     return NextResponse.json({
       ok: true,
-      settlementMode: 'erc8183_escrow',
+      ...escrowRail(),
       localJobId: params.localJobId,
       erc8183JobId,
       erc8183Status: 'Open',
@@ -181,7 +186,7 @@ export async function POST(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      { ok: false, error: 'confirm_create_failed', message },
+      { ok: false, ...escrowRail(), error: 'confirm_create_failed', message },
       { status: 500 },
     );
   }
