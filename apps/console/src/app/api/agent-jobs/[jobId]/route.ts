@@ -4,16 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAgentJob, withAgentJobNamespace } from '@/lib/agent-jobs/store';
-
-function wrongRailEscrowError() {
-  return {
-    ok: false,
-    rail: 'escrow',
-    settlementMode: 'erc8183_escrow',
-    error: 'wrong_rail',
-    message: 'This is an ERC-8183 escrow job. Use /api/erc8183-jobs/* routes, not legacy x402 job routes.',
-  };
-}
+import { wrongRailEscrowError } from '@/lib/rails/responses';
 
 export async function GET(
   _req: NextRequest,
