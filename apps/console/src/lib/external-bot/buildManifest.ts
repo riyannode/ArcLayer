@@ -17,24 +17,29 @@ export type ManifestBuildInput = {
   endpoint: string;
   priceAtomic: string;
   payerWallet?: string;
+  /** Custom display name override — falls back to role.displayName */
+  roleDisplayName?: string;
+  /** Custom branded name override — falls back to role.defaultAgentId */
+  roleBrandedName?: string;
 };
 
 export function buildExternalBotManifest(input: ManifestBuildInput): AgentManifestV1 {
-  const { template, agentId, roleIndex, controller, endpoint, priceAtomic, payerWallet } = input;
+  const { template, agentId, roleIndex, controller, endpoint, priceAtomic, payerWallet, roleDisplayName, roleBrandedName } = input;
   const role = template.roles[roleIndex];
   if (!role) throw new Error(`Role index ${roleIndex} out of bounds for template ${template.id}`);
 
   const mode = manifestMode(template.recommendedMode);
   const now = new Date().toISOString();
   const allScopes = scopesForRole(role.scopes, template.recommendedMode);
+  const displayName = roleDisplayName || role.displayName;
 
   return {
     schema: 'arclayer.agent/v1',
     version: 1,
     agentId,
-    name: `${template.name} — ${role.displayName}`,
+    name: `${template.name} — ${displayName}`,
     role: role.botRole,
-    description: `${role.displayName}: ${role.capabilities.join(', ')}`,
+    description: `${displayName}: ${role.capabilities.join(', ')}`,
     controller,
     // Only set endpoint if it's a valid URL (backend rejects bare filenames)
     ...(endpoint?.startsWith('http') ? { endpoint } : {}),
@@ -45,7 +50,7 @@ export function buildExternalBotManifest(input: ManifestBuildInput): AgentManife
     roles: [
       {
         id: role.roleId,
-        name: role.displayName,
+        name: displayName,
         category: template.category,
         capabilities: role.capabilities,
         endpointPath: role.endpointPath,
