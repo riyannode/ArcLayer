@@ -49,6 +49,13 @@ function AgentCard({ agent }: { agent: PredictionAgentView }) {
           <span
             className={[
               'h-2.5 w-2.5 rounded-full',
+              agent.proofActive ? 'bg-sky-400 shadow-[0_0_14px_rgba(56,189,248,0.9)]' : 'bg-zinc-700',
+            ].join(' ')}
+            title={`bridge proof: ${agent.proof}`}
+          />
+          <span
+            className={[
+              'h-2.5 w-2.5 rounded-full',
               agent.activityActive ? 'animate-pulse bg-orange-400 shadow-[0_0_14px_rgba(251,146,60,0.9)]' : 'bg-zinc-700',
             ].join(' ')}
             title={`activity: ${agent.activity}`}
@@ -70,13 +77,15 @@ function AgentCard({ agent }: { agent: PredictionAgentView }) {
         <Row label="caps" value={agent.caps} />
         <Row label="event" value={agent.event} />
         <Row label="pulse" value={agent.activityActive ? agent.activity : 'idle'} />
+        <Row label="proof" value={agent.proofActive ? agent.proof : 'none'} />
+        <Row label="hash" value={agent.proofHash} />
         <Row label="seen" value={agent.seen} />
       </div>
     </article>
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: string }) {
   return (
     <div className="grid grid-cols-[44px_minmax(0,1fr)] gap-2">
       <span className="uppercase tracking-[0.16em] text-zinc-700">{label}</span>
