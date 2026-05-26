@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto';
+import { pbkdf2Sync, randomBytes } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -174,6 +174,11 @@ export async function requireApiKey(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+const API_KEY_HASH_ITERATIONS = 210_000;
+const API_KEY_HASH_KEYLEN = 32;
+const API_KEY_HASH_DIGEST = 'sha256';
+const API_KEY_HASH_PEPPER = process.env.A2A_API_KEY_PEPPER ?? '';
+
 function hashKey(raw: string): string {
-  return createHash('sha256').update(raw).digest('hex');
+  return pbkdf2Sync(raw, API_KEY_HASH_PEPPER, API_KEY_HASH_ITERATIONS, API_KEY_HASH_KEYLEN, API_KEY_HASH_DIGEST).toString('hex');
 }
