@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // In-memory fake of a2a_api_keys table
@@ -41,14 +42,23 @@ const fakeSupabase = {
       }),
     }),
     update: (patch: Partial<Row>) => ({
-      eq: (col: string, val: string) => ({
-        eq: (col2: string, val2: string) => {
-          const idx = rows.findIndex((r) => r.id === val && r.agent_id === val2);
+      eq: (col: string, val: string) => {
+        const applyById = () => {
+          const idx = rows.findIndex((r) => r.id === val);
           if (idx >= 0) Object.assign(rows[idx], patch);
-          return Promise.resolve({ error: null });
-        },
-        then: (fn: (v: unknown) => void) => fn({ data: null, error: null }),
-      }),
+        };
+        return {
+          eq: (col2: string, val2: string) => {
+            const idx = rows.findIndex((r) => r.id === val && r.agent_id === val2);
+            if (idx >= 0) Object.assign(rows[idx], patch);
+            return Promise.resolve({ error: null });
+          },
+          then: (fn: (v: unknown) => void) => {
+            applyById();
+            fn({ data: null, error: null });
+          },
+        };
+      },
     }),
   }),
 };
@@ -74,6 +84,13 @@ describe('a2a/auth', () => {
     expect(result.id).toBe('key-1');
   });
 
+  it('createApiKey stores a versioned scrypt hash, not a raw SHA-256 digest', async () => {
+    const result = await createApiKey({ agentId: 'test-agent', createdBy: '0xabc' });
+    expect(result.ok).toBe(true);
+    expect(rows[0]?.key_hash).toMatch(/^scrypt_v1\$32768\$8\$1\$/);
+    expect(rows[0]?.key_hash).not.toHaveLength(64);
+  });
+
   it('verifyApiKey returns key metadata for valid key', async () => {
     const created = await createApiKey({ agentId: 'agent-1', createdBy: '0xabc' });
     if (!created.ok) throw new Error('create failed');
@@ -82,6 +99,28 @@ describe('a2a/auth', () => {
     expect(verified).not.toBeNull();
     expect(verified?.agentId).toBe('agent-1');
     expect(verified?.scopes).toContain('jobs:claim');
+  });
+
+  it('verifyApiKey accepts legacy SHA-256 rows and upgrades them to scrypt', async () => {
+    const legacyRaw = 'ak_legacy_key_for_test';
+    const legacyHash = createHash('sha256').update(legacyRaw).digest('hex');
+    rows.push({
+      id: 'legacy-key-1',
+      agent_id: 'legacy-agent',
+      key_hash: legacyHash,
+      key_prefix: legacyRaw.slice(0, 11),
+      label: null,
+      scopes: ['jobs:claim'],
+      created_by: '0xabc',
+      last_used_at: null,
+      revoked_at: null,
+    });
+
+    const verified = await verifyApiKey(legacyRaw);
+    expect(verified).not.toBeNull();
+    expect(verified?.agentId).toBe('legacy-agent');
+    expect(rows[0]?.key_hash).toMatch(/^scrypt_v1\$32768\$8\$1\$/);
+    expect(rows[0]?.key_hash).not.toBe(legacyHash);
   });
 
   it('verifyApiKey returns null for invalid key', async () => {
