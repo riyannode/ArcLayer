@@ -179,41 +179,31 @@ describe('rail separation', () => {
 
   describe('Bridge payload_hash_mismatch', () => {
     it('rejects when client hash does not match server hash', () => {
-      const payload = { sessionId: 's1', role: 'analyzer' };
-      const serverHash = 'abc';
-      const clientHash = 'def';
+      const serverHash: string = 'abc';
+      const clientHash: string = 'def';
 
-      if (clientHash && clientHash !== serverHash) {
-        // This is the P0.7 logic from events/route.ts
-        const error = {
-          ok: false as const,
-          rail: 'bridge' as const,
-          settlementMode: 'x402_offchain' as const,
-          error: 'payload_hash_mismatch' as const,
-          expectedPayloadHash: serverHash,
-          receivedPayloadHash: clientHash,
-        };
-        expect(error.error).toBe('payload_hash_mismatch');
-        expect(error.expectedPayloadHash).toBe('abc');
-        expect(error.receivedPayloadHash).toBe('def');
-      } else {
-        // Should not reach here
-        expect(true).toBe(false);
-      }
+      const mismatch = clientHash !== serverHash;
+      expect(mismatch).toBe(true);
+
+      const error = {
+        ok: false as const,
+        rail: 'bridge' as const,
+        settlementMode: 'x402_offchain' as const,
+        error: 'payload_hash_mismatch' as const,
+        expectedPayloadHash: serverHash,
+        receivedPayloadHash: clientHash,
+      };
+      expect(error.error).toBe('payload_hash_mismatch');
+      expect(error.expectedPayloadHash).toBe('abc');
+      expect(error.receivedPayloadHash).toBe('def');
     });
 
     it('accepts when client hash matches server hash', () => {
-      const payload = { sessionId: 's1', role: 'evaluator' };
-      const serverHash = 'abc';
-      const clientHash = 'abc';
+      const serverHash: string = 'abc';
+      const clientHash: string = 'abc';
 
-      if (clientHash && clientHash !== serverHash) {
-        // Should not reach here
-        expect(true).toBe(false);
-      } else {
-        // Accept — hashes match
-        expect(serverHash).toBe(clientHash);
-      }
+      const match = clientHash === serverHash;
+      expect(match).toBe(true);
     });
   });
 
