@@ -11,6 +11,7 @@ export type PredictionAgentView = {
   seen: string;
   status: PredictionAgentStatus;
   activity: string;
+  activityHref: string;
   activitySeen: string;
   activityActive: boolean;
   proof: string;
@@ -32,6 +33,7 @@ export type PredictionAgentInput = {
   seen?: unknown;
   status?: unknown;
   activity?: unknown;
+  activityHref?: unknown;
   activitySeen?: unknown;
   activityActive?: unknown;
   proof?: unknown;
@@ -110,6 +112,7 @@ export function normalizePredictionAgent(input: PredictionAgentInput): Predictio
     seen: text(input.seen, 'offline'),
     status: normalizeStatus(input.status),
     activity: text(input.activity, 'idle'),
+    activityHref: text(input.activityHref, ''),
     activitySeen: text(input.activitySeen, '—'),
     activityActive: bool(input.activityActive),
     proof: text(input.proof, 'no proof'),
