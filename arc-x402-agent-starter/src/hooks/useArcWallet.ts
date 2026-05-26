@@ -1,6 +1,15 @@
 "use client";
-import { useState } from "react";
+
+import { useAppKit } from '@reown/appkit/react';
+import { useAccount } from 'wagmi';
+
 export function useArcWallet() {
-  const [address, setAddress] = useState<string>();
-  return { address, connectMock: () => setAddress("0x1234...abcd") };
+  const { open } = useAppKit();
+  const { address, isConnected } = useAccount();
+
+  return {
+    address,
+    isConnected,
+    openConnect: () => open(),
+  };
 }

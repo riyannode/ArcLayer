@@ -38,3 +38,14 @@ Mulai dari `src/hooks/useAgentRegistry.ts` dan `src/hooks/useJobFlow.ts`.
 
 ## ArcOSS submission note
 Repo ini terpisah dari ArcLayer utama dan fokus sebagai starter kit.
+
+
+## Demo mode vs real mode
+- Demo mode: API gates accept any `X-PAYMENT` payload and return demo tx hashes/IDs so builders can run the starter without deployed contracts.
+- Real mode: keep the same primitives but wire API verification to x402 settlement backend and replace demo register/create-job hooks with real `writeContract` calls.
+
+## Build instructions
+```bash
+pnpm install
+pnpm build
+```
