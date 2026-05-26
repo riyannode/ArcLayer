@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { insertBridgeEvent, listBridgeEvents, stablePayloadHash, type BridgeEventInput } from '@/lib/agent-bridge/store';
 import { requireRegisteredExternalAgent } from '@/lib/a2a/external-registry';
+import { bridgeRail } from '@/lib/rails/responses';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -14,7 +15,7 @@ function isValidRole(role: string) {
 }
 
 function bad(error: string, status = 400, extra?: Record<string, unknown>) {
-  return NextResponse.json({ ok: false, error, ...(extra ?? {}) }, { status });
+  return NextResponse.json({ ok: false, ...bridgeRail(), error, ...(extra ?? {}) }, { status });
 }
 
 export async function POST(req: NextRequest) {
@@ -77,7 +78,7 @@ export async function POST(req: NextRequest) {
       jobId: typeof body.jobId === 'string' ? body.jobId.trim() : null,
       category: typeof body.category === 'string' ? body.category.trim() : null,
     });
-    return NextResponse.json({ ok: true, eventId: event.id, deduped: event.deduped });
+    return NextResponse.json({ ok: true, ...bridgeRail(), eventId: event.id, deduped: event.deduped });
   } catch (err) {
     return bad('insert_failed', 500, { message: err instanceof Error ? err.message : 'unknown' });
   }
@@ -107,7 +108,7 @@ export async function GET(req: NextRequest) {
       category,
       limit,
     });
-    return NextResponse.json({ ok: true, events });
+    return NextResponse.json({ ok: true, ...bridgeRail(), events });
   } catch (err) {
     return bad('query_failed', 500, { message: err instanceof Error ? err.message : 'unknown' });
   }
