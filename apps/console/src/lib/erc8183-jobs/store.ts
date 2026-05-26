@@ -297,6 +297,56 @@ export async function attachErc8183CompleteTx(input: {
   if (error) throw new Error(`attachErc8183CompleteTx failed: ${error.message}`);
 }
 
+/**
+ * attachErc8183PreparedSubmit — persist result/proof/deliverable hash
+ * before the submit tx is signed and broadcast.
+ *
+ * This ensures the local mirror has all proof data before on-chain settlement.
+ */
+export async function attachErc8183PreparedSubmit(input: {
+  localJobId: string;
+  resultPayload: Record<string, unknown>;
+  resultPayloadHash: string;
+  proofPayload: Record<string, unknown>;
+  proofPayloadHash: string;
+  deliverableHash: string;
+}): Promise<void> {
+  const db = ensureDb();
+  const { error } = await db
+    .from('agent_jobs')
+    .update({
+      result_payload: input.resultPayload,
+      result_payload_hash: input.resultPayloadHash,
+      proof_payload: input.proofPayload,
+      proof_payload_hash: input.proofPayloadHash,
+      deliverable_hash: input.deliverableHash,
+    })
+    .eq('job_id', input.localJobId)
+    .eq('settlement_mode', 'erc8183_escrow');
+
+  if (error) throw new Error(`attachErc8183PreparedSubmit failed: ${error.message}`);
+}
+
+/**
+ * attachErc8183PreparedComplete — persist reasonHash before the
+ * complete tx is signed and broadcast.
+ */
+export async function attachErc8183PreparedComplete(input: {
+  localJobId: string;
+  reasonHash: string;
+}): Promise<void> {
+  const db = ensureDb();
+  const { error } = await db
+    .from('agent_jobs')
+    .update({
+      reason_hash: input.reasonHash,
+    })
+    .eq('job_id', input.localJobId)
+    .eq('settlement_mode', 'erc8183_escrow');
+
+  if (error) throw new Error(`attachErc8183PreparedComplete failed: ${error.message}`);
+}
+
 // ─── Off-chain worker metadata ───────────────────────────────────────────────
 
 /**

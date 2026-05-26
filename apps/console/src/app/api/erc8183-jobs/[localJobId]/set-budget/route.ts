@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { CONTRACTS } from '@arclayer/sdk';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { getErc8183JobByLocalId } from '@/lib/erc8183-jobs/store';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
 
@@ -8,6 +9,8 @@ export async function POST(
   { params }: { params: { localJobId: string } },
 ) {
   try {
+    const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_CONFIRM);
+    if (auth.error) return auth.error;
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
       return NextResponse.json(

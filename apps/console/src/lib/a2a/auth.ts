@@ -12,6 +12,14 @@ export const API_KEY_SCOPES = {
   JOBS_SETTLE: 'jobs:settle',
   AGENT_BRIDGE_WRITE: 'agent_bridge:write',
   AGENT_BRIDGE_RECEIPT: 'agent_bridge:receipt',
+  // ERC-8183 escrow job scopes
+  ERC8183_CREATE: 'erc8183:create',
+  ERC8183_CONFIRM: 'erc8183:confirm',
+  ERC8183_CLAIM: 'erc8183:claim',
+  ERC8183_RUNNING: 'erc8183:running',
+  ERC8183_SUBMIT: 'erc8183:submit',
+  ERC8183_COMPLETE: 'erc8183:complete',
+  ERC8183_TX: 'erc8183:tx',
 } as const;
 
 // ─── Key generation ───────────────────────────────────────────────────────────

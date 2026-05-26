@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import {
   getErc8183JobByLocalId,
   markErc8183JobRunning,
@@ -8,19 +9,15 @@ import {
  * POST /api/erc8183-jobs/[localJobId]/running
  *
  * Off-chain worker metadata transition for ERC-8183 escrow jobs.
- *
- * Allowed only when:
- *   - status = 'claimed'
- *   - worker_id matches the caller
- *
- * Sets status = 'running', started_at.
- * No smart contract call — on-chain escrow state is unchanged.
+ * Requires erc8183:running scope.
  */
 export async function POST(
   req: NextRequest,
   { params }: { params: { localJobId: string } },
 ) {
   try {
+    const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_RUNNING);
+    if (auth.error) return auth.error;
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
       return NextResponse.json(
