@@ -36,17 +36,35 @@ const ARC_RPC_URL = required('ARC_RPC_URL');
 const JOB_BUDGET_ATOMIC = process.env.JOB_BUDGET_ATOMIC || '1000000';
 const JOB_EXPIRY_SECONDS = parseInt(process.env.JOB_EXPIRY_SECONDS || '86400', 10);
 const JOB_CREATE_INTERVAL_MS = parseInt(process.env.JOB_CREATE_INTERVAL_MS || '60000', 10);
+const MAX_JOBS_PER_RUN = parseInt(process.env.MAX_JOBS_PER_RUN || '0', 10); // 0 = unlimited
+const MAX_OPEN_JOBS = parseInt(process.env.MAX_OPEN_JOBS || '5', 10);
 const AUTONOMOUS_TX = process.env.AUTONOMOUS_TX === 'true';
 
 const signer = createSigner({ privateKey: CLIENT_PK, rpcUrl: ARC_RPC_URL });
 
 let jobCounter = 0;
+let jobsCreatedThisRun = 0;
 
 async function createAndFundJob() {
   jobCounter++;
+  jobsCreatedThisRun++;
   console.log(`\n[${new Date().toISOString()}] Job #${jobCounter}: creating...`);
 
+  // Safety: MAX_JOBS_PER_RUN
+  if (MAX_JOBS_PER_RUN > 0 && jobsCreatedThisRun > MAX_JOBS_PER_RUN) {
+    console.log(`   Reached MAX_JOBS_PER_RUN (${MAX_JOBS_PER_RUN}) — stopping`);
+    process.exit(0);
+  }
+
   try {
+    // Safety: check existing open jobs
+    const existing = await api.listJobs({ status: 'created', limit: '100', buyerAgentId: BUYER_AGENT_ID });
+    const existingList = Array.isArray(existing) ? existing : existing?.jobs || existing?.data || [];
+    const openCount = existingList.filter((j) => !j.erc8183Status || j.erc8183Status === 'Open' || j.erc8183Status === 'null').length;
+    if (openCount >= MAX_OPEN_JOBS) {
+      console.log(`   Too many open jobs (${openCount} >= ${MAX_OPEN_JOBS}) — skipping this cycle`);
+      return;
+    }
     const balance = await signer.getUsdcBalance();
     const budgetAtomic = BigInt(JOB_BUDGET_ATOMIC);
     console.log(`   USDC balance: ${balance}, budget: ${budgetAtomic}`);
@@ -78,38 +96,38 @@ async function createAndFundJob() {
       const confirmed = await api.confirmCreateTx(localJobId, createResult.hash);
       console.log(`   createJob confirmed! erc8183_job_id: ${confirmed.erc8183JobId}`);
 
-      // 3. Poll until provider sets budget (status = Funded)
+      // 3. Poll until provider sets budget (job still Open, but erc8183JobId exists + on-chain budget set)
+      // 3. Poll fund endpoint until provider sets budget
       console.log(`   Waiting for provider to setBudget...`);
       const MAX_POLL = 60;
-      let funded = false;
+      let fundTxInstructions = null;
       for (let i = 0; i < MAX_POLL; i++) {
         await sleep(2000);
         try {
-          const job = await api.getJob(localJobId);
-          if (job.erc8183_status === 'Funded') {
-            funded = true;
+          const result = await api.fund(localJobId);
+          if (result.txs && result.txs.length >= 2) {
+            fundTxInstructions = result;
             break;
           }
-        } catch {}
+        } catch (err) {
+          // fund returns error if budget not set yet — keep polling
+          if (i % 5 === 0) console.log(`   Waiting... (${i * 2}s)`);
+        }
       }
 
-      if (!funded) {
-        console.warn(`   Provision timeout — job not funded by provider`);
+      if (!fundTxInstructions) {
+        console.warn(`   Timeout — provider didn't set budget`);
         return;
       }
-      console.log(`   Provider set budget! Job is Funded.`);
+      console.log(`   Provider set budget! Proceeding to fund.`);
 
-      // 4. Approve USDC + fund
-      console.log(`   Getting fund tx instructions...`);
-      const fundTx = await api.fund(localJobId);
-
-      console.log(`   Signing approve tx...`);
-      const approveResult = await signer.sendTx(fundTx.txs[0]);
+      // 4. Approve USDC + fund — use fundTxInstructions from poll
+      const approveResult = await signer.sendTx(fundTxInstructions.txs[0]);
       console.log(`   approve tx: ${approveResult.hash}`);
       await sleep(2000);
 
       console.log(`   Signing fund tx...`);
-      const fundResult = await signer.sendTx(fundTx.txs[1]);
+      const fundResult = await signer.sendTx(fundTxInstructions.txs[1]);
       console.log(`   fund tx: ${fundResult.hash}`);
       await sleep(2000);
 
