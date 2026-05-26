@@ -268,6 +268,31 @@ async function countBridgeRoles(sessionId: string) {
   return new Set(events.map((event) => event.role).filter(Boolean)).size;
 }
 
+/**
+ * List all distinct bridge session IDs with event counts, newest first.
+ */
+export async function listBridgeSessions(limit = 20): Promise<{ sessionId: string; eventCount: number }[]> {
+  const supabase = getSupabaseAdmin();
+  // Use raw count-grouped query via Supabase select with count
+  const { data, error } = await supabase
+    .from('agent_bridge_events')
+    .select('session_id')
+    .order('created_at', { ascending: false })
+    .limit(1000);
+
+  if (error) throw new Error(error.message);
+
+  // Group by session_id client-side
+  const sessionMap = new Map<string, number>();
+  for (const row of data ?? []) {
+    sessionMap.set(row.session_id, (sessionMap.get(row.session_id) ?? 0) + 1);
+  }
+
+  return Array.from(sessionMap.entries())
+    .slice(0, limit)
+    .map(([sessionId, eventCount]) => ({ sessionId, eventCount }));
+}
+
 export async function latestBridgeSession(): Promise<BridgeSession | null> {
   const events = await listBridgeEvents({ limit: 100 });
   const latestSessionId = events[0]?.session_id;
