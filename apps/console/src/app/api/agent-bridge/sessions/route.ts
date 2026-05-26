@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      { ok: false, error: 'sessions_failed', message },
+      { ok: false, ...bridgeRail(), error: 'sessions_failed', message },
       { status: 500 },
     );
   }
