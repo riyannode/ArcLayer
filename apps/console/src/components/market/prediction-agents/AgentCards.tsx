@@ -85,7 +85,7 @@ function AgentCard({ agent }: { agent: PredictionAgentView }) {
   );
 }
 
-function Row({ label, value }: { label: string }) {
+function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid grid-cols-[44px_minmax(0,1fr)] gap-2">
       <span className="uppercase tracking-[0.16em] text-zinc-700">{label}</span>
