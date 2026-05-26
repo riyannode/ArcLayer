@@ -14,6 +14,8 @@ export type PredictionAgentView = {
   activityHref: string;
   activitySeen: string;
   activityActive: boolean;
+  tx: string;
+  txHref: string;
   proof: string;
   proofHash: string;
   proofHashHref: string;
@@ -40,6 +42,8 @@ export type PredictionAgentInput = {
   activityHref?: unknown;
   activitySeen?: unknown;
   activityActive?: unknown;
+  tx?: unknown;
+  txHref?: unknown;
   proof?: unknown;
   proofHash?: unknown;
   proofHashHref?: unknown;
@@ -123,6 +127,8 @@ export function normalizePredictionAgent(input: PredictionAgentInput): Predictio
     activityHref: text(input.activityHref, ''),
     activitySeen: text(input.activitySeen, '—'),
     activityActive: bool(input.activityActive),
+    tx: text(input.tx, '—'),
+    txHref: text(input.txHref, ''),
     proof: text(input.proof, 'no proof'),
     proofHash: text(input.proofHash, '—'),
     proofHashHref: text(input.proofHashHref, ''),
