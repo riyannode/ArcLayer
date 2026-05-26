@@ -20,7 +20,7 @@ export async function getManifest(agentId: string): Promise<StoredAgentManifest 
 
   const parsed = parseManifest(data.manifest);
   if (!parsed.ok) {
-    console.warn(`[manifest.store] stored manifest for ${agentId} is invalid:`, parsed.error);
+    console.warn('[manifest.store] stored manifest for %s is invalid:', agentId, parsed.error);
     return null;
   }
 
