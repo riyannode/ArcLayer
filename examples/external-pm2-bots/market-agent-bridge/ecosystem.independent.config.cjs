@@ -51,6 +51,17 @@ module.exports = {
         COMMON_ENV_FILE: ".env.common",
         RUN_FOREVER: "true"
       }
+    },
+    {
+      name: "prediction-market-heartbeat",
+      script: "../prediction-market-heartbeat.mjs",
+      cwd: __dirname,
+      instances: 1,
+      exec_mode: "fork",
+      env: {
+        A2A_LIVE_EVENTS_TOKEN: process.env.A2A_LIVE_EVENTS_TOKEN || "",
+        ARCLAYER_WEB_ORIGIN: process.env.ARCLAYER_WEB_ORIGIN || "https://arclayers.xyz"
+      }
     }
   ]
 };
