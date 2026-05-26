@@ -303,18 +303,23 @@ async function safePostLiveEvent(eventType, details = {}) {
       reasoning: details.reasoning || 'executor external_trace x402 autopay'
     }
   };
-  const res = await fetch(`${BASE_URL}/api/a2a/live-events`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${A2A_LIVE_EVENTS_TOKEN}`, 'content-type': 'application/json', accept: 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.ok === false) {
-    const message = `safePostLiveEvent failed: ${res.status} ${data.error || data.message || ''}`.trim();
-    console.error(message);
-    return { ok: false, status: res.status, error: data.error || 'live_event_failed', message, response: data };
+  try {
+    const res = await fetch(`${BASE_URL}/api/a2a/live-events`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${A2A_LIVE_EVENTS_TOKEN}`, 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      const message = `safePostLiveEvent failed: ${res.status} ${data.error || data.message || ''}`.trim();
+      console.error(message);
+      return { ok: false, status: res.status, error: data.error || 'live_event_failed', message, response: data };
+    }
+    return data;
+  } catch (err) {
+    console.error(`[safePostLiveEvent] network error posting ${eventType}: ${err.message}`);
+    return { ok: false, error: 'network_error', message: err.message };
   }
-  return data;
 }
 
 module.exports = { BASE_URL, AGENT_ID, AGENT_CATEGORY, sha256, currentSessionId, getJson, hasRoleContentEvent, hasExecutorX402EventOnly, hasExecutorX402Proof, latestSession, postEvent, postReceipt, safePostLiveEvent };
