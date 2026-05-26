@@ -312,7 +312,15 @@ export default function RegisterAutonomousPage() {
   const normalizedAgentName = normalizeAgentName(form.name);
   const generatedMetadataURI = buildPendingManifestURI(address, normalizedAgentName);
   const effectiveMetadataURI = form.metadataURI.trim() || generatedMetadataURI;
-  const endpointLooksReady = /^https:\/\//.test(form.endpoint.trim()) && !form.endpoint.includes('your-agent.example.com');
+  const endpointLooksReady = useMemo(() => {
+    const endpoint = form.endpoint.trim();
+    try {
+      const parsed = new URL(endpoint);
+      return parsed.protocol === 'https:' && parsed.hostname !== 'your-agent.example.com';
+    } catch {
+      return false;
+    }
+  }, [form.endpoint]);
   const enabledRoles = useMemo(() => roles.filter((role) => role.enabled).map(normalizeRole), [roles]);
   const roleValidationError = useMemo(() => validateRoles(roles, form.endpoint), [roles, form.endpoint]);
   const primaryRole = enabledRoles[0] ?? normalizeRole(roles[0]);
