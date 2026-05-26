@@ -28,8 +28,29 @@ async function handler(req: NextRequest) {
     }
   }
 
-  const events = requestedScope === 'summary' ? latest?.events?.slice(-5) ?? [] : await listBridgeEvents({ sessionId, limit: 100 });
-  const receipts = requestedScope === 'full_events' || requestedScope === 'receipts' || requestedScope === 'external_trace' ? await listBridgeReceipts(sessionId) : latest?.receipts ?? [];
+  const isLatestSession = latest?.sessionId === sessionId;
+
+  // P0.8: Never use latest session data for a different requested sessionId
+  let sessionEvents: import('@/lib/agent-bridge/store').BridgeEventRow[] = [];
+  let sessionReceipts: import('@/lib/agent-bridge/store').BridgeReceiptRow[] = [];
+
+  if (requestedScope === 'summary') {
+    if (isLatestSession) {
+      sessionEvents = latest?.events?.slice(-5) ?? [];
+      sessionReceipts = latest?.receipts ?? [];
+    } else {
+      sessionEvents = (await listBridgeEvents({ sessionId, limit: 5 })).slice(-5);
+      sessionReceipts = await listBridgeReceipts(sessionId);
+    }
+  } else {
+    sessionEvents = await listBridgeEvents({ sessionId, limit: 100 });
+    if (['full_events', 'receipts', 'external_trace'].includes(requestedScope)) {
+      sessionReceipts = await listBridgeReceipts(sessionId);
+    }
+  }
+
+  const events = sessionEvents;
+  const receipts = ['summary', 'full_events', 'receipts', 'external_trace'].includes(requestedScope) ? sessionReceipts : [];
   const payloadHash = stablePayloadHash({ sessionId, scope: requestedScope, eventCount: events.length, receiptCount: receipts.length });
 
   const response = NextResponse.json({
@@ -38,7 +59,7 @@ async function handler(req: NextRequest) {
     scope: requestedScope,
     role,
     sessionId,
-    summary: latest && latest.sessionId === sessionId ? latest : { sessionId, events: events.slice(-5), receipts },
+    summary: isLatestSession && latest ? latest : { sessionId, events: events.slice(-5), receipts },
     events: requestedScope === 'summary' ? undefined : events,
     receipts,
     payloadHash,
