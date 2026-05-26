@@ -6,15 +6,22 @@ import { bridgeRail } from '@/lib/rails/responses';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-type BridgeScope = 'summary' | 'full_events' | 'receipts' | 'payload' | 'external_trace';
-const SCOPES = new Set<BridgeScope>(['summary', 'full_events', 'receipts', 'payload', 'external_trace']);
+type BridgeScope = 'summary' | 'full_events' | 'receipts' | 'payload' | 'external_trace' | 'market_data';
+const SCOPES = new Set<BridgeScope>(['summary', 'full_events', 'receipts', 'payload', 'external_trace', 'market_data']);
 
 async function handler(req: NextRequest) {
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
-  const requestedScope = typeof body.scope === 'string' && SCOPES.has(body.scope as BridgeScope) ? (body.scope as BridgeScope) : 'summary';
+  const requestedScopeRaw = typeof body.scope === 'string' ? body.scope.trim() : '';
+  if (!SCOPES.has(requestedScopeRaw as BridgeScope)) {
+    return NextResponse.json(
+      { ok: false, error: 'invalid_scope', message: 'Scope must be summary, full_events, receipts, payload, external_trace, or market_data.' },
+      { status: 400 },
+    );
+  }
+  const requestedScope = requestedScopeRaw as BridgeScope;
   const role = typeof body.role === 'string' ? body.role.trim().toLowerCase() : '';
-  if (!['analyzer', 'evaluator', 'executor'].includes(role)) {
-    return NextResponse.json({ ok: false, error: 'invalid_role', message: 'Role must be analyzer, evaluator, or executor.' }, { status: 400 });
+  if (!['oracle', 'analyzer', 'evaluator', 'executor'].includes(role)) {
+    return NextResponse.json({ ok: false, error: 'invalid_role', message: 'Role must be oracle, analyzer, evaluator, or executor.' }, { status: 400 });
   }
   const latest = await latestBridgeSession();
   const hasInputSession = typeof body.sessionId === 'string' && body.sessionId.trim().length > 0;
@@ -45,13 +52,13 @@ async function handler(req: NextRequest) {
     }
   } else {
     sessionEvents = await listBridgeEvents({ sessionId, limit: 100 });
-    if (['full_events', 'receipts', 'external_trace'].includes(requestedScope)) {
+    if (['full_events', 'receipts', 'external_trace', 'market_data'].includes(requestedScope)) {
       sessionReceipts = await listBridgeReceipts(sessionId);
     }
   }
 
   const events = sessionEvents;
-  const receipts = ['summary', 'full_events', 'receipts', 'external_trace'].includes(requestedScope) ? sessionReceipts : [];
+  const receipts = ['summary', 'full_events', 'receipts', 'external_trace', 'market_data'].includes(requestedScope) ? sessionReceipts : [];
   const payloadHash = stablePayloadHash({ sessionId, scope: requestedScope, eventCount: events.length, receiptCount: receipts.length });
 
   const response = NextResponse.json({
