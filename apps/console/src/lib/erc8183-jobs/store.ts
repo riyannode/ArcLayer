@@ -173,6 +173,41 @@ export async function getErc8183JobByOnchainId(
   return mapRow(data);
 }
 
+/**
+ * List ERC-8183 escrow jobs — always filtered to settlement_mode='erc8183_escrow'.
+ */
+export async function listErc8183Jobs(filter: {
+  buyerAgentId?: string;
+  providerAgentId?: string;
+  workerId?: string;
+  status?: string;
+  erc8183Status?: Erc8183Status;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<Erc8183JobView[]> {
+  const db = ensureDb();
+  let query = db.from('agent_jobs').select('*');
+
+  query = query.eq('settlement_mode', 'erc8183_escrow');
+  if (filter.buyerAgentId) query = query.eq('buyer_agent_id', filter.buyerAgentId);
+  if (filter.providerAgentId) query = query.eq('provider_agent_id', filter.providerAgentId);
+  if (filter.workerId) query = query.eq('worker_id', filter.workerId);
+  if (filter.status) query = query.eq('status', filter.status);
+  if (filter.erc8183Status) query = query.eq('erc8183_status', filter.erc8183Status);
+
+  query = query.order('created_at', { ascending: false });
+
+  const lim = filter.limit ?? 50;
+  query = query.limit(lim);
+  if (filter.offset) {
+    query = query.range(filter.offset, filter.offset + lim - 1);
+  }
+
+  const { data, error } = await query;
+  if (error) throw new Error(`listErc8183Jobs failed: ${error.message}`);
+  return (data ?? []).map(mapRow);
+}
+
 // ─── Attach tx hashes ─────────────────────────────────────────────────────────
 
 export async function attachErc8183CreateTx(input: {
