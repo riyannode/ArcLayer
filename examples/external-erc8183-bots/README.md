@@ -131,8 +131,8 @@ The bots work independently:
 
 | Env Var | Default | Description |
 |---------|---------|-------------|
-| `MAX_JOBS_PER_RUN` | 0 (unlimited) | Client — stop after N total jobs |
-| `MAX_OPEN_JOBS` | 5 | Client — skip creation if too many open jobs |
+| `MAX_JOBS_PER_RUN` | 1 | Client | Stop after N total jobs. Set `0` only for unlimited recurring creation — dangerous for first run |
+| `MAX_OPEN_JOBS` | 5 | Client | Skip creation if too many open jobs |
 | `MAX_ACTIVE_JOBS` | 3 | Provider/evaluator — process at most N per cycle |
 | `MAX_BUDGET_ATOMIC` | — | Client — cap per-job budget (hardcoded in env) |
 | `AUTONOMOUS_TX` | true | Required — enables on-chain signing |
