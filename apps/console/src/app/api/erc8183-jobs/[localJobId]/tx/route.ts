@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { decodeEventLog, parseAbiItem } from 'viem';
+import type { Hex } from 'viem';
 import { getErc8183JobByLocalId } from '@/lib/erc8183-jobs/store';
 import {
   readTransactionReceipt,
@@ -11,20 +13,66 @@ import {
   attachErc8183FundTx,
   attachErc8183SubmitTx,
   attachErc8183CompleteTx,
-  updateErc8183Status,
 } from '@/lib/erc8183-jobs/store';
 import { assertErc8183Participant, isErc8183Admin } from '@/lib/erc8183-jobs/authz';
 import { escrowRail } from '@/lib/rails/responses';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { USDC_ABI, CONTRACTS } from '@/lib/contracts';
 import { ARC_TOKENS } from '@arclayer/sdk';
-import type { Hex } from 'viem';
 import type { Erc8183JobView } from '@/lib/erc8183-jobs/types';
 import type { ConfirmedReceipt } from '@/lib/erc8183-jobs/receipt';
 
 type TxType = 'set_budget' | 'approve' | 'fund' | 'submit' | 'complete';
 
 const VALID_TX_TYPES: TxType[] = ['set_budget', 'approve', 'fund', 'submit', 'complete'];
+
+// ── Approval event decoder ────────────────────────────────────────────────
+
+const APPROVAL_EVENT = parseAbiItem(
+  'event Approval(address indexed owner, address indexed spender, uint256 value)',
+);
+
+/**
+ * Check whether a transaction receipt contains a USDC Approval event
+ * matching the expected client → AgenticCommerce spender + minimum value.
+ */
+function hasRelevantApprovalLog(receipt: ConfirmedReceipt, job: Erc8183JobView): boolean {
+  const owner = (job.clientAddress ?? '').toLowerCase();
+  const spender = CONTRACTS.ERC8183_AGENTIC_COMMERCE.toLowerCase();
+  const required = BigInt(job.priceAtomic);
+
+  for (const log of receipt.logs ?? []) {
+    if (log.address.toLowerCase() !== ARC_TOKENS.USDC.toLowerCase()) continue;
+
+    try {
+      const decoded = decodeEventLog({
+        abi: [APPROVAL_EVENT],
+        data: log.data,
+        topics: log.topics,
+      });
+
+      if (decoded.eventName !== 'Approval') continue;
+
+      const args = decoded.args as {
+        owner?: `0x${string}`;
+        spender?: `0x${string}`;
+        value?: bigint;
+      };
+
+      if ((args.owner ?? '').toLowerCase() !== owner) continue;
+      if ((args.spender ?? '').toLowerCase() !== spender) continue;
+      if ((args.value ?? 0n) < required) continue;
+
+      return true;
+    } catch {
+      continue;
+    }
+  }
+
+  return false;
+}
+
+// ── On-chain job provenance helpers ───────────────────────────────────────
 
 /**
  * Validate that an on-chain job's fields match the local job record.
@@ -47,7 +95,7 @@ function validateOnchainJobMatch(
   const localClient = (local.clientAddress ?? '').toLowerCase();
   if (localClient && onchain.client.toLowerCase() !== localClient) {
     return NextResponse.json(
-      { ok: false, error: 'onchain_client_mismatch', txType, message: `On-chain job client ${onchain.client} does not match local job client ${localClient}.` },
+      { ok: false, ...escrowRail(), error: 'onchain_client_mismatch', txType, message: `On-chain job client ${onchain.client} does not match local job client ${localClient}.` },
       { status: 422 },
     );
   }
@@ -55,7 +103,7 @@ function validateOnchainJobMatch(
   const localProvider = (local.providerAddress ?? '').toLowerCase();
   if (localProvider && onchain.provider.toLowerCase() !== localProvider) {
     return NextResponse.json(
-      { ok: false, error: 'onchain_provider_mismatch', txType, message: `On-chain job provider ${onchain.provider} does not match local job provider ${localProvider}.` },
+      { ok: false, ...escrowRail(), error: 'onchain_provider_mismatch', txType, message: `On-chain job provider ${onchain.provider} does not match local job provider ${localProvider}.` },
       { status: 422 },
     );
   }
@@ -63,7 +111,7 @@ function validateOnchainJobMatch(
   const localEval = (local.evaluatorAddress ?? '').toLowerCase();
   if (localEval && onchain.evaluator.toLowerCase() !== localEval && onchain.evaluator.toLowerCase() !== zeroAddress) {
     return NextResponse.json(
-      { ok: false, error: 'onchain_evaluator_mismatch', txType, message: `On-chain job evaluator ${onchain.evaluator} does not match local job evaluator ${localEval} or zero address.` },
+      { ok: false, ...escrowRail(), error: 'onchain_evaluator_mismatch', txType, message: `On-chain job evaluator ${onchain.evaluator} does not match local job evaluator ${localEval} or zero address.` },
       { status: 422 },
     );
   }
@@ -71,7 +119,7 @@ function validateOnchainJobMatch(
   const localExpiredAt = local.expiredAtUnix ? BigInt(local.expiredAtUnix) : null;
   if (localExpiredAt !== null && onchain.expiredAt !== localExpiredAt) {
     return NextResponse.json(
-      { ok: false, error: 'onchain_expired_at_mismatch', txType, message: `On-chain job expiredAt ${onchain.expiredAt} does not match local job expiredAt ${localExpiredAt}.` },
+      { ok: false, ...escrowRail(), error: 'onchain_expired_at_mismatch', txType, message: `On-chain job expiredAt ${onchain.expiredAt} does not match local job expiredAt ${localExpiredAt}.` },
       { status: 422 },
     );
   }
@@ -79,7 +127,7 @@ function validateOnchainJobMatch(
   const localHook = (local.hookAddress ?? zeroAddress).toLowerCase();
   if (onchain.hook.toLowerCase() !== localHook) {
     return NextResponse.json(
-      { ok: false, error: 'onchain_hook_mismatch', txType, message: `On-chain job hook ${onchain.hook} does not match local job hook ${localHook}.` },
+      { ok: false, ...escrowRail(), error: 'onchain_hook_mismatch', txType, message: `On-chain job hook ${onchain.hook} does not match local job hook ${localHook}.` },
       { status: 422 },
     );
   }
@@ -100,6 +148,8 @@ function validateOnchainJobMatch(
  *   4. Update erc8183_status from on-chain state (not blind txType mapping)
  *
  * For set_budget and approve: on-chain status doesn't change, just store tx hash.
+ *
+ * All responses include rail='escrow' and settlementMode='erc8183_escrow'.
  */
 export async function POST(
   req: NextRequest,
@@ -111,7 +161,7 @@ export async function POST(
     const job = await getErc8183JobByLocalId(params.localJobId);
     if (!job) {
       return NextResponse.json(
-        { ok: false, error: 'job_not_found', message: 'ERC-8183 job not found.' },
+        { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
         { status: 404 },
       );
     }
@@ -146,14 +196,14 @@ export async function POST(
 
     if (!txType || !VALID_TX_TYPES.includes(txType)) {
       return NextResponse.json(
-        { ok: false, error: 'invalid_tx_type', message: `tx_type must be one of: ${VALID_TX_TYPES.join(', ')}` },
+        { ok: false, ...escrowRail(), error: 'invalid_tx_type', message: `tx_type must be one of: ${VALID_TX_TYPES.join(', ')}` },
         { status: 400 },
       );
     }
 
     if (!txHash || typeof txHash !== 'string' || !txHash.startsWith('0x')) {
       return NextResponse.json(
-        { ok: false, error: 'invalid_tx_hash', message: 'Valid tx_hash (0x-prefixed) is required.' },
+        { ok: false, ...escrowRail(), error: 'invalid_tx_hash', message: 'Valid tx_hash (0x-prefixed) is required.' },
         { status: 400 },
       );
     }
@@ -162,7 +212,7 @@ export async function POST(
     const receipt = await readTransactionReceipt(txHash);
     if (!receipt) {
       return NextResponse.json(
-        { ok: false, error: 'tx_not_found', message: 'Transaction not found. It may still be mining. Retry after a few seconds.' },
+        { ok: false, ...escrowRail(), error: 'tx_not_found', message: 'Transaction not found. It may still be mining. Retry after a few seconds.' },
         { status: 202 },
       );
     }
@@ -170,7 +220,7 @@ export async function POST(
     // Step 2: confirm receipt success
     if (receipt.status !== 'success') {
       return NextResponse.json(
-        { ok: false, error: 'tx_reverted', message: `Transaction reverted on-chain.` },
+        { ok: false, ...escrowRail(), error: 'tx_reverted', message: 'Transaction reverted on-chain.' },
         { status: 422 },
       );
     }
@@ -216,7 +266,7 @@ export async function POST(
 
         return NextResponse.json({
           ok: true,
-          settlementMode: 'erc8183_escrow',
+          ...escrowRail(),
           localJobId: params.localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'set_budget',
@@ -228,27 +278,60 @@ export async function POST(
       }
 
       case 'approve': {
-        // Verify USDC allowance was granted after the approve tx
-        const clientAddress = job.clientAddress;
-        let allowanceOk = false;
-        let actualAllowance = BigInt(0);
-        if (clientAddress) {
-          try {
-            const pc = getArcPublicClient();
-            actualAllowance = await pc.readContract({
-              address: ARC_TOKENS.USDC,
-              abi: USDC_ABI,
-              functionName: 'allowance',
-              args: [clientAddress as Hex, CONTRACTS.ERC8183_AGENTIC_COMMERCE],
-            }) as bigint;
-            allowanceOk = actualAllowance >= BigInt(job.priceAtomic);
-          } catch {
-            // If allowance check fails, still allow — the tx receipt proves approval
-            allowanceOk = true;
-          }
+        // 1. Receipt must contain a matching Approval(client → AgenticCommerce) log
+        if (!hasRelevantApprovalLog(receipt, job)) {
+          return NextResponse.json(
+            {
+              ok: false,
+              ...escrowRail(),
+              error: 'tx_not_relevant_to_job',
+              txType: 'approve',
+              message:
+                'Approve tx receipt does not contain a matching USDC Approval(client -> AgenticCommerce) event.',
+            },
+            { status: 422 },
+          );
         }
 
-        if (!allowanceOk) {
+        // 2. Client address must be on record
+        const clientAddress = job.clientAddress;
+        if (!clientAddress) {
+          return NextResponse.json(
+            {
+              ok: false,
+              ...escrowRail(),
+              error: 'missing_client_address',
+              txType: 'approve',
+            },
+            { status: 422 },
+          );
+        }
+
+        // 3. On-chain allowance must be >= priceAtomic after the approve tx
+        let actualAllowance: bigint;
+        try {
+          const pc = getArcPublicClient();
+          actualAllowance = await pc.readContract({
+            address: ARC_TOKENS.USDC,
+            abi: USDC_ABI,
+            functionName: 'allowance',
+            args: [clientAddress as Hex, CONTRACTS.ERC8183_AGENTIC_COMMERCE],
+          }) as bigint;
+        } catch (err) {
+          return NextResponse.json(
+            {
+              ok: false,
+              ...escrowRail(),
+              error: 'allowance_check_failed',
+              txType: 'approve',
+              message:
+                err instanceof Error ? err.message : 'Failed to verify USDC allowance after approve tx.',
+            },
+            { status: 503 },
+          );
+        }
+
+        if (actualAllowance < BigInt(job.priceAtomic)) {
           return NextResponse.json(
             {
               ok: false,
@@ -258,7 +341,6 @@ export async function POST(
               clientAddress,
               requiredAllowance: job.priceAtomic,
               actualAllowance: actualAllowance.toString(),
-              message: `USDC allowance after approve tx is insufficient. Required >= ${job.priceAtomic}, got ${actualAllowance}.`,
             },
             { status: 422 },
           );
@@ -271,13 +353,14 @@ export async function POST(
 
         return NextResponse.json({
           ok: true,
-          settlementMode: 'erc8183_escrow',
+          ...escrowRail(),
           localJobId: params.localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'approve',
           txHash,
           erc8183Status: job.erc8183Status ?? 'Open',
           blockNumber: Number(receipt.blockNumber),
+          allowance: actualAllowance.toString(),
           message: 'USDC approve confirmed. Proceed to sign and broadcast the fund tx.',
         });
       }
@@ -287,7 +370,7 @@ export async function POST(
         const onchainJob = await readOnchainJob(erc8183JobIdBigInt);
         if (!onchainJob) {
           return NextResponse.json(
-            { ok: false, error: 'onchain_job_not_found', message: 'Job not found on-chain after fund tx. The contract may have reverted differently than the receipt suggests.' },
+            { ok: false, ...escrowRail(), error: 'onchain_job_not_found', message: 'Job not found on-chain after fund tx. The contract may have reverted differently than the receipt suggests.' },
             { status: 422 },
           );
         }
@@ -305,7 +388,7 @@ export async function POST(
 
         return NextResponse.json({
           ok: true,
-          settlementMode: 'erc8183_escrow',
+          ...escrowRail(),
           localJobId: params.localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'fund',
@@ -321,7 +404,7 @@ export async function POST(
         const onchainJob = await readOnchainJob(erc8183JobIdBigInt);
         if (!onchainJob) {
           return NextResponse.json(
-            { ok: false, error: 'onchain_job_not_found', message: 'Job not found on-chain after submit tx.' },
+            { ok: false, ...escrowRail(), error: 'onchain_job_not_found', message: 'Job not found on-chain after submit tx.' },
             { status: 422 },
           );
         }
@@ -339,7 +422,7 @@ export async function POST(
 
         return NextResponse.json({
           ok: true,
-          settlementMode: 'erc8183_escrow',
+          ...escrowRail(),
           localJobId: params.localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'submit',
@@ -355,7 +438,7 @@ export async function POST(
         const onchainJob = await readOnchainJob(erc8183JobIdBigInt);
         if (!onchainJob) {
           return NextResponse.json(
-            { ok: false, error: 'onchain_job_not_found', message: 'Job not found on-chain after complete tx.' },
+            { ok: false, ...escrowRail(), error: 'onchain_job_not_found', message: 'Job not found on-chain after complete tx.' },
             { status: 422 },
           );
         }
@@ -372,7 +455,7 @@ export async function POST(
 
         return NextResponse.json({
           ok: true,
-          settlementMode: 'erc8183_escrow',
+          ...escrowRail(),
           localJobId: params.localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'complete',
@@ -387,7 +470,7 @@ export async function POST(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json(
-      { ok: false, error: 'tx_confirmation_failed', message },
+      { ok: false, ...escrowRail(), error: 'tx_confirmation_failed', message },
       { status: 500 },
     );
   }
