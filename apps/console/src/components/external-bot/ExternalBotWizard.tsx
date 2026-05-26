@@ -186,16 +186,31 @@ export default function ExternalBotWizard() {
 
   const handleRolesConfirm = useCallback(() => {
     if (!template) return;
-    // Validate slugs before confirming
+    // Validate slugs + display names before confirming
     const errors: Record<string, string> = {};
+    const seenSlugs = new Set<string>();
+
     for (const er of editableRoles) {
+      if (!er.displayName.trim()) {
+        errors[er.roleId] = 'Display Name is required.';
+        continue;
+      }
+
       if (!SLUG_REGEX.test(er.brandedName)) {
         errors[er.roleId] = `Slug "${er.brandedName}" invalid. Lowercase, 3-64 chars, hyphen allowed.`;
+        continue;
       }
+
+      if (seenSlugs.has(er.brandedName)) {
+        errors[er.roleId] = `Slug "${er.brandedName}" is duplicated. Use a unique runtime slug per role.`;
+        continue;
+      }
+
+      seenSlugs.add(er.brandedName);
     }
     setSlugErrors(errors);
     if (Object.keys(errors).length > 0) {
-      setError('Fix slug errors before proceeding.');
+      setError('Fix slug/name errors before proceeding.');
       return;
     }
     const rows: TxRow[] = editableRoles.map((r) => ({

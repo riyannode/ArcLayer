@@ -32,7 +32,6 @@ export function buildExternalBotManifest(input: ManifestBuildInput): AgentManife
   const now = new Date().toISOString();
   const allScopes = scopesForRole(role.scopes, template.recommendedMode);
   const displayName = roleDisplayName || role.displayName;
-  const brandedName = roleBrandedName || role.defaultAgentId;
 
   return {
     schema: 'arclayer.agent/v1',
