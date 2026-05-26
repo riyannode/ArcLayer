@@ -228,20 +228,20 @@ export async function revokeDerivA2aKeyById(keyId: string, agentId: string): Pro
   const supabase = getSupabaseAdmin();
   const now = new Date().toISOString();
 
-  const { error, count } = await supabase
+  const { data, error } = await supabase
     .from(TABLE)
     .update({ revoked_at: now })
     .eq('id', keyId)
     .eq('agent_id', agentId)
     .is('revoked_at', null)
-    .select('id', { count: 'exact', head: false });
+    .select('id');
 
   if (error) {
     console.error('[deriv-job-key] revokeById failed', error.message);
     return false;
   }
 
-  return (count ?? 0) > 0;
+  return (data?.length ?? 0) > 0;
 }
 
 /**
