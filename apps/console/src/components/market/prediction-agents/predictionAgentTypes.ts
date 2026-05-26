@@ -15,6 +15,7 @@ export type PredictionAgentView = {
   activityActive: boolean;
   proof: string;
   proofHash: string;
+  proofHashHref: string;
   proofSeen: string;
   proofActive: boolean;
 };
@@ -35,6 +36,7 @@ export type PredictionAgentInput = {
   activityActive?: unknown;
   proof?: unknown;
   proofHash?: unknown;
+  proofHashHref?: unknown;
   proofSeen?: unknown;
   proofActive?: unknown;
 };
@@ -112,6 +114,7 @@ export function normalizePredictionAgent(input: PredictionAgentInput): Predictio
     activityActive: bool(input.activityActive),
     proof: text(input.proof, 'no proof'),
     proofHash: text(input.proofHash, '—'),
+    proofHashHref: text(input.proofHashHref, ''),
     proofSeen: text(input.proofSeen, '—'),
     proofActive: bool(input.proofActive),
   } satisfies PredictionAgentView;
