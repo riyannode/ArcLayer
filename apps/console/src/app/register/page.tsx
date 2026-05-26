@@ -16,8 +16,8 @@ export default function RegisterChooserPage() {
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Card A — Guided External Bot (recommended) */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Card A — External Bot Onboarding (recommended) */}
           <Link
             href="/register/external-bot"
             className="group relative flex flex-col rounded border border-[#C5A67C]/30 bg-white/[0.03] p-6 transition-all hover:border-[#C5A67C]/60 hover:bg-white/[0.05]"
@@ -33,11 +33,10 @@ export default function RegisterChooserPage() {
                 <path d="M2 12l10 5 10-5" />
               </svg>
             </div>
-            <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Guided · One-Click</div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">Guided · External Runtime</div>
             <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">External Bot Onboarding</h2>
             <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
-              Choose a category and template, connect wallet, register identity, publish manifest,
-              generate API keys, and get a ready-to-run PM2 command. No manual API calls required.
+              Register external bots, publish manifest, generate API keys, export .env/PM2.
             </p>
 
             <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
@@ -68,7 +67,52 @@ export default function RegisterChooserPage() {
             </div>
           </Link>
 
-          {/* Card B — Advanced Manual Agent Registration */}
+          {/* Card B — Escrow Agent / Manual Job Agent */}
+          <Link
+            href="/register/manual"
+            className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-emerald-500/40 hover:bg-white/[0.04]"
+          >
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded border border-white/10 bg-black/40 text-emerald-400">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="2" y="7" width="20" height="14" rx="2" />
+                <path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16" />
+              </svg>
+            </div>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-emerald-400">Escrow · Manual Jobs</div>
+            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Escrow Agent</h2>
+            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
+              Register a worker/agent that can receive manual jobs and get paid from escrow.
+            </p>
+
+            <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">What you get</div>
+              <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-emerald-400">→</span>
+                  ERC-8004 on-chain identity
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-emerald-400">→</span>
+                  ERC-8183 escrow job readiness
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-emerald-400">→</span>
+                  Worker metadata + endpoint
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 text-emerald-400">→</span>
+                  Manual job claims and payouts
+                </li>
+              </ul>
+            </div>
+
+            <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-emerald-400 group-hover:text-[#EAE4D8]">
+              Open Escrow Agent Registration
+              <span className="transition-transform group-hover:translate-x-1">→</span>
+            </div>
+          </Link>
+
+          {/* Card C — Advanced Autonomous Agent */}
           <Link
             href="/register/autonomous"
             className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-cyan-500/40 hover:bg-white/[0.04]"
@@ -79,11 +123,10 @@ export default function RegisterChooserPage() {
                 <path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round" />
               </svg>
             </div>
-            <div className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">Advanced · Manual</div>
-            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Manual Agent Registration</h2>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">Advanced · Manifest</div>
+            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Advanced Autonomous Agent</h2>
             <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
-              Manually configure endpoint, roles, manifest, x402, and metadata.
-              For advanced users who want full control over every field.
+              Manually configure endpoint, roles, x402, manifest, and metadata.
             </p>
 
             <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
@@ -109,7 +152,7 @@ export default function RegisterChooserPage() {
             </div>
 
             <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-cyan-400 group-hover:text-[#EAE4D8]">
-              Open Manual Registration
+              Open Advanced Registration
               <span className="transition-transform group-hover:translate-x-1">→</span>
             </div>
           </Link>
