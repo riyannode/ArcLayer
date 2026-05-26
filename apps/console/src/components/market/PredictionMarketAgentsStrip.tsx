@@ -344,7 +344,7 @@ export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots
   return (
     <section className="space-y-4">
       <div className="flex justify-end">
-        <a href="/register/autonomous?category=prediction-market-bots" className="rounded-sm border border-[#ff9100]/30 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#ff9100]">
+        <a href="/register/external-bot?category=prediction-market-bots" className="rounded-sm border border-[#ff9100]/30 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#ff9100]">
           Register Bot →
         </a>
       </div>

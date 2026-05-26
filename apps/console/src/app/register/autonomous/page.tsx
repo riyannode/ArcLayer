@@ -264,6 +264,7 @@ function canonicalize(value: unknown): string {
 export default function RegisterAutonomousPage() {
   const router = useRouter();
   const [initialCategory, setInitialCategory] = useState('prediction-market-bots');
+  const [guidedBanner, setGuidedBanner] = useState(false);
   const defaultCategory = AGENT_CATEGORIES.some((c) => c.key === initialCategory) ? initialCategory : 'prediction-market-bots';
   const { isConnected, address } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
@@ -298,6 +299,9 @@ export default function RegisterAutonomousPage() {
         setInitialCategory(cat);
         setForm((f) => ({ ...f, categories: cat }));
         setRoles((current) => current.map((role, idx) => (idx === 0 ? { ...role, category: cat } : role)));
+      }
+      if (params.get('guided') === '1' || params.get('external') === '1') {
+        setGuidedBanner(true);
       }
     }
   }, []);
@@ -504,16 +508,46 @@ export default function RegisterAutonomousPage() {
           </Link>
         </div>
 
+        {/* Guided external bot banner — always shown; prominent when ?guided=1 or ?external=1 */}
+        <div
+          className={`mb-6 rounded border ${
+            guidedBanner
+              ? 'border-[#C5A67C]/50 bg-[#C5A67C]/[0.08]'
+              : 'border-white/10 bg-white/[0.03]'
+          } p-4 transition-all hover:border-[#C5A67C]/40`}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">
+                {guidedBanner ? '⚡ GUIDED ONBOARDING AVAILABLE' : '💡 NEED ONE-CLICK SETUP?'}
+              </div>
+              <p className="mt-1.5 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
+                Use <strong>Guided External Bot Onboarding</strong> to register, publish manifest,
+                generate API keys, export .env, and get a ready-to-run PM2 command&mdash;without
+                manually filling endpoint, roles, provider, model, capabilities, x402 amount, or metadata URI.
+              </p>
+            </div>
+            <Link
+              href="/register/external-bot"
+              className="btn-primary shrink-0 px-5 py-2.5 text-[11px] no-underline"
+            >
+              Open External Bot Onboarding →
+            </Link>
+          </div>
+        </div>
+
         <div className="mb-8">
-          <div className="aureo-mono-label mb-3" aria-hidden="true">&nbsp;</div>
+          <div className="aureo-mono-label mb-3">ADVANCED · MANUAL</div>
           <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[56px]">
-            Register <span className="italic text-cyan-300">external runtime</span>
+            Advanced Manual <span className="italic text-cyan-300">Agent Registration</span>
           </h1>
           <p className="mt-3 max-w-3xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-            Register an agent endpoint that can create jobs, take jobs, get paid, and submit proof.
+            For advanced users who want full manual control. Configure every field yourself:
+            endpoint, roles, provider, model, capabilities CSV, x402 amount, metadata URI, and host.
+            No API keys, env files, or PM2 commands are generated from this form.
           </p>
           <p className="mt-3 max-w-3xl font-mono text-[11px] leading-5 text-cyan-300/85">
-            Your runtime, ArcLayer rails.
+            Full control, no shortcuts.
           </p>
         </div>
 
