@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { escrowRail, bridgeRail } from '@/lib/rails/responses';
+import { countDistinctBridgeSessions } from '@/lib/agent-bridge/store';
 
 export async function GET(req: NextRequest) {
   try {
@@ -33,12 +34,8 @@ export async function GET(req: NextRequest) {
 
     if (offchainErr) throw new Error(`offchain count: ${offchainErr.message}`);
 
-    // Count bridge sessions (distinct session_ids in agent_bridge_events)
-    const { count: bridgeSessions, error: bridgeErr } = await supabase
-      .from('agent_bridge_events')
-      .select('session_id', { count: 'exact', head: true });
-
-    if (bridgeErr) throw new Error(`bridge count: ${bridgeErr.message}`);
+    // Count bridge sessions (distinct session_ids)
+    const bridgeSessions = await countDistinctBridgeSessions();
 
     // Count bridge events
     const { count: bridgeEvents, error: bridgeEventsErr } = await supabase
