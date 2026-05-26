@@ -21,8 +21,8 @@ export async function POST(
       );
     }
 
-    // Guard: only the buyer (client) can set the budget on-chain
-    const budgetAuthError = assertErc8183Participant(job, auth, ['buyer']);
+    // Guard: only the provider can set the budget on-chain
+    const budgetAuthError = assertErc8183Participant(job, auth, ['provider']);
     if (budgetAuthError) return budgetAuthError;
 
     // Guard: erc8183_job_id must exist (createJob tx confirmed)
