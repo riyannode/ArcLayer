@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'crypto';
+import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'crypto';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -26,7 +26,7 @@ export const API_KEY_SCOPES = {
 
 /**
  * Generate a new API key for an agent. Returns the raw key (shown once)
- * and stores only the SHA-256 hash in Supabase.
+ * and stores only a versioned PBKDF2-derived hash in Supabase.
  */
 export async function createApiKey(input: {
   agentId: string;
@@ -69,36 +69,42 @@ export type VerifiedKey = {
 };
 
 /**
- * Verify a bearer token against stored hashes.
+ * Verify a bearer token against stored PBKDF2 hashes.
  * Returns the key metadata if valid, null if invalid/revoked.
  * Also updates last_used_at on successful verification.
  */
 export async function verifyApiKey(rawKey: string): Promise<VerifiedKey | null> {
   if (!rawKey || !rawKey.startsWith('ak_')) return null;
 
-  const keyHash = hashKey(rawKey);
+  const keyPrefix = rawKey.slice(0, 11);
   const supabase = getSupabaseAdmin();
 
   const { data, error } = await supabase
     .from(TABLE)
-    .select('id, agent_id, scopes, revoked_at')
-    .eq('key_hash', keyHash)
-    .maybeSingle();
+    .select('id, agent_id, scopes, revoked_at, key_hash')
+    .eq('key_prefix', keyPrefix)
+    .is('revoked_at', null);
 
-  if (error || !data) return null;
-  if (data.revoked_at) return null;
+  if (error || !data?.length) return null;
 
-  // Fire-and-forget last_used_at update
+  const matched = data.find((row) => {
+    if (!row?.key_hash || typeof row.key_hash !== 'string') return false;
+    return verifyKeyHash(rawKey, row.key_hash);
+  });
+
+  if (!matched) return null;
+
+  // Fire-and-forget last_used_at update.
   supabase
     .from(TABLE)
     .update({ last_used_at: new Date().toISOString() })
-    .eq('id', data.id)
+    .eq('id', matched.id)
     .then(() => {});
 
   return {
-    id: data.id,
-    agentId: data.agent_id,
-    scopes: data.scopes ?? [],
+    id: matched.id,
+    agentId: matched.agent_id,
+    scopes: matched.scopes ?? [],
   };
 }
 
@@ -174,6 +180,67 @@ export async function requireApiKey(
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+const API_KEY_HASH_VERSION = 'pbkdf2_v1';
+const API_KEY_HASH_ITERATIONS = 210_000;
+const API_KEY_HASH_KEYLEN = 32;
+const API_KEY_HASH_DIGEST = 'sha256';
+const API_KEY_HASH_PEPPER = process.env.A2A_API_KEY_PEPPER;
+
+function getApiKeyPepper(): string {
+  if (!API_KEY_HASH_PEPPER && process.env.NODE_ENV === 'production') {
+    throw new Error('A2A_API_KEY_PEPPER is required in production');
+  }
+
+  return API_KEY_HASH_PEPPER ?? 'dev-only-a2a-api-key-pepper';
+}
+
 function hashKey(raw: string): string {
-  return createHash('sha256').update(raw).digest('hex');
+  const salt = randomBytes(16).toString('base64url');
+  const digest = pbkdf2Sync(
+    `${getApiKeyPepper()}:${raw}`,
+    salt,
+    API_KEY_HASH_ITERATIONS,
+    API_KEY_HASH_KEYLEN,
+    API_KEY_HASH_DIGEST,
+  ).toString('hex');
+
+  return [
+    API_KEY_HASH_VERSION,
+    API_KEY_HASH_ITERATIONS,
+    API_KEY_HASH_DIGEST,
+    salt,
+    digest,
+  ].join('$');
+}
+
+function verifyKeyHash(raw: string, storedHash: string): boolean {
+  const [version, iterationsRaw, digest, salt, expectedHex] = storedHash.split('$');
+
+  if (version !== API_KEY_HASH_VERSION) return false;
+  if (!iterationsRaw || !digest || !salt || !expectedHex) return false;
+  if (digest !== API_KEY_HASH_DIGEST) return false;
+
+  const iterations = Number(iterationsRaw);
+  if (!Number.isSafeInteger(iterations) || iterations <= 0) return false;
+
+  let actual: Buffer;
+  let expected: Buffer;
+
+  try {
+    actual = pbkdf2Sync(
+      `${getApiKeyPepper()}:${raw}`,
+      salt,
+      iterations,
+      API_KEY_HASH_KEYLEN,
+      digest,
+    );
+
+    expected = Buffer.from(expectedHex, 'hex');
+  } catch {
+    return false;
+  }
+
+  if (actual.length !== expected.length) return false;
+
+  return timingSafeEqual(actual, expected);
 }
