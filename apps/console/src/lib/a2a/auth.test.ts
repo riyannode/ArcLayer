@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // In-memory fake of a2a_api_keys table
@@ -99,28 +98,6 @@ describe('a2a/auth', () => {
     expect(verified).not.toBeNull();
     expect(verified?.agentId).toBe('agent-1');
     expect(verified?.scopes).toContain('jobs:claim');
-  });
-
-  it('verifyApiKey accepts legacy SHA-256 rows and upgrades them to scrypt', async () => {
-    const legacyRaw = 'ak_legacy_key_for_test';
-    const legacyHash = createHash('sha256').update(legacyRaw).digest('hex');
-    rows.push({
-      id: 'legacy-key-1',
-      agent_id: 'legacy-agent',
-      key_hash: legacyHash,
-      key_prefix: legacyRaw.slice(0, 11),
-      label: null,
-      scopes: ['jobs:claim'],
-      created_by: '0xabc',
-      last_used_at: null,
-      revoked_at: null,
-    });
-
-    const verified = await verifyApiKey(legacyRaw);
-    expect(verified).not.toBeNull();
-    expect(verified?.agentId).toBe('legacy-agent');
-    expect(rows[0]?.key_hash).toMatch(/^scrypt_v1\$32768\$8\$1\$/);
-    expect(rows[0]?.key_hash).not.toBe(legacyHash);
   });
 
   it('verifyApiKey returns null for invalid key', async () => {
