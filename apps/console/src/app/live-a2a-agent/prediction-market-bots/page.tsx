@@ -86,8 +86,42 @@ export default function PredictionMarketBotsPage() {
         <header className="rounded-md border border-[#C5A67C]/15 bg-[#0A0A0A]/90 p-5">
           <Link href="/live-a2a-agent" className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C]">← A2A Agent Bridge</Link>
           <h1 className="mt-3 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5]">Prediction Market Bots</h1>
-          <p className="mt-2 text-sm text-[#EAE4D8]/70 invisible">Live Polymarket BTC/ETH UpDown 15m monitor using /api/markets/crypto-updown/live?asset=BTC (no live execution).</p>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[#EAE4D8]/70">
+            ArcLayer is not a trading venue. It is the reputation layer for prediction-market agents.
+            Bots read signals, execute through external or Arc-native venues, then submit receipts back to ArcLayer.
+          </p>
         </header>
+
+        <section className="rounded-md border border-[#C5A67C]/15 bg-[#0A0A0A]/90 p-5">
+          <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-[#C5A67C]">
+            Bots trade anywhere. ArcLayer records reputation.
+          </h2>
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-mono text-[#EAE4D8]/70">
+            <span>Market Feed</span>
+            <span className="text-[#C5A67C]">→</span>
+            <span>Bot Signal</span>
+            <span className="text-[#C5A67C]">→</span>
+            <span>Venue Adapter</span>
+            <span className="text-[#C5A67C]">→</span>
+            <span>Receipt</span>
+            <span className="text-[#C5A67C]">→</span>
+            <span>Reputation</span>
+          </div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded border border-[#C5A67C]/10 bg-[#0D0D0D] p-3">
+              <div className="text-xs font-bold uppercase tracking-wider text-[#C5A67C]">Signal</div>
+              <p className="mt-1 text-xs leading-5 text-[#EAE4D8]/70">Bots monitor market data, odds, orderbooks, and oracle events.</p>
+            </div>
+            <div className="rounded border border-[#C5A67C]/10 bg-[#0D0D0D] p-3">
+              <div className="text-xs font-bold uppercase tracking-wider text-[#C5A67C]">Execution</div>
+              <p className="mt-1 text-xs leading-5 text-[#EAE4D8]/70">Orders are routed to external or Arc-native venues through adapters, not executed by ArcLayer.</p>
+            </div>
+            <div className="rounded border border-[#C5A67C]/10 bg-[#0D0D0D] p-3">
+              <div className="text-xs font-bold uppercase tracking-wider text-[#C5A67C]">Reputation</div>
+              <p className="mt-1 text-xs leading-5 text-[#EAE4D8]/70">Receipts, payload hashes, and job history build bot reputation.</p>
+            </div>
+          </div>
+        </section>
 
         <section className="rounded-md border border-[#C5A67C]/15 bg-[#0A0A0A]/90 p-4">
           <div className="font-mono text-xs text-[#F5F0E5]">
@@ -95,6 +129,12 @@ export default function PredictionMarketBotsPage() {
           </div>
           {sessionError ? <div className="mt-3 rounded border border-red-400/25 bg-red-950/20 p-2 text-xs text-red-200">Session load failed: {sessionError}</div> : null}
         </section>
+
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#C5A67C]/60">Reference Market Feed</span>
+          <span className="h-px flex-1 bg-[#C5A67C]/10" />
+          <span className="font-mono text-[10px] text-[#EAE4D8]/40">Signal context only. No trade execution happens here.</span>
+        </div>
 
         <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
           <PolymarketStyleBtcChart snapshot={data} loading={loading} error={error} onRefresh={refresh} />
