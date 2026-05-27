@@ -15,6 +15,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { getAgentCategory } from '@/app/live-a2a-agent/categories';
+import { safeJson } from '@/lib/safeFetch';
 
 type DiagCheck = { label: string; status: 'ok' | 'fail' | 'pending'; detail: string };
 
@@ -39,11 +40,11 @@ function DashboardContent() {
     // 1. Roster — /api/a2a/agents/by-category
     try {
       const res = await fetch(`/api/a2a/agents/by-category?category=${encodeURIComponent(cat)}`);
-      const data = await res.json();
+      const data = await safeJson<{ agents?: { agentId: string; name?: string; source?: string }[]; total?: number; source?: string }>(res);
       const match = agentId
-        ? data.agents?.filter((a: { agentId: string }) => a.agentId === agentId) || []
+        ? data.agents?.filter((a) => a.agentId === agentId) || []
         : data.agents || [];
-      foundAgents.push(...match.map((a: { agentId: string; name: string; source: string }) => ({
+      foundAgents.push(...match.map((a) => ({
         agentId: a.agentId,
         name: a.name || a.agentId,
         source: a.source,
@@ -63,9 +64,9 @@ function DashboardContent() {
     // 2. Presence
     try {
       const res = await fetch(`/api/a2a/presence?category=${encodeURIComponent(cat)}`);
-      const data = await res.json();
+      const data = await safeJson<{ presence?: { agentId: string; status?: string; lastEventType?: string }[]; total?: number }>(res);
       const match = agentId
-        ? data.presence?.filter((p: { agentId: string }) => p.agentId === agentId) || []
+        ? data.presence?.filter((p) => p.agentId === agentId) || []
         : data.presence || [];
       newChecks.push({
         label: 'Presence',
@@ -81,9 +82,9 @@ function DashboardContent() {
     // 3. Live events
     try {
       const res = await fetch(`/api/a2a/live-events?category=${encodeURIComponent(cat)}&limit=10`);
-      const data = await res.json();
+      const data = await safeJson<{ events?: { agentId: string; eventType?: string }[]; total?: number }>(res);
       const match = agentId
-        ? data.events?.filter((e: { agentId: string }) => e.agentId === agentId) || []
+        ? data.events?.filter((e) => e.agentId === agentId) || []
         : data.events || [];
       newChecks.push({
         label: 'Live Events',
@@ -97,7 +98,7 @@ function DashboardContent() {
     // 4. Bridge session
     try {
       const res = await fetch('/api/agent-bridge/sessions/latest');
-      const data = await res.json();
+      const data = await safeJson<{ session?: { id?: string; totals?: { events?: number } } }>(res);
       newChecks.push({
         label: 'Latest Bridge Session',
         status: data.session ? 'ok' : 'pending',

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { safeJson } from '@/lib/safeFetch';
 
 const BASE_URL = 'https://arclayers.xyz';
 const INDEXER_URL = 'https://indexer.arclayers.xyz';
@@ -192,8 +193,16 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
     try {
       const endpoint = mode === 'autonomous' ? '/api/a2a/agents' : `${INDEXER_URL}/agents`;
       const res = await fetch(endpointUrl(endpoint));
-      const data = await res.json();
-      const agents = Array.isArray(data) ? data : data.agents || data.result?.agents || [];
+      const data = await safeJson<unknown>(res);
+      let agents: Record<string, string>[] = [];
+      if (Array.isArray(data)) {
+        agents = data as Record<string, string>[];
+      } else if (data && typeof data === 'object') {
+        const obj = data as Record<string, unknown>;
+        if (Array.isArray(obj.agents)) agents = obj.agents as Record<string, string>[];
+        else if (obj.result && typeof obj.result === 'object' && Array.isArray((obj.result as Record<string, unknown>).agents))
+          agents = (obj.result as Record<string, unknown>).agents as Record<string, string>[];
+      }
       setDiscovery((d) => ({ ...d, loading: false, agents }));
     } catch (err) {
       setDiscovery((d) => ({ ...d, loading: false, error: 'Failed to fetch agents' }));
@@ -204,8 +213,16 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
     setDiscovery((d) => ({ ...d, jobsLoading: true, jobsError: null }));
     try {
       const res = await fetch(`${INDEXER_URL}/jobs`);
-      const data = await res.json();
-      const jobs = Array.isArray(data) ? data : data.jobs || data.result?.jobs || [];
+      const data = await safeJson<unknown>(res);
+      let jobs: Record<string, string>[] = [];
+      if (Array.isArray(data)) {
+        jobs = data as Record<string, string>[];
+      } else if (data && typeof data === 'object') {
+        const obj = data as Record<string, unknown>;
+        if (Array.isArray(obj.jobs)) jobs = obj.jobs as Record<string, string>[];
+        else if (obj.result && typeof obj.result === 'object' && Array.isArray((obj.result as Record<string, unknown>).jobs))
+          jobs = (obj.result as Record<string, unknown>).jobs as Record<string, string>[];
+      }
       setDiscovery((d) => ({ ...d, jobsLoading: false, jobs }));
     } catch (err) {
       setDiscovery((d) => ({ ...d, jobsLoading: false, jobsError: 'Failed to fetch jobs' }));

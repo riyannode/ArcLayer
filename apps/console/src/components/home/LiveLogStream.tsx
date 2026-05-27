@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { indexerUrl } from '@/lib/indexer';
+import { safeJson } from '@/lib/safeFetch';
 
 /**
  * LiveLogStream — terminal-style event tail that reads real protocol data
@@ -71,7 +72,7 @@ export default function LiveLogStream() {
       try {
         const res = await fetch(indexerUrl('/overview'), { cache: 'no-store' });
         if (!res.ok) throw new Error('not ready');
-        const data = await res.json();
+        const data = await safeJson<{ summary?: Record<string, unknown>; jobs?: { id?: string; client?: string; worker?: string; status?: number; createdAt?: string | number }[]; agents?: { agentId?: string; controller?: string; score?: string }[]; proofs?: { tokenId?: string; jobId?: string; agentId?: string; payer?: string; createdAt?: string | number }[] }>(res);
         if (cancelled) return;
         setConnected(true);
 
@@ -81,8 +82,8 @@ export default function LiveLogStream() {
         const proofs = Array.isArray(data?.proofs) ? data.proofs : [];
 
         // Rough block proxy — largest createdAt, so number grows with events.
-        const maxCreated = [...jobs, ...proofs]
-          .map((x: { createdAt?: string | number }) => Number(x?.createdAt ?? 0))
+        const maxCreated = [...(data.jobs ?? []), ...(data.proofs ?? [])]
+          .map((x) => Number(x.createdAt ?? 0))
           .filter((n) => Number.isFinite(n) && n > 0);
         if (maxCreated.length > 0) {
           setBlockHeight(Math.max(...maxCreated) % 10_000_000);

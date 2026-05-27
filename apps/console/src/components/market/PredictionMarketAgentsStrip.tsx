@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import AgentCards from './prediction-agents/AgentCards';
 import NodeGraph from './prediction-agents/NodeGraph';
 import type { PredictionAgentInput } from './prediction-agents/predictionAgentTypes';
+import { safeJson } from '@/lib/safeFetch';
 
 type Agent = {
   agentId?: string | number | null;
@@ -278,7 +279,7 @@ export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots
       setRosterLoading(true);
       try {
         const res = await fetch(`/api/a2a/agents/by-category?category=${encodeURIComponent(category)}`, { cache: 'no-store', signal: controller.signal });
-        const json = await res.json();
+        const json = await safeJson<{ ok: boolean; agents?: Agent[]; total?: number; error?: string }>(res);
         clearTimeout(timeoutId);
         if (!alive) return;
         if (!res.ok || !json.ok) throw new Error(json.error || 'agents_fetch_failed');
@@ -327,7 +328,7 @@ export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots
           fetch(`/api/a2a/presence?category=${encodeURIComponent(category)}`, { cache: 'no-store' }),
           fetch(`/api/a2a/live-events?category=${encodeURIComponent(category)}&limit=50`, { cache: 'no-store' }),
         ]);
-        const [pJson, eJson] = await Promise.all([pRes.json(), eRes.json()]);
+        const [pJson, eJson] = await Promise.all([safeJson<{ ok: boolean; presence?: AgentPresence[] }>(pRes), safeJson<{ ok: boolean; events?: AgentLiveEvent[] }>(eRes)]);
         if (!alive) return;
         if (pRes.ok && pJson.ok) setPresence(Array.isArray(pJson.presence) ? pJson.presence : []);
         if (eRes.ok && eJson.ok) setEvents(Array.isArray(eJson.events) ? eJson.events : []);

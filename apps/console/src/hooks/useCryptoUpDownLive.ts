@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { LiveSnapshot } from '@/lib/markets/polymarket/types';
+import { safeJson } from '@/lib/safeFetch';
 
 type ApiResponse = { ok: boolean; data?: LiveSnapshot; error?: string };
 
@@ -14,7 +15,7 @@ export function useCryptoUpDownLive(asset: 'BTC' | 'ETH' = 'BTC', enabled = true
     if (!enabled) return;
     try {
       const res = await fetch(`/api/markets/crypto-updown/live?asset=${asset}`);
-      const json = (await res.json()) as ApiResponse;
+      const json = await safeJson<ApiResponse>(res);
       if (!res.ok || !json.ok || !json.data) throw new Error(json.error || 'fetch_failed');
       setData(json.data);
       setError(null);

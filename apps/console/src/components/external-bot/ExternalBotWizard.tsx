@@ -38,6 +38,7 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { useArcSign } from '@/hooks/useArcSign';
 import { useX402PaidFetch } from '@/hooks/useX402PaidFetch';
+import { safeJson } from '@/lib/safeFetch';
 import { buildRegisterAgentConfig } from '@arclayer/sdk';
 import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
 import { config } from '@/lib/wagmi';
@@ -380,7 +381,7 @@ export default function ExternalBotWizard() {
           }),
         });
 
-        const data = await res.json();
+        const data = await safeJson<{ ok: boolean; apiKey?: string; key?: string; error?: string }>(res);
         if (!res.ok || !data.ok) {
           throw new Error(data.error || 'key_gen_failed');
         }
@@ -1111,9 +1112,9 @@ function DiagnosticsPanel({ category, txRows, template }: {
     // 1. Roster check — /api/a2a/agents/by-category
     try {
       const rosterRes = await fetch(`/api/a2a/agents/by-category?category=${encodeURIComponent(cat)}`);
-      const rosterData = await rosterRes.json();
+      const rosterData = await safeJson<{ agents?: { agentId: string }[]; total?: number; source?: string }>(rosterRes);
       const ourAgentIds = txRows.map((r) => r.agentId);
-      const visible = rosterData.agents?.filter((a: { agentId: string }) => ourAgentIds.includes(a.agentId)) || [];
+      const visible = rosterData.agents?.filter((a) => ourAgentIds.includes(a.agentId)) || [];
 
       newChecks.push({
         label: 'Roster Visibility',
@@ -1129,9 +1130,9 @@ function DiagnosticsPanel({ category, txRows, template }: {
     // 2. Presence check
     try {
       const presRes = await fetch(`/api/a2a/presence?category=${encodeURIComponent(cat)}`);
-      const presData = await presRes.json();
+      const presData = await safeJson<{ presence?: { agentId: string; status?: string }[]; total?: number }>(presRes);
       const ourIds = txRows.map((r) => r.agentId);
-      const present = presData.presence?.filter((p: { agentId: string }) => ourIds.includes(p.agentId)) || [];
+      const present = presData.presence?.filter((p) => ourIds.includes(p.agentId)) || [];
       newChecks.push({
         label: 'Presence Status',
         status: present.length > 0 ? 'ok' : 'fail',
@@ -1146,11 +1147,11 @@ function DiagnosticsPanel({ category, txRows, template }: {
     // 3. Live events count
     try {
       const evRes = await fetch(`/api/a2a/live-events?category=${encodeURIComponent(cat)}&limit=5`);
-      const evData = await evRes.json();
+      const evData = await safeJson<{ total?: number }>(evRes);
       newChecks.push({
         label: 'Live Events',
-        status: evData.total > 0 ? 'ok' : 'pending',
-        detail: evData.total > 0 ? `${evData.total} events recorded` : 'No events yet. Run bots to emit events.',
+        status: (evData.total ?? 0) > 0 ? 'ok' : 'pending',
+        detail: (evData.total ?? 0) > 0 ? `${evData.total} events recorded` : 'No events yet. Run bots to emit events.',
       });
     } catch {
       newChecks.push({ label: 'Live Events', status: 'fail', detail: 'API unreachable' });
@@ -1159,7 +1160,7 @@ function DiagnosticsPanel({ category, txRows, template }: {
     // 4. Latest bridge session
     try {
       const sessRes = await fetch('/api/agent-bridge/sessions/latest');
-      const sessData = await sessRes.json();
+      const sessData = await safeJson<{ session?: { id?: string; totals?: { events?: number } } }>(sessRes);
       newChecks.push({
         label: 'Latest Bridge Session',
         status: sessData.session ? 'ok' : 'pending',
