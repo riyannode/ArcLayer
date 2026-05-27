@@ -14,11 +14,11 @@ const crypto = require('crypto');
 
 const BASE_URL = required('ARCLAYER_BASE_URL');
 
-// Worker alias backward compat: WORKER_AGENT_ID || PROVIDER_AGENT_ID
+// Provider legacy key wins for backward compatibility; WORKER_AGENT_ID is fallback.
 const PROVIDER_AGENT_ID = process.env.PROVIDER_AGENT_ID || required('WORKER_AGENT_ID');
 const WORKER_ID = process.env.WORKER_ID || PROVIDER_AGENT_ID;
 
-// Worker alias backward compat: WORKER_ADDRESS || PROVIDER_ADDRESS
+// Provider legacy key wins for backward compatibility; WORKER_ADDRESS is fallback.
 const PROVIDER_ADDRESS = (() => {
   const addr = process.env.PROVIDER_ADDRESS || process.env.WORKER_ADDRESS;
   if (!addr) throw new Error('Missing required env: PROVIDER_ADDRESS or WORKER_ADDRESS');
@@ -26,7 +26,7 @@ const PROVIDER_ADDRESS = (() => {
   return addr;
 })();
 
-// Worker alias backward compat: WORKER_PRIVATE_KEY || PROVIDER_PRIVATE_KEY
+// Provider legacy key wins for backward compatibility; WORKER_PRIVATE_KEY is fallback.
 const PROVIDER_PK = (() => {
   const pk = process.env.PROVIDER_PRIVATE_KEY || process.env.WORKER_PRIVATE_KEY;
   if (!pk) throw new Error('Missing required env: PROVIDER_PRIVATE_KEY or WORKER_PRIVATE_KEY');

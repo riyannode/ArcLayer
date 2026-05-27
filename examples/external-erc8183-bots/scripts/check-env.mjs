@@ -52,6 +52,14 @@ function getOr(value, ...alternatives) {
   return value || alternatives.find((a) => a);
 }
 
+function formatValue(key, value) {
+  if (!value) return '<empty>';
+  const sensitive = /PRIVATE_KEY|API_KEY|TOKEN|SECRET/i.test(key);
+  if (sensitive) return '<set>';
+  if (value.length > 24) return `${value.slice(0, 20)}...`;
+  return value;
+}
+
 function checkRequired(env, botName, key, alternatives = []) {
   const found = key.startsWith('*')
     ? alternatives.some((alt) => env[alt])
@@ -63,9 +71,9 @@ function checkRequired(env, botName, key, alternatives = []) {
       : alternatives.find((alt) => env[alt]);
     if (alternatives.length > 0) {
       const displayKeys = [key, ...alternatives].join(' / ');
-      console.log(`  ✓ ${displayKeys}: ${usedKey ? env[usedKey]?.slice(0, 20) + '...' : 'set'}`);
+      console.log(`  ✓ ${displayKeys}: ${usedKey ? formatValue(usedKey, env[usedKey]) : 'set'}`);
     } else {
-      console.log(`  ✓ ${key}: ${env[key]?.slice(0, 20) + '...' || '<empty>'}`);
+      console.log(`  ✓ ${key}: ${formatValue(key, env[key])}`);
     }
     return true;
   }
@@ -78,7 +86,7 @@ function checkRequired(env, botName, key, alternatives = []) {
 
 function checkOptional(env, key, label) {
   if (env[key]) {
-    console.log(`  ○ ${label || key}: ${env[key].slice(0, 20) + '...'}`);
+    console.log(`  ○ ${label || key}: ${formatValue(key, env[key])}`);
     return true;
   }
   console.log(`  - ${label || key}: (not set — optional)`);
