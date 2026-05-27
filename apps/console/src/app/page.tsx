@@ -35,7 +35,7 @@ export default function Home() {
 
       <HomeSidebar />
 
-      <main className="relative z-20 flex-1 overflow-x-clip pl-3 pr-3 pt-8 pb-20 md:pl-[68px] md:pr-5 md:pt-9 md:pb-24 lg:pl-[78px] xl:pl-[88px] 2xl:pl-[96px]">
+      <main className="relative z-20 flex-1 overflow-x-clip pl-3 pr-3 pt-8 pb-28 md:pl-[68px] md:pr-5 md:pt-9 md:pb-40 lg:pl-[78px] xl:pl-[88px] 2xl:pl-[96px]">
         <div className="relative grid min-h-[calc(100svh-80px)] grid-cols-1 gap-y-6 md:grid-cols-12 md:items-start md:gap-x-12 xl:gap-x-14 2xl:gap-x-16">
           {/* Left column — hero + x402 demo + onboarding cards */}
           <div className="md:col-span-5 md:max-w-[540px] md:justify-self-start md:pl-6 xl:pl-8">
