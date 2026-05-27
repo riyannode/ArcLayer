@@ -469,9 +469,6 @@ function JobsPage() {
           <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
             Manual <span className="italic text-[#C5A67C]">Job</span>
           </h1>
-          <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)] invisible">
-            Pick an agent, assign a task, set a USDC budget, and lock funds in the Settlement Vault.
-          </p>
         </div>
 
         <div className="mb-5 overflow-x-auto border-y border-white/10 py-2">
@@ -488,13 +485,6 @@ function JobsPage() {
               {isRefreshing ? 'REFRESHING\u2026' : 'REFRESH'}
             </button>
             <Link href="/register/manual" className="btn-primary">REGISTER AGENT</Link>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-l-2 border-[#C5A67C]/40 pl-4 font-mono text-[10.5px] text-[rgba(234,228,216,0.84)]">
-            <span>Pick an agent, assign a task, lock USDC.</span>
-            <span className="text-[rgba(234,228,216,0.85)]">&middot;</span>
-            <span>x402 is not job funding.</span>
-            <span className="text-[rgba(234,228,216,0.85)]">&middot;</span>
-            <span>Escrow = approve, fund, release USDC.</span>
           </div>
         </section>
 
@@ -514,7 +504,6 @@ function JobsPage() {
                 className="group min-h-[126px] rounded-sm border border-white/[0.07] bg-black/25 p-3 text-left transition hover:border-[#C5A67C]/35 hover:bg-white/[0.035]"
               >
                 <div className="font-mono text-[11px] font-bold uppercase tracking-[0.12em] text-[#EAE4D8]">{cat.key}</div>
-                <div className="mt-2 line-clamp-2 text-[10.5px] leading-snug text-[rgba(234,228,216,0.78)] invisible">{cat.copy}</div>
                 <div className="mt-3 flex flex-wrap gap-1 font-mono text-[9px] uppercase tracking-[0.12em]">
                   <span className="chip-status pending">{cat.jobCount} jobs</span>
                   <span className="chip-status">{cat.agentCount} agents</span>
@@ -530,8 +519,6 @@ function JobsPage() {
           <div className="mb-5 inline-flex items-center gap-2 border border-[rgba(184,205,126,0.35)] bg-[rgba(184,205,126,0.06)] px-3 py-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
             <span className="h-1.5 w-1.5 rounded-full bg-[#B8CD7E]" />
             Connected as <span className="text-[#EAE4D8]">{shortenAddress(address)}</span>
-            <span className="text-[rgba(234,228,216,0.84)]">&middot;</span>
-            <span className="text-[#C5A67C]">Client</span>
           </div>
         )}
 
@@ -570,9 +557,6 @@ function JobsPage() {
                 indexed
               </span>
             </div>
-            <p className="mt-2 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)] invisible">
-              Create, fund, review, and settle jobs.
-            </p>
 
             {/* Filter / sort bar */}
             <div className="mt-4 space-y-3">
@@ -687,7 +671,6 @@ function JobsPage() {
                           <div className="mt-1 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)]">
                             Job #{job.id} · {agentLabel}{skill ? ` · ${skill}` : ''}
                           </div>
-                          <div className="mt-1 line-clamp-2 font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">{display.description}</div>
                           <div className="mt-1 font-mono text-[9.5px] text-[rgba(234,228,216,0.65)]">{display.duration} · {display.difficulty}</div>
                           <div className="mt-2 flex flex-wrap gap-2 font-mono text-[10px]">
                             <Link href={`/a2a/agents/${job.agentId}`} className="text-[#C5A67C] hover:text-[#EAE4D8]">View agent profile</Link>
@@ -725,12 +708,10 @@ function JobsPage() {
                   {jobs.length > 0 ? (
                     <>
                       <p className="font-mono text-[11.5px] text-[#EAE4D8]">No jobs match your filter</p>
-                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">Try a different keyword or clear the filter.</p>
                     </>
                   ) : (
                     <>
                       <p className="font-mono text-[11.5px] text-[#EAE4D8]">No indexed jobs yet</p>
-                      <p className="font-mono text-[10.5px] text-[rgba(234,228,216,0.78)] invisible">Create the first funded job.</p>
                     </>
                   )}
                 </div>
@@ -759,9 +740,6 @@ function JobsPage() {
                 )}
               </div>
               <h2 className="mt-2 aureo-display text-[28px] text-[#EAE4D8]">Create job assignment</h2>
-              <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)] invisible">
-                Assign work to a registered agent.
-              </p>
 
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {JOB_TEMPLATES.map((template) => (
@@ -837,7 +815,7 @@ function JobsPage() {
                     </div>
                   ) : (
                     <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
-                      Register an agent first.
+                      No agent selected.
                     </div>
                   )}
                 </div>
@@ -851,7 +829,6 @@ function JobsPage() {
                       placeholder="Paste full agent ID if indexer is empty"
                       className="input-mono"
                     />
-                    <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">Fallback if the indexer is empty.</div>
                   </div>
                 )}
 
@@ -871,11 +848,6 @@ function JobsPage() {
                     placeholder={selectedAgent ? selectedAgent.controller : '0x... worker wallet'}
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">
-                    {selectedAgent && !customWorker
-                      ? 'Auto-filled from selected agent.'
-                      : 'Worker and client cannot be the same address.'}
-                  </div>
                 </div>
 
                 <div>
@@ -916,15 +888,6 @@ function JobsPage() {
                 {isCreating ? 'CREATING\u2026' : 'CREATE JOB'}
               </button>
 
-              <details className="mt-4 group border-t border-white/5 pt-3">
-                <summary className="cursor-pointer font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)] transition hover:text-[rgba(234,228,216,0.82)]">
-                  Developer details
-                </summary>
-                <div className="mt-2 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.85)] invisible">
-                  <code className="text-[rgba(234,228,216,0.85)]">createJob(agentId, worker, evaluator, taskDescription)</code> — &ldquo;Client Address&rdquo; maps to the <code className="text-[rgba(234,228,216,0.85)]">evaluator</code> contract parameter.
-                </div>
-              </details>
-
               {createdJobId && (
                 <div className="mt-4 rounded-none border border-[rgba(184,205,126,0.35)] bg-[rgba(184,205,126,0.08)] p-4">
                   <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[#B8CD7E]">Step 1 complete</div>
@@ -941,9 +904,6 @@ function JobsPage() {
             <section id="fund-job" className="aureo-panel scroll-mt-4 p-4 md:p-6">
               <div className="aureo-mono-label mb-2">STEP 2</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Approve &amp; fund Settlement Vault</h2>
-              <p className="mt-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.78)] invisible">
-                Lock USDC until work is approved.
-              </p>
 
               <div className="mt-5 space-y-4">
                 <div>
@@ -954,7 +914,6 @@ function JobsPage() {
                     placeholder="Job ID to budget and fund"
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">Auto-filled after Step 1.</div>
                 </div>
 
                 <div>
@@ -965,7 +924,6 @@ function JobsPage() {
                     placeholder="1"
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">Agreed job price.</div>
                 </div>
 
                 <div>
@@ -984,7 +942,6 @@ function JobsPage() {
                     placeholder="1"
                     className="input-mono"
                   />
-                  <div className="mt-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.85)]">USDC locked for this job.</div>
                 </div>
 
                 {selectedFundingJob && (
@@ -1001,15 +958,6 @@ function JobsPage() {
               <button onClick={handleFundJob} disabled={!isConnected || isCreating || isFunding} className="btn-primary mt-5">
                 {isFunding ? 'FUNDING\u2026' : 'APPROVE & FUND'}
               </button>
-
-              <details className="mt-4 group border-t border-white/5 pt-3">
-                <summary className="cursor-pointer font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)] transition hover:text-[rgba(234,228,216,0.82)]">
-                  Developer details
-                </summary>
-                <div className="mt-2 font-mono text-[9.5px] leading-4 text-[rgba(234,228,216,0.85)]">
-                  <code className="text-[rgba(234,228,216,0.85)]">setBudget &rarr; approve(USDC) &rarr; fund(jobId, amount)</code>
-                </div>
-              </details>
             </section>
 
             <details id="advanced-escrow" className="aureo-panel scroll-mt-4 p-4 md:p-6">
@@ -1020,12 +968,6 @@ function JobsPage() {
                 <DisputeViewer />
               </div>
             </details>
-
-            <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(10,10,10,0.6)] p-5 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.82)]">
-              {isConnected
-                ? '\u2713 Wallet connected. Manual flow: Select Agent \u2192 Create Job \u2192 Fund \u2192 Submit Deliverable \u2192 Complete \u2192 Settlement recorded.'
-                : '\u26a0 Connect wallet to submit protocol writes.'}
-            </div>
           </section>
         </div>
       </div>
