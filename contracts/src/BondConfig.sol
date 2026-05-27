@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IBondConfig} from "./ArcVault.sol";
+
 /// @title BondConfig
 /// @notice Admin-configurable performance bond tiers for jobbers.
 ///         Rates adjustable via multi-sig owner (Safe recommended).
-contract BondConfig {
+contract BondConfig is IBondConfig {
     struct Tier {
         uint256 minAmount;   // inclusive, in USDC (6 decimals)
         uint256 maxAmount;   // exclusive, type(uint256).max for uncapped
@@ -73,7 +75,8 @@ contract BondConfig {
     }
 
     function _rawBond(uint256 jobAmount) internal view returns (uint256) {
-        for (uint256 i = 0; i < tiers.length; i++) {
+        uint256 len = tiers.length;
+        for (uint256 i = 0; i < len; i++) {
             if (jobAmount >= tiers[i].minAmount && jobAmount < tiers[i].maxAmount) {
                 if (tiers[i].isFlat) {
                     return tiers[i].flatBond;
