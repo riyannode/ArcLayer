@@ -1,17 +1,8 @@
-'use client';
-
 import './globals.css';
-import { usePathname } from 'next/navigation';
-import Providers from '@/components/Providers';
-import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
-import WebGLBackground from '@/components/WebGLBackground';
-import { ProtectionNoticeProvider } from '@/components/protection';
+import type { ReactNode } from 'react';
+import RootShell from '@/components/RootShell';
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const isLanding = pathname === '/';
-
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -26,25 +17,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
         <meta name="theme-color" content="#050505" />
-          <meta name="description" content="ArcLayer — payment infrastructure for AI agents." />
+        <meta name="description" content="ArcLayer — payment infrastructure for AI agents." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta property="og:title" content="ArcLayer · Payment infrastructure for agents ready to ship" />
-          <meta property="og:description" content="x402 payments, paid jobs, and reputation for any agent." />
+        <meta property="og:description" content="x402 payments, paid jobs, and reputation for any agent." />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="/icon-512.png" />
         <title>ArcLayer · Payment infrastructure for agents ready to ship</title>
       </head>
+
       <body suppressHydrationWarning style={{ background: '#050505', color: '#EAE4D8' }}>
-        {!isLanding && <WebGLBackground />}
-        <Providers>
-          <ProtectionNoticeProvider>
-            <div className="relative z-10 min-h-screen flex flex-col">
-              <Navbar />
-              <main key={pathname} className="flex-1 page-transition">{children}</main>
-              {!isLanding && <Footer />}
-            </div>
-          </ProtectionNoticeProvider>
-        </Providers>
+        <RootShell>{children}</RootShell>
       </body>
     </html>
   );
