@@ -6,6 +6,7 @@ import { Suspense, use, useEffect, useMemo, useState } from 'react';
 import { ActiveDecisionDetail, buildPredictionMarketDecisionNodes, PredictionMarketDecisionBoard, type BridgeSession, type DecisionNode } from '@/components/agent-bridge';
 import { PolymarketBtc15mPanel, PolymarketOrderbookPanel, PolymarketStyleBtcChart } from '@/components/market/PolymarketPanels';
 import { useCryptoUpDownLive } from '@/hooks/useCryptoUpDownLive';
+import { safeJson } from '@/lib/safeFetch';
 
 type A2AJob = { id: string; title?: string; description?: string; category?: string; roleId?: string; budget?: string; status?: string; requester?: string; agentId?: string; claimedBy?: string; createdAt?: string; updatedAt?: string };
 type LatestResponse = { ok: boolean; session: BridgeSession | null; error?: string; message?: string };
@@ -30,10 +31,10 @@ function LiveA2AJobDetailContent({ params }: PageProps) {
     async function load() {
       try {
         const [jobsRes, sessionRes] = await Promise.all([fetch('/api/a2a/jobs', { cache: 'no-store' }), fetch('/api/agent-bridge/sessions/latest', { cache: 'no-store' })]);
-        const jobsData = await jobsRes.json().catch(() => ({ jobs: [] }));
+        const jobsData = await safeJson<{ ok?: boolean; jobs?: unknown[]; message?: string; error?: string }>(jobsRes).catch(() => null);
         if (!jobsRes.ok || jobsData?.ok === false) throw new Error(jobsData?.message || jobsData?.error || `HTTP ${jobsRes.status}`);
-        const found = (Array.isArray(jobsData.jobs) ? jobsData.jobs as A2AJob[] : []).find((item) => item.id === id) || null;
-        const sessionData = (await sessionRes.json().catch(() => ({ session: null }))) as LatestResponse;
+        const found = (Array.isArray(jobsData?.jobs) ? jobsData.jobs as A2AJob[] : []).find((item) => item.id === id) || null;
+        const sessionData = await safeJson<LatestResponse>(sessionRes).catch(() => ({ session: null })) as LatestResponse;
         if (!alive) return;
         setJob(found); setSession(sessionData.session ?? null); setError(found ? null : 'job_not_found');
       } catch (err) { if (alive) setError(err instanceof Error ? err.message : 'job_fetch_failed'); }

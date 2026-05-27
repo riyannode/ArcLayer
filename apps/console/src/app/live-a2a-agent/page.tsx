@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import type { BridgeSession } from '@/components/agent-bridge';
 import { AGENT_CATEGORIES } from './categories';
+import { safeJson } from '@/lib/safeFetch';
 
 type LatestResponse = { ok: boolean; session: BridgeSession | null; error?: string; message?: string };
 
@@ -17,7 +18,7 @@ export default function LiveA2AAgentPage() {
     async function load() {
       try {
         const res = await fetch('/api/agent-bridge/sessions/latest', { cache: 'no-store' });
-        const data = (await res.json()) as LatestResponse;
+        const data = await safeJson<LatestResponse>(res);
         if (!alive) return;
         if (!res.ok || !data.ok) {
           setError(data.message || data.error || 'query_failed');

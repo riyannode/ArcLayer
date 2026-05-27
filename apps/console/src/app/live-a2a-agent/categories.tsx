@@ -1,10 +1,8 @@
-import type { ReactNode } from 'react';
-
 export type AgentCategory = {
   key: string;
   label: string;
   tagline: string;
-  icon: ReactNode;
+  iconKey: string;
   capabilities: string[];
   exampleAgents: string[];
   feeRange: string;
@@ -16,14 +14,12 @@ export type AgentCategory = {
   };
 };
 
-const icon = (<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" /></svg>);
-
 export const AGENT_CATEGORIES: AgentCategory[] = [
   {
     key: 'prediction-market-bots',
     label: 'Prediction Market Bots',
     tagline: 'External workers for market data, probability models, and settlement-aware decision support',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['Agent Runtime', 'Bridge Event', 'Receipt', 'Reputation'],
     exampleAgents: ['Example PM2 Bot Pipeline', 'Prediction Market Trader'],
     feeRange: 'x402 per job/resource',
@@ -38,7 +34,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     key: 'spot-trading-bots',
     label: 'Spot Trading Bots',
     tagline: 'Owner-operated spot execution agents connected through ArcLayer jobs and receipts',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['Job claim', 'External execution', 'Proof upload', 'x402 Access'],
     exampleAgents: ['Spot Trader', 'Risk Manager'],
     feeRange: 'job budget based',
@@ -53,7 +49,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     key: 'arbitrage-bots',
     label: 'Arbitrage Bots',
     tagline: 'Cross-venue opportunity scanners and external execution workers',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['Data ingest', 'External runtime', 'Payload hash', 'Receipt'],
     exampleAgents: ['Arbitrage Bot', 'Data Provider'],
     feeRange: 'job budget based',
@@ -68,7 +64,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     key: 'research-agents',
     label: 'Research Agents',
     tagline: 'Autonomous research workers producing traceable outputs and proofs',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['Research task', 'Work Proof', 'Receipt', 'Reputation'],
     exampleAgents: ['Research Agent', 'Analyzer'],
     feeRange: 'x402 per report',
@@ -83,7 +79,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     key: 'analyzer-agents',
     label: 'Analyzer Agents',
     tagline: 'External analyzers for structured data, risk, scoring, and evaluation workflows',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['Analysis event', 'Verification', 'Bridge receipt', 'Reputation'],
     exampleAgents: ['Analyzer', 'Evaluator'],
     feeRange: 'x402 per analysis',
@@ -98,7 +94,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     key: 'data-oracle-agents',
     label: 'Data / Oracle Agents',
     tagline: 'Data providers and oracle feeds posted as bridge events',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['Raw feed', 'Oracle event', 'Payload hash', 'Session viewer'],
     exampleAgents: ['Data Provider', 'Oracle'],
     feeRange: 'resource scope based',
@@ -113,7 +109,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     key: 'risk-compliance-agents',
     label: 'Risk & Compliance Agents',
     tagline: 'Policy, risk, and compliance checks by registered external runtimes',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['Risk check', 'Verification', 'Audit receipt', 'Reputation'],
     exampleAgents: ['Risk Manager', 'Compliance Agent'],
     feeRange: 'x402 per check',
@@ -128,7 +124,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     key: 'rwa-agents',
     label: 'RWA Agents',
     tagline: 'Real-world asset evaluation, evidence collection, and proof workflows',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['RWA evaluation', 'Document proof', 'Receipt', 'Reputation'],
     exampleAgents: ['RWA Evaluator', 'Evidence Worker'],
     feeRange: 'job budget based',
@@ -143,7 +139,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     key: 'treasury-yield-bots',
     label: 'Treasury & Yield Bots',
     tagline: 'External treasury operators and yield analysts using ArcLayer rails',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['Treasury job', 'External runtime', 'Proof', 'x402 Access'],
     exampleAgents: ['Yield Analyst', 'Treasury Worker'],
     feeRange: 'job budget based',
@@ -158,7 +154,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     key: 'devops-security-agents',
     label: 'DevOps & Security Agents',
     tagline: 'Infrastructure, audit, monitoring, and response agents with proofed outputs',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['Monitor job', 'Security proof', 'Receipt', 'Reputation'],
     exampleAgents: ['Security Agent', 'DevOps Worker'],
     feeRange: 'x402 per task',
@@ -173,7 +169,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     key: 'a2a-commerce-agents',
     label: 'A2A Commerce Agents',
     tagline: 'Agents selling and buying services via jobs, auth, x402, receipts, and reputation',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['Registry', 'Jobs', 'x402', 'Receipts'],
     exampleAgents: ['Registered Agent', 'Commerce Worker'],
     feeRange: 'x402 per resource',
@@ -188,7 +184,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     key: 'erc8183-commerce',
     label: 'ERC-8183 Escrow Jobs',
     tagline: 'On-chain escrow jobs: client creates, worker budgets, evaluator settles. Full USDC lifecycle.',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['Create Job', 'Set Budget', 'Fund Escrow', 'Submit Proof', 'Complete'],
     exampleAgents: ['Client Bot', 'Worker Bot', 'Evaluator Bot'],
     feeRange: 'on-chain escrow + USDC gas',
@@ -203,7 +199,7 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
     key: 'custom-workers',
     label: 'Custom Workers',
     tagline: 'Any owner-hosted agent runtime with custom roles and bridge events',
-    icon,
+    iconKey: 'hamburger',
     capabilities: ['Custom role', 'API key auth', 'Bridge Event', 'Receipt'],
     exampleAgents: ['Custom Worker', 'External Runtime'],
     feeRange: 'configurable',
@@ -218,4 +214,19 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
 
 export function getAgentCategory(key: string) {
   return AGENT_CATEGORIES.find((category) => category.key === key) ?? null;
+}
+
+/**
+ * Render an SVG icon for a given iconKey.
+ * Add new iconKey → SVG mappings here as the project adds distinct icons.
+ */
+export function renderCategoryIcon(iconKey: string, className = 'w-5 h-5'): JSX.Element {
+  switch (iconKey) {
+    default:
+      return (
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className={className}>
+          <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+        </svg>
+      );
+  }
 }
