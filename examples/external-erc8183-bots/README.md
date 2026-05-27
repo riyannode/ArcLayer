@@ -5,6 +5,10 @@
 
 Client, provider, and evaluator bots that autonomously run ERC-8183 escrow jobs on Arc Testnet.
 
+> **Worker is the user-facing name. Provider is legacy runtime compatibility.**
+> Both `PROVIDER_*` and `WORKER_*` env keys are accepted — the runtime prefers `PROVIDER_*`
+> when both are set. See [Worker/Provider Naming](#-workerprovider-naming) for details.
+
 ## Architecture
 
 ```
@@ -64,13 +68,42 @@ Fill in:
 - `ARCLAYER_API_KEY` — generated from `/register/external-bot` on the deployed console
 - `*_PRIVATE_KEY` — wallet private key with USDC + gas
 - `*_ADDRESS` — corresponding wallet address
-- `WORKER_ID` — **must equal `PROVIDER_AGENT_ID`** (the API key's agentId)
+- `WORKER_ID` — **must equal the worker/provider agent ID** (the API key's agentId)
 
 **Never commit filled `.env` files.** A `.gitignore` in this folder already excludes them.
 
+### Preflight check
+
+After filling `.env` files, verify everything is correct:
+
+```bash
+npm run check:env
+```
+
+This checks all three `.env` files for required fields, supports Worker/Provider
+alias naming, and reports any missing vars with exit codes:
+- `0` — all good
+- `1` — missing required fields
+- `2` — `.env` file not found
+
 ### Key constraint
 
-The **`WORKER_ID` in provider bot `.env` must equal `PROVIDER_AGENT_ID`**. The backend's participant guard checks the API key's `agentId` against `job.workerId` on the `/running` route. If they don't match, you get `participant_mismatch`.
+The **`WORKER_ID` in provider bot `.env` must equal `PROVIDER_AGENT_ID` (or `WORKER_AGENT_ID`)**. The backend's participant guard checks the API key's `agentId` against `job.workerId` on the `/running` route. If they don't match, you get `participant_mismatch`.
+
+### Worker/Provider Naming
+
+The runtime accepts both naming conventions for backward compatibility:
+
+| Worker (user-facing) | Provider (legacy compat) | Purpose |
+|---|---|---|
+| `WORKER_AGENT_ID` | `PROVIDER_AGENT_ID` | Agent ID for the worker role |
+| `WORKER_ID` | — | Must equal `WORKER_AGENT_ID` / `PROVIDER_AGENT_ID` |
+| `WORKER_ADDRESS` | `PROVIDER_ADDRESS` | Wallet address for signing |
+| `WORKER_PRIVATE_KEY` | `PROVIDER_PRIVATE_KEY` | Private key for tx signing |
+
+When both `WORKER_*` and `PROVIDER_*` are set, `PROVIDER_*` takes precedence
+for backward compatibility. You can use either convention exclusively, or mix
+them — the runtime resolves the active value at startup.
 
 ### Contract address override (optional)
 
@@ -102,6 +135,9 @@ npm install
 ## 5. Run with PM2
 
 ```bash
+# Run preflight check first
+npm run check:env
+
 # Start all three bots
 pm2 start client-bot/ecosystem.config.cjs
 pm2 start provider-bot/ecosystem.config.cjs
@@ -121,7 +157,7 @@ The bots work independently:
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `participant_mismatch` | API key agentId doesn't match job participant | Ensure `WORKER_ID == PROVIDER_AGENT_ID` in provider `.env` |
+| `participant_mismatch` | API key agentId doesn't match job participant | Ensure `WORKER_ID == PROVIDER_AGENT_ID` (or `WORKER_ID == WORKER_AGENT_ID`) in provider `.env` |
 | `erc8183_job_not_funded` | Job hasn't been funded on-chain | Wait for client bot to complete the fund cycle |
 | `erc8183_job_not_claimed` | Provider tries to markRunning before claim | Provider handles this automatically in Phase 2 |
 | `insufficient_balance` | Wallet out of USDC | Top up wallet via Arc Testnet faucet |
@@ -150,8 +186,9 @@ The bots work independently:
 - [ ] Register all 3 agents in external registry
 - [ ] Generate role-scoped API keys (client/provider/evaluator)
 - [ ] Fund wallets with USDC + ARC gas tokens
+- [ ] Run `npm run check:env` to verify `.env` files
 - [ ] Set `AUTONOMOUS_TX=true` in all `.env`
-- [ ] Verify `WORKER_ID == PROVIDER_AGENT_ID` in provider `.env`
+- [ ] Verify `WORKER_ID == PROVIDER_AGENT_ID` (or `WORKER_ID == WORKER_AGENT_ID`) in provider `.env`
 - [ ] Test one full cycle manually
 - [ ] Deploy with PM2 ecosystem configs
 - [ ] Monitor logs for errors
