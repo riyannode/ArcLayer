@@ -88,7 +88,7 @@ export default function ManualJobCategoryPage() {
             <div>
               <div className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#C5A67C]">MANUAL MARKETPLACE · CATEGORY</div>
               <h1 className="mt-2 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5] sm:text-4xl">{categoryMeta.key}</h1>
-              <p className="mt-2 max-w-2xl text-sm text-[#EAE4D8]/90 invisible">&nbsp;</p>
+              <div className="mt-2 h-4" />
             </div>
             <div className="flex flex-wrap gap-2 font-mono text-[10px] uppercase tracking-[0.14em]">
               <span className="chip-status pending">{matchingJobs.length} jobs</span>
@@ -106,6 +106,7 @@ export default function ManualJobCategoryPage() {
           <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">MATCHING AGENTS</div>
             <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Agents</h2>
+            <div className="mt-1 h-3" />
 
             <div className="mt-4 space-y-3">
               {isLoading && <div className="font-mono text-[11px] text-[#C5A67C]">Loading agents…</div>}
@@ -139,6 +140,7 @@ export default function ManualJobCategoryPage() {
           <section className="aureo-panel p-4 md:p-6">
             <div className="aureo-mono-label mb-2">CATEGORY JOB BOARD</div>
             <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Jobs</h2>
+            <div className="mt-1 h-3" />
 
             <div className="mt-4 space-y-3">
               {isLoading && <div className="font-mono text-[11px] text-[#C5A67C]">Loading jobs…</div>}

@@ -469,6 +469,7 @@ function JobsPage() {
           <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
             Manual <span className="italic text-[#C5A67C]">Job</span>
           </h1>
+          <div className="mt-3 h-5" />
         </div>
 
         <div className="mb-5 overflow-x-auto border-y border-white/10 py-2">
@@ -486,6 +487,7 @@ function JobsPage() {
             </button>
             <Link href="/register/manual" className="btn-primary">REGISTER AGENT</Link>
           </div>
+          <div className="mt-4 h-4" />
         </section>
 
         <section id="categories" className="mb-6">
@@ -557,6 +559,7 @@ function JobsPage() {
                 indexed
               </span>
             </div>
+            <div className="mt-2 h-4" />
 
             {/* Filter / sort bar */}
             <div className="mt-4 space-y-3">
@@ -740,6 +743,7 @@ function JobsPage() {
                 )}
               </div>
               <h2 className="mt-2 aureo-display text-[28px] text-[#EAE4D8]">Create job assignment</h2>
+              <div className="mt-1 h-4" />
 
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {JOB_TEMPLATES.map((template) => (
@@ -829,6 +833,7 @@ function JobsPage() {
                       placeholder="Paste full agent ID if indexer is empty"
                       className="input-mono"
                     />
+                    <div className="mt-1.5 h-3" />
                   </div>
                 )}
 
@@ -848,6 +853,7 @@ function JobsPage() {
                     placeholder={selectedAgent ? selectedAgent.controller : '0x... worker wallet'}
                     className="input-mono"
                   />
+                  <div className="mt-1.5 h-3" />
                 </div>
 
                 <div>
@@ -888,6 +894,8 @@ function JobsPage() {
                 {isCreating ? 'CREATING\u2026' : 'CREATE JOB'}
               </button>
 
+              <div className="mt-4 h-px bg-white/5" />
+
               {createdJobId && (
                 <div className="mt-4 rounded-none border border-[rgba(184,205,126,0.35)] bg-[rgba(184,205,126,0.08)] p-4">
                   <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[#B8CD7E]">Step 1 complete</div>
@@ -904,6 +912,7 @@ function JobsPage() {
             <section id="fund-job" className="aureo-panel scroll-mt-4 p-4 md:p-6">
               <div className="aureo-mono-label mb-2">STEP 2</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Approve &amp; fund Settlement Vault</h2>
+              <div className="mt-1 h-4" />
 
               <div className="mt-5 space-y-4">
                 <div>
@@ -914,6 +923,7 @@ function JobsPage() {
                     placeholder="Job ID to budget and fund"
                     className="input-mono"
                   />
+                  <div className="mt-1.5 h-3" />
                 </div>
 
                 <div>
@@ -924,6 +934,7 @@ function JobsPage() {
                     placeholder="1"
                     className="input-mono"
                   />
+                  <div className="mt-1.5 h-3" />
                 </div>
 
                 <div>
@@ -942,6 +953,7 @@ function JobsPage() {
                     placeholder="1"
                     className="input-mono"
                   />
+                  <div className="mt-1.5 h-3" />
                 </div>
 
                 {selectedFundingJob && (
@@ -958,6 +970,8 @@ function JobsPage() {
               <button onClick={handleFundJob} disabled={!isConnected || isCreating || isFunding} className="btn-primary mt-5">
                 {isFunding ? 'FUNDING\u2026' : 'APPROVE & FUND'}
               </button>
+
+              <div className="mt-4 h-px bg-white/5" />
             </section>
 
             <details id="advanced-escrow" className="aureo-panel scroll-mt-4 p-4 md:p-6">
