@@ -1,12 +1,12 @@
 /**
- * GatewayWallet — minimal ABI for client-side deposit flow.
+ * Circle GatewayWallet + ERC20 minimal ABI for ArcLayer wallet onboarding.
  *
- * Only includes the read/write functions we touch from the browser.
- * The full ABI lives server-side in @circle-fin/x402-batching.
- *
- * Source: Circle Gateway docs + on-chain inspection of
- *   0x0077777d7EBA4688BDeF3E311b846F25870A19B9 (Arc Testnet)
+ * Used by:
+ * - Gateway deposit
+ * - Gateway balance checks
+ * - Recovery withdrawal: initiateWithdrawal -> withdraw
  */
+
 export const GATEWAY_WALLET_ABI = [
   {
     type: 'function',
@@ -21,25 +21,79 @@ export const GATEWAY_WALLET_ABI = [
   {
     type: 'function',
     stateMutability: 'view',
-    name: 'deposits',
+    name: 'totalBalance',
     inputs: [
-      { name: 'depositor', type: 'address' },
       { name: 'token', type: 'address' },
+      { name: 'depositor', type: 'address' },
     ],
     outputs: [{ name: '', type: 'uint256' }],
   },
   {
-    type: 'event',
-    name: 'Deposited',
+    type: 'function',
+    stateMutability: 'view',
+    name: 'availableBalance',
     inputs: [
-      { name: 'token', type: 'address', indexed: true },
-      { name: 'depositor', type: 'address', indexed: true },
-      { name: 'value', type: 'uint256', indexed: false },
+      { name: 'token', type: 'address' },
+      { name: 'depositor', type: 'address' },
     ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    stateMutability: 'view',
+    name: 'withdrawingBalance',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'depositor', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    stateMutability: 'view',
+    name: 'withdrawableBalance',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'depositor', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    stateMutability: 'view',
+    name: 'withdrawalDelay',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    stateMutability: 'view',
+    name: 'withdrawalBlock',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'depositor', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+  },
+  {
+    type: 'function',
+    stateMutability: 'nonpayable',
+    name: 'initiateWithdrawal',
+    inputs: [
+      { name: 'token', type: 'address' },
+      { name: 'value', type: 'uint256' },
+    ],
+    outputs: [],
+  },
+  {
+    type: 'function',
+    stateMutability: 'nonpayable',
+    name: 'withdraw',
+    inputs: [{ name: 'token', type: 'address' }],
+    outputs: [],
   },
 ] as const;
 
-/** Minimal ERC-20 ABI for approve/allowance/balanceOf. */
 export const ERC20_ABI = [
   {
     type: 'function',
