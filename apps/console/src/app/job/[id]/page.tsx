@@ -125,13 +125,13 @@ export default function JobDetailPage() {
   // Auto-fetch deliverable JSON only when a real IPFS CID or HTTPS URL is submitted.
   useEffect(() => {
     let cancelled = false;
-    if (isPlaceholderURI(job?.deliverable)) {
+    if (isPlaceholderURI(safeJob?.deliverable)) {
       setPreview(null);
       setPreviewError(null);
       setPreviewLoading(false);
       return;
     }
-    const url = ipfsToHttp(job?.deliverable);
+    const url = ipfsToHttp(safeJob?.deliverable);
     if (!url) { setPreview(null); setPreviewError(null); return; }
     setPreviewLoading(true);
     setPreviewError(null);
@@ -147,7 +147,7 @@ export default function JobDetailPage() {
       })
       .finally(() => { if (!cancelled) setPreviewLoading(false); });
     return () => { cancelled = true; };
-  }, [job?.deliverable]);
+  }, [safeJob?.deliverable]);
 
   async function handleSubmitDeliverable() {
     if (!jobId) return;
@@ -187,8 +187,8 @@ export default function JobDetailPage() {
     finally { setActiveAction(null); }
   }
 
-  const statusChipClass = job
-    ? job.status === 3 ? 'chip-status success' : job.status === 4 ? 'chip-status error' : 'chip-status pending'
+  const statusChipClass = safeJob
+    ? safeJob.status === 3 ? 'chip-status success' : safeJob.status === 4 ? 'chip-status error' : 'chip-status pending'
     : 'chip-status';
 
   return (
@@ -213,7 +213,7 @@ export default function JobDetailPage() {
           >
             <span className="aureo-mono-label" style={{ color: '#C5A67C' }}>BUDGET</span>
             <span className="font-mono text-[18px] text-[#EAE4D8]">
-              {job ? `${formatUSDC(safeBigInt(job.budget))} USDC` : isLoading ? '…' : '0.00 USDC'}
+              {safeJob ? `${formatUSDC(safeBigInt(safeJob.budget))} USDC` : isLoading ? '…' : '0.00 USDC'}
             </span>
           </div>
         </div>
@@ -229,10 +229,10 @@ export default function JobDetailPage() {
         {/* KPIs */}
         <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
           {[
-            ['STATUS', job ? JOB_STATUS[job.status] : isLoading ? '…' : '—', statusChipClass],
-            ['FUNDED', job ? `${formatUSDC(safeBigInt(job.fundedAmount))} USDC` : isLoading ? '…' : '0.00 USDC'],
-            ['DELIVERABLE', job?.deliverable || job?.deliverable ? 'Submitted' : isLoading ? '…' : 'pending'],
-            ['SETTLEMENT', job?.status === 3 ? 'Completed' : job?.status === 4 ? 'Rejected' : job?.status === 5 ? 'Expired' : isLoading ? '…' : 'pending'],
+            ['STATUS', safeJob ? JOB_STATUS[safeJob.status] : isLoading ? '…' : '—', statusChipClass],
+            ['FUNDED', safeJob ? `${formatUSDC(safeBigInt(safeJob.fundedAmount))} USDC` : isLoading ? '…' : '0.00 USDC'],
+            ['DELIVERABLE', safeJob?.deliverable ? 'Submitted' : isLoading ? '…' : 'pending'],
+            ['SETTLEMENT', safeJob?.status === 3 ? 'Completed' : safeJob?.status === 4 ? 'Rejected' : safeJob?.status === 5 ? 'Expired' : isLoading ? '…' : 'pending'],
           ].map(([label, value, chip], i) => (
             <div key={label as string} className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)', animation: `fadeInUp 0.4s ${i * 0.04}s both cubic-bezier(0.16, 1, 0.3, 1)` }}>
               <p className="aureo-mono-label">{label as string}</p>
@@ -251,11 +251,11 @@ export default function JobDetailPage() {
             <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Parties &amp; metadata</h2>
             <div className="mt-5 space-y-2.5">
               {[
-                ['client', job ? shortenAddress(job.client) : isLoading ? '…' : '—'],
-                ['provider', job ? shortenAddress(job.provider) : isLoading ? '…' : '—'],
-                ['evaluator', job ? shortenAddress(job.evaluator) : isLoading ? '…' : '—'],
-                ['description', job?.description ? job.description : isLoading ? '…' : '—'],
-                ['created', job ? new Date(Number(job.createdAt) * 1000).toLocaleString() : isLoading ? '…' : '—'],
+                ['client', safeJob ? shortenAddress(safeJob.client) : isLoading ? '…' : '—'],
+                ['provider', safeJob ? shortenAddress(safeJob.provider) : isLoading ? '…' : '—'],
+                ['evaluator', safeJob ? shortenAddress(safeJob.evaluator) : isLoading ? '…' : '—'],
+                ['description', safeJob?.description || (isLoading ? '…' : '—')],
+                ['created', safeJob ? new Date(Number(safeJob.createdAt) * 1000).toLocaleString() : isLoading ? '…' : '—'],
               ].map(([label, value]) => (
                 <div key={label} className="ledger-row flex items-center justify-between border border-white/10 bg-black/20 px-4 py-2.5">
                   <span className="font-mono text-[10.5px] tracking-[0.14em] text-[#a0a0a0]">{label}</span>
@@ -279,32 +279,32 @@ export default function JobDetailPage() {
             <div className="mt-5 space-y-3">
               <ArtifactRow
                 label="Deliverable URI"
-                value={job?.deliverable || (isLoading ? '…' : 'No deliverable submitted.')}
-                href={ipfsToHttp(job?.deliverable)}
+                value={safeJob?.deliverable || (isLoading ? '…' : 'No deliverable submitted.')}
+                href={ipfsToHttp(safeJob?.deliverable)}
               />
               <ArtifactRow
                 label="Deliverable hash"
-                value={job?.deliverable || (isLoading ? '…' : 'No deliverable hash.')}
+                value={safeJob?.deliverable || (isLoading ? '…' : 'No deliverable hash.')}
               />
 
               {/* Submitted work preview */}
-              {job?.deliverable && (
+              {safeJob?.deliverable && (
                 <div className="p-4" style={{ border: '1px solid rgba(184, 205, 126, 0.25)', background: 'rgba(184, 205, 126, 0.04)' }}>
                   <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>SUBMITTED WORK PREVIEW</p>
 
                   {/* Always show the raw URI + copy */}
                   <div className="mt-2 flex items-center gap-2">
-                    <code className="flex-1 truncate font-mono text-[10.5px] text-[#b5b5b5]">{job.deliverable}</code>
+                    <code className="flex-1 truncate font-mono text-[10.5px] text-[#b5b5b5]">{safeJob.deliverable}</code>
                     <button
-                      onClick={() => navigator.clipboard.writeText(job.deliverable)}
+                      onClick={() => navigator.clipboard.writeText(safeJob.deliverable)}
                       className="shrink-0 font-mono text-[9px] tracking-[0.14em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
                       title="Copy URI"
                     >
                       COPY
                     </button>
-                    {ipfsToHttp(job.deliverable) && !isPlaceholderURI(job.deliverable) && (
+                    {ipfsToHttp(safeJob.deliverable) && !isPlaceholderURI(safeJob.deliverable) && (
                       <a
-                        href={ipfsToHttp(job.deliverable)!}
+                        href={ipfsToHttp(safeJob.deliverable)!}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="shrink-0 font-mono text-[9px] tracking-[0.14em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]"
@@ -315,7 +315,7 @@ export default function JobDetailPage() {
                   </div>
 
                   {/* Placeholder URI — explain clearly */}
-                  {isPlaceholderURI(job.deliverable) && (
+                  {isPlaceholderURI(safeJob.deliverable) && (
                     <p className="mt-3 font-mono text-[11px] text-[#f5c864]">
                       No valid work file submitted yet. Please submit a real IPFS CID or HTTPS link.
                     </p>
@@ -327,7 +327,7 @@ export default function JobDetailPage() {
                   )}
 
                   {/* Fetch error — human-readable */}
-                  {previewError && !isPlaceholderURI(job.deliverable) && (
+                  {previewError && !isPlaceholderURI(safeJob.deliverable) && (
                     <div className="mt-3">
                       <p className="font-mono text-[11px] text-[#f0c5c5]">
                         Preview unavailable. The submitted work link could not be opened.
@@ -384,11 +384,11 @@ export default function JobDetailPage() {
         <section className="aureo-panel mt-6 p-4 md:p-6">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <div className="aureo-mono-label mb-2">ACTIONS · {job ? JOB_STATUS[job.status] : '…'}</div>
+              <div className="aureo-mono-label mb-2">ACTIONS · {safeJob ? JOB_STATUS[safeJob.status] : '…'}</div>
               <h2 className="aureo-display text-[28px] text-[#EAE4D8]">
-                {job?.status === 3 ? 'Settlement complete' :
-                 job?.status === 2 ? 'Review deliverable, then complete'  :
-                 job?.status === 1 ? 'Funded — awaiting provider submission' :
+                {safeJob?.status === 3 ? 'Settlement complete' :
+                 safeJob?.status === 2 ? 'Review deliverable, then complete'  :
+                 safeJob?.status === 1 ? 'Funded — awaiting provider submission' :
                  'Job lifecycle controls'}
               </h2>
             </div>
@@ -417,12 +417,12 @@ export default function JobDetailPage() {
 
           {/* PRIMARY: status-driven actions */}
           <div className="mt-5 space-y-3">
-            {job?.status === 2 && previewError && isEvaluator && (
+            {safeJob?.status === 2 && previewError && isEvaluator && (
               <div className="p-3 font-mono text-[11px] tracking-[0.04em]" style={{ border: '1px solid rgba(245, 200, 100, 0.35)', background: 'rgba(245, 200, 100, 0.06)', color: '#f5c864' }}>
                 ⚠️ Preview unavailable — you can still complete on-chain if you trust the submitted URI/hash.
               </div>
             )}
-            {job?.status === 2 && isEvaluator && (
+            {safeJob?.status === 2 && isEvaluator && (
               <button
                 onClick={handleComplete}
                 disabled={!isConnected || activeAction !== null}
@@ -432,7 +432,7 @@ export default function JobDetailPage() {
                 {activeAction === 'complete' ? 'COMPLETING…' : '✓ COMPLETE JOB'}
               </button>
             )}
-            {job?.status === 2 && !isEvaluator && isConnected && (
+            {safeJob?.status === 2 && !isEvaluator && isConnected && (
               <div className="p-3 font-mono text-[11px] tracking-[0.04em] text-[#a0a0a0]" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(0,0,0,0.2)' }}>
                 {isWorker
                   ? '⏳ Deliverable submitted. Waiting for evaluator to complete via ERC-8183.'
@@ -440,7 +440,7 @@ export default function JobDetailPage() {
               </div>
             )}
 
-            {job?.status === 3 && (
+            {safeJob?.status === 3 && (
               <div className="p-4" style={{ border: '1px solid rgba(184, 205, 126, 0.35)', background: 'rgba(184, 205, 126, 0.06)' }}>
                 <p className="aureo-mono-label" style={{ color: '#B8CD7E' }}>COMPLETED</p>
                 <p className="mt-2 font-mono text-[12px] text-[#EAE4D8]">
@@ -449,9 +449,9 @@ export default function JobDetailPage() {
               </div>
             )}
 
-            {job && job.status < 2 && (
+            {safeJob && safeJob.status < 2 && (
               <p className="font-mono text-[11.5px] text-[#a0a0a0]">
-                {job.status === 1
+                {safeJob.status === 1
                   ? '✓ Funded. The service provider should submit deliverable via ERC-8183 submit().'
                   : 'Job not yet funded. Use setBudget, USDC approve, then fund(jobId, 0x).'}
               </p>

@@ -1,16 +1,17 @@
-import type { A2AOnChain, AutonomousFeed, NetworkAgent, Overview, RegisteredAgent } from '@/types/agent-network';
+import type { A2AOnChain, AutonomousFeed, Job, NetworkAgent, Overview, Proof, RegisteredAgent } from '@/types/agent-network';
 import { asArray, asString } from '@/lib/safeShape';
+import { safeBigInt } from '@/lib/safeNumber';
 
 function jobsForAgent(overview: Overview | null, agentId?: string) {
   if (!overview || !agentId) return 0;
-  return overview.jobs.filter((job) => job.provider?.toLowerCase() === agentId.toLowerCase()).length;
+  return asArray<Job>(overview.jobs).filter((job) => job.provider?.toLowerCase() === agentId.toLowerCase()).length;
 }
 
 function jobClientsForAgent(overview: Overview | null, agentId?: string) {
   if (!overview || !agentId) return [];
   return Array.from(
     new Set(
-      overview.jobs
+      asArray<Job>(overview.jobs)
         .filter((job) => job.provider?.toLowerCase() === agentId.toLowerCase() && job.client)
         .map((job) => `${job.client.slice(0, 6)}…${job.client.slice(-4)}`)
     )
@@ -47,9 +48,9 @@ export function buildAgentNetwork({
       if (hiddenIds?.has(regId)) continue;
 
       const completed = jobsForAgent(overview, regId);
-      const receipts = (overview?.proofs as any[] | undefined)?.filter((p) => String(p.agentId || "").toLowerCase() === regKey) ?? [];
-      const jobs = overview?.jobs.filter((job) => job.provider?.toLowerCase() === regKey) ?? [];
-      const volumeRaw = receipts.reduce((sum, p) => sum + BigInt(p.amountPaid || '0'), BigInt(0)).toString();
+      const receipts = asArray<Proof>(overview?.proofs).filter((p) => String(p.agentId || '').toLowerCase() === regKey);
+      const jobs = asArray<Job>(overview?.jobs).filter((job) => job.provider?.toLowerCase() === regKey);
+      const volumeRaw = receipts.reduce((sum, p) => sum + safeBigInt(p.amountPaid as string | undefined), BigInt(0)).toString();
       const activity = [
         ...receipts.map((p) => ({
           id: `proof-${p.tokenId}`,
