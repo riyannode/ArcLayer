@@ -258,11 +258,13 @@ function JobsPage() {
         fetchIndexerJson<IndexedJob[]>('/jobs'),
         fetchIndexerJson<IndexedAgent[]>('/agents'),
       ]);
-      setJobs(normalizeIndexedJobs(nextJobs));
-      setAgents(normalizeIndexedAgents(nextAgents));
+      const normalizedJobs = normalizeIndexedJobs(nextJobs);
+      const normalizedAgents = normalizeIndexedAgents(nextAgents);
+      setJobs(normalizedJobs);
+      setAgents(normalizedAgents);
       setCreateForm((current) => ({
         ...current,
-        agentId: current.agentId || preselectedAgentId || nextAgents[0]?.agentId || '',
+        agentId: current.agentId || preselectedAgentId || normalizedAgents[0]?.agentId || '',
       }));
     } finally {
       setIsRefreshing(false);
@@ -281,11 +283,13 @@ function JobsPage() {
           fetchIndexerJson<IndexedAgent[]>('/agents'),
         ]);
         if (!cancelled) {
-          setJobs(normalizeIndexedJobs(nextJobs));
-          setAgents(normalizeIndexedAgents(nextAgents));
+          const normalizedJobs = normalizeIndexedJobs(nextJobs);
+          const normalizedAgents = normalizeIndexedAgents(nextAgents);
+          setJobs(normalizedJobs);
+          setAgents(normalizedAgents);
           setCreateForm((current) => ({
             ...current,
-            agentId: preselectedAgentId || current.agentId || nextAgents[0]?.agentId || '',
+            agentId: preselectedAgentId || current.agentId || normalizedAgents[0]?.agentId || '',
           }));
           setStatusTone('synced');
         }
