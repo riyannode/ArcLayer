@@ -264,20 +264,43 @@ export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots
   const [presence, setPresence] = useState<AgentPresence[]>([]);
   const [events, setEvents] = useState<AgentLiveEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [rosterLoading, setRosterLoading] = useState(false);
+  const [rosterError, setRosterError] = useState<string | null>(null);
+  const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(null);
+  const [rosterTotal, setRosterTotal] = useState<number>(0);
 
   useEffect(() => {
     let alive = true;
 
     async function loadRoster() {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20_000);
+      setRosterLoading(true);
       try {
-        const res = await fetch(`/api/a2a/agents/by-category?category=${encodeURIComponent(category)}`, { cache: 'no-store' });
+        const res = await fetch(`/api/a2a/agents/by-category?category=${encodeURIComponent(category)}`, { cache: 'no-store', signal: controller.signal });
         const json = await res.json();
+        clearTimeout(timeoutId);
         if (!alive) return;
         if (!res.ok || !json.ok) throw new Error(json.error || 'agents_fetch_failed');
-        setAgents(Array.isArray(json.agents) ? json.agents : []);
+        const list = Array.isArray(json.agents) ? json.agents : [];
+        setAgents(list);
+        setRosterTotal(json.total ?? list.length);
+        setLastLoadedAt(new Date().toISOString());
+        setRosterError(null);
         setError(null);
       } catch (err) {
-        if (alive) setError(err instanceof Error ? err.message : 'agents_fetch_failed');
+        clearTimeout(timeoutId);
+        if (!alive) return;
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          setRosterError(`roster fetch timed out after 20s`);
+          setError('roster_fetch_timed_out');
+        } else {
+          const msg = err instanceof Error ? err.message : 'agents_fetch_failed';
+          setRosterError(msg);
+          setError(msg);
+        }
+      } finally {
+        if (alive) setRosterLoading(false);
       }
     }
 
@@ -340,6 +363,18 @@ export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots
     () => toPredictionAgentInputs(agents, presenceByAgent, latestEventByAgent, proofByRole),
     [agents, presenceByAgent, latestEventByAgent, proofByRole],
   );
+  const onlineCount = useMemo(() => [...presenceByAgent.values()].filter(isOnline).length, [presenceByAgent]);
+  const diagnosticsVisible = rosterLoading || Boolean(rosterError) || agents.length === 0;
+  const diagnostics = {
+    source: 'a2a-api',
+    rosterTotal,
+    agents: agents.length,
+    presence: presence.length,
+    events: events.length,
+    online: onlineCount,
+    lastLoadedAt,
+    error: rosterError,
+  };
 
   return (
     <section className="space-y-4">
@@ -352,6 +387,14 @@ export function PredictionMarketAgentsStrip({ category = 'prediction-market-bots
       {error ? (
         <div className="rounded border border-red-400/20 bg-red-950/20 p-2 text-xs text-red-200">{error}</div>
       ) : null}
+
+      {/* diagnostics line — collapsed when OK, auto-visible on loading/error/zero */}
+      <div className={`text-[10px] font-mono leading-tight transition-opacity ${diagnosticsVisible ? 'opacity-100' : 'opacity-30 hover:opacity-100'}`}>
+        {rosterLoading ? '⟳ loading roster…' :
+         diagnostics.source} | roster {diagnostics.rosterTotal} · agents {diagnostics.agents} · presence {diagnostics.presence} · events {diagnostics.events} · online {diagnostics.online}
+        {lastLoadedAt ? ` · ${new Date(lastLoadedAt).toLocaleTimeString()}` : ''}
+        {rosterError ? ` · error: ${rosterError}` : ''}
+      </div>
 
       <NodeGraph agents={uiAgents} />
       <AgentCards agents={uiAgents} />
