@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { indexerUrl } from '@/lib/indexer';
+import { safeJson } from '@/lib/safeFetch';
 
 export type HomeStat = { label: string; value: string; suffix: string };
 
@@ -25,7 +26,7 @@ export default function HomeStats() {
       try {
         const res = await fetch(indexerUrl('/overview'), { cache: 'no-store' });
         if (!res.ok) throw new Error('indexer not ready');
-        const data = await res.json();
+        const data = await safeJson<{ summary?: Record<string, unknown> }>(res);
         if (cancelled) return;
         const s = data?.summary;
         if (s) {
