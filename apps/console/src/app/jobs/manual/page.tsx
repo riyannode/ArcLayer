@@ -18,6 +18,8 @@ import { formatUSDC, parseUSDC, shortenAddress } from '@/lib/contracts';
 import { fetchIndexerJson, type IndexedAgent, type IndexedJob, waitForIndexer } from '@/lib/indexer';
 import { config } from '@/lib/wagmi';
 import { displayAgentLabel, formatSkillLabel, parseAgentSkill, shortAgentId } from '@/lib/agentName';
+import { asArray, asRecord, asString, asNumber } from '@/lib/safeShape';
+import { safeBigInt } from '@/lib/safeNumber';
 import { VaultDepositPanel } from '@/components/vault/VaultDepositPanel';
 import { MilestoneProgressPanel } from '@/components/vault/MilestoneProgressPanel';
 import { DisputeViewer } from '@/components/vault/DisputeViewer';
@@ -38,6 +40,61 @@ import {
 
 const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Completed'] as const;
 const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'success' };
+
+function normalizeIndexedJob(input: unknown): IndexedJob {
+  const v = asRecord(input);
+  const s = (key: string) => asString(v[key]);
+  const n = (key: string) => asNumber(v[key]);
+  return {
+    id: s('id'),
+    client: s('client'),
+    provider: s('provider'),
+    evaluator: s('evaluator'),
+    hook: s('hook'),
+    expiredAt: s('expiredAt'),
+    description: s('description'),
+    budget: s('budget') || '0',
+    fundedAmount: s('fundedAmount') || '0',
+    createdAtBlock: s('createdAtBlock'),
+    updatedAtBlock: s('updatedAtBlock'),
+    deliverable: s('deliverable'),
+    completionReason: s('completionReason'),
+    status: n('status'),
+    statusLabel: 'Open' as const,
+    worker: s('worker') || s('provider'),
+    agentId: s('agentId') || s('provider'),
+    jobSpecHash: s('jobSpecHash') || s('description'),
+    deliverableURI: s('deliverableURI') || s('deliverable'),
+    proofMetadataURI: s('proofMetadataURI'),
+    approved: Boolean(v['approved']),
+    createdAt: s('createdAt') || s('createdAtBlock'),
+  };
+}
+
+function normalizeIndexedAgent(input: unknown): IndexedAgent {
+  const v = asRecord(input);
+  const s = (key: string) => asString(v[key]);
+  return {
+    agentId: s('agentId') || s('tokenId'),
+    controller: s('controller'),
+    skillHash: s('skillHash'),
+    metadataURI: s('metadataURI'),
+    registeredAt: s('registeredAt'),
+    reputationScore: s('reputationScore') || '0',
+    score: s('score') || '0',
+    jobs: asArray(v['jobs']).map((j: unknown) => String(j)),
+    proofTokenIds: asArray(v['proofTokenIds']).map((id: unknown) => String(id)),
+    tokenId: s('tokenId') || s('agentId'),
+  };
+}
+
+function normalizeIndexedJobs(input: unknown): IndexedJob[] {
+  return asArray(input).map(normalizeIndexedJob);
+}
+
+function normalizeIndexedAgents(input: unknown): IndexedAgent[] {
+  return asArray(input).map(normalizeIndexedAgent);
+}
 
 function isValidAddress(value: string) {
   return /^0x[a-fA-F0-9]{40}$/.test(value.trim());
@@ -151,17 +208,17 @@ function JobsPage() {
       const agent = agentById.get(j.agentId);
       const name = agent ? displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI }) : shortAgentId(j.agentId);
       const skill = agent ? (formatSkillLabel(parseAgentSkill(agent.metadataURI)) || parseAgentSkill(agent.metadataURI) || '') : '';
-      const status = JOB_STATUS[j.status] || '';
+      const status = JOB_STATUS[asNumber(j.status)] ?? 'Unknown';
       return [`#${j.id}`, j.id, j.agentId, shortAgentId(j.agentId), j.worker, j.client, j.evaluator, name, skill, status, display.category, display.title, display.description]
         .some((v) => String(v).toLowerCase().includes(q));
     });
     return rows.sort((a, b) => {
-      if (jobSort === 'newest') return Number(BigInt(b.id) - BigInt(a.id));
-      if (jobSort === 'budgetDesc') return Number(BigInt(b.budget) - BigInt(a.budget));
-      if (jobSort === 'budgetAsc') return Number(BigInt(a.budget) - BigInt(b.budget));
-      if (jobSort === 'settledFirst') return (b.status === 5 ? 1 : 0) - (a.status === 5 ? 1 : 0) || Number(BigInt(b.id) - BigInt(a.id));
+      if (jobSort === 'newest') return Number(safeBigInt(b.id) - safeBigInt(a.id));
+      if (jobSort === 'budgetDesc') return Number(safeBigInt(b.budget) - safeBigInt(a.budget));
+      if (jobSort === 'budgetAsc') return Number(safeBigInt(a.budget) - safeBigInt(b.budget));
+      if (jobSort === 'settledFirst') return (b.status === 5 ? 1 : 0) - (a.status === 5 ? 1 : 0) || Number(safeBigInt(b.id) - safeBigInt(a.id));
       // 'relevant': actionable first, then newest
-      return (relevance[a.status] ?? 9) - (relevance[b.status] ?? 9) || Number(BigInt(b.id) - BigInt(a.id));
+      return (relevance[a.status] ?? 9) - (relevance[b.status] ?? 9) || Number(safeBigInt(b.id) - safeBigInt(a.id));
     });
   }, [jobs, jobDisplays, jobSearch, jobCategoryFilter, jobStatusFilter, jobSort, myJobsOnly, address, agentById]);
 
@@ -201,8 +258,8 @@ function JobsPage() {
         fetchIndexerJson<IndexedJob[]>('/jobs'),
         fetchIndexerJson<IndexedAgent[]>('/agents'),
       ]);
-      setJobs(nextJobs);
-      setAgents(nextAgents);
+      setJobs(normalizeIndexedJobs(nextJobs));
+      setAgents(normalizeIndexedAgents(nextAgents));
       setCreateForm((current) => ({
         ...current,
         agentId: current.agentId || preselectedAgentId || nextAgents[0]?.agentId || '',
@@ -224,8 +281,8 @@ function JobsPage() {
           fetchIndexerJson<IndexedAgent[]>('/agents'),
         ]);
         if (!cancelled) {
-          setJobs(nextJobs);
-          setAgents(nextAgents);
+          setJobs(normalizeIndexedJobs(nextJobs));
+          setAgents(normalizeIndexedAgents(nextAgents));
           setCreateForm((current) => ({
             ...current,
             agentId: preselectedAgentId || current.agentId || nextAgents[0]?.agentId || '',
@@ -322,15 +379,15 @@ function JobsPage() {
       setTxState('Receipt confirmed. Waiting for indexer refresh\u2026');
       const next = await waitForIndexer<IndexedJob[]>(
         '/jobs',
-        (payload) => payload.some(
+        (payload) => normalizeIndexedJobs(payload).some(
           (j) =>
             j.agentId === createForm.agentId &&
             j.worker.toLowerCase() === createForm.worker.toLowerCase() &&
             j.evaluator.toLowerCase() === createForm.evaluator.toLowerCase()
         )
       );
-      setJobs(next);
-      const createdJob = [...next].reverse().find(
+      setJobs(normalizeIndexedJobs(next));
+      const createdJob = normalizeIndexedJobs(next).reverse().find(
         (j) =>
           j.agentId === createForm.agentId &&
           j.worker.toLowerCase() === createForm.worker.toLowerCase() &&
@@ -356,6 +413,11 @@ function JobsPage() {
       setTxState('Enter a Job ID first.');
       return;
     }
+    if (!/^\d+$/.test(fundForm.jobId.trim())) {
+      setStatusTone('error');
+      setTxState('Invalid Job ID: must be a numeric string.');
+      return;
+    }
 
     try {
       setIsFunding(true);
@@ -379,9 +441,9 @@ function JobsPage() {
       setTxState('Funding receipt confirmed. Waiting for indexer refresh\u2026');
       const next = await waitForIndexer<IndexedJob[]>(
         '/jobs',
-        (payload) => payload.some((j) => j.id === fundForm.jobId && j.fundedAmount === amount.toString())
+        (payload) => normalizeIndexedJobs(payload).some((j) => j.id === fundForm.jobId && j.fundedAmount === amount.toString())
       );
-      setJobs(next);
+      setJobs(normalizeIndexedJobs(next));
       setStatusTone('synced');
       setTxState('Budget set, USDC approved, and Deposit Amount funded into the Settlement Vault.');
     } catch (e) {
@@ -631,16 +693,16 @@ function JobsPage() {
                             <button type="button" onClick={() => { setCreateForm((c) => ({ ...c, agentId: job.agentId, category: display.category, title: display.isStructured ? display.title : '', jobSpec: display.isStructured ? display.description : '' })); document.getElementById('create-job')?.scrollIntoView({ behavior: 'smooth' }); }} className="text-[#777] hover:text-[#C5A67C]">Use agent</button>
                           </div>
                         </div>
-                        <span className={`chip-status ${JOB_TONE[job.status] ?? 'pending'}`}>{JOB_STATUS[job.status]}</span>
+                        <span className={`chip-status ${JOB_TONE[asNumber(job.status)] ?? 'pending'}`}>{JOB_STATUS[asNumber(job.status)] ?? 'Unknown'}</span>
                       </div>
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
                         <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.28)] px-3 py-2">
                           <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)]">Budget</div>
-                          <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{formatUSDC(BigInt(job.budget))} USDC</div>
+                          <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{formatUSDC(safeBigInt(job.budget))} USDC</div>
                         </div>
                         <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.28)] px-3 py-2">
                           <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)]">Deposit Amount</div>
-                          <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{formatUSDC(BigInt(job.fundedAmount))} USDC</div>
+                          <div className="mt-1 font-mono text-[11px] text-[#EAE4D8]">{formatUSDC(safeBigInt(job.fundedAmount))} USDC</div>
                         </div>
                       </div>
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -925,7 +987,7 @@ function JobsPage() {
                   <div className="rounded-none border border-[rgba(255,255,255,0.08)] bg-[rgba(0,0,0,0.3)] px-4 py-3">
                     <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.85)]">Funding Preview</div>
                     <div className="mt-2 grid gap-2 md:grid-cols-2">
-                      <div className="font-mono text-[10.5px] text-[#EAE4D8]">Status {JOB_STATUS[selectedFundingJob.status]}</div>
+                      <div className="font-mono text-[10.5px] text-[#EAE4D8]">Status {JOB_STATUS[asNumber(selectedFundingJob.status)] ?? 'Unknown'}</div>
                       <div className="font-mono text-[10.5px] text-[#EAE4D8]">Worker {shortenAddress(selectedFundingJob.worker)}</div>
                     </div>
                   </div>
