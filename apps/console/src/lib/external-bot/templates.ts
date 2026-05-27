@@ -92,6 +92,53 @@ const predictionMarketPM2: ExternalBotTemplate = {
 };
 
 // ──────────────────────────────────────────────
+// ERC-8183 Escrow Job Bots
+// ──────────────────────────────────────────────
+const erc8183EscrowBots: ExternalBotTemplate = {
+  id: 'erc8183-escrow-bots',
+  category: 'erc8183-commerce',
+  name: 'ERC-8183 Escrow Job Bots',
+  description: '3-role on-chain escrow pipeline: client creates jobs, worker budgets + submits work, evaluator settles. PM2 runtime.',
+  recommendedMode: 'erc8183-commerce',
+  defaultPriceAtomic: '1000',
+  defaultPriceLabel: 'on-chain escrow',
+  defaultRuntime: 'pm2',
+  fixedBotRoleNames: true,
+  bootSequence: ['client', 'provider', 'evaluator'],
+  roles: [
+    {
+      roleId: 'client',
+      displayName: 'Client Bot',
+      defaultAgentId: 'erc8183-client',
+      botRole: 'client',
+      capabilities: ['create_job', 'fund_escrow', 'approve_usdc', 'onchain_tx'],
+      endpointPath: 'client-bot/index.js',
+      scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:create', 'erc8183:confirm'],
+    },
+    {
+      // Worker is the user-facing name. provider is the legacy runtime role name
+      // used by the existing ERC-8183 example folder (provider-bot/).
+      roleId: 'provider',
+      displayName: 'Worker Bot',
+      defaultAgentId: 'erc8183-provider',
+      botRole: 'provider',
+      capabilities: ['set_budget', 'claim_job', 'submit_work', 'onchain_tx'],
+      endpointPath: 'provider-bot/index.js',
+      scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:claim', 'erc8183:running', 'erc8183:submit'],
+    },
+    {
+      roleId: 'evaluator',
+      displayName: 'Evaluator Bot',
+      defaultAgentId: 'erc8183-evaluator',
+      botRole: 'evaluator',
+      capabilities: ['evaluate', 'settle', 'complete_job', 'onchain_tx'],
+      endpointPath: 'evaluator-bot/index.js',
+      scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:complete', 'erc8183:tx'],
+    },
+  ],
+};
+
+// ──────────────────────────────────────────────
 // 7.12 — Custom Worker
 // ──────────────────────────────────────────────
 const customWorker: ExternalBotTemplate = {
@@ -121,6 +168,7 @@ const customWorker: ExternalBotTemplate = {
 // ──────────────────────────────────────────────
 export const EXTERNAL_BOT_TEMPLATES: ExternalBotTemplate[] = [
   predictionMarketPM2,
+  erc8183EscrowBots,
   customWorker,
 ];
 
