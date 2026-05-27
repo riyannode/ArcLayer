@@ -548,26 +548,33 @@ export default function ExternalBotWizard() {
   // ── UI ──────────────────────────────────────────────────────
   return (
     <div className="mx-auto max-w-3xl">
-      {/* Progress bar */}
-      <div className="mb-6 flex items-center gap-1">
-        {STEPS.map((s, i) => (
-          <div key={s} className="flex items-center gap-1">
-            <div className={`h-2 w-2 rounded-full ${
-              i <= stepIdx ? 'bg-[#C5A67C]' : 'bg-white/10'
-            }`} title={STEP_LABELS[s]} />
-            {i < STEPS.length - 1 && <div className={`h-px w-6 ${i < stepIdx ? 'bg-[#C5A67C]/50' : 'bg-white/10'}`} />}
-          </div>
-        ))}
-      </div>
-
-      <div className="font-mono text-[10px] uppercase tracking-[0.34em] text-[#C5A67C] mb-2">
-        {STEP_LABELS[step]}
+      {/* Progress bar with step labels */}
+      <div className="mb-8">
+        <div className="flex items-center gap-1">
+          {STEPS.map((s, i) => (
+            <div key={s} className="flex items-center gap-1">
+              <div className={`h-2 w-2 rounded-full ${
+                i <= stepIdx ? 'bg-[#C5A67C]' : 'bg-white/10'
+              }`} title={STEP_LABELS[s]} />
+              {i < STEPS.length - 1 && <div className={`h-px w-6 ${i < stepIdx ? 'bg-[#C5A67C]/50' : 'bg-white/10'}`} />}
+            </div>
+          ))}
+        </div>
+        <div className="mt-2 flex items-center justify-between">
+          {STEPS.map((s, i) => (
+            <div key={s} className={`font-mono text-[8px] uppercase tracking-[0.14em] ${
+              i === stepIdx ? 'text-[#C5A67C]' : i < stepIdx ? 'text-[#EAE4D8]/40' : 'text-[#EAE4D8]/20'
+            }`} style={{ width: `${100 / STEPS.length}%`, textAlign: 'center' }}>
+              {STEP_LABELS[s]}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ── Step 1: Category Selection ─────────────────────────── */}
       {step === 'category' && (
         <div>
-          <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-4">
+          <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-6">
             Choose Category
           </h2>
           <div className="grid gap-3 md:grid-cols-2">
@@ -575,20 +582,19 @@ export default function ExternalBotWizard() {
               <button
                 key={cat.key}
                 onClick={() => handleSelectCategory(cat.key)}
-                className="rounded-sm border border-white/10 bg-white/[0.02] p-4 text-left transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
+                className="group rounded-sm border border-white/10 bg-white/[0.02] p-5 text-left transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
               >
-                <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C]">{cat.label}</div>
-                <p className="mt-1 text-xs text-[#EAE4D8]/70">{cat.tagline}</p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {cat.capabilities.map((c) => (
-                    <span key={c} className="rounded-sm bg-white/5 px-1.5 py-0.5 font-mono text-[9px] text-[#EAE4D8]/60">
+                <div className="flex items-center justify-between">
+                  <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C]">{cat.label}</div>
+                  <div className="font-mono text-[9px] text-[#EAE4D8]/30 group-hover:text-[#C5A67C]/60 transition-colors">→</div>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-1">
+                  {cat.capabilities.slice(0, 3).map((c) => (
+                    <span key={c} className="rounded-sm bg-white/5 px-1.5 py-0.5 font-mono text-[8px] text-[#EAE4D8]/50">
                       {c}
                     </span>
                   ))}
                 </div>
-                {cat.feeRange && (
-                  <div className="mt-2 font-mono text-[9px] text-[#EAE4D8]/40">{cat.feeRange}</div>
-                )}
               </button>
             ))}
           </div>
@@ -596,26 +602,19 @@ export default function ExternalBotWizard() {
       )}
 
       {/* ── Step 2: Template Selection ─────────────────────────── */}
-      {/* (fix #5) Categories without templates show 'Template coming soon' */}
       {step === 'template' && (
         <div>
-          <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-1">
+          <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-6">
             {categoryConfig?.label}
           </h2>
-          <p className="text-xs text-[#EAE4D8]/70 mb-4">{categoryConfig?.tagline}</p>
 
           {templates.length === 0 ? (
             <div className="rounded-sm border border-yellow-500/30 bg-yellow-500/5 p-4 text-sm text-yellow-300/80">
               <div className="font-mono text-[10px] uppercase tracking-[0.18em] mb-1">Template coming soon</div>
-              This category does not have an onboarding template yet. Templates are being added per category.
-              Check back later or use the{' '}
-              <button
-                onClick={() => handleSelectCategory('custom-workers')}
-                className="underline text-[#C5A67C]"
-              >
+              No template yet. Use{' '}
+              <button onClick={() => handleSelectCategory('custom-workers')} className="underline text-[#C5A67C]">
                 Custom Worker
-              </button>{' '}
-              template for a generic setup.
+              </button>.
             </div>
           ) : (
             <div className="space-y-3">
@@ -623,33 +622,21 @@ export default function ExternalBotWizard() {
                 <button
                   key={t.id}
                   onClick={() => handleSelectTemplate(t.id)}
-                  className="w-full rounded-sm border border-white/10 bg-white/[0.02] p-4 text-left transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
+                  className="group w-full rounded-sm border border-white/10 bg-white/[0.02] p-5 text-left transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
                 >
                   <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-semibold text-[#EAE4D8]">{t.name}</div>
-                      {t.description && (
-                        <p className="mt-0.5 text-xs text-[#EAE4D8]/60">{t.description}</p>
-                      )}
-                    </div>
-                    <div className="flex gap-2">
-                      <span className="rounded-sm border border-white/10 px-2 py-1 font-mono text-[9px] uppercase text-[#C5A67C]">
-                        {t.defaultRuntime}
-                      </span>
-                      <span className="rounded-sm border border-white/10 px-2 py-1 font-mono text-[9px] uppercase text-[#C5A67C]">
-                        {t.recommendedMode}
-                      </span>
-                    </div>
+                    <div className="font-semibold text-[#EAE4D8]">{t.name}</div>
+                    <div className="font-mono text-[9px] text-[#EAE4D8]/30 group-hover:text-[#C5A67C]/60 transition-colors">→</div>
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-1">
+                  <div className="mt-3 flex flex-wrap gap-1">
                     {(t.availableRoles || t.roles).map((r) => (
-                      <span key={r.roleId} className="rounded-sm bg-white/5 px-1.5 py-0.5 font-mono text-[9px] text-[#EAE4D8]/70">
+                      <span key={r.roleId} className="rounded-sm bg-white/5 px-1.5 py-0.5 font-mono text-[8px] text-[#EAE4D8]/50">
                         {r.displayName}
                       </span>
                     ))}
                   </div>
-                  <div className="mt-2 font-mono text-[9px] text-[#EAE4D8]/40">
-                    {t.defaultPriceLabel} · {t.defaultRuntime} · {t.recommendedMode}
+                  <div className="mt-2 font-mono text-[8px] text-[#EAE4D8]/30">
+                    {t.defaultPriceLabel} · {t.defaultRuntime}
                   </div>
                 </button>
               ))}
@@ -660,7 +647,7 @@ export default function ExternalBotWizard() {
             onClick={() => setStep('category')}
             className="mt-4 px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/50 hover:text-[#EAE4D8]"
           >
-            ← Back to categories
+            ← Back
           </button>
         </div>
       )}
@@ -668,25 +655,15 @@ export default function ExternalBotWizard() {
       {/* ── Step 3: Roles Preview ─────────────────────────────── */}
       {step === 'roles' && template && (
         <div>
-          <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-1">
+          <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-6">
             {template.name}
           </h2>
-          {template.description && (
-            <p className="text-xs text-[#EAE4D8]/60 mb-4">{template.description}</p>
-          )}
 
           <div className="space-y-3 mb-4">
             {editableRoles.map((r) => (
-              <div key={r.roleId} className="rounded-sm border border-white/10 bg-white/[0.02] p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-sm text-[#EAE4D8]">{r.botRole}</span>
-                    {template.fixedBotRoleNames && (
-                      <span className="rounded-sm bg-cyan-500/10 px-1.5 py-0.5 font-mono text-[8px] text-cyan-300">
-                        BOT_ROLE={r.botRole}
-                      </span>
-                    )}
-                  </div>
+              <div key={r.roleId} className="rounded-sm border border-white/10 bg-white/[0.02] p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-semibold text-sm text-[#EAE4D8]">{r.botRole}</span>
                   {editableRoles.length > 1 && (
                     <button
                       onClick={() => handleRemoveRole(r.roleId)}
@@ -697,9 +674,8 @@ export default function ExternalBotWizard() {
                   )}
                 </div>
 
-                {/* Role Selector (only when template has availableRoles) */}
                 {template.availableRoles && (
-                  <div className="mb-2">
+                  <div className="mb-3">
                     <label className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/60">
                       Role
                     </label>
@@ -721,8 +697,7 @@ export default function ExternalBotWizard() {
                   </div>
                 )}
 
-                {/* Display Name (editable) */}
-                <div className="mb-2">
+                <div className="mb-3">
                   <label className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/60">
                     Display Name
                   </label>
@@ -737,12 +712,10 @@ export default function ExternalBotWizard() {
                       );
                     }}
                     className="mt-0.5 w-full rounded-sm border border-white/10 bg-black/40 px-2 py-1.5 font-mono text-xs text-[#EAE4D8]"
-                    placeholder="My Custom Oracle"
                   />
                 </div>
 
-                {/* Runtime Slug (editable) */}
-                <div className="mb-2">
+                <div className="mb-3">
                   <label className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/60">
                     Runtime Slug
                   </label>
@@ -756,7 +729,6 @@ export default function ExternalBotWizard() {
                           pr.roleId === r.roleId ? { ...pr, brandedName: val } : pr
                         )
                       );
-                      // Clear error for this role if valid
                       if (SLUG_REGEX.test(val) || val === '') {
                         setSlugErrors((prev) => {
                           const next = { ...prev };
@@ -768,7 +740,6 @@ export default function ExternalBotWizard() {
                     className={`mt-0.5 w-full rounded-sm border px-2 py-1.5 font-mono text-xs text-[#EAE4D8] ${
                       slugErrors[r.roleId] ? 'border-red-500/50 bg-red-500/10' : 'border-white/10 bg-black/40'
                     }`}
-                    placeholder="my-custom-oracle"
                   />
                   {slugErrors[r.roleId] && (
                     <div className="mt-1 font-mono text-[9px] text-red-400">{slugErrors[r.roleId]}</div>
@@ -855,28 +826,29 @@ export default function ExternalBotWizard() {
       {/* ── Step 4: Wallet ────────────────────────────────────── */}
       {step === 'wallet' && (
         <div>
-          <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-4">
+          <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-6">
             Connect Wallet
           </h2>
 
-          <div className="space-y-3 mb-4">
-            <div className={`rounded-sm border p-3 ${isConnected ? 'border-green-500/30 bg-green-500/5' : 'border-white/10 bg-white/[0.02]'}`}>
+          <div className="space-y-3 mb-6">
+            <div className={`rounded-sm border p-4 ${isConnected ? 'border-green-500/30 bg-green-500/5' : 'border-white/10 bg-white/[0.02]'}`}>
               <div className="font-mono text-[10px] text-[#EAE4D8]/60 mb-1">Wallet</div>
               <div className="text-sm text-[#EAE4D8]">{isConnected ? address : 'Not connected'}</div>
             </div>
 
-            <div className={`rounded-sm border p-3 ${isOnArc ? 'border-green-500/30 bg-green-500/5' : 'border-yellow-500/30 bg-yellow-500/5'}`}>
+            <div className={`rounded-sm border p-4 ${isOnArc ? 'border-green-500/30 bg-green-500/5' : 'border-yellow-500/30 bg-yellow-500/5'}`}>
               <div className="font-mono text-[10px] text-[#EAE4D8]/60 mb-1">Network</div>
-              <div className="text-sm text-[#EAE4D8]">{isOnArc ? '✅ Arc Testnet (5042002)' : '⚠ Switch to Arc Testnet'}</div>
+              <div className="text-sm text-[#EAE4D8]">{isOnArc ? 'Arc Testnet ✓' : 'Switch to Arc Testnet'}</div>
             </div>
 
             {activeTemplate && (
-              <div className="rounded-sm border border-white/10 bg-white/[0.02] p-3">
-                <div className="font-mono text-[10px] text-[#EAE4D8]/60 mb-1">Estimated Steps</div>
-                <div className="text-sm text-[#EAE4D8]">
-                  • {activeTemplate.roles.length} ERC-8004 register transaction{activeTemplate.roles.length > 1 ? 's' : ''}
-                  • {activeTemplate.roles.length} manifest sign + x402 publish
-                  • {activeTemplate.roles.length} API key sign + generate
+              <div className="rounded-sm border border-white/10 bg-white/[0.02] p-4">
+                <div className="font-mono text-[10px] text-[#EAE4D8]/60 mb-2">What happens next</div>
+                <div className="space-y-1 font-mono text-[11px] text-[#EAE4D8]">
+                  <div>1. Register agent identity on-chain</div>
+                  <div>2. Sign and publish manifest</div>
+                  <div>3. Generate API key</div>
+                  <div>4. Export .env + PM2 command</div>
                 </div>
               </div>
             )}
@@ -979,7 +951,7 @@ export default function ExternalBotWizard() {
 
           <div className="mb-4 rounded-sm border border-yellow-500/20 bg-yellow-500/5 p-3">
             <div className="font-mono text-[10px] text-yellow-300/80">
-              ⚠ API keys shown once. Copy them now. If lost, revoke and regenerate from agent settings.
+              Copy keys now — they won't be shown again.
             </div>
           </div>
 
@@ -1025,7 +997,7 @@ export default function ExternalBotWizard() {
           {/* Show generated API keys once */}
           <div className="mb-4 rounded-sm border border-yellow-500/20 bg-yellow-500/5 p-3">
             <div className="font-mono text-[10px] text-yellow-300/80">
-              ⚠ API keys shown once. Copy or download them now.
+              Copy keys now — they won't be shown again.
             </div>
           </div>
           {txRows.map((r) => (
