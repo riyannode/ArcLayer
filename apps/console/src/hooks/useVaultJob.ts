@@ -25,6 +25,7 @@ import { ARC_VAULT_ADDRESS, USDC_DECIMALS, isZeroAddress } from '@/lib/vault/con
 import { USDC_ADDRESS } from '@/lib/x402/constants';
 import arcVaultAbiJson from '@/lib/vault/abi/arc-vault.json';
 import erc20AbiJson from '@/lib/vault/abi/erc20.json';
+import { safeJson, safeJsonCatch } from '@/lib/safeFetch';
 
 const arcVaultAbi = arcVaultAbiJson as Abi;
 const erc20Abi = erc20AbiJson as Abi;
@@ -180,11 +181,11 @@ export function useVaultJob() {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
+        const err = await safeJsonCatch<{ error?: string }>(res, { error: res.statusText });
         throw new Error(err.error || `Indexing failed: HTTP ${res.status}`);
       }
 
-      const json = await res.json();
+      const json = await safeJson<{ jobId: string }>(res);
       setState({
         step: 'done',
         message: `Vault job created ✓ on-chain id #${onChainJobId?.toString() ?? '—'}`,

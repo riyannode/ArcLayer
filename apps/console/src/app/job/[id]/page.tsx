@@ -14,6 +14,8 @@ import { CONTRACTS, formatUSDC, getExplorerAddressUrl, shortenAddress } from '@/
 import { config } from '@/lib/wagmi';
 import { fetchIndexerJson, INDEXER_BASE_URL, type JobDetail, waitForIndexer, loadJobDetail, type DataSource } from '@/lib/indexer';
 import { IndexerDegradedBanner } from '@/components/IndexerDegradedBanner';
+import { safeJsonCatch } from '@/lib/safeFetch';
+import { safeBigInt } from '@/lib/safeNumber';
 
 const JOB_STATUS = ['Open', 'Funded', 'Submitted', 'Completed', 'Rejected', 'Expired'] as const;
 
@@ -121,9 +123,10 @@ export default function JobDetailPage() {
     fetch(url, { cache: 'no-store' })
       .then(async (r) => {
         if (!r.ok) throw new Error(`gateway ${r.status}`);
-        return r.json();
+        const j = await safeJsonCatch<DeliverablePreview | null>(r, null);
+        if (!j) { if (!cancelled) setPreviewError('Gateway returned invalid JSON — preview unavailable.'); return; }
+        if (!cancelled) setPreview(j);
       })
-      .then((j: DeliverablePreview) => { if (!cancelled) setPreview(j); })
       .catch((e: unknown) => {
         if (!cancelled) setPreviewError(e instanceof Error ? e.message : 'fetch failed');
       })
@@ -195,7 +198,7 @@ export default function JobDetailPage() {
           >
             <span className="aureo-mono-label" style={{ color: '#C5A67C' }}>BUDGET</span>
             <span className="font-mono text-[18px] text-[#EAE4D8]">
-              {job ? `${formatUSDC(BigInt(job.budget))} USDC` : isLoading ? '…' : '0.00 USDC'}
+              {job ? `${formatUSDC(safeBigInt(job.budget))} USDC` : isLoading ? '…' : '0.00 USDC'}
             </span>
           </div>
         </div>
@@ -212,7 +215,7 @@ export default function JobDetailPage() {
         <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
           {[
             ['STATUS', job ? JOB_STATUS[job.status] : isLoading ? '…' : '—', statusChipClass],
-            ['FUNDED', job ? `${formatUSDC(BigInt(job.fundedAmount))} USDC` : isLoading ? '…' : '0.00 USDC'],
+            ['FUNDED', job ? `${formatUSDC(safeBigInt(job.fundedAmount))} USDC` : isLoading ? '…' : '0.00 USDC'],
             ['DELIVERABLE', job?.deliverable || job?.deliverable ? 'Submitted' : isLoading ? '…' : 'pending'],
             ['SETTLEMENT', job?.status === 3 ? 'Completed' : job?.status === 4 ? 'Rejected' : job?.status === 5 ? 'Expired' : isLoading ? '…' : 'pending'],
           ].map(([label, value, chip], i) => (
@@ -349,7 +352,7 @@ export default function JobDetailPage() {
                   <div className="mt-2 space-y-1 font-mono text-[11px] text-[#b5b5b5]">
                     <p className="text-[#C5A67C]">Record #{proof.tokenId}</p>
                     <p>payer {shortenAddress(proof.payer)}</p>
-                    <p>amount {formatUSDC(BigInt(proof.amountPaid))} USDC</p>
+                    <p>amount {formatUSDC(safeBigInt(proof.amountPaid))} USDC</p>
                     <p>recorded {new Date(Number(proof.mintedAt) * 1000).toLocaleString()}</p>
                   </div>
                 ) : (
