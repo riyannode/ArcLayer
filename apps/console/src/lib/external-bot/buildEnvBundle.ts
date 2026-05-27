@@ -27,10 +27,9 @@ export function buildEnvBundle(input: {
   erc8004Ids: string[];
   /** Branded names for RUNTIME_ID prefix (e.g. hermes-oracle). If omitted, falls back to agentId. */
   runtimeNames?: string[];
-  liveEventsToken?: string;
   payoutAddress?: string;
 }): EnvBundle {
-  const { template, baseUrl, category, agentIds, apiKeys, erc8004Ids, runtimeNames, liveEventsToken, payoutAddress } = input;
+  const { template, baseUrl, category, agentIds, apiKeys, erc8004Ids, runtimeNames, payoutAddress } = input;
 
   // ── .env.common ──────────────────────────────────────────────
   const commonLines: string[] = [
@@ -43,7 +42,21 @@ export function buildEnvBundle(input: {
     'X402_SCOPE=external_trace',
     'BOT_INTERVAL_MS=900000',
   ];
-  if (liveEventsToken) commonLines.push(`A2A_LIVE_EVENTS_TOKEN=${liveEventsToken}`);
+
+  // ERC-8183 specific common vars
+  if (template.id === 'erc8183-escrow-bots') {
+    commonLines.push('ARC_RPC_URL=https://rpc.testnet.arc.network');
+    commonLines.push('JOB_POLL_INTERVAL_MS=5000');
+    commonLines.push('CLAIM_TTL_SECONDS=600');
+    commonLines.push('MAX_ACTIVE_JOBS=3');
+    commonLines.push('AUTONOMOUS_TX=true');
+  }
+
+  commonLines.push('# ARCLAYER_API_KEY is per-role — see .env.<role> files');
+  commonLines.push('# LLM API key — paste your own:');
+  commonLines.push('# LLM_API_KEY=<your-api-key>');
+  commonLines.push('# LLM_PROVIDER=openai');
+  commonLines.push('# LLM_MODEL=gpt-4o');
   commonLines.push('# Paste X402_PAYER_PRIVATE_KEY on your VPS — never in browser');
   commonLines.push('# X402_PAYER_PRIVATE_KEY=<paste-on-vps>');
 
@@ -71,6 +84,32 @@ export function buildEnvBundle(input: {
     ];
     if (erc8004) lines.push(`ARCLAYER_ERC8004_ID=${erc8004}`);
     if (payoutAddress) lines.push(`X402_RECEIVER_ADDRESS=${payoutAddress}`);
+
+    // ERC-8183 per-role specific env placeholders
+    if (template.id === 'erc8183-escrow-bots') {
+      if (role.botRole === 'client') {
+        lines.push(`BUYER_AGENT_ID=${agentId}`);
+        lines.push('# Paste your Arc Testnet address:');
+        lines.push('# CLIENT_ADDRESS=<your-0x-address>');
+        lines.push('# Paste your Arc Testnet private key:');
+        lines.push('# CLIENT_PRIVATE_KEY=<paste-on-vps>');
+      }
+      if (role.botRole === 'provider') {
+        lines.push(`PROVIDER_AGENT_ID=${agentId}`);
+        lines.push(`WORKER_ID=${agentId}`);
+        lines.push('# Paste your Arc Testnet address:');
+        lines.push('# PROVIDER_ADDRESS=<your-0x-address>');
+        lines.push('# Paste your Arc Testnet private key:');
+        lines.push('# PROVIDER_PRIVATE_KEY=<paste-on-vps>');
+      }
+      if (role.botRole === 'evaluator') {
+        lines.push(`EVALUATOR_AGENT_ID=${agentId}`);
+        lines.push('# Paste your Arc Testnet address:');
+        lines.push('# EVALUATOR_ADDRESS=<your-0x-address>');
+        lines.push('# Paste your Arc Testnet private key:');
+        lines.push('# EVALUATOR_PRIVATE_KEY=<paste-on-vps>');
+      }
+    }
 
     const filename = template.fixedBotRoleNames
       ? `.env.${role.botRole}`

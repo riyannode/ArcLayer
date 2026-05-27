@@ -25,6 +25,10 @@ export function buildInstallCommand(input: {
     return buildPM2MarketBridgeCommand(envBundle);
   }
 
+  if (template.id === 'erc8183-escrow-bots') {
+    return buildERC8183EscrowCommand(envBundle);
+  }
+
   // (fix #6) Non-PM2 templates = coming soon
   return buildComingSoonCommand(template);
 }
@@ -54,6 +58,32 @@ pm2 status
 `;
 
   return { title: 'PM2 — market-agent-bridge', command: cmd.trim() };
+}
+
+function buildERC8183EscrowCommand(envBundle: EnvBundle): InstallCommand {
+  const envSnippets = formatEnvBundleAsInstallCommands(envBundle);
+  const cmd = `# ── ERC-8183 Escrow Job Bots ────────────────────────────
+git clone https://github.com/riyannode/ArcLayer.git
+cd ArcLayer/examples/external-erc8183-bots
+
+# ── Env files ─────────────────────────────────────────
+${envSnippets}
+
+# ── Install dependencies ──────────────────────────────
+npm install
+
+# ── Install PM2 (if missing) ──────────────────────────
+npm install -g pm2 2>/dev/null || true
+
+# ── Start processes ───────────────────────────────────
+pm2 delete client-bot provider-bot evaluator-bot 2>/dev/null || true
+pm2 start ecosystem.config.cjs
+pm2 save
+
+# ── Check status ──────────────────────────────────────
+pm2 status
+`;
+  return { title: 'PM2 — erc8183-escrow-bots', command: cmd.trim() };
 }
 
 function buildComingSoonCommand(template: ExternalBotTemplate): InstallCommand {
