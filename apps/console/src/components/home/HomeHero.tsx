@@ -1,7 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import LiveLogStream from './LiveLogStream';
+import HomeOnboardingCards from './HomeOnboardingCards';
 
 const X402DemoPanel = dynamic(() => import('@/components/x402/X402DemoPanel'), {
   ssr: false,
@@ -17,7 +17,7 @@ export default function HomeHero() {
   return (
     <div className="relative flex max-w-[540px] flex-col justify-center">
       <div className="mb-2 flex flex-col gap-1">
-        <span className="aureo-mono-label">IDENTITY · JOBS · VALIDATION · REPUTATION</span>
+        <span className="aureo-mono-label">IDENTITY → JOBS → VALIDATION → REPUTATION</span>
       </div>
 
       <h1
@@ -62,9 +62,8 @@ export default function HomeHero() {
         <X402DemoPanel compact ticketOnly />
       </div>
 
-      <div className="mt-4 section-reveal" style={{ animationDelay: '0.45s' }}>
-        <LiveLogStream />
-      </div>
+      {/* Onboarding path cards — below x402 demo */}
+      <HomeOnboardingCards />
     </div>
   );
 }
