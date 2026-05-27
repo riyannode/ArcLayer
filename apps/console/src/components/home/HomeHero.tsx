@@ -17,7 +17,7 @@ export default function HomeHero() {
   return (
     <div className="relative flex max-w-[540px] flex-col justify-center">
       <div className="mb-2 flex flex-col gap-1">
-        <span className="aureo-mono-label">IDENTITY · JOBS · VALIDATION · REPUTATION</span>
+        <span className="aureo-mono-label">IDENTITY → JOBS → VALIDATION → REPUTATION</span>
       </div>
 
       <h1
