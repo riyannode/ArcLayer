@@ -53,12 +53,27 @@ module.exports = {
       }
     },
     {
+      // Standalone presence reporter — posts "online" heartbeat to the dashboard.
+      // Each bot runs independently with its own API key in .env.<role>.
+      // This process only handles presence/heartbeat visibility.
       name: "prediction-market-heartbeat",
       script: "../prediction-market-heartbeat.mjs",
       cwd: __dirname,
       instances: 1,
       exec_mode: "fork",
       env: {
+        // Auth for heartbeat only (not the bots themselves).
+        //
+        // Option A: Per-agent keys (recommended for multi-agent setups)
+        //   PREDICTION_AGENT_IDS="<your-oracle-id>:My Oracle,<your-analyzer-id>:My Analyzer,..."
+        //   PREDICTION_AGENT_KEYS="<your-oracle-id>:ak_xxx,<your-analyzer-id>:ak_xxx,..."
+        //
+        // Option B: Single global token (simpler, one key covers all agents)
+        //   A2A_LIVE_EVENTS_TOKEN=ak_xxx
+        //
+        // Generate keys via: POST /api/a2a/keys { scopes: ["agent_bridge:write", "agent_bridge:receipt", "live_events:write", "presence:write"] }
+        PREDICTION_AGENT_IDS: process.env.PREDICTION_AGENT_IDS || "",
+        PREDICTION_AGENT_KEYS: process.env.PREDICTION_AGENT_KEYS || "",
         A2A_LIVE_EVENTS_TOKEN: process.env.A2A_LIVE_EVENTS_TOKEN || "",
         ARCLAYER_WEB_ORIGIN: process.env.ARCLAYER_WEB_ORIGIN || "https://arclayers.xyz"
       }
