@@ -159,7 +159,7 @@ export default function LiveLogStream() {
   }, []);
 
   return (
-    <div className="llog w-full min-w-0 max-w-[480px] overflow-hidden">
+    <div className="llog w-full min-w-0 max-w-[480px] overflow-hidden ml-auto">
       <div className="llog-bar">
         <div className="llog-dots" aria-hidden="true">
           <span className="llog-dot r" />
@@ -205,16 +205,16 @@ export default function LiveLogStream() {
           box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5), 0 0 10px rgba(197,166,124,0.08);
         }
         .llog-bar {
-          display: flex; align-items: center; gap: 8px;
-          padding: 8px 14px;
+          display: flex; align-items: center; gap: 6px;
+          padding: 5px 10px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.06);
           background: rgba(10, 10, 10, 0.95);
           overflow: hidden;
           min-width: 0;
         }
-        .llog-dots { display: inline-flex; gap: 5px; margin-right: 4px; }
+        .llog-dots { display: inline-flex; gap: 4px; margin-right: 3px; }
         .llog-dot {
-          width: 8px; height: 8px; border-radius: 9999px;
+          width: 6px; height: 6px; border-radius: 9999px;
           background: rgba(255,255,255,0.15);
         }
         .llog-dot.r { background: rgba(230,130,130,0.65); }
@@ -222,9 +222,10 @@ export default function LiveLogStream() {
         .llog-dot.g { background: rgba(184,205,126,0.7); }
         .llog-title {
           font-family: var(--font-mono, ui-monospace, monospace);
-          font-size: 11px; letter-spacing: 0.12em;
+          font-size: 10px; letter-spacing: 0.12em;
           color: rgba(234,228,216,0.85);
           white-space: nowrap; flex-shrink: 0;
+          font-style: normal;
         }
         .llog-sep { color: rgba(234,228,216,0.35); flex-shrink: 0; }
         .llog-meta {
@@ -253,12 +254,13 @@ export default function LiveLogStream() {
         }
         .llog-body {
           font-family: var(--font-mono);
-          font-size: 11.5px; line-height: 1.7;
-          padding: 10px 14px;
-          min-height: 180px; max-height: 220px;
+          font-size: 10.5px; line-height: 1.5;
+          font-style: normal;
+          padding: 6px 10px;
+          min-height: 120px; max-height: 160px;
           overflow: hidden;
           background: linear-gradient(180deg, rgba(5,5,5,0.6) 0%, rgba(5,5,5,0.92) 100%);
-          mask-image: linear-gradient(180deg, transparent 0, black 20px, black 100%);
+          mask-image: linear-gradient(180deg, transparent 0, black 14px, black 100%);
         }
         .llog-line {
           display: flex; gap: 10px; align-items: baseline;
@@ -271,7 +273,7 @@ export default function LiveLogStream() {
         }
         .llog-ts    { color: rgba(234,228,216,0.35); min-width: 64px; flex-shrink: 0; white-space: nowrap; }
         .llog-chev  { color: #C5A67C; flex-shrink: 0; }
-        .llog-call  { color: #EAE4D8; flex-shrink: 0; white-space: nowrap; }
+        .llog-call  { color: #EAE4D8; flex-shrink: 0; white-space: nowrap; font-style: normal; }
         .llog-hash  { color: #C5A67C; flex-shrink: 0; white-space: nowrap; }
         .llog-note  {
           color: rgba(234,228,216,0.55);
