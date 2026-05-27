@@ -7,6 +7,13 @@ export const runtime = 'nodejs';
 
 const ARC_RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
 
+// Safe diagnostics — log presence only, never values.
+console.log('[gateway-balance] env', {
+  hasCircleClientKey: Boolean(process.env.NEXT_PUBLIC_CIRCLE_CLIENT_KEY),
+  hasCircleClientUrl: Boolean(process.env.NEXT_PUBLIC_CIRCLE_CLIENT_URL),
+  rpcHost: (() => { try { return new URL(ARC_RPC).host; } catch { return 'invalid-url'; } })(),
+});
+
 export async function GET(req: NextRequest) {
   const rawAddress = req.nextUrl.searchParams.get('address');
 
@@ -120,6 +127,11 @@ export async function GET(req: NextRequest) {
       method: 'gateway-wallet-v2',
     });
   } catch (err) {
+    console.error('[gateway-balance] read failed', {
+      rpcHost: (() => { try { return new URL(ARC_RPC).host; } catch { return 'invalid-url'; } })(),
+      error: err instanceof Error ? err.message : String(err),
+    });
+
     return NextResponse.json(
       {
         method: 'error',
