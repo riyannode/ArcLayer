@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
       jobId: typeof body.jobId === 'string' ? body.jobId.trim() : null,
       category: typeof body.category === 'string' ? body.category.trim() : null,
     });
-    return NextResponse.json({ ok: true, ...bridgeRail(), eventId: event.id, deduped: event.deduped });
+    return NextResponse.json({ ok: true, ...bridgeRail(), eventId: event.id, deduped: event.deduped, payloadHash: serverHash });
   } catch (err) {
     return bad('insert_failed', 500, { message: err instanceof Error ? err.message : 'unknown' });
   }

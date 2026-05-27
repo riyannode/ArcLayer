@@ -333,7 +333,7 @@ function paymentRequiredResponse(opts: X402MiddlewareOptions, req: NextRequest) 
       ttlMs: (opts.maxTimeoutSeconds ?? 300) * 1000,
     });
     if (requested.rail === 'arc-native-eoa') {
-      accepts.push(buildNativeRequirements(opts, session.sessionId));
+      accepts.push(buildNativeRequirements(opts));
     } else if (isGatewayEnabled()) {
       accepts.push(buildGatewayRequirements(opts, session.sessionId));
     }
@@ -557,7 +557,7 @@ async function handleNative(
     : ({} as Record<string, unknown>);
   const scope = typeof reqBody.scope === 'string' && reqBody.scope.trim().length > 0 ? reqBody.scope.trim() : null;
   const inputSessionId = typeof reqBody.sessionId === 'string' && reqBody.sessionId.trim().length > 0 ? reqBody.sessionId.trim() : null;
-  const ALLOWED_ROLES = ['analyzer', 'evaluator', 'executor', 'buyer', 'provider', 'worker', 'settler'];
+  const ALLOWED_ROLES = ['oracle', 'analyzer', 'evaluator', 'executor', 'buyer', 'provider', 'worker', 'settler'];
   const role = typeof reqBody.role === 'string' && ALLOWED_ROLES.includes(reqBody.role.trim().toLowerCase()) ? reqBody.role.trim().toLowerCase() : null;
 
   if (needsResourceContext) {

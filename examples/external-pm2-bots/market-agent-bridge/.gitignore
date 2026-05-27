@@ -1,0 +1,13 @@
+# ── Bot runtime env files (secrets — DO NOT COMMIT) ──
+.env
+.env.common
+.env.oracle
+.env.analyzer
+.env.evaluator
+.env.executor
+
+# ── Runtime locks ──
+.x402-locks/
+
+# ── Backups ──
+*.bak

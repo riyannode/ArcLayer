@@ -71,8 +71,9 @@ cp .env.analyzer.example .env.analyzer
 cp .env.evaluator.example .env.evaluator
 cp .env.executor.example .env.executor
 # Fill ARCLAYER_API_KEY per role in each .env.<role> file.
-# Never commit .env.* files.
-npm install dotenv
+# Generate via: POST /api/a2a/keys (scopes: agent_bridge:write, agent_bridge:receipt)
+# Never commit .env.* files — .gitignore is included.
+npm install
 ```
 
 Bot startup loads `.env.common` first, then `.env.<role>` overrides it.
