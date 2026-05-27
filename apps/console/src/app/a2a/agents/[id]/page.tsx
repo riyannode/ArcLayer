@@ -13,6 +13,8 @@ import type {
 } from '@/types/agent-network';
 import { buildAgentNetwork } from '@/lib/a2a/build-agent-network';
 import { fetchIndexerJson, indexerUrl } from '@/lib/indexer';
+import { safeJson, safeJsonCatch } from '@/lib/safeFetch';
+import { asArray, asString } from '@/lib/safeShape';
 import type { AgentDetail, IndexedJob, IndexedProof } from '@/lib/indexer';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest';
 import { AvatarUploader } from '@/components/agent/AvatarUploader';
@@ -124,16 +126,21 @@ export default function AgentProfilePage() {
         fetch(`/api/a2a/agents?t=${cacheBust}`, { cache: 'no-store' }),
       ]);
 
-      const overview: Overview | null = ovRes.ok ? await ovRes.json() : null;
-      const onchain: A2AOnChain | null = ocRes.ok ? await ocRes.json() : null;
-      const feed: AutonomousFeed | null = fdRes.ok ? await fdRes.json() : { items: [], latest: null };
-      const regData = regRes.ok ? await regRes.json().catch(() => ({ agents: [] })) : { agents: [] };
-      const registeredAgents: RegisteredAgent[] = Array.isArray(regData.agents) ? regData.agents : [];
+      const overview: Overview | null = ovRes.ok ? await safeJson<Overview>(ovRes) : null;
+      const onchain: A2AOnChain | null = ocRes.ok ? await safeJsonCatch<A2AOnChain>(ocRes, null as unknown as A2AOnChain) : null;
+      const rawFd = fdRes.ok ? await safeJsonCatch<unknown>(fdRes, null) : null;
+      const rawReg = regRes.ok ? await safeJsonCatch<unknown>(regRes, null) : null;
+      const fdData = {
+        items: asArray(rawFd ? (rawFd as Record<string, unknown>)?.items ?? [] : []),
+        latest: asString(rawFd ? (rawFd as Record<string, unknown>)?.latest ?? null : null, null as unknown as string),
+      } as AutonomousFeed;
+      const regData = { agents: asArray<RegisteredAgent>(rawReg ? (rawReg as Record<string, unknown>)?.agents ?? [] : []) };
+      const registeredAgents: RegisteredAgent[] = regData.agents;
 
-      const latestFeedMs = feed?.latest ? Date.parse(feed.latest) : 0;
+      const latestFeedMs = fdData?.latest ? Date.parse(fdData.latest) : 0;
       const isLive = latestFeedMs > 0 && Date.now() - latestFeedMs < 120_000;
 
-      const networkAgents = buildAgentNetwork({ onchain, overview, feed, isLive, registeredAgents });
+      const networkAgents = buildAgentNetwork({ onchain, overview, feed: fdData, isLive, registeredAgents });
       const found = networkAgents.find(
         (a) => a.id === agentId || a.agentId === agentId
       ) ?? null;
