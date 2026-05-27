@@ -140,21 +140,46 @@ export async function upsertAgentPresence(input: AgentPresenceInput): Promise<{ 
   return { ok: true };
 }
 
+async function listSupabaseManifestAgentIdsByCategory(category: string): Promise<string[]> {
+  try {
+    const manifests = await listStoredManifests();
+    return manifests
+      .filter((item) => {
+        const manifest = item.manifest;
+        return (
+          manifest.categories?.includes(category) ||
+          manifest.roles?.some((role) => role.category === category)
+        );
+      })
+      .map((item) => item.agentId)
+      .filter(Boolean);
+  } catch (err) {
+    console.error('[a2a.live-events] Supabase manifest lookup failed', err);
+    return [];
+  }
+}
+
 async function agentIdsForCategory(category: string): Promise<string[]> {
   const source = process.env.A2A_AGENT_ROSTER_SOURCE || 'local-indexer';
-  if (source !== 'global') {
-    const ids = await listLocalIndexerAgentIdsByCategory(category);
+
+  if (source === 'global') {
+    const ids = await listSupabaseManifestAgentIdsByCategory(category);
     return ids.filter((agentId) => isVisibleAgentId(agentId));
   }
 
-  const manifests = await listStoredManifests();
-  return manifests
-    .filter((item) => {
-      const manifest = item.manifest;
-      return manifest.categories?.includes(category) || manifest.roles?.some((role) => role.category === category);
-    })
-    .map((item) => item.agentId)
-    .filter((agentId) => isVisibleAgentId(agentId));
+  // Default local-indexer mode: merge local indexer IDs + Supabase manifest IDs
+  let localIds: string[] = [];
+  try {
+    localIds = await listLocalIndexerAgentIdsByCategory(category);
+  } catch (err) {
+    console.error('[a2a.live-events] local indexer lookup failed, falling back to Supabase', err);
+  }
+
+  const supabaseIds = await listSupabaseManifestAgentIdsByCategory(category);
+
+  // Merge + dedupe by agentId
+  const merged = Array.from(new Set([...localIds, ...supabaseIds]));
+  return merged.filter((agentId) => isVisibleAgentId(agentId));
 }
 
 export async function listAgentLiveEventsByCategory(category: string, limit = 50) {
