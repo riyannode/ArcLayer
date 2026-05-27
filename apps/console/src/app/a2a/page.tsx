@@ -6,6 +6,8 @@ import { waitForTransactionReceipt } from '@wagmi/core';
 import { useWriteContract } from 'wagmi';
 import { config } from '@/lib/wagmi';
 import { indexerUrl } from '@/lib/indexer';
+import { safeJson, safeJsonCatch } from '@/lib/safeFetch';
+import { safeBigInt } from '@/lib/safeNumber';
 import type { Hex } from 'viem';
 
 const AGENT_REGISTRY_ADDRESS = '0xB263336055dD65FF501e36CA39941760D943703C' as const;
@@ -236,10 +238,10 @@ function A2ADashboardPage() {
         fetch('/api/a2a/agents'),
       ]);
       if (!ovRes.ok) throw new Error(`indexer ${ovRes.status}`);
-      const ovData: Overview = await ovRes.json();
-      const ocData: A2AOnChain = ocRes.ok ? await ocRes.json() : null;
-      const fdData: AutonomousFeed = fdRes.ok ? await fdRes.json() : { items: [], latest: null };
-      const regData = regRes.ok ? await regRes.json().catch(() => ({ agents: [] })) : { agents: [] };
+      const ovData: Overview = await safeJson<Overview>(ovRes);
+      const ocData: A2AOnChain | null = ocRes.ok ? await safeJsonCatch<A2AOnChain>(ocRes, null as unknown as A2AOnChain) : null;
+      const fdData: AutonomousFeed = fdRes.ok ? await safeJsonCatch<AutonomousFeed>(fdRes, { items: [], latest: null }) : { items: [], latest: null };
+      const regData = regRes.ok ? await safeJsonCatch<{ agents: [] }>(regRes, { agents: [] }) : { agents: [] };
 
       // Detect new feed items
       const currentIds = new Set(fdData.items.map((i) => i.id));
@@ -320,14 +322,14 @@ function A2ADashboardPage() {
   const liveIgniaTrades = Math.max(hermes?.stats?.callsServed ?? 0, feedIgniaTrades);
 
   // Total volume = JobEscrow funded (manual jobs) + x402 signal revenue (Apolo + Hermes totalRevenue)
-  const jobsFundedRaw = summary ? BigInt(summary.totalFunded || '0') : BigInt(0);
-  const apoloRevenueRaw = ignia?.stats?.totalRevenue ? BigInt(ignia.stats.totalRevenue) : BigInt(0);
-  const hermesRevenueRaw = hermes?.stats?.totalRevenue ? BigInt(hermes.stats.totalRevenue) : BigInt(0);
+  const jobsFundedRaw = safeBigInt(summary?.totalFunded);
+  const apoloRevenueRaw = safeBigInt(ignia?.stats?.totalRevenue);
+  const hermesRevenueRaw = safeBigInt(hermes?.stats?.totalRevenue);
   const totalVolumeRaw = jobsFundedRaw + apoloRevenueRaw + hermesRevenueRaw;
 
   // Total USDC held by autonomous agents (live wallet balance)
-  const igniaBal = onchain?.balances?.usdc?.pythia ? BigInt(onchain.balances.usdc.pythia) : BigInt(0);
-  const hermesBal = onchain?.balances?.usdc?.hermes ? BigInt(onchain.balances.usdc.hermes) : BigInt(0);
+  const igniaBal = safeBigInt(onchain?.balances?.usdc?.pythia);
+  const hermesBal = safeBigInt(onchain?.balances?.usdc?.hermes);
   const totalAgentBalanceRaw = igniaBal + hermesBal;
 
   return (

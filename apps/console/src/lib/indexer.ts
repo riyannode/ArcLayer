@@ -10,6 +10,8 @@
  * to recompute aggregates client-side.
  */
 
+import { safeJson } from '@/lib/safeFetch';
+
 export const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || 'https://indexer.arclayers.xyz';
 
 export function indexerUrl(path: string) {
@@ -146,7 +148,7 @@ export async function fetchIndexerJson<T>(path: string) {
   if (!response.ok) {
     throw new Error(response.status === 404 ? 'Resource not found.' : `Indexer returned HTTP ${response.status}.`);
   }
-  return (await response.json()) as T;
+  return safeJson<T>(response);
 }
 
 export async function waitForIndexer<T>(
@@ -179,7 +181,7 @@ export async function pingIndexer(timeoutMs = 4000): Promise<boolean> {
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!res.ok) return false;
-    const body = (await res.json()) as { ok?: boolean };
+    const body = await safeJson<{ ok?: boolean }>(res);
     return body.ok === true;
   } catch {
     return false;
