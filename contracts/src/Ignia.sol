@@ -41,7 +41,7 @@ contract Ignia is ReentrancyGuard {
     // ─── State ───────────────────────────────────────────────────────────
     IERC20 public immutable usdc;
     address public oracle;        // Pythia agent address
-    address public immutable admin;
+    address public admin;
 
     uint256 public marketCount;
     mapping(uint256 => Market) public markets;
