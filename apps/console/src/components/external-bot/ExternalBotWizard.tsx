@@ -28,7 +28,7 @@ import { useAccount } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
 
 import { AGENT_CATEGORIES, getAgentCategory } from '@/app/live-a2a-agent/categories';
-import { getTemplate, getTemplatesByCategory, type ExternalBotTemplate } from '@/lib/external-bot/templates';
+import { getTemplate, getTemplatesByCategory, type ExternalBotTemplate, type BotRole } from '@/lib/external-bot/templates';
 import { buildExternalBotManifest, type ManifestBuildInput } from '@/lib/external-bot/buildManifest';
 import { buildEnvBundle } from '@/lib/external-bot/buildEnvBundle';
 import { buildInstallCommand } from '@/lib/external-bot/buildInstallCommand';
@@ -120,6 +120,30 @@ export default function ExternalBotWizard() {
 
   const stepIdx = STEPS.indexOf(step);
 
+  // Build activeTemplate: overrides template.roles with the user's selected editableRoles.
+  // All downstream operations (register, manifest, keys, export, install) use this.
+  const activeTemplate = useMemo(() => {
+    if (!template) return null;
+    // Only override when template has availableRoles (multi-role catalog)
+    if (!template.availableRoles) return template;
+    return {
+      ...template,
+      roles: editableRoles.map((er) => {
+        const catalogRole = template.availableRoles!.find((ar) => ar.roleId === er.roleId);
+        const base = catalogRole || template.roles[0];
+        return {
+          ...base,
+          displayName: er.displayName,
+          defaultAgentId: er.brandedName,
+          botRole: er.botRole,
+          capabilities: er.capabilities,
+          endpointPath: er.endpointPath,
+          scopes: er.scopes,
+        } as BotRole;
+      }),
+    };
+  }, [template, editableRoles]);
+
   // ── Helpers ─────────────────────────────────────────────────
   const getAgentId = useCallback((row: TxRow, fallback: string): string => {
     // After mint: row.agentId = minted token ID, row.mintedTokenId also set
@@ -169,23 +193,78 @@ export default function ExternalBotWizard() {
       setSlugErrors({});
     }
     setStep('roles');
+  }, [template, editableRoles]);
+
+  // ── Role management helpers (for templates with availableRoles) ──
+  const unselectedRoles = useMemo(() => {
+    if (!template?.availableRoles) return [];
+    const selectedIds = new Set(editableRoles.map((r) => r.roleId));
+    return template.availableRoles.filter((r) => !selectedIds.has(r.roleId));
+  }, [template, editableRoles]);
+
+  const handleSwitchRole = useCallback((oldRoleId: string, newRoleId: string) => {
+    if (!template?.availableRoles) return;
+    // Block if newRoleId is already selected by another card
+    const duplicate = editableRoles.some((r) => r.roleId === newRoleId && r.roleId !== oldRoleId);
+    if (duplicate) return;
+    const catalogRole = template.availableRoles.find((r) => r.roleId === newRoleId);
+    if (!catalogRole) return;
+    setEditableRoles((prev) =>
+      prev.map((r) =>
+        r.roleId === oldRoleId
+          ? {
+              roleId: catalogRole.roleId,
+              botRole: catalogRole.botRole,
+              displayName: catalogRole.displayName,
+              brandedName: catalogRole.defaultAgentId,
+              capabilities: catalogRole.capabilities,
+              endpointPath: catalogRole.endpointPath,
+              scopes: catalogRole.scopes,
+            }
+          : r
+      )
+    );
+  }, [template, editableRoles]);
+
+  const handleAddRole = useCallback(() => {
+    if (!template?.availableRoles || unselectedRoles.length === 0) return;
+    const next = unselectedRoles[0];
+    setEditableRoles((prev) => [
+      ...prev,
+      {
+        roleId: next.roleId,
+        botRole: next.botRole,
+        displayName: next.displayName,
+        brandedName: next.defaultAgentId,
+        capabilities: next.capabilities,
+        endpointPath: next.endpointPath,
+        scopes: next.scopes,
+      },
+    ]);
+  }, [template, unselectedRoles]);
+
+  const handleRemoveRole = useCallback((roleId: string) => {
+    setEditableRoles((prev) => {
+      if (prev.length <= 1) return prev; // at least one role must remain
+      return prev.filter((r) => r.roleId !== roleId);
+    });
   }, []);
 
   // ── Step 3: Roles (preview) ─────────────────────────────────
   const roleRows = useMemo(() => {
-    if (!template) return [];
-    return template.roles.map((r) => ({
+    if (!activeTemplate) return [];
+    return activeTemplate.roles.map((r) => ({
       roleId: r.roleId,
       displayName: r.displayName,
       brandedName: r.defaultAgentId,
       botRole: r.botRole,
       capabilities: r.capabilities.join(', '),
-      scopes: scopesForRole(r.scopes, template.recommendedMode).join(', '),
+      scopes: scopesForRole(r.scopes, activeTemplate!.recommendedMode).join(', '),
     }));
-  }, [template]);
+  }, [activeTemplate]);
 
   const handleRolesConfirm = useCallback(() => {
-    if (!template) return;
+    if (!activeTemplate) return;
     // Validate slugs + display names before confirming
     const errors: Record<string, string> = {};
     const seenSlugs = new Set<string>();
@@ -222,7 +301,7 @@ export default function ExternalBotWizard() {
     setTxRows(rows);
     setError(null);
     setStep('wallet');
-  }, [template, editableRoles]);
+  }, [activeTemplate, editableRoles]);
 
   // ── Step 4: Wallet ──────────────────────────────────────────
   const handleWalletConfirm = useCallback(() => {
@@ -234,14 +313,14 @@ export default function ExternalBotWizard() {
 
   // ── Step 5: Register Identity (ERC-8004) ────────────────────
   const handleRegister = useCallback(async () => {
-    if (!template || !address) return;
+    if (!activeTemplate || !address) return;
     setIsBusy(true);
     setError(null);
 
     const newRows = [...txRows];
 
-    for (let i = 0; i < template.roles.length; i++) {
-      const role = template.roles[i];
+    for (let i = 0; i < activeTemplate.roles.length; i++) {
+      const role = activeTemplate.roles[i];
       const edRole = editableRoles[i];
       newRows[i] = { ...newRows[i], step: 'signing' };
       setTxRows([...newRows]);
@@ -281,26 +360,26 @@ export default function ExternalBotWizard() {
     }
 
     setIsBusy(false);
-  }, [template, address, txRows, editableRoles, writeContractAsync]);
+  }, [activeTemplate, address, txRows, editableRoles, writeContractAsync]);
 
   // ── Step 6: Publish Manifest (x402) ─────────────────────────
   // (fix #1) method: POST (not PUT)
   // (fix #2) use canonical manifestHash + buildManifestMessage from lib
   const handlePublishManifest = useCallback(async () => {
-    if (!template || !address) return;
+    if (!activeTemplate || !address) return;
     setIsBusy(true);
     setError(null);
 
     const newRows = [...txRows];
 
-    for (let i = 0; i < template.roles.length; i++) {
-      const role = template.roles[i];
+    for (let i = 0; i < activeTemplate.roles.length; i++) {
+      const role = activeTemplate.roles[i];
       const edRole = editableRoles[i];
       const agentId = getAgentId(newRows[i], role.defaultAgentId);
 
       try {
         const input: ManifestBuildInput = {
-          template,
+          template: activeTemplate!,
           agentId,
           roleIndex: i,
           controller: address,
@@ -343,19 +422,19 @@ export default function ExternalBotWizard() {
 
     setIsBusy(false);
     setStep('keys');
-  }, [template, address, txRows, priceAtomic, payoutAddress, serviceEndpointUrl, signMessageAsync, paidFetch, getAgentId, editableRoles]);
+  }, [activeTemplate, address, txRows, priceAtomic, payoutAddress, serviceEndpointUrl, signMessageAsync, paidFetch, getAgentId, editableRoles]);
 
   // ── Step 7: Generate API Keys ───────────────────────────────
   // (fix #3) agentId = minted token ID (from txRow.agentId after register)
   const handleGenerateKeys = useCallback(async () => {
-    if (!template || !address) return;
+    if (!activeTemplate || !address) return;
     setIsBusy(true);
     setError(null);
 
     const newRows = [...txRows];
 
-    for (let i = 0; i < template.roles.length; i++) {
-      const role = template.roles[i];
+    for (let i = 0; i < activeTemplate.roles.length; i++) {
+      const role = activeTemplate.roles[i];
       const agentId = getAgentId(newRows[i], role.defaultAgentId);
 
       try {
@@ -375,7 +454,7 @@ export default function ExternalBotWizard() {
           body: JSON.stringify({
             agentId,
             label: `${role.displayName} Runtime Key`,
-            scopes: scopesForRole(role.scopes, template.recommendedMode),
+            scopes: scopesForRole(role.scopes, activeTemplate!.recommendedMode),
             ts,
             signature,
           }),
@@ -397,29 +476,29 @@ export default function ExternalBotWizard() {
 
     setIsBusy(false);
     setStep('export');
-  }, [template, address, txRows, signMessageAsync, getAgentId]);
+  }, [activeTemplate, address, txRows, signMessageAsync, getAgentId]);
 
   // ── Step 8: Export ──────────────────────────────────────────
   // (fix #3) Env uses minted token ID as ARCLAYER_AGENT_ID
   // (fix #4) Branded name goes into RUNTIME_ID prefix
   // (fix #6) Generic template = coming soon, only PM2 is runnable
   const handleBuildExport = useCallback(() => {
-    if (!template || !selectedCategory) return;
+    if (!activeTemplate || !selectedCategory) return;
 
     // (fix #3) Use txRow.agentId which = minted token ID after register
     // This ensures env ARCLAYER_AGENT_ID matches key agentId
-    const agentIds = txRows.map((r, i) => r.agentId || template.roles[i]?.defaultAgentId || '');
+    const agentIds = txRows.map((r, i) => r.agentId || activeTemplate.roles[i]?.defaultAgentId || '');
     const apiKeys = txRows.map((r) => r.apiKey || '');
     const erc8004Ids = txRows.map((r) =>
       r.mintedTokenId ? `erc8004_identity_registry:${r.mintedTokenId}` : ''
     );
     // (fix #4) Pass branded names for RUNTIME_ID prefix
     const runtimeNames = txRows.map((r, i) =>
-      r.brandedName || template.roles[i]?.defaultAgentId || ''
+      r.brandedName || activeTemplate.roles[i]?.defaultAgentId || ''
     );
 
     const bundle = buildEnvBundle({
-      template,
+      template: activeTemplate,
       baseUrl: 'https://www.arclayers.xyz',
       category: selectedCategory,
       agentIds,
@@ -430,13 +509,13 @@ export default function ExternalBotWizard() {
     });
 
     const cmd = buildInstallCommand({
-      template,
+      template: activeTemplate,
       envBundle: bundle,
-      roleNames: template.roles.map((r) => r.roleId),
+      roleNames: activeTemplate.roles.map((r) => r.roleId),
     });
 
     let exportStr = '# ── Category: ' + (categoryConfig?.label || selectedCategory) + ' ──\n';
-    exportStr += `# Template: ${template.name}\n\n`;
+    exportStr += `# Template: ${activeTemplate!.name}\n\n`;
     exportStr += '## .env.common\n\n';
     exportStr += bundle.common.content + '\n';
 
@@ -451,7 +530,7 @@ export default function ExternalBotWizard() {
     setEnvBundleStr(exportStr);
     setInstallCmd(cmd.command);
     setError(null);
-  }, [template, selectedCategory, txRows, categoryConfig, payoutAddress]);
+  }, [activeTemplate, selectedCategory, txRows, categoryConfig, payoutAddress]);
 
   const handleCopyCommand = useCallback(() => {
     if (!installCmd) return;
@@ -562,14 +641,14 @@ export default function ExternalBotWizard() {
                     </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1">
-                    {t.roles.map((r) => (
+                    {(t.availableRoles || t.roles).map((r) => (
                       <span key={r.roleId} className="rounded-sm bg-white/5 px-1.5 py-0.5 font-mono text-[9px] text-[#EAE4D8]/70">
                         {r.displayName}
                       </span>
                     ))}
                   </div>
                   <div className="mt-2 font-mono text-[9px] text-[#EAE4D8]/40">
-                    {t.defaultPriceLabel} per job · {t.roles.length} role{t.roles.length > 1 ? 's' : ''}
+                    {t.defaultPriceLabel} per job · {t.roles.length} selected · {(t.availableRoles || t.roles).length} available
                   </div>
                 </button>
               ))}
@@ -605,7 +684,39 @@ export default function ExternalBotWizard() {
                       </span>
                     )}
                   </div>
+                  {editableRoles.length > 1 && (
+                    <button
+                      onClick={() => handleRemoveRole(r.roleId)}
+                      className="rounded-sm border border-red-500/30 px-2 py-0.5 font-mono text-[9px] text-red-400 hover:bg-red-500/10"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
+
+                {/* Role Selector (only when template has availableRoles) */}
+                {template.availableRoles && (
+                  <div className="mb-2">
+                    <label className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/60">
+                      Role
+                    </label>
+                    <select
+                      value={r.roleId}
+                      onChange={(e) => handleSwitchRole(r.roleId, e.target.value)}
+                      className="mt-0.5 w-full rounded-sm border border-white/10 bg-black/40 px-2 py-1.5 font-mono text-xs text-[#EAE4D8]"
+                    >
+                      {template.availableRoles.map((ar) => (
+                        <option
+                          key={ar.roleId}
+                          value={ar.roleId}
+                          disabled={editableRoles.some((er) => er.roleId === ar.roleId && er.roleId !== r.roleId)}
+                        >
+                          {ar.displayName} ({ar.botRole})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {/* Display Name (editable) */}
                 <div className="mb-2">
@@ -675,6 +786,16 @@ export default function ExternalBotWizard() {
               </div>
             ))}
           </div>
+
+          {/* Add Role button (only when template has availableRoles and unselected roles exist) */}
+          {template.availableRoles && unselectedRoles.length > 0 && (
+            <button
+              onClick={handleAddRole}
+              className="mb-4 rounded-sm border border-dashed border-[#C5A67C]/40 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/10"
+            >
+              + Add Role
+            </button>
+          )}
 
           <div className="mb-4">
             <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/70">
@@ -747,13 +868,13 @@ export default function ExternalBotWizard() {
               <div className="text-sm text-[#EAE4D8]">{isOnArc ? '✅ Arc Testnet (5042002)' : '⚠ Switch to Arc Testnet'}</div>
             </div>
 
-            {template && (
+            {activeTemplate && (
               <div className="rounded-sm border border-white/10 bg-white/[0.02] p-3">
                 <div className="font-mono text-[10px] text-[#EAE4D8]/60 mb-1">Estimated Steps</div>
                 <div className="text-sm text-[#EAE4D8]">
-                  • {template.roles.length} ERC-8004 register transaction{template.roles.length > 1 ? 's' : ''}
-                  • {template.roles.length} manifest sign + x402 publish
-                  • {template.roles.length} API key sign + generate
+                  • {activeTemplate.roles.length} ERC-8004 register transaction{activeTemplate.roles.length > 1 ? 's' : ''}
+                  • {activeTemplate.roles.length} manifest sign + x402 publish
+                  • {activeTemplate.roles.length} API key sign + generate
                 </div>
               </div>
             )}
@@ -776,7 +897,7 @@ export default function ExternalBotWizard() {
             Register Agent Identity
           </h2>
 
-          <TxProgressTable rows={txRows} template={template} action="register" />
+          <TxProgressTable rows={txRows} template={activeTemplate} action="register" />
 
           {error && (
             <div className="mt-3 rounded-sm border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300">
@@ -815,7 +936,7 @@ export default function ExternalBotWizard() {
             Publish Manifest (x402)
           </h2>
 
-          <TxProgressTable rows={txRows} template={template} action="manifest" />
+          <TxProgressTable rows={txRows} template={activeTemplate} action="manifest" />
 
           {error && (
             <div className="mt-3 rounded-sm border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300">
@@ -860,7 +981,7 @@ export default function ExternalBotWizard() {
             </div>
           </div>
 
-          <TxProgressTable rows={txRows} template={template} action="keys" />
+          <TxProgressTable rows={txRows} template={activeTemplate} action="keys" />
 
           {error && (
             <div className="mt-3 rounded-sm border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300">
@@ -1014,7 +1135,7 @@ export default function ExternalBotWizard() {
         <DiagnosticsPanel
           category={selectedCategory}
           txRows={txRows}
-          template={template ?? null}
+          template={activeTemplate ?? null}
         />
       )}
 
