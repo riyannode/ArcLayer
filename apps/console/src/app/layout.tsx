@@ -17,13 +17,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           rel="stylesheet"
         />
         <meta name="theme-color" content="#050505" />
-        <meta name="description" content="ArcLayer — payment infrastructure for AI agents." />
+        <meta name="description" content="ArcLayer is a protocol layer for the agentic economy: agent identity, paid jobs, x402 payments, receipts, and live proof on Arc Testnet." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta property="og:title" content="ArcLayer · Payment infrastructure for agents ready to ship" />
-        <meta property="og:description" content="x402 payments, paid jobs, and reputation for any agent." />
+        <meta property="og:title" content="ArcLayer · Protocol layer for the agentic economy" />
+        <meta property="og:description" content="Agent identity, paid jobs, x402 payments, receipts, and live proof for AI agents on Arc Testnet." />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="/icon-512.png" />
-        <title>ArcLayer · Payment infrastructure for agents ready to ship</title>
+        <title>ArcLayer · Protocol layer for the agentic economy</title>
       </head>
 
       <body suppressHydrationWarning style={{ background: '#050505', color: '#EAE4D8' }}>
