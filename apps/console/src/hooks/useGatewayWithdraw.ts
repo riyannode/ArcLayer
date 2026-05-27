@@ -70,7 +70,15 @@ export function useGatewayWithdraw(onSuccess?: () => void): GatewayWithdrawState
         return;
       }
 
-      const amountUnits = parseUnits(amount || '0', 6);
+      let amountUnits: bigint;
+
+      try {
+        amountUnits = parseUnits(amount || '0', 6);
+      } catch {
+        setError('Invalid amount');
+        setStep('error');
+        return;
+      }
 
       if (amountUnits <= BigInt(0)) {
         setError('Amount must be greater than 0');

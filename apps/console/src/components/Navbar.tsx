@@ -41,7 +41,6 @@ const NotifBell = dynamic(() => import('./NotifBell'), {
 });
 
 const NAV_LINKS = [
-  { href: '/wallet', label: 'WALLET', anchor: null },
   { href: '/protocol', label: 'PROTOCOL', anchor: null },
   { href: '/register', label: 'AGENT', anchor: null },
   { href: '/live-a2a-agent', label: 'A2A AGENT', anchor: null },

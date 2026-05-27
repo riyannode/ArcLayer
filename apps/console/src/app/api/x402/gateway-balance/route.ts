@@ -98,6 +98,11 @@ export async function GET(req: NextRequest) {
       gatewayAvailableUsdc: formatUnits(gatewayAvailable, 6),
       gatewayAvailableAtomic: gatewayAvailable.toString(),
 
+      // Backward compatibility for older x402 UI code.
+      // depositedUsdc means available Gateway balance ready to spend.
+      depositedUsdc: formatUnits(gatewayAvailable, 6),
+      depositedAtomic: gatewayAvailable.toString(),
+
       gatewayTotalUsdc: formatUnits(gatewayTotal, 6),
       gatewayTotalAtomic: gatewayTotal.toString(),
 

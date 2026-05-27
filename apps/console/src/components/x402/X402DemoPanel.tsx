@@ -12,6 +12,7 @@ import { DEFAULT_GATEWAY_DEPOSIT_USDC } from '@/lib/x402/constants';
 import { DevDetails } from '@/components/DevDetails';
 import { NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_SETTLED, NOTICE_REPLAY_FAILED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
 import { shortenAddress } from '@/lib/contracts';
+import GatewayMiniDeposit from '@/components/wallet/GatewayMiniDeposit';
 
 const ARC_CHAIN_ID = 5042002;
 const ARC_RPC = 'https://rpc.drpc.testnet.arc.network';
@@ -639,6 +640,21 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                 <button onClick={busy || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
                   {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ — UNLOCKED' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                 </button>
+
+                {mode === 'circle-gateway' && walletMode === 'passkey' && (
+                  <div className="mt-3">
+                    <GatewayMiniDeposit
+                      showUnlockButton
+                      onReadyToUnlock={runDemo}
+                    />
+                  </div>
+                )}
+
+                {mode === 'circle-gateway' && walletMode === 'passkey' && gatewayDepositInsufficient && (
+                  <p className="mt-2 text-[11px] leading-relaxed text-white/35">
+                    Deposit USDC first, then unlock x402.
+                  </p>
+                )}
               </>
             )}
           </div>
@@ -835,6 +851,21 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                 <button onClick={busy || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
                   {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ — UNLOCKED' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                 </button>
+
+                {mode === 'circle-gateway' && walletMode === 'passkey' && (
+                  <div className="mt-3">
+                    <GatewayMiniDeposit
+                      showUnlockButton
+                      onReadyToUnlock={runDemo}
+                    />
+                  </div>
+                )}
+
+                {mode === 'circle-gateway' && walletMode === 'passkey' && gatewayDepositInsufficient && (
+                  <p className="mt-2 text-[11px] leading-relaxed text-white/35">
+                    Deposit USDC first, then unlock x402.
+                  </p>
+                )}
                 <button
                   onClick={() => {
                     // Clear session-paid keys for this wallet, then disconnect

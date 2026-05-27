@@ -5,6 +5,7 @@ import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { useAccount, useDisconnect } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
 import { shortenAddress } from '@/lib/contracts';
+import GatewayMiniDeposit from '@/components/wallet/GatewayMiniDeposit';
 
 type Variant = 'landing' | 'app';
 
@@ -30,6 +31,7 @@ export default function WalletStatus({ variant = 'app' }: Props) {
 
   const [showPicker, setShowPicker] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
+  const [showMiniWallet, setShowMiniWallet] = useState(false);
   const [username, setUsername] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -116,13 +118,13 @@ export default function WalletStatus({ variant = 'app' }: Props) {
   }
 
   // Landing: after connect, show address pill (same as app) — no redirect.
-  if (variant === 'landing' && isConnected && activeAddress) {
+  if (isConnected && activeAddress) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="relative flex items-center gap-2">
         <button
           type="button"
-          onClick={() => copyAddress(activeAddress)}
-          title="Copy full address"
+          onClick={() => setShowMiniWallet((v) => !v)}
+          title="Open Gateway wallet"
           className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] transition hover:brightness-125"
           style={{
             background: 'rgba(197, 166, 124, 0.08)',
@@ -131,59 +133,15 @@ export default function WalletStatus({ variant = 'app' }: Props) {
           }}
         >
           <span className="pulse-dot" />
-          <span className="text-[9px] tracking-[0.14em] text-white/80">{walletType === 'eoa' ? 'EOA' : 'PASSKEY'}</span>
+          <span className="text-[9px] tracking-[0.14em] text-white/80">
+            {walletType === 'eoa' ? 'EOA' : 'PASSKEY'}
+          </span>
           {shortenAddress(activeAddress)}
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3 text-white/50">
-            <path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z" />
-            <path d="M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.44A1.5 1.5 0 008.378 6H4.5z" />
-          </svg>
+          <span className="text-[9px] tracking-[0.14em] text-white/40">
+            WALLET
+          </span>
         </button>
-        <button
-          onClick={handleDisconnect}
-          className="px-3 py-2 font-mono text-[10px] tracking-[0.18em] text-white/80 transition-all duration-300"
-          style={{ border: '1px solid rgba(255, 255, 255, 0.08)' }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(255,100,100,0.5)';
-            e.currentTarget.style.color = '#ff6464';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
-            e.currentTarget.style.color = 'rgba(255,255,255,0.4)';
-          }}
-        >
-          DISCONNECT
-        </button>
-      </div>
-    );
-  }
 
-  // App: full session chrome (address pill + disconnect).
-  if (variant === 'app' && isConnected && activeAddress) {
-    return (
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => copyAddress(activeAddress)}
-          title="Copy full address"
-          className="flex items-center gap-2 px-3 py-2 font-mono text-[11px] transition hover:brightness-125"
-          style={{
-            background: 'rgba(197, 166, 124, 0.08)',
-            color: '#C5A67C',
-            border: '1px solid rgba(197, 166, 124, 0.25)',
-          }}
-        >
-          <span className="pulse-dot" />
-          <span className="text-[9px] tracking-[0.14em] text-white/80">{walletType === 'eoa' ? 'EOA' : 'PASSKEY'}</span>
-          {shortenAddress(activeAddress)}
-          {copied ? (
-            <span className="font-mono text-[9px] tracking-[0.14em] text-emerald-400">COPIED</span>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3 w-3 text-white/50">
-              <path d="M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z" />
-              <path d="M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.44A1.5 1.5 0 008.378 6H4.5z" />
-            </svg>
-          )}
-        </button>
         <button
           onClick={handleDisconnect}
           className="px-3 py-2 font-mono text-[10px] tracking-[0.18em] text-white/80 transition-all duration-300"
@@ -199,6 +157,30 @@ export default function WalletStatus({ variant = 'app' }: Props) {
         >
           DISCONNECT
         </button>
+
+        {showMiniWallet && (
+          <div className="absolute right-0 top-full z-50 mt-3 w-[340px] max-w-[calc(100vw-24px)]">
+            <GatewayMiniDeposit />
+
+            <div className="mt-2 flex gap-2 rounded-xl border border-white/10 bg-[#080808] p-2 font-mono">
+              <button
+                type="button"
+                onClick={() => copyAddress(activeAddress)}
+                className="flex-1 rounded-lg border border-white/10 px-3 py-2 text-[10px] tracking-[0.14em] text-white/45 hover:text-white/80"
+              >
+                {copied ? 'COPIED' : 'COPY ADDRESS'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowMiniWallet(false)}
+                className="flex-1 rounded-lg border border-white/10 px-3 py-2 text-[10px] tracking-[0.14em] text-white/45 hover:text-white/80"
+              >
+                CLOSE
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
