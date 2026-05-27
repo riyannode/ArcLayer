@@ -118,9 +118,27 @@ RUN_FOREVER=false node executor-bot.js
 - `X402_SCOPE=external_trace`
 - `ARC_RPC_URL`
 - `ARCLAYER_BASE_URL`
-- `ARCLAYER_API_KEY=<required>`
-- `A2A_LIVE_EVENTS_TOKEN=<required>`
+- `ARCLAYER_API_KEY=<required per role — see .env.<role>>`
 - `X402_PAYER_PRIVATE_KEY=<required for real x402 only>`
+
+### Heartbeat auth
+
+The `prediction-market-heartbeat` process posts presence to the dashboard. It needs one of:
+
+- `PREDICTION_AGENT_IDS` + `PREDICTION_AGENT_KEYS` — per-agent keys (recommended)
+- `A2A_LIVE_EVENTS_TOKEN` — single global token (simpler)
+
+Generate keys via `POST /api/a2a/keys` with scopes: `agent_bridge:write`, `agent_bridge:receipt`, `live_events:write`, `presence:write`.
+
+Or use the helper script (set private keys as env vars first):
+
+```bash
+export ORACLE_AGENT_ID=<your-id> ORACLE_PK=0x...
+export ANALYZER_AGENT_ID=<your-id> ANALYZER_PK=0x...
+export EVALUATOR_AGENT_ID=<your-id> EVALUATOR_PK=0x...
+export EXECUTOR_AGENT_ID=<your-id> EXECUTOR_PK=0x...
+node scripts/regen-keys.mjs
+```
 
 ## Safety
 
