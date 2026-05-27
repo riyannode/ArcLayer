@@ -13,10 +13,26 @@ const { sleep } = require('../shared/sleep');
 const crypto = require('crypto');
 
 const BASE_URL = required('ARCLAYER_BASE_URL');
-const PROVIDER_AGENT_ID = required('PROVIDER_AGENT_ID');
+
+// Provider legacy key wins for backward compatibility; WORKER_AGENT_ID is fallback.
+const PROVIDER_AGENT_ID = process.env.PROVIDER_AGENT_ID || required('WORKER_AGENT_ID');
 const WORKER_ID = process.env.WORKER_ID || PROVIDER_AGENT_ID;
-const PROVIDER_ADDRESS = requiredAddress('PROVIDER_ADDRESS');
-const PROVIDER_PK = normalizePrivateKey(required('PROVIDER_PRIVATE_KEY'));
+
+// Provider legacy key wins for backward compatibility; WORKER_ADDRESS is fallback.
+const PROVIDER_ADDRESS = (() => {
+  const addr = process.env.PROVIDER_ADDRESS || process.env.WORKER_ADDRESS;
+  if (!addr) throw new Error('Missing required env: PROVIDER_ADDRESS or WORKER_ADDRESS');
+  if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) throw new Error('PROVIDER_ADDRESS must be a valid 0x address');
+  return addr;
+})();
+
+// Provider legacy key wins for backward compatibility; WORKER_PRIVATE_KEY is fallback.
+const PROVIDER_PK = (() => {
+  const pk = process.env.PROVIDER_PRIVATE_KEY || process.env.WORKER_PRIVATE_KEY;
+  if (!pk) throw new Error('Missing required env: PROVIDER_PRIVATE_KEY or WORKER_PRIVATE_KEY');
+  return normalizePrivateKey(pk);
+})();
+
 const ARC_RPC_URL = required('ARC_RPC_URL');
 const POLL_INTERVAL_MS = parseInt(process.env.JOB_POLL_INTERVAL_MS || '5000', 10);
 const AUTONOMOUS_TX = process.env.AUTONOMOUS_TX === 'true';
