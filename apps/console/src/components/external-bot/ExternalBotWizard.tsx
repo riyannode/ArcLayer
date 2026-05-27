@@ -28,7 +28,7 @@ import { useAccount } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
 
 import { AGENT_CATEGORIES, getAgentCategory } from '@/app/live-a2a-agent/categories';
-import { getTemplate, getTemplatesByCategory } from '@/lib/external-bot/templates';
+import { getTemplate, getTemplatesByCategory, type ExternalBotTemplate } from '@/lib/external-bot/templates';
 import { buildExternalBotManifest, type ManifestBuildInput } from '@/lib/external-bot/buildManifest';
 import { buildEnvBundle } from '@/lib/external-bot/buildEnvBundle';
 import { buildInstallCommand } from '@/lib/external-bot/buildInstallCommand';
@@ -96,7 +96,6 @@ export default function ExternalBotWizard() {
   const [envBundleStr, setEnvBundleStr] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
-  const [liveEventsToken, setLiveEventsToken] = useState('');
   const [payoutAddress, setPayoutAddress] = useState('');
   const [serviceEndpointUrl, setServiceEndpointUrl] = useState('');
 
@@ -426,7 +425,6 @@ export default function ExternalBotWizard() {
       apiKeys,
       erc8004Ids,
       runtimeNames,
-      liveEventsToken: liveEventsToken || undefined,
       payoutAddress: payoutAddress || undefined,
     });
 
@@ -452,7 +450,7 @@ export default function ExternalBotWizard() {
     setEnvBundleStr(exportStr);
     setInstallCmd(cmd.command);
     setError(null);
-  }, [template, selectedCategory, txRows, categoryConfig, liveEventsToken, payoutAddress]);
+  }, [template, selectedCategory, txRows, categoryConfig, payoutAddress]);
 
   const handleCopyCommand = useCallback(() => {
     if (!installCmd) return;
@@ -901,30 +899,33 @@ export default function ExternalBotWizard() {
           </h2>
 
           {/* Show generated API keys once */}
-          {txRows.map((r, i) => r.apiKey && (
-            <div key={r.roleId || i} className="mb-2 rounded-sm border border-white/10 bg-white/[0.02] p-3">
-              <div className="font-mono text-[10px] text-[#EAE4D8]/60">
-                {r.brandedName} (ID: {r.agentId})
+          <div className="mb-4 rounded-sm border border-yellow-500/20 bg-yellow-500/5 p-3">
+            <div className="font-mono text-[10px] text-yellow-300/80">
+              ⚠ API keys shown once. Copy or download them now.
+            </div>
+          </div>
+          {txRows.map((r) => (
+            <div key={r.roleId} className="mb-2 rounded-sm border border-white/10 bg-white/[0.02] p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-mono text-[10px] text-[#EAE4D8]/60">
+                    {r.brandedName} (ID: {r.agentId})
+                  </div>
+                  {r.apiKey && (
+                    <div className="mt-1 break-all font-mono text-xs text-[#C5A67C]">{r.apiKey}</div>
+                  )}
+                </div>
+                {r.apiKey && (
+                  <button
+                    onClick={() => navigator.clipboard.writeText(r.apiKey || '')}
+                    className="rounded-sm border border-white/10 px-2 py-1 font-mono text-[9px] text-[#EAE4D8]/60 hover:text-[#EAE4D8]"
+                  >
+                    Copy Key
+                  </button>
+                )}
               </div>
-              <div className="mt-1 break-all font-mono text-xs text-[#C5A67C]">{r.apiKey}</div>
             </div>
           ))}
-
-          {/* Options for live events token + payout address */}
-          {template && (
-            <div className="mb-4">
-              <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/70">
-                A2A Live Events Token (optional)
-              </label>
-              <input
-                type="text"
-                value={liveEventsToken}
-                onChange={(e) => setLiveEventsToken(e.target.value)}
-                className="mt-1 w-full rounded-sm border border-white/10 bg-black/40 px-3 py-2 font-mono text-sm text-[#EAE4D8]"
-                placeholder="ale_..."
-              />
-            </div>
-          )}
 
           {template && (
             <div className="mb-4">
@@ -950,9 +951,35 @@ export default function ExternalBotWizard() {
             </button>
           ) : (
             <div className="space-y-4">
+              {/* Download .env bundle */}
+              {envBundleStr && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const blob = new Blob([envBundleStr], { type: 'text/plain' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'arclayer-env-bundle.txt';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-emerald-300 hover:bg-emerald-500/20"
+                  >
+                    📥 Download .env Bundle
+                  </button>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(envBundleStr)}
+                    className="rounded-sm border border-white/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/60 hover:text-[#EAE4D8]"
+                  >
+                    📋 Copy All Env
+                  </button>
+                </div>
+              )}
+
               <div className="rounded-sm border border-white/10 bg-black/40 p-3">
                 <div className="mb-2 flex items-center justify-between">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C]">Install Command</div>
+                  <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C]">PM2 Run Command</div>
                   <button
                     onClick={handleCopyCommand}
                     className="rounded-sm border border-white/10 px-2 py-1 font-mono text-[9px] text-[#EAE4D8]/60 hover:text-[#EAE4D8]"
@@ -970,7 +997,7 @@ export default function ExternalBotWizard() {
                   onClick={() => setStep('health')}
                   className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/20"
                 >
-                  Next: Health Check →
+                  Next: Diagnostics →
                 </button>
                 <button onClick={back} className="px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/50 hover:text-[#EAE4D8]">
                   ← Back
@@ -981,49 +1008,13 @@ export default function ExternalBotWizard() {
         </div>
       )}
 
-      {/* ── Step 9: Health Check ──────────────────────────────── */}
+      {/* ── Step 9: Diagnostics + Success ─────────────────────── */}
       {step === 'health' && (
-        <div>
-          <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-4">
-            Health Check
-          </h2>
-
-          <div className="space-y-3">
-            <div className="rounded-sm border border-cyan-500/20 bg-cyan-500/5 p-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-300 mb-2">After running on VPS</div>
-              <ul className="space-y-1 font-mono text-[10px] text-[#EAE4D8]/70">
-                <li>1. Run the install command on your VPS</li>
-                <li>2. Wait for PM2 processes to start</li>
-                <li>3. Use &apos;pm2 logs&apos; to check each process</li>
-                <li>4. Events appear in live viewer after first cycle (~15 min)</li>
-                <li>5. Verify bridge events: GET /api/agent-bridge/events?category={selectedCategory}</li>
-                <li>6. Verify receipts: GET /api/agent-bridge/receipts?sessionId=&lt;session&gt;</li>
-              </ul>
-            </div>
-
-            <div className="rounded-sm border border-white/10 bg-white/[0.02] p-3">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/60 mb-2">Agent Status</div>
-              {txRows.map((r) => (
-                <div key={r.roleId} className="py-1 font-mono text-[10px]">
-                  <span className="text-[#C5A67C]">{r.brandedName}</span>
-                  <span className="text-[#EAE4D8]/40 ml-2">
-                    ID: {r.agentId}
-                    {r.mintedTokenId ? ' · ✅ Registered' : ' · ❌ Not registered'}
-                    {r.manifestHash ? ' · ✅ Manifest published' : ''}
-                    {r.apiKey ? ' · ✅ Key generated' : ' · ❌ No key'}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <a
-              href={selectedCategory ? `/live-a2a-agent/${selectedCategory}` : '/live-a2a-agent'}
-              className="inline-block rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition-colors hover:bg-[#C5A67C]/20"
-            >
-              Open Live Viewer →
-            </a>
-          </div>
-        </div>
+        <DiagnosticsPanel
+          category={selectedCategory}
+          txRows={txRows}
+          template={template ?? null}
+        />
       )}
 
       {error && step !== 'register' && step !== 'manifest' && step !== 'keys' && (
@@ -1076,6 +1067,220 @@ function TxProgressTable({ rows, template, action }: {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── Diagnostics Panel (Step 9) ────────────────────────────────────
+
+type DiagCheck = { label: string; status: 'ok' | 'fail' | 'pending'; detail: string };
+
+function DiagnosticsPanel({ category, txRows, template }: {
+  category: string | null;
+  txRows: TxRow[];
+  template: ExternalBotTemplate | null;
+}) {
+  const [checks, setChecks] = useState<DiagCheck[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<string | null>(null);
+
+  const dashboardUrl = category
+    ? `/dashboard/external-bot?category=${encodeURIComponent(category)}&agentId=${encodeURIComponent(txRows[0]?.agentId || '')}`
+    : '/live-a2a-agent';
+
+  // Run initial checks on mount
+  useEffect(() => {
+    const initial: DiagCheck[] = txRows.map((r) => ({
+      label: `${r.brandedName}`,
+      status: r.mintedTokenId && r.manifestHash && r.apiKey ? 'ok' : r.mintedTokenId ? 'fail' : 'pending',
+      detail: [
+        r.mintedTokenId ? '✅ Registered' : '❌ Not Registered',
+        r.manifestHash ? '✅ Manifest' : '❌ No Manifest',
+        r.apiKey ? '✅ Key' : '❌ No Key',
+      ].join(' · '),
+    }));
+    setChecks(initial);
+  }, [txRows]);
+
+  const runTestSync = useCallback(async () => {
+    if (!category) return;
+    setSyncing(true);
+    const cat = category;
+    const newChecks: DiagCheck[] = [];
+
+    // 1. Roster check — /api/a2a/agents/by-category
+    try {
+      const rosterRes = await fetch(`/api/a2a/agents/by-category?category=${encodeURIComponent(cat)}`);
+      const rosterData = await rosterRes.json();
+      const ourAgentIds = txRows.map((r) => r.agentId);
+      const visible = rosterData.agents?.filter((a: { agentId: string }) => ourAgentIds.includes(a.agentId)) || [];
+
+      newChecks.push({
+        label: 'Roster Visibility',
+        status: visible.length > 0 ? 'ok' : 'fail',
+        detail: visible.length > 0
+          ? `${visible.length}/${ourAgentIds.length} agents visible in roster (total: ${rosterData.total})`
+          : `0 agents found. Source: ${rosterData.source || 'unknown'}. Total roster: ${rosterData.total}`,
+      });
+    } catch {
+      newChecks.push({ label: 'Roster Visibility', status: 'fail', detail: 'API unreachable' });
+    }
+
+    // 2. Presence check
+    try {
+      const presRes = await fetch(`/api/a2a/presence?category=${encodeURIComponent(cat)}`);
+      const presData = await presRes.json();
+      const ourIds = txRows.map((r) => r.agentId);
+      const present = presData.presence?.filter((p: { agentId: string }) => ourIds.includes(p.agentId)) || [];
+      newChecks.push({
+        label: 'Presence Status',
+        status: present.length > 0 ? 'ok' : 'fail',
+        detail: present.length > 0
+          ? `${present.length} online (${presData.total} total)`
+          : `0 present. Run bots to send heartbeat. Total: ${presData.total}`,
+      });
+    } catch {
+      newChecks.push({ label: 'Presence Status', status: 'fail', detail: 'API unreachable' });
+    }
+
+    // 3. Live events count
+    try {
+      const evRes = await fetch(`/api/a2a/live-events?category=${encodeURIComponent(cat)}&limit=5`);
+      const evData = await evRes.json();
+      newChecks.push({
+        label: 'Live Events',
+        status: evData.total > 0 ? 'ok' : 'pending',
+        detail: evData.total > 0 ? `${evData.total} events recorded` : 'No events yet. Run bots to emit events.',
+      });
+    } catch {
+      newChecks.push({ label: 'Live Events', status: 'fail', detail: 'API unreachable' });
+    }
+
+    // 4. Latest bridge session
+    try {
+      const sessRes = await fetch('/api/agent-bridge/sessions/latest');
+      const sessData = await sessRes.json();
+      newChecks.push({
+        label: 'Latest Bridge Session',
+        status: sessData.session ? 'ok' : 'pending',
+        detail: sessData.session
+          ? `Session ${sessData.session.id?.slice(0, 12)}… (${sessData.session.totals?.events || 0} events)`
+          : 'No sessions yet. Bridge activates on first event.',
+      });
+    } catch {
+      newChecks.push({ label: 'Latest Bridge Session', status: 'fail', detail: 'API unreachable' });
+    }
+
+    // 5. Per-agent status checks
+    for (const row of txRows) {
+      newChecks.push({
+        label: `${row.brandedName} (${row.agentId})`,
+        status: row.mintedTokenId && row.manifestHash && row.apiKey ? 'ok' : 'fail',
+        detail: [
+          row.mintedTokenId ? '✅ Reg' : '❌ Reg',
+          row.manifestHash ? '✅ Man' : '❌ Man',
+          row.apiKey ? '✅ Key' : '❌ Key',
+        ].join(' · '),
+      });
+    }
+
+    setChecks(newChecks);
+    setLastSync(new Date().toLocaleTimeString());
+    setSyncing(false);
+  }, [category, txRows]);
+
+  return (
+    <div>
+      <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-4">
+        Diagnostics &amp; Status
+      </h2>
+
+      {/* Success summary */}
+      <div className="mb-4 rounded-sm border border-emerald-500/20 bg-emerald-500/5 p-4">
+        <div className="font-mono text-[12px] uppercase tracking-[0.18em] text-emerald-300 mb-2">
+          ✅ Onboarding Complete
+        </div>
+        <div className="space-y-1 font-mono text-[10px] text-[#EAE4D8]/70">
+          {txRows.map((r) => (
+            <div key={r.roleId}>
+              <span className="text-[#C5A67C]">{r.brandedName}</span>
+              {' '}— Agent ID: {r.agentId} · Runtime: {r.brandedName}-runtime-01
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 font-mono text-[10px] text-[#EAE4D8]/50">
+          Next: Copy .env files to your VPS, paste X402_PAYER_PRIVATE_KEY + LLM_API_KEY, run PM2 command.
+        </div>
+      </div>
+
+      {/* Test Sync button */}
+      <div className="mb-4 flex gap-3">
+        <button
+          onClick={runTestSync}
+          disabled={syncing}
+          className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/20 disabled:opacity-40"
+        >
+          {syncing ? 'Testing…' : '🔍 Test Sync'}
+        </button>
+        <a
+          href={dashboardUrl}
+          className="rounded-sm border border-emerald-500/40 bg-emerald-500/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-emerald-300 hover:bg-emerald-500/20"
+        >
+          Open Dashboard →
+        </a>
+      </div>
+
+      {lastSync && (
+        <div className="mb-3 font-mono text-[9px] text-[#EAE4D8]/40">
+          Last sync: {lastSync}
+        </div>
+      )}
+
+      {/* Checks table */}
+      {checks.length > 0 && (
+        <div className="rounded-sm border border-white/10 bg-black/40 p-3">
+          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C] mb-3">
+            Sync Results
+          </div>
+          <div className="space-y-2">
+            {checks.map((c, i) => (
+              <div key={i} className={`rounded-sm border p-2 ${
+                c.status === 'ok' ? 'border-emerald-500/20 bg-emerald-500/5' :
+                c.status === 'fail' ? 'border-red-500/20 bg-red-500/5' :
+                'border-white/10 bg-white/[0.02]'
+              }`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-mono text-[10px] text-[#EAE4D8]">{c.label}</div>
+                    <div className="mt-0.5 font-mono text-[9px] text-[#EAE4D8]/50">{c.detail}</div>
+                  </div>
+                  <span className={`font-mono text-[9px] ${
+                    c.status === 'ok' ? 'text-emerald-300' :
+                    c.status === 'fail' ? 'text-red-400' :
+                    'text-[#EAE4D8]/40'
+                  }`}>
+                    {c.status === 'ok' ? '✅' : c.status === 'fail' ? '❌' : '⏳'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Guide */}
+      <div className="mt-4 rounded-sm border border-cyan-500/20 bg-cyan-500/5 p-3">
+        <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-cyan-300 mb-2">
+          After running on VPS
+        </div>
+        <ol className="space-y-1 font-mono text-[10px] text-[#EAE4D8]/70 list-decimal list-inside">
+          <li>Copy .env files to your VPS (download button in Export step)</li>
+          <li>Paste X402_PAYER_PRIVATE_KEY + LLM_API_KEY in .env.common</li>
+          <li>Run: <code className="text-[#C5A67C]">pm2 start ecosystem.config.cjs</code></li>
+          <li>Check: <code className="text-[#C5A67C]">pm2 logs</code> for startup</li>
+          <li>Click Test Sync after bots emit first event (~1 cycle)</li>
+        </ol>
+      </div>
     </div>
   );
 }
