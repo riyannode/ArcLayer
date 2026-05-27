@@ -18,7 +18,7 @@ import type { ExternalBotTemplate } from './templates';
 function mockTemplate(): ExternalBotTemplate {
   const t = getTemplate('prediction-market-pm2-bridge');
   if (!t) throw new Error('prediction-market-pm2-bridge template not found');
-  return t;
+  return { ...t, roles: t.availableRoles ?? t.roles };
 }
 
 // ── Tests ────────────────────────────────────────────────────
@@ -28,7 +28,8 @@ describe('templates', () => {
     const t = getTemplate('prediction-market-pm2-bridge');
     expect(t).toBeDefined();
     expect(t?.category).toBe('prediction-market-bots');
-    expect(t?.roles).toHaveLength(4);
+    expect(t?.roles).toHaveLength(1);
+    expect(t?.availableRoles).toHaveLength(4);
   });
 
   it('registers custom-worker template', () => {

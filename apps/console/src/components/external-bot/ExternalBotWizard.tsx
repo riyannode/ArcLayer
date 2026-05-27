@@ -28,7 +28,7 @@ import { useAccount } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
 
 import { AGENT_CATEGORIES, getAgentCategory } from '@/app/live-a2a-agent/categories';
-import { getTemplate, getTemplatesByCategory, type ExternalBotTemplate } from '@/lib/external-bot/templates';
+import { getTemplate, getTemplatesByCategory, type BotRole, type ExternalBotTemplate } from '@/lib/external-bot/templates';
 import { buildExternalBotManifest, type ManifestBuildInput } from '@/lib/external-bot/buildManifest';
 import { buildEnvBundle } from '@/lib/external-bot/buildEnvBundle';
 import { buildInstallCommand } from '@/lib/external-bot/buildInstallCommand';
@@ -115,6 +115,19 @@ export default function ExternalBotWizard() {
 
   // ── Derived ─────────────────────────────────────────────────
   const template = useMemo(() => selectedTemplateId ? getTemplate(selectedTemplateId) : null, [selectedTemplateId]);
+  const roleCatalog = useMemo(() => template?.availableRoles ?? template?.roles ?? [], [template]);
+  const editableRoleToBotRole = useCallback((er: EditableRole): BotRole => ({
+    roleId: er.roleId,
+    displayName: er.displayName,
+    defaultAgentId: er.brandedName,
+    botRole: er.botRole,
+    capabilities: er.capabilities,
+    endpointPath: er.endpointPath,
+    scopes: er.scopes,
+  }), []);
+  const activeTemplate = useMemo(() => (
+    template ? { ...template, roles: editableRoles.map(editableRoleToBotRole) } : null
+  ), [template, editableRoles, editableRoleToBotRole]);
   const categoryConfig = useMemo(() => selectedCategory ? getAgentCategory(selectedCategory) : null, [selectedCategory]);
   const isOnArc = chainId === ARC_CHAIN_ID;
 
@@ -173,16 +186,16 @@ export default function ExternalBotWizard() {
 
   // ── Step 3: Roles (preview) ─────────────────────────────────
   const roleRows = useMemo(() => {
-    if (!template) return [];
-    return template.roles.map((r) => ({
+    if (!activeTemplate) return [];
+    return activeTemplate.roles.map((r) => ({
       roleId: r.roleId,
       displayName: r.displayName,
       brandedName: r.defaultAgentId,
       botRole: r.botRole,
       capabilities: r.capabilities.join(', '),
-      scopes: scopesForRole(r.scopes, template.recommendedMode).join(', '),
+      scopes: scopesForRole(r.scopes, activeTemplate.recommendedMode).join(', '),
     }));
-  }, [template]);
+  }, [activeTemplate]);
 
   const handleRolesConfirm = useCallback(() => {
     if (!template) return;
@@ -240,8 +253,8 @@ export default function ExternalBotWizard() {
 
     const newRows = [...txRows];
 
-    for (let i = 0; i < template.roles.length; i++) {
-      const role = template.roles[i];
+    for (let i = 0; i < activeTemplate.roles.length; i++) {
+      const role = activeTemplate.roles[i];
       const edRole = editableRoles[i];
       newRows[i] = { ...newRows[i], step: 'signing' };
       setTxRows([...newRows]);
@@ -281,7 +294,7 @@ export default function ExternalBotWizard() {
     }
 
     setIsBusy(false);
-  }, [template, address, txRows, editableRoles, writeContractAsync]);
+  }, [template, activeTemplate, address, txRows, editableRoles, writeContractAsync]);
 
   // ── Step 6: Publish Manifest (x402) ─────────────────────────
   // (fix #1) method: POST (not PUT)
@@ -293,14 +306,14 @@ export default function ExternalBotWizard() {
 
     const newRows = [...txRows];
 
-    for (let i = 0; i < template.roles.length; i++) {
-      const role = template.roles[i];
+    for (let i = 0; i < activeTemplate.roles.length; i++) {
+      const role = activeTemplate.roles[i];
       const edRole = editableRoles[i];
       const agentId = getAgentId(newRows[i], role.defaultAgentId);
 
       try {
         const input: ManifestBuildInput = {
-          template,
+          template: activeTemplate,
           agentId,
           roleIndex: i,
           controller: address,
@@ -343,7 +356,7 @@ export default function ExternalBotWizard() {
 
     setIsBusy(false);
     setStep('keys');
-  }, [template, address, txRows, priceAtomic, payoutAddress, serviceEndpointUrl, signMessageAsync, paidFetch, getAgentId, editableRoles]);
+  }, [template, activeTemplate, address, txRows, priceAtomic, payoutAddress, serviceEndpointUrl, signMessageAsync, paidFetch, getAgentId, editableRoles]);
 
   // ── Step 7: Generate API Keys ───────────────────────────────
   // (fix #3) agentId = minted token ID (from txRow.agentId after register)
@@ -354,8 +367,8 @@ export default function ExternalBotWizard() {
 
     const newRows = [...txRows];
 
-    for (let i = 0; i < template.roles.length; i++) {
-      const role = template.roles[i];
+    for (let i = 0; i < activeTemplate.roles.length; i++) {
+      const role = activeTemplate.roles[i];
       const agentId = getAgentId(newRows[i], role.defaultAgentId);
 
       try {
@@ -375,7 +388,7 @@ export default function ExternalBotWizard() {
           body: JSON.stringify({
             agentId,
             label: `${role.displayName} Runtime Key`,
-            scopes: scopesForRole(role.scopes, template.recommendedMode),
+            scopes: scopesForRole(role.scopes, activeTemplate.recommendedMode),
             ts,
             signature,
           }),
@@ -397,7 +410,7 @@ export default function ExternalBotWizard() {
 
     setIsBusy(false);
     setStep('export');
-  }, [template, address, txRows, signMessageAsync, getAgentId]);
+  }, [template, activeTemplate, address, txRows, signMessageAsync, getAgentId]);
 
   // ── Step 8: Export ──────────────────────────────────────────
   // (fix #3) Env uses minted token ID as ARCLAYER_AGENT_ID
@@ -408,18 +421,18 @@ export default function ExternalBotWizard() {
 
     // (fix #3) Use txRow.agentId which = minted token ID after register
     // This ensures env ARCLAYER_AGENT_ID matches key agentId
-    const agentIds = txRows.map((r, i) => r.agentId || template.roles[i]?.defaultAgentId || '');
+    const agentIds = txRows.map((r, i) => r.agentId || activeTemplate.roles[i]?.defaultAgentId || '');
     const apiKeys = txRows.map((r) => r.apiKey || '');
     const erc8004Ids = txRows.map((r) =>
       r.mintedTokenId ? `erc8004_identity_registry:${r.mintedTokenId}` : ''
     );
     // (fix #4) Pass branded names for RUNTIME_ID prefix
     const runtimeNames = txRows.map((r, i) =>
-      r.brandedName || template.roles[i]?.defaultAgentId || ''
+      r.brandedName || activeTemplate.roles[i]?.defaultAgentId || ''
     );
 
     const bundle = buildEnvBundle({
-      template,
+      template: activeTemplate,
       baseUrl: 'https://www.arclayers.xyz',
       category: selectedCategory,
       agentIds,
@@ -430,9 +443,9 @@ export default function ExternalBotWizard() {
     });
 
     const cmd = buildInstallCommand({
-      template,
+      template: activeTemplate,
       envBundle: bundle,
-      roleNames: template.roles.map((r) => r.roleId),
+      roleNames: activeTemplate.roles.map((r) => r.roleId),
     });
 
     let exportStr = '# ── Category: ' + (categoryConfig?.label || selectedCategory) + ' ──\n';
@@ -451,7 +464,7 @@ export default function ExternalBotWizard() {
     setEnvBundleStr(exportStr);
     setInstallCmd(cmd.command);
     setError(null);
-  }, [template, selectedCategory, txRows, categoryConfig, payoutAddress]);
+  }, [template, activeTemplate, selectedCategory, txRows, categoryConfig, payoutAddress]);
 
   const handleCopyCommand = useCallback(() => {
     if (!installCmd) return;
@@ -605,6 +618,48 @@ export default function ExternalBotWizard() {
                       </span>
                     )}
                   </div>
+                  <button
+                    onClick={() => {
+                      if (editableRoles.length <= 1) return;
+                      setEditableRoles((prev) => prev.filter((pr) => pr.roleId !== r.roleId));
+                    }}
+                    disabled={editableRoles.length <= 1}
+                    className="rounded-sm border border-red-500/30 px-2 py-1 font-mono text-[9px] text-red-300 disabled:opacity-40"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <div className="mb-2">
+                  <label className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/60">Role</label>
+                  <select
+                    value={r.roleId}
+                    onChange={(e) => {
+                      const nextRole = roleCatalog.find((rc) => rc.roleId === e.target.value);
+                      if (!nextRole) return;
+                      const exists = editableRoles.some((er) => er.roleId === nextRole.roleId && er.roleId !== r.roleId);
+                      if (exists) return;
+                      setEditableRoles((prev) => prev.map((pr) => pr.roleId === r.roleId ? ({
+                        roleId: nextRole.roleId,
+                        botRole: nextRole.botRole,
+                        displayName: nextRole.displayName,
+                        brandedName: nextRole.defaultAgentId,
+                        capabilities: nextRole.capabilities,
+                        endpointPath: nextRole.endpointPath,
+                        scopes: nextRole.scopes,
+                      }) : pr));
+                    }}
+                    className="mt-0.5 w-full rounded-sm border border-white/10 bg-black/40 px-2 py-1.5 font-mono text-xs text-[#EAE4D8]"
+                  >
+                    {roleCatalog.map((rc) => (
+                      <option
+                        key={rc.roleId}
+                        value={rc.roleId}
+                        disabled={editableRoles.some((er) => er.roleId === rc.roleId && er.roleId !== r.roleId)}
+                      >
+                        {rc.botRole}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Display Name (editable) */}
@@ -675,6 +730,28 @@ export default function ExternalBotWizard() {
               </div>
             ))}
           </div>
+          {roleCatalog.length > editableRoles.length && (
+            <div className="mb-4">
+              <button
+                onClick={() => {
+                  const next = roleCatalog.find((rc) => !editableRoles.some((er) => er.roleId === rc.roleId));
+                  if (!next) return;
+                  setEditableRoles((prev) => [...prev, {
+                    roleId: next.roleId,
+                    botRole: next.botRole,
+                    displayName: next.displayName,
+                    brandedName: next.defaultAgentId,
+                    capabilities: next.capabilities,
+                    endpointPath: next.endpointPath,
+                    scopes: next.scopes,
+                  }]);
+                }}
+                className="rounded-sm border border-white/10 px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/70 hover:text-[#EAE4D8]"
+              >
+                + Add Role
+              </button>
+            </div>
+          )}
 
           <div className="mb-4">
             <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/70">
@@ -751,9 +828,9 @@ export default function ExternalBotWizard() {
               <div className="rounded-sm border border-white/10 bg-white/[0.02] p-3">
                 <div className="font-mono text-[10px] text-[#EAE4D8]/60 mb-1">Estimated Steps</div>
                 <div className="text-sm text-[#EAE4D8]">
-                  • {template.roles.length} ERC-8004 register transaction{template.roles.length > 1 ? 's' : ''}
-                  • {template.roles.length} manifest sign + x402 publish
-                  • {template.roles.length} API key sign + generate
+                  • {editableRoles.length} ERC-8004 register transaction{editableRoles.length > 1 ? 's' : ''}
+                  • {editableRoles.length} manifest sign + x402 publish
+                  • {editableRoles.length} API key sign + generate
                 </div>
               </div>
             )}
@@ -776,7 +853,7 @@ export default function ExternalBotWizard() {
             Register Agent Identity
           </h2>
 
-          <TxProgressTable rows={txRows} template={template} action="register" />
+          <TxProgressTable rows={txRows} template={activeTemplate} action="register" />
 
           {error && (
             <div className="mt-3 rounded-sm border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300">
@@ -798,7 +875,7 @@ export default function ExternalBotWizard() {
                 disabled={isBusy}
                 className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition-colors hover:bg-[#C5A67C]/20 disabled:opacity-40"
               >
-                {isBusy ? 'Registering…' : 'Register All Agents'}
+                {isBusy ? 'Registering…' : txRows.length > 1 ? 'Register Agents' : 'Register Agent'}
               </button>
             )}
             <button onClick={back} className="px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/50 hover:text-[#EAE4D8]">
@@ -815,7 +892,7 @@ export default function ExternalBotWizard() {
             Publish Manifest (x402)
           </h2>
 
-          <TxProgressTable rows={txRows} template={template} action="manifest" />
+          <TxProgressTable rows={txRows} template={activeTemplate} action="manifest" />
 
           {error && (
             <div className="mt-3 rounded-sm border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300">
@@ -860,7 +937,7 @@ export default function ExternalBotWizard() {
             </div>
           </div>
 
-          <TxProgressTable rows={txRows} template={template} action="keys" />
+          <TxProgressTable rows={txRows} template={activeTemplate} action="keys" />
 
           {error && (
             <div className="mt-3 rounded-sm border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-300">

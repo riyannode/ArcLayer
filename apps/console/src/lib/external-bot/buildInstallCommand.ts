@@ -22,7 +22,7 @@ export function buildInstallCommand(input: {
   const { template, envBundle, roleNames } = input;
 
   if (template.id === 'prediction-market-pm2-bridge') {
-    return buildPM2MarketBridgeCommand(envBundle);
+    return buildPM2MarketBridgeCommand(envBundle, roleNames);
   }
 
   if (template.id === 'erc8183-escrow-bots') {
@@ -33,8 +33,11 @@ export function buildInstallCommand(input: {
   return buildComingSoonCommand(template);
 }
 
-function buildPM2MarketBridgeCommand(envBundle: EnvBundle): InstallCommand {
+function buildPM2MarketBridgeCommand(envBundle: EnvBundle, roleNames: string[]): InstallCommand {
   const envSnippets = formatEnvBundleAsInstallCommands(envBundle);
+  const selectedApps = roleNames.map((roleName) => `${roleName}-bot`);
+  const appList = selectedApps.join(' ');
+  const onlyList = selectedApps.join(',');
   const cmd = `# ── Prediction Market PM2 Bridge ──────────────────────────
 git clone https://github.com/riyannode/ArcLayer.git
 cd ArcLayer/examples/external-pm2-bots/market-agent-bridge
@@ -49,8 +52,8 @@ npm install
 npm install -g pm2 2>/dev/null || true
 
 # ── Start processes ───────────────────────────────────
-pm2 delete oracle-bot analyzer-bot evaluator-bot executor-bot 2>/dev/null || true
-pm2 start ecosystem.independent.config.cjs
+pm2 delete ${appList} 2>/dev/null || true
+pm2 start ecosystem.independent.config.cjs --only "${onlyList}"
 pm2 save
 
 # ── Check status ──────────────────────────────────────

@@ -31,6 +31,7 @@ export type ExternalBotTemplate = {
   defaultPriceLabel: string;
   defaultRuntime: BotRuntime;
   roles: BotRole[];
+  availableRoles?: BotRole[];
   /** BOT_ROLE is fixed by runtime script (true for market-agent-bridge). */
   fixedBotRoleNames?: boolean;
   /** Boot sequence for multi-role PM2 templates. */
@@ -40,55 +41,59 @@ export type ExternalBotTemplate = {
 // ──────────────────────────────────────────────
 // 7.1 — Prediction Market PM2 Bridge
 // ──────────────────────────────────────────────
+const predictionOracleRole: BotRole = {
+  roleId: 'oracle',
+  displayName: 'Hermes Oracle',
+  defaultAgentId: 'hermes-oracle',
+  botRole: 'oracle',
+  capabilities: ['market_snapshot', 'market_data', 'orderbook', 'candles', 'btc_15m', 'polymarket_feed'],
+  endpointPath: 'oracle-bot.js',
+  scopes: ['agent_bridge:write', 'agent_bridge:receipt'],
+};
+
+const predictionAnalyzerRole: BotRole = {
+  roleId: 'analyzer',
+  displayName: 'Apollo Analyzer',
+  defaultAgentId: 'apollo-analyzer',
+  botRole: 'analyzer',
+  capabilities: ['resolver_output', 'market_signal', 'llm_analysis', 'probability_estimate', 'trend_analysis'],
+  endpointPath: 'analyzer-bot.js',
+  scopes: ['agent_bridge:write', 'agent_bridge:receipt'],
+};
+
+const predictionEvaluatorRole: BotRole = {
+  roleId: 'evaluator',
+  displayName: 'Ignia Evaluator',
+  defaultAgentId: 'ignia-evaluator',
+  botRole: 'evaluator',
+  capabilities: ['evaluation', 'risk_analysis', 'confidence_score', 'signal_validation', 'dry_run_decision'],
+  endpointPath: 'evaluator-bot.js',
+  scopes: ['agent_bridge:write', 'agent_bridge:receipt'],
+};
+
+const predictionExecutorRole: BotRole = {
+  roleId: 'executor',
+  displayName: 'Budu Executor',
+  defaultAgentId: 'budu-executor',
+  botRole: 'executor',
+  capabilities: ['execution_intent', 'dry_run_execution', 'x402_autopay', 'submit_proof', 'receipt_generation'],
+  endpointPath: 'executor-bot.js',
+  scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'x402:pay'],
+};
+
 const predictionMarketPM2: ExternalBotTemplate = {
   id: 'prediction-market-pm2-bridge',
   category: 'prediction-market-bots',
-  name: 'Prediction Market PM2 Bridge',
-  description: '4-role PM2 bot pipeline: oracle → analyzer → evaluator → executor. x402 autopay, bridge events, receipts.',
+  name: 'Prediction Market Bot',
+  description: 'Default single-bot onboarding (Oracle) with optional multi-role PM2 pipeline: oracle → analyzer → evaluator → executor.',
   recommendedMode: 'hybrid',
   defaultPriceAtomic: '1000',
   defaultPriceLabel: '0.001 USDC',
   defaultRuntime: 'pm2',
   fixedBotRoleNames: true,
   bootSequence: ['oracle', 'analyzer', 'evaluator', 'executor'],
-  roles: [
-    {
-      roleId: 'oracle',
-      displayName: 'Hermes Oracle',
-      defaultAgentId: 'hermes-oracle',
-      botRole: 'oracle',
-      capabilities: ['market_snapshot', 'market_data', 'orderbook', 'candles', 'btc_15m', 'polymarket_feed'],
-      endpointPath: 'oracle-bot.js',
-      scopes: ['agent_bridge:write', 'agent_bridge:receipt'],
-    },
-    {
-      roleId: 'analyzer',
-      displayName: 'Apollo Analyzer',
-      defaultAgentId: 'apollo-analyzer',
-      botRole: 'analyzer',
-      capabilities: ['resolver_output', 'market_signal', 'llm_analysis', 'probability_estimate', 'trend_analysis'],
-      endpointPath: 'analyzer-bot.js',
-      scopes: ['agent_bridge:write', 'agent_bridge:receipt'],
-    },
-    {
-      roleId: 'evaluator',
-      displayName: 'Ignia Evaluator',
-      defaultAgentId: 'ignia-evaluator',
-      botRole: 'evaluator',
-      capabilities: ['evaluation', 'risk_analysis', 'confidence_score', 'signal_validation', 'dry_run_decision'],
-      endpointPath: 'evaluator-bot.js',
-      scopes: ['agent_bridge:write', 'agent_bridge:receipt'],
-    },
-    {
-      roleId: 'executor',
-      displayName: 'Budu Executor',
-      defaultAgentId: 'budu-executor',
-      botRole: 'executor',
-      capabilities: ['execution_intent', 'dry_run_execution', 'x402_autopay', 'submit_proof', 'receipt_generation'],
-      endpointPath: 'executor-bot.js',
-      scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'x402:pay'],
-    },
-  ],
+  roles: [predictionOracleRole],
+  availableRoles: [predictionOracleRole, predictionAnalyzerRole, predictionEvaluatorRole, predictionExecutorRole],
 };
 
 // ──────────────────────────────────────────────
