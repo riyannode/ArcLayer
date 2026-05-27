@@ -16,6 +16,7 @@ import { fetchIndexerJson, INDEXER_BASE_URL, type JobDetail, waitForIndexer, loa
 import { IndexerDegradedBanner } from '@/components/IndexerDegradedBanner';
 import { safeJsonCatch } from '@/lib/safeFetch';
 import { safeBigInt } from '@/lib/safeNumber';
+import { asArray, asString, asNumber } from '@/lib/safeShape';
 
 const JOB_STATUS = ['Open', 'Funded', 'Submitted', 'Completed', 'Rejected', 'Expired'] as const;
 
@@ -102,10 +103,24 @@ export default function JobDetailPage() {
   const job = payload?.job || null;
   const proof = payload?.proof || null;
 
+  // Normalize job fields — valid JSON but wrong shape can crash .toLowerCase, BigInt, .map
+  const safeJob = job ? {
+    ...job,
+    client: asString(job.client),
+    provider: asString(job.provider),
+    evaluator: asString(job.evaluator),
+    description: asString(job.description),
+    deliverable: asString(job.deliverable),
+    budget: asString(job.budget),
+    fundedAmount: asString(job.fundedAmount),
+    createdAt: asString(job.createdAt),
+    status: asNumber(job.status),
+  } : null;
+
   // Role checks for UI gating
-  const isEvaluator = !!(job && address && address.toLowerCase() === job.evaluator.toLowerCase());
-  const isClient = !!(job && address && address.toLowerCase() === job.client.toLowerCase());
-  const isWorker = !!(job && address && address.toLowerCase() === job.provider.toLowerCase());
+  const isEvaluator = !!(safeJob && address && address.toLowerCase() === safeJob.evaluator.toLowerCase());
+  const isClient = !!(safeJob && address && address.toLowerCase() === safeJob.client.toLowerCase());
+  const isWorker = !!(safeJob && address && address.toLowerCase() === safeJob.provider.toLowerCase());
 
   // Auto-fetch deliverable JSON only when a real IPFS CID or HTTPS URL is submitted.
   useEffect(() => {
@@ -388,15 +403,15 @@ export default function JobDetailPage() {
           </div>
 
           {/* Caller authority hint */}
-          {job && address && (
+          {safeJob && address && (
             <div className="mt-4 p-3 font-mono text-[10.5px] tracking-[0.04em] text-[#a0a0a0]" style={{ border: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}>
               you are{' '}
-              {address.toLowerCase() === job.client.toLowerCase() && <span className="text-[#C5A67C]">CLIENT </span>}
-              {address.toLowerCase() === job.evaluator.toLowerCase() && <span className="text-[#B8CD7E]">EVALUATOR </span>}
-              {address.toLowerCase() === job.provider.toLowerCase() && <span className="text-[#9eb8ff]">PROVIDER </span>}
-              {address.toLowerCase() !== job.client.toLowerCase() &&
-               address.toLowerCase() !== job.evaluator.toLowerCase() &&
-               address.toLowerCase() !== job.provider.toLowerCase() && <span>· not a participant</span>}
+              {address.toLowerCase() === safeJob.client.toLowerCase() && <span className="text-[#C5A67C]">CLIENT </span>}
+              {address.toLowerCase() === safeJob.evaluator.toLowerCase() && <span className="text-[#B8CD7E]">EVALUATOR </span>}
+              {address.toLowerCase() === safeJob.provider.toLowerCase() && <span className="text-[#9eb8ff]">PROVIDER </span>}
+              {address.toLowerCase() !== safeJob.client.toLowerCase() &&
+               address.toLowerCase() !== safeJob.evaluator.toLowerCase() &&
+               address.toLowerCase() !== safeJob.provider.toLowerCase() && <span>· not a participant</span>}
             </div>
           )}
 

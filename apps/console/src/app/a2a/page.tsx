@@ -8,6 +8,7 @@ import { config } from '@/lib/wagmi';
 import { indexerUrl } from '@/lib/indexer';
 import { safeJson, safeJsonCatch } from '@/lib/safeFetch';
 import { safeBigInt } from '@/lib/safeNumber';
+import { asArray, asRecord, asString, asNumber } from '@/lib/safeShape';
 import type { Hex } from 'viem';
 
 const AGENT_REGISTRY_ADDRESS = '0xB263336055dD65FF501e36CA39941760D943703C' as const;
@@ -240,8 +241,34 @@ function A2ADashboardPage() {
       if (!ovRes.ok) throw new Error(`indexer ${ovRes.status}`);
       const ovData: Overview = await safeJson<Overview>(ovRes);
       const ocData: A2AOnChain | null = ocRes.ok ? await safeJsonCatch<A2AOnChain>(ocRes, null as unknown as A2AOnChain) : null;
-      const fdData: AutonomousFeed = fdRes.ok ? await safeJsonCatch<AutonomousFeed>(fdRes, { items: [], latest: null }) : { items: [], latest: null };
-      const regData = regRes.ok ? await safeJsonCatch<{ agents: [] }>(regRes, { agents: [] }) : { agents: [] };
+      const rawFd = fdRes.ok ? await safeJsonCatch<unknown>(fdRes, null) : null;
+      const rawReg = regRes.ok ? await safeJsonCatch<unknown>(regRes, null) : null;
+
+      // Normalize shapes — valid JSON but wrong shape can still crash .map/.filter
+      const fdData = {
+        items: asArray<FeedItem>((rawFd as Record<string, unknown>)?.items ?? []),
+        latest: asString((rawFd as Record<string, unknown>)?.latest ?? null, null as unknown as string),
+      } as AutonomousFeed;
+      const regData = { agents: asArray<RegisteredAgent>((rawReg as Record<string, unknown>)?.agents ?? []) };
+      const summaryRaw = asRecord((ovData as Record<string, unknown>)?.summary);
+      const ovDataNormalized: Overview = {
+        ...ovData,
+        summary: {
+          totalFunded: asString(summaryRaw.totalFunded, '0'),
+          totalBudget: asString(summaryRaw.totalBudget, '0'),
+          jobs: asNumber(summaryRaw.jobs, 0),
+          agents: asNumber(summaryRaw.agents, 0),
+          proofs: asNumber(summaryRaw.proofs, 0),
+          settledJobs: asNumber(summaryRaw.settledJobs, 0),
+          fundedJobs: asNumber(summaryRaw.fundedJobs, 0),
+          totalFundedAtomic: asString(summaryRaw.totalFundedAtomic, '0'),
+          totalBudgetAtomic: asString(summaryRaw.totalBudgetAtomic, '0'),
+          budgetedUsdc: asString(summaryRaw.budgetedUsdc, '0'),
+          fundedUsdc: asString(summaryRaw.fundedUsdc, '0'),
+        },
+        jobs: asArray(ovData.jobs),
+        proofs: asArray(ovData.proofs),
+      };
 
       // Detect new feed items
       const currentIds = new Set(fdData.items.map((i) => i.id));
@@ -258,7 +285,7 @@ function A2ADashboardPage() {
       const signalCount = Math.max(ocData?.agents.pythia?.stats?.callsServed ?? 0, feedSignalCount);
 
       // Volume sparkline: JobEscrow funded + x402 revenue (Apolo + Hermes)
-      const jobFunded = Number(ovData.summary.totalFunded || '0') / 1e6;
+      const jobFunded = Number(ovDataNormalized.summary.totalFunded || '0') / 1e6;
       const pythiaRev = Number(ocData?.agents.pythia?.stats?.totalRevenue || '0') / 1e6;
       const hermesRev = Number(ocData?.agents.hermes?.stats?.totalRevenue || '0') / 1e6;
       const totalVol = jobFunded + pythiaRev + hermesRev;
@@ -272,14 +299,14 @@ function A2ADashboardPage() {
       if (options?.summaryOnly) {
         setOverview((prev) => {
           if (!prev) return prev;
-          return { ...prev, summary: ovData.summary };
+          return { ...prev, summary: ovDataNormalized.summary };
         });
       } else {
-        setOverview(ovData);
+        setOverview(ovDataNormalized);
       }
       if (ocData) setOnchain(ocData);
       setFeed(fdData);
-      setRegisteredAgents(Array.isArray(regData.agents) ? regData.agents : []);
+      setRegisteredAgents(regData.agents);
       setError(null);
     } catch (err: any) {
       setError(err?.message || 'fetch failed');

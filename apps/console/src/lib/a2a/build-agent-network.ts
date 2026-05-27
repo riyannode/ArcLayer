@@ -1,4 +1,5 @@
 import type { A2AOnChain, AutonomousFeed, NetworkAgent, Overview, RegisteredAgent } from '@/types/agent-network';
+import { asArray, asString } from '@/lib/safeShape';
 
 function jobsForAgent(overview: Overview | null, agentId?: string) {
   if (!overview || !agentId) return 0;
@@ -70,10 +71,10 @@ export function buildAgentNetwork({
 
       agents.push({
         id: regId,
-        name: meta?.name || `Agent ${regId.slice(0, 8)}`,
-        role: meta?.role || 'Registered Agent',
-        capability: meta?.capability || ['General'],
-        description: meta?.description || 'Registered agent synced from ArcLayer registry/indexer.',
+        name: asString(meta?.name) || `Agent ${regId.slice(0, 8)}`,
+        role: asString(meta?.role) || 'Registered Agent',
+        capability: asArray<string>(meta?.capability).length > 0 ? asArray<string>(meta?.capability) : ['General'],
+        description: asString(meta?.description) || 'Registered agent synced from ArcLayer registry/indexer.',
         status: completed > 0 || receipts.length > 0 ? 'LIVE' : 'IDLE',
         wallet: reg.controller,
         agentId: regId,
@@ -84,7 +85,7 @@ export function buildAgentNetwork({
         revenueRaw: volumeRaw,
         balanceRaw: null,
         primaryAction: 'Create Job',
-        categories: (meta?.categories as NetworkAgent['categories']) || ['developers'],
+        categories: (asArray(meta?.categories).length > 0 ? asArray(meta?.categories) : ['developers']) as NetworkAgent['categories'],
         activity,
         source: 'registry',
         canHide: true,
