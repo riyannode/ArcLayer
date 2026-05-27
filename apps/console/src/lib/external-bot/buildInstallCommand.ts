@@ -26,7 +26,7 @@ export function buildInstallCommand(input: {
   }
 
   if (template.id === 'erc8183-escrow-bots') {
-    return buildERC8183EscrowCommand(envBundle);
+    return buildERC8183EscrowCommand(envBundle, roleNames);
   }
 
   // (fix #6) Non-PM2 templates = coming soon
@@ -42,10 +42,9 @@ function buildPM2MarketBridgeCommand(envBundle: EnvBundle, roleNames: string[]):
     evaluator: 'evaluator-bot',
     executor: 'executor-bot',
   };
-  // Single-role model: use only the first role
-  const roleName = roleNames[0];
-  const appName = roleNameMap[roleName] || `${roleName}-bot`;
-  const cmd = `# ── Prediction Market PM2 Bridge ──────────────────────────
+  const deleteLines = roleNames.map((r) => `pm2 delete ${roleNameMap[r] || `${r}-bot`} 2>/dev/null || true`).join('\n');
+  const startLines = roleNames.map((r) => `pm2 start ecosystem.independent.config.cjs --only "${roleNameMap[r] || `${r}-bot`}"`).join('\n');
+  const cmd = `# ── Prediction Market Bot ─────────────────────────────────
 git clone https://github.com/riyannode/ArcLayer.git
 cd ArcLayer/examples/external-pm2-bots/market-agent-bridge
 
@@ -58,9 +57,9 @@ npm install
 # ── Install PM2 (if missing) ──────────────────────────
 npm install -g pm2 2>/dev/null || true
 
-# ── Start process ─────────────────────────────────────
-pm2 delete ${appName} 2>/dev/null || true
-pm2 start ecosystem.independent.config.cjs --only "${appName}"
+# ── Start processes ───────────────────────────────────
+${deleteLines}
+${startLines}
 pm2 save
 
 # ── Check status ──────────────────────────────────────
@@ -70,9 +69,22 @@ pm2 status
   return { title: 'PM2 — market-agent-bridge', command: cmd.trim() };
 }
 
-function buildERC8183EscrowCommand(envBundle: EnvBundle): InstallCommand {
+function buildERC8183EscrowCommand(envBundle: EnvBundle, roleNames: string[]): InstallCommand {
   const envSnippets = formatEnvBundleAsInstallCommands(envBundle);
-  const cmd = `# ── ERC-8183 Escrow Job Bots ────────────────────────────
+  const roleNameMap: Record<string, { pm2Name: string; dir: string }> = {
+    client: { pm2Name: 'arclayer-erc8183-client', dir: 'client-bot/ecosystem.config.cjs' },
+    provider: { pm2Name: 'arclayer-erc8183-provider', dir: 'provider-bot/ecosystem.config.cjs' },
+    evaluator: { pm2Name: 'arclayer-erc8183-evaluator', dir: 'evaluator-bot/ecosystem.config.cjs' },
+  };
+  const deleteLines = roleNames.map((r) => {
+    const m = roleNameMap[r];
+    return `pm2 delete ${m?.pm2Name || r} 2>/dev/null || true`;
+  }).join('\n');
+  const startLines = roleNames.map((r) => {
+    const m = roleNameMap[r];
+    return `pm2 start ${m?.dir || `${r}-bot/ecosystem.config.cjs`}`;
+  }).join('\n');
+  const cmd = `# ── ERC-8183 Escrow Job Bot ───────────────────────────────
 git clone https://github.com/riyannode/ArcLayer.git
 cd ArcLayer/examples/external-erc8183-bots
 
@@ -85,11 +97,9 @@ npm install
 # ── Install PM2 (if missing) ──────────────────────────
 npm install -g pm2 2>/dev/null || true
 
-# ── Start per-role processes ──────────────────────────
-pm2 delete arclayer-erc8183-client arclayer-erc8183-provider arclayer-erc8183-evaluator 2>/dev/null || true
-pm2 start client-bot/ecosystem.config.cjs
-pm2 start provider-bot/ecosystem.config.cjs
-pm2 start evaluator-bot/ecosystem.config.cjs
+# ── Start processes ───────────────────────────────────
+${deleteLines}
+${startLines}
 pm2 save
 
 # ── Check status ──────────────────────────────────────

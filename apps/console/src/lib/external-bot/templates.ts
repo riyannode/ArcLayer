@@ -86,7 +86,7 @@ const predictionMarketPM2: ExternalBotTemplate = {
   id: 'prediction-market-pm2-bridge',
   category: 'prediction-market-bots',
   name: 'Prediction Market Bot',
-  description: 'Single independent prediction-market bot. Choose one role: oracle, analyzer, evaluator, or executor.',
+  description: 'Choose one or more independent bot roles.',
   recommendedMode: 'hybrid',
   defaultPriceAtomic: '1000',
   defaultPriceLabel: '0.001 USDC',
@@ -100,48 +100,51 @@ const predictionMarketPM2: ExternalBotTemplate = {
 // ──────────────────────────────────────────────
 // ERC-8183 Escrow Job Bots
 // ──────────────────────────────────────────────
+const erc8183ClientRole: BotRole = {
+  roleId: 'client',
+  displayName: 'Client Bot',
+  defaultAgentId: 'erc8183-client',
+  botRole: 'client',
+  capabilities: ['create_job', 'fund_escrow', 'approve_usdc', 'onchain_tx'],
+  endpointPath: 'client-bot/index.js',
+  scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:create', 'erc8183:confirm'],
+};
+
+const erc8183ProviderRole: BotRole = {
+  // Worker is the user-facing name. provider is the legacy runtime role name
+  // used by the existing ERC-8183 example folder (provider-bot/).
+  roleId: 'provider',
+  displayName: 'Worker Bot',
+  defaultAgentId: 'erc8183-provider',
+  botRole: 'provider',
+  capabilities: ['set_budget', 'claim_job', 'submit_work', 'onchain_tx'],
+  endpointPath: 'provider-bot/index.js',
+  scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:claim', 'erc8183:running', 'erc8183:submit'],
+};
+
+const erc8183EvaluatorRole: BotRole = {
+  roleId: 'evaluator',
+  displayName: 'Evaluator Bot',
+  defaultAgentId: 'erc8183-evaluator',
+  botRole: 'evaluator',
+  capabilities: ['evaluate', 'settle', 'complete_job', 'onchain_tx'],
+  endpointPath: 'evaluator-bot/index.js',
+  scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:complete', 'erc8183:tx'],
+};
+
 const erc8183EscrowBots: ExternalBotTemplate = {
   id: 'erc8183-escrow-bots',
   category: 'erc8183-commerce',
-  name: 'ERC-8183 Escrow Job Bots',
-  description: '3-role on-chain escrow pipeline: client creates jobs, worker budgets + submits work, evaluator settles. PM2 runtime.',
+  name: 'ERC-8183 Escrow Job Bot',
+  description: 'Choose one or more independent bot roles.',
   recommendedMode: 'erc8183-commerce',
   defaultPriceAtomic: '1000',
   defaultPriceLabel: 'on-chain escrow',
   defaultRuntime: 'pm2',
   fixedBotRoleNames: true,
   bootSequence: ['client', 'provider', 'evaluator'],
-  roles: [
-    {
-      roleId: 'client',
-      displayName: 'Client Bot',
-      defaultAgentId: 'erc8183-client',
-      botRole: 'client',
-      capabilities: ['create_job', 'fund_escrow', 'approve_usdc', 'onchain_tx'],
-      endpointPath: 'client-bot/index.js',
-      scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:create', 'erc8183:confirm'],
-    },
-    {
-      // Worker is the user-facing name. provider is the legacy runtime role name
-      // used by the existing ERC-8183 example folder (provider-bot/).
-      roleId: 'provider',
-      displayName: 'Worker Bot',
-      defaultAgentId: 'erc8183-provider',
-      botRole: 'provider',
-      capabilities: ['set_budget', 'claim_job', 'submit_work', 'onchain_tx'],
-      endpointPath: 'provider-bot/index.js',
-      scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:claim', 'erc8183:running', 'erc8183:submit'],
-    },
-    {
-      roleId: 'evaluator',
-      displayName: 'Evaluator Bot',
-      defaultAgentId: 'erc8183-evaluator',
-      botRole: 'evaluator',
-      capabilities: ['evaluate', 'settle', 'complete_job', 'onchain_tx'],
-      endpointPath: 'evaluator-bot/index.js',
-      scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:complete', 'erc8183:tx'],
-    },
-  ],
+  roles: [erc8183ClientRole],
+  availableRoles: [erc8183ClientRole, erc8183ProviderRole, erc8183EvaluatorRole],
 };
 
 // ──────────────────────────────────────────────
