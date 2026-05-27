@@ -1,5 +1,8 @@
 # Autonomous ERC-8183 External Bots
 
+> **Standalone example.** This directory is NOT part of the root `pnpm-workspace.yaml`.
+> Install and run from this folder independently.
+
 Client, provider, and evaluator bots that autonomously run ERC-8183 escrow jobs on Arc Testnet.
 
 ## Architecture
@@ -51,16 +54,19 @@ Copy the raw keys — they are shown once.
 Each bot has its own `.env`:
 
 ```bash
-cp examples/external-erc8183-bots/client-bot/.env.example   examples/external-erc8183-bots/client-bot/.env
-cp examples/external-erc8183-bots/provider-bot/.env.example examples/external-erc8183-bots/provider-bot/.env
-cp examples/external-erc8183-bots/evaluator-bot/.env.example examples/external-erc8183-bots/evaluator-bot/.env
+cd examples/external-erc8183-bots
+cp client-bot/.env.example   client-bot/.env
+cp provider-bot/.env.example provider-bot/.env
+cp evaluator-bot/.env.example evaluator-bot/.env
 ```
 
 Fill in:
-- `ARCLAYER_API_KEY` — the key from step 2 for each role
+- `ARCLAYER_API_KEY` — generated from `/register/external-bot` on the deployed console
 - `*_PRIVATE_KEY` — wallet private key with USDC + gas
 - `*_ADDRESS` — corresponding wallet address
 - `WORKER_ID` — **must equal `PROVIDER_AGENT_ID`** (the API key's agentId)
+
+**Never commit filled `.env` files.** A `.gitignore` in this folder already excludes them.
 
 ### Key constraint
 
@@ -85,6 +91,8 @@ USDC_ADDRESS=0x<new-address>
 No source code edit needed. Falls back to defaults if unset.
 
 ## 4. Install Dependencies
+
+This example is standalone — install from this folder:
 
 ```bash
 cd examples/external-erc8183-bots
@@ -121,7 +129,7 @@ The bots work independently:
 
 ## 7. Security Notes
 
-- **Never commit `.env` files.** Use `.env.example` as template.
+- **Never commit `.env` files.** This folder includes a `.gitignore` that excludes them. Use `.env.example` as template.
 - Each bot has its own API key scoped to only the actions it needs.
 - API key is sent via `Authorization: Bearer` header.
 - Wallet private keys never leave the bot process.
