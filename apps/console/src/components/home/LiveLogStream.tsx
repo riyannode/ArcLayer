@@ -159,7 +159,7 @@ export default function LiveLogStream() {
   }, []);
 
   return (
-    <div className="llog w-full min-w-0 overflow-hidden">
+    <div className="llog w-full min-w-0 max-w-[480px] overflow-hidden ml-auto">
       <div className="llog-bar">
         <div className="llog-dots" aria-hidden="true">
           <span className="llog-dot r" />
