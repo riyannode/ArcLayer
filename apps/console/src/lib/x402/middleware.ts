@@ -1256,7 +1256,7 @@ async function handleNative(
       });
     } catch (settledErr) {
       const msg = settledErr instanceof Error ? settledErr.message : 'onSettled hook failed';
-      console.error(`[x402] onSettled hook failed for ${opts.resource}:`, msg);
+      console.error('[x402] onSettled hook failed for %s: %s', String(opts.resource), msg);
       return NextResponse.json(
         {
           ok: false,
