@@ -48,8 +48,8 @@ export default function Home() {
               <HexGrid3D />
             </div>
 
-            {/* Live indexer — below honeycomb, with breathing room */}
-            <div className="section-reveal px-2" style={{ animationDelay: '0.5s' }}>
+            {/* Live indexer — below honeycomb, aligned */}
+            <div className="section-reveal" style={{ animationDelay: '0.5s' }}>
               <LiveLogStream />
             </div>
           </div>
