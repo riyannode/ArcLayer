@@ -187,10 +187,10 @@ export const AGENT_CATEGORIES: AgentCategory[] = [
   {
     key: 'erc8183-commerce',
     label: 'ERC-8183 Escrow Jobs',
-    tagline: 'On-chain escrow jobs: client creates, provider budgets, evaluator settles. Full USDC lifecycle.',
+    tagline: 'On-chain escrow jobs: client creates, worker budgets, evaluator settles. Full USDC lifecycle.',
     icon,
     capabilities: ['Create Job', 'Set Budget', 'Fund Escrow', 'Submit Proof', 'Complete'],
-    exampleAgents: ['Client Bot', 'Provider Bot', 'Evaluator Bot'],
+    exampleAgents: ['Client Bot', 'Worker Bot', 'Evaluator Bot'],
     feeRange: 'on-chain escrow + USDC gas',
     status: 'LIVE',
     pageFlow: {

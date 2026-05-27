@@ -98,7 +98,7 @@ const erc8183EscrowBots: ExternalBotTemplate = {
   id: 'erc8183-escrow-bots',
   category: 'erc8183-commerce',
   name: 'ERC-8183 Escrow Job Bots',
-  description: '3-role on-chain escrow pipeline: client creates jobs, provider budgets + submits work, evaluator settles. PM2 runtime.',
+  description: '3-role on-chain escrow pipeline: client creates jobs, worker budgets + submits work, evaluator settles. PM2 runtime.',
   recommendedMode: 'erc8183-commerce',
   defaultPriceAtomic: '1000',
   defaultPriceLabel: 'on-chain escrow',
@@ -116,8 +116,10 @@ const erc8183EscrowBots: ExternalBotTemplate = {
       scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:create', 'erc8183:confirm'],
     },
     {
+      // Worker is the user-facing name. provider is the legacy runtime role name
+      // used by the existing ERC-8183 example folder (provider-bot/).
       roleId: 'provider',
-      displayName: 'Provider Bot',
+      displayName: 'Worker Bot',
       defaultAgentId: 'erc8183-provider',
       botRole: 'provider',
       capabilities: ['set_budget', 'claim_job', 'submit_work', 'onchain_tx'],

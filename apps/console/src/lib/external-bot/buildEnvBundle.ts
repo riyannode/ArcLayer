@@ -92,8 +92,13 @@ export function buildEnvBundle(input: {
 
       if (role.botRole === 'provider') {
         lines.push(
+          `# Worker is the user-facing name. PROVIDER_* is the legacy runtime env key.`,
           `PROVIDER_AGENT_ID=${agentId}`,
           `WORKER_ID=${agentId}`,
+          `# Worker aliases (same as PROVIDER_* for compatibility):`,
+          `# WORKER_AGENT_ID=${agentId}`,
+          `# WORKER_ADDRESS=<same as PROVIDER_ADDRESS>`,
+          `# WORKER_PRIVATE_KEY=<same as PROVIDER_PRIVATE_KEY>`,
           `# Paste your Arc Testnet address:`,
           `# PROVIDER_ADDRESS=<your-0x-address>`,
           `# Paste your Arc Testnet private key:`,
