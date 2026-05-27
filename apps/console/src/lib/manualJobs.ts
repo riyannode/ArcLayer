@@ -1,5 +1,6 @@
 import type { IndexedAgent, IndexedJob } from './indexer';
 import { displayAgentLabel, parseAgentSkill, shortAgentId } from './agentName';
+import { asString } from './safeShape';
 
 export const MANUAL_CATEGORIES = [
   { key: 'Smart Contract', slug: 'smart-contract', copy: 'Audit, escrow, Solidity, protocol tasks.' },
@@ -47,18 +48,19 @@ export function slugFromCategory(category: ManualCategory): string {
 }
 
 export function normalizeCategory(value: unknown): ManualCategory {
-  const text = String(value ?? '').trim().toLowerCase();
+  const text = asString(value).toLowerCase();
   return CATEGORY_KEYS.find((c) => c.toLowerCase() === text) ?? 'Other';
 }
 
 export function inferManualJobCategory(job: IndexedJob, agent?: IndexedAgent | null): ManualCategory {
+  const agentMetadataUri = agent ? asString(agent.metadataURI) : '';
   const haystack = [
-    (job as IndexedJob & { taskDescription?: string; jobSpec?: string }).taskDescription,
-    (job as IndexedJob & { jobSpec?: string }).jobSpec,
-    job.jobSpecHash,
-    agent?.metadataURI,
-    agent ? parseAgentSkill(agent.metadataURI) : '',
-    agent ? displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI }) : '',
+    asString((job as IndexedJob & { taskDescription?: string; jobSpec?: string }).taskDescription),
+    asString((job as IndexedJob & { jobSpec?: string }).jobSpec),
+    asString(job.jobSpecHash),
+    agentMetadataUri,
+    agent ? parseAgentSkill(agentMetadataUri) : '',
+    agent ? displayAgentLabel({ agentId: asString(agent.agentId), metadataURI: agentMetadataUri }) : '',
   ].join(' ').toLowerCase();
   if (/security|exploit|threat|pentest|vulnerab/.test(haystack)) return 'Security Audit';
   if (/solidity|escrow|contract|audit|protocol/.test(haystack)) return 'Smart Contract';
@@ -73,6 +75,8 @@ export function inferManualJobCategory(job: IndexedJob, agent?: IndexedAgent | n
 }
 
 export function inferAgentCategory(agent: IndexedAgent): ManualCategory {
+  const safeAgentId = asString(agent.agentId);
+  const safeDescription = asString(agent.metadataURI);
   const synthetic: IndexedJob = {
     id: '',
     client: '',
@@ -90,9 +94,9 @@ export function inferAgentCategory(agent: IndexedAgent): ManualCategory {
     status: 0,
     statusLabel: 'Open',
     // Legacy aliases
-    agentId: agent.agentId,
+    agentId: safeAgentId,
     worker: '',
-    jobSpecHash: '',
+    jobSpecHash: safeDescription,
     deliverableURI: '',
     proofMetadataURI: '',
     approved: false,
@@ -102,9 +106,13 @@ export function inferAgentCategory(agent: IndexedAgent): ManualCategory {
 }
 
 export function getManualJobDisplay(job: IndexedJob, agent?: IndexedAgent | null): ManualJobDisplay {
+  const safeJobId = asString(job.id);
+  const safeAgentId = asString(job.agentId);
+  const safeDescription = asString(job.description);
+  const safeJobSpecHash = asString(job.jobSpecHash);
   const raw =
-    (job as IndexedJob & { taskDescription?: string; jobSpec?: string }).taskDescription ??
-    (job as IndexedJob & { jobSpec?: string }).jobSpec ??
+    asString((job as IndexedJob & { taskDescription?: string; jobSpec?: string }).taskDescription) ||
+    asString((job as IndexedJob & { jobSpec?: string }).jobSpec) ||
     '';
   if (raw && raw.trim().startsWith('{')) {
     try {
@@ -113,13 +121,13 @@ export function getManualJobDisplay(job: IndexedJob, agent?: IndexedAgent | null
       >;
       return {
         category: normalizeCategory(parsed.category),
-        title: parsed.title?.trim() || `Manual Job #${job.id}`,
+        title: parsed.title?.trim() || `Manual Job #${safeJobId}`,
         description:
           parsed.description?.trim() ||
           `Escrow job assigned to ${
             agent
-              ? displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI })
-              : shortAgentId(job.agentId)
+              ? displayAgentLabel({ agentId: asString(agent.agentId), metadataURI: asString(agent.metadataURI) })
+              : shortAgentId(safeAgentId)
           }`,
         duration: parsed.duration?.trim() || 'Unspecified',
         difficulty: parsed.difficulty?.trim() || 'Unspecified',
@@ -130,11 +138,11 @@ export function getManualJobDisplay(job: IndexedJob, agent?: IndexedAgent | null
     }
   }
   const agentLabel = agent
-    ? displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI })
-    : shortAgentId(job.agentId);
+    ? displayAgentLabel({ agentId: asString(agent.agentId), metadataURI: asString(agent.metadataURI) })
+    : shortAgentId(safeAgentId);
   return {
     category: inferManualJobCategory(job, agent),
-    title: `Manual Job #${job.id}`,
+    title: `Manual Job #${safeJobId}`,
     description: `Escrow job assigned to ${agentLabel}`,
     duration: 'Unspecified',
     difficulty: 'Unspecified',

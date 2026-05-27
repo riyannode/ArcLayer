@@ -14,6 +14,7 @@ import { InlineProtectionNotice, NOTICE_WALLET_NOT_CONNECTED } from '@/component
 import { LLMAgentConnectKit } from '@/components/LLMAgentConnectKit';
 import { shortenAddress } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
+import { asArray, asRecord, asString } from '@/lib/safeShape';
 import {
   buildAgentMetadataURI,
   displayAgentLabel,
@@ -40,6 +41,27 @@ const MANUAL_SKILL_OPTIONS = [
 ] as const;
 
 const DEFAULT_MANUAL_SKILL = 'solidity-auditor';
+
+function normalizeIndexedAgent(input: unknown): IndexedAgent {
+  const v = asRecord(input);
+  const s = (key: string) => asString(v[key]);
+  return {
+    agentId: s('agentId') || s('tokenId'),
+    controller: s('controller'),
+    skillHash: s('skillHash'),
+    metadataURI: s('metadataURI'),
+    registeredAt: s('registeredAt'),
+    reputationScore: s('reputationScore') || '0',
+    score: s('score') || '0',
+    jobs: asArray(v['jobs']).map((j: unknown) => String(j)),
+    proofTokenIds: asArray(v['proofTokenIds']).map((id: unknown) => String(id)),
+    tokenId: s('tokenId') || s('agentId'),
+  };
+}
+
+function normalizeIndexedAgents(input: unknown): IndexedAgent[] {
+  return asArray(input).map(normalizeIndexedAgent);
+}
 
 function RegisterManualAgentPageContent() {
   const router = useRouter();
@@ -82,9 +104,9 @@ function RegisterManualAgentPageContent() {
         const label = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI }).toLowerCase();
         return (
           label.includes(q) ||
-          a.agentId.toLowerCase().includes(q) ||
-          a.controller.toLowerCase().includes(q) ||
-          (a.metadataURI ?? '').toLowerCase().includes(q)
+          asString(a.agentId).toLowerCase().includes(q) ||
+          asString(a.controller).toLowerCase().includes(q) ||
+          asString(a.metadataURI).toLowerCase().includes(q)
         );
       });
     }
@@ -100,8 +122,8 @@ function RegisterManualAgentPageContent() {
         break;
       case 'name':
         list.sort((a, b) => {
-          const la = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI }).toLowerCase();
-          const lb = displayAgentLabel({ agentId: b.agentId, metadataURI: b.metadataURI }).toLowerCase();
+          const la = displayAgentLabel({ agentId: asString(a.agentId), metadataURI: asString(a.metadataURI) }).toLowerCase();
+          const lb = displayAgentLabel({ agentId: asString(b.agentId), metadataURI: asString(b.metadataURI) }).toLowerCase();
           return la.localeCompare(lb);
         });
         break;
@@ -118,7 +140,7 @@ function RegisterManualAgentPageContent() {
   async function loadAgents() {
     setIsRefreshing(true);
     try {
-      setAgents(await fetchIndexerJson<IndexedAgent[]>('/agents'));
+      setAgents(normalizeIndexedAgents(await fetchIndexerJson<IndexedAgent[]>('/agents')));
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load agents.');
     } finally {
@@ -133,7 +155,7 @@ function RegisterManualAgentPageContent() {
         setIsLoading(true);
         setLoadError(null);
         const next = await fetchIndexerJson<IndexedAgent[]>('/agents');
-        if (!cancelled) setAgents(next);
+        if (!cancelled) setAgents(normalizeIndexedAgents(next));
       } catch (e) {
         if (!cancelled) setLoadError(e instanceof Error ? e.message : 'Failed to load agents.');
       } finally {
@@ -227,7 +249,7 @@ function RegisterManualAgentPageContent() {
       try {
         await waitForIndexer<IndexedAgent[]>(
           '/agents',
-          (next) => next.some((a) => a.agentId.toLowerCase() === agentId.toString().toLowerCase()),
+          (next) => normalizeIndexedAgents(next).some((a) => asString(a.agentId).toLowerCase() === agentId.toString().toLowerCase()),
           { attempts: 6, delayMs: 2000 },
         );
         setIndexerSynced(true);
@@ -469,17 +491,20 @@ function RegisterManualAgentPageContent() {
                 ))
               ) : filteredAgents.length > 0 ? (
                 visibleAgents.map((a) => {
-                  const label = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI });
-                  const hasName = !!parseAgentName(a.metadataURI);
+                  const safeAid = asString(a.agentId);
+                  const safeMeta = asString(a.metadataURI);
+                  const safeCtrl = asString(a.controller);
+                  const label = displayAgentLabel({ agentId: safeAid, metadataURI: safeMeta });
+                  const hasName = !!parseAgentName(safeMeta);
                   return (
-                    <div key={a.agentId} className="aureo-list-card flex flex-col gap-2 px-3 py-2.5 md:flex-row md:items-center md:justify-between md:gap-4 md:px-4 md:py-2.5">
+                    <div key={safeAid} className="aureo-list-card flex flex-col gap-2 px-3 py-2.5 md:flex-row md:items-center md:justify-between md:gap-4 md:px-4 md:py-2.5">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-[12px] text-[#EAE4D8]">{hasName ? label : `Agent ${label}`}</span>
-                          {hasName && <span className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">{shortAgentId(a.agentId)}</span>}
+                          {hasName && <span className="font-mono text-[10px] text-[rgba(234,228,216,0.85)]">{shortAgentId(safeAid)}</span>}
                         </div>
                         <div className="mt-0.5 font-mono text-[10px] text-[rgba(234,228,216,0.85)]">
-                          controller {shortenAddress(a.controller)}
+                          controller {shortenAddress(safeCtrl)}
                         </div>
                       </div>
 
@@ -491,16 +516,16 @@ function RegisterManualAgentPageContent() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); handleCopyAgentId(a.agentId); }}
+                          onClick={(e) => { e.stopPropagation(); handleCopyAgentId(safeAid); }}
                           className="btn-bordered px-2.5 py-1.5 text-[9px]"
-                          title={`Copy full ID: ${a.agentId}`}
+                          title={`Copy full ID: ${safeAid}`}
                         >
                           Copy ID
                         </button>
-                        <Link href={`/jobs/manual?agent=${encodeURIComponent(a.agentId)}`} className="btn-primary px-2.5 py-1.5 text-[9px]">
+                        <Link href={`/jobs/manual?agent=${encodeURIComponent(safeAid)}`} className="btn-primary px-2.5 py-1.5 text-[9px]">
                           Use
                         </Link>
-                        <Link href={`/agent/${a.agentId}`} className="font-mono text-[9px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
+                        <Link href={`/agent/${safeAid}`} className="font-mono text-[9px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
                           Details →
                         </Link>
                       </div>
