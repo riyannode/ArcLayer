@@ -5,7 +5,7 @@ import { ERC20_ABI, GATEWAY_WALLET_ABI } from '@/lib/x402/gateway/abi';
 
 export const runtime = 'nodejs';
 
-const ARC_RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
+const ARC_RPC = process.env.ARC_RPC_URL || 'https://rpc.testnet.arc.network';
 
 // Safe diagnostics — log presence only, never values.
 console.log('[gateway-balance] env', {

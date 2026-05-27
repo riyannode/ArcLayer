@@ -15,7 +15,8 @@ import { shortenAddress } from '@/lib/contracts';
 import GatewayMiniDeposit from '@/components/wallet/GatewayMiniDeposit';
 
 const ARC_CHAIN_ID = 5042002;
-const ARC_RPC = 'https://rpc.drpc.testnet.arc.network';
+const ARC_RPC =
+  process.env.NEXT_PUBLIC_ARC_RPC_URL || 'https://rpc.testnet.arc.network';
 const USDC = getAddress('0x3600000000000000000000000000000000000000');
 const NETWORK = 'eip155:5042002';
 const FALLBACK_PAY_TO = getAddress('0x4aA3402575b6D98EacE35A823EFa267F7365bdD2');
