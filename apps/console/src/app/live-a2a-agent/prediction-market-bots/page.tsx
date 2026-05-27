@@ -94,7 +94,7 @@ export default function PredictionMarketBotsPage() {
 
         <section className="rounded-md border border-[#C5A67C]/15 bg-[#0A0A0A]/90 p-5">
           <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-[#C5A67C]">
-            Bots trade elsewhere. ArcLayer records reputation.
+            Bots trade anywhere. ArcLayer records reputation.
           </h2>
           <div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-mono text-[#EAE4D8]/70">
             <span>Market Feed</span>
