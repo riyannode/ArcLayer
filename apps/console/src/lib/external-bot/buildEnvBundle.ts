@@ -31,7 +31,102 @@ export function buildEnvBundle(input: {
 }): EnvBundle {
   const { template, baseUrl, category, agentIds, apiKeys, erc8004Ids, runtimeNames, payoutAddress } = input;
 
+  const isErc8183 = template.id === 'erc8183-escrow-bots';
+
   // ── .env.common ──────────────────────────────────────────────
+  // ERC-8183 bots load per-directory .env — .env.common is informational only
+  if (isErc8183) {
+    const common = {
+      filename: '.env.common',
+      content: [
+        '# ERC-8183 bots load .env from their own directory.',
+        '# Each role has a self-contained env file — see below.',
+        '# Shared vars (ARCLAYER_BASE_URL, ARC_RPC_URL) are duplicated into each role file.',
+        '# Cross-role IDs (PROVIDER_AGENT_ID, EVALUATOR_AGENT_ID) are in the client .env file.',
+        '',
+      ].join('\n'),
+    };
+
+    // ── Per-role .env files (self-contained, per directory) ────
+    const roleFiles: EnvKeyPair[] = template.roles.map((role, idx) => {
+      const agentId = agentIds[idx] || role.defaultAgentId;
+      const apiKey = apiKeys[idx] || '';
+      const erc8004 = erc8004Ids[idx] || '';
+
+      // Self-contained env: each bot loads __dirname + '/.env'
+      const lines: string[] = [
+        `# ${role.displayName} — ERC-8183`,
+        `ARCLAYER_BASE_URL=${baseUrl}`,
+        `ARCLAYER_API_KEY=${apiKey}`,
+        `ARCLAYER_AGENT_ID=${agentId}`,
+        `AGENT_CATEGORY=${category}`,
+        `ARC_RPC_URL=https://rpc.testnet.arc.network`,
+        `AUTONOMOUS_TX=true`,
+      ];
+      if (erc8004) lines.push(`ARCLAYER_ERC8004_ID=${erc8004}`);
+
+      if (role.botRole === 'client') {
+        const providerAgentId = agentIds[1] || template.roles[1]?.defaultAgentId || '';
+        const evaluatorAgentId = agentIds[2] || template.roles[2]?.defaultAgentId || '';
+        lines.push(
+          `BUYER_AGENT_ID=${agentId}`,
+          `# Paste your Arc Testnet address:`,
+          `# CLIENT_ADDRESS=<your-0x-address>`,
+          `# Paste your Arc Testnet private key:`,
+          `# CLIENT_PRIVATE_KEY=<paste-on-vps>`,
+          `# ── Cross-role: provider ──`,
+          `PROVIDER_AGENT_ID=${providerAgentId}`,
+          `# Paste the provider's Arc address:`,
+          `# PROVIDER_ADDRESS=<provider-0x-address>`,
+          `# ── Cross-role: evaluator ──`,
+          `EVALUATOR_AGENT_ID=${evaluatorAgentId}`,
+          `# Paste the evaluator's Arc address:`,
+          `# EVALUATOR_ADDRESS=<evaluator-0x-address>`,
+          `JOB_BUDGET_ATOMIC=1000000`,
+          `JOB_EXPIRY_SECONDS=86400`,
+          `JOB_CREATE_INTERVAL_MS=60000`,
+          `MAX_JOBS_PER_RUN=0`,
+          `MAX_OPEN_JOBS=5`,
+        );
+      }
+
+      if (role.botRole === 'provider') {
+        lines.push(
+          `PROVIDER_AGENT_ID=${agentId}`,
+          `WORKER_ID=${agentId}`,
+          `# Paste your Arc Testnet address:`,
+          `# PROVIDER_ADDRESS=<your-0x-address>`,
+          `# Paste your Arc Testnet private key:`,
+          `# PROVIDER_PRIVATE_KEY=<paste-on-vps>`,
+          `JOB_POLL_INTERVAL_MS=5000`,
+          `CLAIM_TTL_SECONDS=600`,
+          `MAX_ACTIVE_JOBS=3`,
+        );
+      }
+
+      if (role.botRole === 'evaluator') {
+        lines.push(
+          `EVALUATOR_AGENT_ID=${agentId}`,
+          `# Paste your Arc Testnet address:`,
+          `# EVALUATOR_ADDRESS=<your-0x-address>`,
+          `# Paste your Arc Testnet private key:`,
+          `# EVALUATOR_PRIVATE_KEY=<paste-on-vps>`,
+          `JOB_POLL_INTERVAL_MS=5000`,
+          `EVALUATOR_MODE=rules`,
+          `MAX_ACTIVE_JOBS=3`,
+        );
+      }
+
+      // filename: client-bot/.env, provider-bot/.env, evaluator-bot/.env
+      const filename = `${role.botRole}-bot/.env`;
+
+      return { role: role.roleId, filename, content: lines.join('\n') + '\n' };
+    });
+
+    return { common, roleFiles };
+  }
+
+  // ── Non-ERC-8183: standard .env.common + per-role ────────────
   const commonLines: string[] = [
     `ARCLAYER_BASE_URL=${baseUrl}`,
     `AGENT_CATEGORY=${category}`,
@@ -42,15 +137,6 @@ export function buildEnvBundle(input: {
     'X402_SCOPE=external_trace',
     'BOT_INTERVAL_MS=900000',
   ];
-
-  // ERC-8183 specific common vars
-  if (template.id === 'erc8183-escrow-bots') {
-    commonLines.push('ARC_RPC_URL=https://rpc.testnet.arc.network');
-    commonLines.push('JOB_POLL_INTERVAL_MS=5000');
-    commonLines.push('CLAIM_TTL_SECONDS=600');
-    commonLines.push('MAX_ACTIVE_JOBS=3');
-    commonLines.push('AUTONOMOUS_TX=true');
-  }
 
   commonLines.push('# ARCLAYER_API_KEY is per-role — see .env.<role> files');
   commonLines.push('# LLM API key — paste your own:');
@@ -84,32 +170,6 @@ export function buildEnvBundle(input: {
     ];
     if (erc8004) lines.push(`ARCLAYER_ERC8004_ID=${erc8004}`);
     if (payoutAddress) lines.push(`X402_RECEIVER_ADDRESS=${payoutAddress}`);
-
-    // ERC-8183 per-role specific env placeholders
-    if (template.id === 'erc8183-escrow-bots') {
-      if (role.botRole === 'client') {
-        lines.push(`BUYER_AGENT_ID=${agentId}`);
-        lines.push('# Paste your Arc Testnet address:');
-        lines.push('# CLIENT_ADDRESS=<your-0x-address>');
-        lines.push('# Paste your Arc Testnet private key:');
-        lines.push('# CLIENT_PRIVATE_KEY=<paste-on-vps>');
-      }
-      if (role.botRole === 'provider') {
-        lines.push(`PROVIDER_AGENT_ID=${agentId}`);
-        lines.push(`WORKER_ID=${agentId}`);
-        lines.push('# Paste your Arc Testnet address:');
-        lines.push('# PROVIDER_ADDRESS=<your-0x-address>');
-        lines.push('# Paste your Arc Testnet private key:');
-        lines.push('# PROVIDER_PRIVATE_KEY=<paste-on-vps>');
-      }
-      if (role.botRole === 'evaluator') {
-        lines.push(`EVALUATOR_AGENT_ID=${agentId}`);
-        lines.push('# Paste your Arc Testnet address:');
-        lines.push('# EVALUATOR_ADDRESS=<your-0x-address>');
-        lines.push('# Paste your Arc Testnet private key:');
-        lines.push('# EVALUATOR_PRIVATE_KEY=<paste-on-vps>');
-      }
-    }
 
     const filename = template.fixedBotRoleNames
       ? `.env.${role.botRole}`

@@ -75,9 +75,11 @@ npm install
 # ── Install PM2 (if missing) ──────────────────────────
 npm install -g pm2 2>/dev/null || true
 
-# ── Start processes ───────────────────────────────────
-pm2 delete client-bot provider-bot evaluator-bot 2>/dev/null || true
-pm2 start ecosystem.config.cjs
+# ── Start per-role processes ──────────────────────────
+pm2 delete arclayer-erc8183-client arclayer-erc8183-provider arclayer-erc8183-evaluator 2>/dev/null || true
+pm2 start client-bot/ecosystem.config.cjs
+pm2 start provider-bot/ecosystem.config.cjs
+pm2 start evaluator-bot/ecosystem.config.cjs
 pm2 save
 
 # ── Check status ──────────────────────────────────────
