@@ -65,6 +65,22 @@ function tokenForAgent(agentId, tokenMap) {
 
 const tokenMap = buildTokenMap();
 
+function validateTokenCoverage() {
+  if (!tokenMap) return; // global token mode — A2A_LIVE_EVENTS_TOKEN covers all
+
+  const missing = bots
+    .map(([agentId]) => agentId)
+    .filter((agentId) => !tokenMap.get(agentId));
+
+  if (missing.length > 0) {
+    console.error(`Missing heartbeat API key for agent IDs: ${missing.join(', ')}`);
+    console.error('Provide A2A_LIVE_EVENTS_TOKEN or PREDICTION_AGENT_KEYS=agentId:apiKey,...');
+    process.exit(1);
+  }
+}
+
+validateTokenCoverage();
+
 async function post(path, body, token) {
   const res = await fetch(`${origin}${path}`, {
     method: 'POST',
@@ -85,8 +101,7 @@ async function tick() {
   for (const [agentId, agentName] of bots) {
     const authToken = tokenForAgent(agentId, tokenMap);
     if (!authToken) {
-      console.error(`[heartbeat] missing token for agent ${agentId}`);
-      continue;
+      throw new Error(`Missing token for agent ${agentId}`);
     }
     await post('/api/a2a/presence', {
       agentId,
