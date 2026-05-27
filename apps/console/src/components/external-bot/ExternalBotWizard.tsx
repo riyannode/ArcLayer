@@ -205,8 +205,7 @@ export default function ExternalBotWizard() {
   const handleSwitchRole = useCallback((oldRoleId: string, newRoleId: string) => {
     if (!template?.availableRoles) return;
     // Block if newRoleId is already selected by another card
-    const duplicate = editableRoles.some((r) => r.roleId === newRoleId && r.roleId !== oldRoleId);
-    if (duplicate) return;
+    if (editableRoles.some((r) => r.roleId === newRoleId && r.roleId !== oldRoleId)) return;
     const catalogRole = template.availableRoles.find((r) => r.roleId === newRoleId);
     if (!catalogRole) return;
     setEditableRoles((prev) =>
@@ -245,7 +244,7 @@ export default function ExternalBotWizard() {
 
   const handleRemoveRole = useCallback((roleId: string) => {
     setEditableRoles((prev) => {
-      if (prev.length <= 1) return prev; // at least one role must remain
+      if (prev.length <= 1) return prev;
       return prev.filter((r) => r.roleId !== roleId);
     });
   }, []);
@@ -629,7 +628,9 @@ export default function ExternalBotWizard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="font-semibold text-[#EAE4D8]">{t.name}</div>
-                      <p className="mt-0.5 text-xs text-[#EAE4D8]/60">{t.description}</p>
+                      {t.description && (
+                        <p className="mt-0.5 text-xs text-[#EAE4D8]/60">{t.description}</p>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <span className="rounded-sm border border-white/10 px-2 py-1 font-mono text-[9px] uppercase text-[#C5A67C]">
@@ -648,7 +649,7 @@ export default function ExternalBotWizard() {
                     ))}
                   </div>
                   <div className="mt-2 font-mono text-[9px] text-[#EAE4D8]/40">
-                    {t.defaultPriceLabel} per job · {t.roles.length} selected · {(t.availableRoles || t.roles).length} available
+                    {t.defaultPriceLabel} · {t.defaultRuntime} · {t.recommendedMode}
                   </div>
                 </button>
               ))}
@@ -670,7 +671,9 @@ export default function ExternalBotWizard() {
           <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-1">
             {template.name}
           </h2>
-          <p className="text-xs text-[#EAE4D8]/60 mb-4">{template.description}</p>
+          {template.description && (
+            <p className="text-xs text-[#EAE4D8]/60 mb-4">{template.description}</p>
+          )}
 
           <div className="space-y-3 mb-4">
             {editableRoles.map((r) => (
@@ -787,7 +790,6 @@ export default function ExternalBotWizard() {
             ))}
           </div>
 
-          {/* Add Role button (only when template has availableRoles and unselected roles exist) */}
           {template.availableRoles && unselectedRoles.length > 0 && (
             <button
               onClick={handleAddRole}
@@ -919,7 +921,7 @@ export default function ExternalBotWizard() {
                 disabled={isBusy}
                 className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition-colors hover:bg-[#C5A67C]/20 disabled:opacity-40"
               >
-                {isBusy ? 'Registering…' : 'Register All Agents'}
+                {isBusy ? 'Registering…' : `Register Agent${activeTemplate && activeTemplate.roles.length > 1 ? 's' : ''}`}
               </button>
             )}
             <button onClick={back} className="px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/50 hover:text-[#EAE4D8]">
@@ -958,7 +960,7 @@ export default function ExternalBotWizard() {
                 disabled={isBusy}
                 className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/20 disabled:opacity-40"
               >
-                {isBusy ? 'Publishing…' : 'Publish Manifests'}
+                {isBusy ? 'Publishing…' : `Publish Manifest${activeTemplate && activeTemplate.roles.length > 1 ? 's' : ''}`}
               </button>
             )}
             <button onClick={back} className="px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/50 hover:text-[#EAE4D8]">
@@ -1003,7 +1005,7 @@ export default function ExternalBotWizard() {
                 disabled={isBusy}
                 className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/20 disabled:opacity-40"
               >
-                {isBusy ? 'Generating…' : 'Generate API Keys'}
+                {isBusy ? 'Generating…' : `Generate API Key${activeTemplate && activeTemplate.roles.length > 1 ? 's' : ''}`}
               </button>
             )}
             <button onClick={back} className="px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/50 hover:text-[#EAE4D8]">
