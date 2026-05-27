@@ -291,8 +291,10 @@ async function postReceipt({ sessionId, payloadHash, metadata = {}, receiptType 
 }
 
 async function safePostLiveEvent(eventType, details = {}) {
-  if (!A2A_LIVE_EVENTS_TOKEN) {
-    return { ok: false, skipped: true, error: 'missing_live_events_token' };
+  // Dual auth: global A2A_LIVE_EVENTS_TOKEN (backward compat) OR per-agent ARCLAYER_API_KEY
+  const LIVE_AUTH_TOKEN = A2A_LIVE_EVENTS_TOKEN || API_KEY;
+  if (!LIVE_AUTH_TOKEN) {
+    return { ok: false, skipped: true, error: 'missing_live_auth_token' };
   }
   const payload = {
     agentId: AGENT_ID,
@@ -320,7 +322,7 @@ async function safePostLiveEvent(eventType, details = {}) {
   try {
     const res = await fetch(`${BASE_URL}/api/a2a/live-events`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${A2A_LIVE_EVENTS_TOKEN}`, 'content-type': 'application/json', accept: 'application/json' },
+      headers: { authorization: `Bearer ${LIVE_AUTH_TOKEN}`, 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify(payload)
     });
     const data = await res.json().catch(() => ({}));

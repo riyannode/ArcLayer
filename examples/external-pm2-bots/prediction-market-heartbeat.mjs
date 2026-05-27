@@ -1,8 +1,9 @@
 const origin = process.env.ARCLAYER_WEB_ORIGIN || 'https://arclayers.xyz';
-const token = process.env.A2A_LIVE_EVENTS_TOKEN;
+// Dual auth: global A2A_LIVE_EVENTS_TOKEN (backward compat) OR per-agent ARCLAYER_API_KEY
+const token = process.env.A2A_LIVE_EVENTS_TOKEN || process.env.ARCLAYER_API_KEY;
 
 if (!token) {
-  console.error('A2A_LIVE_EVENTS_TOKEN is required');
+  console.error('A2A_LIVE_EVENTS_TOKEN or ARCLAYER_API_KEY is required');
   process.exit(1);
 }
 
