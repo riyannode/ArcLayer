@@ -1350,7 +1350,12 @@ export function withX402(
     if (opts.allowedRails) {
       const incomingMode = extracted.mode === 'gateway' ? 'circle-gateway-passkey' : 'arc-native-eoa';
       if (!opts.allowedRails.includes(incomingMode as 'arc-native-eoa' | 'circle-gateway-passkey')) {
-        console.log(`[x402] rail ${incomingMode} not allowed for ${opts.resource}, allowed set:`, opts.allowedRails);
+        console.log(
+          '[x402] rail %s not allowed for %s, allowed set:',
+          incomingMode,
+          String(opts.resource),
+          opts.allowedRails,
+        );
         return NextResponse.json(
           { ok: false, error: 'rail_not_allowed', message: `Payment rail ${incomingMode} is not allowed for this resource. Allowed: ${opts.allowedRails.join(', ')}` },
           { status: 403, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
