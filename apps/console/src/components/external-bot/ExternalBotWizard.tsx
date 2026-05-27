@@ -571,20 +571,20 @@ export default function ExternalBotWizard() {
           <h2 className="text-2xl font-black uppercase tracking-[0.12em] text-[#F5F0E5] mb-6">
             Choose Category
           </h2>
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
             {AGENT_CATEGORIES.filter((c) => c.status === 'LIVE').map((cat) => (
               <button
                 key={cat.key}
                 onClick={() => handleSelectCategory(cat.key)}
-                className="group rounded-sm border border-white/10 bg-white/[0.02] p-5 text-left transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
+                className="group rounded-sm border border-white/10 bg-white/[0.02] p-3 text-left transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
               >
-                <div className="flex items-center justify-between">
-                  <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C]">{cat.label}</div>
-                  <div className="font-mono text-[9px] text-[#EAE4D8]/80 group-hover:text-[#C5A67C]/80 transition-colors">→</div>
+                <div className="flex items-center justify-between gap-1">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-[#C5A67C] leading-tight">{cat.label}</div>
+                  <div className="font-mono text-[9px] text-[#EAE4D8]/80 group-hover:text-[#C5A67C]/80 transition-colors shrink-0">→</div>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-1">
+                <div className="mt-2 flex flex-wrap gap-1">
                   {cat.capabilities.slice(0, 3).map((c) => (
-                    <span key={c} className="rounded-sm bg-white/5 px-1.5 py-0.5 font-mono text-[8px] text-[#EAE4D8]/80">
+                    <span key={c} className="rounded-sm bg-white/5 px-1 py-0.5 font-mono text-[7px] text-[#EAE4D8]/80">
                       {c}
                     </span>
                   ))}
