@@ -1131,7 +1131,11 @@ async function handleNative(
         });
       } catch (settledErr) {
         const msg = settledErr instanceof Error ? settledErr.message : 'onSettled hook failed';
-        console.error(`[x402] onSettled hook failed for ${opts.resource}:`, msg);
+        console.error(
+          '[x402] onSettled hook failed for %s:',
+          String(opts.resource),
+          msg,
+        );
         return NextResponse.json(
           {
             ok: false,
@@ -1371,7 +1375,12 @@ export function withX402(
       return await handleNative(extracted.proof, opts, handler, req);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Payment processing error';
-      console.error(`[x402] Error processing ${extracted.mode} payment for ${opts.resource}:`, message);
+      console.error(
+        '[x402] Error processing %s payment for %s:',
+        extracted.mode,
+        String(opts.resource),
+        message,
+      );
       return NextResponse.json(
         { ok: false, error: 'payment_processing_error', message },
         { status: 500, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
