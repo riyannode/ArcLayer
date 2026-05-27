@@ -204,6 +204,9 @@ export default function ExternalBotWizard() {
 
   const handleSwitchRole = useCallback((oldRoleId: string, newRoleId: string) => {
     if (!template?.availableRoles) return;
+    // Block if newRoleId is already selected by another card
+    const duplicate = editableRoles.some((r) => r.roleId === newRoleId && r.roleId !== oldRoleId);
+    if (duplicate) return;
     const catalogRole = template.availableRoles.find((r) => r.roleId === newRoleId);
     if (!catalogRole) return;
     setEditableRoles((prev) =>
@@ -221,7 +224,7 @@ export default function ExternalBotWizard() {
           : r
       )
     );
-  }, [template]);
+  }, [template, editableRoles]);
 
   const handleAddRole = useCallback(() => {
     if (!template?.availableRoles || unselectedRoles.length === 0) return;
@@ -703,7 +706,11 @@ export default function ExternalBotWizard() {
                       className="mt-0.5 w-full rounded-sm border border-white/10 bg-black/40 px-2 py-1.5 font-mono text-xs text-[#EAE4D8]"
                     >
                       {template.availableRoles.map((ar) => (
-                        <option key={ar.roleId} value={ar.roleId}>
+                        <option
+                          key={ar.roleId}
+                          value={ar.roleId}
+                          disabled={editableRoles.some((er) => er.roleId === ar.roleId && er.roleId !== r.roleId)}
+                        >
                           {ar.displayName} ({ar.botRole})
                         </option>
                       ))}
