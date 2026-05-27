@@ -474,7 +474,11 @@ async function handleGateway(
       resource: opts.resource,
       status: 'failed',
     }).catch(() => undefined);
-    console.error(`[x402-gw] Settlement failed: ${opts.resource} — ${settleResult.errorReason}`);
+    console.error(
+          '[x402-gw] Settlement failed for %s: %s',
+          String(opts.resource),
+          settleResult.errorReason,
+        );
     if (earlyPayer) await releaseAccessSession(earlyPayer, opts.resource, 'circle-gateway');
     return NextResponse.json(
       { ok: false, error: 'payment_settlement_failed', reason: settleResult.errorReason },
@@ -1346,7 +1350,7 @@ export function withX402(
 
     // No payment → 402
     if (!extracted) {
-      console.log(`[x402] 402 Payment Required: ${opts.resource}`);
+      console.log('[x402] 402 Payment Required: %s', String(opts.resource));
       return paymentRequiredResponse(opts, req);
     }
 
