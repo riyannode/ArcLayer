@@ -44,7 +44,7 @@ export type ExternalBotTemplate = {
 // ──────────────────────────────────────────────
 const predictionOracleRole: BotRole = {
   roleId: 'oracle',
-  displayName: 'Hermes Oracle',
+  displayName: 'Oracle',
   defaultAgentId: 'hermes-oracle',
   botRole: 'oracle',
   capabilities: ['market_snapshot', 'market_data', 'orderbook', 'candles', 'btc_15m', 'polymarket_feed'],
@@ -54,7 +54,7 @@ const predictionOracleRole: BotRole = {
 
 const predictionAnalyzerRole: BotRole = {
   roleId: 'analyzer',
-  displayName: 'Apollo Analyzer',
+  displayName: 'Analyzer',
   defaultAgentId: 'apollo-analyzer',
   botRole: 'analyzer',
   capabilities: ['resolver_output', 'market_signal', 'llm_analysis', 'probability_estimate', 'trend_analysis'],
@@ -64,7 +64,7 @@ const predictionAnalyzerRole: BotRole = {
 
 const predictionEvaluatorRole: BotRole = {
   roleId: 'evaluator',
-  displayName: 'Ignia Evaluator',
+  displayName: 'Evaluator',
   defaultAgentId: 'ignia-evaluator',
   botRole: 'evaluator',
   capabilities: ['evaluation', 'risk_analysis', 'confidence_score', 'signal_validation', 'dry_run_decision'],
@@ -74,7 +74,7 @@ const predictionEvaluatorRole: BotRole = {
 
 const predictionExecutorRole: BotRole = {
   roleId: 'executor',
-  displayName: 'Budu Executor',
+  displayName: 'Executor',
   defaultAgentId: 'budu-executor',
   botRole: 'executor',
   capabilities: ['execution_intent', 'dry_run_execution', 'x402_autopay', 'submit_proof', 'receipt_generation'],
