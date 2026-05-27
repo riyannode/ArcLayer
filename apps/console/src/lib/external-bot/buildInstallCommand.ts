@@ -42,9 +42,9 @@ function buildPM2MarketBridgeCommand(envBundle: EnvBundle, roleNames: string[]):
     evaluator: 'evaluator-bot',
     executor: 'executor-bot',
   };
-  const selectedApps = roleNames.map((r) => roleNameMap[r] || `${r}-bot`);
-  const selectedAppsJoined = selectedApps.join(',');
-  const deleteList = selectedApps.join(' ');
+  // Single-role model: use only the first role
+  const roleName = roleNames[0];
+  const appName = roleNameMap[roleName] || `${roleName}-bot`;
   const cmd = `# ── Prediction Market PM2 Bridge ──────────────────────────
 git clone https://github.com/riyannode/ArcLayer.git
 cd ArcLayer/examples/external-pm2-bots/market-agent-bridge
@@ -58,9 +58,9 @@ npm install
 # ── Install PM2 (if missing) ──────────────────────────
 npm install -g pm2 2>/dev/null || true
 
-# ── Start processes ───────────────────────────────────
-pm2 delete ${deleteList} 2>/dev/null || true
-pm2 start ecosystem.independent.config.cjs --only "${selectedAppsJoined}"
+# ── Start process ─────────────────────────────────────
+pm2 delete ${appName} 2>/dev/null || true
+pm2 start ecosystem.independent.config.cjs --only "${appName}"
 pm2 save
 
 # ── Check status ──────────────────────────────────────

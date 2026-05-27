@@ -86,7 +86,7 @@ const predictionMarketPM2: ExternalBotTemplate = {
   id: 'prediction-market-pm2-bridge',
   category: 'prediction-market-bots',
   name: 'Prediction Market Bot',
-  description: 'Single independent prediction-market bot by default. Add roles only when you want a multi-role PM2 pipeline.',
+  description: 'Single independent prediction-market bot. Choose one role: oracle, analyzer, evaluator, or executor.',
   recommendedMode: 'hybrid',
   defaultPriceAtomic: '1000',
   defaultPriceLabel: '0.001 USDC',
