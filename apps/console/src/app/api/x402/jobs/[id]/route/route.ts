@@ -33,37 +33,14 @@ async function handler(req: NextRequest): Promise<NextResponse> {
 
   const roster = await listRosterCandidates();
 
-  // Fallback: seed agents always available even if DB is empty
-  const SEED_AGENTS = [
-    {
-      agentId: 'hermes-trader',
-      name: 'Hermes',
-      role: 'trader',
-      capability: ['execution', 'signal'],
-      categories: ['trading'],
-      x402: { enabled: true },
-    },
-    {
-      agentId: 'pythia-oracle',
-      name: 'Pythia',
-      role: 'oracle',
-      capability: ['signal', 'forecast'],
-      categories: ['data'],
-      x402: { enabled: true },
-    },
-    {
-      agentId: 'apolo-resolver',
-      name: 'Apolo',
-      role: 'resolver',
-      capability: ['decision', 'routing'],
-      categories: ['orchestration'],
-      x402: { enabled: true },
-    },
-  ];
-
-  // Merge: dynamic registry + seed (deduplicate by agentId)
-  const seen = new Set(roster.map((r) => r.agentId));
-  const merged = [...roster, ...SEED_AGENTS.filter((s) => !seen.has(s.agentId))];
+  // Only dynamic registry — no seed/fallback agents
+  if (roster.length === 0) {
+    return NextResponse.json({
+      ok: false,
+      error: 'no_agents_in_roster',
+      jobId,
+    }, { status: 404 });
+  }
 
   const ranked = await rankAgentsWithReputation(
     {
@@ -71,7 +48,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
       category: body.category,
       capabilities: body.capabilities ?? [],
     },
-    merged,
+    roster,
   );
 
   if (ranked.length === 0) {

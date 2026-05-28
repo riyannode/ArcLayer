@@ -5,8 +5,7 @@
  *   1. `metadata.categories[]` explicitly contains the category key, OR
  *   2. The agent's on-chain `role` maps to that category via the role table.
  *
- * Featured demo agents (Pythia / Apolo / Hermes / Ignia) are filtered out so
- * they don't double up with the hardcoded featured flow at the top of the page.
+ * All agents from the registry appear — no hardcoded featured filter.
  */
 
 export type RegistryAgent = {
@@ -43,16 +42,6 @@ const ROLE_TO_CATEGORIES: Record<string, string[]> = {
   DEVOPS: ['devops-security-agents'],
 };
 
-// Featured demo agents that already render in the hardcoded flow at the top.
-// Match by metadata.name (case-insensitive) — this is what registry writes.
-const FEATURED_NAMES = new Set(['pythia', 'apolo', 'hermes', 'ignia', 'pythia-resolver']);
-
-export function isFeaturedAgent(agent: RegistryAgent): boolean {
-  const name = agent.metadata?.name?.toLowerCase().trim();
-  if (!name) return false;
-  return FEATURED_NAMES.has(name);
-}
-
 export function agentMatchesCategory(agent: RegistryAgent, categoryKey: string): boolean {
   // Explicit metadata.categories takes precedence.
   if (Array.isArray(agent.metadata?.categories) && agent.metadata.categories.length > 0) {
@@ -64,5 +53,5 @@ export function agentMatchesCategory(agent: RegistryAgent, categoryKey: string):
 }
 
 export function filterAgentsByCategory(agents: RegistryAgent[], categoryKey: string): RegistryAgent[] {
-  return agents.filter((a) => !isFeaturedAgent(a) && agentMatchesCategory(a, categoryKey));
+  return agents.filter((a) => agentMatchesCategory(a, categoryKey));
 }
