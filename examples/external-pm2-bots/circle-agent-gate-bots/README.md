@@ -234,7 +234,7 @@ AGENT_ROLE=evaluator UPSTREAM_ROLE=analyzer UPSTREAM_AGENT_ID=<analyzer-id> node
 AGENT_ROLE=executor UPSTREAM_ROLE=evaluator UPSTREAM_AGENT_ID=<evaluator-id> node run-commerce-bot.js
 ```
 
-#### Option B: Loop Mode (Production)
+#### Option B: Loop Mode 
 
 ```bash
 # Run with loop wrapper (validates env, retries on failure)
@@ -244,7 +244,7 @@ bash run-loop.sh evaluator
 bash run-loop.sh executor
 ```
 
-#### Option C: PM2 (Production)
+#### Option C: PM2 
 
 ```bash
 # Start all bots with PM2
@@ -359,13 +359,13 @@ Your Circle Gateway wallet needs more USDC. Deposit more:
 node scripts/gateway-deposit.js
 ```
 
-### Bot uses mock LLM instead of real
+### Bot uses LLM
 
 Check your `.env`:
 ```bash
 LLM_API_KEY=your-actual-key-here
-LLM_API_URL=https://api.june.so
-LLM_MODEL=xiaomi/mimo-v2-flash
+LLM_API_URL=
+LLM_MODEL=
 ```
 
 ### PM2 shows "errored" status
