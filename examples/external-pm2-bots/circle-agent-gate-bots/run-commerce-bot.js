@@ -103,7 +103,7 @@ async function runOracle({ config, env }) {
   });
 
   console.log(
-    `[oracle] event posted sessionId=${env.sessionId?.slice(0, 16)}... payloadHash=${event.payloadHash?.slice(0, 12)}...`
+    `[oracle] event posted payloadHash=${event.payloadHash?.slice(0, 12)}...`
   );
 
   // Oracle publishes + posts receipt (no payment to upstream)
