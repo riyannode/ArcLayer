@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
-import { getBridgeReceiptByPayload, insertBridgeReceipt } from '@/lib/agent-bridge/store';
+import { getBridgeReceiptByPayload, insertBridgeReceipt, listBridgeEvents } from '@/lib/agent-bridge/store';
 import { withX402 } from '@/lib/x402/middleware';
 import { resolveCircleAgentGate } from '@/lib/x402/circle-agent-policy';
 import { sanitizeLlmReceipt, type SanitizedLlmReceipt } from '@/lib/x402/llm-receipt';
@@ -17,6 +17,53 @@ export type CircleAgentGateHandlerContext = {
   reputationEligible: boolean;
   llmReceipt: SanitizedLlmReceipt | null;
 };
+
+async function validateCircleGateSession(ctx: {
+  sessionId: string;
+  category: string;
+}) {
+  const events = await listBridgeEvents({
+    sessionId: ctx.sessionId,
+    limit: 10,
+  });
+
+  if (!events.length) {
+    return {
+      ok: false as const,
+      status: 404,
+      error: 'gate_session_not_found',
+      message: 'Circle agent gate session was not found. Create at least one bridge event before paying for this session.',
+      details: {
+        sessionId: ctx.sessionId,
+        category: ctx.category,
+      },
+    };
+  }
+
+  const eventCategories = new Set(
+    events
+      .map((event) => (typeof event.category === 'string' ? event.category.trim() : ''))
+      .filter(Boolean),
+  );
+
+  if (eventCategories.size > 0 && !eventCategories.has(ctx.category)) {
+    return {
+      ok: false as const,
+      status: 409,
+      error: 'gate_session_category_mismatch',
+      message: 'Circle agent gate category does not match the existing bridge session category.',
+      details: {
+        sessionId: ctx.sessionId,
+        requestedCategory: ctx.category,
+        existingCategories: Array.from(eventCategories),
+      },
+    };
+  }
+
+  return {
+    ok: true as const,
+  };
+}
 
 export function withCircleAgentGate(
   handler?: (req: NextRequest, ctx: CircleAgentGateHandlerContext) => Promise<NextResponse>,
@@ -54,6 +101,43 @@ export function withCircleAgentGate(
           field: 'agentId',
         },
         { status: 403 },
+      );
+    }
+
+    const sessionValidation = await validateCircleGateSession({
+      sessionId: ctx.sessionId,
+      category: ctx.category,
+    }).catch((err) => {
+      const message = err instanceof Error ? err.message : 'unknown session validation error';
+
+      console.error(
+        '[circle-agent-gate] session validation failed session=%s category=%s error=%s',
+        ctx.sessionId,
+        ctx.category,
+        message,
+      );
+
+      return {
+        ok: false as const,
+        status: 500,
+        error: 'gate_session_validation_failed',
+        message,
+        details: {
+          sessionId: ctx.sessionId,
+          category: ctx.category,
+        },
+      };
+    });
+
+    if (!sessionValidation.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: sessionValidation.error,
+          message: sessionValidation.message,
+          details: sessionValidation.details,
+        },
+        { status: sessionValidation.status },
       );
     }
 
