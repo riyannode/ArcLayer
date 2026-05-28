@@ -134,12 +134,17 @@ async function runBuyerRole({ config, env }) {
     sellerRole: env.upstreamRole,
   });
 
-  // 1. Read upstream events
+  // 1. Read upstream events — filter to seller's output type only,
+  //    not their purchase intents (bridge_event). Without this, a
+  //    buyer that starts right after the seller posts its purchase
+  //    intent but before its output is posted would process + pay
+  //    for the intent payload instead of the actual analysis.
   const { events } = await readUpstreamEvents({
     agentId: env.upstreamAgentId,
     role: env.upstreamRole,
     category: env.category,
     limit: 3,
+    filterType: eventTypeForRole(env.upstreamRole),
   });
 
   if (!events.length) {
