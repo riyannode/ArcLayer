@@ -12,6 +12,7 @@ import { DEFAULT_GATEWAY_DEPOSIT_USDC } from '@/lib/x402/constants';
 import { DevDetails } from '@/components/DevDetails';
 import { NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_SETTLED, NOTICE_REPLAY_FAILED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
 import { shortenAddress } from '@/lib/contracts';
+import GatewayDepositSheet from '@/components/x402/GatewayDepositSheet';
 
 const ARC_CHAIN_ID = 5042002;
 const ARC_RPC = 'https://rpc.drpc.testnet.arc.network';
@@ -78,6 +79,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   const [gatewayBalance, setGatewayBalance] = useState<GatewayBalance | null>(null);
   const [walletUsdcBalance, setWalletUsdcBalance] = useState<string | null>(null);
   const [copiedWallet, setCopiedWallet] = useState(false);
+  const [depositSheetOpen, setDepositSheetOpen] = useState(false);
 
   const walletMode: WalletMode = eoaConnected ? 'eoa' : authenticated ? 'passkey' : null;
   const activeAddress = useMemo(() => {
@@ -578,6 +580,26 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   const gatewayDepositInsufficient = mode === 'circle-gateway' && gatewayDepositUsdc < 0.05;
   const connectLabel = mode === 'circle-gateway' ? 'CONNECT CIRCLE PASSKEY' : 'CONNECT WALLET';
 
+  useEffect(() => {
+    if (
+      ticketOnly &&
+      activeAuthed &&
+      mode === 'circle-gateway' &&
+      gatewayDepositInsufficient &&
+      !unlocked &&
+      !busy
+    ) {
+      setDepositSheetOpen(true);
+    }
+  }, [
+    ticketOnly,
+    activeAuthed,
+    mode,
+    gatewayDepositInsufficient,
+    unlocked,
+    busy,
+  ]);
+
   // Compact-aware sizing tokens
   const c = {
     headTitle: compact ? 'text-xl md:text-2xl' : 'text-3xl md:text-5xl',
@@ -599,7 +621,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
 
   if (ticketOnly) {
     return (
-      <aside className="w-full max-w-[440px]">
+      <>
+        <aside className="w-full max-w-[440px]">
         <div className={`${c.cardRadius} border border-white/10 bg-[#111]/95 ${c.cardPad} shadow-2xl shadow-black/40`}>
           <div className="mb-3 flex items-center justify-between">
             <h3 className={`font-semibold tracking-[-0.03em] text-white ${compact ? 'text-base' : 'text-xl'}`}>Unlock x402</h3>
@@ -636,14 +659,43 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                   <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
                   {walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · {shortenAddress(address)}
                 </div>
-                <button onClick={busy || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
-                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ — UNLOCKED' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                <button
+                  onClick={
+                    busy
+                      ? undefined
+                      : gatewayDepositInsufficient
+                        ? () => setDepositSheetOpen(true)
+                        : runDemo
+                  }
+                  disabled={busy || relayer?.ready === false}
+                  className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${
+                    mode === 'arc-native'
+                      ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]'
+                      : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'
+                  }`}
+                >
+                  {busy
+                    ? `RUNNING: ${step.toUpperCase()}`
+                    : cooldown
+                      ? 'PAID ✓ — UNLOCKED'
+                      : gatewayDepositInsufficient
+                        ? 'DEPOSIT TO GATEWAY'
+                        : step === 'done'
+                          ? 'RUN AGAIN'
+                          : 'BUY ACCESS'}
                 </button>
               </>
             )}
           </div>
         </div>
       </aside>
+
+      <GatewayDepositSheet
+        open={depositSheetOpen}
+        onClose={() => setDepositSheetOpen(false)}
+        onSuccess={refreshGatewayBalance}
+      />
+    </>
     );
   }
 
@@ -832,8 +884,30 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                   <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
                   {walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · {shortenAddress(address)}
                 </div>
-                <button onClick={busy || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
-                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ — UNLOCKED' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                <button
+                  onClick={
+                    busy
+                      ? undefined
+                      : gatewayDepositInsufficient
+                        ? () => setDepositSheetOpen(true)
+                        : runDemo
+                  }
+                  disabled={busy || relayer?.ready === false}
+                  className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${
+                    mode === 'arc-native'
+                      ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]'
+                      : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'
+                  }`}
+                >
+                  {busy
+                    ? `RUNNING: ${step.toUpperCase()}`
+                    : cooldown
+                      ? 'PAID ✓ — UNLOCKED'
+                      : gatewayDepositInsufficient
+                        ? 'DEPOSIT TO GATEWAY'
+                        : step === 'done'
+                          ? 'RUN AGAIN'
+                          : 'BUY ACCESS'}
                 </button>
                 <button
                   onClick={() => {
