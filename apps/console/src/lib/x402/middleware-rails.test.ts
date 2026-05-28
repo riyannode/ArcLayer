@@ -226,6 +226,7 @@ describe('extractPayment', () => {
 // ─── withNative integration ───────────────────────────────────────────────────
 
 vi.mock('./gateway/batch-client', () => {
+  const isGatewayEnabled = vi.fn(() => false);
   return {
     getBatchFacilitatorClient: () => ({
       verify: async () => ({ isValid: true, payer: '0x9fC73BE13EAB35DD55547f89b1aD2663b9038eE5' }),
@@ -233,7 +234,7 @@ vi.mock('./gateway/batch-client', () => {
     }),
     getArcTestnetGatewayConfig: () => ({ gatewayWallet: '0x0077777d7eBA4688BDeF3E311b846F25870A19B9' }),
     isBatchPayment: () => false,
-    isGatewayEnabled: () => false,
+    isGatewayEnabled,
   };
 });
 
@@ -269,13 +270,15 @@ vi.mock('./exact/verify-settlement-proof', () => ({
   verifyExactSettlementProof: async () => ({ isValid: true }),
 }));
 
-vi.mock('./access-session', () => {
-  return {
-    claimAccessSession: async () => ({ ok: true }),
-    completeAccessSession: async () => undefined,
-    releaseAccessSession: async () => undefined,
-  };
-});
+const { accessSessionMock } = vi.hoisted(() => ({
+  accessSessionMock: vi.fn(async () => ({ ok: true })),
+}));
+
+vi.mock('./access-session', () => ({
+  claimAccessSession: accessSessionMock,
+  completeAccessSession: async () => undefined,
+  releaseAccessSession: async () => undefined,
+}));
 
 vi.mock('./rail-session', () => {
   return {
@@ -353,5 +356,77 @@ describe('withNative integration', () => {
 
     expect(body.error).not.toBe('rail_not_allowed');
     expect(body.error).not.toBe('payment_required');
+  });
+});
+
+// ─── Access session fail-closed tests ─────────────────────────────────────────
+
+import { isGatewayEnabled } from './gateway/batch-client';
+import { withGateway } from './middleware';
+
+describe('handleGateway access session fail-closed', () => {
+  beforeAll(() => {
+    process.env.X402_RECEIVER_ADDRESS = '0x9fC73BE13EAB35DD55547f89b1aD2663b9038eE5';
+    process.env.X402_GATEWAY_WALLET_ADDRESS = '0x0077777d7eBA4688BDeF3E311b846F25870A19B9';
+    vi.mocked(isGatewayEnabled).mockReturnValue(true);
+  });
+
+  afterAll(() => {
+    vi.mocked(isGatewayEnabled).mockRestore();
+  });
+
+  it('returns 409 already_paid for active_session reason', async () => {
+    accessSessionMock.mockResolvedValue({
+      ok: false,
+      reason: 'active_session',
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    });
+
+    const handler = async () => NextResponse.json({ ok: true }, { status: 200 });
+    const wrapped = withGateway(handler, '$0.01', '/api/test');
+
+    const req = mockReq({ 'payment-signature': encodeProof(GATEWAY_PROOF) });
+    const res = await wrapped(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe('already_paid');
+    expect(body.reason).toBe('active_session');
+    expect(body.expiresAt).toBeDefined();
+  });
+
+  it('returns 503 session_store_unavailable for session_store_unavailable reason', async () => {
+    accessSessionMock.mockResolvedValue({
+      ok: false,
+      reason: 'session_store_unavailable',
+    });
+
+    const handler = async () => NextResponse.json({ ok: true }, { status: 200 });
+    const wrapped = withGateway(handler, '$0.01', '/api/test');
+
+    const req = mockReq({ 'payment-signature': encodeProof(GATEWAY_PROOF) });
+    const res = await wrapped(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(503);
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe('session_store_unavailable');
+    expect(body.reason).toBe('session_store_unavailable');
+    expect(body.message).toContain('session store is unavailable');
+  });
+
+  it('proceeds to settlement path when claimAccessSession returns ok: true', async () => {
+    accessSessionMock.mockResolvedValue({ ok: true });
+
+    const handler = async () => NextResponse.json({ ok: true, handled: true }, { status: 200 });
+    const wrapped = withGateway(handler, '$0.01', '/api/test');
+
+    const req = mockReq({ 'payment-signature': encodeProof(GATEWAY_PROOF) });
+    const res = await wrapped(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.ok).toBe(true);
   });
 });
