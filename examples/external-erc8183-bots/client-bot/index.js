@@ -1,5 +1,5 @@
 /**
- * Client bot — creates ERC-8183 escrow jobs, funds after provider sets budget.
+ * Client bot — creates ERC-8183 escrow jobs with random templates, funds after provider sets budget.
  *
  * Correct ERC-8183 flow:
  *   1. Client creates job on-chain (createJob)
@@ -7,14 +7,15 @@
  *   3. Client approves USDC + funds
  *
  * Loop:
- *   1. Create local job via POST /api/erc8183-jobs
- *   2. Sign + broadcast createJob tx
- *   3. Confirm create tx to backend
- *   4. Poll until provider calls setBudget (erc8183_status = Funded)
- *   5. Approve USDC + sign approve
- *   6. Fund escrow + sign fund
- *   7. Confirm fund tx
- *   8. Wait JOB_CREATE_INTERVAL_MS
+ *   1. Pick random job template
+ *   2. Create local job via POST /api/erc8183-jobs
+ *   3. Sign + broadcast createJob tx
+ *   4. Confirm create tx to backend
+ *   5. Poll until provider calls setBudget (erc8183_status = Funded)
+ *   6. Approve USDC + sign approve
+ *   7. Fund escrow + sign fund
+ *   8. Confirm fund tx
+ *   9. Wait JOB_CREATE_INTERVAL_MS
  */
 require('dotenv').config({ path: __dirname + '/.env' });
 
@@ -22,6 +23,7 @@ const api = require('../shared/erc8183-http-client');
 const { createSigner } = require('../shared/tx-signer');
 const { required, requiredAddress, normalizePrivateKey } = require('../shared/env');
 const { sleep } = require('../shared/sleep');
+const crypto = require('crypto');
 
 // ── Env ─────────────────────────────────────────────────────────────────
 const BASE_URL = required('ARCLAYER_BASE_URL');
@@ -33,9 +35,9 @@ const PROVIDER_ADDRESS = requiredAddress('PROVIDER_ADDRESS');
 const EVALUATOR_AGENT_ID = required('EVALUATOR_AGENT_ID');
 const EVALUATOR_ADDRESS = requiredAddress('EVALUATOR_ADDRESS');
 const ARC_RPC_URL = required('ARC_RPC_URL');
-const JOB_BUDGET_ATOMIC = process.env.JOB_BUDGET_ATOMIC || '1000000';
+const JOB_BUDGET_ATOMIC = process.env.JOB_BUDGET_ATOMIC || '100000';
 const JOB_EXPIRY_SECONDS = parseInt(process.env.JOB_EXPIRY_SECONDS || '86400', 10);
-const JOB_CREATE_INTERVAL_MS = parseInt(process.env.JOB_CREATE_INTERVAL_MS || '60000', 10);
+const JOB_CREATE_INTERVAL_MS = parseInt(process.env.JOB_CREATE_INTERVAL_MS || '180000', 10);
 const MAX_JOBS_PER_RUN = parseInt(process.env.MAX_JOBS_PER_RUN || '0', 10); // 0 = unlimited
 const MAX_OPEN_JOBS = parseInt(process.env.MAX_OPEN_JOBS || '5', 10);
 const AUTONOMOUS_TX = process.env.AUTONOMOUS_TX === 'true';
@@ -44,6 +46,52 @@ const signer = createSigner({ privateKey: CLIENT_PK, rpcUrl: ARC_RPC_URL });
 
 let jobCounter = 0;
 let jobsCreatedThisRun = 0;
+
+// ── Random job templates ─────────────────────────────────────────────────
+
+const JOB_TEMPLATES = [
+  {
+    jobType: 'market_summary',
+    query: 'Provide a concise market summary for the top 5 crypto assets by 24h volume.',
+    requiredCapability: 'market-summary',
+    difficulty: 'medium',
+  },
+  {
+    jobType: 'risk_check',
+    query: 'Evaluate the smart contract risk profile for a new DeFi lending protocol.',
+    requiredCapability: 'risk-check',
+    difficulty: 'hard',
+  },
+  {
+    jobType: 'sentiment_scan',
+    query: 'Scan social media and news sentiment for BTC and ETH over the last 24 hours.',
+    requiredCapability: 'sentiment-scan',
+    difficulty: 'easy',
+  },
+  {
+    jobType: 'execution_plan',
+    query: 'Generate an execution plan for a DCA strategy across 3 L2 chains.',
+    requiredCapability: 'execution-plan',
+    difficulty: 'medium',
+  },
+  {
+    jobType: 'data_quality_check',
+    query: 'Validate data feed consistency across 3 oracle sources for ETH/USD price.',
+    requiredCapability: 'data-quality-check',
+    difficulty: 'easy',
+  },
+];
+
+function pickRandomTemplate() {
+  const template = JOB_TEMPLATES[Math.floor(Math.random() * JOB_TEMPLATES.length)];
+  return {
+    ...template,
+    nonce: crypto.randomBytes(8).toString('hex'),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+// ── Create + fund job ────────────────────────────────────────────────────
 
 async function createAndFundJob() {
   jobCounter++;
@@ -65,9 +113,14 @@ async function createAndFundJob() {
       console.log(`   Too many open jobs (${openCount} >= ${MAX_OPEN_JOBS}) — skipping this cycle`);
       return;
     }
+
     const balance = await signer.getUsdcBalance();
     const budgetAtomic = BigInt(JOB_BUDGET_ATOMIC);
     console.log(`   USDC balance: ${balance}, budget: ${budgetAtomic}`);
+
+    // Pick random template
+    const template = pickRandomTemplate();
+    console.log(`   Template: ${template.jobType} (${template.requiredCapability})`);
 
     // 1. Create local job
     const created = await api.createJob({
@@ -78,9 +131,16 @@ async function createAndFundJob() {
       evaluatorAgentId: EVALUATOR_AGENT_ID,
       evaluatorAddress: EVALUATOR_ADDRESS,
       expiredAtUnix: String(Math.floor(Date.now() / 1000) + JOB_EXPIRY_SECONDS),
-      description: `Auto ERC-8183 job #${jobCounter}`,
+      description: `[${template.jobType}] ${template.query.slice(0, 80)}`,
       budgetAtomic: JOB_BUDGET_ATOMIC,
-      inputPayload: { query: `Auto job ${jobCounter}`, createdAt: new Date().toISOString() },
+      inputPayload: {
+        jobType: template.jobType,
+        query: template.query,
+        requiredCapability: template.requiredCapability,
+        difficulty: template.difficulty,
+        nonce: template.nonce,
+        createdAt: template.createdAt,
+      },
     });
 
     const localJobId = created.localJobId;
@@ -96,7 +156,6 @@ async function createAndFundJob() {
       const confirmed = await api.confirmCreateTx(localJobId, createResult.hash);
       console.log(`   createJob confirmed! erc8183_job_id: ${confirmed.erc8183JobId}`);
 
-      // 3. Poll until provider sets budget (job still Open, but erc8183JobId exists + on-chain budget set)
       // 3. Poll fund endpoint until provider sets budget
       console.log(`   Waiting for provider to setBudget...`);
       const MAX_POLL = 60;
@@ -144,7 +203,7 @@ async function createAndFundJob() {
 }
 
 async function main() {
-  console.log('=== ERC-8183 Client Bot ===');
+  console.log('=== ERC-8183 Client Bot (autonomous job market) ===');
   console.log(`URL: ${BASE_URL}`);
   console.log(`Client: ${CLIENT_ADDRESS}`);
   console.log(`Provider: ${PROVIDER_ADDRESS}`);
@@ -152,6 +211,7 @@ async function main() {
   console.log(`Budget: ${JOB_BUDGET_ATOMIC} (6 dec)`);
   console.log(`Autonomous: ${AUTONOMOUS_TX}`);
   console.log(`Interval: ${JOB_CREATE_INTERVAL_MS}ms`);
+  console.log(`Templates: ${JOB_TEMPLATES.length} random types`);
 
   await createAndFundJob();
   setInterval(createAndFundJob, JOB_CREATE_INTERVAL_MS);
