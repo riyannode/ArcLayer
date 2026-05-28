@@ -1,6 +1,6 @@
 const { currentSessionId } = require("./hash");
 
-const BASE_URL = (process.env.ARCLAYER_BASE_URL || "https://arclayers.xyz").replace(/\/$/, "");
+const BASE_URL = (process.env.ARCLAYER_BASE_URL || process.env.ARCLAYER_API_URL || "https://arclayers.xyz").replace(/\/$/, "");
 
 function getApiKey() {
   return String(process.env.ARCLAYER_API_KEY || process.env.ARCLAYER_AGENT_API_KEY || "").trim();
@@ -91,6 +91,8 @@ async function postReceiptReference({
   runtimeId,
   payment,
   llmReceipt,
+  rail = "x402_circle_gateway",
+  source = "circle-agent-gate",
 }) {
   return postBridgeEvent({
     sessionId,
@@ -99,16 +101,16 @@ async function postReceiptReference({
     runtimeId,
     type: "receipt_reference",
     payload: {
-      source: "circle-agent-gate",
-      rail: "x402_circle_gateway",
+      source,
+      rail,
       paymentId: payment.paymentId || null,
       txHash: payment.txHash || payment.transaction || null,
       payloadHash: payment.payloadHash || null,
       llmReceipt,
     },
     metadata: {
-      rail: "x402_circle_gateway",
-      source: "circle-agent-gate",
+      rail,
+      source,
     },
   });
 }

@@ -4,11 +4,13 @@
   "type": "commonjs",
   "scripts": {
     "run": "node run-bot.js",
+    "commerce:run": "node run-commerce-bot.js",
     "gateway:deposit": "node scripts/gateway-deposit.js",
     "commerce:profile": "node scripts/register-commerce-profile.js"
   },
   "dependencies": {
     "@circle-fin/x402-batching": "^3.0.4",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "viem": "^2.51.3"
   }
 }

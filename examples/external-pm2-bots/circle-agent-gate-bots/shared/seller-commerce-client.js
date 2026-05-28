@@ -1,6 +1,6 @@
 const { GatewayClient } = require("@circle-fin/x402-batching/client");
 
-const BASE_URL = (process.env.ARCLAYER_BASE_URL || "https://arclayers.xyz").replace(/\/$/, "");
+const BASE_URL = (process.env.ARCLAYER_BASE_URL || process.env.ARCLAYER_API_URL || "https://arclayers.xyz").replace(/\/$/, "");
 
 function normalizePrivateKey(value) {
   const raw = String(value || "").trim();
@@ -66,6 +66,7 @@ async function paySellerCommerceGate({
     accessType,
     payload,
     llmReceipt,
+    nonce: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
   };
 
   const client = new GatewayClient({
@@ -74,18 +75,49 @@ async function paySellerCommerceGate({
     rpcUrl: process.env.ARC_RPC_URL || process.env.RPC_URL || undefined,
   });
 
-  const result = await client.pay(`${BASE_URL}/api/x402/agent-commerce-gate`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json",
-      accept: "application/json",
-    },
-    body,
-  });
+  let result;
+  try {
+    result = await client.pay(`${BASE_URL}/api/x402/agent-commerce-gate`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body,
+    });
+  } catch (payErr) {
+    const msg = String(payErr.message || payErr);
+    // already_paid = session was already settled — treat as success
+    if (msg.includes("already_paid")) {
+      return {
+        ok: true,
+        rail: "x402_circle_commerce",
+        payer: client.address || null,
+        paymentId: null,
+        transaction: null,
+        txHash: null,
+        buyerAgentId,
+        sellerAgentId,
+        sellerRole,
+        accessType,
+        sessionId,
+        payloadHash,
+        alreadyPaid: true,
+        response: { already_paid: true },
+      };
+    }
+    // Log full error for debugging
+    console.error(`[paySellerCommerceGate] FULL ERROR:`, msg);
+    if (payErr.response?.data) console.error(`[paySellerCommerceGate] API response:`, JSON.stringify(payErr.response.data));
+    throw payErr;
+  }
 
-  const data = result.data || {};
-  const txHash = data.txHash || data.transaction || result.txHash || result.transaction || null;
+  const safeResult = JSON.parse(JSON.stringify(result, (_, v) => typeof v === 'bigint' ? v.toString() : v));
+  console.log(`[paySellerCommerceGate] raw result:`, JSON.stringify(safeResult, null, 2));
+
+  const data = safeResult.data || {};
+  const txHash = data.txHash || data.transaction || safeResult.txHash || safeResult.transaction || null;
 
   return {
     ok: true,

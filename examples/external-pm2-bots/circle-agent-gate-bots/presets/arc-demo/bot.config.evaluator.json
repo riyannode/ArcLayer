@@ -1,0 +1,12 @@
+{
+  "category": "prediction-market-bots",
+  "role": "evaluator",
+  "scope": "evaluation",
+  "market": "btc-15m",
+  "runtimeId": "circle-commerce-evaluator-01",
+  "eventType": "evaluation",
+  "payload": {
+    "source": "circle-commerce-bot",
+    "action": "PUBLISH_EVALUATION"
+  }
+}
