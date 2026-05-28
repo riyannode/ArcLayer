@@ -120,8 +120,12 @@ Evaluate this work. Return JSON only.`;
 
   const result = await callLlm(LLM_SYSTEM_PROMPT, userPrompt);
 
-  // Validate structure
-  const approved = Boolean(result.approved);
+  // Validate structure — strict boolean check to prevent Boolean("false") === true
+  if (typeof result.approved !== 'boolean') {
+    throw new Error('LLM evaluation approved must be a boolean');
+  }
+
+  const approved = result.approved === true;
   const score = Math.min(100, Math.max(0, parseInt(result.score, 10) || 0));
   const reason = String(result.reason || 'no reason provided').slice(0, 200);
   const qualityFlags = Array.isArray(result.qualityFlags) ? result.qualityFlags : [];
