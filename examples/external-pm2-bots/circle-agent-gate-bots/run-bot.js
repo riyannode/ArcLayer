@@ -7,7 +7,7 @@ const { buildLlmReceipt } = require("./shared/llm-receipt");
 const { postBridgeEvent, postReceiptReference } = require("./shared/arclayer-api");
 const { payCircleAgentGate } = require("./shared/circle-gate-client");
 const { readUpstreamEvents } = require("./shared/read-events");
-const { processWithMockLlm } = require("./shared/process-mock-llm");
+const { processWithLlm } = require("./shared/llm-processor");
 const { payUpstreamForAccess } = require("./shared/pay-upstream");
 
 // ─── Config ───────────────────────────────────────────────────────────────────
@@ -38,7 +38,7 @@ async function runOracle({ config, env }) {
   // Oracle: generate data → post bridge event → (downstream pays to access)
   console.log(`[oracle] generating raw market data session=${env.sessionId}`);
 
-  const llmResult = processWithMockLlm({ role: "oracle", upstreamData: null, config: env });
+  const llmResult = processWithLlm({ role: "oracle", upstreamData: null, config: env });
   const llmReceipt = buildLlmReceipt({ payload: llmResult, llmReceipt: llmResult });
 
   const payload = {
@@ -103,7 +103,7 @@ async function runAnalyzer({ config, env }) {
   console.log(`[analyzer] found ${events.length} events, latest payloadHash=${latestEvent.payloadHash}`);
 
   // 2. Pay oracle for data access
-  const llmResult = processWithMockLlm({ role: "analyzer", upstreamData: latestEvent.payload, config: env });
+  const llmResult = processWithLlm({ role: "analyzer", upstreamData: latestEvent.payload, config: env });
   const llmReceipt = buildLlmReceipt({ payload: llmResult, llmReceipt: llmResult });
 
   const paymentPayloadHash = sha256({
@@ -192,7 +192,7 @@ async function runEvaluator({ config, env }) {
   const latestEvent = events[0];
   console.log(`[evaluator] found ${events.length} events, latest payloadHash=${latestEvent.payloadHash}`);
 
-  const llmResult = processWithMockLlm({ role: "evaluator", upstreamData: latestEvent.payload, config: env });
+  const llmResult = processWithLlm({ role: "evaluator", upstreamData: latestEvent.payload, config: env });
   const llmReceipt = buildLlmReceipt({ payload: llmResult, llmReceipt: llmResult });
 
   const paymentPayloadHash = sha256({
@@ -288,7 +288,7 @@ async function runExecutor({ config, env }) {
     return null;
   }
 
-  const llmResult = processWithMockLlm({ role: "executor", upstreamData: latestEvent.payload, config: env });
+  const llmResult = processWithLlm({ role: "executor", upstreamData: latestEvent.payload, config: env });
   const llmReceipt = buildLlmReceipt({ payload: llmResult, llmReceipt: llmResult });
 
   const paymentPayloadHash = sha256({
