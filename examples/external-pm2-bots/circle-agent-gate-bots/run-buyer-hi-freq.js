@@ -14,7 +14,7 @@ const { resolveCommerceRoute } = require("./shared/commerce-route-map");
 // ─── Config ──────────────────────────────────────────────────────────
 
 const LLM_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const PAY_INTERVAL = Math.floor(60_000 / 9); // ~6,667ms = 9x per minute
+const PAY_INTERVAL = 60_000; // 1x per minute
 
 function eventTypeForRole(role) {
   if (role === "oracle") return "market_snapshot";
@@ -172,7 +172,7 @@ async function main() {
   console.log(`  market:     ${market}`);
   console.log(`  upstream:   ${env.upstreamAgentId} (${env.upstreamRole})`);
   console.log(`  LLM every:  5 min`);
-  console.log(`  pay:        9x/min (~6.7s interval)`);
+  console.log(`  pay:        1x/min (60s interval)`);
 
   let iteration = 0;
 
