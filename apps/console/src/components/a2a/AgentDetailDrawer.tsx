@@ -11,12 +11,7 @@ const TYPE_COLORS: Record<FeedItem['type'], string> = {
   error: 'bg-red-500/15 text-red-300 border-red-500/30',
 };
 
-const AGENT_COLORS: Record<FeedItem['agent'], string> = {
-  Pythia: 'text-cyan-200',
-  Ignia: 'text-cyan-300',
-  Apolo: 'text-violet-300',
-  Hermes: 'text-amber-300',
-};
+const AGENT_COLORS: Record<string, string> = {};
 
 function short(addr: string) {
   if (!addr || addr.length < 12) return addr || '—';
