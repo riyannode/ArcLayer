@@ -114,7 +114,10 @@ async function callJuneApi({ systemPrompt, userMessage, role }) {
   }
 
   const data = await res.json();
-  const content = data?.choices?.[0]?.message?.content;
+  const msg = data?.choices?.[0]?.message;
+  // Reasoning models (qwen, kimi, deepseek-v4-pro) put output in `reasoning`,
+  // non-reasoning models (gemini-flash, deepseek-v4-flash, claude) put it in `content`.
+  const content = msg?.content || msg?.reasoning;
 
   if (!content) {
     throw new Error("June API returned empty response");
@@ -225,7 +228,7 @@ function buildUserMessage(role, upstreamData, config) {
 // ── Main ─────────────────────────────────────────────────────────
 
 async function processWithLlm({ role, upstreamData, config }) {
-  const isMock = provider === "mock" || model === "mock-llm" || !apiKey;
+  const isMock = provider === "mock" || model === "mock-llm" || !apiKey || provider === "none";
 
   if (!isMock) {
     try {
