@@ -135,7 +135,7 @@ async function main() {
 
   console.log(`[oracle-hi-freq] starting`);
   console.log(`  market:     ${env.market}`);
-  console.log(`  session:    ${env.sessionId}`);
+  console.log(`  session:    [redacted]`);
   console.log(`  LLM every:  5 min`);
   console.log(`  publish:    9x/min (~6.7s interval)`);
 
