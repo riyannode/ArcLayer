@@ -16,54 +16,62 @@ const X402DemoPanel = dynamic(() => import('@/components/x402/X402DemoPanel'), {
 export default function HomeHero() {
   return (
     <div className="relative flex max-w-[540px] flex-col justify-center">
-      <div className="mb-2 flex flex-col gap-1">
-        <span className="aureo-mono-label">IDENTITY → JOBS → VALIDATION → REPUTATION</span>
-      </div>
+      <div data-x402-blur-zone="true">
+        <div className="mb-2 flex flex-col gap-1">
+          <span className="aureo-mono-label">IDENTITY → JOBS → VALIDATION → REPUTATION</span>
+        </div>
 
-      <h1
-        className="aureo-display text-[#EAE4D8]"
-        style={{
-          fontSize: 'clamp(32px, 3.2vw, 58px)',
-          lineHeight: 0.9,
-        }}
-      >
-        <span className="block section-reveal" style={{ animationDelay: '0.05s' }}>
-          PROTOCOL LAYER
-        </span>
-        <span className="block section-reveal" style={{ animationDelay: '0.15s' }}>
-          FOR THE
-        </span>
-        <span
-          className="block italic text-[#C5A67C] section-reveal"
-          style={{ animationDelay: '0.25s' }}
+        <h1
+          className="aureo-display text-[#EAE4D8]"
+          style={{
+            fontSize: 'clamp(32px, 3.2vw, 58px)',
+            lineHeight: 0.9,
+          }}
         >
-          agentic economy
-        </span>
-      </h1>
+          <span className="block section-reveal" style={{ animationDelay: '0.05s' }}>
+            PROTOCOL LAYER
+          </span>
+          <span className="block section-reveal" style={{ animationDelay: '0.15s' }}>
+            FOR THE
+          </span>
+          <span
+            className="block italic text-[#C5A67C] section-reveal"
+            style={{ animationDelay: '0.25s' }}
+          >
+            agentic economy
+          </span>
+        </h1>
 
-      <div className="my-3 flex max-w-[460px] items-center gap-3" aria-hidden="true">
-        <span className="h-px flex-1 bg-transparent" />
-        <span
-          className="h-[10px] w-[10px] rotate-45 border border-transparent"
-          style={{ background: 'transparent' }}
-        />
-        <span className="h-px flex-1 bg-transparent" />
+        <div className="my-3 flex max-w-[460px] items-center gap-3" aria-hidden="true">
+          <span className="h-px flex-1 bg-transparent" />
+          <span
+            className="h-[10px] w-[10px] rotate-45 border border-transparent"
+            style={{ background: 'transparent' }}
+          />
+          <span className="h-px flex-1 bg-transparent" />
+        </div>
+
+        <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.9)] md:text-[14.5px]">
+          ArcLayer powers agent identity, paid jobs, validation, reputation, and USDC settlement on{' '}
+          <span className="text-[#C5A67C]">Arc</span>. Simple rails for x402 payments, paid jobs, and reputation.
+        </p>
+
+        <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.88)] invisible">
+          Agent identity · paid jobs · validation · reputation · USDC settlement
+        </p>
       </div>
 
-      <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.9)] md:text-[14.5px]">
-        ArcLayer powers agent identity, paid jobs, validation, reputation, and USDC settlement on{' '}
-        <span className="text-[#C5A67C]">Arc</span>. Simple rails for x402 payments, paid jobs, and reputation.
-      </p>
-      <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.88)] invisible">
-        Agent identity · paid jobs · validation · reputation · USDC settlement
-      </p>
-
-      <div className="mt-5 section-reveal" style={{ animationDelay: '0.35s' }}>
+      <div
+        data-x402-unlock-zone="true"
+        className="mt-5 section-reveal"
+        style={{ animationDelay: '0.35s' }}
+      >
         <X402DemoPanel compact ticketOnly />
       </div>
 
-      {/* Onboarding path cards — below x402 demo */}
-      <HomeOnboardingCards />
+      <div data-x402-blur-zone="true">
+        <HomeOnboardingCards />
+      </div>
     </div>
   );
 }
