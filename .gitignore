@@ -101,3 +101,6 @@ agents/data/
 agents/scripts/
 scripts/record-*.mjs
 .env*.local
+
+# ERC-8183 bot secrets
+examples/external-erc8183-bots/*/.env
