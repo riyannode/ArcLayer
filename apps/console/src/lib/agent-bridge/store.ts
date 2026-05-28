@@ -88,7 +88,7 @@ export type BridgeSession = {
     roles: number;
   };
 };
-export type BridgeReceiptType = 'x402_arc_native' | 'x402_circle_gateway' | 'dry_run';
+export type BridgeReceiptType = 'x402_arc_native' | 'x402_circle_gateway' | 'x402_circle_commerce' | 'dry_run';
 
 export interface BridgeEventInput {
   sessionId: string;
