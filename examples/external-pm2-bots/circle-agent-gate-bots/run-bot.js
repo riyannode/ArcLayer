@@ -372,7 +372,7 @@ async function main() {
     throw new Error(`Unknown role: ${env.role}. Must be one of: ${Object.keys(ROLE_HANDLERS).join(", ")}`);
   }
 
-  console.log(`[${env.role}] starting role=${env.role} runtimeId=${env.runtimeId} session=${env.sessionId} upstream=${env.upstreamRole || "none"}`);
+  console.log(`[${env.role}] starting`);
   await handler({ config, env });
   console.log(`[${env.role}] finished`);
 }
