@@ -101,7 +101,7 @@ async function main() {
     llmReceipt,
   });
 
-  console.log(`[circle-bot] done session=${event.sessionId}`);
+  console.log("[circle-bot] done");
 }
 
 main().catch((err) => {
