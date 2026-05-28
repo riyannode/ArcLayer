@@ -4,6 +4,9 @@ client-bot/.env
 provider-bot/.env
 evaluator-bot/.env
 
+# ── Backup files ──
+*.env.bak.*
+
 # ── Runtime logs ──
 client-bot/logs/
 provider-bot/logs/
