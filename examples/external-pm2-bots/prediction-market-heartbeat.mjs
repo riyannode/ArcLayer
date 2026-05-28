@@ -1,25 +1,21 @@
 const origin = process.env.ARCLAYER_WEB_ORIGIN || 'https://arclayers.xyz';
 
-const defaults = [
-  ['19803', 'ArcLayer Prediction Analyzer'],
-  ['19804', 'ArcLayer Prediction Evaluator'],
-  ['19805', 'ArcLayer Prediction Executor'],
-  ['19806', 'ArcLayer Prediction Oracle'],
-];
-
 const rawAgentIds = process.env.PREDICTION_AGENT_IDS?.trim() || '';
+if (!rawAgentIds) {
+  console.error('PREDICTION_AGENT_IDS env var is required (comma-separated agentId:displayName pairs)');
+  process.exit(1);
+}
+
 const bots = rawAgentIds
-  ? rawAgentIds
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter(Boolean)
-      .map((entry) => {
-        const [agentId, ...nameParts] = entry.split(':');
-        return [agentId ? agentId.trim() : '', nameParts.join(':').trim()];
-      })
-      .filter(([agentId]) => agentId)
-      .map(([agentId, name]) => [agentId, name || `Agent ${agentId}`])
-  : defaults;
+  .split(',')
+  .map((entry) => entry.trim())
+  .filter(Boolean)
+  .map((entry) => {
+    const [agentId, ...nameParts] = entry.split(':');
+    return [agentId ? agentId.trim() : '', nameParts.join(':').trim()];
+  })
+  .filter(([agentId]) => agentId)
+  .map(([agentId, name]) => [agentId, name || `Agent ${agentId}`]);
 
 // --- Auth resolution ---
 
