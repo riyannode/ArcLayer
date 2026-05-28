@@ -94,7 +94,57 @@ async function runOnce() {
         role: 'executor'
       });
       if (payment.ok) {
-        console.log(`[x402][executor] paid tx=${payment.txHash || payment.transaction || 'n/a'}`);
+        const txHash = payment.txHash || payment.transaction || null;
+        console.log(`[x402][executor] paid tx=${txHash || 'n/a'} payer=${payment.payer || 'n/a'}`);
+
+        // Persist x402 proof — without this, hasExecutorX402Proof() never
+        // returns true and the dedup guard in latestSession() keeps resurfacing
+        // the same session every cycle.
+        if (txHash) {
+          const paymentId = payment.paymentId || null;
+          const receiptEventPayload = {
+            source: 'x402-autopay',
+            scope: 'external_trace',
+            role: 'executor',
+            txHash,
+            transaction: txHash,
+            paymentId
+          };
+          const receiptRef = await postEvent({
+            sessionId: session.sessionId,
+            role: 'executor',
+            type: 'receipt_reference',
+            runtimeId: process.env.RUNTIME_ID || 'pm2-llm-executor-bot',
+            payload: receiptEventPayload,
+            metadata: { source: 'x402-autopay' }
+          });
+          await postReceipt({
+            sessionId: session.sessionId,
+            receiptType: 'x402_arc_native',
+            payloadHash: sha256(receiptEventPayload),
+            metadata: {
+              role: 'executor',
+              scope: 'external_trace',
+              source: 'x402-autopay',
+              txHash,
+              paymentId,
+              bridgePayloadHash: receiptRef.payloadHash,
+              protocolTxMode: 'arc_testnet'
+            }
+          });
+          await safePostLiveEvent('x402_paid', {
+            sessionId: session.sessionId,
+            paymentId,
+            bridgePayloadHash: receiptRef.payloadHash,
+            txHash,
+            amountAtomic: payment.amount || null,
+            title: 'Executor x402 paid',
+            summary: `Executor external_trace x402 payment settled`,
+            trace: ['executor', 'receipt_reference', 'x402_arc_native', 'x402_paid'],
+            reasoning: 'executor external_trace x402 autopay'
+          });
+          console.log(`[x402][executor] proof persisted session=${session.sessionId} tx=${txHash}`);
+        }
       }
     } catch (err) {
       console.error(`[x402][executor] payment failed: ${err.message}`);
