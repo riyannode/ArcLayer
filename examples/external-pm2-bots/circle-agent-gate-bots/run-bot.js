@@ -54,7 +54,7 @@ async function main() {
     model: process.env.LLM_MODEL,
   });
 
-  console.log(`[circle-bot] post event session=${sessionId} category=${category} role=${role} scope=${scope} market=${market}`);
+  console.log(`[circle-bot] post event sessionSet=${Boolean(sessionId)} category=${category} role=${role} scope=${scope} market=${market}`);
 
   const event = await postBridgeEvent({
     sessionId,
