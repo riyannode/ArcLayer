@@ -320,11 +320,27 @@ function classifyPaymentFromProof(proof: Record<string, unknown>): 'gateway' | '
 /** @internal test export — do not use in production */
 export const testClassifyPaymentFromProof = classifyPaymentFromProof;
 
+function railAllowed(opts: X402MiddlewareOptions, rail: AllowedRail): boolean {
+  return !opts.allowedRails || opts.allowedRails.includes(rail);
+}
+
 function paymentRequiredResponse(opts: X402MiddlewareOptions, req: NextRequest) {
   const requested = resolveRequestedRail(req);
   const accepts: unknown[] = [];
 
   if (requested.rail && requested.payer) {
+    if (!railAllowed(opts, requested.rail)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'rail_not_allowed',
+          message: `Rail ${requested.rail} is not allowed for this resource.`,
+          allowedRails: opts.allowedRails ?? ['arc-native-eoa', 'circle-gateway-passkey'],
+        },
+        { status: 403, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+
     const session = createRailSession({
       resource: opts.resource,
       payer: requested.payer,
@@ -332,25 +348,40 @@ function paymentRequiredResponse(opts: X402MiddlewareOptions, req: NextRequest) 
       amount: opts.amount,
       ttlMs: (opts.maxTimeoutSeconds ?? 300) * 1000,
     });
+
     if (requested.rail === 'arc-native-eoa') {
-      accepts.push(buildNativeRequirements(opts));
+      accepts.push(buildNativeRequirements(opts, session.sessionId));
     } else if (isGatewayEnabled()) {
       accepts.push(buildGatewayRequirements(opts, session.sessionId));
     }
   } else {
-    // Backward-compatible dual-mode fallback for generic clients that do not request rail lock.
-    accepts.push(buildNativeRequirements(opts));
-    if (isGatewayEnabled()) accepts.push(buildGatewayRequirements(opts));
+    if (railAllowed(opts, 'arc-native-eoa')) {
+      accepts.push(buildNativeRequirements(opts));
+    }
+
+    if (railAllowed(opts, 'circle-gateway-passkey') && isGatewayEnabled()) {
+      accepts.push(buildGatewayRequirements(opts));
+    }
   }
 
   const paymentRequired = {
     x402Version: X402_VERSION_V2,
-    resource: { url: opts.resource, description: opts.description || `Paid resource (${opts.resource})`, mimeType: 'application/json' },
+    resource: {
+      url: opts.resource,
+      description: opts.description || `Paid resource (${opts.resource})`,
+      mimeType: 'application/json',
+    },
     accepts,
   };
 
   return new NextResponse(
-    JSON.stringify({ ok: false, error: 'payment_required', message: 'x402 payment required', x402Version: X402_VERSION_V2, accepts: paymentRequired.accepts }),
+    JSON.stringify({
+      ok: false,
+      error: 'payment_required',
+      message: 'x402 payment required',
+      x402Version: X402_VERSION_V2,
+      accepts: paymentRequired.accepts,
+    }),
     {
       status: 402,
       headers: {
