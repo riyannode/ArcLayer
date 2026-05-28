@@ -4,13 +4,13 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title MarketMirrorRegistry
-/// @notice Maps Polymarket slugs to Ignia market ids and tracks resolution.
+/// @notice Maps Polymarket slugs to external market ids and tracks resolution.
 contract MarketMirrorRegistry is Ownable {
     struct Mirror {
         bytes32 slugHash;
         string slug;
         string asset;            // BTC, ETH, SOL
-        uint256 igniaMarketId;
+        uint256 sourceMarketId;
         uint64 createdAt;
         uint64 deadline;
         bool resolved;
@@ -25,7 +25,7 @@ contract MarketMirrorRegistry is Ownable {
         bytes32 indexed slugHash,
         string slug,
         string asset,
-        uint256 indexed igniaMarketId,
+        uint256 indexed sourceMarketId,
         uint64 deadline
     );
     event MirrorResolved(bytes32 indexed slugHash, uint8 outcome);
@@ -60,7 +60,7 @@ contract MarketMirrorRegistry is Ownable {
     function registerMirror(
         string calldata slug,
         string calldata asset,
-        uint256 igniaMarketId,
+        uint256 sourceMarketId,
         uint64 deadline
     ) external onlyAuthorized returns (bytes32 slugHash) {
         slugHash = keccak256(bytes(slug));
@@ -70,7 +70,7 @@ contract MarketMirrorRegistry is Ownable {
             slugHash: slugHash,
             slug: slug,
             asset: asset,
-            igniaMarketId: igniaMarketId,
+            sourceMarketId: sourceMarketId,
             createdAt: uint64(block.timestamp),
             deadline: deadline,
             resolved: false,
@@ -78,7 +78,7 @@ contract MarketMirrorRegistry is Ownable {
         });
         allSlugs.push(slugHash);
 
-        emit MirrorRegistered(slugHash, slug, asset, igniaMarketId, deadline);
+        emit MirrorRegistered(slugHash, slug, asset, sourceMarketId, deadline);
     }
 
     function markResolved(bytes32 slugHash, uint8 outcome) external onlyAuthorized {

@@ -483,7 +483,7 @@ Paste this into your coding agent.
           <div className="px-5 py-4 border-b border-white/8">
             <div className="aureo-mono-label mb-1" style={{ color: '#C5A67C' }}>PASTE THIS TO YOUR AI</div>
             <h3 className="aureo-display text-xl md:text-2xl" style={{ color: '#EAE4D8' }}>
-              Drop into Codex, Cursor, Claude, Kiro, Hermes, OpenClaw, and all other agents
+              Drop into Codex, Cursor, Claude, Kiro, OpenClaw, and all other agents
             </h3>
           </div>
           <div className="p-5">

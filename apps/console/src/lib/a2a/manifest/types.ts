@@ -2,7 +2,7 @@ export const AGENT_MANIFEST_SCHEMA = 'arclayer.agent/v1' as const;
 
 export type AgentRuntimeProvider =
   | 'claude'
-  | 'hermes'
+  | 'node-runtime'
   | 'openclaw'
   | 'openai-compatible'
   | 'local-command'

@@ -37,7 +37,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
       verification: {
         jobId,
         receiptId,
-        verifier: verifierAgent || 'apolo-verifier',
+        verifier: verifierAgent || 'external-verifier',
         result: passed ? 'PASSED' : 'FAILED',
         confidence: Number(confidence.toFixed(3)),
         reason: passed

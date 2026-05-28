@@ -83,7 +83,7 @@ export function AgentDetailDrawer({
   const [copied, setCopied] = useState(false);
   if (!agent) return null;
 
-  const x402Receipts = agent.activity.filter((item) => item.tx || item.type === 'payment' || item.label.toLowerCase().includes('x402') || item.label.toLowerCase().includes('apolo'));
+  const x402Receipts = agent.activity.filter((item) => item.tx || item.type === 'payment' || item.label.toLowerCase().includes('x402'));
 
   const copyWallet = async () => {
     const value = agent.wallet || agent.agentId;

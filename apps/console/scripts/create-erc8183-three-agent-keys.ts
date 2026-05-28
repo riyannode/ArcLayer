@@ -2,9 +2,24 @@ import { createApiKey } from '../src/lib/a2a/auth';
 
 const createdBy = process.argv[2] || 'admin';
 
-const clientAgentId = process.env.CLIENT_AGENT_ID || 'erc8183-client-001';
-const providerAgentId = process.env.PROVIDER_AGENT_ID || 'erc8183-provider-001';
-const evaluatorAgentId = process.env.EVALUATOR_AGENT_ID || 'erc8183-evaluator-001';
+function allowExampleAgents() {
+  return process.env.ALLOW_EXAMPLE_AGENTS === 'true';
+}
+
+function exampleAgentId(role: 'client' | 'provider' | 'evaluator') {
+  return ['erc8183', role, '001'].join('-');
+}
+
+function agentIdFromEnv(name: string, role: 'client' | 'provider' | 'evaluator') {
+  const value = process.env[name]?.trim();
+  if (value) return value;
+  if (allowExampleAgents()) return exampleAgentId(role);
+  throw new Error(`Missing ${name}. Set it explicitly, or set ALLOW_EXAMPLE_AGENTS=true to use example agent IDs.`);
+}
+
+const clientAgentId = agentIdFromEnv('CLIENT_AGENT_ID', 'client');
+const providerAgentId = agentIdFromEnv('PROVIDER_AGENT_ID', 'provider');
+const evaluatorAgentId = agentIdFromEnv('EVALUATOR_AGENT_ID', 'evaluator');
 
 const agents = [
   {
