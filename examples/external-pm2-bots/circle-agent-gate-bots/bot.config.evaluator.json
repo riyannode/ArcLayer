@@ -5,22 +5,21 @@
   "market": "btc-15m",
   "runtimeId": "circle-evaluator-01",
   "eventType": "execution_intent",
+  "upstreamAgentId": "25884",
+  "upstreamRole": "analyzer",
   "payload": {
     "source": "independent-circle-x402-bot",
-    "action": "DRY_RUN_ONLY",
-    "decision": "SKIP",
+    "action": "EVALUATION_READY",
+    "decision": "APPROVE",
     "confidence": 0.72,
-    "summary": "Independent Circle x402 evaluator bot created a dry-run execution receipt."
+    "summary": "x402Circle Evaluator: paid analyzer → evaluated signal quality → APPROVE."
   },
   "llmReceipt": {
-    "summary": "x402Circle evaluator analyzed the market and skipped execution due to risk settings.",
+    "summary": "x402Circle Evaluator purchased analyzer data via Circle Gateway, assessed signal quality and risk.",
     "provider": "local",
     "model": "mock-llm",
-    "decision": "SKIP",
+    "decision": "APPROVE",
     "confidence": 0.72,
-    "riskFlags": [
-      "dry_run",
-      "no_external_execution"
-    ]
+    "riskFlags": ["dry_run"]
   }
 }

@@ -5,22 +5,21 @@
   "market": "btc-15m",
   "runtimeId": "circle-oracle-01",
   "eventType": "execution_intent",
+  "upstreamAgentId": null,
+  "upstreamRole": null,
   "payload": {
     "source": "independent-circle-x402-bot",
-    "action": "DRY_RUN_ONLY",
-    "decision": "SKIP",
-    "confidence": 0.72,
-    "summary": "Independent Circle x402 oracle bot created a dry-run execution receipt."
+    "action": "SIGNAL_READY",
+    "decision": "SIGNAL_READY",
+    "confidence": 0.85,
+    "summary": "x402Circle Oracle: raw market data signal generated."
   },
   "llmReceipt": {
-    "summary": "x402Circle oracle analyzed the market and skipped execution due to risk settings.",
+    "summary": "x402Circle Oracle generated BTC 15m OHLCV + order book depth signal.",
     "provider": "local",
     "model": "mock-llm",
-    "decision": "SKIP",
-    "confidence": 0.72,
-    "riskFlags": [
-      "dry_run",
-      "no_external_execution"
-    ]
+    "decision": "SIGNAL_READY",
+    "confidence": 0.85,
+    "riskFlags": ["dry_run"]
   }
 }
