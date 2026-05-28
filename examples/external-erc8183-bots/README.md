@@ -1,25 +1,49 @@
-# Autonomous ERC-8183 External Bots
+# Autonomous ERC-8183 Job-Market Demo
 
 > **Standalone example.** This directory is NOT part of the root `pnpm-workspace.yaml`.
 > Install and run from this folder independently.
 
-Client, provider, and evaluator bots that autonomously run ERC-8183 escrow jobs on Arc Testnet.
+Three independent bots that demonstrate an autonomous ERC-8183 job market on Arc Testnet.
+Each bot runs as a separate PM2 process with its own wallet + API key.
 
-> **Worker is the user-facing name. Provider is legacy runtime compatibility.**
-> Both `PROVIDER_*` and `WORKER_*` env keys are accepted — the runtime prefers `PROVIDER_*`
-> when both are set. See [Worker/Provider Naming](#-workerprovider-naming) for details.
-
-## Architecture
+## How It Works
 
 ```
 Client Bot ──createJob──▶ Provider Bot ──submit──▶ Evaluator Bot ──complete──▶ Done
    │                        │                         │
-   ├─ setBudget             ├─ claim                   ├─ evaluate (rules/LLM)
-   ├─ approve USDC          ├─ running                 └─ complete tx
+   ├─ random job template   ├─ capability filter       ├─ LLM or rules eval
+   ├─ setBudget             ├─ structured strategy     ├─ score >= 70 → complete
+   ├─ approve USDC          ├─ claim + running         └─ score < 70 → soft reject
    └─ fund                  └─ submit tx
 ```
 
-Three independent PM2 processes, each with its own wallet + API key.
+- **Creator/Client** creates random small-budget ERC-8183 jobs every 3 minutes.
+  Each job picks a random template (market_summary, risk_check, sentiment_scan, execution_plan, data_quality_check).
+- **Worker/Provider** scans assigned jobs every 1 minute.
+  Only processes jobs whose `requiredCapability` matches its configured capabilities.
+  Submits structured results based on job type instead of static echo.
+- **Evaluator** reviews submitted work every 1 minute.
+  Uses LLM evaluation when configured, falls back to rules-based scoring.
+  - Good work (score >= 70): evaluator completes escrow — provider gets paid.
+  - Bad work (score < 70): evaluator soft-rejects by logging rejection evidence.
+    The evaluator does NOT call `complete`. Escrow stays open.
+
+### Soft Rejection vs Slash
+
+Protocol-level slash/dispute is **not implemented** in the current ERC-8183 MVP.
+When the evaluator rejects work, it simply does not call `complete` — the escrow
+remains open and the provider is not paid. This is a "soft reject" pattern.
+Slash, dispute, and timeout-based recovery are planned as future extensions.
+
+## Architecture
+
+This is an **autonomous job-market demo**, not a fixed orchestrator pipeline.
+Each bot operates independently:
+
+- No shared state between bots (only on-chain + backend API).
+- No central scheduler or dependency graph.
+- Job content is randomized — the provider must handle different job types.
+- The evaluator uses LLM intelligence to judge work quality.
 
 ## 1. Register Agents
 
@@ -70,6 +94,11 @@ Fill in:
 - `*_ADDRESS` — corresponding wallet address
 - `WORKER_ID` — **must equal the worker/provider agent ID** (the API key's agentId)
 
+For LLM evaluation, also fill in:
+- `LLM_BASE_URL` — OpenAI-compatible API endpoint
+- `LLM_API_KEY` — API key for the LLM service
+- `LLM_MODEL` — model name (default: `xiaomi/mimo-v2-flash`)
+
 **Never commit filled `.env` files.** A `.gitignore` in this folder already excludes them.
 
 ### Preflight check
@@ -79,12 +108,6 @@ After filling `.env` files, verify everything is correct:
 ```bash
 npm run check:env
 ```
-
-This checks all three `.env` files for required fields, supports Worker/Provider
-alias naming, and reports any missing vars with exit codes:
-- `0` — all good
-- `1` — missing required fields
-- `2` — `.env` file not found
 
 ### Key constraint
 
@@ -149,47 +172,64 @@ pm2 logs arclayer-erc8183-provider --lines 20
 ```
 
 The bots work independently:
-- **Client** creates + funds a job every `JOB_CREATE_INTERVAL_MS` (default 60s)
-- **Provider** polls every `JOB_POLL_INTERVAL_MS` (5s) for open/funded jobs
-- **Evaluator** polls every `JOB_POLL_INTERVAL_MS` (5s) for submitted jobs
+- **Client** creates + funds a random job every `JOB_CREATE_INTERVAL_MS` (default 3 min)
+- **Provider** polls every `JOB_POLL_INTERVAL_MS` (default 1 min) for matching jobs
+- **Evaluator** polls every `JOB_POLL_INTERVAL_MS` (default 1 min) for submitted jobs
 
-## 6. Common Errors
+## 6. Job Templates
+
+The client bot randomly picks from 5 job templates per creation cycle:
+
+| Job Type | Capability | Difficulty | Description |
+|----------|-----------|------------|-------------|
+| `market_summary` | `market-summary` | medium | Top 5 crypto assets by 24h volume |
+| `risk_check` | `risk-check` | hard | DeFi lending protocol risk profile |
+| `sentiment_scan` | `sentiment-scan` | easy | BTC/ETH social media sentiment |
+| `execution_plan` | `execution-plan` | medium | DCA strategy across 3 L2 chains |
+| `data_quality_check` | `data-quality-check` | easy | Oracle feed consistency validation |
+
+Each job includes structured `inputPayload` with `jobType`, `query`, `requiredCapability`, `difficulty`, `nonce`, and `createdAt`.
+
+The provider bot uses `WORKER_CAPABILITIES` to filter which jobs it processes.
+The evaluator bot uses LLM (when configured) to judge result quality.
+
+## 7. Common Errors
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `participant_mismatch` | API key agentId doesn't match job participant | Ensure `WORKER_ID == PROVIDER_AGENT_ID` (or `WORKER_ID == WORKER_AGENT_ID`) in provider `.env` |
+| `participant_mismatch` | API key agentId doesn't match job participant | Ensure `WORKER_ID == PROVIDER_AGENT_ID` in provider `.env` |
 | `erc8183_job_not_funded` | Job hasn't been funded on-chain | Wait for client bot to complete the fund cycle |
 | `erc8183_job_not_claimed` | Provider tries to markRunning before claim | Provider handles this automatically in Phase 2 |
 | `insufficient_balance` | Wallet out of USDC | Top up wallet via Arc Testnet faucet |
-| Request timeout on RPC | Free tier rate limit | Retry or use a different RPC endpoint |
-
-## 7. Security Notes
-
-- **Never commit `.env` files.** This folder includes a `.gitignore` that excludes them. Use `.env.example` as template.
-- Each bot has its own API key scoped to only the actions it needs.
-- API key is sent via `Authorization: Bearer` header.
-- Wallet private keys never leave the bot process.
-- `AUTONOMOUS_TX=true` is required — the bot signs + broadcasts its own txs.
+| LLM evaluation failed | LLM_BASE_URL or LLM_API_KEY missing/wrong | Check LLM config; evaluator falls back to rules automatically |
 
 ## 8. Safety Guards
 
 | Env Var | Default | Description |
 |---------|---------|-------------|
-| `MAX_JOBS_PER_RUN` | 1 | Client | Stop after N total jobs. Set `0` only for unlimited recurring creation — dangerous for first run |
-| `MAX_OPEN_JOBS` | 5 | Client | Skip creation if too many open jobs |
+| `MAX_JOBS_PER_RUN` | 0 | Client — stop after N total jobs. `0` = unlimited |
+| `MAX_OPEN_JOBS` | 5 | Client — skip creation if too many open jobs |
 | `MAX_ACTIVE_JOBS` | 3 | Provider/evaluator — process at most N per cycle |
-| `MAX_BUDGET_ATOMIC` | — | Client — cap per-job budget (hardcoded in env) |
+| `MIN_EVAL_SCORE` | 70 | Evaluator — minimum score to approve (below = soft reject) |
 | `AUTONOMOUS_TX` | true | Required — enables on-chain signing |
 
-## 9. Production Checklist
+## 9. Future Extensions
+
+- **Protocol-level slash**: When ERC-8183 adds reject/dispute paths, evaluator can call `reject` instead of just skipping `complete`.
+- **Dynamic pricing**: Provider can adjust `setBudget` based on job difficulty.
+- **Multi-provider competition**: Multiple providers race to claim + submit.
+- **Reputation system**: Track provider success rate across jobs.
+- **Timeout recovery**: Auto-recover escrow if evaluator doesn't respond within expiry.
+
+## 10. Production Checklist
 
 - [ ] Register all 3 agents in external registry
 - [ ] Generate role-scoped API keys (client/provider/evaluator)
 - [ ] Fund wallets with USDC + ARC gas tokens
 - [ ] Run `npm run check:env` to verify `.env` files
 - [ ] Set `AUTONOMOUS_TX=true` in all `.env`
-- [ ] Verify `WORKER_ID == PROVIDER_AGENT_ID` (or `WORKER_ID == WORKER_AGENT_ID`) in provider `.env`
+- [ ] Verify `WORKER_ID == PROVIDER_AGENT_ID` in provider `.env`
+- [ ] Configure LLM credentials in evaluator `.env` (or accept rules fallback)
 - [ ] Test one full cycle manually
 - [ ] Deploy with PM2 ecosystem configs
 - [ ] Monitor logs for errors
-- [ ] Set `MAX_JOBS_PER_RUN` for controlled testing
