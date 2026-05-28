@@ -276,6 +276,11 @@ export async function getBridgeReceiptByPayload(input: {
   scope?: string;
   market?: string;
   agentId?: string;
+
+  buyerAgentId?: string;
+  sellerAgentId?: string;
+  sellerRole?: string;
+  accessType?: string;
 }) {
   let query = getSupabaseAdmin()
     .from('agent_bridge_receipts')
@@ -289,6 +294,11 @@ export async function getBridgeReceiptByPayload(input: {
   if (input.scope) query = query.eq('metadata->>scope', input.scope);
   if (input.market) query = query.eq('metadata->>market', input.market);
   if (input.agentId) query = query.eq('metadata->>agentId', input.agentId);
+
+  if (input.buyerAgentId) query = query.eq('metadata->>buyerAgentId', input.buyerAgentId);
+  if (input.sellerAgentId) query = query.eq('metadata->>sellerAgentId', input.sellerAgentId);
+  if (input.sellerRole) query = query.eq('metadata->>sellerRole', input.sellerRole);
+  if (input.accessType) query = query.eq('metadata->>accessType', input.accessType);
 
   const { data, error } = await query.maybeSingle();
 

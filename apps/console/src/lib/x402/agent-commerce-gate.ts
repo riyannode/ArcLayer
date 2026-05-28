@@ -134,6 +134,10 @@ export function withPredictionMarketSellerCommerceGate(
       scope: ctx.scope,
       market: ctx.market,
       agentId: ctx.buyerAgentId,
+      buyerAgentId: ctx.buyerAgentId,
+      sellerAgentId: ctx.sellerAgentId,
+      sellerRole: ctx.sellerRole,
+      accessType: ctx.accessType,
     }).catch((err) => {
       console.error('[agent-commerce-gate] receipt precheck failed:', err instanceof Error ? err.message : 'unknown');
       return null;
@@ -219,6 +223,10 @@ export function withPredictionMarketSellerCommerceGate(
           scope: ctx.scope,
           market: ctx.market,
           agentId: ctx.buyerAgentId,
+          buyerAgentId: ctx.buyerAgentId,
+          sellerAgentId: ctx.sellerAgentId,
+          sellerRole: ctx.sellerRole,
+          accessType: ctx.accessType,
         }).catch(() => null);
 
         if (duplicate) return;
