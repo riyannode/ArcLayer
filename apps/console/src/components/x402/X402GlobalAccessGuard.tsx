@@ -63,8 +63,22 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
           <div className="absolute inset-0 bg-[#050505]/45 backdrop-blur-[2px]" />
 
           <div className="relative h-full w-full">
-            <div className="pointer-events-auto absolute left-3 right-3 top-[330px] max-w-[440px] md:left-[98px] md:right-auto md:top-[360px] xl:left-[120px]">
-              <X402DemoPanel compact ticketOnly />
+            <div
+              className="pointer-events-auto absolute top-0 left-0 right-0 px-3 pt-8 md:pl-[68px] md:pr-5 md:pt-9 lg:pl-[78px] xl:pl-[88px] 2xl:pl-[96px]"
+            >
+              <div className="grid min-h-[calc(100svh-80px)] grid-cols-1 gap-y-6 md:grid-cols-12 md:items-start md:gap-x-12 xl:gap-x-14 2xl:gap-x-16">
+                {/* Left column — match homepage hero column */}
+                <div className="md:col-span-5 md:max-w-[540px] md:justify-self-start md:pl-6 xl:pl-8">
+                  <div className="flex max-w-[540px] flex-col justify-center">
+                    {/* Spacer for hero text height */}
+                    <div className="h-[260px] md:h-[280px]" />
+
+                    <div className="mt-5">
+                      <X402DemoPanel compact ticketOnly />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
