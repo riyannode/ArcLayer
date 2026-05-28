@@ -267,6 +267,35 @@ export async function listBridgeReceipts(sessionId: string) {
   return data ?? [];
 }
 
+export async function getBridgeReceiptByPayload(input: {
+  sessionId: string;
+  receiptType: BridgeReceiptType;
+  payloadHash: string;
+  category?: string;
+  role?: string;
+  scope?: string;
+  market?: string;
+  agentId?: string;
+}) {
+  let query = getSupabaseAdmin()
+    .from('agent_bridge_receipts')
+    .select('id, session_id, receipt_type, payment_id, transaction, payload_hash, metadata, created_at')
+    .eq('session_id', input.sessionId)
+    .eq('receipt_type', input.receiptType)
+    .eq('payload_hash', input.payloadHash);
+
+  if (input.category) query = query.eq('metadata->>category', input.category);
+  if (input.role) query = query.eq('metadata->>role', input.role);
+  if (input.scope) query = query.eq('metadata->>scope', input.scope);
+  if (input.market) query = query.eq('metadata->>market', input.market);
+  if (input.agentId) query = query.eq('metadata->>agentId', input.agentId);
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data ?? null;
+}
+
 async function countBridgeEvents(sessionId: string) {
   const { count, error } = await getSupabaseAdmin()
     .from('agent_bridge_events')
