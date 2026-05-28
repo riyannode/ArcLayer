@@ -117,7 +117,14 @@ async function callJuneApi({ systemPrompt, userMessage, role }) {
   const msg = data?.choices?.[0]?.message;
   // Reasoning models (qwen, kimi, deepseek-v4-pro) put output in `reasoning`,
   // non-reasoning models (gemini-flash, deepseek-v4-flash, claude) put it in `content`.
-  const content = msg?.content || msg?.reasoning;
+  const reasoning = msg?.reasoning || null;
+  const content = msg?.content || reasoning;
+
+  // Log reasoning if present
+  if (reasoning) {
+    const preview = typeof reasoning === 'string' ? reasoning.slice(0, 300) : JSON.stringify(reasoning).slice(0, 300);
+    console.log(`[llm:${role}] reasoning: ${preview}${reasoning.length > 300 ? '...' : ''}`);
+  }
 
   if (!content) {
     throw new Error("June API returned empty response");
@@ -236,8 +243,10 @@ async function processWithLlm({ role, upstreamData, config }) {
       const userMessage = buildUserMessage(role, upstreamData, config);
 
       const startMs = Date.now();
+      console.log(`[llm:${role}] calling ${provider} model=${model}`);
       const result = await callJuneApi({ systemPrompt, userMessage, role });
       const latencyMs = Date.now() - startMs;
+      console.log(`[llm:${role}] OK in ${latencyMs}ms`);
 
       return {
         ...result,
