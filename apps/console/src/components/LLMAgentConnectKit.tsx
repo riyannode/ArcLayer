@@ -11,7 +11,7 @@ const RPC_URL = 'https://rpc.drpc.testnet.arc.network';
 const ERC8004_IDENTITY_REGISTRY = '0x8004A818BFB912233c491871b3d84c89A494BD9e';
 
 type LLMConnectMode = 'manual' | 'autonomous';
-type SnippetKind = 'curl' | 'python' | 'typescript' | 'hermes';
+type SnippetKind = 'curl' | 'python' | 'typescript' | 'node-runtime';
 
 type Props = {
   mode: LLMConnectMode;
@@ -90,7 +90,7 @@ def register_agent(name, skill, metadata_uri):
 if __name__ == '__main__':
     print('agents=', discover_agents())
     print('jobs=', search_jobs(os.getenv('JOB_QUERY', ''))[:5])
-    # print(register_agent('hermes-auditor-01', 'solidity-auditor', 'arclayer://agent/hermes-auditor-01'))`;
+    # print(register_agent('external-auditor-01', 'solidity-auditor', 'arclayer://agent/external-auditor-01'))`;
 }
 
 function buildTypeScript(mode: LLMConnectMode) {
@@ -137,10 +137,10 @@ function buildTypeScript(mode: LLMConnectMode) {
   ].join('\n');
 }
 
-function buildHermes(mode: LLMConnectMode) {
+function buildNodeRuntime(mode: LLMConnectMode) {
   return `---
 name: arclayer-agent-connect
-description: Register and discover ArcLayer ${mode} jobs from Hermes/OpenClaw/LLM agents.
+description: Register and discover ArcLayer ${mode} jobs from external LLM agents.
 ---
 
 ## Use when
@@ -167,7 +167,7 @@ const TABS: Array<{ id: SnippetKind; label: string }> = [
   { id: 'curl', label: 'cURL' },
   { id: 'python', label: 'Python' },
   { id: 'typescript', label: 'TypeScript' },
-  { id: 'hermes', label: 'Hermes Skill' },
+  { id: 'node-runtime', label: 'Node Runtime Skill' },
 ];
 
 export function LLMAgentConnectKit({ mode, className = '' }: Props) {
@@ -232,7 +232,7 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
   const snippet = useMemo(() => {
     if (tab === 'python') return buildPython(mode);
     if (tab === 'typescript') return buildTypeScript(mode);
-    if (tab === 'hermes') return buildHermes(mode);
+    if (tab === 'node-runtime') return buildNodeRuntime(mode);
     return buildCurl(mode);
   }, [mode, tab]);
 
@@ -249,7 +249,7 @@ export function LLMAgentConnectKit({ mode, className = '' }: Props) {
           <div className="aureo-mono-label mb-2">LLM CONNECT</div>
           <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Connect LLM Agent</h2>
           <p className="mt-2 max-w-2xl font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)] invisible">
-            Hermes, OpenClaw, or custom agents can discover jobs, register identity, and integrate with ArcLayer using scriptable endpoints.
+            External LLM runtimes can discover jobs, register identity, and integrate with ArcLayer using scriptable endpoints.
           </p>
         </div>
         <button type="button" onClick={() => setOpen((v) => !v)} className="btn-primary shrink-0">

@@ -13,6 +13,21 @@ function optional(name: string, fallback = '') {
   return process.env[name]?.trim() || fallback;
 }
 
+function allowExampleAgents() {
+  return process.env.ALLOW_EXAMPLE_AGENTS === 'true';
+}
+
+function exampleAgentId(role: 'client' | 'provider' | 'evaluator') {
+  return ['erc8183', role, '001'].join('-');
+}
+
+function agentIdFromEnv(name: string, role: 'client' | 'provider' | 'evaluator') {
+  const value = process.env[name]?.trim();
+  if (value) return value;
+  if (allowExampleAgents()) return exampleAgentId(role);
+  throw new Error(`Missing ${name}. Set it explicitly, or set ALLOW_EXAMPLE_AGENTS=true to use example agent IDs.`);
+}
+
 function normalizePrivateKey(value: string): `0x${string}` {
   return value.startsWith('0x') ? (value as `0x${string}`) : (`0x${value}` as `0x${string}`);
 }
@@ -27,21 +42,21 @@ type AgentConfig = {
 
 const agents: AgentConfig[] = [
   {
-    agentId: optional('CLIENT_AGENT_ID', 'erc8183-client-001'),
+    agentId: agentIdFromEnv('CLIENT_AGENT_ID', 'client'),
     name: optional('CLIENT_AGENT_NAME', 'ERC-8183 Client Bot'),
     endpoint: optional('CLIENT_AGENT_ENDPOINT', 'https://client-bot.example.com'),
     privateKeyEnv: 'CLIENT_PRIVATE_KEY',
     capabilities: ['erc8183-client', 'create-job', 'fund-escrow'],
   },
   {
-    agentId: optional('PROVIDER_AGENT_ID', 'erc8183-provider-001'),
+    agentId: agentIdFromEnv('PROVIDER_AGENT_ID', 'provider'),
     name: optional('PROVIDER_AGENT_NAME', 'ERC-8183 Provider Bot'),
     endpoint: optional('PROVIDER_AGENT_ENDPOINT', 'https://provider-bot.example.com'),
     privateKeyEnv: 'PROVIDER_PRIVATE_KEY',
     capabilities: ['erc8183-provider', 'claim-job', 'run-job', 'submit-deliverable'],
   },
   {
-    agentId: optional('EVALUATOR_AGENT_ID', 'erc8183-evaluator-001'),
+    agentId: agentIdFromEnv('EVALUATOR_AGENT_ID', 'evaluator'),
     name: optional('EVALUATOR_AGENT_NAME', 'ERC-8183 Evaluator Bot'),
     endpoint: optional('EVALUATOR_AGENT_ENDPOINT', 'https://evaluator-bot.example.com'),
     privateKeyEnv: 'EVALUATOR_PRIVATE_KEY',

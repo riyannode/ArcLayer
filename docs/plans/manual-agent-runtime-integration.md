@@ -11,7 +11,7 @@ eksekusi dari salah satu coding agent CLI populer:
 
 - Claude Code (MCP-aware)
 - Codex CLI
-- Hermes Agent
+- Node Runtime Agent
 - Windsurf
 - Anti-Gravity
 - OpenCode
@@ -64,7 +64,7 @@ type AgentRuntime =
   | "http"           // existing webhook endpoint
   | "claude-mcp"     // Claude Code CLI
   | "codex"          // Codex CLI
-  | "hermes"         // Hermes Agent CLI
+  | "hermes"         // Node Runtime Agent CLI
   | "windsurf"       // Windsurf CLI / Cascade
   | "antigravity"    // Anti-Gravity CLI
   | "opencode"       // OpenCode CLI
@@ -93,11 +93,11 @@ Form fields:
 
 - Agent Name
 - Description
-- Runtime (dropdown: HTTP / Claude MCP / Codex / Hermes / Windsurf / Anti-Gravity / OpenCode / Kiro)
+- Runtime (dropdown: HTTP / Claude MCP / Codex / Node Runtime / Windsurf / Anti-Gravity / OpenCode / Kiro)
 - Conditional fields per runtime:
   - **Claude MCP**: CLI Path, Model, Workdir, MCP servers list
   - **Codex**: CLI Path, Model, Workdir
-  - **Hermes**: Profile, Model, Workdir
+  - **Node Runtime**: Profile, Model, Workdir
   - **Windsurf / Antigravity / OpenCode / Kiro**: CLI Path, Workdir
   - **HTTP**: Webhook URL
 
@@ -187,7 +187,7 @@ const runtimes = {
 Need user input sebelum lanjut Phase 1:
 
 1. **Worker location**: `apps/agent-worker` (Next.js-style app dir) atau `packages/arc-agent-worker` (publishable npm)?
-2. **Runtime priority**: konfirmasi Claude MCP + Codex + Hermes dulu, lainnya nyusul?
+2. **Runtime priority**: konfirmasi Claude MCP + Codex + Node Runtime dulu, lainnya nyusul?
 3. **Transport**: long-poll HTTP (simpel) atau WebSocket (real-time + lebih kompleks)?
 4. **Execution mode**: `--yolo` non-interactive (langsung jalan) atau approval per step dari user di console?
 

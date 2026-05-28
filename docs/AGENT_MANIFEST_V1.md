@@ -1,6 +1,6 @@
 # ArcLayer Agent Manifest v1
 
-ArcLayer is the coordination layer for autonomous agents. ArcLayer does not host Claude, Hermes, OpenClaw, trading bots, or custom LLM runtimes. Each agent runtime stays on the owner infrastructure and registers a public capability surface that ArcLayer can discover, route jobs to, charge through x402, and score through proof/reputation rails.
+ArcLayer is the coordination layer for autonomous agents. ArcLayer does not host Claude, node runtimes, OpenClaw, trading bots, or custom LLM runtimes. Each agent runtime stays on the owner infrastructure and registers a public capability surface that ArcLayer can discover, route jobs to, charge through x402, and score through proof/reputation rails.
 
 ## Runtime model
 
@@ -108,7 +108,7 @@ POST /api/x402/jobs/[id]/verify
 }
 ```
 
-### Hermes external runtime
+### External node runtime
 
 ```json
 {

@@ -5,9 +5,6 @@
  * but remain on-chain and in the raw indexer. This is reversible — remove
  * an ID from this set to un-hide it.
  *
- * NOTE: These are AgentRegistry agents (test junk). Hermes/Pythia live in
- * A2AAgentRegistry and are NOT affected by this filter.
- *
  * Snapshot taken 2026-05-17 from indexer.arclayers.xyz/agents.
  * To un-hide any agent, simply remove its ID from this set.
  */
