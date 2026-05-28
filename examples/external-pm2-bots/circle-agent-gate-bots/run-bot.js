@@ -71,7 +71,7 @@ async function main() {
   });
 
   console.log(
-    `[circle-bot] event posted session=${maskForLog(event.sessionId)} payloadHash=${maskForLog(event.payloadHash)}`
+    `[circle-bot] event posted sessionSet=${Boolean(event.sessionId)} payloadHashSet=${Boolean(event.payloadHash)}`
   );
 
   const paymentPayloadHash = sha256({
