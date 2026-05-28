@@ -29,14 +29,14 @@ Important product, protocol, build, and grant-readiness changes from the last 7 
 - Added paid signal, orderbook, and history endpoints.
 - Improved payment success/replay guard notification flow.
 - Removed native payer session lock; nonce-based replay guard remains.
-- Added LLM Agent Connect Kit with cURL, Python, TypeScript, and Hermes examples.
+- Added LLM Agent Connect Kit with cURL, Python, TypeScript, and node runtime examples.
 
 ## 2026-05-17
 
 ### A2A protocol + agents
-- Integrated Ignia oracle, Apolo resolver, and Hermes buyer flow.
-- Added Apolo to A2A status response.
-- Renamed and clarified the Ignia → Apolo → Hermes graph.
+- Integrated oracle, resolver, and buyer flow.
+- Added deterministic routing status updates.
+- Renamed and clarified the oracle → resolver → buyer graph.
 - Added per-agent winrate and PnL stats.
 - Added live proof metrics, signal stream, and market telemetry.
 

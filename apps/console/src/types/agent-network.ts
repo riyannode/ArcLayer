@@ -108,8 +108,8 @@ export type AgentStats = {
 export type A2AOnChain = {
   chainId: number;
   contracts: Record<string, string>;
-  agents: Record<string, { agentId: string; role: string; stats: AgentStats | null }>;
-  balances: { usdc: { hermes: string | null; pythia: string | null } };
-  markets: { totalMarkets: number | null; totalMirrors: number | null };
+  agents?: Record<string, { agentId: string; role: string; stats: AgentStats | null }>;
+  balances?: { usdc?: Record<string, string | null> };
+  markets: { totalMirrors: number | null };
   timestamp: string;
 };

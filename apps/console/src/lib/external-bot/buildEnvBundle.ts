@@ -5,7 +5,7 @@
  *
  * agentId consistency (fix #3):
  *   - ARCLAYER_AGENT_ID = minted ERC-8004 token ID (matches key agentId)
- *   - RUNTIME_ID = branded name as prefix (e.g. hermes-oracle-runtime-01)
+ *   - RUNTIME_ID = branded name as prefix (e.g. signal-oracle-runtime-01)
  *   - ARCLAYER_ERC8004_ID = full on-chain reference
  */
 
@@ -25,7 +25,7 @@ export function buildEnvBundle(input: {
   agentIds: string[];
   apiKeys: string[];
   erc8004Ids: string[];
-  /** Branded names for RUNTIME_ID prefix (e.g. hermes-oracle). If omitted, falls back to agentId. */
+  /** Branded names for RUNTIME_ID prefix (e.g. signal-oracle). If omitted, falls back to agentId. */
   runtimeNames?: string[];
   payoutAddress?: string;
 }): EnvBundle {

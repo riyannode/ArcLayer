@@ -50,7 +50,7 @@ type TxRow = {
   roleId: string;
   /** agentId used for manifest, keys, and env. After mint: set to mintedTokenId. */
   agentId: string;
-  /** Branded display name (e.g. hermes-oracle). Stays in RUNTIME_ID prefix only. */
+  /** Branded display name (e.g. signal-oracle). Stays in RUNTIME_ID prefix only. */
   brandedName: string;
   step: 'pending' | 'signing' | 'tx' | 'minted' | 'failed';
   txHash?: string;

@@ -1,15 +1,14 @@
 /**
  * agent-wallet.ts — ArcLayer autonomous agent wallet executor.
  *
- * INTERNAL USE ONLY — Hermes on-chain executor.
+ * INTERNAL USE ONLY — service executor for on-chain transactions.
  *
  * This module is strictly server-side. It MUST NOT be imported from client
  * components or API routes that expose it publicly.
  *
  * Security model:
- *   - Only Hermes (AGENT_EXECUTOR_ROLE=hermes) can sign on-chain transactions.
- *   - Pythia/Apollo are reasoning-only agents. They may sign x402 payments
- *     via a separate surface, but MUST NOT use this executor for on-chain tx.
+ *   - Only the internal service executor (AGENT_EXECUTOR_ROLE=service-executor) can sign on-chain transactions.
+ *   - External agents may use separate x402 payment surfaces, but MUST NOT use this executor for on-chain tx.
  *   - All transactions are allowlisted by contract + function selector.
  *   - USDC.approve is additionally decoded: spender must be JOB_ESCROW,
  *     amount must be <= AGENT_EXECUTOR_MAX_USDC_ATOMIC.
@@ -198,10 +197,10 @@ const ALLOWED_SELECTORS: Record<AllowedSelector, { to: Address; selector: Hex }>
   'JobEscrow.cancelJob': { to: JOB_ESCROW as Address, selector: '0x1dffa3dc' },
 };
 
-function assertHermesExecutor() {
+function assertServiceExecutor() {
   const role = (process.env.AGENT_EXECUTOR_ROLE || '').toLowerCase();
-  if (role !== 'hermes') {
-    throw new Error('agent-wallet is internal-only: set AGENT_EXECUTOR_ROLE=hermes to enable signing');
+  if (role !== 'service-executor') {
+    throw new Error('agent-wallet is internal-only: set AGENT_EXECUTOR_ROLE=service-executor to enable signing');
   }
 }
 
@@ -267,7 +266,7 @@ async function sendAndWait(to: Address, data: Hex, value = BigInt(0), gas?: bigi
   if (!process.env.AGENT_EXECUTOR_PRIVATE_KEY) {
     return dryRunResult(to, data, 'AGENT_EXECUTOR_PRIVATE_KEY missing');
   }
-  assertHermesExecutor();
+  assertServiceExecutor();
 
   const w = wallet();
   const addr = agentAddress();
@@ -447,7 +446,7 @@ export async function cancelJob(jobId: bigint | string): Promise<TxResult> {
 }
 
 /**
- * Execute allowlisted calldata only. Internal Hermes executor surface — not a public signer.
+ * Execute allowlisted calldata only. Internal service executor surface — not a public signer.
  */
 export async function executeCalldata(
   to: Address,

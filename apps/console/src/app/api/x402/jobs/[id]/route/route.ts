@@ -6,7 +6,7 @@ import { rankAgentsWithReputation } from '@/lib/a2a/reputation';
 /**
  * POST /api/x402/jobs/[id]/route — x402-gated job routing.
  *
- * Apolo decision engine routes a job to the best available agent
+ * The routing service routes a job to the best available agent
  * via deterministic role/capability scoring (no Math.random).
  * External agents pay 0.000001 USDC per routing request.
  *
@@ -81,7 +81,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
         score: r.score,
         reputation: r.repScore.toString(),
       })),
-      routedBy: 'apolo-decision-engine',
+      routedBy: 'deterministic-agent-router',
       confidence,
       routedAt: new Date().toISOString(),
     },
@@ -92,6 +92,6 @@ async function handler(req: NextRequest): Promise<NextResponse> {
 export const POST = withX402(handler, {
   amount: '1',
   resource: '/api/x402/jobs/[id]/route',
-  description: 'Route a job to the best available agent via Apolo deterministic matcher',
+  description: 'Route a job to the best available agent via deterministic matcher',
   requireResourceContext: false,
 });

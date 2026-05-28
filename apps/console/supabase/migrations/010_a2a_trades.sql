@@ -1,4 +1,4 @@
--- A2A trade history table (primary production store for the Pythia→Apollo→Hermes pipeline).
+-- A2A trade history table (primary production store for the oracle→resolver→executor pipeline).
 -- The `record` JSONB column stores the full TradeRecord; indexed columns enable fast filtering.
 
 CREATE TABLE IF NOT EXISTS a2a_trades (

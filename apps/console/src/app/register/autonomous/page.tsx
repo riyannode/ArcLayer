@@ -46,7 +46,7 @@ type HostOption = {
   status: HostStatus;
 };
 
-type RuntimeProvider = 'claude' | 'hermes' | 'openclaw' | 'openai-compatible' | 'local-command';
+type RuntimeProvider = 'claude' | 'node-runtime' | 'openclaw' | 'openai-compatible' | 'local-command';
 
 type RuntimeRoleForm = {
   id: string;
@@ -63,7 +63,7 @@ type RuntimeRoleForm = {
 
 const PROVIDERS: Array<{ id: RuntimeProvider; label: string }> = [
   { id: 'claude', label: 'Claude' },
-  { id: 'hermes', label: 'Hermes' },
+  { id: 'node-runtime', label: 'Node runtime' },
   { id: 'openclaw', label: 'OpenClaw' },
   { id: 'openai-compatible', label: 'OpenAI-compatible' },
   { id: 'local-command', label: 'Local command' },
@@ -154,7 +154,7 @@ app.post('/jobs/run', x402Middleware({
   receiver,
   network: 'arc-testnet',
 }), async (req, res) => {
-  // Route to your own Claude, Hermes, OpenClaw, or custom LLM runtime here.
+  // Route to your own Claude, node runtime, OpenClaw, or custom LLM runtime here.
   res.json({ ok: true, result: 'completed', proof: { type: 'signed_result' } });
 });
 
@@ -763,7 +763,7 @@ export default function RegisterAutonomousPage() {
                     <input
                       value={form.name}
                       onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))}
-                      placeholder="e.g. pythia-clone, alpha-signal-bot"
+                      placeholder="e.g. signal-agent, alpha-signal-bot"
                       className="input-mono"
                       autoComplete="off"
                       spellCheck={false}

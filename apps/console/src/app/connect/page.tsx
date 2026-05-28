@@ -4,13 +4,13 @@
  * /connect — Developer landing for "bring your own LLM runtime".
  *
  * This page is the entrypoint for any external agent runtime (Claude Desktop,
- * Cursor, Hermes, OpenClaw, custom Python/TS) that wants to plug into ArcLayer
+ * Cursor, node runtimes, OpenClaw, custom Python/TS) that wants to plug into ArcLayer
  * rails without ArcLayer hosting their LLM.
  *
  * Surfaces:
  *   1. Discovery manifest pointer (/.well-known/agent.json)
  *   2. MCP one-line install (/api/mcp)
- *   3. Code snippets per runtime (curl / Python / TypeScript / Hermes / OpenClaw)
+ *   3. Code snippets per runtime (curl / Python / TypeScript / node runtime / OpenClaw)
  *   4. CTA → /register/external-bot
  */
 
@@ -25,7 +25,7 @@ const TABS = [
   { id: 'python', label: 'Python' },
   { id: 'typescript', label: 'TypeScript' },
   { id: 'mcp', label: 'MCP (Claude / Cursor)' },
-  { id: 'hermes', label: 'Hermes' },
+  { id: 'node-runtime', label: 'Node Runtime' },
   { id: 'openclaw', label: 'OpenClaw' },
 ] as const;
 
@@ -139,21 +139,21 @@ curl -s -X POST ${BASE_URL}/api/mcp \\
 # Available tools (read): list_agents, get_agent, list_jobs, get_job, protocol_overview
 # Available tools (tx):   register_agent_calldata, create_job_calldata`,
 
-  hermes: `# Hermes runtime (Node-based, BYO LLM key)
-# Add ArcLayer as a tool. Hermes never sends your LLM key to ArcLayer.
+  'node-runtime': `# External node runtime (BYO LLM key)
+# Add ArcLayer as a tool. ArcLayer never receives your LLM key.
 
 # 1. Discover
-hermes tool exec http GET ${BASE_URL}/.well-known/agent.json
+node-runtime-agent tool exec http GET ${BASE_URL}/.well-known/agent.json
 
 # 2. List jobs you can take
-hermes tool exec http GET ${INDEXER_URL}/jobs
+node-runtime-agent tool exec http GET ${INDEXER_URL}/jobs
 
-# 3. Build registerAgent tx (Hermes signs with your local key)
-hermes tool exec http POST ${BASE_URL}/api/mcp \\
-  --json '{"tool":"register_agent_calldata","args":{"name":"hermes-bot","skill":"signals","metadataURI":"https://my.example.com/manifest.json"}}'
+# 3. Build registerAgent tx (your runtime signs with your local key)
+node-runtime-agent tool exec http POST ${BASE_URL}/api/mcp \\
+  --json '{"tool":"register_agent_calldata","args":{"name":"external-agent","skill":"signals","metadataURI":"https://my.example.com/manifest.json"}}'
 
-# 4. Sign + broadcast through hermes wallet
-hermes wallet send --to <to> --data <data> --chain 5042002`,
+# 4. Sign + broadcast through your runtime wallet
+node-runtime-agent wallet send --to <to> --data <data> --chain 5042002`,
 
   openclaw: `// OpenClaw external agent runtime
 // (Bring your own LLM. ArcLayer is rails only.)
