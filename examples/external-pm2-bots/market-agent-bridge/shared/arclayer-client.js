@@ -70,6 +70,7 @@ function buildRoleState(events) {
           payload: event.payload || {},
           type: normalizedType,
           eventId: event.id || event.eventId || null,
+          timestamp: event.created_at || event.timestamp || event.createdAt || event.updatedAt || null,
         };
         hasContent[role] = true;
       }
@@ -79,6 +80,7 @@ function buildRoleState(events) {
         payload: event.payload || {},
         type: normalizedType,
         eventId: event.id || event.eventId || null,
+        timestamp: event.created_at || event.timestamp || event.createdAt || event.updatedAt || null,
       };
       if (isContent) hasContent[role] = true;
     }
