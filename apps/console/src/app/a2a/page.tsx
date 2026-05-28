@@ -48,12 +48,7 @@ const TYPE_COLORS: Record<FeedItem['type'], string> = {
   error: 'bg-red-500/15 text-red-300 border-red-500/30',
 };
 
-const AGENT_COLORS: Record<FeedItem['agent'], string> = {
-  Pythia: 'text-cyan-200',
-  Ignia: 'text-cyan-300',
-  Apolo: 'text-violet-300',
-  Hermes: 'text-amber-300',
-};
+const AGENT_COLORS: Record<string, string> = {};
 
 function short(addr: string) {
   if (!addr || addr.length < 12) return addr || '—';
@@ -281,14 +276,14 @@ function A2ADashboardPage() {
       }
       setPrevFeedIds(currentIds);
 
-      const feedSignalCount = fdData.items.filter((item) => item.agent === 'Apolo' && item.type === 'payment').length;
-      const signalCount = Math.max(ocData?.agents.pythia?.stats?.callsServed ?? 0, feedSignalCount);
+      const feedSignalCount = fdData.items.filter((item) => item.type === 'payment').length;
+      const allSignalCount = Object.values(ocData?.agents || {}).reduce((sum: number, a: any) => sum + (a?.stats?.callsServed ?? 0), 0);
+      const signalCount = Math.max(allSignalCount, feedSignalCount);
 
-      // Volume sparkline: JobEscrow funded + x402 revenue (Apolo + Hermes)
+      // Volume sparkline: JobEscrow funded + ALL agent x402 revenue
       const jobFunded = Number(ovDataNormalized.summary.totalFunded || '0') / 1e6;
-      const pythiaRev = Number(ocData?.agents.pythia?.stats?.totalRevenue || '0') / 1e6;
-      const hermesRev = Number(ocData?.agents.hermes?.stats?.totalRevenue || '0') / 1e6;
-      const totalVol = jobFunded + pythiaRev + hermesRev;
+      const allAgentRevenue = Object.values(ocData?.agents || {}).reduce((sum: number, a: any) => sum + Number(a?.stats?.totalRevenue || '0') / 1e6, 0);
+      const totalVol = jobFunded + allAgentRevenue;
 
       setVolumeHistory((prev) => [...prev.slice(-29), totalVol]);
       setSignalHistory((prev) => [
@@ -328,8 +323,8 @@ function A2ADashboardPage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const summary = overview?.summary;
-  const ignia = onchain?.agents.pythia; // legacy on-chain key, branded as Ignia/Apolo
-  const hermes = onchain?.agents.hermes;
+  // Generic: aggregate ALL agents (no hardcoded names)
+  const allOnchainAgents = onchain?.agents ? Object.values(onchain.agents) : [];
   const latestFeedMs = feed?.latest ? Date.parse(feed.latest) : 0;
   const isLive = latestFeedMs > 0 && Date.now() - latestFeedMs < 120_000;
   const proofTxs = (feed?.items ?? []).filter((item) => item.tx);
@@ -339,25 +334,21 @@ function A2ADashboardPage() {
   const selectedAgent = useMemo(() => networkAgents.find((agent) => agent.id === selectedAgentId) ?? null, [networkAgents, selectedAgentId]);
   const activeFilterLabel = AGENT_FILTERS.find((item) => item.key === filter)?.label ?? 'All agents';
 
-  // Live-derived counters from autonomous feed (compensates for ReputationRegistry not being updated by agent telemetry)
+  // Live-derived counters from autonomous feed — aggregate ALL agents
   const feedItems = feed?.items ?? [];
-  const feedSignalsServed = feedItems.filter((item) => item.agent === 'Apolo' && item.type === 'payment').length;
-  const feedIgniaTrades = feedItems.filter((item) =>
-    item.agent === 'Hermes' && item.type === 'trade' && item.label.toLowerCase().includes('ignia')
-  ).length;
-  const liveSignalsServed = Math.max(ignia?.stats?.callsServed ?? 0, feedSignalsServed);
-  const liveIgniaTrades = Math.max(hermes?.stats?.callsServed ?? 0, feedIgniaTrades);
+  const feedSignalCount = feedItems.filter((item) => item.type === 'payment').length;
+  const feedTradeCount = feedItems.filter((item) => item.type === 'trade').length;
+  const liveSignalsServed = allOnchainAgents.reduce((sum, a) => sum + (a?.stats?.callsServed ?? 0), 0) || feedSignalCount;
+  const liveTrades = allOnchainAgents.reduce((sum, a) => sum + (a?.stats?.callsServed ?? 0), 0) || feedTradeCount;
 
-  // Total volume = JobEscrow funded (manual jobs) + x402 signal revenue (Apolo + Hermes totalRevenue)
+  // Total volume = JobEscrow funded + ALL agent x402 revenue
   const jobsFundedRaw = safeBigInt(summary?.totalFunded);
-  const apoloRevenueRaw = safeBigInt(ignia?.stats?.totalRevenue);
-  const hermesRevenueRaw = safeBigInt(hermes?.stats?.totalRevenue);
-  const totalVolumeRaw = jobsFundedRaw + apoloRevenueRaw + hermesRevenueRaw;
+  const allRevenueRaw = allOnchainAgents.reduce((sum, a) => sum + safeBigInt(a?.stats?.totalRevenue), 0n);
+  const totalVolumeRaw = jobsFundedRaw + allRevenueRaw;
 
-  // Total USDC held by autonomous agents (live wallet balance)
-  const igniaBal = safeBigInt(onchain?.balances?.usdc?.pythia);
-  const hermesBal = safeBigInt(onchain?.balances?.usdc?.hermes);
-  const totalAgentBalanceRaw = igniaBal + hermesBal;
+  // Total USDC held by ALL autonomous agents (live wallet balance)
+  const usdcBalances = onchain?.balances?.usdc;
+  const totalAgentBalanceRaw = (usdcBalances ? Object.values(usdcBalances).reduce((sum: bigint, b) => sum + safeBigInt(b as string | number | bigint | null | undefined), 0n) : 0n);
 
   return (
     <main className="min-h-screen bg-[#0A0A0A] text-[#EAE4D8] selection:bg-[#C5A67C]/20">
