@@ -27,7 +27,8 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
     if (typeof window === 'undefined') return;
 
     if (!loading && !hasAccess && pathname !== '/') {
-      sessionStorage.setItem('x402_return_to', pathname);
+      const returnPath = window.location.pathname + window.location.search + window.location.hash;
+      sessionStorage.setItem('x402_return_to', returnPath);
       router.replace('/');
     }
   }, [loading, hasAccess, pathname, router]);
@@ -58,25 +59,13 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
       </div>
 
       {locked && pathname === '/' && (
-        <div className="fixed inset-0 z-[999] flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-[#050505]/70 backdrop-blur-[3px]" />
+        <div className="fixed inset-0 z-[999] pointer-events-none">
+          <div className="absolute inset-0 bg-[#050505]/45 backdrop-blur-[2px]" />
 
-          <div className="relative z-10 w-full max-w-[440px]">
-            <div className="mb-4 text-center">
-              <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#C5A67C]">
-                x402 protected access
-              </div>
-
-              <h2 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-[#EAE4D8]">
-                Unlock ArcLayer
-              </h2>
-
-              <p className="mt-2 text-xs leading-5 text-white/60">
-                Connect wallet and complete x402 payment to open the full protocol UI.
-              </p>
+          <div className="relative h-full w-full">
+            <div className="pointer-events-auto absolute left-3 right-3 top-[330px] max-w-[440px] md:left-[98px] md:right-auto md:top-[360px] xl:left-[120px]">
+              <X402DemoPanel compact ticketOnly />
             </div>
-
-            <X402DemoPanel compact ticketOnly />
           </div>
         </div>
       )}
