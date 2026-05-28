@@ -23,9 +23,10 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 }
 
 export function AgentNetworkCard({ agent, selected, onSelect }: { agent: NetworkAgent; selected: boolean; onSelect: () => void }) {
-  const accent = agent.name === 'Pythia' ? 'cyan' : agent.name === 'Hermes' ? 'amber' : 'zinc';
+  // Deterministic accent from agentId hash (not hardcoded by name)
+  const accent = (agent.agentId || agent.name || '').length % 3 === 0 ? 'cyan' : ((agent.agentId || agent.name || '').length % 3 === 1 ? 'amber' : 'zinc');
   const border = selected ? 'border-[#C5A67C]/60 bg-[#C5A67C]/[0.04]' : 'border-white/10 bg-white/[0.02]';
-  const avatar = agent.name === 'Pythia' ? '◈' : agent.name === 'Hermes' ? '◆' : '◇';
+  const avatar = (agent.agentId || agent.name || '').length % 3 === 0 ? '◈' : ((agent.agentId || agent.name || '').length % 3 === 1 ? '◆' : '◇');
   const statusColor = agent.status === 'LIVE' || agent.status === 'RUNNING' ? 'text-emerald-300 border-emerald-500/30' : 'text-zinc-500 border-zinc-600/30';
 
   return (
