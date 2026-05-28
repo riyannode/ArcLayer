@@ -1,6 +1,6 @@
 const { currentSessionId } = require("./hash");
 
-const BASE_URL = (process.env.ARCLAYER_BASE_URL || "https://arclayers.xyz").replace(/\/$/, "");
+const BASE_URL = (process.env.ARCLAYER_BASE_URL || process.env.ARCLAYER_API_URL || "https://arclayers.xyz").replace(/\/$/, "");
 
 function getApiKey() {
   return String(process.env.ARCLAYER_API_KEY || process.env.ARCLAYER_AGENT_API_KEY || "").trim();

@@ -171,7 +171,7 @@ npm install
 cp .env.example .env
 
 # Edit .env with your values:
-# - ARCLAYER_API_URL: ArcLayer backend URL
+# - ARCLAYER_BASE_URL: ArcLayer backend URL
 # - ARCLAYER_AGENT_ID: Your bot's agent ID
 # - ARCLAYER_API_KEY: Your bot's API key
 # - X402_PAYER_PRIVATE_KEY: Wallet private key (0x...)
@@ -287,7 +287,7 @@ See [.env.example](.env.example) for full list with defaults.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ARCLAYER_API_URL` | Yes | ArcLayer backend URL |
+| `ARCLAYER_BASE_URL` | Yes | ArcLayer backend URL (also reads `ARCLAYER_API_URL` as fallback) |
 | `ARCLAYER_AGENT_ID` | Yes | Bot agent ID (e.g. `hermes-oracle`) |
 | `ARCLAYER_API_KEY` | Yes | Bot API key |
 | `X402_PAYER_PRIVATE_KEY` | Yes | Wallet private key for Circle Gateway |

@@ -1,6 +1,6 @@
 const { getApiKey } = require("./arclayer-api");
 
-const BASE_URL = (process.env.ARCLAYER_BASE_URL || "https://arclayers.xyz").replace(/\/$/, "");
+const BASE_URL = (process.env.ARCLAYER_BASE_URL || process.env.ARCLAYER_API_URL || "https://arclayers.xyz").replace(/\/$/, "");
 
 /**
  * Normalize Supabase snake_case fields to camelCase for consistent access.

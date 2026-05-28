@@ -1,6 +1,6 @@
 const { GatewayClient } = require("@circle-fin/x402-batching/client");
 
-const BASE_URL = (process.env.ARCLAYER_BASE_URL || "https://arclayers.xyz").replace(/\/$/, "");
+const BASE_URL = (process.env.ARCLAYER_BASE_URL || process.env.ARCLAYER_API_URL || "https://arclayers.xyz").replace(/\/$/, "");
 
 function normalizePrivateKey(value) {
   const raw = String(value || "").trim();
