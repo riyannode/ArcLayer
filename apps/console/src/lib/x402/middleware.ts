@@ -452,10 +452,35 @@ async function handleGateway(
   })();
   if (earlyPayer) {
     const sessionClaim = await claimAccessSession(earlyPayer, opts.resource, 'circle-gateway');
+
     if (!sessionClaim.ok) {
+      if (sessionClaim.reason === 'active_session') {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'already_paid',
+            reason: 'active_session',
+            message: 'You already have an active access session for this resource.',
+            expiresAt: sessionClaim.expiresAt,
+          },
+          { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
+      }
+
+      console.error(
+        '[x402-gw] Access session claim failed for %s: %s',
+        String(opts.resource),
+        sessionClaim.reason ?? 'unknown',
+      );
+
       return NextResponse.json(
-        { ok: false, error: 'already_paid', message: 'You already have an active access session for this resource.', expiresAt: sessionClaim.expiresAt },
-        { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        {
+          ok: false,
+          error: 'session_store_unavailable',
+          reason: sessionClaim.reason ?? 'unknown',
+          message: 'x402 access session store is unavailable. Payment was not settled. Retry later.',
+        },
+        { status: 503, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
       );
     }
   }
