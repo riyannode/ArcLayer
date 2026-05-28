@@ -91,6 +91,8 @@ async function postReceiptReference({
   runtimeId,
   payment,
   llmReceipt,
+  rail = "x402_circle_gateway",
+  source = "circle-agent-gate",
 }) {
   return postBridgeEvent({
     sessionId,
@@ -99,16 +101,16 @@ async function postReceiptReference({
     runtimeId,
     type: "receipt_reference",
     payload: {
-      source: "circle-agent-gate",
-      rail: "x402_circle_gateway",
+      source,
+      rail,
       paymentId: payment.paymentId || null,
       txHash: payment.txHash || payment.transaction || null,
       payloadHash: payment.payloadHash || null,
       llmReceipt,
     },
     metadata: {
-      rail: "x402_circle_gateway",
-      source: "circle-agent-gate",
+      rail,
+      source,
     },
   });
 }
