@@ -70,6 +70,7 @@ export type AgentCommerceGateContext = {
   market: string;
   sessionId: string;
   runtimeId: string | null;
+  sourcePayloadHash: string | null;
   payloadHash: string;
   accessType: string;
   amountAtomic: string;
@@ -225,23 +226,25 @@ export function resolveAgentCommerceGate(input: Record<string, unknown>):
     };
   }
 
-  const rawPayloadHash = cleanString(input.payloadHash);
-  const payloadHash = isValidHash(rawPayloadHash)
-    ? rawPayloadHash
-    : stablePayloadHash({
-        category,
-        buyerAgentId,
-        buyerRole,
-        sellerAgentId,
-        sellerRole,
-        scope,
-        market,
-        sessionId,
-        runtimeId,
-        accessType,
-        payload: input.payload ?? {},
-        llmReceipt: input.llmReceipt ?? null,
-      });
+  const rawSourcePayloadHash = cleanString(input.payloadHash);
+  const sourcePayloadHash = isValidHash(rawSourcePayloadHash) ? rawSourcePayloadHash : null;
+
+  const payloadHash = stablePayloadHash({
+    purpose: 'x402_circle_commerce',
+    category,
+    buyerAgentId,
+    buyerRole,
+    sellerAgentId,
+    sellerRole,
+    scope,
+    market,
+    sessionId,
+    runtimeId,
+    accessType,
+    sourcePayloadHash,
+    payload: input.payload ?? {},
+    llmReceipt: input.llmReceipt ?? null,
+  });
 
   const amountAtomic = sellerPolicy.amountAtomic ?? categoryPolicy.defaultAmountAtomic;
 
@@ -267,6 +270,7 @@ export function resolveAgentCommerceGate(input: Record<string, unknown>):
       market,
       sessionId,
       runtimeId,
+      sourcePayloadHash,
       payloadHash,
       accessType,
       amountAtomic,

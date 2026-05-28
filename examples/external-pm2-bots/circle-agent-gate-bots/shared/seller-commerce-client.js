@@ -16,12 +16,20 @@ function getAgentId() {
   return String(process.env.ARCLAYER_AGENT_ID || process.env.AGENT_ID || "").trim();
 }
 
+function defaultScopeForSeller(sellerRole, accessType) {
+  if (sellerRole === "oracle") return "market_data";
+  if (sellerRole === "analyzer") return "analysis";
+  if (sellerRole === "evaluator") return "evaluation";
+  if (sellerRole === "executor") return "hft_session";
+  return "hft_session";
+}
+
 async function paySellerCommerceGate({
   sellerAgentId,
   sellerRole,
   buyerRole,
   category = process.env.AGENT_CATEGORY || "prediction-market-bots",
-  scope = process.env.AGENT_SCOPE || process.env.X402_SCOPE || "hft_session",
+  scope = process.env.AGENT_SCOPE || process.env.X402_SCOPE || defaultScopeForSeller(sellerRole, accessType),
   market = process.env.MARKET_ID || "btc-15m",
   sessionId,
   runtimeId = process.env.RUNTIME_ID || null,

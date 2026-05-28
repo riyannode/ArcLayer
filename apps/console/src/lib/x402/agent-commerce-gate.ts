@@ -22,6 +22,7 @@ async function validateCommerceSession(ctx: AgentCommerceGateContext) {
   const events = await listBridgeEvents({
     sessionId: ctx.sessionId,
     category: ctx.category,
+    agentId: ctx.buyerAgentId,
     limit: 10,
   });
 
@@ -235,6 +236,7 @@ export function withPredictionMarketSellerCommerceGate(
             scope: ctx.scope,
             market: ctx.market,
             accessType: ctx.accessType,
+            sourcePayloadHash: ctx.sourcePayloadHash,
             buyerAgentId: ctx.buyerAgentId,
             buyerRole: ctx.buyerRole,
             sellerAgentId: ctx.sellerAgentId,
