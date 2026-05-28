@@ -1,0 +1,76 @@
+'use client';
+
+import { type ReactNode, useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useX402Access } from '@/hooks/useX402Access';
+
+interface X402GlobalAccessGuardProps {
+  children: ReactNode;
+}
+
+/**
+ * X402GlobalAccessGuard
+ *
+ * Locks the public UI until the user unlocks the x402 protected resource.
+ *
+ * Important:
+ * - This guard does NOT render an extra X402DemoPanel.
+ * - The only active unlock panel is the existing homepage X402DemoPanel in HomeHero.
+ * - API routes are not affected by this React guard.
+ */
+export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuardProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { hasAccess, loading } = useX402Access();
+
+  const locked = loading || !hasAccess;
+  const lockedHome = locked && pathname === '/';
+  const lockedNonHome = locked && pathname !== '/';
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (!loading && !hasAccess && pathname !== '/') {
+      const returnPath =
+        window.location.pathname + window.location.search + window.location.hash;
+
+      sessionStorage.setItem('x402_return_to', returnPath);
+      router.replace('/');
+    }
+  }, [loading, hasAccess, pathname, router]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!hasAccess) return;
+
+    const returnTo = sessionStorage.getItem('x402_return_to');
+
+    if (
+      returnTo &&
+      returnTo !== '/' &&
+      returnTo.startsWith('/') &&
+      !returnTo.startsWith('//')
+    ) {
+      sessionStorage.removeItem('x402_return_to');
+      router.replace(returnTo);
+    }
+  }, [hasAccess, router]);
+
+  return (
+    <div
+      className="relative min-h-screen"
+      data-x402-locked-home={lockedHome ? 'true' : undefined}
+    >
+      <div
+        aria-hidden={lockedNonHome}
+        className={
+          lockedNonHome
+            ? 'pointer-events-none select-none blur-[12px] brightness-[0.35] transition duration-300'
+            : 'transition duration-300'
+        }
+      >
+        {children}
+      </div>
+    </div>
+  );
+}

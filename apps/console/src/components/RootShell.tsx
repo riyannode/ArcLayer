@@ -8,6 +8,7 @@ import Footer from '@/components/Footer';
 import WebGLBackground from '@/components/WebGLBackground';
 import { ProtectionNoticeProvider } from '@/components/protection';
 import ClientErrorBoundary from '@/components/ClientErrorBoundary';
+import X402GlobalAccessGuard from '@/components/x402/X402GlobalAccessGuard';
 
 export default function RootShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -25,21 +26,27 @@ export default function RootShell({ children }: { children: ReactNode }) {
         <Providers>
           <ClientErrorBoundary label="Protection notice">
             <ProtectionNoticeProvider>
-              <div className="relative z-10 min-h-screen flex flex-col">
-                <ClientErrorBoundary label="Navigation" fallback={null}>
-                  <Navbar />
-                </ClientErrorBoundary>
+              <X402GlobalAccessGuard>
+                <div className="relative z-10 min-h-screen flex flex-col">
+                  <div data-x402-blur-zone="true">
+                    <ClientErrorBoundary label="Navigation" fallback={null}>
+                      <Navbar />
+                    </ClientErrorBoundary>
+                  </div>
 
-                <main key={pathname} className="flex-1 page-transition">
-                  {children}
-                </main>
+                  <main key={pathname} className="flex-1 page-transition">
+                    {children}
+                  </main>
 
-                {!isLanding ? (
-                  <ClientErrorBoundary label="Footer" fallback={null}>
-                    <Footer />
-                  </ClientErrorBoundary>
-                ) : null}
-              </div>
+                  {!isLanding ? (
+                    <div data-x402-blur-zone="true">
+                      <ClientErrorBoundary label="Footer" fallback={null}>
+                        <Footer />
+                      </ClientErrorBoundary>
+                    </div>
+                  ) : null}
+                </div>
+              </X402GlobalAccessGuard>
             </ProtectionNoticeProvider>
           </ClientErrorBoundary>
         </Providers>
