@@ -1,0 +1,26 @@
+{
+  "category": "prediction-market-bots",
+  "role": "oracle",
+  "scope": "hft_session",
+  "market": "btc-15m",
+  "runtimeId": "circle-oracle-01",
+  "eventType": "execution_intent",
+  "payload": {
+    "source": "independent-circle-x402-bot",
+    "action": "DRY_RUN_ONLY",
+    "decision": "SKIP",
+    "confidence": 0.72,
+    "summary": "Independent Circle x402 oracle bot created a dry-run execution receipt."
+  },
+  "llmReceipt": {
+    "summary": "x402Circle oracle analyzed the market and skipped execution due to risk settings.",
+    "provider": "local",
+    "model": "mock-llm",
+    "decision": "SKIP",
+    "confidence": 0.72,
+    "riskFlags": [
+      "dry_run",
+      "no_external_execution"
+    ]
+  }
+}

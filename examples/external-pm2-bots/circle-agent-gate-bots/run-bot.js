@@ -60,7 +60,7 @@ async function main() {
     sessionId,
     category,
     role,
-    type: config.eventType || "circle_gate_intent",
+    type: config.eventType || "execution_intent",
     runtimeId,
     payload,
     metadata: {
