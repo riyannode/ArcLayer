@@ -1,51 +1,58 @@
-# External PM2 Market Agent Bridge
+# ArcLayer Examples
 
-Multi-agent prediction market bot running on VPS via PM2.
+Example bots and templates for building on ArcLayer.
 
-## Architecture
+## Examples
 
-4 independent agents, each with dedicated LLM and wallet config:
+### [external-pm2-bots/market-agent-bridge](./external-pm2-bots/market-agent-bridge/)
 
-| Bot | Role | Mode |
-|:---|:---|:---|
-| **Oracle** | Fetches raw Polymarket BTC 15m feed | `RUN_FOREVER=true` |
-| **Analyzer** | LLM market analysis | `RUN_FOREVER=true` |
-| **Evaluator** | Risk evaluation | `RUN_FOREVER=true` |
-| **Executor** | DRY_RUN execution intent | `RUN_FOREVER=true` |
+Prediction market pipeline — 4 independent PM2 bots running BTC 15-minute analysis on Arc Testnet.
 
-## Modes
+| Bot | Role | LLM |
+|:----|:-----|:----|
+| Oracle | Fetches Polymarket market data | ✅ |
+| Analyzer | BPS signal + LLM market analysis | ✅ |
+| Evaluator | Risk gates + LLM decision | ✅ |
+| Executor | Zero-guard poller + x402 payment | ❌ |
 
-### Independent (default)
-4 separate PM2 processes, each runs forever. Oracle does NOT spawn children.
+All bots run independently as separate PM2 processes. No child spawning.
+
+### [external-erc8183-bots](./external-erc8183-bots/)
+
+ERC-8183 escrow job bots — client, provider, and evaluator that autonomously create, execute, and complete escrow jobs.
+
+| Bot | Role |
+|:----|:-----|
+| Client | Creates + funds escrow jobs |
+| Provider | Sets budget, claims, runs, submits |
+| Evaluator | Reviews deliverables, completes escrow |
+
+### [external-erc8183-jobs](./external-erc8183-jobs/)
+
+ERC-8183 job interaction examples.
+
+### [external-agent-jobs](./external-agent-jobs/)
+
+Agent job examples.
+
+### [runtime-gateway-template](./runtime-gateway-template/)
+
+Runtime gateway template for building custom agent runtimes.
+
+## Quick Start
+
+Each example is standalone — install and run from its own directory:
 
 ```bash
-pm2 start ecosystem.independent.config.cjs
-```
-
-### Chain
-1 PM2 process (oracle only). Oracle spawns children per cycle via spawnSync.
-
-```bash
-pm2 start ecosystem.chain.config.cjs
-```
-
-Do not run both modes at the same time.
-
-## Env loading
-
-Each bot loads `.env.common` first, then `.env.<role>` overrides it.
-PM2 ecosystem config controls mode keys (`EVENT_CHAIN_ENABLED`, `RUN_FOREVER`).
-
-```bash
-cp .env.common.example .env.common
-cp .env.oracle.example .env.oracle
-cp .env.analyzer.example .env.analyzer
-cp .env.evaluator.example .env.evaluator
-cp .env.executor.example .env.executor
+cd examples/<example-dir>
+npm install
+cp .env.example .env  # or .env.*.example → .env.*
+# Fill in your values
+pm2 start ecosystem.config.cjs
 ```
 
 ## Security
 
-- `.env.*` gitignored; only `.env.*.example` tracked.
-- No API keys, private keys, or wallet keys in repo.
-- Each bot uses unique `ARCLAYER_AGENT_ID`, `RUNTIME_ID`, and x402 wallet.
+- Never commit `.env` files — all examples include `.gitignore`
+- Each bot uses its own API key with scoped permissions
+- Wallet private keys never leave the bot process

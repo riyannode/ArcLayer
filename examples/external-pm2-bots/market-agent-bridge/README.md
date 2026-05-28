@@ -1,209 +1,168 @@
-# ArcLayer External PM2 Market Agent Bridge
+# Market Agent Bridge — Prediction Market Bots
 
-External PM2 market agent bridge example: external PM2 bots make market decisions while ArcLayer acts as the protocol bridge for identity, x402 access, bridge events, receipts, payload hashes, and proof history on Arc.
+> **Standalone example.** This directory is NOT part of the root `pnpm-workspace.yaml`.
+> Install and run from this folder independently.
 
-This is **not** a generic external LLM demo and not a real trading executor.
+Four independent PM2 bots that autonomously run a BTC 15-minute prediction market pipeline on Arc Testnet.
 
 ## Architecture
 
-**Role-split PM2:** 4 independent processes, one per role.
-
 ```
-oracle -> market_snapshot
-                  |
-          analyzer -> resolver_output
-                           |
-                   evaluator -> evaluation
-                                    |
-                            executor -> execution_intent + x402 autopay
+Oracle (LLM) ──market_snapshot──▶ Analyzer (LLM) ──resolver_output──▶ Evaluator (LLM) ──evaluation──▶ Executor (zero-guard)
+     │                                  │                                  │                              │
+     ├─ fetch Polymarket BTC 15m        ├─ BPS signal + LLM analysis       ├─ risk gate + LLM decision    ├─ poll evaluator output
+     ├─ orderbook + candles             ├─ direction + confidence           ├─ approve/reject               ├─ post execution_intent
+     └─ LLM summary + post event        └─ post analysis event             └─ post evaluation event        └─ x402 autopay (if approved)
 ```
 
-- **oracle-bot.js** fetches ArcLayer raw BTC 15m Polymarket market/orderbook/candles feed and posts `role=oracle` `type=market_snapshot`.
-- **analyzer-bot.js** reads the latest oracle `market_snapshot` from the bridge, runs LLM analysis, and posts `role=analyzer` `type=resolver_output`.
-- **evaluator-bot.js** reads the analyzer `resolver_output`, evaluates risk, and posts `role=evaluator` `type=evaluation`.
-- **executor-bot.js** reads the evaluator `evaluation`, posts a DRY_RUN execution intent with x402 autopay receipt. It never places real trades.
+**Each bot is a separate PM2 process. No bot spawns children. All run independently.**
 
-**Key principles:**
-- No controller spawns children. No `spawnSync`. No chain mode.
-- One role = one PM2 process.
-- One role = one manifest.
-- One role = one A2A API key.
-- ERC-8004 ID is only the identity reference/display, not the `ARCLAYER_AGENT_ID` used by job/bridge API.
-- x402 is route-level paid access, not a global gate for every API call.
+## Bot Roles
 
-## Flow
+| Bot | Role | LLM | Description |
+|:----|:-----|:----|:------------|
+| **Oracle** | Data fetcher | ✅ Yes | Fetches Polymarket BTC 15m market, orderbook, candles. Uses LLM to summarize raw data for downstream agents. |
+| **Analyzer** | Market analyst | ✅ Yes | Reads oracle output, computes BPS signals, uses LLM to produce direction (UP/DOWN/NEUTRAL) + confidence. |
+| **Evaluator** | Decision maker | ✅ Yes | Reads analyzer output, runs deterministic risk gates, uses LLM to make final APPROVE/REJECT decision. |
+| **Executor** | Zero-guard poller | ❌ No | Polls for evaluator output. Posts execution intent + receipt. No LLM — pure relay. |
 
-```text
-external PM2 bot
-  -> raw Polymarket BTC 15m data
-  -> LLM analysis
-  -> risk evaluation
-  -> DRY_RUN decision intent
-  -> x402 bridge-access
-  -> bridge event + payloadHash + runtimeId
-  -> receipt/history
-  -> /live-a2a-agent frontend viewer
-```
-
-1. Each bot reads/writes to the ArcLayer bridge API using its own `ARCLAYER_AGENT_ID` and `ARCLAYER_API_KEY`.
-2. Downstream roles (analyzer, evaluator, executor) read upstream events by **category**, not by local agentId. This allows analyzer to read oracle events from `llm-market-oracle`, evaluator to read analyzer events from `llm-market-analyzer`, etc.
-3. ArcLayer stores the bridge event, `payloadHash`, `runtimeId`, category metadata, receipt/history, and x402 unlock status.
-4. `/live-a2a-agent` shows the full flow.
-
-## Architecture boundary
-
-- **ArcLayer is the protocol bridge.**
-- **Bots run anywhere.**
-- **Bots own strategy, local LLM keys, and execution.**
-- **ArcLayer handles identity, x402, events, receipts, payload hashes, and history.**
-
-`apps/console` stays the protocol/data layer: raw market data, bridge events, x402, receipts, and viewer surfaces only. It does not include real trade execution, a private-key executor, or hardcoded trading strategy.
-
-## Setup
-
-### Environment files
+## 1. Install Dependencies
 
 ```bash
 cd examples/external-pm2-bots/market-agent-bridge
-cp .env.common.example .env.common
-cp .env.oracle.example .env.oracle
-cp .env.analyzer.example .env.analyzer
-cp .env.evaluator.example .env.evaluator
-cp .env.executor.example .env.executor
-# Fill ARCLAYER_API_KEY per role in each .env.<role> file.
-# Generate via: POST /api/a2a/keys (scopes: agent_bridge:write, agent_bridge:receipt)
-# Never commit .env.* files — .gitignore is included.
 npm install
 ```
 
-Bot startup loads `.env.common` first, then `.env.<role>` overrides it.
+## 2. Configure Env
 
-`.env.common` contains shared settings only (base URL, category, interval, x402 defaults).
-Role-specific API keys and agent IDs go in each `.env.<role>` file.
-
-There is no `llm-market-agent` fallback. Each role uses its own `ARCLAYER_AGENT_ID` from its env file.
-
-### Start with PM2 (independent mode — 4 processes)
+Each bot has a shared `.env.common` + per-role `.env.<role>`:
 
 ```bash
-pm2 delete oracle-bot analyzer-bot evaluator-bot executor-bot 2>/dev/null || true
-pm2 start ecosystem.independent.config.cjs
-pm2 save
+cp .env.common.example   .env.common
+cp .env.oracle.example   .env.oracle
+cp .env.analyzer.example .env.analyzer
+cp .env.evaluator.example .env.evaluator
+cp .env.executor.example  .env.executor
+```
+
+Fill in for each role:
+- `ARCLAYER_AGENT_ID` — minted ERC-8004 token ID
+- `ARCLAYER_API_KEY` — A2A API key (scopes: `agent_bridge:write`, `agent_bridge:receipt`)
+- `LLM_BASE_URL` + `LLM_MODEL` + `LLM_API_KEY` — LLM provider config (oracle, analyzer, evaluator only)
+- `X402_PAYER_PRIVATE_KEY` — ERC-8004 controller wallet (needs ~20 USDC on Arc testnet)
+
+**Never commit filled `.env` files.** The `.gitignore` excludes them all.
+
+### LLM Configuration
+
+Oracle, Analyzer, and Evaluator each have independent LLM configs in their `.env.<role>`:
+
+```bash
+# .env.oracle
+LLM_BASE_URL=https://api.blockchain.info/ai/api/v1
+LLM_MODEL=google/gemini-3-flash
+LLM_API_KEY=<your-key>
+USE_LLM=true
+
+# .env.analyzer
+LLM_BASE_URL=https://api.blockchain.info/ai/api/v1
+LLM_MODEL=anthropic/claude-haiku-4.5
+LLM_API_KEY=<your-key>
+USE_LLM=true
+
+# .env.evaluator
+LLM_BASE_URL=https://api.blockchain.info/ai/api/v1
+LLM_MODEL=x-ai/grok-4.3
+LLM_API_KEY=<your-key>
+USE_LLM=true
+```
+
+Executor has `USE_LLM=false` — it does not call any LLM.
+
+## 3. Run with PM2
+
+```bash
+# Start all 4 bots + heartbeat (independent mode — default)
+pm2 start ecosystem.config.cjs
+
+# Monitor
 pm2 status
+pm2 logs oracle-bot --lines 20
+pm2 logs analyzer-bot --lines 20
+pm2 logs evaluator-bot --lines 20
+pm2 logs executor-bot --lines 20
 ```
 
-Expected:
-- PM2 has exactly 4 processes.
-- oracle-bot runs forever posting `market_snapshot`.
-- analyzer-bot runs forever and waits for oracle `market_snapshot`.
-- evaluator-bot runs forever and waits for analyzer `resolver_output`.
-- executor-bot runs forever and waits for evaluator `evaluation`.
-- No controller spawns children. Each process is independent.
+## 4. How It Works
 
-## One-shot smoke (no PM2)
+### Cycle Flow (every 15 min by default)
+
+1. **Oracle** fetches Polymarket BTC 15m data (market, orderbook, candles), calls LLM to summarize, posts `market_snapshot` event
+2. **Analyzer** reads oracle's latest session, computes BPS signal, calls LLM for analysis, posts `resolver_output` event
+3. **Evaluator** reads analyzer output, runs deterministic risk gates + LLM evaluation, posts `evaluation` event
+4. **Executor** polls for evaluator output, posts `execution_intent` + receipt + live event. If approved + `X402_AUTOPAY=true`, pays x402 bridge access.
+
+### Independence Model
+
+Each bot is a standalone PM2 process:
+- **No child spawning** — each bot runs its own `runForever()` loop
+- **No inter-process communication** — bots communicate via ArcLayer API events
+- **Role locks** — filesystem-based locks prevent duplicate processing per session (oracle, analyzer, evaluator)
+- **Dedup guards** — API-level dedup prevents duplicate events per role+session
+- **Heartbeat** — each bot posts a heartbeat live event after every cycle
+
+### Safety Guards
+
+| Env Var | Default | Description |
+|:--------|:--------|:------------|
+| `BOT_INTERVAL_MS` | `900000` (15 min) | Cycle interval for all bots |
+| `MAX_ACTIVE_JOBS` | `3` | Max jobs per cycle (evaluator/executor) |
+| `X402_AUTOPAY` | `true` | Enable autonomous x402 payment |
+| `X402_AUTOPAY_REQUIRED` | `false` | Fail cycle if autopay fails |
+| `USE_LLM` | `true` | Enable/disable LLM calls per role |
+| `MARKET_EXECUTION_MODE` | `DRY_RUN` | DRY_RUN or LIVE |
+
+## 5. PM2 Ecosystem Config
+
+The `ecosystem.config.cjs` starts all bots in **independent mode** (default):
 
 ```bash
-RUN_FOREVER=false node oracle-bot.js
-RUN_FOREVER=false node analyzer-bot.js
-RUN_FOREVER=false node evaluator-bot.js
-RUN_FOREVER=false node executor-bot.js
+pm2 start ecosystem.config.cjs
 ```
 
-## Required env for x402 executor lifecycle
+Each bot:
+- Runs as a single `fork` mode process
+- Loads `.env.common` + `.env.<role>` via `env-loader.js`
+- Has `RUN_FOREVER=true` set by PM2 env
+- Restarts automatically on crash (PM2 default)
 
-- `MARKET_EXECUTION_MODE=DRY_RUN`
-- `PROTOCOL_TX_MODE=ARC_TESTNET`
-- `X402_AUTOPAY=true`
-- `X402_AUTOPAY_REQUIRED=false`
-- `X402_SCOPE=external_trace`
-- `ARC_RPC_URL`
-- `ARCLAYER_BASE_URL`
-- `ARCLAYER_API_KEY=<required per role — see .env.<role>>`
-- `X402_PAYER_PRIVATE_KEY=<required for real x402 only>`
+## 6. Common Errors
 
-### Heartbeat auth
+| Error | Cause | Fix |
+|:------|:------|:----|
+| `missing_env:ARCLAYER_AGENT_ID` | `.env.<role>` not filled | Copy `.env.<role>.example` → `.env.<role>` and fill values |
+| `missing_llm_env` | LLM config incomplete | Set `LLM_BASE_URL`, `LLM_MODEL`, `LLM_API_KEY` in `.env.<role>` |
+| `lock_exists` | Another process already processing this session | Normal — role lock prevents duplicates. Wait for next cycle. |
+| `no_oracle_session` | Oracle hasn't posted yet | Wait for oracle to complete its cycle first |
+| `participant_mismatch` | API key agentId doesn't match | Ensure `ARCLAYER_AGENT_ID` matches the API key's agentId |
+| `x402_autopay_failed` | Wallet out of USDC | Top up wallet via Arc Testnet faucet |
 
-The `prediction-market-heartbeat` process posts presence to the dashboard. It needs one of:
+## 7. Security Notes
 
-- `PREDICTION_AGENT_IDS` + `PREDICTION_AGENT_KEYS` — per-agent keys (recommended)
-- `A2A_LIVE_EVENTS_TOKEN` — single global token (simpler)
+- **Never commit `.env` files.** The `.gitignore` excludes all `.env.*` files.
+- Each bot has its own API key scoped to only the actions it needs.
+- API key is sent via `Authorization: Bearer` header.
+- Wallet private keys never leave the bot process.
+- `DRY_RUN` mode is default — no real trade execution.
 
-Generate keys via `POST /api/a2a/keys` with scopes: `agent_bridge:write`, `agent_bridge:receipt`, `live_events:write`, `presence:write`.
+## 8. Production Checklist
 
-Or use the helper script (set private keys as env vars first):
-
-```bash
-export ORACLE_AGENT_ID=<your-id> ORACLE_PK=0x...
-export ANALYZER_AGENT_ID=<your-id> ANALYZER_PK=0x...
-export EVALUATOR_AGENT_ID=<your-id> EVALUATOR_PK=0x...
-export EXECUTOR_AGENT_ID=<your-id> EXECUTOR_PK=0x...
-node scripts/regen-keys.mjs
-```
-
-## Safety
-
-- `.env` is ignored by repo policy; `.env.example` files contain placeholders only.
-- `MARKET_EXECUTION_MODE=DRY_RUN` is required. Setting `MARKET_EXECUTION_MODE=REAL` may throw.
-- x402 autopay requires: `X402_AUTOPAY=true`, `PROTOCOL_TX_MODE=ARC_TESTNET`, and an unpaid session.
-- No LLM API key, private key, exchange key, or wallet private key is sent to ArcLayer or Supabase.
-- ArcLayer stores only non-sensitive bridge metadata: `agent_id`, `runtime_id`, `session_id`, `category`, role, event payload hashes, receipts, and timestamps.
-
-## Idempotency & Duplicate Prevention
-
-### One role = one content event per session
-
-Each bot role (analyzer, evaluator, executor) performs its content action
-and x402 payment **at most once per session**. This is enforced at three layers:
-
-1. **Bot-side gating** — `hasRoleContentEvent()` in `shared/arclayer-client.js`
-   checks if the role already has a content-type event (`resolver_output`,
-   `evaluation`, `execution_intent`) for the current session. If found, the bot
-   skips processing entirely before posting events or paying.
-
-2. **Server-side content event dedup** — The `agent_bridge_events` table has a
-   partial unique index on `event_dedupe_key` (SHA-256 of
-   `v1|sessionId|agentId|role|eventType`). Only content events
-   (`market_snapshot`, `resolver_output`, `evaluation`, `execution_intent`) get a
-   non-null dedupe key. This ensures at most one content event per agent/role/session
-   regardless of bot process races.
-
-3. **Server-side payment idempotency** — The `x402_resource_payments` table
-   prevents duplicate x402 settlement per resource/session/scope/role key.
-
-### Deterministic nonce
-
-By default, `shared/x402-client.js` generates a deterministic EIP-3009 nonce
-for Arc native exact payments (`scheme === "exact"`, network includes `"5042002"`,
-`transferMethod === "eip3009"`). The nonce is a SHA-256 hash of:
-`resource|sessionId|scope|role|payer|asset|payTo|amount|chainId`.
-
-This means a retry with the same session/role/payer produces the same `bytes32`
-nonce. If the first authorization was already settled on-chain, the second
-attempt is rejected by the facilitator as `Eip3009NonceAlreadyUsed` — no
-duplicate on-chain transfer.
-
-**Environment variable:**
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `X402_DETERMINISTIC_NONCE` | `true` (unset) | Set to `false` to fall back to random nonce (manual experiments only) |
-
-**Scope of deterministic nonce:**
-- ✅ Arc native exact EIP-3009 (rail `arc-native-eoa`, network 5042002)
-- ❌ Circle Gateway offchain/nanopayment mode
-- ❌ Permit2
-- ❌ Solana
-- ❌ Non-EIP3009 payment modes
-
-### 409 payment_in_flight
-
-When the backend returns HTTP 409 with `error: "payment_in_flight"`, the bot
-treats this as a non-fatal skip. It does not retry payment in the same cycle.
-The caller receives `{ ok: false, skipped: true, error: 'payment_in_flight' }`.
-
-## Safety Warnings
-
-- Do not run with real trading keys or real funds.
-- `MARKET_EXECUTION_MODE` must remain `DRY_RUN` for no-trade executor.
-- `X402_AUTOPAY=true` enables live x402 payments.
-- Each external bot must use unique `ARCLAYER_AGENT_ID`, `RUNTIME_ID`, and wallet key.
+- [ ] Register 4 agents in ERC-8004 registry (oracle, analyzer, evaluator, executor)
+- [ ] Generate role-scoped A2A API keys
+- [ ] Fund wallets with USDC + ARC gas tokens
+- [ ] Copy `.env.*.example` → `.env.*` and fill all values
+- [ ] Set `USE_LLM=true` for oracle, analyzer, evaluator
+- [ ] Set `USE_LLM=false` for executor
+- [ ] Test one full cycle manually (`pm2 start ecosystem.config.cjs`)
+- [ ] Monitor logs for errors
+- [ ] Set `MARKET_EXECUTION_MODE=DRY_RUN` for testing

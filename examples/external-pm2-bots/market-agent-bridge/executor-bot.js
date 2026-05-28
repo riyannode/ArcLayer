@@ -1,109 +1,108 @@
 const { loadRoleEnv } = require("./shared/env-loader");
 loadRoleEnv("executor");
-const fs = require('node:fs');
-const path = require('node:path');
-const { callLLM } = require("./shared/llm-client");
-const { hasRoleContentEvent, latestSession, postEvent, postReceipt, safePostLiveEvent, sha256, getJson, hasExecutorX402EventOnly, hasExecutorX402Proof } = require("./shared/arclayer-client");
+const { latestSession, postEvent, postReceipt, safePostLiveEvent, sha256 } = require("./shared/arclayer-client");
 const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
-const { acquireRoleLock, releaseRoleLock } = require("./shared/role-lock");
 
 async function runOnce() {
-  const { session } = await latestSession({ requiredRoles: ['analyzer', 'evaluator'] });
+  // Executor hanya polling dari evaluator — zero guard
+  const { session } = await latestSession({ requiredRoles: ['evaluator'] });
   if (!session?.sessionId) {
-    console.log('[executor] skip reason=no_bridge_session');
+    console.log('[executor] skip reason=no_evaluator_session');
     return;
   }
-  const analyzerPayload = session.roles?.analyzer?.payload;
+
   const evaluatorPayload = session.roles?.evaluator?.payload;
-
-  // Acquire role lock — atomic filesystem lock prevents concurrent
-  // executor processes from processing the same session.
-  let rlp = acquireRoleLock(session.sessionId, 'executor');
-  if (!rlp) {
-    console.log(`[executor] lock_exists session=${session.sessionId} role=executor, skip`);
-    return;
-  }
-  try {
-    // Skip if executor already has execution_intent for this session
-    if (hasRoleContentEvent({ sessionId: session.sessionId, events: session.events, role: 'executor', type: 'execution_intent' })) {
-    console.log(`[executor] skip session=${session.sessionId} reason=role_already_processed`);
-    return;
-  }
-  if (!analyzerPayload) throw new Error('Missing analyzer output.');
   if (!evaluatorPayload) {
-    console.log('[executor] skip reason=no_evaluator_output');
+    console.log('[executor] skip reason=no_evaluator_payload');
     return;
   }
-  if (typeof evaluatorPayload.approved !== 'boolean') throw new Error('Invalid evaluator approval shape.');
 
-  const payload = { source: 'llm-executor', action: 'DRY_RUN_ONLY', mode: 'DRY_RUN', reason: evaluatorPayload.approved ? 'Dry-run only' : 'Skipped: evaluator rejected' };
-  const posted = await postEvent({ sessionId: session.sessionId, role: 'executor', type: 'execution_intent', runtimeId: process.env.RUNTIME_ID || 'pm2-llm-executor-bot', payload });
+  // Freshness check — skip session lama (>10 menit)
+  const evaluatorTs = session.roles?.evaluator?.timestamp || 0;
+  const ageMin = evaluatorTs ? (Date.now() - new Date(evaluatorTs).getTime()) / 60000 : 999;
+  if (ageMin > 10) {
+    console.log(`[executor] skip session=${session.sessionId} reason=stale_evaluator age=${ageMin.toFixed(1)}m`);
+    return;
+  }
+
+  const approved = Boolean(evaluatorPayload.approved);
+  const direction = evaluatorPayload.direction || evaluatorPayload.suggestedDirection || 'NEUTRAL';
+  const confidence = evaluatorPayload.confidence || 0;
+
+  console.log(`[executor] signal received session=${session.sessionId} approved=${approved} direction=${direction} confidence=${confidence}`);
+
+  // Post execution intent — selalu, apapun hasil evaluator
+  const payload = {
+    source: 'llm-executor',
+    action: approved ? 'EXECUTE' : 'DRY_RUN_ONLY',
+    mode: approved ? 'LIVE' : 'DRY_RUN',
+    direction,
+    confidence,
+    reason: approved ? `Approved: ${direction} @ ${confidence}%` : `Rejected: ${evaluatorPayload.reason || 'evaluator rejected'}`,
+    evaluatorRiskLevel: evaluatorPayload.riskLevel || 'HIGH',
+    evaluatorFlags: evaluatorPayload.flags || []
+  };
+
+  const posted = await postEvent({
+    sessionId: session.sessionId,
+    role: 'executor',
+    type: 'execution_intent',
+    runtimeId: process.env.RUNTIME_ID || 'pm2-llm-executor-bot',
+    payload
+  });
+
   if (posted.deduped) {
-    console.log(`[executor] deduped content event session=${session.sessionId}, skip downstream`);
+    console.log(`[executor] deduped session=${session.sessionId}, skip receipt`);
     return;
   }
-  await postReceipt({ sessionId: session.sessionId, receiptType: 'x402_arc_native', payloadHash: posted.payloadHash, metadata: { role: 'executor' } });
 
-  if (!evaluatorPayload.approved) return;
-  if (process.env.X402_AUTOPAY !== 'true' || process.env.PROTOCOL_TX_MODE !== 'ARC_TESTNET') return;
-  const scope = 'external_trace';
-  let lp;
-  try {
-    const SCOPE_LOCK_DIR = require('node:path').resolve(__dirname, '.x402-locks');
-    const scopeLp = require('node:path').join(SCOPE_LOCK_DIR, `${session.sessionId}-${scope}.lock`);
-    require('node:fs').mkdirSync(SCOPE_LOCK_DIR, { recursive: true });
-    try { const fd = require('node:fs').openSync(scopeLp, 'wx'); require('node:fs').closeSync(fd); lp = scopeLp; } catch (err) { if (err && err.code === 'EEXIST') lp = null; else throw err; }
-    if (!lp) {
-      console.log(`[x402][executor] lock_exists session=${session.sessionId} scope=${scope}, skip`);
-      return;
+  // Post receipt — selalu
+  await postReceipt({
+    sessionId: session.sessionId,
+    receiptType: 'x402_arc_native',
+    payloadHash: posted.payloadHash,
+    metadata: {
+      role: 'executor',
+      approved,
+      direction,
+      confidence,
+      evaluatorRiskLevel: evaluatorPayload.riskLevel
     }
-    // Event-based skip: check if any executor already posted receipt_reference for this session
-    const preflightEvents = await getJson(`/api/agent-bridge/events?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
-    if (hasExecutorX402EventOnly({ sessionId: session.sessionId, events: preflightEvents.events || [] })) {
-      console.log(`[x402][executor] event_exists session=${session.sessionId}, skip payment`);
-      return;
-    }
-    const payment = await payForBridgeAccess({ sessionId: session.sessionId, scope, role: 'executor' });
-    if (!payment.ok) return;
-    if (payment.alreadyPaid) {
-      console.log(`[x402][executor] already_paid session=${session.sessionId} tx=${payment.txHash || payment.transaction || 'n/a'}`);
-      // Idempotency: check if proofs already exist before reposting
-      const existingEvents = await getJson(`/api/agent-bridge/events?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
-      const existingReceipts = await getJson(`/api/agent-bridge/receipts?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ receipts: [] }));
-      const existingLive = await getJson(`/api/a2a/live-events?category=prediction-market-bots&sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
-      if (hasExecutorX402Proof({ sessionId: session.sessionId, events: existingEvents.events || [], receipts: existingReceipts.receipts || [], liveEvents: existingLive.events || [] })) {
-        console.log(`[x402][executor] proofs already exist for session=${session.sessionId}, skip repost`);
-        return;
+  });
+
+  console.log(`[executor] receipt posted session=${session.sessionId} approved=${approved}`);
+
+  // Live event
+  await safePostLiveEvent('execution_intent', {
+    sessionId: session.sessionId,
+    approved,
+    direction,
+    confidence,
+    title: `Executor ${approved ? 'EXECUTE' : 'DRY_RUN'}: ${direction}`,
+    summary: `Signal ${direction} @ ${confidence}% — ${approved ? 'approved' : 'rejected'} by evaluator`,
+    trace: ['executor', 'execution_intent'],
+    reasoning: payload.reason
+  });
+
+  // x402 payment kalau approved
+  if (approved && process.env.X402_AUTOPAY === 'true' && process.env.PROTOCOL_TX_MODE === 'ARC_TESTNET') {
+    try {
+      const payment = await payForBridgeAccess({
+        sessionId: session.sessionId,
+        scope: 'external_trace',
+        role: 'executor'
+      });
+      if (payment.ok) {
+        console.log(`[x402][executor] paid tx=${payment.txHash || payment.transaction || 'n/a'}`);
       }
+    } catch (err) {
+      console.error(`[x402][executor] payment failed: ${err.message}`);
     }
-    const txHash = payment.txHash || payment.transaction || null;
-    const paymentId = payment.paymentId || null;
-    // Re-check events before posting proofs (race guard: another process may have posted)
-    const postflightEvents = await getJson(`/api/agent-bridge/events?sessionId=${encodeURIComponent(session.sessionId)}&limit=50`, { authenticated: true }).catch(() => ({ events: [] }));
-    if (hasExecutorX402EventOnly({ sessionId: session.sessionId, events: postflightEvents.events || [] })) {
-      console.log(`[x402][executor] event_appeared session=${session.sessionId} tx=${txHash}, skip proof posting`);
-      return;
-    }
-    const receiptEventPayload = { source: 'x402-autopay', scope, role: 'executor', txHash, transaction: txHash, paymentId };
-    const receiptRef = await postEvent({ sessionId: session.sessionId, role: 'executor', type: 'receipt_reference', runtimeId: process.env.RUNTIME_ID || 'pm2-llm-executor-bot', payload: receiptEventPayload, metadata: { source: 'x402-autopay' } });
-    await postReceipt({ sessionId: session.sessionId, receiptType: 'x402_arc_native', payloadHash: sha256(receiptEventPayload), metadata: { role: 'executor', scope, source: 'x402-autopay', txHash, paymentId, bridgePayloadHash: receiptRef.payloadHash, protocolTxMode: 'arc_testnet' } });
-    const liveResult = await safePostLiveEvent('x402_paid', {
-      sessionId: session.sessionId,
-      paymentId,
-      bridgePayloadHash: receiptRef.payloadHash,
-      txHash,
-      amountAtomic: payment.amount || null,
-      title: 'Executor x402 paid',
-      summary: 'Executor external_trace x402 payment settled',
-      trace: ['executor', 'receipt_reference', 'x402_arc_native', 'x402_paid'],
-      reasoning: 'executor external_trace x402 autopay'
-    });
-    if (!liveResult.ok) throw new Error(liveResult.message || liveResult.error || 'live_event_failed');
-  } finally { try { if (lp) require('node:fs').unlinkSync(lp); } catch {} }
-} finally {
-  releaseRoleLock(rlp);
-}
+  }
 }
 
-runForever("executor", runOnce).catch((err) => { console.error(`[executor] fatal: ${err.message}`); process.exitCode = 1; });
+runForever("executor", runOnce).catch((err) => {
+  console.error(`[executor] fatal: ${err.message}`);
+  process.exitCode = 1;
+});
