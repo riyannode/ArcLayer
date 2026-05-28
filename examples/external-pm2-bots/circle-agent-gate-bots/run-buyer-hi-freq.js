@@ -80,7 +80,7 @@ async function payAndPublish({ config, env, llmResult, iteration }) {
     createdAt: new Date().toISOString(),
   };
 
-  await postBridgeEvent({
+  const bridgeResult = await postBridgeEvent({
     sessionId,
     category: env.category,
     role: env.role,
@@ -94,6 +94,13 @@ async function payAndPublish({ config, env, llmResult, iteration }) {
     },
   });
 
+  const realPayloadHash = bridgeResult.payloadHash;
+
+  // Use real upstream payload hash by default; synthetic only for stress testing
+  const sourcePayloadHash = process.env.STRESS_MODE === "true"
+    ? `0x${env.role}${Date.now().toString(16)}${iteration.toString(16).padStart(4, "0")}`
+    : realPayloadHash;
+
   // Pay upstream (pass llmReceipt for commerce gate requirement)
   await payUpstreamForAccess({
     upstreamAgentId: env.upstreamAgentId,
@@ -103,7 +110,7 @@ async function payAndPublish({ config, env, llmResult, iteration }) {
     market: env.market,
     sessionId,
     runtimeId: env.runtimeId,
-    sourcePayloadHash: `0x${env.role}${Date.now().toString(16)}${iteration.toString(16).padStart(4, "0")}`,
+    sourcePayloadHash,
     payload: { hiFreq: true, iteration, timestamp: new Date().toISOString() },
     llmReceipt: {
       summary: llmResult.summary || `${env.role} analysis for ${env.market}`,

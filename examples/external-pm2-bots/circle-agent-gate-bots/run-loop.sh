@@ -24,10 +24,37 @@ if [[ ! -f "$ROLE_SCRIPT" ]]; then
   exit 1
 fi
 
-# Extract env vars from role script (skip shebang, cd, exec)
+# Source shared .env first so ARCLAYER_API_KEY_ANALYZER etc are available
+source .env 2>/dev/null || true
+
+# Extract env vars from role script
 set -a
 source <(grep '^export ' "$ROLE_SCRIPT" | sed 's/^export //')
 set +a
+
+missing=0
+
+require_env() {
+  local key="$1"
+  if [[ -z "${!key:-}" ]]; then
+    echo "[loop] ERROR: missing required env: $key"
+    missing=1
+  fi
+}
+
+require_env ARCLAYER_AGENT_ID
+require_env ARCLAYER_API_KEY
+require_env X402_PAYER_PRIVATE_KEY
+
+if [[ "$ROLE" != "oracle" ]]; then
+  require_env UPSTREAM_AGENT_ID
+  require_env UPSTREAM_ROLE
+fi
+
+if [[ "$missing" -ne 0 ]]; then
+  echo "[loop] refusing to start with incomplete env"
+  exit 1
+fi
 
 echo "[loop] role=${ROLE} interval=${INTERVAL}s max_runs=${MAX_RUNS}"
 echo "[loop] pid=$$ starting loop..."
