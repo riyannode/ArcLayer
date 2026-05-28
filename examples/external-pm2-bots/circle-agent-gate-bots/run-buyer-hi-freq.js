@@ -17,6 +17,7 @@ const LLM_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const PAY_INTERVAL = Math.floor(60_000 / 9); // ~6,667ms = 9x per minute
 
 function eventTypeForRole(role) {
+  if (role === "oracle") return "market_snapshot";
   if (role === "analyzer") return "resolver_output";
   if (role === "evaluator") return "evaluation";
   if (role === "executor") return "execution_intent";
@@ -46,6 +47,7 @@ async function getOrRefreshLlm(config, env) {
   });
 
   const upstreamData = events.length ? (events[0]?.payload || events[0] || {}) : { mock: true, signal: "NEUTRAL" };
+  const upstreamPayloadHash = events[0]?.payloadHash || null;
 
   // Call LLM
   console.log(`[${env.role}] calling LLM...`);
@@ -54,6 +56,7 @@ async function getOrRefreshLlm(config, env) {
     upstreamData,
     config: env,
   });
+  cachedLlmResult.upstreamPayloadHash = upstreamPayloadHash;
   lastLlmTime = now;
   console.log(`[${env.role}] LLM done: signal=${cachedLlmResult.signal || "none"}`);
 
@@ -96,10 +99,10 @@ async function payAndPublish({ config, env, llmResult, iteration }) {
 
   const realPayloadHash = bridgeResult.payloadHash;
 
-  // Use real upstream payload hash by default; synthetic only for stress testing
+  // Priority: upstream event hash > bridge event hash > synthetic (stress only)
   const sourcePayloadHash = process.env.STRESS_MODE === "true"
     ? `0x${env.role}${Date.now().toString(16)}${iteration.toString(16).padStart(4, "0")}`
-    : realPayloadHash;
+    : (llmResult.upstreamPayloadHash || realPayloadHash);
 
   // Pay upstream (pass llmReceipt for commerce gate requirement)
   await payUpstreamForAccess({
