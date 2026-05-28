@@ -3,9 +3,9 @@
 # x402 Circle Gateway Stress Test Runner
 # ──────────────────────────────────────────────────────────────
 # Usage:
-#   ./run-stress.sh                    # default: 1s interval, infinite
-#   ./run-stress.sh 500 100            # 500ms interval, 100 payments
-#   PAY_INTERVAL=200 ./run-stress.sh   # 200ms interval
+#   HI_FREQ_ENABLED=true ./run-stress.sh                    # default: 1s interval, infinite
+#   HI_FREQ_ENABLED=true ./run-stress.sh 500 100            # 500ms interval, 100 payments
+#   HI_FREQ_ENABLED=true PAY_INTERVAL=200 ./run-stress.sh   # 200ms interval
 # ──────────────────────────────────────────────────────────────
 
 set -euo pipefail
@@ -14,6 +14,13 @@ cd "$(dirname "$0")"
 # Load env
 if [ -f .env ]; then
   set -a; source .env; set +a
+fi
+
+# ─── Safety guard: require explicit opt-in ────────────────────
+if [[ "${HI_FREQ_ENABLED:-false}" != "true" ]]; then
+  echo "ERROR: HI_FREQ_ENABLED=true is required to run x402 stress payments"
+  echo "Refusing to start stress test to avoid accidental real payments."
+  exit 1
 fi
 
 # Args
@@ -35,7 +42,7 @@ echo "╠═══════════════════════�
 echo "║  Role:         ${AGENT_ROLE:-analyzer}"
 echo "║  Upstream:     ${UPSTREAM_AGENT_ID}"
 echo "║  Interval:     ${PAY_INTERVAL}ms"
-echo "║  Max payments: ${MAX_payments:-infinite}"
+echo "║  Max payments: ${MAX_PAYMENTS:-infinite}"
 echo "╚══════════════════════════════════════════════╝"
 echo ""
 

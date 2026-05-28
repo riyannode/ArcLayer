@@ -12,9 +12,9 @@
 
 require("dotenv").config();
 
-const { payUpstreamForAccess } = require("./shared/pay-upstream");
-const { postBridgeEvent } = require("./shared/arclayer-api");
-const { resolveCommerceRoute } = require("./shared/commerce-route-map");
+const { payUpstreamForAccess } = require("../shared/pay-upstream");
+const { postBridgeEvent } = require("../shared/arclayer-api");
+const { resolveCommerceRoute } = require("../shared/commerce-route-map");
 
 // ─── Config ──────────────────────────────────────────────────────────
 

@@ -3,15 +3,36 @@ const path = require("node:path");
 
 require("dotenv").config({ path: path.join(process.cwd(), ".env") });
 
-const { currentSessionId } = require("./shared/hash");
-const { buildLlmReceipt } = require("./shared/llm-receipt");
-const { postBridgeEvent, postReceiptReference } = require("./shared/arclayer-api");
-const { processWithLlm } = require("./shared/llm-processor");
+// ─── Safety guard: require explicit opt-in ────────────────────
+
+const HI_FREQ_ENABLED = process.env.HI_FREQ_ENABLED === "true";
+if (!HI_FREQ_ENABLED) {
+  throw new Error("HI_FREQ_ENABLED=true is required for high-frequency demo mode");
+}
+
+// ─── Imports (stress-demo is one level below shared/) ─────────
+
+const { currentSessionId } = require("../shared/hash");
+const { buildLlmReceipt } = require("../shared/llm-receipt");
+const { postBridgeEvent, postReceiptReference } = require("../shared/arclayer-api");
+const { processWithLlm } = require("../shared/llm-processor");
 
 // ─── Config ──────────────────────────────────────────────────────────
 
 const LLM_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const PUBLISH_INTERVAL = Math.floor(60_000 / 9); // ~6,667ms = 9x per minute
+
+const PAY_PER_MINUTE = Number(process.env.PAY_PER_MINUTE || "9");
+const MAX_PAY_PER_MINUTE = 9;
+
+if (!Number.isFinite(PAY_PER_MINUTE) || PAY_PER_MINUTE < 1) {
+  throw new Error("PAY_PER_MINUTE must be a positive number");
+}
+
+if (PAY_PER_MINUTE > MAX_PAY_PER_MINUTE) {
+  throw new Error(`PAY_PER_MINUTE too high: ${PAY_PER_MINUTE}. Max allowed: ${MAX_PAY_PER_MINUTE}`);
+}
+
+const PUBLISH_INTERVAL = Math.floor(60_000 / PAY_PER_MINUTE);
 
 function readConfig() {
   const configPath = process.env.BOT_CONFIG || "bot.config.example.json";
@@ -137,11 +158,11 @@ async function main() {
   console.log(`  market:     ${env.market}`);
   console.log(`  session:    [redacted]`);
   console.log(`  LLM every:  5 min`);
-  console.log(`  publish:    9x/min (~6.7s interval)`);
+  console.log(`  publish:    ${PAY_PER_MINUTE} paid access cycles/minute (${PUBLISH_INTERVAL}ms interval)`);
 
   let iteration = 0;
 
-  // Main loop — publish 9x per minute
+  // Main loop
   while (true) {
     try {
       // Get LLM result (cached or fresh)
