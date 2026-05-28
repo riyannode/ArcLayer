@@ -76,7 +76,7 @@ async function main() {
     llmReceipt,
   });
 
-  console.log(`[circle-bot] pay circle gate session=${event.sessionId} payloadHash=${paymentPayloadHash}`);
+  console.log("[circle-bot] pay circle gate session=[redacted] payloadHash=[redacted]");
 
   const payment = await payCircleAgentGate({
     category,
