@@ -533,6 +533,38 @@ async function handleGateway(
     paymentId,
   };
   response.headers.set('PAYMENT-RESPONSE', encodePaymentResponse(paymentResponse));
+
+  // onSettled hook — called AFTER payment is settled on Circle.
+  // Settlement is final; receipt recording failure is operational, not financial.
+  // We do NOT return 502 here — payer already paid.
+  if (opts.onSettled) {
+    try {
+      await opts.onSettled({
+        req,
+        response,
+        mode: 'circle-gateway',
+        paymentId,
+        transaction: settleResult.transaction ?? null,
+        payer,
+        payTo: requirements.payTo,
+        amount: requirements.amount,
+        resource: opts.resource,
+      });
+    } catch (settledErr) {
+      const msg = settledErr instanceof Error ? settledErr.message : 'onSettled hook failed';
+
+      console.error(
+        '[x402-gw] onSettled failed after payment settled for %s paymentId=%s: %s',
+        String(opts.resource),
+        paymentId,
+        msg,
+      );
+
+      response.headers.set('X-ArcLayer-Receipt-Warning', 'settlement_record_failed');
+      response.headers.set('X-ArcLayer-Receipt-Warning-Reason', msg.slice(0, 200));
+    }
+  }
+
   await emitX402LiveEvent({
     req,
     response,
