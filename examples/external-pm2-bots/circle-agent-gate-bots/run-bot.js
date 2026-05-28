@@ -18,6 +18,13 @@ function readConfig() {
   return JSON.parse(fs.readFileSync(fullPath, "utf8"));
 }
 
+function maskForLog(value) {
+  const str = String(value || "");
+  if (!str) return "n/a";
+  if (str.length <= 8) return "***";
+  return `${str.slice(0, 4)}...${str.slice(-4)}`;
+}
+
 async function main() {
   const config = readConfig();
 
@@ -63,7 +70,9 @@ async function main() {
     },
   });
 
-  console.log(`[circle-bot] event posted session=${event.sessionId} payloadHash=${event.payloadHash}`);
+  console.log(
+    `[circle-bot] event posted session=${maskForLog(event.sessionId)} payloadHash=${maskForLog(event.payloadHash)}`
+  );
 
   const paymentPayloadHash = sha256({
     eventPayloadHash: event.payloadHash,
