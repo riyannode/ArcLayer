@@ -576,8 +576,18 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   // Rail lock: EOA → Arc Native only, Passkey → Circle Gateway only.
   const arcDisabledForPasskey = walletMode === 'passkey';
   const circleDisabledForEoa = walletMode === 'eoa';
-  const gatewayDepositUsdc = gatewayBalance?.depositedUsdc ? Number(gatewayBalance.depositedUsdc) : 0;
-  const gatewayDepositInsufficient = mode === 'circle-gateway' && gatewayDepositUsdc < 0.05;
+  const gatewayBalanceKnown =
+    gatewayBalance?.depositedUsdc !== undefined &&
+    gatewayBalance?.depositedUsdc !== null;
+
+  const gatewayDepositUsdc = gatewayBalanceKnown
+    ? Number(gatewayBalance.depositedUsdc)
+    : 0;
+
+  const gatewayDepositInsufficient =
+    mode === 'circle-gateway' &&
+    gatewayBalanceKnown &&
+    gatewayDepositUsdc < 0.05;
   const connectLabel = mode === 'circle-gateway' ? 'CONNECT CIRCLE PASSKEY' : 'CONNECT WALLET';
 
   useEffect(() => {
@@ -700,6 +710,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   }
 
   return (
+    <>
     <div className={`grid ${c.gap} ${c.grid}`}>
       {/* ─── Left column: protected resource + mode picker + log ─── */}
       <section className={compact ? 'space-y-3' : 'space-y-5'}>
@@ -938,5 +949,12 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
         </div>
       </aside>
     </div>
+
+    <GatewayDepositSheet
+      open={depositSheetOpen}
+      onClose={() => setDepositSheetOpen(false)}
+      onSuccess={refreshGatewayBalance}
+    />
+  </>
   );
 }
