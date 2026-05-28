@@ -1,0 +1,12 @@
+{
+  "category": "prediction-market-bots",
+  "role": "oracle",
+  "scope": "market_data",
+  "market": "btc-15m",
+  "runtimeId": "circle-commerce-oracle-01",
+  "eventType": "market_snapshot",
+  "payload": {
+    "source": "circle-commerce-bot",
+    "action": "PUBLISH_MARKET_DATA"
+  }
+}
