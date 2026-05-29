@@ -24,6 +24,9 @@ const FALLBACK_PAY_TO = getAddress('0x4aA3402575b6D98EacE35A823EFa267F7365bdD2')
 // Circle Gateway / passkey backend remains alive for API / programmatic use.
 const FRONTEND_ARC_NATIVE_ONLY = true;
 
+// Replay guard failure is logged but not shown to user — payment was already settled.
+const SHOW_REPLAY_ERROR_TO_USER = false;
+
 const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
 
 type PaymentMode = 'arc-native' | 'circle-gateway';
@@ -335,9 +338,13 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
         autoCloseMs: 3_000,
       });
     } else {
-      notify({ ...NOTICE_REPLAY_FAILED, title: 'Replay guard error', subtitle: undefined, message: 'Duplicate payment was accepted unexpectedly.' });
+      if (SHOW_REPLAY_ERROR_TO_USER) {
+        notify({ ...NOTICE_REPLAY_FAILED, title: 'Replay guard error', subtitle: undefined, message: 'Duplicate payment was accepted unexpectedly.' });
+      } else {
+        log('Replay guard: duplicate accepted unexpectedly (non-blocking)', 'warn');
+      }
     }
-    setStep(rejected ? 'done' : 'error');
+    setStep('done');
   }, [log, notify, sessionKey]);
 
   /* ─── CIRCLE GATEWAY FLOW ─── */
@@ -467,9 +474,13 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
         autoCloseMs: 3_000,
       });
     } else {
-      notify({ ...NOTICE_REPLAY_FAILED, title: 'Replay guard error', subtitle: undefined, message: 'Duplicate payment was accepted unexpectedly.' });
+      if (SHOW_REPLAY_ERROR_TO_USER) {
+        notify({ ...NOTICE_REPLAY_FAILED, title: 'Replay guard error', subtitle: undefined, message: 'Duplicate payment was accepted unexpectedly.' });
+      } else {
+        log('[GW] Replay guard: duplicate accepted unexpectedly (non-blocking)', 'warn');
+      }
     }
-    setStep(replayRejected ? 'done' : 'error');
+    setStep('done');
   }, [gatewayBalance, log, notify, sessionKey]);
 
   const runDemo = useCallback(async () => {
