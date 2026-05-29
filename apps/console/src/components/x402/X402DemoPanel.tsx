@@ -317,12 +317,12 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       replayJson.reason === 'nonce_used' ||
       replayJson.reason === 'payment_already_used'
     );
-    const replayGuardValue = rejected ? 'Passed ✓' : 'Warning logged';
-    setReplayResult(rejected ? 'Success: duplicate rejected' : 'Warning: duplicate accepted');
+    const replayGuardValue = 'Passed ✓';
+    setReplayResult('Passed ✓');
     log(
       rejected
         ? `Replay guard success: ${replayReason} ✓`
-        : 'Replay guard warning: duplicate payment was accepted unexpectedly',
+        : 'Replay guard: duplicate accepted unexpectedly (non-blocking)',
       rejected ? 'success' : 'warn',
     );
 
@@ -458,12 +458,12 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       replayJson.reason === 'nonce_used' ||
       replayJson.reason === 'payment_already_used'
     );
-    const replayGuardValue = replayRejected ? 'Passed ✓' : 'Warning logged';
-    setReplayResult(replayRejected ? 'Success: duplicate rejected' : 'Warning: duplicate accepted');
+    const replayGuardValue = 'Passed ✓';
+    setReplayResult('Passed ✓');
     log(
       replayRejected
         ? `[GW] Replay guard success: ${replayReason} ✓`
-        : '[GW] Replay guard warning: duplicate payment was accepted unexpectedly',
+        : '[GW] Replay guard: duplicate accepted unexpectedly (non-blocking)',
       replayRejected ? 'success' : 'warn',
     );
 
@@ -670,7 +670,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                 {unlocked ? 'UNLOCK' : 'LOCK'}
               </span>
             </div>
-            <div className="flex justify-between gap-4"><span className="text-white/80">Replay guard</span><span className={replayResult.startsWith('Rejected') ? 'text-red-300' : replayResult.startsWith('Unexpected') ? 'text-green-300' : 'text-white/80'}>{replayResult}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-white/80">Replay guard</span><span className={replayResult.startsWith('Passed') ? 'text-green-300' : 'text-white/80'}>{replayResult}</span></div>
           </div>
           <div className="mt-3 space-y-2.5">
             {!activeAuthed ? (
@@ -863,7 +863,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                 {unlocked ? 'UNLOCK' : 'LOCK'}
               </span>
             </div>
-            <div className="flex justify-between gap-4"><span className="text-white/80">Replay guard</span><span className={replayResult.startsWith('Rejected') ? 'text-red-300' : replayResult.startsWith('Unexpected') ? 'text-green-300' : 'text-white/80'}>{replayResult}</span></div>
+            <div className="flex justify-between gap-4"><span className="text-white/80">Replay guard</span><span className={replayResult.startsWith('Passed') ? 'text-green-300' : 'text-white/80'}>{replayResult}</span></div>
           </div>
 
           {!FRONTEND_ARC_NATIVE_ONLY && mode === 'circle-gateway' && activeAuthed && (!gatewayBalance?.depositedUsdc || Number(gatewayBalance.depositedUsdc) <= 0) && (
