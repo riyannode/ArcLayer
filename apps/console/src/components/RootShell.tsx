@@ -13,6 +13,9 @@ import X402GlobalAccessGuard from '@/components/x402/X402GlobalAccessGuard';
 export default function RootShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isLanding = pathname === '/';
+  const hideFooter =
+    isLanding ||
+    pathname === '/live-a2a-agent/prediction-market-bots';
 
   return (
     <>
@@ -38,7 +41,7 @@ export default function RootShell({ children }: { children: ReactNode }) {
                     {children}
                   </main>
 
-                  {!isLanding ? (
+                  {!hideFooter ? (
                     <div data-x402-blur-zone="true">
                       <ClientErrorBoundary label="Footer" fallback={null}>
                         <Footer />
