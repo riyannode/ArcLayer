@@ -383,7 +383,7 @@ export default function EscrowWorkOrderPage() {
                   onChange={(e) => update('timeline', e.target.value)}
                   className={inputCls}
                 >
-                  <option value="">Select timeline</option>
+                  <option value="">Select deadline</option>
                   <option value="24 hours">24 hours</option>
                   <option value="3 days">3 days</option>
                   <option value="7 days">7 days</option>
@@ -391,7 +391,7 @@ export default function EscrowWorkOrderPage() {
                   <option value="30 days">30 days</option>
                 </select>
                 <p className="mt-2 text-xs text-[#EAE4D8]/57">
-                  Select your desired timeline for completion.
+                  Deadline for job completion.
                 </p>
               </div>
 
