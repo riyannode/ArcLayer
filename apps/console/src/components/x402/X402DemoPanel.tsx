@@ -84,12 +84,13 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   const [walletUsdcBalance, setWalletUsdcBalance] = useState<string | null>(null);
   const [copiedWallet, setCopiedWallet] = useState(false);
 
-  const walletMode: WalletMode = eoaConnected ? 'eoa' : authenticated ? 'passkey' : null;
+  const walletMode: WalletMode = eoaConnected ? 'eoa' : !FRONTEND_ARC_NATIVE_ONLY && authenticated ? 'passkey' : null;
   const activeAddress = useMemo(() => {
     if (eoaConnected && eoaAddress) return eoaAddress as `0x${string}`;
-    return (circleAddress as `0x${string}`) || undefined;
+    if (!FRONTEND_ARC_NATIVE_ONLY) return (circleAddress as `0x${string}`) || undefined;
+    return undefined;
   }, [eoaConnected, eoaAddress, circleAddress]);
-  const activeAuthed = eoaConnected || authenticated;
+  const activeAuthed = FRONTEND_ARC_NATIVE_ONLY ? eoaConnected : eoaConnected || authenticated;
   const address = activeAddress || '';
 
   // Auto-lock mode: when FRONTEND_ARC_NATIVE_ONLY, always force arc-native.
