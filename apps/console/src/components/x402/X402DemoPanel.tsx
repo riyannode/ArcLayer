@@ -10,7 +10,7 @@ import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'vie
 import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
 import { DEFAULT_GATEWAY_DEPOSIT_USDC } from '@/lib/x402/constants';
 import { DevDetails } from '@/components/DevDetails';
-import { NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_SETTLED, NOTICE_REPLAY_FAILED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
+import { NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_SETTLED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
 import { shortenAddress } from '@/lib/contracts';
 
 const ARC_CHAIN_ID = 5042002;
@@ -23,9 +23,6 @@ const FALLBACK_PAY_TO = getAddress('0x4aA3402575b6D98EacE35A823EFa267F7365bdD2')
 // When true, homepage UI shows only Arc Native EOA flow.
 // Circle Gateway / passkey backend remains alive for API / programmatic use.
 const FRONTEND_ARC_NATIVE_ONLY = true;
-
-// Replay guard failure is logged but not shown to user — payment was already settled.
-const SHOW_REPLAY_ERROR_TO_USER = false;
 
 const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
 
@@ -320,30 +317,34 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       replayJson.reason === 'nonce_used' ||
       replayJson.reason === 'payment_already_used'
     );
-    setReplayResult(rejected ? 'Success: duplicate rejected' : 'Error: duplicate accepted');
-    log(rejected ? `Replay guard success: ${replayReason} ✓` : 'Replay guard error: duplicate payment was accepted', rejected ? 'success' : 'error');
+    const replayGuardValue = rejected ? 'Passed ✓' : 'Warning logged';
+    setReplayResult(rejected ? 'Success: duplicate rejected' : 'Warning: duplicate accepted');
+    log(
+      rejected
+        ? `Replay guard success: ${replayReason} ✓`
+        : 'Replay guard warning: duplicate payment was accepted unexpectedly',
+      rejected ? 'success' : 'warn',
+    );
 
-    if (rejected) {
-      notify({
-        ...NOTICE_PAYMENT_SETTLED,
-        title: 'Payment successful',
-        message: 'Your x402 payment was authorized and verified.\nThe protected agent resource is now unlocked.',
-        details: [
-          { label: 'Amount paid', value: `${formatUnits(BigInt(req.amount), 6)} USDC`, mono: false },
-          ...(paymentResp.transaction ? [{ label: 'Tx hash', value: `${paymentResp.transaction.slice(0, 10)}...${paymentResp.transaction.slice(-8)}`, href: `https://testnet.arcscan.app/tx/${paymentResp.transaction}`, mono: true }] : []),
-          { label: 'Method', value: 'x402 authorization', mono: false },
-          { label: 'Status', value: 'Verified ✓', mono: false },
-          { label: 'Replay guard', value: 'Passed ✓', mono: false },
-        ],
-        autoCloseMs: 3_000,
-      });
-    } else {
-      if (SHOW_REPLAY_ERROR_TO_USER) {
-        notify({ ...NOTICE_REPLAY_FAILED, title: 'Replay guard error', subtitle: undefined, message: 'Duplicate payment was accepted unexpectedly.' });
-      } else {
-        log('Replay guard: duplicate accepted unexpectedly (non-blocking)', 'warn');
-      }
-    }
+    notify({
+      ...NOTICE_PAYMENT_SETTLED,
+      title: 'Payment successful',
+      message: 'Your x402 payment was authorized and verified.\nThe protected agent resource is now unlocked.',
+      details: [
+        { label: 'Amount paid', value: `${formatUnits(BigInt(req.amount), 6)} USDC`, mono: false },
+        ...(paymentResp.transaction ? [{
+          label: 'Tx hash',
+          value: `${paymentResp.transaction.slice(0, 10)}...${paymentResp.transaction.slice(-8)}`,
+          href: `https://testnet.arcscan.app/tx/${paymentResp.transaction}`,
+          mono: true,
+        }] : []),
+        { label: 'Method', value: 'x402 authorization', mono: false },
+        { label: 'Status', value: 'Verified ✓', mono: false },
+        { label: 'Replay guard', value: replayGuardValue, mono: false },
+      ],
+      autoCloseMs: 3_000,
+    });
+
     setStep('done');
   }, [log, notify, sessionKey]);
 
@@ -457,29 +458,33 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
       replayJson.reason === 'nonce_used' ||
       replayJson.reason === 'payment_already_used'
     );
-    setReplayResult(replayRejected ? 'Success: duplicate rejected' : 'Error: duplicate accepted');
-    log(replayRejected ? `[GW] Replay guard success: ${replayReason} ✓` : '[GW] Replay guard error: duplicate payment was accepted', replayRejected ? 'success' : 'error');
-    if (replayRejected) {
-      notify({
-        ...NOTICE_PAYMENT_SETTLED,
-        title: 'Payment successful',
-        message: 'Your x402 payment was authorized and verified.\nThe protected agent resource is now unlocked.',
-        details: [
-          { label: 'Amount paid', value: `${formatUnits(BigInt(gwOption.amount), 6)} USDC`, mono: false },
-          ...(paymentResp.transaction ? [{ label: 'Tx hash', value: `${paymentResp.transaction.slice(0, 10)}...${paymentResp.transaction.slice(-8)}`, href: `https://testnet.arcscan.app/tx/${paymentResp.transaction}`, mono: true }] : [{ label: 'Tx hash', value: 'batched settlement', mono: false }]),
-          { label: 'Method', value: 'x402 · Circle Gateway', mono: false },
-          { label: 'Status', value: 'Verified ✓', mono: false },
-          { label: 'Replay guard', value: 'Passed ✓', mono: false },
-        ],
-        autoCloseMs: 3_000,
-      });
-    } else {
-      if (SHOW_REPLAY_ERROR_TO_USER) {
-        notify({ ...NOTICE_REPLAY_FAILED, title: 'Replay guard error', subtitle: undefined, message: 'Duplicate payment was accepted unexpectedly.' });
-      } else {
-        log('[GW] Replay guard: duplicate accepted unexpectedly (non-blocking)', 'warn');
-      }
-    }
+    const replayGuardValue = replayRejected ? 'Passed ✓' : 'Warning logged';
+    setReplayResult(replayRejected ? 'Success: duplicate rejected' : 'Warning: duplicate accepted');
+    log(
+      replayRejected
+        ? `[GW] Replay guard success: ${replayReason} ✓`
+        : '[GW] Replay guard warning: duplicate payment was accepted unexpectedly',
+      replayRejected ? 'success' : 'warn',
+    );
+
+    notify({
+      ...NOTICE_PAYMENT_SETTLED,
+      title: 'Payment successful',
+      message: 'Your x402 payment was authorized and verified.\nThe protected agent resource is now unlocked.',
+      details: [
+        { label: 'Amount paid', value: `${formatUnits(BigInt(gwOption.amount), 6)} USDC`, mono: false },
+        ...(paymentResp.transaction ? [{
+          label: 'Tx hash',
+          value: `${paymentResp.transaction.slice(0, 10)}...${paymentResp.transaction.slice(-8)}`,
+          href: `https://testnet.arcscan.app/tx/${paymentResp.transaction}`,
+          mono: true,
+        }] : [{ label: 'Tx hash', value: 'batched settlement', mono: false }]),
+        { label: 'Method', value: 'x402 · Circle Gateway', mono: false },
+        { label: 'Status', value: 'Verified ✓', mono: false },
+        { label: 'Replay guard', value: replayGuardValue, mono: false },
+      ],
+      autoCloseMs: 3_000,
+    });
     setStep('done');
   }, [gatewayBalance, log, notify, sessionKey]);
 

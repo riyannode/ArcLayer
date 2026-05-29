@@ -1,8 +1,9 @@
 'use client';
 
-import { type ReactNode, useEffect } from 'react';
+import { type ReactNode, useCallback, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useX402Access } from '@/hooks/useX402Access';
+import { useProtectionNotice, NOTICE_HOME_LOCKED } from '@/components/protection';
 
 interface X402GlobalAccessGuardProps {
   children: ReactNode;
@@ -22,10 +23,27 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
   const pathname = usePathname();
   const router = useRouter();
   const { hasAccess, loading } = useX402Access();
+  const { notify } = useProtectionNotice();
 
   const locked = loading || !hasAccess;
   const lockedHome = locked && pathname === '/';
   const lockedNonHome = locked && pathname !== '/';
+
+  const handleLockedClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!lockedHome) return;
+
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-x402-unlock-zone="true"]')) return;
+
+      notify(NOTICE_HOME_LOCKED);
+
+      document
+        .querySelector('[data-x402-unlock-zone="true"]')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    },
+    [lockedHome, notify],
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -60,6 +78,7 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
     <div
       className="relative min-h-screen"
       data-x402-locked-home={lockedHome ? 'true' : undefined}
+      onClickCapture={handleLockedClick}
     >
       <div
         aria-hidden={lockedNonHome}
