@@ -115,7 +115,7 @@ export default function PredictionMarketBotsPage() {
         </div>
 
         {/* Bottom spacer — preserves page height after footer removal */}
-        <div className="h-2" />
+        <div className="h-[480px]" />
       </div>
     </main>
   );
