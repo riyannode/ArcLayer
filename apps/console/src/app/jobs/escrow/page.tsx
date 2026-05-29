@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useEffect, type ReactNode } from 'react';
-import { waitForTransactionReceipt, switchChain } from '@wagmi/core';
+import { switchChain } from '@wagmi/core';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { buildCreateJobConfig } from '@arclayer/sdk';
@@ -389,11 +389,7 @@ export default function EscrowWorkOrderPage() {
         ),
       );
 
-      // Step 3: Wait for tx receipt
-      setTxState('Waiting for tx confirmation…');
-      await waitForTransactionReceipt(config, { hash: createHash });
-
-      // Step 4: Confirm with backend
+      // Step 3: Confirm with backend (writeContractAsync already awaited receipt)
       setTxState('Confirming JobCreated event…');
       const confirmRes = await fetch('/api/jobs/escrow/created', {
         method: 'POST',
