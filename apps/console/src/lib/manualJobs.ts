@@ -6,12 +6,11 @@ export const MANUAL_CATEGORIES = [
   { key: 'Smart Contract', slug: 'smart-contract', copy: 'Audit, escrow, Solidity, protocol tasks.' },
   { key: 'Frontend', slug: 'frontend', copy: 'UI, wallet, dashboard, x402 integration.' },
   { key: 'Backend', slug: 'backend', copy: 'API, routes, database, server logic.' },
-  { key: 'AI Agent', slug: 'ai-agent', copy: 'LLM runtime, agent setup, A2A workflow.' },
-  { key: 'Security Audit', slug: 'security-audit', copy: 'Threat review, exploits, risk reports.' },
-  { key: 'Data / Research', slug: 'data-research', copy: 'Market, signal, dataset, research tasks.' },
-  { key: 'Design / UI', slug: 'design-ui', copy: 'UX, visuals, screens, product polish.' },
   { key: 'DevOps', slug: 'devops', copy: 'Deploy, infra, Vercel, monitoring.' },
+  { key: 'Design', slug: 'design', copy: 'UX, visuals, screens, product polish.' },
+  { key: 'Data Research', slug: 'data-research', copy: 'Market, signal, dataset, research tasks.' },
   { key: 'Documentation', slug: 'documentation', copy: 'Guides, README, integration docs.' },
+  { key: 'Analysis', slug: 'analysis', copy: 'Threat review, reports, and technical analysis.' },
   { key: 'Other', slug: 'other', copy: 'Custom escrow work.' },
 ] as const;
 
@@ -25,7 +24,7 @@ export const JOB_TEMPLATES = [
   { name: 'Smart contract audit', category: 'Smart Contract', title: 'Audit escrow flow', jobSpec: 'Review approve/fund/settle logic and report issues.', duration: '24 hours', difficulty: 'Advanced' },
   { name: 'Frontend wallet integration', category: 'Frontend', title: 'Fix wallet UI flow', jobSpec: 'Improve wallet connection, loading states, and action clarity.', duration: '1–6 hours', difficulty: 'Medium' },
   { name: 'Backend API task', category: 'Backend', title: 'Secure API route', jobSpec: 'Add auth checks and improve error handling.', duration: '24 hours', difficulty: 'Medium' },
-  { name: 'AI agent setup', category: 'AI Agent', title: 'Connect external agent runtime', jobSpec: 'Configure an agent endpoint and test job execution.', duration: '2–7 days', difficulty: 'Advanced' },
+  { name: 'Technical analysis', category: 'Analysis', title: 'Review agent workflow', jobSpec: 'Analyze the workflow, identify risks, and provide recommendations.', duration: '2–7 days', difficulty: 'Advanced' },
   { name: 'Documentation task', category: 'Documentation', title: 'Write integration guide', jobSpec: 'Explain setup, usage, and expected flow.', duration: '1–6 hours', difficulty: 'Simple' },
 ] as const;
 
@@ -62,13 +61,13 @@ export function inferManualJobCategory(job: IndexedJob, agent?: IndexedAgent | n
     agent ? parseAgentSkill(agentMetadataUri) : '',
     agent ? displayAgentLabel({ agentId: asString(agent.agentId), metadataURI: agentMetadataUri }) : '',
   ].join(' ').toLowerCase();
-  if (/security|exploit|threat|pentest|vulnerab/.test(haystack)) return 'Security Audit';
+  if (/security|exploit|threat|pentest|vulnerab|analysis|report/.test(haystack)) return 'Analysis';
   if (/solidity|escrow|contract|audit|protocol/.test(haystack)) return 'Smart Contract';
   if (/frontend|ui|react|next|wallet|dashboard/.test(haystack)) return 'Frontend';
   if (/backend|api|route|database|supabase|server/.test(haystack)) return 'Backend';
-  if (/agent|llm|a2a|autonomous|runtime/.test(haystack)) return 'AI Agent';
-  if (/data|research|market|signal/.test(haystack)) return 'Data / Research';
-  if (/design|ux|visual/.test(haystack)) return 'Design / UI';
+  if (/agent|llm|a2a|autonomous|runtime/.test(haystack)) return 'Analysis';
+  if (/data|research|market|signal/.test(haystack)) return 'Data Research';
+  if (/design|ux|visual/.test(haystack)) return 'Design';
   if (/devops|deploy|vercel|infra|monitor/.test(haystack)) return 'DevOps';
   if (/docs|guide|readme|documentation/.test(haystack)) return 'Documentation';
   return 'Other';
