@@ -1,14 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useArcWallet } from '@/hooks/useArcWallet';
-import { ARC_EXPLORER, CONTRACTS, formatUSDC, shortenAddress } from '@/lib/contracts';
-import { displayAgentLabel, formatSkillLabel, parseAgentName, parseAgentSkill, shortAgentId } from '@/lib/agentName';
+import { useEffect, useRef, useState } from 'react';
+import { ARC_EXPLORER, CONTRACTS, formatUSDC } from '@/lib/contracts';
 import { fetchIndexerJson, type DashboardOverview } from '@/lib/indexer';
 
-const JOB_STATUS = ['Created', 'Budgeted', 'Funded', 'Submitted', 'Completed'] as const;
-const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'pending', 4: 'success' };
 
 const RPC_ENDPOINTS = [
   { label: 'blockdaemon', url: 'https://rpc.blockdaemon.testnet.arc.network' },
@@ -24,19 +20,6 @@ function copyToClipboard(text: string) {
 }
 
 type RpcHealth = { label: string; latency: number | null; blockNumber: bigint | null; ok: boolean };
-type JobEvent = {
-  eventName: string;
-  blockNumber: string;
-  transactionHash: string;
-  logIndex: number;
-  jobId?: string;
-  agentId?: string;
-  worker?: string;
-  client?: string;
-  payout?: string;
-  fee?: string;
-  budget?: string;
-};
 
 async function probeRpc(url: string): Promise<{ blockNumber: bigint | null; latency: number }> {
   const t0 = performance.now();
@@ -57,23 +40,15 @@ async function probeRpc(url: string): Promise<{ blockNumber: bigint | null; late
 }
 
 export default function Dashboard() {
-  const { address, isConnected } = useArcWallet();
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [rpcHealth, setRpcHealth] = useState<RpcHealth[]>([]);
   const [chainHead, setChainHead] = useState<bigint | null>(null);
-  const [events, setEvents] = useState<JobEvent[]>([]);
+
   const [lastSyncedBlock, setLastSyncedBlock] = useState<bigint | null>(null);
   const [tickCount, setTickCount] = useState(0);
-  const [agentSearch, setAgentSearch] = useState('');
-  const [agentSort, setAgentSort] = useState<'top' | 'jobs' | 'newest' | 'name'>('top');
-  const [showAllAgents, setShowAllAgents] = useState(false);
-  const [jobSearch, setJobSearch] = useState('');
-  const [jobStatusFilter, setJobStatusFilter] = useState<'all' | '0' | '1' | '2' | '3' | '4'>('all');
-  const [jobSort, setJobSort] = useState<'relevant' | 'newest' | 'budgetDesc' | 'budgetAsc' | 'depositDesc' | 'completedFirst'>('relevant');
-  const [showAllJobs, setShowAllJobs] = useState(false);
   const pulseRef = useRef<HTMLSpanElement>(null);
 
   async function loadOverview(options?: { silent?: boolean }) {
@@ -82,9 +57,8 @@ export default function Dashboard() {
       else setIsLoading(true);
       setError(null);
       const overviewPath = options?.silent ? '/overview/summary' : '/overview';
-      const [next, eventsRes, rootRes] = await Promise.all([
+      const [next, rootRes] = await Promise.all([
         fetchIndexerJson<DashboardOverview>(overviewPath),
-        fetchIndexerJson<JobEvent[]>('/job-events').catch(() => [] as JobEvent[]),
         fetchIndexerJson<{ lastSyncedBlock?: string; eventCount?: number }>('/').catch(() => ({} as { lastSyncedBlock?: string })),
       ]);
       if (options?.silent) {
@@ -92,7 +66,7 @@ export default function Dashboard() {
       } else {
         setOverview(next);
       }
-      setEvents(Array.isArray(eventsRes) ? eventsRes.slice(0, 20) : []);
+
       if (rootRes?.lastSyncedBlock) setLastSyncedBlock(BigInt(rootRes.lastSyncedBlock));
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Failed to load protocol dashboard.');
@@ -147,11 +121,8 @@ export default function Dashboard() {
     };
   }, []);
 
-  const jobs = overview?.jobs || [];
-  const agents = overview?.agents || [];
   const summary = overview?.summary;
-  // "lastSyncedBlock" here is block of last indexed event, not true cursor.
-  // Report time-since-last-event as the real health signal.
+
   const blocksSinceLastEvent = chainHead && lastSyncedBlock ? Number(chainHead - lastSyncedBlock) : null;
   // Health: active protocol = events fire regularly. Dormant testnet = expected silence.
   // Testnet Arc ~2s block time → 1800 blocks/hr. Up to ~50k blocks (~28hrs) is normal for low-traffic testnet.
@@ -166,65 +137,7 @@ export default function Dashboard() {
     return (a.latency ?? 9999) < (b.latency ?? 9999) ? a : b;
   }) : null;
 
-  const agentById = useMemo(() => {
-    const map = new Map<string, (typeof agents)[number]>();
-    for (const agent of agents) {
-      map.set(agent.agentId, agent);
-      if (agent.tokenId) map.set(agent.tokenId, agent);
-    }
-    return map;
-  }, [agents]);
 
-  const filteredAgents = useMemo(() => {
-    const q = agentSearch.trim().toLowerCase();
-    const rows = agents.filter((a) => {
-      if (!q) return true;
-      const name = parseAgentName(a.metadataURI) || '';
-      const skill = formatSkillLabel(parseAgentSkill(a.metadataURI)) || parseAgentSkill(a.metadataURI) || '';
-      return [name, skill, a.controller, a.agentId, a.tokenId || '', shortAgentId(a.tokenId || a.agentId)].some((v) => v.toLowerCase().includes(q));
-    });
-    return rows.sort((a, b) => {
-      if (agentSort === 'jobs') return b.jobs.length - a.jobs.length || Number(BigInt(b.score) - BigInt(a.score));
-      if (agentSort === 'newest') return Number(BigInt(b.registeredAt || '0') - BigInt(a.registeredAt || '0'));
-      if (agentSort === 'name') {
-        const an = displayAgentLabel({ agentId: a.agentId, metadataURI: a.metadataURI }).toLowerCase();
-        const bn = displayAgentLabel({ agentId: b.agentId, metadataURI: b.metadataURI }).toLowerCase();
-        return an.localeCompare(bn);
-      }
-      return Number(BigInt(b.score) - BigInt(a.score)) || b.jobs.length - a.jobs.length;
-    });
-  }, [agents, agentSearch, agentSort]);
-  const visibleAgents = showAllAgents ? filteredAgents : filteredAgents.slice(0, 3);
-
-  const filteredJobs = useMemo(() => {
-    const q = jobSearch.trim().toLowerCase();
-    const relevance: Record<number, number> = { 3: 0, 4: 1, 2: 2, 1: 3, 0: 4, 5: 5, 6: 6 };
-    const rows = jobs.filter((j) => {
-      if (jobStatusFilter !== 'all' && j.status !== Number(jobStatusFilter)) return false;
-      if (!q) return true;
-      const agent = agentById.get(j.agentId);
-      const name = agent ? displayAgentLabel({ agentId: agent.agentId, metadataURI: agent.metadataURI }) : shortAgentId(j.agentId);
-      const skill = agent ? (formatSkillLabel(parseAgentSkill(agent.metadataURI)) || parseAgentSkill(agent.metadataURI) || '') : '';
-      const status = JOB_STATUS[j.status] || '';
-      return [`#${j.id}`, j.id, j.agentId, shortAgentId(j.agentId), j.worker, j.client, name, skill, status].some((v) => String(v).toLowerCase().includes(q));
-    });
-    return rows.sort((a, b) => {
-      if (jobSort === 'newest') return Number(BigInt(b.id) - BigInt(a.id));
-      if (jobSort === 'budgetDesc') return Number(BigInt(b.budget) - BigInt(a.budget));
-      if (jobSort === 'budgetAsc') return Number(BigInt(a.budget) - BigInt(b.budget));
-      if (jobSort === 'depositDesc') return Number(BigInt(b.fundedAmount) - BigInt(a.fundedAmount));
-      if (jobSort === 'completedFirst') return (b.status === 4 ? 1 : 0) - (a.status === 4 ? 1 : 0) || Number(BigInt(b.id) - BigInt(a.id));
-      return (relevance[a.status] ?? 9) - (relevance[b.status] ?? 9) || Number(BigInt(b.id) - BigInt(a.id));
-    });
-  }, [jobs, jobSearch, jobStatusFilter, jobSort, agentById]);
-  const visibleJobs = showAllJobs ? filteredJobs : filteredJobs.slice(0, 5);
-
-  const topAgents = useMemo(() => [...agents].sort((a, b) => Number(BigInt(b.score) - BigInt(a.score))), [agents]);
-  const connectedJobs = useMemo(() => {
-    if (!address) return [];
-    const lower = address.toLowerCase();
-    return jobs.filter((j) => j.client.toLowerCase() === lower || j.worker.toLowerCase() === lower || j.evaluator.toLowerCase() === lower);
-  }, [address, jobs]);
 
   return (
     <div className="relative px-6 py-16 md:px-10 md:py-24">
@@ -333,325 +246,12 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Demo proof: canonical completed E2E */}
-        <div className="mt-6 flex flex-col gap-3 border border-[#B8CD7E]/20 bg-[#B8CD7E]/[0.035] p-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="aureo-mono-label mb-2" style={{ color: '#B8CD7E' }}>COMPLETED ERC-8183 JOB</div>
-            <p className="font-mono text-[12px] leading-6 text-[#EAE4D8] invisible">
-              Job <span className="text-[#C5A67C]">#19</span> completed on Arc testnet through ERC-8183 AgenticCommerce.
-            </p>
-            <div className="mt-2 flex flex-wrap gap-3">
-              <Link href="/job/19" className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C5A67C] hover:text-[#EAE4D8]">View Job →</Link>
-              <a href={`${ARC_EXPLORER}/address/${CONTRACTS.ERC8183_AGENTIC_COMMERCE}`} target="_blank" rel="noopener noreferrer" className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#C5A67C] hover:text-[#EAE4D8]">View ERC-8183 Contract →</a>
-            </div>
-          </div>
-          <span className="chip-status success self-start md:self-auto">SETTLED</span>
-        </div>
 
-        {/* Main grid: jobs + event tail */}
-        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-          <Panel
-            title="JOBS · FIND"
-            sub="Search and filter jobs"
-            action={<Link href="/jobs" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>OPEN ALL ↗</Link>}
-          >
-            <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
-              <input
-                value={jobSearch}
-                onChange={(e) => setJobSearch(e.target.value)}
-                placeholder="Search job, agent, payout wallet, approver..."
-                className="input-mono flex-1 text-[11px]"
-                spellCheck={false}
-              />
-              <select
-                value={jobStatusFilter}
-                onChange={(e) => setJobStatusFilter(e.target.value as typeof jobStatusFilter)}
-                className="input-mono text-[10.5px] md:w-[120px]"
-              >
-                <option value="all">All status</option>
-                <option value="0">Created</option>
-                <option value="1">Budgeted</option>
-                <option value="2">Funded</option>
-                <option value="3">Submitted</option>
-                <option value="4">Completed</option>
-              </select>
-              <select
-                value={jobSort}
-                onChange={(e) => setJobSort(e.target.value as typeof jobSort)}
-                className="input-mono text-[10.5px] md:w-[140px]"
-              >
-                <option value="relevant">Most relevant</option>
-                <option value="newest">Newest</option>
-                <option value="budgetDesc">Highest budget</option>
-                <option value="budgetAsc">Lowest budget</option>
-                <option value="depositDesc">Highest deposit</option>
-                <option value="completedFirst">Completed first</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              {filteredJobs.length === 0 ? (
-                <Empty msg={isLoading ? 'Loading jobs…' : (jobSearch || jobStatusFilter !== 'all' ? 'No matching jobs found.' : 'No jobs indexed yet.')} />
-              ) : (
-                visibleJobs.map((job) => {
-                  const ag = agentById.get(job.agentId);
-                  const agName = ag ? displayAgentLabel({ agentId: ag.agentId, metadataURI: ag.metadataURI }) : shortAgentId(job.agentId);
-                  const agSkill = ag ? formatSkillLabel(parseAgentSkill(ag.metadataURI)) : null;
-                  return (
-                    <Link
-                      key={job.id}
-                      href={`/job/${job.id.toString()}`}
-                      className="ledger-row block border border-white/10 bg-black/20 px-3 py-2.5 hover:border-[#C5A67C]/40 overflow-hidden"
-                    >
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0">
-                        <span className="font-mono text-[12px] whitespace-nowrap" style={{ color: '#EAE4D8' }}>#{job.id}</span>
-                        <span className={`chip-status ${JOB_TONE[job.status] || 'pending'}`}>{JOB_STATUS[job.status]}</span>
-                        <span className="font-mono text-[10.5px] min-w-0 truncate" style={{ color: 'rgba(234, 228, 216, 0.7)' }}>
-                          {agName}{agSkill ? <span style={{ color: 'rgba(234, 228, 216, 0.45)' }}> · {agSkill}</span> : null}
-                        </span>
-                        <span className="font-mono text-[11px] whitespace-nowrap ml-auto" style={{ color: '#C5A67C' }}>{formatUSDC(BigInt(job.budget))}</span>
-                      </div>
-                      <div className="mt-1 font-mono text-[10px] truncate" style={{ color: 'rgba(234, 228, 216, 0.45)' }}>
-                        Payout {shortenAddress(job.worker)} · Approver {shortenAddress(job.client)}
-                      </div>
-                    </Link>
-                  );
-                })
-              )}
-              {filteredJobs.length > 5 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllJobs((v) => !v)}
-                  className="font-mono text-[10.5px] uppercase tracking-[0.18em]"
-                  style={{ color: '#C5A67C' }}
-                >
-                  {showAllJobs ? `Show less ↑` : `Show all (${filteredJobs.length}) ↓`}
-                </button>
-              )}
-            </div>
-          </Panel>
-
-          <Panel title="EVENT · TAIL" sub={`${events.length} recent`}>
-            <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-              {events.length === 0 ? <Empty msg={isLoading ? 'Loading events…' : 'No events yet.'} /> : events.map((ev) => (
-                <div
-                  key={`${ev.transactionHash}-${ev.logIndex}`}
-                  className="border border-white/5 bg-black/30 px-3 py-2 transition hover:border-[#C5A67C]/30"
-                  style={{ animation: 'fadeInUp 0.4s both cubic-bezier(0.16, 1, 0.3, 1)' }}
-                >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-mono text-[11.5px] font-medium" style={{ color: eventColor(ev.eventName) }}>{ev.eventName}</span>
-                    <a
-                      href={`${ARC_EXPLORER}/block/${ev.blockNumber}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-[10px] hover:text-[#C5A67C]"
-                      style={{ color: 'rgba(234, 228, 216, 0.45)' }}
-                    >
-                      #{ev.blockNumber.slice(-6)}
-                    </a>
-                  </div>
-                  <div className="mt-1 font-mono text-[10.5px]" style={{ color: 'rgba(234, 228, 216, 0.65)' }}>
-                    {ev.jobId && <Link href={`/job/${ev.jobId}`} className="hover:text-[#C5A67C]">job <span style={{ color: '#EAE4D8' }}>#{ev.jobId}</span></Link>}
-                    {ev.jobId && ev.agentId && ' · '}
-                    {ev.agentId && <Link href={`/agent/${ev.agentId}`} className="hover:text-[#C5A67C]">agent <span style={{ color: '#EAE4D8' }}>#{ev.agentId}</span></Link>}
-                    {(ev.payout || ev.budget) && ' · '}
-                    {ev.payout && <>payout <span style={{ color: '#C5A67C' }}>{formatUSDC(BigInt(ev.payout))}</span></>}
-                    {ev.budget && !ev.payout && <>budget <span style={{ color: '#C5A67C' }}>{formatUSDC(BigInt(ev.budget))}</span></>}
-                  </div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <a
-                      href={`${ARC_EXPLORER}/tx/${ev.transactionHash}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono text-[9.5px] truncate hover:text-[#C5A67C]"
-                      style={{ color: 'rgba(234, 228, 216, 0.35)' }}
-                    >
-                      {ev.transactionHash.slice(0, 10)}…{ev.transactionHash.slice(-6)} ↗
-                    </a>
-                    <button
-                      onClick={() => copyToClipboard(ev.transactionHash)}
-                      className="font-mono text-[9px] uppercase tracking-wider hover:text-[#C5A67C]"
-                      style={{ color: 'rgba(234, 228, 216, 0.3)' }}
-                      title="copy tx hash"
-                    >
-                      copy
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Panel>
-        </div>
-
-        {/* Agent finder */}
-        <div className="mt-8">
-          <Panel
-            title="AGENTS · FIND"
-            sub="Browse registered agents"
-            action={<Link href="/register" className="font-mono text-[11px]" style={{ color: '#C5A67C' }}>REGISTER ↗</Link>}
-          >
-            <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:gap-2">
-              <input
-                value={agentSearch}
-                onChange={(e) => setAgentSearch(e.target.value)}
-                placeholder="Search agent, controller, ID, capability..."
-                className="input-mono flex-1 text-[11px]"
-                spellCheck={false}
-              />
-              <select
-                value={agentSort}
-                onChange={(e) => setAgentSort(e.target.value as typeof agentSort)}
-                className="input-mono text-[10.5px] md:w-[130px]"
-              >
-                <option value="top">Top score</option>
-                <option value="jobs">Most jobs</option>
-                <option value="newest">Newest</option>
-                <option value="name">Name A-Z</option>
-              </select>
-            </div>
-            <div className="space-y-2">
-              {filteredAgents.length === 0 ? (
-                <Empty msg={isLoading ? 'Loading agents…' : (agentSearch ? 'No matching agents found.' : 'No agents registered.')} />
-              ) : (
-                visibleAgents.map((a) => {
-                  const name = parseAgentName(a.metadataURI);
-                  const publicAgentId = a.tokenId || a.agentId;
-                  const label = name || `Agent ${shortAgentId(publicAgentId)}`;
-                  const skill = formatSkillLabel(parseAgentSkill(a.metadataURI));
-                  return (
-                    <div key={a.agentId} className="ledger-row flex flex-col gap-2 border border-white/10 bg-black/20 px-3 py-2.5 hover:border-[#C5A67C]/40 md:flex-row md:items-center md:justify-between md:gap-4">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-mono text-[12px] truncate" style={{ color: '#EAE4D8' }}>{label}</div>
-                        <div className="mt-0.5 font-mono text-[10px] truncate" style={{ color: 'rgba(234, 228, 216, 0.48)' }}>
-                          {skill ? <>{skill} · </> : null}ID <span title={publicAgentId}>{shortAgentId(publicAgentId)}</span> · controller {shortenAddress(a.controller)}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="chip-status success" title={`Score ${a.score}`}>Score {formatScore(a.score)}</span>
-                        <span className="tag-pill">{a.jobs.length} {a.jobs.length === 1 ? 'job' : 'jobs'}</span>
-                        <button
-                          type="button"
-                          onClick={() => copyToClipboard(publicAgentId)}
-                          className="btn-bordered px-2.5 py-1.5 text-[9px]"
-                          title={`Copy agent ID: ${publicAgentId}`}
-                        >
-                          Copy ID
-                        </button>
-                        <Link href={`/jobs?agent=${encodeURIComponent(a.agentId)}`} className="btn-primary px-2.5 py-1.5 text-[9px]">
-                          Use
-                        </Link>
-                        <Link href={`/agent/${encodeURIComponent(a.agentId)}`} className="font-mono text-[9px] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
-                          Details →
-                        </Link>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              {filteredAgents.length > 3 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllAgents((v) => !v)}
-                  className="font-mono text-[10.5px] uppercase tracking-[0.18em]"
-                  style={{ color: '#C5A67C' }}
-                >
-                  {showAllAgents ? `Show less ↑` : `Show all (${filteredAgents.length}) ↓`}
-                </button>
-              )}
-            </div>
-          </Panel>
-        </div>
-
-        {/* Wallet view */}
-        {isConnected && address && (
-          <div className="mt-8">
-              <Panel title="WALLET · PARTICIPATION" sub={`${connectedJobs.length} as buyer / agent / approver`}>
-              {connectedJobs.length === 0 ? (
-                  <Empty msg="No ERC-8183 job records found for this wallet yet." />
-              ) : (
-                <div className="space-y-2">
-                  {connectedJobs.map((job) => (
-                    <Link
-                      href={`/job/${job.id}`}
-                      key={`conn-${job.id}`}
-                      className="ledger-row block border border-white/10 bg-black/20 px-4 py-3"
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="font-mono text-[12.5px]" style={{ color: '#EAE4D8' }}>Job #{job.id}</span>
-                        <span className={`chip-status ${JOB_TONE[job.status] || 'pending'}`}>{JOB_STATUS[job.status]}</span>
-                      </div>
-                      <div className="mt-1 font-mono text-[10.5px]" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>
-                        Approver {shortenAddress(job.client)} · Payout {shortenAddress(job.worker)}
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </Panel>
-          </div>
-        )}
-
-        {error && (
-          <div className="mt-8 p-5" style={{ border: '1px solid rgba(230, 130, 130, 0.35)', background: 'rgba(230, 130, 130, 0.06)' }}>
-            <div className="aureo-mono-label" style={{ color: '#e68282' }}>INDEXER · UNREACHABLE</div>
-            <p className="mt-2 font-mono text-[11.5px] leading-5" style={{ color: '#f0c5c5' }}>
-              {error} · start with <span style={{ color: '#C5A67C' }}>pnpm --dir indexer start</span>
-            </p>
-          </div>
-        )}
-
-        {/* Developer shortcuts */}
-        <div className="mt-10">
-          <Panel title="DEVELOPER · SHORTCUTS" sub="Quick links">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div>
-                <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.5)]">API</div>
-                <div className="mt-2 space-y-1.5 font-mono text-[10.5px] text-[#EAE4D8]">
-                  <div><a href="/api/x402/supported" className="text-[#C5A67C] hover:text-[#EAE4D8]">GET /api/x402/supported</a></div>
-                  <div><span className="text-[rgba(234,228,216,0.45)]">POST</span> /api/x402/verify</div>
-                  <div><span className="text-[rgba(234,228,216,0.45)]">POST</span> /api/x402/settle</div>
-                  <div><a href="/api/x402/status" className="text-[#C5A67C] hover:text-[#EAE4D8]">GET /api/x402/status</a></div>
-                  <div><a href="/api/x402/gateway-status" className="text-[#C5A67C] hover:text-[#EAE4D8]">GET /api/x402/gateway-status</a></div>
-                </div>
-              </div>
-              <div>
-                <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.5)]">SDK</div>
-                <div className="mt-2 space-y-1.5 font-mono text-[10.5px] text-[#EAE4D8]">
-                  <code className="block rounded-sm border border-white/10 bg-black/40 px-2 py-1.5 text-[10px] text-[#EAE4D8]">pnpm add @arclayer/sdk</code>
-                  <Link href="/docs" className="block text-[#C5A67C] hover:text-[#EAE4D8]">Docs →</Link>
-                  <a href="https://github.com/riyannode/ArcLayer" target="_blank" rel="noopener noreferrer" className="block text-[#C5A67C] hover:text-[#EAE4D8]">GitHub repo ↗</a>
-                </div>
-              </div>
-              <div>
-                <div className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.5)]">CONTRACTS · ARC TESTNET</div>
-                <div className="mt-2 space-y-1.5 font-mono text-[10px] text-[rgba(234,228,216,0.85)]">
-                  <ContractRow label="ERC-8004 IdentityRegistry" addr={CONTRACTS.ERC8004_IDENTITY_REGISTRY} />
-                  <ContractRow label="ERC-8183 AgenticCommerce" addr={CONTRACTS.ERC8183_AGENTIC_COMMERCE} />
-                  <ContractRow label="USDC" addr={CONTRACTS.USDC} />
-                </div>
-              </div>
-            </div>
-          </Panel>
-        </div>
       </div>
     </div>
   );
 }
 
-
-function formatScore(raw: string): string {
-  const n = Number(raw);
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2).replace(/\.?0+$/, '') + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.?0+$/, '') + 'K';
-  return String(n);
-}
-
-function eventColor(name: string): string {
-  if (name.includes('Settled')) return '#B8CD7E';
-  if (name.includes('Cancel')) return '#e68282';
-  if (name.includes('Fund') || name.includes('Created')) return '#C5A67C';
-  return '#EAE4D8';
-}
 
 function Panel({ title, sub, action, children }: { title: string; sub?: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
@@ -698,22 +298,6 @@ function RpcRow({ label, latency, blockNumber, ok, loading, url }: RpcHealth & {
   );
 }
 
-function ContractRow({ label, addr }: { label: string; addr: string }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span>{label}</span>
-      <a
-        href={`${ARC_EXPLORER}/address/${addr}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="truncate text-[#C5A67C] hover:text-[#EAE4D8]"
-        title={addr}
-      >
-        {addr.slice(0, 6)}…{addr.slice(-4)}
-      </a>
-    </div>
-  );
-}
 
 function RailCard({ title, status, text, href, cta }: { title: string; status: string; text: string; href: string; cta: string }) {
   const tone = status === 'LIVE' ? '#B8CD7E' : '#C5A67C';
@@ -739,11 +323,5 @@ function StatusLine({ label, value, tone }: { label: string; value: string; tone
   );
 }
 
-function Empty({ msg }: { msg: string }) {
-  return (
-    <p className="p-4 font-mono text-[11.5px] leading-5 invisible" style={{ color: 'rgba(234, 228, 216, 0.45)', border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0, 0, 0, 0.25)' }}>
-      {msg}
-    </p>
-  );
-}
+
 
