@@ -35,9 +35,14 @@ async function runOnce() {
     return;
   }
 
-  const approved = Boolean(upstreamPayload.approved);
-  const direction = upstreamPayload.direction || upstreamPayload.suggestedDirection || 'NEUTRAL';
-  const confidence = upstreamPayload.confidence || 0;
+  // Prefer evaluator for approval (has `approved` field, analyzer doesn't)
+  // Use analyzer for signal/direction data (has technical analysis)
+  const evalPayload = session.roles?.evaluator?.payload;
+  const signalPayload = session.roles?.analyzer?.payload || evalPayload;
+
+  const approved = Boolean(evalPayload?.approved);
+  const direction = signalPayload?.direction || signalPayload?.suggestedDirection || evalPayload?.direction || 'NEUTRAL';
+  const confidence = signalPayload?.confidence || evalPayload?.confidence || 0;
 
   console.log(`[executor] signal received session=${session.sessionId} approved=${approved} direction=${direction} confidence=${confidence}`);
 
@@ -48,9 +53,9 @@ async function runOnce() {
     mode: approved ? 'LIVE' : 'DRY_RUN',
     direction,
     confidence,
-    reason: approved ? `Approved: ${direction} @ ${confidence}%` : `Rejected: ${upstreamPayload.reason || 'upstream rejected'}`,
-    riskLevel: upstreamPayload.riskLevel || 'HIGH',
-    flags: upstreamPayload.flags || []
+    reason: approved ? `Approved: ${direction} @ ${confidence}%` : `Rejected: ${evalPayload?.reason || signalPayload?.reason || 'upstream rejected'}`,
+    riskLevel: evalPayload?.riskLevel || signalPayload?.riskLevel || 'HIGH',
+    flags: evalPayload?.flags || signalPayload?.flags || []
   };
 
   const posted = await postEvent({
@@ -76,7 +81,7 @@ async function runOnce() {
       approved,
       direction,
       confidence,
-      riskLevel: upstreamPayload.riskLevel
+      riskLevel: evalPayload?.riskLevel || signalPayload?.riskLevel
     }
   });
 
