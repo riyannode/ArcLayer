@@ -136,3 +136,12 @@ export const NOTICE_TX_FAILED: ProtectionInput = {
   autoCloseMs: 5_000,
   dedupeKey: "tx:failed",
 };
+
+export const NOTICE_HOME_LOCKED: ProtectionInput = {
+  surface: "toast",
+  severity: "warning",
+  title: "Unlock required",
+  message: "Complete the x402 payment to unlock this interface.",
+  autoCloseMs: 3_500,
+  dedupeKey: "x402:locked_home_click",
+};
