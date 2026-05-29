@@ -29,7 +29,6 @@ type FormState = {
   deliverables: string;
   requirements: string;
   timeline: string;
-  budgetMin: string;
   budgetMax: string;
   clientAddress: string;
 };
@@ -41,7 +40,6 @@ const emptyForm: FormState = {
   deliverables: '',
   requirements: '',
   timeline: '',
-  budgetMin: '',
   budgetMax: '',
   clientAddress: '',
 };
