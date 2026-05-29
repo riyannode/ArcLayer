@@ -5,7 +5,7 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { switchChain } from '@wagmi/core';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
-import { buildCreateJobConfig } from '@arclayer/sdk';
+import { ERC8183_AGENTIC_COMMERCE_ABI } from '@arclayer/sdk';
 import { config } from '@/lib/wagmi';
 
 /* ------------------------------------------------------------------ */
@@ -236,16 +236,27 @@ export default function EscrowWorkOrderPage() {
     }
   }, []);
 
-  /* ---- Load worker agents from indexer (with env fallback) ---- */
+  /* ---- Load worker agents filtered by selected category ---- */
   useEffect(() => {
+    if (!form.category) {
+      setWorkerAgents([]);
+      return;
+    }
+
     let alive = true;
+
     async function load() {
       setWorkersLoading(true);
       try {
-        const res = await fetch('/api/a2a/agents/by-category?category=all', { cache: 'no-store' });
+        const categoryParam = encodeURIComponent(form.category);
+        const res = await fetch(`/api/a2a/agents/by-category?category=${categoryParam}`, {
+          cache: 'no-store',
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
         const json = await res.json();
         if (!json.ok || !Array.isArray(json.agents)) throw new Error('bad response');
+
         const agents: WorkerAgent[] = json.agents
           .filter((a: { controller?: string | null }) => a.controller && /^0x[0-9a-fA-F]{40}$/.test(a.controller))
           .map((a: { agentId?: string | number | null; id?: string | number | null; name?: string | null; controller?: string | null; roles?: Array<{ category?: string }> | null }) => ({
@@ -254,13 +265,11 @@ export default function EscrowWorkOrderPage() {
             controller: a.controller as `0x${string}`,
             category: a.roles?.[0]?.category ?? undefined,
           }));
-        if (alive && agents.length > 0) {
+
+        if (alive) {
           setWorkerAgents(agents);
-        } else if (alive && envFallbackWorker) {
-          setWorkerAgents([envFallbackWorker]);
         }
       } catch {
-        /* indexer not ready — use env fallback */
         if (alive && envFallbackWorker) {
           setWorkerAgents([envFallbackWorker]);
         }
@@ -268,9 +277,13 @@ export default function EscrowWorkOrderPage() {
         if (alive) setWorkersLoading(false);
       }
     }
+
     load();
-    return () => { alive = false; };
-  }, []);
+
+    return () => {
+      alive = false;
+    };
+  }, [form.category]);
 
   /* ---- Derived completion flags ---- */
   const overviewComplete = Boolean(
@@ -326,7 +339,13 @@ export default function EscrowWorkOrderPage() {
 
     const providerAgentId = selectedWorker.agentId;
     const providerAddress = selectedWorker.controller;
+    const evaluatorAddress = address as `0x${string}`;
 
+    // ERC-8183: evaluator MUST be non-zero (contract reverts on zero address)
+    if (!evaluatorAddress || evaluatorAddress === '0x0000000000000000000000000000000000000000') {
+      setError('Evaluator address is required. Connect a valid wallet.');
+      return;
+    }
     try {
       setCreating(true);
       setError('');
@@ -353,6 +372,7 @@ export default function EscrowWorkOrderPage() {
         body: JSON.stringify({
           buyerAgentId: 'console-user', // placeholder — will be replaced with real agent ID
           clientAddress: address,
+          evaluatorAddress,
           providerAgentId,
           providerAddress,
           expiredAtUnix,
@@ -375,19 +395,24 @@ export default function EscrowWorkOrderPage() {
       const { localJobId } = createData;
 
       // Step 2: Ensure wallet is on Arc Testnet, then sign
+      // Use server-returned tx instruction as single source of truth (prevents client/server drift)
       setTxState('Switching to Arc Testnet…');
       await switchChain(config, { chainId: 5042002 });
 
       setTxState('Waiting for wallet signature…');
-      const createHash = await writeContractAsync(
-        buildCreateJobConfig(
-          providerAddress,
-          '0x0000000000000000000000000000000000000000' as `0x${string}`,
-          BigInt(expiredAtUnix),
-          form.description,
-          '0x0000000000000000000000000000000000000000' as `0x${string}`,
-        ),
-      );
+      const txArgs = createData.tx.args as [string, string, string | number | bigint, string, string];
+      const createHash = await writeContractAsync({
+        address: createData.tx.address as `0x${string}`,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI,
+        functionName: 'createJob',
+        args: [
+          txArgs[0] as `0x${string}`,
+          txArgs[1] as `0x${string}`,
+          BigInt(txArgs[2]),
+          txArgs[3],
+          txArgs[4] as `0x${string}`,
+        ],
+      });
 
       // Step 3: Confirm with backend (writeContractAsync already awaited receipt)
       setTxState('Confirming JobCreated event…');
@@ -438,6 +463,7 @@ export default function EscrowWorkOrderPage() {
     ['Token', 'USDC'],
     ['Network', 'Arc Testnet'],
     ['Client Wallet', address || form.clientAddress || 'Not connected'],
+    ['Evaluator Wallet', 'Same as client'],
     ['Worker Agent', selectedWorker?.name ?? 'Not selected'],
   ] as const;
 
@@ -509,9 +535,16 @@ export default function EscrowWorkOrderPage() {
                 <FieldLabel required>Category</FieldLabel>
                 <select
                   value={form.category}
-                  onChange={(e) =>
-                    update('category', e.target.value as Category)
-                  }
+                  onChange={(e) => {
+                    const nextCategory = e.target.value as Category | '';
+                    setForm((s) => ({
+                      ...s,
+                      category: nextCategory,
+                      workerAgentId: '',
+                    }));
+                    setError('');
+                    setSuccess('');
+                  }}
                   className={inputCls}
                 >
                   <option value="">Select a category</option>
@@ -560,10 +593,14 @@ export default function EscrowWorkOrderPage() {
                   value={form.workerAgentId}
                   onChange={(e) => update('workerAgentId', e.target.value)}
                   className={inputCls}
-                  disabled={workersLoading}
+                  disabled={!form.category || workersLoading}
                 >
                   <option value="">
-                    {workersLoading ? 'Loading agents…' : 'Select a worker agent'}
+                    {!form.category
+                      ? 'Select a category first'
+                      : workersLoading
+                        ? 'Loading worker agents…'
+                        : 'Select a worker agent'}
                   </option>
                   {workerAgents.map((agent) => (
                     <option key={agent.agentId} value={agent.agentId}>
