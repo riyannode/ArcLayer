@@ -80,7 +80,7 @@ function BenefitCard({
   copy: string;
 }) {
   return (
-    <div className="flex items-center gap-5 rounded-xl border border-[#111315] bg-black/20 px-5 py-4">
+    <div className="flex items-center gap-5 rounded-xl border border-transparent bg-black/20 px-5 py-4">
       <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/25 bg-[#C5A67C]/8 text-2xl text-[#F0B84A]">
         {icon}
       </div>
