@@ -236,16 +236,27 @@ export default function EscrowWorkOrderPage() {
     }
   }, []);
 
-  /* ---- Load worker agents from indexer (with env fallback) ---- */
+  /* ---- Load worker agents filtered by selected category ---- */
   useEffect(() => {
+    if (!form.category) {
+      setWorkerAgents([]);
+      return;
+    }
+
     let alive = true;
+
     async function load() {
       setWorkersLoading(true);
       try {
-        const res = await fetch('/api/a2a/agents/by-category?category=all', { cache: 'no-store' });
+        const categoryParam = encodeURIComponent(form.category);
+        const res = await fetch(`/api/a2a/agents/by-category?category=${categoryParam}`, {
+          cache: 'no-store',
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
         const json = await res.json();
         if (!json.ok || !Array.isArray(json.agents)) throw new Error('bad response');
+
         const agents: WorkerAgent[] = json.agents
           .filter((a: { controller?: string | null }) => a.controller && /^0x[0-9a-fA-F]{40}$/.test(a.controller))
           .map((a: { agentId?: string | number | null; id?: string | number | null; name?: string | null; controller?: string | null; roles?: Array<{ category?: string }> | null }) => ({
@@ -254,13 +265,11 @@ export default function EscrowWorkOrderPage() {
             controller: a.controller as `0x${string}`,
             category: a.roles?.[0]?.category ?? undefined,
           }));
-        if (alive && agents.length > 0) {
+
+        if (alive) {
           setWorkerAgents(agents);
-        } else if (alive && envFallbackWorker) {
-          setWorkerAgents([envFallbackWorker]);
         }
       } catch {
-        /* indexer not ready — use env fallback */
         if (alive && envFallbackWorker) {
           setWorkerAgents([envFallbackWorker]);
         }
@@ -268,9 +277,13 @@ export default function EscrowWorkOrderPage() {
         if (alive) setWorkersLoading(false);
       }
     }
+
     load();
-    return () => { alive = false; };
-  }, []);
+
+    return () => {
+      alive = false;
+    };
+  }, [form.category]);
 
   /* ---- Derived completion flags ---- */
   const overviewComplete = Boolean(
@@ -511,9 +524,16 @@ export default function EscrowWorkOrderPage() {
                 <FieldLabel required>Category</FieldLabel>
                 <select
                   value={form.category}
-                  onChange={(e) =>
-                    update('category', e.target.value as Category)
-                  }
+                  onChange={(e) => {
+                    const nextCategory = e.target.value as Category | '';
+                    setForm((s) => ({
+                      ...s,
+                      category: nextCategory,
+                      workerAgentId: '',
+                    }));
+                    setError('');
+                    setSuccess('');
+                  }}
                   className={inputCls}
                 >
                   <option value="">Select a category</option>
@@ -562,10 +582,14 @@ export default function EscrowWorkOrderPage() {
                   value={form.workerAgentId}
                   onChange={(e) => update('workerAgentId', e.target.value)}
                   className={inputCls}
-                  disabled={workersLoading}
+                  disabled={!form.category || workersLoading}
                 >
                   <option value="">
-                    {workersLoading ? 'Loading agents…' : 'Select a worker agent'}
+                    {!form.category
+                      ? 'Select a category first'
+                      : workersLoading
+                        ? 'Loading worker agents…'
+                        : 'Select a worker agent'}
                   </option>
                   {workerAgents.map((agent) => (
                     <option key={agent.agentId} value={agent.agentId}>
