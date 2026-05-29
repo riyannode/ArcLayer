@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import type { NetworkAgent, FeedItem } from '@/types/agent-network';
+import { CreateJobPanel } from './CreateJobPanel';
 
 const TYPE_COLORS: Record<FeedItem['type'], string> = {
   signal: 'bg-blue-500/15 text-blue-300 border-blue-500/30',
@@ -81,6 +82,7 @@ export function AgentDetailDrawer({
   isDeactivating?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const [showCreateJob, setShowCreateJob] = useState(false);
   if (!agent) return null;
 
   const x402Receipts = agent.activity.filter((item) => item.tx || item.type === 'payment' || item.label.toLowerCase().includes('x402'));
@@ -162,13 +164,25 @@ export function AgentDetailDrawer({
             <button
               key={action}
               type="button"
-              onClick={action.includes('Copy') || action.includes('Copied') ? copyWallet : undefined}
+              onClick={
+                action === 'Create Job' ? () => setShowCreateJob(true) :
+                action.includes('Copy') || action.includes('Copied') ? copyWallet :
+                undefined
+              }
               className="rounded border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-[#C5A67C] hover:border-[#C5A67C]/40"
             >
               {action}
             </button>
           ))}
         </div>
+
+        {showCreateJob && (
+          <CreateJobPanel
+            agent={agent}
+            onClose={() => setShowCreateJob(false)}
+            onCreated={() => setShowCreateJob(false)}
+          />
+        )}
 
         {agent.canHide && onHide && (
           <div className="mt-4 rounded border border-red-500/15 bg-red-950/[0.05] p-3">

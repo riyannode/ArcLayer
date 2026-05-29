@@ -165,7 +165,7 @@ export default function DashboardPage() {
 
             <div className="mt-7 flex flex-wrap gap-4">
               <Link
-                href="/jobs/manual#create-job"
+                href="/jobs"
                 className="inline-flex h-14 items-center gap-3 rounded-lg border border-[#F0B84A]/40 bg-[#F0B84A] px-7 text-[15px] font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.22)] transition hover:scale-[1.01] hover:bg-[#FFD084]"
               >
                 <span className="text-2xl leading-none">＋</span>
@@ -173,7 +173,7 @@ export default function DashboardPage() {
               </Link>
 
               <Link
-                href="/register/manual"
+                href="/register"
                 className="inline-flex h-14 items-center gap-3 rounded-lg border border-[#C5A67C]/45 bg-black/20 px-7 text-[15px] font-semibold text-[#F0B84A] transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/10"
               >
                 Register Agent
