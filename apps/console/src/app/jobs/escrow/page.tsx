@@ -184,7 +184,7 @@ export default function EscrowWorkOrderPage() {
   const scopeComplete = Boolean(
     form.deliverables.trim() && form.requirements.trim() && form.timeline,
   );
-  const budgetComplete = Boolean(form.budgetMin || form.budgetMax);
+  const budgetComplete = Boolean(form.budgetMax);
   const canCreate = overviewComplete && scopeComplete;
 
   /* ---- Handlers ---- */
@@ -407,43 +407,28 @@ export default function EscrowWorkOrderPage() {
           <SectionCard
             number={3}
             title="Budget"
-            subtitle="Set your budget range or exact amount."
+            subtitle="Set the escrow budget for this job."
             status={budgetComplete ? 'Complete' : 'Pending'}
             open={openSections.budget}
             onToggle={() => toggleSection('budget')}
           >
-            <div className="grid gap-5 lg:grid-cols-2">
-              <div>
-                <FieldLabel>Minimum Budget</FieldLabel>
-                <div className="relative">
-                  <input
-                    value={form.budgetMin}
-                    onChange={(e) => update('budgetMin', e.target.value)}
-                    inputMode="decimal"
-                    placeholder="e.g. 100"
-                    className={`${inputCls} pr-20`}
-                  />
-                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs text-[#EAE4D8]/57">
-                    USDC
-                  </span>
-                </div>
+            <div>
+              <FieldLabel required>Escrow Budget</FieldLabel>
+              <div className="relative">
+                <input
+                  value={form.budgetMax}
+                  onChange={(e) => update('budgetMax', e.target.value)}
+                  inputMode="decimal"
+                  placeholder="e.g. 100"
+                  className={`${inputCls} pr-20`}
+                />
+                <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs text-[#EAE4D8]/62">
+                  USDC
+                </span>
               </div>
-
-              <div>
-                <FieldLabel>Maximum Budget</FieldLabel>
-                <div className="relative">
-                  <input
-                    value={form.budgetMax}
-                    onChange={(e) => update('budgetMax', e.target.value)}
-                    inputMode="decimal"
-                    placeholder="e.g. 250"
-                    className={`${inputCls} pr-20`}
-                  />
-                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs text-[#EAE4D8]/57">
-                    USDC
-                  </span>
-                </div>
-              </div>
+              <p className="mt-2 text-xs text-[#EAE4D8]/62">
+                Amount locked for escrow payment.
+              </p>
             </div>
           </SectionCard>
 
@@ -467,8 +452,8 @@ export default function EscrowWorkOrderPage() {
               <ReviewCard
                 label="Budget"
                 value={
-                  form.budgetMin || form.budgetMax
-                    ? `${form.budgetMin || '0'} – ${form.budgetMax || '∞'} USDC`
+                  form.budgetMax
+                    ? `${form.budgetMax} USDC`
                     : ''
                 }
               />
