@@ -90,7 +90,7 @@ cd my-bots/
 
 # 2. Copy and fill config
 cp bot.config.example.json bot.config.oracle.json
-# Edit bot.config.oracle.json with your agent ID, API key, private key
+# Edit bot.config.oracle.json with your agent ID and API key
 
 # 3. Run
 chmod +x run-oracle.sh
@@ -118,9 +118,6 @@ chmod +x run-oracle.sh
 ARCLAYER_AGENT_ID=your-agent-id        # From ERC-8004 mint
 ARCLAYER_API_KEY=ak_xxx                 # From console wizard
 BOT_ROLE=oracle                         # oracle|analyzer|evaluator|executor
-
-# Required for x402 payments
-X402_PAYER_PRIVATE_KEY=0x...            # Bot's Arc Testnet wallet key
 
 # Common
 ARCLAYER_BASE_URL=https://arclayers.xyz
