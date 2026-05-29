@@ -63,6 +63,12 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    if (!x402UiLockEnabled) {
+      sessionStorage.removeItem('x402_return_to');
+      return;
+    }
+
     if (!hasAccess) return;
 
     const returnTo = sessionStorage.getItem('x402_return_to');
@@ -76,7 +82,7 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
       sessionStorage.removeItem('x402_return_to');
       router.replace(returnTo);
     }
-  }, [hasAccess, router]);
+  }, [x402UiLockEnabled, hasAccess, router]);
 
   return (
     <div
