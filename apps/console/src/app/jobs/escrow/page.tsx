@@ -392,10 +392,10 @@ export default function EscrowWorkOrderPage() {
 
       // Step 4: Confirm with backend
       setTxState('Confirming JobCreated event…');
-      const confirmRes = await fetch(`/api/erc8183-jobs/${localJobId}/created`, {
+      const confirmRes = await fetch('/api/jobs/escrow/created', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ createTxHash: createHash }),
+        body: JSON.stringify({ localJobId, createTxHash: createHash }),
       });
 
       if (!confirmRes.ok) {
@@ -438,7 +438,7 @@ export default function EscrowWorkOrderPage() {
     ['Settlement', 'ERC-8183 Escrow'],
     ['Token', 'USDC'],
     ['Network', 'Arc Testnet'],
-    ['Client Wallet', form.clientAddress || 'Not connected'],
+    ['Client Wallet', address || form.clientAddress || 'Not connected'],
     ['Worker Agent', selectedWorker?.name ?? 'Not selected'],
   ] as const;
 
@@ -546,7 +546,7 @@ export default function EscrowWorkOrderPage() {
               <div className="lg:col-span-2">
                 <FieldLabel>Client Wallet</FieldLabel>
                 <input
-                  value={form.clientAddress || 'Not connected'}
+                  value={address || form.clientAddress || 'Not connected'}
                   readOnly
                   className={`${inputCls} cursor-not-allowed opacity-80`}
                 />
@@ -670,7 +670,7 @@ export default function EscrowWorkOrderPage() {
                 </span>
               </div>
               <p className="mt-2 text-xs text-[#EAE4D8]/62">
-                Amount locked for escrow payment.
+                Budget amount to use after job creation.
               </p>
             </div>
           </SectionCard>
