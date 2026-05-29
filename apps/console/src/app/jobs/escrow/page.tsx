@@ -36,6 +36,7 @@ type FormState = {
   timeline: string;
   budgetMax: string;
   clientAddress: string;
+  workerAgentId: string;
 };
 
 const emptyForm: FormState = {
@@ -47,9 +48,32 @@ const emptyForm: FormState = {
   timeline: '',
   budgetMax: '',
   clientAddress: '',
+  workerAgentId: '',
 };
 
 const DRAFT_KEY = 'arclayer:escrow-work-order-draft';
+
+/* ------------------------------------------------------------------ */
+/*  Worker Agent type                                                  */
+/* ------------------------------------------------------------------ */
+
+type WorkerAgent = {
+  agentId: string;
+  name: string;
+  controller: `0x${string}`;
+  category?: string;
+  reputationScore?: string;
+};
+
+/** Env fallback — always available so the form is never blocked. */
+const envFallbackWorker: WorkerAgent | null =
+  process.env.NEXT_PUBLIC_PROVIDER_AGENT_ID && process.env.NEXT_PUBLIC_WORKER_ADDR
+    ? {
+        agentId: process.env.NEXT_PUBLIC_PROVIDER_AGENT_ID,
+        name: 'Default Worker Agent',
+        controller: process.env.NEXT_PUBLIC_WORKER_ADDR as `0x${string}`,
+      }
+    : null;
 
 /* ------------------------------------------------------------------ */
 /*  Primitives                                                         */
@@ -196,6 +220,8 @@ export default function EscrowWorkOrderPage() {
     createTxHash: string;
     budgetAtomic: string;
   } | null>(null);
+  const [workerAgents, setWorkerAgents] = useState<WorkerAgent[]>([]);
+  const [workersLoading, setWorkersLoading] = useState(false);
 
   /* ---- Hydrate from draft on mount ---- */
   useEffect(() => {
@@ -210,9 +236,48 @@ export default function EscrowWorkOrderPage() {
     }
   }, []);
 
+  /* ---- Load worker agents from indexer (with env fallback) ---- */
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      setWorkersLoading(true);
+      try {
+        const res = await fetch('/api/a2a/agents/by-category?category=all', { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (!json.ok || !Array.isArray(json.agents)) throw new Error('bad response');
+        const agents: WorkerAgent[] = json.agents
+          .filter((a: { controller?: string | null }) => a.controller && /^0x[0-9a-fA-F]{40}$/.test(a.controller))
+          .map((a: { agentId?: string | number | null; id?: string | number | null; name?: string | null; controller?: string | null; roles?: Array<{ category?: string }> | null }) => ({
+            agentId: String(a.agentId ?? a.id ?? ''),
+            name: a.name || `Agent ${String(a.agentId ?? a.id ?? '').slice(0, 8)}`,
+            controller: a.controller as `0x${string}`,
+            category: a.roles?.[0]?.category ?? undefined,
+          }));
+        if (alive && agents.length > 0) {
+          setWorkerAgents(agents);
+        } else if (alive && envFallbackWorker) {
+          setWorkerAgents([envFallbackWorker]);
+        }
+      } catch {
+        /* indexer not ready — use env fallback */
+        if (alive && envFallbackWorker) {
+          setWorkerAgents([envFallbackWorker]);
+        }
+      } finally {
+        if (alive) setWorkersLoading(false);
+      }
+    }
+    load();
+    return () => { alive = false; };
+  }, []);
+
   /* ---- Derived completion flags ---- */
   const overviewComplete = Boolean(
-    form.title.trim() && form.category && form.description.trim(),
+    form.title.trim() &&
+      form.category &&
+      form.description.trim() &&
+      form.workerAgentId,
   );
   const scopeComplete = Boolean(
     form.deliverables.trim() && form.requirements.trim() && form.timeline,
@@ -249,14 +314,18 @@ export default function EscrowWorkOrderPage() {
       return;
     }
 
-    // Provider config: use env default or block
-    const providerAddress = process.env.NEXT_PUBLIC_WORKER_ADDR as `0x${string}` | undefined;
-    const providerAgentId = process.env.NEXT_PUBLIC_PROVIDER_AGENT_ID as string | undefined;
+    // Look up selected worker agent
+    const selectedWorker = workerAgents.find(
+      (agent) => agent.agentId === form.workerAgentId,
+    );
 
-    if (!providerAddress || !providerAgentId) {
-      setError('Provider agent is not configured yet. Set NEXT_PUBLIC_WORKER_ADDR and NEXT_PUBLIC_PROVIDER_AGENT_ID.');
+    if (!selectedWorker) {
+      setError('Select a worker agent first.');
       return;
     }
+
+    const providerAgentId = selectedWorker.agentId;
+    const providerAddress = selectedWorker.controller;
 
     try {
       setCreating(true);
@@ -357,6 +426,10 @@ export default function EscrowWorkOrderPage() {
   }
 
   /* ---- Render ---- */
+  const selectedWorker = workerAgents.find(
+    (a) => a.agentId === form.workerAgentId,
+  );
+
   const reviewRows = [
     ['Job Title', form.title],
     ['Category', form.category],
@@ -366,6 +439,7 @@ export default function EscrowWorkOrderPage() {
     ['Token', 'USDC'],
     ['Network', 'Arc Testnet'],
     ['Client Wallet', form.clientAddress || 'Not connected'],
+    ['Worker Agent', selectedWorker?.name ?? 'Not selected'],
   ] as const;
 
   const reviewBlocks = [
@@ -478,6 +552,28 @@ export default function EscrowWorkOrderPage() {
                 />
                 <p className="mt-2 text-xs text-[#EAE4D8]/62">
                   This wallet will be used as the ERC-8183 client address.
+                </p>
+              </div>
+
+              <div className="lg:col-span-2">
+                <FieldLabel required>Worker Agent</FieldLabel>
+                <select
+                  value={form.workerAgentId}
+                  onChange={(e) => update('workerAgentId', e.target.value)}
+                  className={inputCls}
+                  disabled={workersLoading}
+                >
+                  <option value="">
+                    {workersLoading ? 'Loading agents…' : 'Select a worker agent'}
+                  </option>
+                  {workerAgents.map((agent) => (
+                    <option key={agent.agentId} value={agent.agentId}>
+                      {agent.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-2 text-xs text-[#EAE4D8]/53">
+                  Selected agent to receive this ERC-8183 job.
                 </p>
               </div>
             </div>
