@@ -10,6 +10,7 @@ import { createPublicClient, formatUnits, getAddress, http, type Hex } from 'vie
 import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
 import { DEFAULT_GATEWAY_DEPOSIT_USDC } from '@/lib/x402/constants';
 import { DevDetails } from '@/components/DevDetails';
+import FaucetHelper from '@/components/x402/FaucetHelper';
 import { NOTICE_INSUFFICIENT_USDC, NOTICE_PAYMENT_SETTLED, NOTICE_REPLAY_FAILED, NOTICE_WALLET_NOT_CONNECTED, NOTICE_WRONG_CHAIN, useProtectionNotice } from '@/components/protection';
 import { shortenAddress } from '@/lib/contracts';
 
@@ -656,6 +657,14 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
             </div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Replay guard</span><span className={replayResult.startsWith('Rejected') ? 'text-red-300' : replayResult.startsWith('Unexpected') ? 'text-green-300' : 'text-white/80'}>{replayResult}</span></div>
           </div>
+          {activeAuthed && (
+            <FaucetHelper
+              address={address}
+              balance={walletUsdcBalance}
+              onClaimed={refreshGatewayBalance}
+              compact={compact}
+            />
+          )}
           <div className="mt-3 space-y-2.5">
             {!activeAuthed ? (
               <button onClick={connectSelectedWallet} className={`w-full cursor-pointer ${c.cardRadiusXs} border border-white/20 bg-white/[0.06] ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] text-white hover:bg-white/[0.12]`}>{connectLabel}</button>
@@ -854,6 +863,15 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
             <div className={`mt-3 ${c.cardRadiusXs} border border-yellow-400/20 bg-yellow-400/10 p-2.5 font-mono leading-5 text-yellow-100/80 ${compact ? 'text-[10.5px]' : 'text-[11px]'}`}>
               Gateway balance is 0 for this wallet. Use the DEPOSIT button above to fund your Gateway balance, or use Arc Native for direct on-chain x402 payment.
             </div>
+          )}
+
+          {activeAuthed && (
+            <FaucetHelper
+              address={address}
+              balance={walletUsdcBalance}
+              onClaimed={refreshGatewayBalance}
+              compact={compact}
+            />
           )}
 
           <div className="mt-3 space-y-2.5">
