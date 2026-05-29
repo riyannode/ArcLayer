@@ -2,6 +2,11 @@
 
 import Link from 'next/link';
 import { useState, useEffect, type ReactNode } from 'react';
+import { waitForTransactionReceipt } from '@wagmi/core';
+import { useArcWallet } from '@/hooks/useArcWallet';
+import { useArcWrite } from '@/hooks/useArcWrite';
+import { buildCreateJobConfig } from '@arclayer/sdk';
+import { config } from '@/lib/wagmi';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -45,7 +50,6 @@ const emptyForm: FormState = {
 };
 
 const DRAFT_KEY = 'arclayer:escrow-work-order-draft';
-const PREVIEW_KEY = 'arclayer:escrow-work-order-preview';
 
 /* ------------------------------------------------------------------ */
 /*  Primitives                                                         */
@@ -148,10 +152,33 @@ function SectionCard({
 }
 
 /* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function timelineToSeconds(timeline: string): number {
+  switch (timeline) {
+    case '24 hours': return 24 * 60 * 60;
+    case '3 days': return 3 * 24 * 60 * 60;
+    case '7 days': return 7 * 24 * 60 * 60;
+    case '14 days': return 14 * 24 * 60 * 60;
+    case '30 days': return 30 * 24 * 60 * 60;
+    default: return 7 * 24 * 60 * 60;
+  }
+}
+
+function usdcToAtomic(amount: string): string {
+  const num = parseFloat(amount);
+  if (isNaN(num) || num <= 0) return '0';
+  return String(Math.round(num * 1e6));
+}
+
+/* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 
 export default function EscrowWorkOrderPage() {
+  const { address, isConnected } = useArcWallet();
+  const { writeContractAsync } = useArcWrite();
   const [form, setForm] = useState<FormState>(emptyForm);
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     overview: true,
@@ -161,6 +188,14 @@ export default function EscrowWorkOrderPage() {
   });
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [txState, setTxState] = useState('');
+  const [result, setResult] = useState<{
+    localJobId: string;
+    erc8183JobId: string;
+    createTxHash: string;
+    budgetAtomic: string;
+  } | null>(null);
 
   /* ---- Hydrate from draft on mount ---- */
   useEffect(() => {
@@ -183,7 +218,7 @@ export default function EscrowWorkOrderPage() {
     form.deliverables.trim() && form.requirements.trim() && form.timeline,
   );
   const budgetComplete = Boolean(form.budgetMax);
-  const canCreate = overviewComplete && scopeComplete;
+  const canCreate = overviewComplete && scopeComplete && budgetComplete;
 
   /* ---- Handlers ---- */
   function toggleSection(key: SectionKey) {
@@ -202,26 +237,123 @@ export default function EscrowWorkOrderPage() {
     setSuccess('Draft saved locally.');
   }
 
-  function createJob() {
+  async function createJob() {
     if (!canCreate) {
       setSuccess('');
-      setError('Complete Overview and Scope before creating the job.');
+      setError('Complete Overview, Scope, and Budget before creating the job.');
       return;
     }
 
-    const localJob = {
-      id: `local_${Date.now()}`,
-      type: 'escrow_work_order_draft',
-      paymentRail: 'erc8183_escrow',
-      ...form,
-      status: 'local_draft',
-      createdAt: new Date().toISOString(),
-    };
+    if (!isConnected || !address) {
+      setError('Connect your wallet first.');
+      return;
+    }
 
-    localStorage.setItem(PREVIEW_KEY, JSON.stringify(localJob));
-    localStorage.removeItem(DRAFT_KEY);
-    setError('');
-    setSuccess('Job draft created locally. Backend wiring will be added later.');
+    // Provider config: use env default or block
+    const providerAddress = process.env.NEXT_PUBLIC_WORKER_ADDR as `0x${string}` | undefined;
+    const providerAgentId = process.env.NEXT_PUBLIC_PROVIDER_AGENT_ID as string | undefined;
+
+    if (!providerAddress || !providerAgentId) {
+      setError('Provider agent is not configured yet. Set NEXT_PUBLIC_WORKER_ADDR and NEXT_PUBLIC_PROVIDER_AGENT_ID.');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      setError('');
+      setSuccess('');
+      setResult(null);
+
+      // Build payload
+      const expiredAtUnix = String(Math.floor(Date.now() / 1000) + timelineToSeconds(form.timeline));
+      const budgetAtomic = usdcToAtomic(form.budgetMax);
+
+      const inputPayload = {
+        title: form.title,
+        category: form.category,
+        description: form.description,
+        deliverables: form.deliverables,
+        requirements: form.requirements,
+      };
+
+      // Step 1: Create local job via server-side wrapper
+      setTxState('Creating local ERC-8183 job…');
+      const createRes = await fetch('/api/jobs/escrow/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          buyerAgentId: 'console-user', // placeholder — will be replaced with real agent ID
+          clientAddress: address,
+          providerAgentId,
+          providerAddress,
+          expiredAtUnix,
+          budgetAtomic,
+          description: form.description,
+          inputPayload,
+        }),
+      });
+
+      if (!createRes.ok) {
+        const errBody = await createRes.json().catch(() => ({}));
+        throw new Error(errBody.message || `Server error ${createRes.status}`);
+      }
+
+      const createData = await createRes.json();
+      if (!createData.ok || !createData.localJobId || !createData.tx) {
+        throw new Error(createData.message || 'Failed to create local job.');
+      }
+
+      const { localJobId, tx } = createData;
+
+      // Step 2: Sign createJob tx via wallet
+      setTxState('Waiting for wallet signature…');
+      const createHash = await writeContractAsync(
+        buildCreateJobConfig(
+          providerAddress,
+          '0x0000000000000000000000000000000000000000' as `0x${string}`,
+          BigInt(expiredAtUnix),
+          form.description,
+          '0x0000000000000000000000000000000000000000' as `0x${string}`,
+        ),
+      );
+
+      // Step 3: Wait for tx receipt
+      setTxState('Waiting for tx confirmation…');
+      await waitForTransactionReceipt(config, { hash: createHash });
+
+      // Step 4: Confirm with backend
+      setTxState('Confirming JobCreated event…');
+      const confirmRes = await fetch(`/api/erc8183-jobs/${localJobId}/created`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ createTxHash: createHash }),
+      });
+
+      if (!confirmRes.ok) {
+        const confirmErr = await confirmRes.json().catch(() => ({}));
+        throw new Error(confirmErr.message || `Confirm error ${confirmRes.status}`);
+      }
+
+      const confirmData = await confirmRes.json();
+      if (!confirmData.ok || !confirmData.erc8183JobId) {
+        throw new Error(confirmData.message || 'Failed to confirm JobCreated event.');
+      }
+
+      // Success!
+      setResult({
+        localJobId,
+        erc8183JobId: confirmData.erc8183JobId,
+        createTxHash: createHash,
+        budgetAtomic,
+      });
+      localStorage.removeItem(DRAFT_KEY);
+      setTxState('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Job creation failed.');
+      setTxState('');
+    } finally {
+      setCreating(false);
+    }
   }
 
   /* ---- Render ---- */
@@ -498,6 +630,11 @@ export default function EscrowWorkOrderPage() {
           </SectionCard>
 
           {/* Feedback banners */}
+          {creating && txState ? (
+            <div className="rounded-lg border border-[#F0B84A]/25 bg-[#F0B84A]/10 px-5 py-3 text-sm text-[#F0B84A]">
+              {txState}
+            </div>
+          ) : null}
           {success ? (
             <div className="rounded-lg border border-[#B8CD7E]/25 bg-[#B8CD7E]/10 px-5 py-3 text-sm text-[#B8CD7E]">
               {success}
@@ -506,6 +643,54 @@ export default function EscrowWorkOrderPage() {
           {error ? (
             <div className="rounded-lg border border-red-400/25 bg-red-400/10 px-5 py-3 text-sm text-red-200">
               {error}
+            </div>
+          ) : null}
+
+          {/* Success summary card */}
+          {result ? (
+            <div className="rounded-xl border border-[#B8CD7E]/25 bg-[#B8CD7E]/5 p-6">
+              <h3 className="text-lg font-semibold text-[#B8CD7E]">Job Created Successfully</h3>
+              <div className="mt-4 space-y-3">
+                {([
+                  ['Local Job ID', result.localJobId],
+                  ['ERC-8183 Job ID', result.erc8183JobId],
+                  ['Status', 'Open'],
+                  ['Escrow Budget', `${form.budgetMax} USDC`],
+                  ['Create Tx Hash', result.createTxHash],
+                  ['Settlement', 'ERC-8183 Escrow'],
+                  ['Network', 'Arc Testnet'],
+                  ['Token', 'USDC'],
+                ] as const).map(([label, value]) => (
+                  <div key={label} className="flex items-center justify-between gap-6">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/38">
+                      {label}
+                    </span>
+                    <span className="max-w-[60%] truncate text-right text-sm font-mono text-[#F4EFE5]">
+                      {value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <Link
+                  href="/profile?tab=jobs"
+                  className="inline-flex h-11 items-center justify-center rounded-lg border border-[#B8CD7E]/35 bg-[#B8CD7E]/10 px-6 text-sm font-semibold text-[#B8CD7E] transition hover:bg-[#B8CD7E]/20"
+                >
+                  View in Profile →
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResult(null);
+                    setForm(emptyForm);
+                    setSuccess('');
+                    setError('');
+                  }}
+                  className="h-11 rounded-lg border border-white/[0.06] bg-black/35 px-6 text-sm font-semibold text-[#EAE4D8] transition hover:bg-white/[0.04]"
+                >
+                  Create Another Job
+                </button>
+              </div>
             </div>
           ) : null}
         </div>
@@ -528,9 +713,10 @@ export default function EscrowWorkOrderPage() {
             <button
               type="button"
               onClick={createJob}
-              className="h-12 rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A] px-10 text-sm font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.18)] transition hover:bg-[#FFD084]"
+              disabled={creating || !canCreate || !isConnected}
+              className="h-12 rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A] px-10 text-sm font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.18)] transition hover:bg-[#FFD084] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Create Job →
+              {creating ? 'Creating…' : 'Create Job →'}
             </button>
           </div>
         </div>
