@@ -37,7 +37,7 @@ export async function GET() {
       args: [account.address],
     });
 
-    const claimAmount = parseUnits(process.env.FAUCET_AMOUNT_USDC ?? '0.05', 6);
+    const claimAmount = parseUnits(process.env.FAUCET_AMOUNT_USDC ?? '1', 6);
     const ready = treasuryBalance >= claimAmount;
 
     return NextResponse.json({
@@ -45,7 +45,8 @@ export async function GET() {
       reason: ready ? 'ok' : 'treasury_empty',
       treasury: account.address,
       treasuryBalanceUsdc: formatUnits(treasuryBalance, 6),
-      claimAmountUsdc: process.env.FAUCET_AMOUNT_USDC ?? '0.05',
+      claimAmountUsdc: process.env.FAUCET_AMOUNT_USDC ?? '1',
+      minUserBalanceUsdc: process.env.FAUCET_MIN_USER_BALANCE_USDC ?? '0.05',
       circleFaucetUrl: CIRCLE_FAUCET_URL,
     });
   } catch (err) {

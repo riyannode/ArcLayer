@@ -1,11 +1,11 @@
 /**
- * POST /api/faucet/claim — Send 0.05 test USDC to the requesting wallet.
+ * POST /api/faucet/claim — Send 1 test USDC to the requesting wallet.
  *
  * Rate limits (enforced via faucet_claims table):
  *   - Wallet: 1 claim / 2 hours
  *   - IP:     3 claims / 2 hours
  *   - Global: 100 claims / 24 hours
- *   - User balance must be < FAUCET_MIN_USER_BALANCE_USDC (default 0.01)
+ *   - User balance must be < FAUCET_MIN_USER_BALANCE_USDC (default 0.05)
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
@@ -108,8 +108,8 @@ export async function POST(req: NextRequest) {
 
     // ─── On-chain checks ───
     const publicClient = createPublicClient({ chain: arcTestnet, transport: http(ARC_RPC) });
-    const amount = parseUnits(process.env.FAUCET_AMOUNT_USDC ?? '0.05', 6);
-    const minUserBalance = parseUnits(process.env.FAUCET_MIN_USER_BALANCE_USDC ?? '0.01', 6);
+    const amount = parseUnits(process.env.FAUCET_AMOUNT_USDC ?? '1', 6);
+    const minUserBalance = parseUnits(process.env.FAUCET_MIN_USER_BALANCE_USDC ?? '0.05', 6);
 
     const [userBalance, treasuryBalance] = await Promise.all([
       publicClient.readContract({ address: USDC, abi: ERC20_ABI, functionName: 'balanceOf', args: [recipient] }),
@@ -148,7 +148,7 @@ export async function POST(req: NextRequest) {
     await supabase.from('faucet_claims').insert({
       wallet_address: recipient,
       ip_hash: ipHash,
-      amount_usdc: Number(process.env.FAUCET_AMOUNT_USDC ?? '0.05'),
+      amount_usdc: Number(process.env.FAUCET_AMOUNT_USDC ?? '1'),
       tx_hash: txHash,
       status: 'sent',
     });
@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       txHash,
-      amount: process.env.FAUCET_AMOUNT_USDC ?? '0.05',
+      amount: process.env.FAUCET_AMOUNT_USDC ?? '1',
       explorerUrl: `https://testnet.arcscan.app/tx/${txHash}`,
     });
   } catch (err) {

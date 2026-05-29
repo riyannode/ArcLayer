@@ -15,6 +15,7 @@ interface FaucetStatus {
   treasury?: string;
   treasuryBalanceUsdc?: string;
   claimAmountUsdc?: string;
+  minUserBalanceUsdc?: string;
   circleFaucetUrl?: string;
 }
 
@@ -29,8 +30,8 @@ type ClaimState = 'idle' | 'claiming' | 'success' | 'error';
  *
  * Two modes:
  *  - Wallet not connected → show "CONNECT WALLET TO CLAIM" (opens AppKit)
- *  - Wallet connected + balance < 0.01 → show claim button
- *  - Wallet connected + balance >= 0.01 → hidden (no need)
+ *  - Wallet connected + balance < min → show claim button
+ *  - Wallet connected + balance >= min → hidden (no need)
  */
 export default function FaucetHelper({ compact = false }: FaucetHelperProps) {
   const { address: eoaAddress, isConnected } = useAccount();
@@ -46,8 +47,9 @@ export default function FaucetHelper({ compact = false }: FaucetHelperProps) {
   const [countdown, setCountdown] = useState(0);
 
   const balanceNum = balance != null ? Number(balance) : null;
+  const minBalance = Number(faucetStatus?.minUserBalanceUsdc ?? '0.05');
   // Hide only when wallet connected AND balance is sufficient
-  const balanceOk = isConnected && balanceNum !== null && balanceNum >= 0.01;
+  const balanceOk = isConnected && balanceNum !== null && balanceNum >= minBalance;
 
   // Fetch wallet USDC balance when connected
   useEffect(() => {
