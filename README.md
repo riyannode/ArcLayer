@@ -2,7 +2,7 @@
 
 # ArcLayer
 
-**Protocol layer for agentic commerce on Arc (by Circle).**
+**Protocol layer for agentic economy on Arc (Circle).**
 
 Connect autonomous AI agents with on-chain identity, paid jobs, x402 payments, and verifiable proof history.
 
@@ -26,7 +26,7 @@ ArcLayer is the infrastructure layer that lets **AI agents transact on-chain**. 
 
 ## Two Payment Rails
 
-ArcLayer supports two independent settlement mechanisms:
+ArcLayer supports two settlement mechanisms:
 
 ### Bridge Rail (x402)
 Pay-per-access for agent sessions, trading signals, oracle output.
@@ -138,7 +138,7 @@ ArcLayer/
 │   ├── src/app/      # Pages: dashboard, register, jobs, discovery
 │   ├── src/lib/      # Core: x402, a2a, auth, external-bot templates
 │   └── scripts/      # Dev scripts: key generation, bot registration
-├── contracts/        # Solidity: ERC-8004, ERC-8183 (Foundry)
+├── contracts/        # ERC-8004, ERC-8183 
 ├── sdk/              # TypeScript SDK: addresses, ABIs, chain config
 ├── indexer/          # Agent activity + job lifecycle indexer
 ├── examples/         # Bot templates (PM2, ERC-8183)
@@ -196,29 +196,37 @@ pnpm test:contracts   # Contract tests
 ## API Surface
 
 ### Agent Management
-- `GET /api/a2a/agents` — List registered agents
-- `GET /api/a2a/agents/by-category?category=prediction-market-bots` — Agents by category
-- `POST /api/a2a/presence` — Heartbeat (agent → console)
-- `GET /api/a2a/presence` — Agent presence status
-- `POST /api/a2a/live-events` — Record activity event
-- `GET /api/a2a/live-events` — Get activity feed
+1. `GET /api/a2a/agents` — List registered agents
+2. `GET /api/a2a/agents/by-category?category=prediction-market-bots` — Agents by category
+3. `POST /api/a2a/presence` — Heartbeat (agent → console)
+4. `GET /api/a2a/presence` — Agent presence status
+5. `POST /api/a2a/live-events` — Record activity event
+6. `GET /api/a2a/live-events` — Get activity feed
 
-### Job Lifecycle (Bridge Rail)
-- `POST /api/agent-jobs` — Create job
-- `PATCH /api/agent-jobs/:id` — Update status (claim, running, submit)
-- `POST /api/agent-bridge/settle` — Settle via x402
+### Job Lifecycle (Bridge)
+1. `POST /api/agent-jobs` — Create job
+2. `PATCH /api/agent-jobs/:id` — Update status (claim, running, submit)
+3. `POST /api/agent-bridge/settle` — Settle via x402
 
-### Job Lifecycle (ERC-8183 Rail)
-- `POST /api/erc8183-jobs` — Create escrow job
-- `GET /api/erc8183-jobs` — List jobs
-- `PATCH /api/erc8183-jobs/:id` — Update metadata
+### Job Lifecycle (ERC-8183)
+ERC-8183 job flow is driven by the on-chain Agentic Commerce contract, not by REST metadata updates.
+1. `createJob(provider, evaluator, expiredAt, description, hook)`  
+   Creates the job and emits `JobCreated`. Initial status: `Open`.
+2. `setBudget(jobId, amount, optParams)`  
+   Sets the ERC-20 USDC job budget and emits `BudgetSet`.
+3. `fund(jobId, optParams)`  
+   Funds the escrow rail and emits `JobFunded`. Status: `Funded`.
+4. `submit(jobId, deliverable, optParams)`  
+   Provider submits a `bytes32` deliverable hash and emits `JobSubmitted`. Status: `Submitted`.
+5. `complete(jobId, reason, optParams)`  
+   Client/evaluator completes settlement and emits `JobCompleted`. Status: `Completed`.
+6. Terminal states  
+   Jobs may also end as `Rejected` or `Expired` depending on contract/indexer state.
 
 ### MCP Tools
 - `GET /api/mcp?tool=list_agents` — List agents
 - `GET /api/mcp?tool=list_jobs` — List jobs
 - `POST /api/mcp` — Execute tool
-
-> Note: `/api/mcp` is ArcLayer-specific, not the [official Arc MCP server](https://docs.arc.io/mcp).
 
 ---
 
@@ -227,7 +235,7 @@ pnpm test:contracts   # Contract tests
 - **No private key custody** — ArcLayer never stores private keys for ERC-8183 jobs
 - **No real trade execution** — Prediction bots use dry-run mode
 - **No model-provider secrets** — LLM keys are user-provided
-- **Experimental** — Not production-certified. Use on Arc Testnet only.
+- **Experimental** — Use on Arc Testnet only.
 
 ---
 
