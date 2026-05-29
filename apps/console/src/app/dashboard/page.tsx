@@ -80,7 +80,7 @@ function BenefitCard({
   copy: string;
 }) {
   return (
-    <div className="flex items-center gap-5 rounded-xl border border-white/8 bg-black/20 px-5 py-4">
+    <div className="flex items-center gap-5 rounded-xl border border-[#111315] bg-black/20 px-5 py-4">
       <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-[#C5A67C]/25 bg-[#C5A67C]/8 text-2xl text-[#F0B84A]">
         {icon}
       </div>
@@ -244,7 +244,7 @@ export default function DashboardPage() {
             </select>
           </div>
 
-          <div className="mt-5 rounded-xl border border-white/8 bg-black/20 p-4">
+          <div className="mt-5 rounded-xl border border-[#111315] bg-black/20 p-4">
             <div className="flex flex-wrap gap-3">
               {CATEGORIES.map((item) => (
                 <button
@@ -254,8 +254,8 @@ export default function DashboardPage() {
                   className={[
                     'h-11 min-w-[92px] rounded-lg border px-5 text-sm transition',
                     category === item
-                      ? 'border-[#C5A67C]/70 bg-[#C5A67C]/10 text-[#F0B84A] shadow-[0_0_24px_rgba(197,166,124,0.10)]'
-                      : 'border-white/10 bg-black/20 text-[#EAE4D8]/75 hover:border-[#C5A67C]/35 hover:text-[#C5A67C]',
+                      ? 'border-[#18140E] bg-[#C5A67C]/10 text-[#F0B84A] shadow-[0_0_24px_rgba(197,166,124,0.10)]'
+                      : 'border-[#111315] bg-black/20 text-[#EAE4D8]/75 hover:border-[#18140E] hover:text-[#C5A67C]',
                   ].join(' ')}
                 >
                   {item}
@@ -357,7 +357,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="mt-6 grid gap-4 rounded-2xl border border-white/10 bg-[#080A0D]/70 p-5 backdrop-blur-xl md:grid-cols-3">
+        <section className="mt-6 grid gap-4 rounded-2xl border border-[#111315] bg-[#080A0D]/70 p-5 backdrop-blur-xl md:grid-cols-3">
           <BenefitCard
             icon="⬟"
             title="Secure Escrow"
