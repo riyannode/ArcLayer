@@ -1,6 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useAccount } from 'wagmi';
+import { createPublicClient, formatUnits, getAddress, http } from 'viem';
+
+const ARC_RPC = 'https://rpc.drpc.testnet.arc.network';
+const USDC = getAddress('0x3600000000000000000000000000000000000000');
+const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
 
 interface FaucetStatus {
   ready: boolean;
@@ -12,25 +18,20 @@ interface FaucetStatus {
 }
 
 interface FaucetHelperProps {
-  /** Connected wallet address */
-  address: string;
-  /** Current wallet USDC balance (formatted string, e.g. "0.00") */
-  balance: string | null;
-  /** Called after a successful claim so parent can refresh balance */
-  onClaimed?: () => void;
-  /** Compact mode for ticketOnly variant */
   compact?: boolean;
 }
 
 type ClaimState = 'idle' | 'claiming' | 'success' | 'error';
 
 /**
- * FaucetHelper — shows "Need test USDC?" card when wallet balance is low.
- *
- * Standalone component. Does NOT modify X402DemoPanel internals.
- * Render inside the ticket sidebar between status info and action buttons.
+ * FaucetHelper — standalone faucet card. Self-contained: reads wallet + balance via wagmi.
+ * Render inside a data-x402-unlock-zone so it stays visible during the global blur lock.
  */
-export default function FaucetHelper({ address, balance, onClaimed, compact = false }: FaucetHelperProps) {
+export default function FaucetHelper({ compact = false }: FaucetHelperProps) {
+  const { address: eoaAddress, isConnected } = useAccount();
+  const address = eoaAddress ?? '';
+
+  const [balance, setBalance] = useState<string | null>(null);
   const [faucetStatus, setFaucetStatus] = useState<FaucetStatus | null>(null);
   const [claimState, setClaimState] = useState<ClaimState>('idle');
   const [claimError, setClaimError] = useState('');
@@ -41,7 +42,16 @@ export default function FaucetHelper({ address, balance, onClaimed, compact = fa
   const balanceNum = balance != null ? Number(balance) : null;
   const needsFaucet = balanceNum !== null && balanceNum < 0.01;
 
-  // Fetch faucet status on mount
+  // Fetch wallet USDC balance
+  useEffect(() => {
+    if (!address) { setBalance(null); return; }
+    const client = createPublicClient({ transport: http(ARC_RPC) });
+    client.readContract({ address: USDC, abi: BALANCE_ABI, functionName: 'balanceOf', args: [address as `0x${string}`] })
+      .then((b) => setBalance(formatUnits(b, 6)))
+      .catch(() => setBalance(null));
+  }, [address]);
+
+  // Fetch faucet status
   useEffect(() => {
     fetch('/api/faucet/status')
       .then((r) => r.json())
@@ -49,15 +59,23 @@ export default function FaucetHelper({ address, balance, onClaimed, compact = fa
       .catch(() => setFaucetStatus({ ready: false, reason: 'probe_failed' }));
   }, []);
 
-  // Countdown timer for rate limit
+  // Countdown timer
   useEffect(() => {
     if (countdown <= 0) return;
     const timer = setInterval(() => setCountdown((c) => Math.max(0, c - 1)), 1000);
     return () => clearInterval(timer);
   }, [countdown]);
 
+  const refreshBalance = useCallback(() => {
+    if (!address) return;
+    const client = createPublicClient({ transport: http(ARC_RPC) });
+    client.readContract({ address: USDC, abi: BALANCE_ABI, functionName: 'balanceOf', args: [address as `0x${string}`] })
+      .then((b) => setBalance(formatUnits(b, 6)))
+      .catch(() => {});
+  }, [address]);
+
   const claim = useCallback(async () => {
-    if (claimState === 'claiming') return;
+    if (claimState === 'claiming' || !address) return;
     setClaimState('claiming');
     setClaimError('');
     setTxHash('');
@@ -77,7 +95,6 @@ export default function FaucetHelper({ address, balance, onClaimed, compact = fa
           setCountdown(data.retryAfterSeconds ?? 7200);
         } else if (data.error === 'treasury_empty') {
           setClaimError('Faucet treasury is empty.');
-          // Refresh status
           setFaucetStatus((prev) => prev ? { ...prev, ready: false, reason: 'treasury_empty' } : null);
         } else if (data.error === 'wallet_already_funded') {
           setClaimError('Wallet already has enough USDC.');
@@ -89,14 +106,16 @@ export default function FaucetHelper({ address, balance, onClaimed, compact = fa
 
       setTxHash(data.txHash);
       setClaimState('success');
-      onClaimed?.();
+      // Refresh balance after a short delay for tx to propagate
+      setTimeout(refreshBalance, 2000);
     } catch (e) {
       setClaimState('error');
       setClaimError(e instanceof Error ? e.message : 'Network error');
     }
-  }, [address, claimState, onClaimed]);
+  }, [address, claimState, refreshBalance]);
 
   const copyAddress = useCallback(async () => {
+    if (!address) return;
     try {
       await navigator.clipboard.writeText(address);
       setCopied(true);
@@ -104,18 +123,22 @@ export default function FaucetHelper({ address, balance, onClaimed, compact = fa
     } catch { /* clipboard unavailable */ }
   }, [address]);
 
-  // Don't render if balance is sufficient or unknown
+  // Don't render if not connected
+  if (!isConnected || !address) return null;
+
+  // Don't render if balance is sufficient
   if (!needsFaucet) return null;
 
   const s = compact ? 'text-[10px]' : 'text-[11px]';
   const btn = compact ? 'py-1.5 text-[10px]' : 'py-2 text-[11px]';
+  const radius = compact ? 'rounded-xl' : 'rounded-2xl';
 
-  // Treasury empty state — redirect to Circle Faucet
+  // Treasury empty — redirect to Circle Faucet
   if (faucetStatus && !faucetStatus.ready) {
     return (
-      <div className="rounded-lg border border-yellow-400/20 bg-yellow-400/[0.06] p-3 font-mono">
+      <div className={`${radius} w-full max-w-[440px] border border-yellow-400/20 bg-[#111]/95 p-3.5 font-mono shadow-2xl shadow-black/40`}>
         <div className={`mb-1.5 ${s} text-yellow-200/90`}>ArcLayer Faucet is empty.</div>
-        <div className={`mb-2.5 ${s} text-white/50`}>
+        <div className={`mb-2.5 ${compact ? 'text-[9px]' : 'text-[10px]'} text-white/40`}>
           Get test USDC from the Circle Faucet instead.
         </div>
         <a
@@ -136,10 +159,10 @@ export default function FaucetHelper({ address, balance, onClaimed, compact = fa
     );
   }
 
-  // Claim success state
+  // Claim success
   if (claimState === 'success') {
     return (
-      <div className="rounded-lg border border-green-400/20 bg-green-400/[0.06] p-3 font-mono">
+      <div className={`${radius} w-full max-w-[440px] border border-green-400/20 bg-[#111]/95 p-3.5 font-mono shadow-2xl shadow-black/40`}>
         <div className={`mb-1 ${s} text-green-300`}>✓ {faucetStatus?.claimAmountUsdc ?? '0.05'} USDC sent</div>
         {txHash && (
           <a
@@ -152,7 +175,7 @@ export default function FaucetHelper({ address, balance, onClaimed, compact = fa
           </a>
         )}
         <div className={`mt-1.5 ${compact ? 'text-[9px]' : 'text-[10px]'} text-white/40`}>
-          Balance will refresh shortly. Then click BUY ACCESS.
+          Balance refreshing… then click BUY ACCESS above.
         </div>
       </div>
     );
@@ -160,11 +183,11 @@ export default function FaucetHelper({ address, balance, onClaimed, compact = fa
 
   // Default: claim available
   return (
-    <div className="rounded-lg border border-[#C5A67C]/15 bg-[#C5A67C]/[0.04] p-3 font-mono">
+    <div className={`${radius} w-full max-w-[440px] border border-[#C5A67C]/15 bg-[#111]/95 p-3.5 font-mono shadow-2xl shadow-black/40`}>
       <div className={`mb-1 ${s} text-white/60`}>
         Balance: <span className="text-yellow-300">{balance ?? '0'} USDC</span>
       </div>
-      <div className={`mb-2.5 ${s} text-white/40`}>
+      <div className={`mb-2.5 ${compact ? 'text-[9px]' : 'text-[10px]'} text-white/40`}>
         Need test USDC to unlock x402 access.
       </div>
       <button
