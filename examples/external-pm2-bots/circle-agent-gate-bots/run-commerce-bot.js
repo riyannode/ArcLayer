@@ -168,23 +168,22 @@ async function runOracle({ config, env }) {
 // External bots just set their ROLE and auto-route to the right upstream.
 
 async function runRoutedRole({ config, env }) {
-  const route = env.upstreamRole
-    ? resolveCommerceRoute({ buyerRole: env.role, sellerRole: env.upstreamRole })
-    : null;
-
   // 1. Read upstream events by ROLE (event graph, blocking)
   let upstreamData = null;
   let upstreamSource = null;
+  let selectedUpstreamRole = null;
 
   if (env.upstreamRole) {
     // Executor fallback: try analyzer first, then evaluator
-    const rolesToTry = env.role === "executor" ? ["analyzer", "evaluator"] : [env.upstreamRole];
+    const rolesToTry = env.role === "executor"
+      ? [env.upstreamRole, "evaluator"].filter((r, i, a) => r && a.indexOf(r) === i)
+      : [env.upstreamRole];
 
     for (const tryRole of rolesToTry) {
       console.log(`[${env.role}] reading upstream role=${tryRole} events...`);
 
       const { events } = await readUpstreamEvents({
-        agentId: null,  // read from ANY agent with this role
+        agentId: env.upstreamAgentId || null,  // P2 fix: respect override
         role: tryRole,
         category: env.category,
         limit: 5,
@@ -194,8 +193,9 @@ async function runRoutedRole({ config, env }) {
       if (events.length) {
         upstreamData = events[0].payload;
         upstreamSource = events[0];
+        selectedUpstreamRole = tryRole;  // P3 fix: track actual role
         console.log(
-          `[${env.role}] upstream data found from ${events[0].runtimeId || tryRole} payloadHash=${events[0].payloadHash?.slice(0, 12)}...`
+          `[${env.role}] upstream data found from ${events[0].agentId || events[0].runtimeId || tryRole} payloadHash=${events[0].payloadHash?.slice(0, 12)}...`
         );
         break;
       } else {
@@ -210,6 +210,11 @@ async function runRoutedRole({ config, env }) {
       throw new Error(`[${env.role}] BLOCKED: no ${tried} events available. Upstream event not found.`);
     }
   }
+
+  // P3 fix: route resolved AFTER fallback, using actual selected role
+  const route = selectedUpstreamRole
+    ? resolveCommerceRoute({ buyerRole: env.role, sellerRole: selectedUpstreamRole })
+    : null;
 
   // 2. Process with LLM (requires upstream data for non-oracle roles)
   const llmResult = await processWithLlm({
@@ -235,7 +240,7 @@ async function runRoutedRole({ config, env }) {
         payload: {
           action: route.action,
           buyerRole: env.role,
-          sellerRole: env.upstreamRole,
+          sellerRole: selectedUpstreamRole,
           sellerAgentId: upstreamSource?.agentId || upstreamSource?.runtimeId || null,
           sourcePayloadHash: upstreamSource?.payloadHash || null,
           market: env.market,
@@ -244,7 +249,7 @@ async function runRoutedRole({ config, env }) {
         metadata: {
           commerceBuyer: true,
           buyerRole: env.role,
-          sellerRole: env.upstreamRole,
+          sellerRole: selectedUpstreamRole,
           sellerAgentId: upstreamSource?.agentId || upstreamSource?.runtimeId || null,
           accessType: route.accessType,
           scope: route.scope,
@@ -261,7 +266,7 @@ async function runRoutedRole({ config, env }) {
       try {
         payment = await payUpstreamForAccess({
           upstreamAgentId: upstreamSource?.agentId || upstreamSource?.runtimeId || null,
-          upstreamRole: env.upstreamRole,
+          upstreamRole: selectedUpstreamRole,
           buyerRole: env.role,
           category: env.category,
           market: env.market,
@@ -275,7 +280,7 @@ async function runRoutedRole({ config, env }) {
           },
           llmReceipt: buildLlmReceipt({
             payload: { upstreamPayload: upstreamData, result: llmResult },
-            llmReceipt: { ...llmResult, summary: llmResult.summary || `${env.role} consumed ${env.upstreamRole} data.`, decision: llmResult.decision || "COMMERCE_ACCESS" },
+            llmReceipt: { ...llmResult, summary: llmResult.summary || `${env.role} consumed ${selectedUpstreamRole} data.`, decision: llmResult.decision || "COMMERCE_ACCESS" },
           }),
         });
         console.log(`[${env.role}] seller commerce paid rail=${payment.rail} tx=${payment.txHash || "n/a"}`);
@@ -293,7 +298,7 @@ async function runRoutedRole({ config, env }) {
     market: env.market,
     runtimeId: env.runtimeId,
     sessionId: env.sessionId,
-    upstreamRole: env.upstreamRole,
+    upstreamRole: selectedUpstreamRole,
     upstreamPayloadHash: upstreamSource?.payloadHash || null,
     analysis: llmResult.analysis || null,
     evaluation: llmResult.evaluation || null,
@@ -317,7 +322,7 @@ async function runRoutedRole({ config, env }) {
       commerceOutput: true,
       eventGraph: true,
       buyerRole: env.role,
-      sellerRole: env.upstreamRole,
+      sellerRole: selectedUpstreamRole,
       scope: route?.scope || "event_graph",
       market: env.market,
       llmProvider: llmResult.provider || null,
@@ -332,7 +337,7 @@ async function runRoutedRole({ config, env }) {
     payload: outputPayload,
     llmReceipt: {
       ...llmResult,
-      summary: llmResult.summary || `${env.role} produced ${env.upstreamRole}-driven analysis for ${env.market}.`,
+      summary: llmResult.summary || `${env.role} produced ${selectedUpstreamRole}-driven analysis for ${env.market}.`,
       decision: llmResult.decision || "PIPELINE_OUTPUT",
     },
   });
