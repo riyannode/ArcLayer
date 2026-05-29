@@ -72,37 +72,37 @@ export async function POST(req: NextRequest) {
     const ipHash = hashIp(ip);
     const supabase = getSupabaseAdmin();
 
-    // ─── Rate limit: wallet (1 claim / 2 hours) ───
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    // ─── Rate limit: wallet (1 claim / 24 hours) ───
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { count: walletRecentCount } = await supabase
       .from('faucet_claims')
       .select('id', { count: 'exact', head: true })
       .ilike('wallet_address', recipient)
-      .gte('created_at', twoHoursAgo);
+      .gte('created_at', twentyFourHoursAgo);
 
     if ((walletRecentCount ?? 0) > 0) {
-      return NextResponse.json({ ok: false, error: 'rate_limited_wallet', retryAfterSeconds: 7200 }, { status: 429 });
+      return NextResponse.json({ ok: false, error: 'rate_limited_wallet', retryAfterSeconds: 86400 }, { status: 429 });
     }
 
-    // ─── Rate limit: IP (3 claims / 2 hours) ───
+    // ─── Rate limit: IP (1 claim / 24 hours) ───
     const { count: ipRecentCount } = await supabase
       .from('faucet_claims')
       .select('id', { count: 'exact', head: true })
       .eq('ip_hash', ipHash)
-      .gte('created_at', twoHoursAgo);
+      .gte('created_at', twentyFourHoursAgo);
 
-    if ((ipRecentCount ?? 0) >= 3) {
-      return NextResponse.json({ ok: false, error: 'rate_limited_ip', retryAfterSeconds: 7200 }, { status: 429 });
+    if ((ipRecentCount ?? 0) >= 1) {
+      return NextResponse.json({ ok: false, error: 'rate_limited_ip', retryAfterSeconds: 86400 }, { status: 429 });
     }
 
-    // ─── Rate limit: global (100 claims / 24 hours) ───
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    // ─── Rate limit: global (max claims / 24 hours) ───
+    const maxDaily = Number(process.env.FAUCET_MAX_DAILY_CLAIMS ?? '1');
     const { count: globalDailyCount } = await supabase
       .from('faucet_claims')
       .select('id', { count: 'exact', head: true })
       .gte('created_at', twentyFourHoursAgo);
 
-    if ((globalDailyCount ?? 0) >= 100) {
+    if ((globalDailyCount ?? 0) >= maxDaily) {
       return NextResponse.json({ ok: false, error: 'rate_limited_global', retryAfterSeconds: 3600 }, { status: 429 });
     }
 
