@@ -357,7 +357,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="mt-auto grid gap-4 rounded-2xl border border-white/10 bg-[#080A0D]/70 p-5 backdrop-blur-xl md:grid-cols-3">
+        <section className="mt-auto grid gap-4 rounded-2xl border border-transparent bg-[#080A0D]/70 p-5 backdrop-blur-xl md:grid-cols-3">
           <BenefitCard
             icon="⬟"
             title="Secure Escrow"
