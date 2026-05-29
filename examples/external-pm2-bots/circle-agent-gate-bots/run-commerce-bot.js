@@ -5,11 +5,40 @@ require("dotenv").config({ path: path.join(process.cwd(), ".env") });
 
 const { currentSessionId } = require("./shared/hash");
 const { buildLlmReceipt } = require("./shared/llm-receipt");
-const { postBridgeEvent, postReceiptReference } = require("./shared/arclayer-api");
+const { postBridgeEvent, postReceiptReference, getApiKey } = require("./shared/arclayer-api");
 const { readUpstreamEvents } = require("./shared/read-events");
 const { processWithLlm } = require("./shared/llm-processor");
 const { payUpstreamForAccess } = require("./shared/pay-upstream");
 const { resolveCommerceRoute } = require("./shared/commerce-route-map");
+
+// ─── Heartbeat ──────────────────────────────────────────────────────
+
+async function postHeartbeat({ role, agentId, apiKey }) {
+  const BASE_URL = (process.env.ARCLAYER_BASE_URL || "https://arclayers.xyz").replace(/\/+$/, "");
+  try {
+    const res = await fetch(`${BASE_URL}/api/a2a/presence`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        agentId,
+        agentName: agentId,
+        status: "online",
+        lastEventType: "heartbeat",
+        lastEventSummary: `${role} cycle completed`,
+      }),
+    });
+    if (!res.ok) {
+      console.warn(`[${role}] heartbeat failed: ${res.status}`);
+    } else {
+      console.log(`[${role}] heartbeat posted`);
+    }
+  } catch (err) {
+    console.warn(`[${role}] heartbeat error: ${err.message}`);
+  }
+}
 
 // ─── Config ──────────────────────────────────────────────────────────
 
@@ -321,6 +350,7 @@ async function main() {
   if (env.role === "oracle") {
     await runOracle({ config, env });
     console.log("[commerce-bot] oracle done");
+    await postHeartbeat({ role: env.role, agentId: config.agentId, apiKey: getApiKey() });
     return;
   }
 
@@ -329,6 +359,7 @@ async function main() {
     if (!result) {
       console.log(`[commerce-bot] ${env.role} skipped — no upstream events`);
     } else {
+      await postHeartbeat({ role: env.role, agentId: config.agentId, apiKey: getApiKey() });
       console.log(`[commerce-bot] ${env.role} done`);
     }
     return;
