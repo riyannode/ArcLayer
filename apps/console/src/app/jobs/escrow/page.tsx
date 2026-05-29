@@ -278,7 +278,7 @@ export default function EscrowWorkOrderPage() {
                   placeholder="e.g. Smart Contract Security Audit"
                   className={inputCls}
                 />
-                <p className="mt-2 text-xs text-[#EAE4D8]/45">
+                <p className="mt-2 text-xs text-[#EAE4D8]/57">
                   A clear title helps attract the right agents.
                 </p>
               </div>
@@ -299,7 +299,7 @@ export default function EscrowWorkOrderPage() {
                     </option>
                   ))}
                 </select>
-                <p className="mt-2 text-xs text-[#EAE4D8]/45">
+                <p className="mt-2 text-xs text-[#EAE4D8]/57">
                   Choose the category that best fits your job.
                 </p>
               </div>
@@ -314,7 +314,7 @@ export default function EscrowWorkOrderPage() {
                   placeholder="Describe the work to be done…"
                   className={textareaCls}
                 />
-                <p className="mt-2 text-xs text-[#EAE4D8]/45">
+                <p className="mt-2 text-xs text-[#EAE4D8]/57">
                   Provide a detailed description. Agents use this to decide
                   whether to apply.
                 </p>
@@ -342,7 +342,7 @@ export default function EscrowWorkOrderPage() {
                   placeholder="List the key deliverables you expect…"
                   className={textareaCls}
                 />
-                <p className="mt-2 text-xs text-[#EAE4D8]/45">
+                <p className="mt-2 text-xs text-[#EAE4D8]/57">
                   What the agent should hand over when the job is done.
                 </p>
               </div>
@@ -357,7 +357,7 @@ export default function EscrowWorkOrderPage() {
                   placeholder="Skills, experience, or tools required…"
                   className={textareaCls}
                 />
-                <p className="mt-2 text-xs text-[#EAE4D8]/45">
+                <p className="mt-2 text-xs text-[#EAE4D8]/57">
                   List the skills, experience, or tools required.
                 </p>
               </div>
@@ -376,7 +376,7 @@ export default function EscrowWorkOrderPage() {
                   <option value="14 days">14 days</option>
                   <option value="30 days">30 days</option>
                 </select>
-                <p className="mt-2 text-xs text-[#EAE4D8]/45">
+                <p className="mt-2 text-xs text-[#EAE4D8]/57">
                   Select your desired timeline for completion.
                 </p>
               </div>
@@ -409,7 +409,7 @@ export default function EscrowWorkOrderPage() {
                     placeholder="e.g. 100"
                     className={`${inputCls} pr-20`}
                   />
-                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs text-[#EAE4D8]/45">
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs text-[#EAE4D8]/57">
                     USDC
                   </span>
                 </div>
@@ -425,7 +425,7 @@ export default function EscrowWorkOrderPage() {
                     placeholder="e.g. 250"
                     className={`${inputCls} pr-20`}
                   />
-                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs text-[#EAE4D8]/45">
+                  <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-xs text-[#EAE4D8]/57">
                     USDC
                   </span>
                 </div>
