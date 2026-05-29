@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
-# Run analyzer bot. Agent ID from env or generic default.
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Load env vars from .env
+source .env 2>/dev/null || true
+
 export AGENT_ROLE=analyzer
-export ARCLAYER_AGENT_ID="${ARCLAYER_AGENT_ID_ANALYZER:-${ARCLAYER_AGENT_ID:-commerce-analyzer-01}}"
+export ARCLAYER_AGENT_ID="${ARCLAYER_AGENT_ID_ANALYZER:-${ARCLAYER_AGENT_ID:-apollo-analyzer}}"
 export ARCLAYER_API_KEY="${ARCLAYER_API_KEY_ANALYZER:-${ARCLAYER_API_KEY:-}}"
 export X402_PAYER_PRIVATE_KEY="${BOT_PRIVATE_KEY_ANALYZER:-${X402_PAYER_PRIVATE_KEY:-}}"
-export UPSTREAM_AGENT_ID="${UPSTREAM_AGENT_ID_ORACLE:-${UPSTREAM_AGENT_ID:-}}"
-export UPSTREAM_ROLE="${UPSTREAM_ROLE:-oracle}"
-export LLM_MODEL="${LLM_MODEL:-xiaomi/mimo-v2-flash}"
+export PRIVATE_KEY="${BOT_PRIVATE_KEY_ANALYZER:-${PRIVATE_KEY:-${X402_PAYER_PRIVATE_KEY:-}}}"
+# Pipeline auto-routes: analyzer reads from ANY oracle
+# Override only if you want a specific upstream agent:
+# export UPSTREAM_ROLE="oracle"
+# export UPSTREAM_AGENT_ID="specific-oracle-id"
+export LLM_MODEL="${LLM_MODEL:-deepseek/deepseek-v4-flash}"
 export LLM_API_KEY="${LLM_API_KEY_ANALYZER:-${LLM_API_KEY:-}}"
-export BOT_CONFIG="bot.config.analyzer.json"
+export LLM_BASE_URL="${LLM_BASE_URL:-https://api.pioneer.ai/v1}"
+export BOT_CONFIG="${BOT_CONFIG:-bot.config.analyzer.json}"
 
 exec node run-commerce-bot.js

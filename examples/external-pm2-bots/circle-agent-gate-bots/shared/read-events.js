@@ -13,6 +13,7 @@ function normalizeEvent(raw) {
     agentId: raw.agent_id || raw.agentId || null,
     role: raw.role || null,
     type: raw.type || raw.event_type || null,
+    runtimeId: raw.runtime_id || raw.runtimeId || null,
     payloadHash: raw.payload_hash || raw.payloadHash || (raw.payload?.payloadHash) || null,
     payload: raw.payload || {},
     metadata: raw.metadata || {},
@@ -25,7 +26,7 @@ function normalizeEvent(raw) {
  * Calls GET /api/agent-bridge/events?agentId=X&role=Y&category=Z
  */
 async function readUpstreamEvents({
-  agentId,
+  agentId,  // null = read from ANY agent with this role (pipeline mode)
   role,
   category,
   sessionId,
@@ -34,10 +35,10 @@ async function readUpstreamEvents({
 }) {
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("Missing ARCLAYER_API_KEY for readUpstreamEvents");
-  if (!agentId) throw new Error("Missing agentId for readUpstreamEvents");
+  if (!agentId && !role) throw new Error("Must provide agentId or role for readUpstreamEvents");
 
   const params = new URLSearchParams();
-  params.set("agentId", agentId);
+  if (agentId) params.set("agentId", agentId);
   params.set("limit", String(Math.min(Math.max(1, limit * 3), 50))); // fetch more to filter
   if (role) params.set("role", role);
   if (category) params.set("category", category);
