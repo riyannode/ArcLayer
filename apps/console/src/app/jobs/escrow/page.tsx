@@ -251,7 +251,7 @@ export default function EscrowWorkOrderPage() {
             Provide the details of the work you need done. Fill in each section
             below — you can always come back and edit later.
           </p>
-          <div className="mt-6 rounded-lg border border-[#C5A67C]/25 bg-[#C5A67C]/8 px-5 py-3 text-sm text-[#EAE4D8]/76">
+          <div className="mt-6 px-1 py-1 text-sm text-[#EAE4D8]/70">
             ⓘ Start simple. You can always edit or add more details after your
             job is created.
           </div>
