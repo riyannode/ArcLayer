@@ -15,7 +15,7 @@ export default function RootShell({ children }: { children: ReactNode }) {
   const isLanding = pathname === '/';
   const hideFooter =
     isLanding ||
-    pathname === '/live-a2a-agent/prediction-market-bots';
+    pathname === '/dashboard';
 
   return (
     <>
