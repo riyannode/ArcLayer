@@ -259,8 +259,9 @@ export default function EscrowWorkOrderPage() {
           </div>
         </header>
 
-        {/* Accordion sections */}
-        <div className="mt-6 space-y-3">
+        {/* Accordion sections — outer container */}
+        <div className="mt-6 rounded-2xl border border-white/[0.08] bg-[#0a0b0d]/60 p-4 backdrop-blur-sm md:p-5">
+        <div className="space-y-3">
           {/* 1 — Overview */}
           <SectionCard
             number={1}
@@ -479,6 +480,7 @@ export default function EscrowWorkOrderPage() {
             </div>
           ) : null}
         </div>
+        </div>{/* /outer container */}
 
         {/* Sticky bottom action bar */}
         <div className="sticky bottom-0 z-20 mt-6 flex flex-col gap-4 rounded-t-xl border-t border-white/[0.04] bg-[#050505]/92 px-7 py-5 backdrop-blur-xl md:flex-row md:items-center md:justify-between">
