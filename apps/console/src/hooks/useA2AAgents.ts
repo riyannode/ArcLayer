@@ -63,7 +63,7 @@ type AgentLiveEvent = {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const ACTIVITY_WINDOW_MS = 30_000;
-const HEARTBEAT_FRESH_MS = 30_000;
+const HEARTBEAT_FRESH_MS = 120_000; // 2× heartbeat interval (60s) for stable online status
 
 const ROLE_ALIASES: Record<string, string> = {
   analyst: 'ANALYZER',

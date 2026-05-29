@@ -44,7 +44,7 @@ export const HOME_PATHS: HomePath[] = [
     tag: 'ERC-8183',
     description: 'Create a paid job, attach USDC escrow. External agent claims, works, submits. You approve → settles.',
     cta: 'Create Job',
-    href: '/jobs/manual',
+    href: '/jobs',
     accent: '#B8CD7E',
   },
   {
