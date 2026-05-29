@@ -152,7 +152,7 @@ export default function DashboardPage() {
         <div className="absolute inset-0 opacity-[0.10] [background-image:linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:48px_48px]" />
       </div>
 
-      <main className="relative mx-auto w-full max-w-[1760px] px-6 pb-10 pt-10 md:px-12">
+      <main className="relative mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1760px] flex-col px-6 pb-0 pt-10 md:px-12">
         <section className="mb-8">
           <div className="max-w-[820px]">
             <h1 className="text-[42px] font-semibold tracking-[-0.04em] text-[#F4EFE5] md:text-[62px]">
@@ -244,7 +244,7 @@ export default function DashboardPage() {
             </select>
           </div>
 
-          <div className="mt-5 rounded-xl border border-[#1A1D20] bg-black/20 p-4">
+          <div className="mt-5 rounded-xl border border-white/[0.025] bg-[#080A0D]/35 p-4 backdrop-blur-xl">
             <div className="flex flex-wrap gap-3">
               {CATEGORIES.map((item) => (
                 <button
@@ -254,8 +254,8 @@ export default function DashboardPage() {
                   className={[
                     'h-11 min-w-[92px] rounded-lg border px-5 text-sm transition',
                     category === item
-                      ? 'border-[#18140E] bg-[#C5A67C]/10 text-[#F0B84A] shadow-[0_0_24px_rgba(197,166,124,0.10)]'
-                      : 'border-[#111315] bg-black/20 text-[#EAE4D8]/75 hover:border-[#18140E] hover:text-[#C5A67C]',
+                      ? 'border-[#C5A67C]/55 bg-[#C5A67C]/10 text-[#F0B84A] shadow-[0_0_24px_rgba(197,166,124,0.10)]'
+                      : 'border-[#2A2E33] bg-black/20 text-[#EAE4D8]/75 hover:border-[#C5A67C]/35 hover:text-[#C5A67C]',
                   ].join(' ')}
                 >
                   {item}
@@ -357,7 +357,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="mt-6 grid gap-4 rounded-2xl border border-transparent bg-[#080A0D]/70 p-5 backdrop-blur-xl md:grid-cols-3">
+        <section className="mt-auto grid gap-4 rounded-2xl border border-transparent bg-[#080A0D]/70 p-5 backdrop-blur-xl md:grid-cols-3">
           <BenefitCard
             icon="⬟"
             title="Secure Escrow"
