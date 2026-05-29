@@ -149,7 +149,7 @@ export default function Dashboard() {
             <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[60px]" style={{ lineHeight: 0.95 }}>
               Protocol <span className="italic" style={{ color: '#C5A67C' }}>Console</span>
             </h1>
-            <p className="mt-4 max-w-2xl font-mono text-[12px] leading-6 invisible" style={{ color: 'rgba(234, 228, 216, 0.88)' }}>
+            <p className="mt-4 max-w-2xl font-mono text-[12px] leading-6" style={{ color: 'rgba(234, 228, 216, 0.8)' }}>
               Live protocol activity at a glance.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
@@ -166,7 +166,7 @@ export default function Dashboard() {
                 className="inline-block h-1.5 w-1.5 rounded-full"
                 style={{ background: error ? '#e68282' : '#B8CD7E', boxShadow: `0 0 8px ${error ? '#e68282' : '#B8CD7E'}` }}
               />
-              <span className="font-mono text-[10.5px] uppercase tracking-[0.2em]" style={{ color: 'rgba(234, 228, 216, 0.7)' }}>
+              <span className="font-mono text-[10.5px] uppercase tracking-[0.2em]" style={{ color: 'rgba(234, 228, 216, 0.8)' }}>
                 {error ? 'offline' : isRefreshing ? 'syncing' : 'live'} · tick {tickCount}
               </span>
             </div>
@@ -208,7 +208,7 @@ export default function Dashboard() {
               <StatusLine label="LAST EVENT" value={lastSyncedBlock ? `#${lastSyncedBlock.toString()}` : '—'} />
               <StatusLine label="EVENTS INDEXED" value={String(summary?.eventCount ?? '—')} />
               <details className="mt-1 border-t border-white/5 pt-3">
-                <summary className="cursor-pointer font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.7)] hover:text-[#C5A67C]">Advanced RPC diagnostics</summary>
+                <summary className="cursor-pointer font-mono text-[9.5px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.8)] hover:text-[#C5A67C]">Advanced RPC diagnostics</summary>
                 <div className="mt-3 space-y-2">
                   {rpcHealth.length === 0
                     ? RPC_ENDPOINTS.map((ep) => <RpcRow key={ep.label} label={ep.label} latency={null} blockNumber={null} ok={false} loading url={ep.url} />)
@@ -258,8 +258,8 @@ function Panel({ title, sub, action, children }: { title: string; sub?: string; 
     <div className="p-5 md:p-6" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(10, 10, 10, 0.6)' }}>
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <div className="aureo-mono-label" style={{ color: 'rgba(234, 228, 216, 0.5)' }}>{title}</div>
-          {sub && <div className="mt-1 font-mono text-[10.5px]" style={{ color: 'rgba(234, 228, 216, 0.35)' }}>{sub}</div>}
+          <div className="aureo-mono-label" style={{ color: 'rgba(234, 228, 216, 0.8)' }}>{title}</div>
+          {sub && <div className="mt-1 font-mono text-[10.5px]" style={{ color: 'rgba(234, 228, 216, 0.8)' }}>{sub}</div>}
         </div>
         {action}
       </div>
@@ -277,12 +277,12 @@ function RpcRow({ label, latency, blockNumber, ok, loading, url }: RpcHealth & {
           className="inline-block h-1.5 w-1.5 rounded-full"
           style={{ background: loading ? '#C5A67C' : ok ? '#B8CD7E' : '#e68282', boxShadow: `0 0 6px ${loading ? '#C5A67C' : ok ? '#B8CD7E' : '#e68282'}` }}
         />
-        <span className="truncate font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.85)' }}>{label}</span>
+        <span className="truncate font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.9)' }}>{label}</span>
         {url && (
           <button
             onClick={() => copyToClipboard(url)}
             className="font-mono text-[9px] uppercase tracking-wider hover:text-[#C5A67C]"
-            style={{ color: 'rgba(234, 228, 216, 0.3)' }}
+            style={{ color: 'rgba(234, 228, 216, 0.8)' }}
             title="copy rpc url"
           >
             copy
@@ -290,8 +290,8 @@ function RpcRow({ label, latency, blockNumber, ok, loading, url }: RpcHealth & {
         )}
       </div>
       <div className="flex shrink-0 items-center gap-3 font-mono text-[10.5px]">
-        <span style={{ color: latency && latency < 100 ? '#B8CD7E' : 'rgba(234, 228, 216, 0.5)' }}>{latency === null ? '—' : `${latency.toFixed(0)}ms`}</span>
-        <span style={{ color: 'rgba(234, 228, 216, 0.5)' }}>{blockNumber ? `#${blockNumber.toString().slice(-6)}` : '—'}</span>
+        <span style={{ color: latency && latency < 100 ? '#B8CD7E' : 'rgba(234, 228, 216, 0.8)' }}>{latency === null ? '—' : `${latency.toFixed(0)}ms`}</span>
+        <span style={{ color: 'rgba(234, 228, 216, 0.8)' }}>{blockNumber ? `#${blockNumber.toString().slice(-6)}` : '—'}</span>
         <span className={`chip-status ${tone}`}>{loading ? 'probe' : ok ? 'ok' : 'down'}</span>
       </div>
     </div>
@@ -307,7 +307,7 @@ function RailCard({ title, status, text, href, cta }: { title: string; status: s
         <span className="font-mono text-[11px] font-medium" style={{ color: '#EAE4D8' }}>{title}</span>
         <span className="font-mono text-[9px] uppercase tracking-[0.14em]" style={{ color: tone }}>{status}</span>
       </div>
-      <p className="font-mono text-[10px] leading-4 invisible" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>{text}</p>
+      <p className="font-mono text-[10px] leading-4" style={{ color: 'rgba(234, 228, 216, 0.8)' }}>{text}</p>
       <span className="mt-auto font-mono text-[9.5px] uppercase tracking-[0.14em]" style={{ color: '#C5A67C' }}>{cta} →</span>
     </Link>
   );
@@ -317,7 +317,7 @@ function StatusLine({ label, value, tone }: { label: string; value: string; tone
   const color = tone === 'success' ? '#B8CD7E' : tone === 'pending' ? '#C5A67C' : '#EAE4D8';
   return (
     <div className="flex items-baseline justify-between">
-      <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.55)' }}>{label}</span>
+      <span className="font-mono text-[11px]" style={{ color: 'rgba(234, 228, 216, 0.8)' }}>{label}</span>
       <span className="font-mono text-[11.5px]" style={{ color }}>{value}</span>
     </div>
   );
