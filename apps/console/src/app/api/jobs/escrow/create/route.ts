@@ -22,7 +22,8 @@ export async function POST(req: NextRequest) {
     // Validate required fields
     const required = [
       'buyerAgentId', 'clientAddress', 'providerAgentId',
-      'providerAddress', 'expiredAtUnix', 'budgetAtomic', 'inputPayload',
+      'providerAddress', 'evaluatorAddress', 'expiredAtUnix',
+      'budgetAtomic', 'inputPayload',
     ] as const;
     for (const field of required) {
       if (!body[field]) {
@@ -31,6 +32,14 @@ export async function POST(req: NextRequest) {
           { status: 400 },
         );
       }
+    }
+
+    // ERC-8183: evaluator MUST be non-zero (reverts on zero address)
+    if (body.evaluatorAddress === '0x0000000000000000000000000000000000000000') {
+      return NextResponse.json(
+        { ok: false, error: 'invalid_evaluator', message: 'evaluatorAddress cannot be the zero address. Use the client wallet as evaluator.' },
+        { status: 400 },
+      );
     }
 
     // Create local job record
@@ -48,13 +57,13 @@ export async function POST(req: NextRequest) {
       inputPayload: body.inputPayload,
     });
 
-    // Return createJob tx instruction
+    // Return createJob tx instruction — use validated evaluator (non-zero, enforced above)
     const tx: TxInstruction = {
       address: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       functionName: 'createJob',
       args: [
         body.providerAddress,
-        body.evaluatorAddress ?? '0x0000000000000000000000000000000000000000',
+        body.evaluatorAddress,
         body.expiredAtUnix,
         body.description ?? '',
         body.hookAddress ?? '0x0000000000000000000000000000000000000000',

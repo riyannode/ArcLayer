@@ -5,7 +5,7 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { switchChain } from '@wagmi/core';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
-import { buildCreateJobConfig } from '@arclayer/sdk';
+import { ERC8183_AGENTIC_COMMERCE_ABI } from '@arclayer/sdk';
 import { config } from '@/lib/wagmi';
 
 /* ------------------------------------------------------------------ */
@@ -340,6 +340,12 @@ export default function EscrowWorkOrderPage() {
     const providerAgentId = selectedWorker.agentId;
     const providerAddress = selectedWorker.controller;
     const evaluatorAddress = address as `0x${string}`;
+
+    // ERC-8183: evaluator MUST be non-zero (contract reverts on zero address)
+    if (!evaluatorAddress || evaluatorAddress === '0x0000000000000000000000000000000000000000') {
+      setError('Evaluator address is required. Connect a valid wallet.');
+      return;
+    }
     try {
       setCreating(true);
       setError('');
@@ -389,19 +395,17 @@ export default function EscrowWorkOrderPage() {
       const { localJobId } = createData;
 
       // Step 2: Ensure wallet is on Arc Testnet, then sign
+      // Use server-returned tx instruction as single source of truth (prevents client/server drift)
       setTxState('Switching to Arc Testnet…');
       await switchChain(config, { chainId: 5042002 });
 
       setTxState('Waiting for wallet signature…');
-      const createHash = await writeContractAsync(
-        buildCreateJobConfig(
-          providerAddress,
-          evaluatorAddress,
-          BigInt(expiredAtUnix),
-          form.description,
-          '0x0000000000000000000000000000000000000000' as `0x${string}`,
-        ),
-      );
+      const createHash = await writeContractAsync({
+        address: createData.tx.address as `0x${string}`,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI,
+        functionName: createData.tx.functionName as 'createJob',
+        args: createData.tx.args as [`0x${string}`, `0x${string}`, bigint, string, `0x${string}`],
+      });
 
       // Step 3: Confirm with backend (writeContractAsync already awaited receipt)
       setTxState('Confirming JobCreated event…');
