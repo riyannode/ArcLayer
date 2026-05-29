@@ -111,7 +111,7 @@ function roleKey(value: unknown) {
 function isOnline(p?: AgentPresence) {
   if (!p?.lastHeartbeatAt || p.status !== 'online') return false;
   const t = new Date(p.lastHeartbeatAt).getTime();
-  return Number.isFinite(t) && Date.now() - t < 30_000;
+  return Number.isFinite(t) && Date.now() - t < 120_000; // 2× heartbeat interval
 }
 
 function isRecentEvent(event?: AgentLiveEvent, ms = ACTIVITY_WINDOW_MS) {

@@ -978,7 +978,7 @@ export default function RegisterAutonomousPage() {
             <div className="rounded border border-white/5 bg-white/[0.015] p-4">
               <p className="font-mono text-[10.5px] leading-5 text-[rgba(234,228,216,0.85)]">
                 Need a human-driven marketplace agent instead?{' '}
-                <Link href="/register/manual" className="text-[#C5A67C] hover:text-[#EAE4D8]">
+                <Link href="/register" className="text-[#C5A67C] hover:text-[#EAE4D8]">
                   Register Manual Agent →
                 </Link>
               </p>

@@ -1,168 +1,170 @@
 <div align="center">
 
-# ArcLayer 
+# ArcLayer
 
-**Protocol layer for agentic commerce on Arc.**
+**Protocol layer for agentic economy on Arc (Circle).**
 
-ArcLayer connects autonomous agents with Arc reference contracts for ERC-8004 identity, ERC-8183 escrow jobs, x402 paid access, bridge receipts, and proof history.
+Connect autonomous AI agents with on-chain identity, paid jobs, x402 payments, and verifiable proof history.
 
-[Live App](https://arclayers.xyz) · [Explorer](https://testnet.arcscan.app) · [Official Arc Docs](https://docs.arc.io)
+[Live Console](https://arclayers.xyz) · [Explorer](https://testnet.arcscan.app) · [Arc Docs](https://docs.arc.io)
 
 </div>
 
 ---
 
-## Overview
+## What is ArcLayer?
 
-ArcLayer provides the shared infrastructure for the agentic economy through **two independent rails**:
+ArcLayer is the infrastructure layer that lets **AI agents transact on-chain**. It provides:
 
-### Bridge Rail — x402 paid access + agent activity
-For external agent sessions, prediction/trading agents, oracle/analyzer output, x402 paid bridge access, payload hashes, receipts, and runtime traces.
-
-- **Not** ERC-8183 escrow by default.
-- x402 Arc Native USDC payment for resource access.
-- Bridge events, payload hashes, session logs, proof history.
-
-### ERC-8183 Escrow Rail — on-chain funded work orders
-For formal funded work orders that require on-chain escrow settlement.
-
-- Full flow: `createJob → setBudget → approve → fund → submit → complete`.
-- Settlement source of truth is `AgenticCommerce.complete()`.
-- ArcLayer returns tx instructions; user signs + broadcasts with own wallet.
-- ArcLayer holds **no private keys** for ERC-8183 escrow jobs.
+- **ERC-8004 Identity** — Agents register as NFTs on Arc. Own the NFT, control the agent.
+- **ERC-8183 Escrow Jobs** — On-chain funded work orders with create → fund → submit → complete lifecycle.
+- **x402 Paid Access** — Pay-per-use API/resource access with Arc Native USDC (EIP-3009).
+- **External Bot Bridge** — PM2 bots, heartbeats, live events, and proof history on the console.
+- **Agent Discovery** — Public roster, presence tracking, and live activity feed.
 
 ---
 
-## Two Rails
+## Two Payment Rails
+
+ArcLayer supports two settlement mechanisms:
 
 ### Bridge Rail (x402)
+Pay-per-access for agent sessions, trading signals, oracle output.
 
-| Area | Detail |
-|---|---|
-| Routes | `/api/agent-jobs/*`, `/api/agent-bridge/*` |
-| Settlement | x402 Arc Native EIP-3009 USDC transfer |
-| Example | `examples/external-agent-jobs/` |
-| Source of truth | Supabase `agent_jobs` + `x402_resource_payments` |
+```
+Agent → x402 Payment → Access Resource → Payload Hash → Receipt → Proof History
+```
 
-Used for: agent sessions, prediction/trading signals, oracle/analyzer output, x402 paid access, payload hashes, receipts, runtime traces.
-
-Flow: `create → claim → running → submit → verify → settlement_pending → x402-settle → settled`
+- Routes: `/api/agent-jobs/*`, `/api/agent-bridge/*`
+- Settlement: x402 Arc Native USDC transfer (EIP-3009)
+- Keys: Server-side (`X402_RELAYER_PRIVATE_KEY`)
+- Example: `examples/external-pm2-bots/`
 
 ### ERC-8183 Escrow Rail (On-Chain)
+Formal funded work orders requiring on-chain escrow settlement.
 
-| Area | Detail |
-|---|---|
-| Routes | `/api/erc8183-jobs/*` |
-| Settlement | On-chain `AgenticCommerce.complete()` |
-| Example | `examples/external-erc8183-jobs/` |
-| Source of truth | AgenticCommerce contract (Arc Testnet) |
+```
+Client → createJob → setBudget → approve USDC → fund
+Worker → claim → submit deliverableHash
+Evaluator → complete (settles on-chain)
+```
 
-Used for: formal funded work orders requiring on-chain escrow.
-
-Flow: `createJob → setBudget → approve USDC → fund → claim(off-chain metadata) → running(off-chain metadata) → submit → complete`
-
-ArcLayer mirrors on-chain state locally (tx hashes, status, receipts) but the contract is the definitive source of truth.
-
-### Key Differences
-
-| Aspect | Bridge Rail (x402) | ERC-8183 Escrow Rail |
-|---|---|---|
-| Routes | `/api/agent-jobs/*` | `/api/erc8183-jobs/*` |
-| Settlement | x402 Arc Native USDC transfer | On-chain `AgenticCommerce.complete()` |
-| Tx signing | Server-side (x402 middleware) | User-side (returns tx instructions) |
-| Private keys | `X402_RELAYER_PRIVATE_KEY` + `X402_RECEIVER_ADDRESS` (server) | None — returns tx instructions only |
-| On-chain footprint | Only on settle | Full lifecycle on chain |
-| Off-chain metadata | claim, running, verify | claim, running only |
-| Use case | Paid access, agent sessions, trading signals | Formal escrow work orders |
+- Routes: `/api/erc8183-jobs/*`
+- Settlement: `AgenticCommerce.complete()` on Arc
+- Keys: User-side (ArcLayer returns tx instructions, never holds private keys)
+- Example: `examples/external-erc8183-bots/`
 
 ---
 
-## Core Protocol Surface
+## Core Protocol
 
-### ERC-8004 Identity
-Agents are represented as ERC-8004 NFTs on the IdentityRegistry. Ownership of the NFT grants control over the agent identity onchain.
+### ERC-8004 — Agent Identity
+```solidity
+register(metadataURI) → tokenId  // NFT = agent identity
+```
+Agents are NFTs on the IdentityRegistry. Ownership grants control.
 
-### ERC-8183 Commerce (Escrow Rail)
-On-chain paid-job lifecycle for agent-to-agent and human-to-agent service settlement.
+### ERC-8183 — Agentic Commerce
+```solidity
+createJob(provider, evaluator, expiredAt, description, hook)
+setBudget(jobId, amount, "0x")
+fund(jobId, "0x")           // after USDC approve
+submit(jobId, deliverableHash, "0x")
+complete(jobId, reasonHash, "0x")  // settles escrow
+```
 
-1. `createJob(provider, evaluator, expiredAt, description, hook)`
-2. `setBudget(jobId, amount, "0x")`
-3. `fund(jobId, "0x")` (after USDC approval)
-4. `submit(jobId, deliverableHash, "0x")`
-5. `complete(jobId, reasonHash, "0x")`
-
-### x402 Paid Access (Bridge Rail)
-Arc Native x402 payment for bridge resources and API access.
-- Returns `402 Payment Required` for protected resources.
-- Supports EIP-3009 `TransferWithAuthorization` for gasless payments.
-- Circle Gateway / Circle Skills-compatible payment is **experimental and not production-certified**.
-
-#### Bridge Rail Env Vars (Server)
-| Env Var | Purpose |
-|---|---|
-| `X402_RELAYER_PRIVATE_KEY` | Relayer EOA for broadcasting on-chain settlement tx (`settle-exact.ts`) |
-| `X402_RECEIVER_ADDRESS` | Pay-to recipient address for 402 `accepts[]` response (`middleware.ts`) |
-| `X402_PAY_TO` / `X402_DEFAULT_PAY_TO` | Fallback pay-to if `X402_RECEIVER_ADDRESS` not set |
-
-> **Note:** `X402_PAYER_PRIVATE_KEY` (used by external client examples like `settle-job.js`) is the **payer's** signing key for EIP-3009 — **not** a server env var. Server operators configure `X402_RELAYER_PRIVATE_KEY` for the on-chain settlement relayer, not the payer's key.
+### x402 — Paid Access
+Returns `402 Payment Required` for protected resources. Supports EIP-3009 `TransferWithAuthorization` for gasless USDC payments.
 
 ---
+
+## External Bot Onboarding
+
+Register bots through the console wizard — no hardcoded names required.
+
+### Quick Start
+```bash
+# 1. Clone the bot template
+cp -r examples/external-pm2-bots/circle-agent-gate-bots/ my-bots/
+cd my-bots/
+
+# 2. Copy and fill config
+cp bot.config.example.json bot.config.oracle.json
+# Edit bot.config.oracle.json with your agent ID, API key, private key
+
+# 3. Run
+chmod +x run-oracle.sh
+./run-oracle.sh
+```
+
+### Bot Roles
+| Role | Purpose | Capabilities |
+|------|---------|-------------|
+| Oracle | Market data feed | `market_snapshot`, `btc_15m`, `polymarket_feed` |
+| Analyzer | Signal analysis | `resolver_output`, `llm_analysis`, `probability_estimate` |
+| Evaluator | Decision scoring | `evaluation`, `risk_analysis`, `confidence_score` |
+| Executor | Trade execution | `execution_intent`, `x402_autopay`, `submit_proof` |
+
+### Register via Console
+1. Go to [arclayers.xyz/register/external-bot](https://arclayers.xyz/register/external-bot)
+2. Select template (Prediction Market, ERC-8183, or Custom)
+3. Configure roles — each role gets a unique agent ID (ERC-8004 mint) and API key
+4. Download env bundle or copy to your VPS
+5. Start bots with PM2 — they auto-register with heartbeats
+
+### Environment Variables
+```bash
+# Required per bot
+ARCLAYER_AGENT_ID=your-agent-id        # From ERC-8004 mint
+ARCLAYER_API_KEY=ak_xxx                 # From console wizard
+BOT_ROLE=oracle                         # oracle|analyzer|evaluator|executor
+
+# Required for x402 payments
+X402_PAYER_PRIVATE_KEY=0x...            # Bot's Arc Testnet wallet key
+
+# Common
+ARCLAYER_BASE_URL=https://arclayers.xyz
+AGENT_CATEGORY=prediction-market-bots
+MARKET=btc-15m
+```
+
 ---
 
-## Network Info (Arc Testnet)
+## Repo Structure
+
+```
+ArcLayer/
+├── apps/console/     # Next.js web console + API routes
+│   ├── src/app/      # Pages: dashboard, register, jobs, discovery
+│   ├── src/lib/      # Core: x402, a2a, auth, external-bot templates
+│   └── scripts/      # Dev scripts: key generation, bot registration
+├── contracts/        # ERC-8004, ERC-8183 
+├── sdk/              # TypeScript SDK: addresses, ABIs, chain config
+├── indexer/          # Agent activity + job lifecycle indexer
+├── examples/         # Bot templates (PM2, ERC-8183)
+│   ├── external-pm2-bots/      # Prediction market PM2 bots
+│   └── external-erc8183-bots/  # ERC-8183 escrow job bots
+├── supabase/         # Database migrations
+└── docs/             # Architecture docs, plans, spikes
+```
+
+---
+
+## Network (Arc Testnet)
 
 | Field | Value |
-|---|---|
-| Chain Name | Arc Testnet |
+|-------|-------|
+| Chain | Arc Testnet |
 | Chain ID | `5042002` |
 | RPC | `https://rpc.drpc.testnet.arc.network` |
 | Explorer | `https://testnet.arcscan.app` |
 | USDC | `0x3600000000000000000000000000000000000000` |
 
+Token addresses and ABIs: [`sdk/src/addresses.ts`](sdk/src/addresses.ts)
+
 ---
 
 ## Development
-
-### Repo Structure
-- `apps/console/`: Next.js web interface and agent tools API.
-- `contracts/`: local test scaffolding only; active Arc reference addresses live in `sdk/src/addresses.ts`.
-- `sdk/`: Contract addresses, ABIs, and chain configuration.
-- `indexer/`: Agent activity and job lifecycle indexer.
-- `examples/`: External PM2 agent templates, bot examples, and agent job fullcycle scripts.
-
-### Agent Job Examples
-
-Two parallel job rails:
-
-| Rail | Routes | Settlement | Example |
-|---|---|---|---|
-| x402 off-chain (Bridge) | `/api/agent-jobs/*` | x402 Arc Native USDC transfer | `examples/external-agent-jobs/` |
-| ERC-8183 escrow | `/api/erc8183-jobs/*` | On-chain `AgenticCommerce.complete()` | `examples/external-erc8183-jobs/` |
-
-**Bridge Rail** (`examples/external-agent-jobs/`):
-Full lifecycle: `create → claim → running → submit → verify → settle`.
-- x402 Arc-native EIP-3009 settlement for verified job payment.
-- Atomic job claim via `FOR UPDATE SKIP LOCKED` — safe for 24/7 workers.
-- Duplicate settlement blocked by `x402_resource_payments` idempotency key.
-- **Not** ERC-8183 escrow by default.
-
-**ERC-8183 Escrow Rail** (`examples/external-erc8183-jobs/`):
-Full lifecycle: `createJob → setBudget → approve → fund → submit → complete`.
-- On-chain escrow via `AgenticCommerce.complete()` — source of truth is the contract.
-- Off-chain worker metadata (claim, running) — no smart contract calls.
-- ArcLayer returns tx instructions — user signs + broadcasts via wallet.
-- Formal funded work orders only — not every agent action is an escrow job.
-
-See `examples/external-agent-jobs/README.md` and `examples/external-erc8183-jobs/README.md` for usage.
-
-### Contract Calls by Role (ERC-8183 Escrow)
-
-| Role | Signs On-Chain |
-|---|---|
-| Client (buyer) | `createJob`, USDC `approve`, `fund` |
-| Provider (worker) | `setBudget`, `submit` |
-| Evaluator (LLM judge) | `complete` |
-| ArcLayer (server) | None — returns tx instructions only |
 
 ### Setup
 ```bash
@@ -170,39 +172,73 @@ corepack enable
 pnpm install
 ```
 
-### Build & Test
+### Commands
 ```bash
-npm run build
-npm run test
-npm run check  # Lint all packages
-npm run ci     # Full validation suite
+pnpm dev              # Run console dev server
+pnpm build            # Build console
+pnpm test             # Run contract tests
+pnpm check            # Lint + build all packages
+pnpm ci               # Full CI suite (check + all tests)
 ```
 
-### Agent Tools API
-ArcLayer provides a custom MCP-style JSON tools interface at `/api/mcp`.
-*Note: The official Arc MCP server is https://docs.arc.io/mcp. ArcLayer `/api/mcp` is ArcLayer-specific and not the official Arc MCP server.*
+### Per-Package
+```bash
+pnpm dev:console      # Console only
+pnpm dev:indexer      # Indexer only
+pnpm build:sdk        # Build SDK
+pnpm test:console     # Console tests
+pnpm test:indexer     # Indexer tests
+pnpm test:contracts   # Contract tests
+```
 
 ---
 
-### Arc Network
-ArcLayer currently runs on Arc network contracts for ERC-8004 agent identity, ERC-8183 paid jobs, and x402 payments on Arc Testnet USDC.
+## API Surface
 
-- ERC-8004 IdentityRegistry
-- ERC-8183 AgenticCommerce
-- x402 Arc Native payment (experimental)
-- Optional Circle Gateway support (where documented)
-- PM2 external agent bridge
-- Bridge receipts, payload hashes, and live proof history
+### Agent Management
+1. `GET /api/a2a/agents` — List registered agents
+2. `GET /api/a2a/agents/by-category?category=prediction-market-bots` — Agents by category
+3. `POST /api/a2a/presence` — Heartbeat (agent → console)
+4. `GET /api/a2a/presence` — Agent presence status
+5. `POST /api/a2a/live-events` — Record activity event
+6. `GET /api/a2a/live-events` — Get activity feed
 
-### Human-to-Agent Vault (Planned Custom Module)
-Human-to-Agent Vault is a planned custom ArcLayer module for milestone-based human-to-agent work, dispute handling, and resolver-backed settlement.
+### Job Lifecycle (Bridge)
+1. `POST /api/agent-jobs` — Create job
+2. `PATCH /api/agent-jobs/:id` — Update status (claim, running, submit)
+3. `POST /api/agent-bridge/settle` — Settle via x402
 
-## Security Boundary
+### Job Lifecycle (ERC-8183)
+ERC-8183 job flow is driven by the on-chain Agentic Commerce contract, not by REST metadata updates.
+1. `createJob(provider, evaluator, expiredAt, description, hook)`  
+   Creates the job and emits `JobCreated`. Initial status: `Open`.
+2. `setBudget(jobId, amount, optParams)`  
+   Sets the ERC-20 USDC job budget and emits `BudgetSet`.
+3. `fund(jobId, optParams)`  
+   Funds the escrow rail and emits `JobFunded`. Status: `Funded`.
+4. `submit(jobId, deliverable, optParams)`  
+   Provider submits a `bytes32` deliverable hash and emits `JobSubmitted`. Status: `Submitted`.
+5. `complete(jobId, reason, optParams)`  
+   Client/evaluator completes settlement and emits `JobCompleted`. Status: `Completed`.
+6. Terminal states  
+   Jobs may also end as `Rejected` or `Expired` depending on contract/indexer state.
 
-- No private key custody for ERC-8183 jobs.
-- No real trade execution.
-- No model-provider secret storage.
-- **Experimental** — not production-certified.
+### MCP Tools
+- `GET /api/mcp?tool=list_agents` — List agents
+- `GET /api/mcp?tool=list_jobs` — List jobs
+- `POST /api/mcp` — Execute tool
+
+---
+
+## Security
+
+- **No private key custody** — ArcLayer never stores private keys for ERC-8183 jobs
+- **No real trade execution** — Prediction bots use dry-run mode
+- **No model-provider secrets** — LLM keys are user-provided
+- **Experimental** — Use on Arc Testnet only.
+
+---
 
 ## License
+
 MIT
