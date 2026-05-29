@@ -1,11 +1,13 @@
 /**
  * POST /api/faucet/claim — Send 1 test USDC to the requesting wallet.
  *
- * Rate limits:
+ * Rate limits (atomic via Supabase RPC):
  *   - Wallet: 1 claim / 24 hours
  *   - IP:     1 claim / 24 hours
  *   - Global: 30 claims / 24 hours
  *   - User balance must be < FAUCET_MIN_USER_BALANCE_USDC
+ *
+ * Flow: reserve pending → transfer USDC → update status
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
@@ -35,11 +37,12 @@ const arcTestnet = {
 function getClientIp(req: NextRequest): string {
   return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
     || req.headers.get('x-real-ip')
-    || 'unknown';
+    || '';
 }
 
 function hashIp(ip: string): string {
-  const salt = process.env.FAUCET_IP_SALT || 'arclayer-faucet-default-salt';
+  const salt = process.env.FAUCET_IP_SALT;
+  if (!salt) throw new Error('FAUCET_IP_SALT is required');
   return createHmac('sha256', salt).update(ip).digest('hex').slice(0, 16);
 }
 
@@ -68,43 +71,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: 'invalid_address' }, { status: 400 });
     }
 
+    // ─── Validate IP ───
     const ip = getClientIp(req);
+    if (!ip || ip === 'unknown') {
+      return NextResponse.json({ ok: false, error: 'ip_required', circleFaucetUrl: CIRCLE_FAUCET_URL }, { status: 429 });
+    }
     const ipHash = hashIp(ip);
-    const supabase = getSupabaseAdmin();
-
-    // ─── Rate limit: wallet (1 claim / 24 hours) ───
-    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { count: walletRecentCount } = await supabase
-      .from('faucet_claims')
-      .select('id', { count: 'exact', head: true })
-      .ilike('wallet_address', recipient)
-      .gte('created_at', twentyFourHoursAgo);
-
-    if ((walletRecentCount ?? 0) > 0) {
-      return NextResponse.json({ ok: false, error: 'rate_limited_wallet', retryAfterSeconds: 86400 }, { status: 429 });
-    }
-
-    // ─── Rate limit: IP (1 claim / 24 hours) ───
-    const { count: ipRecentCount } = await supabase
-      .from('faucet_claims')
-      .select('id', { count: 'exact', head: true })
-      .eq('ip_hash', ipHash)
-      .gte('created_at', twentyFourHoursAgo);
-
-    if ((ipRecentCount ?? 0) >= 1) {
-      return NextResponse.json({ ok: false, error: 'rate_limited_ip', retryAfterSeconds: 86400 }, { status: 429 });
-    }
-
-    // ─── Rate limit: global (max claims / 24 hours) ───
-    const maxDaily = Number(process.env.FAUCET_MAX_DAILY_CLAIMS ?? '30');
-    const { count: globalDailyCount } = await supabase
-      .from('faucet_claims')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', twentyFourHoursAgo);
-
-    if ((globalDailyCount ?? 0) >= maxDaily) {
-      return NextResponse.json({ ok: false, error: 'rate_limited_global', retryAfterSeconds: 3600 }, { status: 429 });
-    }
 
     // ─── On-chain checks ───
     const publicClient = createPublicClient({ chain: arcTestnet, transport: http(ARC_RPC) });
@@ -133,32 +105,70 @@ export async function POST(req: NextRequest) {
       }, { status: 503 });
     }
 
-    // ─── Send USDC ───
+    // ─── Atomic reserve via Supabase RPC ───
+    const supabase = getSupabaseAdmin();
+    const claimAmountUsdc = Number(process.env.FAUCET_AMOUNT_USDC ?? '1');
+    const maxDaily = Number(process.env.FAUCET_MAX_DAILY_CLAIMS ?? '30');
+
+    const { data: reserveRows, error: reserveError } = await supabase.rpc('faucet_reserve_claim', {
+      p_wallet_address: recipient,
+      p_ip_hash: ipHash,
+      p_amount_usdc: claimAmountUsdc,
+      p_max_daily: maxDaily,
+    });
+
+    if (reserveError) {
+      return NextResponse.json({ ok: false, error: reserveError.message, circleFaucetUrl: CIRCLE_FAUCET_URL }, { status: 500 });
+    }
+
+    const reserve = reserveRows?.[0];
+    if (!reserve?.ok) {
+      return NextResponse.json({
+        ok: false,
+        error: reserve?.reason ?? 'claim_rejected',
+        retryAfterSeconds: reserve?.retry_after_seconds ?? 86400,
+        circleFaucetUrl: CIRCLE_FAUCET_URL,
+      }, { status: 429 });
+    }
+
+    // ─── Transfer USDC ───
     const account = privateKeyToAccount(privateKey);
     const walletClient = createWalletClient({ account, chain: arcTestnet, transport: http(ARC_RPC) });
 
-    const txHash = await walletClient.writeContract({
-      address: USDC,
-      abi: ERC20_ABI,
-      functionName: 'transfer',
-      args: [recipient, amount],
-    });
+    try {
+      const txHash = await walletClient.writeContract({
+        address: USDC,
+        abi: ERC20_ABI,
+        functionName: 'transfer',
+        args: [recipient, amount],
+      });
 
-    // ─── Record claim ───
-    await supabase.from('faucet_claims').insert({
-      wallet_address: recipient,
-      ip_hash: ipHash,
-      amount_usdc: Number(process.env.FAUCET_AMOUNT_USDC ?? '1'),
-      tx_hash: txHash,
-      status: 'sent',
-    });
+      // Mark claim as sent
+      await supabase
+        .from('faucet_claims')
+        .update({ tx_hash: txHash, status: 'sent' })
+        .eq('id', reserve.claim_id);
 
-    return NextResponse.json({
-      ok: true,
-      txHash,
-      amount: process.env.FAUCET_AMOUNT_USDC ?? '1',
-      explorerUrl: `https://testnet.arcscan.app/tx/${txHash}`,
-    });
+      return NextResponse.json({
+        ok: true,
+        txHash,
+        amount: process.env.FAUCET_AMOUNT_USDC ?? '1',
+        explorerUrl: `https://testnet.arcscan.app/tx/${txHash}`,
+      });
+    } catch (txError) {
+      // Transfer failed — mark claim as failed
+      await supabase
+        .from('faucet_claims')
+        .update({ status: 'failed' })
+        .eq('id', reserve.claim_id);
+
+      return NextResponse.json({
+        ok: false,
+        error: 'transfer_failed',
+        detail: txError instanceof Error ? txError.message : String(txError),
+        circleFaucetUrl: CIRCLE_FAUCET_URL,
+      }, { status: 500 });
+    }
   } catch (err) {
     return NextResponse.json({
       ok: false,
