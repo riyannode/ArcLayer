@@ -31,10 +31,10 @@ const LANE_STYLE: Record<LaneRole, {
   border: string;
   bg: string;
 }> = {
-  oracle:    { label: 'ORACLE',    color: '#22d3ee', dim: 'rgba(34,211,238,0.1)',  border: 'rgba(34,211,238,0.2)',  bg: 'rgba(34,211,238,0.04)' },
-  analyzer:  { label: 'ANALYZER',  color: '#a78bfa', dim: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.2)', bg: 'rgba(167,139,250,0.04)' },
-  evaluator: { label: 'EVALUATOR', color: '#fb923c', dim: 'rgba(251,146,60,0.1)',  border: 'rgba(251,146,60,0.2)',  bg: 'rgba(251,146,60,0.04)' },
-  executor:  { label: 'EXECUTOR',  color: '#4ade80', dim: 'rgba(74,222,128,0.1)',  border: 'rgba(74,222,128,0.2)',  bg: 'rgba(74,222,128,0.04)' },
+  oracle:    { label: 'ORACLE',    color: '#22d3ee', dim: 'rgba(34,211,238,0.1)',  border: 'rgba(34,211,238,0.36)',  bg: 'rgba(34,211,238,0.04)' },
+  analyzer:  { label: 'ANALYZER',  color: '#a78bfa', dim: 'rgba(167,139,250,0.1)', border: 'rgba(167,139,250,0.36)', bg: 'rgba(167,139,250,0.04)' },
+  evaluator: { label: 'EVALUATOR', color: '#fb923c', dim: 'rgba(251,146,60,0.1)',  border: 'rgba(251,146,60,0.36)',  bg: 'rgba(251,146,60,0.04)' },
+  executor:  { label: 'EXECUTOR',  color: '#4ade80', dim: 'rgba(74,222,128,0.1)',  border: 'rgba(74,222,128,0.36)',  bg: 'rgba(74,222,128,0.04)' },
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
