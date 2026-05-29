@@ -63,8 +63,7 @@ export default function PredictionMarketBotsPage() {
         </section>
 
         {/* Stats bar */}
-        <div className="flex items-center gap-1 font-mono text-[10px] tracking-[0.3px] text-[#555]">
-          <span className="mr-1.5 text-[#333]">a2a-api</span>
+        <div className="flex items-center gap-1 font-mono text-[10px] tracking-[0.3px] text-[#999]">\n          <span className="mr-1.5 text-[#888]">a2a-api</span>
           {[
             { k: 'roster', v: stats.roster },
             { k: 'agents', v: stats.agents },
@@ -73,9 +72,9 @@ export default function PredictionMarketBotsPage() {
             { k: 'online', v: stats.online },
           ].map(({ k, v }, i) => (
             <span key={k} className="flex gap-1">
-              {i > 0 && <span className="text-[#222]">·</span>}
+              {i > 0 && <span className="text-[#666]">·</span>}
               <span>{k}</span>
-              <span className={v > 0 ? 'text-[#666]' : 'text-[#333]'}>{v}</span>
+              <span className={v > 0 ? 'text-[#bbb]' : 'text-[#888]'}>{v}</span>
             </span>
           ))}
         </div>
@@ -89,9 +88,9 @@ export default function PredictionMarketBotsPage() {
 
         {/* Chart + Orderbook */}
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#C5A67C]/60">Reference Market Feed</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#C5A67C]/90">Reference Market Feed</span>
           <span className="h-px flex-1 bg-[#C5A67C]/10" />
-          <span className="font-mono text-[10px] text-[#EAE4D8]/40">Signal context only. No trade execution happens here.</span>
+          <span className="font-mono text-[10px] text-[#EAE4D8]/70">Signal context only. No trade execution happens here.</span>
         </div>
 
         <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
@@ -109,54 +108,14 @@ export default function PredictionMarketBotsPage() {
         <div className="flex justify-end">
           <Link
             href="/register/external-bot?category=prediction-market-bots"
-            className="inline-flex items-center gap-2 rounded border border-[#C5A67C]/12 px-4 py-2 font-mono text-[10px] uppercase tracking-[1.5px] text-[#C5A67C]/40 transition-[border-color,color] hover:border-[#C5A67C]/30 hover:text-[#C5A67C]/70"
+            className="inline-flex items-center gap-2 rounded border border-[#C5A67C]/12 px-4 py-2 font-mono text-[10px] uppercase tracking-[1.5px] text-[#C5A67C]/80 transition-[border-color,color] hover:border-[#C5A67C]/40 hover:text-[#C5A67C]"
           >
             Register Bot →
           </Link>
         </div>
 
-        {/* Footer */}
-        <footer className="mt-12 flex flex-wrap gap-8 border-t border-[#C5A67C]/04 pt-8">
-          <div className="min-w-[120px] flex-1">
-            <div className="mb-2.5 font-mono text-[9px] tracking-[2px] text-[#C5A67C]/20">PROTOCOL</div>
-            {[
-              ['/protocol', 'PROTOCOL'],
-              ['/jobs', 'JOBS'],
-              ['/agents', 'AGENTS'],
-              ['/docs', 'SDK'],
-            ].map(([href, label]) => (
-              <Link key={href} href={href} className="mb-1.5 block font-mono text-[10px] text-[#EAE4D8]/35 transition-colors hover:text-[#EAE4D8]/60">{label}</Link>
-            ))}
-          </div>
-          <div className="min-w-[120px] flex-1">
-            <div className="mb-2.5 font-mono text-[9px] tracking-[2px] text-[#C5A67C]/20">RESOURCES</div>
-            {[
-              ['https://github.com/riyannode/ArcLayer', 'Github ↗'],
-              ['https://rpc.drpc.testnet.arc.network', 'RPC ↗'],
-              ['https://testnet.arcscan.app', 'Explorer ↗'],
-              ['https://arc.circle.com', 'Circle · Arc ↗'],
-            ].map(([href, label]) => (
-              <a key={href} href={href} target="_blank" rel="noopener noreferrer" className="mb-1.5 block font-mono text-[10px] text-[#EAE4D8]/35 transition-colors hover:text-[#EAE4D8]/60">{label}</a>
-            ))}
-          </div>
-          <div className="min-w-[120px] flex-1">
-            <div className="mb-2.5 font-mono text-[9px] tracking-[2px] text-[#C5A67C]/20">NETWORK</div>
-            {[
-              ['CHAIN', 'Arc Testnet'],
-              ['CHAIN ID', '5042002'],
-              ['SETTLEMENT', 'USDC (testnet)'],
-            ].map(([k, v]) => (
-              <div key={k} className="mb-1 flex items-center gap-1.5 font-mono text-[10px] text-[#EAE4D8]/25">
-                <span>{k}</span>
-                <span className="text-[#EAE4D8]/50">{v}</span>
-              </div>
-            ))}
-          </div>
-        </footer>
-
-        <div className="mt-6 font-mono text-[9px] tracking-[1.5px] text-[#C5A67C]/10">
-          © 2026 ARCLAYER · PAYMENT INFRASTRUCTURE FOR AGENTS READY TO SHIP
-        </div>
+        {/* Bottom spacer — preserves page height after footer removal */}
+        <div className="h-2" />
       </div>
     </main>
   );

@@ -120,7 +120,7 @@ function AgentCard({ agent, style }: { agent: PredictionAgentInput; style: typeo
       </div>
 
       {/* Agent ID */}
-      <div className="mt-1 font-mono text-[9px] tracking-[0.3px] text-[#EAE4D8]/22">
+      <div className="mt-1 font-mono text-[9px] tracking-[0.3px] text-[#EAE4D8]/50">
         {shortId(String(agent.id || ''))}
       </div>
 
@@ -135,9 +135,9 @@ function AgentCard({ agent, style }: { agent: PredictionAgentInput; style: typeo
             {hasReasoning && <span className="ml-0.5 opacity-60">⊙</span>}
           </span>
         )}
-        <span className="text-[9px] text-[#EAE4D8]/35">{group}</span>
+        <span className="text-[9px] text-[#EAE4D8]/60">{group}</span>
         {!isOnline && (
-          <span className="text-[9px] text-[#EAE4D8]/20">offline</span>
+          <span className="text-[9px] text-[#EAE4D8]/40">offline</span>
         )}
       </div>
     </div>
@@ -152,7 +152,7 @@ function Lane({ role, agents }: { role: LaneRole; agents: PredictionAgentInput[]
 
   return (
     <div
-      className="flex-1 border-r border-[#C5A67C]/06 px-3.5 py-4 last:border-r-0"
+      className="flex-1 px-3.5 py-4"
       style={{ ['--lane-color' as string]: style.color }}
     >
       {/* Lane header */}
@@ -173,7 +173,7 @@ function Lane({ role, agents }: { role: LaneRole; agents: PredictionAgentInput[]
         >
           {style.label}
         </span>
-        <span className="ml-auto font-mono text-[10px] text-[#EAE4D8]/35">
+        <span className="ml-auto font-mono text-[10px] text-[#EAE4D8]/70">
           {agents.length > 0 ? `${onlineInRole}/${agents.length}` : '—'}
         </span>
       </div>
@@ -181,7 +181,7 @@ function Lane({ role, agents }: { role: LaneRole; agents: PredictionAgentInput[]
       {/* Agent cards */}
       <div className="mt-3.5">
         {agents.length === 0 ? (
-          <div className="py-2 text-center font-mono text-[10px] text-[#EAE4D8]/15">
+          <div className="py-2 text-center font-mono text-[10px] text-[#EAE4D8]/35">
             awaiting agents
           </div>
         ) : (
@@ -213,8 +213,7 @@ export default function ClassificationLanes({ agents }: ClassificationLanesProps
   return (
     <div>
       {/* Label */}
-      <div className="mb-4 font-mono text-[10px] font-medium tracking-[2px] text-[#C5A67C]/40">
-        BOT CLASSIFICATION
+      <div className="mb-4 font-mono text-[10px] font-medium tracking-[2px] text-[#C5A67C]/80">\n        BOT CLASSIFICATION
       </div>
 
       {/* Lanes */}
@@ -225,12 +224,12 @@ export default function ClassificationLanes({ agents }: ClassificationLanesProps
       </div>
 
       {/* Legend */}
-      <div className="mt-4 flex flex-wrap items-center gap-5 rounded-md border border-[#C5A67C]/06 bg-[#ffffff]/[0.01] px-4 py-3">
+      <div className="mt-4 flex flex-wrap items-center gap-5 rounded-md bg-[#ffffff]/[0.01] px-4 py-3">
         {LANE_ORDER.map((role) => {
           const style = LANE_STYLE[role];
           const count = byRole[role].filter((a) => a.status === 'active').length;
           return (
-            <div key={role} className="flex items-center gap-1.5 font-mono text-[10px] tracking-[0.5px] text-[#EAE4D8]/50">
+            <div key={role} className="flex items-center gap-1.5 font-mono text-[10px] tracking-[0.5px] text-[#EAE4D8]/80">
               <span className="h-2 w-2 rounded-full" style={{ background: style.color }} />
               {style.label}
               {count > 0 && (
@@ -239,8 +238,7 @@ export default function ClassificationLanes({ agents }: ClassificationLanesProps
             </div>
           );
         })}
-        <div className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-[#EAE4D8]/35">
-          <span style={{ fontFamily: 'monospace', fontSize: 12, opacity: 0.7 }}>⊙</span>
+        <div className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-[#EAE4D8]/70">\n          <span style={{ fontFamily: 'monospace', fontSize: 12, opacity: 0.7 }}>⊙</span>
           reasoning-enabled
         </div>
       </div>

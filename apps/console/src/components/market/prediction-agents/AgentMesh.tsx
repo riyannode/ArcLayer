@@ -236,7 +236,7 @@ export default function AgentMesh({ agents, reasoning }: AgentMeshProps) {
       ctx.clearRect(0, 0, W, H);
 
       // ── Grid ──
-      ctx.strokeStyle = 'rgba(197,166,124,0.025)';
+      ctx.strokeStyle = 'rgba(197,166,124,0.012)';
       ctx.lineWidth = 0.5;
       for (let x = 0; x < W; x += 56) {
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
@@ -250,7 +250,7 @@ export default function AgentMesh({ agents, reasoning }: AgentMeshProps) {
         if (li === 0) return;
         const x = (W / LANE_ORDER.length) * li;
         ctx.setLineDash([3, 9]);
-        ctx.strokeStyle = 'rgba(197,166,124,0.06)';
+        ctx.strokeStyle = 'rgba(197,166,124,0.03)';
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
         ctx.setLineDash([]);
@@ -297,7 +297,7 @@ export default function AgentMesh({ agents, reasoning }: AgentMeshProps) {
           const b = nodeArr[j];
           const d = Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
           if (d > 420) continue;
-          const alpha = (0.02 + (1 - d / 420) * 0.05) * a.enterAlpha * b.enterAlpha;
+          const alpha = (0.01 + (1 - d / 420) * 0.03) * a.enterAlpha * b.enterAlpha;
           ctx.strokeStyle = `rgba(197,166,124,${alpha})`;
           ctx.lineWidth = 0.5;
           ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
@@ -494,7 +494,7 @@ export default function AgentMesh({ agents, reasoning }: AgentMeshProps) {
         <span className="font-mono text-[10px] font-semibold tracking-[2.5px] text-[#C5A67C]">
           PREDICTION MARKET AGENT ACTIVITY
         </span>
-        <span className="flex items-center gap-2 font-mono text-[10px] text-[#EAE4D8]/45">
+        <span className="flex items-center gap-2 font-mono text-[10px] text-[#EAE4D8]/80">
           <span className="h-[5px] w-[5px] animate-pulse rounded-full bg-[#4ade80]" />
           {onlineCount}/{totalCount} live · {nodeCount} nodes · {proofCount} proof
         </span>
@@ -509,12 +509,12 @@ export default function AgentMesh({ agents, reasoning }: AgentMeshProps) {
         />
         {onlineCount === 0 && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-            <span className="font-mono text-[11px] tracking-[1.5px] text-[#C5A67C]/25">
+            <span className="font-mono text-[11px] tracking-[1.5px] text-[#C5A67C]/60">
               NO ONLINE AGENTS
             </span>
             <a
               href="/register/external-bot?category=prediction-market-bots"
-              className="font-mono text-[10px] tracking-[1.5px] text-[#C5A67C]/40 underline-offset-2 hover:underline"
+              className="font-mono text-[10px] tracking-[1.5px] text-[#C5A67C]/70 underline-offset-2 hover:underline"
             >
               Register a bot →
             </a>
@@ -523,9 +523,9 @@ export default function AgentMesh({ agents, reasoning }: AgentMeshProps) {
       </div>
 
       {/* Session bar */}
-      <div className="flex items-center gap-4 border-t border-[#C5A67C]/06 px-4 py-2 font-mono text-[10px] text-[#EAE4D8]/30">
+      <div className="flex items-center gap-4 border-t border-[#C5A67C]/06 px-4 py-2 font-mono text-[10px] text-[#EAE4D8]/60">
         <span>session</span>
-        <span className="text-[#EAE4D8]/50">
+        <span className="text-[#EAE4D8]/80">
           agents {totalCount} · online {onlineCount} · mesh {nodeCount}
         </span>
         <span className="ml-auto flex items-center gap-1.5">
