@@ -59,6 +59,17 @@ function resolveEnv(config) {
   const role = process.env.AGENT_ROLE || config.role || "executor";
   const market = process.env.MARKET_ID || config.market || "btc-15m";
 
+  // Event graph routing — upstream role auto-resolved per role
+  // External bots just set their ROLE and automatically read from the right upstream
+  const EVENT_GRAPH_UPSTREAM = {
+    oracle: null,                          // no upstream — data source
+    analyzer: { role: "oracle" },          // reads from ANY oracle
+    evaluator: { role: "oracle" },         // reads from ANY oracle
+    executor: { role: "analyzer" },        // reads from ANY analyzer (fallback: evaluator)
+  };
+
+  const upstreamConfig = EVENT_GRAPH_UPSTREAM[role] || null;
+
   return {
     category: process.env.AGENT_CATEGORY || config.category || "prediction-market-bots",
     role,
@@ -68,8 +79,9 @@ function resolveEnv(config) {
       process.env.SESSION_ID ||
       config.sessionId ||
       currentSessionId(`${market}_${role}`),
+    // Upstream: event graph auto-route (or manual override via env)
+    upstreamRole: process.env.UPSTREAM_ROLE || config.upstreamRole || upstreamConfig?.role || null,
     upstreamAgentId: process.env.UPSTREAM_AGENT_ID || config.upstreamAgentId || null,
-    upstreamRole: process.env.UPSTREAM_ROLE || config.upstreamRole || null,
   };
 }
 
@@ -151,154 +163,151 @@ async function runOracle({ config, env }) {
   return event;
 }
 
-// ─── Buyer roles (analyzer / evaluator / executor) ───────────────────
+// ─── Routed role (analyzer / evaluator / executor) ──────────────────
+// Each role reads upstream events by ROLE (not agent ID) — event graph.
+// External bots just set their ROLE and auto-route to the right upstream.
 
-async function runBuyerRole({ config, env }) {
-  if (!env.upstreamAgentId || !env.upstreamRole) {
-    throw new Error(`${env.role} requires UPSTREAM_AGENT_ID and UPSTREAM_ROLE`);
+async function runRoutedRole({ config, env }) {
+  const route = env.upstreamRole
+    ? resolveCommerceRoute({ buyerRole: env.role, sellerRole: env.upstreamRole })
+    : null;
+
+  // 1. Read upstream events by ROLE (event graph, blocking)
+  let upstreamData = null;
+  let upstreamSource = null;
+
+  if (env.upstreamRole) {
+    // Executor fallback: try analyzer first, then evaluator
+    const rolesToTry = env.role === "executor" ? ["analyzer", "evaluator"] : [env.upstreamRole];
+
+    for (const tryRole of rolesToTry) {
+      console.log(`[${env.role}] reading upstream role=${tryRole} events...`);
+
+      const { events } = await readUpstreamEvents({
+        agentId: null,  // read from ANY agent with this role
+        role: tryRole,
+        category: env.category,
+        limit: 5,
+        filterType: eventTypeForRole(tryRole),
+      });
+
+      if (events.length) {
+        upstreamData = events[0].payload;
+        upstreamSource = events[0];
+        console.log(
+          `[${env.role}] upstream data found from ${events[0].runtimeId || tryRole} payloadHash=${events[0].payloadHash?.slice(0, 12)}...`
+        );
+        break;
+      } else {
+        console.log(`[${env.role}] no ${tryRole} events available`);
+      }
+    }
+
+    if (!upstreamData) {
+      // BLOCKING — no upstream data = can't proceed
+      const tried = rolesToTry.join(" or ");
+      console.log(`[${env.role}] BLOCKED: no ${tried} events available in event graph`);
+      throw new Error(`[${env.role}] BLOCKED: no ${tried} events available. Upstream event not found.`);
+    }
   }
 
-  const route = resolveCommerceRoute({
-    buyerRole: env.role,
-    sellerRole: env.upstreamRole,
-  });
-
-  // 1. Read upstream events — filter to seller's output type only,
-  //    not their purchase intents (bridge_event). Without this, a
-  //    buyer that starts right after the seller posts its purchase
-  //    intent but before its output is posted would process + pay
-  //    for the intent payload instead of the actual analysis.
-  const { events } = await readUpstreamEvents({
-    agentId: env.upstreamAgentId,
-    role: env.upstreamRole,
-    category: env.category,
-    limit: 3,
-    filterType: eventTypeForRole(env.upstreamRole),
-  });
-
-  if (!events.length) {
-    console.log(`[${env.role}] no upstream events found`);
-    return null;
-  }
-
-  const latestEvent = events[0];
-  console.log(
-    `[${env.role}] upstream event found payloadHash=${latestEvent.payloadHash?.slice(0, 12)}...`
-  );
-
-  // 2. Process with LLM
+  // 2. Process with LLM (requires upstream data for non-oracle roles)
   const llmResult = await processWithLlm({
     role: env.role,
-    upstreamData: latestEvent.payload,
+    upstreamData,
     config: env,
   });
 
-  // 3. Post purchase intent (required by backend before paying)
-  const purchasePayload = {
-    action: route.action,
-    buyerRole: env.role,
-    sellerRole: env.upstreamRole,
-    sellerAgentId: env.upstreamAgentId,
-    sourcePayloadHash: latestEvent.payloadHash,
-    market: env.market,
-    createdAt: new Date().toISOString(),
-  };
+  // 3. Post purchase intent + pay upstream (best effort)
+  let payment = { paymentId: null, txHash: null, payloadHash: null, rail: "skipped" };
+  let purchaseIntentHash = null;
 
-  const intent = await postBridgeEvent({
-    sessionId: env.sessionId,
-    category: env.category,
-    role: env.role,
-    type: "bridge_event",
-    runtimeId: env.runtimeId,
-    payload: purchasePayload,
-    metadata: {
-      commerceBuyer: true,
-      buyerRole: env.role,
-      sellerRole: env.upstreamRole,
-      sellerAgentId: env.upstreamAgentId,
-      accessType: route.accessType,
-      scope: route.scope,
-      market: env.market,
-    },
-  });
+  if (upstreamData && route) {
+    const skipPayment = process.env.X402_SKIP_PAYMENT === "true";
 
-  console.log(
-    `[${env.role}] purchase intent posted payloadHash=${intent.payloadHash?.slice(0, 12)}...`
-  );
-
-  // 4. Build LLM receipt
-  const llmReceipt = buildLlmReceipt({
-    payload: {
-      upstreamPayload: latestEvent.payload,
-      result: llmResult,
-      purchaseIntentHash: intent.payloadHash,
-    },
-    llmReceipt: {
-      ...llmResult,
-      summary:
-        llmResult.summary ||
-        `${env.role} consumed ${env.upstreamRole} output and produced ${route.accessType}.`,
-      decision: llmResult.decision || "COMMERCE_ACCESS",
-    },
-  });
-
-  // 5. Pay seller through commerce gate (non-fatal — skips if X402_SKIP_PAYMENT=true or on failure)
-  let payment = null;
-  const skipPayment = process.env.X402_SKIP_PAYMENT === "true";
-
-  if (!skipPayment) {
     try {
-      payment = await payUpstreamForAccess({
-        upstreamAgentId: env.upstreamAgentId,
-        upstreamRole: env.upstreamRole,
-        buyerRole: env.role,
+      const intent = await postBridgeEvent({
+        sessionId: env.sessionId,
         category: env.category,
-        market: env.market,
-        sessionId: intent.sessionId,
+        role: env.role,
+        type: "bridge_event",
         runtimeId: env.runtimeId,
-        sourcePayloadHash: latestEvent.payloadHash,
         payload: {
-          purchaseIntentHash: intent.payloadHash,
-          sourceEvent: latestEvent.payloadHash,
           action: route.action,
+          buyerRole: env.role,
+          sellerRole: env.upstreamRole,
+          sellerAgentId: upstreamSource?.agentId || upstreamSource?.runtimeId || null,
+          sourcePayloadHash: upstreamSource?.payloadHash || null,
+          market: env.market,
+          createdAt: new Date().toISOString(),
         },
-        llmReceipt,
+        metadata: {
+          commerceBuyer: true,
+          buyerRole: env.role,
+          sellerRole: env.upstreamRole,
+          sellerAgentId: upstreamSource?.agentId || upstreamSource?.runtimeId || null,
+          accessType: route.accessType,
+          scope: route.scope,
+          market: env.market,
+        },
       });
-      console.log(
-        `[${env.role}] seller commerce paid rail=${payment.rail} tx=${payment.txHash || "n/a"}`
-      );
+      purchaseIntentHash = intent.payloadHash;
+      console.log(`[${env.role}] purchase intent posted payloadHash=${intent.payloadHash?.slice(0, 12)}...`);
     } catch (err) {
-      console.warn(
-        `[${env.role}] commerce payment skipped: ${err.message}`
-      );
-      payment = { paymentId: null, txHash: null, payloadHash: null, rail: "skipped" };
+      console.warn(`[${env.role}] purchase intent skipped: ${err.message}`);
     }
-  } else {
-    console.log(`[${env.role}] commerce payment skipped (X402_SKIP_PAYMENT=true)`);
-    payment = { paymentId: null, txHash: null, payloadHash: null, rail: "skipped" };
+
+    if (!skipPayment && purchaseIntentHash) {
+      try {
+        payment = await payUpstreamForAccess({
+          upstreamAgentId: upstreamSource?.agentId || upstreamSource?.runtimeId || null,
+          upstreamRole: env.upstreamRole,
+          buyerRole: env.role,
+          category: env.category,
+          market: env.market,
+          sessionId: env.sessionId,
+          runtimeId: env.runtimeId,
+          sourcePayloadHash: upstreamSource?.payloadHash || null,
+          payload: {
+            purchaseIntentHash,
+            sourcePayloadHash: upstreamSource?.payloadHash,
+            action: route.action,
+          },
+          llmReceipt: buildLlmReceipt({
+            payload: { upstreamPayload: upstreamData, result: llmResult },
+            llmReceipt: { ...llmResult, summary: llmResult.summary || `${env.role} consumed ${env.upstreamRole} data.`, decision: llmResult.decision || "COMMERCE_ACCESS" },
+          }),
+        });
+        console.log(`[${env.role}] seller commerce paid rail=${payment.rail} tx=${payment.txHash || "n/a"}`);
+      } catch (err) {
+        console.warn(`[${env.role}] commerce payment skipped: ${err.message}`);
+      }
+    }
   }
 
-  // 6. Post output event
+  // 4. Build output payload
   const outputPayload = {
     ...(config.payload || {}),
-    independent: true,
+    eventGraph: true,
     role: env.role,
     market: env.market,
     runtimeId: env.runtimeId,
-    sessionId: intent.sessionId,
-    upstreamEventHash: latestEvent.payloadHash,
-    purchaseIntentHash: intent.payloadHash,
-    paymentPayloadHash: payment.payloadHash || null,
+    sessionId: env.sessionId,
+    upstreamRole: env.upstreamRole,
+    upstreamPayloadHash: upstreamSource?.payloadHash || null,
     analysis: llmResult.analysis || null,
     evaluation: llmResult.evaluation || null,
     execution: llmResult.execution || null,
+    signal: llmResult.signal || null,
+    data: llmResult.data || null,
     decision: llmResult.decision || null,
     confidence: llmResult.confidence ?? null,
     createdAt: new Date().toISOString(),
   };
 
+  // 5. Post output event
   const outputEvent = await postBridgeEvent({
-    sessionId: intent.sessionId,
+    sessionId: env.sessionId,
     category: env.category,
     role: env.role,
     type: eventTypeForRole(env.role),
@@ -306,22 +315,28 @@ async function runBuyerRole({ config, env }) {
     payload: outputPayload,
     metadata: {
       commerceOutput: true,
+      eventGraph: true,
       buyerRole: env.role,
       sellerRole: env.upstreamRole,
-      sellerAgentId: env.upstreamAgentId,
-      accessType: route.accessType,
-      scope: route.scope,
+      scope: route?.scope || "event_graph",
       market: env.market,
       llmProvider: llmResult.provider || null,
       llmModel: llmResult.model || null,
     },
   });
 
-  console.log(
-    `[${env.role}] output posted payloadHash=${outputEvent.payloadHash?.slice(0, 12)}...`
-  );
+  console.log(`[${env.role}] output posted payloadHash=${outputEvent.payloadHash?.slice(0, 12)}...`);
 
-  // 7. Post receipt reference
+  // 6. Post receipt
+  const llmReceipt = buildLlmReceipt({
+    payload: outputPayload,
+    llmReceipt: {
+      ...llmResult,
+      summary: llmResult.summary || `${env.role} produced ${env.upstreamRole}-driven analysis for ${env.market}.`,
+      decision: llmResult.decision || "PIPELINE_OUTPUT",
+    },
+  });
+
   await postReceiptReference({
     sessionId: outputEvent.sessionId,
     category: env.category,
@@ -349,19 +364,15 @@ async function main() {
 
   if (env.role === "oracle") {
     await runOracle({ config, env });
-    console.log("[commerce-bot] oracle done");
     await postHeartbeat({ role: env.role, agentId: config.agentId, apiKey: getApiKey() });
+    console.log("[commerce-bot] oracle done");
     return;
   }
 
   if (["analyzer", "evaluator", "executor"].includes(env.role)) {
-    const result = await runBuyerRole({ config, env });
-    if (!result) {
-      console.log(`[commerce-bot] ${env.role} skipped — no upstream events`);
-    } else {
-      await postHeartbeat({ role: env.role, agentId: config.agentId, apiKey: getApiKey() });
-      console.log(`[commerce-bot] ${env.role} done`);
-    }
+    const result = await runRoutedRole({ config, env });
+    await postHeartbeat({ role: env.role, agentId: config.agentId, apiKey: getApiKey() });
+    console.log(`[commerce-bot] ${env.role} done`);
     return;
   }
 

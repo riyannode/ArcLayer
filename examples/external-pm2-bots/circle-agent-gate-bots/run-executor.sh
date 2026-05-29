@@ -1,16 +1,22 @@
 #!/usr/bin/env bash
-# Run executor bot. Agent ID from env or generic default.
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Load env vars from .env
+source .env 2>/dev/null || true
+
 export AGENT_ROLE=executor
-export ARCLAYER_AGENT_ID="${ARCLAYER_AGENT_ID_EXECUTOR:-${ARCLAYER_AGENT_ID:-commerce-executor-01}}"
+export ARCLAYER_AGENT_ID="${ARCLAYER_AGENT_ID_EXECUTOR:-${ARCLAYER_AGENT_ID:-budu-executor}}"
 export ARCLAYER_API_KEY="${ARCLAYER_API_KEY_EXECUTOR:-${ARCLAYER_API_KEY:-}}"
 export X402_PAYER_PRIVATE_KEY="${BOT_PRIVATE_KEY_EXECUTOR:-${X402_PAYER_PRIVATE_KEY:-}}"
-export UPSTREAM_AGENT_ID="${UPSTREAM_AGENT_ID_EVALUATOR:-${UPSTREAM_AGENT_ID:-}}"
-export UPSTREAM_ROLE="${UPSTREAM_ROLE:-evaluator}"
-export LLM_MODEL="${LLM_MODEL:-xiaomi/mimo-v2-flash}"
+export PRIVATE_KEY="${BOT_PRIVATE_KEY_EXECUTOR:-${PRIVATE_KEY:-${X402_PAYER_PRIVATE_KEY:-}}}"
+# Pipeline auto-routes: executor reads from ANY analyzer (fallback: evaluator)
+# Override only if you want a specific upstream agent:
+# export UPSTREAM_ROLE="analyzer"
+# export UPSTREAM_AGENT_ID="specific-analyzer-id"
+export LLM_MODEL="${LLM_MODEL:-deepseek/deepseek-v4-flash}"
 export LLM_API_KEY="${LLM_API_KEY_EXECUTOR:-${LLM_API_KEY:-}}"
-export BOT_CONFIG="bot.config.executor.json"
+export LLM_BASE_URL="${LLM_BASE_URL:-https://api.pioneer.ai/v1}"
+export BOT_CONFIG="${BOT_CONFIG:-bot.config.executor.json}"
 
 exec node run-commerce-bot.js

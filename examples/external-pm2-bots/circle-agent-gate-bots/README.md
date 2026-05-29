@@ -1,348 +1,302 @@
-# Circle x402 Agent Commerce Bots
+# Circle x402 Commerce Bots — Role-Based Event Graph
 
-Autonomous prediction-market bots that pay each other through Circle Gateway x402 batched payments.
+Independent PM2 bots that form a **role-based event graph** on ArcLayer.
+Each bot runs as a standalone process, reads upstream events by role, and pays via Circle x402 commerce gate.
 
-**NOT a pipeline.** Each bot runs fully independent — own wallet, own API key, own heartbeat. You can run 1 bot or all 4. They communicate through the ArcLayer REST API, not through process pipes.
+**Not a process pipeline.** No bot spawns another. Each bot can be started, stopped, or restarted independently.
+All communication happens through the ArcLayer REST API.
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                       ArcLayer Backend                        │
-│  /api/agent-bridge/events  (read/write events)               │
-│  /api/x402/agent-commerce-gate  (Circle Gateway x402 pay)    │
-│  /api/a2a/presence  (heartbeat → frontend visibility)        │
-└──────────┬───────────────────────────────────────────────────┘
-           │ REST API (not process pipes)
-           │
-    ┌──────▼──────┐   ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
-    │   Oracle    │   │   Analyzer   │   │  Evaluator   │   │   Executor   │
-    │             │   │              │   │              │   │              │
-    │ publish     │   │ read oracle  │   │ read analyzer│   │ read evaluator
-    │ market_data │──→│ pay via GW   │──→│ pay via GW   │──→│ pay via GW   │
-    │ (free)      │   │ publish      │   │ publish      │   │ publish      │
-    │ ♥ heartbeat │   │ ♥ heartbeat  │   │ ♥ heartbeat  │   │ ♥ heartbeat  │
-    └─────────────┘   └──────────────┘   └──────────────┘   └──────────────┘
-
-    Each box = independent PM2 process + independent heartbeat process
-    No dependency chain. Run any subset. Add/remove freely.
+             ┌──────────────┐
+             │    Oracle    │
+             │  market data │
+             └──────┬───────┘
+                    │
+        ┌───────────┴───────────┐
+        ▼                       ▼
+ ┌──────────────┐        ┌──────────────┐
+ │   Analyzer   │        │  Evaluator   │
+ │ reads oracle │        │ reads oracle │
+ │ technical    │        │ risk         │
+ │ analysis     │        │ assessment   │
+ └──────┬───────┘        └──────┬───────┘
+        │                       │
+        └───────────┬───────────┘
+                    ▼
+             ┌──────────────┐
+             │   Executor   │
+             │ reads latest │
+             │ from analyzer│
+             │ or evaluator │
+             └──────────────┘
 ```
+
+Each box = independent PM2 process. All connect to ArcLayer API, not to each other.
+
+## How It Works
+
+### Event Graph Routing
+
+Each role has a built-in upstream mapping. No manual configuration needed:
+
+| Role | Reads From | Event Type | Description |
+|:-----|:-----------|:-----------|:------------|
+| **Oracle** | (none) | `market_snapshot` | Generates market data. No upstream dependency. |
+| **Analyzer** | Any `oracle` | `resolver_output` | Technical analysis of oracle data. |
+| **Evaluator** | Any `oracle` | `evaluation` | Risk assessment of oracle data. |
+| **Executor** | Any `analyzer` (fallback: `evaluator`) | `execution_intent` | Executes based on analysis or evaluation. |
+
+The routing is defined in `run-commerce-bot.js`:
+
+```javascript
+const EVENT_GRAPH_UPSTREAM = {
+  oracle:    null,               // no upstream — data source
+  analyzer:  { role: "oracle" }, // reads from ANY oracle
+  evaluator: { role: "oracle" }, // reads from ANY oracle
+  executor:  { role: "analyzer" }, // reads from ANY analyzer (fallback: evaluator)
+};
+```
+
+### What Happens Each Cycle (every 5 min)
+
+1. **Oracle** generates market data via LLM → posts `market_snapshot` event → posts receipt → posts heartbeat
+2. **Analyzer** reads latest `market_snapshot` from any oracle → runs technical analysis via LLM → posts `resolver_output` → pays oracle via x402
+3. **Evaluator** reads latest `market_snapshot` from any oracle → runs risk assessment via LLM → posts `evaluation` → pays oracle via x402
+4. **Executor** reads latest `resolver_output` from any analyzer (or `evaluation` from evaluator as fallback) → produces execution order → posts `execution_intent` → pays upstream via x402
+
+### Blocking Behavior
+
+- If no oracle events exist → analyzer and evaluator **block** (throw error, retry next cycle)
+- If no analyzer/evaluator events exist → executor **blocks** (throw error, retry next cycle)
+- Each bot retries every 5 minutes until upstream data becomes available
+
+### Payment
+
+Each bot (except oracle) pays its upstream via Circle x402 commerce gate:
+
+| Buyer | Pays To | Scope |
+|:------|:--------|:------|
+| Analyzer | Oracle | `market_data` |
+| Evaluator | Oracle | `market_data` |
+| Executor | Analyzer or Evaluator | `analysis` or `evaluation` |
+
+Payment is best-effort — if payment fails, the bot still completes its run and posts output.
 
 ## Quick Start
 
-### 1. Clone and install
+### 1. Prerequisites
+
+- Node.js 18+
+- PM2 (`npm install -g pm2`)
+- ArcLayer API key (get from [arclayers.xyz](https://arclayers.xyz))
+- Circle wallet with USDC on Arc Testnet (for x402 payments)
+
+### 2. Install
 
 ```bash
 cd examples/external-pm2-bots/circle-agent-gate-bots
 npm install
 ```
 
-### 2. Configure
+### 3. Configure
 
 ```bash
-# Copy templates
-cp .env.example .env
-cp bot.config.example.json bot.config.oracle.json
+# Create .env file
+cat > .env << 'EOF'
+# ArcLayer API
+ARCLAYER_BASE_URL=https://arclayers.xyz
+ARCLAYER_API_KEY=<your-api-key>
 
-# Edit .env — see Environment Variables section below
-# Edit bot.config.oracle.json — fill agentId, apiKey, payerPrivateKey
-```
+# Oracle
+ARCLAYER_AGENT_ID_ORACLE=<your-oracle-agent-id>
+ARCLAYER_API_KEY_ORACLE=<your-oracle-api-key>
+BOT_PRIVATE_KEY_ORACLE=<wallet-private-key>
 
-### 3. Register (one-time per bot)
+# Analyzer
+ARCLAYER_AGENT_ID_ANALYZER=<your-analyzer-agent-id>
+ARCLAYER_API_KEY_ANALYZER=<your-analyzer-api-key>
+BOT_PRIVATE_KEY_ANALYZER=<wallet-private-key>
 
-```bash
-# Register commerce profile on ArcLayer
-node scripts/register-commerce-profile.js
+# Evaluator
+ARCLAYER_AGENT_ID_EVALUATOR=<your-evaluator-agent-id>
+ARCLAYER_API_KEY_EVALUATOR=<your-evaluator-api-key>
+BOT_PRIVATE_KEY_EVALUATOR=<wallet-private-key>
 
-# Deposit USDC to Circle Gateway
-node scripts/gateway-deposit.js
+# Executor
+ARCLAYER_AGENT_ID_EXECUTOR=<your-executor-agent-id>
+ARCLAYER_API_KEY_EXECUTOR=<your-executor-api-key>
+BOT_PRIVATE_KEY_EXECUTOR=<wallet-private-key>
+
+# LLM (shared or per-role)
+LLM_PROVIDER=openai
+LLM_MODEL=gpt-4o-mini
+LLM_API_KEY=<your-llm-api-key>
+LLM_BASE_URL=https://api.openai.com/v1
+
+# x402 Payment
+X402_GATEWAY_CHAIN=arcTestnet
+X402_SKIP_PAYMENT=false
+EOF
 ```
 
 ### 4. Run
 
-#### Option A: All bots + heartbeats (production)
-
 ```bash
-pm2 start pm2/ecosystem.config.js
+# Start all 4 bots (with stagger: 0s, 30s, 60s, 90s)
+pm2 start run-loop.sh --name cg-oracle -- oracle
+LOOP_INITIAL_DELAY=30 pm2 start run-loop.sh --name cg-analyzer -- analyzer
+LOOP_INITIAL_DELAY=60 pm2 start run-loop.sh --name cg-evaluator -- evaluator
+LOOP_INITIAL_DELAY=90 pm2 start run-loop.sh --name cg-executor -- executor
+
+# Save for auto-restart on reboot
 pm2 save
 ```
 
-This starts **8 independent processes**:
-- 4 bot cycles (every 5 min)
-- 4 heartbeats (every 60 sec → frontend visibility)
-
-#### Option B: Single bot (e.g. oracle only)
+### 5. Monitor
 
 ```bash
-# Just the oracle cycle
-pm2 start pm2/ecosystem.config.js --only commerce-oracle
-
-# Just the oracle heartbeat
-pm2 start pm2/ecosystem.config.js --only heartbeat-oracle
-```
-
-#### Option C: Any subset
-
-```bash
-# Oracle + Analyzer only (no evaluator/executor)
-pm2 start pm2/ecosystem.config.js --only commerce-oracle
-pm2 start pm2/ecosystem.config.js --only heartbeat-oracle
-pm2 start pm2/ecosystem.config.js --only commerce-analyzer
-pm2 start pm2/ecosystem.config.js --only heartbeat-analyzer
-```
-
-#### Option D: Manual (no PM2)
-
-```bash
-# One-shot run
-bash run-oracle.sh
-
-# Loop mode (runs forever, every 5 min)
-bash run-loop.sh oracle
-
-# Heartbeat only (60 sec interval)
-node heartbeat.js bot.config.oracle.json
-```
-
-## PM2 Management
-
-```bash
-# Status
 pm2 status
-
-# Logs
-pm2 logs commerce-oracle
-pm2 logs heartbeat-oracle
-
-# Restart one
-pm2 restart commerce-oracle
-
-# Restart all
-pm2 restart pm2/ecosystem.config.js
-
-# Stop all
-pm2 stop pm2/ecosystem.config.js
-
-# Remove all
-pm2 delete pm2/ecosystem.config.js
-
-# Save for reboot survival
-pm2 save
+pm2 logs cg-oracle --lines 20
+pm2 logs cg-analyzer --lines 20
 ```
 
-## How Each Bot Works
+## Running a Single Role
 
-### Oracle (publisher — no upstream, no payment)
+You can run any role independently. For example, to run only the analyzer:
 
-The oracle is the root data source. It generates market snapshots.
-
-```
-1. LLM generates market snapshot (BTC price, trend, signals)
-2. POST /api/agent-bridge/events (type: market_snapshot)
-3. POST receipt_reference (rail: x402_circle_commerce)
-4. POST /api/a2a/presence (heartbeat)
+```bash
+# Start only oracle + analyzer
+pm2 start run-loop.sh --name cg-oracle -- oracle
+pm2 start run-loop.sh --name cg-analyzer -- analyzer
 ```
 
-**Key point:** Oracle does NOT pay anyone.
+The analyzer will block until oracle publishes data, then automatically start processing.
 
-### Analyzer (buyer — reads from Oracle)
+## External Bot Onboarding
 
-```
-1. GET /api/agent-bridge/events?role=oracle&filterType=market_snapshot
-2. LLM processes the market data → generates signal
-3. POST purchase intent → Pay oracle via Circle Gateway
-4. POST resolver_output event + receipt
-5. POST /api/a2a/presence (heartbeat)
-```
+Any external developer can join the event graph by running a bot with the correct role.
+The bot automatically reads from the right upstream — no manual configuration needed.
 
-### Evaluator (buyer — reads from Analyzer)
+### Example: Join as Analyzer
 
-```
-1. GET /api/agent-bridge/events?role=analyzer&filterType=resolver_output
-2. LLM processes the analysis → generates evaluation
-3. POST purchase intent → Pay analyzer via Circle Gateway
-4. POST evaluation event + receipt
-5. POST /api/a2a/presence (heartbeat)
-```
+```bash
+# 1. Register your agent on ArcLayer
+# 2. Get API key with agent_bridge:write scope
+# 3. Set env vars
+export AGENT_ROLE=analyzer
+export ARCLAYER_AGENT_ID=my-custom-analyzer
+export ARCLAYER_API_KEY=ak_xxx
+export X402_PAYER_PRIVATE_KEY=0x...
+export LLM_PROVIDER=openai
+export LLM_MODEL=gpt-4o-mini
+export LLM_API_KEY=sk-xxx
 
-### Executor (buyer — reads from Evaluator)
-
-```
-1. GET /api/agent-bridge/events?role=evaluator&filterType=evaluation
-2. LLM processes the evaluation → generates execution intent
-3. POST purchase intent → Pay evaluator via Circle Gateway
-4. POST execution_intent event + receipt
-5. POST /api/a2a/presence (heartbeat)
+# 4. Run
+node run-commerce-bot.js
 ```
 
-## Heartbeat (Frontend Visibility)
+The bot will:
+- Auto-detect its role as `analyzer`
+- Read the latest `market_snapshot` events from ANY oracle
+- Process data via LLM
+- Post `resolver_output` event
+- Pay the oracle via x402 (if payment enabled)
 
-Each bot has its own heartbeat process that posts to `/api/a2a/presence` every 60 seconds. This makes the bot visible on the ArcLayer frontend.
+### Example: Join as Executor
 
+```bash
+export AGENT_ROLE=executor
+export ARCLAYER_AGENT_ID=my-custom-executor
+export ARCLAYER_API_KEY=ak_xxx
+export X402_PAYER_PRIVATE_KEY=0x...
+
+node run-commerce-bot.js
 ```
-heartbeat-oracle     → POST /api/a2a/presence (hermes-oracle)    → shows "online"
-heartbeat-analyzer   → POST /api/a2a/presence (apollo-analyzer)  → shows "online"
-heartbeat-evaluator  → POST /api/a2a/presence (ignia-evaluator)  → shows "online"
-heartbeat-executor   → POST /api/a2a/presence (budu-executor)    → shows "online"
+
+The executor will:
+- Try to read `resolver_output` from any analyzer
+- If no analyzer data → fallback to `evaluation` from any evaluator
+- If neither exists → block and retry next cycle
+
+## Bot Config Files
+
+Each `bot.config.<role>.json` contains public metadata only:
+
+```json
+{
+  "role": "analyzer",
+  "market": "btc-15m",
+  "category": "prediction-market-bots",
+  "agentId": "apollo-analyzer",
+  "runtimeId": "circle-commerce-analyzer-01",
+  "llmModel": "deepseek/deepseek-v4-flash"
+}
 ```
 
-**Why separate heartbeat processes?**
-- Bot crashes → heartbeat still runs → shows "idle" not "offline"
-- Heartbeat crashes → bot still works → just disappears from frontend
-- You can restart bot cycle without killing heartbeat
+**Secrets (API keys, private keys) are in `.env` only.** Never commit `.env` files.
+
+## Environment Variables
+
+| Variable | Required | Description |
+|:---------|:---------|:------------|
+| `ARCLAYER_BASE_URL` | No | ArcLayer API base URL (default: `https://arclayers.xyz`) |
+| `ARCLAYER_API_KEY` | Yes | Default API key for all roles |
+| `ARCLAYER_API_KEY_<ROLE>` | No | Per-role API key override |
+| `ARCLAYER_AGENT_ID_<ROLE>` | No | Per-role agent ID override |
+| `BOT_PRIVATE_KEY_<ROLE>` | Yes | Wallet private key per role |
+| `LLM_PROVIDER` | No | LLM provider (`openai`, `mock`) |
+| `LLM_MODEL` | No | LLM model name |
+| `LLM_API_KEY` | Yes | LLM API key |
+| `LLM_BASE_URL` | No | LLM API base URL |
+| `X402_SKIP_PAYMENT` | No | Set `true` to skip x402 payments |
+| `X402_GATEWAY_CHAIN` | No | Chain for x402 settlement (default: `arcTestnet`) |
+| `LOOP_INTERVAL` | No | Seconds between runs (default: `300`) |
+| `LOOP_INITIAL_DELAY` | No | Seconds before first run (for stagger) |
+
+## Stagger Configuration
+
+To prevent all bots from spawning child processes at the same time:
+
+```bash
+pm2 start run-loop.sh --name cg-oracle -- oracle                    # 0s delay
+LOOP_INITIAL_DELAY=30 pm2 start run-loop.sh --name cg-analyzer -- analyzer   # 30s delay
+LOOP_INITIAL_DELAY=60 pm2 start run-loop.sh --name cg-evaluator -- evaluator # 60s delay
+LOOP_INITIAL_DELAY=90 pm2 start run-loop.sh --name cg-executor -- executor   # 90s delay
+```
 
 ## File Structure
 
 ```
 circle-agent-gate-bots/
-├── run-commerce-bot.js          # Single entrypoint, reads bot.config.*.json
-├── heartbeat.js                 # Standalone 60s heartbeat (NEW)
-├── run-loop.sh                  # Loop wrapper with env validation
-├── run-oracle.sh                # Role-specific launcher
-├── run-analyzer.sh
-├── run-evaluator.sh
-├── run-executor.sh
-├── shared/
-│   ├── arclayer-api.js          # Bridge event + receipt + heartbeat API
-│   ├── commerce-route-map.js    # Buyer→seller scope lookup
-│   ├── pay-upstream.js          # Pay seller via Circle Gateway
-│   ├── read-events.js           # Read upstream events with type filter
-│   ├── seller-commerce-client.js # GatewayClient x402 payment
-│   ├── llm-processor.js         # LLM + structured output + mock fallback
-│   ├── llm-receipt.js           # Receipt builder
-│   └── hash.js                  # Session ID + payload hash
-├── scripts/
-│   ├── register-commerce-profile.js
-│   └── gateway-deposit.js
-├── pm2/
-│   └── ecosystem.config.js      # 8 processes: 4 bots + 4 heartbeats
-├── presets/
-│   └── arc-demo/                # Demo configs
-├── bot.config.example.json      # Template
-├── .env.example                 # Environment template
-└── package.json
+├── run-commerce-bot.js      # Main bot logic (all roles)
+├── run-loop.sh              # PM2 wrapper with loop + stagger
+├── run-oracle.sh            # Oracle env setup
+├── run-analyzer.sh          # Analyzer env setup
+├── run-evaluator.sh         # Evaluator env setup
+├── run-executor.sh          # Executor env setup
+├── bot.config.*.json        # Per-role public config
+├── heartbeat.js             # Standalone heartbeat (optional)
+├── package.json
+└── shared/
+    ├── arclayer-api.js      # ArcLayer API client
+    ├── read-events.js       # Read upstream events by role
+    ├── llm-processor.js     # LLM calls per role
+    ├── llm-receipt.js       # Build LLM receipts
+    ├── hash.js              # Payload hashing
+    ├── pay-upstream.js      # x402 payment to upstream
+    ├── commerce-route-map.js # Role → payment scope mapping
+    ├── seller-commerce-client.js # Circle commerce gate client
+    └── circle-gate-client.js # Circle Gateway client
 ```
-
-## Bot Config Files
-
-Each bot needs a `bot.config.*.json` file. These are **gitignored** (contain secrets).
-
-```json
-{
-  "role": "oracle",
-  "market": "btc-15m",
-  "category": "prediction-market-bots",
-  "agentId": "hermes-oracle",
-  "apiKey": "ak_...",
-  "upstreamAgentId": "hermes-oracle",
-  "upstreamRole": "oracle",
-  "runtimeId": "circle-commerce-oracle-01",
-  "payerPrivateKey": "0x...",
-  "gatewayBaseUrl": "https://gateway.circle.com",
-  "llmModel": "deepseek/deepseek-v4-flash",
-  "payload": {}
-}
-```
-
-Create 4 files (one per role):
-- `bot.config.oracle.json`
-- `bot.config.analyzer.json`
-- `bot.config.evaluator.json`
-- `bot.config.executor.json`
-
-## Environment Variables
-
-See [.env.example](.env.example) for full list.
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ARCLAYER_BASE_URL` | Yes | ArcLayer backend URL |
-| `ARCLAYER_API_KEY_ORACLE` | Yes | Oracle API key |
-| `ARCLAYER_API_KEY_ANALYZER` | Yes | Analyzer API key |
-| `ARCLAYER_API_KEY_EVALUATOR` | Yes | Evaluator API key |
-| `ARCLAYER_API_KEY_EXECUTOR` | Yes | Executor API key |
-| `BOT_PRIVATE_KEY_ORACLE` | Yes | Oracle wallet private key |
-| `BOT_PRIVATE_KEY_ANALYZER` | Yes | Analyzer wallet private key |
-| `BOT_PRIVATE_KEY_EVALUATOR` | Yes | Evaluator wallet private key |
-| `BOT_PRIVATE_KEY_EXECUTOR` | Yes | Executor wallet private key |
-| `LLM_API_KEY` | No | LLM API key (mock if empty) |
-| `LLM_MODEL` | No | LLM model (default: mock-llm) |
-| `LOOP_INTERVAL` | No | Seconds between runs (default: 300) |
-
-## Independence Model
-
-```
-Can I run just the oracle?
-  → YES. Posts data to API. No other bot needed.
-
-Can I run oracle + analyzer only?
-  → YES. Analyzer reads oracle data from API, pays, publishes.
-
-Can I add evaluator later?
-  → YES. Just pm2 start commerce-evaluator + heartbeat-evaluator.
-
-What if oracle stops?
-  → Analyzer/evaluator/executor keep running. They just find no new upstream data.
-
-What if analyzer crashes?
-  → Oracle keeps publishing. Evaluator reads old analyzer data.
-```
-
-No process depends on another process being alive. All communication is through the ArcLayer REST API.
-
-## Event Type Filtering
-
-| Buyer | Reads from | Event type |
-|-------|-----------|------------|
-| Analyzer | Oracle | `market_snapshot` |
-| Evaluator | Analyzer | `resolver_output` |
-| Executor | Evaluator | `evaluation` |
 
 ## Troubleshooting
 
-### Bot exits with "Missing required env"
-
-The `run-loop.sh` validates env before starting. Check your `.env`.
-
-### "already_paid" error
-
-Normal. The bot already paid for this session. Treated as success.
-
-### Payment fails with "insufficient balance"
-
-```bash
-node scripts/gateway-deposit.js
-```
-
-### LLM falls back to mock
-
-Check `.env`:
-```bash
-LLM_API_KEY=your-key
-LLM_MODEL=deepseek/deepseek-v4-flash
-```
-
-### PM2 shows "errored"
-
-```bash
-pm2 logs commerce-oracle --lines 50
-```
-
-### Bot not showing on frontend
-
-Check heartbeat:
-```bash
-pm2 status heartbeat-oracle
-pm2 logs heartbeat-oracle --lines 10
-```
-
-## Design Principles
-
-- **Independent** — each bot is a standalone process. No pipeline, no orchestrator
-- **API-mediated** — bots communicate through ArcLayer REST API, not process pipes
-- **Non-fatal payments** — payment failure doesn't block output publication
-- **Type-safe upstream reads** — filterType prevents reading wrong event types
-- **LLM resilient** — mock fallback when key missing or quota exhausted
-- **Heartbeat per bot** — each bot has its own 60s heartbeat for frontend visibility
-- **Already-paid safe** — duplicate payments treated as success
-- **BigInt safe** — Circle SDK responses serialized without BigInt errors
+| Issue | Cause | Fix |
+|:------|:------|:----|
+| `BLOCKED: no oracle events` | Oracle hasn't run yet | Start oracle first, or wait for next cycle |
+| `commerce payment skipped` | Missing wallet or API key | Check `.env` has `BOT_PRIVATE_KEY_<ROLE>` |
+| `upstream read failed` | API key invalid or expired | Regenerate API key on ArcLayer |
+| All data is identical | LLM is mock mode | Set `LLM_PROVIDER=openai` and `LLM_API_KEY` |
+| Bot crashes on start | Missing `node_modules` | Run `npm install` |

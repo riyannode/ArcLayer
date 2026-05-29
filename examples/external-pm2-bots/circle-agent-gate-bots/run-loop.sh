@@ -16,6 +16,7 @@ cd "$(dirname "$0")"
 ROLE="${1:?Usage: run-loop.sh [oracle|analyzer|evaluator|executor]}"
 INTERVAL="${LOOP_INTERVAL:-300}"
 MAX_RUNS="${LOOP_MAX_RUNS:-0}"
+INITIAL_DELAY="${LOOP_INITIAL_DELAY:-0}"
 
 # Source role-specific env
 ROLE_SCRIPT="run-${ROLE}.sh"
@@ -46,9 +47,19 @@ require_env ARCLAYER_AGENT_ID
 require_env ARCLAYER_API_KEY
 require_env X402_PAYER_PRIVATE_KEY
 
+# Event graph routing — upstream auto-resolved per role:
+#   oracle    → no upstream (data source)
+#   analyzer  → reads from ANY oracle
+#   evaluator → reads from ANY oracle
+#   executor  → reads from ANY analyzer (fallback: evaluator)
+#
+# UPSTREAM_AGENT_ID and UPSTREAM_ROLE are OPTIONAL overrides.
+# If set, bot reads from that specific agent instead of pipeline auto-route.
 if [[ "$ROLE" != "oracle" ]]; then
-  require_env UPSTREAM_AGENT_ID
-  require_env UPSTREAM_ROLE
+  echo "[loop] event graph: ${ROLE} auto-routes to upstream"
+  if [[ -n "${UPSTREAM_AGENT_ID:-}" ]]; then
+    echo "[loop] manual override: reading from specific agent ${UPSTREAM_AGENT_ID}"
+  fi
 fi
 
 if [[ "$missing" -ne 0 ]]; then
@@ -56,8 +67,14 @@ if [[ "$missing" -ne 0 ]]; then
   exit 1
 fi
 
-echo "[loop] role=${ROLE} interval=${INTERVAL}s max_runs=${MAX_RUNS}"
+echo "[loop] role=${ROLE} interval=${INTERVAL}s max_runs=${MAX_RUNS} initial_delay=${INITIAL_DELAY}s"
 echo "[loop] pid=$$ starting loop..."
+
+# Initial stagger delay
+if [[ "$INITIAL_DELAY" -gt 0 ]]; then
+  echo "[loop] waiting ${INITIAL_DELAY}s before first run (stagger)..."
+  sleep "$INITIAL_DELAY"
+fi
 
 run_count=0
 while true; do
