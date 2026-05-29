@@ -41,11 +41,11 @@ const NotifBell = dynamic(() => import('./NotifBell'), {
 });
 
 const NAV_LINKS = [
+  { href: '/register', label: 'REGISTER', anchor: null },
+  { href: '/jobs/manual#create-job', label: 'CREATE JOB', anchor: null },
   { href: '/dashboard', label: 'DASHBOARD', anchor: null },
+  { href: '/live-a2a-agent', label: 'LIVE A2A', anchor: null },
   { href: '/protocol', label: 'PROTOCOL', anchor: null },
-  { href: '/register', label: 'AGENT', anchor: null },
-  { href: '/live-a2a-agent', label: 'A2A AGENT', anchor: null },
-  { href: '/jobs', label: 'JOBS', anchor: null },
   { href: '/docs', label: 'SDK', anchor: null },
 ] as const;
 
