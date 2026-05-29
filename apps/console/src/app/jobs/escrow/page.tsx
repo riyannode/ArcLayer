@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useEffect, type ReactNode } from 'react';
-import { waitForTransactionReceipt } from '@wagmi/core';
+import { waitForTransactionReceipt, switchChain } from '@wagmi/core';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { buildCreateJobConfig } from '@arclayer/sdk';
@@ -374,7 +374,10 @@ export default function EscrowWorkOrderPage() {
 
       const { localJobId } = createData;
 
-      // Step 2: Sign createJob tx via wallet
+      // Step 2: Ensure wallet is on Arc Testnet, then sign
+      setTxState('Switching to Arc Testnet…');
+      await switchChain(config, { chainId: 5042002 });
+
       setTxState('Waiting for wallet signature…');
       const createHash = await writeContractAsync(
         buildCreateJobConfig(
