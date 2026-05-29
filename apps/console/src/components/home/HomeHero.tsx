@@ -8,6 +8,11 @@ const X402DemoPanel = dynamic(() => import('@/components/x402/X402DemoPanel'), {
   loading: () => <div className="h-[120px] animate-pulse rounded-lg bg-[rgba(234,228,216,0.04)]" />,
 });
 
+const FaucetHelper = dynamic(() => import('@/components/x402/FaucetHelper'), {
+  ssr: false,
+  loading: () => <div className="h-[80px] animate-pulse rounded-lg bg-[rgba(234,228,216,0.04)]" />,
+});
+
 /**
  * Home hero — editorial serif headline, real deployed contracts strip,
  * live indexer stats, and primary homepage CTAs.
@@ -67,6 +72,14 @@ export default function HomeHero() {
         style={{ animationDelay: '0.35s' }}
       >
         <X402DemoPanel compact ticketOnly />
+      </div>
+
+      <div
+        data-x402-unlock-zone="true"
+        className="mt-3 section-reveal"
+        style={{ animationDelay: '0.4s' }}
+      >
+        <FaucetHelper compact />
       </div>
 
       <div data-x402-blur-zone="true">
