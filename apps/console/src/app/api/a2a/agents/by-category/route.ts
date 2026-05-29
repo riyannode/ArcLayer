@@ -9,6 +9,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category')?.trim() || 'prediction-market-bots';
   const source = process.env.A2A_AGENT_ROSTER_SOURCE || 'local-indexer';
+  const isAll = category === 'all';
 
   // Always fetch Supabase manifests for external users
   let supabaseAgents: unknown[] = [];
@@ -17,6 +18,8 @@ export async function GET(request: Request) {
     const manifests = await listStoredManifests();
     supabaseAgents = manifests
       .filter((item) => {
+        // category=all → return all agents, no filter
+        if (isAll) return true;
         const manifest = item.manifest;
         return (
           manifest.categories?.includes(category) ||
@@ -44,12 +47,14 @@ export async function GET(request: Request) {
     supabaseError = 'supabase_unavailable';
   }
 
-  // Local-indexer path for prediction-market-bots
+  // Local-indexer path: run for prediction-market-bots OR all
   let localAgents: unknown[] = [];
   let localError: string | null = null;
-  if (category === 'prediction-market-bots' && source !== 'global') {
+  if ((isAll || category === 'prediction-market-bots') && source !== 'global') {
     try {
-      localAgents = await listLocalIndexerAgentsByCategory(category);
+      // For 'all', pass 'prediction-market-bots' to the local-indexer
+      // since that's the only category it indexes
+      localAgents = await listLocalIndexerAgentsByCategory('prediction-market-bots');
     } catch (error) {
       localError = error instanceof Error ? error.message : 'local_indexer_unavailable';
     }
