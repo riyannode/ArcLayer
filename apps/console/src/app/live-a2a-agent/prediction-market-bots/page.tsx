@@ -21,7 +21,7 @@ export default function PredictionMarketBotsPage() {
       <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
 
         {/* Header */}
-        <header className="rounded-md border border-[#C5A67C]/15 bg-[#0A0A0A]/90 p-5">
+        <header className="rounded-md border border-white/[0.035] bg-[#050505] p-5">
           <Link href="/live-a2a-agent" className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A67C]">← A2A Agent Bridge</Link>
           <h1 className="mt-3 text-3xl font-black uppercase tracking-[0.16em] text-[#F5F0E5]">Prediction Market Bots</h1>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[#EAE4D8]/70">
@@ -31,7 +31,7 @@ export default function PredictionMarketBotsPage() {
         </header>
 
         {/* Flow + Info */}
-        <section className="rounded-md border border-[#C5A67C]/15 bg-[#0A0A0A]/90 p-5">
+        <section className="rounded-md border border-white/[0.035] bg-[#050505] p-5">
           <h2 className="font-mono text-xs uppercase tracking-[0.2em] text-[#C5A67C]">
             Bots trade anywhere. ArcLayer records reputation.
           </h2>
@@ -89,7 +89,7 @@ export default function PredictionMarketBotsPage() {
         {/* Chart + Orderbook */}
         <div className="flex items-center gap-3">
           <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[#C5A67C]/90">Reference Market Feed</span>
-          <span className="h-px flex-1 bg-[#C5A67C]/10" />
+          <span className="h-px flex-1 bg-white/[0.035]" />
           <span className="font-mono text-[10px] text-[#EAE4D8]/70">Signal context only. No trade execution happens here.</span>
         </div>
 
@@ -108,7 +108,7 @@ export default function PredictionMarketBotsPage() {
         <div className="flex justify-end">
           <Link
             href="/register/external-bot?category=prediction-market-bots"
-            className="inline-flex items-center gap-2 rounded border border-[#C5A67C]/12 px-4 py-2 font-mono text-[10px] uppercase tracking-[1.5px] text-[#C5A67C]/80 transition-[border-color,color] hover:border-[#C5A67C]/40 hover:text-[#C5A67C]"
+            className="inline-flex items-center gap-2 rounded border border-white/[0.035] bg-[#050505] px-4 py-2 font-mono text-[10px] uppercase tracking-[1.5px] text-[#C5A67C]/70 transition-[border-color,color,background-color] hover:border-white/[0.08] hover:bg-[#060606] hover:text-[#C5A67C]"
           >
             Register Bot →
           </Link>

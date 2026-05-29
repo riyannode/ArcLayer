@@ -488,9 +488,9 @@ export default function AgentMesh({ agents, reasoning }: AgentMeshProps) {
   const proofCount = agents.filter((a) => a.proofActive).length;
 
   return (
-    <div className="overflow-hidden rounded-lg border border-[#C5A67C]/12 bg-[#070707]">
+    <div className="overflow-hidden rounded-lg border border-white/[0.035] bg-[#050505]">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-[#C5A67C]/08 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-white/[0.035] px-4 py-3">
         <span className="font-mono text-[10px] font-semibold tracking-[2.5px] text-[#C5A67C]">
           PREDICTION MARKET AGENT ACTIVITY
         </span>
@@ -523,7 +523,7 @@ export default function AgentMesh({ agents, reasoning }: AgentMeshProps) {
       </div>
 
       {/* Session bar */}
-      <div className="flex items-center gap-4 border-t border-[#C5A67C]/06 px-4 py-2 font-mono text-[10px] text-[#EAE4D8]/60">
+      <div className="flex items-center gap-4 border-t border-white/[0.03] px-4 py-2 font-mono text-[10px] text-[#EAE4D8]/60">
         <span>session</span>
         <span className="text-[#EAE4D8]/80">
           agents {totalCount} · online {onlineCount} · mesh {nodeCount}

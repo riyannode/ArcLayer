@@ -217,7 +217,7 @@ export default function ClassificationLanes({ agents }: ClassificationLanesProps
       </div>
 
       {/* Lanes */}
-      <div className="flex gap-0 overflow-hidden rounded-lg border border-[#C5A67C]/08 bg-[#070707]">
+      <div className="flex gap-0 overflow-hidden rounded-lg border border-white/[0.035] bg-[#050505]">
         {LANE_ORDER.map((role) => (
           <Lane key={role} role={role} agents={byRole[role]} />
         ))}
