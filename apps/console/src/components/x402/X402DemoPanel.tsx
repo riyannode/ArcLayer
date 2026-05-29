@@ -19,6 +19,11 @@ const USDC = getAddress('0x3600000000000000000000000000000000000000');
 const NETWORK = 'eip155:5042002';
 const FALLBACK_PAY_TO = getAddress('0x4aA3402575b6D98EacE35A823EFa267F7365bdD2');
 
+// ─── Frontend display flag ──────────────────────────────────────────────
+// When true, homepage UI shows only Arc Native EOA flow.
+// Circle Gateway / passkey backend remains alive for API / programmatic use.
+const FRONTEND_ARC_NATIVE_ONLY = true;
+
 const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
 
 type PaymentMode = 'arc-native' | 'circle-gateway';
@@ -87,11 +92,15 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   const activeAuthed = eoaConnected || authenticated;
   const address = activeAddress || '';
 
-  // Auto-lock mode based on wallet: EOA → arc-native, Passkey → circle-gateway.
-  // Backend rail-session also enforces this; UI just prevents user confusion.
+  // Auto-lock mode: when FRONTEND_ARC_NATIVE_ONLY, always force arc-native.
+  // Otherwise: EOA → arc-native, Passkey → circle-gateway.
   useEffect(() => {
-    if (walletMode === 'eoa' && mode !== 'arc-native') setMode('arc-native');
-    else if (walletMode === 'passkey' && mode !== 'circle-gateway') setMode('circle-gateway');
+    if (FRONTEND_ARC_NATIVE_ONLY) {
+      if (mode !== 'arc-native') setMode('arc-native');
+    } else {
+      if (walletMode === 'eoa' && mode !== 'arc-native') setMode('arc-native');
+      else if (walletMode === 'passkey' && mode !== 'circle-gateway') setMode('circle-gateway');
+    }
   }, [walletMode, mode]);
 
   const log = useCallback((msg: string, type: LogType = 'info') => setLogs((prev) => [...prev, { ts: nowTs(), msg, type }]), []);
@@ -562,7 +571,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   }, [activeAuthed, address, walletMode, smartAccount, log, reset, mode, runArcNative, runGateway, notify, sessionKey]);
 
   const connectSelectedWallet = useCallback(() => {
-    if (mode === 'circle-gateway') {
+    if (!FRONTEND_ARC_NATIVE_ONLY && mode === 'circle-gateway') {
       void login();
       return;
     }
@@ -591,7 +600,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
   const circleDisabledForEoa = walletMode === 'eoa';
   const gatewayDepositUsdc = gatewayBalance?.depositedUsdc ? Number(gatewayBalance.depositedUsdc) : 0;
   const gatewayDepositInsufficient = mode === 'circle-gateway' && gatewayDepositUsdc < 0.05;
-  const connectLabel = mode === 'circle-gateway' ? 'CONNECT CIRCLE PASSKEY' : 'CONNECT WALLET';
+  const connectLabel = !FRONTEND_ARC_NATIVE_ONLY && mode === 'circle-gateway' ? 'CONNECT CIRCLE PASSKEY' : 'CONNECT WALLET';
 
   // Compact-aware sizing tokens
   const c = {
@@ -618,12 +627,16 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
         <div className={`${c.cardRadius} border border-white/10 bg-[#111]/95 ${c.cardPad} shadow-2xl shadow-black/40`}>
           <div className="mb-3 flex items-center justify-between">
             <h3 className={`font-semibold tracking-[-0.03em] text-white ${compact ? 'text-base' : 'text-xl'}`}>Unlock x402</h3>
-            <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} ${mode === 'arc-native' ? 'bg-[#C5A67C]/15 text-[#C5A67C]' : 'bg-[#7CB5C5]/15 text-[#7CB5C5]'}`}>{mode === 'arc-native' ? 'ARC' : 'CIRCLE GATEWAY'}</span>
+            <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} bg-[#C5A67C]/15 text-[#C5A67C]`}>
+              {FRONTEND_ARC_NATIVE_ONLY ? 'ARC NATIVE' : mode === 'arc-native' ? 'ARC' : 'CIRCLE GATEWAY'}
+            </span>
           </div>
-          <div className={`mb-3 grid grid-cols-2 overflow-hidden ${c.cardRadiusXs} border border-white/10 bg-black/25 p-1`}>
-            <button onClick={() => setMode('arc-native')} disabled={arcDisabledForPasskey} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
-            <button onClick={() => setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE GATEWAY</button>
-          </div>
+          {!FRONTEND_ARC_NATIVE_ONLY && (
+            <div className={`mb-3 grid grid-cols-2 overflow-hidden ${c.cardRadiusXs} border border-white/10 bg-black/25 p-1`}>
+              <button onClick={() => setMode('arc-native')} disabled={arcDisabledForPasskey} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
+              <button onClick={() => setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE GATEWAY</button>
+            </div>
+          )}
           <div className={`space-y-2.5 border-y border-white/10 py-3 font-mono ${compact ? 'text-[11px]' : 'text-[12px]'}`}>
             <div className="flex justify-between gap-4"><span className="text-white/80">Cost</span><span className="text-white">{displayAmount} USDC</span></div>
             <div className="flex justify-between gap-4"><span className="text-white/80">Network</span><span className="text-white">Arc Testnet</span></div>
@@ -649,10 +662,10 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
               <>
                 <div className={`flex items-center gap-2 font-mono ${c.label} text-white/60`}>
                   <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
-                  {walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · {shortenAddress(address)}
+                  {(FRONTEND_ARC_NATIVE_ONLY || walletMode === 'eoa') ? 'EOA' : 'PASSKEY'} · {shortenAddress(address)}
                 </div>
-                <button onClick={busy || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
-                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ — UNLOCKED' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                <button onClick={busy || (!FRONTEND_ARC_NATIVE_ONLY && gatewayDepositInsufficient) ? undefined : runDemo} disabled={busy || relayer?.ready === false || (!FRONTEND_ARC_NATIVE_ONLY && gatewayDepositInsufficient)} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${FRONTEND_ARC_NATIVE_ONLY || mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ — UNLOCKED' : (!FRONTEND_ARC_NATIVE_ONLY && gatewayDepositInsufficient) ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                 </button>
               </>
             )}
@@ -674,7 +687,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
             </div>
             <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 font-mono text-[10px] text-white/80 sm:mt-0">
               <span className={activeAuthed ? 'h-1.5 w-1.5 rounded-full bg-green-400' : 'h-1.5 w-1.5 rounded-full bg-yellow-400'} />
-              {activeAuthed && address ? `${walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · ${shortenAddress(address)}` : 'Wallet not connected'}
+              {activeAuthed && address ? `${(FRONTEND_ARC_NATIVE_ONLY || walletMode === 'eoa') ? 'EOA' : 'PASSKEY'} · ${shortenAddress(address)}` : 'Wallet not connected'}
             </div>
           </div>
         )}
@@ -709,11 +722,11 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
         </div>
 
         {/* Mode picker */}
-        <div className="grid gap-3 md:grid-cols-2">
-          <button onClick={() => setMode('arc-native')} disabled={arcDisabledForPasskey} className={`cursor-pointer ${c.cardRadius} border ${c.cardPad} text-left transition-all disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'arc-native' ? 'border-[#C5A67C]/70 bg-[#C5A67C]/10 shadow-lg shadow-[#C5A67C]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
+        <div className={`grid gap-3 ${FRONTEND_ARC_NATIVE_ONLY ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
+          <button onClick={() => setMode('arc-native')} disabled={!FRONTEND_ARC_NATIVE_ONLY && arcDisabledForPasskey} className={`cursor-pointer ${c.cardRadius} border ${c.cardPad} text-left transition-all disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'arc-native' || FRONTEND_ARC_NATIVE_ONLY ? 'border-[#C5A67C]/70 bg-[#C5A67C]/10 shadow-lg shadow-[#C5A67C]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
             <div className="mb-3 flex items-center justify-between">
               <span className={`font-mono ${c.label} tracking-[0.18em] text-[#C5A67C]`}>ARC NATIVE</span>
-              <span className={`rounded-full bg-green-500/15 px-2 py-0.5 font-mono ${c.label} text-green-300`}>RECOMMENDED</span>
+              <span className={`rounded-full bg-green-500/15 px-2 py-0.5 font-mono ${c.label} text-green-300`}>{FRONTEND_ARC_NATIVE_ONLY ? 'DEFAULT' : 'RECOMMENDED'}</span>
             </div>
             <div className={`font-semibold text-white ${compact ? 'text-base' : 'text-xl'}`}>EOA Direct Payment</div>
             <p className={`mt-1.5 leading-5 text-white/80 ${c.body}`}>No deposit needed. Sign once, pay directly on Arc.</p>
@@ -723,6 +736,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
             </div>
           </button>
 
+          {!FRONTEND_ARC_NATIVE_ONLY && (
           <button onClick={() => setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer ${c.cardRadius} border ${c.cardPad} text-left transition-all disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'border-[#7CB5C5]/70 bg-[#7CB5C5]/10 shadow-lg shadow-[#7CB5C5]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
             <div className="mb-3 flex items-center justify-between">
               <span className={`font-mono ${c.label} tracking-[0.18em] text-[#7CB5C5]`}>CIRCLE GATEWAY</span>
@@ -778,6 +792,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
               </div>
             )}
           </button>
+          )}
         </div>
 
         {/* Execution log */}
@@ -803,13 +818,17 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
         <div className={`${c.cardRadius} border border-white/10 bg-[#111]/95 ${c.cardPad} shadow-2xl shadow-black/40`}>
           <div className="mb-3 flex items-center justify-between">
             <h3 className={`font-semibold tracking-[-0.03em] text-white ${compact ? 'text-base' : 'text-xl'}`}>Unlock x402</h3>
-            <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} ${mode === 'arc-native' ? 'bg-[#C5A67C]/15 text-[#C5A67C]' : 'bg-[#7CB5C5]/15 text-[#7CB5C5]'}`}>{mode === 'arc-native' ? 'ARC' : 'CIRCLE GATEWAY'}</span>
+            <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} bg-[#C5A67C]/15 text-[#C5A67C]`}>
+              {FRONTEND_ARC_NATIVE_ONLY ? 'ARC NATIVE' : mode === 'arc-native' ? 'ARC' : 'CIRCLE GATEWAY'}
+            </span>
           </div>
 
-          <div className={`mb-3 grid grid-cols-2 overflow-hidden ${c.cardRadiusXs} border border-white/10 bg-black/25 p-1`}>
-            <button onClick={() => setMode('arc-native')} disabled={arcDisabledForPasskey} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
-            <button onClick={() => setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE GATEWAY</button>
-          </div>
+          {!FRONTEND_ARC_NATIVE_ONLY && (
+            <div className={`mb-3 grid grid-cols-2 overflow-hidden ${c.cardRadiusXs} border border-white/10 bg-black/25 p-1`}>
+              <button onClick={() => setMode('arc-native')} disabled={arcDisabledForPasskey} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'arc-native' ? 'bg-[#C5A67C] text-black' : 'text-white/80'}`}>ARC</button>
+              <button onClick={() => setMode('circle-gateway')} disabled={circleDisabledForEoa} className={`cursor-pointer rounded-lg ${c.btnPad} font-mono ${c.btnFont} disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'circle-gateway' ? 'bg-[#7CB5C5] text-black' : 'text-white/80'}`}>CIRCLE GATEWAY</button>
+            </div>
+          )}
 
           <div className={`space-y-2.5 border-y border-white/10 py-3 font-mono ${compact ? 'text-[11px]' : 'text-[12px]'}`}>
             <div className="flex justify-between gap-4"><span className="text-white/80">Cost</span><span className="text-white">{displayAmount} USDC</span></div>
@@ -830,7 +849,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
             <div className="flex justify-between gap-4"><span className="text-white/80">Replay guard</span><span className={replayResult.startsWith('Rejected') ? 'text-red-300' : replayResult.startsWith('Unexpected') ? 'text-green-300' : 'text-white/80'}>{replayResult}</span></div>
           </div>
 
-          {mode === 'circle-gateway' && activeAuthed && (!gatewayBalance?.depositedUsdc || Number(gatewayBalance.depositedUsdc) <= 0) && (
+          {!FRONTEND_ARC_NATIVE_ONLY && mode === 'circle-gateway' && activeAuthed && (!gatewayBalance?.depositedUsdc || Number(gatewayBalance.depositedUsdc) <= 0) && (
             <div className={`mt-3 ${c.cardRadiusXs} border border-yellow-400/20 bg-yellow-400/10 p-2.5 font-mono leading-5 text-yellow-100/80 ${compact ? 'text-[10.5px]' : 'text-[11px]'}`}>
               Gateway balance is 0 for this wallet. Use the DEPOSIT button above to fund your Gateway balance, or use Arc Native for direct on-chain x402 payment.
             </div>
@@ -845,10 +864,10 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
               <>
                 <div className={`flex items-center gap-2 font-mono ${c.label} text-white/60`}>
                   <span className="h-1.5 w-1.5 rounded-full bg-green-400" />
-                  {walletMode === 'eoa' ? 'EOA' : 'PASSKEY'} · {shortenAddress(address)}
+                  {(FRONTEND_ARC_NATIVE_ONLY || walletMode === 'eoa') ? 'EOA' : 'PASSKEY'} · {shortenAddress(address)}
                 </div>
-                <button onClick={busy || gatewayDepositInsufficient ? undefined : runDemo} disabled={busy || relayer?.ready === false || gatewayDepositInsufficient} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
-                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ — UNLOCKED' : gatewayDepositInsufficient ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
+                <button onClick={busy || (!FRONTEND_ARC_NATIVE_ONLY && gatewayDepositInsufficient) ? undefined : runDemo} disabled={busy || relayer?.ready === false || (!FRONTEND_ARC_NATIVE_ONLY && gatewayDepositInsufficient)} className={`w-full cursor-pointer ${c.cardRadiusXs} border ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] transition-all disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/10 disabled:text-white/80 ${FRONTEND_ARC_NATIVE_ONLY || mode === 'arc-native' ? 'border-[#C5A67C]/50 bg-[#C5A67C] text-[#050505] hover:bg-[#d5b78a]' : 'border-[#7CB5C5]/50 bg-[#7CB5C5] text-[#050505] hover:bg-[#91cadb]'}`}>
+                  {busy ? `RUNNING: ${step.toUpperCase()}` : cooldown ? 'PAID ✓ — UNLOCKED' : (!FRONTEND_ARC_NATIVE_ONLY && gatewayDepositInsufficient) ? 'DEPOSIT REQUIRED' : step === 'done' ? 'RUN AGAIN' : `BUY ACCESS`}
                 </button>
                 <button
                   onClick={() => {
@@ -856,7 +875,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                     if (address && typeof window !== 'undefined') {
                       sessionStorage.removeItem(sessionKey(address));
                     }
-                    if (walletMode === 'passkey') circleLogout();
+                    if (!FRONTEND_ARC_NATIVE_ONLY && walletMode === 'passkey') circleLogout();
                     if (eoaConnected) eoaDisconnect();
                     reset();
                   }}
