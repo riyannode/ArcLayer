@@ -368,11 +368,11 @@ export default function EscrowWorkOrderPage() {
                   onChange={(e) => update('requirements', e.target.value)}
                   rows={5}
                   maxLength={1500}
-                  placeholder="Skills, experience, or tools required…"
+                  placeholder="requirements for this job…"
                   className={textareaCls}
                 />
                 <p className="mt-2 text-xs text-[#EAE4D8]/57">
-                  List the skills, experience, or tools required.
+                  Required criteria for completion job.
                 </p>
               </div>
 
