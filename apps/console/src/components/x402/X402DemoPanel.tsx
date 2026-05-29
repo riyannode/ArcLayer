@@ -854,7 +854,9 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
             <div className={`mt-3 ${c.cardRadiusXs} border border-yellow-400/20 bg-yellow-400/10 p-2.5 font-mono leading-5 text-yellow-100/80 ${compact ? 'text-[10.5px]' : 'text-[11px]'}`}>
               Gateway balance is 0 for this wallet. Use the DEPOSIT button above to fund your Gateway balance, or use Arc Native for direct on-chain x402 payment.
             </div>
-          )}\n\n          <div className="mt-3 space-y-2.5">
+          )}
+
+          <div className="mt-3 space-y-2.5">
             {!activeAuthed ? (
               <>
                 <button onClick={connectSelectedWallet} className={`w-full cursor-pointer ${c.cardRadiusXs} border border-white/20 bg-white/[0.06] ${c.btnPad} font-mono ${c.btnFont} tracking-[0.14em] text-white hover:bg-white/[0.12]`}>{connectLabel}</button>

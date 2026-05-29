@@ -144,10 +144,21 @@ export async function POST(req: NextRequest) {
       });
 
       // Mark claim as sent
-      await supabase
+      const { error: markSentError } = await supabase
         .from('faucet_claims')
         .update({ tx_hash: txHash, status: 'sent' })
         .eq('id', reserve.claim_id);
+
+      if (markSentError) {
+        console.error('[faucet] failed to mark claim sent', markSentError);
+        return NextResponse.json({
+          ok: true,
+          txHash,
+          amount: process.env.FAUCET_AMOUNT_USDC ?? '1',
+          explorerUrl: `https://testnet.arcscan.app/tx/${txHash}`,
+          warning: 'claim_record_update_failed',
+        });
+      }
 
       return NextResponse.json({
         ok: true,
@@ -157,10 +168,14 @@ export async function POST(req: NextRequest) {
       });
     } catch (txError) {
       // Transfer failed — mark claim as failed
-      await supabase
+      const { error: markFailedError } = await supabase
         .from('faucet_claims')
         .update({ status: 'failed' })
         .eq('id', reserve.claim_id);
+
+      if (markFailedError) {
+        console.error('[faucet] failed to mark claim failed', markFailedError);
+      }
 
       return NextResponse.json({
         ok: false,
