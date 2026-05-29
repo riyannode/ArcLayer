@@ -152,7 +152,7 @@ export default function DashboardPage() {
         <div className="absolute inset-0 opacity-[0.10] [background-image:linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:48px_48px]" />
       </div>
 
-      <main className="relative mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1760px] flex-col px-6 pb-0 pt-10 md:px-12">
+      <main className="relative mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1760px] flex-col px-6 pb-[120px] pt-10 md:px-12">
         <section className="mb-8">
           <div className="max-w-[820px]">
             <h1 className="text-[42px] font-semibold tracking-[-0.04em] text-[#F4EFE5] md:text-[62px]">
