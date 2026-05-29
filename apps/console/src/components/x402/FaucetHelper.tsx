@@ -47,7 +47,7 @@ export default function FaucetHelper({ compact = false }: FaucetHelperProps) {
   const [countdown, setCountdown] = useState(0);
 
   const balanceNum = balance != null ? Number(balance) : null;
-  const minBalance = Number(faucetStatus?.minUserBalanceUsdc ?? '0.05');
+  const minBalance = Number(faucetStatus?.minUserBalanceUsdc ?? '0.01');
   // Hide only when wallet connected AND balance is sufficient
   const balanceOk = isConnected && balanceNum !== null && balanceNum >= minBalance;
 
@@ -100,8 +100,13 @@ export default function FaucetHelper({ compact = false }: FaucetHelperProps) {
       if (!res.ok || !data.ok) {
         setClaimState('error');
         if (data.error === 'rate_limited_wallet') {
-          setClaimError('Rate limited — try again in 2 hours.');
-          setCountdown(data.retryAfterSeconds ?? 7200);
+          setClaimError('Rate limited — this wallet can claim once per day.');
+          setCountdown(data.retryAfterSeconds ?? 86400);
+        } else if (data.error === 'rate_limited_ip') {
+          setClaimError('Rate limited — this IP can claim once per day.');
+          setCountdown(data.retryAfterSeconds ?? 86400);
+        } else if (data.error === 'rate_limited_global') {
+          setClaimError('Daily faucet limit reached. Use Circle Faucet or try again tomorrow.');
         } else if (data.error === 'treasury_empty') {
           setClaimError('Faucet treasury is empty.');
           setFaucetStatus((prev) => prev ? { ...prev, ready: false, reason: 'treasury_empty' } : null);
@@ -138,7 +143,7 @@ export default function FaucetHelper({ compact = false }: FaucetHelperProps) {
   const sxs = compact ? 'text-[9px]' : 'text-[10px]';
   const btn = compact ? 'py-1.5 text-[10px]' : 'py-2 text-[11px]';
   const radius = compact ? 'rounded-xl' : 'rounded-2xl';
-  const claimAmount = faucetStatus?.claimAmountUsdc ?? '0.05';
+  const claimAmount = faucetStatus?.claimAmountUsdc ?? '1';
 
   // ─── Treasury empty → Circle Faucet fallback ───
   if (faucetStatus && !faucetStatus.ready) {

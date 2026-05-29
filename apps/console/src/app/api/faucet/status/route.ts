@@ -46,7 +46,7 @@ export async function GET() {
       treasury: account.address,
       treasuryBalanceUsdc: formatUnits(treasuryBalance, 6),
       claimAmountUsdc: process.env.FAUCET_AMOUNT_USDC ?? '1',
-      minUserBalanceUsdc: process.env.FAUCET_MIN_USER_BALANCE_USDC ?? '0.05',
+      minUserBalanceUsdc: process.env.FAUCET_MIN_USER_BALANCE_USDC ?? '0.01',
       circleFaucetUrl: CIRCLE_FAUCET_URL,
     });
   } catch (err) {
