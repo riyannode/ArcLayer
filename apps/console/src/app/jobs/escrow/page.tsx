@@ -326,7 +326,7 @@ export default function EscrowWorkOrderPage() {
 
     const providerAgentId = selectedWorker.agentId;
     const providerAddress = selectedWorker.controller;
-
+    const evaluatorAddress = address as `0x${string}`;
     try {
       setCreating(true);
       setError('');
@@ -353,6 +353,7 @@ export default function EscrowWorkOrderPage() {
         body: JSON.stringify({
           buyerAgentId: 'console-user', // placeholder — will be replaced with real agent ID
           clientAddress: address,
+          evaluatorAddress,
           providerAgentId,
           providerAddress,
           expiredAtUnix,
@@ -382,7 +383,7 @@ export default function EscrowWorkOrderPage() {
       const createHash = await writeContractAsync(
         buildCreateJobConfig(
           providerAddress,
-          '0x0000000000000000000000000000000000000000' as `0x${string}`,
+          evaluatorAddress,
           BigInt(expiredAtUnix),
           form.description,
           '0x0000000000000000000000000000000000000000' as `0x${string}`,
@@ -438,6 +439,7 @@ export default function EscrowWorkOrderPage() {
     ['Token', 'USDC'],
     ['Network', 'Arc Testnet'],
     ['Client Wallet', address || form.clientAddress || 'Not connected'],
+    ['Evaluator Wallet', 'Same as client'],
     ['Worker Agent', selectedWorker?.name ?? 'Not selected'],
   ] as const;
 
