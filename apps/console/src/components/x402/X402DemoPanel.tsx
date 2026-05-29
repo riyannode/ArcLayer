@@ -252,9 +252,9 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     } catch (e) { log(`Signature failed: ${e instanceof Error ? e.message : String(e)}`, 'error'); setStep('error'); return; }
 
     setStep('paying');
-    log('4/6 Calling protected resource with X-PAYMENT header (server runs verify+settle inline)...');
+    log('4/6 Calling protected resource with PAYMENT-SIGNATURE header (server runs verify+settle inline)...');
     const header = b64(paymentPayload);
-    const paid = await fetch('/api/x402/protected-resource', { headers: { 'X-PAYMENT': header } });
+    const paid = await fetch('/api/x402/protected-resource', { headers: { 'PAYMENT-SIGNATURE': header } });
     const paidJson = await paid.json();
     if (!paid.ok || !paidJson.unlocked) {
       log(`Payment failed: ${paidJson.error || paid.status} — ${paidJson.reason || paidJson.message || ''}`, 'error');
@@ -280,8 +280,8 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     log(`5/6 Settled & unlocked: tx=${paymentResp.transaction?.slice(0, 18) || 'n/a'}...`, 'success');
 
     setStep('replay');
-    log('6/6 Replay test: reusing same X-PAYMENT against /api/x402/protected-resource...');
-    const replay = await fetch('/api/x402/protected-resource', { headers: { 'X-PAYMENT': header } });
+    log('6/6 Replay test: reusing same PAYMENT-SIGNATURE against /api/x402/protected-resource...');
+    const replay = await fetch('/api/x402/protected-resource', { headers: { 'PAYMENT-SIGNATURE': header } });
     const replayJson = await replay.json();
     const replayReason = replayJson.reason || replayJson.error || 'duplicate_rejected';
     const rejected = !replay.ok && (
@@ -858,7 +858,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
 
           <DevDetails>
             {mode === 'arc-native'
-              ? <div>Technical path: x402 exact · EIP-3009 transferWithAuthorization · network {NETWORK} · X-PAYMENT header · server-side verify+settle inline · nonce replay protection.</div>
+              ? <div>Technical path: x402 exact · EIP-3009 transferWithAuthorization · network {NETWORK} · PAYMENT-SIGNATURE header · server-side verify+settle inline · nonce replay protection.</div>
               : <div>Technical path: GatewayWalletBatched · PAYMENT-SIGNATURE header · server-side BatchFacilitator inline verify+settle · consume-once replay ledger.</div>}
           </DevDetails>
         </div>

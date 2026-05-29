@@ -323,14 +323,14 @@ export default function AgentProfilePage() {
         })],
       })) as Hex;
 
-      // ─── Step 4: Retry with X-PAYMENT header ───────────────────────────
+      // ─── Step 4: Retry with PAYMENT-SIGNATURE header ──────────────────────
       const paymentHeader = b64(paymentPayload);
-      setRunState('5/5 Posting paid run with X-PAYMENT (server verifies + settles)...');
+      setRunState('5/5 Posting paid run with PAYMENT-SIGNATURE (server verifies + settles)...');
       const paid = await fetch(challengeUrl, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'X-PAYMENT': paymentHeader,
+          'PAYMENT-SIGNATURE': paymentHeader,
         },
         body: JSON.stringify({ input: runInput, jobId: visibleJobId.toString() }),
       });
@@ -370,7 +370,7 @@ export default function AgentProfilePage() {
           <div className="aureo-mono-label mb-2">X402 · BUYER RUN</div>
           <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Payment-required agent call</h2>
           <p className="mt-2 max-w-3xl font-mono text-[11.5px] leading-5 text-[#b5b5b5] invisible">
-            Calls <span className="text-[#C5A67C]">POST /api/agents/{agentId}/run</span>, receives a 402 challenge, registers a funded JobEscrow payment on Arc Testnet, then retries with X-PAYMENT.
+            Calls <span className="text-[#C5A67C]">POST /api/agents/{agentId}/run</span>, receives a 402 challenge, registers a funded JobEscrow payment on Arc Testnet, then retries with PAYMENT-SIGNATURE.
           </p>
           <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_auto]">
             <input value={runInput} onChange={(e) => setRunInput(e.target.value)} className="input-mono" placeholder="buyer task / prompt" />
