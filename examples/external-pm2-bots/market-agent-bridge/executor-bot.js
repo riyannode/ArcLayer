@@ -5,30 +5,39 @@ const { runForever } = require("./shared/runner");
 const { payForBridgeAccess } = require("./shared/x402-client");
 
 async function runOnce() {
-  // Executor hanya polling dari evaluator — zero guard
-  const { session } = await latestSession({ requiredRoles: ['evaluator'] });
-  if (!session?.sessionId) {
-    console.log('[executor] skip reason=no_evaluator_session');
-    return;
+  // Event graph: executor reads from analyzer (fallback: evaluator)
+  let data;
+  try {
+    data = await latestSession({ requiredRoles: ['analyzer'] });
+    if (!data?.session?.sessionId) throw new Error('no analyzer session');
+    console.log('[executor] reading from analyzer');
+  } catch {
+    data = await latestSession({ requiredRoles: ['evaluator'] });
+    if (!data?.session?.sessionId) {
+      console.log('[executor] skip reason=no_analyzer_or_evaluator_session');
+      return;
+    }
+    console.log('[executor] fallback: reading from evaluator');
   }
+  const session = data.session;
 
-  const evaluatorPayload = session.roles?.evaluator?.payload;
-  if (!evaluatorPayload) {
-    console.log('[executor] skip reason=no_evaluator_payload');
+  const upstreamPayload = session.roles?.analyzer?.payload || session.roles?.evaluator?.payload;
+  if (!upstreamPayload) {
+    console.log('[executor] skip reason=no_upstream_payload');
     return;
   }
 
   // Freshness check — skip session lama (>10 menit)
-  const evaluatorTs = session.roles?.evaluator?.timestamp || 0;
-  const ageMin = evaluatorTs ? (Date.now() - new Date(evaluatorTs).getTime()) / 60000 : 999;
+  const upstreamTs = session.roles?.analyzer?.timestamp || session.roles?.evaluator?.timestamp || 0;
+  const ageMin = upstreamTs ? (Date.now() - new Date(upstreamTs).getTime()) / 60000 : 999;
   if (ageMin > 10) {
-    console.log(`[executor] skip session=${session.sessionId} reason=stale_evaluator age=${ageMin.toFixed(1)}m`);
+    console.log(`[executor] skip session=${session.sessionId} reason=stale_upstream age=${ageMin.toFixed(1)}m`);
     return;
   }
 
-  const approved = Boolean(evaluatorPayload.approved);
-  const direction = evaluatorPayload.direction || evaluatorPayload.suggestedDirection || 'NEUTRAL';
-  const confidence = evaluatorPayload.confidence || 0;
+  const approved = Boolean(upstreamPayload.approved);
+  const direction = upstreamPayload.direction || upstreamPayload.suggestedDirection || 'NEUTRAL';
+  const confidence = upstreamPayload.confidence || 0;
 
   console.log(`[executor] signal received session=${session.sessionId} approved=${approved} direction=${direction} confidence=${confidence}`);
 
@@ -39,9 +48,9 @@ async function runOnce() {
     mode: approved ? 'LIVE' : 'DRY_RUN',
     direction,
     confidence,
-    reason: approved ? `Approved: ${direction} @ ${confidence}%` : `Rejected: ${evaluatorPayload.reason || 'evaluator rejected'}`,
-    evaluatorRiskLevel: evaluatorPayload.riskLevel || 'HIGH',
-    evaluatorFlags: evaluatorPayload.flags || []
+    reason: approved ? `Approved: ${direction} @ ${confidence}%` : `Rejected: ${upstreamPayload.reason || 'upstream rejected'}`,
+    riskLevel: upstreamPayload.riskLevel || 'HIGH',
+    flags: upstreamPayload.flags || []
   };
 
   const posted = await postEvent({
@@ -67,7 +76,7 @@ async function runOnce() {
       approved,
       direction,
       confidence,
-      evaluatorRiskLevel: evaluatorPayload.riskLevel
+      riskLevel: upstreamPayload.riskLevel
     }
   });
 
@@ -80,7 +89,7 @@ async function runOnce() {
     direction,
     confidence,
     title: `Executor ${approved ? 'EXECUTE' : 'DRY_RUN'}: ${direction}`,
-    summary: `Signal ${direction} @ ${confidence}% — ${approved ? 'approved' : 'rejected'} by evaluator`,
+    summary: `Signal ${direction} @ ${confidence}% — ${approved ? 'approved' : 'rejected'} by upstream`,
     trace: ['executor', 'execution_intent'],
     reasoning: payload.reason
   });
