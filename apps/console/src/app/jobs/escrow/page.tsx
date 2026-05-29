@@ -124,7 +124,7 @@ function SectionCard({
             <h2 className="text-[18px] font-semibold tracking-[-0.02em] text-[#F4EFE5]">
               {title}
             </h2>
-            <p className="mt-1 text-sm leading-5 text-[#EAE4D8]/55">
+            <p className="mt-1 text-sm leading-5 text-[#EAE4D8]/66">
               {subtitle}
             </p>
           </div>
