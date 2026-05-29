@@ -25,7 +25,10 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
   const { hasAccess, loading } = useX402Access();
   const { notify } = useProtectionNotice();
 
-  const locked = loading || !hasAccess;
+  const x402UiLockEnabled =
+    process.env.NEXT_PUBLIC_X402_UI_LOCK_ENABLED !== 'false';
+
+  const locked = x402UiLockEnabled && (loading || !hasAccess);
   const lockedHome = locked && pathname === '/';
   const lockedNonHome = locked && pathname !== '/';
 
@@ -47,6 +50,7 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!x402UiLockEnabled) return;
 
     if (!loading && !hasAccess && pathname !== '/') {
       const returnPath =
@@ -55,10 +59,16 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
       sessionStorage.setItem('x402_return_to', returnPath);
       router.replace('/');
     }
-  }, [loading, hasAccess, pathname, router]);
+  }, [x402UiLockEnabled, loading, hasAccess, pathname, router]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    if (!x402UiLockEnabled) {
+      sessionStorage.removeItem('x402_return_to');
+      return;
+    }
+
     if (!hasAccess) return;
 
     const returnTo = sessionStorage.getItem('x402_return_to');
@@ -72,7 +82,7 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
       sessionStorage.removeItem('x402_return_to');
       router.replace(returnTo);
     }
-  }, [hasAccess, router]);
+  }, [x402UiLockEnabled, hasAccess, router]);
 
   return (
     <div
