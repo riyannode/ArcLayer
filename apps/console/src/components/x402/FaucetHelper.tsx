@@ -150,7 +150,7 @@ export default function FaucetHelper({ compact = false }: FaucetHelperProps) {
     return (
       <div className={`${radius} w-full max-w-[440px] border border-yellow-400/20 bg-[#111]/95 p-3.5 font-mono shadow-2xl shadow-black/40`}>
         <div className={`mb-1.5 ${s} text-yellow-200/90`}>ArcLayer Faucet is empty.</div>
-        <div className={`mb-2.5 ${sxs} text-white/40`}>
+        <div className={`mb-2.5 ${sxs} text-white/80`}>
           Get test USDC from the Circle Faucet instead.
         </div>
         <a
@@ -164,7 +164,7 @@ export default function FaucetHelper({ compact = false }: FaucetHelperProps) {
         {isConnected && (
           <button
             onClick={copyAddress}
-            className={`flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-white/15 ${btn} font-mono tracking-[0.1em] text-white/70 hover:bg-white/5`}
+            className={`flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-white/15 ${btn} font-mono tracking-[0.1em] text-white/80 hover:bg-white/5`}
           >
             {copied ? 'COPIED ✓' : 'COPY WALLET ADDRESS'}
           </button>
@@ -188,7 +188,7 @@ export default function FaucetHelper({ compact = false }: FaucetHelperProps) {
             {txHash}
           </a>
         )}
-        <div className={`mt-1.5 ${sxs} text-white/40`}>
+        <div className={`mt-1.5 ${sxs} text-white/80`}>
           Balance refreshing… then click BUY ACCESS above.
         </div>
       </div>
@@ -202,7 +202,7 @@ export default function FaucetHelper({ compact = false }: FaucetHelperProps) {
         <div className={`mb-1 ${s} text-white/80`}>
           Need test USDC?
         </div>
-        <div className={`mb-2.5 ${sxs} text-white/40`}>
+        <div className={`mb-2.5 ${sxs} text-white/80`}>
           Connect wallet to claim {claimAmount} free test USDC for x402 access.
         </div>
         <button
@@ -218,10 +218,10 @@ export default function FaucetHelper({ compact = false }: FaucetHelperProps) {
   // ─── Wallet connected + balance low → claim button ───
   return (
     <div className={`${radius} w-full max-w-[440px] border border-[#C5A67C]/15 bg-[#111]/95 p-3.5 font-mono shadow-2xl shadow-black/40`}>
-      <div className={`mb-1 ${s} text-white/60`}>
+      <div className={`mb-1 ${s} text-white/80`}>
         Balance: <span className="text-yellow-300">{balance ?? '0'} USDC</span>
       </div>
-      <div className={`mb-2.5 ${sxs} text-white/40`}>
+      <div className={`mb-2.5 ${sxs} text-white/80`}>
         Need test USDC to unlock x402 access.
       </div>
       <button
@@ -236,7 +236,7 @@ export default function FaucetHelper({ compact = false }: FaucetHelperProps) {
             : `CLAIM ${claimAmount} TEST USDC`}
       </button>
       {claimState === 'error' && claimError && (
-        <div className={`mt-2 ${sxs} text-red-300/80`}>{claimError}</div>
+        <div className={`mt-2 ${sxs} text-red-300`}>{claimError}</div>
       )}
     </div>
   );
