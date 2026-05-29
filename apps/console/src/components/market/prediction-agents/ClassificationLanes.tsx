@@ -43,11 +43,29 @@ function toLaneRole(role: string): LaneRole {
   return LANE_ROLE_MAP[role] ?? 'analyzer';
 }
 
-function inferGroup(agentId: string): string {
-  const id = agentId.toLowerCase();
-  if (id.includes('circle') || id === 'budu-executor' || id === 'ignia-evaluator' || id === 'apollo-analyzer' || id === 'hermes-oracle') return 'Circle Commerce';
+/** Determine group label from agent metadata (role, category, caps). No hardcoded agent names. */
+function inferGroup(agent: PredictionAgentInput): string {
+  const role = String(agent.role || '').toLowerCase();
+  const category = String(agent.category || '').toLowerCase();
+  const caps = Array.isArray(agent.caps) ? agent.caps.join(' ').toLowerCase() : String(agent.caps || '').toLowerCase();
+  const id = String(agent.id || agent.agentId || '').toLowerCase();
+
+  // Group by role — works for any agent with standard roles
+  if (['oracle', 'analyzer', 'evaluator', 'executor'].includes(role)) return 'Prediction Market';
+
+  // Group by category from roster API
+  if (category.includes('prediction') || category.includes('commerce')) return 'Prediction Market';
+  if (category.includes('x402')) return 'x402';
+  if (category.includes('erc8183')) return 'ERC-8183';
+
+  // Group by capabilities
+  if (caps.includes('market_snapshot') || caps.includes('btc_15m') || caps.includes('polymarket_feed')) return 'Prediction Market';
+  if (caps.includes('erc8183')) return 'ERC-8183';
+
+  // Group by ID patterns (generic, not hardcoded names)
   if (id.includes('x402')) return 'x402';
-  if (id.includes('pm2') || id.startsWith('24')) return 'PM2 Bridge';
+  if (id.includes('pm2') || /^\d{5,}$/.test(id)) return 'PM2 Bridge';
+
   return 'External';
 }
 
@@ -80,7 +98,7 @@ function AgentCard({ agent, style }: { agent: PredictionAgentInput; style: typeo
   const isOnline = agent.status === 'active';
   const provider = inferProvider(agent);
   const shortProvider = provider ? (PROVIDER_SHORT[provider] ?? provider.slice(0, 3)) : null;
-  const group = inferGroup(String(agent.id || ''));
+  const group = inferGroup(agent);
   const hasReasoning = String(agent.reasoningSummary || '') && String(agent.reasoningSummary || '') !== '—';
 
   return (
