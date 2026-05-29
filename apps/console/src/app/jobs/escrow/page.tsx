@@ -451,7 +451,7 @@ export default function EscrowWorkOrderPage() {
           <SectionCard
             number={4}
             title="Review & Create"
-            subtitle="Confirm the ERC-8183 escrow job payload before creating the draft."
+            subtitle="Confirm the ERC-8183 escrow job before creating the draft."
             status={
               overviewComplete && scopeComplete && budgetComplete
                 ? 'Complete'
