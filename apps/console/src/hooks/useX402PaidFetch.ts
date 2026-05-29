@@ -171,7 +171,17 @@ export function useX402PaidFetch() {
           ...req,
           asset: getAddress(req.asset),
           payTo: getAddress(req.payTo),
-          extra: { name: 'USDC', version: '2', decimals: 6, symbol: 'USDC' },
+          extra: {
+           ...(req.extra ?? {}),
+           name: typeof req.extra?.name === 'string' ? req.extra.name : 'USDC',
+           version: typeof req.extra?.version === 'string' ? req.extra.version : '2',
+           decimals: typeof req.extra?.decimals === 'number' ? req.extra.decimals : 6,
+           symbol: typeof req.extra?.symbol === 'string' ? req.extra.symbol : 'USDC',
+           transferMethod:
+             typeof req.extra?.transferMethod === 'string'
+               ? req.extra.transferMethod
+               : 'eip3009',
+         },
         },
         payload: {
           signature: '0x' as Hex,
@@ -239,8 +249,8 @@ export function useX402PaidFetch() {
         return { ok: false, status: 402, json: challengeJson, error: `Signature failed: ${msg}` };
       }
 
-      const retryHeaders = new Headers(originalHeaders);
-      retryHeaders.set('X-PAYMENT', b64(paymentPayload));
+     const retryHeaders = new Headers(originalHeaders);
+     retryHeaders.set('PAYMENT-SIGNATURE', b64(paymentPayload));
 
       const paidRes = await fetch(path, {
         ...init,
