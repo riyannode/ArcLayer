@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       nextAction: 'createJob',
       localJobId: job.localJobId,
       tx,
-      message: 'Local ERC-8183 job created. Sign the createJob tx via wallet, then POST /api/erc8183-jobs/[localJobId]/created with the tx hash.',
+      message: 'Local ERC-8183 job created. Sign the createJob tx via wallet, then POST /api/jobs/escrow/created with localJobId and createTxHash.',
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

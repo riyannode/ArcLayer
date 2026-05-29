@@ -372,7 +372,7 @@ export default function EscrowWorkOrderPage() {
         throw new Error(createData.message || 'Failed to create local job.');
       }
 
-      const { localJobId, tx } = createData;
+      const { localJobId } = createData;
 
       // Step 2: Sign createJob tx via wallet
       setTxState('Waiting for wallet signature…');
