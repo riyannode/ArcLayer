@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ERC-8183: evaluator MUST be non-zero (reverts on zero address)
-    if (body.evaluatorAddress === '0x0000000000000000000000000000000000000000') {
+    if (String(body.evaluatorAddress).toLowerCase() === '0x0000000000000000000000000000000000000000') {
       return NextResponse.json(
         { ok: false, error: 'invalid_evaluator', message: 'evaluatorAddress cannot be the zero address. Use the client wallet as evaluator.' },
         { status: 400 },

@@ -400,11 +400,18 @@ export default function EscrowWorkOrderPage() {
       await switchChain(config, { chainId: 5042002 });
 
       setTxState('Waiting for wallet signature…');
+      const txArgs = createData.tx.args as [string, string, string | number | bigint, string, string];
       const createHash = await writeContractAsync({
         address: createData.tx.address as `0x${string}`,
         abi: ERC8183_AGENTIC_COMMERCE_ABI,
-        functionName: createData.tx.functionName as 'createJob',
-        args: createData.tx.args as [`0x${string}`, `0x${string}`, bigint, string, `0x${string}`],
+        functionName: 'createJob',
+        args: [
+          txArgs[0] as `0x${string}`,
+          txArgs[1] as `0x${string}`,
+          BigInt(txArgs[2]),
+          txArgs[3],
+          txArgs[4] as `0x${string}`,
+        ],
       });
 
       // Step 3: Confirm with backend (writeContractAsync already awaited receipt)
