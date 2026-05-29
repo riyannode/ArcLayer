@@ -19,11 +19,16 @@ async function payUpstreamForAccess({
   payload,
   llmReceipt,
 }) {
-  if (!upstreamAgentId) throw new Error("Missing upstreamAgentId");
-  if (!upstreamRole) throw new Error("Missing upstreamRole");
-  if (!buyerRole) throw new Error("Missing buyerRole");
-  if (!sessionId) throw new Error("Missing sessionId");
-  if (!sourcePayloadHash) throw new Error("Missing sourcePayloadHash");
+  if (!upstreamAgentId || !upstreamRole || !buyerRole || !sessionId || !sourcePayloadHash) {
+    const missing = [];
+    if (!upstreamAgentId) missing.push("upstreamAgentId");
+    if (!upstreamRole) missing.push("upstreamRole");
+    if (!buyerRole) missing.push("buyerRole");
+    if (!sessionId) missing.push("sessionId");
+    if (!sourcePayloadHash) missing.push("sourcePayloadHash");
+    console.warn(`[pay-upstream] skipping — missing: ${missing.join(", ")} | debug: agentId=${upstreamAgentId} srcHash=${String(sourcePayloadHash).slice(0,12)}`);
+    return { paymentId: null, txHash: null, payloadHash: null, rail: "skipped" };
+  }
 
   const route = resolveCommerceRoute({
     buyerRole,

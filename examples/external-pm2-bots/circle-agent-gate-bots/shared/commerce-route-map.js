@@ -12,6 +12,8 @@ function resolveCommerceRoute({ buyerRole, sellerRole }) {
   const buyer = String(buyerRole || "").trim();
   const seller = String(sellerRole || "").trim();
 
+  // ── Pipeline routes: buyer pays seller ────────────────────────
+
   if (buyer === "analyzer" && seller === "oracle") {
     return {
       scope: "market_data",
@@ -21,7 +23,16 @@ function resolveCommerceRoute({ buyerRole, sellerRole }) {
     };
   }
 
-  if (buyer === "evaluator" && seller === "analyzer") {
+  if (buyer === "evaluator" && seller === "oracle") {
+    return {
+      scope: "market_data",
+      accessType: "oracle_data",
+      action: "purchase_oracle_data",
+      eventType: "bridge_event",
+    };
+  }
+
+  if (buyer === "executor" && seller === "analyzer") {
     return {
       scope: "analysis",
       accessType: "analysis",
@@ -35,6 +46,17 @@ function resolveCommerceRoute({ buyerRole, sellerRole }) {
       scope: "evaluation",
       accessType: "evaluation",
       action: "purchase_evaluation",
+      eventType: "bridge_event",
+    };
+  }
+
+  // ── Legacy routes (kept for backward compat) ──────────────────
+
+  if (buyer === "evaluator" && seller === "analyzer") {
+    return {
+      scope: "analysis",
+      accessType: "analysis",
+      action: "purchase_analysis",
       eventType: "bridge_event",
     };
   }
