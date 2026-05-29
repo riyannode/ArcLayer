@@ -225,6 +225,23 @@ export default function EscrowWorkOrderPage() {
   }
 
   /* ---- Render ---- */
+  const reviewRows = [
+    ['Job Title', form.title],
+    ['Category', form.category],
+    ['Deadline', form.timeline],
+    ['Escrow Budget', form.budgetMax ? `${form.budgetMax} USDC` : ''],
+    ['Settlement', 'ERC-8183 Escrow'],
+    ['Token', 'USDC'],
+    ['Network', 'Arc Testnet'],
+    ['Client Wallet', form.clientAddress || 'Not connected'],
+  ] as const;
+
+  const reviewBlocks = [
+    ['Description', form.description],
+    ['Deliverables', form.deliverables],
+    ['Requirements', form.requirements],
+  ] as const;
+
   return (
     <div className="min-h-screen overflow-hidden bg-[#050505] text-[#EAE4D8]">
       {/* Ambient background */}
@@ -430,11 +447,11 @@ export default function EscrowWorkOrderPage() {
             </div>
           </SectionCard>
 
-          {/* 4 — Final Review */}
+          {/* 4 — Review & Create */}
           <SectionCard
             number={4}
-            title="Final Review"
-            subtitle="Review your job details before posting."
+            title="Review & Create"
+            subtitle="Confirm the ERC-8183 escrow job payload before creating the draft."
             status={
               overviewComplete && scopeComplete && budgetComplete
                 ? 'Complete'
@@ -443,23 +460,40 @@ export default function EscrowWorkOrderPage() {
             open={openSections.review}
             onToggle={() => toggleSection('review')}
           >
-            <div className="grid gap-4 md:grid-cols-4">
-              <ReviewCard label="Job Title" value={form.title} />
-              <ReviewCard label="Category" value={form.category} />
-              <ReviewCard label="Timeline" value={form.timeline} />
-              <ReviewCard
-                label="Budget"
-                value={
-                  form.budgetMax
-                    ? `${form.budgetMax} USDC`
-                    : ''
-                }
-              />
+            <div className="rounded-lg border border-white/[0.04] bg-black/25 p-4">
+              {reviewRows.map(([label, value]) => (
+                <div
+                  key={label}
+                  className="flex items-center justify-between gap-6 border-b border-white/[0.04] py-3 last:border-b-0"
+                >
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/38">
+                    {label}
+                  </span>
+                  <span className="text-right text-sm font-semibold text-[#F4EFE5]">
+                    {value || 'Not set'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 grid gap-4">
+              {reviewBlocks.map(([label, value]) => (
+                <div
+                  key={label}
+                  className="rounded-lg border border-white/[0.04] bg-black/25 p-4"
+                >
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/38">
+                    {label}
+                  </p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#F4EFE5]">
+                    {value || 'Not set'}
+                  </p>
+                </div>
+              ))}
             </div>
 
             <div className="mt-5 rounded-lg border border-[#F0B84A]/20 bg-[#F0B84A]/8 px-4 py-3 text-sm text-[#EAE4D8]/72">
-              This is a local preview only. Backend, indexer, and ERC-8183
-              wiring will be added later.
+              This preview will create a local ERC-8183 escrow draft before wallet signing.
             </div>
           </SectionCard>
 
@@ -505,19 +539,4 @@ export default function EscrowWorkOrderPage() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  Review summary card                                                */
-/* ------------------------------------------------------------------ */
 
-function ReviewCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-white/[0.04] bg-black/25 px-4 py-3">
-      <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/38">
-        {label}
-      </p>
-      <p className="mt-2 truncate text-sm font-semibold text-[#F4EFE5]">
-        {value || 'Not set'}
-      </p>
-    </div>
-  );
-}
