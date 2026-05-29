@@ -226,7 +226,22 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
 
     const paymentPayload = {
       x402Version: 2,
-      accepted: { ...req, asset: getAddress(req.asset), payTo: getAddress(req.payTo), extra: { name: 'USDC', version: '2', decimals: 6, symbol: 'USDC' } },
+      accepted: {
+        ...req,
+        asset: getAddress(req.asset),
+        payTo: getAddress(req.payTo),
+        extra: {
+          ...(req.extra ?? {}),
+          name: typeof req.extra?.name === 'string' ? req.extra.name : 'USDC',
+          version: typeof req.extra?.version === 'string' ? req.extra.version : '2',
+          decimals: typeof req.extra?.decimals === 'number' ? req.extra.decimals : 6,
+          symbol: typeof req.extra?.symbol === 'string' ? req.extra.symbol : 'USDC',
+          transferMethod:
+            typeof req.extra?.transferMethod === 'string'
+              ? req.extra.transferMethod
+              : 'eip3009',
+        },
+      },
       payload: {
         signature: '0x' as Hex,
         authorization: { from: address, to: getAddress(req.payTo), value: req.amount, validAfter: '0', validBefore, nonce },

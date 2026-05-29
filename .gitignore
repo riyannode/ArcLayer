@@ -106,9 +106,6 @@ scripts/record-*.mjs
 examples/external-erc8183-bots/*/.env
 
 # Circle commerce bot secrets (real configs with API keys / private keys)
-examples/external-pm2-bots/circle-agent-gate-bots/bot.config.!(*example).json
-apps/console/scripts/gen-commerce-keys.js
-
 examples/external-pm2-bots/circle-agent-gate-bots/bot.config.*.json
 !examples/external-pm2-bots/circle-agent-gate-bots/bot.config.example.json
-
+apps/console/scripts/gen-commerce-keys.js
