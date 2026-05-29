@@ -30,7 +30,8 @@ function sanitizeEvaluation(raw, deterministic) {
 }
 
 async function runOnce() {
-  const data = await latestSession({ requiredRoles: ['analyzer'] });
+  // Event graph: evaluator reads from oracle
+  const data = await latestSession({ requiredRoles: ['oracle'] });
   const session = data.session;
 
   if (!session?.sessionId) {
