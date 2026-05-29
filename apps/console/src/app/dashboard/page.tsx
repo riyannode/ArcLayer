@@ -182,7 +182,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-white/10 bg-[#080A0D]/78 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-xl">
+        <section className="rounded-2xl border border-transparent bg-[#080A0D]/78 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.32)] backdrop-blur-xl">
           <div className="grid gap-4 lg:grid-cols-[1fr_240px_210px_210px_210px]">
             <label className="relative block">
               <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 text-[#EAE4D8]/42">
