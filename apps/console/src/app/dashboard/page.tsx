@@ -244,7 +244,7 @@ export default function DashboardPage() {
             </select>
           </div>
 
-          <div className="mt-5 rounded-xl border border-[#111315] bg-black/20 p-4">
+          <div className="mt-5 rounded-xl border border-[#1A1D20] bg-black/20 p-4">
             <div className="flex flex-wrap gap-3">
               {CATEGORIES.map((item) => (
                 <button
