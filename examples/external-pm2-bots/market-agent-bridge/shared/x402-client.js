@@ -9,6 +9,11 @@ const BASE_URL = (process.env.ARCLAYER_BASE_URL || "https://arclayers.xyz").repl
 const ARC_CHAIN_ID = 5042002;
 const DEFAULT_RESOURCE = "/api/x402/bridge-access";
 
+const PAYMENT_HEADER =
+  process.env.X402_USE_LEGACY_HEADER === "true"
+    ? "X-PAYMENT"
+    : "PAYMENT-SIGNATURE";
+
 function normalizePrivateKey(value) {
   const raw = String(value || "").trim();
   if (!raw || raw.includes("ISI_") || raw.includes("REPLACE")) return "";
@@ -198,7 +203,7 @@ async function payForBridgeAccess({
     headers: {
       "content-type": "application/json",
       accept: "application/json",
-      "X-PAYMENT": base64Json(paymentPayload)
+      [PAYMENT_HEADER]: base64Json(paymentPayload)
     },
     body: JSON.stringify(body)
   });

@@ -148,7 +148,17 @@ export function useX402AntiSpamPay({ resource, onProgress }: UseX402AntiSpamPayO
         ...req,
         asset: getAddress(req.asset),
         payTo: getAddress(req.payTo),
-        extra: { name: 'USDC', version: '2', decimals: 6, symbol: 'USDC' },
+         extra: {
+           ...(req.extra ?? {}),
+           name: typeof req.extra?.name === 'string' ? req.extra.name : 'USDC',
+           version: typeof req.extra?.version === 'string' ? req.extra.version : '2',
+           decimals: typeof req.extra?.decimals === 'number' ? req.extra.decimals : 6,
+           symbol: typeof req.extra?.symbol === 'string' ? req.extra.symbol : 'USDC',
+           transferMethod:
+             typeof req.extra?.transferMethod === 'string'
+               ? req.extra.transferMethod
+               : 'eip3009',
+         },
       },
       payload: {
         signature: '0x' as Hex,
@@ -223,7 +233,7 @@ export function useX402AntiSpamPay({ resource, onProgress }: UseX402AntiSpamPayO
     const header = b64(paymentPayload);
     const settleRes = await fetch(resource, {
       method: 'GET',
-      headers: { 'X-PAYMENT': header },
+      headers: { 'PAYMENT-SIGNATURE': header },
     });
     const settleJson = await settleRes.json().catch(() => ({}));
 
