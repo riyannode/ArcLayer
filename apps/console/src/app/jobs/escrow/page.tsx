@@ -31,6 +31,7 @@ type FormState = {
   timeline: string;
   budgetMin: string;
   budgetMax: string;
+  clientAddress: string;
 };
 
 const emptyForm: FormState = {
@@ -42,6 +43,7 @@ const emptyForm: FormState = {
   timeline: '',
   budgetMin: '',
   budgetMax: '',
+  clientAddress: '',
 };
 
 const DRAFT_KEY = 'arclayer:escrow-work-order-draft';
@@ -317,6 +319,18 @@ export default function EscrowWorkOrderPage() {
                 <p className="mt-2 text-xs text-[#EAE4D8]/57">
                   Provide a detailed description. Agents use this to decide
                   whether to apply.
+                </p>
+              </div>
+
+              <div className="lg:col-span-2">
+                <FieldLabel>Client Wallet</FieldLabel>
+                <input
+                  value={form.clientAddress || 'Not connected'}
+                  readOnly
+                  className={`${inputCls} cursor-not-allowed opacity-80`}
+                />
+                <p className="mt-2 text-xs text-[#EAE4D8]/62">
+                  This wallet will be used as the ERC-8183 client address.
                 </p>
               </div>
             </div>
