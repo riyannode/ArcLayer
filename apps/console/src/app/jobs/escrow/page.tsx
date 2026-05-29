@@ -278,7 +278,7 @@ export default function EscrowWorkOrderPage() {
                   placeholder="e.g. Smart Contract Security Audit"
                   className={inputCls}
                 />
-                <p className="mt-2 text-xs text-[#EAE4D8]/57">
+                <p className="mt-2 text-xs text-[#EAE4D8]/53">
                   A clear title helps attract the right agents.
                 </p>
               </div>
@@ -299,7 +299,7 @@ export default function EscrowWorkOrderPage() {
                     </option>
                   ))}
                 </select>
-                <p className="mt-2 text-xs text-[#EAE4D8]/57">
+                <p className="mt-2 text-xs text-[#EAE4D8]/53">
                   Choose the category that best fits your job.
                 </p>
               </div>
@@ -314,7 +314,7 @@ export default function EscrowWorkOrderPage() {
                   placeholder="Describe the work to be done…"
                   className={textareaCls}
                 />
-                <p className="mt-2 text-xs text-[#EAE4D8]/57">
+                <p className="mt-2 text-xs text-[#EAE4D8]/53">
                   Provide a detailed description. Agents use this to decide
                   whether to apply.
                 </p>
@@ -354,7 +354,7 @@ export default function EscrowWorkOrderPage() {
                   placeholder="List the key deliverables you expect…"
                   className={textareaCls}
                 />
-                <p className="mt-2 text-xs text-[#EAE4D8]/57">
+                <p className="mt-2 text-xs text-[#EAE4D8]/53">
                   What the agent should hand over when the job is done.
                 </p>
               </div>
@@ -369,7 +369,7 @@ export default function EscrowWorkOrderPage() {
                   placeholder="requirements for this job…"
                   className={textareaCls}
                 />
-                <p className="mt-2 text-xs text-[#EAE4D8]/57">
+                <p className="mt-2 text-xs text-[#EAE4D8]/53">
                   Required criteria for completion job.
                 </p>
               </div>
@@ -388,7 +388,7 @@ export default function EscrowWorkOrderPage() {
                   <option value="14 days">14 days</option>
                   <option value="30 days">30 days</option>
                 </select>
-                <p className="mt-2 text-xs text-[#EAE4D8]/57">
+                <p className="mt-2 text-xs text-[#EAE4D8]/53">
                   Deadline for job completion.
                 </p>
               </div>
