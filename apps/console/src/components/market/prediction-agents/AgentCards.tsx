@@ -77,7 +77,7 @@ function AgentCard({ agent }: { agent: PredictionAgentView }) {
         <Row label="event" value={agent.event} />
         <LinkedRow label="pulse" value={agent.activityActive ? agent.activity : 'idle'} href={agent.activityHref} />
         {hasTx ? <LinkedRow label="tx" value={agent.tx} href={agent.txHref} /> : null}
-        <Row label="proof" value={agent.proofActive ? agent.proof : 'none'} />
+        {agent.proofHash !== '—' ? <LinkedRow label="proof" value={agent.proofHash} href={agent.proofHashHref} /> : <Row label="proof" value={agent.proofActive ? agent.proof : 'none'} />}
         {hasReasoning ? <Row label="llm" value={`${agent.reasoningFallback ? 'fallback' : 'llm'} · ${agent.reasoningSource}`} /> : null}
         {agent.reasoningWhy !== '—' ? <Row label="why" value={agent.reasoningWhy} /> : null}
         <Row label="seen" value={agent.seen} />

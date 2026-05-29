@@ -130,6 +130,18 @@ function ageLabel(value?: string | null): string {
   return `${Math.floor(min / 60)}h ago`;
 }
 
+const EXPLORER_BASE = 'https://testnet.arcscan.app';
+
+function explorerTxUrl(hash: string | null): string {
+  if (!hash) return '';
+  // If it's already 0x-prefixed hex, use directly
+  if (hash.startsWith('0x') && hash.length >= 10) return `${EXPLORER_BASE}/tx/${hash}`;
+  // If it's a hex string without 0x prefix (like paymentId), add prefix
+  if (/^[a-fA-F0-9]{64}$/.test(hash)) return `${EXPLORER_BASE}/tx/0x${hash}`;
+  // UUID or other format — not on-chain, return empty
+  return '';
+}
+
 function isOnline(p?: AgentPresence): boolean {
   if (!p?.lastHeartbeatAt || p.status !== 'online') return false;
   const t = new Date(p.lastHeartbeatAt).getTime();
@@ -329,6 +341,9 @@ export function useA2AAgents(category: string): A2AReturn {
       const activityActive = isRecentEvent(latest);
       const recentX402 = latest?.eventType === 'x402_paid' && activityActive;
       const activityHash = activityTx(latest);
+      const payRef = activityPaymentRef(latest);
+      const txDisplayHash = activityHash || payRef;
+      const txExplorerUrl = explorerTxUrl(payRef) || explorerTxUrl(activityHash);
 
       return [{
         id,
@@ -345,11 +360,11 @@ export function useA2AAgents(category: string): A2AReturn {
         activityHref: '',
         activitySeen: ageLabel(latest?.createdAt),
         activityActive,
-        tx: shortText(activityHash),
-        txHref: '',
-        proof: 'no proof',
-        proofHash: '—',
-        proofHashHref: '',
+        tx: shortText(txDisplayHash),
+        txHref: txExplorerUrl,
+        proof: payRef ? 'gateway payment' : 'no proof',
+        proofHash: shortText(payRef),
+        proofHashHref: explorerTxUrl(payRef),
         proofSeen: '—',
         proofActive: false,
         reasoningSource: '—',
