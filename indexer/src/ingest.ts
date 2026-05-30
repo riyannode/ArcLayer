@@ -1,10 +1,11 @@
 import {
   ERC8004_IDENTITY_REGISTRY_ABI,
+  ERC8004_REPUTATION_REGISTRY_ABI,
   ERC8183_AGENTIC_COMMERCE_ABI,
   CONTRACTS,
   publicClient,
 } from "@arclayer/sdk";
-import type { IndexedAgentEvent, IndexedJobEvent } from "@arclayer/sdk";
+import type { IndexedAgentEvent, IndexedJobEvent, IndexedReputationEvent } from "@arclayer/sdk";
 
 // ── Official ERC-8183 AgenticCommerce events ────────────────────────────────
 
@@ -33,6 +34,16 @@ const AGENT_EVENT_ABIS = ERC8004_IDENTITY_REGISTRY_ABI.filter(
   (item): item is typeof item & { type: "event"; name: typeof AGENT_EVENT_NAMES[number] } =>
     item.type === "event" &&
     (AGENT_EVENT_NAMES as readonly string[]).includes((item as { name?: string }).name ?? ""),
+);
+
+// ── ERC-8004 Reputation Registry events ─────────────────────────────────────
+
+const REPUTATION_EVENT_NAMES = ["FeedbackGiven"] as const;
+
+const REPUTATION_EVENT_ABIS = ERC8004_REPUTATION_REGISTRY_ABI.filter(
+  (item): item is typeof item & { type: "event"; name: typeof REPUTATION_EVENT_NAMES[number] } =>
+    item.type === "event" &&
+    (REPUTATION_EVENT_NAMES as readonly string[]).includes((item as { name?: string }).name ?? ""),
 );
 
 export type FetchJobEventsResult = {
@@ -170,5 +181,55 @@ export async function fetchAgentEvents(
   return { events };
 }
 
+export type FetchReputationEventsResult = {
+  events: IndexedReputationEvent[];
+};
+
+export async function fetchReputationEvents(
+  fromBlock: bigint = BigInt(0),
+  toBlock: bigint,
+): Promise<FetchReputationEventsResult> {
+  if (fromBlock > toBlock) {
+    return { events: [] };
+  }
+
+  const collected = await fetchEventsInRange(
+    CONTRACTS.ERC8004_REPUTATION_REGISTRY,
+    ERC8004_REPUTATION_REGISTRY_ABI,
+    fromBlock,
+    toBlock,
+  );
+
+  const events = collected
+    .filter((event: any) => event.eventName === "FeedbackGiven")
+    .map((event: any) => {
+      const args = (event.args ?? {}) as Record<string, unknown>;
+
+      return {
+        eventName: "FeedbackGiven" as const,
+        blockNumber: event.blockNumber as bigint,
+        transactionHash: event.transactionHash as `0x${string}`,
+        logIndex: (event.logIndex ?? 0) as number,
+        agentTokenId: args.agentTokenId as bigint,
+        reviewer: args.reviewer as `0x${string}`,
+        score: args.score as bigint,
+        category: Number(args.category ?? 0),
+        comment: typeof args.comment === "string" ? args.comment : "",
+        metadataURI: typeof args.metadataURI === "string" ? args.metadataURI : "",
+        proofURI: typeof args.proofURI === "string" ? args.proofURI : "",
+        context: typeof args.context === "string" ? args.context : "",
+        ref: args.ref as `0x${string}` | undefined,
+      } satisfies IndexedReputationEvent;
+    })
+    .sort((a, b) => {
+      if (a.blockNumber !== b.blockNumber) {
+        return Number(a.blockNumber - b.blockNumber);
+      }
+      return a.logIndex - b.logIndex;
+    });
+
+  return { events };
+}
+
 // Re-export for backwards compatibility with any external importers.
-export { JOB_EVENT_ABIS, AGENT_EVENT_ABIS };
+export { JOB_EVENT_ABIS, AGENT_EVENT_ABIS, REPUTATION_EVENT_ABIS };

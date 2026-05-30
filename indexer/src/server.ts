@@ -5,13 +5,15 @@ import {
   ARC_REFERENCE_WALLET_FILTER,
   DEFAULT_FROM_BLOCK,
   IDENTITY_FROM_BLOCK,
+  REPUTATION_FROM_BLOCK,
   INDEXER_PORT,
   INDEX_ARC_REFERENCE_ERC8004,
+  INDEX_ARC_REFERENCE_ERC8004_REPUTATION,
   INDEX_ARC_REFERENCE_ERC8183,
   MAX_BLOCK_RANGE,
   POLL_INTERVAL_MS,
 } from "./config";
-import { fetchAgentEvents, fetchJobEvents, getLatestBlock } from "./ingest";
+import { fetchAgentEvents, fetchJobEvents, fetchReputationEvents, getLatestBlock } from "./ingest";
 import { arcWalletFilterActive } from "./projections";
 import { calculateToBlock } from "./sync-range";
 import { getReferenceFilters, refreshReferenceFiltersFromSupabase } from "./reference-filters";
@@ -30,6 +32,8 @@ import {
   readOverviewSummary,
   readProofByJobId,
   readProofs,
+  readReputation,
+  readReputationByAgent,
   syncProjectionStore,
   writeMetaValue,
 } from "./db";
@@ -107,6 +111,12 @@ export async function runSyncCycle() {
     // Agent events use their own cursor but share the same toBlock ceiling.
     const agentToBlock = calculateToBlock(agentFromBlock, chainLatestBlock, MAX_BLOCK_RANGE);
 
+    const reputationFromBlockValue = readMetaValue("last_synced_reputation_block");
+    const reputationFromBlock = reputationFromBlockValue
+      ? BigInt(reputationFromBlockValue) + BigInt(1)
+      : REPUTATION_FROM_BLOCK;
+    const reputationToBlock = calculateToBlock(reputationFromBlock, chainLatestBlock, MAX_BLOCK_RANGE);
+
     let events: Awaited<ReturnType<typeof fetchJobEvents>>["events"] = [];
     if (INDEX_ARC_REFERENCE_ERC8183) {
       events = (await fetchJobEvents(fromBlock, toBlock)).events;
@@ -117,8 +127,13 @@ export async function runSyncCycle() {
       agentEvts = (await fetchAgentEvents(agentFromBlock, agentToBlock)).events;
     }
 
-    console.log(`[indexer] sync projection: jobs=${events.length} erc8004Agents=${agentEvts.length} block=${toBlock} agentBlock=${agentToBlock}`);
-    const syncResult = await syncProjectionStore(events, agentEvts);
+    let reputationEvts: Awaited<ReturnType<typeof fetchReputationEvents>>["events"] = [];
+    if (INDEX_ARC_REFERENCE_ERC8004_REPUTATION) {
+      reputationEvts = (await fetchReputationEvents(reputationFromBlock, reputationToBlock)).events;
+    }
+
+    console.log(`[indexer] sync projection: jobs=${events.length} erc8004Agents=${agentEvts.length} reputation=${reputationEvts.length} block=${toBlock} agentBlock=${agentToBlock} reputationBlock=${reputationToBlock}`);
+    const syncResult = await syncProjectionStore(events, agentEvts, reputationEvts);
 
     // Advance cursors independently — only when feature flag is active
     if (INDEX_ARC_REFERENCE_ERC8183 && toBlock >= fromBlock) {
@@ -126,6 +141,10 @@ export async function runSyncCycle() {
     }
     if (INDEX_ARC_REFERENCE_ERC8004 && agentToBlock >= agentFromBlock) {
       writeMetaValue("last_synced_agent_block", agentToBlock.toString());
+    }
+
+    if (INDEX_ARC_REFERENCE_ERC8004_REPUTATION && reputationToBlock >= reputationFromBlock) {
+      writeMetaValue("last_synced_reputation_block", reputationToBlock.toString());
     }
 
     lastSyncError = syncResult.lastSyncError;
@@ -190,6 +209,8 @@ createServer((req, res) => {
       visibleAgentCount: counts.visibleAgentCount,
       totalAgentCount: counts.totalAgentCount,
       lastSyncedBlock: Number(readMetaValue("last_synced_block") || "0"),
+      lastSyncedAgentBlock: Number(readMetaValue("last_synced_agent_block") || "0"),
+      lastSyncedReputationBlock: Number(readMetaValue("last_synced_reputation_block") || "0"),
       lastSyncAt: lastSyncAt ? new Date(lastSyncAt).toISOString() : (readMetaValue("last_sync_at") ? new Date(Number(readMetaValue("last_sync_at"))).toISOString() : null),
       lastSyncError: toPublicIndexerErrorMessage(lastSyncError ?? getLastA2AJobSyncError()),
     });
@@ -296,14 +317,31 @@ createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/reputation") {
+    writeJson(res, readReputation());
+    return;
+  }
+
+  if (url.pathname.startsWith("/reputation/")) {
+    const agentTokenId = decodeURIComponent(url.pathname.replace("/reputation/", ""));
+    if (!/^\d+$/.test(agentTokenId)) {
+      res.statusCode = 400;
+      writeJson(res, { error: "Invalid agent token id." });
+      return;
+    }
+
+    writeJson(res, readReputationByAgent(agentTokenId));
+    return;
+  }
 
   writeJson(res, {
     ok: true,
     mode: "arc-reference-100%",
-    endpoints: ["/health", "/overview/summary", "/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug"],
+    endpoints: ["/health", "/overview/summary", "/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug", "/reputation", "/reputation/:agentTokenId"],
     eventCount: Number(readMetaValue("event_count") || "0"),
     lastSyncedBlock: readMetaValue("last_synced_block"),
     lastSyncedAgentBlock: readMetaValue("last_synced_agent_block"),
+    lastSyncedReputationBlock: readMetaValue("last_synced_reputation_block"),
   });
 }).listen(INDEXER_PORT, () => {
   console.log(`ArcLayer indexer (Arc Reference Mode) listening on http://localhost:${INDEXER_PORT}`);
