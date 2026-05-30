@@ -74,6 +74,8 @@ export async function getAgentsByController(
     .from(TABLE)
     .select('draft_id, controller, metadata, status, agent_id, tx_hash, updated_at')
     .eq('controller', controller.toLowerCase())
+    .eq('status', 'minted')
+    .not('agent_id', 'is', null)
     .order('updated_at', { ascending: false });
 
   if (error || !data) return [];
