@@ -1,20 +1,30 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { waitForTransactionReceipt } from '@wagmi/core';
+import { type Address } from 'viem';
 import {
   ArrowLeft,
   Bot,
   BriefcaseBusiness,
   Check,
+  ChevronDown,
+  ChevronUp,
   FileJson,
   KeyRound,
   Shield,
   Wallet,
   Workflow,
 } from 'lucide-react';
+import { buildRegisterAgentConfig } from '@arclayer/sdk';
+import { useArcWallet } from '@/hooks/useArcWallet';
+import { useArcWrite } from '@/hooks/useArcWrite';
+import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
+import { config } from '@/lib/wagmi';
 
 type AgentRole = 'worker' | 'evaluator' | 'autonomous-client';
+type RegisterStatus = 'idle' | 'pending' | 'success' | 'error';
 
 const CATEGORIES = [
   'Smart Contract',
@@ -36,16 +46,24 @@ type RoleConfig = {
   label: string;
   description: string;
   identityRole: string;
+  manifestMode: 'buyer' | 'seller' | 'dual';
   defaultCapabilities: string[];
+  jobAccepts: string[];
 };
 
 type FormState = {
   agentName: string;
+  description: string;
+  avatarUrl: string;
   role: AgentRole;
   category: Category | '';
   capabilities: string;
   controllerWallet: string;
   metadataUri: string;
+  websiteUrl: string;
+  docsUrl: string;
+  repoUrl: string;
+  xUrl: string;
   confirm: boolean;
 };
 
@@ -54,36 +72,47 @@ const ROLE_CONFIG: Record<AgentRole, RoleConfig> = {
     id: 'worker',
     title: 'Worker Agent',
     label: 'Worker',
-    description: 'Agent identity for providers that can receive escrow jobs and submit work proofs.',
+    description: 'Receives escrow jobs and submits work proof.',
     identityRole: 'provider',
+    manifestMode: 'seller',
     defaultCapabilities: ['claim_job', 'submit_work'],
+    jobAccepts: ['claim', 'run', 'submit-proof'],
   },
   evaluator: {
     id: 'evaluator',
     title: 'Evaluator Agent',
     label: 'Evaluator',
-    description: 'Agent identity for evaluators that can review submitted work and settle escrow jobs.',
+    description: 'Reviews work and settles escrow jobs.',
     identityRole: 'evaluator',
+    manifestMode: 'dual',
     defaultCapabilities: ['evaluate_work', 'complete_job'],
+    jobAccepts: ['run', 'submit-proof', 'complete'],
   },
   'autonomous-client': {
     id: 'autonomous-client',
     title: 'Autonomous Client Agent',
     label: 'Client',
-    description:
-      'Agent identity for client bots. Automation, budget, and strategy are configured separately in the example bot.',
+    description: 'Creates and funds escrow jobs.',
     identityRole: 'client',
+    manifestMode: 'buyer',
     defaultCapabilities: ['create_job', 'fund_escrow'],
+    jobAccepts: ['create'],
   },
 };
 
 const DEFAULT_FORM: FormState = {
   agentName: '',
+  description: '',
+  avatarUrl: '',
   role: 'worker',
   category: '',
   capabilities: '',
   controllerWallet: '',
   metadataUri: '',
+  websiteUrl: '',
+  docsUrl: '',
+  repoUrl: '',
+  xUrl: '',
   confirm: false,
 };
 
@@ -108,6 +137,11 @@ function capabilityList(value: string) {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 24);
+}
+
+function buildPendingManifestURI(controller: string | undefined, slug: string) {
+  if (!controller || !slug) return '';
+  return `arclayer://manifest/pending/${controller}/${encodeURIComponent(slug)}`;
 }
 
 function FieldShell({
@@ -147,6 +181,26 @@ function TextInput({
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
       className="h-12 w-full rounded-md border border-white/10 bg-[#07090D] px-4 text-[14px] text-[#F5F0E5] outline-none transition placeholder:text-[#EAE4D8]/35 focus:border-[#F3C536]/60 focus:ring-2 focus:ring-[#F3C536]/10"
+    />
+  );
+}
+
+function TextareaInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      rows={3}
+      className="w-full resize-none rounded-md border border-white/10 bg-[#07090D] px-4 py-3 text-[14px] leading-6 text-[#F5F0E5] outline-none transition placeholder:text-[#EAE4D8]/35 focus:border-[#F3C536]/60 focus:ring-2 focus:ring-[#F3C536]/10"
     />
   );
 }
@@ -231,7 +285,7 @@ function StepItem({
 
 function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[150px_1fr] gap-4 text-[13px]">
+    <div className="grid grid-cols-[135px_1fr] gap-4 text-[13px]">
       <span className="text-[#EAE4D8]/55">{label}</span>
       <span className="min-w-0 truncate text-[#F5F0E5]/85">{value || '—'}</span>
     </div>
@@ -278,34 +332,137 @@ function RoleButton({
   );
 }
 
+function StatusBox({ label, value, active }: { label: string; value: string; active?: boolean }) {
+  return (
+    <div className="rounded-md border border-white/10 bg-white/[0.025] px-3 py-3">
+      <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#EAE4D8]/38">{label}</div>
+      <div className={active ? 'mt-1 text-[12px] text-[#F3C536]' : 'mt-1 text-[12px] text-[#EAE4D8]/70'}>{value}</div>
+    </div>
+  );
+}
+
+function MetadataPreview({ data, manifestCount }: { data: unknown; manifestCount: number }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const json = useMemo(() => JSON.stringify(data, null, 2), [data]);
+
+  return (
+    <div className="rounded-md border border-white/10 bg-[#05070A]">
+      <button
+        type="button"
+        onClick={() => setIsOpen((value) => !value)}
+        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-white/[0.025]"
+        aria-expanded={isOpen}
+      >
+        <div className="flex items-center gap-3">
+          <FileJson className="h-4 w-4 text-[#F3C536]" />
+          <div>
+            <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#F3C536]">
+              Identity Metadata Preview
+            </div>
+            <div className="mt-1 text-[12px] text-[#EAE4D8]/50">{isOpen ? 'Hide JSON' : 'Show JSON'}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="rounded border border-[#F3C536]/25 bg-[#F3C536]/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#F3C536]">
+            {manifestCount} manifest
+          </span>
+          {isOpen ? <ChevronUp className="h-4 w-4 text-[#F3C536]" /> : <ChevronDown className="h-4 w-4 text-[#F3C536]" />}
+        </div>
+      </button>
+
+      <div className="grid gap-2 border-t border-white/10 px-4 py-3 sm:grid-cols-3">
+        <StatusBox label="Schema" value="arclayer.agent/v1" active />
+        <StatusBox label="Category" value="erc8183-commerce" />
+        <StatusBox label="Network" value="arc-testnet" />
+      </div>
+
+      {isOpen && (
+        <pre className="max-h-[420px] overflow-auto border-t border-white/10 p-4 text-[11px] leading-5 text-[#EAE4D8]/62">
+          {json}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 export default function ERC8183EscrowRegisterPage() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [notice, setNotice] = useState('');
   const [createdAt] = useState(() => new Date().toISOString());
+  const [registerStatus, setRegisterStatus] = useState<RegisterStatus>('idle');
+  const [mintedAgentId, setMintedAgentId] = useState<string>('');
+  const [txHash, setTxHash] = useState<string>('');
+  const { isConnected, address } = useArcWallet();
+  const { writeContractAsync } = useArcWrite();
 
   const role = ROLE_CONFIG[form.role];
   const customCaps = useMemo(() => capabilityList(form.capabilities), [form.capabilities]);
+  const controller = address || form.controllerWallet;
+  const agentSlug = slugify(form.agentName) || 'erc8183-agent';
+  const metadataURI = form.metadataUri.trim() || buildPendingManifestURI(controller, agentSlug);
+  const metadataReady = Boolean(form.agentName.trim() && form.description.trim() && form.category && controller && customCaps.length > 0);
 
-  const identityMetadata = useMemo(() => {
-    const categorySlug = form.category ? slugify(form.category) : '';
-    const allCaps = Array.from(
-      new Set([...role.defaultCapabilities, ...customCaps, ...(categorySlug ? [categorySlug] : [])]),
-    );
+  useEffect(() => {
+    if (!address) return;
+    setForm((prev) => (prev.controllerWallet ? prev : { ...prev, controllerWallet: address }));
+  }, [address]);
+
+  const agentManifest = useMemo(() => {
+    const categorySlug = form.category ? slugify(form.category) : 'general';
+    const allCaps = Array.from(new Set([...role.defaultCapabilities, ...customCaps, categorySlug]));
+    const now = new Date().toISOString();
 
     return {
-      schema: 'arclayer.identity/v1',
-      standard: 'ERC-8004',
+      schema: 'arclayer.agent/v1',
+      version: 1,
+      agentId: mintedAgentId || `pending-${agentSlug}`,
       name: form.agentName || 'ArcLayer Agent',
       role: role.identityRole,
-      category: form.category || undefined,
+      description: form.description || `${role.title} for ERC-8183 escrow work orders.`,
+      controller: controller || undefined,
+      mode: role.manifestMode,
+      avatar: form.avatarUrl || undefined,
+      capability: allCaps,
       capabilities: allCaps,
-      controller: form.controllerWallet || undefined,
-      metadataURI: form.metadataUri || undefined,
-      tags: ['erc8183', 'agentic-commerce', ...(categorySlug ? [categorySlug] : [])],
-      note: 'Identity only. Runtime URL, bot strategy, budgets, deliverables, requirements, and automation settings live outside this registration flow.',
+      categories: ['erc8183-commerce', categorySlug],
+      roles: [
+        {
+          id: role.id,
+          name: role.title,
+          category: 'erc8183-commerce',
+          capabilities: allCaps,
+          enabled: true,
+        },
+      ],
+      tags: ['erc8183', 'agentic-commerce', role.id, categorySlug],
+      links: {
+        homepage: form.websiteUrl || undefined,
+        docs: form.docsUrl || undefined,
+        repo: form.repoUrl || undefined,
+        x: form.xUrl || undefined,
+      },
+      x402: {
+        enabled: false,
+        network: 'arc-testnet',
+        currency: 'USDC',
+        receiver: controller || undefined,
+        payTo: controller || undefined,
+      },
+      jobs: {
+        accepts: role.jobAccepts,
+        inputFormats: ['text', 'json'],
+        outputFormats: ['json', 'proof'],
+      },
+      proof: {
+        types: ['signed_result', 'url'],
+        signing: 'eip191',
+      },
+      host: 'erc8183-identity',
+      metadataURI: metadataURI || undefined,
       createdAt,
+      updatedAt: now,
     };
-  }, [form.agentName, form.category, form.controllerWallet, form.metadataUri, role, customCaps, createdAt]);
+  }, [agentSlug, controller, createdAt, customCaps, form, metadataURI, mintedAgentId, role]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -313,36 +470,65 @@ export default function ERC8183EscrowRegisterPage() {
 
   function saveDraft() {
     const payload = {
-      type: 'erc8004-agent-identity-draft',
+      type: 'erc8183-agent-identity-draft',
       form,
-      identityMetadata,
+      metadataURI,
+      agentManifest,
     };
 
-    localStorage.setItem('arclayer-erc8004-agent-identity-draft', JSON.stringify(payload, null, 2));
-    setNotice('Identity draft saved locally. Bot/runtime settings are intentionally not included.');
+    localStorage.setItem('arclayer-erc8183-agent-identity-draft', JSON.stringify(payload, null, 2));
+    setNotice('Draft saved. Bot setup is separate.');
   }
 
-  function submitRegister() {
+  async function submitRegister() {
+    if (!isConnected || !address) {
+      setRegisterStatus('error');
+      setNotice('Connect wallet first.');
+      return;
+    }
+    if (!metadataReady || !metadataURI) {
+      setRegisterStatus('error');
+      setNotice('Complete required fields first.');
+      return;
+    }
     if (!form.confirm) {
+      setRegisterStatus('error');
       setNotice('Confirm the identity information before minting.');
       return;
     }
 
-    const payload = {
-      type: 'erc8004-agent-identity-submit',
-      form,
-      identityMetadata,
-      nextSteps: [
-        'Upload or resolve the identity metadata URI if it is not provided yet.',
-        'Call ERC-8004 IdentityRegistry.register(metadataURI).',
-        'Store the minted tokenId as the agentId.',
-        'Configure worker/evaluator/client bot runtime separately from the identity registration flow.',
-      ],
-    };
+    try {
+      setRegisterStatus('pending');
+      setNotice('Submitting ERC-8004 identity mint...');
+      const hash = await writeContractAsync(buildRegisterAgentConfig(metadataURI));
+      setTxHash(hash);
+      setNotice(`Waiting for ${hash.slice(0, 10)}...`);
+      const receipt = await waitForTransactionReceipt(config, { hash });
+      const minted = extractERC8004MintedTokenIdFromReceipt(receipt, address as Address | undefined);
+      const mintedId = minted.toString();
 
-    localStorage.setItem('arclayer-erc8004-agent-identity-submit', JSON.stringify(payload, null, 2));
-    console.log('[ArcLayer] ERC-8004 agent identity payload:', payload);
-    setNotice('Identity mint payload created. Wire this button to metadata upload and ERC-8004 register(metadataURI).');
+      setMintedAgentId(mintedId);
+      setRegisterStatus('success');
+      localStorage.setItem(
+        'arclayer-erc8183-agent-identity-registered',
+        JSON.stringify(
+          {
+            agentId: mintedId,
+            txHash: hash,
+            metadataURI,
+            form,
+            agentManifest: { ...agentManifest, agentId: mintedId },
+            nextStep: `/register/erc8183/setup?agentId=${encodeURIComponent(mintedId)}`,
+          },
+          null,
+          2,
+        ),
+      );
+      setNotice(`Identity minted. Agent ID ${mintedId}. Continue to ERC-8183 PM2 setup.`);
+    } catch (error) {
+      setRegisterStatus('error');
+      setNotice(error instanceof Error ? error.message : 'Identity mint failed.');
+    }
   }
 
   return (
@@ -368,30 +554,30 @@ export default function ERC8183EscrowRegisterPage() {
               Register Agent Identity
             </h1>
             <p className="mt-5 max-w-[370px] text-[16px] leading-8 text-[#EAE4D8]/62">
-              Mint an agent identity for ERC-8183 escrow commerce. Bot runtime settings are configured separately in the example bot flow.
+              Create the public identity first. PM2 bot setup comes later.
             </p>
           </div>
 
           <div className="relative mt-16">
             <div className="absolute left-5 top-10 h-[140px] border-l border-dashed border-white/16" />
-            <StepItem number={1} title="Identity" description="Name, role, category, and capabilities" active />
-            <StepItem number={2} title="Ownership" description="Controller wallet and metadata URI" />
-            <StepItem number={3} title="Mint" description="Review identity metadata and mint" />
+            <StepItem number={1} title="Identity" description="Name, role, category" active />
+            <StepItem number={2} title="Profile" description="Avatar, links, metadata" />
+            <StepItem number={3} title="Mint" description="Review and register" />
           </div>
 
           <div className="mt-12 rounded-md border border-[#F3C536]/22 bg-[#F3C536]/[0.025] p-7">
             <div className="flex items-center gap-3 text-[#F3C536]">
               <Workflow className="h-5 w-5" />
-              <div className="font-mono text-[13px] font-semibold">Identity only</div>
+              <div className="font-mono text-[13px] font-semibold">Simple scope</div>
             </div>
 
             <div className="mt-8 space-y-8">
               <div className="flex gap-5">
                 <BriefcaseBusiness className="mt-1 h-6 w-6 shrink-0 text-[#F3C536]" />
                 <div>
-                  <div className="font-semibold text-[#F5F0E5]">No bot settings here</div>
+                  <div className="font-semibold text-[#F5F0E5]">Identity only</div>
                   <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
-                    Runtime URL, budgets, job templates, and automation strategy belong in the separate bot setup.
+                    No PM2, keys, or private config here.
                   </p>
                 </div>
               </div>
@@ -399,9 +585,9 @@ export default function ERC8183EscrowRegisterPage() {
               <div className="flex gap-5">
                 <Wallet className="mt-1 h-6 w-6 shrink-0 text-[#F3C536]" />
                 <div>
-                  <div className="font-semibold text-[#F5F0E5]">Controller wallet owns identity</div>
+                  <div className="font-semibold text-[#F5F0E5]">Wallet owns identity</div>
                   <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
-                    The controller address should be the wallet that owns or controls the ERC-8004 identity.
+                    Connected wallet mints the ERC-8004 identity.
                   </p>
                 </div>
               </div>
@@ -409,9 +595,9 @@ export default function ERC8183EscrowRegisterPage() {
               <div className="flex gap-5">
                 <Shield className="mt-1 h-6 w-6 shrink-0 text-[#F3C536]" />
                 <div>
-                  <div className="font-semibold text-[#F5F0E5]">Job creation stays in Jobs</div>
+                  <div className="font-semibold text-[#F5F0E5]">Next step</div>
                   <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
-                    Manual clients create escrow jobs from Jobs. Autonomous clients use bot config after identity mint.
+                    Continue to ERC-8183 PM2 setup after mint.
                   </p>
                 </div>
               </div>
@@ -423,7 +609,7 @@ export default function ERC8183EscrowRegisterPage() {
           <div className="mx-auto max-w-[1180px] space-y-3">
             <Section icon={<Bot className="h-6 w-6" />} title="Agent Identity">
               <div className="grid gap-7 lg:grid-cols-2">
-                <FieldShell label="Agent / Runtime Name" required helper="Human-readable name for the ERC-8004 identity.">
+                <FieldShell label="Agent Name" required helper="Public display name.">
                   <TextInput
                     value={form.agentName}
                     onChange={(value) => update('agentName', value)}
@@ -431,14 +617,14 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="Role" required helper="Role stored in identity metadata for discovery.">
+                <FieldShell label="Role" required helper="Escrow identity role.">
                   <SelectInput
                     value={form.role}
                     onChange={(value) => update('role', value as AgentRole)}
                     options={[
-                      { value: 'worker', label: 'Worker — receives and submits escrow jobs' },
-                      { value: 'evaluator', label: 'Evaluator — reviews and settles escrow jobs' },
-                      { value: 'autonomous-client', label: 'Autonomous Client — identity for client bot' },
+                      { value: 'worker', label: 'Worker — receives jobs' },
+                      { value: 'evaluator', label: 'Evaluator — reviews work' },
+                      { value: 'autonomous-client', label: 'Client — creates jobs' },
                     ]}
                   />
                 </FieldShell>
@@ -455,7 +641,17 @@ export default function ERC8183EscrowRegisterPage() {
                   </div>
                 </div>
 
-                <FieldShell label="Category" required helper="Used for agent discovery and marketplace filtering.">
+                <div className="lg:col-span-2">
+                  <FieldShell label="Description" required helper="Short public summary.">
+                    <TextareaInput
+                      value={form.description}
+                      onChange={(value) => update('description', value)}
+                      placeholder="What does this escrow agent do?"
+                    />
+                  </FieldShell>
+                </div>
+
+                <FieldShell label="Category" required helper="Used for discovery.">
                   <SelectInput
                     value={form.category}
                     onChange={(value) => update('category', value as Category | '')}
@@ -466,7 +662,7 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="Capabilities" required helper="Comma-separated identity tags, not bot strategy.">
+                <FieldShell label="Capabilities" required helper="Comma-separated tags.">
                   <TextInput
                     value={form.capabilities}
                     onChange={(value) => update('capabilities', value)}
@@ -489,9 +685,9 @@ export default function ERC8183EscrowRegisterPage() {
               </div>
             </Section>
 
-            <Section icon={<KeyRound className="h-6 w-6" />} title="Ownership">
+            <Section icon={<KeyRound className="h-6 w-6" />} title="Profile & Ownership">
               <div className="grid gap-7 lg:grid-cols-2">
-                <FieldShell label="Controller Wallet" required helper="Public address that owns or controls this ERC-8004 identity.">
+                <FieldShell label="Controller Wallet" required helper="Auto-filled from wallet.">
                   <TextInput
                     value={form.controllerWallet}
                     onChange={(value) => update('controllerWallet', value)}
@@ -499,11 +695,51 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="Metadata URI" helper="Optional for now. The mint flow can upload metadata and fill this later.">
+                <FieldShell label="Avatar / Logo URL" helper="Optional image URL.">
+                  <TextInput
+                    value={form.avatarUrl}
+                    onChange={(value) => update('avatarUrl', value)}
+                    placeholder="https://.../logo.png"
+                  />
+                </FieldShell>
+
+                <FieldShell label="Metadata URI" helper="Optional. Generated if empty.">
                   <TextInput
                     value={form.metadataUri}
                     onChange={(value) => update('metadataUri', value)}
-                    placeholder="ipfs://... or https://..."
+                    placeholder="arclayer://... or ipfs://..."
+                  />
+                </FieldShell>
+
+                <FieldShell label="Website" helper="Optional.">
+                  <TextInput
+                    value={form.websiteUrl}
+                    onChange={(value) => update('websiteUrl', value)}
+                    placeholder="https://..."
+                  />
+                </FieldShell>
+
+                <FieldShell label="Docs" helper="Optional.">
+                  <TextInput
+                    value={form.docsUrl}
+                    onChange={(value) => update('docsUrl', value)}
+                    placeholder="https://..."
+                  />
+                </FieldShell>
+
+                <FieldShell label="Repo" helper="Optional.">
+                  <TextInput
+                    value={form.repoUrl}
+                    onChange={(value) => update('repoUrl', value)}
+                    placeholder="https://github.com/..."
+                  />
+                </FieldShell>
+
+                <FieldShell label="X / Twitter" helper="Optional.">
+                  <TextInput
+                    value={form.xUrl}
+                    onChange={(value) => update('xUrl', value)}
+                    placeholder="https://x.com/..."
                   />
                 </FieldShell>
               </div>
@@ -517,13 +753,22 @@ export default function ERC8183EscrowRegisterPage() {
                       <ReviewRow label="Agent Name" value={form.agentName} />
                       <ReviewRow label="Role" value={role.title} />
                       <ReviewRow label="Category" value={form.category} />
+                      <ReviewRow label="Agent ID" value={mintedAgentId || 'Pending identity'} />
                     </div>
 
                     <div className="space-y-3">
-                      <ReviewRow label="Controller" value={shortAddress(form.controllerWallet)} />
-                      <ReviewRow label="Metadata URI" value={form.metadataUri || 'Generated later'} />
+                      <ReviewRow label="Controller" value={shortAddress(controller)} />
+                      <ReviewRow label="Metadata URI" value={metadataURI || 'Generated after wallet'} />
                       <ReviewRow label="Capabilities" value={customCaps.join(', ')} />
+                      <ReviewRow label="Tx" value={txHash ? shortAddress(txHash) : '—'} />
                     </div>
+                  </div>
+
+                  <div className="mt-6 grid gap-3 sm:grid-cols-4">
+                    <StatusBox label="Identity" value={mintedAgentId ? `Agent ${mintedAgentId}` : 'Pending'} active={Boolean(mintedAgentId)} />
+                    <StatusBox label="Metadata" value={metadataReady ? 'Ready' : 'Incomplete'} active={metadataReady} />
+                    <StatusBox label="Controller" value={controller ? shortAddress(controller) : 'Connect wallet'} active={Boolean(controller)} />
+                    <StatusBox label="Next" value="ERC-8183 PM2 setup" active={registerStatus === 'success'} />
                   </div>
 
                   <label className="mt-6 flex items-start gap-3 rounded-md border border-white/10 bg-white/[0.025] p-4">
@@ -539,34 +784,37 @@ export default function ERC8183EscrowRegisterPage() {
                       {form.confirm && <Check className="h-3.5 w-3.5" />}
                     </button>
                     <span className="text-[13px] leading-6 text-[#EAE4D8]/62">
-                      I understand this page only prepares/mints an ERC-8004 identity. Runtime URL, API keys, budgets, deliverables, requirements, and autonomous bot settings are configured separately.
+                      I confirm this is public identity metadata. Bot secrets and PM2 settings are configured separately.
                     </span>
                   </label>
                 </div>
 
-                <div className="rounded-md border border-white/10 bg-[#05070A]">
-                  <div className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
-                    <FileJson className="h-4 w-4 text-[#F3C536]" />
-                    <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#F3C536]">
-                      Identity Metadata Preview
-                    </div>
-                  </div>
-                  <pre className="max-h-[640px] overflow-auto p-4 text-[11px] leading-5 text-[#EAE4D8]/62">
-                    {JSON.stringify(identityMetadata, null, 2)}
-                  </pre>
-                </div>
+                <MetadataPreview data={agentManifest} manifestCount={1} />
               </div>
             </Section>
 
             {notice && (
-              <div className="rounded-md border border-[#F3C536]/25 bg-[#F3C536]/[0.045] px-5 py-4 text-[13px] leading-6 text-[#F3C536]">
+              <div
+                className={
+                  registerStatus === 'error'
+                    ? 'rounded-md border border-rose-400/25 bg-rose-400/[0.055] px-5 py-4 text-[13px] leading-6 text-rose-200'
+                    : 'rounded-md border border-[#F3C536]/25 bg-[#F3C536]/[0.045] px-5 py-4 text-[13px] leading-6 text-[#F3C536]'
+                }
+              >
                 {notice}
+                {registerStatus === 'success' && mintedAgentId && (
+                  <div className="mt-2">
+                    <Link href={`/register/erc8183/setup?agentId=${encodeURIComponent(mintedAgentId)}`} className="underline decoration-[#F3C536]/50 underline-offset-4">
+                      Continue to ERC-8183 PM2 setup →
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 
             <div className="sticky bottom-0 z-20 flex flex-col gap-4 rounded-t-xl border-t border-white/10 bg-[#05070A]/92 px-5 py-5 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
               <p className="text-[13px] leading-6 text-[#EAE4D8]/55">
-                Save a local identity draft now. Bot setup will be handled by the separate example-bot configuration flow.
+                Register identity here. Configure PM2 bots in the separate setup flow.
               </p>
 
               <div className="flex flex-col gap-3 sm:flex-row">
@@ -580,9 +828,10 @@ export default function ERC8183EscrowRegisterPage() {
                 <button
                   type="button"
                   onClick={submitRegister}
-                  className="h-12 rounded-md border border-[#F3C536] bg-[#F3C536] px-9 text-[13px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
+                  disabled={registerStatus === 'pending'}
+                  className="h-12 rounded-md border border-[#F3C536] bg-[#F3C536] px-9 text-[13px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Mint Identity
+                  {registerStatus === 'pending' ? 'Minting...' : 'Mint Identity'}
                 </button>
               </div>
             </div>
