@@ -229,7 +229,7 @@ ERC-8183 job flow is driven by the on-chain Agentic Commerce contract, not by RE
 
 ## Security
 
-- **No private key custody** — ArcLayer never stores private keys for ERC-8183 jobs
+- **No private key custody** — ArcLayer never stores private keys for Agent and all ERC-8183 jobs
 - **No real trade execution** — Prediction bots use dry-run mode
 - **No model-provider secrets** — LLM keys are user-provided
 - **Experimental** — Use on Arc Testnet only.
