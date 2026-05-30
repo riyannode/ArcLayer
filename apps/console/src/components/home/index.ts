@@ -9,23 +9,15 @@
  * Structure:
  *   HomeSidebar        — slim vertical AUREO-style rail (md+)
  *   HomeHero           — editorial headline + quickstart + CTAs
- *     └─ HomeProofStrip  — 4 deployed contracts on Arc Testnet
- *     └─ HomeStats       — live indexer stats (fallbacks silently)
- *   ArchVisual         — monumental ring SVG (right column)
- *   HomeFeaturedCard   — glass card overlapping the visual
+ *     └─ HomeOnboardingCards — path selector (inside HomeHero)
+ *   HexGrid3D          — animated hex grid background
+ *   LiveLogStream      — live event ticker
  *   HomeProtocolSection — "Four modules. One settlement fabric."
- *   HomeWhoIsThisFor   — landing path selector for x402 vs escrow
  *   HomeFooterStrip    — small network metadata strip
  */
 export { default as HomeSidebar } from './HomeSidebar';
 export { default as HomeHero } from './HomeHero';
-export { default as HomeStats } from './HomeStats';
-export { default as HomeProofStrip } from './HomeProofStrip';
-export { default as HomeFeaturedCard } from './HomeFeaturedCard';
-export { default as ArchVisual } from './ArchVisual';
 export { default as HexGrid3D } from './HexGrid3D';
 export { default as LiveLogStream } from './LiveLogStream';
 export { default as HomeProtocolSection } from './HomeProtocolSection';
-export { default as HomeWhoIsThisFor } from './HomeWhoIsThisFor';
-export { default as HomeX402ProofCard } from './HomeX402ProofCard';
 export { default as HomeFooterStrip } from './HomeFooterStrip';
