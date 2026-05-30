@@ -90,12 +90,24 @@ export async function GET(
       },
     });
   } catch (error) {
+    const score = '0';
+    const message = error instanceof Error ? error.message : 'reputation_indexer_unavailable';
+
     return NextResponse.json({
+      ok: false,
       agentId: tokenId,
-      score: '0',
+      tokenId,
+      score,
       stats: null,
+      feedback: [],
       source: 'erc8004_reputation_indexer',
-      error: error instanceof Error ? error.message : 'reputation_indexer_unavailable',
+      error: message,
+      reputation: {
+        score,
+        stats: null,
+        feedback: [],
+        source: 'erc8004_reputation_indexer',
+      },
     });
   }
 }
