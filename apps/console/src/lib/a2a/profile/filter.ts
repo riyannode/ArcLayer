@@ -36,7 +36,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value.map(String);
+  return value.filter((v): v is string => typeof v === 'string');
 }
 
 /**
@@ -55,7 +55,7 @@ export function isArcLayerPlatformAgent(agent: CanonicalAgentLike) {
   if (agent.tokenURI) {
     if (agent.tokenURI.startsWith('arclayer://manifest/')) return true;
     if (agent.tokenURI.includes('/api/a2a/metadata/draft/')) return true;
-    if (agent.tokenURI.includes('arclayers.xyz')) return true;
+    if (agent.tokenURI.includes('/api/a2a/manifest')) return true;
   }
 
   if (!isRecord(agent.metadata)) return false;
@@ -148,7 +148,7 @@ export function platformSortRank(agent: CanonicalAgentLike) {
  * Returns a display badge label for the agent's canonical source.
  */
 export function getAgentBadge(agent: CanonicalAgentLike) {
-  if (agent.source === 'manifest') return 'ArcLayer Verified';
+  if (agent.source === 'manifest') return 'ArcLayer Published';
   if (agent.source === 'draft') return 'ArcLayer Minted';
   if (isArcLayerPlatformAgent(agent)) return 'ArcLayer Compatible';
   return 'External ERC-8004';
