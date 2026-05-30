@@ -38,7 +38,7 @@ const AGENT_EVENT_ABIS = ERC8004_IDENTITY_REGISTRY_ABI.filter(
 
 // ── ERC-8004 Reputation Registry events ─────────────────────────────────────
 
-const REPUTATION_EVENT_NAMES = ["FeedbackGiven"] as const;
+const REPUTATION_EVENT_NAMES = ["NewFeedback"] as const;
 
 const REPUTATION_EVENT_ABIS = ERC8004_REPUTATION_REGISTRY_ABI.filter(
   (item): item is typeof item & { type: "event"; name: typeof REPUTATION_EVENT_NAMES[number] } =>
@@ -201,24 +201,25 @@ export async function fetchReputationEvents(
   );
 
   const events = collected
-    .filter((event: any) => event.eventName === "FeedbackGiven")
+    .filter((event: any) => event.eventName === "NewFeedback")
     .map((event: any) => {
       const args = (event.args ?? {}) as Record<string, unknown>;
 
       return {
-        eventName: "FeedbackGiven" as const,
+        eventName: "NewFeedback" as const,
         blockNumber: event.blockNumber as bigint,
         transactionHash: event.transactionHash as `0x${string}`,
         logIndex: (event.logIndex ?? 0) as number,
-        agentTokenId: args.agentTokenId as bigint,
-        reviewer: args.reviewer as `0x${string}`,
-        score: args.score as bigint,
-        category: Number(args.category ?? 0),
-        comment: typeof args.comment === "string" ? args.comment : "",
-        metadataURI: typeof args.metadataURI === "string" ? args.metadataURI : "",
-        proofURI: typeof args.proofURI === "string" ? args.proofURI : "",
-        context: typeof args.context === "string" ? args.context : "",
-        ref: args.ref as `0x${string}` | undefined,
+        agentTokenId: args.agentId as bigint,
+        reviewer: args.clientAddress as `0x${string}`,
+        feedbackIndex: Number(args.feedbackIndex ?? 0),
+        score: args.value as bigint,
+        category: Number(args.valueDecimals ?? 0),
+        comment: typeof args.endpoint === "string" ? args.endpoint : "",
+        metadataURI: typeof args.feedbackURI === "string" ? args.feedbackURI : "",
+        proofURI: typeof args.tag2 === "string" ? args.tag2 : "",
+        context: typeof args.tag1 === "string" ? args.tag1 : "",
+        ref: args.feedbackHash as `0x${string}` | undefined,
       } satisfies IndexedReputationEvent;
     })
     .sort((a, b) => {
