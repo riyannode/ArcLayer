@@ -139,10 +139,7 @@ function capabilityList(value: string) {
     .slice(0, 24);
 }
 
-function buildPendingManifestURI(controller: string | undefined, slug: string) {
-  if (!controller || !slug) return '';
-  return `arclayer://manifest/pending/${controller}/${encodeURIComponent(slug)}`;
-}
+
 
 function FieldShell({
   label,
@@ -399,8 +396,15 @@ export default function ERC8183EscrowRegisterPage() {
   const customCaps = useMemo(() => capabilityList(form.capabilities), [form.capabilities]);
   const controller = address || form.controllerWallet;
   const agentSlug = slugify(form.agentName) || 'erc8183-agent';
-  const metadataURI = form.metadataUri.trim() || buildPendingManifestURI(controller, agentSlug);
-  const metadataReady = Boolean(form.agentName.trim() && form.description.trim() && form.category && controller && customCaps.length > 0);
+  const metadataURI = form.metadataUri.trim();
+  const metadataReady = Boolean(
+    form.agentName.trim() &&
+      form.description.trim() &&
+      form.category &&
+      controller &&
+      customCaps.length > 0 &&
+      metadataURI,
+  );
 
   useEffect(() => {
     if (!address) return;
@@ -486,9 +490,9 @@ export default function ERC8183EscrowRegisterPage() {
       setNotice('Connect wallet first.');
       return;
     }
-    if (!metadataReady || !metadataURI) {
+    if (!metadataReady) {
       setRegisterStatus('error');
-      setNotice('Complete required fields first.');
+      setNotice('Complete required fields first. Metadata URI is required.');
       return;
     }
     if (!form.confirm) {
@@ -518,7 +522,7 @@ export default function ERC8183EscrowRegisterPage() {
             metadataURI,
             form,
             agentManifest: { ...agentManifest, agentId: mintedId },
-            nextStep: `/register/erc8183/setup?agentId=${encodeURIComponent(mintedId)}`,
+            nextStep: 'PM2 setup will be available in separate flow.',
           },
           null,
           2,
@@ -703,11 +707,11 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="Metadata URI" helper="Optional. Generated if empty.">
+                <FieldShell label="Metadata URI" required helper="Must resolve before mint.">
                   <TextInput
                     value={form.metadataUri}
                     onChange={(value) => update('metadataUri', value)}
-                    placeholder="arclayer://... or ipfs://..."
+                    placeholder="https://... or ipfs://..."
                   />
                 </FieldShell>
 
@@ -802,11 +806,9 @@ export default function ERC8183EscrowRegisterPage() {
                 }
               >
                 {notice}
-                {registerStatus === 'success' && mintedAgentId && (
-                  <div className="mt-2">
-                    <Link href={`/register/erc8183/setup?agentId=${encodeURIComponent(mintedAgentId)}`} className="underline decoration-[#F3C536]/50 underline-offset-4">
-                      Continue to ERC-8183 PM2 setup →
-                    </Link>
+                {registerStatus === 'success' && (
+                  <div className="mt-2 text-[#EAE4D8]/70">
+                    PM2 setup will be available in separate flow.
                   </div>
                 )}
               </div>
