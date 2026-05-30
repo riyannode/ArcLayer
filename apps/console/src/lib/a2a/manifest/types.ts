@@ -44,6 +44,8 @@ export type AgentManifestV1 = {
     docs?: string;
     homepage?: string;
     repo?: string;
+    x?: string;
+    twitter?: string;
   };
   x402?: {
     enabled: boolean;

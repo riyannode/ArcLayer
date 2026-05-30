@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { type Address } from 'viem';
+import { useSignMessage } from 'wagmi';
 import {
   ArrowLeft,
   Bot,
@@ -22,6 +23,7 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
 import { config } from '@/lib/wagmi';
+import type { AgentManifestV1 } from '@/lib/a2a/manifest/types';
 
 type AgentRole = 'worker' | 'evaluator' | 'autonomous-client';
 type RegisterStatus = 'idle' | 'pending' | 'success' | 'error';
@@ -389,8 +391,11 @@ export default function ERC8183EscrowRegisterPage() {
   const [registerStatus, setRegisterStatus] = useState<RegisterStatus>('idle');
   const [mintedAgentId, setMintedAgentId] = useState<string>('');
   const [txHash, setTxHash] = useState<string>('');
+  const [metadataDraftId, setMetadataDraftId] = useState('');
+  const [metadataWriteToken, setMetadataWriteToken] = useState('');
   const { isConnected, address } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
+  const { signMessageAsync } = useSignMessage();
 
   const role = ROLE_CONFIG[form.role];
   const customCaps = useMemo(() => capabilityList(form.capabilities), [form.capabilities]);
@@ -402,8 +407,7 @@ export default function ERC8183EscrowRegisterPage() {
       form.description.trim() &&
       form.category &&
       controller &&
-      customCaps.length > 0 &&
-      metadataURI,
+      customCaps.length > 0,
   );
 
   useEffect(() => {
@@ -478,10 +482,61 @@ export default function ERC8183EscrowRegisterPage() {
       form,
       metadataURI,
       agentManifest,
+      metadataDraftId,
+      metadataWriteToken,
     };
 
     localStorage.setItem('arclayer-erc8183-agent-identity-draft', JSON.stringify(payload, null, 2));
     setNotice('Draft saved. Bot setup is separate.');
+  }
+
+  async function createDraft(metadata: AgentManifestV1) {
+    const res = await fetch('/api/a2a/metadata/draft', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ controller, metadata }),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok || !json.ok) {
+      throw new Error(json.error || 'Failed to create metadata draft');
+    }
+
+    setMetadataDraftId(json.draftId);
+    setMetadataWriteToken(json.writeToken);
+    update('metadataUri', json.metadataURI);
+
+    return {
+      draftId: json.draftId as string,
+      writeToken: json.writeToken as string,
+      metadataURI: json.metadataURI as string,
+    };
+  }
+
+  async function patchDraft(input: {
+    draftId: string;
+    writeToken: string;
+    agentId: string;
+    txHash: string;
+    metadata: AgentManifestV1;
+  }) {
+    const res = await fetch(`/api/a2a/metadata/draft/${input.draftId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        writeToken: input.writeToken,
+        agentId: input.agentId,
+        txHash: input.txHash,
+        metadata: input.metadata,
+      }),
+    });
+
+    const json = await res.json();
+
+    if (!res.ok || !json.ok) {
+      throw new Error(json.error || 'Failed to update metadata draft');
+    }
   }
 
   async function submitRegister() {
@@ -492,7 +547,7 @@ export default function ERC8183EscrowRegisterPage() {
     }
     if (!metadataReady) {
       setRegisterStatus('error');
-      setNotice('Complete required fields first. Metadata URI is required.');
+      setNotice('Complete required fields first.');
       return;
     }
     if (!form.confirm) {
@@ -503,32 +558,69 @@ export default function ERC8183EscrowRegisterPage() {
 
     try {
       setRegisterStatus('pending');
+
+      // Step 1: Create or reuse metadata draft
+      let draftId = metadataDraftId;
+      let writeToken = metadataWriteToken;
+      let effectiveMetadataURI = metadataURI;
+
+      if (!draftId) {
+        setNotice('Creating metadata draft...');
+        const draft = await createDraft(agentManifest as AgentManifestV1);
+        draftId = draft.draftId;
+        writeToken = draft.writeToken;
+        effectiveMetadataURI = draft.metadataURI;
+      }
+
+      // Step 2: Mint ERC-8004 identity
       setNotice('Submitting ERC-8004 identity mint...');
-      const hash = await writeContractAsync(buildRegisterAgentConfig(metadataURI));
+      const hash = await writeContractAsync(buildRegisterAgentConfig(effectiveMetadataURI));
       setTxHash(hash);
       setNotice(`Waiting for ${hash.slice(0, 10)}...`);
+
       const receipt = await waitForTransactionReceipt(config, { hash });
       const minted = extractERC8004MintedTokenIdFromReceipt(receipt, address as Address | undefined);
       const mintedId = minted.toString();
 
+      // Step 3: Patch draft with minted agentId
+      const finalManifest = {
+        ...(agentManifest as AgentManifestV1),
+        agentId: mintedId,
+        metadataURI: effectiveMetadataURI,
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (draftId && writeToken) {
+        setNotice('Updating metadata draft...');
+        await patchDraft({
+          draftId,
+          writeToken,
+          agentId: mintedId,
+          txHash: hash,
+          metadata: finalManifest,
+        });
+      }
+
       setMintedAgentId(mintedId);
       setRegisterStatus('success');
+
       localStorage.setItem(
         'arclayer-erc8183-agent-identity-registered',
         JSON.stringify(
           {
             agentId: mintedId,
             txHash: hash,
-            metadataURI,
+            metadataURI: effectiveMetadataURI,
             form,
-            agentManifest: { ...agentManifest, agentId: mintedId },
+            agentManifest: finalManifest,
             nextStep: 'PM2 setup will be available in separate flow.',
           },
           null,
           2,
         ),
       );
-      setNotice(`Identity minted. Agent ID ${mintedId}. Continue to ERC-8183 PM2 setup.`);
+
+      setNotice(`Identity minted. Agent ID ${mintedId}. Manifest draft updated.`);
     } catch (error) {
       setRegisterStatus('error');
       setNotice(error instanceof Error ? error.message : 'Identity mint failed.');
@@ -707,11 +799,11 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="Metadata URI" required helper="Must resolve before mint.">
+                <FieldShell label="Metadata URI" helper="Auto-generated when you register. You can also provide your own.">
                   <TextInput
                     value={form.metadataUri}
                     onChange={(value) => update('metadataUri', value)}
-                    placeholder="https://... or ipfs://..."
+                    placeholder="Auto-generated (or paste your own https://... / ipfs://...)"
                   />
                 </FieldShell>
 
@@ -762,7 +854,7 @@ export default function ERC8183EscrowRegisterPage() {
 
                     <div className="space-y-3">
                       <ReviewRow label="Controller" value={shortAddress(controller)} />
-                      <ReviewRow label="Metadata URI" value={metadataURI || 'Generated after wallet'} />
+                      <ReviewRow label="Metadata URI" value={metadataURI || 'Auto-generated on register'} />
                       <ReviewRow label="Capabilities" value={customCaps.join(', ')} />
                       <ReviewRow label="Tx" value={txHash ? shortAddress(txHash) : '—'} />
                     </div>
