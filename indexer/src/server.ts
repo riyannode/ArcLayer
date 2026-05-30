@@ -90,7 +90,16 @@ export async function runSyncCycle() {
     const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
 
     const agentFromBlockValue = readMetaValue("last_synced_agent_block");
-    const agentFromBlock = agentFromBlockValue ? BigInt(agentFromBlockValue) + BigInt(1) : IDENTITY_FROM_BLOCK;
+
+    // Upgrade path: older indexer used last_synced_block for both job and agent sync.
+    // If the new agent cursor doesn't exist yet, seed from the job cursor.
+    const effectiveAgentCursor = agentFromBlockValue || fromBlockValue;
+    if (!agentFromBlockValue && fromBlockValue) {
+      console.log(`[indexer] seeded agent cursor from last_synced_block=${fromBlockValue}`);
+    }
+    const agentFromBlock = effectiveAgentCursor
+      ? BigInt(effectiveAgentCursor) + BigInt(1)
+      : IDENTITY_FROM_BLOCK;
 
     const chainLatestBlock = await getLatestBlock();
     const toBlock = calculateToBlock(fromBlock, chainLatestBlock, MAX_BLOCK_RANGE);
