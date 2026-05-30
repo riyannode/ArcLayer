@@ -111,11 +111,11 @@ export async function runSyncCycle() {
     console.log(`[indexer] sync projection: jobs=${events.length} erc8004Agents=${agentEvts.length} block=${toBlock} agentBlock=${agentToBlock}`);
     const syncResult = await syncProjectionStore(events, agentEvts);
 
-    // Advance cursors independently
-    if (toBlock >= fromBlock) {
+    // Advance cursors independently — only when feature flag is active
+    if (INDEX_ARC_REFERENCE_ERC8183 && toBlock >= fromBlock) {
       writeMetaValue("last_synced_block", toBlock.toString());
     }
-    if (agentToBlock >= agentFromBlock) {
+    if (INDEX_ARC_REFERENCE_ERC8004 && agentToBlock >= agentFromBlock) {
       writeMetaValue("last_synced_agent_block", agentToBlock.toString());
     }
 
