@@ -252,42 +252,68 @@ export default function AgentProfilePage() {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
 
-  async function loadAgents(controller: string) {
+  async function loadAgents(controller: string, signal?: AbortSignal) {
     setLoading(true);
     setNotice('');
 
     try {
-      const res = await fetch(`/api/a2a/metadata/profile?controller=${encodeURIComponent(controller)}`, {
-        cache: 'no-store',
-      });
+      const normalizedController = controller.toLowerCase();
+
+      const res = await fetch(
+        `/api/a2a/metadata/profile?controller=${encodeURIComponent(controller)}`,
+        {
+          cache: 'no-store',
+          signal,
+        },
+      );
+
       const json = (await res.json()) as ProfileResponse;
+
+      if (signal?.aborted) return;
 
       if (!res.ok || !json.ok) {
         throw new Error(json.error || 'Failed to load profile agents.');
       }
 
-      const minted = (json.agents || []).filter((agent) => agent.status === 'minted' && agent.agentId);
-      setAgents(minted);
-      if (minted.length > 0) {
-        setSelectedAgentId((current) => current || minted[0].agentId);
+      if (json.controller?.toLowerCase() !== normalizedController) {
+        return;
       }
+
+      const minted = (json.agents || []).filter((agent) => agent.status === 'minted' && agent.agentId);
+
+      setAgents(minted);
+      setSelectedAgentId((current) => {
+        if (current && minted.some((agent) => agent.agentId === current)) return current;
+        return minted[0]?.agentId || '';
+      });
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+
       setAgents([]);
+      setSelectedAgentId('');
       setNotice(error instanceof Error ? error.message : 'Failed to load profile agents.');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
     if (!ready) return;
+
     if (!isConnected || !address) {
       setAgents([]);
       setSelectedAgentId('');
+      setLoading(false);
       return;
     }
 
-    void loadAgents(address);
+    const controller = new AbortController();
+
+    void loadAgents(address, controller.signal);
+
+    return () => controller.abort();
   }, [ready, isConnected, address]);
 
   const selectedAgent = useMemo(() => {
@@ -432,8 +458,8 @@ export default function AgentProfilePage() {
               </div>
             </div>
 
-            <div className="mt-8 grid gap-4 md:grid-cols-[repeat(4,minmax(0,1fr))_140px]">
-              {agents.slice(0, 4).map((agent) => {
+            <div className="mt-8 flex gap-4 overflow-x-auto pb-2">
+              {agents.map((agent) => {
                 const active = selectedAgent?.agentId === agent.agentId;
 
                 return (
@@ -447,8 +473,8 @@ export default function AgentProfilePage() {
                     }}
                     className={
                       active
-                        ? 'flex h-[132px] items-center gap-5 rounded-lg border border-[#F3C536]/50 bg-[#F3C536]/[0.055] p-5 text-left shadow-[0_0_24px_rgba(243,197,54,0.10)]'
-                        : 'flex h-[132px] items-center gap-5 rounded-lg border border-white/10 bg-[#080D13]/76 p-5 text-left transition hover:border-[#F3C536]/30'
+                        ? 'flex h-[132px] min-w-[260px] items-center gap-5 rounded-lg border border-[#F3C536]/50 bg-[#F3C536]/[0.055] p-5 text-left shadow-[0_0_24px_rgba(243,197,54,0.10)]'
+                        : 'flex h-[132px] min-w-[260px] items-center gap-5 rounded-lg border border-white/10 bg-[#080D13]/76 p-5 text-left transition hover:border-[#F3C536]/30'
                     }
                   >
                     <AgentAvatar agent={agent} />
@@ -465,7 +491,7 @@ export default function AgentProfilePage() {
 
               <Link
                 href="/register/erc8183"
-                className="flex h-[132px] flex-col items-center justify-center rounded-lg border border-white/10 bg-[#080D13]/76 text-[#EAE4D8]/60 transition hover:border-[#F3C536]/35 hover:text-[#F3C536]"
+                className="flex h-[132px] min-w-[140px] flex-col items-center justify-center rounded-lg border border-white/10 bg-[#080D13]/76 text-[#EAE4D8]/60 transition hover:border-[#F3C536]/35 hover:text-[#F3C536]"
               >
                 <span className="flex h-12 w-12 items-center justify-center rounded-full border border-[#F3C536]/30">
                   <Plus className="h-6 w-6" />
