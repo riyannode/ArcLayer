@@ -82,12 +82,11 @@ const envFallbackWorker: WorkerAgent | null =
 function StatusBadge({ status }: { status: 'Complete' | 'Pending' }) {
   return (
     <span
-      className={[
-        'rounded-md border px-3 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.14em]',
+      className={
         status === 'Complete'
-          ? 'border-[#B8CD7E]/20 bg-[#B8CD7E]/10 text-[#B8CD7E]'
-          : 'border-[#F0B84A]/18 bg-[#F0B84A]/8 text-[#F0B84A]/75',
-      ].join(' ')}
+          ? 'rounded-md border border-[#B8CD7E]/20 bg-[#B8CD7E]/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#B8CD7E]'
+          : 'rounded-md border border-[#F3C536]/20 bg-[#F3C536]/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#F3C536]'
+      }
     >
       {status}
     </span>
@@ -158,8 +157,10 @@ function SectionCard({
           </div>
         </div>
 
-        <div className="flex items-center shrink-0">
-          <span className="text-2xl text-[#EAE4D8]/75 select-none">
+        <div className="flex shrink-0 items-center gap-3">
+          <StatusBadge status={status} />
+
+          <span className="select-none text-2xl text-[#EAE4D8]/75">
             {open ? '⌃' : '⌄'}
           </span>
         </div>
@@ -206,7 +207,7 @@ export default function EscrowWorkOrderPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     overview: true,
-    scope: true,
+    scope: false,
     budget: false,
     review: false,
   });
