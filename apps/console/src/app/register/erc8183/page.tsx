@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { type Address } from 'viem';
@@ -27,6 +27,8 @@ import type { AgentManifestV1 } from '@/lib/a2a/manifest/types';
 
 type AgentRole = 'worker' | 'evaluator' | 'autonomous-client';
 type RegisterStatus = 'idle' | 'pending' | 'success' | 'error';
+type SectionKey = 'identity' | 'profile' | 'review';
+type SectionStatus = 'Complete' | 'Pending';
 
 const CATEGORIES = [
   'Smart Contract',
@@ -229,21 +231,77 @@ function SelectInput({
 }
 
 function Section({
+  number,
   icon,
   title,
+  subtitle,
+  status,
+  open,
+  onToggle,
   children,
 }: {
-  icon: React.ReactNode;
+  number: number;
+  icon: ReactNode;
   title: string;
-  children: React.ReactNode;
+  subtitle: string;
+  status: SectionStatus;
+  open: boolean;
+  onToggle: () => void;
+  children?: ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-white/10 bg-[#07090D]/88 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
-      <div className="flex items-center gap-4 px-7 pt-6">
-        <div className="flex h-8 w-8 items-center justify-center text-[#F5F0E5]">{icon}</div>
-        <h2 className="text-[20px] font-semibold tracking-[-0.04em] text-[#F5F0E5]">{title}</h2>
-      </div>
-      <div className="px-7 pb-6 pt-5">{children}</div>
+    <section className="overflow-hidden rounded-lg border border-white/10 bg-[#07090D]/88 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-start justify-between gap-5 px-7 py-5 text-left transition hover:bg-white/[0.025]"
+      >
+        <div className="flex items-start gap-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#F3C536]/35 bg-[#05070A] text-[#F3C536]">
+            {number}
+          </div>
+
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-7 w-7 items-center justify-center text-[#F5F0E5]">
+                {icon}
+              </div>
+              <h2 className="text-[20px] font-semibold tracking-[-0.04em] text-[#F5F0E5]">
+                {title}
+              </h2>
+            </div>
+
+            <p className="mt-2 text-[13px] leading-5 text-[#EAE4D8]/50">
+              {subtitle}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-3">
+          <span
+            className={
+              status === 'Complete'
+                ? 'rounded-md border border-[#B8CD7E]/20 bg-[#B8CD7E]/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#B8CD7E]'
+                : 'rounded-md border border-[#F3C536]/20 bg-[#F3C536]/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#F3C536]'
+            }
+          >
+            {status}
+          </span>
+
+          {open ? (
+            <ChevronUp className="h-4 w-4 text-[#F3C536]" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-[#F3C536]" />
+          )}
+        </div>
+      </button>
+
+      {open ? (
+        <div className="border-t border-white/10 px-7 pb-6 pt-5">
+          {children}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -393,6 +451,11 @@ export default function ERC8183EscrowRegisterPage() {
   const [txHash, setTxHash] = useState<string>('');
   const [metadataDraftId, setMetadataDraftId] = useState('');
   const [metadataWriteToken, setMetadataWriteToken] = useState('');
+  const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
+    identity: true,
+    profile: false,
+    review: false,
+  });
   const { isConnected, address } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const { signMessageAsync } = useSignMessage();
@@ -409,6 +472,14 @@ export default function ERC8183EscrowRegisterPage() {
       controller &&
       customCaps.length > 0,
   );
+  const identityComplete = Boolean(
+    form.agentName.trim() &&
+      form.description.trim() &&
+      form.category &&
+      customCaps.length > 0,
+  );
+  const profileComplete = Boolean(controller);
+  const reviewComplete = Boolean(metadataReady && form.confirm);
 
   useEffect(() => {
     if (!address) return;
@@ -474,6 +545,10 @@ export default function ERC8183EscrowRegisterPage() {
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function toggleSection(key: SectionKey) {
+    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   }
 
   function saveDraft() {
@@ -709,7 +784,15 @@ export default function ERC8183EscrowRegisterPage() {
 
         <section className="px-5 py-8 sm:px-8 lg:px-14 xl:px-16">
           <div className="mx-auto max-w-[1180px] space-y-3">
-            <Section icon={<Bot className="h-6 w-6" />} title="Agent Identity">
+            <Section
+              number={1}
+              icon={<Bot className="h-6 w-6" />}
+              title="Agent Identity"
+              subtitle="Name, role, category, and public capabilities."
+              status={identityComplete ? 'Complete' : 'Pending'}
+              open={openSections.identity}
+              onToggle={() => toggleSection('identity')}
+            >
               <div className="grid gap-7 lg:grid-cols-2">
                 <FieldShell label="Agent Name" required helper="Public display name.">
                   <TextInput
@@ -787,7 +870,15 @@ export default function ERC8183EscrowRegisterPage() {
               </div>
             </Section>
 
-            <Section icon={<KeyRound className="h-6 w-6" />} title="Profile & Ownership">
+            <Section
+              number={2}
+              icon={<KeyRound className="h-6 w-6" />}
+              title="Profile & Ownership"
+              subtitle="Controller wallet, metadata URI, avatar, and links."
+              status={profileComplete ? 'Complete' : 'Pending'}
+              open={openSections.profile}
+              onToggle={() => toggleSection('profile')}
+            >
               <div className="grid gap-7 lg:grid-cols-2">
                 <FieldShell label="Controller Wallet" required helper="Auto-filled from wallet.">
                   <TextInput
@@ -847,7 +938,15 @@ export default function ERC8183EscrowRegisterPage() {
               </div>
             </Section>
 
-            <Section icon={<FileJson className="h-6 w-6" />} title="Review & Mint">
+            <Section
+              number={3}
+              icon={<FileJson className="h-6 w-6" />}
+              title="Review & Mint"
+              subtitle="Check metadata, confirm ownership, then mint identity."
+              status={reviewComplete ? 'Complete' : 'Pending'}
+              open={openSections.review}
+              onToggle={() => toggleSection('review')}
+            >
               <div className="grid gap-8 xl:grid-cols-[1fr_430px]">
                 <div>
                   <div className="grid gap-3 sm:grid-cols-2">

@@ -206,7 +206,7 @@ export default function EscrowWorkOrderPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     overview: true,
-    scope: true,
+    scope: false,
     budget: false,
     review: false,
   });
