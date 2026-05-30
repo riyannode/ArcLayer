@@ -14,6 +14,7 @@ import {
   KeyRound,
   Link2,
   Loader2,
+  Medal,
   Plus,
   RefreshCcw,
   ShieldCheck,
@@ -67,7 +68,38 @@ type ProfileResponse = {
   error?: string;
 };
 
-type TabKey = 'basic' | 'capabilities' | 'links' | 'metadata';
+type ReputationFeedback = {
+  score?: string;
+  reviewer?: string;
+  comment?: string;
+  metadataURI?: string;
+  proofURI?: string;
+  context?: string;
+  ref?: string;
+  blockNumber?: string;
+  txHash?: string;
+  logIndex?: number;
+  source?: string;
+};
+
+type ReputationResponse = {
+  ok: boolean;
+  agentId: string;
+  tokenId?: string;
+  score?: string;
+  feedback?: ReputationFeedback[];
+  source?: string;
+  updatedAt?: string | null;
+  error?: string;
+  reputation?: {
+    score?: string;
+    feedback?: ReputationFeedback[];
+    source?: string;
+    updatedAt?: string | null;
+  };
+};
+
+type TabKey = 'basic' | 'capabilities' | 'links' | 'reputation' | 'metadata';
 
 const EMPTY_AGENTS: ProfileAgent[] = [];
 
@@ -251,6 +283,8 @@ export default function AgentProfilePage() {
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
+  const [reputation, setReputation] = useState<ReputationResponse | null>(null);
+  const [reputationLoading, setReputationLoading] = useState(false);
 
   async function loadAgents(controller: string, signal?: AbortSignal) {
     setLoading(true);
@@ -320,11 +354,58 @@ export default function AgentProfilePage() {
     return agents.find((agent) => agent.agentId === selectedAgentId) || agents[0] || null;
   }, [agents, selectedAgentId]);
 
+  useEffect(() => {
+    if (!selectedAgent?.agentId) {
+      setReputation(null);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function loadReputation() {
+      setReputationLoading(true);
+
+      try {
+        const res = await fetch(`/api/a2a/reputation/${encodeURIComponent(selectedAgent.agentId)}`, {
+          cache: 'no-store',
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          setReputation(null);
+          return;
+        }
+
+        const json = (await res.json()) as ReputationResponse;
+
+        if (!controller.signal.aborted) {
+          setReputation(json);
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setReputation(null);
+      } finally {
+        if (!controller.signal.aborted) {
+          setReputationLoading(false);
+        }
+      }
+    }
+
+    void loadReputation();
+
+    return () => controller.abort();
+  }, [selectedAgent?.agentId]);
+
   const selectedCapabilities = selectedAgent ? getCapabilities(selectedAgent) : [];
   const selectedLinks = selectedAgent ? getLinks(selectedAgent) : { website: '', docs: '', repo: '', x: '' };
   const selectedMetadataURI = selectedAgent ? getMetadataURI(selectedAgent) : '';
   const selectedRole = selectedAgent ? roleLabel(selectedAgent.metadata?.role) : 'Worker';
   const selectedName = selectedAgent ? getAgentName(selectedAgent) : 'Agent Name';
+
+  const reputationScore = reputation?.reputation?.score ?? reputation?.score ?? '0';
+  const reputationFeedback = reputation?.reputation?.feedback ?? reputation?.feedback ?? [];
+  const latestFeedback = reputationFeedback[0] || null;
+  const latestFeedbackTx = latestFeedback?.txHash || '';
 
   return (
     <main className="min-h-screen bg-[#05070A] text-[#F5F0E5]">
@@ -521,6 +602,12 @@ export default function AgentProfilePage() {
                   label="Links"
                 />
                 <TabButton
+                  active={activeTab === 'reputation'}
+                  onClick={() => setActiveTab('reputation')}
+                  icon={<Medal className="h-5 w-5" />}
+                  label="Reputation"
+                />
+                <TabButton
                   active={activeTab === 'metadata'}
                   onClick={() => setActiveTab('metadata')}
                   icon={<FileJson className="h-5 w-5" />}
@@ -626,6 +713,74 @@ export default function AgentProfilePage() {
                           <p className="text-[14px] text-[#EAE4D8]/55">No links provided.</p>
                         )}
                       </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'reputation' && (
+                    <div>
+                      <h3 className="flex items-center gap-3 text-[18px] font-semibold">
+                        <Medal className="h-5 w-5 text-[#F3C536]" />
+                        Reputation
+                      </h3>
+
+                      <p className="mt-3 text-[14px] leading-6 text-[#EAE4D8]/55">
+                        Feedback written to the ERC-8004 Reputation Registry and indexed by ArcLayer.
+                      </p>
+
+                      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                            Score
+                          </div>
+                          <div className="mt-2 text-[#F3C536]">
+                            {reputationLoading ? 'Loading…' : reputationScore}
+                          </div>
+                        </div>
+
+                        <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                            Feedback
+                          </div>
+                          <div className="mt-2 text-[#EAE4D8]/70">
+                            {reputationLoading ? 'Loading…' : reputationFeedback.length}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 space-y-0 rounded-md border border-white/10 bg-white/[0.018] px-4">
+                        <InfoRow
+                          icon={<Medal className="h-4 w-4" />}
+                          label="Score"
+                          value={reputationLoading ? 'Loading…' : reputationScore}
+                        />
+                        <InfoRow
+                          icon={<BadgeCheck className="h-4 w-4" />}
+                          label="Feedback Count"
+                          value={reputationLoading ? 'Loading…' : String(reputationFeedback.length)}
+                        />
+                        <InfoRow
+                          icon={<ShieldCheck className="h-4 w-4" />}
+                          label="Source"
+                          value="ERC-8004"
+                        />
+                        <InfoRow
+                          icon={<KeyRound className="h-4 w-4" />}
+                          label="Latest Tx"
+                          value={latestFeedbackTx ? shortAddress(latestFeedbackTx) : '—'}
+                          copy={latestFeedbackTx}
+                        />
+                      </div>
+
+                      {latestFeedback?.comment && (
+                        <div className="mt-5 rounded-md border border-[#F3C536]/18 bg-[#F3C536]/[0.035] p-4">
+                          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#F3C536]">
+                            Latest Feedback
+                          </div>
+                          <p className="mt-2 text-[14px] leading-6 text-[#EAE4D8]/72">
+                            {latestFeedback.comment}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
 
