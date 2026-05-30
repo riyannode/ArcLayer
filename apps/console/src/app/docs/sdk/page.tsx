@@ -54,10 +54,18 @@ await client.runWorker(
   },
   {
     id: 'reputation',
-    title: 'Experimental Reputation',
-    description: 'Experimental reputation query. Not part of official Arc spec.',
-    code: `const rep = await client.getReputation('target-agent-id');
-console.log(rep.reputationScore); // on-chain int128 as string`,
+    title: 'Reputation (ERC-8004)',
+    description: 'Agent reputation via ERC-8004 Reputation Registry. giveFeedback writes on-chain NewFeedback events. Indexer aggregates per-agent scores. Query via /api/a2a/reputation/:tokenId.',
+    code: `// Read reputation (public)
+const rep = await client.getReputation('4473');
+console.log(rep.reputation.score);       // "10"
+console.log(rep.reputation.feedback);    // [{score, reviewer, comment, ...}]
+
+// Write feedback (admin-gated, not public user flow)
+// POST /api/a2a/reputation/feedback
+// Requires x-arclayer-admin-key header
+// Calls giveFeedback on-chain → emits NewFeedback event
+// Indexer polls, decodes, aggregates per agent`,
   },
   {
     id: 'webhooks',
