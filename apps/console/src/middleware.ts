@@ -11,20 +11,25 @@ const CANONICAL_ORIGIN = 'https://arclayers.xyz';
 const MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
 
 const BOT_UA = [
-  'Baiduspider',
-  'GPTBot',
-  'OAI-SearchBot',
-  'ChatGPT-User',
+  'baiduspider',
+  'googlebot',
+  'gptbot',
+  'oai-searchbot',
+  'chatgpt-user',
   'bingbot',
-  'YandexBot',
-  'AhrefsBot',
-  'SemrushBot',
-  'DotBot',
-  'MJ12bot',
+  'yandexbot',
+  'ahrefsbot',
+  'semrushbot',
+  'dotbot',
+  'mj12bot',
+  'bytespider',
+  'claudebot',
+  'perplexitybot',
 ];
 
 function isBot(ua: string): boolean {
-  return BOT_UA.some((bot) => ua.includes(bot));
+  const normalized = ua.toLowerCase();
+  return BOT_UA.some((bot) => normalized.includes(bot));
 }
 
 function isMaintenanceAllowedPath(pathname: string): boolean {
