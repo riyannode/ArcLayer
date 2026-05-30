@@ -559,17 +559,23 @@ export default function ERC8183EscrowRegisterPage() {
     try {
       setRegisterStatus('pending');
 
-      // Step 1: Create or reuse metadata draft
+      // Step 1: Create draft only if no user-provided metadataURI
       let draftId = metadataDraftId;
       let writeToken = metadataWriteToken;
       let effectiveMetadataURI = metadataURI;
 
-      if (!draftId) {
+      if (!effectiveMetadataURI && !draftId) {
         setNotice('Creating metadata draft...');
         const draft = await createDraft(agentManifest as AgentManifestV1);
         draftId = draft.draftId;
         writeToken = draft.writeToken;
         effectiveMetadataURI = draft.metadataURI;
+      }
+
+      if (!effectiveMetadataURI) {
+        setRegisterStatus('error');
+        setNotice('Metadata URI is required.');
+        return;
       }
 
       // Step 2: Mint ERC-8004 identity
