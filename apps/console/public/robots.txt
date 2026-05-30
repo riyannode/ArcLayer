@@ -1,0 +1,23 @@
+User-agent: *
+Disallow: /api/
+Disallow: /_next/data/
+
+User-agent: Baiduspider
+Disallow: /
+
+User-agent: GPTBot
+Disallow: /api/
+Allow: /
+
+User-agent: OAI-SearchBot
+Disallow: /api/
+Allow: /
+
+User-agent: ChatGPT-User
+Disallow: /api/
+
+User-agent: Googlebot
+Disallow: /api/
+Allow: /
+
+Sitemap: https://arclayers.xyz/sitemap.xml

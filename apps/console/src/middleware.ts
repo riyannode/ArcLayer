@@ -10,6 +10,23 @@ const ALLOWED_ORIGINS = new Set([
 const CANONICAL_ORIGIN = 'https://arclayers.xyz';
 const MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
 
+const BOT_UA = [
+  'Baiduspider',
+  'GPTBot',
+  'OAI-SearchBot',
+  'ChatGPT-User',
+  'bingbot',
+  'YandexBot',
+  'AhrefsBot',
+  'SemrushBot',
+  'DotBot',
+  'MJ12bot',
+];
+
+function isBot(ua: string): boolean {
+  return BOT_UA.some((bot) => ua.includes(bot));
+}
+
 function isMaintenanceAllowedPath(pathname: string): boolean {
   return (
     pathname === '/maintenance' ||
@@ -42,7 +59,13 @@ function corsHeaders(origin: string | null): Record<string, string> {
 
 export function middleware(req: NextRequest) {
   const origin = req.headers.get('origin');
+  const ua = req.headers.get('user-agent') || '';
   const { pathname } = req.nextUrl;
+
+  // Block bots from API routes
+  if (pathname.startsWith('/api/') && isBot(ua)) {
+    return new NextResponse('Blocked', { status: 403 });
+  }
 
   if (req.method === 'OPTIONS') {
     if (origin && !ALLOWED_ORIGINS.has(origin)) {
