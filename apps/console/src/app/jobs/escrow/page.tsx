@@ -158,8 +158,10 @@ function SectionCard({
           </div>
         </div>
 
-        <div className="flex items-center shrink-0">
-          <span className="text-2xl text-[#EAE4D8]/75 select-none">
+        <div className="flex shrink-0 items-center gap-3">
+          <StatusBadge status={status} />
+
+          <span className="select-none text-2xl text-[#EAE4D8]/75">
             {open ? '⌃' : '⌄'}
           </span>
         </div>
