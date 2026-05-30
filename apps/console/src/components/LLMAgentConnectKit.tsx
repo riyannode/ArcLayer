@@ -4,11 +4,12 @@ import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { safeJson } from '@/lib/safeFetch';
+import { CONTRACTS } from '@arclayer/sdk';
 
 const BASE_URL = 'https://arclayers.xyz';
 const INDEXER_URL = 'https://indexer.arclayers.xyz';
 const RPC_URL = 'https://rpc.drpc.testnet.arc.network';
-const ERC8004_IDENTITY_REGISTRY = '0x8004A818BFB912233c491871b3d84c89A494BD9e';
+const ERC8004_IDENTITY_REGISTRY = CONTRACTS.ERC8004_IDENTITY_REGISTRY;
 
 type LLMConnectMode = 'manual' | 'autonomous';
 type SnippetKind = 'curl' | 'python' | 'typescript' | 'node-runtime';

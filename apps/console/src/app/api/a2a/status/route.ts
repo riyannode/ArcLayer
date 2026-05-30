@@ -5,6 +5,7 @@
  */
 import { NextResponse } from 'next/server';
 import { createPublicClient, http, type Hex } from 'viem';
+import { CONTRACTS as SDK_CONTRACTS } from '@arclayer/sdk';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -15,14 +16,10 @@ let statusCache: { expiresAt: number; payload: unknown } | null = null;
 const RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
 const CHAIN_ID = 5042002;
 
-// A2A contract addresses (Arc Testnet)
-const CONTRACTS = {
-  agentRegistry: '0xB263336055dD65FF501e36CA39941760D943703C' as Hex,
-  reputationRegistry: '0x9c97CAE866397d94e295632B3BFCF342ea20f1Cc' as Hex,
-  receiptRegistry: '0x5F591465D0C2fe20A28D2539dFBB2B00716397B7' as Hex,
-  mirrorRegistry: '0xec5910926925941c451C97A8bd2c4Ba7bD173195' as Hex,
-  usdc: '0x3600000000000000000000000000000000000000' as Hex,
-};
+// Mirror registry — not in SDK, legacy contract for totalMirrors() reads
+const MIRROR_REGISTRY = '0xec5910926925941c451C97A8bd2c4Ba7bD173195' as Hex;
+
+// Explicit lowercase keys for API consumers (SDK uses UPPERCASE internally)
 
 const MIRROR_ABI = [
   {
@@ -44,14 +41,21 @@ export async function GET() {
     const client = createPublicClient({ transport: http(RPC) });
 
     const totalMirrors = await client.readContract({
-      address: CONTRACTS.mirrorRegistry,
+      address: MIRROR_REGISTRY,
       abi: MIRROR_ABI,
       functionName: 'totalMirrors',
     }).catch(() => null);
 
     const payload = {
       chainId: CHAIN_ID,
-      contracts: CONTRACTS,
+      contracts: {
+        identityRegistry: SDK_CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+        reputationRegistry: SDK_CONTRACTS.ERC8004_REPUTATION_REGISTRY,
+        validationRegistry: SDK_CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+        agenticCommerce: SDK_CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        usdc: SDK_CONTRACTS.USDC,
+        mirrorRegistry: MIRROR_REGISTRY,
+      },
       markets: {
         totalMirrors: totalMirrors === null ? null : Number(totalMirrors),
       },

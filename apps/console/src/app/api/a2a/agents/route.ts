@@ -1,39 +1,21 @@
 import { NextResponse } from 'next/server';
 import { indexerUrl } from '@/lib/indexer';
-import { createPublicClient, http, parseAbiItem, type Hex, type Log } from 'viem';
+import type { Hex } from 'viem';
 import { isHiddenAgent } from '@/lib/a2a/hidden-agents';
 import { resolveManifestMetadata } from '@/lib/a2a/manifest';
 import { listStoredManifests } from '@/lib/a2a/roster';
 import { listRegisteredExternalAgents } from '@/lib/a2a/external-registry';
+import { CONTRACTS } from '@arclayer/sdk';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 const AGENTS_CACHE_CONTROL = 'public, s-maxage=30, stale-while-revalidate=120';
 
-const RPC = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
-const AGENT_REGISTRY = '0xB263336055dD65FF501e36CA39941760D943703C' as Hex;
+// ERC-8004 Identity Registry — used for response metadata only (no legacy chain scan)
+const AGENT_REGISTRY = CONTRACTS.ERC8004_IDENTITY_REGISTRY as Hex;
 
-// A2A deploy block on Arc testnet (5042002): 42_548_683.
-// Default to that so we don't scan from genesis (blocked by free-tier RPC range cap).
-const DEFAULT_FROM_BLOCK = BigInt(42548683);
-const FROM_BLOCK = BigInt(process.env.AGENT_REGISTRY_FROM_BLOCK || DEFAULT_FROM_BLOCK.toString());
-
-// drpc.testnet.arc.network free tier rejects ranges > 10_000 blocks.
-const MAX_BLOCK_RANGE = BigInt(process.env.AGENT_REGISTRY_MAX_RANGE || '9000');
 const MAX_METADATA_BYTES = 32_000;
 const METADATA_CONCURRENCY = 6;
-
-const AGENT_REGISTERED = parseAbiItem(
-  'event AgentRegistered(bytes32 indexed agentId, address indexed owner, uint8 indexed role, string endpoint, string metadataURI)'
-);
-
-const ROLE_NAMES: Record<number, string> = {
-  0: 'MARKET_DATA',
-  1: 'TRADER',
-  2: 'EXECUTOR',
-  3: 'ORACLE',
-  4: 'AGGREGATOR',
-};
 
 type AgentMetadata = {
   name?: string;
@@ -140,31 +122,6 @@ async function fetchMetadata(uri: string, agentId?: string): Promise<AgentMetada
   }
 }
 
-type RegisteredLog = Log<bigint, number, false, typeof AGENT_REGISTERED, true>;
-
-async function fetchLogsChunked(
-  client: ReturnType<typeof createPublicClient>,
-  fromBlock: bigint,
-  toBlock: bigint,
-): Promise<{ logs: RegisteredLog[]; chunks: number }> {
-  const logs: RegisteredLog[] = [];
-  let chunks = 0;
-  let cursor = fromBlock;
-  while (cursor <= toBlock) {
-    const end = cursor + MAX_BLOCK_RANGE - BigInt(1) > toBlock ? toBlock : cursor + MAX_BLOCK_RANGE - BigInt(1);
-    const chunkLogs = await client.getLogs({
-      address: AGENT_REGISTRY,
-      event: AGENT_REGISTERED,
-      fromBlock: cursor,
-      toBlock: end,
-    });
-    logs.push(...(chunkLogs as RegisteredLog[]));
-    chunks += 1;
-    cursor = end + BigInt(1);
-  }
-  return { logs, chunks };
-}
-
 async function fetchIndexerAgents(origin: string): Promise<IndexerAgent[]> {
   try {
     void origin;
@@ -230,88 +187,39 @@ export async function GET(request: Request) {
     }, { headers: { 'Cache-Control': AGENTS_CACHE_CONTROL } });
   }
 
-  const scanChain = source === 'chain';
-  const client = scanChain ? createPublicClient({ transport: http(RPC) }) : null;
-
   try {
     const storedManifests = await listStoredManifests();
     const manifestById = new Map(storedManifests.map((item) => [String(item.agentId).toLowerCase(), item]));
-    const allowedAgentIds = new Set(manifestById.keys());
 
-    const latestById = new Map<string, RegisteredLog>();
-    let visibleLogs: RegisteredLog[] = [];
-    let latestBlock: bigint | null = null;
-    let fromBlock: bigint | null = null;
-    let chunks = 0;
-    if (scanChain && client) {
-      latestBlock = await client.getBlockNumber();
-      fromBlock = FROM_BLOCK > latestBlock ? latestBlock : FROM_BLOCK;
-      const chainScan = await fetchLogsChunked(client, fromBlock, latestBlock);
-      chunks = chainScan.chunks;
-      for (const log of chainScan.logs) {
-        const agentId = log.args.agentId?.toString();
-        if (agentId) latestById.set(agentId, log);
-      }
-      visibleLogs = Array.from(latestById.values()).filter((log) => {
-        const agentId = log.args.agentId?.toString() || '';
-        return agentId && !isHiddenAgent(agentId) && allowedAgentIds.has(agentId.toLowerCase());
-      });
-    }
-
-    const agents = await mapWithConcurrency(visibleLogs, METADATA_CONCURRENCY, async (log) => {
-      const metadataURI = log.args.metadataURI || '';
-      const agentId = log.args.agentId?.toString() || '';
-      const roleNum = typeof log.args.role === 'number' ? log.args.role : Number(log.args.role ?? 0);
-      const roleName = ROLE_NAMES[roleNum] ?? `ROLE_${roleNum}`;
-      const metadata = await fetchMetadata(metadataURI, agentId);
-      // A2A registry only has autonomous role types; if metadata fails to resolve,
-      // fall back to on-chain role as the source of truth.
-      const enrichedMetadata = metadata ?? {
-        name: undefined,
-        role: roleName,
-        autonomous: true,
-      };
-      return {
-        agentId,
-        owner: log.args.owner || '',
-        controller: log.args.owner || '',
-        role: roleName,
-        roleId: roleNum,
-        endpoint: log.args.endpoint || '',
-        metadataURI,
-        registeredAtBlock: log.blockNumber?.toString(),
-        metadata: enrichedMetadata,
-      };
-    });
-
+    // Source 1: Indexer agents (ERC-8004 on-chain data)
     const origin = new URL(request.url).origin;
-    const allowlistedIndexerAgents = (await fetchIndexerAgents(origin)).filter((agent) =>
-      allowedAgentIds.has(String(agent.agentId).toLowerCase())
+    const indexerAgents = await mapWithConcurrency(
+      await fetchIndexerAgents(origin),
+      METADATA_CONCURRENCY,
+      async (agent) => {
+        const metadata = await fetchMetadata(agent.metadataURI || '', agent.agentId);
+        return {
+          agentId: agent.agentId,
+          owner: agent.controller || '',
+          controller: agent.controller || '',
+          role: metadata?.role || 'REGISTERED_AGENT',
+          roleId: null,
+          endpoint: metadata?.endpoint || '',
+          metadataURI: agent.metadataURI || '',
+          registeredAtBlock: agent.registeredAt,
+          skillHash: agent.skillHash,
+          reputationScore: agent.reputationScore,
+          score: agent.score,
+          jobs: agent.jobs || [],
+          proofTokenIds: agent.proofTokenIds || [],
+          metadata: metadata ?? { autonomous: true },
+        };
+      },
     );
 
-    const indexerAgents = await mapWithConcurrency(allowlistedIndexerAgents, METADATA_CONCURRENCY, async (agent) => {
-      const metadata = await fetchMetadata(agent.metadataURI || '', agent.agentId);
-      return {
-        agentId: agent.agentId,
-        owner: agent.controller || '',
-        controller: agent.controller || '',
-        role: metadata?.role || 'REGISTERED_AGENT',
-        roleId: null,
-        endpoint: metadata?.endpoint || '',
-        metadataURI: agent.metadataURI || '',
-        registeredAtBlock: agent.registeredAt,
-        skillHash: agent.skillHash,
-        reputationScore: agent.reputationScore,
-        score: agent.score,
-        jobs: agent.jobs || [],
-        proofTokenIds: agent.proofTokenIds || [],
-        metadata: metadata ?? { autonomous: true },
-      };
-    });
-
+    // Source 2: Stored manifests (web_manifest registrations)
     const merged = new Map<string, any>();
     for (const agent of indexerAgents) merged.set(String(agent.agentId).toLowerCase(), agent);
-    for (const agent of agents) merged.set(String(agent.agentId).toLowerCase(), agent);
 
     for (const [normalizedId, stored] of manifestById.entries()) {
       if (merged.has(normalizedId)) continue;
@@ -344,23 +252,20 @@ export async function GET(request: Request) {
       });
     }
 
-    const autonomousAgents = Array.from(merged.values());
+    // Filter hidden agents
+    const autonomousAgents = Array.from(merged.values()).filter(
+      (agent) => !isHiddenAgent(agent.agentId),
+    );
 
     return NextResponse.json({
       registry: AGENT_REGISTRY,
       agents: autonomousAgents,
       totalRegistered: autonomousAgents.length,
-      totalHidden: latestById.size - visibleLogs.length,
+      totalHidden: merged.size - autonomousAgents.length,
       totalVisible: autonomousAgents.length,
       totalAutonomous: autonomousAgents.length,
       categoryFilter,
-      scan: {
-        fromBlock: fromBlock ? fromBlock.toString() : null,
-        toBlock: latestBlock ? latestBlock.toString() : null,
-        chunks,
-        maxRange: MAX_BLOCK_RANGE.toString(),
-        source,
-      },
+      scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
       timestamp: new Date().toISOString(),
     }, {
       headers: { 'Cache-Control': AGENTS_CACHE_CONTROL },
@@ -373,13 +278,7 @@ export async function GET(request: Request) {
         agents: [],
         totalRegistered: 0,
         totalAutonomous: 0,
-        scan: {
-          fromBlock: FROM_BLOCK.toString(),
-          toBlock: null,
-          chunks: 0,
-          maxRange: MAX_BLOCK_RANGE.toString(),
-          source,
-        },
+        scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
         error: message,
       },
       { status: 200, headers: { 'Cache-Control': AGENTS_CACHE_CONTROL } },

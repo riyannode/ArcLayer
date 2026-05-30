@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { CopyButton } from '@/components/CopyButton';
+import { CONTRACTS } from '@arclayer/sdk';
 
 /* ─── Constants ─── */
 
@@ -63,13 +64,15 @@ const networkInfo = [
   { label: 'Chain ID', value: '5042002', copy: true },
   { label: 'RPC', value: 'https://rpc.drpc.testnet.arc.network', copy: true },
   { label: 'Explorer', value: 'https://testnet.arcscan.app', copy: true },
-  { label: 'USDC (6 decimals)', value: '0x3600000000000000000000000000000000000000', copy: true },
+  { label: 'USDC (6 decimals)', value: CONTRACTS.USDC, copy: true },
 ];
 
 const contracts = [
-  { label: 'ERC-8004 IdentityRegistry', address: '0x8004A818BFB912233c491871b3d84c89A494BD9e' },
-  { label: 'ERC-8183 AgenticCommerce', address: '0x0747EEf0706327138c69792bF28Cd525089e4583' },
-  { label: 'USDC', address: '0x3600000000000000000000000000000000000000' },
+  { label: 'ERC-8004 IdentityRegistry', address: CONTRACTS.ERC8004_IDENTITY_REGISTRY },
+  { label: 'ERC-8004 ReputationRegistry', address: CONTRACTS.ERC8004_REPUTATION_REGISTRY },
+  { label: 'ERC-8004 ValidationRegistry', address: CONTRACTS.ERC8004_VALIDATION_REGISTRY },
+  { label: 'ERC-8183 AgenticCommerce', address: CONTRACTS.ERC8183_AGENTIC_COMMERCE },
+  { label: 'USDC', address: CONTRACTS.USDC },
 ];
 
 const integrationOrder = [
@@ -145,12 +148,14 @@ ArcLayer follows the current Arc reference (ERC-8004 + ERC-8183 + x402) on Arc T
 - REST indexer APIs for fast reads
 
 Network: Arc Testnet, chainId 5042002, RPC https://rpc.drpc.testnet.arc.network,
-explorer https://testnet.arcscan.app, USDC 0x3600000000000000000000000000000000000000 (6 decimals).
+explorer https://testnet.arcscan.app, USDC ${CONTRACTS.USDC} (6 decimals).
 
 Core contracts (import from @arclayer/sdk):
-- ERC-8004 IdentityRegistry  0x8004A818BFB912233c491871b3d84c89A494BD9e
-- ERC-8183 AgenticCommerce   0x0747EEf0706327138c69792bF28Cd525089e4583
-- USDC                       0x3600000000000000000000000000000000000000
+- ERC-8004 IdentityRegistry  ${CONTRACTS.ERC8004_IDENTITY_REGISTRY}
+- ERC-8004 ReputationRegistry ${CONTRACTS.ERC8004_REPUTATION_REGISTRY}
+- ERC-8004 ValidationRegistry ${CONTRACTS.ERC8004_VALIDATION_REGISTRY}
+- ERC-8183 AgenticCommerce   ${CONTRACTS.ERC8183_AGENTIC_COMMERCE}
+- USDC                       ${CONTRACTS.USDC}
 
 Integration goals:
 1. Detect existing wallet stack (wagmi, viem, ethers, Privy, RainbowKit, etc.).
