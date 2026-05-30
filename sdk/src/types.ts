@@ -48,6 +48,22 @@ export type IndexedJobEvent = {
   deliverableURI?: string;
 };
 
+export type IndexedReputationEvent = {
+  eventName: "FeedbackGiven";
+  blockNumber: bigint;
+  transactionHash: `0x${string}`;
+  logIndex: number;
+  agentTokenId: bigint;
+  reviewer: Address;
+  score: bigint;
+  category: number;
+  comment?: string;
+  metadataURI?: string;
+  proofURI?: string;
+  context?: string;
+  ref?: `0x${string}`;
+};
+
 // ── Legacy tuples (deprecated, kept as type aliases for migration) ──────────
 
 /** @deprecated Human-to-Agent Vault/custom module tuple, not active in Arc/Circle mode. */
