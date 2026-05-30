@@ -90,6 +90,7 @@ type ReputationResponse = {
   feedback?: ReputationFeedback[];
   source?: string;
   updatedAt?: string | null;
+  error?: string;
   reputation?: {
     score?: string;
     feedback?: ReputationFeedback[];
