@@ -1,0 +1,681 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import {
+  BadgeCheck,
+  Bot,
+  CheckCircle2,
+  Clipboard,
+  Code2,
+  ExternalLink,
+  FileJson,
+  Globe,
+  KeyRound,
+  Link2,
+  Loader2,
+  Plus,
+  RefreshCcw,
+  ShieldCheck,
+  UserRound,
+  Wallet,
+  X,
+} from 'lucide-react';
+import { useArcWallet } from '@/hooks/useArcWallet';
+
+type AgentMetadata = {
+  schema?: string;
+  version?: number;
+  agentId?: string;
+  name?: string;
+  role?: string;
+  description?: string;
+  controller?: string;
+  mode?: string;
+  avatar?: string;
+  capability?: string[];
+  capabilities?: string[];
+  categories?: string[];
+  tags?: string[];
+  metadataURI?: string;
+  txHash?: string;
+  updatedAt?: string;
+  links?: {
+    homepage?: string;
+    website?: string;
+    docs?: string;
+    repo?: string;
+    x?: string;
+    twitter?: string;
+  };
+};
+
+type ProfileAgent = {
+  agentId: string;
+  controller: string;
+  status: 'minted' | string;
+  txHash?: string;
+  metadata: AgentMetadata;
+  updatedAt?: string;
+};
+
+type ProfileResponse = {
+  ok: boolean;
+  controller: string;
+  agents: ProfileAgent[];
+  total: number;
+  error?: string;
+};
+
+type TabKey = 'basic' | 'capabilities' | 'links' | 'metadata';
+
+const EMPTY_AGENTS: ProfileAgent[] = [];
+
+function shortAddress(value?: string) {
+  if (!value) return '—';
+  if (value.length < 14) return value;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+function roleLabel(value?: string) {
+  if (!value) return 'Worker';
+  if (value === 'provider') return 'Worker';
+  if (value === 'autonomous-client') return 'Client';
+  return value
+    .split(/[-_ ]+/)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function uniq(values: Array<string | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .filter(Boolean)
+        .map((value) => String(value).trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function getAgentName(agent: ProfileAgent) {
+  return agent.metadata?.name || `Agent ${agent.agentId}`;
+}
+
+function getCapabilities(agent: ProfileAgent) {
+  return uniq([
+    ...(agent.metadata?.capabilities || []),
+    ...(agent.metadata?.capability || []),
+    ...(agent.metadata?.tags || []),
+  ]).slice(0, 12);
+}
+
+function getMetadataURI(agent: ProfileAgent) {
+  return agent.metadata?.metadataURI || '';
+}
+
+function getLinks(agent: ProfileAgent) {
+  const links = agent.metadata?.links || {};
+  return {
+    website: links.homepage || links.website || '',
+    docs: links.docs || '',
+    repo: links.repo || '',
+    x: links.x || links.twitter || '',
+  };
+}
+
+async function copyToClipboard(value?: string) {
+  if (!value) return;
+  await navigator.clipboard.writeText(value);
+}
+
+function ProfileIcon({ className = '' }: { className?: string }) {
+  return (
+    <div
+      className={`relative flex items-center justify-center overflow-hidden rounded-full border border-[#F3C536]/35 bg-[#0B0F14] shadow-[0_0_40px_rgba(243,197,54,0.12)] ${className}`}
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(243,197,54,0.18),transparent_42%)]" />
+      <Bot className="relative h-12 w-12 text-[#F3C536]" />
+      <div className="absolute bottom-5 h-1 w-8 rounded-full bg-[#F3C536]/80 shadow-[0_0_16px_rgba(243,197,54,0.7)]" />
+    </div>
+  );
+}
+
+function AgentAvatar({ agent, large = false }: { agent?: ProfileAgent; large?: boolean }) {
+  const avatar = agent?.metadata?.avatar;
+
+  if (avatar) {
+    return (
+      <div
+        className={
+          large
+            ? 'h-[170px] w-[170px] overflow-hidden rounded-full border border-[#F3C536]/30 bg-black/30'
+            : 'h-14 w-14 overflow-hidden rounded-full border border-[#F3C536]/25 bg-black/30'
+        }
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={avatar} alt="" className="h-full w-full object-cover" />
+      </div>
+    );
+  }
+
+  return <ProfileIcon className={large ? 'h-[170px] w-[170px]' : 'h-14 w-14'} />;
+}
+
+function InfoRow({
+  icon,
+  label,
+  value,
+  copy,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: React.ReactNode;
+  copy?: string;
+}) {
+  return (
+    <div className="grid grid-cols-[34px_130px_1fr_28px] items-center gap-3 border-b border-white/[0.06] py-4 last:border-b-0">
+      <div className="flex h-8 w-8 items-center justify-center rounded-full border border-[#F3C536]/14 bg-[#F3C536]/8 text-[#F3C536]">
+        {icon}
+      </div>
+      <div className="text-[14px] text-[#F5F0E5]">{label}</div>
+      <div className="min-w-0 truncate text-[14px] text-[#EAE4D8]/70">{value || '—'}</div>
+      {copy ? (
+        <button
+          type="button"
+          onClick={() => copyToClipboard(copy)}
+          className="flex h-7 w-7 items-center justify-center rounded border border-white/10 text-[#EAE4D8]/45 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]"
+          aria-label={`Copy ${label}`}
+        >
+          <Clipboard className="h-3.5 w-3.5" />
+        </button>
+      ) : (
+        <span />
+      )}
+    </div>
+  );
+}
+
+function TabButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        active
+          ? 'relative flex items-center gap-3 px-8 py-5 text-[#F3C536]'
+          : 'flex items-center gap-3 px-8 py-5 text-[#EAE4D8]/55 transition hover:text-[#F3C536]'
+      }
+    >
+      {icon}
+      <span className="text-[15px] font-medium">{label}</span>
+      {active && (
+        <span className="absolute bottom-0 left-6 right-6 h-[2px] rounded-full bg-[#F3C536] shadow-[0_0_16px_rgba(243,197,54,0.55)]" />
+      )}
+    </button>
+  );
+}
+
+function LinkButton({ href, label, icon }: { href?: string; label: string; icon: React.ReactNode }) {
+  if (!href) return null;
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex h-12 items-center gap-3 rounded-md border border-white/10 bg-white/[0.025] px-5 text-[14px] text-[#EAE4D8]/70 transition hover:border-[#F3C536]/35 hover:text-[#F3C536]"
+    >
+      {icon}
+      {label}
+      <ExternalLink className="h-3.5 w-3.5 opacity-70" />
+    </a>
+  );
+}
+
+export default function AgentProfilePage() {
+  const { isConnected, address, ready } = useArcWallet();
+  const [agents, setAgents] = useState<ProfileAgent[]>(EMPTY_AGENTS);
+  const [selectedAgentId, setSelectedAgentId] = useState('');
+  const [activeTab, setActiveTab] = useState<TabKey>('basic');
+  const [metadataOpen, setMetadataOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  async function loadAgents(controller: string, signal?: AbortSignal) {
+    setLoading(true);
+    setNotice('');
+
+    try {
+      const normalizedController = controller.toLowerCase();
+
+      const res = await fetch(
+        `/api/a2a/metadata/profile?controller=${encodeURIComponent(controller)}`,
+        {
+          cache: 'no-store',
+          signal,
+        },
+      );
+
+      const json = (await res.json()) as ProfileResponse;
+
+      if (signal?.aborted) return;
+
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || 'Failed to load profile agents.');
+      }
+
+      if (json.controller?.toLowerCase() !== normalizedController) {
+        return;
+      }
+
+      const minted = (json.agents || []).filter((agent) => agent.status === 'minted' && agent.agentId);
+
+      setAgents(minted);
+      setSelectedAgentId((current) => {
+        if (current && minted.some((agent) => agent.agentId === current)) return current;
+        return minted[0]?.agentId || '';
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+
+      setAgents([]);
+      setSelectedAgentId('');
+      setNotice(error instanceof Error ? error.message : 'Failed to load profile agents.');
+    } finally {
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!ready) return;
+
+    if (!isConnected || !address) {
+      setAgents([]);
+      setSelectedAgentId('');
+      setLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    void loadAgents(address, controller.signal);
+
+    return () => controller.abort();
+  }, [ready, isConnected, address]);
+
+  const selectedAgent = useMemo(() => {
+    return agents.find((agent) => agent.agentId === selectedAgentId) || agents[0] || null;
+  }, [agents, selectedAgentId]);
+
+  const selectedCapabilities = selectedAgent ? getCapabilities(selectedAgent) : [];
+  const selectedLinks = selectedAgent ? getLinks(selectedAgent) : { website: '', docs: '', repo: '', x: '' };
+  const selectedMetadataURI = selectedAgent ? getMetadataURI(selectedAgent) : '';
+  const selectedRole = selectedAgent ? roleLabel(selectedAgent.metadata?.role) : 'Worker';
+  const selectedName = selectedAgent ? getAgentName(selectedAgent) : 'Agent Name';
+
+  return (
+    <main className="min-h-screen bg-[#05070A] text-[#F5F0E5]">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(243,197,54,0.06),transparent_28%),radial-gradient(circle_at_80%_8%,rgba(255,255,255,0.035),transparent_22%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent_46%)]" />
+      <div className="pointer-events-none fixed inset-0 opacity-[0.14] [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:44px_44px]" />
+
+      <section className="relative mx-auto max-w-[1440px] px-6 pb-16 pt-12 sm:px-10 lg:px-16">
+        <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
+          <div>
+            <h1 className="text-[46px] font-semibold tracking-[-0.055em] text-[#F5F0E5] sm:text-[54px]">
+              Agent Profile
+            </h1>
+            <p className="mt-4 text-[16px] text-[#EAE4D8]/60">
+              View and manage your registered agents.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-5">
+            <Link
+              href="/register/erc8183"
+              className="inline-flex h-14 items-center justify-center gap-4 rounded-md border border-[#F3C536]/45 bg-transparent px-8 text-[15px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10"
+            >
+              <Plus className="h-5 w-5" />
+              Register New Agent
+            </Link>
+
+            <div className="flex items-center gap-5 rounded-md border border-white/10 bg-[#080D13]/86 px-6 py-5">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[#F3C536]/20 bg-[#F3C536]/8 text-[#F3C536]">
+                <Wallet className="h-6 w-6" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[14px] text-[#EAE4D8]/55">Connected Wallet</div>
+                <div className="mt-1 truncate text-[15px] tracking-[0.03em] text-[#F5F0E5]">
+                  {isConnected ? shortAddress(address) : 'Not connected'}
+                </div>
+              </div>
+              {address && (
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(address)}
+                  className="text-[#EAE4D8]/45 transition hover:text-[#F3C536]"
+                  aria-label="Copy wallet address"
+                >
+                  <Clipboard className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {!ready || loading ? (
+          <div className="mt-10 flex min-h-[420px] items-center justify-center rounded-xl border border-white/10 bg-[#080D13]/70">
+            <div className="flex items-center gap-3 text-[#EAE4D8]/60">
+              <Loader2 className="h-5 w-5 animate-spin text-[#F3C536]" />
+              Loading agent profile...
+            </div>
+          </div>
+        ) : !isConnected ? (
+          <div className="mt-10 rounded-xl border border-[#F3C536]/24 bg-[#080D13]/78 p-10">
+            <div className="max-w-xl">
+              <div className="font-mono text-[12px] uppercase tracking-[0.18em] text-[#F3C536]">
+                Wallet Required
+              </div>
+              <h2 className="mt-4 text-[30px] font-semibold tracking-[-0.04em]">Connect wallet to view Profile</h2>
+              <p className="mt-3 text-[15px] leading-7 text-[#EAE4D8]/58">
+                Profile uses your connected wallet to find minted ERC-8183 agent identities.
+              </p>
+            </div>
+          </div>
+        ) : agents.length === 0 ? (
+          <div className="mt-10 rounded-xl border border-[#F3C536]/24 bg-[#080D13]/78 p-10">
+            <div className="max-w-xl">
+              <div className="font-mono text-[12px] uppercase tracking-[0.18em] text-[#F3C536]">
+                No Agents Found
+              </div>
+              <h2 className="mt-4 text-[30px] font-semibold tracking-[-0.04em]">Register your first ERC-8183 agent</h2>
+              <p className="mt-3 text-[15px] leading-7 text-[#EAE4D8]/58">
+                Minted agent identities owned by this wallet will appear here.
+              </p>
+              <Link
+                href="/register/erc8183"
+                className="mt-7 inline-flex h-12 items-center justify-center gap-3 rounded-md bg-[#F3C536] px-6 text-[14px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
+              >
+                <Plus className="h-4 w-4" />
+                Register ERC-8183 Agent
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="mt-10 overflow-hidden rounded-xl border border-[#1A2228] bg-[#080D13]/78 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]">
+              <div className="relative grid min-h-[300px] gap-8 p-8 md:grid-cols-[230px_1fr]">
+                <div className="absolute inset-0 opacity-50 [background-image:radial-gradient(circle_at_85%_15%,rgba(243,197,54,0.16),transparent_28%),linear-gradient(135deg,transparent_40%,rgba(243,197,54,0.10)_70%,transparent_100%)]" />
+                <div className="relative flex items-center justify-center">
+                  <AgentAvatar agent={selectedAgent || undefined} large />
+                </div>
+
+                <div className="relative flex flex-col justify-center">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <h2 className="text-[38px] font-semibold tracking-[-0.045em] text-[#F5F0E5]">
+                      {selectedName}
+                    </h2>
+                    <span className="inline-flex items-center gap-2 rounded-md border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-[14px] text-emerald-300">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Minted
+                    </span>
+                  </div>
+
+                  <div className="mt-8 grid max-w-[620px] gap-4 text-[16px] md:grid-cols-[140px_1fr]">
+                    <div className="flex items-center gap-3 text-[#F3C536]">
+                      <BadgeCheck className="h-5 w-5" />
+                      <span className="text-[#EAE4D8]/62">Agent ID:</span>
+                    </div>
+                    <div>{selectedAgent?.agentId}</div>
+
+                    <div className="flex items-center gap-3 text-[#F3C536]">
+                      <UserRound className="h-5 w-5" />
+                      <span className="text-[#EAE4D8]/62">Role:</span>
+                    </div>
+                    <div>{selectedRole}</div>
+
+                    <div className="flex items-center gap-3 text-[#F3C536]">
+                      <ShieldCheck className="h-5 w-5" />
+                      <span className="text-[#EAE4D8]/62">Capabilities:</span>
+                    </div>
+                    <div className="truncate">
+                      {selectedCapabilities.length > 0 ? selectedCapabilities.slice(0, 4).join(', ') : '—'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 flex gap-4 overflow-x-auto pb-2">
+              {agents.map((agent) => {
+                const active = selectedAgent?.agentId === agent.agentId;
+
+                return (
+                  <button
+                    key={agent.agentId}
+                    type="button"
+                    onClick={() => {
+                      setSelectedAgentId(agent.agentId);
+                      setActiveTab('basic');
+                      setMetadataOpen(false);
+                    }}
+                    className={
+                      active
+                        ? 'flex h-[132px] min-w-[260px] items-center gap-5 rounded-lg border border-[#F3C536]/50 bg-[#F3C536]/[0.055] p-5 text-left shadow-[0_0_24px_rgba(243,197,54,0.10)]'
+                        : 'flex h-[132px] min-w-[260px] items-center gap-5 rounded-lg border border-white/10 bg-[#080D13]/76 p-5 text-left transition hover:border-[#F3C536]/30'
+                    }
+                  >
+                    <AgentAvatar agent={agent} />
+                    <div className="min-w-0">
+                      <div className="truncate text-[16px] font-medium text-[#F5F0E5]">{getAgentName(agent)}</div>
+                      <div className="mt-2 flex items-center gap-2 text-[13px] text-[#EAE4D8]/55">
+                        <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                        Minted
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+
+              <Link
+                href="/register/erc8183"
+                className="flex h-[132px] min-w-[140px] flex-col items-center justify-center rounded-lg border border-white/10 bg-[#080D13]/76 text-[#EAE4D8]/60 transition hover:border-[#F3C536]/35 hover:text-[#F3C536]"
+              >
+                <span className="flex h-12 w-12 items-center justify-center rounded-full border border-[#F3C536]/30">
+                  <Plus className="h-6 w-6" />
+                </span>
+                <span className="mt-3 text-[14px]">Add Agent</span>
+              </Link>
+            </div>
+
+            <div className="mt-8 overflow-hidden rounded-xl border border-white/10 bg-[#080D13]/80">
+              <div className="flex border-b border-white/10">
+                <TabButton
+                  active={activeTab === 'basic'}
+                  onClick={() => setActiveTab('basic')}
+                  icon={<BadgeCheck className="h-5 w-5" />}
+                  label="Basic Info"
+                />
+                <TabButton
+                  active={activeTab === 'capabilities'}
+                  onClick={() => setActiveTab('capabilities')}
+                  icon={<ShieldCheck className="h-5 w-5" />}
+                  label="Capabilities"
+                />
+                <TabButton
+                  active={activeTab === 'links'}
+                  onClick={() => setActiveTab('links')}
+                  icon={<Link2 className="h-5 w-5" />}
+                  label="Links"
+                />
+                <TabButton
+                  active={activeTab === 'metadata'}
+                  onClick={() => setActiveTab('metadata')}
+                  icon={<FileJson className="h-5 w-5" />}
+                  label="Metadata"
+                />
+              </div>
+
+              <div className="grid gap-8 p-8 lg:grid-cols-[1fr_1fr]">
+                <div>
+                  <InfoRow
+                    icon={<BadgeCheck className="h-4 w-4" />}
+                    label="Agent ID"
+                    value={selectedAgent?.agentId}
+                    copy={selectedAgent?.agentId}
+                  />
+                  <InfoRow
+                    icon={<UserRound className="h-4 w-4" />}
+                    label="Role"
+                    value={selectedRole}
+                  />
+                  <InfoRow
+                    icon={<Wallet className="h-4 w-4" />}
+                    label="Controller"
+                    value={shortAddress(selectedAgent?.controller)}
+                    copy={selectedAgent?.controller}
+                  />
+                  <InfoRow
+                    icon={<Link2 className="h-4 w-4" />}
+                    label="Metadata URI"
+                    value={selectedMetadataURI ? shortAddress(selectedMetadataURI) : '—'}
+                    copy={selectedMetadataURI}
+                  />
+                  <InfoRow
+                    icon={<KeyRound className="h-4 w-4" />}
+                    label="Tx Hash"
+                    value={selectedAgent?.txHash ? shortAddress(selectedAgent.txHash) : '—'}
+                    copy={selectedAgent?.txHash}
+                  />
+                </div>
+
+                <div className="border-white/10 lg:border-l lg:pl-8">
+                  {activeTab === 'basic' && (
+                    <div>
+                      <h3 className="flex items-center gap-3 text-[18px] font-semibold">
+                        <BadgeCheck className="h-5 w-5 text-[#F3C536]" />
+                        Basic Info
+                      </h3>
+                      <p className="mt-3 text-[14px] leading-6 text-[#EAE4D8]/55">
+                        This identity is minted on ERC-8004. Runtime and PM2 setup are separate.
+                      </p>
+                      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                            Status
+                          </div>
+                          <div className="mt-2 text-emerald-300">Minted</div>
+                        </div>
+                        <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                          <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                            Next
+                          </div>
+                          <div className="mt-2 text-[#EAE4D8]/70">PM2 setup later</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'capabilities' && (
+                    <div>
+                      <h3 className="flex items-center gap-3 text-[18px] font-semibold">
+                        <ShieldCheck className="h-5 w-5 text-[#F3C536]" />
+                        Capabilities
+                      </h3>
+                      <div className="mt-6 flex flex-wrap gap-3">
+                        {selectedCapabilities.length > 0 ? (
+                          selectedCapabilities.map((item) => (
+                            <span
+                              key={item}
+                              className="rounded-md border border-[#F3C536]/35 bg-[#F3C536]/[0.055] px-4 py-2 font-mono text-[12px] tracking-[0.04em] text-[#F3C536]"
+                            >
+                              {item}
+                            </span>
+                          ))
+                        ) : (
+                          <p className="text-[14px] text-[#EAE4D8]/55">No capabilities found.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'links' && (
+                    <div>
+                      <h3 className="flex items-center gap-3 text-[18px] font-semibold">
+                        <Link2 className="h-5 w-5 text-[#F3C536]" />
+                        Links
+                      </h3>
+                      <div className="mt-6 flex flex-wrap gap-3">
+                        <LinkButton href={selectedLinks.website} label="Website" icon={<Globe className="h-5 w-5" />} />
+                        <LinkButton href={selectedLinks.docs} label="Docs" icon={<FileJson className="h-5 w-5" />} />
+                        <LinkButton href={selectedLinks.repo} label="Repo" icon={<Code2 className="h-5 w-5" />} />
+                        <LinkButton href={selectedLinks.x} label="X" icon={<X className="h-5 w-5" />} />
+                        {!selectedLinks.website && !selectedLinks.docs && !selectedLinks.repo && !selectedLinks.x && (
+                          <p className="text-[14px] text-[#EAE4D8]/55">No links provided.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'metadata' && (
+                    <div>
+                      <h3 className="flex items-center gap-3 text-[18px] font-semibold">
+                        <FileJson className="h-5 w-5 text-[#F3C536]" />
+                        Metadata
+                      </h3>
+                      <p className="mt-3 text-[14px] leading-6 text-[#EAE4D8]/55">
+                        View a summary of the agent&apos;s identity metadata.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setMetadataOpen((value) => !value)}
+                        className="mt-6 inline-flex h-12 items-center gap-3 rounded-md border border-[#F3C536]/35 px-6 text-[14px] text-[#F3C536] transition hover:bg-[#F3C536]/10"
+                      >
+                        <Code2 className="h-4 w-4" />
+                        {metadataOpen ? 'Hide JSON' : 'Show JSON'}
+                      </button>
+
+                      {metadataOpen && selectedAgent && (
+                        <pre className="mt-5 max-h-[360px] overflow-auto rounded-md border border-white/10 bg-[#05070A] p-4 text-[11px] leading-5 text-[#EAE4D8]/62">
+                          {JSON.stringify(selectedAgent.metadata, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {notice && (
+          <div className="mt-6 flex items-center justify-between rounded-md border border-rose-400/25 bg-rose-400/[0.055] px-5 py-4 text-[13px] text-rose-200">
+            <span>{notice}</span>
+            {address && (
+              <button
+                type="button"
+                onClick={() => loadAgents(address)}
+                className="inline-flex items-center gap-2 text-rose-100 underline decoration-rose-300/40 underline-offset-4"
+              >
+                <RefreshCcw className="h-3.5 w-3.5" />
+                Retry
+              </button>
+            )}
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
