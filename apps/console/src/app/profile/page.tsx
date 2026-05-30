@@ -415,7 +415,7 @@ export default function AgentProfilePage() {
           </div>
         ) : (
           <>
-            <div className="mt-10 overflow-hidden rounded-xl border border-[#F3C536]/28 bg-[#080D13]/78 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]">
+            <div className="mt-10 overflow-hidden rounded-xl border border-[#1A2228] bg-[#080D13]/78 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]">
               <div className="relative grid min-h-[300px] gap-8 p-8 md:grid-cols-[230px_1fr]">
                 <div className="absolute inset-0 opacity-50 [background-image:radial-gradient(circle_at_85%_15%,rgba(243,197,54,0.16),transparent_28%),linear-gradient(135deg,transparent_40%,rgba(243,197,54,0.10)_70%,transparent_100%)]" />
                 <div className="relative flex items-center justify-center">
