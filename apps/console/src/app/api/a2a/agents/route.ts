@@ -14,6 +14,37 @@ const AGENTS_CACHE_CONTROL = 'public, s-maxage=30, stale-while-revalidate=120';
 // ERC-8004 Identity Registry — used for response metadata only (no legacy chain scan)
 const AGENT_REGISTRY = CONTRACTS.ERC8004_IDENTITY_REGISTRY as Hex;
 
+function normalizeAgentIdentity(input: {
+  agentId?: unknown;
+  tokenId?: unknown;
+  controller?: unknown;
+  owner?: unknown;
+  source?: unknown;
+}) {
+  const rawTokenId = input.tokenId === undefined || input.tokenId === null
+    ? ''
+    : String(input.tokenId).trim();
+
+  const rawAgentId = input.agentId === undefined || input.agentId === null
+    ? ''
+    : String(input.agentId).trim();
+
+  // ERC-8004 canonical identity: tokenId. Fallback to agentId for web/external agents.
+  const canonicalId = rawTokenId || rawAgentId;
+
+  return {
+    agentId: canonicalId,
+    tokenId: rawTokenId || (/^\d+$/.test(rawAgentId) ? rawAgentId : null),
+    owner: typeof input.owner === 'string' && input.owner ? input.owner : undefined,
+    controller: typeof input.controller === 'string' ? input.controller : '',
+    source: typeof input.source === 'string' && input.source
+      ? input.source
+      : rawTokenId || /^\d+$/.test(rawAgentId)
+        ? 'erc8004_identity_registry'
+        : 'web_manifest',
+  };
+}
+
 const MAX_METADATA_BYTES = 32_000;
 const METADATA_CONCURRENCY = 6;
 
@@ -36,6 +67,7 @@ type AgentMetadata = {
 
 type IndexerAgent = {
   agentId: string;
+  tokenId?: string | null;
   controller: string;
   skillHash?: string;
   metadataURI: string;
@@ -44,6 +76,7 @@ type IndexerAgent = {
   score?: string;
   jobs?: string[];
   proofTokenIds?: string[];
+  source?: string;
 };
 
 function ipfsToGateway(uri: string) {
@@ -158,25 +191,35 @@ export async function GET(request: Request) {
     const approvedExternal = await listRegisteredExternalAgents();
     return NextResponse.json({
       registry: 'external-registry',
-      agents: approvedExternal.map((agent) => ({
-        agentId: agent.agentId,
-        owner: agent.owner || agent.address || '',
-        controller: agent.address || agent.owner || '',
-        role: 'REGISTERED_EXTERNAL_AGENT',
-        roleId: null,
-        endpoint: agent.endpoint || '',
-        metadataURI: '',
-        source: agent.source || 'external-registry',
-        onchain: false,
-        metadata: {
-          name: agent.name,
+      agents: approvedExternal.map((agent) => {
+        const identity = normalizeAgentIdentity({
+          agentId: agent.agentId,
+          controller: agent.address || agent.owner,
+          owner: agent.owner || agent.address,
+          source: agent.source || 'external-registry',
+        });
+
+        return {
+          agentId: identity.agentId,
+          tokenId: identity.tokenId,
+          owner: identity.owner || identity.controller,
+          controller: identity.controller,
           role: 'REGISTERED_EXTERNAL_AGENT',
-          autonomous: true,
-          endpoint: agent.endpoint,
-          capability: agent.capabilities || [],
-          skills: agent.capabilities || [],
-        },
-      })),
+          roleId: null,
+          endpoint: agent.endpoint || '',
+          metadataURI: '',
+          source: identity.source,
+          onchain: false,
+          metadata: {
+            name: agent.name,
+            role: 'REGISTERED_EXTERNAL_AGENT',
+            autonomous: true,
+            endpoint: agent.endpoint,
+            capability: agent.capabilities || [],
+            skills: agent.capabilities || [],
+          },
+        };
+      }),
       totalRegistered: approvedExternal.length,
       totalVisible: approvedExternal.length,
       totalAutonomous: approvedExternal.length,
@@ -198,15 +241,26 @@ export async function GET(request: Request) {
       METADATA_CONCURRENCY,
       async (agent) => {
         const metadata = await fetchMetadata(agent.metadataURI || '', agent.agentId);
-        return {
+        const identity = normalizeAgentIdentity({
           agentId: agent.agentId,
-          owner: agent.controller || '',
-          controller: agent.controller || '',
+          tokenId: agent.tokenId,
+          controller: agent.controller,
+          owner: agent.controller,
+          source: agent.source || 'erc8004_identity_registry',
+        });
+
+        return {
+          agentId: identity.agentId,
+          tokenId: identity.tokenId,
+          owner: identity.owner || identity.controller,
+          controller: identity.controller,
           role: metadata?.role || 'REGISTERED_AGENT',
           roleId: null,
           endpoint: metadata?.endpoint || '',
           metadataURI: agent.metadataURI || '',
           registeredAtBlock: agent.registeredAt,
+          source: identity.source,
+          onchain: true,
           skillHash: agent.skillHash,
           reputationScore: agent.reputationScore,
           score: agent.score,
@@ -224,10 +278,18 @@ export async function GET(request: Request) {
     for (const [normalizedId, stored] of manifestById.entries()) {
       if (merged.has(normalizedId)) continue;
       const manifest = stored.manifest;
-      merged.set(normalizedId, {
+      const identity = normalizeAgentIdentity({
         agentId: stored.agentId,
-        owner: stored.controller || '',
-        controller: stored.controller || '',
+        controller: stored.controller,
+        owner: stored.controller,
+        source: 'web_manifest',
+      });
+
+      merged.set(normalizedId, {
+        agentId: identity.agentId,
+        tokenId: identity.tokenId,
+        owner: identity.owner || identity.controller,
+        controller: identity.controller,
         role: manifest.role || 'REGISTERED_AGENT',
         roleId: null,
         endpoint: manifest.endpoint || '',
