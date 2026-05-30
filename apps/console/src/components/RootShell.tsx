@@ -4,7 +4,6 @@ import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import Providers from '@/components/Providers';
 import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
 import WebGLBackground from '@/components/WebGLBackground';
 import { ProtectionNoticeProvider } from '@/components/protection';
 import ClientErrorBoundary from '@/components/ClientErrorBoundary';
@@ -13,10 +12,6 @@ import X402GlobalAccessGuard from '@/components/x402/X402GlobalAccessGuard';
 export default function RootShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isLanding = pathname === '/';
-  const hideFooter =
-    isLanding ||
-    pathname === '/dashboard';
-
   return (
     <>
       {!isLanding ? (
@@ -37,17 +32,9 @@ export default function RootShell({ children }: { children: ReactNode }) {
                     </ClientErrorBoundary>
                   </div>
 
-                  <main key={pathname} className="flex-1 page-transition">
+                  <main key={pathname} className="flex-1 page-transition pb-36">
                     {children}
                   </main>
-
-                  {!hideFooter ? (
-                    <div data-x402-blur-zone="true">
-                      <ClientErrorBoundary label="Footer" fallback={null}>
-                        <Footer />
-                      </ClientErrorBoundary>
-                    </div>
-                  ) : null}
                 </div>
               </X402GlobalAccessGuard>
             </ProtectionNoticeProvider>
