@@ -16,8 +16,7 @@ import {
   Workflow,
 } from 'lucide-react';
 
-type EscrowMode = 'provider' | 'client' | 'evaluator' | 'suite';
-type RoleId = 'client' | 'provider' | 'evaluator';
+type EscrowRole = 'provider' | 'evaluator' | 'client';
 
 const CATEGORIES = [
   'Smart Contract',
@@ -34,7 +33,7 @@ const CATEGORIES = [
 type Category = (typeof CATEGORIES)[number];
 
 type RoleConfig = {
-  id: RoleId;
+  id: EscrowRole;
   title: string;
   label: string;
   description: string;
@@ -48,50 +47,27 @@ type RoleConfig = {
 };
 
 type FormState = {
-  mode: EscrowMode;
+  role: EscrowRole;
   agentName: string;
-  runtimeBaseUrl: string;
-  clientWallet: string;
-  providerWallet: string;
-  evaluatorWallet: string;
-  payoutWallet: string;
-  workTitle: string;
   category: Category | '';
-  description: string;
-  deliverables: string;
-  requirements: string;
-  timeline: string;
-  defaultBudgetAtomic: string;
-  minEvalScore: string;
-  maxOpenJobs: string;
-  maxActiveJobs: string;
   capabilities: string;
+  runtimeBaseUrl: string;
+  controllerWallet: string;
+  payoutWallet: string;
   proofTypes: string[];
   autonomousTx: boolean;
   llmEvaluation: boolean;
+  maxOpenJobs: string;
+  maxActiveJobs: string;
   confirm: boolean;
 };
 
-const ROLE_CONFIG: Record<RoleId, RoleConfig> = {
-  client: {
-    id: 'client',
-    title: 'Autonomous Client Bot',
-    label: 'Client Bot',
-    description:
-      'Creates and funds escrow jobs automatically. Manual clients should use Jobs → Create Job.',
-    defaultSlug: 'erc8183-client',
-    botRole: 'client',
-    endpointPath: 'client-bot/index.js',
-    mode: 'buyer',
-    scopes: ['erc8183:create', 'erc8183:confirm', 'erc8183:tx'],
-    capabilities: ['create_job', 'fund_escrow', 'approve_usdc', 'onchain_tx'],
-    accepts: ['create', 'fund_escrow', 'confirm'],
-  },
+const ROLE_CONFIG: Record<EscrowRole, RoleConfig> = {
   provider: {
     id: 'provider',
     title: 'Worker / Provider Runtime',
     label: 'Worker',
-    description: 'Receives matching escrow work orders, performs the work, and submits proof.',
+    description: 'Receives matching escrow jobs, performs the work, and submits proof.',
     defaultSlug: 'erc8183-provider',
     botRole: 'provider',
     endpointPath: 'provider-bot/index.js',
@@ -113,40 +89,38 @@ const ROLE_CONFIG: Record<RoleId, RoleConfig> = {
     capabilities: ['evaluate', 'settle', 'complete_job', 'onchain_tx'],
     accepts: ['evaluate', 'complete', 'settle'],
   },
+  client: {
+    id: 'client',
+    title: 'Autonomous Client Runtime',
+    label: 'Client',
+    description: 'Advanced runtime that can create and fund jobs automatically. Manual clients use Jobs.',
+    defaultSlug: 'erc8183-client',
+    botRole: 'client',
+    endpointPath: 'client-bot/index.js',
+    mode: 'buyer',
+    scopes: ['erc8183:create', 'erc8183:confirm', 'erc8183:tx'],
+    capabilities: ['create_job', 'fund_escrow', 'approve_usdc', 'onchain_tx'],
+    accepts: ['create', 'fund_escrow', 'confirm'],
+  },
 };
 
-const TIMELINES = ['24 hours', '3 days', '7 days', '14 days', '30 days'];
 const PROOF_TYPES = ['signed_result', 'url', 'workproof_nft'];
 
 const DEFAULT_FORM: FormState = {
-  mode: 'provider',
+  role: 'provider',
   agentName: '',
-  runtimeBaseUrl: '',
-  clientWallet: '',
-  providerWallet: '',
-  evaluatorWallet: '',
-  payoutWallet: '',
-  workTitle: '',
   category: '',
-  description: '',
-  deliverables: '',
-  requirements: '',
-  timeline: '7 days',
-  defaultBudgetAtomic: '1000',
-  minEvalScore: '70',
-  maxOpenJobs: '5',
-  maxActiveJobs: '3',
   capabilities: '',
+  runtimeBaseUrl: '',
+  controllerWallet: '',
+  payoutWallet: '',
   proofTypes: ['signed_result', 'url'],
   autonomousTx: true,
   llmEvaluation: false,
+  maxOpenJobs: '5',
+  maxActiveJobs: '3',
   confirm: false,
 };
-
-function activeRoles(mode: EscrowMode): RoleConfig[] {
-  if (mode === 'suite') return [ROLE_CONFIG.client, ROLE_CONFIG.provider, ROLE_CONFIG.evaluator];
-  return [ROLE_CONFIG[mode]];
-}
 
 function slugify(value: string) {
   return value
@@ -173,17 +147,6 @@ function capabilityList(value: string) {
 
 function toggleItem(list: string[], item: string) {
   return list.includes(item) ? list.filter((value) => value !== item) : [...list, item];
-}
-
-function walletForRole(form: FormState, role: RoleId) {
-  if (role === 'client') return form.clientWallet;
-  if (role === 'provider') return form.providerWallet;
-  return form.evaluatorWallet;
-}
-
-function modeLabel(mode: EscrowMode) {
-  if (mode === 'suite') return 'Full Suite';
-  return ROLE_CONFIG[mode].title;
 }
 
 function FieldShell({
@@ -223,28 +186,6 @@ function TextInput({
       onChange={(event) => onChange(event.target.value)}
       placeholder={placeholder}
       className="h-12 w-full rounded-md border border-white/10 bg-[#07090D] px-4 text-[14px] text-[#F5F0E5] outline-none transition placeholder:text-[#EAE4D8]/35 focus:border-[#F3C536]/60 focus:ring-2 focus:ring-[#F3C536]/10"
-    />
-  );
-}
-
-function TextareaInput({
-  value,
-  onChange,
-  placeholder,
-  rows = 3,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  rows?: number;
-}) {
-  return (
-    <textarea
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      rows={rows}
-      className="w-full resize-none rounded-md border border-white/10 bg-[#07090D] px-4 py-3 text-[14px] leading-6 text-[#F5F0E5] outline-none transition placeholder:text-[#EAE4D8]/35 focus:border-[#F3C536]/60 focus:ring-2 focus:ring-[#F3C536]/10"
     />
   );
 }
@@ -381,97 +322,71 @@ export default function ERC8183EscrowRegisterPage() {
   const [notice, setNotice] = useState('');
   const [createdAt] = useState(() => new Date().toISOString());
 
-  const roles = useMemo(() => activeRoles(form.mode), [form.mode]);
-  const customCaps = useMemo(() => capabilityList(form.capabilities), [form.capabilities]);
+  const role = ROLE_CONFIG[form.role];
+  const caps = useMemo(() => capabilityList(form.capabilities), [form.capabilities]);
 
-  const manifestDrafts = useMemo(() => {
+  const manifestDraft = useMemo(() => {
     const now = new Date().toISOString();
-    const baseSlug = slugify(form.agentName) || 'erc8183-runtime';
+    const baseSlug = slugify(form.agentName) || role.defaultSlug;
     const categorySlug = form.category ? slugify(form.category) : '';
-    const workTitleSlug = form.workTitle ? slugify(form.workTitle) : '';
-    const receiver = form.payoutWallet || form.providerWallet || form.clientWallet || form.evaluatorWallet;
+    const roleCaps = Array.from(
+      new Set([...role.capabilities, ...caps, ...(categorySlug ? [categorySlug] : [])]),
+    );
+    const receiver = form.payoutWallet || form.controllerWallet;
 
-    return roles.map((role) => {
-      const wallet = walletForRole(form, role.id);
-      const roleCaps = Array.from(
-        new Set([
-          ...role.capabilities,
-          ...customCaps,
-          ...(categorySlug ? [categorySlug] : []),
-          ...(workTitleSlug ? [workTitleSlug] : []),
-        ]),
-      );
-
-      return {
-        schema: 'arclayer.agent/v1',
-        version: 1,
-        agentId: `${baseSlug}-${role.id}`,
-        name: `${form.agentName || 'ERC-8183 Agent Runtime'} — ${role.label}`,
-        role: role.botRole,
-        description:
-          form.description ||
-          'ERC-8183 escrow runtime for matching, executing, evaluating, or funding work orders on Arc Testnet.',
-        controller: wallet || undefined,
-        endpoint: form.runtimeBaseUrl ? `${form.runtimeBaseUrl.replace(/\/$/, '')}/${role.endpointPath}` : undefined,
-        mode: role.mode,
-        capability: roleCaps,
-        capabilities: roleCaps,
-        categories: ['erc8183-commerce', ...(categorySlug ? [categorySlug] : [])],
-        roles: [
-          {
-            id: role.id,
-            name: role.title,
-            category: form.category || 'Other',
-            capabilities: roleCaps,
-            endpointPath: role.endpointPath,
-            enabled: true,
-          },
-        ],
-        payments: {
-          rail: 'erc8183-escrow',
-          network: 'arc-testnet',
-          currency: 'USDC',
-          defaultBudgetAtomic: form.defaultBudgetAtomic,
-          receiver: receiver || undefined,
-        },
-        jobs: {
-          accepts: role.accepts,
-          inputFormats: ['text', 'json'],
-          outputFormats: ['json', 'proof'],
-          workOrderDefaults: {
-            title: form.workTitle || undefined,
-            category: form.category || undefined,
-            description: form.description || undefined,
-            deliverables: form.deliverables || undefined,
-            requirements: form.requirements || undefined,
-            timeline: form.timeline || undefined,
-            budgetAtomic: form.defaultBudgetAtomic,
-          },
-        },
-        proof: {
-          types: form.proofTypes,
-          signing: 'eip191',
-        },
-        host: 'self-hosted-pm2',
-        erc8183: {
+    return {
+      schema: 'arclayer.agent/v1',
+      version: 1,
+      agentId: baseSlug,
+      name: form.agentName || 'ERC-8183 Agent Runtime',
+      role: role.botRole,
+      controller: form.controllerWallet || undefined,
+      endpoint: form.runtimeBaseUrl ? `${form.runtimeBaseUrl.replace(/\/$/, '')}/${role.endpointPath}` : undefined,
+      mode: role.mode,
+      category: form.category || undefined,
+      capability: roleCaps,
+      capabilities: roleCaps,
+      categories: ['erc8183-commerce', ...(categorySlug ? [categorySlug] : [])],
+      roles: [
+        {
+          id: role.id,
+          name: role.title,
+          category: form.category || 'Other',
+          capabilities: roleCaps,
+          endpointPath: role.endpointPath,
           enabled: true,
-          role: role.id,
-          contract: 'AgenticCommerce',
-          budgetAtomic: form.defaultBudgetAtomic,
-          minEvalScore: Number(form.minEvalScore || 70),
-          maxOpenJobs: Number(form.maxOpenJobs || 5),
-          maxActiveJobs: Number(form.maxActiveJobs || 3),
-          autonomousTx: form.autonomousTx,
-          llmEvaluation: form.llmEvaluation,
-          scopes: role.scopes,
-          workOrderCategory: form.category || undefined,
-          timeline: form.timeline || undefined,
         },
-        createdAt,
-        updatedAt: now,
-      };
-    });
-  }, [form, roles, customCaps, createdAt]);
+      ],
+      payments: {
+        rail: 'erc8183-escrow',
+        network: 'arc-testnet',
+        currency: 'USDC',
+        receiver: receiver || undefined,
+      },
+      jobs: {
+        accepts: role.accepts,
+        inputFormats: ['text', 'json'],
+        outputFormats: ['json', 'proof'],
+      },
+      proof: {
+        types: form.proofTypes,
+        signing: 'eip191',
+      },
+      host: 'self-hosted-pm2',
+      erc8183: {
+        enabled: true,
+        role: role.id,
+        contract: 'AgenticCommerce',
+        autonomousTx: form.autonomousTx,
+        llmEvaluation: form.llmEvaluation,
+        maxOpenJobs: Number(form.maxOpenJobs || 5),
+        maxActiveJobs: Number(form.maxActiveJobs || 3),
+        scopes: role.scopes,
+      },
+      createdAt,
+      updatedAt: now,
+    };
+  }, [form, role, caps, createdAt]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -481,7 +396,7 @@ export default function ERC8183EscrowRegisterPage() {
     const payload = {
       type: 'erc8183-runtime-register-draft',
       form,
-      manifests: manifestDrafts,
+      manifest: manifestDraft,
     };
 
     localStorage.setItem('arclayer-erc8183-runtime-draft', JSON.stringify(payload, null, 2));
@@ -497,21 +412,20 @@ export default function ERC8183EscrowRegisterPage() {
     const payload = {
       type: 'erc8183-runtime-register-submit',
       form,
-      manifests: manifestDrafts,
+      manifest: manifestDraft,
       nextSteps: [
-        'Mint ERC-8004 identity for each selected runtime role.',
+        'Mint ERC-8004 identity for this runtime.',
         'Replace provisional agentId with minted ERC-8004 tokenId.',
-        'Sign manifestHash using the role controller wallet.',
+        'Sign manifestHash using the controller wallet.',
         'POST signed manifest to /api/a2a/manifest.',
-        'Generate role-scoped API keys.',
-        'Export .env files for ERC-8183 PM2 bots.',
-        'Run npm run check:env before PM2 start.',
+        'Generate role-scoped API key.',
+        'Export .env file for the selected ERC-8183 PM2 bot.',
       ],
     };
 
     localStorage.setItem('arclayer-erc8183-runtime-submit', JSON.stringify(payload, null, 2));
     console.log('[ArcLayer] ERC-8183 runtime register payload:', payload);
-    setNotice('Register payload created. Wire this button to mint identity, publish manifest, generate keys, and export PM2 env.');
+    setNotice('Register payload created. Wire this button to mint identity, publish manifest, generate key, and export PM2 env.');
   }
 
   return (
@@ -534,33 +448,33 @@ export default function ERC8183EscrowRegisterPage() {
               ERC-8183 · AGENT RUNTIME
             </div>
             <h1 className="mt-3 text-[34px] font-bold tracking-[-0.055em] text-[#F5F0E5] sm:text-[38px]">
-              Register ERC-8183 Runtime
+              Register Agent Runtime
             </h1>
             <p className="mt-5 max-w-[370px] text-[16px] leading-8 text-[#EAE4D8]/62">
-              Register a worker, evaluator, or autonomous client runtime for escrow jobs. Manual clients create jobs from the Jobs page without registering an agent.
+              Register a worker, evaluator, or autonomous client runtime. Job-specific settings stay in Jobs or in the example bot configuration.
             </p>
           </div>
 
           <div className="relative mt-16">
             <div className="absolute left-5 top-10 h-[140px] border-l border-dashed border-white/16" />
-            <StepItem number={1} title="Runtime Info" description="Choose role and runtime endpoint" active />
-            <StepItem number={2} title="Work Order Defaults" description="Mirror Create Job fields for matching" />
-            <StepItem number={3} title="Review & Submit" description="Confirm manifest and register runtime" />
+            <StepItem number={1} title="Identity" description="Name, role, category, and capabilities" active />
+            <StepItem number={2} title="Runtime" description="Endpoint, controller wallet, and payout" />
+            <StepItem number={3} title="Policy" description="Proof types, scopes, and runtime guards" />
           </div>
 
           <div className="mt-12 rounded-md border border-[#F3C536]/22 bg-[#F3C536]/[0.025] p-7">
             <div className="flex items-center gap-3 text-[#F3C536]">
               <Workflow className="h-5 w-5" />
-              <div className="font-mono text-[13px] font-semibold">Escrow runtime notes</div>
+              <div className="font-mono text-[13px] font-semibold">Registration scope</div>
             </div>
 
             <div className="mt-8 space-y-8">
               <div className="flex gap-5">
                 <BriefcaseBusiness className="mt-1 h-6 w-6 shrink-0 text-[#F3C536]" />
                 <div>
-                  <div className="font-semibold text-[#F5F0E5]">Worker is the default runtime</div>
+                  <div className="font-semibold text-[#F5F0E5]">This is not Create Job</div>
                   <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
-                    Use this page to register agents that receive, execute, or evaluate escrow jobs.
+                    Manual clients create escrow jobs from Jobs. This page only registers runtimes.
                   </p>
                 </div>
               </div>
@@ -568,9 +482,9 @@ export default function ERC8183EscrowRegisterPage() {
               <div className="flex gap-5">
                 <Wallet className="mt-1 h-6 w-6 shrink-0 text-[#F3C536]" />
                 <div>
-                  <div className="font-semibold text-[#F5F0E5]">Manual clients stay in Jobs</div>
+                  <div className="font-semibold text-[#F5F0E5]">Only public addresses</div>
                   <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
-                    Human users can create and fund escrow jobs manually from Jobs → Create Job.
+                    Private keys stay in the operator wallet, VPS, PM2 runtime, or bot config.
                   </p>
                 </div>
               </div>
@@ -578,9 +492,9 @@ export default function ERC8183EscrowRegisterPage() {
               <div className="flex gap-5">
                 <Shield className="mt-1 h-6 w-6 shrink-0 text-[#F3C536]" />
                 <div>
-                  <div className="font-semibold text-[#F5F0E5]">Private keys never enter ArcLayer</div>
+                  <div className="font-semibold text-[#F5F0E5]">Bot-specific config lives elsewhere</div>
                   <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
-                    Only public controller wallets are saved. Keys stay in the operator runtime or wallet.
+                    Client-bot budgets, task templates, and automation strategy belong in the example bot env/config.
                   </p>
                 </div>
               </div>
@@ -590,22 +504,9 @@ export default function ERC8183EscrowRegisterPage() {
 
         <section className="px-5 py-8 sm:px-8 lg:px-14 xl:px-16">
           <div className="mx-auto max-w-[1180px] space-y-3">
-            <Section icon={<Bot className="h-6 w-6" />} title="Runtime Info">
+            <Section icon={<Bot className="h-6 w-6" />} title="Agent Runtime">
               <div className="grid gap-7 lg:grid-cols-2">
-                <FieldShell label="Registration Type" required helper="Worker is recommended for agents that receive escrow work orders.">
-                  <SelectInput
-                    value={form.mode}
-                    onChange={(value) => update('mode', value as EscrowMode)}
-                    options={[
-                      { value: 'provider', label: 'Worker / Provider — receive and submit jobs' },
-                      { value: 'evaluator', label: 'Evaluator — review and settle jobs' },
-                      { value: 'client', label: 'Autonomous Client Bot — create and fund jobs automatically' },
-                      { value: 'suite', label: 'Full Suite — Client Bot + Worker + Evaluator' },
-                    ]}
-                  />
-                </FieldShell>
-
-                <FieldShell label="Agent Runtime Name" required helper="Clear name shown in registry and manifest.">
+                <FieldShell label="Agent / Runtime Name" required helper="Name shown in the registry and manifest.">
                   <TextInput
                     value={form.agentName}
                     onChange={(value) => update('agentName', value)}
@@ -613,15 +514,17 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <div className="lg:col-span-2">
-                  <FieldShell label="Runtime Base URL" required helper="Public HTTPS base URL for your self-hosted runtime.">
-                    <TextInput
-                      value={form.runtimeBaseUrl}
-                      onChange={(value) => update('runtimeBaseUrl', value)}
-                      placeholder="https://your-erc8183-runtime.com"
-                    />
-                  </FieldShell>
-                </div>
+                <FieldShell label="Role" required helper="Choose what this runtime is allowed to do.">
+                  <SelectInput
+                    value={form.role}
+                    onChange={(value) => update('role', value as EscrowRole)}
+                    options={[
+                      { value: 'provider', label: 'Worker / Provider — receive and submit jobs' },
+                      { value: 'evaluator', label: 'Evaluator — review and settle jobs' },
+                      { value: 'client', label: 'Autonomous Client — create and fund jobs automatically' },
+                    ]}
+                  />
+                </FieldShell>
 
                 <div className="lg:col-span-2">
                   <div className="mb-3 font-mono text-[12px] font-semibold tracking-[-0.02em] text-[#F5F0E5]">
@@ -629,49 +532,13 @@ export default function ERC8183EscrowRegisterPage() {
                   </div>
 
                   <div className="grid gap-3 md:grid-cols-3">
-                    <RoleButton
-                      role={ROLE_CONFIG.provider}
-                      active={roles.some((role) => role.id === 'provider')}
-                      onClick={() => update('mode', 'provider')}
-                    />
-                    <RoleButton
-                      role={ROLE_CONFIG.evaluator}
-                      active={roles.some((role) => role.id === 'evaluator')}
-                      onClick={() => update('mode', 'evaluator')}
-                    />
-                    <RoleButton
-                      role={ROLE_CONFIG.client}
-                      active={roles.some((role) => role.id === 'client')}
-                      onClick={() => update('mode', 'client')}
-                    />
+                    <RoleButton role={ROLE_CONFIG.provider} active={form.role === 'provider'} onClick={() => update('role', 'provider')} />
+                    <RoleButton role={ROLE_CONFIG.evaluator} active={form.role === 'evaluator'} onClick={() => update('role', 'evaluator')} />
+                    <RoleButton role={ROLE_CONFIG.client} active={form.role === 'client'} onClick={() => update('role', 'client')} />
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => update('mode', 'suite')}
-                    className={
-                      form.mode === 'suite'
-                        ? 'mt-3 w-full rounded-md border border-[#F3C536]/45 bg-[#F3C536]/10 px-4 py-3 text-left font-mono text-[12px] uppercase tracking-[0.12em] text-[#F3C536]'
-                        : 'mt-3 w-full rounded-md border border-white/10 bg-white/[0.025] px-4 py-3 text-left font-mono text-[12px] uppercase tracking-[0.12em] text-[#EAE4D8]/55 hover:border-[#F3C536]/30'
-                    }
-                  >
-                    Use Full Suite: Autonomous Client Bot + Worker + Evaluator
-                  </button>
                 </div>
-              </div>
-            </Section>
 
-            <Section icon={<ClipboardList className="h-6 w-6" />} title="Work Order Defaults">
-              <div className="grid gap-7 lg:grid-cols-2">
-                <FieldShell label="Work Order Title" required helper="Matches Job Title in Jobs → Create Job.">
-                  <TextInput
-                    value={form.workTitle}
-                    onChange={(value) => update('workTitle', value)}
-                    placeholder="e.g., Smart Contract Security Audit"
-                  />
-                </FieldShell>
-
-                <FieldShell label="Category" required helper="Same category taxonomy used by manual escrow job creation.">
+                <FieldShell label="Category" required helper="Used for discovery and matching. Same taxonomy as manual escrow jobs.">
                   <SelectInput
                     value={form.category}
                     onChange={(value) => update('category', value as Category | '')}
@@ -682,140 +549,63 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <div className="lg:col-span-2">
-                  <FieldShell label="Description" required helper="Describe the work this runtime can execute or evaluate.">
-                    <TextareaInput
-                      value={form.description}
-                      onChange={(value) => update('description', value)}
-                      placeholder="Describe the work to be done…"
-                      rows={4}
-                    />
-                  </FieldShell>
-                </div>
-
-                <FieldShell label="Deliverables" required helper="What the worker should submit when the job is done.">
-                  <TextareaInput
-                    value={form.deliverables}
-                    onChange={(value) => update('deliverables', value)}
-                    placeholder="List the key deliverables you expect…"
-                    rows={4}
-                  />
-                </FieldShell>
-
-                <FieldShell label="Requirements" required helper="Completion criteria used by the evaluator or manual reviewer.">
-                  <TextareaInput
-                    value={form.requirements}
-                    onChange={(value) => update('requirements', value)}
-                    placeholder="requirements for this job…"
-                    rows={4}
-                  />
-                </FieldShell>
-
-                <FieldShell label="Timeline" required helper="Default deadline template for matching escrow work orders.">
-                  <SelectInput
-                    value={form.timeline}
-                    onChange={(value) => update('timeline', value)}
-                    options={TIMELINES.map((timeline) => ({ value: timeline, label: timeline }))}
-                  />
-                </FieldShell>
-
-                <FieldShell label="Default Escrow Budget Atomic" required helper="Mirrors Escrow Budget in Create Job. Example: 1000 = 0.001 USDC.">
+                <FieldShell label="Capabilities" required helper="Comma-separated skills used for agent discovery and job matching.">
                   <TextInput
-                    value={form.defaultBudgetAtomic}
-                    onChange={(value) => update('defaultBudgetAtomic', value)}
-                    placeholder="1000"
+                    value={form.capabilities}
+                    onChange={(value) => update('capabilities', value)}
+                    placeholder="audit, security-review, code-review"
                   />
                 </FieldShell>
 
                 <div className="lg:col-span-2">
-                  <FieldShell label="Additional Capabilities" helper="Optional comma-separated tags. Category and title are already included for matching.">
-                    <TextInput
-                      value={form.capabilities}
-                      onChange={(value) => update('capabilities', value)}
-                      placeholder="audit, security-review, code-review"
-                    />
-
-                    {[...customCaps, ...(form.category ? [slugify(form.category)] : [])].length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {Array.from(new Set([...customCaps, ...(form.category ? [slugify(form.category)] : [])])).map((capability) => (
-                          <span
-                            key={capability}
-                            className="rounded-md border border-white/10 bg-white/[0.035] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#EAE4D8]/62"
-                          >
-                            {capability}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </FieldShell>
+                  {caps.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {caps.map((capability) => (
+                        <span
+                          key={capability}
+                          className="rounded-md border border-white/10 bg-white/[0.035] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#EAE4D8]/62"
+                        >
+                          {capability}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </Section>
 
-            <Section icon={<Link2 className="h-6 w-6" />} title="Wallets & Runtime Policy">
+            <Section icon={<Link2 className="h-6 w-6" />} title="Endpoint & Wallets">
               <div className="grid gap-7 lg:grid-cols-2">
-                {(form.mode === 'suite' || form.mode === 'client') && (
-                  <FieldShell label="Autonomous Client Wallet" required helper="Controller address for a bot that creates and funds jobs automatically.">
+                <div className="lg:col-span-2">
+                  <FieldShell label="Runtime Base URL" required helper="Public HTTPS base URL for your self-hosted runtime.">
                     <TextInput
-                      value={form.clientWallet}
-                      onChange={(value) => update('clientWallet', value)}
-                      placeholder="0x..."
+                      value={form.runtimeBaseUrl}
+                      onChange={(value) => update('runtimeBaseUrl', value)}
+                      placeholder="https://your-erc8183-runtime.com"
                     />
                   </FieldShell>
-                )}
+                </div>
 
-                {(form.mode === 'suite' || form.mode === 'provider') && (
-                  <FieldShell label="Worker / Provider Wallet" required helper="Public address for the worker that claims and submits jobs.">
-                    <TextInput
-                      value={form.providerWallet}
-                      onChange={(value) => update('providerWallet', value)}
-                      placeholder="0x..."
-                    />
-                  </FieldShell>
-                )}
+                <FieldShell label="Controller Wallet" required helper="Public address that controls this ERC-8004 runtime identity.">
+                  <TextInput
+                    value={form.controllerWallet}
+                    onChange={(value) => update('controllerWallet', value)}
+                    placeholder="0x..."
+                  />
+                </FieldShell>
 
-                {(form.mode === 'suite' || form.mode === 'evaluator') && (
-                  <FieldShell label="Evaluator Wallet" required helper="Public address for the evaluator that completes settlement.">
-                    <TextInput
-                      value={form.evaluatorWallet}
-                      onChange={(value) => update('evaluatorWallet', value)}
-                      placeholder="0x..."
-                    />
-                  </FieldShell>
-                )}
-
-                <FieldShell label="Payout Wallet" helper="Optional. Defaults to Worker wallet, then Client/Evaluator wallet.">
+                <FieldShell label="Payout Wallet" helper="Optional. Defaults to controller wallet if left empty.">
                   <TextInput
                     value={form.payoutWallet}
                     onChange={(value) => update('payoutWallet', value)}
                     placeholder="0x..."
                   />
                 </FieldShell>
+              </div>
+            </Section>
 
-                <FieldShell label="Minimum Evaluation Score" required helper="Evaluator completes escrow only if score passes this threshold.">
-                  <TextInput
-                    value={form.minEvalScore}
-                    onChange={(value) => update('minEvalScore', value)}
-                    placeholder="70"
-                  />
-                </FieldShell>
-
-                <FieldShell label="Max Open Jobs" helper="Autonomous client safety guard.">
-                  <TextInput
-                    value={form.maxOpenJobs}
-                    onChange={(value) => update('maxOpenJobs', value)}
-                    placeholder="5"
-                  />
-                </FieldShell>
-
-                <FieldShell label="Max Active Jobs" helper="Worker/evaluator processing guard.">
-                  <TextInput
-                    value={form.maxActiveJobs}
-                    onChange={(value) => update('maxActiveJobs', value)}
-                    placeholder="3"
-                  />
-                </FieldShell>
-
+            <Section icon={<ClipboardList className="h-6 w-6" />} title="Runtime Policy">
+              <div className="grid gap-7 lg:grid-cols-2">
                 <FieldShell label="Proof Types" required helper="Evidence formats for receipt/proof history.">
                   <div className="flex min-h-12 flex-wrap items-center gap-2 rounded-md border border-white/10 bg-[#07090D] px-3 py-2">
                     {PROOF_TYPES.map((item) => (
@@ -835,7 +625,7 @@ export default function ERC8183EscrowRegisterPage() {
                   </div>
                 </FieldShell>
 
-                <FieldShell label="Runtime Options" helper="Stored as runtime policy metadata, not secrets.">
+                <FieldShell label="Runtime Options" helper="Stored as public runtime metadata, not secrets.">
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
@@ -864,6 +654,22 @@ export default function ERC8183EscrowRegisterPage() {
                     </button>
                   </div>
                 </FieldShell>
+
+                <FieldShell label="Max Open Jobs" helper="Runtime guard. Detailed client bot budgets stay in bot config.">
+                  <TextInput
+                    value={form.maxOpenJobs}
+                    onChange={(value) => update('maxOpenJobs', value)}
+                    placeholder="5"
+                  />
+                </FieldShell>
+
+                <FieldShell label="Max Active Jobs" helper="Worker/evaluator processing guard.">
+                  <TextInput
+                    value={form.maxActiveJobs}
+                    onChange={(value) => update('maxActiveJobs', value)}
+                    placeholder="3"
+                  />
+                </FieldShell>
               </div>
             </Section>
 
@@ -873,38 +679,17 @@ export default function ERC8183EscrowRegisterPage() {
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-3">
                       <ReviewRow label="Runtime Name" value={form.agentName} />
-                      <ReviewRow label="Type" value={modeLabel(form.mode)} />
-                      <ReviewRow label="Work Title" value={form.workTitle} />
+                      <ReviewRow label="Role" value={role.title} />
                       <ReviewRow label="Category" value={form.category} />
                       <ReviewRow label="Runtime" value={form.runtimeBaseUrl} />
-                      <ReviewRow label="Timeline" value={form.timeline} />
                     </div>
 
                     <div className="space-y-3">
-                      <ReviewRow label="Budget Atomic" value={form.defaultBudgetAtomic} />
-                      <ReviewRow label="Client Wallet" value={shortAddress(form.clientWallet)} />
-                      <ReviewRow label="Worker Wallet" value={shortAddress(form.providerWallet)} />
-                      <ReviewRow label="Evaluator Wallet" value={shortAddress(form.evaluatorWallet)} />
-                      <ReviewRow label="Payout" value={shortAddress(form.payoutWallet || form.providerWallet)} />
+                      <ReviewRow label="Controller" value={shortAddress(form.controllerWallet)} />
+                      <ReviewRow label="Payout" value={shortAddress(form.payoutWallet || form.controllerWallet)} />
                       <ReviewRow label="Proof" value={form.proofTypes.join(', ')} />
+                      <ReviewRow label="Capabilities" value={caps.join(', ')} />
                     </div>
-                  </div>
-
-                  <div className="mt-6 grid gap-4">
-                    {([
-                      ['Description', form.description],
-                      ['Deliverables', form.deliverables],
-                      ['Requirements', form.requirements],
-                    ] as const).map(([label, value]) => (
-                      <div key={label} className="rounded-md border border-white/10 bg-[#05070A] p-4">
-                        <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#F3C536]">
-                          {label}
-                        </div>
-                        <p className="mt-2 whitespace-pre-wrap text-[13px] leading-6 text-[#F5F0E5]/78">
-                          {value || '—'}
-                        </p>
-                      </div>
-                    ))}
                   </div>
 
                   <div className="mt-6 rounded-md border border-white/10 bg-[#05070A]">
@@ -915,22 +700,18 @@ export default function ERC8183EscrowRegisterPage() {
                       </div>
                     </div>
 
-                    <div className="divide-y divide-white/10">
-                      {roles.map((role) => (
-                        <div key={role.id} className="grid gap-3 px-4 py-4 md:grid-cols-[120px_1fr]">
-                          <div className="font-semibold text-[#F5F0E5]">{role.label}</div>
-                          <div className="flex flex-wrap gap-2">
-                            {role.scopes.map((scope) => (
-                              <span
-                                key={scope}
-                                className="rounded border border-white/10 bg-white/[0.025] px-2 py-1 font-mono text-[10px] tracking-[0.06em] text-[#EAE4D8]/60"
-                              >
-                                {scope}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                    <div className="grid gap-3 px-4 py-4 md:grid-cols-[120px_1fr]">
+                      <div className="font-semibold text-[#F5F0E5]">{role.label}</div>
+                      <div className="flex flex-wrap gap-2">
+                        {role.scopes.map((scope) => (
+                          <span
+                            key={scope}
+                            className="rounded border border-white/10 bg-white/[0.025] px-2 py-1 font-mono text-[10px] tracking-[0.06em] text-[#EAE4D8]/60"
+                          >
+                            {scope}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
@@ -947,7 +728,7 @@ export default function ERC8183EscrowRegisterPage() {
                       {form.confirm && <Check className="h-3.5 w-3.5" />}
                     </button>
                     <span className="text-[13px] leading-6 text-[#EAE4D8]/62">
-                      I understand this registers ERC-8183 runtimes only. Manual clients should create jobs from Jobs → Create Job and do not need an agent identity.
+                      I understand this registers an ERC-8183 agent runtime only. Job-specific templates, budgets, deliverables, and requirements are configured in Jobs or in the example bot config.
                     </span>
                   </label>
                 </div>
@@ -960,7 +741,7 @@ export default function ERC8183EscrowRegisterPage() {
                     </div>
                   </div>
                   <pre className="max-h-[640px] overflow-auto p-4 text-[11px] leading-5 text-[#EAE4D8]/62">
-                    {JSON.stringify(manifestDrafts, null, 2)}
+                    {JSON.stringify(manifestDraft, null, 2)}
                   </pre>
                 </div>
               </div>
@@ -974,7 +755,7 @@ export default function ERC8183EscrowRegisterPage() {
 
             <div className="sticky bottom-0 z-20 flex flex-col gap-4 rounded-t-xl border-t border-white/10 bg-[#05070A]/92 px-5 py-5 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
               <p className="text-[13px] leading-6 text-[#EAE4D8]/55">
-                Save a local draft now. Wiring for mint identity, publish manifest, API keys, and PM2 env export is deferred.
+                Save a local draft now. Wiring for mint identity, publish manifest, API key, and PM2 env export is deferred.
               </p>
 
               <div className="flex flex-col gap-3 sm:flex-row">
