@@ -28,6 +28,62 @@ export type A2AJob = {
   updatedAt?: string;
 };
 
+export type A2AReputationStats = {
+  callsServed?: number | string;
+  callsFailed?: number | string;
+  signalsCorrect?: number | string;
+  signalsWrong?: number | string;
+  cumulativePnlBps?: number | string;
+  calibrationScore?: number | string;
+  totalRevenue?: number | string;
+  reputationScore?: number | string;
+};
+
+export type A2AReputationFeedback = {
+  agentTokenId?: string;
+  reviewer?: string;
+  score?: string;
+  category?: string;
+  comment?: string;
+  metadataURI?: string;
+  proofURI?: string;
+  context?: string;
+  ref?: string;
+  blockNumber?: string;
+  txHash?: string;
+  logIndex?: number;
+  source?: string;
+};
+
+export type A2AReputationResponse = {
+  ok: boolean;
+  agentId: string;
+  tokenId?: string;
+  score: string;
+  stats: A2AReputationStats | null;
+  feedback: A2AReputationFeedback[];
+  source: string;
+  updatedAt?: string | null;
+  error?: string;
+
+  /**
+   * Legacy-compatible public envelope returned by /api/a2a/reputation/:tokenId.
+   */
+  reputation: {
+    score: string;
+    stats: A2AReputationStats | null;
+    feedback: A2AReputationFeedback[];
+    source: string;
+    updatedAt?: string | null;
+  };
+
+  /**
+   * Deprecated old SDK field. Some older callers may still read this.
+   * Prefer `score` or `reputation.score`.
+   */
+  reputationScore?: string;
+};
+
 export type A2AClientOptions = {
   /** ArcLayer base URL, default https://arclayers.xyz */
   baseUrl?: string;
@@ -94,14 +150,17 @@ export class A2AClient {
   }
 
   /** GET /api/a2a/reputation/:agentId */
-  async getReputation(agentId?: string): Promise<{
-    ok: boolean;
-    agentId: string;
-    reputationScore: string;
-    stats?: Record<string, string>;
-  }> {
+  async getReputation(agentId?: string): Promise<A2AReputationResponse> {
     const id = agentId ?? this.agentId;
-    return this.req(`/api/a2a/reputation/${encodeURIComponent(id)}`);
+    const response = await this.req<A2AReputationResponse>(
+      `/api/a2a/reputation/${encodeURIComponent(id)}`,
+    );
+
+    return {
+      ...response,
+      reputationScore:
+        response.reputationScore ?? response.score ?? response.reputation?.score ?? '0',
+    };
   }
 
   /** POST /api/a2a/webhooks — register a webhook */
