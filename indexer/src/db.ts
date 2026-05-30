@@ -132,6 +132,7 @@ db.exec(`
     context TEXT NOT NULL,
     ref TEXT NOT NULL,
     block_number TEXT NOT NULL,
+    log_index TEXT NOT NULL DEFAULT '0',
     tx_hash TEXT NOT NULL,
     payload_json TEXT NOT NULL,
     source TEXT NOT NULL DEFAULT 'erc8004_reputation_registry'
@@ -164,6 +165,7 @@ for (const statement of [
   "ALTER TABLE agents ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE job_events ADD COLUMN source TEXT NOT NULL DEFAULT 'erc8183_agentic_commerce'",
   "ALTER TABLE agent_events ADD COLUMN source TEXT NOT NULL DEFAULT 'erc8004_identity_registry'",
+  "ALTER TABLE reputation_events ADD COLUMN log_index TEXT NOT NULL DEFAULT '0'",
 ]) {
   try {
     db.exec(statement);
@@ -242,8 +244,8 @@ const upsertAgentEvent = db.prepare(`
 const upsertReputationEvent = db.prepare(`
   INSERT INTO reputation_events (
     event_key, agent_token_id, reviewer, score, category, comment, metadata_uri,
-    proof_uri, context, ref, block_number, tx_hash, payload_json, source
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    proof_uri, context, ref, block_number, log_index, tx_hash, payload_json, source
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(event_key) DO UPDATE SET
     score = excluded.score,
     category = excluded.category,
@@ -253,6 +255,7 @@ const upsertReputationEvent = db.prepare(`
     context = excluded.context,
     payload_json = excluded.payload_json,
     block_number = excluded.block_number,
+    log_index = excluded.log_index,
     tx_hash = excluded.tx_hash
 `);
 
@@ -292,7 +295,7 @@ function recomputeReputationAggregate(agentTokenId: string) {
     SELECT *
     FROM reputation_events
     WHERE agent_token_id = ?
-    ORDER BY CAST(block_number AS INTEGER), tx_hash
+    ORDER BY CAST(block_number AS INTEGER), CAST(log_index AS INTEGER), tx_hash
   `).all(agentTokenId) as Array<{
     score: string;
     category: string;
@@ -300,6 +303,7 @@ function recomputeReputationAggregate(agentTokenId: string) {
     reviewer: string;
     tx_hash: string;
     block_number: string;
+    log_index: string;
   }>;
 
   if (rows.length === 0) return;
@@ -457,6 +461,7 @@ export async function syncProjectionStore(
         event.context ?? "",
         event.ref ?? "",
         event.blockNumber.toString(),
+        String(event.logIndex ?? 0),
         event.transactionHash,
         stringifyJson({
           ...event,
@@ -771,7 +776,7 @@ export function readReputationByAgent(agentTokenId: string) {
     SELECT *
     FROM reputation_events
     WHERE agent_token_id = ?
-    ORDER BY CAST(block_number AS INTEGER) DESC, tx_hash DESC
+    ORDER BY CAST(block_number AS INTEGER) DESC, CAST(log_index AS INTEGER) DESC, tx_hash DESC
   `).all(agentTokenId).map((row) => ({
     agentTokenId: row.agent_token_id as string,
     reviewer: row.reviewer as string,
@@ -783,6 +788,7 @@ export function readReputationByAgent(agentTokenId: string) {
     context: row.context as string,
     ref: row.ref as string,
     blockNumber: row.block_number as string,
+    logIndex: Number(row.log_index ?? 0),
     txHash: row.tx_hash as string,
     source: row.source as string,
   }));
