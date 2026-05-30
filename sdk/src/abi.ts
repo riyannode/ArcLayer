@@ -111,6 +111,21 @@ export const ERC8004_REPUTATION_REGISTRY_ABI = [
     ],
     outputs: [],
   },
+  {
+    name: "FeedbackGiven",
+    type: "event",
+    inputs: [
+      { name: "agentTokenId", type: "uint256", indexed: true },
+      { name: "reviewer", type: "address", indexed: true },
+      { name: "score", type: "int128", indexed: false },
+      { name: "category", type: "uint8", indexed: false },
+      { name: "comment", type: "string", indexed: false },
+      { name: "metadataURI", type: "string", indexed: false },
+      { name: "proofURI", type: "string", indexed: false },
+      { name: "context", type: "string", indexed: false },
+      { name: "ref", type: "bytes32", indexed: true },
+    ],
+  },
 ] as const;
 
 // ── ERC-8004 Validation Registry ─────────────────────────────────────────────

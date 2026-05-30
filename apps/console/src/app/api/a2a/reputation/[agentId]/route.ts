@@ -1,44 +1,70 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getReputationScore, getAgentStats } from '@/lib/a2a/reputation';
+import { NextResponse } from 'next/server';
+import { indexerUrl } from '@/lib/indexer';
 
-export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-/**
- * GET /api/a2a/reputation/[agentId] — public reputation lookup.
- * Returns on-chain reputation score + stats for an agent.
- */
 export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ agentId: string }> },
-): Promise<NextResponse> {
+  _request: Request,
+  { params }: { params: Promise<{ agentId: string }> }
+) {
   const { agentId } = await params;
+  const tokenId = decodeURIComponent(agentId || '').trim();
 
-  if (!agentId) {
-    return NextResponse.json({ ok: false, error: 'missing_agent_id' }, { status: 400 });
+  if (!/^\d+$/.test(tokenId)) {
+    return NextResponse.json(
+      {
+        agentId: tokenId,
+        score: '0',
+        stats: null,
+        source: 'erc8004_reputation_indexer',
+        error: 'invalid_erc8004_token_id',
+      },
+      { status: 200 }
+    );
   }
 
-  const [score, stats] = await Promise.all([
-    getReputationScore(agentId),
-    getAgentStats(agentId),
-  ]);
+  try {
+    const res = await fetch(indexerUrl(`/reputation/${tokenId}`), {
+      cache: 'no-store',
+    });
 
-  return NextResponse.json({
-    ok: true,
-    agentId,
-    reputation: {
-      score: score.toString(),
-      stats: stats
-        ? {
-            callsServed: stats.callsServed.toString(),
-            callsFailed: stats.callsFailed.toString(),
-            signalsCorrect: stats.signalsCorrect.toString(),
-            signalsWrong: stats.signalsWrong.toString(),
-            cumulativePnlBps: stats.cumulativePnlBps.toString(),
-            calibrationScore: stats.calibrationScore.toString(),
-            totalRevenue: stats.totalRevenue.toString(),
-          }
-        : null,
-    },
-  });
+    if (!res.ok) {
+      return NextResponse.json({
+        agentId: tokenId,
+        score: '0',
+        stats: null,
+        source: 'erc8004_reputation_indexer',
+      });
+    }
+
+    const data = await res.json();
+
+    return NextResponse.json({
+      agentId: tokenId,
+      tokenId,
+      score: data.averageScore ?? '0',
+      stats: {
+        callsServed: data.feedbackCount ?? 0,
+        callsFailed: 0,
+        signalsCorrect: 0,
+        signalsWrong: 0,
+        cumulativePnlBps: 0,
+        calibrationScore: 0,
+        totalRevenue: '0',
+        reputationScore: data.averageScore ?? '0',
+      },
+      feedback: data.events ?? [],
+      source: 'erc8004_reputation_indexer',
+      updatedAt: data.updatedAt ?? null,
+    });
+  } catch (error) {
+    return NextResponse.json({
+      agentId: tokenId,
+      score: '0',
+      stats: null,
+      source: 'erc8004_reputation_indexer',
+      error: error instanceof Error ? error.message : 'reputation_indexer_unavailable',
+    });
+  }
 }

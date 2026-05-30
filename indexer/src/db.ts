@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import { ARC_ERC20_USDC_DECIMALS, type IndexedAgentEvent, type IndexedJobEvent } from "@arclayer/sdk";
+import { ARC_ERC20_USDC_DECIMALS, type IndexedAgentEvent, type IndexedJobEvent, type IndexedReputationEvent } from "@arclayer/sdk";
 import { formatUnits } from "viem";
 import {
   createSupabaseRestClientFromEnv,
@@ -10,7 +10,7 @@ import {
   type ERC8183IndexedLifecycleEvent,
 } from "./a2a-lifecycle-sync";
 import { projectAgentsFromEvents, projectJobsFromEvents } from "./projections";
-import { ARC_ERC8004_ADDRESS, ARC_ERC8183_ADDRESS } from "./config";
+import { ARC_ERC8004_ADDRESS, ARC_ERC8183_ADDRESS, ARC_ERC8004_REPUTATION_ADDRESS } from "./config";
 
 const currentDir = dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.INDEXER_DB_PATH || resolve(currentDir, "../data/arclayer-indexer.sqlite");
@@ -119,6 +119,37 @@ db.exec(`
     payload_json TEXT NOT NULL,
     source TEXT NOT NULL DEFAULT 'erc8004_identity_registry'
   );
+
+  CREATE TABLE IF NOT EXISTS reputation_events (
+    event_key TEXT PRIMARY KEY,
+    agent_token_id TEXT NOT NULL,
+    reviewer TEXT NOT NULL,
+    score TEXT NOT NULL,
+    category TEXT NOT NULL,
+    comment TEXT NOT NULL,
+    metadata_uri TEXT NOT NULL,
+    proof_uri TEXT NOT NULL,
+    context TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    block_number TEXT NOT NULL,
+    tx_hash TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'erc8004_reputation_registry'
+  );
+
+  CREATE TABLE IF NOT EXISTS reputation_aggregates (
+    agent_token_id TEXT PRIMARY KEY,
+    feedback_count INTEGER NOT NULL,
+    score_sum TEXT NOT NULL,
+    average_score TEXT NOT NULL,
+    latest_score TEXT NOT NULL,
+    latest_category TEXT NOT NULL,
+    latest_comment TEXT NOT NULL,
+    latest_reviewer TEXT NOT NULL,
+    latest_tx_hash TEXT NOT NULL,
+    latest_block_number TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
 
 for (const statement of [
@@ -208,6 +239,42 @@ const upsertAgentEvent = db.prepare(`
     tx_hash = excluded.tx_hash
 `);
 
+const upsertReputationEvent = db.prepare(`
+  INSERT INTO reputation_events (
+    event_key, agent_token_id, reviewer, score, category, comment, metadata_uri,
+    proof_uri, context, ref, block_number, tx_hash, payload_json, source
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(event_key) DO UPDATE SET
+    score = excluded.score,
+    category = excluded.category,
+    comment = excluded.comment,
+    metadata_uri = excluded.metadata_uri,
+    proof_uri = excluded.proof_uri,
+    context = excluded.context,
+    payload_json = excluded.payload_json,
+    block_number = excluded.block_number,
+    tx_hash = excluded.tx_hash
+`);
+
+const upsertReputationAggregate = db.prepare(`
+  INSERT INTO reputation_aggregates (
+    agent_token_id, feedback_count, score_sum, average_score, latest_score,
+    latest_category, latest_comment, latest_reviewer, latest_tx_hash,
+    latest_block_number, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(agent_token_id) DO UPDATE SET
+    feedback_count = excluded.feedback_count,
+    score_sum = excluded.score_sum,
+    average_score = excluded.average_score,
+    latest_score = excluded.latest_score,
+    latest_category = excluded.latest_category,
+    latest_comment = excluded.latest_comment,
+    latest_reviewer = excluded.latest_reviewer,
+    latest_tx_hash = excluded.latest_tx_hash,
+    latest_block_number = excluded.latest_block_number,
+    updated_at = excluded.updated_at
+`);
+
 function parseJson<T>(value: string): T {
   return JSON.parse(value) as T;
 }
@@ -218,6 +285,42 @@ function stringifyJson(value: unknown) {
 
 function serializeEventKey(event: { transactionHash: `0x${string}`; logIndex: number }) {
   return `${event.transactionHash}:${event.logIndex}`;
+}
+
+function recomputeReputationAggregate(agentTokenId: string) {
+  const rows = db.prepare(`
+    SELECT *
+    FROM reputation_events
+    WHERE agent_token_id = ?
+    ORDER BY CAST(block_number AS INTEGER), tx_hash
+  `).all(agentTokenId) as Array<{
+    score: string;
+    category: string;
+    comment: string;
+    reviewer: string;
+    tx_hash: string;
+    block_number: string;
+  }>;
+
+  if (rows.length === 0) return;
+
+  const scoreSum = rows.reduce((sum, row) => sum + BigInt(row.score || "0"), BigInt(0));
+  const averageScore = scoreSum / BigInt(rows.length);
+  const latest = rows[rows.length - 1];
+
+  upsertReputationAggregate.run(
+    agentTokenId,
+    rows.length,
+    scoreSum.toString(),
+    averageScore.toString(),
+    latest.score,
+    latest.category,
+    latest.comment,
+    latest.reviewer,
+    latest.tx_hash,
+    latest.block_number,
+    new Date().toISOString(),
+  );
 }
 
 export function writeMetaValue(key: string, value: string) {
@@ -272,6 +375,7 @@ function normalizeAgentForCompatibilitySchema(agent: ReturnType<typeof projectAg
 export async function syncProjectionStore(
   events: IndexedJobEvent[],
   agentEvents: IndexedAgentEvent[] = [],
+  reputationEvents: IndexedReputationEvent[] = [],
 ): Promise<{ lastSyncError: string | null }> {
   db.exec("BEGIN");
   try {
@@ -335,10 +439,44 @@ export async function syncProjectionStore(
 
     }
 
+    const affectedReputationAgentIds = new Set<string>();
+
+    for (const event of reputationEvents) {
+      const agentTokenId = event.agentTokenId.toString();
+      affectedReputationAgentIds.add(agentTokenId);
+
+      upsertReputationEvent.run(
+        serializeEventKey(event),
+        agentTokenId,
+        event.reviewer,
+        event.score.toString(),
+        String(event.category),
+        event.comment ?? "",
+        event.metadataURI ?? "",
+        event.proofURI ?? "",
+        event.context ?? "",
+        event.ref ?? "",
+        event.blockNumber.toString(),
+        event.transactionHash,
+        stringifyJson({
+          ...event,
+          source: "erc8004_reputation_registry",
+          chainId: 5042002,
+          contractAddress: ARC_ERC8004_REPUTATION_ADDRESS,
+        }),
+        "erc8004_reputation_registry",
+      );
+    }
+
+    for (const agentTokenId of affectedReputationAgentIds) {
+      recomputeReputationAggregate(agentTokenId);
+    }
+
     upsertMeta.run("last_sync_at", Date.now().toString());
     const storedJobEvents = (db.prepare(`SELECT COUNT(*) AS count FROM job_events`).get() as { count: number }).count;
     const storedAgentEvents = (db.prepare(`SELECT COUNT(*) AS count FROM agent_events`).get() as { count: number }).count;
-    upsertMeta.run("event_count", String(storedJobEvents + storedAgentEvents));
+    const storedReputationEvents = (db.prepare(`SELECT COUNT(*) AS count FROM reputation_events`).get() as { count: number }).count;
+    upsertMeta.run("event_count", String(storedJobEvents + storedAgentEvents + storedReputationEvents));
     db.exec("COMMIT");
   } catch (error) {
     db.exec("ROLLBACK");
@@ -600,4 +738,80 @@ export function readCounts() {
 export function readMetaValue(key: string) {
   const row = db.prepare(`SELECT value FROM meta WHERE key = ?`).get(key) as { value?: string } | undefined;
   return row?.value ?? null;
+}
+
+export function readReputation() {
+  return db.prepare(`
+    SELECT *
+    FROM reputation_aggregates
+    ORDER BY CAST(average_score AS INTEGER) DESC, CAST(agent_token_id AS INTEGER) DESC
+  `).all().map((row) => ({
+    agentTokenId: row.agent_token_id as string,
+    feedbackCount: Number(row.feedback_count),
+    scoreSum: row.score_sum as string,
+    averageScore: row.average_score as string,
+    latestScore: row.latest_score as string,
+    latestCategory: row.latest_category as string,
+    latestComment: row.latest_comment as string,
+    latestReviewer: row.latest_reviewer as string,
+    latestTxHash: row.latest_tx_hash as string,
+    latestBlockNumber: row.latest_block_number as string,
+    updatedAt: row.updated_at as string,
+  }));
+}
+
+export function readReputationByAgent(agentTokenId: string) {
+  const aggregate = db.prepare(`
+    SELECT *
+    FROM reputation_aggregates
+    WHERE agent_token_id = ?
+  `).get(agentTokenId);
+
+  const events = db.prepare(`
+    SELECT *
+    FROM reputation_events
+    WHERE agent_token_id = ?
+    ORDER BY CAST(block_number AS INTEGER) DESC, tx_hash DESC
+  `).all(agentTokenId).map((row) => ({
+    agentTokenId: row.agent_token_id as string,
+    reviewer: row.reviewer as string,
+    score: row.score as string,
+    category: row.category as string,
+    comment: row.comment as string,
+    metadataURI: row.metadata_uri as string,
+    proofURI: row.proof_uri as string,
+    context: row.context as string,
+    ref: row.ref as string,
+    blockNumber: row.block_number as string,
+    txHash: row.tx_hash as string,
+    source: row.source as string,
+  }));
+
+  if (!aggregate) {
+    return {
+      agentTokenId,
+      feedbackCount: 0,
+      scoreSum: "0",
+      averageScore: "0",
+      latestScore: "0",
+      events,
+    };
+  }
+
+  const row = aggregate as any;
+
+  return {
+    agentTokenId: row.agent_token_id as string,
+    feedbackCount: Number(row.feedback_count),
+    scoreSum: row.score_sum as string,
+    averageScore: row.average_score as string,
+    latestScore: row.latest_score as string,
+    latestCategory: row.latest_category as string,
+    latestComment: row.latest_comment as string,
+    latestReviewer: row.latest_reviewer as string,
+    latestTxHash: row.latest_tx_hash as string,
+    latestBlockNumber: row.latest_block_number as string,
+    updatedAt: row.updated_at as string,
+    events,
+  };
 }
