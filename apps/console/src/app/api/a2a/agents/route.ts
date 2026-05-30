@@ -272,11 +272,15 @@ export async function GET(request: Request) {
     );
 
     // Source 2: Stored manifests (web_manifest registrations)
+    // Stored manifests have richer metadata (name, endpoint, categories, x402).
+    // When an indexer row already exists for the same normalized ID, merge on-chain
+    // fields (tokenId, onchain, skillHash, reputationScore, etc.) INTO the manifest
+    // entry instead of skipping. This prevents the ExternalBotWizard flow from showing
+    // fallback metadata when the manifest has the real published name/endpoint.
     const merged = new Map<string, any>();
     for (const agent of indexerAgents) merged.set(String(agent.agentId).toLowerCase(), agent);
 
     for (const [normalizedId, stored] of manifestById.entries()) {
-      if (merged.has(normalizedId)) continue;
       const manifest = stored.manifest;
       const identity = normalizeAgentIdentity({
         agentId: stored.agentId,
@@ -285,7 +289,9 @@ export async function GET(request: Request) {
         source: 'web_manifest',
       });
 
-      merged.set(normalizedId, {
+      const existing = merged.get(normalizedId);
+
+      const manifestEntry = {
         agentId: identity.agentId,
         tokenId: identity.tokenId,
         owner: identity.owner || identity.controller,
@@ -295,7 +301,7 @@ export async function GET(request: Request) {
         endpoint: manifest.endpoint || '',
         metadataURI: `arclayer://manifest/${encodeURIComponent(stored.agentId)}`,
         registeredAtBlock: null,
-        source: 'web_manifest',
+        source: 'web_manifest' as const,
         onchain: false,
         metadata: {
           name: manifest.name,
@@ -311,7 +317,28 @@ export async function GET(request: Request) {
           skills: manifest.capabilities,
           x402: manifest.x402?.enabled ? 'enabled' : undefined,
         },
-      });
+      };
+
+      if (existing) {
+        // Merge on-chain fields into the manifest entry (manifest metadata wins)
+        merged.set(normalizedId, {
+          ...manifestEntry,
+          tokenId: existing.tokenId || manifestEntry.tokenId,
+          onchain: existing.onchain,
+          registeredAtBlock: existing.registeredAtBlock,
+          skillHash: existing.skillHash,
+          reputationScore: existing.reputationScore,
+          score: existing.score,
+          jobs: existing.jobs,
+          proofTokenIds: existing.proofTokenIds,
+          // Preserve manifest metadataURI unless indexer has a real on-chain URI
+          metadataURI: existing.metadataURI && !existing.metadataURI.startsWith('arclayer://')
+            ? existing.metadataURI
+            : manifestEntry.metadataURI,
+        });
+      } else {
+        merged.set(normalizedId, manifestEntry);
+      }
     }
 
     // Filter hidden agents
