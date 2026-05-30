@@ -205,6 +205,13 @@ export async function fetchReputationEvents(
     .map((event: any) => {
       const args = (event.args ?? {}) as Record<string, unknown>;
 
+      // Map contract event fields to SDK normalized names.
+      // Contract giveFeedback(agentId, value, valueDecimals, tag1, tag2, endpoint, feedbackURI, feedbackHash)
+      // Write route passes: (agentTokenId, score, category, comment, metadataURI, proofURI, context, ref)
+      // Event emit: NewFeedback(..., tag1, tag1, tag2, endpoint, feedbackURI, feedbackHash)
+      //   tag1 = comment (param 4), tag2 = metadataURI (param 5),
+      //   endpoint = proofURI (param 6), feedbackURI = context (param 7),
+      //   feedbackHash = ref (param 8)
       return {
         eventName: "NewFeedback" as const,
         blockNumber: event.blockNumber as bigint,
@@ -215,10 +222,10 @@ export async function fetchReputationEvents(
         feedbackIndex: Number(args.feedbackIndex ?? 0),
         score: args.value as bigint,
         category: Number(args.valueDecimals ?? 0),
-        comment: typeof args.endpoint === "string" ? args.endpoint : "",
-        metadataURI: typeof args.feedbackURI === "string" ? args.feedbackURI : "",
-        proofURI: typeof args.tag2 === "string" ? args.tag2 : "",
-        context: typeof args.tag1 === "string" ? args.tag1 : "",
+        comment: typeof args.tag1 === "string" ? args.tag1 : "",
+        metadataURI: typeof args.tag2 === "string" ? args.tag2 : "",
+        proofURI: typeof args.endpoint === "string" ? args.endpoint : "",
+        context: typeof args.feedbackURI === "string" ? args.feedbackURI : "",
         ref: args.feedbackHash as `0x${string}` | undefined,
       } satisfies IndexedReputationEvent;
     })
