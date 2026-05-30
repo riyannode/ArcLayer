@@ -65,6 +65,32 @@ export async function getMetadataDraft(draftId: string): Promise<MetadataDraftRe
   };
 }
 
+export async function getAgentsByController(
+  controller: string,
+): Promise<MetadataDraftRecord[]> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('draft_id, controller, metadata, status, agent_id, tx_hash, updated_at')
+    .eq('controller', controller.toLowerCase())
+    .eq('status', 'minted')
+    .not('agent_id', 'is', null)
+    .order('updated_at', { ascending: false });
+
+  if (error || !data) return [];
+
+  return data.map((row) => ({
+    draftId: row.draft_id,
+    controller: row.controller,
+    metadata: row.metadata,
+    status: row.status,
+    agentId: row.agent_id,
+    txHash: row.tx_hash,
+    updatedAt: row.updated_at,
+  }));
+}
+
 export async function updateMetadataDraft(input: {
   draftId: string;
   writeToken: string;
