@@ -39,6 +39,39 @@ function stringArray(value: unknown): string[] {
   return value.filter((v): v is string => typeof v === 'string');
 }
 
+const ARCLAYER_METADATA_HOSTS = new Set([
+  'arclayers.xyz',
+  'www.arclayers.xyz',
+]);
+
+function isArcLayerTokenURI(tokenURI: string) {
+  if (tokenURI.startsWith('arclayer://manifest/')) {
+    return true;
+  }
+
+  try {
+    const url = new URL(tokenURI);
+    const host = url.hostname.toLowerCase();
+    const path = url.pathname;
+
+    if (url.protocol !== 'https:') {
+      return false;
+    }
+
+    if (!ARCLAYER_METADATA_HOSTS.has(host)) {
+      return false;
+    }
+
+    return (
+      path.startsWith('/api/a2a/metadata/draft/') ||
+      path.startsWith('/api/a2a/manifest') ||
+      path.startsWith('/api/a2a/metadata/agent/')
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Returns true if the agent qualifies as an ArcLayer platform agent.
  *
@@ -52,10 +85,8 @@ export function isArcLayerPlatformAgent(agent: CanonicalAgentLike) {
   if (agent.source === 'manifest') return true;
   if (agent.source === 'draft') return true;
 
-  if (agent.tokenURI) {
-    if (agent.tokenURI.startsWith('arclayer://manifest/')) return true;
-    if (agent.tokenURI.includes('/api/a2a/metadata/draft/')) return true;
-    if (agent.tokenURI.includes('/api/a2a/manifest')) return true;
+  if (agent.tokenURI && isArcLayerTokenURI(agent.tokenURI)) {
+    return true;
   }
 
   if (!isRecord(agent.metadata)) return false;
