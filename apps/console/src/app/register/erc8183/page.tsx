@@ -1,0 +1,845 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { waitForTransactionReceipt } from '@wagmi/core';
+import { type Address } from 'viem';
+import {
+  ArrowLeft,
+  Bot,
+  BriefcaseBusiness,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  FileJson,
+  KeyRound,
+  Shield,
+  Wallet,
+  Workflow,
+} from 'lucide-react';
+import { buildRegisterAgentConfig } from '@arclayer/sdk';
+import { useArcWallet } from '@/hooks/useArcWallet';
+import { useArcWrite } from '@/hooks/useArcWrite';
+import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
+import { config } from '@/lib/wagmi';
+
+type AgentRole = 'worker' | 'evaluator' | 'autonomous-client';
+type RegisterStatus = 'idle' | 'pending' | 'success' | 'error';
+
+const CATEGORIES = [
+  'Smart Contract',
+  'Frontend',
+  'Backend',
+  'DevOps',
+  'Design',
+  'Data Research',
+  'Documentation',
+  'Analysis',
+  'Other',
+] as const;
+
+type Category = (typeof CATEGORIES)[number];
+
+type RoleConfig = {
+  id: AgentRole;
+  title: string;
+  label: string;
+  description: string;
+  identityRole: string;
+  manifestMode: 'buyer' | 'seller' | 'dual';
+  defaultCapabilities: string[];
+  jobAccepts: string[];
+};
+
+type FormState = {
+  agentName: string;
+  description: string;
+  avatarUrl: string;
+  role: AgentRole;
+  category: Category | '';
+  capabilities: string;
+  controllerWallet: string;
+  metadataUri: string;
+  websiteUrl: string;
+  docsUrl: string;
+  repoUrl: string;
+  xUrl: string;
+  confirm: boolean;
+};
+
+const ROLE_CONFIG: Record<AgentRole, RoleConfig> = {
+  worker: {
+    id: 'worker',
+    title: 'Worker Agent',
+    label: 'Worker',
+    description: 'Receives escrow jobs and submits work proof.',
+    identityRole: 'provider',
+    manifestMode: 'seller',
+    defaultCapabilities: ['claim_job', 'submit_work'],
+    jobAccepts: ['claim', 'run', 'submit-proof'],
+  },
+  evaluator: {
+    id: 'evaluator',
+    title: 'Evaluator Agent',
+    label: 'Evaluator',
+    description: 'Reviews work and settles escrow jobs.',
+    identityRole: 'evaluator',
+    manifestMode: 'dual',
+    defaultCapabilities: ['evaluate_work', 'complete_job'],
+    jobAccepts: ['run', 'submit-proof', 'complete'],
+  },
+  'autonomous-client': {
+    id: 'autonomous-client',
+    title: 'Autonomous Client Agent',
+    label: 'Client',
+    description: 'Creates and funds escrow jobs.',
+    identityRole: 'client',
+    manifestMode: 'buyer',
+    defaultCapabilities: ['create_job', 'fund_escrow'],
+    jobAccepts: ['create'],
+  },
+};
+
+const DEFAULT_FORM: FormState = {
+  agentName: '',
+  description: '',
+  avatarUrl: '',
+  role: 'worker',
+  category: '',
+  capabilities: '',
+  controllerWallet: '',
+  metadataUri: '',
+  websiteUrl: '',
+  docsUrl: '',
+  repoUrl: '',
+  xUrl: '',
+  confirm: false,
+};
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
+function shortAddress(value: string) {
+  if (!value) return '—';
+  if (value.length < 14) return value;
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
+}
+
+function capabilityList(value: string) {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 24);
+}
+
+
+
+function FieldShell({
+  label,
+  required,
+  helper,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  helper?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <div className="mb-2 font-mono text-[12px] font-semibold tracking-[-0.02em] text-[#F5F0E5]">
+        {label} {required && <span className="text-[#F3C536]">*</span>}
+      </div>
+      {children}
+      {helper && <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/48">{helper}</p>}
+    </label>
+  );
+}
+
+function TextInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <input
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      className="h-12 w-full rounded-md border border-white/10 bg-[#07090D] px-4 text-[14px] text-[#F5F0E5] outline-none transition placeholder:text-[#EAE4D8]/35 focus:border-[#F3C536]/60 focus:ring-2 focus:ring-[#F3C536]/10"
+    />
+  );
+}
+
+function TextareaInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <textarea
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      rows={3}
+      className="w-full resize-none rounded-md border border-white/10 bg-[#07090D] px-4 py-3 text-[14px] leading-6 text-[#F5F0E5] outline-none transition placeholder:text-[#EAE4D8]/35 focus:border-[#F3C536]/60 focus:ring-2 focus:ring-[#F3C536]/10"
+    />
+  );
+}
+
+function SelectInput({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="h-12 w-full appearance-none rounded-md border border-white/10 bg-[#07090D] px-4 text-[14px] text-[#F5F0E5] outline-none transition focus:border-[#F3C536]/60 focus:ring-2 focus:ring-[#F3C536]/10"
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value} className="bg-[#07090D] text-[#F5F0E5]">
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function Section({
+  icon,
+  title,
+  children,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-white/10 bg-[#07090D]/88 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
+      <div className="flex items-center gap-4 px-7 pt-6">
+        <div className="flex h-8 w-8 items-center justify-center text-[#F5F0E5]">{icon}</div>
+        <h2 className="text-[20px] font-semibold tracking-[-0.04em] text-[#F5F0E5]">{title}</h2>
+      </div>
+      <div className="px-7 pb-6 pt-5">{children}</div>
+    </section>
+  );
+}
+
+function StepItem({
+  number,
+  title,
+  description,
+  active,
+}: {
+  number: number;
+  title: string;
+  description: string;
+  active?: boolean;
+}) {
+  return (
+    <div className="relative flex gap-5">
+      <div className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/18 bg-[#07090D]">
+        <span
+          className={
+            active
+              ? 'flex h-10 w-10 items-center justify-center rounded-full border border-[#F3C536] text-[13px] text-[#F3C536]'
+              : 'text-[13px] text-[#EAE4D8]/75'
+          }
+        >
+          {number}
+        </span>
+      </div>
+      <div className="pb-10">
+        <div className={active ? 'font-semibold text-[#F3C536]' : 'font-semibold text-[#EAE4D8]/75'}>
+          {title}
+        </div>
+        <div className="mt-1 text-[13px] leading-5 text-[#EAE4D8]/48">{description}</div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[135px_1fr] gap-4 text-[13px]">
+      <span className="text-[#EAE4D8]/55">{label}</span>
+      <span className="min-w-0 truncate text-[#F5F0E5]/85">{value || '—'}</span>
+    </div>
+  );
+}
+
+function RoleButton({
+  role,
+  active,
+  onClick,
+}: {
+  role: RoleConfig;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        active
+          ? 'rounded-md border border-[#F3C536]/45 bg-[#F3C536]/10 p-4 text-left transition'
+          : 'rounded-md border border-white/10 bg-white/[0.025] p-4 text-left transition hover:border-[#F3C536]/30 hover:bg-[#F3C536]/[0.04]'
+      }
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className={active ? 'font-semibold text-[#F3C536]' : 'font-semibold text-[#F5F0E5]'}>
+            {role.title}
+          </div>
+          <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/55">{role.description}</p>
+        </div>
+        <div
+          className={
+            active
+              ? 'flex h-6 w-6 shrink-0 items-center justify-center rounded border border-[#F3C536] bg-[#F3C536] text-[#07090D]'
+              : 'h-6 w-6 shrink-0 rounded border border-white/20'
+          }
+        >
+          {active && <Check className="h-4 w-4" />}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function StatusBox({ label, value, active }: { label: string; value: string; active?: boolean }) {
+  return (
+    <div className="rounded-md border border-white/10 bg-white/[0.025] px-3 py-3">
+      <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#EAE4D8]/38">{label}</div>
+      <div className={active ? 'mt-1 text-[12px] text-[#F3C536]' : 'mt-1 text-[12px] text-[#EAE4D8]/70'}>{value}</div>
+    </div>
+  );
+}
+
+function MetadataPreview({ data, manifestCount }: { data: unknown; manifestCount: number }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const json = useMemo(() => JSON.stringify(data, null, 2), [data]);
+
+  return (
+    <div className="rounded-md border border-white/10 bg-[#05070A]">
+      <button
+        type="button"
+        onClick={() => setIsOpen((value) => !value)}
+        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition hover:bg-white/[0.025]"
+        aria-expanded={isOpen}
+      >
+        <div className="flex items-center gap-3">
+          <FileJson className="h-4 w-4 text-[#F3C536]" />
+          <div>
+            <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#F3C536]">
+              Identity Metadata Preview
+            </div>
+            <div className="mt-1 text-[12px] text-[#EAE4D8]/50">{isOpen ? 'Hide JSON' : 'Show JSON'}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="rounded border border-[#F3C536]/25 bg-[#F3C536]/10 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#F3C536]">
+            {manifestCount} manifest
+          </span>
+          {isOpen ? <ChevronUp className="h-4 w-4 text-[#F3C536]" /> : <ChevronDown className="h-4 w-4 text-[#F3C536]" />}
+        </div>
+      </button>
+
+      <div className="grid gap-2 border-t border-white/10 px-4 py-3 sm:grid-cols-3">
+        <StatusBox label="Schema" value="arclayer.agent/v1" active />
+        <StatusBox label="Category" value="erc8183-commerce" />
+        <StatusBox label="Network" value="arc-testnet" />
+      </div>
+
+      {isOpen && (
+        <pre className="max-h-[420px] overflow-auto border-t border-white/10 p-4 text-[11px] leading-5 text-[#EAE4D8]/62">
+          {json}
+        </pre>
+      )}
+    </div>
+  );
+}
+
+export default function ERC8183EscrowRegisterPage() {
+  const [form, setForm] = useState<FormState>(DEFAULT_FORM);
+  const [notice, setNotice] = useState('');
+  const [createdAt] = useState(() => new Date().toISOString());
+  const [registerStatus, setRegisterStatus] = useState<RegisterStatus>('idle');
+  const [mintedAgentId, setMintedAgentId] = useState<string>('');
+  const [txHash, setTxHash] = useState<string>('');
+  const { isConnected, address } = useArcWallet();
+  const { writeContractAsync } = useArcWrite();
+
+  const role = ROLE_CONFIG[form.role];
+  const customCaps = useMemo(() => capabilityList(form.capabilities), [form.capabilities]);
+  const controller = address || form.controllerWallet;
+  const agentSlug = slugify(form.agentName) || 'erc8183-agent';
+  const metadataURI = form.metadataUri.trim();
+  const metadataReady = Boolean(
+    form.agentName.trim() &&
+      form.description.trim() &&
+      form.category &&
+      controller &&
+      customCaps.length > 0 &&
+      metadataURI,
+  );
+
+  useEffect(() => {
+    if (!address) return;
+    setForm((prev) => (prev.controllerWallet ? prev : { ...prev, controllerWallet: address }));
+  }, [address]);
+
+  const agentManifest = useMemo(() => {
+    const categorySlug = form.category ? slugify(form.category) : 'general';
+    const allCaps = Array.from(new Set([...role.defaultCapabilities, ...customCaps, categorySlug]));
+    const now = new Date().toISOString();
+
+    return {
+      schema: 'arclayer.agent/v1',
+      version: 1,
+      agentId: mintedAgentId || `pending-${agentSlug}`,
+      name: form.agentName || 'ArcLayer Agent',
+      role: role.identityRole,
+      description: form.description || `${role.title} for ERC-8183 escrow work orders.`,
+      controller: controller || undefined,
+      mode: role.manifestMode,
+      avatar: form.avatarUrl || undefined,
+      capability: allCaps,
+      capabilities: allCaps,
+      categories: ['erc8183-commerce', categorySlug],
+      roles: [
+        {
+          id: role.id,
+          name: role.title,
+          category: 'erc8183-commerce',
+          capabilities: allCaps,
+          enabled: true,
+        },
+      ],
+      tags: ['erc8183', 'agentic-commerce', role.id, categorySlug],
+      links: {
+        homepage: form.websiteUrl || undefined,
+        docs: form.docsUrl || undefined,
+        repo: form.repoUrl || undefined,
+        x: form.xUrl || undefined,
+      },
+      x402: {
+        enabled: false,
+        network: 'arc-testnet',
+        currency: 'USDC',
+        receiver: controller || undefined,
+        payTo: controller || undefined,
+      },
+      jobs: {
+        accepts: role.jobAccepts,
+        inputFormats: ['text', 'json'],
+        outputFormats: ['json', 'proof'],
+      },
+      proof: {
+        types: ['signed_result', 'url'],
+        signing: 'eip191',
+      },
+      host: 'erc8183-identity',
+      metadataURI: metadataURI || undefined,
+      createdAt,
+      updatedAt: now,
+    };
+  }, [agentSlug, controller, createdAt, customCaps, form, metadataURI, mintedAgentId, role]);
+
+  function update<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function saveDraft() {
+    const payload = {
+      type: 'erc8183-agent-identity-draft',
+      form,
+      metadataURI,
+      agentManifest,
+    };
+
+    localStorage.setItem('arclayer-erc8183-agent-identity-draft', JSON.stringify(payload, null, 2));
+    setNotice('Draft saved. Bot setup is separate.');
+  }
+
+  async function submitRegister() {
+    if (!isConnected || !address) {
+      setRegisterStatus('error');
+      setNotice('Connect wallet first.');
+      return;
+    }
+    if (!metadataReady) {
+      setRegisterStatus('error');
+      setNotice('Complete required fields first. Metadata URI is required.');
+      return;
+    }
+    if (!form.confirm) {
+      setRegisterStatus('error');
+      setNotice('Confirm the identity information before minting.');
+      return;
+    }
+
+    try {
+      setRegisterStatus('pending');
+      setNotice('Submitting ERC-8004 identity mint...');
+      const hash = await writeContractAsync(buildRegisterAgentConfig(metadataURI));
+      setTxHash(hash);
+      setNotice(`Waiting for ${hash.slice(0, 10)}...`);
+      const receipt = await waitForTransactionReceipt(config, { hash });
+      const minted = extractERC8004MintedTokenIdFromReceipt(receipt, address as Address | undefined);
+      const mintedId = minted.toString();
+
+      setMintedAgentId(mintedId);
+      setRegisterStatus('success');
+      localStorage.setItem(
+        'arclayer-erc8183-agent-identity-registered',
+        JSON.stringify(
+          {
+            agentId: mintedId,
+            txHash: hash,
+            metadataURI,
+            form,
+            agentManifest: { ...agentManifest, agentId: mintedId },
+            nextStep: 'PM2 setup will be available in separate flow.',
+          },
+          null,
+          2,
+        ),
+      );
+      setNotice(`Identity minted. Agent ID ${mintedId}. Continue to ERC-8183 PM2 setup.`);
+    } catch (error) {
+      setRegisterStatus('error');
+      setNotice(error instanceof Error ? error.message : 'Identity mint failed.');
+    }
+  }
+
+  return (
+    <main className="min-h-screen overflow-hidden bg-[#05070A] text-[#F5F0E5]">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_28%_18%,rgba(243,197,54,0.075),transparent_28%),radial-gradient(circle_at_72%_10%,rgba(255,255,255,0.05),transparent_22%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent_45%)]" />
+      <div className="pointer-events-none fixed inset-0 opacity-[0.18] [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:44px_44px]" />
+
+      <div className="relative grid min-h-screen lg:grid-cols-[520px_1fr]">
+        <aside className="border-r border-white/10 px-8 py-8 sm:px-12 lg:px-16">
+          <Link
+            href="/register"
+            className="inline-flex items-center gap-3 font-mono text-[12px] font-semibold tracking-[0.04em] text-[#F3C536] transition hover:text-[#FFE070]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Register
+          </Link>
+
+          <div className="mt-14">
+            <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#F3C536]">
+              ERC-8004 · AGENT IDENTITY
+            </div>
+            <h1 className="mt-3 text-[34px] font-bold tracking-[-0.055em] text-[#F5F0E5] sm:text-[38px]">
+              Register Agent Identity
+            </h1>
+            <p className="mt-5 max-w-[370px] text-[16px] leading-8 text-[#EAE4D8]/62">
+              Create the public identity first. PM2 bot setup comes later.
+            </p>
+          </div>
+
+          <div className="relative mt-16">
+            <div className="absolute left-5 top-10 h-[140px] border-l border-dashed border-white/16" />
+            <StepItem number={1} title="Identity" description="Name, role, category" active />
+            <StepItem number={2} title="Profile" description="Avatar, links, metadata" />
+            <StepItem number={3} title="Mint" description="Review and register" />
+          </div>
+
+          <div className="mt-12 rounded-md border border-[#F3C536]/22 bg-[#F3C536]/[0.025] p-7">
+            <div className="flex items-center gap-3 text-[#F3C536]">
+              <Workflow className="h-5 w-5" />
+              <div className="font-mono text-[13px] font-semibold">Simple scope</div>
+            </div>
+
+            <div className="mt-8 space-y-8">
+              <div className="flex gap-5">
+                <BriefcaseBusiness className="mt-1 h-6 w-6 shrink-0 text-[#F3C536]" />
+                <div>
+                  <div className="font-semibold text-[#F5F0E5]">Identity only</div>
+                  <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
+                    No PM2, keys, or private config here.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-5">
+                <Wallet className="mt-1 h-6 w-6 shrink-0 text-[#F3C536]" />
+                <div>
+                  <div className="font-semibold text-[#F5F0E5]">Wallet owns identity</div>
+                  <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
+                    Connected wallet mints the ERC-8004 identity.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-5">
+                <Shield className="mt-1 h-6 w-6 shrink-0 text-[#F3C536]" />
+                <div>
+                  <div className="font-semibold text-[#F5F0E5]">Next step</div>
+                  <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
+                    Continue to ERC-8183 PM2 setup after mint.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <section className="px-5 py-8 sm:px-8 lg:px-14 xl:px-16">
+          <div className="mx-auto max-w-[1180px] space-y-3">
+            <Section icon={<Bot className="h-6 w-6" />} title="Agent Identity">
+              <div className="grid gap-7 lg:grid-cols-2">
+                <FieldShell label="Agent Name" required helper="Public display name.">
+                  <TextInput
+                    value={form.agentName}
+                    onChange={(value) => update('agentName', value)}
+                    placeholder="e.g., Smart Contract Audit Worker"
+                  />
+                </FieldShell>
+
+                <FieldShell label="Role" required helper="Escrow identity role.">
+                  <SelectInput
+                    value={form.role}
+                    onChange={(value) => update('role', value as AgentRole)}
+                    options={[
+                      { value: 'worker', label: 'Worker — receives jobs' },
+                      { value: 'evaluator', label: 'Evaluator — reviews work' },
+                      { value: 'autonomous-client', label: 'Client — creates jobs' },
+                    ]}
+                  />
+                </FieldShell>
+
+                <div className="lg:col-span-2">
+                  <div className="mb-3 font-mono text-[12px] font-semibold tracking-[-0.02em] text-[#F5F0E5]">
+                    Identity Role <span className="text-[#F3C536]">*</span>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <RoleButton role={ROLE_CONFIG.worker} active={form.role === 'worker'} onClick={() => update('role', 'worker')} />
+                    <RoleButton role={ROLE_CONFIG.evaluator} active={form.role === 'evaluator'} onClick={() => update('role', 'evaluator')} />
+                    <RoleButton role={ROLE_CONFIG['autonomous-client']} active={form.role === 'autonomous-client'} onClick={() => update('role', 'autonomous-client')} />
+                  </div>
+                </div>
+
+                <div className="lg:col-span-2">
+                  <FieldShell label="Description" required helper="Short public summary.">
+                    <TextareaInput
+                      value={form.description}
+                      onChange={(value) => update('description', value)}
+                      placeholder="What does this escrow agent do?"
+                    />
+                  </FieldShell>
+                </div>
+
+                <FieldShell label="Category" required helper="Used for discovery.">
+                  <SelectInput
+                    value={form.category}
+                    onChange={(value) => update('category', value as Category | '')}
+                    options={[
+                      { value: '', label: 'Select a category' },
+                      ...CATEGORIES.map((category) => ({ value: category, label: category })),
+                    ]}
+                  />
+                </FieldShell>
+
+                <FieldShell label="Capabilities" required helper="Comma-separated tags.">
+                  <TextInput
+                    value={form.capabilities}
+                    onChange={(value) => update('capabilities', value)}
+                    placeholder="audit, security-review, code-review"
+                  />
+                </FieldShell>
+
+                {customCaps.length > 0 && (
+                  <div className="lg:col-span-2 flex flex-wrap gap-2">
+                    {customCaps.map((capability) => (
+                      <span
+                        key={capability}
+                        className="rounded-md border border-white/10 bg-white/[0.035] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#EAE4D8]/62"
+                      >
+                        {capability}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Section>
+
+            <Section icon={<KeyRound className="h-6 w-6" />} title="Profile & Ownership">
+              <div className="grid gap-7 lg:grid-cols-2">
+                <FieldShell label="Controller Wallet" required helper="Auto-filled from wallet.">
+                  <TextInput
+                    value={form.controllerWallet}
+                    onChange={(value) => update('controllerWallet', value)}
+                    placeholder="0x..."
+                  />
+                </FieldShell>
+
+                <FieldShell label="Avatar / Logo URL" helper="Optional image URL.">
+                  <TextInput
+                    value={form.avatarUrl}
+                    onChange={(value) => update('avatarUrl', value)}
+                    placeholder="https://.../logo.png"
+                  />
+                </FieldShell>
+
+                <FieldShell label="Metadata URI" required helper="Must resolve before mint.">
+                  <TextInput
+                    value={form.metadataUri}
+                    onChange={(value) => update('metadataUri', value)}
+                    placeholder="https://... or ipfs://..."
+                  />
+                </FieldShell>
+
+                <FieldShell label="Website" helper="Optional.">
+                  <TextInput
+                    value={form.websiteUrl}
+                    onChange={(value) => update('websiteUrl', value)}
+                    placeholder="https://..."
+                  />
+                </FieldShell>
+
+                <FieldShell label="Docs" helper="Optional.">
+                  <TextInput
+                    value={form.docsUrl}
+                    onChange={(value) => update('docsUrl', value)}
+                    placeholder="https://..."
+                  />
+                </FieldShell>
+
+                <FieldShell label="Repo" helper="Optional.">
+                  <TextInput
+                    value={form.repoUrl}
+                    onChange={(value) => update('repoUrl', value)}
+                    placeholder="https://github.com/..."
+                  />
+                </FieldShell>
+
+                <FieldShell label="X / Twitter" helper="Optional.">
+                  <TextInput
+                    value={form.xUrl}
+                    onChange={(value) => update('xUrl', value)}
+                    placeholder="https://x.com/..."
+                  />
+                </FieldShell>
+              </div>
+            </Section>
+
+            <Section icon={<FileJson className="h-6 w-6" />} title="Review & Mint">
+              <div className="grid gap-8 xl:grid-cols-[1fr_430px]">
+                <div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-3">
+                      <ReviewRow label="Agent Name" value={form.agentName} />
+                      <ReviewRow label="Role" value={role.title} />
+                      <ReviewRow label="Category" value={form.category} />
+                      <ReviewRow label="Agent ID" value={mintedAgentId || 'Pending identity'} />
+                    </div>
+
+                    <div className="space-y-3">
+                      <ReviewRow label="Controller" value={shortAddress(controller)} />
+                      <ReviewRow label="Metadata URI" value={metadataURI || 'Generated after wallet'} />
+                      <ReviewRow label="Capabilities" value={customCaps.join(', ')} />
+                      <ReviewRow label="Tx" value={txHash ? shortAddress(txHash) : '—'} />
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid gap-3 sm:grid-cols-4">
+                    <StatusBox label="Identity" value={mintedAgentId ? `Agent ${mintedAgentId}` : 'Pending'} active={Boolean(mintedAgentId)} />
+                    <StatusBox label="Metadata" value={metadataReady ? 'Ready' : 'Incomplete'} active={metadataReady} />
+                    <StatusBox label="Controller" value={controller ? shortAddress(controller) : 'Connect wallet'} active={Boolean(controller)} />
+                    <StatusBox label="Next" value="ERC-8183 PM2 setup" active={registerStatus === 'success'} />
+                  </div>
+
+                  <label className="mt-6 flex items-start gap-3 rounded-md border border-white/10 bg-white/[0.025] p-4">
+                    <button
+                      type="button"
+                      onClick={() => update('confirm', !form.confirm)}
+                      className={
+                        form.confirm
+                          ? 'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border border-[#F3C536] bg-[#F3C536] text-[#07090D]'
+                          : 'mt-0.5 h-5 w-5 shrink-0 rounded border border-white/25'
+                      }
+                    >
+                      {form.confirm && <Check className="h-3.5 w-3.5" />}
+                    </button>
+                    <span className="text-[13px] leading-6 text-[#EAE4D8]/62">
+                      I confirm this is public identity metadata. Bot secrets and PM2 settings are configured separately.
+                    </span>
+                  </label>
+                </div>
+
+                <MetadataPreview data={agentManifest} manifestCount={1} />
+              </div>
+            </Section>
+
+            {notice && (
+              <div
+                className={
+                  registerStatus === 'error'
+                    ? 'rounded-md border border-rose-400/25 bg-rose-400/[0.055] px-5 py-4 text-[13px] leading-6 text-rose-200'
+                    : 'rounded-md border border-[#F3C536]/25 bg-[#F3C536]/[0.045] px-5 py-4 text-[13px] leading-6 text-[#F3C536]'
+                }
+              >
+                {notice}
+                {registerStatus === 'success' && (
+                  <div className="mt-2 text-[#EAE4D8]/70">
+                    PM2 setup will be available in separate flow.
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="sticky bottom-0 z-20 flex flex-col gap-4 rounded-t-xl border-t border-white/10 bg-[#05070A]/92 px-5 py-5 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-[13px] leading-6 text-[#EAE4D8]/55">
+                Register identity here. Configure PM2 bots in the separate setup flow.
+              </p>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={saveDraft}
+                  className="h-12 rounded-md border border-[#F3C536]/35 bg-transparent px-8 text-[13px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/70 hover:bg-[#F3C536]/8"
+                >
+                  Save Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={submitRegister}
+                  disabled={registerStatus === 'pending'}
+                  className="h-12 rounded-md border border-[#F3C536] bg-[#F3C536] px-9 text-[13px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {registerStatus === 'pending' ? 'Minting...' : 'Mint Identity'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
