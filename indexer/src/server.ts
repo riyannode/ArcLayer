@@ -4,6 +4,7 @@ import {
   ARC_REFERENCE_METADATA_PREFIX_FILTER,
   ARC_REFERENCE_WALLET_FILTER,
   DEFAULT_FROM_BLOCK,
+  IDENTITY_FROM_BLOCK,
   INDEXER_PORT,
   INDEX_ARC_REFERENCE_ERC8004,
   INDEX_ARC_REFERENCE_ERC8183,
@@ -88,8 +89,14 @@ export async function runSyncCycle() {
     const fromBlockValue = readMetaValue("last_synced_block");
     const fromBlock = fromBlockValue ? BigInt(fromBlockValue) + BigInt(1) : DEFAULT_FROM_BLOCK;
 
+    const agentFromBlockValue = readMetaValue("last_synced_agent_block");
+    const agentFromBlock = agentFromBlockValue ? BigInt(agentFromBlockValue) + BigInt(1) : IDENTITY_FROM_BLOCK;
+
     const chainLatestBlock = await getLatestBlock();
     const toBlock = calculateToBlock(fromBlock, chainLatestBlock, MAX_BLOCK_RANGE);
+
+    // Agent events use their own cursor but share the same toBlock ceiling.
+    const agentToBlock = calculateToBlock(agentFromBlock, chainLatestBlock, MAX_BLOCK_RANGE);
 
     let events: Awaited<ReturnType<typeof fetchJobEvents>>["events"] = [];
     if (INDEX_ARC_REFERENCE_ERC8183) {
@@ -98,15 +105,18 @@ export async function runSyncCycle() {
 
     let agentEvts: Awaited<ReturnType<typeof fetchAgentEvents>>["events"] = [];
     if (INDEX_ARC_REFERENCE_ERC8004) {
-      agentEvts = (await fetchAgentEvents(fromBlock, toBlock)).events;
+      agentEvts = (await fetchAgentEvents(agentFromBlock, agentToBlock)).events;
     }
 
-    console.log(`[indexer] sync projection: jobs=${events.length} erc8004Agents=${agentEvts.length} block=${toBlock}`);
+    console.log(`[indexer] sync projection: jobs=${events.length} erc8004Agents=${agentEvts.length} block=${toBlock} agentBlock=${agentToBlock}`);
     const syncResult = await syncProjectionStore(events, agentEvts);
 
-    // Always advance cursor so empty ranges don't get re-scanned
+    // Advance cursors independently
     if (toBlock >= fromBlock) {
       writeMetaValue("last_synced_block", toBlock.toString());
+    }
+    if (agentToBlock >= agentFromBlock) {
+      writeMetaValue("last_synced_agent_block", agentToBlock.toString());
     }
 
     lastSyncError = syncResult.lastSyncError;
@@ -284,6 +294,7 @@ createServer((req, res) => {
     endpoints: ["/health", "/overview/summary", "/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug"],
     eventCount: Number(readMetaValue("event_count") || "0"),
     lastSyncedBlock: readMetaValue("last_synced_block"),
+    lastSyncedAgentBlock: readMetaValue("last_synced_agent_block"),
   });
 }).listen(INDEXER_PORT, () => {
   console.log(`ArcLayer indexer (Arc Reference Mode) listening on http://localhost:${INDEXER_PORT}`);

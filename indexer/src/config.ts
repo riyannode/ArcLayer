@@ -1,6 +1,12 @@
 export const INDEXER_PORT = Number(process.env.INDEXER_PORT || process.env.PORT || 3535);
 const fromBlockEnv = process.env.FROM_BLOCK ?? process.env.START_BLOCK ?? '41752050';
 export const DEFAULT_FROM_BLOCK = BigInt(fromBlockEnv);
+
+// ERC-8004 Identity Registry deployment / backfill start block.
+export const IDENTITY_FROM_BLOCK = BigInt(
+  process.env.IDENTITY_FROM_BLOCK || process.env.ERC8004_IDENTITY_FROM_BLOCK || fromBlockEnv,
+);
+
 export const POLL_INTERVAL_MS = Number(process.env.POLL_INTERVAL_MS || 30_000);
 export const ARC_RPC_URL = process.env.ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
 export const DATABASE_PATH = process.env.DATABASE_PATH || '';
@@ -26,5 +32,5 @@ export const ARC_REFERENCE_METADATA_PREFIX_FILTER = (process.env.ARC_REFERENCE_M
   .split(',').map((s) => s.trim()).filter(Boolean);
 
 console.log(
-  `[indexer] startup config fromBlock=${DEFAULT_FROM_BLOCK.toString()} maxBlockRange=${MAX_BLOCK_RANGE.toString()} pollIntervalMs=${POLL_INTERVAL_MS} indexErc8183=${INDEX_ARC_REFERENCE_ERC8183} indexErc8004=${INDEX_ARC_REFERENCE_ERC8004} indexerDbPath=${INDEXER_DB_PATH || '(default)'}`,
+  `[indexer] startup config fromBlock=${DEFAULT_FROM_BLOCK.toString()} identityFromBlock=${IDENTITY_FROM_BLOCK.toString()} maxBlockRange=${MAX_BLOCK_RANGE.toString()} pollIntervalMs=${POLL_INTERVAL_MS} indexErc8183=${INDEX_ARC_REFERENCE_ERC8183} indexErc8004=${INDEX_ARC_REFERENCE_ERC8004} indexerDbPath=${INDEXER_DB_PATH || '(default)'}`,
 );
