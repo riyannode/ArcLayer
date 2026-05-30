@@ -12,6 +12,10 @@ import X402GlobalAccessGuard from '@/components/x402/X402GlobalAccessGuard';
 export default function RootShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isLanding = pathname === '/';
+  const shouldAddFormerFooterPadding =
+    !isLanding &&
+    pathname !== '/dashboard';
+
   return (
     <>
       {!isLanding ? (
@@ -32,7 +36,10 @@ export default function RootShell({ children }: { children: ReactNode }) {
                     </ClientErrorBoundary>
                   </div>
 
-                  <main key={pathname} className="flex-1 page-transition pb-36">
+                  <main
+                    key={pathname}
+                    className={`flex-1 page-transition ${shouldAddFormerFooterPadding ? 'pb-36' : ''}`}
+                  >
                     {children}
                   </main>
                 </div>
