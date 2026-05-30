@@ -63,23 +63,57 @@ export type RegisteredAgentMetadata = {
   avatar?: string;
 };
 
+export type RegisteredAgentSource =
+  | 'erc8004_identity_registry'
+  | 'web_manifest'
+  | 'external-registry'
+  | 'indexer'
+  | 'registry'
+  | string;
+
 export type RegisteredAgent = {
+  /**
+   * Canonical ArcLayer agent ID.
+   * For ERC-8004 agents this must equal tokenId.
+   * Kept as agentId for compatibility with existing UI/routes.
+   */
   agentId: string;
-  metadataURI: string;
+
+  /**
+   * ERC-8004 Identity Registry tokenId.
+   * For web_manifest / external-registry agents this may be undefined.
+   */
+  tokenId?: string | null;
+
+  owner?: string;
   controller: string;
-  registeredAtBlock?: string;
+  endpoint?: string;
+  metadataURI: string;
+  registeredAtBlock?: string | null;
+  source?: RegisteredAgentSource;
+  onchain?: boolean;
+  skillHash?: string;
+  reputationScore?: string;
+  score?: string;
+  jobs?: string[];
+  proofTokenIds?: string[];
   metadata: RegisteredAgentMetadata | null;
 };
 
 export type NetworkAgent = {
   id: string;
+  tokenId?: string | null;
   name: string;
   role: string;
   capability: string[];
   description: string;
   status: 'LIVE' | 'RUNNING' | 'IDLE';
   wallet?: string;
+  owner?: string;
+  controller?: string;
   agentId?: string;
+  metadataURI?: string;
+  source: RegisteredAgentSource;
   avatar?: string;
   reputation: number;
   callsServed: number;
@@ -89,7 +123,6 @@ export type NetworkAgent = {
   primaryAction: string;
   categories: AgentCategory[];
   activity: FeedItem[];
-  source: 'registry';
   canHide: boolean;
   connectedTo?: string[];
 };

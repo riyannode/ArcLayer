@@ -2,25 +2,47 @@ import type { A2AOnChain, AutonomousFeed, Job, NetworkAgent, Overview, Proof, Re
 import { asArray, asString, asNumber } from '@/lib/safeShape';
 import { safeBigInt } from '@/lib/safeNumber';
 
-function jobsForAgent(overview: Overview | null, agentId?: string) {
-  if (!overview || !agentId) return 0;
-  const lowerId = agentId.toLowerCase();
-  return asArray<Job>(overview.jobs).filter((job) => {
-    const provider = asString(job.provider).toLowerCase();
-    return provider === lowerId;
-  }).length;
+function canonicalAgentId(reg: RegisteredAgent) {
+  return String(reg.tokenId || reg.agentId || '').trim();
 }
 
-function jobClientsForAgent(overview: Overview | null, agentId?: string) {
-  if (!overview || !agentId) return [];
-  const lowerId = agentId.toLowerCase();
+function agentProviderKeys(reg: RegisteredAgent) {
+  return [
+    reg.tokenId,
+    reg.agentId,
+    reg.controller,
+    reg.owner,
+  ]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
+}
+
+function isJobForAgent(job: Job, keys: string[]) {
+  const provider = asString(job.provider).toLowerCase();
+  return provider.length > 0 && keys.includes(provider);
+}
+
+function isProofForAgent(proof: Proof, keys: string[]) {
+  const agentId = asString(proof.agentId).toLowerCase();
+  return agentId.length > 0 && keys.includes(agentId);
+}
+
+function jobsForAgent(overview: Overview | null, reg?: RegisteredAgent) {
+  if (!overview || !reg) return 0;
+  const keys = agentProviderKeys(reg);
+  return asArray<Job>(overview.jobs).filter((job) => isJobForAgent(job, keys)).length;
+}
+
+function jobClientsForAgent(overview: Overview | null, reg?: RegisteredAgent) {
+  if (!overview || !reg) return [];
+  const keys = agentProviderKeys(reg);
+
   return Array.from(
     new Set(
       asArray<Job>(overview.jobs)
         .filter((job) => {
-          const provider = asString(job.provider).toLowerCase();
           const client = asString(job.client);
-          return provider === lowerId && client.length > 0;
+          return isJobForAgent(job, keys) && client.length > 0;
         })
         .map((job) => {
           const client = asString(job.client);
@@ -52,16 +74,17 @@ export function buildAgentNetwork({
   if (registeredAgents && registeredAgents.length > 0) {
     const seenRegistryIds = new Set<string>();
     for (const reg of registeredAgents) {
-      const regId = String(reg.agentId || '');
+      const regId = canonicalAgentId(reg);
       const regKey = regId.toLowerCase();
+      const providerKeys = agentProviderKeys(reg);
       const meta = reg.metadata;
       if (!regKey || seenRegistryIds.has(regKey)) continue;
       seenRegistryIds.add(regKey);
       if (hiddenIds?.has(regId)) continue;
 
-      const completed = jobsForAgent(overview, regId);
-      const receipts = asArray<Proof>(overview?.proofs).filter((p) => String(p.agentId || '').toLowerCase() === regKey);
-      const jobs = asArray<Job>(overview?.jobs).filter((job) => job.provider?.toLowerCase() === regKey);
+      const completed = jobsForAgent(overview, reg);
+      const receipts = asArray<Proof>(overview?.proofs).filter((p) => isProofForAgent(p, providerKeys));
+      const jobs = asArray<Job>(overview?.jobs).filter((job) => isJobForAgent(job, providerKeys));
       const volumeRaw = receipts.reduce((sum, p) => sum + safeBigInt(p.amountPaid as string | undefined), BigInt(0)).toString();
       const activity = [
         ...receipts.map((p) => {
@@ -96,13 +119,18 @@ export function buildAgentNetwork({
 
       agents.push({
         id: regId,
+        tokenId: reg.tokenId ?? (/^\d+$/.test(regId) ? regId : null),
         name: asString(meta?.name) || `Agent ${regId.slice(0, 8)}`,
         role: asString(meta?.role) || 'Registered Agent',
         capability: asArray<string>(meta?.capability).length > 0 ? asArray<string>(meta?.capability) : ['General'],
-        description: asString(meta?.description) || 'Registered agent synced from ArcLayer registry/indexer.',
+        description: asString(meta?.description) || 'Registered agent synced from ERC-8004 identity/indexer.',
         status: completed > 0 || receipts.length > 0 ? 'LIVE' : 'IDLE',
         wallet: asString(reg.controller),
+        owner: asString(reg.owner),
+        controller: asString(reg.controller),
         agentId: regId,
+        metadataURI: asString(reg.metadataURI),
+        source: reg.source || 'erc8004_identity_registry',
         avatar: asString(meta?.avatar) || undefined,
         reputation: asNumber((reg as any).reputationScore, 0),
         callsServed: receipts.length,
@@ -112,9 +140,8 @@ export function buildAgentNetwork({
         primaryAction: 'Create Job',
         categories: (asArray(meta?.categories).length > 0 ? asArray(meta?.categories) : ['developers']) as NetworkAgent['categories'],
         activity,
-        source: 'registry',
         canHide: true,
-        connectedTo: jobClientsForAgent(overview, regId),
+        connectedTo: jobClientsForAgent(overview, reg),
       });
     }
   }

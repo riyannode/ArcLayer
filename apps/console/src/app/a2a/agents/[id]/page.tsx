@@ -142,7 +142,7 @@ export default function AgentProfilePage() {
 
       const networkAgents = buildAgentNetwork({ onchain, overview, feed: fdData, isLive, registeredAgents });
       const found = networkAgents.find(
-        (a) => a.id === agentId || a.agentId === agentId
+        (a) => a.id === agentId || a.agentId === agentId || a.tokenId === agentId
       ) ?? null;
 
       if (found) {
@@ -298,12 +298,24 @@ export default function AgentProfilePage() {
 
                 <div className="space-y-2 rounded border border-white/10 bg-white/[0.02] p-4 font-mono text-[11px]">
                   <div>
-                    <p className="text-[#555]">Wallet / controller</p>
-                    <p className="break-all text-[#EAE4D8]">{agent.wallet || '—'}</p>
+                    <p className="text-[#555]">ERC-8004 Token ID</p>
+                    <p className="break-all text-[#EAE4D8]">{agent.tokenId || agent.agentId || agent.id}</p>
                   </div>
                   <div>
-                    <p className="text-[#555]">Agent ID</p>
-                    <p className="break-all text-[#EAE4D8]">{agent.agentId || agent.id}</p>
+                    <p className="text-[#555]">Controller</p>
+                    <p className="break-all text-[#EAE4D8]">{agent.controller || agent.wallet || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#555]">Owner</p>
+                    <p className="break-all text-[#EAE4D8]">{agent.owner || agent.wallet || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#555]">Metadata URI</p>
+                    <p className="break-all text-[#EAE4D8]">{agent.metadataURI || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#555]">Source</p>
+                    <p className="break-all text-[#EAE4D8]">{agent.source || '—'}</p>
                   </div>
                   {agent.connectedTo && agent.connectedTo.length > 0 && (
                     <div>
