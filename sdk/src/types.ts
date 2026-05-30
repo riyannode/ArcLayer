@@ -49,12 +49,13 @@ export type IndexedJobEvent = {
 };
 
 export type IndexedReputationEvent = {
-  eventName: "FeedbackGiven";
+  eventName: "NewFeedback";
   blockNumber: bigint;
   transactionHash: `0x${string}`;
   logIndex: number;
   agentTokenId: bigint;
   reviewer: Address;
+  feedbackIndex: number;
   score: bigint;
   category: number;
   comment?: string;
