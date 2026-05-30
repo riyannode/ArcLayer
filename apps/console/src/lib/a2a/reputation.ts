@@ -1,10 +1,9 @@
 import { createPublicClient, createWalletClient, http, toHex, pad, keccak256 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { arcTestnet } from '@arclayer/sdk';
+import { arcTestnet, CONTRACTS } from '@arclayer/sdk';
 import { AgentMatchCandidate, rankAgentsForJob, JobMatchInput } from './match-agents';
 
-// ─── Contract config ─────────────────────────────────────────────────────────
-const REPUTATION_REGISTRY = '0x9c97CAE866397d94e295632B3BFCF342ea20f1Cc' as const;
+const REPUTATION_REGISTRY = CONTRACTS.ERC8004_REPUTATION_REGISTRY;
 
 const ABI = [
   {
