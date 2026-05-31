@@ -459,13 +459,14 @@ export default function EscrowWorkOrderPage() {
     ['Job Title', form.title],
     ['Category', form.category],
     ['Deadline', form.timeline],
-    ['Escrow Budget', form.budgetMax ? `${form.budgetMax} USDC` : ''],
+    ['Proposed Budget', form.budgetMax ? `${form.budgetMax} USDC` : ''],
     ['Settlement', 'ERC-8183 Escrow'],
     ['Token', 'USDC'],
     ['Network', 'Arc Testnet'],
     ['Client Wallet', address || form.clientAddress || 'Not connected'],
     ['Evaluator Wallet', 'Same as client'],
     ['Worker Agent', selectedWorker?.name ?? 'Not selected'],
+    ['Next Step', 'Fund escrow after worker confirmation'],
   ] as const;
 
   const reviewBlocks = [
@@ -494,16 +495,11 @@ export default function EscrowWorkOrderPage() {
         {/* Header */}
         <header className="mt-7">
           <h1 className="text-[42px] font-semibold tracking-[-0.04em] text-[#F4EFE5] md:text-[58px]">
-            Create Manual Job
+            Create Job Assignment
           </h1>
           <p className="mt-3 max-w-3xl text-[15px] leading-7 text-[#EAE4D8]/66">
-            Provide the details of the work you need done. Fill in each section
-            below — you can always come back and edit later.
+            Create job request for a selected worker agent.
           </p>
-          <div className="mt-6 px-1 py-1 text-sm text-[#EAE4D8]/70">
-            ⓘ Start simple. You can always edit or add more details after your
-            job is created.
-          </div>
         </header>
 
         {/* Accordion sections */}
@@ -513,7 +509,7 @@ export default function EscrowWorkOrderPage() {
           <SectionCard
             number={1}
             title="Overview"
-            subtitle="Add a short title, choose a category, and describe the work."
+            subtitle="Add the basic job details and choose a worker."
             status={overviewComplete ? 'Complete' : 'Pending'}
             open={openSections.overview}
             onToggle={() => toggleSection('overview')}
@@ -528,7 +524,7 @@ export default function EscrowWorkOrderPage() {
                   className={inputCls}
                 />
                 <p className="mt-2 text-xs text-[#EAE4D8]/53">
-                  A clear title helps attract the right agents.
+                  Short name for this work request.
                 </p>
               </div>
 
@@ -556,7 +552,7 @@ export default function EscrowWorkOrderPage() {
                   ))}
                 </select>
                 <p className="mt-2 text-xs text-[#EAE4D8]/53">
-                  Choose the category that best fits your job.
+                  Used to find matching worker agents.
                 </p>
               </div>
 
@@ -571,8 +567,7 @@ export default function EscrowWorkOrderPage() {
                   className={textareaCls}
                 />
                 <p className="mt-2 text-xs text-[#EAE4D8]/53">
-                  Provide a detailed description. Agents use this to decide
-                  whether to apply.
+                  Explain what needs to be done.
                 </p>
               </div>
 
@@ -583,8 +578,8 @@ export default function EscrowWorkOrderPage() {
                   readOnly
                   className={`${inputCls} cursor-not-allowed opacity-80`}
                 />
-                <p className="mt-2 text-xs text-[#EAE4D8]/62">
-                  This wallet will be used as the ERC-8183 client address.
+                <p className="mt-2 text-xs text-[#EAE4D8]/53">
+                  Wallet creating this job.
                 </p>
               </div>
 
@@ -610,8 +605,34 @@ export default function EscrowWorkOrderPage() {
                   ))}
                 </select>
                 <p className="mt-2 text-xs text-[#EAE4D8]/53">
-                  Selected agent to receive this ERC-8183 job.
+                  The agent that will receive this assignment.
                 </p>
+
+                {/* Selected Worker Card */}
+                {selectedWorker ? (
+                  <div className="mt-4 rounded-lg border border-white/[0.06] bg-[#EAE4D8]/[0.04] p-4">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/38">
+                      Selected Worker
+                    </p>
+                    <p className="mt-1 text-xs text-[#EAE4D8]/53">
+                      This worker will receive the assignment.
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-[#EAE4D8]/38">Worker Agent</span>
+                        <span className="text-sm font-semibold text-[#F4EFE5]">{selectedWorker.name}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-[#EAE4D8]/38">Agent ID</span>
+                        <span className="font-mono text-xs text-[#F4EFE5]">{selectedWorker.agentId}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-[#EAE4D8]/38">Controller</span>
+                        <span className="max-w-[200px] truncate font-mono text-xs text-[#F4EFE5]">{selectedWorker.controller}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </SectionCard>
@@ -620,7 +641,7 @@ export default function EscrowWorkOrderPage() {
           <SectionCard
             number={2}
             title="Scope"
-            subtitle="Define deliverables, requirements, and timeline."
+            subtitle="Define what the worker should deliver."
             status={scopeComplete ? 'Complete' : 'Pending'}
             open={openSections.scope}
             onToggle={() => toggleSection('scope')}
@@ -637,7 +658,7 @@ export default function EscrowWorkOrderPage() {
                   className={textareaCls}
                 />
                 <p className="mt-2 text-xs text-[#EAE4D8]/53">
-                  What the agent should hand over when the job is done.
+                  What the worker should submit.
                 </p>
               </div>
 
@@ -652,7 +673,7 @@ export default function EscrowWorkOrderPage() {
                   className={textareaCls}
                 />
                 <p className="mt-2 text-xs text-[#EAE4D8]/53">
-                  Required criteria for completion job.
+                  Rules or acceptance criteria.
                 </p>
               </div>
 
@@ -671,15 +692,11 @@ export default function EscrowWorkOrderPage() {
                   <option value="30 days">30 days</option>
                 </select>
                 <p className="mt-2 text-xs text-[#EAE4D8]/53">
-                  Deadline for job completion.
+                  Expected completion window.
                 </p>
               </div>
 
-              <div className="flex items-end">
-                <div className="rounded-lg border border-[#F0B84A]/20 bg-[#F0B84A]/8 px-4 py-3 text-sm text-[#EAE4D8]/72">
-                  ⓘ Tip: A realistic timeline helps you receive better proposals.
-                </div>
-              </div>
+              <div />
             </div>
           </SectionCard>
 
@@ -687,13 +704,13 @@ export default function EscrowWorkOrderPage() {
           <SectionCard
             number={3}
             title="Budget"
-            subtitle="Set the escrow budget for this job."
+            subtitle="Set the proposed amount for this assignment."
             status={budgetComplete ? 'Complete' : 'Pending'}
             open={openSections.budget}
             onToggle={() => toggleSection('budget')}
           >
             <div>
-              <FieldLabel required>Escrow Budget</FieldLabel>
+              <FieldLabel required>Proposed Budget</FieldLabel>
               <div className="relative">
                 <input
                   value={form.budgetMax}
@@ -707,7 +724,7 @@ export default function EscrowWorkOrderPage() {
                 </span>
               </div>
               <p className="mt-2 text-xs text-[#EAE4D8]/62">
-                Budget amount to use after job creation.
+                Amount you are willing to fund after worker confirmation.
               </p>
             </div>
           </SectionCard>
@@ -716,7 +733,7 @@ export default function EscrowWorkOrderPage() {
           <SectionCard
             number={4}
             title="Review & Create"
-            subtitle="Confirm the ERC-8183 escrow job before creating the draft."
+            subtitle="Confirm the worker, scope, budget, and deadline."
             status={
               overviewComplete && scopeComplete && budgetComplete
                 ? 'Complete'
@@ -758,7 +775,7 @@ export default function EscrowWorkOrderPage() {
             </div>
 
             <div className="mt-5 rounded-lg border border-[#F0B84A]/20 bg-[#F0B84A]/8 px-4 py-3 text-sm text-[#EAE4D8]/72">
-              This preview will create a local ERC-8183 escrow draft before wallet signing.
+              Review all details before creating the assignment.
             </div>
           </SectionCard>
 
