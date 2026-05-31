@@ -766,7 +766,20 @@ export default function AgentProfilePage() {
                         <InfoRow
                           icon={<KeyRound className="h-4 w-4" />}
                           label="Latest Tx"
-                          value={latestFeedbackTx ? shortAddress(latestFeedbackTx) : '—'}
+                          value={
+                            latestFeedbackTx ? (
+                              <a
+                                href={`https://testnet.arcscan.app/tx/${latestFeedbackTx}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[#EAE4D8]/70 transition hover:text-[#F3C536]"
+                              >
+                                {shortAddress(latestFeedbackTx)}
+                              </a>
+                            ) : (
+                              '—'
+                            )
+                          }
                           copy={latestFeedbackTx}
                         />
                       </div>
