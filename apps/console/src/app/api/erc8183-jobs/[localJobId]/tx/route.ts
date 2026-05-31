@@ -13,6 +13,7 @@ import {
   attachErc8183FundTx,
   attachErc8183SubmitTx,
   attachErc8183CompleteTx,
+  Erc8183TxHashConflictError,
 } from '@/lib/erc8183-jobs/store';
 import { assertErc8183Participant, isErc8183Admin } from '@/lib/erc8183-jobs/authz';
 import { escrowRail } from '@/lib/rails/responses';
@@ -632,9 +633,35 @@ export async function POST(
       }
     }
   } catch (err) {
+    if (
+      err instanceof Erc8183TxHashConflictError ||
+      (err as { code?: string })?.code === 'TX_HASH_CONFLICT'
+    ) {
+      const conflict = err as Erc8183TxHashConflictError;
+
+      return NextResponse.json(
+        {
+          ok: false,
+          ...escrowRail(),
+          error: 'tx_hash_conflict',
+          fieldName: conflict.fieldName,
+          existingTxHash: conflict.existingTxHash,
+          nextTxHash: conflict.nextTxHash,
+          message: 'A different transaction hash is already attached for this ERC-8183 stage.',
+        },
+        { status: 409 },
+      );
+    }
+
     const message = err instanceof Error ? err.message : 'Unknown error';
+
     return NextResponse.json(
-      { ok: false, ...escrowRail(), error: 'tx_confirmation_failed', message },
+      {
+        ok: false,
+        ...escrowRail(),
+        error: 'tx_confirmation_failed',
+        message,
+      },
       { status: 500 },
     );
   }
