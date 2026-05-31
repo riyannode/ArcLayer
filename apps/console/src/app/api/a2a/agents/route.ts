@@ -294,8 +294,8 @@ export async function GET(request: Request) {
     try {
       const canonicalAgents = await fetchCanonicalErc8004Agents();
 
-      const agents = canonicalAgents
-        .map((agent) => {
+      const agents = (
+        await mapWithConcurrency(canonicalAgents, METADATA_CONCURRENCY, async (agent) => {
           const identity = normalizeAgentIdentity({
             agentId: agent.agentId,
             tokenId: agent.tokenId,
@@ -304,14 +304,17 @@ export async function GET(request: Request) {
             source: agent.source || 'erc8004_identity_registry',
           });
 
+          const resolvedMetadata =
+            agent.metadata ?? await fetchMetadata(agent.metadataURI || '', agent.agentId);
+
           return {
             agentId: identity.agentId,
             tokenId: identity.tokenId,
             owner: identity.owner || identity.controller,
             controller: identity.controller,
-            role: agent.metadata?.role || 'REGISTERED_AGENT',
+            role: resolvedMetadata?.role || 'REGISTERED_AGENT',
             roleId: null,
-            endpoint: agent.metadata?.endpoint || '',
+            endpoint: resolvedMetadata?.endpoint || '',
             metadataURI: agent.metadataURI || '',
             registeredAtBlock: agent.blockNumber || null,
             source: identity.source,
@@ -321,10 +324,10 @@ export async function GET(request: Request) {
             chainId: agent.chainId,
             mintedAt: agent.mintedAt,
             updatedAt: agent.updatedAt,
-            metadata: agent.metadata ?? { autonomous: true },
+            metadata: resolvedMetadata ?? { autonomous: true },
           };
         })
-        .filter((agent) => !isHiddenAgent(agent.agentId));
+      ).filter((agent) => !isHiddenAgent(agent.agentId));
 
       return NextResponse.json(
         {
