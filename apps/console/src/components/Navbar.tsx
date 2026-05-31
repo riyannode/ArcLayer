@@ -53,6 +53,7 @@ const NAV_LINKS = [
 export default function Navbar() {
   const pathname = usePathname();
   const isLanding = pathname === '/';
+  const isRegister = pathname.startsWith('/register');
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -79,7 +80,7 @@ export default function Navbar() {
 
   return (
     <nav
-      className="sticky top-0 z-50 border-b border-white/10 backdrop-blur-xl transition-all duration-500"
+      className={`sticky top-0 z-50 border-b ${isRegister ? 'border-transparent' : 'border-white/10'} backdrop-blur-xl transition-all duration-500`}
       style={{
         background: 'rgba(5, 5, 5, 0.85)',
         height: scrolled ? '60px' : '72px',
