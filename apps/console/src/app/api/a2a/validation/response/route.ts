@@ -30,7 +30,8 @@ function statusFor(message: string) {
     message === 'validation_request_not_found_onchain' ||
     message === 'validation_already_responded_onchain' ||
     message === 'validation_response_signer_mismatch_db' ||
-    message === 'validation_response_signer_mismatch_onchain'
+    message === 'validation_response_signer_mismatch_onchain' ||
+    message === 'validation_response_already_pending'
   ) {
     return 409;
   }

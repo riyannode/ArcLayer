@@ -409,7 +409,42 @@ export async function createValidationResponse(input: ValidationResponseInput) {
     transport: http(process.env.ARC_RPC_URL),
   });
 
-  const txHash = await walletClient.writeContract(validation.config);
+  const { data: claimedRows, error: claimError } = await supabase
+    .from('a2a_validations')
+    .update({
+      response_locked_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq('request_hash', validation.requestHash)
+    .eq('response_status', VALIDATION_RESPONSE.NONE)
+    .is('response_tx_hash', null)
+    .is('response_locked_at', null)
+    .select('request_hash');
+
+  if (claimError) {
+    throw new Error(`db_update_failed:${claimError.message}`);
+  }
+
+  if (!claimedRows || claimedRows.length !== 1) {
+    throw new Error('validation_response_already_pending');
+  }
+
+  let txHash: `0x${string}`;
+
+  try {
+    txHash = await walletClient.writeContract(validation.config);
+  } catch (writeError) {
+    await supabase
+      .from('a2a_validations')
+      .update({
+        response_locked_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('request_hash', validation.requestHash)
+      .is('response_tx_hash', null);
+
+    throw writeError;
+  }
 
   const { error: responseTxHashUpdateError } = await supabase
     .from('a2a_validations')

@@ -18,6 +18,7 @@ create table if not exists a2a_validations (
   reason text,
   response_tx_hash text,
   response_block_number bigint,
+  response_locked_at timestamptz,
 
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -34,5 +35,8 @@ create index if not exists a2a_validations_validator_address_idx
 
 create index if not exists a2a_validations_response_status_idx
   on a2a_validations (response_status);
+
+create index if not exists a2a_validations_response_locked_at_idx
+  on a2a_validations (response_locked_at);
 
 alter table a2a_validations enable row level security;
