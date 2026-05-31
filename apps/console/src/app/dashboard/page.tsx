@@ -3,54 +3,68 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
-type JobCategory =
+type AgentType =
   | 'All'
-  | 'Smart Contract'
-  | 'Frontend'
-  | 'Backend'
-  | 'DevOps'
-  | 'Design'
-  | 'Data Research'
-  | 'Documentation'
-  | 'Analysis'
+  | 'Smart Contract Agent'
+  | 'Frontend Agent'
+  | 'Backend Agent'
+  | 'DevOps Agent'
+  | 'Design Agent'
+  | 'Data Research Agent'
+  | 'Documentation Agent'
+  | 'Analysis Agent'
+  | 'Payment Agent'
+  | 'Evaluator Agent'
   | 'Other';
 
 type JobStatus = 'Open' | 'Funded' | 'Submitted' | 'Completed';
+type ReputationFilter = 'all' | 'trusted' | 'new' | 'flagged';
+type DashboardSort =
+  | 'recent'
+  | 'reputationDesc'
+  | 'reputationAsc'
+  | 'jobsDesc'
+  | 'budgetDesc'
+  | 'pendingFirst';
 
 type DashboardJob = {
   id: string;
   title: string;
   description: string;
-  category: Exclude<JobCategory, 'All'>;
+  category: Exclude<AgentType, 'All'>;
   budgetUsdc: number;
-  deadline: string;
-  deadlineMeta: string;
-  proposals: number;
+  jobCount: number;
+  statusMeta: string;
+  reputation: string;
   status: JobStatus;
 };
 
-const CATEGORIES: JobCategory[] = [
+const AGENT_TYPES: AgentType[] = [
   'All',
-  'Smart Contract',
-  'Frontend',
-  'Backend',
-  'DevOps',
-  'Design',
-  'Data Research',
-  'Documentation',
-  'Analysis',
+  'Smart Contract Agent',
+  'Frontend Agent',
+  'Backend Agent',
+  'DevOps Agent',
+  'Design Agent',
+  'Data Research Agent',
+  'Documentation Agent',
+  'Analysis Agent',
+  'Payment Agent',
+  'Evaluator Agent',
   'Other',
 ];
 
-const CATEGORY_ICONS: Record<Exclude<JobCategory, 'All'>, string> = {
-  'Smart Contract': '⬡',
-  Frontend: '▱',
-  Backend: '▣',
-  DevOps: '⌘',
-  Design: '✦',
-  'Data Research': '◈',
-  Documentation: '▤',
-  Analysis: '◇',
+const AGENT_TYPE_ICONS: Record<Exclude<AgentType, 'All'>, string> = {
+  'Smart Contract Agent': '⬡',
+  'Frontend Agent': '▱',
+  'Backend Agent': '▣',
+  'DevOps Agent': '⌘',
+  'Design Agent': '✦',
+  'Data Research Agent': '◈',
+  'Documentation Agent': '▤',
+  'Analysis Agent': '◇',
+  'Payment Agent': '◍',
+  'Evaluator Agent': '◇',
   Other: '◌',
 };
 
@@ -62,10 +76,10 @@ function statusClass(status: JobStatus) {
   return 'border-white/10 bg-white/[0.04] text-[#EAE4D8]/70';
 }
 
-function JobIcon({ category }: { category: Exclude<JobCategory, 'All'> }) {
+function JobIcon({ category }: { category: Exclude<AgentType, 'All'> }) {
   return (
     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#C5A67C]/20 bg-black/45 text-lg text-[#F0B84A] shadow-[0_0_28px_rgba(197,166,124,0.08)]">
-      {CATEGORY_ICONS[category]}
+      {AGENT_TYPE_ICONS[category]}
     </div>
   );
 }
@@ -97,10 +111,10 @@ function BenefitCard({
 
 export default function DashboardPage() {
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState<JobCategory>('All');
-  const [budget, setBudget] = useState<'all' | 'under100' | '100to250' | 'over250'>('all');
-  const [deadline, setDeadline] = useState<'all' | 'soon' | 'week' | 'later'>('all');
-  const [sort, setSort] = useState<'newest' | 'budgetDesc' | 'budgetAsc' | 'proposals'>('newest');
+  const [agentType, setAgentType] = useState<AgentType>('All');
+  const [activity, setActivity] = useState<JobStatus | 'all'>('all');
+  const [reputation, setReputation] = useState<ReputationFilter>('all');
+  const [sort, setSort] = useState<DashboardSort>('recent');
 
   // Backend nanti masuk di sini.
   // Jangan pakai mock data. Kalau backend belum di-wire, biarkan kosong.
@@ -110,17 +124,10 @@ export default function DashboardPage() {
     const q = query.trim().toLowerCase();
 
     const rows = jobs.filter((job) => {
-      if (category !== 'All' && job.category !== category) return false;
+      if (agentType !== 'All' && job.category !== agentType) return false;
 
-      if (budget === 'under100' && job.budgetUsdc >= 100) return false;
-      if (budget === '100to250' && (job.budgetUsdc < 100 || job.budgetUsdc > 250)) return false;
-      if (budget === 'over250' && job.budgetUsdc <= 250) return false;
-
-      if (deadline !== 'all') {
-        if (deadline === 'soon' && !job.deadlineMeta.includes('1 day')) return false;
-        if (deadline === 'week' && !job.deadlineMeta.includes('days')) return false;
-        if (deadline === 'later' && job.deadlineMeta.includes('1 day')) return false;
-      }
+      if (activity !== 'all' && job.status !== activity) return false;
+      if (reputation !== 'all' && !job.reputation.toLowerCase().includes(reputation)) return false;
 
       if (!q) return true;
 
@@ -136,13 +143,17 @@ export default function DashboardPage() {
     });
 
     return rows.sort((a, b) => {
-      if (sort === 'budgetDesc') return b.budgetUsdc - a.budgetUsdc;
-      if (sort === 'budgetAsc') return a.budgetUsdc - b.budgetUsdc;
-      if (sort === 'proposals') return b.proposals - a.proposals;
+      const reputationA = Number.parseFloat(a.reputation.replace(/[^\d.-]/g, '')) || 0;
+      const reputationB = Number.parseFloat(b.reputation.replace(/[^\d.-]/g, '')) || 0;
 
+      if (sort === 'reputationDesc') return reputationB - reputationA;
+      if (sort === 'reputationAsc') return reputationA - reputationB;
+      if (sort === 'jobsDesc') return b.jobCount - a.jobCount;
+      if (sort === 'budgetDesc') return b.budgetUsdc - a.budgetUsdc;
+      if (sort === 'pendingFirst') return Number(a.status !== 'Open') - Number(b.status !== 'Open');
       return Number(b.id) - Number(a.id);
     });
-  }, [jobs, query, category, budget, deadline, sort]);
+  }, [jobs, query, agentType, activity, reputation, sort]);
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#050607] text-[#EAE4D8]">
@@ -156,20 +167,20 @@ export default function DashboardPage() {
         <section className="mb-8">
           <div className="max-w-[820px]">
             <h1 className="text-[42px] font-semibold tracking-[-0.04em] text-[#F4EFE5] md:text-[62px]">
-              Marketplace Dashboard
+              Agent Dashboard
             </h1>
 
             <p className="mt-3 max-w-2xl text-[15px] leading-7 text-[#EAE4D8]/62">
-              Post jobs. Find trusted agents. Get work done onchain.
+              Track agents, Reputation, and History.
             </p>
 
             <div className="mt-7 flex flex-wrap gap-4">
               <Link
-                href="/jobs"
+                href="/jobs/escrow"
                 className="inline-flex h-14 items-center gap-3 rounded-lg border border-[#F0B84A]/40 bg-[#F0B84A] px-7 text-[15px] font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.22)] transition hover:scale-[1.01] hover:bg-[#FFD084]"
               >
                 <span className="text-2xl leading-none">＋</span>
-                Post a Manual Job
+                Create Escrow Job
               </Link>
 
               <Link
@@ -191,7 +202,7 @@ export default function DashboardPage() {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search jobs by title, skills, or keywords..."
+                placeholder="Search agent, job ID, wallet, or tx hash..."
                 className="h-[52px] w-full rounded-lg border border-white/10 bg-black/35 px-12 py-4 text-sm text-[#EAE4D8] outline-none transition placeholder:text-[#EAE4D8]/34 focus:border-[#C5A67C]/45"
                 autoComplete="off"
                 spellCheck={false}
@@ -199,37 +210,38 @@ export default function DashboardPage() {
             </label>
 
             <select
-              value={category}
-              onChange={(event) => setCategory(event.target.value as JobCategory)}
+              value={agentType}
+              onChange={(event) => setAgentType(event.target.value as AgentType)}
               className="h-[52px] rounded-lg border border-white/10 bg-black/35 px-4 text-sm text-[#EAE4D8] outline-none focus:border-[#C5A67C]/45"
             >
-              {CATEGORIES.map((item) => (
+              {AGENT_TYPES.map((item) => (
                 <option key={item} value={item}>
-                  {item === 'All' ? 'All Categories' : item}
+                  {item === 'All' ? 'All Agent' : item}
                 </option>
               ))}
             </select>
 
             <select
-              value={budget}
-              onChange={(event) => setBudget(event.target.value as typeof budget)}
+              value={activity}
+              onChange={(event) => setActivity(event.target.value as typeof activity)}
               className="h-[52px] rounded-lg border border-white/10 bg-black/35 px-4 text-sm text-[#EAE4D8] outline-none focus:border-[#C5A67C]/45"
             >
-              <option value="all">All Budgets</option>
-              <option value="under100">Under 100 USDC</option>
-              <option value="100to250">100–250 USDC</option>
-              <option value="over250">Over 250 USDC</option>
+              <option value="all">All Activity</option>
+              <option value="Open">Open</option>
+              <option value="Funded">Funded</option>
+              <option value="Submitted">Submitted</option>
+              <option value="Completed">Completed</option>
             </select>
 
             <select
-              value={deadline}
-              onChange={(event) => setDeadline(event.target.value as typeof deadline)}
+              value={reputation}
+              onChange={(event) => setReputation(event.target.value as ReputationFilter)}
               className="h-[52px] rounded-lg border border-white/10 bg-black/35 px-4 text-sm text-[#EAE4D8] outline-none focus:border-[#C5A67C]/45"
             >
-              <option value="all">All Deadlines</option>
-              <option value="soon">Due Soon</option>
-              <option value="week">This Week</option>
-              <option value="later">Later</option>
+              <option value="all">All Reputation</option>
+              <option value="trusted">Trusted</option>
+              <option value="new">New</option>
+              <option value="flagged">Flagged</option>
             </select>
 
             <select
@@ -237,28 +249,30 @@ export default function DashboardPage() {
               onChange={(event) => setSort(event.target.value as typeof sort)}
               className="h-[52px] rounded-lg border border-white/10 bg-black/35 px-4 text-sm text-[#EAE4D8] outline-none focus:border-[#C5A67C]/45"
             >
-              <option value="newest">Sort: Newest</option>
+              <option value="recent">Sort: Recent</option>
+              <option value="reputationDesc">Highest Reputation</option>
+              <option value="reputationAsc">Lowest Reputation</option>
+              <option value="jobsDesc">Most Jobs</option>
               <option value="budgetDesc">Highest Budget</option>
-              <option value="budgetAsc">Lowest Budget</option>
-              <option value="proposals">Most Proposals</option>
+              <option value="pendingFirst">Pending First</option>
             </select>
           </div>
 
           <div className="mt-5 rounded-xl border border-white/[0.025] bg-[#080A0D]/35 p-4 backdrop-blur-xl">
             <div className="flex flex-wrap gap-3">
-              {CATEGORIES.map((item) => (
+              {AGENT_TYPES.map((item) => (
                 <button
                   key={item}
                   type="button"
-                  onClick={() => setCategory(item)}
+                  onClick={() => setAgentType(item)}
                   className={[
                     'h-11 min-w-[92px] rounded-lg border px-5 text-sm transition',
-                    category === item
+                    agentType === item
                       ? 'border-[#C5A67C]/55 bg-[#C5A67C]/10 text-[#F0B84A] shadow-[0_0_24px_rgba(197,166,124,0.10)]'
                       : 'border-[#2A2E33] bg-black/20 text-[#EAE4D8]/75 hover:border-[#C5A67C]/35 hover:text-[#C5A67C]',
                   ].join(' ')}
                 >
-                  {item}
+                  {item === 'All' ? 'All Agent Types' : item}
                 </button>
               ))}
             </div>
@@ -266,10 +280,10 @@ export default function DashboardPage() {
 
           <div className="mt-6">
             <div className="grid grid-cols-[minmax(0,1fr)_160px_180px_170px_160px] px-2 pb-3 font-mono text-[11px] uppercase tracking-[0.22em] text-[#EAE4D8]/42 max-xl:hidden">
-              <span>Job</span>
+              <span>Agent / Job</span>
               <span>Budget</span>
-              <span>Deadline</span>
-              <span>Proposals</span>
+              <span>Status</span>
+              <span>Reputation</span>
               <span>Action</span>
             </div>
 
@@ -316,18 +330,18 @@ export default function DashboardPage() {
 
                     <div>
                       <p className="font-mono text-[15px] text-[#F4EFE5]">
-                        {job.deadline}
+                        {job.status}
                       </p>
                       <p className="mt-1 text-xs text-[#EAE4D8]/42">
-                        {job.deadlineMeta}
+                        {job.statusMeta}
                       </p>
                     </div>
 
                     <div>
                       <p className="font-mono text-[15px] text-[#F4EFE5]">
-                        {job.proposals}
+                        {job.reputation}
                       </p>
-                      <p className="mt-1 text-xs text-[#EAE4D8]/42">Proposals</p>
+                      <p className="mt-1 text-xs text-[#EAE4D8]/42">Reputation</p>
                     </div>
 
                     <div className="flex justify-start xl:justify-end">
@@ -347,10 +361,10 @@ export default function DashboardPage() {
                   ≡
                 </div>
                 <p className="mt-4 text-[15px] font-semibold text-[#F4EFE5]">
-                  No jobs indexed yet
+                  No agent yet
                 </p>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#EAE4D8]/50">
-                  This dashboard is ready. Wire the backend/indexer later to populate live marketplace jobs.
+                  This dashboard is ready. Wire the backend/indexer later to populate live agent operations.
                 </p>
               </div>
             )}
