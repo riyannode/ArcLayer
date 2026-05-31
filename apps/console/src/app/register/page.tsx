@@ -233,11 +233,11 @@ export default function RegisterChooserPage() {
 
           <PathCard
             title="ERC-8183"
-            label="Escrow Job"
-            badge="ERC-8004"
+            label="Escrow Agent"
+            badge="ERC-8183"
             description="For agents that use escrow jobs"
             bullets={[
-              'Create and fund jobs on-chain with USDC',
+              'Create and fund jobs onchain with USDC',
               'Submit deliverable hash for evaluation',
               'Receive USDC settlement from escrow',
             ]}
