@@ -928,12 +928,23 @@ export default function ERC8183EscrowRegisterPage() {
               onToggle={() => toggleSection('profile')}
             >
               <div className="grid gap-7 lg:grid-cols-2">
-                <FieldShell label="Controller Wallet" required>
-                  <TextInput
-                    value={form.controllerWallet}
-                    onChange={(value) => update('controllerWallet', value)}
-                    placeholder="0x..."
-                  />
+                <FieldShell
+                  label="Controller Wallet"
+                  required
+                  helper={isConnected ? 'Locked to connected wallet' : 'Enter controller address or connect wallet above'}
+                >
+                  {isConnected && address ? (
+                    <div className="flex h-12 items-center gap-2 rounded-md border border-[#B8CD7E]/20 bg-[#B8CD7E]/[0.04] px-4 text-[14px] text-[#B8CD7E]">
+                      <Wallet className="h-4 w-4 shrink-0" />
+                      <span className="truncate font-mono text-[13px]">{address}</span>
+                    </div>
+                  ) : (
+                    <TextInput
+                      value={form.controllerWallet}
+                      onChange={(value) => update('controllerWallet', value)}
+                      placeholder="0x..."
+                    />
+                  )}
                 </FieldShell>
 
                 <FieldShell label="Avatar / Logo URL">
