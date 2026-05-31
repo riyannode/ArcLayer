@@ -190,7 +190,33 @@ export async function createValidationRequest(input: ValidationRequestInput) {
       response_status: VALIDATION_RESPONSE.NONE,
     });
 
-  if (insertError && insertError.code !== '23505') {
+  if (insertError?.code === '23505') {
+    const { data: duplicate, error: duplicateReadError } = await supabase
+      .from('a2a_validations')
+      .select('request_hash, request_tx_hash, response_status')
+      .eq('request_hash', validation.requestHash)
+      .maybeSingle();
+
+    if (duplicateReadError) {
+      throw new Error(`db_read_failed:${duplicateReadError.message}`);
+    }
+
+    if (duplicate?.request_tx_hash) {
+      return {
+        ok: true,
+        source: 'erc8004_validation_registry',
+        action: 'validationRequest',
+        idempotent: true,
+        requestHash: duplicate.request_hash,
+        txHash: duplicate.request_tx_hash,
+        responseStatus: duplicate.response_status,
+      };
+    }
+
+    throw new Error('validation_request_already_pending');
+  }
+
+  if (insertError) {
     throw new Error(`db_insert_failed:${insertError.message}`);
   }
 
@@ -278,15 +304,15 @@ export async function getValidationStatus(requestHash: Hex) {
   if (!isBytes32(requestHash)) {
     throw new Error('requestHash_invalid_bytes32');
   }
-
   const status = await sdkReadValidationStatus(requestHash);
-
+  const agentTokenId = status.agentId.toString();
   return {
     ok: true,
     source: 'erc8004_validation_registry',
     requestHash,
     validatorAddress: status.validatorAddress,
-    agentId: status.agentId.toString(),
+    agentId: agentTokenId,
+    agentTokenId,
     response: Number(status.response),
     responseHash: status.responseHash,
     tag: status.tag,
@@ -324,7 +350,7 @@ export async function createValidationResponse(input: ValidationResponseInput) {
   if (
     !chainStatus.validatorAddress ||
     sameAddress(chainStatus.validatorAddress, ZERO_ADDRESS) ||
-    chainStatus.agentId === '0'
+    chainStatus.agentTokenId === '0'
   ) {
     throw new Error('validation_request_not_found_onchain');
   }

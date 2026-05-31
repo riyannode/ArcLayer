@@ -24,6 +24,7 @@ function statusFor(message: string) {
   if (message === 'missing_VALIDATION_API_KEY') return 503;
   if (message.startsWith('missing_or_invalid_')) return 503;
   if (message.startsWith('db_')) return 500;
+  if (message === 'validation_request_already_pending') return 409;
   if (message.includes('must_match')) return 409;
   if (message.endsWith('_required')) return 400;
   if (message.endsWith('_invalid')) return 400;
