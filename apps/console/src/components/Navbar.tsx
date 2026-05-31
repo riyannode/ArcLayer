@@ -94,14 +94,12 @@ export default function Navbar() {
           </div>
           <div className="flex flex-col leading-none">
             <span
-              className="aureo-body text-[#EAE4D8]/72"
+              className="aureo-body text-zinc-100"
               style={{ fontSize: '15px', letterSpacing: '0.24em', fontWeight: 400 }}
             >
               ARCLAYER
             </span>
-            <span className="mt-1 hidden font-mono text-[9px] tracking-[0.2em] text-[#C5A67C] md:block">
-              x402 · ERC-8004 · ERC-8183
-            </span>
+            <span className="mt-1 hidden font-mono text-[9px] tracking-[0.2em] md:block">&nbsp;</span>
           </div>
         </Link>
 
@@ -120,10 +118,10 @@ export default function Navbar() {
                   fontSize: '11px',
                   letterSpacing: '0.24em',
                   fontWeight: 400,
-                  color: isActive ? '#C5A67C' : '#EAE4D8',
+                  color: isActive ? '#C5A67C' : '#f4f4f5',
                 }}
                 onMouseEnter={(e) => { if (!isActive) e.currentTarget.style.color = '#C5A67C'; }}
-                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = '#EAE4D8'; }}
+                onMouseLeave={(e) => { if (!isActive) e.currentTarget.style.color = '#f4f4f5'; }}
               >
                 {link.label}
                 {isActive && (
@@ -194,7 +192,7 @@ export default function Navbar() {
                   fontFamily: 'Inter, sans-serif',
                   fontSize: '11px',
                   letterSpacing: '0.24em',
-                  color: isActive ? '#C5A67C' : '#EAE4D8',
+                  color: isActive ? '#C5A67C' : '#f4f4f5',
                   background: isActive ? 'rgba(197, 166, 124, 0.08)' : 'transparent',
                   borderLeft: isActive ? '2px solid #C5A67C' : '2px solid transparent',
                 }}
