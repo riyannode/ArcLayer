@@ -9,26 +9,45 @@ interface X402GlobalAccessGuardProps {
   children: ReactNode;
 }
 
-/**
- * X402GlobalAccessGuard
- *
- * Locks the public UI until the user unlocks the x402 protected resource.
- *
- * Important:
- * - This guard does NOT render an extra X402DemoPanel.
- * - The only active unlock panel is the existing homepage X402DemoPanel in HomeHero.
- * - API routes are not affected by this React guard.
- */
+type X402UiLockMode = 'off' | 'app-only' | 'full';
+
+function getX402UiLockMode(): X402UiLockMode {
+  const mode = process.env.NEXT_PUBLIC_X402_UI_LOCK_MODE;
+
+  if (mode === 'off' || mode === 'app-only' || mode === 'full') {
+    return mode;
+  }
+
+  // Backward compatibility with old env.
+  if (process.env.NEXT_PUBLIC_X402_UI_LOCK_ENABLED === 'false') {
+    return 'off';
+  }
+
+  // Safe default: homepage public, app gated.
+  return 'app-only';
+}
+
+function isPublicPath(pathname: string) {
+  return (
+    pathname === '/' ||
+    pathname === '/docs'
+  );
+}
+
 export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuardProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { hasAccess, loading } = useX402Access();
   const { notify } = useProtectionNotice();
 
-  const x402UiLockEnabled =
-    process.env.NEXT_PUBLIC_X402_UI_LOCK_ENABLED !== 'false';
+  const x402UiLockMode = getX402UiLockMode();
+  const publicPath = isPublicPath(pathname);
 
-  const locked = x402UiLockEnabled && (loading || !hasAccess);
+  const locked =
+    x402UiLockMode !== 'off' &&
+    (loading || !hasAccess) &&
+    (x402UiLockMode === 'full' || !publicPath);
+
   const lockedHome = locked && pathname === '/';
   const lockedNonHome = locked && pathname !== '/';
 
@@ -50,21 +69,29 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    if (!x402UiLockEnabled) return;
+    if (x402UiLockMode === 'off') return;
 
-    if (!loading && !hasAccess && pathname !== '/') {
+    const currentPath = window.location.pathname;
+    const currentPublicPath = isPublicPath(currentPath);
+
+    if (
+      !loading &&
+      !hasAccess &&
+      currentPath !== '/' &&
+      (x402UiLockMode === 'full' || !currentPublicPath)
+    ) {
       const returnPath =
         window.location.pathname + window.location.search + window.location.hash;
 
       sessionStorage.setItem('x402_return_to', returnPath);
       router.replace('/');
     }
-  }, [x402UiLockEnabled, loading, hasAccess, pathname, router]);
+  }, [x402UiLockMode, loading, hasAccess, pathname, router]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    if (!x402UiLockEnabled) {
+    if (x402UiLockMode === 'off') {
       sessionStorage.removeItem('x402_return_to');
       return;
     }
@@ -82,7 +109,7 @@ export default function X402GlobalAccessGuard({ children }: X402GlobalAccessGuar
       sessionStorage.removeItem('x402_return_to');
       router.replace(returnTo);
     }
-  }, [x402UiLockEnabled, hasAccess, router]);
+  }, [x402UiLockMode, hasAccess, router]);
 
   return (
     <div
