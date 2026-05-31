@@ -9,11 +9,36 @@ export const revalidate = 0;
 
 const CACHE_CONTROL = 'public, s-maxage=30, stale-while-revalidate=120';
 
+function isAllowedOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    const allowedHosts = new Set(['localhost', '127.0.0.1']);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && allowedHosts.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function resolveSafeBaseOrigin(request: Request): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL;
+  if (configured && isAllowedOrigin(configured)) {
+    return new URL(configured).origin;
+  }
+
+  const requestOrigin = new URL(request.url).origin;
+  if (isAllowedOrigin(requestOrigin)) {
+    return requestOrigin;
+  }
+
+  throw new Error('invalid_origin_for_internal_fetch');
+}
+
 export async function GET(request: Request) {
   try {
-    const origin = new URL(request.url).origin;
+    const baseOrigin = resolveSafeBaseOrigin(request);
+    const agentsUrl = new URL('/api/a2a/agents', baseOrigin);
 
-    const res = await fetch(`${origin}/api/a2a/agents`, {
+    const res = await fetch(agentsUrl, {
       cache: 'no-store',
       headers: { accept: 'application/json' },
     });
