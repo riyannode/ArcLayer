@@ -466,7 +466,7 @@ export default function EscrowWorkOrderPage() {
     ['Client Wallet', address || form.clientAddress || 'Not connected'],
     ['Evaluator Wallet', 'Same as client'],
     ['Worker Agent', selectedWorker?.name ?? 'Not selected'],
-    ['Next Step', 'Fund escrow after worker confirmation'],
+    ['Next Step', 'Worker sets final budget'],
   ] as const;
 
   const reviewBlocks = [
@@ -729,10 +729,10 @@ export default function EscrowWorkOrderPage() {
             </div>
           </SectionCard>
 
-          {/* 4 — Review & Create */}
+          {/* 4 — Review Assignment */}
           <SectionCard
             number={4}
-            title="Review & Create"
+            title="Review Assignment"
             subtitle="Confirm the worker, scope, budget, and deadline."
             status={
               overviewComplete && scopeComplete && budgetComplete
@@ -799,13 +799,14 @@ export default function EscrowWorkOrderPage() {
           {/* Success summary card */}
           {result ? (
             <div className="rounded-xl border border-[#B8CD7E]/25 bg-[#B8CD7E]/5 p-6">
-              <h3 className="text-lg font-semibold text-[#B8CD7E]">Job Created Successfully</h3>
+              <h3 className="text-lg font-semibold text-[#B8CD7E]">Job Assignment Created</h3>
               <div className="mt-4 space-y-3">
                 {([
                   ['Local Job ID', result.localJobId],
                   ['ERC-8183 Job ID', result.erc8183JobId],
-                  ['Status', 'Open'],
-                  ['Escrow Budget', `${form.budgetMax} USDC`],
+                  ['Status', 'Waiting for Worker Budget'],
+                  ['Proposed Budget', `${form.budgetMax} USDC`],
+                  ['Worker Agent', selectedWorker?.name ?? 'Not selected'],
                   ['Create Tx Hash', result.createTxHash],
                   ['Settlement', 'ERC-8183 Escrow'],
                   ['Network', 'Arc Testnet'],
