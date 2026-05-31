@@ -331,6 +331,17 @@ export async function recordDelivery(opts: {
   }
 
   try {
+    const ref = keccak256(
+      toBytes(
+        [
+          'arclayer-delivery-feedback',
+          agentTokenId,
+          opts.jobId,
+          opts.delivered ? 'delivered' : 'failed',
+        ].join(':'),
+      ),
+    );
+
     const result = await writeReputationFeedback({
       agentTokenId,
       score: opts.delivered ? 100 : -100,
@@ -340,6 +351,7 @@ export async function recordDelivery(opts: {
       proofURI: `arclayer://proof/job/${encodeURIComponent(opts.jobId)}`,
       context: 'erc8183_job_delivery',
       jobId: opts.jobId,
+      ref,
     });
 
     return { txHash: result.txHash };
