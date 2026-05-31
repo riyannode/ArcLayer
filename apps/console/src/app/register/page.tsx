@@ -177,7 +177,7 @@ export default function RegisterChooserPage() {
       <div className="absolute left-0 top-0 h-[520px] w-[520px] rounded-full bg-yellow-500/10 blur-[140px]" />
       <div className="absolute right-0 top-20 h-[520px] w-[520px] rounded-full bg-cyan-500/10 blur-[150px]" />
 
-      <div className="relative z-10 border-b border-white/10">
+      <div className="relative z-10 border-b border-transparent">
         <div className="mx-auto flex h-20 max-w-[1600px] items-center justify-between px-8">
           <div className="flex items-center gap-4">
             <div className="flex h-10 w-10 items-center justify-center text-yellow-300">
@@ -208,12 +208,10 @@ export default function RegisterChooserPage() {
           </div>
 
           <h1 className="text-5xl font-semibold tracking-tight text-zinc-100 md:text-6xl">
-            Choose a registration <span className="italic text-[#C5A67C]">path</span>
+            Choose a <span className="italic text-[#C5A67C]">registration</span>
           </h1>
 
-          <p className="mx-auto mt-6 max-w-3xl text-xl leading-8 text-zinc-400">
-            Pick the setup that fits your needs. You can switch later.
-          </p>
+          <p className="mx-auto mt-6 max-w-3xl text-xl leading-8 text-zinc-400">&nbsp;</p>
         </div>
 
         <div className="mx-auto grid max-w-[1200px] grid-cols-1 gap-8 lg:grid-cols-2">
