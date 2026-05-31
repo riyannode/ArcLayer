@@ -250,10 +250,37 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
   return out;
 }
 
+const TRUSTED_ARCLAYER_METADATA_HOSTS = new Set([
+  'arclayers.xyz',
+  'www.arclayers.xyz',
+]);
+
+function inferTrustedMetadataSource(uri: string): CanonicalAgentSource | null {
+  if (uri.startsWith('arclayer://manifest/')) return 'manifest';
+
+  try {
+    const url = new URL(uri);
+    if (url.protocol !== 'https:') return null;
+    const host = url.hostname.toLowerCase();
+    if (!TRUSTED_ARCLAYER_METADATA_HOSTS.has(host)) return null;
+
+    const path = url.pathname;
+    if (path.startsWith('/api/a2a/metadata/draft/')) return 'draft';
+    if (path.startsWith('/api/a2a/manifest')) return 'manifest';
+    if (path.startsWith('/api/a2a/metadata/agent/')) return 'manifest';
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function inferCanonicalSource(agent: any): CanonicalAgentSource {
   const uri = String(agent.metadataURI || '');
-  if (uri.startsWith('arclayer://manifest/')) return 'manifest';
-  if (uri.includes('/api/a2a/metadata/draft/')) return 'draft';
+
+  const trustedSource = inferTrustedMetadataSource(uri);
+  if (trustedSource) return trustedSource;
+
   if (agent.source === 'web_manifest') return 'manifest';
 
   const hasProofTokens =
