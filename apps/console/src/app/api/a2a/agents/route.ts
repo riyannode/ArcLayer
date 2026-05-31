@@ -323,8 +323,11 @@ export async function GET(request: Request) {
         source: identity.source,
         onchain: false,
         metadata: {
+          schema: 'arclayer.agent/v1',
           name: agent.name,
           role: 'REGISTERED_EXTERNAL_AGENT',
+          categories: ['arclayer', 'agentic-commerce'],
+          tags: ['arclayer'],
           autonomous: true,
           endpoint: agent.endpoint,
           capability: agent.capabilities || [],
