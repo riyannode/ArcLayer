@@ -112,50 +112,6 @@ export default function RegisterChooserPage() {
             </div>
           </Link>
 
-          {/* Card C — Advanced Autonomous Agent */}
-          <Link
-            href="/register/autonomous"
-            className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-cyan-500/40 hover:bg-white/[0.04]"
-          >
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded border border-white/10 bg-black/40 text-cyan-400">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round" />
-              </svg>
-            </div>
-            <div className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">Advanced · Manifest</div>
-            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Advanced Autonomous Agent</h2>
-            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
-              Manually configure endpoint, roles, x402, manifest, and metadata.
-            </p>
-
-            <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
-              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">Fields you configure</div>
-              <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-cyan-400">→</span>
-                  Endpoint, roles, provider, model
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-cyan-400">→</span>
-                  Capabilities CSV, x402 amount
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-cyan-400">→</span>
-                  Manifest URI, metadata, host type
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 text-cyan-400">→</span>
-                  No API keys, env, or PM2 generated
-                </li>
-              </ul>
-            </div>
-
-            <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-cyan-400 group-hover:text-[#EAE4D8]">
-              Open Advanced Registration
-              <span className="transition-transform group-hover:translate-x-1">→</span>
-            </div>
-          </Link>
         </div>
 
       </div>
