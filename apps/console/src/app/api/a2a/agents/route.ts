@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server';
 import { indexerUrl } from '@/lib/indexer';
 import type { Hex } from 'viem';
 import { isHiddenAgent } from '@/lib/a2a/hidden-agents';
+import {
+  getCanonicalProfileMode,
+  shouldExposeAgent,
+  platformSortRank,
+  getAgentBadge,
+  type CanonicalAgentSource,
+  type CanonicalAgentLike,
+} from '@/lib/a2a/profile/filter';
 import { resolveManifestMetadata } from '@/lib/a2a/manifest';
 import { listStoredManifests } from '@/lib/a2a/roster';
 import { listRegisteredExternalAgents } from '@/lib/a2a/external-registry';
@@ -240,6 +248,24 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
   });
   await Promise.all(workers);
   return out;
+}
+
+function inferCanonicalSource(agent: any): CanonicalAgentSource {
+  const uri = String(agent.metadataURI || '');
+  if (uri.startsWith('arclayer://manifest/')) return 'manifest';
+  if (uri.includes('/api/a2a/metadata/draft/')) return 'draft';
+  if (agent.skillHash || agent.reputationScore || agent.proofTokenIds) return 'indexer';
+  return 'onchain';
+}
+
+function toCanonicalAgent(agent: any): CanonicalAgentLike {
+  return {
+    agentId: String(agent.agentId),
+    controller: agent.controller || agent.owner || null,
+    source: inferCanonicalSource(agent),
+    metadata: agent.metadata,
+    tokenURI: agent.metadataURI || null,
+  };
 }
 
 export async function GET(request: Request) {
@@ -482,17 +508,37 @@ export async function GET(request: Request) {
     }
 
     // Filter hidden agents
-    const autonomousAgents = Array.from(merged.values()).filter(
+    const allAgents = Array.from(merged.values()).filter(
       (agent) => !isHiddenAgent(agent.agentId),
     );
 
+    // Apply canonical profile filter
+    const mode = getCanonicalProfileMode();
+
+    const visibleAgents = allAgents
+      .filter((agent) =>
+        shouldExposeAgent({
+          agent: toCanonicalAgent(agent),
+          mode,
+          surface: 'discovery',
+        }),
+      )
+      .sort((a, b) =>
+        platformSortRank(toCanonicalAgent(a)) - platformSortRank(toCanonicalAgent(b)),
+      )
+      .map((agent) => ({
+        ...agent,
+        badge: getAgentBadge(toCanonicalAgent(agent)),
+      }));
+
     return NextResponse.json({
       registry: AGENT_REGISTRY,
-      agents: autonomousAgents,
-      totalRegistered: autonomousAgents.length,
-      totalHidden: merged.size - autonomousAgents.length,
-      totalVisible: autonomousAgents.length,
-      totalAutonomous: autonomousAgents.length,
+      agents: visibleAgents,
+      totalRegistered: allAgents.length,
+      totalHidden: allAgents.length - visibleAgents.length,
+      totalVisible: visibleAgents.length,
+      totalAutonomous: visibleAgents.length,
+      canonicalMode: mode,
       categoryFilter,
       scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
       timestamp: new Date().toISOString(),
