@@ -17,6 +17,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import {
   isBytes32,
+  normalizeBytes32,
   normalizePrivateKey,
   parseBigIntField,
   parseUint8Field,
@@ -124,8 +125,8 @@ export function buildValidationRequest(input: ValidationRequestInput) {
     throw new Error('taskUri_required');
   }
 
-  const requestHash = isBytes32(input.requestHash)
-    ? input.requestHash
+  const requestHash = input.requestHash
+    ? normalizeBytes32(input.requestHash, 'requestHash')
     : makeValidationRequestHash({ validator, agentTokenId, taskUri });
 
   const config = buildValidationRequestConfig(
@@ -284,10 +285,7 @@ export async function createValidationRequest(input: ValidationRequestInput) {
 }
 
 export function buildValidationResponse(input: ValidationResponseInput) {
-  if (!isBytes32(input.requestHash)) {
-    throw new Error('requestHash_invalid_bytes32');
-  }
-
+  const requestHash = normalizeBytes32(input.requestHash, 'requestHash');
   const status = parseResponseStatus(input.status);
 
   const resultUri = String(input.resultUri || '').trim();
@@ -297,16 +295,16 @@ export function buildValidationResponse(input: ValidationResponseInput) {
   if (!reason) throw new Error('reason_required');
 
   const resultHash = isBytes32(input.resultHash)
-    ? input.resultHash
+    ? normalizeBytes32(input.resultHash, 'resultHash')
     : makeValidationResultHash({
-        requestHash: input.requestHash,
+        requestHash,
         status,
         resultUri,
         reason,
       });
 
   const config = buildValidationResponseConfig(
-    input.requestHash,
+    requestHash,
     status,
     resultUri,
     resultHash,
@@ -314,7 +312,7 @@ export function buildValidationResponse(input: ValidationResponseInput) {
   );
 
   return {
-    requestHash: input.requestHash,
+    requestHash,
     status,
     resultUri,
     resultHash,
@@ -324,15 +322,14 @@ export function buildValidationResponse(input: ValidationResponseInput) {
 }
 
 export async function getValidationStatus(requestHash: Hex) {
-  if (!isBytes32(requestHash)) {
-    throw new Error('requestHash_invalid_bytes32');
-  }
-  const status = await sdkReadValidationStatus(requestHash);
+  const normalizedRequestHash = normalizeBytes32(requestHash, 'requestHash');
+  const status = await sdkReadValidationStatus(normalizedRequestHash);
   const agentTokenId = status.agentId.toString();
+
   return {
     ok: true,
     source: 'erc8004_validation_registry',
-    requestHash,
+    requestHash: normalizedRequestHash,
     validatorAddress: status.validatorAddress,
     agentId: agentTokenId,
     agentTokenId,

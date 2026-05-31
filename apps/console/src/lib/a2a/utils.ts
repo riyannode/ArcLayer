@@ -11,6 +11,14 @@ export function isBytes32(value: unknown): value is Hex {
   return typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value);
 }
 
+export function normalizeBytes32(value: unknown, name: string): Hex {
+  if (!isBytes32(value)) {
+    throw new Error(`${name}_invalid_bytes32`);
+  }
+
+  return value.toLowerCase() as Hex;
+}
+
 export function parseBigIntField(value: unknown, name: string): bigint {
   if (value === undefined || value === null || value === '') {
     throw new Error(`${name}_required`);
