@@ -19,6 +19,13 @@ type AgentType =
 
 type JobStatus = 'Open' | 'Funded' | 'Submitted' | 'Completed';
 type ReputationFilter = 'all' | 'trusted' | 'new' | 'flagged';
+type DashboardSort =
+  | 'recent'
+  | 'reputationDesc'
+  | 'reputationAsc'
+  | 'jobsDesc'
+  | 'budgetDesc'
+  | 'pendingFirst';
 
 type DashboardJob = {
   id: string;
@@ -26,6 +33,7 @@ type DashboardJob = {
   description: string;
   category: Exclude<AgentType, 'All'>;
   budgetUsdc: number;
+  jobCount: number;
   statusMeta: string;
   reputation: string;
   status: JobStatus;
@@ -106,7 +114,7 @@ export default function DashboardPage() {
   const [agentType, setAgentType] = useState<AgentType>('All');
   const [activity, setActivity] = useState<JobStatus | 'all'>('all');
   const [reputation, setReputation] = useState<ReputationFilter>('all');
-  const [sort, setSort] = useState<'recent' | 'budgetDesc' | 'budgetAsc'>('recent');
+  const [sort, setSort] = useState<DashboardSort>('recent');
 
   // Backend nanti masuk di sini.
   // Jangan pakai mock data. Kalau backend belum di-wire, biarkan kosong.
@@ -135,8 +143,14 @@ export default function DashboardPage() {
     });
 
     return rows.sort((a, b) => {
+      const reputationA = Number.parseFloat(a.reputation.replace(/[^\d.-]/g, '')) || 0;
+      const reputationB = Number.parseFloat(b.reputation.replace(/[^\d.-]/g, '')) || 0;
+
+      if (sort === 'reputationDesc') return reputationB - reputationA;
+      if (sort === 'reputationAsc') return reputationA - reputationB;
+      if (sort === 'jobsDesc') return b.jobCount - a.jobCount;
       if (sort === 'budgetDesc') return b.budgetUsdc - a.budgetUsdc;
-      if (sort === 'budgetAsc') return a.budgetUsdc - b.budgetUsdc;
+      if (sort === 'pendingFirst') return Number(a.status !== 'Open') - Number(b.status !== 'Open');
       return Number(b.id) - Number(a.id);
     });
   }, [jobs, query, agentType, activity, reputation, sort]);
@@ -236,8 +250,11 @@ export default function DashboardPage() {
               className="h-[52px] rounded-lg border border-white/10 bg-black/35 px-4 text-sm text-[#EAE4D8] outline-none focus:border-[#C5A67C]/45"
             >
               <option value="recent">Sort: Recent</option>
+              <option value="reputationDesc">Highest Reputation</option>
+              <option value="reputationAsc">Lowest Reputation</option>
+              <option value="jobsDesc">Most Jobs</option>
               <option value="budgetDesc">Highest Budget</option>
-              <option value="budgetAsc">Lowest Budget</option>
+              <option value="pendingFirst">Pending First</option>
             </select>
           </div>
 
@@ -344,7 +361,7 @@ export default function DashboardPage() {
                   ≡
                 </div>
                 <p className="mt-4 text-[15px] font-semibold text-[#F4EFE5]">
-                  No jobs indexed yet
+                  No agent yet
                 </p>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#EAE4D8]/50">
                   This dashboard is ready. Wire the backend/indexer later to populate live agent operations.
