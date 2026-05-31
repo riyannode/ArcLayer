@@ -7,6 +7,8 @@ import { formatUnits } from "viem";
 import {
   createSupabaseRestClientFromEnv,
   syncA2AJobsFromERC8183Events,
+  syncERC8004AgentsToSupabase,
+  type ERC8004AgentProjection,
   type ERC8183IndexedLifecycleEvent,
 } from "./a2a-lifecycle-sync";
 import { projectAgentsFromEvents, projectJobsFromEvents } from "./projections";
@@ -502,6 +504,33 @@ export async function syncProjectionStore(
         })) as ERC8183IndexedLifecycleEvent[],
       supabase,
     );
+
+    // Sync affected ERC-8004 agents to Supabase
+    const affectedAgentsForSupabase: ERC8004AgentProjection[] = [];
+    for (const agentId of affectedAgentIds) {
+      const row = db.prepare(`SELECT * FROM agents WHERE token_id = ? OR agent_id = ?`).get(agentId, `erc8004_identity_registry:${agentId}`) as Record<string, string> | undefined;
+      if (!row) continue;
+
+      affectedAgentsForSupabase.push({
+        agentId: String(row.agent_id || ""),
+        tokenId: String(row.token_id || agentId),
+        owner: String(row.controller || ""),
+        controller: String(row.controller || ""),
+        metadataURI: String(row.metadata_uri || ""),
+        source: String(row.source || "erc8004_identity_registry"),
+        chainId: String(row.chain_id || "5042002"),
+        registryAddress: String(row.registry_address || ARC_ERC8004_ADDRESS),
+        txHash: String(row.tx_hash || ""),
+        blockNumber: String(row.block_number || ""),
+        mintedAt: String(row.imported_at || row.updated_at || ""),
+        metadataJSON: null,
+      });
+    }
+
+    if (affectedAgentsForSupabase.length > 0) {
+      await syncERC8004AgentsToSupabase(affectedAgentsForSupabase, supabase);
+    }
+
     return { lastSyncError: null };
   } catch (error) {
     lastA2AJobSyncError = error instanceof Error ? error.message : String(error);

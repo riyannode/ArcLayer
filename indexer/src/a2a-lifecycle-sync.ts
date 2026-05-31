@@ -62,12 +62,35 @@ type LogLike = Pick<Log, "address" | "data" | "topics"> & {
   blockTimestamp?: bigint | number | string | Date | null;
 };
 
-type SupabaseLike = {
-  from(table: "a2a_jobs"): {
-    update(payload: Record<string, unknown>): {
-      eq(column: "onchain_job_id", value: string): Promise<{ error?: { message?: string } | null }>;
-    };
+export type ERC8004AgentProjection = {
+  agentId: string;
+  tokenId: string;
+  owner: string;
+  controller: string;
+  metadataURI: string;
+  source: string;
+  chainId: string;
+  registryAddress: string;
+  txHash: string;
+  blockNumber: string;
+  mintedAt?: string;
+  metadataJSON?: Record<string, unknown> | null;
+};
+
+type SupabaseJobTable = {
+  update(payload: Record<string, unknown>): {
+    eq(column: "onchain_job_id", value: string): Promise<{ error?: { message?: string } | null }>;
   };
+};
+
+type SupabaseAgentTable = {
+  upsert(payload: Record<string, unknown>, onConflict: string): Promise<{ error?: { message?: string } | null }>;
+};
+
+type SupabaseLike = {
+  from(table: "a2a_jobs"): SupabaseJobTable;
+  from(table: "erc8004_agents"): SupabaseAgentTable;
+  from(table: string): SupabaseJobTable | SupabaseAgentTable;
 };
 
 export const ERC8183_AGENTIC_COMMERCE_ADDRESS = CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address;
@@ -200,13 +223,78 @@ export async function syncA2AJobsFromERC8183Logs(
   return syncA2AJobsFromERC8183Events(events, supabase);
 }
 
+export async function syncERC8004AgentsToSupabase(
+  agents: ERC8004AgentProjection[],
+  supabase: SupabaseLike,
+): Promise<{ upserted: number; skipped: number }> {
+  let upserted = 0;
+  let skipped = 0;
+
+  for (const agent of agents) {
+    if (!agent.tokenId || !agent.controller) {
+      skipped++;
+      continue;
+    }
+
+    const payload = {
+      token_id: agent.tokenId,
+      agent_id: agent.agentId,
+      owner: agent.owner || agent.controller,
+      controller: agent.controller,
+      metadata_uri: agent.metadataURI || "",
+      metadata_json: agent.metadataJSON ?? null,
+      source: agent.source || "erc8004_identity_registry",
+      chain_id: agent.chainId,
+      registry_address: agent.registryAddress,
+      tx_hash: agent.txHash,
+      block_number: agent.blockNumber,
+      minted_at: agent.mintedAt ?? null,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from("erc8004_agents")
+      .upsert(payload, "token_id");
+
+    if (error) {
+      throw new Error(`[indexer] erc8004_agents upsert failed: ${error.message ?? "unknown error"}`);
+    }
+
+    upserted++;
+  }
+
+  return { upserted, skipped };
+}
+
 export function createSupabaseRestClientFromEnv(): SupabaseLike | null {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
 
-  return {
-    from(table: "a2a_jobs") {
+  const client = {
+    from(table: string) {
+      if (table === "erc8004_agents") {
+        return {
+          async upsert(payload: Record<string, unknown>, onConflict: string) {
+            const endpoint = `${url.replace(/\/$/, "")}/rest/v1/${table}?on_conflict=${encodeURIComponent(onConflict)}`;
+            const res = await fetch(endpoint, {
+              method: "POST",
+              headers: {
+                apikey: key,
+                Authorization: `Bearer ${key}`,
+                "Content-Type": "application/json",
+                Prefer: "resolution=merge-duplicates,return=minimal",
+              },
+              body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+              return { error: { message: await res.text() } };
+            }
+            return { error: null };
+          },
+        };
+      }
+
       return {
         update(payload: Record<string, unknown>) {
           return {
@@ -232,4 +320,6 @@ export function createSupabaseRestClientFromEnv(): SupabaseLike | null {
       };
     },
   };
+
+  return client as SupabaseLike;
 }
