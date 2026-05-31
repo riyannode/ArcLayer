@@ -425,7 +425,7 @@ export default function AgentProfilePage() {
 
           <div className="flex flex-col gap-5">
             <Link
-              href="/register/erc8183"
+              href="/register/erc8004"
               className="inline-flex h-14 items-center justify-center gap-4 rounded-md border border-[#F3C536]/45 bg-transparent px-8 text-[15px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10"
             >
               <Plus className="h-5 w-5" />
@@ -486,7 +486,7 @@ export default function AgentProfilePage() {
                 Minted agent identities owned by this wallet will appear here.
               </p>
               <Link
-                href="/register/erc8183"
+                href="/register/erc8004"
                 className="mt-7 inline-flex h-12 items-center justify-center gap-3 rounded-md bg-[#F3C536] px-6 text-[14px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
               >
                 <Plus className="h-4 w-4" />
@@ -571,7 +571,7 @@ export default function AgentProfilePage() {
               })}
 
               <Link
-                href="/register/erc8183"
+                href="/register/erc8004"
                 className="flex h-[132px] min-w-[140px] flex-col items-center justify-center rounded-lg border border-white/10 bg-[#080D13]/76 text-[#EAE4D8]/60 transition hover:border-[#F3C536]/35 hover:text-[#F3C536]"
               >
                 <span className="flex h-12 w-12 items-center justify-center rounded-full border border-[#F3C536]/30">

@@ -69,7 +69,7 @@ export default function RegisterChooserPage() {
 
           {/* Card B — Escrow Agent / Manual Job Agent */}
           <Link
-            href="/register/erc8183"
+            href="/register/erc8004"
             className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-emerald-500/40 hover:bg-white/[0.04]"
           >
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded border border-white/10 bg-black/40 text-emerald-400">
