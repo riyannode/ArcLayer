@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
+import { getAddress, isAddress } from 'viem';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -33,6 +34,24 @@ export async function GET(request: Request) {
     const controller = searchParams.get('controller');
     const limitRaw = searchParams.get('limit') ?? '100';
 
+    const normalizedController = controller?.trim()
+      ? isAddress(controller.trim())
+        ? getAddress(controller.trim())
+        : null
+      : undefined;
+
+    if (controller?.trim() && !normalizedController) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'invalid_controller_address',
+          detail: 'controller must be a valid EVM address',
+          agents: [],
+        },
+        { status: 400, headers: { 'Cache-Control': ERROR_CACHE_CONTROL } },
+      );
+    }
+
     const limit = Math.min(Math.max(Number(limitRaw) || 100, 1), 500);
 
     const supabase = getSupabaseAdmin();
@@ -49,8 +68,8 @@ export async function GET(request: Request) {
       query = query.eq('token_id', tokenId);
     }
 
-    if (controller) {
-      query = query.ilike('controller', controller);
+    if (normalizedController) {
+      query = query.ilike('controller', normalizedController);
     }
 
     const { data, error } = await query;
