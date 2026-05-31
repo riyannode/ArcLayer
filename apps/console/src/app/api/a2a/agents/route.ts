@@ -381,7 +381,7 @@ export async function GET(request: Request) {
         error: 'registry_sync_failed',
         detail: message,
       },
-      { status: 502, headers: { 'Cache-Control': AGENTS_CACHE_CONTROL } },
+      { status: 502, headers: { 'Cache-Control': 'no-store, no-cache, max-age=0' } },
     );
   }
 }
