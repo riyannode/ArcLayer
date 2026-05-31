@@ -79,6 +79,23 @@ type IndexerAgent = {
   source?: string;
 };
 
+type CanonicalErc8004Agent = {
+  agentId: string;
+  tokenId?: string | null;
+  owner?: string;
+  controller: string;
+  metadataURI?: string;
+  metadata?: AgentMetadata | null;
+  source?: string;
+  chainId?: string;
+  registryAddress?: string;
+  txHash?: string;
+  blockNumber?: string;
+  mintedAt?: string;
+  updatedAt?: string;
+  onchain?: boolean;
+};
+
 function ipfsToGateway(uri: string) {
   if (!uri.startsWith('ipfs://')) return uri;
   return `https://ipfs.io/ipfs/${uri.slice('ipfs://'.length)}`;
@@ -177,6 +194,22 @@ async function fetchIndexerAgents(origin: string): Promise<IndexerAgent[]> {
   }
 }
 
+async function fetchCanonicalErc8004Agents(origin: string): Promise<CanonicalErc8004Agent[]> {
+  const res = await fetch(`${origin}/api/erc8004/agents?limit=500`, { cache: 'no-store' });
+
+  if (!res.ok) {
+    throw new Error(`erc8004_supabase_agents_unavailable:${res.status}`);
+  }
+
+  const data = await res.json();
+
+  if (!Array.isArray(data?.agents)) {
+    throw new Error('erc8004_supabase_agents_invalid_response');
+  }
+
+  return data.agents as CanonicalErc8004Agent[];
+}
+
 async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
   let next = 0;
@@ -237,6 +270,84 @@ export async function GET(request: Request) {
       categoryFilter,
       timestamp: new Date().toISOString(),
     }, { headers: { 'Cache-Control': AGENTS_CACHE_CONTROL } });
+  }
+
+  if (source === 'erc8004-supabase') {
+    try {
+      const origin = new URL(request.url).origin;
+      const canonicalAgents = await fetchCanonicalErc8004Agents(origin);
+
+      const agents = canonicalAgents
+        .map((agent) => {
+          const identity = normalizeAgentIdentity({
+            agentId: agent.agentId,
+            tokenId: agent.tokenId,
+            controller: agent.controller,
+            owner: agent.owner || agent.controller,
+            source: agent.source || 'erc8004_identity_registry',
+          });
+
+          return {
+            agentId: identity.agentId,
+            tokenId: identity.tokenId,
+            owner: identity.owner || identity.controller,
+            controller: identity.controller,
+            role: agent.metadata?.role || 'REGISTERED_AGENT',
+            roleId: null,
+            endpoint: agent.metadata?.endpoint || '',
+            metadataURI: agent.metadataURI || '',
+            registeredAtBlock: agent.blockNumber || null,
+            source: identity.source,
+            onchain: true,
+            registryAddress: agent.registryAddress,
+            txHash: agent.txHash,
+            chainId: agent.chainId,
+            mintedAt: agent.mintedAt,
+            updatedAt: agent.updatedAt,
+            metadata: agent.metadata ?? { autonomous: true },
+          };
+        })
+        .filter((agent) => !isHiddenAgent(agent.agentId));
+
+      return NextResponse.json(
+        {
+          registry: AGENT_REGISTRY,
+          sourceMode: 'erc8004-supabase',
+          resolvedSource: 'erc8004-supabase',
+          globalEnabled: false,
+          agents,
+          totalRegistered: agents.length,
+          totalVisible: agents.length,
+          totalAutonomous: agents.length,
+          totalHidden: canonicalAgents.length - agents.length,
+          categoryFilter,
+          scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
+          timestamp: new Date().toISOString(),
+        },
+        { headers: { 'Cache-Control': AGENTS_CACHE_CONTROL } },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'erc8004_supabase_source_failed';
+
+      return NextResponse.json(
+        {
+          registry: AGENT_REGISTRY,
+          sourceMode: 'erc8004-supabase',
+          resolvedSource: 'erc8004-supabase',
+          globalEnabled: false,
+          agents: [],
+          totalRegistered: 0,
+          totalVisible: 0,
+          totalAutonomous: 0,
+          totalHidden: 0,
+          categoryFilter,
+          scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
+          error: 'erc8004_supabase_source_failed',
+          detail: message,
+        },
+        { status: 502, headers: { 'Cache-Control': 'no-store, no-cache, max-age=0' } },
+      );
+    }
   }
 
   try {
