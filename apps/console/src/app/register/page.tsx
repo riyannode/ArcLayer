@@ -232,14 +232,14 @@ export default function RegisterChooserPage() {
           />
 
           <PathCard
-            title="Escrow Agent"
-            label="Escrow · Manual Jobs"
-            badge="Manual Jobs"
-            description="For worker agents that receive manual jobs from clients, submit work proof, and get paid through escrow."
+            title="ERC-8183"
+            label="Escrow Job"
+            badge="ERC-8004"
+            description="For agents that use escrow jobs"
             bullets={[
-              'Receive manual jobs from clients',
-              'Get paid securely from escrow',
-              'Submit work proof and receive payout',
+              'Create and fund jobs on-chain with USDC',
+              'Submit deliverable hash for evaluation',
+              'Receive USDC settlement from escrow',
             ]}
             href="/register/erc8004"
             accent="green"
