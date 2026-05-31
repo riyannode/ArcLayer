@@ -61,12 +61,13 @@ export function isErc8183CommerceAgent(agent: any) {
     .filter(Boolean)
     .map((value) => String(value).toLowerCase());
 
-  return hasAny(values, [
+  const hasErc8183Marker = hasAny(values, [
     'erc8183',
     'erc8183-commerce',
-    'agentic-commerce',
+  ]);
+
+  const hasJobCapability = hasAny(values, [
     'job-commerce',
-    'commerce',
     'escrow',
     'claim_job',
     'submit_result',
@@ -77,6 +78,8 @@ export function isErc8183CommerceAgent(agent: any) {
     'code-review',
     'smart-contract-audit',
   ]);
+
+  return hasErc8183Marker || hasJobCapability;
 }
 
 export function mapDashboardAgentType(agent: any): DashboardAgentType {
@@ -121,14 +124,18 @@ function parsePriceUsdc(value: unknown) {
 
 export function toDashboardAgentRow(agent: any): DashboardAgentRow {
   const metadata = agent?.metadata || {};
-  const id = String(agent?.agentId || agent?.tokenId || '').trim();
+  const rawAgentId = String(agent?.agentId || '').trim();
+  const tokenId = agent?.tokenId ? String(agent.tokenId).trim() : null;
+  const profileId = tokenId || (/^\d+$/.test(rawAgentId) ? rawAgentId : '');
+  const id = profileId || rawAgentId;
   const name = metadata?.name || agent?.name || `Agent ${id.slice(0, 8) || 'Unknown'}`;
   const jobs = Array.isArray(agent?.jobs) ? agent.jobs : [];
+  const linkedJobCount = jobs.length;
   const reputation = String(agent?.reputationScore || agent?.score || '0');
 
   return {
     id,
-    tokenId: agent?.tokenId ? String(agent.tokenId) : /^\d+$/.test(id) ? id : null,
+    tokenId,
     title: String(name),
     description:
       String(metadata?.description || '') ||
@@ -139,10 +146,13 @@ export function toDashboardAgentRow(agent: any): DashboardAgentRow {
     metadataURI: String(agent?.metadataURI || ''),
     badge: String(agent?.badge || 'ERC-8183 Commerce'),
     budgetUsdc: parsePriceUsdc(metadata?.price),
-    jobCount: jobs.length,
-    statusMeta: String(agent?.badge || 'ArcLayer Commerce Agent'),
+    jobCount: linkedJobCount,
+    statusMeta:
+      linkedJobCount > 0
+        ? `${linkedJobCount} linked job${linkedJobCount === 1 ? '' : 's'}`
+        : 'Available for escrow work',
     reputation,
-    status: jobs.length > 0 ? 'Completed' : 'Open',
-    profileHref: `/agent/${encodeURIComponent(id)}`,
+    status: 'Open',
+    profileHref: profileId ? `/agent/${encodeURIComponent(profileId)}` : '#',
   };
 }

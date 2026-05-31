@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import {
   isErc8183CommerceAgent,
   toDashboardAgentRow,
+  type DashboardAgentRow,
 } from '@/lib/dashboard/erc8183-agents';
 
 export const dynamic = 'force-dynamic';
@@ -53,7 +54,7 @@ export async function GET(request: Request) {
     const agents = rawAgents
       .filter((agent: any) => isErc8183CommerceAgent(agent))
       .map((agent: any) => toDashboardAgentRow(agent))
-      .filter((agent: any) => agent.id.length > 0);
+      .filter((agent: DashboardAgentRow) => agent.id.length > 0 && agent.profileHref !== '#');
 
     return NextResponse.json(
       {
