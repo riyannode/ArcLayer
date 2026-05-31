@@ -6,6 +6,7 @@ import { resolveManifestMetadata } from '@/lib/a2a/manifest';
 import { listStoredManifests } from '@/lib/a2a/roster';
 import { listRegisteredExternalAgents } from '@/lib/a2a/external-registry';
 import { CONTRACTS } from '@arclayer/sdk';
+import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -195,19 +196,36 @@ async function fetchIndexerAgents(origin: string): Promise<IndexerAgent[]> {
 }
 
 async function fetchCanonicalErc8004Agents(): Promise<CanonicalErc8004Agent[]> {
-  const res = await fetch('/api/erc8004/agents?limit=500', { cache: 'no-store' });
+  const supabase = getSupabaseAdmin();
 
-  if (!res.ok) {
-    throw new Error(`erc8004_supabase_agents_unavailable:${res.status}`);
+  const { data, error } = await supabase
+    .from('erc8004_agents')
+    .select(
+      'token_id,agent_id,owner,controller,metadata_uri,metadata_json,source,chain_id,registry_address,tx_hash,block_number,minted_at,updated_at',
+    )
+    .order('updated_at', { ascending: false })
+    .limit(500);
+
+  if (error) {
+    throw new Error(`erc8004_supabase_agents_query_failed:${error.message}`);
   }
 
-  const data = await res.json();
-
-  if (!Array.isArray(data?.agents)) {
-    throw new Error('erc8004_supabase_agents_invalid_response');
-  }
-
-  return data.agents as CanonicalErc8004Agent[];
+  return (data ?? []).map((row) => ({
+    agentId: row.agent_id,
+    tokenId: row.token_id,
+    owner: row.owner,
+    controller: row.controller,
+    metadataURI: row.metadata_uri,
+    metadata: row.metadata_json ?? null,
+    source: row.source,
+    chainId: row.chain_id,
+    registryAddress: row.registry_address,
+    txHash: row.tx_hash,
+    blockNumber: row.block_number,
+    mintedAt: row.minted_at,
+    updatedAt: row.updated_at,
+    onchain: true,
+  }));
 }
 
 async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
