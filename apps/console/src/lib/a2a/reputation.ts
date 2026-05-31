@@ -1,6 +1,12 @@
 import { indexerUrl } from '@/lib/indexer';
 import { AgentMatchCandidate, rankAgentsForJob, JobMatchInput } from './match-agents';
 import {
+  normalizePrivateKey,
+  isBytes32,
+  parseBigIntField,
+  parseUint8Field,
+} from './utils';
+import {
   arcTestnet,
   buildGiveFeedbackConfig,
   publicClient,
@@ -137,46 +143,8 @@ export type ReputationFeedbackInput = {
   jobId?: string;
 };
 
-function normalizePrivateKey(value: string | undefined): `0x${string}` | null {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (/^0x[0-9a-fA-F]{64}$/.test(trimmed)) return trimmed as `0x${string}`;
-  return null;
-}
-
-function parseBigIntField(value: unknown, name: string): bigint {
-  if (value === undefined || value === null || value === '') {
-    throw new Error(`${name}_required`);
-  }
-
-  if (typeof value === 'bigint') return value;
-
-  if (typeof value === 'number') {
-    if (!Number.isInteger(value)) throw new Error(`${name}_must_be_integer`);
-    return BigInt(value);
-  }
-
-  if (typeof value === 'string') {
-    if (!/^-?\d+$/.test(value.trim())) {
-      throw new Error(`${name}_must_be_integer_string`);
-    }
-    return BigInt(value.trim());
-  }
-
-  throw new Error(`${name}_invalid`);
-}
-
 function parseCategory(value: unknown): number {
-  const parsed = Number(value ?? 0);
-
-  if (!Number.isInteger(parsed)) throw new Error('category_must_be_integer');
-  if (parsed < 0 || parsed > 255) throw new Error('category_out_of_uint8_range');
-
-  return parsed;
-}
-
-function isBytes32(value: unknown): value is Hex {
-  return typeof value === 'string' && /^0x[0-9a-fA-F]{64}$/.test(value);
+  return parseUint8Field(value ?? 0, 'category');
 }
 
 function normalizeFeedbackRef(input: {
