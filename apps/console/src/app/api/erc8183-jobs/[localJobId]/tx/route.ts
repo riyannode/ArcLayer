@@ -18,6 +18,12 @@ import { assertErc8183Participant, isErc8183Admin } from '@/lib/erc8183-jobs/aut
 import { escrowRail } from '@/lib/rails/responses';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { USDC_ABI, CONTRACTS } from '@/lib/contracts';
+import {
+  parseBudgetSet,
+  parseJobFunded,
+  parseJobSubmitted,
+  parseJobCompleted,
+} from '@/lib/contracts/erc8183';
 import { ARC_TOKENS } from '@arclayer/sdk';
 import type { Erc8183JobView } from '@/lib/erc8183-jobs/types';
 import type { ConfirmedReceipt } from '@/lib/erc8183-jobs/receipt';
@@ -70,6 +76,68 @@ function hasRelevantApprovalLog(receipt: ConfirmedReceipt, job: Erc8183JobView):
   }
 
   return false;
+}
+
+// ── Event verification helpers ─────────────────────────────────────────────
+
+function sameHex(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false;
+  return a.toLowerCase() === b.toLowerCase();
+}
+function isAgenticCommerceLog(log: { address?: string }): boolean {
+  return (
+    typeof log.address === 'string' &&
+    log.address.toLowerCase() === CONTRACTS.ERC8183_AGENTIC_COMMERCE.toLowerCase()
+  );
+}
+
+function eventError(error: string, txType: string, message: string) {
+  return NextResponse.json(
+    {
+      ok: false,
+      ...escrowRail(),
+      error,
+      txType,
+      message,
+    },
+    { status: 422 },
+  );
+}
+
+function findBudgetSetEvent(receipt: ConfirmedReceipt, expectedJobId: bigint) {
+  for (const log of receipt.logs ?? []) {
+    if (!isAgenticCommerceLog(log)) continue;
+    const ev = parseBudgetSet(log);
+    if (ev && ev.jobId === expectedJobId) return ev;
+  }
+  return null;
+}
+
+function findJobFundedEvent(receipt: ConfirmedReceipt, expectedJobId: bigint) {
+  for (const log of receipt.logs ?? []) {
+    if (!isAgenticCommerceLog(log)) continue;
+    const ev = parseJobFunded(log);
+    if (ev && ev.jobId === expectedJobId) return ev;
+  }
+  return null;
+}
+
+function findJobSubmittedEvent(receipt: ConfirmedReceipt, expectedJobId: bigint) {
+  for (const log of receipt.logs ?? []) {
+    if (!isAgenticCommerceLog(log)) continue;
+    const ev = parseJobSubmitted(log);
+    if (ev && ev.jobId === expectedJobId) return ev;
+  }
+  return null;
+}
+
+function findJobCompletedEvent(receipt: ConfirmedReceipt, expectedJobId: bigint) {
+  for (const log of receipt.logs ?? []) {
+    if (!isAgenticCommerceLog(log)) continue;
+    const ev = parseJobCompleted(log);
+    if (ev && ev.jobId === expectedJobId) return ev;
+  }
+  return null;
 }
 
 // ── On-chain job provenance helpers ───────────────────────────────────────
@@ -230,6 +298,30 @@ export async function POST(
     // Step 3-4: handle by tx type
     switch (txType) {
       case 'set_budget': {
+        // Require BudgetSet event in receipt for this job
+        const budgetEvent = findBudgetSetEvent(receipt, erc8183JobIdBigInt);
+        if (!budgetEvent) {
+          return eventError(
+            'missing_expected_event',
+            'set_budget',
+            'setBudget tx receipt does not contain a matching BudgetSet event for this job.',
+          );
+        }
+
+        if (budgetEvent.amount !== BigInt(job.priceAtomic)) {
+          return NextResponse.json(
+            {
+              ok: false,
+              ...escrowRail(),
+              error: 'event_amount_mismatch',
+              txType: 'set_budget',
+              expectedAmount: job.priceAtomic,
+              eventAmount: budgetEvent.amount.toString(),
+            },
+            { status: 422 },
+          );
+        }
+
         // Read on-chain job for provenance check
         const onchainBudgetJob = await readOnchainJob(erc8183JobIdBigInt);
         if (!onchainBudgetJob) {
@@ -366,6 +458,30 @@ export async function POST(
       }
 
       case 'fund': {
+        // Require JobFunded event in receipt for this job
+        const fundedEvent = findJobFundedEvent(receipt, erc8183JobIdBigInt);
+        if (!fundedEvent) {
+          return eventError(
+            'missing_expected_event',
+            'fund',
+            'fund tx receipt does not contain a matching JobFunded event for this job.',
+          );
+        }
+
+        if (fundedEvent.amount !== BigInt(job.priceAtomic)) {
+          return NextResponse.json(
+            {
+              ok: false,
+              ...escrowRail(),
+              error: 'event_amount_mismatch',
+              txType: 'fund',
+              expectedAmount: job.priceAtomic,
+              eventAmount: fundedEvent.amount.toString(),
+            },
+            { status: 422 },
+          );
+        }
+
         // Step 3: read on-chain job state
         const onchainJob = await readOnchainJob(erc8183JobIdBigInt);
         if (!onchainJob) {
@@ -401,6 +517,30 @@ export async function POST(
       }
 
       case 'submit': {
+        // Require JobSubmitted event in receipt for this job
+        const submittedEvent = findJobSubmittedEvent(receipt, erc8183JobIdBigInt);
+        if (!submittedEvent) {
+          return eventError(
+            'missing_expected_event',
+            'submit',
+            'submit tx receipt does not contain a matching JobSubmitted event for this job.',
+          );
+        }
+
+        if (job.deliverableHash && !sameHex(submittedEvent.deliverable, job.deliverableHash)) {
+          return NextResponse.json(
+            {
+              ok: false,
+              ...escrowRail(),
+              error: 'event_deliverable_mismatch',
+              txType: 'submit',
+              expectedDeliverable: job.deliverableHash,
+              eventDeliverable: submittedEvent.deliverable,
+            },
+            { status: 422 },
+          );
+        }
+
         const onchainJob = await readOnchainJob(erc8183JobIdBigInt);
         if (!onchainJob) {
           return NextResponse.json(
@@ -435,6 +575,30 @@ export async function POST(
       }
 
       case 'complete': {
+        // Require JobCompleted event in receipt for this job
+        const completedEvent = findJobCompletedEvent(receipt, erc8183JobIdBigInt);
+        if (!completedEvent) {
+          return eventError(
+            'missing_expected_event',
+            'complete',
+            'complete tx receipt does not contain a matching JobCompleted event for this job.',
+          );
+        }
+
+        if (job.reasonHash && !sameHex(completedEvent.reason, job.reasonHash)) {
+          return NextResponse.json(
+            {
+              ok: false,
+              ...escrowRail(),
+              error: 'event_reason_mismatch',
+              txType: 'complete',
+              expectedReason: job.reasonHash,
+              eventReason: completedEvent.reason,
+            },
+            { status: 422 },
+          );
+        }
+
         const onchainJob = await readOnchainJob(erc8183JobIdBigInt);
         if (!onchainJob) {
           return NextResponse.json(
