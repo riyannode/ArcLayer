@@ -45,6 +45,77 @@ function ensureDb(): SupabaseClient {
   return getSupabaseAdmin();
 }
 
+// ─── Tx Hash Immutability Guard ─────────────────────────────────────────────
+
+function normalizeTxHash(txHash: string | null | undefined): string | null {
+  return txHash ? txHash.toLowerCase() : null;
+}
+
+export class Erc8183TxHashConflictError extends Error {
+  code = 'TX_HASH_CONFLICT' as const;
+
+  constructor(
+    public readonly fieldName: string,
+    public readonly existingTxHash: string,
+    public readonly nextTxHash: string,
+  ) {
+    super(`${fieldName} already attached with a different tx hash`);
+  }
+}
+
+export class Erc8183TxHashIdempotentError extends Error {
+  code = 'IDEMPOTENT_TX' as const;
+
+  constructor(
+    public readonly fieldName: string,
+    public readonly existingTxHash: string,
+  ) {
+    super(`${fieldName} already attached with the same tx hash`);
+  }
+}
+
+function assertImmutableTxHash(params: {
+  existingTxHash: string | null | undefined;
+  nextTxHash: string;
+  fieldName: string;
+}) {
+  const existing = normalizeTxHash(params.existingTxHash);
+  const next = normalizeTxHash(params.nextTxHash);
+
+  if (!existing) return;
+
+  if (existing === next) {
+    throw new Erc8183TxHashIdempotentError(params.fieldName, params.existingTxHash!);
+  }
+
+  throw new Erc8183TxHashConflictError(
+    params.fieldName,
+    params.existingTxHash!,
+    params.nextTxHash,
+  );
+}
+
+async function readTxColumn(
+  db: SupabaseClient,
+  localJobId: string,
+  column: string,
+): Promise<string | null> {
+  const { data, error } = await db
+    .from('agent_jobs')
+    .select(column)
+    .eq('job_id', localJobId)
+    .eq('settlement_mode', 'erc8183_escrow')
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null;
+    throw new Error(`readTxColumn failed for ${column}: ${error.message}`);
+  }
+
+  const row = data as unknown as Record<string, unknown> | null;
+  return row?.[column] ? String(row[column]) : null;
+}
+
 function mapRow(row: Record<string, unknown>): Erc8183JobView {
   return {
     localJobId: String(row.job_id),
@@ -249,11 +320,27 @@ export async function attachErc8183SetBudgetTx(input: {
   setBudgetTxHash: string;
 }): Promise<void> {
   const db = ensureDb();
+  const field = 'set_budget_tx_hash';
+
+  const existing = await readTxColumn(db, input.localJobId, field);
+
+  try {
+    assertImmutableTxHash({
+      existingTxHash: existing,
+      nextTxHash: input.setBudgetTxHash,
+      fieldName: field,
+    });
+  } catch (err) {
+    if (err instanceof Erc8183TxHashIdempotentError) return;
+    throw err;
+  }
+
   const { error } = await db
     .from('agent_jobs')
     .update({ set_budget_tx_hash: input.setBudgetTxHash })
     .eq('job_id', input.localJobId)
-    .eq('settlement_mode', 'erc8183_escrow');
+    .eq('settlement_mode', 'erc8183_escrow')
+    .is('set_budget_tx_hash', null);
 
   if (error) throw new Error(`attachErc8183SetBudgetTx failed: ${error.message}`);
 }
@@ -263,11 +350,27 @@ export async function attachErc8183ApproveTx(input: {
   approveTxHash: string;
 }): Promise<void> {
   const db = ensureDb();
+  const field = 'approve_tx_hash';
+
+  const existing = await readTxColumn(db, input.localJobId, field);
+
+  try {
+    assertImmutableTxHash({
+      existingTxHash: existing,
+      nextTxHash: input.approveTxHash,
+      fieldName: field,
+    });
+  } catch (err) {
+    if (err instanceof Erc8183TxHashIdempotentError) return;
+    throw err;
+  }
+
   const { error } = await db
     .from('agent_jobs')
     .update({ approve_tx_hash: input.approveTxHash })
     .eq('job_id', input.localJobId)
-    .eq('settlement_mode', 'erc8183_escrow');
+    .eq('settlement_mode', 'erc8183_escrow')
+    .is('approve_tx_hash', null);
 
   if (error) throw new Error(`attachErc8183ApproveTx failed: ${error.message}`);
 }
@@ -278,6 +381,21 @@ export async function attachErc8183FundTx(input: {
   erc8183Status: Erc8183Status;
 }): Promise<void> {
   const db = ensureDb();
+  const field = 'fund_tx_hash';
+
+  const existing = await readTxColumn(db, input.localJobId, field);
+
+  try {
+    assertImmutableTxHash({
+      existingTxHash: existing,
+      nextTxHash: input.fundTxHash,
+      fieldName: field,
+    });
+  } catch (err) {
+    if (err instanceof Erc8183TxHashIdempotentError) return;
+    throw err;
+  }
+
   const { error } = await db
     .from('agent_jobs')
     .update({
@@ -285,7 +403,8 @@ export async function attachErc8183FundTx(input: {
       erc8183_status: input.erc8183Status,
     })
     .eq('job_id', input.localJobId)
-    .eq('settlement_mode', 'erc8183_escrow');
+    .eq('settlement_mode', 'erc8183_escrow')
+    .is('fund_tx_hash', null);
 
   if (error) throw new Error(`attachErc8183FundTx failed: ${error.message}`);
 }
@@ -297,6 +416,21 @@ export async function attachErc8183SubmitTx(input: {
   status?: string;
 }): Promise<void> {
   const db = ensureDb();
+  const field = 'submit_tx_hash';
+
+  const existing = await readTxColumn(db, input.localJobId, field);
+
+  try {
+    assertImmutableTxHash({
+      existingTxHash: existing,
+      nextTxHash: input.submitTxHash,
+      fieldName: field,
+    });
+  } catch (err) {
+    if (err instanceof Erc8183TxHashIdempotentError) return;
+    throw err;
+  }
+
   const update: Record<string, unknown> = {
     submit_tx_hash: input.submitTxHash,
     erc8183_status: input.erc8183Status,
@@ -308,7 +442,8 @@ export async function attachErc8183SubmitTx(input: {
     .from('agent_jobs')
     .update(update)
     .eq('job_id', input.localJobId)
-    .eq('settlement_mode', 'erc8183_escrow');
+    .eq('settlement_mode', 'erc8183_escrow')
+    .is('submit_tx_hash', null);
 
   if (error) throw new Error(`attachErc8183SubmitTx failed: ${error.message}`);
 }
@@ -319,6 +454,21 @@ export async function attachErc8183CompleteTx(input: {
   erc8183Status: Erc8183Status;
 }): Promise<void> {
   const db = ensureDb();
+  const field = 'complete_tx_hash';
+
+  const existing = await readTxColumn(db, input.localJobId, field);
+
+  try {
+    assertImmutableTxHash({
+      existingTxHash: existing,
+      nextTxHash: input.completeTxHash,
+      fieldName: field,
+    });
+  } catch (err) {
+    if (err instanceof Erc8183TxHashIdempotentError) return;
+    throw err;
+  }
+
   const { error } = await db
     .from('agent_jobs')
     .update({
@@ -328,7 +478,8 @@ export async function attachErc8183CompleteTx(input: {
       settled_at: new Date().toISOString(),
     })
     .eq('job_id', input.localJobId)
-    .eq('settlement_mode', 'erc8183_escrow');
+    .eq('settlement_mode', 'erc8183_escrow')
+    .is('complete_tx_hash', null);
 
   if (error) throw new Error(`attachErc8183CompleteTx failed: ${error.message}`);
 }
