@@ -254,7 +254,12 @@ function inferCanonicalSource(agent: any): CanonicalAgentSource {
   const uri = String(agent.metadataURI || '');
   if (uri.startsWith('arclayer://manifest/')) return 'manifest';
   if (uri.includes('/api/a2a/metadata/draft/')) return 'draft';
-  if (agent.skillHash || agent.reputationScore || agent.proofTokenIds) return 'indexer';
+  if (agent.source === 'web_manifest') return 'manifest';
+
+  const hasProofTokens =
+    Array.isArray(agent.proofTokenIds) && agent.proofTokenIds.length > 0;
+
+  if (agent.skillHash || agent.reputationScore || hasProofTokens) return 'indexer';
   return 'onchain';
 }
 
@@ -268,6 +273,28 @@ function toCanonicalAgent(agent: any): CanonicalAgentLike {
   };
 }
 
+function applyCanonicalFilter(agents: any[]) {
+  const mode = getCanonicalProfileMode();
+
+  const visible = agents
+    .filter((agent) =>
+      shouldExposeAgent({
+        agent: toCanonicalAgent(agent),
+        mode,
+        surface: 'discovery',
+      }),
+    )
+    .sort((a, b) =>
+      platformSortRank(toCanonicalAgent(a)) - platformSortRank(toCanonicalAgent(b)),
+    )
+    .map((agent) => ({
+      ...agent,
+      badge: getAgentBadge(toCanonicalAgent(agent)),
+    }));
+
+  return { visibleAgents: visible, mode };
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const source = searchParams.get('source') || process.env.A2A_AGENT_ROSTER_SOURCE || 'local-indexer';
@@ -275,41 +302,47 @@ export async function GET(request: Request) {
 
   if (source === 'registered-only') {
     const approvedExternal = await listRegisteredExternalAgents();
+
+    const allAgents = approvedExternal.map((agent) => {
+      const identity = normalizeAgentIdentity({
+        agentId: agent.agentId,
+        controller: agent.address || agent.owner,
+        owner: agent.owner || agent.address,
+        source: agent.source || 'external-registry',
+      });
+
+      return {
+        agentId: identity.agentId,
+        tokenId: identity.tokenId,
+        owner: identity.owner || identity.controller,
+        controller: identity.controller,
+        role: 'REGISTERED_EXTERNAL_AGENT',
+        roleId: null,
+        endpoint: agent.endpoint || '',
+        metadataURI: '',
+        source: identity.source,
+        onchain: false,
+        metadata: {
+          name: agent.name,
+          role: 'REGISTERED_EXTERNAL_AGENT',
+          autonomous: true,
+          endpoint: agent.endpoint,
+          capability: agent.capabilities || [],
+          skills: agent.capabilities || [],
+        },
+      };
+    });
+
+    const { visibleAgents, mode } = applyCanonicalFilter(allAgents);
+
     return NextResponse.json({
       registry: 'external-registry',
-      agents: approvedExternal.map((agent) => {
-        const identity = normalizeAgentIdentity({
-          agentId: agent.agentId,
-          controller: agent.address || agent.owner,
-          owner: agent.owner || agent.address,
-          source: agent.source || 'external-registry',
-        });
-
-        return {
-          agentId: identity.agentId,
-          tokenId: identity.tokenId,
-          owner: identity.owner || identity.controller,
-          controller: identity.controller,
-          role: 'REGISTERED_EXTERNAL_AGENT',
-          roleId: null,
-          endpoint: agent.endpoint || '',
-          metadataURI: '',
-          source: identity.source,
-          onchain: false,
-          metadata: {
-            name: agent.name,
-            role: 'REGISTERED_EXTERNAL_AGENT',
-            autonomous: true,
-            endpoint: agent.endpoint,
-            capability: agent.capabilities || [],
-            skills: agent.capabilities || [],
-          },
-        };
-      }),
-      totalRegistered: approvedExternal.length,
-      totalVisible: approvedExternal.length,
-      totalAutonomous: approvedExternal.length,
-      totalHidden: 0,
+      agents: visibleAgents,
+      totalRegistered: allAgents.length,
+      totalVisible: visibleAgents.length,
+      totalAutonomous: visibleAgents.length,
+      totalHidden: allAgents.length - visibleAgents.length,
+      canonicalMode: mode,
       scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
       categoryFilter,
       timestamp: new Date().toISOString(),
@@ -320,7 +353,7 @@ export async function GET(request: Request) {
     try {
       const canonicalAgents = await fetchCanonicalErc8004Agents();
 
-      const agents = (
+      const allAgents = (
         await mapWithConcurrency(canonicalAgents, METADATA_CONCURRENCY, async (agent) => {
           const identity = normalizeAgentIdentity({
             agentId: agent.agentId,
@@ -355,17 +388,20 @@ export async function GET(request: Request) {
         })
       ).filter((agent) => !isHiddenAgent(agent.agentId));
 
+      const { visibleAgents, mode } = applyCanonicalFilter(allAgents);
+
       return NextResponse.json(
         {
           registry: AGENT_REGISTRY,
           sourceMode: 'erc8004-supabase',
           resolvedSource: 'erc8004-supabase',
           globalEnabled: false,
-          agents,
-          totalRegistered: agents.length,
-          totalVisible: agents.length,
-          totalAutonomous: agents.length,
-          totalHidden: canonicalAgents.length - agents.length,
+          agents: visibleAgents,
+          totalRegistered: allAgents.length,
+          totalVisible: visibleAgents.length,
+          totalAutonomous: visibleAgents.length,
+          totalHidden: allAgents.length - visibleAgents.length,
+          canonicalMode: mode,
           categoryFilter,
           scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
           timestamp: new Date().toISOString(),
@@ -512,24 +548,7 @@ export async function GET(request: Request) {
       (agent) => !isHiddenAgent(agent.agentId),
     );
 
-    // Apply canonical profile filter
-    const mode = getCanonicalProfileMode();
-
-    const visibleAgents = allAgents
-      .filter((agent) =>
-        shouldExposeAgent({
-          agent: toCanonicalAgent(agent),
-          mode,
-          surface: 'discovery',
-        }),
-      )
-      .sort((a, b) =>
-        platformSortRank(toCanonicalAgent(a)) - platformSortRank(toCanonicalAgent(b)),
-      )
-      .map((agent) => ({
-        ...agent,
-        badge: getAgentBadge(toCanonicalAgent(agent)),
-      }));
+    const { visibleAgents, mode } = applyCanonicalFilter(allAgents);
 
     return NextResponse.json({
       registry: AGENT_REGISTRY,
