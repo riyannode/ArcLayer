@@ -226,7 +226,31 @@ export async function createValidationRequest(input: ValidationRequestInput) {
     transport: http(process.env.ARC_RPC_URL),
   });
 
-  const txHash = await walletClient.writeContract(validation.config);
+  let txHash: `0x${string}`;
+
+  try {
+    txHash = await walletClient.writeContract(validation.config);
+  } catch (writeError) {
+    await supabase
+      .from('a2a_validations')
+      .delete()
+      .eq('request_hash', validation.requestHash)
+      .is('request_tx_hash', null);
+
+    throw writeError;
+  }
+
+  const { error: txHashUpdateError } = await supabase
+    .from('a2a_validations')
+    .update({
+      request_tx_hash: txHash,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('request_hash', validation.requestHash);
+
+  if (txHashUpdateError) {
+    throw new Error(`db_update_failed:${txHashUpdateError.message}`);
+  }
 
   const receipt = await publicClient.waitForTransactionReceipt({
     hash: txHash,
@@ -237,7 +261,6 @@ export async function createValidationRequest(input: ValidationRequestInput) {
   const { error: updateError } = await supabase
     .from('a2a_validations')
     .update({
-      request_tx_hash: txHash,
       request_block_number: Number(receipt.blockNumber),
       updated_at: new Date().toISOString(),
     })
@@ -345,6 +368,18 @@ export async function createValidationResponse(input: ValidationResponseInput) {
     };
   }
 
+  if (row.response_tx_hash) {
+    return {
+      ok: true,
+      source: 'erc8004_validation_registry',
+      action: 'validationResponse',
+      idempotent: true,
+      requestHash: validation.requestHash,
+      response: Number(row.response_status),
+      txHash: row.response_tx_hash,
+    };
+  }
+
   const chainStatus = await getValidationStatus(validation.requestHash);
 
   if (
@@ -379,6 +414,20 @@ export async function createValidationResponse(input: ValidationResponseInput) {
 
   const txHash = await walletClient.writeContract(validation.config);
 
+  const { error: responseTxHashUpdateError } = await supabase
+    .from('a2a_validations')
+    .update({
+      response_tx_hash: txHash,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('request_hash', validation.requestHash)
+    .eq('response_status', VALIDATION_RESPONSE.NONE)
+    .is('response_tx_hash', null);
+
+  if (responseTxHashUpdateError) {
+    throw new Error(`db_update_failed:${responseTxHashUpdateError.message}`);
+  }
+
   const receipt = await publicClient.waitForTransactionReceipt({
     hash: txHash,
     confirmations: 1,
@@ -392,12 +441,11 @@ export async function createValidationResponse(input: ValidationResponseInput) {
       result_uri: validation.resultUri,
       result_hash: validation.resultHash,
       reason: validation.reason,
-      response_tx_hash: txHash,
       response_block_number: Number(receipt.blockNumber),
       updated_at: new Date().toISOString(),
     })
     .eq('request_hash', validation.requestHash)
-    .eq('response_status', VALIDATION_RESPONSE.NONE);
+    .eq('response_tx_hash', txHash);
 
   if (updateError) throw new Error(`db_update_failed:${updateError.message}`);
 
