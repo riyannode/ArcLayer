@@ -158,13 +158,22 @@ async function fetchMetadata(uri: string, agentId?: string): Promise<AgentMetada
 async function fetchIndexerAgents(origin: string): Promise<IndexerAgent[]> {
   try {
     void origin;
+
     const res = await fetch(indexerUrl('/agents'), { cache: 'no-store' });
-    if (!res.ok) return [];
+
+    if (!res.ok) {
+      throw new Error(`indexer_agents_unavailable:${res.status}`);
+    }
+
     const data = await res.json();
+
     if (Array.isArray(data)) return data as IndexerAgent[];
-    return Array.isArray(data?.agents) ? data.agents as IndexerAgent[] : [];
-  } catch {
-    return [];
+    if (Array.isArray(data?.agents)) return data.agents as IndexerAgent[];
+
+    throw new Error('indexer_agents_invalid_response');
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'indexer_agents_fetch_failed';
+    throw new Error(message);
   }
 }
 
@@ -361,6 +370,7 @@ export async function GET(request: Request) {
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'registry_sync_failed';
+
     return NextResponse.json(
       {
         registry: AGENT_REGISTRY,
@@ -368,9 +378,10 @@ export async function GET(request: Request) {
         totalRegistered: 0,
         totalAutonomous: 0,
         scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
-        error: message,
+        error: 'registry_sync_failed',
+        detail: message,
       },
-      { status: 200, headers: { 'Cache-Control': AGENTS_CACHE_CONTROL } },
+      { status: 502, headers: { 'Cache-Control': 'no-store, no-cache, max-age=0' } },
     );
   }
 }
