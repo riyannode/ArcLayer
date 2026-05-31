@@ -335,14 +335,21 @@ export async function attachErc8183SetBudgetTx(input: {
     throw err;
   }
 
-  const { error } = await db
+  const { data: updated, error } = await db
     .from('agent_jobs')
     .update({ set_budget_tx_hash: input.setBudgetTxHash })
     .eq('job_id', input.localJobId)
     .eq('settlement_mode', 'erc8183_escrow')
-    .is('set_budget_tx_hash', null);
+    .is('set_budget_tx_hash', null)
+    .select('job_id');
 
   if (error) throw new Error(`attachErc8183SetBudgetTx failed: ${error.message}`);
+
+  if (!updated || updated.length === 0) {
+    const actual = await readTxColumn(db, input.localJobId, field);
+    if (actual && normalizeTxHash(actual) === normalizeTxHash(input.setBudgetTxHash)) return;
+    throw new Erc8183TxHashConflictError(field, actual ?? 'unknown', input.setBudgetTxHash);
+  }
 }
 
 export async function attachErc8183ApproveTx(input: {
@@ -365,14 +372,21 @@ export async function attachErc8183ApproveTx(input: {
     throw err;
   }
 
-  const { error } = await db
+  const { data: updated, error } = await db
     .from('agent_jobs')
     .update({ approve_tx_hash: input.approveTxHash })
     .eq('job_id', input.localJobId)
     .eq('settlement_mode', 'erc8183_escrow')
-    .is('approve_tx_hash', null);
+    .is('approve_tx_hash', null)
+    .select('job_id');
 
   if (error) throw new Error(`attachErc8183ApproveTx failed: ${error.message}`);
+
+  if (!updated || updated.length === 0) {
+    const actual = await readTxColumn(db, input.localJobId, field);
+    if (actual && normalizeTxHash(actual) === normalizeTxHash(input.approveTxHash)) return;
+    throw new Erc8183TxHashConflictError(field, actual ?? 'unknown', input.approveTxHash);
+  }
 }
 
 export async function attachErc8183FundTx(input: {
@@ -396,7 +410,7 @@ export async function attachErc8183FundTx(input: {
     throw err;
   }
 
-  const { error } = await db
+  const { data: updated, error } = await db
     .from('agent_jobs')
     .update({
       fund_tx_hash: input.fundTxHash,
@@ -404,9 +418,16 @@ export async function attachErc8183FundTx(input: {
     })
     .eq('job_id', input.localJobId)
     .eq('settlement_mode', 'erc8183_escrow')
-    .is('fund_tx_hash', null);
+    .is('fund_tx_hash', null)
+    .select('job_id');
 
   if (error) throw new Error(`attachErc8183FundTx failed: ${error.message}`);
+
+  if (!updated || updated.length === 0) {
+    const actual = await readTxColumn(db, input.localJobId, field);
+    if (actual && normalizeTxHash(actual) === normalizeTxHash(input.fundTxHash)) return;
+    throw new Erc8183TxHashConflictError(field, actual ?? 'unknown', input.fundTxHash);
+  }
 }
 
 export async function attachErc8183SubmitTx(input: {
@@ -438,14 +459,21 @@ export async function attachErc8183SubmitTx(input: {
   if (input.status) update.status = input.status;
   if (input.status === 'submitted') update.submitted_at = new Date().toISOString();
 
-  const { error } = await db
+  const { data: updated, error } = await db
     .from('agent_jobs')
     .update(update)
     .eq('job_id', input.localJobId)
     .eq('settlement_mode', 'erc8183_escrow')
-    .is('submit_tx_hash', null);
+    .is('submit_tx_hash', null)
+    .select('job_id');
 
   if (error) throw new Error(`attachErc8183SubmitTx failed: ${error.message}`);
+
+  if (!updated || updated.length === 0) {
+    const actual = await readTxColumn(db, input.localJobId, field);
+    if (actual && normalizeTxHash(actual) === normalizeTxHash(input.submitTxHash)) return;
+    throw new Erc8183TxHashConflictError(field, actual ?? 'unknown', input.submitTxHash);
+  }
 }
 
 export async function attachErc8183CompleteTx(input: {
@@ -469,7 +497,7 @@ export async function attachErc8183CompleteTx(input: {
     throw err;
   }
 
-  const { error } = await db
+  const { data: updated, error } = await db
     .from('agent_jobs')
     .update({
       complete_tx_hash: input.completeTxHash,
@@ -479,9 +507,16 @@ export async function attachErc8183CompleteTx(input: {
     })
     .eq('job_id', input.localJobId)
     .eq('settlement_mode', 'erc8183_escrow')
-    .is('complete_tx_hash', null);
+    .is('complete_tx_hash', null)
+    .select('job_id');
 
   if (error) throw new Error(`attachErc8183CompleteTx failed: ${error.message}`);
+
+  if (!updated || updated.length === 0) {
+    const actual = await readTxColumn(db, input.localJobId, field);
+    if (actual && normalizeTxHash(actual) === normalizeTxHash(input.completeTxHash)) return;
+    throw new Erc8183TxHashConflictError(field, actual ?? 'unknown', input.completeTxHash);
+  }
 }
 
 /**
