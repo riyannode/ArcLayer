@@ -194,8 +194,8 @@ async function fetchIndexerAgents(origin: string): Promise<IndexerAgent[]> {
   }
 }
 
-async function fetchCanonicalErc8004Agents(origin: string): Promise<CanonicalErc8004Agent[]> {
-  const res = await fetch(`${origin}/api/erc8004/agents?limit=500`, { cache: 'no-store' });
+async function fetchCanonicalErc8004Agents(): Promise<CanonicalErc8004Agent[]> {
+  const res = await fetch('/api/erc8004/agents?limit=500', { cache: 'no-store' });
 
   if (!res.ok) {
     throw new Error(`erc8004_supabase_agents_unavailable:${res.status}`);
@@ -274,8 +274,7 @@ export async function GET(request: Request) {
 
   if (source === 'erc8004-supabase') {
     try {
-      const origin = new URL(request.url).origin;
-      const canonicalAgents = await fetchCanonicalErc8004Agents(origin);
+      const canonicalAgents = await fetchCanonicalErc8004Agents();
 
       const agents = canonicalAgents
         .map((agent) => {
