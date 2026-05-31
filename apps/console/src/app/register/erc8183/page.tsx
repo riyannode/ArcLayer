@@ -94,7 +94,7 @@ const ROLE_CONFIG: Record<AgentRole, RoleConfig> = {
   },
   'autonomous-client': {
     id: 'autonomous-client',
-    title: 'Autonomous Client Agent',
+    title: 'Client Agent',
     label: 'Client',
     description: 'Creates and funds escrow jobs.',
     identityRole: 'client',
@@ -108,7 +108,7 @@ const DEFAULT_FORM: FormState = {
   agentName: '',
   description: '',
   avatarUrl: '',
-  role: 'worker',
+  role: 'autonomous-client',
   category: '',
   capabilities: '',
   controllerWallet: '',
@@ -159,10 +159,10 @@ function FieldShell({
   return (
     <label className="block">
       <div className="mb-2 font-mono text-[12px] font-semibold tracking-[-0.02em] text-[#F5F0E5]">
-        {label} {required && <span className="text-[#F3C536]">*</span>}
+        {label}
       </div>
       {children}
-      {helper && <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/48">{helper}</p>}
+      <p className="mt-2 h-5 text-[12px] leading-5 text-[#EAE4D8]/48">{helper || ''}</p>
     </label>
   );
 }
@@ -462,21 +462,27 @@ export default function ERC8183EscrowRegisterPage() {
 
   const role = ROLE_CONFIG[form.role];
   const customCaps = useMemo(() => capabilityList(form.capabilities), [form.capabilities]);
+  const isClientRole = form.role === 'autonomous-client';
+  const requiresCategoryAndCapabilities = !isClientRole;
   const controller = address || form.controllerWallet;
   const agentSlug = slugify(form.agentName) || 'erc8183-agent';
   const metadataURI = form.metadataUri.trim();
+  const hasRequiredCategory = !requiresCategoryAndCapabilities || Boolean(form.category);
+  const hasRequiredCapabilities = !requiresCategoryAndCapabilities || customCaps.length > 0;
+
   const metadataReady = Boolean(
     form.agentName.trim() &&
       form.description.trim() &&
-      form.category &&
-      controller &&
-      customCaps.length > 0,
+      hasRequiredCategory &&
+      hasRequiredCapabilities &&
+      controller,
   );
+
   const identityComplete = Boolean(
     form.agentName.trim() &&
       form.description.trim() &&
-      form.category &&
-      customCaps.length > 0,
+      hasRequiredCategory &&
+      hasRequiredCapabilities,
   );
   const profileComplete = Boolean(controller);
   const reviewComplete = Boolean(metadataReady && form.confirm);
@@ -487,7 +493,11 @@ export default function ERC8183EscrowRegisterPage() {
   }, [address]);
 
   const agentManifest = useMemo(() => {
-    const categorySlug = form.category ? slugify(form.category) : 'general';
+    const categorySlug = form.category
+      ? slugify(form.category)
+      : isClientRole
+        ? 'client'
+        : 'general';
     const allCaps = Array.from(new Set([...role.defaultCapabilities, ...customCaps, categorySlug]));
     const now = new Date().toISOString();
 
@@ -541,10 +551,30 @@ export default function ERC8183EscrowRegisterPage() {
       createdAt,
       updatedAt: now,
     };
-  }, [agentSlug, controller, createdAt, customCaps, form, metadataURI, mintedAgentId, role]);
+  }, [agentSlug, controller, createdAt, customCaps, form, isClientRole, metadataURI, mintedAgentId, role]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function updateRole(nextRole: AgentRole) {
+    setForm((prev) => {
+      if (prev.role === nextRole) return prev;
+
+      if (nextRole === 'autonomous-client') {
+        return {
+          ...prev,
+          role: nextRole,
+          category: '',
+          capabilities: '',
+        };
+      }
+
+      return {
+        ...prev,
+        role: nextRole,
+      };
+    });
   }
 
   function toggleSection(key: SectionKey) {
@@ -725,7 +755,7 @@ export default function ERC8183EscrowRegisterPage() {
 
           <div className="mt-14">
             <div className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#F3C536]">
-              ERC-8004 · AGENT IDENTITY
+              ERC-8004
             </div>
             <h1 className="mt-3 text-[34px] font-bold tracking-[-0.055em] text-[#F5F0E5] sm:text-[38px]">
               Register Agent Identity
@@ -794,7 +824,7 @@ export default function ERC8183EscrowRegisterPage() {
               onToggle={() => toggleSection('identity')}
             >
               <div className="grid gap-7 lg:grid-cols-2">
-                <FieldShell label="Agent Name" required helper="Public display name.">
+                <FieldShell label="Agent Name" required>
                   <TextInput
                     value={form.agentName}
                     onChange={(value) => update('agentName', value)}
@@ -802,32 +832,46 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="Role" required helper="Escrow identity role.">
+                <FieldShell label="Role" required>
                   <SelectInput
                     value={form.role}
-                    onChange={(value) => update('role', value as AgentRole)}
+                    onChange={(value) => updateRole(value as AgentRole)}
                     options={[
-                      { value: 'worker', label: 'Worker — receives jobs' },
-                      { value: 'evaluator', label: 'Evaluator — reviews work' },
-                      { value: 'autonomous-client', label: 'Client — creates jobs' },
+                      { value: 'autonomous-client', label: 'Client (Create Job)' },
+                      { value: 'worker', label: 'Worker (Receive Job)' },
+                      { value: 'evaluator', label: 'Evaluator (Review Job)' },
                     ]}
                   />
                 </FieldShell>
 
                 <div className="lg:col-span-2">
                   <div className="mb-3 font-mono text-[12px] font-semibold tracking-[-0.02em] text-[#F5F0E5]">
-                    Identity Role <span className="text-[#F3C536]">*</span>
+                    Identity Role
                   </div>
 
                   <div className="grid gap-3 md:grid-cols-3">
-                    <RoleButton role={ROLE_CONFIG.worker} active={form.role === 'worker'} onClick={() => update('role', 'worker')} />
-                    <RoleButton role={ROLE_CONFIG.evaluator} active={form.role === 'evaluator'} onClick={() => update('role', 'evaluator')} />
-                    <RoleButton role={ROLE_CONFIG['autonomous-client']} active={form.role === 'autonomous-client'} onClick={() => update('role', 'autonomous-client')} />
+                    <RoleButton
+                      role={ROLE_CONFIG['autonomous-client']}
+                      active={form.role === 'autonomous-client'}
+                      onClick={() => updateRole('autonomous-client')}
+                    />
+
+                    <RoleButton
+                      role={ROLE_CONFIG.worker}
+                      active={form.role === 'worker'}
+                      onClick={() => updateRole('worker')}
+                    />
+
+                    <RoleButton
+                      role={ROLE_CONFIG.evaluator}
+                      active={form.role === 'evaluator'}
+                      onClick={() => updateRole('evaluator')}
+                    />
                   </div>
                 </div>
 
                 <div className="lg:col-span-2">
-                  <FieldShell label="Description" required helper="Short public summary.">
+                  <FieldShell label="Description" required>
                     <TextareaInput
                       value={form.description}
                       onChange={(value) => update('description', value)}
@@ -836,31 +880,35 @@ export default function ERC8183EscrowRegisterPage() {
                   </FieldShell>
                 </div>
 
-                <FieldShell label="Category" required helper="Used for discovery.">
-                  <SelectInput
-                    value={form.category}
-                    onChange={(value) => update('category', value as Category | '')}
-                    options={[
-                      { value: '', label: 'Select a category' },
-                      ...CATEGORIES.map((category) => ({ value: category, label: category })),
-                    ]}
-                  />
-                </FieldShell>
+                {requiresCategoryAndCapabilities && (
+                  <>
+                    <FieldShell label="Category" required>
+                      <SelectInput
+                        value={form.category}
+                        onChange={(value) => update('category', value as Category | '')}
+                        options={[
+                          { value: '', label: 'Select a category' },
+                          ...CATEGORIES.map((category) => ({ value: category, label: category })),
+                        ]}
+                      />
+                    </FieldShell>
 
-                <FieldShell label="Capabilities" required helper="Comma-separated tags.">
-                  <TextInput
-                    value={form.capabilities}
-                    onChange={(value) => update('capabilities', value)}
-                    placeholder="audit, security-review, code-review"
-                  />
-                </FieldShell>
+                    <FieldShell label="Capabilities" required>
+                      <TextInput
+                        value={form.capabilities}
+                        onChange={(value) => update('capabilities', value)}
+                        placeholder="audit, security-review, code-review"
+                      />
+                    </FieldShell>
+                  </>
+                )}
 
                 {customCaps.length > 0 && (
                   <div className="lg:col-span-2 flex flex-wrap gap-2">
                     {customCaps.map((capability) => (
                       <span
                         key={capability}
-                        className="rounded-md border border-white/10 bg-white/[0.035] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#EAE4D8]/62"
+                        className="rounded-md border border-white/10 bg-white/[0.035] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#EAE4D8]/63"
                       >
                         {capability}
                       </span>
@@ -880,7 +928,7 @@ export default function ERC8183EscrowRegisterPage() {
               onToggle={() => toggleSection('profile')}
             >
               <div className="grid gap-7 lg:grid-cols-2">
-                <FieldShell label="Controller Wallet" required helper="Auto-filled from wallet.">
+                <FieldShell label="Controller Wallet" required>
                   <TextInput
                     value={form.controllerWallet}
                     onChange={(value) => update('controllerWallet', value)}
@@ -888,7 +936,7 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="Avatar / Logo URL" helper="Optional image URL.">
+                <FieldShell label="Avatar / Logo URL">
                   <TextInput
                     value={form.avatarUrl}
                     onChange={(value) => update('avatarUrl', value)}
@@ -896,7 +944,7 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="Metadata URI" helper="Auto-generated when you register. You can also provide your own.">
+                <FieldShell label="Metadata URI">
                   <TextInput
                     value={form.metadataUri}
                     onChange={(value) => update('metadataUri', value)}
@@ -904,7 +952,7 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="Website" helper="Optional.">
+                <FieldShell label="Website" helper="Optional">
                   <TextInput
                     value={form.websiteUrl}
                     onChange={(value) => update('websiteUrl', value)}
@@ -912,7 +960,7 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="Docs" helper="Optional.">
+                <FieldShell label="Docs" helper="Optional">
                   <TextInput
                     value={form.docsUrl}
                     onChange={(value) => update('docsUrl', value)}
@@ -920,7 +968,7 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="Repo" helper="Optional.">
+                <FieldShell label="Repo" helper="Optional">
                   <TextInput
                     value={form.repoUrl}
                     onChange={(value) => update('repoUrl', value)}
@@ -928,7 +976,7 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="X / Twitter" helper="Optional.">
+                <FieldShell label="X / Twitter" helper="Optional">
                   <TextInput
                     value={form.xUrl}
                     onChange={(value) => update('xUrl', value)}
