@@ -17,6 +17,29 @@ function json(status: number, payload: Record<string, unknown>) {
   return NextResponse.json(payload, { status });
 }
 
+const VALIDATION_ERRORS = new Set([
+  'agentTokenId_required',
+  'agentTokenId_must_be_integer',
+  'agentTokenId_must_be_integer_string',
+  'agentTokenId_invalid',
+  'agentTokenId_must_be_positive',
+  'score_required',
+  'score_must_be_integer',
+  'score_must_be_integer_string',
+  'score_invalid',
+  'score_out_of_manual_test_range',
+  'category_must_be_integer',
+  'category_out_of_uint8_range',
+]);
+
+function errorStatus(message: string): number {
+  if (message === 'unauthorized') return 401;
+  if (VALIDATION_ERRORS.has(message)) return 400;
+  if (message === 'missing_REPUTATION_FEEDBACK_API_KEY') return 503;
+  if (message === 'missing_or_invalid_REPUTATION_FEEDBACK_PRIVATE_KEY') return 503;
+  return 500;
+}
+
 function requireAdmin(request: Request) {
   const expected = process.env.REPUTATION_FEEDBACK_API_KEY;
 
@@ -68,7 +91,7 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : String(error);
 
     return json(
-      message === 'unauthorized' ? 401 : 500,
+      errorStatus(message),
       {
         ok: false,
         error: message,
