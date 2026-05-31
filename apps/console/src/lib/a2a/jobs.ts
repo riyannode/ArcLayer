@@ -183,7 +183,9 @@ export async function getA2AJob(id: string): Promise<A2AJob | null> {
   return data ? rowToJob(data) : null;
 }
 
-export async function createA2AJob(input: CreateJobInput): Promise<A2AJob> {
+export async function createA2AJob(
+  input: CreateJobInput,
+): Promise<{ ok: true; job: A2AJob } | { ok: false; error: string; detail?: string }> {
   const supabase = getSupabaseAdmin();
   const now = new Date().toISOString();
   const id = nextJobId(input);
@@ -210,12 +212,15 @@ export async function createA2AJob(input: CreateJobInput): Promise<A2AJob> {
   const { data, error } = await supabase.from(TABLE).insert(row).select().single();
   if (error) {
     console.error('[a2a.jobs] create error', error.message);
-    // Fallback: return constructed job even if DB write failed
-    return rowToJob(row);
+    return {
+      ok: false,
+      error: 'db_insert_failed',
+      detail: error.message,
+    };
   }
   const job = rowToJob(data);
   dispatchWebhookEvent('job.created', { job }).catch(() => {});
-  return job;
+  return { ok: true, job };
 }
 
 export async function claimA2AJob(id: string, agentId: string): Promise<{ ok: true; job: A2AJob } | { ok: false; error: string }> {

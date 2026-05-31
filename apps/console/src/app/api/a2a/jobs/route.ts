@@ -46,7 +46,7 @@ async function postHandler(req: NextRequest) {
   if (typeof title !== 'string' || typeof description !== 'string' || !title.trim() || !description.trim()) {
     return NextResponse.json({ ok: false, error: 'missing_fields', message: 'title and description are required' }, { status: 400 });
   }
-  const job = await createA2AJob({
+  const result = await createA2AJob({
     title,
     description,
     category: typeof category === 'string' ? category : undefined,
@@ -56,7 +56,13 @@ async function postHandler(req: NextRequest) {
     agentId: typeof agentId === 'string' ? agentId : undefined,
     input,
   });
-  return NextResponse.json({ ok: true, job }, { status: 201 });
+  if (!result.ok) {
+    return NextResponse.json(
+      { ok: false, error: result.error, detail: result.detail },
+      { status: 502, headers: { 'Cache-Control': 'no-store, no-cache, max-age=0' } },
+    );
+  }
+  return NextResponse.json({ ok: true, job: result.job }, { status: 201 });
 }
 
 // 0.000001 USDC = 1 atomic (6 decimals). Creating a job is a paid action.
