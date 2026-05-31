@@ -103,8 +103,8 @@ export default function NotifBell() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="relative flex items-center justify-center p-2 transition-colors duration-200"
-        style={{ color: unreadCount > 0 ? '#C5A67C' : 'rgba(255, 255, 255, 0.4)' }}
+        className="relative flex h-10 w-10 items-center justify-center rounded-md border border-[#C5A67C]/35 bg-[#C5A67C]/10 text-[#EAE4D8]/80 shadow-[0_0_18px_rgba(197,166,124,0.12)] transition hover:border-[#F3C536]/60 hover:bg-[#F3C536]/10 hover:text-[#F3C536]"
+        style={{ color: unreadCount > 0 ? '#F3C536' : undefined }}
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
       >
         <NotifIcon size={18} />
