@@ -17,6 +17,7 @@ import {
 } from '@/lib/erc8183-jobs/store';
 import { assertErc8183Participant, isErc8183Admin } from '@/lib/erc8183-jobs/authz';
 import { escrowRail } from '@/lib/rails/responses';
+import { checkMemoryRateLimit } from '@/lib/rate-limit/memory';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { USDC_ABI, CONTRACTS } from '@/lib/contracts';
 import {
@@ -274,6 +275,42 @@ export async function POST(
       return NextResponse.json(
         { ok: false, ...escrowRail(), error: 'invalid_tx_hash', message: 'Valid tx_hash (0x-prefixed) is required.' },
         { status: 400 },
+      );
+    }
+
+    // Rate limit: 20 attempts per 5 minutes per key + job + txType
+    const rateLimit = checkMemoryRateLimit({
+      key: [
+        'erc8183_tx',
+        auth.key.id,
+        auth.key.agentId,
+        params.localJobId,
+        txType,
+      ].join(':'),
+      limit: 20,
+      windowMs: 5 * 60 * 1000,
+    });
+
+    if (!rateLimit.ok) {
+      return NextResponse.json(
+        {
+          ok: false,
+          ...escrowRail(),
+          error: 'rate_limited',
+          message: 'Too many tx confirmation attempts. Retry after the reset time.',
+          limit: rateLimit.limit,
+          remaining: rateLimit.remaining,
+          resetAt: new Date(rateLimit.resetAt).toISOString(),
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil((rateLimit.resetAt - Date.now()) / 1000)),
+            'X-RateLimit-Limit': String(rateLimit.limit),
+            'X-RateLimit-Remaining': String(rateLimit.remaining),
+            'X-RateLimit-Reset': String(Math.ceil(rateLimit.resetAt / 1000)),
+          },
+        },
       );
     }
 
