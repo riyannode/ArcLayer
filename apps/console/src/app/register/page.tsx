@@ -86,7 +86,7 @@ function PathCard({
   return (
     <div
       className={[
-        'relative flex min-h-[520px] flex-col rounded-[22px] border bg-black/35 p-8',
+        'relative flex min-h-[400px] flex-col rounded-xl border bg-black/35 p-5',
         'shadow-[0_0_80px_rgba(0,0,0,0.35)] backdrop-blur-sm transition',
         'hover:-translate-y-1 hover:bg-white/[0.035]',
         accentBorder,
@@ -94,68 +94,68 @@ function PathCard({
       ].join(' ')}
     >
       {recommended ? (
-        <div className="absolute right-8 top-8 rounded-md border border-yellow-300/35 bg-yellow-300/10 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.28em] text-yellow-300">
+        <div className="absolute right-5 top-5 rounded-md border border-yellow-300/35 bg-yellow-300/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.28em] text-yellow-300">
           Recommended
         </div>
       ) : (
-        <div className="absolute right-8 top-8 rounded-md border border-emerald-300/35 bg-emerald-300/10 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.28em] text-emerald-300">
+        <div className="absolute right-5 top-5 rounded-md border border-emerald-300/35 bg-emerald-300/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.28em] text-emerald-300">
           {badge}
         </div>
       )}
 
       <div
         className={[
-          'mb-8 flex h-20 w-20 items-center justify-center rounded-lg border',
+          'mb-5 flex h-14 w-14 items-center justify-center rounded-lg border',
           accentBorder,
           accentBg,
           accentText,
         ].join(' ')}
       >
-        {isYellow ? <StackIcon className="h-10 w-10" /> : <BriefcaseIcon className="h-10 w-10" />}
+        {isYellow ? <StackIcon className="h-7 w-7" /> : <BriefcaseIcon className="h-7 w-7" />}
       </div>
 
-      <div className={`mb-4 text-xs font-bold uppercase tracking-[0.34em] ${accentText}`}>
+      <div className={`mb-2 text-[10px] font-bold uppercase tracking-[0.34em] ${accentText}`}>
         {label}
       </div>
 
-      <h2 className="text-3xl font-semibold tracking-tight text-zinc-100">
+      <h2 className="text-xl font-semibold tracking-tight text-zinc-100">
         {title}
       </h2>
 
-      <p className="mt-4 max-w-[520px] text-base leading-7 text-zinc-400">
+      <p className="mt-2 max-w-[520px] text-[13px] leading-6 text-zinc-400">
         {description}
       </p>
 
-      <div className="my-8 h-px w-full bg-white/10" />
+      <div className="my-5 h-px w-full bg-white/10" />
 
-      <div className="space-y-5">
+      <div className="space-y-3">
         {bullets.map((item) => (
-          <div key={item} className="flex items-center gap-4 text-zinc-300">
+          <div key={item} className="flex items-center gap-3 text-zinc-300">
             <span
               className={[
-                'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px]',
+                'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[9px]',
                 accentBorder,
                 accentText,
               ].join(' ')}
             >
               ✓
             </span>
-            <span className="text-base">{item}</span>
+            <span className="text-[13px]">{item}</span>
           </div>
         ))}
       </div>
 
-      <div className="mt-auto pt-10">
+      <div className="mt-auto pt-6">
         <Link
           href={href}
           className={[
-            'group flex h-14 w-full items-center justify-center gap-3 rounded-md px-5',
-            'text-base font-semibold transition',
+            'group flex h-11 w-full items-center justify-center gap-2 rounded-md px-4',
+            'text-[13px] font-semibold transition',
             buttonClass,
           ].join(' ')}
         >
           {cta}
-          <ArrowRightIcon className="h-5 w-5 transition group-hover:translate-x-1" />
+          <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-1" />
         </Link>
       </div>
     </div>
@@ -178,43 +178,43 @@ export default function RegisterChooserPage() {
       <div className="absolute right-0 top-20 h-[520px] w-[520px] rounded-full bg-cyan-500/10 blur-[150px]" />
 
       <div className="relative z-10 border-b border-transparent">
-        <div className="mx-auto flex h-20 max-w-[1600px] items-center justify-between px-8">
-          <div className="flex items-center gap-4">
-            <div className="flex h-10 w-10 items-center justify-center text-yellow-300">
-              <StackIcon className="h-9 w-9" />
+        <div className="mx-auto flex h-16 max-w-[1600px] items-center justify-between px-8">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center text-yellow-300">
+              <StackIcon className="h-7 w-7" />
             </div>
-            <div className="text-sm font-bold uppercase tracking-[0.22em] text-yellow-300">
+            <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-yellow-300">
               Agent Registration
             </div>
           </div>
 
           <Link
             href="/docs"
-            className="text-sm font-medium text-zinc-400 transition hover:text-zinc-100"
+            className="text-[11px] font-medium text-zinc-400 transition hover:text-zinc-100"
           >
             ? Need help?
           </Link>
         </div>
       </div>
 
-      <section className="relative z-10 mx-auto max-w-[1500px] px-8 py-14">
-        <div className="mb-14 text-center">
-          <div className="mb-8 flex items-center justify-center gap-5">
-            <span className="h-px w-24 bg-yellow-300/40" />
-            <span className="text-xs font-bold uppercase tracking-[0.35em] text-yellow-300">
+      <section className="relative z-10 mx-auto max-w-[1500px] px-8 pt-10 pb-14">
+        <div className="mb-10 text-center">
+          <div className="mb-5 flex items-center justify-center gap-4">
+            <span className="h-px w-16 bg-yellow-300/40" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.35em] text-yellow-300">
               PROTOCOL · ONBOARDING
             </span>
-            <span className="h-px w-24 bg-yellow-300/40" />
+            <span className="h-px w-16 bg-yellow-300/40" />
           </div>
 
-          <h1 className="text-5xl font-semibold tracking-tight text-zinc-100 md:text-6xl">
+          <h1 className="text-4xl font-semibold tracking-tight text-zinc-100 md:text-5xl">
             Choose a <span className="italic text-[#C5A67C]">registration</span>
           </h1>
 
-          <p className="mx-auto mt-6 max-w-3xl text-xl leading-8 text-zinc-400">&nbsp;</p>
+          <p className="mx-auto mt-5 max-w-3xl text-base leading-7 text-zinc-400">&nbsp;</p>
         </div>
 
-        <div className="mx-auto grid max-w-[1200px] grid-cols-1 gap-8 lg:grid-cols-2">
+        <div className="mx-auto grid max-w-[960px] grid-cols-1 gap-5 lg:grid-cols-2">
           <PathCard
             title="External Bot Onboarding"
             label="Guided · External Runtime"
@@ -247,16 +247,16 @@ export default function RegisterChooserPage() {
           />
         </div>
 
-        <div className="mx-auto mt-10 flex max-w-[1200px] items-center gap-5 rounded-2xl border border-white/10 bg-white/[0.035] px-8 py-6 text-zinc-300">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-yellow-300/30 bg-yellow-300/10 text-yellow-300">
-            <ShieldIcon className="h-6 w-6" />
+        <div className="mx-auto mt-8 flex max-w-[960px] items-center gap-4 rounded-xl border border-white/10 bg-white/[0.035] px-6 py-4 text-zinc-300">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-yellow-300/30 bg-yellow-300/10 text-yellow-300">
+            <ShieldIcon className="h-5 w-5" />
           </div>
 
           <div>
-            <p className="text-base font-semibold text-zinc-100">
+            <p className="text-sm font-semibold text-zinc-100">
               Both paths create an on-chain ERC-8004 agent identity.
             </p>
-            <p className="mt-1 text-sm text-zinc-500">
+            <p className="mt-0.5 text-[11px] text-zinc-500">
               You can review and edit details in the next steps before minting.
             </p>
           </div>
