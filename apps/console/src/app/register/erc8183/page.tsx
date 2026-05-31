@@ -53,6 +53,10 @@ type RoleConfig = {
   manifestMode: 'buyer' | 'seller' | 'dual';
   defaultCapabilities: string[];
   jobAccepts: string[];
+  profileTabs: string[];
+  registerFocus: string;
+  customCapabilitiesLabel: string;
+  customCapabilitiesHelper: string;
 };
 
 type FormState = {
@@ -81,6 +85,10 @@ const ROLE_CONFIG: Record<AgentRole, RoleConfig> = {
     manifestMode: 'seller',
     defaultCapabilities: ['claim_job', 'submit_work'],
     jobAccepts: ['claim', 'run', 'submit-proof'],
+    profileTabs: ['Basic Info', 'Capabilities', 'Links', 'Reputation', 'Metadata'],
+    registerFocus: 'Registers an agent that receives jobs, submits deliverables, and earns reputation.',
+    customCapabilitiesLabel: 'Worker Capabilities',
+    customCapabilitiesHelper: 'Optional tags shown in Worker profile, for example audit, code-review, frontend.',
   },
   evaluator: {
     id: 'evaluator',
@@ -89,18 +97,26 @@ const ROLE_CONFIG: Record<AgentRole, RoleConfig> = {
     description: 'Reviews work and settles escrow jobs.',
     identityRole: 'evaluator',
     manifestMode: 'dual',
-    defaultCapabilities: ['evaluate_work', 'complete_job'],
-    jobAccepts: ['run', 'submit-proof', 'complete'],
+    defaultCapabilities: ['review_work', 'evaluate_quality', 'approve_delivery', 'complete_job'],
+    jobAccepts: ['review', 'evaluate', 'complete'],
+    profileTabs: ['Basic Info', 'Links', 'Review Queue', 'Performance', 'Notifications', 'Metadata'],
+    registerFocus: 'Registers an evaluator that reviews submitted work and approves completed jobs.',
+    customCapabilitiesLabel: 'Evaluator Focus',
+    customCapabilitiesHelper: 'Optional review focus, for example audit-review, security-review, QA, dispute-review.',
   },
   'autonomous-client': {
     id: 'autonomous-client',
-    title: 'Autonomous Client Agent',
+    title: 'Client Agent',
     label: 'Client',
     description: 'Creates and funds escrow jobs.',
     identityRole: 'client',
     manifestMode: 'buyer',
-    defaultCapabilities: ['create_job', 'fund_escrow'],
-    jobAccepts: ['create'],
+    defaultCapabilities: ['create_job', 'fund_escrow', 'view_submissions'],
+    jobAccepts: ['create', 'fund', 'track'],
+    profileTabs: ['Basic Info', 'Links', 'Jobs Created', 'Submissions', 'Notifications', 'Metadata'],
+    registerFocus: 'Registers a client that creates jobs, funds work, and tracks submissions.',
+    customCapabilitiesLabel: 'Client Tags',
+    customCapabilitiesHelper: 'Optional tags for discovery. Client capabilities are auto-filled, so this can stay empty.',
   },
 };
 
@@ -373,8 +389,11 @@ function RoleButton({
           <div className={active ? 'font-semibold text-[#F3C536]' : 'font-semibold text-[#F5F0E5]'}>
             {role.title}
           </div>
-          <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/55">{role.description}</p>
+          <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/55">
+            {role.description}
+          </p>
         </div>
+
         <div
           className={
             active
@@ -384,6 +403,31 @@ function RoleButton({
         >
           {active && <Check className="h-4 w-4" />}
         </div>
+      </div>
+
+      <div className="mt-4 rounded-md border border-white/10 bg-[#05070A]/55 p-3">
+        <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+          Profile tabs after register
+        </div>
+
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {role.profileTabs.map((tab) => (
+            <span
+              key={tab}
+              className={
+                active
+                  ? 'rounded border border-[#F3C536]/25 bg-[#F3C536]/10 px-2 py-1 text-[10px] text-[#F3C536]'
+                  : 'rounded border border-white/10 bg-white/[0.025] px-2 py-1 text-[10px] text-[#EAE4D8]/50'
+              }
+            >
+              {tab}
+            </span>
+          ))}
+        </div>
+
+        <p className="mt-3 text-[11px] leading-5 text-[#EAE4D8]/48">
+          {role.registerFocus}
+        </p>
       </div>
     </button>
   );
@@ -462,6 +506,17 @@ export default function ERC8183EscrowRegisterPage() {
 
   const role = ROLE_CONFIG[form.role];
   const customCaps = useMemo(() => capabilityList(form.capabilities), [form.capabilities]);
+  const defaultCaps = role.defaultCapabilities;
+  const allCapabilities = useMemo(() => {
+    const categorySlug = form.category ? slugify(form.category) : '';
+    return Array.from(
+      new Set([
+        ...defaultCaps,
+        ...customCaps,
+        ...(categorySlug ? [categorySlug] : []),
+      ]),
+    );
+  }, [defaultCaps, customCaps, form.category]);
   const controller = address || form.controllerWallet;
   const agentSlug = slugify(form.agentName) || 'erc8183-agent';
   const metadataURI = form.metadataUri.trim();
@@ -470,13 +525,13 @@ export default function ERC8183EscrowRegisterPage() {
       form.description.trim() &&
       form.category &&
       controller &&
-      customCaps.length > 0,
+      allCapabilities.length > 0,
   );
   const identityComplete = Boolean(
     form.agentName.trim() &&
       form.description.trim() &&
       form.category &&
-      customCaps.length > 0,
+      allCapabilities.length > 0,
   );
   const profileComplete = Boolean(controller);
   const reviewComplete = Boolean(metadataReady && form.confirm);
@@ -488,7 +543,7 @@ export default function ERC8183EscrowRegisterPage() {
 
   const agentManifest = useMemo(() => {
     const categorySlug = form.category ? slugify(form.category) : 'general';
-    const allCaps = Array.from(new Set([...role.defaultCapabilities, ...customCaps, categorySlug]));
+    const allCaps = allCapabilities;
     const now = new Date().toISOString();
 
     return {
@@ -541,10 +596,21 @@ export default function ERC8183EscrowRegisterPage() {
       createdAt,
       updatedAt: now,
     };
-  }, [agentSlug, controller, createdAt, customCaps, form, metadataURI, mintedAgentId, role]);
+  }, [allCapabilities, agentSlug, controller, createdAt, form, metadataURI, mintedAgentId, role]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function updateRole(nextRole: AgentRole) {
+    setForm((prev) => {
+      if (prev.role === nextRole) return prev;
+      return {
+        ...prev,
+        role: nextRole,
+        capabilities: '',
+      };
+    });
   }
 
   function toggleSection(key: SectionKey) {
@@ -805,7 +871,7 @@ export default function ERC8183EscrowRegisterPage() {
                 <FieldShell label="Role" required helper="Escrow identity role.">
                   <SelectInput
                     value={form.role}
-                    onChange={(value) => update('role', value as AgentRole)}
+                    onChange={(value) => updateRole(value as AgentRole)}
                     options={[
                       { value: 'worker', label: 'Worker — receives jobs' },
                       { value: 'evaluator', label: 'Evaluator — reviews work' },
@@ -820,9 +886,9 @@ export default function ERC8183EscrowRegisterPage() {
                   </div>
 
                   <div className="grid gap-3 md:grid-cols-3">
-                    <RoleButton role={ROLE_CONFIG.worker} active={form.role === 'worker'} onClick={() => update('role', 'worker')} />
-                    <RoleButton role={ROLE_CONFIG.evaluator} active={form.role === 'evaluator'} onClick={() => update('role', 'evaluator')} />
-                    <RoleButton role={ROLE_CONFIG['autonomous-client']} active={form.role === 'autonomous-client'} onClick={() => update('role', 'autonomous-client')} />
+                    <RoleButton role={ROLE_CONFIG.worker} active={form.role === 'worker'} onClick={() => updateRole('worker')} />
+                    <RoleButton role={ROLE_CONFIG.evaluator} active={form.role === 'evaluator'} onClick={() => updateRole('evaluator')} />
+                    <RoleButton role={ROLE_CONFIG['autonomous-client']} active={form.role === 'autonomous-client'} onClick={() => updateRole('autonomous-client')} />
                   </div>
                 </div>
 
@@ -847,26 +913,58 @@ export default function ERC8183EscrowRegisterPage() {
                   />
                 </FieldShell>
 
-                <FieldShell label="Capabilities" required helper="Comma-separated tags.">
+                <FieldShell
+                  label={role.customCapabilitiesLabel}
+                  helper={role.customCapabilitiesHelper}
+                >
                   <TextInput
                     value={form.capabilities}
                     onChange={(value) => update('capabilities', value)}
-                    placeholder="audit, security-review, code-review"
+                    placeholder={
+                      form.role === 'worker'
+                        ? 'audit, security-review, code-review'
+                        : form.role === 'evaluator'
+                          ? 'audit-review, QA, dispute-review'
+                          : 'dao-client, product-owner, treasury'
+                    }
                   />
                 </FieldShell>
 
-                {customCaps.length > 0 && (
-                  <div className="lg:col-span-2 flex flex-wrap gap-2">
-                    {customCaps.map((capability) => (
-                      <span
-                        key={capability}
-                        className="rounded-md border border-white/10 bg-white/[0.035] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#EAE4D8]/62"
-                      >
-                        {capability}
-                      </span>
-                    ))}
+                <div className="lg:col-span-2 space-y-3">
+                  <div>
+                    <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                      Auto role capabilities
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {role.defaultCapabilities.map((capability) => (
+                        <span
+                          key={capability}
+                          className="rounded-md border border-[#F3C536]/30 bg-[#F3C536]/[0.055] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#F3C536]"
+                        >
+                          {capability}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                )}
+
+                  {customCaps.length > 0 && (
+                    <div>
+                      <div className="mb-2 font-mono text-[11px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                        Custom tags
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {customCaps.map((capability) => (
+                          <span
+                            key={capability}
+                            className="rounded-md border border-white/10 bg-white/[0.035] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#EAE4D8]/62"
+                          >
+                            {capability}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </Section>
 
