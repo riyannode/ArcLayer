@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server';
 import { indexerUrl } from '@/lib/indexer';
 import type { Hex } from 'viem';
 import { isHiddenAgent } from '@/lib/a2a/hidden-agents';
+import {
+  getCanonicalProfileMode,
+  shouldExposeAgent,
+  platformSortRank,
+  getAgentBadge,
+  type CanonicalAgentSource,
+  type CanonicalAgentLike,
+} from '@/lib/a2a/profile/filter';
 import { resolveManifestMetadata } from '@/lib/a2a/manifest';
 import { listStoredManifests } from '@/lib/a2a/roster';
 import { listRegisteredExternalAgents } from '@/lib/a2a/external-registry';
@@ -242,6 +250,78 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T)
   return out;
 }
 
+const TRUSTED_ARCLAYER_METADATA_HOSTS = new Set([
+  'arclayers.xyz',
+  'www.arclayers.xyz',
+]);
+
+function inferTrustedMetadataSource(uri: string): CanonicalAgentSource | null {
+  if (uri.startsWith('arclayer://manifest/')) return 'manifest';
+
+  try {
+    const url = new URL(uri);
+    if (url.protocol !== 'https:') return null;
+    const host = url.hostname.toLowerCase();
+    if (!TRUSTED_ARCLAYER_METADATA_HOSTS.has(host)) return null;
+
+    const path = url.pathname;
+    if (path.startsWith('/api/a2a/metadata/draft/')) return 'draft';
+    if (path.startsWith('/api/a2a/manifest')) return 'manifest';
+    if (path.startsWith('/api/a2a/metadata/agent/')) return 'manifest';
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function inferCanonicalSource(agent: any): CanonicalAgentSource {
+  const uri = String(agent.metadataURI || '');
+
+  const trustedSource = inferTrustedMetadataSource(uri);
+  if (trustedSource) return trustedSource;
+
+  if (agent.source === 'web_manifest') return 'manifest';
+
+  const hasProofTokens =
+    Array.isArray(agent.proofTokenIds) && agent.proofTokenIds.length > 0;
+
+  if (agent.skillHash || agent.reputationScore || hasProofTokens) return 'indexer';
+  return 'onchain';
+}
+
+function toCanonicalAgent(agent: any): CanonicalAgentLike {
+  return {
+    agentId: String(agent.agentId),
+    controller: agent.controller || agent.owner || null,
+    source: inferCanonicalSource(agent),
+    metadata: agent.metadata,
+    tokenURI: agent.metadataURI || null,
+  };
+}
+
+function applyCanonicalFilter(agents: any[]) {
+  const mode = getCanonicalProfileMode();
+
+  const visible = agents
+    .filter((agent) =>
+      shouldExposeAgent({
+        agent: toCanonicalAgent(agent),
+        mode,
+        surface: 'discovery',
+      }),
+    )
+    .sort((a, b) =>
+      platformSortRank(toCanonicalAgent(a)) - platformSortRank(toCanonicalAgent(b)),
+    )
+    .map((agent) => ({
+      ...agent,
+      badge: getAgentBadge(toCanonicalAgent(agent)),
+    }));
+
+  return { visibleAgents: visible, mode };
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const source = searchParams.get('source') || process.env.A2A_AGENT_ROSTER_SOURCE || 'local-indexer';
@@ -249,41 +329,50 @@ export async function GET(request: Request) {
 
   if (source === 'registered-only') {
     const approvedExternal = await listRegisteredExternalAgents();
+
+    const allAgents = approvedExternal.map((agent) => {
+      const identity = normalizeAgentIdentity({
+        agentId: agent.agentId,
+        controller: agent.address || agent.owner,
+        owner: agent.owner || agent.address,
+        source: agent.source || 'external-registry',
+      });
+
+      return {
+        agentId: identity.agentId,
+        tokenId: identity.tokenId,
+        owner: identity.owner || identity.controller,
+        controller: identity.controller,
+        role: 'REGISTERED_EXTERNAL_AGENT',
+        roleId: null,
+        endpoint: agent.endpoint || '',
+        metadataURI: '',
+        source: identity.source,
+        onchain: false,
+        metadata: {
+          schema: 'arclayer.agent/v1',
+          name: agent.name,
+          role: 'REGISTERED_EXTERNAL_AGENT',
+          categories: ['arclayer', 'agentic-commerce'],
+          tags: ['arclayer'],
+          autonomous: true,
+          endpoint: agent.endpoint,
+          capability: agent.capabilities || [],
+          skills: agent.capabilities || [],
+        },
+      };
+    });
+
+    const { visibleAgents, mode } = applyCanonicalFilter(allAgents);
+
     return NextResponse.json({
       registry: 'external-registry',
-      agents: approvedExternal.map((agent) => {
-        const identity = normalizeAgentIdentity({
-          agentId: agent.agentId,
-          controller: agent.address || agent.owner,
-          owner: agent.owner || agent.address,
-          source: agent.source || 'external-registry',
-        });
-
-        return {
-          agentId: identity.agentId,
-          tokenId: identity.tokenId,
-          owner: identity.owner || identity.controller,
-          controller: identity.controller,
-          role: 'REGISTERED_EXTERNAL_AGENT',
-          roleId: null,
-          endpoint: agent.endpoint || '',
-          metadataURI: '',
-          source: identity.source,
-          onchain: false,
-          metadata: {
-            name: agent.name,
-            role: 'REGISTERED_EXTERNAL_AGENT',
-            autonomous: true,
-            endpoint: agent.endpoint,
-            capability: agent.capabilities || [],
-            skills: agent.capabilities || [],
-          },
-        };
-      }),
-      totalRegistered: approvedExternal.length,
-      totalVisible: approvedExternal.length,
-      totalAutonomous: approvedExternal.length,
-      totalHidden: 0,
+      agents: visibleAgents,
+      totalRegistered: allAgents.length,
+      totalVisible: visibleAgents.length,
+      totalAutonomous: visibleAgents.length,
+      totalHidden: allAgents.length - visibleAgents.length,
+      canonicalMode: mode,
       scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
       categoryFilter,
       timestamp: new Date().toISOString(),
@@ -294,7 +383,7 @@ export async function GET(request: Request) {
     try {
       const canonicalAgents = await fetchCanonicalErc8004Agents();
 
-      const agents = (
+      const allAgents = (
         await mapWithConcurrency(canonicalAgents, METADATA_CONCURRENCY, async (agent) => {
           const identity = normalizeAgentIdentity({
             agentId: agent.agentId,
@@ -329,17 +418,20 @@ export async function GET(request: Request) {
         })
       ).filter((agent) => !isHiddenAgent(agent.agentId));
 
+      const { visibleAgents, mode } = applyCanonicalFilter(allAgents);
+
       return NextResponse.json(
         {
           registry: AGENT_REGISTRY,
           sourceMode: 'erc8004-supabase',
           resolvedSource: 'erc8004-supabase',
           globalEnabled: false,
-          agents,
-          totalRegistered: agents.length,
-          totalVisible: agents.length,
-          totalAutonomous: agents.length,
-          totalHidden: canonicalAgents.length - agents.length,
+          agents: visibleAgents,
+          totalRegistered: allAgents.length,
+          totalVisible: visibleAgents.length,
+          totalAutonomous: visibleAgents.length,
+          totalHidden: allAgents.length - visibleAgents.length,
+          canonicalMode: mode,
           categoryFilter,
           scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
           timestamp: new Date().toISOString(),
@@ -482,17 +574,20 @@ export async function GET(request: Request) {
     }
 
     // Filter hidden agents
-    const autonomousAgents = Array.from(merged.values()).filter(
+    const allAgents = Array.from(merged.values()).filter(
       (agent) => !isHiddenAgent(agent.agentId),
     );
 
+    const { visibleAgents, mode } = applyCanonicalFilter(allAgents);
+
     return NextResponse.json({
       registry: AGENT_REGISTRY,
-      agents: autonomousAgents,
-      totalRegistered: autonomousAgents.length,
-      totalHidden: merged.size - autonomousAgents.length,
-      totalVisible: autonomousAgents.length,
-      totalAutonomous: autonomousAgents.length,
+      agents: visibleAgents,
+      totalRegistered: allAgents.length,
+      totalHidden: allAgents.length - visibleAgents.length,
+      totalVisible: visibleAgents.length,
+      totalAutonomous: visibleAgents.length,
+      canonicalMode: mode,
       categoryFilter,
       scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
       timestamp: new Date().toISOString(),
