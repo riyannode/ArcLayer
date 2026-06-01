@@ -97,6 +97,19 @@ type AgentTab =
   | 'metadata'
   | 'actions';
 
+const AGENT_TABS: readonly [
+  AgentTab,
+  string,
+  ComponentType<{ className?: string }>,
+][] = [
+  ['basic', 'Basic Info', BadgeCheck],
+  ['capabilities', 'Capabilities', ShieldCheck],
+  ['links', 'Links', Link2],
+  ['reputation', 'Reputation', Trophy],
+  ['metadata', 'Metadata', FileJson],
+  ['actions', 'Actions', Sparkles],
+];
+
 // ─── Helpers ────────────────────────────────────────────────────────
 
 function parseAgentId(value: string | undefined) {
@@ -121,6 +134,60 @@ function buildReputationSeries(
     seed + completedJobs,
     Math.max(baseScore, reputation) + proofBoost,
   ];
+}
+
+function isValidDateString(value?: string | null): boolean {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time);
+}
+
+function formatDateString(value?: string | null): string | null {
+  if (!isValidDateString(value)) return null;
+  return new Date(value as string).toLocaleString();
+}
+
+function formatRegisteredAt(
+  rawRegisteredAt?: string | null,
+  metadata?: Erc8183AgentMetadata | null,
+): { label: string; value: string } {
+  const meta = metadata as Record<string, unknown> | null | undefined;
+  const metadataDate =
+    formatDateString(meta?.createdAt as string | undefined) ||
+    formatDateString(meta?.updatedAt as string | undefined);
+
+  if (metadataDate) {
+    return { label: 'Registered', value: metadataDate };
+  }
+
+  const raw = String(rawRegisteredAt || '').trim();
+  if (!raw) return { label: 'Registered', value: '—' };
+
+  const numeric = Number(raw);
+
+  if (
+    Number.isFinite(numeric) &&
+    numeric >= 946684800 &&
+    numeric <= 4102444800
+  ) {
+    return {
+      label: 'Registered',
+      value: new Date(numeric * 1000).toLocaleString(),
+    };
+  }
+
+  if (
+    Number.isFinite(numeric) &&
+    numeric >= 946684800000 &&
+    numeric <= 4102444800000
+  ) {
+    return {
+      label: 'Registered',
+      value: new Date(numeric).toLocaleString(),
+    };
+  }
+
+  return { label: 'Registered Block', value: `#${raw}` };
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────
@@ -398,6 +465,8 @@ export default function AgentProfilePage() {
       (isErc8183ProfileMetadata(metadata) &&
         isErc8183CapabilityList(capabilities)));
 
+  const registeredInfo = formatRegisteredAt(agent?.registeredAt, metadata);
+
   // ─── Hire This Agent handler ───────────────────────────────────────
   // TODO: Future — insert x402 anti-spam gate before createJob to prevent
   // UI/API spam. The gate should check wallet age, prior jobs, or a small
@@ -613,16 +682,7 @@ export default function AgentProfilePage() {
             {/* ─── Tabs ──────────────────────────────────────────────── */}
             <div className="mt-8 overflow-hidden rounded-xl border border-[#1A2228] bg-[#080D13]/78">
               <div className="flex overflow-x-auto border-b border-white/[0.08]">
-                {(
-                  [
-                    ['basic', 'Basic Info', BadgeCheck],
-                    ['capabilities', 'Capabilities', ShieldCheck],
-                    ['links', 'Links', Link2],
-                    ['reputation', 'Reputation', Trophy],
-                    ['metadata', 'Metadata', FileJson],
-                    ['actions', 'Actions', Sparkles],
-                  ] as [AgentTab, string, ComponentType<{ className?: string }>][]
-                ).map(([key, label, Icon]) => (
+                {AGENT_TABS.map(([key, label, Icon]) => (
                   <AgentTabButton
                     key={key}
                     active={activeTab === key}
@@ -659,14 +719,8 @@ export default function AgentProfilePage() {
                         copy={agent.metadataURI}
                       />
                       <DetailRow
-                        label="Registered"
-                        value={
-                          agent.registeredAt
-                            ? new Date(
-                                Number(agent.registeredAt) * 1000,
-                              ).toLocaleString()
-                            : '—'
-                        }
+                        label={registeredInfo.label}
+                        value={registeredInfo.value}
                       />
                     </div>
 
