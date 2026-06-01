@@ -133,6 +133,14 @@ export async function runSyncCycle() {
     }
 
     console.log(`[indexer] sync projection: jobs=${events.length} erc8004Agents=${agentEvts.length} reputation=${reputationEvts.length} block=${toBlock} agentBlock=${agentToBlock} reputationBlock=${reputationToBlock}`);
+
+    // Progress logging: gap remaining + blocks/min
+    const agentGap = Number(chainLatestBlock - agentToBlock);
+    const agentRangeProcessed = Number(agentToBlock - agentFromBlock);
+    const durationMs = Date.now() - t0;
+    const blocksPerMin = durationMs > 0 ? Math.round((agentRangeProcessed / durationMs) * 60_000) : 0;
+    const etaMin = blocksPerMin > 0 ? Math.ceil(agentGap / blocksPerMin) : '?';
+    console.log(`[indexer] progress: agentGap=${agentGap.toLocaleString()} blocks | speed=${blocksPerMin.toLocaleString()} blocks/min | ETA=${etaMin} min | chainTip=${chainLatestBlock}`);
     const syncResult = await syncProjectionStore(events, agentEvts, reputationEvts);
 
     // Advance cursors independently — only when feature flag is active

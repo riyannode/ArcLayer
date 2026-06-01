@@ -3,29 +3,37 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { readContract, waitForTransactionReceipt } from '@wagmi/core';
-import { decodeEventLog, getAddress, type Hex } from 'viem';
+import { waitForTransactionReceipt } from '@wagmi/core';
+import { decodeEventLog, getAddress } from 'viem';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
-import { useRail, railQueryParams } from '@/components/rail/RailProvider';
-import { CONTRACTS, ERC8183_AGENTIC_COMMERCE_ABI, buildApproveUsdcConfig, buildCreateJobConfig, buildFundJobConfig, buildSetBudgetConfig } from '@arclayer/sdk';
-import { formatUSDC, shortenAddress } from '@/lib/contracts';
-import { parseUSDC } from '@/lib/contracts';
+import {
+  CONTRACTS,
+  ERC8183_AGENTIC_COMMERCE_ABI,
+  buildApproveUsdcConfig,
+  buildCreateJobConfig,
+  buildFundJobConfig,
+  buildSetBudgetConfig,
+} from '@arclayer/sdk';
+import { formatUSDC, parseUSDC } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
-import { CopyButton } from '@/components/CopyButton';
-import { X402ActionGate } from '@/components/x402/X402ActionGate';
 import { IndexerDegradedBanner } from '@/components/IndexerDegradedBanner';
 import { loadAgentDetail, type DataSource } from '@/lib/indexer';
+import {
+  displayCategory,
+  fetchErc8183Metadata,
+  getErc8183Avatar,
+  getErc8183Capabilities,
+  getErc8183Links,
+  isErc8183CapabilityList,
+  isErc8183ProfileMetadata,
+  roleLabel,
+  shortText,
+  type Erc8183AgentMetadata,
+} from '@/lib/erc8183/agent-profile';
+import type { DashboardAgentRow } from '@/lib/dashboard/erc8183-agents';
 
-const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || 'https://indexer.arclayers.xyz';
-
-const ARC_CHAIN_ID = 5042002;
-const USDC = getAddress('0x3600000000000000000000000000000000000000');
-
-function randomNonce(): Hex {
-  return `0x${Array.from(crypto.getRandomValues(new Uint8Array(32))).map((b) => b.toString(16).padStart(2, '0')).join('')}` as Hex;
-}
-function b64(value: unknown) { return btoa(JSON.stringify(value)); }
+// ─── Types ──────────────────────────────────────────────────────────
 
 type IndexedJob = {
   id: string;
@@ -72,17 +80,30 @@ type AgentDetail = {
   proofs: IndexedProof[];
 };
 
-const JOB_STATUS = ['Open', 'Funded', 'Submitted', 'Completed', 'Rejected', 'Expired'] as const;
-const JOB_TONE: Record<number, string> = { 0: '', 1: 'pending', 2: 'pending', 3: 'success', 4: 'error', 5: 'pending' };
+type AgentTab =
+  | 'basic'
+  | 'capabilities'
+  | 'links'
+  | 'reputation'
+  | 'metadata'
+  | 'actions';
+
+// ─── Helpers ────────────────────────────────────────────────────────
 
 function parseAgentId(value: string | undefined) {
   return value && /^\d+$/.test(value) ? value : null;
 }
 
-function buildReputationSeries(agent: IndexedAgent | undefined, jobs: IndexedJob[], proofs: IndexedProof[]) {
+function buildReputationSeries(
+  agent: IndexedAgent | undefined,
+  jobs: IndexedJob[],
+  proofs: IndexedProof[],
+) {
   const baseScore = Number(agent?.score ?? 0);
   const reputation = Number(agent?.reputationScore ?? baseScore);
-  const completedJobs = jobs.filter((job) => job.approved || job.status >= 3).length;
+  const completedJobs = jobs.filter(
+    (job) => job.approved || job.status >= 3,
+  ).length;
   const proofBoost = proofs.length * 2;
   const seed = Math.max(0, reputation - completedJobs - proofBoost);
   return [
@@ -92,6 +113,8 @@ function buildReputationSeries(agent: IndexedAgent | undefined, jobs: IndexedJob
     Math.max(baseScore, reputation) + proofBoost,
   ];
 }
+
+// ─── Sub-components ─────────────────────────────────────────────────
 
 function Sparkline({ values }: { values: number[] }) {
   const safe = values.length > 1 ? values : [0, 0];
@@ -107,11 +130,23 @@ function Sparkline({ values }: { values: number[] }) {
     .join(' ');
 
   return (
-    <svg viewBox="0 0 100 100" className="h-20 w-full" preserveAspectRatio="none" aria-hidden>
+    <svg
+      viewBox="0 0 100 100"
+      className="h-20 w-full"
+      preserveAspectRatio="none"
+      aria-hidden
+    >
       <defs>
-        <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="100" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#C5A67C" stopOpacity="0.35" />
-          <stop offset="1" stopColor="#C5A67C" stopOpacity="0" />
+        <linearGradient
+          id="sparkFill"
+          x1="0"
+          y1="0"
+          x2="0"
+          y2="100"
+          gradientUnits="userSpaceOnUse"
+        >
+          <stop offset="0" stopColor="#F3C536" stopOpacity="0.35" />
+          <stop offset="1" stopColor="#F3C536" stopOpacity="0" />
         </linearGradient>
       </defs>
       <polyline
@@ -122,7 +157,7 @@ function Sparkline({ values }: { values: number[] }) {
       <polyline
         points={points}
         fill="none"
-        stroke="#C5A67C"
+        stroke="#F3C536"
         strokeWidth="1.5"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -136,386 +171,749 @@ function Sparkline({ values }: { values: number[] }) {
   );
 }
 
+function Erc8183Avatar({
+  avatar,
+  name,
+}: {
+  avatar?: string;
+  name: string;
+}) {
+  if (avatar) {
+    return (
+      <div className="h-[160px] w-[160px] overflow-hidden rounded-full border border-[#F3C536]/30 bg-black/30 shadow-[0_0_44px_rgba(243,197,54,0.12)]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={avatar} alt="" className="h-full w-full object-cover" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative flex h-[160px] w-[160px] items-center justify-center overflow-hidden rounded-full border border-[#F3C536]/30 bg-[#0B0F14] shadow-[0_0_44px_rgba(243,197,54,0.12)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(243,197,54,0.18),transparent_42%)]" />
+      <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-[#F3C536]/35 text-[28px] font-semibold text-[#F3C536]">
+        {name.slice(0, 1).toUpperCase()}
+      </div>
+      <div className="absolute bottom-8 h-1 w-9 rounded-full bg-[#F3C536]/80 shadow-[0_0_16px_rgba(243,197,54,0.7)]" />
+    </div>
+  );
+}
+
+function AgentTabButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        active
+          ? 'relative px-5 py-4 text-[14px] font-medium text-[#F3C536]'
+          : 'px-5 py-4 text-[14px] font-medium text-[#EAE4D8]/55 transition hover:text-[#F3C536]'
+      }
+    >
+      {label}
+      {active && (
+        <span className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full bg-[#F3C536] shadow-[0_0_16px_rgba(243,197,54,0.55)]" />
+      )}
+    </button>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  copy,
+}: {
+  label: string;
+  value: React.ReactNode;
+  copy?: string;
+}) {
+  return (
+    <div className="grid gap-2 border-b border-white/[0.06] py-4 last:border-b-0 sm:grid-cols-[150px_1fr_32px] sm:items-center">
+      <div className="text-[13px] text-[#EAE4D8]/55">{label}</div>
+      <div className="min-w-0 truncate font-mono text-[12px] text-[#F5F0E5]">
+        {value || '—'}
+      </div>
+      {copy ? (
+        <button
+          type="button"
+          onClick={() => navigator.clipboard.writeText(copy)}
+          className="hidden h-8 w-8 items-center justify-center rounded border border-white/10 text-[10px] text-[#EAE4D8]/45 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] sm:flex"
+        >
+          CP
+        </button>
+      ) : (
+        <span />
+      )}
+    </div>
+  );
+}
+
+function CapabilityPill({ value }: { value: string }) {
+  return (
+    <span className="rounded-md border border-[#F3C536]/20 bg-[#F3C536]/7 px-3 py-2 font-mono text-[11px] text-[#F3C536]">
+      {value}
+    </span>
+  );
+}
+
+// ─── Main Page ──────────────────────────────────────────────────────
+
 export default function AgentProfilePage() {
   const params = useParams<{ id: string }>();
   const { address, isConnected } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
-  const { rail } = useRail();
   const agentId = parseAgentId(params.id);
+
   const [profile, setProfile] = useState<AgentDetail | null>(null);
+  const [metadata, setMetadata] = useState<Erc8183AgentMetadata | null>(null);
   const [dataSource, setDataSource] = useState<DataSource>('indexer');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [runInput, setRunInput] = useState('Run a paid test task through x402.');
-  const [runBudget, setRunBudget] = useState('1');
-  const [runState, setRunState] = useState<string | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
+  const [activeTab, setActiveTab] = useState<AgentTab>('basic');
 
+  const [dashboardAgent, setDashboardAgent] = useState<DashboardAgentRow | null>(null);
+
+  // ─── Hire This Agent state ─────────────────────────────────────────
+  const [hireDescription, setHireDescription] = useState(
+    'Describe the task you want this agent to perform.',
+  );
+  const [hireBudget, setHireBudget] = useState('1');
+  const [hireState, setHireState] = useState<string | null>(null);
+  const [isHiring, setIsHiring] = useState(false);
+  const [createdJobId, setCreatedJobId] = useState<string | null>(null);
+
+  // ─── Load agent detail + resolve metadata ──────────────────────────
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!agentId) { setError('Invalid agent id.'); setIsLoading(false); return; }
+      if (!agentId) {
+        setError('Invalid agent id.');
+        setIsLoading(false);
+        return;
+      }
       try {
-        setIsLoading(true); setError(null);
+        setIsLoading(true);
+        setError(null);
         const { data, source } = await loadAgentDetail(agentId);
-        if (!cancelled) { setProfile(data); setDataSource(source); }
+        const resolvedMetadata = await fetchErc8183Metadata(
+          data.agent.metadataURI,
+        );
+
+        // Fetch dashboard row as trusted ERC-8183 fallback.
+        // Dashboard already filters via /api/dashboard/erc8183-agents.
+        let dashboardRow: DashboardAgentRow | null = null;
+        try {
+          const dashRes = await fetch('/api/dashboard/erc8183-agents', {
+            cache: 'no-store',
+            headers: { accept: 'application/json' },
+          });
+          if (dashRes.ok) {
+            const dashData = await dashRes.json();
+            const rows: DashboardAgentRow[] = Array.isArray(dashData?.agents)
+              ? dashData.agents
+              : [];
+            dashboardRow =
+              rows.find(
+                (r) =>
+                  r.tokenId === agentId ||
+                  r.id === agentId ||
+                  r.profileHref === `/agent/${agentId}`,
+              ) || null;
+          }
+        } catch {
+          // Dashboard fetch is non-blocking fallback.
+        }
+
+        if (!cancelled) {
+          setProfile(data);
+          setMetadata(resolvedMetadata);
+          setDashboardAgent(dashboardRow);
+          setDataSource(source);
+        }
       } catch (e) {
-        if (!cancelled) { setError(e instanceof Error ? e.message : 'Failed to load agent profile.'); setProfile(null); }
-      } finally { if (!cancelled) setIsLoading(false); }
+        if (!cancelled) {
+          setError(
+            e instanceof Error ? e.message : 'Failed to load agent profile.',
+          );
+          setProfile(null);
+          setMetadata(null);
+          setDashboardAgent(null);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
     }
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [agentId]);
 
+  // ─── Computed values ───────────────────────────────────────────────
   const agent = profile?.agent;
   const jobs = profile?.jobs || [];
   const proofs = profile?.proofs || [];
   const series = buildReputationSeries(agent, jobs, proofs);
 
-  async function handlePaidRun() {
+  const capabilities = getErc8183Capabilities(metadata);
+  const links = getErc8183Links(metadata);
+  const avatar = getErc8183Avatar(metadata);
+
+  const displayName =
+    metadata?.name || dashboardAgent?.title || `Agent #${agentId || '0'}`;
+  const displayRole = roleLabel(metadata?.role || 'Worker');
+  const category =
+    displayCategory(metadata) || dashboardAgent?.category || 'ERC-8183 Commerce';
+
+  const displayDescription =
+    metadata?.description ||
+    dashboardAgent?.description ||
+    'ERC-8183 commerce agent for escrow-backed work, reputation, and settlement history.';
+
+  // ERC-8183 detection: explicit marker AND job capability (AND logic).
+  // Boolean(dashboardAgent) = trusted shortcut — dashboard route already enforces AND.
+  const isErc8183Agent =
+    Boolean(agent) &&
+    (Boolean(dashboardAgent) ||
+      (isErc8183ProfileMetadata(metadata) &&
+        isErc8183CapabilityList(capabilities)));
+
+  // ─── Hire This Agent handler ───────────────────────────────────────
+  // TODO: Future — insert x402 anti-spam gate before createJob to prevent
+  // UI/API spam. The gate should check wallet age, prior jobs, or a small
+  // x402 micro-payment before allowing job creation. Keep x402 infra intact.
+  async function handleHireAgent() {
     if (!agent || !agentId || !address) return;
+
     try {
-      setIsRunning(true);
+      setIsHiring(true);
+      setHireState('1/4 Creating ERC-8183 job...');
+      setCreatedJobId(null);
 
-      // ─── Step 1: Get x402 402 challenge ────────────────────────────────
-      // Rail + payer must be passed as QUERY PARAMS (middleware reads them
-      // from req.nextUrl.searchParams, not from headers).
-      setRunState('1/5 Requesting x402 challenge from /api/agents/:id/run...');
-      const qs = railQueryParams(rail, address);
-      const challengeUrl = `/api/agents/${agentId}/run${qs ? `?${qs}` : ''}`;
-      const first = await fetch(challengeUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ input: runInput }),
-      });
-      if (first.status !== 402) {
-        throw new Error(`Expected x402 challenge (HTTP 402), received HTTP ${first.status}.`);
-      }
-      const challenge = await first.json();
-      if (!Array.isArray(challenge.accepts) || challenge.accepts.length === 0) {
-        throw new Error('x402 challenge missing accepts[] requirements.');
-      }
-      type Requirement = {
-        scheme: 'exact';
-        network: string;
-        asset: `0x${string}`;
-        amount: string;
-        payTo: `0x${string}`;
-        maxTimeoutSeconds: number;
-        extra?: Record<string, unknown>;
-      };
-      const accepts = challenge.accepts as Requirement[];
-      if (rail === 'gateway') {
-        throw new Error('Gateway agent run not available');
-      }
-      const req = accepts.find((a) => !a.extra?.name || a.extra?.name === 'USDC') || accepts[0];
-      if (!req) {
-        throw new Error('Gateway agent run not available.');
+      if (!agent.controller) {
+        throw new Error('Agent controller is missing.');
       }
 
-      // ─── Step 2: Optional ERC-8183 AgenticCommerce funding (on-chain provenance) ──────
-      // Funds the job for indexer/protocol audit trail. Independent of x402
-      // payment — x402 verifies the resource access, ERC-8183 AgenticCommerce records the
-      // job for proof-of-work tracking.
-      const amount = parseUSDC(runBudget);
-      // ERC-8183 official: there is no `jobCounter` view. Derive jobId from
-      // the `JobCreated` event emitted by createJob() in the next tx receipt.
-      setRunState('2/5 Creating job on AgenticCommerce escrow...');
-      const serviceWorker = (process.env.NEXT_PUBLIC_WORKER_ADDR as `0x${string}` | undefined) ?? (agent.controller as `0x${string}`);
-      // Default expiry: 7 days from now (ERC-8183 expects a unix-second deadline).
-      const expiredAt = BigInt(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60);
-      const createHash = await writeContractAsync(
-        buildCreateJobConfig(serviceWorker, address as `0x${string}`, expiredAt, runInput),
+      const worker = getAddress(agent.controller) as `0x${string}`;
+      const client = getAddress(address) as `0x${string}`;
+      const expiredAt = BigInt(
+        Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
       );
-      const createReceipt = await waitForTransactionReceipt(config, { hash: createHash });
+      const amount = parseUSDC(hireBudget);
 
-      // Parse JobCreated event to get the actual on-chain jobId.
-      let visibleJobId = BigInt(0);
+      // ─── Step 1: createJob ──────────────────────────────────────────
+      const createHash = await writeContractAsync(
+        buildCreateJobConfig(worker, client, expiredAt, hireDescription),
+      );
+      const createReceipt = await waitForTransactionReceipt(config, {
+        hash: createHash,
+      });
+
+      let jobId = BigInt(0);
       for (const log of createReceipt.logs) {
-        if (log.address.toLowerCase() !== CONTRACTS.ERC8183_AGENTIC_COMMERCE.toLowerCase()) continue;
+        if (
+          log.address.toLowerCase() !==
+          CONTRACTS.ERC8183_AGENTIC_COMMERCE.toLowerCase()
+        ) {
+          continue;
+        }
         try {
-          const decoded = decodeEventLog({ abi: ERC8183_AGENTIC_COMMERCE_ABI, data: log.data, topics: log.topics });
-          if (decoded.eventName === 'JobCreated' && decoded.args && 'jobId' in decoded.args) {
-            visibleJobId = decoded.args.jobId as bigint;
+          const decoded = decodeEventLog({
+            abi: ERC8183_AGENTIC_COMMERCE_ABI,
+            data: log.data,
+            topics: log.topics,
+          });
+          if (
+            decoded.eventName === 'JobCreated' &&
+            decoded.args &&
+            'jobId' in decoded.args
+          ) {
+            jobId = decoded.args.jobId as bigint;
             break;
           }
-        } catch { /* skip non-matching logs */ }
-      }
-      if (visibleJobId === BigInt(0)) {
-        throw new Error('JobCreated event not found in tx receipt');
+        } catch {
+          /* skip non-matching logs */
+        }
       }
 
-      setRunState('3/5 Setting budget, approving USDC, funding job...');
-      const budgetHash = await writeContractAsync(buildSetBudgetConfig(visibleJobId, amount));
+      if (jobId === BigInt(0)) {
+        throw new Error(
+          'JobCreated event not found in transaction receipt.',
+        );
+      }
+
+      setCreatedJobId(jobId.toString());
+
+      // ─── Step 2: setBudget ──────────────────────────────────────────
+      setHireState(
+        `2/4 Setting budget for Job #${jobId.toString()}...`,
+      );
+      const budgetHash = await writeContractAsync(
+        buildSetBudgetConfig(jobId, amount),
+      );
       await waitForTransactionReceipt(config, { hash: budgetHash });
-      const approveHash = await writeContractAsync(buildApproveUsdcConfig(amount));
+
+      // ─── Step 3: approve USDC ───────────────────────────────────────
+      setHireState('3/4 Approving USDC...');
+      const approveHash = await writeContractAsync(
+        buildApproveUsdcConfig(amount),
+      );
       await waitForTransactionReceipt(config, { hash: approveHash });
-      const fundHash = await writeContractAsync(buildFundJobConfig(visibleJobId, amount));
+
+      // ─── Step 4: fund job ───────────────────────────────────────────
+      setHireState(
+        `4/4 Funding Job #${jobId.toString()}...`,
+      );
+      const fundHash = await writeContractAsync(
+        buildFundJobConfig(jobId, amount),
+      );
       await waitForTransactionReceipt(config, { hash: fundHash });
 
-      // ─── Step 3: Sign EIP-3009 transferWithAuthorization ───────────────
-      setRunState('4/5 Signing EIP-3009 authorization for x402 payment...');
-      const eth = (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum;
-      if (!eth) throw new Error('No injected wallet found. Connect EOA wallet to sign x402 payment.');
-      // Ensure wallet on Arc Testnet.
-      try {
-        await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: `0x${ARC_CHAIN_ID.toString(16)}` }] });
-      } catch (e) {
-        const err = e as { code?: number };
-        if (err.code !== 4902) throw e;
-        await eth.request({
-          method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: `0x${ARC_CHAIN_ID.toString(16)}`,
-            chainName: 'Arc Testnet',
-            // Arc native gas token is USDC (18 decimals native interface).
-            nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
-            rpcUrls: ['https://rpc.drpc.testnet.arc.network'],
-            blockExplorerUrls: ['https://testnet.arcscan.app'],
-          }],
-        });
-      }
-
-      const validBefore = String(Math.floor(Date.now() / 1000) + 600);
-      const nonce = randomNonce();
-      const paymentPayload = {
-        x402Version: 2,
-        accepted: {
-          ...req,
-          asset: getAddress(req.asset),
-          payTo: getAddress(req.payTo),
-          extra: {
-            ...(req.extra ?? {}),
-            name: typeof req.extra?.name === 'string' ? req.extra.name : 'USDC',
-            version: typeof req.extra?.version === 'string' ? req.extra.version : '2',
-            decimals: typeof req.extra?.decimals === 'number' ? req.extra.decimals : 6,
-            symbol: typeof req.extra?.symbol === 'string' ? req.extra.symbol : 'USDC',
-            transferMethod:
-              typeof req.extra?.transferMethod === 'string'
-                ? req.extra.transferMethod
-                : 'eip3009',
-          },
-        },
-        payload: {
-          signature: '0x' as Hex,
-          authorization: { from: address, to: getAddress(req.payTo), value: req.amount, validAfter: '0', validBefore, nonce },
-        },
-      };
-      paymentPayload.payload.signature = (await eth.request({
-        method: 'eth_signTypedData_v4',
-        params: [address, JSON.stringify({
-          types: {
-            EIP712Domain: [
-              { name: 'name', type: 'string' },
-              { name: 'version', type: 'string' },
-              { name: 'chainId', type: 'uint256' },
-              { name: 'verifyingContract', type: 'address' },
-            ],
-            TransferWithAuthorization: [
-              { name: 'from', type: 'address' },
-              { name: 'to', type: 'address' },
-              { name: 'value', type: 'uint256' },
-              { name: 'validAfter', type: 'uint256' },
-              { name: 'validBefore', type: 'uint256' },
-              { name: 'nonce', type: 'bytes32' },
-            ],
-          },
-          primaryType: 'TransferWithAuthorization',
-          domain: { name: 'USDC', version: '2', chainId: ARC_CHAIN_ID, verifyingContract: USDC },
-          message: {
-            from: address,
-            to: getAddress(req.payTo),
-            value: `0x${BigInt(req.amount).toString(16)}`,
-            validAfter: '0x0',
-            validBefore: `0x${BigInt(validBefore).toString(16)}`,
-            nonce,
-          },
-        })],
-      })) as Hex;
-
-      // ─── Step 4: Retry with PAYMENT-SIGNATURE header ──────────────────────
-      const paymentHeader = b64(paymentPayload);
-      setRunState('5/5 Posting paid run with PAYMENT-SIGNATURE (server verifies + settles)...');
-      const paid = await fetch(challengeUrl, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'PAYMENT-SIGNATURE': paymentHeader,
-        },
-        body: JSON.stringify({ input: runInput, jobId: visibleJobId.toString() }),
-      });
-      const payload = await paid.json();
-      if (!paid.ok) throw new Error(payload.message || payload.error || `Paid run failed with HTTP ${paid.status}.`);
-      setRunState(`Job #${visibleJobId.toString()} settled. AgenticCommerce tx: ${fundHash.slice(0, 10)}... | Run: ${payload.run?.status ?? 'submitted'}.`);
-    } catch (e) {
-      setRunState(e instanceof Error ? e.message : 'Paid run failed.');
+      setHireState(
+        `Job #${jobId.toString()} created and funded. Funding tx: ${fundHash.slice(0, 10)}...`,
+      );
+    } catch (error) {
+      setHireState(
+        error instanceof Error ? error.message : 'Failed to hire agent.',
+      );
     } finally {
-      setIsRunning(false);
+      setIsHiring(false);
     }
   }
 
+  // ─── Render ────────────────────────────────────────────────────────
   return (
-    <div className="aureo-page">
-      <div className="aureo-shell">
-        <div className="aureo-detail-hero mb-8 p-5 md:p-7 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <Link href="/protocol" className="font-mono text-[11px] tracking-[0.16em] text-[#C5A67C] transition-colors hover:text-[#EAE4D8]">
-              ← BACK · CONSOLE
-            </Link>
-            <div className="aureo-mono-label mt-5 mb-3">PROTOCOL · AGENT</div>
-            <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
-              Agent <span className="italic text-[#C5A67C]">#{agentId || '0'}</span>
-            </h1>
-            <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[#b5b5b5] invisible">
-              Indexed capability profile and work-proof history from the ArcLayer indexer.
-            </p>
-          </div>
-          <Link href="/docs" className="btn-primary self-start md:self-auto">SDK QUICKSTART</Link>
+    <main className="min-h-screen bg-[#05070A] text-[#F5F0E5]">
+      {/* Background effects */}
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(243,197,54,0.06),transparent_28%),radial-gradient(circle_at_80%_8%,rgba(255,255,255,0.035),transparent_22%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent_46%)]" />
+      <div className="pointer-events-none fixed inset-0 opacity-[0.14] [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:44px_44px]" />
+
+      <section className="relative mx-auto max-w-[1280px] px-6 pb-16 pt-10 sm:px-10 lg:px-16">
+        {/* Back link */}
+        <div className="mb-8 flex items-center justify-between gap-4">
+          <Link
+            href="/dashboard"
+            className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition hover:text-[#F5F0E5]"
+          >
+            ← Back to Dashboard
+          </Link>
         </div>
 
-        <X402ActionGate lockedMessage="Pay x402 on homepage to unlock agent actions">
-        <IndexerDegradedBanner visible={dataSource === 'rpc'} className="mb-6" />
-
-        <section className="mb-6 p-6" style={{ border: '1px solid rgba(197, 166, 124, 0.22)', background: 'rgba(10, 10, 10, 0.68)' }}>
-          <div className="aureo-mono-label mb-2">X402 · BUYER RUN</div>
-          <h2 className="aureo-display text-[28px] text-[#EAE4D8]">Payment-required agent call</h2>
-          <p className="mt-2 max-w-3xl font-mono text-[11.5px] leading-5 text-[#b5b5b5] invisible">
-            Calls <span className="text-[#C5A67C]">POST /api/agents/{agentId}/run</span>, receives a 402 challenge, registers a funded JobEscrow payment on Arc Testnet, then retries with PAYMENT-SIGNATURE.
-          </p>
-          <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_auto]">
-            <input value={runInput} onChange={(e) => setRunInput(e.target.value)} className="input-mono" placeholder="buyer task / prompt" />
-            <input value={runBudget} onChange={(e) => setRunBudget(e.target.value)} className="input-mono" placeholder="USDC" />
-            <button onClick={handlePaidRun} disabled={!isConnected || !agent || isRunning} className="btn-primary">
-              {isRunning ? 'RUNNING...' : 'PAY · RUN'}
-            </button>
-          </div>
-          <div className="mt-4 p-4 font-mono text-[11.5px] leading-5 text-[#b5b5b5]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
-            {runState || (isConnected ? 'Wallet connected. Needs testnet USDC for approval/funding.' : 'Connect a wallet on Arc Testnet 5042002 to test end-to-end.')}
-          </div>
-        </section>
-        </X402ActionGate>
-
+        {/* Error */}
         {error && (
-          <div className="mb-6 p-4" style={{ border: '1px solid rgba(230, 130, 130, 0.35)', background: 'rgba(230, 130, 130, 0.06)' }}>
-            <p className="font-mono text-[11.5px] text-[#f0c5c5]">{error}</p>
+          <div className="mb-6 rounded-xl border border-red-500/25 bg-red-950/10 px-5 py-4 text-sm text-red-300">
+            {error}
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="aureo-panel p-4 md:p-6 min-w-0">
-            <div className="aureo-mono-label mb-2">REGISTRY</div>
-            <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Record</h2>
-            <div className="mt-5 space-y-2.5">
-              {([
-                { label: 'controller', value: agent?.controller, display: agent ? shortenAddress(agent.controller) : isLoading ? '…' : '—', copyable: !!agent?.controller },
-                { label: 'skill hash', value: agent?.skillHash, display: agent ? `${agent.skillHash.slice(0, 10)}…${agent.skillHash.slice(-8)}` : isLoading ? '…' : '—', copyable: !!agent?.skillHash },
-                { label: 'metadata', value: agent?.metadataURI, display: agent?.metadataURI || (isLoading ? '…' : '—'), copyable: !!agent?.metadataURI },
-                { label: 'registered', value: undefined, display: agent ? new Date(Number(agent.registeredAt) * 1000).toLocaleString() : isLoading ? '…' : '—', copyable: false },
-              ] as const).map((row) => (
-                <div key={row.label} className="ledger-row flex flex-col gap-2 border border-white/10 bg-black/20 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-                  <span className="font-mono text-[10.5px] tracking-[0.14em] text-[#a0a0a0] sm:shrink-0">{row.label}</span>
-                  <div className="flex min-w-0 flex-1 items-center gap-2 sm:justify-end">
-                    <span
-                      className="block min-w-0 flex-1 truncate font-mono text-[11.5px] text-[#EAE4D8] sm:flex-none sm:max-w-[60%]"
-                      title={typeof row.value === 'string' ? row.value : undefined}
-                    >
-                      {row.display}
+        {/* Indexer degraded banner */}
+        <IndexerDegradedBanner
+          visible={dataSource === 'rpc'}
+          className="mb-6"
+        />
+
+        {/* Loading / Not found / Unsupported / Profile */}
+        {isLoading ? (
+          <div className="flex min-h-[420px] items-center justify-center rounded-xl border border-white/10 bg-[#080D13]/70">
+            <div className="font-mono text-[12px] text-[#EAE4D8]/55">
+              Loading ERC-8183 agent profile...
+            </div>
+          </div>
+        ) : !agent ? (
+          <div className="rounded-xl border border-[#F3C536]/24 bg-[#080D13]/78 p-10">
+            <div className="font-mono text-[12px] uppercase tracking-[0.18em] text-[#F3C536]">
+              Agent Not Found
+            </div>
+            <h1 className="mt-4 text-[32px] font-semibold tracking-[-0.04em]">
+              No agent record found.
+            </h1>
+          </div>
+        ) : !isErc8183Agent ? (
+          <div className="rounded-xl border border-[#F3C536]/24 bg-[#080D13]/78 p-10">
+            <div className="font-mono text-[12px] uppercase tracking-[0.18em] text-[#F3C536]">
+              Unsupported Agent Type
+            </div>
+            <h1 className="mt-4 text-[32px] font-semibold tracking-[-0.04em]">
+              This is not an ERC-8183 commerce agent.
+            </h1>
+            <p className="mt-3 max-w-2xl text-[15px] leading-7 text-[#EAE4D8]/58">
+              Dashboard profiles are currently limited to ERC-8183 job, escrow,
+              and commerce agents.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* ─── Hero card ──────────────────────────────────────────── */}
+            <div className="overflow-hidden rounded-xl border border-[#1A2228] bg-[#080D13]/78 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]">
+              <div className="relative grid min-h-[300px] gap-8 p-8 md:grid-cols-[230px_1fr]">
+                <div className="absolute inset-0 opacity-50 [background-image:radial-gradient(circle_at_85%_15%,rgba(243,197,54,0.16),transparent_28%),linear-gradient(135deg,transparent_40%,rgba(243,197,54,0.10)_70%,transparent_100%)]" />
+
+                <div className="relative flex items-center justify-center">
+                  <Erc8183Avatar avatar={avatar} name={displayName} />
+                </div>
+
+                <div className="relative flex flex-col justify-center">
+                  <div className="flex flex-wrap items-center gap-4">
+                    <h1 className="text-[38px] font-semibold tracking-[-0.045em] text-[#F5F0E5]">
+                      {displayName}
+                    </h1>
+                    <span className="inline-flex items-center gap-2 rounded-md border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-[14px] text-emerald-300">
+                      Minted
                     </span>
-                    {row.copyable && row.value ? (
-                      <CopyButton text={row.value} label="COPY" className="shrink-0 px-2 py-1 text-[9px]" />
-                    ) : null}
+                    <span className="inline-flex items-center gap-2 rounded-md border border-[#F3C536]/25 bg-[#F3C536]/8 px-3 py-1.5 text-[14px] text-[#F3C536]">
+                      ERC-8183 Commerce
+                    </span>
+                  </div>
+
+                  <p className="mt-3 max-w-2xl text-[14px] leading-6 text-[#EAE4D8]/55">
+                    {displayDescription}
+                  </p>
+
+                  <div className="mt-8 grid max-w-[760px] gap-4 text-[15px] md:grid-cols-[150px_1fr]">
+                    <div className="text-[#F3C536]">Agent ID:</div>
+                    <div>{agentId}</div>
+
+                    <div className="text-[#F3C536]">Role:</div>
+                    <div>{displayRole}</div>
+
+                    <div className="text-[#F3C536]">Category:</div>
+                    <div>{category}</div>
+
+                    <div className="text-[#F3C536]">Capabilities:</div>
+                    <div className="truncate">
+                      {capabilities.length > 0
+                        ? capabilities.slice(0, 5).join(', ')
+                        : '—'}
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="aureo-panel p-4 md:p-6">
-            <div className="aureo-mono-label mb-2">TELEMETRY</div>
-            <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Protocol signals</h2>
-            <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {[
-                ['SCORE', agent ? agent.score : isLoading ? '…' : '0'],
-                ['JOBS', String(jobs.length)],
-                ['PROOFS', String(proofs.length)],
-              ].map(([label, value], i) => (
-                <div key={label} className="p-4" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)', animation: `fadeInUp 0.4s ${i * 0.05}s both cubic-bezier(0.16, 1, 0.3, 1)` }}>
-                  <p className="aureo-mono-label">{label}</p>
-                  <p className="mt-2 aureo-display text-[28px] text-[#EAE4D8]">{value}</p>
-                </div>
-              ))}
-            </div>
-            <div className="mt-6 p-4" style={{ border: '1px solid rgba(197, 166, 124, 0.2)', background: 'rgba(0,0,0,0.3)' }}>
-              <div className="flex items-center justify-between">
-                <p className="aureo-mono-label" style={{ color: '#C5A67C' }}>REPUTATION · TREND</p>
-                <span className="font-mono text-[11px] text-[#C5A67C]">{series[series.length - 1]}</span>
               </div>
-              <div className="mt-3">
-                <Sparkline values={series} />
+            </div>
+
+            {/* ─── Tabs ──────────────────────────────────────────────── */}
+            <div className="mt-8 overflow-hidden rounded-xl border border-[#1A2228] bg-[#080D13]/78">
+              <div className="flex overflow-x-auto border-b border-white/[0.08]">
+                {(
+                  [
+                    ['basic', 'Basic Info'],
+                    ['capabilities', 'Capabilities'],
+                    ['links', 'Links'],
+                    ['reputation', 'Reputation'],
+                    ['metadata', 'Metadata'],
+                    ['actions', 'Actions'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <AgentTabButton
+                    key={key}
+                    active={activeTab === key}
+                    label={label}
+                    onClick={() => setActiveTab(key)}
+                  />
+                ))}
               </div>
-              <p className="mt-2 font-mono text-[10.5px] leading-5 text-[#a0a0a0] invisible">
-                Reputation projected from completed ERC-8183 AgenticCommerce jobs.
-              </p>
-            </div>
-          </section>
-        </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <section className="aureo-panel p-4 md:p-6">
-            <div className="aureo-mono-label mb-2">JOBS</div>
-            <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Linked jobs</h2>
-            <div className="mt-5 space-y-3">
-              {jobs.length > 0 ? (
-                jobs.map((job) => (
-                  <Link
-                    key={job.id}
-                    href={`/job/${job.id}`}
-                    className="ledger-row block border border-white/10 bg-black/20 px-4 py-3"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="font-mono text-[12.5px] text-[#EAE4D8]">Job #{job.id}</span>
-                      <span className="font-mono text-[11px] text-[#C5A67C]">{formatUSDC(BigInt(job.budget))} USDC</span>
+              <div className="p-6">
+                {/* Basic Info */}
+                {activeTab === 'basic' && (
+                  <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+                    <div>
+                      <DetailRow
+                        label="Agent ID"
+                        value={String(agentId || '—')}
+                      />
+                      <DetailRow label="Role" value={displayRole} />
+                      <DetailRow
+                        label="Controller"
+                        value={shortText(agent.controller)}
+                        copy={agent.controller}
+                      />
+                      <DetailRow
+                        label="Skill Hash"
+                        value={shortText(agent.skillHash, 10, 8)}
+                        copy={agent.skillHash}
+                      />
+                      <DetailRow
+                        label="Metadata URI"
+                        value={shortText(agent.metadataURI, 18, 10)}
+                        copy={agent.metadataURI}
+                      />
+                      <DetailRow
+                        label="Registered"
+                        value={
+                          agent.registeredAt
+                            ? new Date(
+                                Number(agent.registeredAt) * 1000,
+                              ).toLocaleString()
+                            : '—'
+                        }
+                      />
                     </div>
-                    <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#a0a0a0]">
-                      <span>provider {shortenAddress(job.provider)}</span>
-                      <span className={`chip-status ${JOB_TONE[job.status] ?? 'pending'}`}>{JOB_STATUS[job.status] || job.status}</span>
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <p className="p-4 font-mono text-[11.5px] text-[#a0a0a0]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
-                  {isLoading ? 'Loading jobs…' : 'No jobs for this agent yet.'}
-                </p>
-              )}
-            </div>
-          </section>
 
-          <section className="aureo-panel p-4 md:p-6">
-            <div className="aureo-mono-label mb-2">SETTLEMENT RECORDS</div>
-            <h2 className="aureo-display text-[24px] text-[#EAE4D8]">Soulbound history</h2>
-            <div className="mt-5 space-y-3">
-              {proofs.length > 0 ? (
-                proofs.map((p) => (
-                  <div key={p.tokenId} className="ledger-row border border-white/10 bg-black/20 px-4 py-3">
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="font-mono text-[12.5px] text-[#EAE4D8]">Job #{p.jobId}</span>
-                      <span className="font-mono text-[11px] text-[#C5A67C]">{formatUSDC(BigInt(p.amountPaid))} USDC</span>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-4 font-mono text-[10.5px] text-[#a0a0a0]">
-                      <span>payer {shortenAddress(p.payer)}</span>
-                      <span>{new Date(Number(p.mintedAt) * 1000).toLocaleDateString()}</span>
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+                      <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
+                        Protocol Signals
+                      </div>
+                      <div className="mt-5 grid gap-3">
+                        {(
+                          [
+                            ['Score', agent.score || '0'],
+                            ['Jobs', String(jobs.length)],
+                            ['Proofs', String(proofs.length)],
+                          ] as const
+                        ).map(([label, value]) => (
+                          <div
+                            key={label}
+                            className="rounded-lg border border-white/10 bg-black/20 p-4"
+                          >
+                            <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/45">
+                              {label}
+                            </div>
+                            <div className="mt-2 text-[26px] text-[#F5F0E5]">
+                              {value}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                ))
-              ) : (
-                <p className="p-4 font-mono text-[11.5px] text-[#a0a0a0]" style={{ border: '1px solid rgba(255, 255, 255, 0.08)', background: 'rgba(0,0,0,0.3)' }}>
-                  {isLoading ? 'Loading proofs…' : 'No settlement records for this agent yet.'}
-                </p>
-              )}
+                )}
+
+                {/* Capabilities */}
+                {activeTab === 'capabilities' && (
+                  <div>
+                    <h2 className="text-[22px] font-semibold text-[#F5F0E5]">
+                      Capabilities
+                    </h2>
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      {capabilities.length > 0 ? (
+                        capabilities.map((capability) => (
+                          <CapabilityPill
+                            key={capability}
+                            value={capability}
+                          />
+                        ))
+                      ) : (
+                        <p className="text-sm text-[#EAE4D8]/55">
+                          No capabilities found in metadata.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Links */}
+                {activeTab === 'links' && (
+                  <div>
+                    <h2 className="text-[22px] font-semibold text-[#F5F0E5]">
+                      Links
+                    </h2>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      {(
+                        [
+                          ['Website', links.website],
+                          ['Docs', links.docs],
+                          ['Repo', links.repo],
+                          ['X', links.x],
+                        ] as const
+                      ).map(([label, href]) =>
+                        href ? (
+                          <a
+                            key={label}
+                            href={href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-sm text-[#EAE4D8]/70 transition hover:border-[#F3C536]/35 hover:text-[#F3C536]"
+                          >
+                            {label}
+                          </a>
+                        ) : null,
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Reputation */}
+                {activeTab === 'reputation' && (
+                  <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+                      <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
+                        Reputation Trend
+                      </div>
+                      <div className="mt-4">
+                        <Sparkline values={series} />
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-5">
+                      <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
+                        Jobs &amp; Proofs
+                      </div>
+                      <div className="mt-4 space-y-3 text-sm text-[#EAE4D8]/62">
+                        <p>Linked jobs: {jobs.length}</p>
+                        <p>Settlement proofs: {proofs.length}</p>
+                        <p>
+                          Reputation score:{' '}
+                          {agent.reputationScore || agent.score || '0'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Metadata */}
+                {activeTab === 'metadata' && (
+                  <div>
+                    <h2 className="text-[22px] font-semibold text-[#F5F0E5]">
+                      Metadata
+                    </h2>
+                    <pre className="mt-5 max-h-[420px] overflow-auto rounded-xl border border-white/10 bg-black/30 p-4 font-mono text-[11px] leading-5 text-[#EAE4D8]/65">
+                      {JSON.stringify(
+                        metadata || { metadataURI: agent.metadataURI },
+                        null,
+                        2,
+                      )}
+                    </pre>
+                  </div>
+                )}
+
+                {/* Actions — Hire This Agent */}
+                {activeTab === 'actions' && (
+                  <section className="rounded-xl border border-[#C5A67C]/20 bg-black/20 p-5">
+                    <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
+                      ERC-8183 · Hire Agent
+                    </div>
+
+                    <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#F5F0E5]">
+                      Hire This Agent
+                    </h2>
+
+                    <p className="mt-2 max-w-2xl text-sm leading-6 text-[#EAE4D8]/52">
+                      Create an ERC-8183 job, set a USDC budget, approve funds,
+                      and fund the job through ArcLayer commerce rails.
+                    </p>
+
+                    <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_auto]">
+                      <input
+                        value={hireDescription}
+                        onChange={(event) =>
+                          setHireDescription(event.target.value)
+                        }
+                        className="input-mono"
+                        placeholder="Describe the task for this agent"
+                      />
+                      <input
+                        value={hireBudget}
+                        onChange={(event) =>
+                          setHireBudget(event.target.value)
+                        }
+                        className="input-mono"
+                        placeholder="USDC"
+                      />
+                      <button
+                        onClick={handleHireAgent}
+                        disabled={!isConnected || !agent || isHiring}
+                        className="btn-primary"
+                      >
+                        {isHiring ? 'HIRING...' : 'HIRE THIS AGENT'}
+                      </button>
+                    </div>
+
+                    <div className="mt-4 rounded-lg border border-white/10 bg-black/30 p-4 font-mono text-[11.5px] leading-5 text-[#b5b5b5]">
+                      {hireState ||
+                        (isConnected
+                          ? 'Wallet connected. Hiring requires Arc Testnet USDC for approval and funding.'
+                          : 'Connect a wallet on Arc Testnet 5042002 to hire this agent.')}
+                    </div>
+
+                    {createdJobId && (
+                      <Link
+                        href={`/job/${createdJobId}`}
+                        className="mt-4 inline-flex h-10 items-center rounded-lg border border-[#F3C536]/30 px-4 text-sm font-semibold text-[#F3C536] transition hover:bg-[#F3C536]/10"
+                      >
+                        View Job #{createdJobId}
+                      </Link>
+                    )}
+                  </section>
+                )}
+              </div>
             </div>
-          </section>
-        </div>
-      </div>
-    </div>
+
+            {/* ─── Jobs & Proofs ──────────────────────────────────────── */}
+            <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_1fr]">
+              <section className="rounded-xl border border-[#1A2228] bg-[#080D13]/78 p-6">
+                <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
+                  Jobs
+                </div>
+                <h2 className="mt-2 text-[22px] font-semibold text-[#F5F0E5]">
+                  Linked jobs
+                </h2>
+                <div className="mt-5 space-y-3">
+                  {jobs.length > 0 ? (
+                    jobs.map((job) => (
+                      <Link
+                        key={job.id}
+                        href={`/job/${job.id}`}
+                        className="block rounded-lg border border-white/10 bg-black/20 px-4 py-3 transition hover:border-[#F3C536]/25"
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="font-mono text-[12.5px] text-[#EAE4D8]">
+                            Job #{job.id}
+                          </span>
+                          <span className="font-mono text-[11px] text-[#C5A67C]">
+                            {formatUSDC(BigInt(job.budget))} USDC
+                          </span>
+                        </div>
+                      </Link>
+                    ))
+                  ) : (
+                    <p className="rounded-lg border border-white/10 bg-black/20 p-4 text-sm text-[#EAE4D8]/55">
+                      No jobs for this agent yet.
+                    </p>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-[#1A2228] bg-[#080D13]/78 p-6">
+                <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
+                  Settlement Records
+                </div>
+                <h2 className="mt-2 text-[22px] font-semibold text-[#F5F0E5]">
+                  Proof history
+                </h2>
+                <div className="mt-5 space-y-3">
+                  {proofs.length > 0 ? (
+                    proofs.map((proof) => (
+                      <div
+                        key={proof.tokenId}
+                        className="rounded-lg border border-white/10 bg-black/20 px-4 py-3"
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="font-mono text-[12.5px] text-[#EAE4D8]">
+                            Job #{proof.jobId}
+                          </span>
+                          <span className="font-mono text-[11px] text-[#C5A67C]">
+                            {formatUSDC(BigInt(proof.amountPaid))} USDC
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-lg border border-white/10 bg-black/20 p-4 text-sm text-[#EAE4D8]/55">
+                      No settlement proofs yet.
+                    </p>
+                  )}
+                </div>
+              </section>
+            </div>
+          </>
+        )}
+      </section>
+    </main>
   );
 }

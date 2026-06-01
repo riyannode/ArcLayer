@@ -50,6 +50,8 @@ export function isErc8183CommerceAgent(agent: any) {
     agent?.source,
     agent?.badge,
     metadata?.schema,
+    metadata?.standard,
+    metadata?.dashboard,
     metadata?.role,
     metadata?.x402,
     ...asArray(metadata?.tags),
@@ -61,27 +63,29 @@ export function isErc8183CommerceAgent(agent: any) {
     .filter(Boolean)
     .map((value) => String(value).toLowerCase());
 
-  const hasErc8183Marker = hasAny(values, [
-    'erc8183',
-    'erc8183-commerce',
-  ]);
+  // 1. Agent must have explicit ERC-8183 marker.
+  const hasExplicitErc8183 =
+    String(metadata?.standard || '').toLowerCase() === 'erc8183' ||
+    String(metadata?.dashboard || '').toLowerCase() === 'erc8183' ||
+    hasAny(values, ['erc8183', 'erc8183-commerce', 'job-commerce']);
 
-  const hasJobCapability = hasAny(values, [
-    'job-commerce',
-    'job-creation',
-    'a2a_job',
-    'escrow',
+  // 2. Agent must have job capability (ERC-8183 lifecycle markers).
+  //    a2a_job is valid but only when paired with explicit ERC-8183 marker.
+  const hasErc8183JobCapability = hasAny(values, [
     'claim_job',
+    'submit_work',
     'submit_result',
     'approve_result',
     'settle_job',
-    'audit',
-    'security-review',
-    'code-review',
-    'smart-contract-audit',
+    'job-creation',
+    'escrow',
+    'a2a_job',
   ]);
 
-  return hasErc8183Marker || hasJobCapability;
+  // Both conditions required: explicit ERC-8183 AND job capability.
+  // This excludes x402-only / payment-API agents that lack ERC-8183 markers.
+  // A2A agents pass only when they declare ERC-8183 standard/dashboard/tags.
+  return hasExplicitErc8183 && hasErc8183JobCapability;
 }
 
 export function mapDashboardAgentType(agent: any): DashboardAgentType {
