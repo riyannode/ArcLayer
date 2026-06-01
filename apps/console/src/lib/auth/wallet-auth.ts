@@ -137,12 +137,12 @@ export function withWalletAuth<TParams = unknown>(
     ctx: { params: TParams; wallet: `0x${string}` },
   ) => Promise<Response> | Response,
 ) {
-  return async (req: NextRequest, ctx: { params: TParams }): Promise<Response> => {
+  return async (req: NextRequest, ctx: { params: Promise<TParams> }): Promise<Response> => {
     const auth = await verifyWalletAuth(req);
     if (!auth.ok) {
       return NextResponse.json({ error: auth.error }, { status: auth.status });
     }
-    return handler(req, { params: ctx.params, wallet: auth.wallet });
+    return handler(req, { params: await ctx.params, wallet: auth.wallet });
   };
 }
 
