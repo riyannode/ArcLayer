@@ -45,11 +45,16 @@ function hasAny(values: string[], needles: string[]) {
 export function isErc8183CommerceAgent(agent: any) {
   const metadata = agent?.metadata || {};
 
+  // Explicit A2A/internal exclusion: if agent name/tags/categories contain
+  // "a2a" and metadata does NOT explicitly declare erc8183, exclude it.
+  const agentName = String(agent?.name || metadata?.name || '').toLowerCase();
   const values = [
     agent?.role,
     agent?.source,
     agent?.badge,
     metadata?.schema,
+    metadata?.standard,
+    metadata?.dashboard,
     metadata?.role,
     metadata?.x402,
     ...asArray(metadata?.tags),
@@ -61,6 +66,17 @@ export function isErc8183CommerceAgent(agent: any) {
     .filter(Boolean)
     .map((value) => String(value).toLowerCase());
 
+  // If agent name or tags contain "a2a" but metadata does NOT explicitly
+  // declare erc8183 standard/dashboard, treat as internal A2A agent — skip.
+  const looksLikeA2A =
+    agentName.includes('a2a') || hasAny(values, ['a2a']);
+  const explicitlyErc8183 =
+    String(metadata?.standard || '').toLowerCase() === 'erc8183' ||
+    String(metadata?.dashboard || '').toLowerCase() === 'erc8183';
+
+  if (looksLikeA2A && !explicitlyErc8183) return false;
+
+  // Protocol/hire markers only — no generic skill tags.
   const hasErc8183Marker = hasAny(values, [
     'erc8183',
     'erc8183-commerce',
@@ -69,16 +85,11 @@ export function isErc8183CommerceAgent(agent: any) {
   const hasJobCapability = hasAny(values, [
     'job-commerce',
     'job-creation',
-    'a2a_job',
     'escrow',
     'claim_job',
     'submit_result',
     'approve_result',
     'settle_job',
-    'audit',
-    'security-review',
-    'code-review',
-    'smart-contract-audit',
   ]);
 
   return hasErc8183Marker || hasJobCapability;
