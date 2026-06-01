@@ -50,7 +50,6 @@ const emptyForm: FormState = {
 };
 
 const DRAFT_KEY = 'arclayer:direct-hire-draft';
-const API_KEY_STORAGE = 'arclayer:erc8183-api-key';
 
 /* ------------------------------------------------------------------ */
 /*  Primitives                                                         */
@@ -239,8 +238,6 @@ export default function DirectHireEscrowPage() {
   const [buyerAgents, setBuyerAgents] = useState<BuyerAgent[]>([]);
   const [buyersLoading, setBuyersLoading] = useState(false);
 
-  const [apiKey, setApiKey] = useState('');
-
   const [preparing, setPreparing] = useState(false);
   const [prepareResult, setPrepareResult] = useState<PrepareResult | null>(null);
   const [error, setError] = useState('');
@@ -304,7 +301,7 @@ export default function DirectHireEscrowPage() {
     };
   }, [agentId]);
 
-  /* ---- Hydrate from draft + API key on mount ---- */
+  /* ---- Hydrate from draft on mount ---- */
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
@@ -314,12 +311,6 @@ export default function DirectHireEscrowPage() {
       }
     } catch {
       /* corrupted draft — ignore */
-    }
-    try {
-      const storedKey = localStorage.getItem(API_KEY_STORAGE);
-      if (storedKey) setApiKey(storedKey);
-    } catch {
-      /* ignore */
     }
   }, []);
 
@@ -379,15 +370,16 @@ export default function DirectHireEscrowPage() {
   );
   const budgetComplete = Boolean(form.budgetMax);
   const buyerComplete = Boolean(form.buyerAgentId);
-  const apiKeyPresent = Boolean(apiKey.trim());
   const evaluatorComplete =
     form.evaluatorMode === 'client' || Boolean(form.evaluatorAgentId.trim());
+  /* Prepare is disabled until wallet-auth/session lands (PR #408). */
+  const walletSessionReady = false;
   const canPrepare =
+    walletSessionReady &&
     taskComplete &&
     scopeComplete &&
     budgetComplete &&
     buyerComplete &&
-    apiKeyPresent &&
     evaluatorComplete &&
     agentData;
 
@@ -405,18 +397,8 @@ export default function DirectHireEscrowPage() {
 
   function saveDraft() {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
-    if (apiKey.trim()) {
-      localStorage.setItem(API_KEY_STORAGE, apiKey.trim());
-    }
     setError('');
     setSuccess('Draft saved locally.');
-  }
-
-  function saveApiKey() {
-    if (apiKey.trim()) {
-      localStorage.setItem(API_KEY_STORAGE, apiKey.trim());
-      setSuccess('API key saved locally.');
-    }
   }
 
   async function handlePrepare() {
@@ -462,10 +444,7 @@ export default function DirectHireEscrowPage() {
 
       const res = await fetch('/api/erc8183-jobs/web-hire/prepare', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey.trim()}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
 
@@ -500,7 +479,6 @@ export default function DirectHireEscrowPage() {
     ['Settlement', 'ERC-8183 Escrow'],
     ['Evaluator', form.evaluatorMode === 'client' ? 'Client (self)' : `Agent #${form.evaluatorAgentId}`],
     ['Client Wallet', address || 'Not connected'],
-    ['API Key', apiKeyPresent ? '••••••' : 'Not set'],
   ] as const;
 
   return (
@@ -671,32 +649,7 @@ export default function DirectHireEscrowPage() {
                       </p>
                     </div>
 
-                    {/* API Key */}
-                    <div>
-                      <FieldLabel required>ERC-8183 API Key</FieldLabel>
-                      <div className="flex gap-3">
-                        <input
-                          type="password"
-                          value={apiKey}
-                          onChange={(e) => {
-                            setApiKey(e.target.value);
-                            setError('');
-                          }}
-                          placeholder="ak_..."
-                          className={`${inputCls} flex-1`}
-                        />
-                        <button
-                          type="button"
-                          onClick={saveApiKey}
-                          className="h-12 shrink-0 rounded-lg border border-[#C5A67C]/35 bg-black/35 px-5 text-sm font-semibold text-[#F0B84A] transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/8"
-                        >
-                          Save Key
-                        </button>
-                      </div>
-                      <p className="mt-2 text-xs text-[#EAE4D8]/53">
-                        API key with <span className="font-mono text-[#F3C536]">erc8183:create</span> scope. Stored locally in your browser.
-                      </p>
-                    </div>
+
                   </div>
                 )}
               </SectionCard>
@@ -976,8 +929,8 @@ export default function DirectHireEscrowPage() {
         {/* Sticky bottom action bar */}
         {!agentLoading && agentData && (
           <div className="sticky bottom-0 z-20 mt-6 flex flex-col gap-4 rounded-t-xl border-t border-white/[0.04] bg-[#050505]/92 px-7 py-5 backdrop-blur-xl md:flex-row md:items-center md:justify-between">
-            <p className="text-sm text-[#EAE4D8]/55">
-              Save a draft and continue later.
+            <p className="text-sm text-[#EAE4D8]/55 max-w-xl">
+              Wallet session is required to prepare this hire. This will be enabled after wallet-auth/session is merged.
             </p>
 
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -990,11 +943,11 @@ export default function DirectHireEscrowPage() {
               </button>
               <button
                 type="button"
-                onClick={handlePrepare}
-                disabled={preparing || !canPrepare || !isConnected}
-                className="h-12 rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A] px-10 text-sm font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.18)] transition hover:bg-[#FFD084] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled
+                title="Wallet session auth is required — will be available after PR #408"
+                className="h-12 cursor-not-allowed rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A]/40 px-10 text-sm font-semibold text-black/50 shadow-none"
               >
-                {preparing ? 'Preparing…' : 'Prepare Job →'}
+                Prepare Job →
               </button>
             </div>
           </div>
