@@ -1,17 +1,12 @@
-export type DashboardAgentStatus = 'Open' | 'Funded' | 'Submitted' | 'Completed';
+import {
+  ERC8183_MARKERS,
+  DASHBOARD_TYPE_MAP,
+  type DashboardAgentType,
+} from '@/lib/agents/taxonomy';
 
-export type DashboardAgentType =
-  | 'Smart Contract Agent'
-  | 'Frontend Agent'
-  | 'Backend Agent'
-  | 'DevOps Agent'
-  | 'Design Agent'
-  | 'Data Research Agent'
-  | 'Documentation Agent'
-  | 'Analysis Agent'
-  | 'Payment Agent'
-  | 'Evaluator Agent'
-  | 'Other';
+export { type DashboardAgentType };
+
+export type DashboardAgentStatus = 'Open' | 'Funded' | 'Submitted' | 'Completed';
 
 export type DashboardAgentRow = {
   id: string;
@@ -37,19 +32,31 @@ function asArray(value: unknown): string[] {
     : [];
 }
 
-function hasAny(values: string[], needles: string[]) {
+function hasAny(values: string[], needles: readonly string[]) {
   const normalized = values.map((value) => value.toLowerCase());
   return needles.some((needle) => normalized.some((v) => v.includes(needle)));
 }
 
+/**
+ * Fast path: if metadata.dashboard === 'erc8183', the agent was registered
+ * through the ERC-8183 form and is definitely a commerce agent.
+ */
+function hasDashboardMarker(metadata: Record<string, unknown>): boolean {
+  return String(metadata?.dashboard || '').toLowerCase() === 'erc8183';
+}
+
 export function isErc8183CommerceAgent(agent: any) {
   const metadata = agent?.metadata || {};
+
+  // Fast path — registered via ERC-8183 form
+  if (hasDashboardMarker(metadata)) return true;
 
   const values = [
     agent?.role,
     agent?.source,
     agent?.badge,
     metadata?.schema,
+    metadata?.standard,
     metadata?.role,
     metadata?.x402,
     ...asArray(metadata?.tags),
@@ -61,31 +68,25 @@ export function isErc8183CommerceAgent(agent: any) {
     .filter(Boolean)
     .map((value) => String(value).toLowerCase());
 
-  const hasErc8183Marker = hasAny(values, [
-    'erc8183',
-    'erc8183-commerce',
-  ]);
-
-  const hasJobCapability = hasAny(values, [
-    'job-commerce',
-    'job-creation',
-    'a2a_job',
-    'escrow',
-    'claim_job',
-    'submit_result',
-    'approve_result',
-    'settle_job',
-    'audit',
-    'security-review',
-    'code-review',
-    'smart-contract-audit',
-  ]);
-
-  return hasErc8183Marker || hasJobCapability;
+  return hasAny(values, ERC8183_MARKERS);
 }
 
+/**
+ * Resolve the dashboard display category from the agent's metadata.
+ * Checks metadata.categories and tags against DASHBOARD_TYPE_MAP slugs.
+ * Falls back to substring heuristic for legacy agents.
+ */
 export function mapDashboardAgentType(agent: any): DashboardAgentType {
   const metadata = agent?.metadata || {};
+
+  // Fast path — use category from metadata if it maps to a known type
+  const metaCategories = asArray(metadata?.categories);
+  for (const cat of metaCategories) {
+    const slug = cat.toLowerCase().replace(/\s+/g, '-');
+    if (DASHBOARD_TYPE_MAP[slug]) return DASHBOARD_TYPE_MAP[slug] as DashboardAgentType;
+  }
+
+  // Fallback: substring scan on all values
   const values = [
     agent?.role,
     metadata?.role,

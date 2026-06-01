@@ -24,25 +24,18 @@ import { useArcWrite } from '@/hooks/useArcWrite';
 import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
 import { config } from '@/lib/wagmi';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest/types';
+import {
+  ERC8183_DASHBOARD_CATEGORIES,
+  type Erc8183Category,
+} from '@/lib/agents/taxonomy';
 
 type AgentRole = 'worker' | 'evaluator' | 'autonomous-client';
 type RegisterStatus = 'idle' | 'pending' | 'success' | 'error';
 type SectionKey = 'identity' | 'profile' | 'review';
 type SectionStatus = 'Complete' | 'Pending';
 
-const CATEGORIES = [
-  'Smart Contract',
-  'Frontend',
-  'Backend',
-  'DevOps',
-  'Design',
-  'Data Research',
-  'Documentation',
-  'Analysis',
-  'Other',
-] as const;
-
-type Category = (typeof CATEGORIES)[number];
+const CATEGORIES = ERC8183_DASHBOARD_CATEGORIES;
+type Category = Erc8183Category;
 
 type RoleConfig = {
   id: AgentRole;
@@ -503,6 +496,8 @@ export default function ERC8183EscrowRegisterPage() {
 
     return {
       schema: 'arclayer.agent/v1',
+      standard: 'erc8183',
+      dashboard: 'erc8183',
       version: 1,
       agentId: mintedAgentId || `pending-${agentSlug}`,
       name: form.agentName || 'ArcLayer Agent',
@@ -523,7 +518,7 @@ export default function ERC8183EscrowRegisterPage() {
           enabled: true,
         },
       ],
-      tags: ['erc8183', 'agentic-commerce', role.id, categorySlug],
+      tags: ['erc8183', 'erc8183-commerce', 'job-commerce', 'agentic-commerce', role.id, categorySlug],
       links: {
         homepage: form.websiteUrl || undefined,
         docs: form.docsUrl || undefined,
