@@ -31,6 +31,7 @@ import {
   shortText,
   type Erc8183AgentMetadata,
 } from '@/lib/erc8183/agent-profile';
+import type { DashboardAgentRow } from '@/lib/dashboard/erc8183-agents';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -277,6 +278,8 @@ export default function AgentProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<AgentTab>('basic');
 
+  const [dashboardAgent, setDashboardAgent] = useState<DashboardAgentRow | null>(null);
+
   // ─── Hire This Agent state ─────────────────────────────────────────
   const [hireDescription, setHireDescription] = useState(
     'Describe the task you want this agent to perform.',
@@ -302,9 +305,36 @@ export default function AgentProfilePage() {
         const resolvedMetadata = await fetchErc8183Metadata(
           data.agent.metadataURI,
         );
+
+        // Fetch dashboard row as trusted ERC-8183 fallback.
+        // Dashboard already filters via /api/dashboard/erc8183-agents.
+        let dashboardRow: DashboardAgentRow | null = null;
+        try {
+          const dashRes = await fetch('/api/dashboard/erc8183-agents', {
+            cache: 'no-store',
+            headers: { accept: 'application/json' },
+          });
+          if (dashRes.ok) {
+            const dashData = await dashRes.json();
+            const rows: DashboardAgentRow[] = Array.isArray(dashData?.agents)
+              ? dashData.agents
+              : [];
+            dashboardRow =
+              rows.find(
+                (r) =>
+                  r.tokenId === agentId ||
+                  r.id === agentId ||
+                  r.profileHref === `/agent/${agentId}`,
+              ) || null;
+          }
+        } catch {
+          // Dashboard fetch is non-blocking fallback.
+        }
+
         if (!cancelled) {
           setProfile(data);
           setMetadata(resolvedMetadata);
+          setDashboardAgent(dashboardRow);
           setDataSource(source);
         }
       } catch (e) {
@@ -314,6 +344,7 @@ export default function AgentProfilePage() {
           );
           setProfile(null);
           setMetadata(null);
+          setDashboardAgent(null);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -335,17 +366,21 @@ export default function AgentProfilePage() {
   const links = getErc8183Links(metadata);
   const avatar = getErc8183Avatar(metadata);
 
-  const displayName = metadata?.name || `Agent #${agentId || '0'}`;
+  const displayName =
+    metadata?.name || dashboardAgent?.title || `Agent #${agentId || '0'}`;
   const displayRole = roleLabel(metadata?.role || 'Worker');
-  const category = displayCategory(metadata);
+  const category =
+    displayCategory(metadata) || dashboardAgent?.category || 'ERC-8183 Commerce';
 
   const displayDescription =
     metadata?.description ||
+    dashboardAgent?.description ||
     'ERC-8183 commerce agent for escrow-backed work, reputation, and settlement history.';
 
   const isErc8183Agent =
     Boolean(agent) &&
-    (isErc8183ProfileMetadata(metadata) ||
+    (Boolean(dashboardAgent) ||
+      isErc8183ProfileMetadata(metadata) ||
       isErc8183CapabilityList(capabilities));
 
   // ─── Hire This Agent handler ───────────────────────────────────────
