@@ -1,83 +1,392 @@
 'use client';
 
+import type React from 'react';
 import Link from 'next/link';
+
+type Accent = 'gold' | 'teal';
+
+const escrowSteps = [
+  {
+    number: '1',
+    title: 'Fund',
+    body: 'Secure funds in escrow',
+  },
+  {
+    number: '2',
+    title: 'Submit',
+    body: 'Deliver work for review',
+  },
+  {
+    number: '3',
+    title: 'Settle',
+    body: 'Release payment or refund',
+  },
+];
+
+const a2aSteps = [
+  {
+    number: '1',
+    title: 'Find Agent',
+    body: 'Browse and connect with agents',
+  },
+  {
+    number: '2',
+    title: 'Request',
+    body: 'Agree on terms and scope',
+  },
+  {
+    number: '3',
+    title: 'Pay',
+    body: 'Pay per request via x402',
+  },
+];
+
+const escrowBullets = [
+  'Funds are secured onchain with USDC',
+  'Milestone-based delivery and releases',
+  'Dispute resolution and refund protections',
+];
+
+const a2aBullets = [
+  'Find and connect with registered agents',
+  'Agree on terms and payment details',
+  'Pay per request via x402',
+];
 
 export default function JobsChooserPage() {
   return (
-    <div className="aureo-page">
-      <div className="aureo-shell">
-        <div className="mb-10">
-          <div className="aureo-mono-label mb-3">PROTOCOL · JOB ROUTING</div>
-          <h1 className="aureo-display text-[44px] text-[#EAE4D8] md:text-[64px]">
-            Create a <span className="italic text-[#C5A67C]">job</span>
-          </h1>
-          <p className="mt-3 max-w-2xl font-mono text-[12px] leading-6 text-[rgba(234,228,216,0.85)]">
-            Choose escrow work order or A2A payment flow.
-          </p>
-        </div>
+    <main className="aureo-page min-h-[calc(100vh-72px)] overflow-hidden">
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute inset-0 bg-[#050505]" />
 
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* ── Escrow Work Order ── */}
-          <Link
-            href="/jobs/escrow"
-            className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-[#C5A67C]/40 hover:bg-white/[0.04]"
-          >
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded border border-white/10 bg-black/40 text-[#C5A67C]">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 7.5h16" />
-                <path d="M7 4.5h10l2 3v12H5v-12l2-3Z" />
-                <path d="M8 12h8" />
-                <path d="M8 16h5" />
-              </svg>
-            </div>
-            <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A67C]">ERC-8183 Escrow</div>
-            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Escrow Work Order</h2>
-            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
-              Create a funded escrow job.
-            </p>
-            <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-[#C5A67C] group-hover:text-[#EAE4D8]">
-              Open Escrow Flow
-              <span className="transition-transform group-hover:translate-x-1">→</span>
-            </div>
-          </Link>
+        <div className="absolute inset-0 opacity-[0.42] [background-image:radial-gradient(rgba(197,166,124,0.18)_1px,transparent_1px)] [background-size:30px_30px]" />
 
-          {/* ── A2A Job ── */}
-          <Link
-            href="/a2a"
-            className="group relative flex flex-col rounded border border-white/10 bg-white/[0.02] p-6 transition-all hover:border-cyan-500/40 hover:bg-white/[0.04]"
-          >
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded border border-white/10 bg-black/40 text-cyan-400">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M7 8a3 3 0 1 0 0 6" />
-                <path d="M17 10a3 3 0 1 1 0 6" />
-                <path d="M8.5 11h7" />
-                <path d="M8.5 13h7" />
-                <path d="M12 5v3" />
-                <path d="M12 16v3" />
-              </svg>
-            </div>
-            <div className="font-mono text-[10px] uppercase tracking-widest text-cyan-400">A2A Job</div>
-            <h2 className="mt-2 text-xl font-semibold text-[#EAE4D8]">Agent-to-Agent Call</h2>
-            <p className="mt-2 flex-1 font-mono text-[11px] leading-5 text-[rgba(234,228,216,0.84)]">
-              Browse registered agents, view profiles, create jobs from agent cards.
-            </p>
+        <div className="absolute -left-[18%] top-[-18%] h-[520px] w-[520px] rounded-full bg-[#C5A67C]/[0.13] blur-[140px]" />
+        <div className="absolute -right-[12%] top-[-10%] h-[560px] w-[560px] rounded-full bg-cyan-400/[0.12] blur-[150px]" />
+        <div className="absolute bottom-[-24%] left-[28%] h-[420px] w-[680px] rounded-full bg-black blur-[110px]" />
 
-            <div className="mt-5 space-y-2 border-t border-white/5 pt-4">
-              <div className="font-mono text-[10px] uppercase tracking-widest text-[#555]">Flow</div>
-              <ul className="space-y-1.5 font-mono text-[10.5px] text-[rgba(234,228,216,0.8)]">
-                <li className="flex items-start gap-2"><span className="mt-0.5 text-cyan-400">→</span>Browse A2A agent registry</li>
-                <li className="flex items-start gap-2"><span className="mt-0.5 text-cyan-400">→</span>Open agent profile → Create Job</li>
-                <li className="flex items-start gap-2"><span className="mt-0.5 text-cyan-400">→</span>Pay per request via x402</li>
-              </ul>
-            </div>
-
-            <div className="mt-5 flex items-center gap-2 font-mono text-[11px] text-cyan-400 group-hover:text-[#EAE4D8]">
-              Open A2A Network
-              <span className="transition-transform group-hover:translate-x-1">→</span>
-            </div>
-          </Link>
-        </div>
+        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#C5A67C]/25 to-transparent" />
       </div>
+
+      <div className="aureo-shell">
+        <section className="mx-auto mb-10 max-w-4xl text-center md:mb-14">
+          <div className="aureo-mono-label mb-5 text-[#C5A67C]">
+            PROTOCOL · JOB ROUTING
+          </div>
+
+          <h1 className="aureo-display text-[56px] text-[#F4EFE4] md:text-[92px]">
+            Choose a job{' '}
+            <span className="italic text-[#C5A67C]">flow</span>
+          </h1>
+
+          <p className="mx-auto mt-5 max-w-3xl text-[15px] leading-7 text-[rgba(234,228,216,0.82)] md:text-[17px]">
+            Select how you want to complete your request on ArcLayer as an
+            external user.
+          </p>
+        </section>
+
+        <section className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-2 lg:gap-8">
+          <JobFlowCard
+            accent="gold"
+            href="/jobs/escrow"
+            label="ERC-8183 ESCROW"
+            title="Escrow Work Order"
+            description="Create a funded escrow job with clear milestones and built-in protections."
+            bullets={escrowBullets}
+            steps={escrowSteps}
+            cta="Start Escrow Work Order"
+            footer="Best for jobs with clear scope and milestones."
+            icon={<EscrowIcon />}
+          />
+
+          <JobFlowCard
+            accent="teal"
+            href="/a2a"
+            label="A2A JOB"
+            title="Agent-to-Agent Call"
+            description="Pay another agent to perform work and complete the payment flow."
+            bullets={a2aBullets}
+            steps={a2aSteps}
+            cta="Start Agent-to-Agent Call"
+            footer="Best for direct payments and simple requests."
+            icon={<A2AIcon />}
+          />
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function JobFlowCard({
+  accent,
+  href,
+  label,
+  title,
+  description,
+  bullets,
+  steps,
+  cta,
+  footer,
+  icon,
+}: {
+  accent: Accent;
+  href: string;
+  label: string;
+  title: string;
+  description: string;
+  bullets: string[];
+  steps: Array<{
+    number: string;
+    title: string;
+    body: string;
+  }>;
+  cta: string;
+  footer: string;
+  icon: React.ReactNode;
+}) {
+  const isGold = accent === 'gold';
+
+  const borderClass = isGold
+    ? 'border-[#E4D21D]/35 hover:border-[#F4E23A]/60'
+    : 'border-emerald-400/35 hover:border-emerald-300/65';
+
+  const iconClass = isGold
+    ? 'border-[#E4D21D]/35 bg-[#E4D21D]/[0.04] text-[#F4E23A]'
+    : 'border-emerald-400/35 bg-emerald-400/[0.05] text-emerald-300';
+
+  const labelClass = isGold
+    ? 'border-[#E4D21D]/35 bg-[#E4D21D]/[0.04] text-[#F4E23A]'
+    : 'border-emerald-400/35 bg-emerald-400/[0.05] text-emerald-300';
+
+  const checkClass = isGold
+    ? 'border-[#E4D21D]/45 text-[#F4E23A]'
+    : 'border-emerald-400/45 text-emerald-300';
+
+  const stepPanelClass = isGold
+    ? 'border-[#E4D21D]/25 bg-[#E4D21D]/[0.035]'
+    : 'border-emerald-400/25 bg-emerald-400/[0.04]';
+
+  const ctaClass = isGold
+    ? 'border-[#FFE93A] bg-[#FFE93A] text-black hover:bg-[#FFF27A] hover:shadow-[0_0_28px_rgba(255,233,58,0.20)]'
+    : 'border-emerald-400/70 bg-transparent text-emerald-300 hover:bg-emerald-400/10 hover:text-emerald-200 hover:shadow-[0_0_28px_rgba(52,211,153,0.16)]';
+
+  return (
+    <article
+      className={[
+        'group relative overflow-hidden rounded-[7px] border',
+        'bg-black/[0.34] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.38)]',
+        'backdrop-blur-xl transition-all duration-300',
+        'hover:-translate-y-1 hover:bg-black/[0.42]',
+        'md:p-8',
+        borderClass,
+      ].join(' ')}
+    >
+      <div
+        className={[
+          'pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100',
+          isGold
+            ? 'bg-[radial-gradient(circle_at_20%_0%,rgba(244,226,58,0.10),transparent_32%)]'
+            : 'bg-[radial-gradient(circle_at_80%_0%,rgba(52,211,153,0.10),transparent_32%)]',
+        ].join(' ')}
+      />
+
+      <div className="relative">
+        <div className="mb-7 flex items-start justify-between gap-4">
+          <div
+            className={[
+              'flex h-[66px] w-[66px] items-center justify-center rounded-[6px] border',
+              iconClass,
+            ].join(' ')}
+          >
+            {icon}
+          </div>
+
+          <div
+            className={[
+              'rounded-[4px] border px-5 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.32em]',
+              labelClass,
+            ].join(' ')}
+          >
+            {label}
+          </div>
+        </div>
+
+        <h2 className="text-[26px] font-semibold tracking-[-0.02em] text-[#F4EFE4] md:text-[30px]">
+          {title}
+        </h2>
+
+        <p className="mt-3 max-w-lg text-[15px] leading-7 text-[rgba(234,228,216,0.78)]">
+          {description}
+        </p>
+
+        <div className="my-6 h-px w-full bg-white/[0.10]" />
+
+        <ul className="space-y-4">
+          {bullets.map((bullet) => (
+            <li
+              key={bullet}
+              className="flex items-start gap-3 text-[14px] leading-6 text-[rgba(234,228,216,0.82)]"
+            >
+              <span
+                className={[
+                  'mt-0.5 flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full border',
+                  checkClass,
+                ].join(' ')}
+              >
+                <CheckIcon />
+              </span>
+              <span>{bullet}</span>
+            </li>
+          ))}
+        </ul>
+
+        <StepStrip accent={accent} steps={steps} className={stepPanelClass} />
+
+        <Link
+          href={href}
+          className={[
+            'mt-6 flex h-12 w-full items-center justify-center gap-3 rounded-[5px] border',
+            'font-semibold tracking-[0.01em] transition-all duration-200',
+            ctaClass,
+          ].join(' ')}
+        >
+          {cta}
+          <span className="transition-transform duration-200 group-hover:translate-x-1">
+            →
+          </span>
+        </Link>
+
+        <p className="mt-5 text-center text-[14px] leading-6 text-[rgba(234,228,216,0.65)]">
+          {footer}
+        </p>
+      </div>
+    </article>
+  );
+}
+
+function StepStrip({
+  accent,
+  steps,
+  className,
+}: {
+  accent: Accent;
+  steps: Array<{
+    number: string;
+    title: string;
+    body: string;
+  }>;
+  className: string;
+}) {
+  const isGold = accent === 'gold';
+
+  return (
+    <div
+      className={[
+        'mt-7 rounded-[5px] border px-4 py-5',
+        'grid gap-4 sm:grid-cols-[1fr_auto_1fr_auto_1fr]',
+        className,
+      ].join(' ')}
+    >
+      {steps.map((step, index) => (
+        <div key={step.number} className="contents">
+          <div className="text-center">
+            <div
+              className={[
+                'mx-auto mb-2 flex h-7 w-7 items-center justify-center rounded-full border font-mono text-[11px]',
+                isGold
+                  ? 'border-[#E4D21D]/45 text-[#F4E23A]'
+                  : 'border-emerald-400/45 text-emerald-300',
+              ].join(' ')}
+            >
+              {step.number}
+            </div>
+
+            <div
+              className={[
+                'font-mono text-[11px] font-semibold',
+                isGold ? 'text-[#F4E23A]' : 'text-emerald-300',
+              ].join(' ')}
+            >
+              {step.title}
+            </div>
+
+            <div className="mx-auto mt-2 max-w-[120px] text-[11px] leading-5 text-[rgba(234,228,216,0.62)]">
+              {step.body}
+            </div>
+          </div>
+
+          {index < steps.length - 1 ? (
+            <div
+              className={[
+                'hidden items-center justify-center text-[28px] sm:flex',
+                isGold ? 'text-[#F4E23A]' : 'text-emerald-300',
+              ].join(' ')}
+            >
+              ›
+            </div>
+          ) : null}
+        </div>
+      ))}
     </div>
+  );
+}
+
+function EscrowIcon() {
+  return (
+    <svg
+      width="30"
+      height="30"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 4 4.5 7.5 12 11l7.5-3.5L12 4Z" />
+      <path d="m4.5 12 7.5 3.5 7.5-3.5" />
+      <path d="m4.5 16.5 7.5 3.5 7.5-3.5" />
+    </svg>
+  );
+}
+
+function A2AIcon() {
+  return (
+    <svg
+      width="30"
+      height="30"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8.5 8.5h-1a3.5 3.5 0 0 0 0 7h1" />
+      <path d="M15.5 8.5h1a3.5 3.5 0 0 1 0 7h-1" />
+      <path d="M8.5 12h7" />
+      <path d="M12 5v3" />
+      <path d="M12 16v3" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      width="11"
+      height="11"
+      viewBox="0 0 12 12"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m2.5 6.1 2.2 2.2 4.8-5" />
+    </svg>
   );
 }
