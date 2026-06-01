@@ -69,23 +69,23 @@ export default function JobsChooserPage() {
       </div>
 
       <div className="aureo-shell">
-        <section className="mx-auto mb-10 max-w-4xl text-center md:mb-14">
+        <section className="mx-auto mb-8 max-w-3xl text-center md:mb-10">
           <div className="aureo-mono-label mb-5 text-[#C5A67C]">
             PROTOCOL · JOB ROUTING
           </div>
 
-          <h1 className="aureo-display text-[56px] text-[#F4EFE4] md:text-[92px]">
+          <h1 className="aureo-display text-[44px] text-[#F4EFE4] md:text-[68px]">
             Choose a job{' '}
             <span className="italic text-[#C5A67C]">flow</span>
           </h1>
 
-          <p className="mx-auto mt-5 max-w-3xl text-[15px] leading-7 text-[rgba(234,228,216,0.82)] md:text-[17px]">
+          <p className="mx-auto mt-3 max-w-2xl text-[12px] leading-6 text-[rgba(234,228,216,0.78)] md:text-[13px]">
             Select how you want to complete your request on ArcLayer as an
             external user.
           </p>
         </section>
 
-        <section className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-2 lg:gap-8">
+        <section className="mx-auto grid max-w-[960px] gap-5 lg:grid-cols-2">
           <JobFlowCard
             accent="gold"
             href="/jobs/escrow"
@@ -174,10 +174,10 @@ function JobFlowCard({
     <article
       className={[
         'group relative overflow-hidden rounded-[7px] border',
-        'bg-black/[0.34] p-6 shadow-[0_30px_90px_rgba(0,0,0,0.38)]',
+        'bg-black/[0.34] p-5 shadow-[0_24px_70px_rgba(0,0,0,0.34)]',
         'backdrop-blur-xl transition-all duration-300',
-        'hover:-translate-y-1 hover:bg-black/[0.42]',
-        'md:p-8',
+        'hover:-translate-y-0.5 hover:bg-black/[0.42]',
+        'md:p-6',
         borderClass,
       ].join(' ')}
     >
@@ -191,10 +191,10 @@ function JobFlowCard({
       />
 
       <div className="relative">
-        <div className="mb-7 flex items-start justify-between gap-4">
+        <div className="mb-5 flex items-start justify-between gap-4">
           <div
             className={[
-              'flex h-[66px] w-[66px] items-center justify-center rounded-[6px] border',
+              'flex h-12 w-12 items-center justify-center rounded-[5px] border',
               iconClass,
             ].join(' ')}
           >
@@ -203,7 +203,7 @@ function JobFlowCard({
 
           <div
             className={[
-              'rounded-[4px] border px-5 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.32em]',
+              'rounded-[4px] border px-4 py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.28em]',
               labelClass,
             ].join(' ')}
           >
@@ -211,25 +211,25 @@ function JobFlowCard({
           </div>
         </div>
 
-        <h2 className="text-[26px] font-semibold tracking-[-0.02em] text-[#F4EFE4] md:text-[30px]">
+        <h2 className="text-xl font-semibold tracking-[-0.02em] text-[#F4EFE4] md:text-[22px]">
           {title}
         </h2>
 
-        <p className="mt-3 max-w-lg text-[15px] leading-7 text-[rgba(234,228,216,0.78)]">
+        <p className="mt-2 max-w-lg text-[12px] leading-5 text-[rgba(234,228,216,0.76)]">
           {description}
         </p>
 
-        <div className="my-6 h-px w-full bg-white/[0.10]" />
+        <div className="my-5 h-px w-full bg-white/[0.08]" />
 
-        <ul className="space-y-4">
+        <ul className="space-y-3">
           {bullets.map((bullet) => (
             <li
               key={bullet}
-              className="flex items-start gap-3 text-[14px] leading-6 text-[rgba(234,228,216,0.82)]"
+              className="flex items-start gap-3 text-[12px] leading-5 text-[rgba(234,228,216,0.82)]"
             >
               <span
                 className={[
-                  'mt-0.5 flex h-[19px] w-[19px] shrink-0 items-center justify-center rounded-full border',
+                  'mt-0.5 flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-full border',
                   checkClass,
                 ].join(' ')}
               >
@@ -245,8 +245,8 @@ function JobFlowCard({
         <Link
           href={href}
           className={[
-            'mt-6 flex h-12 w-full items-center justify-center gap-3 rounded-[5px] border',
-            'font-semibold tracking-[0.01em] transition-all duration-200',
+            'mt-5 flex h-10 w-full items-center justify-center gap-3 rounded-[5px] border',
+            'text-[12px] font-semibold tracking-[0.01em] transition-all duration-200',
             ctaClass,
           ].join(' ')}
         >
@@ -256,7 +256,7 @@ function JobFlowCard({
           </span>
         </Link>
 
-        <p className="mt-5 text-center text-[14px] leading-6 text-[rgba(234,228,216,0.65)]">
+        <p className="mt-4 text-center text-[12px] leading-5 text-[rgba(234,228,216,0.62)]">
           {footer}
         </p>
       </div>
@@ -282,8 +282,8 @@ function StepStrip({
   return (
     <div
       className={[
-        'mt-7 rounded-[5px] border px-4 py-5',
-        'grid gap-4 sm:grid-cols-[1fr_auto_1fr_auto_1fr]',
+        'mt-5 rounded-[5px] border px-3 py-4',
+        'grid gap-3 sm:grid-cols-[1fr_auto_1fr_auto_1fr]',
         className,
       ].join(' ')}
     >
@@ -292,7 +292,7 @@ function StepStrip({
           <div className="text-center">
             <div
               className={[
-                'mx-auto mb-2 flex h-7 w-7 items-center justify-center rounded-full border font-mono text-[11px]',
+                'mx-auto mb-1.5 flex h-5 w-5 items-center justify-center rounded-full border font-mono text-[9px]',
                 isGold
                   ? 'border-[#E4D21D]/45 text-[#F4E23A]'
                   : 'border-emerald-400/45 text-emerald-300',
@@ -303,14 +303,14 @@ function StepStrip({
 
             <div
               className={[
-                'font-mono text-[11px] font-semibold',
+                'font-mono text-[9.5px] font-semibold',
                 isGold ? 'text-[#F4E23A]' : 'text-emerald-300',
               ].join(' ')}
             >
               {step.title}
             </div>
 
-            <div className="mx-auto mt-2 max-w-[120px] text-[11px] leading-5 text-[rgba(234,228,216,0.62)]">
+            <div className="mx-auto mt-1.5 max-w-[105px] text-[9.5px] leading-4 text-[rgba(234,228,216,0.58)]">
               {step.body}
             </div>
           </div>
@@ -318,7 +318,7 @@ function StepStrip({
           {index < steps.length - 1 ? (
             <div
               className={[
-                'hidden items-center justify-center text-[28px] sm:flex',
+                'hidden items-center justify-center text-[22px] sm:flex',
                 isGold ? 'text-[#F4E23A]' : 'text-emerald-300',
               ].join(' ')}
             >
