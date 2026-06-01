@@ -77,19 +77,22 @@ export async function syncErc8004Identity(
     // ownerOf may not be available; use controller as fallback
   }
 
-  // 4. Read metadataURI from contract if not provided
-  let metadataURI = input.metadataURI ?? '';
-  if (!metadataURI) {
-    try {
-      metadataURI = (await client.readContract({
-        address: CONTRACTS.ERC8004_IDENTITY_REGISTRY as Address,
-        abi: ERC8004_IDENTITY_REGISTRY_ABI,
-        functionName: 'tokenURI',
-        args: [tokenId],
-      })) as string;
-    } catch {
-      metadataURI = '';
-    }
+  // 4. Always read canonical metadataURI from chain
+  let metadataURI: string;
+  try {
+    metadataURI = (await client.readContract({
+      address: CONTRACTS.ERC8004_IDENTITY_REGISTRY as Address,
+      abi: ERC8004_IDENTITY_REGISTRY_ABI,
+      functionName: 'tokenURI',
+      args: [tokenId],
+    })) as string;
+  } catch {
+    throw new Error('token_uri_read_failed');
+  }
+
+  // Optional caller-provided metadataURI is only an assertion, not source of truth
+  if (input.metadataURI && input.metadataURI.trim() !== metadataURI.trim()) {
+    throw new Error('metadata_uri_mismatch');
   }
 
   // 5. Upsert to erc8004_agents

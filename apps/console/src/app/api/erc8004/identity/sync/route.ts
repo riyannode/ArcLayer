@@ -52,6 +52,8 @@ export async function POST(req: NextRequest) {
     const status =
       message === 'tx_not_found_or_not_mined' ? 202 :
       message === 'tx_reverted' ? 422 :
+      message === 'metadata_uri_mismatch' ? 422 :
+      message === 'token_uri_read_failed' ? 502 :
       message.startsWith('ERC-8004 mint Transfer event not found') ? 422 :
       message.startsWith('upsert_failed') ? 502 :
       500;
