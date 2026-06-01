@@ -76,6 +76,29 @@ function JobIcon({ category }: { category: Exclude<AgentType, 'All'> }) {
   );
 }
 
+function AgentAvatar({
+  avatar,
+  title,
+  category,
+}: {
+  avatar?: string;
+  title: string;
+  category: Exclude<AgentType, 'All'>;
+}) {
+  if (avatar) {
+    return (
+      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-[#C5A67C]/25 bg-black/45 shadow-[0_0_28px_rgba(197,166,124,0.08)]">
+        <img src={avatar} alt={`${title} avatar`} className="h-full w-full object-cover" />
+        <span className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-tl-md border-l border-t border-[#C5A67C]/25 bg-black/80 text-[10px] text-[#F0B84A]">
+          {AGENT_TYPE_ICONS[category]}
+        </span>
+      </div>
+    );
+  }
+
+  return <JobIcon category={category} />;
+}
+
 function BenefitCard({
   icon,
   title,
@@ -341,10 +364,10 @@ export default function DashboardPage() {
                     onClick={() => router.push(job.profileHref)}
                     tabIndex={0}
                     role="button"
-                    className="group relative grid cursor-pointer gap-4 rounded-xl border border-white/8 bg-white/[0.025] px-5 py-4 transition hover:border-[#C5A67C]/25 hover:bg-white/[0.04] xl:grid-cols-[minmax(0,1fr)_160px_180px_170px_160px] xl:items-center"
+                    className="group relative grid cursor-pointer gap-4 rounded-xl border border-[#C5A67C]/35 bg-white/[0.025] px-5 py-4 shadow-[0_0_0_1px_rgba(197,166,124,0.12)] transition hover:border-[#F0B84A]/55 hover:bg-white/[0.04] hover:shadow-[0_0_0_1px_rgba(240,184,74,0.28),0_0_26px_rgba(240,184,74,0.05)] xl:grid-cols-[minmax(0,1fr)_160px_180px_170px_160px] xl:items-center"
                   >
                     <div className="flex min-w-0 items-center gap-4">
-                      <JobIcon category={job.category} />
+                      <AgentAvatar avatar={job.avatar} title={job.title} category={job.category} />
 
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
@@ -447,33 +470,66 @@ export default function DashboardPage() {
 
       {hoveredAgent && (
         <div className="pointer-events-none fixed right-8 top-28 z-40 w-[360px] rounded-2xl border border-[#C5A67C]/20 bg-[#080A0D]/95 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)] backdrop-blur-xl">
-          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#F0B84A]">
-            Agent Preview
-          </p>
+          <div className="flex items-start gap-4">
+            <AgentAvatar
+              avatar={hoveredAgent.avatar}
+              title={hoveredAgent.title}
+              category={hoveredAgent.category}
+            />
 
-          <h3 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-[#F4EFE5]">
-            {hoveredAgent.title}
-          </h3>
+            <div className="min-w-0">
+              <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#F0B84A]">
+                Agent Preview
+              </p>
+              <h3 className="mt-2 truncate text-lg font-semibold tracking-[-0.02em] text-[#F4EFE5]">
+                {hoveredAgent.title}
+              </h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="rounded-md border border-emerald-400/25 bg-emerald-400/8 px-2 py-1 font-mono text-[10px] text-emerald-300">
+                  {hoveredAgent.badge}
+                </span>
+                <span className="rounded-md border border-[#C5A67C]/25 bg-[#C5A67C]/8 px-2 py-1 font-mono text-[10px] text-[#F0B84A]">
+                  {hoveredAgent.category}
+                </span>
+                <span className={`rounded-md border px-2 py-1 font-mono text-[10px] ${statusClass(hoveredAgent.status)}`}>
+                  {hoveredAgent.status}
+                </span>
+              </div>
+            </div>
+          </div>
 
-          <p className="mt-2 line-clamp-3 text-sm leading-6 text-[#EAE4D8]/55">
+          <p className="mt-4 line-clamp-3 text-sm leading-6 text-[#EAE4D8]/55">
             {hoveredAgent.description}
           </p>
 
-          <div className="mt-4 grid gap-2 font-mono text-[11px] text-[#EAE4D8]/58">
-            <span>Badge: {hoveredAgent.badge}</span>
-            <span>Status: {hoveredAgent.status}</span>
-            <span>Jobs: {hoveredAgent.jobCount}</span>
-            <span>Reputation: {hoveredAgent.reputation}</span>
-            <span>
-              Controller:{' '}
-              {hoveredAgent.controller
-                ? `${hoveredAgent.controller.slice(0, 6)}…${hoveredAgent.controller.slice(-4)}`
-                : '—'}
-            </span>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {(hoveredAgent.capabilities ?? []).slice(0, 4).map((cap) => (
+              <span key={cap} className="rounded-md border border-white/10 bg-white/[0.03] px-2 py-1 font-mono text-[10px] text-[#EAE4D8]/65">
+                {cap}
+              </span>
+            ))}
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-white/10 bg-black/25 p-3">
+              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/40">Jobs</p>
+              <p className="mt-1 font-mono text-sm text-[#F4EFE5]">{hoveredAgent.jobCount}</p>
+            </div>
+            <div className="rounded-lg border border-white/10 bg-black/25 p-3">
+              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#EAE4D8]/40">Reputation</p>
+              <p className="mt-1 font-mono text-sm text-[#F4EFE5]">{hoveredAgent.reputation}</p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-white/10 bg-black/25 px-3 py-2 font-mono text-[11px] text-[#EAE4D8]/58">
+            Controller:{' '}
+            {hoveredAgent.controller
+              ? `${hoveredAgent.controller.slice(0, 6)}…${hoveredAgent.controller.slice(-4)}`
+              : '—'}
           </div>
 
           <p className="mt-4 font-mono text-[10px] text-[#8A8378]">
-            Click row to open full profile.
+            Click row to open full ERC-8183 profile.
           </p>
         </div>
       )}
