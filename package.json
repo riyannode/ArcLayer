@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "next": "14.2.0",
+    "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18"
   },
@@ -27,5 +27,12 @@
   },
   "keywords": [],
   "author": "",
-  "license": "MIT"
+  "license": "MIT",
+  "pnpm": {
+    "overrides": {
+      "axios": "^1.16.0",
+      "ws": "^8.18.0",
+      "postcss": "^8.5.0"
+    }
+  }
 }
