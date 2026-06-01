@@ -364,7 +364,7 @@ export default function DashboardPage() {
                     onClick={() => router.push(job.profileHref)}
                     tabIndex={0}
                     role="button"
-                    className="group relative isolate grid cursor-pointer gap-4 rounded-xl border-0 bg-white/[0.025] px-5 py-4 transition before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:border before:border-[#C5A67C]/32 before:content-[''] after:pointer-events-none after:absolute after:inset-[1px] after:rounded-[11px] after:border after:border-white/[0.08] after:content-[''] hover:bg-white/[0.04] hover:before:border-[#F0B84A]/52 hover:after:border-white/[0.10] hover:shadow-[0_0_26px_rgba(240,184,74,0.05)] focus:outline-none focus-visible:before:border-[#F0B84A]/60 focus-visible:shadow-[0_0_0_2px_rgba(240,184,74,0.10)] xl:grid-cols-[minmax(0,1fr)_160px_180px_170px_160px] xl:items-center"
+                    className="group relative grid cursor-pointer gap-4 rounded-xl border border-white/8 bg-white/[0.025] px-5 py-4 shadow-[0_0_0_1px_rgba(197,166,124,0.22)] transition hover:border-white/10 hover:bg-white/[0.04] hover:shadow-[0_0_0_1px_rgba(240,184,74,0.36),0_0_26px_rgba(240,184,74,0.05)] xl:grid-cols-[minmax(0,1fr)_160px_180px_170px_160px] xl:items-center"
                   >
                     <div className="flex min-w-0 items-center gap-4">
                       <AgentAvatar avatar={job.avatar} title={job.title} category={job.category} />
