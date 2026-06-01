@@ -38,8 +38,8 @@ function asArray(value: unknown): string[] {
 }
 
 function hasAny(values: string[], needles: string[]) {
-  const normalized = new Set(values.map((value) => value.toLowerCase()));
-  return needles.some((needle) => normalized.has(needle));
+  const normalized = values.map((value) => value.toLowerCase());
+  return needles.some((needle) => normalized.some((v) => v.includes(needle)));
 }
 
 export function isErc8183CommerceAgent(agent: any) {
@@ -68,6 +68,8 @@ export function isErc8183CommerceAgent(agent: any) {
 
   const hasJobCapability = hasAny(values, [
     'job-commerce',
+    'job-creation',
+    'a2a_job',
     'escrow',
     'claim_job',
     'submit_result',
