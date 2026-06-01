@@ -548,8 +548,14 @@ async function main() {
   console.log('\n=== SMOKE TEST PASSED ===');
   console.log(`Local Job:  ${localJobId}`);
   console.log(`On-chain:   ${erc8183JobId}`);
-  console.log(`Lifecycle:  create → setBudget → approve → fund → claim → running → submit → complete`);
-  console.log(`All 8 lifecycle steps verified on-chain + DB.`);
+  console.log('');
+  console.log('Arc ERC-8183 on-chain lifecycle verified:');
+  console.log('  createJob → setBudget → approve → fund → submit → complete');
+  console.log('');
+  console.log('ArcLayer DB/local orchestration verified:');
+  console.log('  claim → running');
+  console.log('');
+  console.log('6 on-chain tx hashes verified. On-chain status Completed(3), DB status settled.');
 }
 
 main().catch((err) => {
