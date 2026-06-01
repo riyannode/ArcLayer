@@ -144,7 +144,23 @@ async function main() {
   if (!matches) fail('ownerOf mismatch');
   ok('ownerOf matches controller');
 
-  // ── Step 7: Idempotency — call sync again ─────────────────────────────
+  // ── Step 7: Negative case — metadata_uri_mismatch ─────────────────────
+
+  step('Negative case — metadata_uri_mismatch rejects wrong URI');
+  try {
+    await syncErc8004Identity({
+      txHash: hash,
+      expectedController: account.address,
+      metadataURI: 'arclayer://wrong/fake-uri',
+    });
+    fail('Should have thrown metadata_uri_mismatch');
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg !== 'metadata_uri_mismatch') fail(`Expected metadata_uri_mismatch, got: ${msg}`);
+    ok('Correctly rejected mismatched metadataURI');
+  }
+
+  // ── Step 8: Idempotency — call sync again ─────────────────────────────
 
   step('Idempotency — call syncErc8004Identity() again with same txHash');
   const result2 = await syncErc8004Identity({
@@ -167,6 +183,7 @@ async function main() {
   console.log('  DB read back — all fields match');
   console.log('  Query by controller — returns correct agent');
   console.log('  ownerOf on-chain — matches controller');
+  console.log('  metadata_uri_mismatch — correctly rejects wrong URI');
   console.log('  Idempotent re-sync — no error');
 }
 
