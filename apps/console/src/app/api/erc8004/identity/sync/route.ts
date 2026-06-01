@@ -21,9 +21,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     // Validate required fields
-    if (!body.txHash || typeof body.txHash !== 'string' || !body.txHash.startsWith('0x')) {
+    if (!body.txHash || typeof body.txHash !== 'string' || !/^0x[a-fA-F0-9]{64}$/.test(body.txHash)) {
       return NextResponse.json(
-        { ok: false, error: 'invalid_txHash', detail: 'txHash must be a 0x-prefixed hex string' },
+        { ok: false, error: 'invalid_txHash', detail: 'txHash must be a 0x-prefixed 66-char hex string (0x + 64 hex chars)' },
         { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
       );
     }

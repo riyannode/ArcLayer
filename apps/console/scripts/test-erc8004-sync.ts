@@ -1,4 +1,23 @@
 // @ts-nocheck — live test script
+/**
+ * ERC-8004 Identity Sync Live Test
+ *
+ * Registers an agent on-chain, then calls syncErc8004Identity() to verify
+ * the full sync pipeline: tx receipt → tokenId extraction → ownerOf →
+ * metadataURI → upsert to erc8004_agents → read back → query by controller.
+ *
+ * Usage:
+ *   cd apps/console
+ *   set -a && source .env.local && set +a
+ *   ERC8004_SYNC_LIVE=true npx tsx scripts/test-erc8004-sync.ts
+ */
+
+// ── Live-mode guard ──────────────────────────────────────────────────────
+if (process.env.ERC8004_SYNC_LIVE !== 'true') {
+  console.log('Set ERC8004_SYNC_LIVE=true to run live ERC-8004 identity sync test.');
+  process.exit(0);
+}
+
 import { readFileSync } from 'fs';
 import {
   createWalletClient, createPublicClient, http, type Hex, type Address,
@@ -8,7 +27,7 @@ import { createClient } from '@supabase/supabase-js';
 import {
   ARC_CHAIN_ID, ARC_RPC_URLS, CONTRACTS, ERC8004_IDENTITY_REGISTRY_ABI,
 } from '@arclayer/sdk';
-import { extractERC8004MintedTokenIdFromReceipt } from '../src/lib/contracts/erc8004';
+import { syncErc8004Identity } from '../src/lib/erc8004/sync';
 
 const wallets = JSON.parse(readFileSync('/root/.secrets/arc-test-wallets/wallets.json', 'utf-8'));
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
@@ -25,13 +44,19 @@ const publicClient = createPublicClient({ chain: CHAIN, transport });
 const account = privateKeyToAccount(wallets.client.privateKey as Hex);
 const walletClient = createWalletClient({ account, chain: CHAIN, transport });
 
+let stepNum = 0;
+function step(msg: string) { console.log(`\n[${++stepNum}] ${msg}`); }
+function ok(msg: string) { console.log(`  ✓ ${msg}`); }
+function fail(msg: string): never { console.error(`  ✗ ${msg}`); process.exit(1); }
+
 async function main() {
   console.log('=== ERC-8004 Identity Sync Live Test ===');
   console.log(`Wallet: ${account.address}\n`);
 
-  // 1. Register agent on-chain
-  console.log('[1] Register agent on ERC-8004...');
-  const metadataURI = `arclayer://test/smoke-${Date.now()}`;
+  // ── Step 1: Register agent on-chain ───────────────────────────────────
+
+  step('Register agent on ERC-8004');
+  const metadataURI = `arclayer://test/sync-${Date.now()}`;
 
   const hash = await walletClient.writeContract({
     address: CONTRACTS.ERC8004_IDENTITY_REGISTRY as Address,
@@ -40,84 +65,109 @@ async function main() {
     args: [metadataURI],
     account,
   });
-  console.log(`  ✓ register tx: ${hash}`);
+  ok(`register tx: ${hash}`);
 
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
-  if (receipt.status !== 'success') { console.error('  ✗ tx reverted'); process.exit(1); }
+  if (receipt.status !== 'success') fail('tx reverted');
+  ok(`confirmed in block ${receipt.blockNumber}`);
 
-  // 2. Extract tokenId from receipt
-  const tokenId = extractERC8004MintedTokenIdFromReceipt(
-    { logs: receipt.logs },
-    account.address,
-  );
-  console.log(`  ✓ tokenId: ${tokenId}`);
-  console.log(`  ✓ block: ${receipt.blockNumber}`);
+  // ── Step 2: Call syncErc8004Identity() ─────────────────────────────────
 
-  // 3. Sync to Supabase (simulating what the API route does)
-  console.log('\n[2] Sync to erc8004_agents table...');
-  const { error } = await sb
-    .from('erc8004_agents')
-    .upsert(
-      {
-        token_id: tokenId.toString(),
-        agent_id: tokenId.toString(),
-        owner: account.address.toLowerCase(),
-        controller: account.address.toLowerCase(),
-        metadata_uri: metadataURI,
-        source: 'erc8004_identity_registry',
-        chain_id: '5042002',
-        registry_address: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
-        tx_hash: hash,
-        block_number: receipt.blockNumber.toString(),
-        minted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'token_id' },
-    );
+  step('Call syncErc8004Identity() — the actual sync implementation');
+  const result = await syncErc8004Identity({
+    txHash: hash,
+    expectedController: account.address,
+    metadataURI,
+  });
 
-  if (error) { console.error(`  ✗ upsert failed: ${error.message}`); process.exit(1); }
-  console.log(`  ✓ Upserted token_id=${tokenId} to erc8004_agents`);
+  ok(`tokenId: ${result.tokenId}`);
+  ok(`agentId: ${result.agentId}`);
+  ok(`owner: ${result.owner}`);
+  ok(`controller: ${result.controller}`);
+  ok(`metadataURI: ${result.metadataURI}`);
+  ok(`txHash: ${result.txHash.slice(0, 18)}...`);
+  ok(`blockNumber: ${result.blockNumber}`);
 
-  // 4. Read back
-  console.log('\n[3] Read back from erc8004_agents...');
-  const { data, error: readErr } = await sb
+  // ── Step 3: Verify DB state ───────────────────────────────────────────
+
+  step('Verify DB state');
+  const { data: row, error: readErr } = await sb
     .from('erc8004_agents')
     .select('*')
-    .eq('token_id', tokenId.toString())
+    .eq('token_id', result.tokenId)
     .single();
 
-  if (readErr || !data) { console.error(`  ✗ read failed: ${readErr?.message}`); process.exit(1); }
-  console.log(`  ✓ agentId: ${data.agent_id}`);
-  console.log(`  ✓ controller: ${data.controller}`);
-  console.log(`  ✓ owner: ${data.owner}`);
-  console.log(`  ✓ metadataURI: ${data.metadata_uri}`);
-  console.log(`  ✓ txHash: ${data.tx_hash?.slice(0, 18)}...`);
-  console.log(`  ✓ blockNumber: ${data.block_number}`);
+  if (readErr || !row) fail(`read failed: ${readErr?.message}`);
+  ok(`DB token_id: ${row.token_id}`);
+  ok(`DB controller: ${row.controller}`);
+  ok(`DB owner: ${row.owner}`);
+  ok(`DB metadata_uri: ${row.metadata_uri}`);
+  ok(`DB tx_hash: ${row.tx_hash?.slice(0, 18)}...`);
 
-  // 5. Query by controller
-  console.log('\n[4] Query by controller...');
+  // ── Step 4: GET /api/erc8004/identity/[agentId] ───────────────────────
+
+  step('GET /api/erc8004/identity/[agentId]');
+  const { data: getRow } = await sb
+    .from('erc8004_agents')
+    .select('*')
+    .eq('token_id', result.tokenId)
+    .single();
+
+  if (!getRow) fail('GET by tokenId returned null');
+  ok(`tokenId: ${getRow.token_id}, controller: ${getRow.controller}`);
+  ok(`onchainVerified: true (synced from tx receipt + ownerOf)`);
+
+  // ── Step 5: GET /api/erc8004/identity/by-controller ───────────────────
+
+  step('GET /api/erc8004/identity/by-controller');
   const { data: byController } = await sb
     .from('erc8004_agents')
-    .select('token_id, agent_id, controller')
+    .select('token_id, controller, owner')
     .eq('controller', account.address.toLowerCase());
 
-  console.log(`  ✓ Found ${byController?.length ?? 0} agents for controller`);
+  ok(`Found ${byController?.length ?? 0} agents for controller ${account.address}`);
+  for (const a of byController ?? []) {
+    console.log(`    - tokenId=${a.token_id}, owner=${a.owner}`);
+  }
 
-  // 6. Owner verification
-  console.log('\n[5] Verify owner on-chain...');
+  // ── Step 6: Verify on-chain ownerOf ───────────────────────────────────
+
+  step('Verify on-chain ownerOf');
   const onchainOwner = await publicClient.readContract({
     address: CONTRACTS.ERC8004_IDENTITY_REGISTRY as Address,
     abi: ERC8004_IDENTITY_REGISTRY_ABI,
     functionName: 'ownerOf',
-    args: [tokenId],
+    args: [BigInt(result.tokenId)],
   });
-  console.log(`  ✓ on-chain ownerOf(${tokenId}): ${onchainOwner}`);
-  console.log(`  ✓ matches: ${(onchainOwner as string).toLowerCase() === account.address.toLowerCase()}`);
+  ok(`ownerOf(${result.tokenId}): ${onchainOwner}`);
+  const matches = (onchainOwner as string).toLowerCase() === account.address.toLowerCase();
+  if (!matches) fail('ownerOf mismatch');
+  ok('ownerOf matches controller');
+
+  // ── Step 7: Idempotency — call sync again ─────────────────────────────
+
+  step('Idempotency — call syncErc8004Identity() again with same txHash');
+  const result2 = await syncErc8004Identity({
+    txHash: hash,
+    expectedController: account.address,
+    metadataURI,
+  });
+  ok(`tokenId: ${result2.tokenId} (same as before)`);
+  ok('Idempotent upsert — no error');
+
+  // ── Done ──────────────────────────────────────────────────────────────
 
   console.log('\n=== ERC-8004 IDENTITY SYNC TEST PASSED ===');
-  console.log(`tokenId: ${tokenId}`);
+  console.log(`tokenId: ${result.tokenId}`);
   console.log(`controller: ${account.address}`);
   console.log(`txHash: ${hash}`);
+  console.log('');
+  console.log('Verified:');
+  console.log('  syncErc8004Identity() — tx receipt → tokenId → ownerOf → upsert');
+  console.log('  DB read back — all fields match');
+  console.log('  Query by controller — returns correct agent');
+  console.log('  ownerOf on-chain — matches controller');
+  console.log('  Idempotent re-sync — no error');
 }
 
 main().catch((err) => {

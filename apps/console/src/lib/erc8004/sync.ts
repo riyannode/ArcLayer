@@ -121,14 +121,18 @@ export async function syncErc8004Identity(
   // 6. Patch metadata draft if draftId/writeToken provided
   if (input.draftId && input.writeToken) {
     try {
-      const { updateMetadataDraft } = await import('@/lib/a2a/metadata-drafts/store');
-      await updateMetadataDraft({
-        draftId: input.draftId,
-        writeToken: input.writeToken,
-        metadata: {}, // keep existing metadata
-        agentId: tokenIdStr,
-        txHash: input.txHash,
-      });
+      const { getMetadataDraft, updateMetadataDraft } = await import('@/lib/a2a/metadata-drafts/store');
+      const existing = await getMetadataDraft(input.draftId);
+      if (existing) {
+        await updateMetadataDraft({
+          draftId: input.draftId,
+          writeToken: input.writeToken,
+          metadata: existing.metadata, // preserve existing metadata
+          agentId: tokenIdStr,
+          txHash: input.txHash,
+        });
+      }
+      // If draft not found, skip silently — non-fatal
     } catch {
       // Non-fatal — draft patch is optional
     }
