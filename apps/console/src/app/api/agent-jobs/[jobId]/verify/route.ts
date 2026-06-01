@@ -8,7 +8,7 @@ import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ jobId: string }> | { jobId: string } },
+  { params }: { params: Promise<{ jobId: string }> },
 ) {
   try {
     const auth = await requireApiKey(req, API_KEY_SCOPES.JOBS_VERIFY);
