@@ -29,6 +29,8 @@ export type DashboardAgentRow = {
   reputation: string;
   status: DashboardAgentStatus;
   profileHref: string;
+  avatar?: string;
+  capabilities?: string[];
 };
 
 function asArray(value: unknown): string[] {
@@ -160,5 +162,16 @@ export function toDashboardAgentRow(agent: any): DashboardAgentRow {
     reputation,
     status: 'Open',
     profileHref: profileId ? `/agent/${encodeURIComponent(profileId)}` : '#',
+    avatar:
+      metadata?.avatar ||
+      metadata?.image ||
+      metadata?.logo ||
+      agent?.avatar ||
+      '',
+    capabilities: [
+      ...asArray(metadata?.capabilities),
+      ...asArray(metadata?.capability),
+      ...asArray(metadata?.tags),
+    ],
   };
 }
