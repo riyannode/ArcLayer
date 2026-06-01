@@ -203,7 +203,8 @@ async function handleOnchainSubmit(params: { jobId: string; agentId: string; bod
   return NextResponse.json(result);
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
   // Phase 11: require API key with jobs:submit scope
   const auth = await requireApiKey(req, 'jobs:submit');
   if (auth.error) return auth.error;
@@ -227,7 +228,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { data: job, error: fetchErr } = await supabase
     .from('a2a_jobs')
     .select('id,claimed_by,is_onchain,onchain_job_id,provider')
-    .eq('id', params.id)
+    .eq('id', id)
     .maybeSingle();
 
   if (fetchErr) {
@@ -238,7 +239,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   if ((job as A2AJobRow).is_onchain && (job as A2AJobRow).onchain_job_id) {
     try {
-      return await handleOnchainSubmit({ jobId: params.id, agentId: auth.key.agentId, body: body as SubmitBody, job: job as A2AJobRow });
+      return await handleOnchainSubmit({ jobId: id, agentId: auth.key.agentId, body: body as SubmitBody, job: job as A2AJobRow });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'submit_failed';
       if (message.endsWith('_invalid_hex')) return jsonError(message, 400);
@@ -248,7 +249,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   }
 
   const { output, proof, summary } = body as Record<string, unknown>;
-  const result = await submitA2AJob(params.id, {
+  const result = await submitA2AJob(id, {
     agentId: auth.key.agentId,
     output,
     proof,
@@ -260,7 +261,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   recordDelivery({
     providerAgentId: auth.key.agentId,
     buyerAgentId: 'arclayer-system',
-    jobId: params.id,
+    jobId: id,
     delivered: true,
   }).catch((e) => console.error('[submit] recordDelivery error:', e));
 

@@ -27,13 +27,14 @@ import type { Hex } from 'viem';
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { localJobId: string } },
+  { params }: { params: Promise<{ localJobId: string }> },
 ) {
+    const { localJobId } = await params;
   try {
     const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_CONFIRM);
     if (auth.error) return auth.error;
 
-    const job = await getErc8183JobByLocalId(params.localJobId);
+    const job = await getErc8183JobByLocalId(localJobId);
     if (!job) {
       return NextResponse.json(
         { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
@@ -50,7 +51,7 @@ export async function POST(
       return NextResponse.json({
         ok: true,
         ...escrowRail(),
-        localJobId: params.localJobId,
+        localJobId: localJobId,
         erc8183JobId: job.erc8183JobId,
         createTxHash: job.createTxHash,
         message: 'createJob tx already confirmed.',
@@ -168,7 +169,7 @@ export async function POST(
 
     // Step 5: store results
     await attachErc8183CreateTx({
-      localJobId: params.localJobId,
+      localJobId: localJobId,
       createTxHash,
       erc8183JobId,
     });
@@ -176,7 +177,7 @@ export async function POST(
     return NextResponse.json({
       ok: true,
       ...escrowRail(),
-      localJobId: params.localJobId,
+      localJobId: localJobId,
       erc8183JobId,
       erc8183Status: 'Open',
       createTxHash,

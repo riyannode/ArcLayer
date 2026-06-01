@@ -7,7 +7,8 @@ import { requireRegisteredExternalAgent } from '@/lib/a2a/external-registry';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
   // Phase 11: require API key with jobs:claim scope
   const auth = await requireApiKey(req, 'jobs:claim');
   if (auth.error) return auth.error;
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ ok: false, error: 'unregistered_external_agent' }, { status: 403 });
   }
 
-  const result = await claimA2AJob(params.id, agentId);
+  const result = await claimA2AJob(id, agentId);
   if (!result.ok) return NextResponse.json(result, { status: result.error === 'job_not_found' ? 404 : 409 });
   return NextResponse.json(result);
 }

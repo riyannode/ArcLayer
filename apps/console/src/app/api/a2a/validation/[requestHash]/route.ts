@@ -8,10 +8,11 @@ export const revalidate = 0;
 
 export async function GET(
   _request: Request,
-  { params }: { params: { requestHash: string } },
+  { params }: { params: Promise<{ requestHash: string }> },
 ) {
+    const { requestHash } = await params;
   try {
-    const result = await getValidationStatus(params.requestHash as Hex);
+    const result = await getValidationStatus(requestHash as Hex);
     return NextResponse.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

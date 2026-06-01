@@ -9,8 +9,9 @@ import type { TxInstruction } from '@/lib/erc8183-jobs/types';
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { localJobId: string } },
+  { params }: { params: Promise<{ localJobId: string }> },
 ) {
+    const { localJobId } = await params;
   try {
     const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_COMPLETE);
     if (auth.error) return auth.error;
@@ -30,7 +31,7 @@ export async function POST(
       );
     }
 
-    const job = await getErc8183JobByLocalId(params.localJobId);
+    const job = await getErc8183JobByLocalId(localJobId);
     if (!job) {
       return NextResponse.json(
         { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
@@ -54,7 +55,7 @@ export async function POST(
 
     // Persist reasonHash to local mirror before returning tx instruction
     await attachErc8183PreparedComplete({
-      localJobId: params.localJobId,
+      localJobId: localJobId,
       reasonHash,
     });
 
@@ -68,7 +69,7 @@ export async function POST(
       ok: true,
       ...escrowRail(),
       nextAction: 'complete',
-      localJobId: params.localJobId,
+      localJobId: localJobId,
       erc8183JobId: job.erc8183JobId,
       reasonHash,
       tx,

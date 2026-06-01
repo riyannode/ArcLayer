@@ -8,7 +8,7 @@ import { bridgeRail } from '@/lib/rails/responses';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ sessionId: string }> | { sessionId: string } },
+  { params }: { params: Promise<{ sessionId: string }> },
 ) {
   try {
     const auth = await requireApiKey(_req, [API_KEY_SCOPES.AGENT_BRIDGE_WRITE, API_KEY_SCOPES.AGENT_BRIDGE_RECEIPT]);

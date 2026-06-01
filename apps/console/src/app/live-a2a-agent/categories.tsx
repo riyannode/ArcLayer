@@ -1,3 +1,5 @@
+import React from 'react';
+
 export type AgentCategory = {
   key: string;
   label: string;
@@ -220,7 +222,7 @@ export function getAgentCategory(key: string) {
  * Render an SVG icon for a given iconKey.
  * Add new iconKey → SVG mappings here as the project adds distinct icons.
  */
-export function renderCategoryIcon(iconKey: string, className = 'w-5 h-5'): JSX.Element {
+export function renderCategoryIcon(iconKey: string, className = 'w-5 h-5'): React.ReactElement {
   switch (iconKey) {
     default:
       return (

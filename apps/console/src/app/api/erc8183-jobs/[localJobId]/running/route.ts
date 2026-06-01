@@ -15,12 +15,13 @@ import { escrowRail } from '@/lib/rails/responses';
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { localJobId: string } },
+  { params }: { params: Promise<{ localJobId: string }> },
 ) {
+    const { localJobId } = await params;
   try {
     const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_RUNNING);
     if (auth.error) return auth.error;
-    const job = await getErc8183JobByLocalId(params.localJobId);
+    const job = await getErc8183JobByLocalId(localJobId);
     if (!job) {
       return NextResponse.json(
         { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
@@ -69,14 +70,14 @@ export async function POST(
     }
 
     await markErc8183JobRunning({
-      localJobId: params.localJobId,
+      localJobId: localJobId,
       workerId,
     });
 
     return NextResponse.json({
       ok: true,
       ...escrowRail(),
-      localJobId: params.localJobId,
+      localJobId: localJobId,
       erc8183JobId: job.erc8183JobId,
       status: 'running',
       workerId,

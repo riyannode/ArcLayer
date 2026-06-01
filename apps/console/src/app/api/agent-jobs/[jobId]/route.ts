@@ -8,7 +8,7 @@ import { wrongRailEscrowError, offchainJobRail } from '@/lib/rails/responses';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ jobId: string }> | { jobId: string } },
+  { params }: { params: Promise<{ jobId: string }> },
 ) {
   try {
     const { jobId } = await params;
