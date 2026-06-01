@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import type { DashboardAgentRow } from '@/lib/dashboard/erc8183-agents';
 
 type AgentType =
   | 'All'
@@ -27,17 +29,7 @@ type DashboardSort =
   | 'budgetDesc'
   | 'pendingFirst';
 
-type DashboardJob = {
-  id: string;
-  title: string;
-  description: string;
-  category: Exclude<AgentType, 'All'>;
-  budgetUsdc: number;
-  jobCount: number;
-  statusMeta: string;
-  reputation: string;
-  status: JobStatus;
-};
+/* DashboardAgentRow imported from @/lib/dashboard/erc8183-agents */
 
 const AGENT_TYPES: AgentType[] = [
   'All',
@@ -110,20 +102,60 @@ function BenefitCard({
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [agentType, setAgentType] = useState<AgentType>('All');
   const [activity, setActivity] = useState<JobStatus | 'all'>('all');
   const [reputation, setReputation] = useState<ReputationFilter>('all');
   const [sort, setSort] = useState<DashboardSort>('recent');
 
-  // Backend nanti masuk di sini.
-  // Jangan pakai mock data. Kalau backend belum di-wire, biarkan kosong.
-  const jobs: DashboardJob[] = [];
+  const [agents, setAgents] = useState<DashboardAgentRow[]>([]);
+  const [hoveredAgent, setHoveredAgent] = useState<DashboardAgentRow | null>(null);
+  const [loadingAgents, setLoadingAgents] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDashboardAgents() {
+      try {
+        setLoadingAgents(true);
+        setLoadError(null);
+
+        const res = await fetch('/api/dashboard/erc8183-agents', {
+          cache: 'no-store',
+          headers: { accept: 'application/json' },
+        });
+
+        if (!res.ok) throw new Error(`dashboard_agents:${res.status}`);
+
+        const data = await res.json();
+        const rows = Array.isArray(data?.agents) ? data.agents : [];
+
+        if (cancelled) return;
+
+        setAgents(rows);
+      } catch (err) {
+        if (!cancelled) {
+          setLoadError(err instanceof Error ? err.message : 'failed to load agents');
+          setAgents([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingAgents(false);
+      }
+    }
+
+    void loadDashboardAgents();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filteredJobs = useMemo(() => {
     const q = query.trim().toLowerCase();
 
-    const rows = jobs.filter((job) => {
+    const rows = agents.filter((job) => {
       if (agentType !== 'All' && job.category !== agentType) return false;
 
       if (activity !== 'all' && job.status !== activity) return false;
@@ -153,7 +185,7 @@ export default function DashboardPage() {
       if (sort === 'pendingFirst') return Number(a.status !== 'Open') - Number(b.status !== 'Open');
       return Number(b.id) - Number(a.id);
     });
-  }, [jobs, query, agentType, activity, reputation, sort]);
+  }, [agents, query, agentType, activity, reputation, sort]);
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#050607] text-[#EAE4D8]">
@@ -278,6 +310,12 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {loadError && (
+            <div className="mt-5 rounded-xl border border-red-500/20 bg-red-950/10 px-4 py-3 text-sm text-red-300">
+              {loadError}
+            </div>
+          )}
+
           <div className="mt-6">
             <div className="grid grid-cols-[minmax(0,1fr)_160px_180px_170px_160px] px-2 pb-3 font-mono text-[11px] uppercase tracking-[0.22em] text-[#EAE4D8]/42 max-xl:hidden">
               <span>Agent / Job</span>
@@ -287,12 +325,23 @@ export default function DashboardPage() {
               <span>Action</span>
             </div>
 
-            {filteredJobs.length > 0 ? (
+            {loadingAgents ? (
+              <div className="rounded-xl border border-dashed border-white/10 bg-black/25 px-6 py-14 text-center">
+                <p className="text-[15px] font-semibold text-[#F4EFE5]">Loading commerce agents…</p>
+              </div>
+            ) : filteredJobs.length > 0 ? (
               <div className="space-y-3">
                 {filteredJobs.map((job) => (
                   <article
                     key={job.id}
-                    className="group grid gap-4 rounded-xl border border-white/8 bg-white/[0.025] px-5 py-4 transition hover:border-[#C5A67C]/25 hover:bg-white/[0.04] xl:grid-cols-[minmax(0,1fr)_160px_180px_170px_160px] xl:items-center"
+                    onMouseEnter={() => setHoveredAgent(job)}
+                    onMouseLeave={() => setHoveredAgent(null)}
+                    onFocus={() => setHoveredAgent(job)}
+                    onBlur={() => setHoveredAgent(null)}
+                    onClick={() => router.push(job.profileHref)}
+                    tabIndex={0}
+                    role="button"
+                    className="group relative grid cursor-pointer gap-4 rounded-xl border border-white/8 bg-white/[0.025] px-5 py-4 transition hover:border-[#C5A67C]/25 hover:bg-white/[0.04] xl:grid-cols-[minmax(0,1fr)_160px_180px_170px_160px] xl:items-center"
                   >
                     <div className="flex min-w-0 items-center gap-4">
                       <JobIcon category={job.category} />
@@ -300,7 +349,8 @@ export default function DashboardPage() {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <Link
-                            href={`/job/${job.id}`}
+                            href={job.profileHref}
+                            onClick={(event) => event.stopPropagation()}
                             className="truncate text-[16px] font-semibold tracking-[-0.01em] text-[#F4EFE5] transition hover:text-[#F0B84A]"
                           >
                             {job.title}
@@ -312,6 +362,10 @@ export default function DashboardPage() {
 
                           <span className="rounded-md border border-[#C5A67C]/25 bg-[#C5A67C]/8 px-2 py-1 font-mono text-[10px] text-[#F0B84A]">
                             {job.category}
+                          </span>
+
+                          <span className="rounded-md border border-emerald-400/25 bg-emerald-400/8 px-2 py-1 font-mono text-[10px] text-emerald-300">
+                            {job.badge}
                           </span>
                         </div>
 
@@ -346,10 +400,11 @@ export default function DashboardPage() {
 
                     <div className="flex justify-start xl:justify-end">
                       <Link
-                        href={`/job/${job.id}`}
+                        href={job.profileHref}
+                        onClick={(event) => event.stopPropagation()}
                         className="inline-flex h-11 min-w-[132px] items-center justify-center rounded-lg border border-[#C5A67C]/35 bg-black/10 px-5 text-sm font-semibold text-[#F0B84A] transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/10"
                       >
-                        View Job
+                        View Profile
                       </Link>
                     </div>
                   </article>
@@ -361,10 +416,10 @@ export default function DashboardPage() {
                   ≡
                 </div>
                 <p className="mt-4 text-[15px] font-semibold text-[#F4EFE5]">
-                  No agent yet
+                  No ERC-8183 commerce agent yet
                 </p>
                 <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#EAE4D8]/50">
-                  This dashboard is ready. Wire the backend/indexer later to populate live agent operations.
+                  Register or publish an ArcLayer commerce agent to make it appear here.
                 </p>
               </div>
             )}
@@ -389,6 +444,39 @@ export default function DashboardPage() {
           />
         </section>
       </main>
+
+      {hoveredAgent && (
+        <div className="pointer-events-none fixed right-8 top-28 z-40 w-[360px] rounded-2xl border border-[#C5A67C]/20 bg-[#080A0D]/95 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.48)] backdrop-blur-xl">
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#F0B84A]">
+            Agent Preview
+          </p>
+
+          <h3 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-[#F4EFE5]">
+            {hoveredAgent.title}
+          </h3>
+
+          <p className="mt-2 line-clamp-3 text-sm leading-6 text-[#EAE4D8]/55">
+            {hoveredAgent.description}
+          </p>
+
+          <div className="mt-4 grid gap-2 font-mono text-[11px] text-[#EAE4D8]/58">
+            <span>Badge: {hoveredAgent.badge}</span>
+            <span>Status: {hoveredAgent.status}</span>
+            <span>Jobs: {hoveredAgent.jobCount}</span>
+            <span>Reputation: {hoveredAgent.reputation}</span>
+            <span>
+              Controller:{' '}
+              {hoveredAgent.controller
+                ? `${hoveredAgent.controller.slice(0, 6)}…${hoveredAgent.controller.slice(-4)}`
+                : '—'}
+            </span>
+          </div>
+
+          <p className="mt-4 font-mono text-[10px] text-[#8A8378]">
+            Click row to open full profile.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
