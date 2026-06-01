@@ -377,11 +377,13 @@ export default function AgentProfilePage() {
     dashboardAgent?.description ||
     'ERC-8183 commerce agent for escrow-backed work, reputation, and settlement history.';
 
+  // ERC-8183 detection: explicit marker AND job capability (AND logic).
+  // Boolean(dashboardAgent) = trusted shortcut — dashboard route already enforces AND.
   const isErc8183Agent =
     Boolean(agent) &&
     (Boolean(dashboardAgent) ||
-      isErc8183ProfileMetadata(metadata) ||
-      isErc8183CapabilityList(capabilities));
+      (isErc8183ProfileMetadata(metadata) &&
+        isErc8183CapabilityList(capabilities)));
 
   // ─── Hire This Agent handler ───────────────────────────────────────
   // TODO: Future — insert x402 anti-spam gate before createJob to prevent

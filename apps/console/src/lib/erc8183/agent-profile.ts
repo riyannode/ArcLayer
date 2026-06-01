@@ -26,21 +26,28 @@ export type Erc8183AgentMetadata = {
 };
 
 /**
- * Protocol-level markers that identify an agent as ERC-8183 commerce.
- * These are NOT generic skill/job tags — they are protocol signals.
+ * Explicit ERC-8183 protocol markers — metadata fields that declare ERC-8183 compliance.
+ * These are protocol-level signals, NOT job capability tags.
  */
 export const ERC8183_AGENT_MARKERS = [
   'erc8183',
   'erc8183-commerce',
   'job-commerce',
-  'job-creation',
-  'a2a_job',
-  'escrow',
+] as const;
+
+/**
+ * Job capability markers — lifecycle actions an ERC-8183 agent supports.
+ * a2a_job is valid ONLY when paired with an explicit ERC-8183 marker above.
+ */
+export const ERC8183_JOB_CAPABILITIES = [
   'claim_job',
   'submit_work',
   'submit_result',
   'approve_result',
   'settle_job',
+  'job-creation',
+  'escrow',
+  'a2a_job',
 ] as const;
 
 function asArray(value: unknown): string[] {
@@ -90,8 +97,8 @@ export function isErc8183ProfileMetadata(metadata?: Erc8183AgentMetadata | null)
 export function isErc8183CapabilityList(values: string[]) {
   const normalized = values.map(normalize);
 
-  return ERC8183_AGENT_MARKERS.some((marker) =>
-    normalized.some((value) => value.includes(marker)),
+  return ERC8183_JOB_CAPABILITIES.some((cap) =>
+    normalized.some((value) => value.includes(cap)),
   );
 }
 
