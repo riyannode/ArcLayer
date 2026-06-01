@@ -26,10 +26,9 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const session = resolveSessionFromCookie(cookieValue);
+  const session = await resolveSessionFromCookie(cookieValue);
 
   if (!session) {
-    // Cookie present but invalid/expired — clear it
     const res = NextResponse.json(
       { ok: true, authenticated: false, linkedAgents: EMPTY_LINKED_AGENTS },
       { headers: { 'Cache-Control': 'no-store' } },

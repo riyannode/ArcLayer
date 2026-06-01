@@ -13,7 +13,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   verifyAndCreateSession,
-  buildNonceSignMessage,
   buildSessionCookie,
 } from '@/lib/auth/wallet-session';
 

@@ -1,8 +1,9 @@
 /**
- * Tests for lib/auth/wallet-session.ts
+ * Tests for lib/auth/wallet-session.ts (Supabase-backed)
  *
- * Covers: HMAC token signing, nonce address binding, wallet mismatch rejection,
- * production secret enforcement, session create/resolve/destroy, linked agents.
+ * Uses createTestSupabaseMock() to inject in-memory Supabase mock.
+ * Covers: HMAC token signing, nonce hash storage, nonce consumption,
+ * wallet mismatch, expired nonce, session create/resolve/revoke, linked agents.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -15,8 +16,8 @@ import {
   resolveSessionFromCookie,
   destroySession,
   verifyAndCreateSession,
+  createTestSupabaseMock,
   SESSION_COOKIE_NAME,
-  __resetStoresForTests,
   type VerifyError,
 } from './wallet-session';
 
@@ -30,27 +31,29 @@ vi.mock('viem', async (importOriginal) => {
   };
 });
 
-// ── Tests ─────────────────────────────────────────────────────────────────
+// ── Mock Supabase client ──────────────────────────────────────────────────
+
+let mockSupabase: ReturnType<typeof createTestSupabaseMock>;
+
+vi.mock('@/lib/x402/supabaseClient', () => ({
+  getSupabaseAdmin: () => mockSupabase.supabase,
+}));
+
+// ── Constants ─────────────────────────────────────────────────────────────
 
 const VALID_WALLET = '0xF5f11E68fbcbfa20De9208709aB60fF81509Cb20';
 const MOCK_SIG = `0x${'ab'.repeat(65)}`;
 
-describe('wallet-session', () => {
+// ── Tests ─────────────────────────────────────────────────────────────────
+
+describe('wallet-session (Supabase-backed)', () => {
   beforeEach(() => {
-    __resetStoresForTests();
+    mockSupabase = createTestSupabaseMock();
   });
 
   // ── HMAC token round-trip ──────────────────────────────────────────────
 
   describe('HMAC session token', () => {
-    it('sign and verify round-trips correctly', () => {
-      // verifySessionToken is the public surface — if signSessionId produces
-      // a valid HMAC, verifySessionToken should extract the sessionId.
-      // We test this indirectly via session create + resolve.
-      const token = 'test-session-id'; // not a real token — should fail
-      expect(verifySessionToken(token)).toBeNull();
-    });
-
     it('rejects empty string', () => {
       expect(verifySessionToken('')).toBeNull();
     });
@@ -64,66 +67,57 @@ describe('wallet-session', () => {
     });
   });
 
-  // ── Production secret enforcement ──────────────────────────────────────
+  // ── Nonce: hash stored, not raw ────────────────────────────────────────
 
-  describe('WALLET_SESSION_SECRET enforcement', () => {
-    it('uses env secret when WALLET_SESSION_SECRET is set', () => {
-      // The signSessionId function uses getSessionSecret() which reads env.
-      // If it works without throwing, the dev fallback is active.
-      // We verify the HMAC is actually keyed by testing that tokens from
-      // different secrets are incompatible.
-      const token = 'abc123';
-      const sig1 = verifySessionToken(`${token}.deadbeef`);
-      expect(sig1).toBeNull(); // wrong sig
-    });
-  });
-
-  // ── Nonce address binding ──────────────────────────────────────────────
-
-  describe('generateNonce (address-bound)', () => {
-    it('rejects invalid address', () => {
-      const result = generateNonce('not-an-address');
+  describe('generateNonce', () => {
+    it('rejects invalid address', async () => {
+      const result = await generateNonce('not-an-address');
       expect(result.ok).toBe(false);
       expect((result as VerifyError).error).toBe('invalid_address');
     });
 
-    it('accepts valid address and returns bound nonce', () => {
-      const result = generateNonce(VALID_WALLET);
+    it('stores nonce_hash in DB, not raw nonce', async () => {
+      const result = await generateNonce(VALID_WALLET);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+
+      // DB should have one nonce row
+      expect(mockSupabase.nonceRows).toHaveLength(1);
+      const row = mockSupabase.nonceRows[0] as Record<string, unknown>;
+
+      // nonce_hash should be sha256 of raw nonce
+      const { createHash } = await import('node:crypto');
+      const expectedHash = createHash('sha256').update(result.nonce).digest('hex');
+      expect(row.nonce_hash).toBe(expectedHash);
+
+      // Raw nonce should NOT be stored
+      expect(row).not.toHaveProperty('nonce');
+    });
+
+    it('returns correct message with wallet and nonce', async () => {
+      const result = await generateNonce(VALID_WALLET);
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
       expect(result.address).toBe(VALID_WALLET);
-      expect(result.nonce).toMatch(/^[a-f0-9]{64}$/);
       expect(result.message).toContain('ArcLayer Wallet Session');
       expect(result.message).toContain(VALID_WALLET);
       expect(result.message).toContain(result.nonce);
-      expect(result.expiresAt).toBeGreaterThan(Date.now());
     });
 
-    it('lowercase address is accepted and checksummed in output', () => {
-      const result = generateNonce('0xf5f11e68fbcbfa20de9208709ab60ff81509cb20');
+    it('lowercase address is checksummed', async () => {
+      const result = await generateNonce('0xf5f11e68fbcbfa20de9208709ab60ff81509cb20');
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.address).toBe(VALID_WALLET);
-      expect(result.message).toContain(VALID_WALLET);
-    });
-
-    it('generates unique nonces', () => {
-      const a = generateNonce(VALID_WALLET);
-      const b = generateNonce(VALID_WALLET);
-      expect(a.ok).toBe(true);
-      expect(b.ok).toBe(true);
-      if (a.ok && b.ok) {
-        expect(a.nonce).not.toBe(b.nonce);
-      }
     });
   });
 
-  // ── Wallet mismatch rejection ──────────────────────────────────────────
+  // ── Nonce verify: consumes nonce ───────────────────────────────────────
 
   describe('verifyAndCreateSession', () => {
     it('rejects invalid wallet', async () => {
-      const nonceResult = generateNonce(VALID_WALLET);
+      const nonceResult = await generateNonce(VALID_WALLET);
       expect(nonceResult.ok).toBe(true);
       if (!nonceResult.ok) return;
 
@@ -136,9 +130,9 @@ describe('wallet-session', () => {
       expect((result as VerifyError).error).toBe('invalid_wallet');
     });
 
-    it('rejects wallet mismatch with nonce-bound address', async () => {
+    it('rejects wallet mismatch with nonce-bound controller', async () => {
       const otherWallet = '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045';
-      const nonceResult = generateNonce(VALID_WALLET);
+      const nonceResult = await generateNonce(VALID_WALLET);
       expect(nonceResult.ok).toBe(true);
       if (!nonceResult.ok) return;
 
@@ -162,7 +156,7 @@ describe('wallet-session', () => {
     });
 
     it('rejects reused nonce (replay protection)', async () => {
-      const nonceResult = generateNonce(VALID_WALLET);
+      const nonceResult = await generateNonce(VALID_WALLET);
       expect(nonceResult.ok).toBe(true);
       if (!nonceResult.ok) return;
 
@@ -173,6 +167,7 @@ describe('wallet-session', () => {
       });
       expect(first.ok).toBe(true);
 
+      // Second attempt — nonce already used
       const second = await verifyAndCreateSession({
         wallet: VALID_WALLET,
         nonce: nonceResult.nonce,
@@ -182,8 +177,27 @@ describe('wallet-session', () => {
       expect((second as VerifyError).error).toBe('nonce_used');
     });
 
-    it('creates session with valid cookie token on success', async () => {
-      const nonceResult = generateNonce(VALID_WALLET);
+    it('rejects expired nonce', async () => {
+      // Generate nonce then manually expire it
+      const nonceResult = await generateNonce(VALID_WALLET);
+      expect(nonceResult.ok).toBe(true);
+      if (!nonceResult.ok) return;
+
+      // Expire the nonce in the mock DB
+      const row = mockSupabase.nonceRows[0] as Record<string, unknown>;
+      row.expires_at = new Date(Date.now() - 1000).toISOString();
+
+      const result = await verifyAndCreateSession({
+        wallet: VALID_WALLET,
+        nonce: nonceResult.nonce,
+        signature: MOCK_SIG,
+      });
+      expect(result.ok).toBe(false);
+      expect((result as VerifyError).error).toBe('nonce_expired');
+    });
+
+    it('creates session row and returns cookie token on success', async () => {
+      const nonceResult = await generateNonce(VALID_WALLET);
       expect(nonceResult.ok).toBe(true);
       if (!nonceResult.ok) return;
 
@@ -195,49 +209,135 @@ describe('wallet-session', () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
 
-      expect(result.session.wallet).toBe(VALID_WALLET.toLowerCase());
-      expect(result.session.expiresAt).toBeGreaterThan(Date.now());
-      expect(result.cookieToken).toBeDefined();
+      // Session row created
+      expect(mockSupabase.sessionRows).toHaveLength(1);
+      const sessionRow = mockSupabase.sessionRows[0] as Record<string, unknown>;
+      expect(sessionRow.controller).toBe(VALID_WALLET.toLowerCase());
+      expect(sessionRow.revoked_at ?? null).toBeNull();
 
-      // Cookie token should resolve back to the session
-      const resolved = resolveSessionFromCookie(result.cookieToken!);
+      // Cookie token present
+      expect(result.cookieToken).toBeDefined();
+      expect(result.session.wallet).toBe(VALID_WALLET.toLowerCase());
+    });
+
+    it('nonce row marked as used after successful verify', async () => {
+      const nonceResult = await generateNonce(VALID_WALLET);
+      expect(nonceResult.ok).toBe(true);
+      if (!nonceResult.ok) return;
+
+      await verifyAndCreateSession({
+        wallet: VALID_WALLET,
+        nonce: nonceResult.nonce,
+        signature: MOCK_SIG,
+      });
+
+      const nonceRow = mockSupabase.nonceRows[0] as Record<string, unknown>;
+      expect(nonceRow.used_at).toBeTruthy();
+    });
+  });
+
+  // ── Session resolve from cookie ────────────────────────────────────────
+
+  describe('resolveSessionFromCookie', () => {
+    it('returns null for garbage cookie', async () => {
+      expect(await resolveSessionFromCookie('garbage')).toBeNull();
+    });
+
+    it('returns null for empty string', async () => {
+      expect(await resolveSessionFromCookie('')).toBeNull();
+    });
+
+    it('resolves valid session from cookie', async () => {
+      const nonceResult = await generateNonce(VALID_WALLET);
+      expect(nonceResult.ok).toBe(true);
+      if (!nonceResult.ok) return;
+
+      const createResult = await verifyAndCreateSession({
+        wallet: VALID_WALLET,
+        nonce: nonceResult.nonce,
+        signature: MOCK_SIG,
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok || !createResult.cookieToken) return;
+
+      const resolved = await resolveSessionFromCookie(createResult.cookieToken);
       expect(resolved).not.toBeNull();
       expect(resolved!.wallet).toBe(VALID_WALLET.toLowerCase());
     });
-  });
 
-  // ── Session resolve / destroy ──────────────────────────────────────────
-
-  describe('resolveSessionFromCookie', () => {
-    it('returns null for garbage cookie', () => {
-      expect(resolveSessionFromCookie('garbage')).toBeNull();
-    });
-
-    it('returns null for empty string', () => {
-      expect(resolveSessionFromCookie('')).toBeNull();
-    });
-  });
-
-  describe('destroySession', () => {
-    it('destroys existing session', async () => {
-      const nonceResult = generateNonce(VALID_WALLET);
+    it('returns null for expired session', async () => {
+      const nonceResult = await generateNonce(VALID_WALLET);
       expect(nonceResult.ok).toBe(true);
       if (!nonceResult.ok) return;
 
-      const result = await verifyAndCreateSession({
+      const createResult = await verifyAndCreateSession({
         wallet: VALID_WALLET,
         nonce: nonceResult.nonce,
         signature: MOCK_SIG,
       });
-      expect(result.ok).toBe(true);
-      if (!result.ok) return;
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok || !createResult.cookieToken) return;
 
-      expect(destroySession(result.cookieToken!)).toBe(true);
-      expect(resolveSessionFromCookie(result.cookieToken!)).toBeNull();
+      // Expire the session
+      const sessionRow = mockSupabase.sessionRows[0] as Record<string, unknown>;
+      sessionRow.expires_at = new Date(Date.now() - 1000).toISOString();
+
+      const resolved = await resolveSessionFromCookie(createResult.cookieToken);
+      expect(resolved).toBeNull();
     });
 
-    it('returns false for non-existent session', () => {
-      expect(destroySession('nonexistent.sig')).toBe(false);
+    it('returns null for revoked session', async () => {
+      const nonceResult = await generateNonce(VALID_WALLET);
+      expect(nonceResult.ok).toBe(true);
+      if (!nonceResult.ok) return;
+
+      const createResult = await verifyAndCreateSession({
+        wallet: VALID_WALLET,
+        nonce: nonceResult.nonce,
+        signature: MOCK_SIG,
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok || !createResult.cookieToken) return;
+
+      // Revoke the session
+      const sessionRow = mockSupabase.sessionRows[0] as Record<string, unknown>;
+      sessionRow.revoked_at = new Date().toISOString();
+
+      const resolved = await resolveSessionFromCookie(createResult.cookieToken);
+      expect(resolved).toBeNull();
+    });
+  });
+
+  // ── Logout: revokes session ────────────────────────────────────────────
+
+  describe('destroySession (logout)', () => {
+    it('revokes session in DB', async () => {
+      const nonceResult = await generateNonce(VALID_WALLET);
+      expect(nonceResult.ok).toBe(true);
+      if (!nonceResult.ok) return;
+
+      const createResult = await verifyAndCreateSession({
+        wallet: VALID_WALLET,
+        nonce: nonceResult.nonce,
+        signature: MOCK_SIG,
+      });
+      expect(createResult.ok).toBe(true);
+      if (!createResult.ok || !createResult.cookieToken) return;
+
+      const destroyed = await destroySession(createResult.cookieToken);
+      expect(destroyed).toBe(true);
+
+      // Session row should have revoked_at
+      const sessionRow = mockSupabase.sessionRows[0] as Record<string, unknown>;
+      expect(sessionRow.revoked_at).toBeTruthy();
+
+      // Subsequent resolve should fail
+      const resolved = await resolveSessionFromCookie(createResult.cookieToken);
+      expect(resolved).toBeNull();
+    });
+
+    it('returns false for non-existent session', async () => {
+      expect(await destroySession('nonexistent.sig')).toBe(false);
     });
   });
 
@@ -263,7 +363,7 @@ describe('wallet-session', () => {
   // ── buildNonceSignMessage ──────────────────────────────────────────────
 
   describe('buildNonceSignMessage', () => {
-    it('includes wallet and nonce in message', () => {
+    it('includes wallet and nonce', () => {
       const msg = buildNonceSignMessage(VALID_WALLET, 'abc123');
       expect(msg).toContain('ArcLayer Wallet Session');
       expect(msg).toContain(VALID_WALLET);

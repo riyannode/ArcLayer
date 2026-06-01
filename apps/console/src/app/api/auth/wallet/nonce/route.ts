@@ -2,8 +2,7 @@
  * GET /api/auth/wallet/nonce?address=0x...
  *
  * Generates a signing nonce bound to the given wallet address.
- * Returns the exact message the client must sign with EIP-191 personal_sign.
- * Client then POSTs the signature to /api/auth/wallet/verify.
+ * Stores sha256(nonce) in Supabase. Returns raw nonce + exact message to client.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -23,7 +22,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const result = generateNonce(address.trim());
+  const result = await generateNonce(address.trim());
 
   if (!result.ok) {
     return NextResponse.json(

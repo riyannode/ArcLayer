@@ -1,29 +1,40 @@
 /**
- * Wallet Session — cookie-based session for external non-dev users.
+ * Wallet Session — Supabase-backed cookie session for external non-dev users.
  *
  * Flow:
- *   1. Client calls GET /api/auth/wallet/nonce?address=0x... → receives { nonce, message, expiresAt }
- *   2. Client signs the message with EIP-191 personal_sign
- *   3. Client calls POST /api/auth/wallet/verify with { wallet, nonce, signature }
- *   4. Server verifies signature (must match nonce-bound address), creates session, sets httpOnly cookie
- *   5. Subsequent requests read session from cookie via GET /api/auth/session
- *   6. Client calls POST /api/auth/logout to clear session
+ *   1. GET /api/auth/wallet/nonce?address=0x... → nonce + message
+ *   2. Client signs message with EIP-191 personal_sign
+ *   3. POST /api/auth/wallet/verify → verify sig, create DB session, set httpOnly cookie
+ *   4. GET /api/auth/session → resolve session from cookie, return linked agents
+ *   5. POST /api/auth/logout → revoke session, clear cookie
  *
- * Session is stored in-memory (per-instance). For multi-instance deployments,
- * swap SessionStore with a Redis/DB-backed implementation.
+ * Storage: Supabase (wallet_auth_nonces + wallet_sessions).
+ * Cookie: HMAC-signed session token (createHmac).
+ * Raw nonce returned once to client; DB stores sha256(nonce).
+ * Raw cookie token never stored; DB stores sha256(sessionId).
  */
 
 import { verifyMessage, isAddress, getAddress } from 'viem';
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac, createHash, randomBytes } from 'node:crypto';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
 export interface NonceEntry {
-  nonce: string;
-  wallet: string; // checksummed 0x address, bound at nonce creation
-  createdAt: number;
-  expiresAt: number;
-  used: boolean;
+  nonce_hash: string;
+  controller: string;
+  message: string;
+  expires_at: string;
+  used_at: string | null;
+}
+
+export interface SessionRow {
+  id: string;
+  session_hash: string;
+  controller: string;
+  expires_at: string;
+  revoked_at: string | null;
+  created_at: string;
+  last_seen_at: string | null;
 }
 
 export interface WalletSession {
@@ -37,7 +48,7 @@ export interface NonceResponse {
   ok: true;
   address: string;
   nonce: string;
-  message: string; // exact message the client must sign
+  message: string;
   expiresAt: number;
 }
 
@@ -72,8 +83,6 @@ export interface SessionStatus {
 
 const NONCE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
-const MAX_NONCES = 5_000;
-const MAX_SESSIONS = 10_000;
 export const SESSION_COOKIE_NAME = 'arclayer-wallet-session';
 
 function getSessionSecret(): string {
@@ -85,37 +94,22 @@ function getSessionSecret(): string {
   return 'arclayer-dev-session-secret-change-in-prod';
 }
 
-// ── In-memory stores ──────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────
 
-const nonceStore = new Map<string, NonceEntry>();
-const sessionStore = new Map<string, WalletSession>();
-
-function pruneNonces(): void {
-  if (nonceStore.size < MAX_NONCES) return;
-  const now = Date.now();
-  for (const [key, entry] of Array.from(nonceStore.entries())) {
-    if (entry.expiresAt < now || entry.used) {
-      nonceStore.delete(key);
-    }
-  }
+function sha256Hex(input: string): string {
+  return createHash('sha256').update(input).digest('hex');
 }
 
-function pruneSessions(): void {
-  if (sessionStore.size < MAX_SESSIONS) return;
-  const now = Date.now();
-  for (const [key, session] of Array.from(sessionStore.entries())) {
-    if (session.expiresAt < now) {
-      sessionStore.delete(key);
-    }
-  }
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function ttlIso(ms: number): string {
+  return new Date(Date.now() + ms).toISOString();
 }
 
 // ── Signing helpers ───────────────────────────────────────────────────────
 
-/**
- * Build the canonical message that the client must sign.
- * Address is checksummed via getAddress.
- */
 export function buildNonceSignMessage(wallet: string, nonce: string): string {
   return [
     'ArcLayer Wallet Session',
@@ -127,9 +121,6 @@ export function buildNonceSignMessage(wallet: string, nonce: string): string {
   ].join('\n');
 }
 
-/**
- * Create an HMAC-signed session token: sessionId.hmac
- */
 function signSessionId(sessionId: string): string {
   const secret = getSessionSecret();
   const hmac = createHmac('sha256', secret)
@@ -138,10 +129,6 @@ function signSessionId(sessionId: string): string {
   return `${sessionId}.${hmac}`;
 }
 
-/**
- * Verify and extract sessionId from a signed token.
- * Returns null if invalid.
- */
 export function verifySessionToken(token: string): string | null {
   const dotIdx = token.lastIndexOf('.');
   if (dotIdx < 0) return null;
@@ -154,7 +141,6 @@ export function verifySessionToken(token: string): string | null {
     .update(sessionId)
     .digest('hex');
 
-  // Constant-time comparison
   if (providedSig.length !== expectedSig.length) return null;
   let mismatch = 0;
   for (let i = 0; i < providedSig.length; i++) {
@@ -165,45 +151,54 @@ export function verifySessionToken(token: string): string | null {
   return sessionId;
 }
 
+// ── Supabase client ───────────────────────────────────────────────────────
+
+async function getSupabase() {
+  const { getSupabaseAdmin } = await import('@/lib/x402/supabaseClient');
+  return getSupabaseAdmin();
+}
+
 // ── Core API ──────────────────────────────────────────────────────────────
 
 /**
- * Generate a new nonce bound to a specific wallet address.
- * The address is validated, checksummed, and stored in the nonce entry.
+ * Generate a new nonce bound to a wallet address.
+ * Stores sha256(nonce) in DB. Returns raw nonce + exact message to client.
  */
-export function generateNonce(address: string): NonceResponse | VerifyError {
+export async function generateNonce(address: string): Promise<NonceResponse | VerifyError> {
   if (!isAddress(address)) {
     return { ok: false, error: 'invalid_address', detail: 'Valid Ethereum address required' };
   }
 
   const normalized = getAddress(address);
-  pruneNonces();
-
   const nonce = randomBytes(32).toString('hex');
-  const now = Date.now();
-  const expiresAt = now + NONCE_TTL_MS;
+  const nonceHash = sha256Hex(nonce);
   const message = buildNonceSignMessage(normalized, nonce);
+  const expiresAt = ttlIso(NONCE_TTL_MS);
 
-  nonceStore.set(nonce, {
-    nonce,
-    wallet: normalized,
-    createdAt: now,
-    expiresAt,
-    used: false,
+  const supabase = await getSupabase();
+  const { error } = await supabase.from('wallet_auth_nonces').insert({
+    nonce_hash: nonceHash,
+    controller: normalized.toLowerCase(),
+    message,
+    expires_at: expiresAt,
   });
+
+  if (error) {
+    return { ok: false, error: 'nonce_store_failed', detail: error.message };
+  }
 
   return {
     ok: true,
     address: normalized,
     nonce,
     message,
-    expiresAt,
+    expiresAt: new Date(expiresAt).getTime(),
   };
 }
 
 /**
  * Verify a signed nonce and create a session.
- * Rejects if body.wallet does not match the wallet bound to the nonce.
+ * Rejects if wallet doesn't match nonce-bound controller.
  */
 export async function verifyAndCreateSession(params: {
   wallet: string;
@@ -212,51 +207,53 @@ export async function verifyAndCreateSession(params: {
 }): Promise<VerifyResponse & { cookieToken?: string }> {
   const { wallet, nonce, signature } = params;
 
-  // Validate wallet address
   if (!isAddress(wallet)) {
     return { ok: false, error: 'invalid_wallet', detail: 'Invalid Ethereum address' };
   }
 
   const normalizedWallet = getAddress(wallet);
 
-  // Validate signature format
   if (!/^0x[a-fA-F0-9]{130}$/.test(signature)) {
     return { ok: false, error: 'invalid_signature', detail: 'Signature must be 65-byte hex' };
   }
 
-  // Look up nonce
-  const entry = nonceStore.get(nonce);
-  if (!entry) {
-    return { ok: false, error: 'nonce_not_found', detail: 'Nonce not found or already consumed' };
+  const nonceHash = sha256Hex(nonce);
+  const supabase = await getSupabase();
+
+  // Lookup nonce by hash
+  const { data: nonceRow, error: lookupError } = await supabase
+    .from('wallet_auth_nonces')
+    .select('*')
+    .eq('nonce_hash', nonceHash)
+    .maybeSingle();
+
+  if (lookupError || !nonceRow) {
+    return { ok: false, error: 'nonce_not_found', detail: 'Nonce not found' };
   }
 
-  if (entry.used) {
+  if (nonceRow.used_at) {
     return { ok: false, error: 'nonce_used', detail: 'Nonce already consumed (replay protection)' };
   }
 
-  if (entry.expiresAt < Date.now()) {
-    nonceStore.delete(nonce);
+  if (new Date(nonceRow.expires_at).getTime() < Date.now()) {
     return { ok: false, error: 'nonce_expired', detail: 'Nonce expired (5min window)' };
   }
 
-  // Wallet must match the wallet bound to the nonce
-  if (getAddress(entry.wallet) !== normalizedWallet) {
+  // Wallet must match the controller bound to the nonce
+  if (getAddress(nonceRow.controller) !== normalizedWallet) {
     return {
       ok: false,
       error: 'wallet_mismatch',
-      detail: `Nonce was created for ${entry.wallet}, not ${normalizedWallet}`,
+      detail: `Nonce was created for ${nonceRow.controller}, not ${normalizedWallet}`,
     };
   }
 
-  // Build the canonical message (must match what was returned by generateNonce)
-  const message = buildNonceSignMessage(normalizedWallet, nonce);
-
-  // Verify signature
+  // Verify signature over the stored message
   let valid = false;
   try {
     valid = await verifyMessage({
       address: normalizedWallet,
-      message,
+      message: nonceRow.message as string,
       signature: signature as `0x${string}`,
     });
   } catch {
@@ -268,58 +265,111 @@ export async function verifyAndCreateSession(params: {
   }
 
   // Mark nonce used
-  entry.used = true;
-  entry.wallet = normalizedWallet.toLowerCase();
+  const { error: markError } = await supabase
+    .from('wallet_auth_nonces')
+    .update({ used_at: nowIso() })
+    .eq('nonce_hash', nonceHash)
+    .is('used_at', null);
+
+  if (markError) {
+    return { ok: false, error: 'nonce_consume_failed', detail: markError.message };
+  }
 
   // Create session
-  pruneSessions();
   const sessionId = randomBytes(32).toString('hex');
-  const now = Date.now();
-  const session: WalletSession = {
-    sessionId,
-    wallet: normalizedWallet.toLowerCase() as `0x${string}`,
-    createdAt: now,
-    expiresAt: now + SESSION_TTL_MS,
-  };
+  const sessionHash = sha256Hex(sessionId);
+  const now = nowIso();
+  const expiresAt = ttlIso(SESSION_TTL_MS);
 
-  sessionStore.set(sessionId, session);
+  const { error: sessionError } = await supabase.from('wallet_sessions').insert({
+    session_hash: sessionHash,
+    controller: normalizedWallet.toLowerCase(),
+    expires_at: expiresAt,
+    created_at: now,
+    last_seen_at: now,
+  });
+
+  if (sessionError) {
+    return { ok: false, error: 'session_create_failed', detail: sessionError.message };
+  }
 
   const cookieToken = signSessionId(sessionId);
 
-  return { ok: true, session, cookieToken };
+  return {
+    ok: true,
+    session: {
+      sessionId,
+      wallet: normalizedWallet.toLowerCase() as `0x${string}`,
+      createdAt: Date.now(),
+      expiresAt: new Date(expiresAt).getTime(),
+    },
+    cookieToken,
+  };
 }
 
 /**
- * Resolve a session from a cookie token string.
- * Returns the session if valid and not expired, null otherwise.
+ * Resolve a session from a cookie token.
+ * Verifies HMAC, hashes sessionId, looks up in DB.
  */
-export function resolveSessionFromCookie(cookieValue: string): WalletSession | null {
+export async function resolveSessionFromCookie(cookieValue: string): Promise<WalletSession | null> {
   const sessionId = verifySessionToken(cookieValue);
   if (!sessionId) return null;
 
-  const session = sessionStore.get(sessionId);
-  if (!session) return null;
+  const sessionHash = sha256Hex(sessionId);
+  const supabase = await getSupabase();
 
-  if (session.expiresAt < Date.now()) {
-    sessionStore.delete(sessionId);
+  const { data: row, error } = await supabase
+    .from('wallet_sessions')
+    .select('*')
+    .eq('session_hash', sessionHash)
+    .maybeSingle();
+
+  if (error || !row) return null;
+
+  // Check expiry
+  if (new Date(row.expires_at).getTime() < Date.now()) {
     return null;
   }
 
-  return session;
+  // Check revoked
+  if (row.revoked_at) return null;
+
+  // Update last_seen_at (fire-and-forget)
+  supabase
+    .from('wallet_sessions')
+    .update({ last_seen_at: nowIso() })
+    .eq('session_hash', sessionHash)
+    .then(() => {}); // eslint-disable-line @typescript-eslint/no-empty-function
+
+  return {
+    sessionId,
+    wallet: row.controller as `0x${string}`,
+    createdAt: new Date(row.created_at).getTime(),
+    expiresAt: new Date(row.expires_at).getTime(),
+  };
 }
 
 /**
- * Destroy a session by cookie token.
+ * Revoke a session (logout).
  */
-export function destroySession(cookieValue: string): boolean {
+export async function destroySession(cookieValue: string): Promise<boolean> {
   const sessionId = verifySessionToken(cookieValue);
   if (!sessionId) return false;
-  return sessionStore.delete(sessionId);
+
+  const sessionHash = sha256Hex(sessionId);
+  const supabase = await getSupabase();
+
+  const { error } = await supabase
+    .from('wallet_sessions')
+    .update({ revoked_at: nowIso() })
+    .eq('session_hash', sessionHash)
+    .is('revoked_at', null);
+
+  return !error;
 }
 
-/**
- * Build Set-Cookie header value for the session cookie.
- */
+// ── Cookie helpers ────────────────────────────────────────────────────────
+
 export function buildSessionCookie(token: string, maxAgeSeconds = SESSION_TTL_MS / 1000): string {
   const parts = [
     `${SESSION_COOKIE_NAME}=${token}`,
@@ -329,7 +379,6 @@ export function buildSessionCookie(token: string, maxAgeSeconds = SESSION_TTL_MS
     `Max-Age=${maxAgeSeconds}`,
   ];
 
-  // Secure flag in production (HTTPS)
   if (process.env.NODE_ENV === 'production') {
     parts.push('Secure');
   }
@@ -337,25 +386,17 @@ export function buildSessionCookie(token: string, maxAgeSeconds = SESSION_TTL_MS
   return parts.join('; ');
 }
 
-/**
- * Build Set-Cookie header to clear the session cookie.
- */
 export function buildClearSessionCookie(): string {
   return `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
 // ── Linked agents helper ─────────────────────────────────────────────────
 
-/**
- * Fetch ERC-8004 agents linked to a controller address.
- * Queries erc8004_agents via Supabase admin client.
- */
 export async function getLinkedErc8004AgentsForController(
   controller: string,
 ): Promise<LinkedAgent[]> {
   try {
-    const { getSupabaseAdmin } = await import('@/lib/x402/supabaseClient');
-    const supabase = getSupabaseAdmin();
+    const supabase = await getSupabase();
     const { data, error } = await supabase
       .from('erc8004_agents')
       .select('token_id, agent_id, controller, metadata_json')
@@ -378,8 +419,139 @@ export async function getLinkedErc8004AgentsForController(
 
 // ── Test helpers ──────────────────────────────────────────────────────────
 
-/** Reset stores — for tests only. */
-export function __resetStoresForTests(): void {
-  nonceStore.clear();
-  sessionStore.clear();
+/**
+ * Create an in-memory Supabase mock for tests.
+ * Returns { supabase, nonceRows, sessionRows } for assertions.
+ */
+export function createTestSupabaseMock() {
+  const nonceRows: Record<string, unknown>[] = [];
+  const sessionRows: Record<string, unknown>[] = [];
+
+  function applyFilters(rows: Record<string, unknown>[], filters: Array<{ op: string; col: string; val: unknown }>) {
+    return rows.filter((row) =>
+      filters.every((f) => {
+        const v = row[f.col];
+        if (f.op === 'eq') return v === f.val;
+        if (f.op === 'is') {
+          // Supabase IS NULL matches both null and undefined (column not set)
+          if (f.val === null) return v === null || v === undefined;
+          return v !== null && v !== undefined;
+        }
+        return true;
+      }),
+    );
+  }
+
+  const supabase = {
+    from: (table: string) => {
+      if (table === 'wallet_auth_nonces') {
+        return {
+          insert: (row: Record<string, unknown>) => {
+            nonceRows.push(row);
+            return Promise.resolve({ data: null, error: null });
+          },
+          select: (_cols: string) => {
+            const filters: Array<{ op: string; col: string; val: unknown }> = [];
+            const chain: Record<string, unknown> = {
+              eq: (col: string, val: unknown) => {
+                filters.push({ op: 'eq', col, val });
+                return chain;
+              },
+              is: (col: string, val: unknown) => {
+                filters.push({ op: 'is', col, val });
+                return chain;
+              },
+              maybeSingle: () => {
+                const filtered = applyFilters(nonceRows, filters);
+                return Promise.resolve({ data: filtered[0] ?? null, error: null });
+              },
+            };
+            return chain;
+          },
+          update: (updates: Record<string, unknown>) => {
+            const filters: Array<{ op: string; col: string; val: unknown }> = [];
+            const chain: Record<string, unknown> = {
+              eq: (col: string, val: unknown) => {
+                filters.push({ op: 'eq', col, val });
+                return chain;
+              },
+              is: (col: string, val: unknown) => {
+                filters.push({ op: 'is', col, val });
+                return chain;
+              },
+              then: (resolve: (v: unknown) => void) => {
+                const filtered = applyFilters(nonceRows, filters);
+                filtered.forEach((row) => Object.assign(row, updates));
+                resolve({ data: null, error: null });
+              },
+            };
+            return chain;
+          },
+        };
+      }
+
+      if (table === 'wallet_sessions') {
+        return {
+          insert: (row: Record<string, unknown>) => {
+            sessionRows.push(row);
+            return Promise.resolve({ data: null, error: null });
+          },
+          select: (_cols: string) => {
+            const filters: Array<{ op: string; col: string; val: unknown }> = [];
+            const chain: Record<string, unknown> = {
+              eq: (col: string, val: unknown) => {
+                filters.push({ op: 'eq', col, val });
+                return chain;
+              },
+              is: (col: string, val: unknown) => {
+                filters.push({ op: 'is', col, val });
+                return chain;
+              },
+              maybeSingle: () => {
+                const filtered = applyFilters(sessionRows, filters);
+                return Promise.resolve({ data: filtered[0] ?? null, error: null });
+              },
+            };
+            return chain;
+          },
+          update: (updates: Record<string, unknown>) => {
+            const filters: Array<{ op: string; col: string; val: unknown }> = [];
+            const chain: Record<string, unknown> = {
+              eq: (col: string, val: unknown) => {
+                filters.push({ op: 'eq', col, val });
+                return chain;
+              },
+              is: (col: string, val: unknown) => {
+                filters.push({ op: 'is', col, val });
+                return chain;
+              },
+              then: (resolve: (v: unknown) => void) => {
+                const filtered = applyFilters(sessionRows, filters);
+                filtered.forEach((row) => Object.assign(row, updates));
+                resolve({ data: null, error: null });
+              },
+            };
+            return chain;
+          },
+        };
+      }
+
+      if (table === 'erc8004_agents') {
+        return {
+          select: (_cols: string) => {
+            const chain: Record<string, unknown> = {
+              eq: (_col: string, _val: unknown) => chain,
+              order: () => chain,
+              limit: () => Promise.resolve({ data: [], error: null }),
+            };
+            return chain;
+          },
+        };
+      }
+
+      throw new Error(`Unexpected table: ${table}`);
+    },
+  };
+
+  return { supabase, nonceRows, sessionRows };
 }
