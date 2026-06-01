@@ -95,21 +95,24 @@ export async function reconcileErc8183Job(
     }
   }
 
-  // 5. Add reconcile event
-  await db.from('agent_job_events').insert({
-    job_id: localJobId,
-    event_type: 'reconciled',
-    actor_agent_id: 'system',
-    status_before: oldStatus,
-    status_after: onchainStatus,
-    payload_hash: null,
-    metadata: {
-      onchainStatus,
-      localStatus: localJob.status,
-      participantsMatch,
-      fieldsUpdated: Object.keys(updates),
-    },
-  });
+  // 5. Add reconcile event only when fields changed
+  const fieldsChanged = Object.keys(updates);
+  if (fieldsChanged.length > 0) {
+    await db.from('agent_job_events').insert({
+      job_id: localJobId,
+      event_type: 'reconciled',
+      actor_agent_id: 'system',
+      status_before: oldStatus,
+      status_after: onchainStatus,
+      payload_hash: null,
+      metadata: {
+        onchainStatus,
+        localStatus: localJob.status,
+        participantsMatch,
+        fieldsUpdated: fieldsChanged,
+      },
+    });
+  }
 
   return {
     ok: true,

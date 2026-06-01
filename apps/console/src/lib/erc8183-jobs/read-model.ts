@@ -48,26 +48,34 @@ export function normalizeErc8183LifecycleStatus(
   job: Erc8183JobView,
   onchainStatus?: Erc8183Status | null,
 ): LifecycleStatus {
-  // Local status takes priority for off-chain states
-  if (job.status === 'settled') return 'Settled';
-  if (job.status === 'running') return 'Running';
-  if (job.status === 'claimed') return 'Claimed';
-
-  // On-chain status when available
+  // On-chain terminal/advanced states always win over stale local state
   if (onchainStatus) {
-    if (onchainStatus === 'Completed') return 'Completed';
     if (onchainStatus === 'Rejected') return 'Rejected';
     if (onchainStatus === 'Expired') return 'Expired';
+
+    if (onchainStatus === 'Completed') {
+      return job.status === 'settled' ? 'Settled' : 'Completed';
+    }
+
     if (onchainStatus === 'Submitted') return 'Submitted';
-    if (onchainStatus === 'Funded') return 'Funded';
+
+    if (onchainStatus === 'Funded') {
+      // Allow local off-chain sub-states when on-chain is still Funded
+      if (job.status === 'running') return 'Running';
+      if (job.status === 'claimed') return 'Claimed';
+      return 'Funded';
+    }
+
     if (onchainStatus === 'Open') {
       return job.setBudgetTxHash ? 'BudgetSet' : 'CreatedOnchain';
     }
   }
 
-  // Fallback to tx hashes
-  if (job.completeTxHash) return 'Completed';
+  // Fallback to tx hashes when on-chain status unavailable
+  if (job.completeTxHash) return job.status === 'settled' ? 'Settled' : 'Completed';
   if (job.submitTxHash) return 'Submitted';
+  if (job.status === 'running') return 'Running';
+  if (job.status === 'claimed') return 'Claimed';
   if (job.fundTxHash) return 'Funded';
   if (job.setBudgetTxHash) return 'BudgetSet';
   if (job.createTxHash && job.erc8183JobId) return 'CreatedOnchain';
@@ -104,33 +112,41 @@ export function buildErc8183Timeline(
 ): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
-  // Add tx-based events from job state
+  // Build a lookup of DB event timestamps by event_type for tx events
+  const dbEventTs = new Map<string, string>();
+  for (const ev of dbEvents) {
+    if (ev.created_at && !dbEventTs.has(ev.event_type)) {
+      dbEventTs.set(ev.event_type, ev.created_at);
+    }
+  }
+
+  // Add tx-based events from job state, preferring DB event timestamps
   if (job.createTxHash) {
     events.push({
       type: 'create_tx_confirmed',
       txHash: job.createTxHash,
-      createdAt: job.createdAt,
+      createdAt: dbEventTs.get('create_tx_confirmed') ?? job.createdAt,
     });
   }
   if (job.setBudgetTxHash) {
     events.push({
       type: 'budget_set_tx_confirmed',
       txHash: job.setBudgetTxHash,
-      createdAt: job.createdAt,
+      createdAt: dbEventTs.get('budget_set_tx_confirmed') ?? job.createdAt,
     });
   }
   if (job.approveTxHash) {
     events.push({
       type: 'approve_tx_confirmed',
       txHash: job.approveTxHash,
-      createdAt: job.createdAt,
+      createdAt: dbEventTs.get('approve_tx_confirmed') ?? job.createdAt,
     });
   }
   if (job.fundTxHash) {
     events.push({
       type: 'fund_tx_confirmed',
       txHash: job.fundTxHash,
-      createdAt: job.createdAt,
+      createdAt: dbEventTs.get('fund_tx_confirmed') ?? job.createdAt,
     });
   }
   if (job.claimedAt) {
@@ -154,7 +170,7 @@ export function buildErc8183Timeline(
       type: 'submit_tx_confirmed',
       txHash: job.submitTxHash,
       payloadHash: job.deliverableHash ?? undefined,
-      createdAt: job.createdAt,
+      createdAt: dbEventTs.get('submit_tx_confirmed') ?? job.createdAt,
     });
   }
   if (job.completeTxHash) {
@@ -162,13 +178,12 @@ export function buildErc8183Timeline(
       type: 'complete_tx_confirmed',
       txHash: job.completeTxHash,
       payloadHash: job.reasonHash ?? undefined,
-      createdAt: job.createdAt,
+      createdAt: dbEventTs.get('complete_tx_confirmed') ?? job.createdAt,
     });
   }
 
   // Merge DB events (for events not derivable from job state)
   for (const ev of dbEvents) {
-    // Skip if we already have this event type from tx hashes
     const alreadyHave = events.some((e) => e.type === ev.event_type);
     if (!alreadyHave) {
       events.push({
