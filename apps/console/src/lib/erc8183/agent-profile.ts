@@ -37,6 +37,7 @@ export const ERC8183_AGENT_MARKERS = [
   'a2a_job',
   'escrow',
   'claim_job',
+  'submit_work',
   'submit_result',
   'approve_result',
   'settle_job',
