@@ -1,26 +1,43 @@
 #!/usr/bin/env npx tsx
 // @ts-nocheck — standalone smoke script, runtime verified
+
+// ── Live-mode guard ──────────────────────────────────────────────────────
+if (process.env.ERC8183_SMOKE_LIVE !== 'true') {
+  console.log('Set ERC8183_SMOKE_LIVE=true to run live on-chain ERC-8183 smoke test.');
+  process.exit(0);
+}
 /**
  * ERC-8183 Full Lifecycle Smoke Test
  *
- * Tests the COMPLETE on-chain ERC-8183 lifecycle with real wallets:
- *   1. Register agents on ERC-8004 (client, provider, evaluator)
- *   2. Create local job mirror (store function → DB)
- *   3. createJob on-chain → extract jobId from event
- *   4. Confirm create tx → attach erc8183JobId + createTxHash
- *   5. Provider setBudget on-chain
- *   6. Client approve USDC on-chain
- *   7. Client fund on-chain
- *   8. Worker claim (off-chain store)
- *   9. Worker running (off-chain store)
- *  10. Worker submit deliverable on-chain
- *  11. Evaluator complete on-chain
- *  12. Verify final state in DB + on-chain
+ * Tests the COMPLETE ERC-8183 lifecycle with real wallets:
+ *
+ * Arc ERC-8183 on-chain lifecycle:
+ *   1. Create local job mirror (DB)
+ *   2. createJob on-chain (client signs) → extract jobId from event
+ *   3. Confirm create tx → attach erc8183JobId + createTxHash
+ *   4. Verify on-chain job state (client/provider/evaluator match)
+ *   5. setBudget on-chain (provider signs)
+ *   6. approve USDC on-chain (client signs)
+ *   7. fund on-chain → verify status=Funded(1)
+ *   8. submit deliverable on-chain (worker signs) → verify status=Submitted(2)
+ *   9. complete on-chain (evaluator signs) → verify status=Completed(3)
+ *
+ * ArcLayer backend/local orchestration:
+ *  10. claim job (DB-only, off-chain worker metadata)
+ *  11. mark running (DB-only, off-chain worker metadata)
+ *
+ * Final:
+ *  12. Verify 6 on-chain tx hashes, deliverableHash, reasonHash in DB
+ *      On-chain status = Completed(3), DB status = settled
+ *
+ * Note: claim and running are ArcLayer DB/local worker orchestration states
+ * between fund and submit. They are NOT ERC-8183 on-chain states.
  *
  * Usage:
- *   cd apps/console && set -a && source .env.local && set +a
+ *   cd apps/console
+ *   set -a && source .env.local && set +a
  *   source /root/.secrets/arc-test-wallets/smoke-keys.env
- *   npx tsx scripts/smoke-erc8183-lifecycle.ts
+ *   ERC8183_SMOKE_LIVE=true npx tsx scripts/smoke-erc8183-lifecycle.ts
  *
  * Requires:
  *   - SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY in env
