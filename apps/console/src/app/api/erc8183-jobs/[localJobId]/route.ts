@@ -8,7 +8,7 @@ import { escrowRail } from '@/lib/rails/responses';
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ localJobId: string }> | { localJobId: string } },
+  { params }: { params: Promise<{ localJobId: string }> },
 ) {
   try {
     const auth = await requireApiKey(_req, [API_KEY_SCOPES.ERC8183_CREATE, API_KEY_SCOPES.ERC8183_TX]);

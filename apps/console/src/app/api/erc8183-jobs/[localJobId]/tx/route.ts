@@ -223,12 +223,13 @@ function validateOnchainJobMatch(
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { localJobId: string } },
+  { params }: { params: Promise<{ localJobId: string }> },
 ) {
+    const { localJobId } = await params;
   try {
     const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_TX);
     if (auth.error) return auth.error;
-    const job = await getErc8183JobByLocalId(params.localJobId);
+    const job = await getErc8183JobByLocalId(localJobId);
     if (!job) {
       return NextResponse.json(
         { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
@@ -284,7 +285,7 @@ export async function POST(
         'erc8183_tx',
         auth.key.id,
         auth.key.agentId,
-        params.localJobId,
+        localJobId,
         txType,
       ].join(':'),
       limit: 20,
@@ -390,14 +391,14 @@ export async function POST(
         }
 
         await attachErc8183SetBudgetTx({
-          localJobId: params.localJobId,
+          localJobId: localJobId,
           setBudgetTxHash: txHash,
         });
 
         return NextResponse.json({
           ok: true,
           ...escrowRail(),
-          localJobId: params.localJobId,
+          localJobId: localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'set_budget',
           txHash,
@@ -477,14 +478,14 @@ export async function POST(
         }
 
         await attachErc8183ApproveTx({
-          localJobId: params.localJobId,
+          localJobId: localJobId,
           approveTxHash: txHash,
         });
 
         return NextResponse.json({
           ok: true,
           ...escrowRail(),
-          localJobId: params.localJobId,
+          localJobId: localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'approve',
           txHash,
@@ -535,7 +536,7 @@ export async function POST(
 
         // Step 4: update from on-chain state
         await attachErc8183FundTx({
-          localJobId: params.localJobId,
+          localJobId: localJobId,
           fundTxHash: txHash,
           erc8183Status: onchainJob.erc8183Status,
         });
@@ -543,7 +544,7 @@ export async function POST(
         return NextResponse.json({
           ok: true,
           ...escrowRail(),
-          localJobId: params.localJobId,
+          localJobId: localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'fund',
           txHash,
@@ -592,7 +593,7 @@ export async function POST(
         if (submitProvenanceError) return submitProvenanceError;
 
         await attachErc8183SubmitTx({
-          localJobId: params.localJobId,
+          localJobId: localJobId,
           submitTxHash: txHash,
           erc8183Status: onchainJob.erc8183Status,
           status: 'submitted',
@@ -601,7 +602,7 @@ export async function POST(
         return NextResponse.json({
           ok: true,
           ...escrowRail(),
-          localJobId: params.localJobId,
+          localJobId: localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'submit',
           txHash,
@@ -650,7 +651,7 @@ export async function POST(
         if (completeProvenanceError) return completeProvenanceError;
 
         await attachErc8183CompleteTx({
-          localJobId: params.localJobId,
+          localJobId: localJobId,
           completeTxHash: txHash,
           erc8183Status: onchainJob.erc8183Status,
         });
@@ -658,7 +659,7 @@ export async function POST(
         return NextResponse.json({
           ok: true,
           ...escrowRail(),
-          localJobId: params.localJobId,
+          localJobId: localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'complete',
           txHash,

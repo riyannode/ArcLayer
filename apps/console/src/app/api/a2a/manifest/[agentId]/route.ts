@@ -20,8 +20,8 @@ async function getOnchainController(agentId: string): Promise<string | null> {
   }
 }
 
-export async function GET(_req: Request, { params }: { params: { agentId: string } }) {
-  const agentId = params.agentId;
+export async function GET(_req: Request, { params }: { params: Promise<{ agentId: string }> }) {
+  const { agentId } = await params;
   if (!agentId || !/^[0-9]+$/.test(agentId)) {
     return NextResponse.json({ error: 'invalid agentId' }, { status: 400 });
   }

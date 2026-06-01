@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
-    "next": "14.2.35",
-    "react": "^18",
-    "react-dom": "^18"
+    "next": "15.5.16",
+    "react": "^19",
+    "react-dom": "^19"
   },
   "description": "ArcLayer monorepo root",
   "packageManager": "pnpm@10.23.0",
@@ -31,8 +31,9 @@
   "pnpm": {
     "overrides": {
       "axios": "^1.16.0",
-      "ws": "^8.18.0",
-      "postcss": "^8.5.0"
+      "ws": "^8.20.1",
+      "postcss": "^8.5.0",
+      "uuid": "^13.0.1"
     }
   }
 }

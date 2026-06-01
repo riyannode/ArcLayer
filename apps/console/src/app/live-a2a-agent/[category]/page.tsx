@@ -3,10 +3,10 @@ import { redirect } from 'next/navigation';
 import { getAgentCategory } from '../categories';
 import { A2ACategoryPageView } from '@/components/agent-bridge/A2ACategoryPageView';
 
-type PageProps = { params: { category: string } };
+type PageProps = { params: Promise<{ category: string }> };
 
-export default function LiveA2AAgentCategoryPage({ params }: PageProps) {
-  const categoryKey = params.category;
+export default async function LiveA2AAgentCategoryPage({ params }: PageProps) {
+  const { category: categoryKey } = await params;
   const category = getAgentCategory(categoryKey);
 
   if (!category) {

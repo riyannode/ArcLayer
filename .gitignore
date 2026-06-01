@@ -109,3 +109,7 @@ examples/external-erc8183-bots/*/.env
 examples/external-pm2-bots/circle-agent-gate-bots/bot.config.*.json
 !examples/external-pm2-bots/circle-agent-gate-bots/bot.config.example.json
 apps/console/scripts/gen-commerce-keys.js
+
+# Generated/indexer artifacts
+indexer/core
+indexer/indexer.db
