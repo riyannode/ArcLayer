@@ -58,7 +58,9 @@ export async function getLatestBlock() {
   return publicClient.getBlockNumber();
 }
 
-async function fetchEventsInRange(
+const MIN_CHUNK_BLOCKS = 500n;
+
+async function fetchEventsInRangeRaw(
   address: `0x${string}`,
   abi: readonly unknown[],
   fromBlock: bigint,
@@ -70,6 +72,40 @@ async function fetchEventsInRange(
     fromBlock,
     toBlock,
   });
+}
+
+/**
+ * Fetch events with automatic range-split fallback.
+ * If the full range RPC call fails, split in half and retry each chunk.
+ * Recurses until chunks reach MIN_CHUNK_BLOCKS.
+ */
+async function fetchEventsInRange(
+  address: `0x${string}`,
+  abi: readonly unknown[],
+  fromBlock: bigint,
+  toBlock: bigint,
+): Promise<any[]> {
+  try {
+    return await fetchEventsInRangeRaw(address, abi, fromBlock, toBlock);
+  } catch (err) {
+    const range = toBlock - fromBlock;
+    if (range <= MIN_CHUNK_BLOCKS) {
+      // Already at minimum chunk size — propagate the error.
+      throw err;
+    }
+
+    const mid = fromBlock + range / 2n;
+    console.warn(
+      `[indexer] getLogs failed for range ${fromBlock}-${toBlock} (${range} blocks), splitting at ${mid}`,
+    );
+
+    const [left, right] = await Promise.all([
+      fetchEventsInRange(address, abi, fromBlock, mid),
+      fetchEventsInRange(address, abi, mid + 1n, toBlock),
+    ]);
+
+    return [...left, ...right];
+  }
 }
 
 /**
