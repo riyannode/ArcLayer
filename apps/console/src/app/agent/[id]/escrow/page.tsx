@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState, useEffect, type ReactNode } from 'react';
-import { loadAgentDetail, type DataSource } from '@/lib/indexer';
+import { loadAgentDetail } from '@/lib/indexer';
 import {
   fetchErc8183Metadata,
   getErc8183Capabilities,
@@ -11,7 +11,6 @@ import {
   displayCategory,
   roleLabel,
   shortText,
-  type Erc8183AgentMetadata,
 } from '@/lib/erc8183/agent-profile';
 import { useArcWallet } from '@/hooks/useArcWallet';
 
@@ -19,9 +18,17 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
-type SectionKey = 'agent' | 'task' | 'scope' | 'budget' | 'review';
+type SectionKey = 'provider' | 'client' | 'task' | 'scope' | 'budget' | 'review';
+
+type BuyerAgent = {
+  agentId: string;
+  tokenId: string;
+  controller: string;
+  metadataName?: string;
+};
 
 type FormState = {
+  buyerAgentId: string;
   description: string;
   deliverables: string;
   requirements: string;
@@ -32,6 +39,7 @@ type FormState = {
 };
 
 const emptyForm: FormState = {
+  buyerAgentId: '',
   description: '',
   deliverables: '',
   requirements: '',
@@ -42,6 +50,7 @@ const emptyForm: FormState = {
 };
 
 const DRAFT_KEY = 'arclayer:direct-hire-draft';
+const API_KEY_STORAGE = 'arclayer:erc8183-api-key';
 
 /* ------------------------------------------------------------------ */
 /*  Primitives                                                         */
@@ -219,12 +228,18 @@ export default function DirectHireEscrowPage() {
 
   const [form, setForm] = useState<FormState>(emptyForm);
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
-    agent: true,
+    provider: true,
+    client: false,
     task: false,
     scope: false,
     budget: false,
     review: false,
   });
+
+  const [buyerAgents, setBuyerAgents] = useState<BuyerAgent[]>([]);
+  const [buyersLoading, setBuyersLoading] = useState(false);
+
+  const [apiKey, setApiKey] = useState('');
 
   const [preparing, setPreparing] = useState(false);
   const [prepareResult, setPrepareResult] = useState<PrepareResult | null>(null);
@@ -289,7 +304,7 @@ export default function DirectHireEscrowPage() {
     };
   }, [agentId]);
 
-  /* ---- Hydrate from draft on mount ---- */
+  /* ---- Hydrate from draft + API key on mount ---- */
   useEffect(() => {
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
@@ -300,7 +315,62 @@ export default function DirectHireEscrowPage() {
     } catch {
       /* corrupted draft — ignore */
     }
+    try {
+      const storedKey = localStorage.getItem(API_KEY_STORAGE);
+      if (storedKey) setApiKey(storedKey);
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  /* ---- Load buyer agents by connected wallet controller ---- */
+  useEffect(() => {
+    if (!address || !isConnected) {
+      setBuyerAgents([]);
+      return;
+    }
+
+    let alive = true;
+
+    async function loadBuyers() {
+      setBuyersLoading(true);
+      try {
+        const res = await fetch(
+          `/api/erc8004/identity/by-controller?controller=${address}`,
+          { cache: 'no-store' },
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = await res.json();
+        if (!json.ok || !Array.isArray(json.agents)) throw new Error('bad response');
+
+        const agents: BuyerAgent[] = json.agents.map(
+          (a: { agentId?: string; tokenId?: string; controller?: string; metadata?: { name?: string } | null }) => ({
+            agentId: String(a.agentId ?? a.tokenId ?? ''),
+            tokenId: String(a.tokenId ?? a.agentId ?? ''),
+            controller: a.controller ?? '',
+            metadataName: a.metadata?.name ?? undefined,
+          }),
+        );
+
+        if (alive) {
+          setBuyerAgents(agents);
+          // Auto-select if only one agent
+          if (agents.length === 1 && !form.buyerAgentId) {
+            setForm((s) => ({ ...s, buyerAgentId: agents[0].agentId }));
+          }
+        }
+      } catch {
+        if (alive) setBuyerAgents([]);
+      } finally {
+        if (alive) setBuyersLoading(false);
+      }
+    }
+
+    loadBuyers();
+    return () => {
+      alive = false;
+    };
+  }, [address, isConnected]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---- Derived completion flags ---- */
   const taskComplete = Boolean(form.description.trim());
@@ -308,7 +378,18 @@ export default function DirectHireEscrowPage() {
     form.deliverables.trim() && form.requirements.trim() && form.timeline,
   );
   const budgetComplete = Boolean(form.budgetMax);
-  const canPrepare = taskComplete && scopeComplete && budgetComplete && agentData;
+  const buyerComplete = Boolean(form.buyerAgentId);
+  const apiKeyPresent = Boolean(apiKey.trim());
+  const evaluatorComplete =
+    form.evaluatorMode === 'client' || Boolean(form.evaluatorAgentId.trim());
+  const canPrepare =
+    taskComplete &&
+    scopeComplete &&
+    budgetComplete &&
+    buyerComplete &&
+    apiKeyPresent &&
+    evaluatorComplete &&
+    agentData;
 
   /* ---- Handlers ---- */
   function toggleSection(key: SectionKey) {
@@ -324,8 +405,18 @@ export default function DirectHireEscrowPage() {
 
   function saveDraft() {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+    if (apiKey.trim()) {
+      localStorage.setItem(API_KEY_STORAGE, apiKey.trim());
+    }
     setError('');
     setSuccess('Draft saved locally.');
+  }
+
+  function saveApiKey() {
+    if (apiKey.trim()) {
+      localStorage.setItem(API_KEY_STORAGE, apiKey.trim());
+      setSuccess('API key saved locally.');
+    }
   }
 
   async function handlePrepare() {
@@ -356,7 +447,7 @@ export default function DirectHireEscrowPage() {
 
       const body: Record<string, unknown> = {
         settlementMode: 'erc8183_escrow',
-        buyerAgentId: 'console-user',
+        buyerAgentId: form.buyerAgentId,
         providerAgentId: agentData.agentId,
         evaluatorMode: form.evaluatorMode,
         budgetAtomic,
@@ -371,7 +462,10 @@ export default function DirectHireEscrowPage() {
 
       const res = await fetch('/api/erc8183-jobs/web-hire/prepare', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey.trim()}`,
+        },
         body: JSON.stringify(body),
       });
 
@@ -394,15 +488,19 @@ export default function DirectHireEscrowPage() {
   }
 
   /* ---- Render ---- */
+  const selectedBuyer = buyerAgents.find((a) => a.agentId === form.buyerAgentId);
+
   const reviewRows = [
     ['Provider Agent', agentData?.name ?? '—'],
     ['Provider ID', agentData?.agentId ?? '—'],
+    ['Buyer Agent', selectedBuyer?.metadataName || (form.buyerAgentId ? `Agent #${form.buyerAgentId}` : '—')],
     ['Category', agentData?.category ?? '—'],
     ['Deadline', form.timeline || '—'],
     ['Budget', form.budgetMax ? `${form.budgetMax} USDC` : '—'],
     ['Settlement', 'ERC-8183 Escrow'],
     ['Evaluator', form.evaluatorMode === 'client' ? 'Client (self)' : `Agent #${form.evaluatorAgentId}`],
     ['Client Wallet', address || 'Not connected'],
+    ['API Key', apiKeyPresent ? '••••••' : 'Not set'],
   ] as const;
 
   return (
@@ -452,14 +550,14 @@ export default function DirectHireEscrowPage() {
         {!agentLoading && agentData && (
           <div className="mt-6">
             <div className="space-y-3">
-              {/* 0 — Selected Agent (read-only) */}
+              {/* 1 — Provider Agent (read-only) */}
               <SectionCard
                 number={1}
-                title="Selected Agent"
+                title="Provider Agent"
                 subtitle="This agent will receive the ERC-8183 job."
                 status="Complete"
-                open={openSections.agent}
-                onToggle={() => toggleSection('agent')}
+                open={openSections.provider}
+                onToggle={() => toggleSection('provider')}
               >
                 <div className="grid gap-5 lg:grid-cols-[200px_1fr]">
                   {/* Avatar */}
@@ -529,9 +627,83 @@ export default function DirectHireEscrowPage() {
                 </div>
               </SectionCard>
 
-              {/* 2 — Task */}
+              {/* 2 — Client / Buyer Agent */}
               <SectionCard
                 number={2}
+                title="Client / Buyer Agent"
+                subtitle="Select the buyer agent from your ERC-8004 identity records."
+                status={buyerComplete ? 'Complete' : 'Pending'}
+                open={openSections.client}
+                onToggle={() => toggleSection('client')}
+              >
+                {!isConnected ? (
+                  <div className="rounded-lg border border-[#F0B84A]/20 bg-[#F0B84A]/8 px-4 py-3 text-sm text-[#EAE4D8]/72">
+                    Connect your wallet to load your buyer agent identities.
+                  </div>
+                ) : buyersLoading ? (
+                  <div className="font-mono text-[12px] text-[#EAE4D8]/55">
+                    Loading your ERC-8004 identities…
+                  </div>
+                ) : buyerAgents.length === 0 ? (
+                  <div className="rounded-lg border border-red-400/20 bg-red-400/8 px-4 py-3 text-sm text-red-200">
+                    No ERC-8004 identities found for wallet {shortText(address || '')}.
+                    Mint an identity first.
+                  </div>
+                ) : (
+                  <div className="grid gap-5">
+                    <div>
+                      <FieldLabel required>Buyer Agent ID</FieldLabel>
+                      <select
+                        value={form.buyerAgentId}
+                        onChange={(e) => update('buyerAgentId', e.target.value)}
+                        className={inputCls}
+                      >
+                        <option value="">Select your buyer agent</option>
+                        {buyerAgents.map((a) => (
+                          <option key={a.agentId} value={a.agentId}>
+                            {a.metadataName || `Agent #${a.agentId}`}
+                            {a.agentId !== a.tokenId ? ` (token ${a.tokenId})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-2 text-xs text-[#EAE4D8]/53">
+                        This agent will be the ERC-8183 client/buyer. Loaded from your connected wallet&apos;s ERC-8004 identities.
+                      </p>
+                    </div>
+
+                    {/* API Key */}
+                    <div>
+                      <FieldLabel required>ERC-8183 API Key</FieldLabel>
+                      <div className="flex gap-3">
+                        <input
+                          type="password"
+                          value={apiKey}
+                          onChange={(e) => {
+                            setApiKey(e.target.value);
+                            setError('');
+                          }}
+                          placeholder="ak_..."
+                          className={`${inputCls} flex-1`}
+                        />
+                        <button
+                          type="button"
+                          onClick={saveApiKey}
+                          className="h-12 shrink-0 rounded-lg border border-[#C5A67C]/35 bg-black/35 px-5 text-sm font-semibold text-[#F0B84A] transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/8"
+                        >
+                          Save Key
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-[#EAE4D8]/53">
+                        API key with <span className="font-mono text-[#F3C536]">erc8183:create</span> scope. Stored locally in your browser.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </SectionCard>
+
+              {/* 3 — Task */}
+              <SectionCard
+                number={3}
                 title="Task"
                 subtitle="Describe the work you need done."
                 status={taskComplete ? 'Complete' : 'Pending'}
@@ -556,9 +728,9 @@ export default function DirectHireEscrowPage() {
                 </div>
               </SectionCard>
 
-              {/* 3 — Scope */}
+              {/* 4 — Scope */}
               <SectionCard
-                number={3}
+                number={4}
                 title="Scope"
                 subtitle="Define deliverables, requirements, and timeline."
                 status={scopeComplete ? 'Complete' : 'Pending'}
@@ -614,9 +786,9 @@ export default function DirectHireEscrowPage() {
                 </div>
               </SectionCard>
 
-              {/* 4 — Budget */}
+              {/* 5 — Budget */}
               <SectionCard
-                number={4}
+                number={5}
                 title="Budget"
                 subtitle="Set the escrow budget for this job."
                 status={budgetComplete ? 'Complete' : 'Pending'}
@@ -676,9 +848,9 @@ export default function DirectHireEscrowPage() {
                 </div>
               </SectionCard>
 
-              {/* 5 — Review & Prepare */}
+              {/* 6 — Review & Prepare */}
               <SectionCard
-                number={5}
+                number={6}
                 title="Review & Prepare"
                 subtitle="Confirm the ERC-8183 escrow job before preparing."
                 status={
