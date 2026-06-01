@@ -63,7 +63,8 @@ function mergeProof(existing: unknown, incoming: unknown): unknown {
   return incoming;
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
   const auth = await requireApiKey(req, 'jobs:submit');
   if (auth.error) return auth.error;
 
@@ -93,7 +94,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const { data: job, error: fetchErr } = await supabase
     .from('a2a_jobs')
     .select('id,is_onchain,onchain_job_id,submit_tx,settlement_status,evaluator,proof')
-    .eq('id', params.id)
+    .eq('id', id)
     .maybeSingle();
 
   if (fetchErr || !job) return jsonError('job_not_found', 404);
@@ -174,7 +175,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (input.evaluation !== undefined) updatePayload.evaluation = input.evaluation;
   if (input.proof !== undefined) updatePayload.proof = mergeProof(row.proof, input.proof);
 
-  const { data, error } = await supabase.from('a2a_jobs').update(updatePayload).eq('id', params.id).select().single();
+  const { data, error } = await supabase.from('a2a_jobs').update(updatePayload).eq('id', id).select().single();
   if (error) {
     console.error('[complete] a2a_jobs update error:', error.message);
     return jsonError('db_error', 500);
@@ -184,7 +185,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     ok: true,
     job: withA2AJobNamespace(data as any),
     receipt: {
-      jobId: params.id,
+      jobId: id,
       onchainJobId,
       completeTx,
       settlementStatus: ERC8183JobStatus.Completed.toString(),
