@@ -1,7 +1,6 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import HomeOnboardingCards from './HomeOnboardingCards';
 
 const X402DemoPanel = dynamic(() => import('@/components/x402/X402DemoPanel'), {
   ssr: false,
@@ -83,7 +82,8 @@ export default function HomeHero() {
       </div>
 
       <div data-x402-blur-zone="true">
-        <HomeOnboardingCards />
+        {/* Onboarding cards removed — spacer preserves page height */}
+        <div className="h-[200px]" aria-hidden="true" />
       </div>
     </div>
   );

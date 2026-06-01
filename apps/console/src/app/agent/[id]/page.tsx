@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { decodeEventLog, getAddress } from 'viem';
 import { useArcWallet } from '@/hooks/useArcWallet';
@@ -32,6 +32,15 @@ import {
   type Erc8183AgentMetadata,
 } from '@/lib/erc8183/agent-profile';
 import type { DashboardAgentRow } from '@/lib/dashboard/erc8183-agents';
+import {
+  BadgeCheck,
+  ShieldCheck,
+  Link2,
+  Trophy,
+  FileJson,
+  Sparkles,
+  Code2,
+} from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -88,6 +97,19 @@ type AgentTab =
   | 'metadata'
   | 'actions';
 
+const AGENT_TABS: readonly [
+  AgentTab,
+  string,
+  ComponentType<{ className?: string }>,
+][] = [
+  ['basic', 'Basic Info', BadgeCheck],
+  ['capabilities', 'Capabilities', ShieldCheck],
+  ['links', 'Links', Link2],
+  ['reputation', 'Reputation', Trophy],
+  ['metadata', 'Metadata', FileJson],
+  ['actions', 'Actions', Sparkles],
+];
+
 // ─── Helpers ────────────────────────────────────────────────────────
 
 function parseAgentId(value: string | undefined) {
@@ -112,6 +134,60 @@ function buildReputationSeries(
     seed + completedJobs,
     Math.max(baseScore, reputation) + proofBoost,
   ];
+}
+
+function isValidDateString(value?: string | null): boolean {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time);
+}
+
+function formatDateString(value?: string | null): string | null {
+  if (!isValidDateString(value)) return null;
+  return new Date(value as string).toLocaleString();
+}
+
+function formatRegisteredAt(
+  rawRegisteredAt?: string | null,
+  metadata?: Erc8183AgentMetadata | null,
+): { label: string; value: string } {
+  const meta = metadata as Record<string, unknown> | null | undefined;
+  const metadataDate =
+    formatDateString(meta?.createdAt as string | undefined) ||
+    formatDateString(meta?.updatedAt as string | undefined);
+
+  if (metadataDate) {
+    return { label: 'Registered', value: metadataDate };
+  }
+
+  const raw = String(rawRegisteredAt || '').trim();
+  if (!raw) return { label: 'Registered', value: '—' };
+
+  const numeric = Number(raw);
+
+  if (
+    Number.isFinite(numeric) &&
+    numeric >= 946684800 &&
+    numeric <= 4102444800
+  ) {
+    return {
+      label: 'Registered',
+      value: new Date(numeric * 1000).toLocaleString(),
+    };
+  }
+
+  if (
+    Number.isFinite(numeric) &&
+    numeric >= 946684800000 &&
+    numeric <= 4102444800000
+  ) {
+    return {
+      label: 'Registered',
+      value: new Date(numeric).toLocaleString(),
+    };
+  }
+
+  return { label: 'Registered Block', value: `#${raw}` };
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────
@@ -201,10 +277,12 @@ function Erc8183Avatar({
 function AgentTabButton({
   active,
   label,
+  icon: Icon,
   onClick,
 }: {
   active: boolean;
   label: string;
+  icon: ComponentType<{ className?: string }>;
   onClick: () => void;
 }) {
   return (
@@ -213,11 +291,12 @@ function AgentTabButton({
       onClick={onClick}
       className={
         active
-          ? 'relative px-5 py-4 text-[14px] font-medium text-[#F3C536]'
-          : 'px-5 py-4 text-[14px] font-medium text-[#EAE4D8]/55 transition hover:text-[#F3C536]'
+          ? 'relative inline-flex items-center gap-2 px-5 py-4 text-[14px] font-medium text-[#F3C536]'
+          : 'inline-flex items-center gap-2 px-5 py-4 text-[14px] font-medium text-[#EAE4D8]/55 transition hover:text-[#F3C536]'
       }
     >
-      {label}
+      <Icon className="h-4 w-4" />
+      <span>{label}</span>
       {active && (
         <span className="absolute bottom-0 left-4 right-4 h-[2px] rounded-full bg-[#F3C536] shadow-[0_0_16px_rgba(243,197,54,0.55)]" />
       )}
@@ -277,6 +356,7 @@ export default function AgentProfilePage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<AgentTab>('basic');
+  const [showMetadataJson, setShowMetadataJson] = useState(false);
 
   const [dashboardAgent, setDashboardAgent] = useState<DashboardAgentRow | null>(null);
 
@@ -384,6 +464,8 @@ export default function AgentProfilePage() {
     (Boolean(dashboardAgent) ||
       (isErc8183ProfileMetadata(metadata) &&
         isErc8183CapabilityList(capabilities)));
+
+  const registeredInfo = formatRegisteredAt(agent?.registeredAt, metadata);
 
   // ─── Hire This Agent handler ───────────────────────────────────────
   // TODO: Future — insert x402 anti-spam gate before createJob to prevent
@@ -600,20 +682,12 @@ export default function AgentProfilePage() {
             {/* ─── Tabs ──────────────────────────────────────────────── */}
             <div className="mt-8 overflow-hidden rounded-xl border border-[#1A2228] bg-[#080D13]/78">
               <div className="flex overflow-x-auto border-b border-white/[0.08]">
-                {(
-                  [
-                    ['basic', 'Basic Info'],
-                    ['capabilities', 'Capabilities'],
-                    ['links', 'Links'],
-                    ['reputation', 'Reputation'],
-                    ['metadata', 'Metadata'],
-                    ['actions', 'Actions'],
-                  ] as const
-                ).map(([key, label]) => (
+                {AGENT_TABS.map(([key, label, Icon]) => (
                   <AgentTabButton
                     key={key}
                     active={activeTab === key}
                     label={label}
+                    icon={Icon}
                     onClick={() => setActiveTab(key)}
                   />
                 ))}
@@ -645,14 +719,8 @@ export default function AgentProfilePage() {
                         copy={agent.metadataURI}
                       />
                       <DetailRow
-                        label="Registered"
-                        value={
-                          agent.registeredAt
-                            ? new Date(
-                                Number(agent.registeredAt) * 1000,
-                              ).toLocaleString()
-                            : '—'
-                        }
+                        label={registeredInfo.label}
+                        value={registeredInfo.value}
                       />
                     </div>
 
@@ -768,18 +836,37 @@ export default function AgentProfilePage() {
 
                 {/* Metadata */}
                 {activeTab === 'metadata' && (
-                  <div>
-                    <h2 className="text-[22px] font-semibold text-[#F5F0E5]">
-                      Metadata
-                    </h2>
-                    <pre className="mt-5 max-h-[420px] overflow-auto rounded-xl border border-white/10 bg-black/30 p-4 font-mono text-[11px] leading-5 text-[#EAE4D8]/65">
-                      {JSON.stringify(
-                        metadata || { metadataURI: agent.metadataURI },
-                        null,
-                        2,
-                      )}
-                    </pre>
-                  </div>
+                  <section className="min-h-[260px] border-l border-white/[0.08] pl-7">
+                    <div className="flex items-center gap-3">
+                      <FileJson className="h-5 w-5 text-[#F3C536]" />
+                      <h2 className="text-[22px] font-semibold text-[#F5F0E5]">
+                        Metadata
+                      </h2>
+                    </div>
+
+                    <p className="mt-3 max-w-xl text-sm leading-6 text-[#EAE4D8]/58">
+                      View a summary of the agent's identity metadata.
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowMetadataJson((value) => !value)}
+                      className="mt-6 inline-flex h-11 items-center gap-2 rounded-md border border-[#F3C536]/35 bg-black/20 px-5 font-mono text-[12px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/60 hover:bg-[#F3C536]/8"
+                    >
+                      <Code2 className="h-4 w-4" />
+                      {showMetadataJson ? 'Hide JSON' : 'Show JSON'}
+                    </button>
+
+                    {showMetadataJson && (
+                      <pre className="mt-5 max-h-[420px] overflow-auto rounded-xl border border-white/10 bg-black/30 p-4 font-mono text-[11px] leading-5 text-[#EAE4D8]/65">
+                        {JSON.stringify(
+                          metadata || { metadataURI: agent.metadataURI },
+                          null,
+                          2,
+                        )}
+                      </pre>
+                    )}
+                  </section>
                 )}
 
                 {/* Actions — Hire This Agent */}
