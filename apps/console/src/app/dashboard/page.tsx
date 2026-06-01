@@ -88,7 +88,7 @@ function AgentAvatar({
   if (avatar) {
     return (
       <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-[#C5A67C]/25 bg-black/45 shadow-[0_0_28px_rgba(197,166,124,0.08)]">
-        <img src={avatar} alt="" className="h-full w-full object-cover" />
+        <img src={avatar} alt={`${title} avatar`} className="h-full w-full object-cover" />
         <span className="absolute bottom-0 right-0 flex h-5 w-5 items-center justify-center rounded-tl-md border-l border-t border-[#C5A67C]/25 bg-black/80 text-[10px] text-[#F0B84A]">
           {AGENT_TYPE_ICONS[category]}
         </span>
