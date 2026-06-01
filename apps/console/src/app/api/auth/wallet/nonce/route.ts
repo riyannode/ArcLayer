@@ -1,30 +1,38 @@
 /**
- * GET /api/auth/wallet/nonce
+ * GET /api/auth/wallet/nonce?address=0x...
  *
- * Returns a fresh nonce for wallet signing.
- * Client signs `buildNonceSignMessage(wallet, nonce)` with EIP-191 personal_sign,
- * then POSTs the signature to /api/auth/wallet/verify.
+ * Generates a signing nonce bound to the given wallet address.
+ * Returns the exact message the client must sign with EIP-191 personal_sign.
+ * Client then POSTs the signature to /api/auth/wallet/verify.
  */
 
-import { NextResponse } from 'next/server';
-import { generateNonce, buildNonceSignMessage } from '@/lib/auth/wallet-session';
+import { NextRequest, NextResponse } from 'next/server';
+import { generateNonce } from '@/lib/auth/wallet-session';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
-  const { nonce, expiresAt } = generateNonce();
+const ERROR_CACHE = 'no-store, no-cache, max-age=0';
 
-  // We don't know the wallet yet at nonce-time, so we return the template.
-  // Client fills in wallet address and builds the final message.
-  const messageTemplate = buildNonceSignMessage('<WALLET>', nonce);
+export async function GET(req: NextRequest) {
+  const address = req.nextUrl.searchParams.get('address');
 
-  return NextResponse.json(
-    {
-      ok: true,
-      nonce,
-      expiresAt,
-      messageTemplate,
-    },
-    { headers: { 'Cache-Control': 'no-store' } },
-  );
+  if (!address?.trim()) {
+    return NextResponse.json(
+      { ok: false, error: 'missing_address', detail: 'address query param is required' },
+      { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+    );
+  }
+
+  const result = generateNonce(address.trim());
+
+  if (!result.ok) {
+    return NextResponse.json(
+      { ok: false, error: result.error, detail: result.detail },
+      { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+    );
+  }
+
+  return NextResponse.json(result, {
+    headers: { 'Cache-Control': 'no-store' },
+  });
 }

@@ -2,10 +2,10 @@
  * Wallet Session — cookie-based session for external non-dev users.
  *
  * Flow:
- *   1. Client calls GET /api/auth/wallet/nonce → receives { nonce, expiresAt }
- *   2. Client signs the nonce with EIP-191 personal_sign
- *   3. Client calls POST /api/auth/wallet/verify with { wallet, signature, nonce }
- *   4. Server verifies signature, creates session, sets httpOnly cookie
+ *   1. Client calls GET /api/auth/wallet/nonce?address=0x... → receives { nonce, message, expiresAt }
+ *   2. Client signs the message with EIP-191 personal_sign
+ *   3. Client calls POST /api/auth/wallet/verify with { wallet, nonce, signature }
+ *   4. Server verifies signature (must match nonce-bound address), creates session, sets httpOnly cookie
  *   5. Subsequent requests read session from cookie via GET /api/auth/session
  *   6. Client calls POST /api/auth/logout to clear session
  *
@@ -14,13 +14,13 @@
  */
 
 import { verifyMessage, isAddress, getAddress } from 'viem';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
 export interface NonceEntry {
   nonce: string;
-  wallet: string; // lowercase 0x address, set after verify
+  wallet: string; // checksummed 0x address, bound at nonce creation
   createdAt: number;
   expiresAt: number;
   used: boolean;
@@ -34,9 +34,11 @@ export interface WalletSession {
 }
 
 export interface NonceResponse {
+  ok: true;
+  address: string;
   nonce: string;
+  message: string; // exact message the client must sign
   expiresAt: number;
-  message: string; // the exact message the client must sign
 }
 
 export interface VerifyResult {
@@ -52,10 +54,18 @@ export interface VerifyError {
 
 export type VerifyResponse = VerifyResult | VerifyError;
 
+export interface LinkedAgent {
+  agentId: string;
+  tokenId: string;
+  controller: string;
+  metadataName?: string;
+}
+
 export interface SessionStatus {
   authenticated: boolean;
   wallet?: `0x${string}`;
   expiresAt?: number;
+  linkedAgents: LinkedAgent[];
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -65,7 +75,15 @@ const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const MAX_NONCES = 5_000;
 const MAX_SESSIONS = 10_000;
 export const SESSION_COOKIE_NAME = 'arclayer-wallet-session';
-const SESSION_SECRET = process.env.WALLET_SESSION_SECRET || 'arclayer-dev-session-secret-change-in-prod';
+
+function getSessionSecret(): string {
+  const env = process.env.WALLET_SESSION_SECRET;
+  if (env) return env;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('WALLET_SESSION_SECRET is required in production');
+  }
+  return 'arclayer-dev-session-secret-change-in-prod';
+}
 
 // ── In-memory stores ──────────────────────────────────────────────────────
 
@@ -96,7 +114,7 @@ function pruneSessions(): void {
 
 /**
  * Build the canonical message that the client must sign.
- * Uses a simple nonce-based message (not per-request method/path).
+ * Address is checksummed via getAddress.
  */
 export function buildNonceSignMessage(wallet: string, nonce: string): string {
   return [
@@ -110,12 +128,12 @@ export function buildNonceSignMessage(wallet: string, nonce: string): string {
 }
 
 /**
- * Create an HMAC-signed session token (sessionId.signature).
- * Uses SHA-256 as HMAC since Node crypto doesn't need external deps.
+ * Create an HMAC-signed session token: sessionId.hmac
  */
 function signSessionId(sessionId: string): string {
-  const hmac = createHash('sha256')
-    .update(`${SESSION_SECRET}:${sessionId}`)
+  const secret = getSessionSecret();
+  const hmac = createHmac('sha256', secret)
+    .update(sessionId)
     .digest('hex');
   return `${sessionId}.${hmac}`;
 }
@@ -131,8 +149,9 @@ export function verifySessionToken(token: string): string | null {
   const sessionId = token.slice(0, dotIdx);
   const providedSig = token.slice(dotIdx + 1);
 
-  const expectedSig = createHash('sha256')
-    .update(`${SESSION_SECRET}:${sessionId}`)
+  const secret = getSessionSecret();
+  const expectedSig = createHmac('sha256', secret)
+    .update(sessionId)
     .digest('hex');
 
   // Constant-time comparison
@@ -149,40 +168,42 @@ export function verifySessionToken(token: string): string | null {
 // ── Core API ──────────────────────────────────────────────────────────────
 
 /**
- * Generate a new nonce for wallet signing.
+ * Generate a new nonce bound to a specific wallet address.
+ * The address is validated, checksummed, and stored in the nonce entry.
  */
-export function generateNonce(): NonceResponse {
+export function generateNonce(address: string): NonceResponse | VerifyError {
+  if (!isAddress(address)) {
+    return { ok: false, error: 'invalid_address', detail: 'Valid Ethereum address required' };
+  }
+
+  const normalized = getAddress(address);
   pruneNonces();
 
   const nonce = randomBytes(32).toString('hex');
   const now = Date.now();
   const expiresAt = now + NONCE_TTL_MS;
+  const message = buildNonceSignMessage(normalized, nonce);
 
   nonceStore.set(nonce, {
     nonce,
-    wallet: '', // filled on verify
+    wallet: normalized,
     createdAt: now,
     expiresAt,
     used: false,
   });
 
   return {
+    ok: true,
+    address: normalized,
     nonce,
+    message,
     expiresAt,
-    message: '', // caller sets after determining wallet
   };
 }
 
 /**
- * Get the sign message for a nonce + wallet combination.
- */
-export function getSignMessage(wallet: string, nonce: string): string {
-  return buildNonceSignMessage(wallet, nonce);
-}
-
-/**
  * Verify a signed nonce and create a session.
- * Returns a session object and the signed cookie token.
+ * Rejects if body.wallet does not match the wallet bound to the nonce.
  */
 export async function verifyAndCreateSession(params: {
   wallet: string;
@@ -218,7 +239,16 @@ export async function verifyAndCreateSession(params: {
     return { ok: false, error: 'nonce_expired', detail: 'Nonce expired (5min window)' };
   }
 
-  // Build the canonical message
+  // Wallet must match the wallet bound to the nonce
+  if (getAddress(entry.wallet) !== normalizedWallet) {
+    return {
+      ok: false,
+      error: 'wallet_mismatch',
+      detail: `Nonce was created for ${entry.wallet}, not ${normalizedWallet}`,
+    };
+  }
+
+  // Build the canonical message (must match what was returned by generateNonce)
   const message = buildNonceSignMessage(normalizedWallet, nonce);
 
   // Verify signature
@@ -312,6 +342,38 @@ export function buildSessionCookie(token: string, maxAgeSeconds = SESSION_TTL_MS
  */
 export function buildClearSessionCookie(): string {
   return `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+}
+
+// ── Linked agents helper ─────────────────────────────────────────────────
+
+/**
+ * Fetch ERC-8004 agents linked to a controller address.
+ * Queries erc8004_agents via Supabase admin client.
+ */
+export async function getLinkedErc8004AgentsForController(
+  controller: string,
+): Promise<LinkedAgent[]> {
+  try {
+    const { getSupabaseAdmin } = await import('@/lib/x402/supabaseClient');
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from('erc8004_agents')
+      .select('token_id, agent_id, controller, metadata_json')
+      .eq('controller', controller.toLowerCase())
+      .order('updated_at', { ascending: false })
+      .limit(50);
+
+    if (error || !data) return [];
+
+    return data.map((row: Record<string, unknown>) => ({
+      agentId: String(row.agent_id ?? row.token_id ?? ''),
+      tokenId: String(row.token_id ?? ''),
+      controller: String(row.controller ?? ''),
+      metadataName: (row.metadata_json as Record<string, unknown> | null)?.name as string | undefined,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 // ── Test helpers ──────────────────────────────────────────────────────────

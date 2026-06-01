@@ -1,21 +1,27 @@
 /**
  * GET /api/auth/session
  *
- * Returns the current wallet session status from the httpOnly cookie.
- * No authentication required — returns { authenticated: false } if no valid session.
+ * Returns the current wallet session status from the httpOnly cookie,
+ * including linked ERC-8004 agents for the authenticated wallet.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveSessionFromCookie, SESSION_COOKIE_NAME } from '@/lib/auth/wallet-session';
+import {
+  resolveSessionFromCookie,
+  getLinkedErc8004AgentsForController,
+  SESSION_COOKIE_NAME,
+} from '@/lib/auth/wallet-session';
 
 export const dynamic = 'force-dynamic';
+
+const EMPTY_LINKED_AGENTS: never[] = [];
 
 export async function GET(req: NextRequest) {
   const cookieValue = req.cookies.get(SESSION_COOKIE_NAME)?.value;
 
   if (!cookieValue) {
     return NextResponse.json(
-      { authenticated: false },
+      { ok: true, authenticated: false, linkedAgents: EMPTY_LINKED_AGENTS },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   }
@@ -25,7 +31,7 @@ export async function GET(req: NextRequest) {
   if (!session) {
     // Cookie present but invalid/expired — clear it
     const res = NextResponse.json(
-      { authenticated: false },
+      { ok: true, authenticated: false, linkedAgents: EMPTY_LINKED_AGENTS },
       { headers: { 'Cache-Control': 'no-store' } },
     );
     res.headers.set(
@@ -35,11 +41,15 @@ export async function GET(req: NextRequest) {
     return res;
   }
 
+  const linkedAgents = await getLinkedErc8004AgentsForController(session.wallet);
+
   return NextResponse.json(
     {
+      ok: true,
       authenticated: true,
       wallet: session.wallet,
       expiresAt: session.expiresAt,
+      linkedAgents,
     },
     { headers: { 'Cache-Control': 'no-store' } },
   );
