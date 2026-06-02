@@ -251,6 +251,37 @@ export function buildAllowedActions(
   return actions;
 }
 
+/**
+ * Compute a human-readable next action label from lifecycle status.
+ * Read-only display only — no tx actions in PR #412.
+ */
+export function getNextActionLabel(ls: LifecycleStatus): string | null {
+  switch (ls) {
+    case 'LocalCreated':
+      return 'Confirm Creation';
+    case 'CreatedOnchain':
+      return 'Set Budget';
+    case 'BudgetSet':
+      return 'Approve & Fund';
+    case 'Funded':
+      return 'Awaiting Worker';
+    case 'Claimed':
+    case 'Running':
+      return 'In Progress';
+    case 'Submitted':
+      return 'Awaiting Evaluation';
+    case 'Completed':
+    case 'Settled':
+      return 'Done';
+    case 'Rejected':
+      return 'Rejected';
+    case 'Expired':
+      return 'Expired';
+    default:
+      return null;
+  }
+}
+
 // ── Job Detail ────────────────────────────────────────────────────────────
 
 export interface Erc8183JobDetail {
@@ -260,6 +291,7 @@ export interface Erc8183JobDetail {
   lifecycleStatus: LifecycleStatus;
   localStatus: string;
   onchainStatus: Erc8183Status | null;
+  description: string | null;
   participants: {
     client: { agentId: string; address: string | null };
     provider: { agentId: string | null; address: string | null };
@@ -356,6 +388,7 @@ export async function buildErc8183JobDetail(
     lifecycleStatus,
     localStatus: job.status,
     onchainStatus,
+    description: job.description,
     participants: {
       client: { agentId: job.buyerAgentId, address: job.clientAddress },
       provider: { agentId: job.providerAgentId, address: job.providerAddress },
