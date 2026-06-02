@@ -109,8 +109,10 @@ import { POST } from './route';
 
 const LOCAL_JOB_ID = 'erc8183_complete_test';
 const BUYER_AGENT = 'buyer-agent-001';
-const WORKER_AGENT = 'worker-agent-001';
-const PROVIDER_AGENT = 'provider-agent-001';
+const WORKER_AGENT = '32965';
+const PROVIDER_AGENT = '32966';
+const WORKER_AGENT_INVALID = 'worker-agent-001';
+const PROVIDER_AGENT_INVALID = 'provider-agent-001';
 const TX_HASH = '0xabc123def456abc123def456abc123def456abc123def456abc123def456abc1' as `0x${string}`;
 const JOB_ID_BIGINT = 42n;
 
@@ -277,6 +279,38 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete + recordDelivery',
   it('does not call recordDelivery if no worker/provider agent exists', async () => {
     mocks.getErc8183JobByLocalId.mockResolvedValue(
       makeJob({ workerId: null, providerAgentId: null }),
+    );
+
+    const req = makeRequest({ txType: 'complete', txHash: TX_HASH });
+    const res = await POST(req, { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) });
+    const body = await res.json();
+
+    expect(body.ok).toBe(true);
+    expect(mocks.recordDelivery).not.toHaveBeenCalled();
+  });
+
+  it('falls back to providerAgentId when workerId has invalid token id format', async () => {
+    mocks.getErc8183JobByLocalId.mockResolvedValue(
+      makeJob({ workerId: WORKER_AGENT_INVALID }),
+    );
+
+    const req = makeRequest({ txType: 'complete', txHash: TX_HASH });
+    const res = await POST(req, { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) });
+    const body = await res.json();
+
+    expect(body.ok).toBe(true);
+    expect(mocks.recordDelivery).toHaveBeenCalledTimes(1);
+    expect(mocks.recordDelivery).toHaveBeenCalledWith({
+      providerAgentId: PROVIDER_AGENT,
+      buyerAgentId: BUYER_AGENT,
+      jobId: LOCAL_JOB_ID,
+      delivered: true,
+    });
+  });
+
+  it('does not call recordDelivery when both workerId and providerAgentId have invalid format', async () => {
+    mocks.getErc8183JobByLocalId.mockResolvedValue(
+      makeJob({ workerId: WORKER_AGENT_INVALID, providerAgentId: PROVIDER_AGENT_INVALID }),
     );
 
     const req = makeRequest({ txType: 'complete', txHash: TX_HASH });

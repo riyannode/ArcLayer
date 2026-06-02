@@ -659,7 +659,15 @@ export async function POST(
 
         // Wire ERC-8183 completion to existing reputation system.
         // Fire-and-forget — reputation failure must not fail complete tx confirmation.
-        const reputationWorkerAgentId = job.workerId ?? job.providerAgentId;
+        // Prefer workerId, but only if it looks like a valid ERC-8004 token id
+        // (pure digits or "prefix:digits"). Otherwise recordDelivery silently
+        // fails because extractAgentTokenId rejects non-numeric strings.
+        const hasValidTokenIdFormat = (v: string | null | undefined): boolean =>
+          !!v && (/^\d+$/.test(v) || /:\d+$/.test(v));
+        const reputationWorkerAgentId =
+          hasValidTokenIdFormat(job.workerId) ? job.workerId
+          : hasValidTokenIdFormat(job.providerAgentId) ? job.providerAgentId
+          : null;
         if (reputationWorkerAgentId) {
           recordDelivery({
             providerAgentId: reputationWorkerAgentId,
