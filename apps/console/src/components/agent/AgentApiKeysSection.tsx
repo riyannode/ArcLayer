@@ -129,13 +129,14 @@ export function AgentApiKeysSection({ agentId }: { agentId: string }) {
         setError(revokeData.detail || 'Failed to revoke old key');
         return;
       }
-      // 2. Only create new key after revoke succeeds
+      // 2. Only create new key after revoke succeeds, preserving old scopes
       const res = await fetch(`/api/agents/${agentId}/api-keys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           label: oldKey?.label || undefined,
-          preset: 'worker',
+          scopes: oldKey?.scopes && oldKey.scopes.length > 0 ? oldKey.scopes : undefined,
+          preset: oldKey?.scopes && oldKey.scopes.length > 0 ? undefined : 'worker',
         }),
       });
       const data = await res.json();

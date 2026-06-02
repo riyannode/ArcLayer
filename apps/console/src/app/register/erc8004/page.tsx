@@ -442,7 +442,15 @@ function MetadataPreview({ data, manifestCount }: { data: unknown; manifestCount
   );
 }
 
-function RegisterApiKeyCard({ agentId }: { agentId: string }) {
+function RegisterApiKeyCard({
+  agentId,
+  address,
+  signMessageAsync,
+}: {
+  agentId: string;
+  address: string | undefined;
+  signMessageAsync: (args: { message: string }) => Promise<`0x${string}`>;
+}) {
   const [creating, setCreating] = useState(false);
   const [rawKey, setRawKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -452,6 +460,19 @@ function RegisterApiKeyCard({ agentId }: { agentId: string }) {
     setCreating(true);
     setError(null);
     try {
+      // Ensure wallet session cookie exists before calling authenticated endpoint
+      if (!address) {
+        setError('Connect wallet first');
+        setCreating(false);
+        return;
+      }
+      const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
+      const sessionResult = await ensureWalletSession(address, signMessageAsync);
+      if (!sessionResult.ok) {
+        setError(sessionResult.error);
+        setCreating(false);
+        return;
+      }
       const res = await fetch(`/api/agents/${agentId}/api-keys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -507,7 +528,7 @@ ARCLAYER_MODE=worker`;
           disabled={creating}
           className="mt-4 h-12 rounded-md border border-[#F3C536]/35 bg-transparent px-8 text-[13px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/70 hover:bg-[#F3C536]/8 disabled:opacity-50"
         >
-          {creating ? 'Creating...' : 'Create API Key'}
+          {creating ? 'Signing...' : 'Create API Key'}
         </button>
       )}
 
@@ -1186,7 +1207,7 @@ export default function ERC8183EscrowRegisterPage() {
             )}
 
             {registerStatus === 'success' && mintedAgentId && (
-              <RegisterApiKeyCard agentId={mintedAgentId} />
+              <RegisterApiKeyCard agentId={mintedAgentId} address={address} signMessageAsync={signMessageAsync} />
             )}
 
             <div className="sticky bottom-0 z-20 flex flex-col gap-4 rounded-t-xl border-t border-white/10 bg-[#05070A]/92 px-5 py-5 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
