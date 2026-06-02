@@ -345,6 +345,62 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ── Verify client, expiredAt, hook match preparation ───────────────
+    const decodedClient = decodedEvent.client.toLowerCase();
+    const expectedClient = prep.buyer_controller.toLowerCase();
+    if (decodedClient !== expectedClient) {
+      await supabase
+        .from('erc8183_hire_preparations')
+        .update({ status: 'failed' })
+        .eq('id', prepareId)
+        .eq('status', 'creating');
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'event_client_mismatch',
+          detail: `Decoded JobCreated.client ${decodedClient} does not match preparation buyer controller ${expectedClient}`,
+        },
+        { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
+      );
+    }
+
+    if (decodedEvent.expiredAt.toString() !== prep.expired_at_unix) {
+      await supabase
+        .from('erc8183_hire_preparations')
+        .update({ status: 'failed' })
+        .eq('id', prepareId)
+        .eq('status', 'creating');
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'event_expired_at_mismatch',
+          detail: `Decoded JobCreated.expiredAt ${decodedEvent.expiredAt.toString()} does not match preparation expired_at_unix ${prep.expired_at_unix}`,
+        },
+        { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
+      );
+    }
+
+    const decodedHook = decodedEvent.hook.toLowerCase();
+    const expectedHook = prep.hook.toLowerCase();
+    if (decodedHook !== expectedHook) {
+      await supabase
+        .from('erc8183_hire_preparations')
+        .update({ status: 'failed' })
+        .eq('id', prepareId)
+        .eq('status', 'creating');
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'event_hook_mismatch',
+          detail: `Decoded JobCreated.hook ${decodedHook} does not match preparation hook ${expectedHook}`,
+        },
+        { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
+      );
+    }
+
     // ── Create local ERC-8183 job record ───────────────────────────────
     const job = await createLocalErc8183Job({
       buyerAgentId: prep.buyer_agent_id,
