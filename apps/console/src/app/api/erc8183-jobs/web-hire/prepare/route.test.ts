@@ -243,7 +243,7 @@ describe('POST /api/erc8183-jobs/web-hire/prepare', () => {
     expect(data.error).toBe('buyer_not_linked');
   });
 
-  it('wallet session rejects when no linked agents (403)', async () => {
+  it('wallet session rejects when no linked agents (403 buyer_not_linked)', async () => {
     mocks.requireApiKey.mockResolvedValue({ error: { status: 401 } });
     mocks.resolveSessionFromCookie.mockResolvedValue(MOCK_SESSION);
     mocks.getLinkedErc8004AgentsForController.mockResolvedValue([]);
@@ -251,9 +251,12 @@ describe('POST /api/erc8183-jobs/web-hire/prepare', () => {
     const res = await POST(makeRequest(VALID_BODY, 'valid-token') as any);
     const data = await res.json();
 
+    // Empty linkedAgents → falls through to validateBuyerOwnership → buyer_not_linked
+    // Body IS read first (buyerAgentId validated), then ownership check fails
     expect(res.status).toBe(403);
     expect(data.ok).toBe(false);
-    expect(data.error).toBe('no_linked_agents');
+    expect(data.error).toBe('buyer_not_linked');
+    expect(data.detail).toContain(BUYER_AGENT);
   });
 
   // ── Missing auth rejects ──────────────────────────────────────────────

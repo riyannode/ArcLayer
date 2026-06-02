@@ -101,15 +101,9 @@ async function attemptAuth(
   }
 
   // Load linked agents for the session wallet
+  // Don't early-return on empty — let the route handler read the body first
+  // and return buyer_not_linked with the actual buyerAgentId in the detail.
   const linkedAgents = await getLinkedErc8004AgentsForController(session.wallet);
-  if (linkedAgents.length === 0) {
-    return {
-      error: NextResponse.json(
-        { ok: false, error: 'no_linked_agents', detail: 'No ERC-8004 agents linked to this wallet' },
-        { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
-      ),
-    };
-  }
 
   return { auth: { type: 'wallet_session', session, linkedAgents } };
 }
