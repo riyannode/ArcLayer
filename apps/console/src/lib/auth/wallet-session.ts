@@ -264,15 +264,20 @@ export async function verifyAndCreateSession(params: {
     return { ok: false, error: 'signature_invalid', detail: 'Signature does not recover to wallet' };
   }
 
-  // Mark nonce used
-  const { error: markError } = await supabase
+  // Mark nonce used — atomic: .select() returns the consumed row (or null if already used)
+  const { data: consumed, error: markError } = await supabase
     .from('wallet_auth_nonces')
     .update({ used_at: nowIso() })
     .eq('nonce_hash', nonceHash)
-    .is('used_at', null);
+    .is('used_at', null)
+    .select('nonce_hash')
+    .maybeSingle();
 
   if (markError) {
     return { ok: false, error: 'nonce_consume_failed', detail: markError.message };
+  }
+  if (!consumed) {
+    return { ok: false, error: 'nonce_used', detail: 'Nonce already consumed (concurrent replay)' };
   }
 
   // Create session
@@ -387,7 +392,11 @@ export function buildSessionCookie(token: string, maxAgeSeconds = SESSION_TTL_MS
 }
 
 export function buildClearSessionCookie(): string {
-  return `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+  const parts = [`${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`];
+  if (process.env.NODE_ENV === 'production') {
+    parts.push('Secure');
+  }
+  return parts.join('; ');
 }
 
 // ── Linked agents helper ─────────────────────────────────────────────────
@@ -479,6 +488,14 @@ export function createTestSupabaseMock() {
                 filters.push({ op: 'is', col, val });
                 return chain;
               },
+              select: (_cols: string) => ({
+                maybeSingle: () => {
+                  const filtered = applyFilters(nonceRows, filters);
+                  if (filtered.length === 0) return Promise.resolve({ data: null, error: null });
+                  filtered.forEach((row) => Object.assign(row, updates));
+                  return Promise.resolve({ data: filtered[0], error: null });
+                },
+              }),
               then: (resolve: (v: unknown) => void) => {
                 const filtered = applyFilters(nonceRows, filters);
                 filtered.forEach((row) => Object.assign(row, updates));
