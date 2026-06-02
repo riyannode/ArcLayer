@@ -489,14 +489,14 @@ ARCLAYER_MODE=worker`;
   };
 
   return (
-    <div className="rounded-xl border border-[#F3C536]/20 bg-[#080D13]/78 p-5">
+    <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5">
       <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
         API Key
       </div>
-      <h3 className="mt-2 text-[16px] font-semibold text-[#F5F0E5]">
+      <h3 className="mt-2 text-[18px] font-semibold tracking-[-0.03em] text-[#F5F0E5]">
         Create API Key for this Agent
       </h3>
-      <p className="mt-1 text-[12px] leading-5 text-[#EAE4D8]/55">
+      <p className="mt-1 text-[13px] leading-5 text-[#EAE4D8]/50">
         Optional. Use this key to authenticate your PM2 worker bot with ArcLayer.
       </p>
 
@@ -505,30 +505,30 @@ ARCLAYER_MODE=worker`;
           type="button"
           onClick={handleCreate}
           disabled={creating}
-          className="mt-4 h-10 rounded-md border border-[#F3C536]/35 bg-transparent px-5 text-[12px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/70 hover:bg-[#F3C536]/8 disabled:opacity-50"
+          className="mt-4 h-12 rounded-md border border-[#F3C536]/35 bg-transparent px-8 text-[13px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/70 hover:bg-[#F3C536]/8 disabled:opacity-50"
         >
           {creating ? 'Creating...' : 'Create API Key'}
         </button>
       )}
 
       {error && (
-        <p className="mt-3 text-[12px] text-rose-300">{error}</p>
+        <p className="mt-3 text-[13px] text-rose-300">{error}</p>
       )}
 
       {rawKey && (
         <div className="mt-4 space-y-3">
-          <div className="rounded-md border border-rose-400/25 bg-rose-400/[0.06] px-4 py-3 text-[12px] leading-5 text-rose-200">
+          <div className="rounded-md border border-[#F3C536]/25 bg-[#F3C536]/[0.045] px-5 py-4 text-[13px] leading-6 text-[#F3C536]">
             Copy this key now. You will not be able to view it again.
           </div>
 
           <div className="flex items-center gap-2">
-            <code className="flex-1 truncate rounded-md border border-white/10 bg-black/30 px-3 py-2.5 font-mono text-[11px] text-[#F3C536]">
+            <code className="flex-1 truncate rounded-md border border-white/10 bg-white/[0.025] px-3 py-2.5 font-mono text-[11px] text-[#F3C536]">
               {rawKey}
             </code>
             <button
               type="button"
               onClick={copyKey}
-              className="h-10 shrink-0 rounded-md border border-[#F3C536]/35 bg-transparent px-4 text-[11px] font-semibold text-[#F3C536] transition hover:bg-[#F3C536]/8"
+              className="h-12 shrink-0 rounded-md border border-[#F3C536]/35 bg-transparent px-5 text-[12px] font-semibold text-[#F3C536] transition hover:bg-[#F3C536]/8"
             >
               {copied ? '✓ Copied' : 'Copy'}
             </button>
@@ -547,7 +547,7 @@ ARCLAYER_MODE=worker`;
                 Copy .env
               </button>
             </div>
-            <pre className="mt-1 overflow-auto rounded-md border border-white/10 bg-black/30 p-3 font-mono text-[10px] leading-5 text-[#EAE4D8]/65">
+            <pre className="mt-1 overflow-auto rounded-md border border-white/10 bg-white/[0.025] p-3 font-mono text-[10px] leading-5 text-[#EAE4D8]/65">
               {envSnippet}
             </pre>
           </div>
