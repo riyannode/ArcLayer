@@ -1,5 +1,5 @@
 /**
- * /api/agents/[agentId]/api-keys
+ * /api/agents/[id]/api-keys
  *
  * POST: Create a new API key for an agent. Returns raw key once.
  * GET: List API key metadata (never returns raw key).
@@ -92,10 +92,10 @@ async function verifyOwnership(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: Promise<{ agentId: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { agentId } = await params;
+    const { id: agentId } = await params;
 
     const auth = await verifyOwnership(req, agentId);
     if (!auth.ok) return auth.response;
@@ -204,10 +204,10 @@ export async function POST(
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ agentId: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const { agentId } = await params;
+    const { id: agentId } = await params;
 
     const auth = await verifyOwnership(req, agentId);
     if (!auth.ok) return auth.response;

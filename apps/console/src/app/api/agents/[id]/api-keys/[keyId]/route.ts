@@ -1,5 +1,5 @@
 /**
- * DELETE /api/agents/[agentId]/api-keys/[keyId]
+ * DELETE /api/agents/[id]/api-keys/[keyId]
  *
  * Revoke an API key. Requires wallet session auth.
  * Only agent controller/owner can revoke keys.
@@ -17,10 +17,10 @@ const ERROR_CACHE = 'no-store, no-cache, max-age=0';
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: Promise<{ agentId: string; keyId: string }> },
+  { params }: { params: Promise<{ id: string; keyId: string }> },
 ) {
   try {
-    const { agentId, keyId } = await params;
+    const { id: agentId, keyId } = await params;
 
     // Auth: wallet session required
     const cookieValue = req.cookies.get(SESSION_COOKIE_NAME)?.value;

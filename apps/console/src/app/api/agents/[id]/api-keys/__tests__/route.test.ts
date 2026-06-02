@@ -1,5 +1,5 @@
 /**
- * Tests for /api/agents/[agentId]/api-keys
+ * Tests for /api/agents/[id]/api-keys
  *
  * POST: auth, ownership, key creation, scope presets, scope validation, input validation.
  * GET: auth, ownership, metadata-only (never raw key/hash).
@@ -48,8 +48,8 @@ vi.mock('@/lib/x402/supabaseClient', () => ({
 
 // ── Import after mocks ────────────────────────────────────────────────────
 
-import { POST, GET } from './route';
-import { DELETE } from './[keyId]/route';
+import { POST, GET } from '../route';
+import { DELETE } from '../[keyId]/route';
 import { NextRequest } from 'next/server';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ function makeDeleteRequest(keyId: string, cookie?: string): NextRequest {
 
 // ── POST Tests ────────────────────────────────────────────────────────────
 
-describe('POST /api/agents/[agentId]/api-keys', () => {
+describe('POST /api/agents/[id]/api-keys', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.resolveSessionFromCookie.mockResolvedValue(MOCK_SESSION);
@@ -113,7 +113,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
 
   it('creates key successfully (201)', async () => {
     const res = await POST(makePostRequest({ preset: 'worker' }, 'valid-token'), {
-      params: Promise.resolve({ agentId: AGENT_ID }),
+      params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
 
@@ -127,7 +127,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('calls createApiKey with correct params', async () => {
     await POST(
       makePostRequest({ preset: 'worker', label: 'My Bot' }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
 
     expect(mocks.createApiKey).toHaveBeenCalledWith({
@@ -141,7 +141,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('client preset resolves correct scopes', async () => {
     await POST(
       makePostRequest({ preset: 'client' }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
 
     expect(mocks.createApiKey).toHaveBeenCalledWith(
@@ -154,7 +154,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('evaluator preset resolves correct scopes', async () => {
     await POST(
       makePostRequest({ preset: 'evaluator' }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
 
     expect(mocks.createApiKey).toHaveBeenCalledWith(
@@ -169,7 +169,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('valid explicit scopes accepted', async () => {
     const res = await POST(
       makePostRequest({ scopes: ['erc8183:tx', 'erc8183:create'] }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
 
@@ -183,7 +183,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('invalid explicit scope rejected (400)', async () => {
     const res = await POST(
       makePostRequest({ scopes: ['erc8183:tx', 'invalid:scope'] }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
 
@@ -196,7 +196,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('empty scopes array falls back to defaults', async () => {
     const res = await POST(
       makePostRequest({ scopes: [] }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
 
@@ -211,7 +211,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('duplicate scopes deduped', async () => {
     const res = await POST(
       makePostRequest({ scopes: ['erc8183:tx', 'erc8183:tx', 'erc8183:create'] }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
 
@@ -226,7 +226,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('non-string label rejected (400)', async () => {
     const res = await POST(
       makePostRequest({ preset: 'worker', label: 123 }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
 
@@ -237,7 +237,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('label over 80 chars rejected (400)', async () => {
     const res = await POST(
       makePostRequest({ preset: 'worker', label: 'a'.repeat(81) }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
 
@@ -248,7 +248,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('label exactly 80 chars accepted', async () => {
     const res = await POST(
       makePostRequest({ preset: 'worker', label: 'a'.repeat(80) }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
 
@@ -259,7 +259,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('invalid preset rejected (400)', async () => {
     const res = await POST(
       makePostRequest({ preset: 'admin' }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
 
@@ -270,7 +270,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('non-array scopes rejected (400)', async () => {
     const res = await POST(
       makePostRequest({ scopes: 'erc8183:tx' }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
 
@@ -281,7 +281,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('non-string scope in array rejected (400)', async () => {
     const res = await POST(
       makePostRequest({ scopes: ['erc8183:tx', 123] }, 'valid-token'),
-      { params: Promise.resolve({ agentId: AGENT_ID }) },
+      { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
 
@@ -293,7 +293,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
 
   it('missing auth returns 401', async () => {
     const res = await POST(makePostRequest({ preset: 'worker' }), {
-      params: Promise.resolve({ agentId: AGENT_ID }),
+      params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
 
@@ -304,7 +304,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('invalid session returns 401', async () => {
     mocks.resolveSessionFromCookie.mockResolvedValue(null);
     const res = await POST(makePostRequest({ preset: 'worker' }, 'bad-token'), {
-      params: Promise.resolve({ agentId: AGENT_ID }),
+      params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
 
@@ -317,7 +317,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
       { agentId: 'other-agent', tokenId: '999', controller: WALLET.toLowerCase() },
     ]);
     const res = await POST(makePostRequest({ preset: 'worker' }, 'valid-token'), {
-      params: Promise.resolve({ agentId: AGENT_ID }),
+      params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
 
@@ -335,7 +335,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
       body: 'null',
     });
     const res = await POST(req, {
-      params: Promise.resolve({ agentId: AGENT_ID }),
+      params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
 
@@ -346,7 +346,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   it('createApiKey failure returns 500', async () => {
     mocks.createApiKey.mockResolvedValue({ ok: false, error: 'db_error' });
     const res = await POST(makePostRequest({ preset: 'worker' }, 'valid-token'), {
-      params: Promise.resolve({ agentId: AGENT_ID }),
+      params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
 
@@ -357,7 +357,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
 
 // ── GET Tests ─────────────────────────────────────────────────────────────
 
-describe('GET /api/agents/[agentId]/api-keys', () => {
+describe('GET /api/agents/[id]/api-keys', () => {
   const MOCK_ROWS = [
     {
       id: 'key-001',
@@ -392,7 +392,7 @@ describe('GET /api/agents/[agentId]/api-keys', () => {
 
   it('owner returns metadata list', async () => {
     const res = await GET(makeGetRequest('valid-token'), {
-      params: Promise.resolve({ agentId: AGENT_ID }),
+      params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
 
@@ -408,7 +408,7 @@ describe('GET /api/agents/[agentId]/api-keys', () => {
 
   it('never returns raw key, key_hash, or hash fields', async () => {
     const res = await GET(makeGetRequest('valid-token'), {
-      params: Promise.resolve({ agentId: AGENT_ID }),
+      params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
     const json = JSON.stringify(data);
@@ -439,7 +439,7 @@ describe('GET /api/agents/[agentId]/api-keys', () => {
       { agentId: 'other', tokenId: '999', controller: WALLET.toLowerCase() },
     ]);
     const res = await GET(makeGetRequest('valid-token'), {
-      params: Promise.resolve({ agentId: AGENT_ID }),
+      params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
 
@@ -449,7 +449,7 @@ describe('GET /api/agents/[agentId]/api-keys', () => {
 
   it('missing session returns 401', async () => {
     const res = await GET(makeGetRequest(), {
-      params: Promise.resolve({ agentId: AGENT_ID }),
+      params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
 
@@ -460,7 +460,7 @@ describe('GET /api/agents/[agentId]/api-keys', () => {
   it('invalid session returns 401', async () => {
     mocks.resolveSessionFromCookie.mockResolvedValue(null);
     const res = await GET(makeGetRequest('bad-token'), {
-      params: Promise.resolve({ agentId: AGENT_ID }),
+      params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
 
@@ -471,7 +471,7 @@ describe('GET /api/agents/[agentId]/api-keys', () => {
 
 // ── DELETE Tests ──────────────────────────────────────────────────────────
 
-describe('DELETE /api/agents/[agentId]/api-keys/[keyId]', () => {
+describe('DELETE /api/agents/[id]/api-keys/[keyId]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.resolveSessionFromCookie.mockResolvedValue(MOCK_SESSION);
@@ -481,7 +481,7 @@ describe('DELETE /api/agents/[agentId]/api-keys/[keyId]', () => {
 
   it('owner revokes key (200)', async () => {
     const res = await DELETE(makeDeleteRequest('key-001', 'valid-token'), {
-      params: Promise.resolve({ agentId: AGENT_ID, keyId: 'key-001' }),
+      params: Promise.resolve({ id: AGENT_ID, keyId: 'key-001' }),
     });
     const data = await res.json();
 
@@ -495,7 +495,7 @@ describe('DELETE /api/agents/[agentId]/api-keys/[keyId]', () => {
       { agentId: 'other', tokenId: '999', controller: WALLET.toLowerCase() },
     ]);
     const res = await DELETE(makeDeleteRequest('key-001', 'valid-token'), {
-      params: Promise.resolve({ agentId: AGENT_ID, keyId: 'key-001' }),
+      params: Promise.resolve({ id: AGENT_ID, keyId: 'key-001' }),
     });
     const data = await res.json();
 
@@ -505,7 +505,7 @@ describe('DELETE /api/agents/[agentId]/api-keys/[keyId]', () => {
 
   it('missing session returns 401', async () => {
     const res = await DELETE(makeDeleteRequest('key-001'), {
-      params: Promise.resolve({ agentId: AGENT_ID, keyId: 'key-001' }),
+      params: Promise.resolve({ id: AGENT_ID, keyId: 'key-001' }),
     });
     const data = await res.json();
 
@@ -516,7 +516,7 @@ describe('DELETE /api/agents/[agentId]/api-keys/[keyId]', () => {
   it('invalid session returns 401', async () => {
     mocks.resolveSessionFromCookie.mockResolvedValue(null);
     const res = await DELETE(makeDeleteRequest('key-001', 'bad-token'), {
-      params: Promise.resolve({ agentId: AGENT_ID, keyId: 'key-001' }),
+      params: Promise.resolve({ id: AGENT_ID, keyId: 'key-001' }),
     });
     const data = await res.json();
 
@@ -527,7 +527,7 @@ describe('DELETE /api/agents/[agentId]/api-keys/[keyId]', () => {
   it('wrong keyId returns 404', async () => {
     mocks.revokeApiKey.mockResolvedValue(false);
     const res = await DELETE(makeDeleteRequest('nonexistent-key', 'valid-token'), {
-      params: Promise.resolve({ agentId: AGENT_ID, keyId: 'nonexistent-key' }),
+      params: Promise.resolve({ id: AGENT_ID, keyId: 'nonexistent-key' }),
     });
     const data = await res.json();
 
