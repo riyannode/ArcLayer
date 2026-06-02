@@ -57,3 +57,28 @@ CREATE INDEX IF NOT EXISTS idx_wallet_sessions_expires_at
 -- Active sessions filter
 CREATE INDEX IF NOT EXISTS idx_wallet_sessions_revoked_at
   ON wallet_sessions (revoked_at) WHERE revoked_at IS NULL;
+
+-- ── RLS: service role only ────────────────────────────────────────────────
+-- wallet_auth_nonces and wallet_sessions are sensitive.
+-- Hashed values still leak login/session activity.
+-- RLS locked to service_role only — matches 0009_a2a_api_keys pattern.
+
+ALTER TABLE wallet_auth_nonces ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS wallet_auth_nonces_service_role ON wallet_auth_nonces;
+CREATE POLICY wallet_auth_nonces_service_role
+  ON wallet_auth_nonces
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
+
+ALTER TABLE wallet_sessions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS wallet_sessions_service_role ON wallet_sessions;
+CREATE POLICY wallet_sessions_service_role
+  ON wallet_sessions
+  FOR ALL
+  TO service_role
+  USING (true)
+  WITH CHECK (true);
