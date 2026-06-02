@@ -19,6 +19,7 @@ import { assertErc8183Participant, isErc8183Admin } from '@/lib/erc8183-jobs/aut
 import { escrowRail } from '@/lib/rails/responses';
 import { checkMemoryRateLimit } from '@/lib/rate-limit/memory';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
+import { recordDelivery } from '@/lib/a2a/reputation';
 import { USDC_ABI, CONTRACTS } from '@/lib/contracts';
 import {
   parseBudgetSet,
@@ -655,6 +656,28 @@ export async function POST(
           completeTxHash: txHash,
           erc8183Status: onchainJob.erc8183Status,
         });
+
+        // Wire ERC-8183 completion to existing reputation system.
+        // Fire-and-forget — reputation failure must not fail complete tx confirmation.
+        // Prefer workerId, but only if it looks like a valid ERC-8004 token id
+        // (pure digits or "prefix:digits"). Otherwise recordDelivery silently
+        // fails because extractAgentTokenId rejects non-numeric strings.
+        const hasValidTokenIdFormat = (v: string | null | undefined): boolean =>
+          !!v && (/^\d+$/.test(v) || /:\d+$/.test(v));
+        const reputationWorkerAgentId =
+          hasValidTokenIdFormat(job.workerId) ? job.workerId
+          : hasValidTokenIdFormat(job.providerAgentId) ? job.providerAgentId
+          : null;
+        if (reputationWorkerAgentId) {
+          recordDelivery({
+            providerAgentId: reputationWorkerAgentId,
+            buyerAgentId: job.buyerAgentId,
+            jobId: localJobId,
+            delivered: true,
+          }).catch((err) => {
+            console.error('[erc8183:complete] recordDelivery failed:', err);
+          });
+        }
 
         return NextResponse.json({
           ok: true,
