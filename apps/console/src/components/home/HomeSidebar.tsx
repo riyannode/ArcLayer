@@ -10,7 +10,6 @@ const items = [
   { label: 'PROTOCOL', href: '/protocol' },
   { label: 'SDK', href: '/docs' },
   { label: 'AGENTS', href: '/agents' },
-  { label: 'JOBS', href: '/jobs' },
   { label: 'LIVE A2A AGENT', href: '/live-a2a-agent' },
 ];
 

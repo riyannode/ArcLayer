@@ -6,7 +6,7 @@ import ArcMark from './ArcMark';
 export default function Footer() {
   const protocolLinks = [
     { label: 'PROTOCOL', href: '/protocol' },
-    { label: 'JOBS', href: '/jobs' },
+    { label: 'DASHBOARD', href: '/dashboard' },
     { label: 'AGENTS', href: '/agents' },
     { label: 'SDK', href: '/docs' },
   ];

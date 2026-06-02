@@ -11,7 +11,7 @@ export default function EscrowRedirectPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/a2a');
+    router.replace('/dashboard');
   }, [router]);
 
   return (
