@@ -442,6 +442,142 @@ function MetadataPreview({ data, manifestCount }: { data: unknown; manifestCount
   );
 }
 
+function RegisterApiKeyCard({
+  agentId,
+  address,
+  signMessageAsync,
+}: {
+  agentId: string;
+  address: string | undefined;
+  signMessageAsync: (args: { message: string }) => Promise<`0x${string}`>;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [rawKey, setRawKey] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCreate = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      // Ensure wallet session cookie exists before calling authenticated endpoint
+      if (!address) {
+        setError('Connect wallet first');
+        setCreating(false);
+        return;
+      }
+      const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
+      const sessionResult = await ensureWalletSession(address, signMessageAsync);
+      if (!sessionResult.ok) {
+        setError(sessionResult.error);
+        setCreating(false);
+        return;
+      }
+      const res = await fetch(`/api/agents/${agentId}/api-keys`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preset: 'worker', label: 'PM2 Worker Key' }),
+      });
+      const data = await res.json();
+      if (data.ok && data.key) {
+        setRawKey(data.key);
+      } else {
+        setError(data.detail || data.error || 'Failed to create key');
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Network error');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const copyKey = async () => {
+    if (!rawKey) return;
+    await navigator.clipboard.writeText(rawKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const envSnippet = `ARCLAYER_API_KEY=${rawKey ?? 'ak_...'}
+ARCLAYER_AGENT_ID=${agentId}
+ARCLAYER_BASE_URL=https://arclayers.xyz
+ARCLAYER_MODE=worker`;
+
+  const copyEnv = async () => {
+    await navigator.clipboard.writeText(envSnippet);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5">
+      <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
+        API Key
+      </div>
+      <h3 className="mt-2 text-[18px] font-semibold tracking-[-0.03em] text-[#F5F0E5]">
+        Create API Key for this Agent
+      </h3>
+      <p className="mt-1 text-[13px] leading-5 text-[#EAE4D8]/50">
+        Optional. Use this key to authenticate your PM2 worker bot with ArcLayer.
+      </p>
+
+      {!rawKey && !error && (
+        <button
+          type="button"
+          onClick={handleCreate}
+          disabled={creating}
+          className="mt-4 h-12 rounded-md border border-[#F3C536]/35 bg-transparent px-8 text-[13px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/70 hover:bg-[#F3C536]/8 disabled:opacity-50"
+        >
+          {creating ? 'Signing...' : 'Create API Key'}
+        </button>
+      )}
+
+      {error && (
+        <p className="mt-3 text-[13px] text-rose-300">{error}</p>
+      )}
+
+      {rawKey && (
+        <div className="mt-4 space-y-3">
+          <div className="rounded-md border border-[#F3C536]/25 bg-[#F3C536]/[0.045] px-5 py-4 text-[13px] leading-6 text-[#F3C536]">
+            Copy this key now. You will not be able to view it again.
+          </div>
+
+          <div className="flex items-center gap-2">
+            <code className="flex-1 truncate rounded-md border border-white/10 bg-white/[0.025] px-3 py-2.5 font-mono text-[11px] text-[#F3C536]">
+              {rawKey}
+            </code>
+            <button
+              type="button"
+              onClick={copyKey}
+              className="h-12 shrink-0 rounded-md border border-[#F3C536]/35 bg-transparent px-5 text-[12px] font-semibold text-[#F3C536] transition hover:bg-[#F3C536]/8"
+            >
+              {copied ? '✓ Copied' : 'Copy'}
+            </button>
+          </div>
+
+          <div className="relative">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#EAE4D8]/45">
+                .env snippet
+              </span>
+              <button
+                type="button"
+                onClick={copyEnv}
+                className="font-mono text-[10px] text-[#F3C536] hover:text-[#FFE070]"
+              >
+                Copy .env
+              </button>
+            </div>
+            <pre className="mt-1 overflow-auto rounded-md border border-white/10 bg-white/[0.025] p-3 font-mono text-[10px] leading-5 text-[#EAE4D8]/65">
+              {envSnippet}
+            </pre>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ERC8183EscrowRegisterPage() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [notice, setNotice] = useState('');
@@ -1068,6 +1204,10 @@ export default function ERC8183EscrowRegisterPage() {
                   </div>
                 )}
               </div>
+            )}
+
+            {registerStatus === 'success' && mintedAgentId && (
+              <RegisterApiKeyCard agentId={mintedAgentId} address={address} signMessageAsync={signMessageAsync} />
             )}
 
             <div className="sticky bottom-0 z-20 flex flex-col gap-4 rounded-t-xl border-t border-white/10 bg-[#05070A]/92 px-5 py-5 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">

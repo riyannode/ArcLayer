@@ -7,6 +7,7 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { formatUSDC } from '@/lib/contracts';
 import { IndexerDegradedBanner } from '@/components/IndexerDegradedBanner';
 import { loadAgentDetail, type DataSource } from '@/lib/indexer';
+import { AgentApiKeysSection } from '@/components/agent/AgentApiKeysSection';
 import {
   displayCategory,
   fetchErc8183Metadata,
@@ -28,6 +29,7 @@ import {
   FileJson,
   Sparkles,
   Code2,
+  Key,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -83,7 +85,8 @@ type AgentTab =
   | 'links'
   | 'reputation'
   | 'metadata'
-  | 'actions';
+  | 'actions'
+  | 'api-keys';
 
 const AGENT_TABS: readonly [
   AgentTab,
@@ -96,6 +99,7 @@ const AGENT_TABS: readonly [
   ['reputation', 'Reputation', Trophy],
   ['metadata', 'Metadata', FileJson],
   ['actions', 'Actions', Sparkles],
+  ['api-keys', 'API Keys', Key],
 ];
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -443,6 +447,16 @@ export default function AgentProfilePage() {
       (isErc8183ProfileMetadata(metadata) &&
         isErc8183CapabilityList(capabilities)));
 
+  const isOwner =
+    isConnected &&
+    Boolean(address) &&
+    Boolean(agent?.controller) &&
+    address?.toLowerCase() === agent?.controller?.toLowerCase();
+
+  const visibleTabs = isOwner
+    ? AGENT_TABS
+    : AGENT_TABS.filter(([key]) => key !== 'api-keys');
+
   const registeredInfo = formatRegisteredAt(agent?.registeredAt, metadata);
 
   // ─── Render ────────────────────────────────────────────────────────
@@ -557,7 +571,7 @@ export default function AgentProfilePage() {
             {/* ─── Tabs ──────────────────────────────────────────────── */}
             <div className="mt-8 overflow-hidden rounded-xl border border-[#1A2228] bg-[#080D13]/78">
               <div className="flex overflow-x-auto border-b border-white/[0.08]">
-                {AGENT_TABS.map(([key, label, Icon]) => (
+                {visibleTabs.map(([key, label, Icon]) => (
                   <AgentTabButton
                     key={key}
                     active={activeTab === key}
@@ -767,6 +781,11 @@ export default function AgentProfilePage() {
                       Open Direct Hire →
                     </Link>
                   </section>
+                )}
+
+                {/* API Keys — owner only */}
+                {activeTab === 'api-keys' && isOwner && agentId && (
+                  <AgentApiKeysSection agentId={agentId} />
                 )}
               </div>
             </div>
