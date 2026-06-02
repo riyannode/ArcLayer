@@ -251,6 +251,7 @@ export async function getErc8183JobByOnchainId(
 export async function listErc8183Jobs(filter: {
   buyerAgentId?: string;
   providerAgentId?: string;
+  evaluatorAgentId?: string;
   workerId?: string;
   status?: string;
   erc8183Status?: Erc8183Status;
@@ -263,6 +264,7 @@ export async function listErc8183Jobs(filter: {
   query = query.eq('settlement_mode', 'erc8183_escrow');
   if (filter.buyerAgentId) query = query.eq('buyer_agent_id', filter.buyerAgentId);
   if (filter.providerAgentId) query = query.eq('provider_agent_id', filter.providerAgentId);
+  if (filter.evaluatorAgentId) query = query.eq('evaluator_agent_id', filter.evaluatorAgentId);
   if (filter.workerId) query = query.eq('worker_id', filter.workerId);
   if (filter.status) query = query.eq('status', filter.status);
   if (filter.erc8183Status) query = query.eq('erc8183_status', filter.erc8183Status);

@@ -8,6 +8,7 @@ import { formatUSDC } from '@/lib/contracts';
 import { IndexerDegradedBanner } from '@/components/IndexerDegradedBanner';
 import { loadAgentDetail, type DataSource } from '@/lib/indexer';
 import { AgentApiKeysSection } from '@/components/agent/AgentApiKeysSection';
+import { AgentJobsSection } from '@/components/agent/AgentJobsSection';
 import {
   displayCategory,
   fetchErc8183Metadata,
@@ -30,6 +31,7 @@ import {
   Sparkles,
   Code2,
   Key,
+  Briefcase,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────
@@ -86,7 +88,8 @@ type AgentTab =
   | 'reputation'
   | 'metadata'
   | 'actions'
-  | 'api-keys';
+  | 'api-keys'
+  | 'jobs';
 
 const AGENT_TABS: readonly [
   AgentTab,
@@ -99,6 +102,7 @@ const AGENT_TABS: readonly [
   ['reputation', 'Reputation', Trophy],
   ['metadata', 'Metadata', FileJson],
   ['actions', 'Actions', Sparkles],
+  ['jobs', 'Jobs', Briefcase],
   ['api-keys', 'API Keys', Key],
 ];
 
@@ -786,6 +790,11 @@ export default function AgentProfilePage() {
                 {/* API Keys — owner only */}
                 {activeTab === 'api-keys' && isOwner && agentId && (
                   <AgentApiKeysSection agentId={agentId} />
+                )}
+
+                {/* Jobs — public worker proof + owner private grouped */}
+                {activeTab === 'jobs' && agentId && (
+                  <AgentJobsSection agentId={agentId} />
                 )}
               </div>
             </div>
