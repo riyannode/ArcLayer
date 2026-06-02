@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useSignMessage } from 'wagmi';
 import { loadAgentDetail } from '@/lib/indexer';
 import {
   fetchErc8183Metadata,
@@ -15,16 +16,23 @@ import {
 import { useArcWallet } from '@/hooks/useArcWallet';
 
 /* ------------------------------------------------------------------ */
-/*  Constants                                                          */
+/*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
 type SectionKey = 'provider' | 'client' | 'task' | 'scope' | 'budget' | 'review';
 
-type BuyerAgent = {
+type LinkedAgent = {
   agentId: string;
   tokenId: string;
   controller: string;
   metadataName?: string;
+};
+
+type SessionStatus = {
+  authenticated: boolean;
+  wallet?: string;
+  expiresAt?: number;
+  linkedAgents: LinkedAgent[];
 };
 
 type FormState = {
@@ -209,8 +217,16 @@ type PrepareResult = {
 export default function DirectHireEscrowPage() {
   const params = useParams<{ id: string }>();
   const { address, isConnected } = useArcWallet();
+  const { signMessageAsync } = useSignMessage();
   const agentId = parseAgentId(params.id);
 
+  /* ---- Wallet session state ---- */
+  const [session, setSession] = useState<SessionStatus | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  const [signingIn, setSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState('');
+
+  /* ---- Agent state ---- */
   const [agentData, setAgentData] = useState<{
     agentId: string;
     name: string;
@@ -225,6 +241,7 @@ export default function DirectHireEscrowPage() {
   const [agentLoading, setAgentLoading] = useState(true);
   const [agentError, setAgentError] = useState<string | null>(null);
 
+  /* ---- Form state ---- */
   const [form, setForm] = useState<FormState>(emptyForm);
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     provider: true,
@@ -235,13 +252,94 @@ export default function DirectHireEscrowPage() {
     review: false,
   });
 
-  const [buyerAgents, setBuyerAgents] = useState<BuyerAgent[]>([]);
-  const [buyersLoading, setBuyersLoading] = useState(false);
-
   const [preparing, setPreparing] = useState(false);
   const [prepareResult, setPrepareResult] = useState<PrepareResult | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  /* ---- Fetch wallet session ---- */
+  const fetchSession = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth/session', { cache: 'no-store' });
+      const data: SessionStatus = await res.json();
+      setSession(data);
+    } catch {
+      setSession({ authenticated: false, linkedAgents: [] });
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setSessionLoading(true);
+      try {
+        const res = await fetch('/api/auth/session', { cache: 'no-store' });
+        const data: SessionStatus = await res.json();
+        if (!cancelled) setSession(data);
+      } catch {
+        if (!cancelled) setSession({ authenticated: false, linkedAgents: [] });
+      } finally {
+        if (!cancelled) setSessionLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [fetchSession]);
+
+  /* ---- Sign in with wallet ---- */
+  async function handleSignIn() {
+    if (!address) return;
+    setSigningIn(true);
+    setSignInError('');
+
+    try {
+      // 1. Get nonce
+      const nonceRes = await fetch(
+        `/api/auth/wallet/nonce?address=${encodeURIComponent(address)}`,
+      );
+      const nonceData = await nonceRes.json();
+      if (!nonceRes.ok || !nonceData.ok) {
+        throw new Error(nonceData.detail || nonceData.error || 'Failed to get nonce');
+      }
+
+      // 2. Sign the message
+      const signature = await signMessageAsync({
+        message: nonceData.message,
+      });
+
+      // 3. Verify and create session
+      const verifyRes = await fetch('/api/auth/wallet/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet: address,
+          nonce: nonceData.nonce,
+          signature,
+        }),
+      });
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok || !verifyData.ok) {
+        throw new Error(verifyData.detail || verifyData.error || 'Signature verification failed');
+      }
+
+      // 4. Refresh session
+      await fetchSession();
+    } catch (e) {
+      setSignInError(e instanceof Error ? e.message : 'Sign-in failed.');
+    } finally {
+      setSigningIn(false);
+    }
+  }
+
+  /* ---- Logout ---- */
+  async function handleLogout() {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      setSession({ authenticated: false, linkedAgents: [] });
+      setForm((s) => ({ ...s, buyerAgentId: '' }));
+    } catch {
+      /* ignore */
+    }
+  }
 
   /* ---- Load agent from route param ---- */
   useEffect(() => {
@@ -314,54 +412,21 @@ export default function DirectHireEscrowPage() {
     }
   }, []);
 
-  /* ---- Load buyer agents by connected wallet controller ---- */
+  /* ---- Linked agents from session ---- */
+  const linkedAgents: LinkedAgent[] = session?.authenticated
+    ? session.linkedAgents
+    : [];
+
+  /* ---- Auto-select buyer if only one linked agent ---- */
   useEffect(() => {
-    if (!address || !isConnected) {
-      setBuyerAgents([]);
-      return;
+    if (
+      session?.authenticated &&
+      linkedAgents.length === 1 &&
+      !form.buyerAgentId
+    ) {
+      setForm((s) => ({ ...s, buyerAgentId: linkedAgents[0].agentId }));
     }
-
-    let alive = true;
-
-    async function loadBuyers() {
-      setBuyersLoading(true);
-      try {
-        const res = await fetch(
-          `/api/erc8004/identity/by-controller?controller=${address}`,
-          { cache: 'no-store' },
-        );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
-        if (!json.ok || !Array.isArray(json.agents)) throw new Error('bad response');
-
-        const agents: BuyerAgent[] = json.agents.map(
-          (a: { agentId?: string; tokenId?: string; controller?: string; metadata?: { name?: string } | null }) => ({
-            agentId: String(a.agentId ?? a.tokenId ?? ''),
-            tokenId: String(a.tokenId ?? a.agentId ?? ''),
-            controller: a.controller ?? '',
-            metadataName: a.metadata?.name ?? undefined,
-          }),
-        );
-
-        if (alive) {
-          setBuyerAgents(agents);
-          // Auto-select if only one agent
-          if (agents.length === 1 && !form.buyerAgentId) {
-            setForm((s) => ({ ...s, buyerAgentId: agents[0].agentId }));
-          }
-        }
-      } catch {
-        if (alive) setBuyerAgents([]);
-      } finally {
-        if (alive) setBuyersLoading(false);
-      }
-    }
-
-    loadBuyers();
-    return () => {
-      alive = false;
-    };
-  }, [address, isConnected]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [session?.authenticated, linkedAgents, form.buyerAgentId]);
 
   /* ---- Derived completion flags ---- */
   const taskComplete = Boolean(form.description.trim());
@@ -372,10 +437,9 @@ export default function DirectHireEscrowPage() {
   const buyerComplete = Boolean(form.buyerAgentId);
   const evaluatorComplete =
     form.evaluatorMode === 'client' || Boolean(form.evaluatorAgentId.trim());
-  /* Prepare is disabled until wallet-auth/session lands (PR #408). */
-  const walletSessionReady = false;
+  const sessionReady = Boolean(session?.authenticated);
   const canPrepare =
-    walletSessionReady &&
+    sessionReady &&
     taskComplete &&
     scopeComplete &&
     budgetComplete &&
@@ -403,11 +467,6 @@ export default function DirectHireEscrowPage() {
 
   async function handlePrepare() {
     if (!canPrepare || !agentData) return;
-
-    if (!isConnected || !address) {
-      setError('Connect your wallet first.');
-      return;
-    }
 
     try {
       setPreparing(true);
@@ -467,7 +526,7 @@ export default function DirectHireEscrowPage() {
   }
 
   /* ---- Render ---- */
-  const selectedBuyer = buyerAgents.find((a) => a.agentId === form.buyerAgentId);
+  const selectedBuyer = linkedAgents.find((a) => a.agentId === form.buyerAgentId);
 
   const reviewRows = [
     ['Provider Agent', agentData?.name ?? '—'],
@@ -478,7 +537,7 @@ export default function DirectHireEscrowPage() {
     ['Budget', form.budgetMax ? `${form.budgetMax} USDC` : '—'],
     ['Settlement', 'ERC-8183 Escrow'],
     ['Evaluator', form.evaluatorMode === 'client' ? 'Client (self)' : `Agent #${form.evaluatorAgentId}`],
-    ['Client Wallet', address || 'Not connected'],
+    ['Client Wallet', session?.authenticated ? shortText(session.wallet || '') : 'Not signed in'],
   ] as const;
 
   return (
@@ -592,15 +651,6 @@ export default function DirectHireEscrowPage() {
                         </span>
                       </div>
                     )}
-
-                    <div className="mt-2">
-                      <Link
-                        href="/dashboard"
-                        className="inline-flex h-9 items-center rounded-lg border border-[#C5A67C]/35 bg-black/35 px-4 text-[12px] font-semibold text-[#F0B84A] transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/8"
-                      >
-                        Change Agent
-                      </Link>
-                    </div>
                   </div>
                 </div>
               </SectionCard>
@@ -609,47 +659,90 @@ export default function DirectHireEscrowPage() {
               <SectionCard
                 number={2}
                 title="Client / Buyer Agent"
-                subtitle="Select the buyer agent from your ERC-8004 identity records."
+                subtitle="Your wallet session identity determines available buyer agents."
                 status={buyerComplete ? 'Complete' : 'Pending'}
                 open={openSections.client}
                 onToggle={() => toggleSection('client')}
               >
-                {!isConnected ? (
-                  <div className="rounded-lg border border-[#F0B84A]/20 bg-[#F0B84A]/8 px-4 py-3 text-sm text-[#EAE4D8]/72">
-                    Connect your wallet to load your buyer agent identities.
-                  </div>
-                ) : buyersLoading ? (
+                {sessionLoading ? (
                   <div className="font-mono text-[12px] text-[#EAE4D8]/55">
-                    Loading your ERC-8004 identities…
+                    Checking wallet session…
                   </div>
-                ) : buyerAgents.length === 0 ? (
-                  <div className="rounded-lg border border-red-400/20 bg-red-400/8 px-4 py-3 text-sm text-red-200">
-                    No ERC-8004 identities found for wallet {shortText(address || '')}.
-                    Mint an identity first.
+                ) : !session?.authenticated ? (
+                  /* ---- Not signed in: show connect + sign-in ---- */
+                  <div className="grid gap-4">
+                    <div className="rounded-lg border border-[#F0B84A]/20 bg-[#F0B84A]/8 px-4 py-3 text-sm text-[#EAE4D8]/72">
+                      Sign in with your wallet to load your ERC-8004 buyer agent identities.
+                    </div>
+                    {!isConnected ? (
+                      <div className="rounded-lg border border-white/[0.06] bg-black/25 px-4 py-3 text-sm text-[#EAE4D8]/55">
+                        Connect your wallet using the navbar, then return here to sign in.
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        <div className="text-[13px] text-[#EAE4D8]/55">
+                          Wallet: <span className="font-mono text-[#F5F0E5]">{shortText(address || '')}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSignIn}
+                          disabled={signingIn}
+                          className="h-12 w-fit rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A]/20 px-8 text-sm font-semibold text-[#F0B84A] transition hover:border-[#F0B84A]/80 hover:bg-[#F0B84A]/30 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {signingIn ? 'Signing…' : 'Sign In with Wallet'}
+                        </button>
+                        {signInError && (
+                          <div className="rounded-lg border border-red-400/25 bg-red-400/8 px-4 py-3 text-sm text-red-200">
+                            {signInError}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
+                  /* ---- Signed in: show session status + agent picker ---- */
                   <div className="grid gap-5">
-                    <div>
-                      <FieldLabel required>Buyer Agent ID</FieldLabel>
-                      <select
-                        value={form.buyerAgentId}
-                        onChange={(e) => update('buyerAgentId', e.target.value)}
-                        className={inputCls}
+                    <div className="flex items-center justify-between gap-4 rounded-lg border border-emerald-400/20 bg-emerald-400/8 px-4 py-3">
+                      <div className="text-sm">
+                        <span className="text-emerald-300">Signed in</span>
+                        <span className="ml-2 font-mono text-[#EAE4D8]/72">
+                          {shortText(session.wallet || '')}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="shrink-0 rounded-md border border-white/[0.06] bg-black/25 px-3 py-1.5 text-[11px] font-semibold text-[#EAE4D8]/55 transition hover:text-[#F4EFE5]"
                       >
-                        <option value="">Select your buyer agent</option>
-                        {buyerAgents.map((a) => (
-                          <option key={a.agentId} value={a.agentId}>
-                            {a.metadataName || `Agent #${a.agentId}`}
-                            {a.agentId !== a.tokenId ? ` (token ${a.tokenId})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="mt-2 text-xs text-[#EAE4D8]/53">
-                        This agent will be the ERC-8183 client/buyer. Loaded from your connected wallet&apos;s ERC-8004 identities.
-                      </p>
+                        Sign Out
+                      </button>
                     </div>
 
-
+                    {linkedAgents.length === 0 ? (
+                      <div className="rounded-lg border border-red-400/20 bg-red-400/8 px-4 py-3 text-sm text-red-200">
+                        No ERC-8004 agent identity found for this wallet. Register or sync an agent first.
+                      </div>
+                    ) : (
+                      <div>
+                        <FieldLabel required>Buyer Agent ID</FieldLabel>
+                        <select
+                          value={form.buyerAgentId}
+                          onChange={(e) => update('buyerAgentId', e.target.value)}
+                          className={inputCls}
+                        >
+                          <option value="">Select your buyer agent</option>
+                          {linkedAgents.map((a) => (
+                            <option key={a.agentId} value={a.agentId}>
+                              {a.metadataName || `Agent #${a.agentId}`}
+                              {a.agentId !== a.tokenId ? ` (token ${a.tokenId})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-2 text-xs text-[#EAE4D8]/53">
+                          This agent will be the ERC-8183 client/buyer. Loaded from your wallet session.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </SectionCard>
@@ -851,7 +944,7 @@ export default function DirectHireEscrowPage() {
                 </div>
 
                 <div className="mt-5 rounded-lg border border-[#F0B84A]/20 bg-[#F0B84A]/8 px-4 py-3 text-sm text-[#EAE4D8]/72">
-                  This will call the prepare API to resolve all participants from ERC-8004 identity records.
+                  This will call the prepare API using your wallet session cookie to resolve all participants from ERC-8004 identity records.
                 </div>
               </SectionCard>
 
@@ -930,7 +1023,11 @@ export default function DirectHireEscrowPage() {
         {!agentLoading && agentData && (
           <div className="sticky bottom-0 z-20 mt-6 flex flex-col gap-4 rounded-t-xl border-t border-white/[0.04] bg-[#050505]/92 px-7 py-5 backdrop-blur-xl md:flex-row md:items-center md:justify-between">
             <p className="text-sm text-[#EAE4D8]/55 max-w-xl">
-              Wallet session is required to prepare this hire. This will be enabled after wallet-auth/session is merged.
+              {!session?.authenticated
+                ? 'Sign in with your wallet to prepare this hire.'
+                : !form.buyerAgentId
+                  ? 'Select a buyer agent to continue.'
+                  : 'All details will be resolved via your wallet session.'}
             </p>
 
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -943,11 +1040,18 @@ export default function DirectHireEscrowPage() {
               </button>
               <button
                 type="button"
-                disabled
-                title="Wallet session auth is required — will be available after PR #408"
-                className="h-12 cursor-not-allowed rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A]/40 px-10 text-sm font-semibold text-black/50 shadow-none"
+                disabled={!canPrepare || preparing}
+                onClick={handlePrepare}
+                title={
+                  !session?.authenticated
+                    ? 'Sign in with your wallet first'
+                    : !form.buyerAgentId
+                      ? 'Select a buyer agent'
+                      : undefined
+                }
+                className="h-12 rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A]/40 px-10 text-sm font-semibold text-black transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/55 disabled:cursor-not-allowed disabled:border-[#F0B84A]/25 disabled:bg-[#F0B84A]/15 disabled:text-black/40"
               >
-                Prepare Job →
+                {preparing ? 'Preparing…' : 'Prepare Job →'}
               </button>
             </div>
           </div>
