@@ -11,7 +11,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import {
   resolveSessionFromCookie,
   getLinkedErc8004AgentsForController,

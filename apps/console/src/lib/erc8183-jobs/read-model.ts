@@ -291,6 +291,7 @@ export interface Erc8183JobDetail {
   lifecycleStatus: LifecycleStatus;
   localStatus: string;
   onchainStatus: Erc8183Status | null;
+  description: string | null;
   participants: {
     client: { agentId: string; address: string | null };
     provider: { agentId: string | null; address: string | null };
@@ -387,6 +388,7 @@ export async function buildErc8183JobDetail(
     lifecycleStatus,
     localStatus: job.status,
     onchainStatus,
+    description: job.description,
     participants: {
       client: { agentId: job.buyerAgentId, address: job.clientAddress },
       provider: { agentId: job.providerAgentId, address: job.providerAddress },

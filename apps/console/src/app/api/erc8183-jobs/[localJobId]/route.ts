@@ -83,16 +83,20 @@ export async function GET(
       );
     }
 
-    // Check participant access
+    // Check participant access — compare both agentId and tokenId
     const linkedAgents = await getLinkedErc8004AgentsForController(session.wallet);
-    const linkedAgentIds = linkedAgents.map((a) => a.agentId.toLowerCase());
+    const linkedAgentIds = new Set(
+      linkedAgents
+        .flatMap((a) => [a.agentId?.toLowerCase(), a.tokenId?.toLowerCase()])
+        .filter(Boolean),
+    );
 
-    const isBuyer = linkedAgentIds.includes(job.buyerAgentId?.toLowerCase() ?? '');
+    const isBuyer = linkedAgentIds.has(job.buyerAgentId?.toLowerCase() ?? '');
     const isProvider = job.providerAgentId
-      ? linkedAgentIds.includes(job.providerAgentId.toLowerCase())
+      ? linkedAgentIds.has(job.providerAgentId.toLowerCase())
       : false;
     const isEvaluator = job.evaluatorAgentId
-      ? linkedAgentIds.includes(job.evaluatorAgentId.toLowerCase())
+      ? linkedAgentIds.has(job.evaluatorAgentId.toLowerCase())
       : false;
 
     if (!isBuyer && !isProvider && !isEvaluator) {

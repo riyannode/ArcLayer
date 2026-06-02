@@ -3,6 +3,7 @@
 import { useParams } from 'next/navigation';
 import { useEffect, useState, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { useSignMessage } from 'wagmi';
 import { useArcWallet } from '@/hooks/useArcWallet';
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -22,6 +23,7 @@ type JobDetail = {
   lifecycleStatus: string;
   localStatus: string;
   onchainStatus: string | null;
+  description: string | null;
   participants: {
     client: { agentId: string; address: string | null };
     provider: { agentId: string | null; address: string | null };
@@ -204,14 +206,17 @@ function ParticipantRow({
 export default function Erc8183JobDetailPage() {
   const params = useParams();
   const localJobId = params.localJobId as string;
-  const { isConnected } = useArcWallet();
+  const { isConnected, address } = useArcWallet();
+  const { signMessageAsync } = useSignMessage();
 
   const [job, setJob] = useState<JobDetail | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [status, setStatus] = useState<
-    'loading' | 'unauthenticated' | 'forbidden' | 'not_found' | 'ready' | 'error'
+    'loading' | 'unauthenticated' | 'need_sign' | 'forbidden' | 'not_found' | 'ready' | 'error'
   >('loading');
   const [error, setError] = useState<string | null>(null);
+  const [signing, setSigning] = useState(false);
+  const [signError, setSignError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchJob = useCallback(async () => {
@@ -220,7 +225,8 @@ export default function Erc8183JobDetailPage() {
       const data: ApiResponse = await res.json();
 
       if (res.status === 401) {
-        setStatus('unauthenticated');
+        // Distinguish: no wallet vs wallet connected but no session
+        setStatus(isConnected ? 'need_sign' : 'unauthenticated');
         return;
       }
       if (res.status === 403) {
@@ -245,7 +251,7 @@ export default function Erc8183JobDetailPage() {
       setStatus('error');
       setError(e instanceof Error ? e.message : 'Network error');
     }
-  }, [localJobId]);
+  }, [localJobId, isConnected]);
 
   useEffect(() => {
     fetchJob();
@@ -271,17 +277,38 @@ export default function Erc8183JobDetailPage() {
 
   // Re-fetch when wallet connects
   useEffect(() => {
-    if (isConnected && status === 'unauthenticated') {
+    if (isConnected && (status === 'unauthenticated' || status === 'need_sign')) {
       fetchJob();
     }
   }, [isConnected, status, fetchJob]);
+
+  // ── Wallet session establishment ──────────────────────────────────────
+
+  const handleSignIn = useCallback(async () => {
+    if (!address || !signMessageAsync) return;
+    setSigning(true);
+    setSignError(null);
+    try {
+      const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
+      const result = await ensureWalletSession(address, signMessageAsync);
+      if (result.ok) {
+        await fetchJob();
+      } else {
+        setSignError(result.error);
+      }
+    } catch (e) {
+      setSignError(e instanceof Error ? e.message : 'Signing failed');
+    } finally {
+      setSigning(false);
+    }
+  }, [address, signMessageAsync, fetchJob]);
 
   return (
     <main className="min-h-screen bg-[#05070A] text-[#F5F0E5]">
       <section className="relative mx-auto max-w-[960px] px-6 pb-16 pt-10 sm:px-10 lg:px-16">
         {/* Back link */}
         <Link
-          href="/"
+          href="/dashboard"
           className="mb-6 inline-flex font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition hover:text-[#F5F0E5]"
         >
           ← Back
@@ -296,7 +323,7 @@ export default function Erc8183JobDetailPage() {
           </div>
         )}
 
-        {/* ── Unauthenticated ── */}
+        {/* ── Unauthenticated (no wallet connected) ── */}
         {status === 'unauthenticated' && (
           <div className="rounded-xl border border-[#F3C536]/20 bg-[#080D13]/78 p-10 text-center">
             <div className="mb-3 text-[18px] font-semibold text-[#F5F0E5]">
@@ -307,6 +334,35 @@ export default function Erc8183JobDetailPage() {
               can access full job information.
             </p>
             <div className="font-mono text-[11px] text-[#EAE4D8]/35">
+              Job #{localJobId}
+            </div>
+          </div>
+        )}
+
+        {/* ── Wallet connected but no session — sign in required ── */}
+        {status === 'need_sign' && (
+          <div className="rounded-xl border border-[#F3C536]/20 bg-[#080D13]/78 p-10 text-center">
+            <div className="mb-3 text-[18px] font-semibold text-[#F5F0E5]">
+              Sign to View Job
+            </div>
+            <p className="mb-6 text-[14px] text-[#EAE4D8]/55">
+              Your wallet is connected but a session is needed to verify
+              participant access. Sign a message to continue.
+            </p>
+            <button
+              type="button"
+              onClick={handleSignIn}
+              disabled={signing}
+              className="inline-flex h-11 items-center gap-2 rounded-lg border border-[#F3C536]/35 bg-[#F3C536]/10 px-6 font-mono text-[12px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/60 hover:bg-[#F3C536]/15 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {signing ? 'Waiting for signature…' : 'Sign to View Job'}
+            </button>
+            {signError && (
+              <p className="mt-4 text-[13px] text-red-300">
+                {signError}
+              </p>
+            )}
+            <div className="mt-4 font-mono text-[11px] text-[#EAE4D8]/35">
               Job #{localJobId}
             </div>
           </div>
@@ -378,6 +434,18 @@ export default function Erc8183JobDetailPage() {
                 </p>
               )}
             </div>
+
+            {/* Description card */}
+            {job.description && (
+              <div className="rounded-xl border border-white/[0.08] bg-[#080D13]/60 px-6 py-5">
+                <h2 className="mb-3 font-mono text-[12px] uppercase tracking-[0.14em] text-[#F3C536]">
+                  Description
+                </h2>
+                <p className="whitespace-pre-wrap text-[14px] leading-6 text-[#EAE4D8]/75">
+                  {job.description}
+                </p>
+              </div>
+            )}
 
             {/* Participants card */}
             <div className="rounded-xl border border-white/[0.08] bg-[#080D13]/60 px-6 py-5">

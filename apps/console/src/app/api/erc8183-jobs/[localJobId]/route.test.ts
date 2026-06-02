@@ -113,6 +113,7 @@ const MOCK_DETAIL = {
   lifecycleStatus: 'Funded' as const,
   localStatus: 'claimed',
   onchainStatus: 'Funded' as const,
+  description: 'Test job',
   participants: {
     client: { agentId: BUYER_AGENT, address: BUYER_CTRL },
     provider: { agentId: PROVIDER_AGENT, address: PROVIDER_CTRL },
@@ -326,6 +327,29 @@ describe('GET /api/erc8183-jobs/[localJobId] — dual auth', () => {
 
       expect(res.status).toBe(200);
       expect(body.currentUserRole).toBe('evaluator');
+    });
+
+    it('returns 200 + currentUserRole=worker when tokenId matches providerAgentId but agentId differs', async () => {
+      mocks.requireApiKey.mockResolvedValue({ error: new Response('unauthorized', { status: 401 }) });
+      mocks.resolveSessionFromCookie.mockResolvedValue({
+        sessionId: 'sess_tokenid',
+        wallet: PROVIDER_CTRL.toLowerCase(),
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 86400000,
+      });
+      // tokenId matches PROVIDER_AGENT, but agentId is different
+      mocks.getLinkedErc8004AgentsForController.mockResolvedValue([
+        { agentId: 'different-agent-id', tokenId: PROVIDER_AGENT, controller: PROVIDER_CTRL.toLowerCase() },
+      ]);
+      mocks.getErc8183JobByLocalId.mockResolvedValue(MOCK_JOB_VIEW);
+      mocks.buildErc8183JobDetail.mockResolvedValue(MOCK_DETAIL);
+
+      const res = await GET(makeRequest('tokenid-match'), mockContext());
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.currentUserRole).toBe('worker');
     });
 
     it('uses expiredAt not deadline', async () => {
