@@ -98,8 +98,12 @@ export async function GET(
     const isEvaluator = job.evaluatorAgentId
       ? linkedAgentIds.has(job.evaluatorAgentId.toLowerCase())
       : false;
+    // workerId can differ from providerAgentId after claim
+    const isWorker = job.workerId
+      ? linkedAgentIds.has(job.workerId.toLowerCase())
+      : false;
 
-    if (!isBuyer && !isProvider && !isEvaluator) {
+    if (!isBuyer && !isProvider && !isEvaluator && !isWorker) {
       return NextResponse.json(
         { ok: false, ...escrowRail(), error: 'forbidden', message: 'Session wallet does not control a participant agent' },
         { status: 403, headers: NO_STORE },
@@ -115,11 +119,10 @@ export async function GET(
       );
     }
 
-    // Determine current user role
-    let currentUserRole: 'client' | 'worker' | 'evaluator' = 'client';
+    // Determine current user role — priority: buyer > evaluator > worker/provider
+    let currentUserRole: 'client' | 'worker' | 'evaluator' = 'worker';
     if (isEvaluator) currentUserRole = 'evaluator';
-    if (isProvider) currentUserRole = 'worker';
-    if (isBuyer) currentUserRole = 'client'; // buyer takes priority
+    if (isBuyer) currentUserRole = 'client';
 
     return NextResponse.json(
       { ok: true, ...escrowRail(), job: detail, currentUserRole },

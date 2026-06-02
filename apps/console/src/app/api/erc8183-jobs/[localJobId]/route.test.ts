@@ -68,6 +68,8 @@ const PROVIDER_AGENT = 'provider-001';
 const PROVIDER_CTRL = '0xb03141849F755b0a337b3352C2290fce66e0C6dD';
 const EVALUATOR_AGENT = 'evaluator-001';
 const EVALUATOR_CTRL = '0x0380542Fd05813461A71e9Befb80fBeA0AE656E8';
+const CLAIMED_WORKER_AGENT = 'claimed-worker-001';
+const CLAIMED_WORKER_CTRL = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1';
 const UNRELATED_WALLET = '0x1111111111111111111111111111111111111111';
 
 const MOCK_JOB_VIEW = {
@@ -146,6 +148,22 @@ const MOCK_DETAIL = {
   },
   timeline: [],
   allowedActions: [],
+};
+
+// ── Mock job where workerId differs from providerAgentId (claimed by different agent) ──
+
+const MOCK_JOB_VIEW_CLAIMED = {
+  ...MOCK_JOB_VIEW,
+  workerId: CLAIMED_WORKER_AGENT,
+  status: 'claimed',
+};
+
+const MOCK_DETAIL_CLAIMED = {
+  ...MOCK_DETAIL,
+  participants: {
+    ...MOCK_DETAIL.participants,
+    worker: { agentId: CLAIMED_WORKER_AGENT },
+  },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -350,6 +368,73 @@ describe('GET /api/erc8183-jobs/[localJobId] — dual auth', () => {
       expect(res.status).toBe(200);
       expect(body.ok).toBe(true);
       expect(body.currentUserRole).toBe('worker');
+    });
+
+    it('returns 200 + currentUserRole=worker when wallet controls claimed workerId (distinct from providerAgentId)', async () => {
+      mocks.requireApiKey.mockResolvedValue({ error: new Response('unauthorized', { status: 401 }) });
+      mocks.resolveSessionFromCookie.mockResolvedValue({
+        sessionId: 'sess_claimed_worker',
+        wallet: CLAIMED_WORKER_CTRL.toLowerCase(),
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 86400000,
+      });
+      mocks.getLinkedErc8004AgentsForController.mockResolvedValue([
+        { agentId: CLAIMED_WORKER_AGENT, tokenId: CLAIMED_WORKER_AGENT, controller: CLAIMED_WORKER_CTRL.toLowerCase() },
+      ]);
+      // workerId = CLAIMED_WORKER_AGENT, providerAgentId = PROVIDER_AGENT (different)
+      mocks.getErc8183JobByLocalId.mockResolvedValue(MOCK_JOB_VIEW_CLAIMED);
+      mocks.buildErc8183JobDetail.mockResolvedValue(MOCK_DETAIL_CLAIMED);
+
+      const res = await GET(makeRequest('claimed-worker-token'), mockContext());
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.currentUserRole).toBe('worker');
+    });
+
+    it('returns 200 + currentUserRole=worker when tokenId matches claimed workerId', async () => {
+      mocks.requireApiKey.mockResolvedValue({ error: new Response('unauthorized', { status: 401 }) });
+      mocks.resolveSessionFromCookie.mockResolvedValue({
+        sessionId: 'sess_claimed_worker_tokenid',
+        wallet: CLAIMED_WORKER_CTRL.toLowerCase(),
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 86400000,
+      });
+      // tokenId matches CLAIMED_WORKER_AGENT, agentId is different
+      mocks.getLinkedErc8004AgentsForController.mockResolvedValue([
+        { agentId: 'some-other-id', tokenId: CLAIMED_WORKER_AGENT, controller: CLAIMED_WORKER_CTRL.toLowerCase() },
+      ]);
+      mocks.getErc8183JobByLocalId.mockResolvedValue(MOCK_JOB_VIEW_CLAIMED);
+      mocks.buildErc8183JobDetail.mockResolvedValue(MOCK_DETAIL_CLAIMED);
+
+      const res = await GET(makeRequest('claimed-worker-tokenid'), mockContext());
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.currentUserRole).toBe('worker');
+    });
+
+    it('returns 403 when wallet has no relation to any participant including workerId', async () => {
+      mocks.requireApiKey.mockResolvedValue({ error: new Response('unauthorized', { status: 401 }) });
+      mocks.resolveSessionFromCookie.mockResolvedValue({
+        sessionId: 'sess_unrelated_claimed',
+        wallet: UNRELATED_WALLET.toLowerCase(),
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 86400000,
+      });
+      mocks.getLinkedErc8004AgentsForController.mockResolvedValue([
+        { agentId: 'unrelated-agent', tokenId: 'unrelated-agent', controller: UNRELATED_WALLET.toLowerCase() },
+      ]);
+      // Job with distinct workerId — unrelated wallet should still get 403
+      mocks.getErc8183JobByLocalId.mockResolvedValue(MOCK_JOB_VIEW_CLAIMED);
+
+      const res = await GET(makeRequest('unrelated-claimed'), mockContext());
+      const body = await res.json();
+
+      expect(res.status).toBe(403);
+      expect(body.error).toBe('forbidden');
     });
 
     it('uses expiredAt not deadline', async () => {
