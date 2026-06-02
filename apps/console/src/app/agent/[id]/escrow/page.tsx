@@ -192,7 +192,7 @@ function usdcToAtomic(amount: string): string {
 
 type PrepareResult = {
   ok: true;
-  prepareId: string | null;
+  prepareId: string;
   settlementMode: string;
   participants: {
     client: { agentId: string; controller: string };

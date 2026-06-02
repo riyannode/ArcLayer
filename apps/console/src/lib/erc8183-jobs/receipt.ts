@@ -59,6 +59,7 @@ export function getArcPublicClient() {
 export interface ConfirmedReceipt {
   status: 'success' | 'reverted';
   transactionHash: Hex;
+  from: Address;
   blockNumber: bigint;
   logs: Log[];
 }
@@ -78,6 +79,7 @@ export async function readTransactionReceipt(
   return {
     status: receipt.status === 'success' ? 'success' : 'reverted',
     transactionHash: receipt.transactionHash,
+    from: receipt.from,
     blockNumber: receipt.blockNumber,
     logs: receipt.logs,
   };

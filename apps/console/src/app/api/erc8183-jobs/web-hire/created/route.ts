@@ -35,7 +35,7 @@ import {
   type WalletSession,
   type LinkedAgent,
 } from '@/lib/auth/wallet-session';
-import type { Hex } from 'viem';
+import type { Hex, Address } from 'viem';
 
 export const dynamic = 'force-dynamic';
 
@@ -163,48 +163,77 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Load preparation
+    // ── Atomic claim: prepared → creating ──────────────────────────────
     const supabase = getSupabaseAdmin();
-    const { data: prepRow, error: prepError } = await supabase
+    const { data: claimedRows, error: claimError } = await supabase
       .from('erc8183_hire_preparations')
-      .select('*')
+      .update({ status: 'creating' })
       .eq('id', prepareId)
-      .single();
+      .eq('status', 'prepared')
+      .select('*');
 
-    if (prepError || !prepRow) {
+    if (claimError) {
+      console.error('[created] failed to claim preparation:', claimError.message);
       return NextResponse.json(
-        { ok: false, error: 'preparation_not_found', detail: `No preparation found for prepareId "${prepareId}"` },
-        { status: 404, headers: { 'Cache-Control': ERROR_CACHE } },
+        { ok: false, error: 'preparation_claim_failed', detail: claimError.message },
+        { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
       );
     }
 
-    const prep = prepRow as PreparationRow;
+    if (!claimedRows || claimedRows.length === 0) {
+      // Either not found, expired, or already claimed — load to give better detail
+      const { data: existing } = await supabase
+        .from('erc8183_hire_preparations')
+        .select('status, erc8183_job_id, create_tx_hash')
+        .eq('id', prepareId)
+        .maybeSingle();
 
-    // Reject if expired
+      if (!existing) {
+        return NextResponse.json(
+          { ok: false, error: 'preparation_not_found', detail: `No preparation found for prepareId "${prepareId}"` },
+          { status: 404, headers: { 'Cache-Control': ERROR_CACHE } },
+        );
+      }
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'already_created_or_in_progress',
+          detail: `Preparation status is "${existing.status}", expected "prepared"`,
+          ...(existing.erc8183_job_id ? { erc8183JobId: existing.erc8183_job_id } : {}),
+          ...(existing.create_tx_hash ? { createTxHash: existing.create_tx_hash } : {}),
+        },
+        { status: 409, headers: { 'Cache-Control': ERROR_CACHE } },
+      );
+    }
+
+    const prep = claimedRows[0] as PreparationRow;
+
+    // Reject if expired (check after claim to avoid TOCTOU)
     if (new Date(prep.expires_at).getTime() < Date.now()) {
+      // Rollback: mark as expired
+      await supabase
+        .from('erc8183_hire_preparations')
+        .update({ status: 'expired' })
+        .eq('id', prepareId)
+        .eq('status', 'creating');
+
       return NextResponse.json(
         { ok: false, error: 'preparation_expired', detail: 'This preparation has expired. Please prepare again.' },
         { status: 410, headers: { 'Cache-Control': ERROR_CACHE } },
       );
     }
 
-    // Reject if already created
-    if (prep.status !== 'prepared') {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'already_created',
-          detail: `Preparation status is "${prep.status}", expected "prepared"`,
-          ...(prep.erc8183_job_id ? { erc8183JobId: prep.erc8183_job_id } : {}),
-          ...(prep.create_tx_hash ? { createTxHash: prep.create_tx_hash } : {}),
-        },
-        { status: 409, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
-    }
-
     // If wallet session auth, enforce buyer ownership
     if (auth.type === 'wallet_session') {
       if (!validateBuyerOwnership(prep.buyer_agent_id, auth.linkedAgents)) {
+        // Rollback: mark as failed
+        await supabase
+          .from('erc8183_hire_preparations')
+          .update({ status: 'failed' })
+          .eq('id', prepareId)
+          .eq('status', 'creating');
+
         return NextResponse.json(
           {
             ok: false,
@@ -216,9 +245,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Read transaction receipt from Arc Testnet
+    // ── Read transaction receipt from Arc Testnet ──────────────────────
     const receipt = await readTransactionReceipt(createTxHash as Hex);
     if (!receipt) {
+      // Don't rollback — tx may arrive later. Keep status='creating' so retry works.
       return NextResponse.json(
         { ok: false, error: 'tx_not_found', detail: 'Transaction not found. It may not have been mined yet. Retry after a few seconds.' },
         { status: 202, headers: { 'Cache-Control': ERROR_CACHE } },
@@ -227,8 +257,34 @@ export async function POST(req: NextRequest) {
 
     // Confirm tx succeeded
     if (receipt.status !== 'success') {
+      await supabase
+        .from('erc8183_hire_preparations')
+        .update({ status: 'failed' })
+        .eq('id', prepareId)
+        .eq('status', 'creating');
+
       return NextResponse.json(
         { ok: false, error: 'tx_reverted', detail: 'createJob transaction reverted on-chain.' },
+        { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
+      );
+    }
+
+    // ── Verify tx sender = buyer controller ────────────────────────────
+    const txSender = receipt.from.toLowerCase() as string;
+    const expectedBuyer = prep.buyer_controller.toLowerCase();
+    if (txSender !== expectedBuyer) {
+      await supabase
+        .from('erc8183_hire_preparations')
+        .update({ status: 'failed' })
+        .eq('id', prepareId)
+        .eq('status', 'creating');
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'tx_sender_mismatch',
+          detail: `Transaction sender ${txSender} does not match preparation buyer controller ${expectedBuyer}`,
+        },
         { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
       );
     }
@@ -236,6 +292,12 @@ export async function POST(req: NextRequest) {
     // Decode JobCreated event
     const decodedEvent = decodeJobCreatedFromReceipt(receipt);
     if (!decodedEvent) {
+      await supabase
+        .from('erc8183_hire_preparations')
+        .update({ status: 'failed' })
+        .eq('id', prepareId)
+        .eq('status', 'creating');
+
       return NextResponse.json(
         { ok: false, error: 'job_created_event_not_found', detail: 'Could not decode JobCreated event from receipt logs.' },
         { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
@@ -244,10 +306,16 @@ export async function POST(req: NextRequest) {
 
     const erc8183JobId = decodedEvent.jobId.toString();
 
-    // Verify event values match preparation where possible
+    // Verify event values match preparation
     const decodedProvider = decodedEvent.provider.toLowerCase();
     const expectedProvider = prep.provider_controller.toLowerCase();
     if (decodedProvider !== expectedProvider) {
+      await supabase
+        .from('erc8183_hire_preparations')
+        .update({ status: 'failed' })
+        .eq('id', prepareId)
+        .eq('status', 'creating');
+
       return NextResponse.json(
         {
           ok: false,
@@ -261,6 +329,12 @@ export async function POST(req: NextRequest) {
     const decodedEvaluator = decodedEvent.evaluator.toLowerCase();
     const expectedEvaluator = prep.evaluator_controller.toLowerCase();
     if (decodedEvaluator !== expectedEvaluator) {
+      await supabase
+        .from('erc8183_hire_preparations')
+        .update({ status: 'failed' })
+        .eq('id', prepareId)
+        .eq('status', 'creating');
+
       return NextResponse.json(
         {
           ok: false,
@@ -271,7 +345,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create local ERC-8183 job record
+    // ── Create local ERC-8183 job record ───────────────────────────────
     const job = await createLocalErc8183Job({
       buyerAgentId: prep.buyer_agent_id,
       clientAddress: prep.buyer_controller,
@@ -293,7 +367,7 @@ export async function POST(req: NextRequest) {
       erc8183JobId,
     });
 
-    // Mark preparation as created
+    // ── Mark preparation as created ────────────────────────────────────
     await supabase
       .from('erc8183_hire_preparations')
       .update({
@@ -301,7 +375,8 @@ export async function POST(req: NextRequest) {
         create_tx_hash: createTxHash,
         erc8183_job_id: erc8183JobId,
       })
-      .eq('id', prepareId);
+      .eq('id', prepareId)
+      .eq('status', 'creating');
 
     return NextResponse.json(
       {

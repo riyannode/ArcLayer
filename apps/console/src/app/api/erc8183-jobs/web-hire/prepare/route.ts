@@ -224,10 +224,13 @@ export async function POST(req: NextRequest) {
 
     if (prepError) {
       console.error('[prepare] failed to persist preparation:', prepError.message);
-      // Non-fatal: still return the result even if persistence fails
+      return NextResponse.json(
+        { ok: false, error: 'preparation_persist_failed', detail: prepError.message },
+        { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
+      );
     }
 
-    const prepareId = prepRow?.id ?? null;
+    const prepareId = prepRow!.id;
 
     return NextResponse.json(
       { ...result, prepareId },
