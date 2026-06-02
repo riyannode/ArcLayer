@@ -119,10 +119,10 @@ export function AgentDetailDrawer({
             View full profile →
           </Link>
           <Link
-            href={`/jobs?agent=${agent.id}`}
+            href={`/agent/${agent.id}/escrow`}
             className="rounded border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-emerald-300 hover:bg-emerald-500/15"
           >
-            Hire this agent
+            Open Direct Hire →
           </Link>
         </div>
 

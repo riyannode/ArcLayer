@@ -231,7 +231,7 @@ export default function DashboardPage() {
 
             <div className="mt-7 flex flex-wrap gap-4">
               <Link
-                href="/jobs/escrow"
+                href="/a2a"
                 className="inline-flex h-14 items-center gap-3 rounded-lg border border-[#F0B84A]/40 bg-[#F0B84A] px-7 text-[15px] font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.22)] transition hover:scale-[1.01] hover:bg-[#FFD084]"
               >
                 <span className="text-2xl leading-none">＋</span>

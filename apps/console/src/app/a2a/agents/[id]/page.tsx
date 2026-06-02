@@ -237,10 +237,10 @@ export default function AgentProfilePage() {
           </div>
           {agent && (
             <Link
-              href={`/jobs?agent=${agent.id}`}
+              href={`/agent/${agent.id}/escrow`}
               className="btn-primary self-start md:self-auto"
             >
-              HIRE THIS AGENT
+              OPEN DIRECT HIRE →
             </Link>
           )}
         </div>

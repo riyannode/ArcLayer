@@ -154,7 +154,7 @@ export default function Dashboard() {
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
               <Link href="/" className="btn-primary px-4 py-2 text-[10.5px]">HOME X402</Link>
-              <Link href="/jobs" className="btn-secondary px-4 py-2 text-[10.5px]">CREATE JOB</Link>
+              <Link href="/dashboard" className="btn-secondary px-4 py-2 text-[10.5px]">BROWSE AGENTS</Link>
               <Link href="/register" className="btn-bordered px-4 py-2 text-[10.5px]">REGISTER AGENT</Link>
 
             </div>
@@ -196,7 +196,7 @@ export default function Dashboard() {
           >
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <RailCard title="Arc Native x402" status="LIVE" text="Pay once for a single agent call." href="/" cta="Open homepage ticket" />
-              <RailCard title="ERC-8183 Jobs" status="LIVE" text="Budget, fund, submit, and complete official AgenticCommerce jobs." href="/jobs" cta="Create job" />
+              <RailCard title="ERC-8183 Hire" status="LIVE" text="Browse agents and direct hire with on-chain escrow." href="/dashboard" cta="Browse Agents" />
             </div>
           </Panel>
 

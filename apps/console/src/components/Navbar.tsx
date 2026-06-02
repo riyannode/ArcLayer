@@ -8,7 +8,7 @@ import ArcMark from './ArcMark';
 
 /**
  * Unified top navigation — single source of truth for both landing (`/`) and
- * app pages (`/dashboard`, `/agents`, `/jobs`, `/docs`).
+ * app pages (`/dashboard`, `/agents`, `/docs`).
  *
  * Depth comes from behavior, not styling forks:
  *   - 4 nav items, same order, everywhere.
@@ -43,7 +43,6 @@ const NotifBell = dynamic(() => import('./NotifBell'), {
 const NAV_LINKS = [
   { href: '/register', label: 'REGISTER', anchor: null },
   { href: '/profile', label: 'PROFILE', anchor: null },
-  { href: '/jobs', label: 'JOBS', anchor: null },
   { href: '/dashboard', label: 'DASHBOARD', anchor: null },
   { href: '/live-a2a-agent', label: 'LIVE A2A', anchor: null },
   { href: '/protocol', label: 'PROTOCOL', anchor: null },
