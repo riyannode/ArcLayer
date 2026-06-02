@@ -5,6 +5,15 @@
  * Resolves agentId → controller from erc8004_agents DB (never trusts body).
  * Returns safe next-step instructions for the existing ERC-8183 flow.
  *
+ * Auth: accepts EITHER:
+ *   1. API key (Authorization: Bearer ak_...) with erc8183:create scope
+ *   2. Wallet session cookie (arclayer-wallet-session) from PR #408
+ *
+ * For wallet session auth:
+ *   - buyerAgentId must be linked to the session wallet
+ *   - Returns 401 if no auth at all
+ *   - Returns 403 if wallet session exists but buyerAgentId not linked
+ *
  * Never signs transactions. Never reads private keys.
  * Never mutates x402 state. API contract + validation only.
  */
@@ -18,6 +27,13 @@ import {
 } from '@/lib/erc8183-jobs/web-hire-contract';
 import { escrowRail } from '@/lib/rails/responses';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
+import {
+  resolveSessionFromCookie,
+  getLinkedErc8004AgentsForController,
+  SESSION_COOKIE_NAME,
+  type WalletSession,
+  type LinkedAgent,
+} from '@/lib/auth/wallet-session';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,13 +49,116 @@ const IDENTITY_ERRORS = new Set([
   'evaluator_controller_mismatch',
 ]);
 
+// ── Auth types ────────────────────────────────────────────────────────────
+
+interface ApiKeyAuth {
+  type: 'api_key';
+  agentId: string;
+}
+
+interface WalletSessionAuth {
+  type: 'wallet_session';
+  session: WalletSession;
+  linkedAgents: LinkedAgent[];
+}
+
+type AuthResult = ApiKeyAuth | WalletSessionAuth;
+
+// ── Auth resolution ───────────────────────────────────────────────────────
+
+/**
+ * Try API key first, then wallet session cookie.
+ * Returns the auth result or a NextResponse error.
+ */
+async function attemptAuth(
+  req: NextRequest,
+): Promise<{ auth: AuthResult; error?: never } | { auth?: never; error: NextResponse }> {
+  // 1. Try API key (existing path)
+  const apiKeyResult = await requireApiKey(req, [API_KEY_SCOPES.ERC8183_CREATE]);
+  if (!apiKeyResult.error) {
+    return { auth: { type: 'api_key', agentId: apiKeyResult.key.agentId } };
+  }
+
+  // 2. Try wallet session cookie
+  const cookieValue = req.cookies.get(SESSION_COOKIE_NAME)?.value;
+  if (!cookieValue) {
+    return {
+      error: NextResponse.json(
+        { ok: false, error: 'unauthorized', detail: 'API key or wallet session required' },
+        { status: 401, headers: { 'Cache-Control': ERROR_CACHE } },
+      ),
+    };
+  }
+
+  const session = await resolveSessionFromCookie(cookieValue);
+  if (!session) {
+    return {
+      error: NextResponse.json(
+        { ok: false, error: 'invalid_session', detail: 'Wallet session is invalid or expired' },
+        { status: 401, headers: { 'Cache-Control': ERROR_CACHE } },
+      ),
+    };
+  }
+
+  // Load linked agents for the session wallet
+  const linkedAgents = await getLinkedErc8004AgentsForController(session.wallet);
+  if (linkedAgents.length === 0) {
+    return {
+      error: NextResponse.json(
+        { ok: false, error: 'no_linked_agents', detail: 'No ERC-8004 agents linked to this wallet' },
+        { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
+      ),
+    };
+  }
+
+  return { auth: { type: 'wallet_session', session, linkedAgents } };
+}
+
+/**
+ * Validate that buyerAgentId is owned/controlled by the session wallet.
+ * Checks both tokenId and agentId fields of linked agents.
+ */
+function validateBuyerOwnership(
+  buyerAgentId: string,
+  linkedAgents: LinkedAgent[],
+): boolean {
+  return linkedAgents.some(
+    (agent) => agent.tokenId === buyerAgentId || agent.agentId === buyerAgentId,
+  );
+}
+
+// ── Route handler ─────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
   try {
-    // Require API key with erc8183:create scope
-    const auth = await requireApiKey(req, [API_KEY_SCOPES.ERC8183_CREATE]);
-    if (auth.error) return auth.error;
+    // Dual auth: API key or wallet session
+    const authResult = await attemptAuth(req);
+    if (authResult.error) return authResult.error;
 
+    const auth = authResult.auth;
     const body = await req.json();
+
+    // If wallet session auth, enforce buyerAgentId ownership
+    if (auth.type === 'wallet_session') {
+      const buyerAgentId = body.buyerAgentId as string | undefined;
+      if (!buyerAgentId || typeof buyerAgentId !== 'string') {
+        return NextResponse.json(
+          { ok: false, error: 'missing_buyerAgentId', detail: 'buyerAgentId is required' },
+          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+        );
+      }
+
+      if (!validateBuyerOwnership(buyerAgentId, auth.linkedAgents)) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'buyer_not_linked',
+            detail: `buyerAgentId "${buyerAgentId}" is not linked to session wallet ${auth.session.wallet}`,
+          },
+          { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
+        );
+      }
+    }
 
     // Phase 1: Pure field validation (no DB)
     const validated = validateWebHireInput(body);
