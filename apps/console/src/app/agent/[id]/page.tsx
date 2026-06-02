@@ -3,20 +3,8 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState, type ComponentType } from 'react';
-import { waitForTransactionReceipt } from '@wagmi/core';
-import { decodeEventLog, getAddress } from 'viem';
 import { useArcWallet } from '@/hooks/useArcWallet';
-import { useArcWrite } from '@/hooks/useArcWrite';
-import {
-  CONTRACTS,
-  ERC8183_AGENTIC_COMMERCE_ABI,
-  buildApproveUsdcConfig,
-  buildCreateJobConfig,
-  buildFundJobConfig,
-  buildSetBudgetConfig,
-} from '@arclayer/sdk';
-import { formatUSDC, parseUSDC } from '@/lib/contracts';
-import { config } from '@/lib/wagmi';
+import { formatUSDC } from '@/lib/contracts';
 import { IndexerDegradedBanner } from '@/components/IndexerDegradedBanner';
 import { loadAgentDetail, type DataSource } from '@/lib/indexer';
 import {
@@ -347,7 +335,6 @@ function CapabilityPill({ value }: { value: string }) {
 export default function AgentProfilePage() {
   const params = useParams<{ id: string }>();
   const { address, isConnected } = useArcWallet();
-  const { writeContractAsync } = useArcWrite();
   const agentId = parseAgentId(params.id);
 
   const [profile, setProfile] = useState<AgentDetail | null>(null);
@@ -359,15 +346,6 @@ export default function AgentProfilePage() {
   const [showMetadataJson, setShowMetadataJson] = useState(false);
 
   const [dashboardAgent, setDashboardAgent] = useState<DashboardAgentRow | null>(null);
-
-  // ─── Hire This Agent state ─────────────────────────────────────────
-  const [hireDescription, setHireDescription] = useState(
-    'Describe the task you want this agent to perform.',
-  );
-  const [hireBudget, setHireBudget] = useState('1');
-  const [hireState, setHireState] = useState<string | null>(null);
-  const [isHiring, setIsHiring] = useState(false);
-  const [createdJobId, setCreatedJobId] = useState<string | null>(null);
 
   // ─── Load agent detail + resolve metadata ──────────────────────────
   useEffect(() => {
@@ -466,109 +444,6 @@ export default function AgentProfilePage() {
         isErc8183CapabilityList(capabilities)));
 
   const registeredInfo = formatRegisteredAt(agent?.registeredAt, metadata);
-
-  // ─── Hire This Agent handler ───────────────────────────────────────
-  // TODO: Future — insert x402 anti-spam gate before createJob to prevent
-  // UI/API spam. The gate should check wallet age, prior jobs, or a small
-  // x402 micro-payment before allowing job creation. Keep x402 infra intact.
-  async function handleHireAgent() {
-    if (!agent || !agentId || !address) return;
-
-    try {
-      setIsHiring(true);
-      setHireState('1/4 Creating ERC-8183 job...');
-      setCreatedJobId(null);
-
-      if (!agent.controller) {
-        throw new Error('Agent controller is missing.');
-      }
-
-      const worker = getAddress(agent.controller) as `0x${string}`;
-      const client = getAddress(address) as `0x${string}`;
-      const expiredAt = BigInt(
-        Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60,
-      );
-      const amount = parseUSDC(hireBudget);
-
-      // ─── Step 1: createJob ──────────────────────────────────────────
-      const createHash = await writeContractAsync(
-        buildCreateJobConfig(worker, client, expiredAt, hireDescription),
-      );
-      const createReceipt = await waitForTransactionReceipt(config, {
-        hash: createHash,
-      });
-
-      let jobId = BigInt(0);
-      for (const log of createReceipt.logs) {
-        if (
-          log.address.toLowerCase() !==
-          CONTRACTS.ERC8183_AGENTIC_COMMERCE.toLowerCase()
-        ) {
-          continue;
-        }
-        try {
-          const decoded = decodeEventLog({
-            abi: ERC8183_AGENTIC_COMMERCE_ABI,
-            data: log.data,
-            topics: log.topics,
-          });
-          if (
-            decoded.eventName === 'JobCreated' &&
-            decoded.args &&
-            'jobId' in decoded.args
-          ) {
-            jobId = decoded.args.jobId as bigint;
-            break;
-          }
-        } catch {
-          /* skip non-matching logs */
-        }
-      }
-
-      if (jobId === BigInt(0)) {
-        throw new Error(
-          'JobCreated event not found in transaction receipt.',
-        );
-      }
-
-      setCreatedJobId(jobId.toString());
-
-      // ─── Step 2: setBudget ──────────────────────────────────────────
-      setHireState(
-        `2/4 Setting budget for Job #${jobId.toString()}...`,
-      );
-      const budgetHash = await writeContractAsync(
-        buildSetBudgetConfig(jobId, amount),
-      );
-      await waitForTransactionReceipt(config, { hash: budgetHash });
-
-      // ─── Step 3: approve USDC ───────────────────────────────────────
-      setHireState('3/4 Approving USDC...');
-      const approveHash = await writeContractAsync(
-        buildApproveUsdcConfig(amount),
-      );
-      await waitForTransactionReceipt(config, { hash: approveHash });
-
-      // ─── Step 4: fund job ───────────────────────────────────────────
-      setHireState(
-        `4/4 Funding Job #${jobId.toString()}...`,
-      );
-      const fundHash = await writeContractAsync(
-        buildFundJobConfig(jobId, amount),
-      );
-      await waitForTransactionReceipt(config, { hash: fundHash });
-
-      setHireState(
-        `Job #${jobId.toString()} created and funded. Funding tx: ${fundHash.slice(0, 10)}...`,
-      );
-    } catch (error) {
-      setHireState(
-        error instanceof Error ? error.message : 'Failed to hire agent.',
-      );
-    } finally {
-      setIsHiring(false);
-    }
-  }
 
   // ─── Render ────────────────────────────────────────────────────────
   return (
@@ -881,8 +756,8 @@ export default function AgentProfilePage() {
                     </h2>
 
                     <p className="mt-2 max-w-2xl text-sm leading-6 text-[#EAE4D8]/52">
-                      Create an ERC-8183 job, set a USDC budget, approve funds,
-                      and fund the job through ArcLayer commerce rails.
+                      Create an ERC-8183 escrow job directly with this agent.
+                      Prepare, sign on-chain, and confirm — all in one flow.
                     </p>
 
                     <Link
@@ -891,48 +766,6 @@ export default function AgentProfilePage() {
                     >
                       Open Direct Hire →
                     </Link>
-
-                    <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_auto]">
-                      <input
-                        value={hireDescription}
-                        onChange={(event) =>
-                          setHireDescription(event.target.value)
-                        }
-                        className="input-mono"
-                        placeholder="Describe the task for this agent"
-                      />
-                      <input
-                        value={hireBudget}
-                        onChange={(event) =>
-                          setHireBudget(event.target.value)
-                        }
-                        className="input-mono"
-                        placeholder="USDC"
-                      />
-                      <button
-                        onClick={handleHireAgent}
-                        disabled={!isConnected || !agent || isHiring}
-                        className="btn-primary"
-                      >
-                        {isHiring ? 'HIRING...' : 'HIRE THIS AGENT'}
-                      </button>
-                    </div>
-
-                    <div className="mt-4 rounded-lg border border-white/10 bg-black/30 p-4 font-mono text-[11.5px] leading-5 text-[#b5b5b5]">
-                      {hireState ||
-                        (isConnected
-                          ? 'Wallet connected. Hiring requires Arc Testnet USDC for approval and funding.'
-                          : 'Connect a wallet on Arc Testnet 5042002 to hire this agent.')}
-                    </div>
-
-                    {createdJobId && (
-                      <Link
-                        href={`/job/${createdJobId}`}
-                        className="mt-4 inline-flex h-10 items-center rounded-lg border border-[#F3C536]/30 px-4 text-sm font-semibold text-[#F3C536] transition hover:bg-[#F3C536]/10"
-                      >
-                        View Job #{createdJobId}
-                      </Link>
-                    )}
                   </section>
                 )}
               </div>

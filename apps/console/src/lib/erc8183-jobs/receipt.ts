@@ -59,6 +59,7 @@ export function getArcPublicClient() {
 export interface ConfirmedReceipt {
   status: 'success' | 'reverted';
   transactionHash: Hex;
+  from: Address;
   blockNumber: bigint;
   logs: Log[];
 }
@@ -72,15 +73,21 @@ export async function readTransactionReceipt(
   txHash: Hex,
 ): Promise<ConfirmedReceipt | null> {
   const client = getArcPublicClient();
-  const receipt = await client.getTransactionReceipt({ hash: txHash });
-  if (!receipt) return null;
+  try {
+    const receipt = await client.getTransactionReceipt({ hash: txHash });
+    if (!receipt) return null;
 
-  return {
-    status: receipt.status === 'success' ? 'success' : 'reverted',
-    transactionHash: receipt.transactionHash,
-    blockNumber: receipt.blockNumber,
-    logs: receipt.logs,
-  };
+    return {
+      status: receipt.status === 'success' ? 'success' : 'reverted',
+      transactionHash: receipt.transactionHash,
+      from: receipt.from,
+      blockNumber: receipt.blockNumber,
+      logs: receipt.logs,
+    };
+  } catch {
+    // viem throws TransactionReceiptNotFoundError for missing txs
+    return null;
+  }
 }
 
 // ── JobCreated event decoding ─────────────────────────────────────────────

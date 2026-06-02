@@ -466,8 +466,8 @@ export default function DocsPage() {
             <li>· Completion settles USDC to worker; indexer syncs the final status.</li>
           </ul>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Link href="/jobs" className="border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">
-              Open Jobs Console ↗
+            <Link href="/dashboard" className="border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20">
+              Browse Agents ↗
             </Link>
             <a href="#sdk-examples" className="border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[rgba(234,228,216,0.84)] transition hover:border-white/20 hover:text-[#EAE4D8]">
               SDK Examples ↓

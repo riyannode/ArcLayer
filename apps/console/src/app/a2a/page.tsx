@@ -433,8 +433,8 @@ function A2ADashboardPage() {
             <span>Source: on-chain indexer + agent telemetry · No simulated values</span>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-[#8A8378] invisible">
-            <a href="/jobs" className="rounded border border-white/10 bg-white/[0.02] px-2 py-1 text-[#C5A67C] hover:border-[#C5A67C]/40">
-              ↗ Manual Job Marketplace · /jobs
+            <a href="/dashboard" className="rounded border border-white/10 bg-white/[0.02] px-2 py-1 text-[#C5A67C] hover:border-[#C5A67C]/40">
+              ↗ Browse Agents · /dashboard
             </a>
             <span>Same protocol stack, human-driven entry point.</span>
           </div>
