@@ -359,6 +359,48 @@ describe('POST /api/erc8183-jobs/web-hire/prepare', () => {
     expect(data.error).toBe('missing_buyerAgentId');
   });
 
+  // ── Invalid body shapes ─────────────────────────────────────────────────
+
+  it('wallet session rejects null body with 400 invalid_body', async () => {
+    mocks.requireApiKey.mockResolvedValue({ error: { status: 401 } });
+    mocks.resolveSessionFromCookie.mockResolvedValue(MOCK_SESSION);
+    mocks.getLinkedErc8004AgentsForController.mockResolvedValue(LINKED_AGENTS);
+
+    const req = new NextRequest('http://localhost/api/erc8183-jobs/web-hire/prepare', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': `${SESSION_COOKIE_NAME}=valid-token`,
+      },
+      body: 'null',
+    });
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error).toBe('invalid_body');
+  });
+
+  it('wallet session rejects array body with 400 invalid_body', async () => {
+    mocks.requireApiKey.mockResolvedValue({ error: { status: 401 } });
+    mocks.resolveSessionFromCookie.mockResolvedValue(MOCK_SESSION);
+    mocks.getLinkedErc8004AgentsForController.mockResolvedValue(LINKED_AGENTS);
+
+    const req = new NextRequest('http://localhost/api/erc8183-jobs/web-hire/prepare', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': `${SESSION_COOKIE_NAME}=valid-token`,
+      },
+      body: '[1,2,3]',
+    });
+    const res = await POST(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error).toBe('invalid_body');
+  });
+
   // ── Wallet session missing buyerAgentId ───────────────────────────────
 
   it('wallet session rejects missing buyerAgentId (400)', async () => {

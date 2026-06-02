@@ -132,6 +132,14 @@ export async function POST(req: NextRequest) {
     const auth = authResult.auth;
     const body = await req.json();
 
+    // Guard: body must be a non-null object (not null, not array, not primitive)
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json(
+        { ok: false, error: 'invalid_body', detail: 'Request body must be a JSON object' },
+        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+      );
+    }
+
     // If wallet session auth, enforce buyerAgentId ownership
     if (auth.type === 'wallet_session') {
       const buyerAgentId = body.buyerAgentId as string | undefined;
