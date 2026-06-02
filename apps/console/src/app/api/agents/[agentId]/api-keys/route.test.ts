@@ -1,7 +1,9 @@
 /**
- * Tests for POST /api/agents/[agentId]/api-keys
+ * Tests for /api/agents/[agentId]/api-keys
  *
- * Covers: auth, ownership, key creation, scope presets, error handling.
+ * POST: auth, ownership, key creation, scope presets, scope validation, input validation.
+ * GET: auth, ownership, metadata-only (never raw key/hash).
+ * DELETE: auth, ownership, revoke, 404 on bad keyId.
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   resolveSessionFromCookie: vi.fn(),
   getLinkedErc8004AgentsForController: vi.fn(),
   createApiKey: vi.fn(),
+  revokeApiKey: vi.fn(),
+  supabaseSelect: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/wallet-session', () => ({
@@ -22,6 +26,7 @@ vi.mock('@/lib/auth/wallet-session', () => ({
 
 vi.mock('@/lib/a2a/auth', () => ({
   createApiKey: mocks.createApiKey,
+  revokeApiKey: mocks.revokeApiKey,
   API_KEY_SCOPES: {
     ERC8183_CREATE: 'erc8183:create',
     ERC8183_CONFIRM: 'erc8183:confirm',
@@ -34,12 +39,17 @@ vi.mock('@/lib/a2a/auth', () => ({
 }));
 
 vi.mock('@/lib/x402/supabaseClient', () => ({
-  getSupabaseAdmin: () => ({ from: () => ({}) }),
+  getSupabaseAdmin: () => ({
+    from: () => ({
+      select: mocks.supabaseSelect,
+    }),
+  }),
 }));
 
 // ── Import after mocks ────────────────────────────────────────────────────
 
-import { POST } from './route';
+import { POST, GET } from './route';
+import { DELETE } from './[keyId]/route';
 import { NextRequest } from 'next/server';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
@@ -58,7 +68,7 @@ const LINKED_AGENTS = [
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function makeRequest(body: unknown, cookie?: string): NextRequest {
+function makePostRequest(body: unknown, cookie?: string): NextRequest {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (cookie) headers['Cookie'] = `arclayer-wallet-session=${cookie}`;
   return new NextRequest(`http://localhost/api/agents/${AGENT_ID}/api-keys`, {
@@ -68,7 +78,25 @@ function makeRequest(body: unknown, cookie?: string): NextRequest {
   });
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────
+function makeGetRequest(cookie?: string): NextRequest {
+  const headers: Record<string, string> = {};
+  if (cookie) headers['Cookie'] = `arclayer-wallet-session=${cookie}`;
+  return new NextRequest(`http://localhost/api/agents/${AGENT_ID}/api-keys`, {
+    method: 'GET',
+    headers,
+  });
+}
+
+function makeDeleteRequest(keyId: string, cookie?: string): NextRequest {
+  const headers: Record<string, string> = {};
+  if (cookie) headers['Cookie'] = `arclayer-wallet-session=${cookie}`;
+  return new NextRequest(`http://localhost/api/agents/${AGENT_ID}/api-keys/${keyId}`, {
+    method: 'DELETE',
+    headers,
+  });
+}
+
+// ── POST Tests ────────────────────────────────────────────────────────────
 
 describe('POST /api/agents/[agentId]/api-keys', () => {
   beforeEach(() => {
@@ -84,7 +112,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
   });
 
   it('creates key successfully (201)', async () => {
-    const res = await POST(makeRequest({ preset: 'worker' }, 'valid-token'), {
+    const res = await POST(makePostRequest({ preset: 'worker' }, 'valid-token'), {
       params: Promise.resolve({ agentId: AGENT_ID }),
     });
     const data = await res.json();
@@ -98,7 +126,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
 
   it('calls createApiKey with correct params', async () => {
     await POST(
-      makeRequest({ preset: 'worker', label: 'My Bot' }, 'valid-token'),
+      makePostRequest({ preset: 'worker', label: 'My Bot' }, 'valid-token'),
       { params: Promise.resolve({ agentId: AGENT_ID }) },
     );
 
@@ -112,7 +140,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
 
   it('client preset resolves correct scopes', async () => {
     await POST(
-      makeRequest({ preset: 'client' }, 'valid-token'),
+      makePostRequest({ preset: 'client' }, 'valid-token'),
       { params: Promise.resolve({ agentId: AGENT_ID }) },
     );
 
@@ -125,7 +153,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
 
   it('evaluator preset resolves correct scopes', async () => {
     await POST(
-      makeRequest({ preset: 'evaluator' }, 'valid-token'),
+      makePostRequest({ preset: 'evaluator' }, 'valid-token'),
       { params: Promise.resolve({ agentId: AGENT_ID }) },
     );
 
@@ -136,21 +164,135 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
     );
   });
 
-  it('explicit scopes override preset', async () => {
-    await POST(
-      makeRequest({ scopes: ['erc8183:tx', 'erc8183:create'] }, 'valid-token'),
+  // ── Scope validation ──────────────────────────────────────────────────
+
+  it('valid explicit scopes accepted', async () => {
+    const res = await POST(
+      makePostRequest({ scopes: ['erc8183:tx', 'erc8183:create'] }, 'valid-token'),
       { params: Promise.resolve({ agentId: AGENT_ID }) },
     );
+    const data = await res.json();
 
+    expect(res.status).toBe(201);
+    expect(data.ok).toBe(true);
     expect(mocks.createApiKey).toHaveBeenCalledWith(
-      expect.objectContaining({
-        scopes: ['erc8183:tx', 'erc8183:create'],
-      }),
+      expect.objectContaining({ scopes: ['erc8183:tx', 'erc8183:create'] }),
     );
   });
 
+  it('invalid explicit scope rejected (400)', async () => {
+    const res = await POST(
+      makePostRequest({ scopes: ['erc8183:tx', 'invalid:scope'] }, 'valid-token'),
+      { params: Promise.resolve({ agentId: AGENT_ID }) },
+    );
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error).toBe('invalid_scope');
+    expect(data.detail).toContain('invalid:scope');
+    expect(mocks.createApiKey).not.toHaveBeenCalled();
+  });
+
+  it('empty scopes array falls back to defaults', async () => {
+    const res = await POST(
+      makePostRequest({ scopes: [] }, 'valid-token'),
+      { params: Promise.resolve({ agentId: AGENT_ID }) },
+    );
+    const data = await res.json();
+
+    // Empty scopes = no explicit scopes → createApiKey gets defaults
+    expect(res.status).toBe(201);
+    expect(data.ok).toBe(true);
+    expect(mocks.createApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: undefined }),
+    );
+  });
+
+  it('duplicate scopes deduped', async () => {
+    const res = await POST(
+      makePostRequest({ scopes: ['erc8183:tx', 'erc8183:tx', 'erc8183:create'] }, 'valid-token'),
+      { params: Promise.resolve({ agentId: AGENT_ID }) },
+    );
+    const data = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(mocks.createApiKey).toHaveBeenCalledWith(
+      expect.objectContaining({ scopes: ['erc8183:tx', 'erc8183:create'] }),
+    );
+  });
+
+  // ── Input validation ──────────────────────────────────────────────────
+
+  it('non-string label rejected (400)', async () => {
+    const res = await POST(
+      makePostRequest({ preset: 'worker', label: 123 }, 'valid-token'),
+      { params: Promise.resolve({ agentId: AGENT_ID }) },
+    );
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error).toBe('invalid_label');
+  });
+
+  it('label over 80 chars rejected (400)', async () => {
+    const res = await POST(
+      makePostRequest({ preset: 'worker', label: 'a'.repeat(81) }, 'valid-token'),
+      { params: Promise.resolve({ agentId: AGENT_ID }) },
+    );
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error).toBe('invalid_label');
+  });
+
+  it('label exactly 80 chars accepted', async () => {
+    const res = await POST(
+      makePostRequest({ preset: 'worker', label: 'a'.repeat(80) }, 'valid-token'),
+      { params: Promise.resolve({ agentId: AGENT_ID }) },
+    );
+    const data = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(data.ok).toBe(true);
+  });
+
+  it('invalid preset rejected (400)', async () => {
+    const res = await POST(
+      makePostRequest({ preset: 'admin' }, 'valid-token'),
+      { params: Promise.resolve({ agentId: AGENT_ID }) },
+    );
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error).toBe('invalid_preset');
+  });
+
+  it('non-array scopes rejected (400)', async () => {
+    const res = await POST(
+      makePostRequest({ scopes: 'erc8183:tx' }, 'valid-token'),
+      { params: Promise.resolve({ agentId: AGENT_ID }) },
+    );
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error).toBe('invalid_scopes');
+  });
+
+  it('non-string scope in array rejected (400)', async () => {
+    const res = await POST(
+      makePostRequest({ scopes: ['erc8183:tx', 123] }, 'valid-token'),
+      { params: Promise.resolve({ agentId: AGENT_ID }) },
+    );
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error).toBe('invalid_scope');
+  });
+
+  // ── Auth ──────────────────────────────────────────────────────────────
+
   it('missing auth returns 401', async () => {
-    const res = await POST(makeRequest({ preset: 'worker' }), {
+    const res = await POST(makePostRequest({ preset: 'worker' }), {
       params: Promise.resolve({ agentId: AGENT_ID }),
     });
     const data = await res.json();
@@ -161,7 +303,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
 
   it('invalid session returns 401', async () => {
     mocks.resolveSessionFromCookie.mockResolvedValue(null);
-    const res = await POST(makeRequest({ preset: 'worker' }, 'bad-token'), {
+    const res = await POST(makePostRequest({ preset: 'worker' }, 'bad-token'), {
       params: Promise.resolve({ agentId: AGENT_ID }),
     });
     const data = await res.json();
@@ -174,7 +316,7 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
     mocks.getLinkedErc8004AgentsForController.mockResolvedValue([
       { agentId: 'other-agent', tokenId: '999', controller: WALLET.toLowerCase() },
     ]);
-    const res = await POST(makeRequest({ preset: 'worker' }, 'valid-token'), {
+    const res = await POST(makePostRequest({ preset: 'worker' }, 'valid-token'), {
       params: Promise.resolve({ agentId: AGENT_ID }),
     });
     const data = await res.json();
@@ -203,12 +345,193 @@ describe('POST /api/agents/[agentId]/api-keys', () => {
 
   it('createApiKey failure returns 500', async () => {
     mocks.createApiKey.mockResolvedValue({ ok: false, error: 'db_error' });
-    const res = await POST(makeRequest({ preset: 'worker' }, 'valid-token'), {
+    const res = await POST(makePostRequest({ preset: 'worker' }, 'valid-token'), {
       params: Promise.resolve({ agentId: AGENT_ID }),
     });
     const data = await res.json();
 
     expect(res.status).toBe(500);
     expect(data.error).toBe('create_failed');
+  });
+});
+
+// ── GET Tests ─────────────────────────────────────────────────────────────
+
+describe('GET /api/agents/[agentId]/api-keys', () => {
+  const MOCK_ROWS = [
+    {
+      id: 'key-001',
+      key_prefix: 'ak_abc1234',
+      label: 'Worker Key',
+      scopes: ['erc8183:claim', 'erc8183:tx'],
+      created_at: '2026-06-01T00:00:00Z',
+      last_used_at: '2026-06-02T12:00:00Z',
+      revoked_at: null,
+    },
+    {
+      id: 'key-002',
+      key_prefix: 'ak_def5678',
+      label: null,
+      scopes: ['erc8183:create'],
+      created_at: '2026-05-30T00:00:00Z',
+      last_used_at: null,
+      revoked_at: '2026-06-01T00:00:00Z',
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.resolveSessionFromCookie.mockResolvedValue(MOCK_SESSION);
+    mocks.getLinkedErc8004AgentsForController.mockResolvedValue(LINKED_AGENTS);
+    mocks.supabaseSelect.mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        order: vi.fn().mockResolvedValue({ data: MOCK_ROWS, error: null }),
+      }),
+    });
+  });
+
+  it('owner returns metadata list', async () => {
+    const res = await GET(makeGetRequest('valid-token'), {
+      params: Promise.resolve({ agentId: AGENT_ID }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.ok).toBe(true);
+    expect(data.keys).toHaveLength(2);
+    expect(data.keys[0].id).toBe('key-001');
+    expect(data.keys[0].keyPrefix).toBe('ak_abc1234');
+    expect(data.keys[0].label).toBe('Worker Key');
+    expect(data.keys[0].status).toBe('active');
+    expect(data.keys[1].status).toBe('revoked');
+  });
+
+  it('never returns raw key, key_hash, or hash fields', async () => {
+    const res = await GET(makeGetRequest('valid-token'), {
+      params: Promise.resolve({ agentId: AGENT_ID }),
+    });
+    const data = await res.json();
+    const json = JSON.stringify(data);
+
+    expect(json).not.toContain('key_hash');
+    expect(json).not.toContain('keyHash');
+    expect(json).not.toContain('"hash"');
+    expect(json).not.toContain('"key":');
+    expect(json).not.toContain('"rawKey"');
+
+    // Each key object should only have allowed fields
+    for (const key of data.keys) {
+      expect(key).toHaveProperty('id');
+      expect(key).toHaveProperty('keyPrefix');
+      expect(key).toHaveProperty('label');
+      expect(key).toHaveProperty('scopes');
+      expect(key).toHaveProperty('createdAt');
+      expect(key).toHaveProperty('lastUsedAt');
+      expect(key).toHaveProperty('status');
+      expect(key).not.toHaveProperty('key_hash');
+      expect(key).not.toHaveProperty('key');
+      expect(key).not.toHaveProperty('rawKey');
+    }
+  });
+
+  it('non-owner returns 403', async () => {
+    mocks.getLinkedErc8004AgentsForController.mockResolvedValue([
+      { agentId: 'other', tokenId: '999', controller: WALLET.toLowerCase() },
+    ]);
+    const res = await GET(makeGetRequest('valid-token'), {
+      params: Promise.resolve({ agentId: AGENT_ID }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(data.error).toBe('forbidden');
+  });
+
+  it('missing session returns 401', async () => {
+    const res = await GET(makeGetRequest(), {
+      params: Promise.resolve({ agentId: AGENT_ID }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(data.error).toBe('unauthorized');
+  });
+
+  it('invalid session returns 401', async () => {
+    mocks.resolveSessionFromCookie.mockResolvedValue(null);
+    const res = await GET(makeGetRequest('bad-token'), {
+      params: Promise.resolve({ agentId: AGENT_ID }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(data.error).toBe('invalid_session');
+  });
+});
+
+// ── DELETE Tests ──────────────────────────────────────────────────────────
+
+describe('DELETE /api/agents/[agentId]/api-keys/[keyId]', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.resolveSessionFromCookie.mockResolvedValue(MOCK_SESSION);
+    mocks.getLinkedErc8004AgentsForController.mockResolvedValue(LINKED_AGENTS);
+    mocks.revokeApiKey.mockResolvedValue(true);
+  });
+
+  it('owner revokes key (200)', async () => {
+    const res = await DELETE(makeDeleteRequest('key-001', 'valid-token'), {
+      params: Promise.resolve({ agentId: AGENT_ID, keyId: 'key-001' }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.ok).toBe(true);
+    expect(mocks.revokeApiKey).toHaveBeenCalledWith('key-001', AGENT_ID);
+  });
+
+  it('non-owner returns 403', async () => {
+    mocks.getLinkedErc8004AgentsForController.mockResolvedValue([
+      { agentId: 'other', tokenId: '999', controller: WALLET.toLowerCase() },
+    ]);
+    const res = await DELETE(makeDeleteRequest('key-001', 'valid-token'), {
+      params: Promise.resolve({ agentId: AGENT_ID, keyId: 'key-001' }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(data.error).toBe('forbidden');
+  });
+
+  it('missing session returns 401', async () => {
+    const res = await DELETE(makeDeleteRequest('key-001'), {
+      params: Promise.resolve({ agentId: AGENT_ID, keyId: 'key-001' }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(data.error).toBe('unauthorized');
+  });
+
+  it('invalid session returns 401', async () => {
+    mocks.resolveSessionFromCookie.mockResolvedValue(null);
+    const res = await DELETE(makeDeleteRequest('key-001', 'bad-token'), {
+      params: Promise.resolve({ agentId: AGENT_ID, keyId: 'key-001' }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(401);
+    expect(data.error).toBe('invalid_session');
+  });
+
+  it('wrong keyId returns 404', async () => {
+    mocks.revokeApiKey.mockResolvedValue(false);
+    const res = await DELETE(makeDeleteRequest('nonexistent-key', 'valid-token'), {
+      params: Promise.resolve({ agentId: AGENT_ID, keyId: 'nonexistent-key' }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(404);
+    expect(data.error).toBe('revoke_failed');
   });
 });

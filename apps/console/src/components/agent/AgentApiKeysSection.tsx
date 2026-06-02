@@ -120,10 +120,16 @@ export function AgentApiKeysSection({ agentId }: { agentId: string }) {
 
   const handleRotate = async (keyId: string) => {
     if (!confirm('Rotate this key? The old key will be revoked and a new one generated.')) return;
-    // Revoke old, create new with same label/preset
     try {
       const oldKey = keys.find((k) => k.id === keyId);
-      await fetch(`/api/agents/${agentId}/api-keys/${keyId}`, { method: 'DELETE' });
+      // 1. Revoke old key first
+      const revokeRes = await fetch(`/api/agents/${agentId}/api-keys/${keyId}`, { method: 'DELETE' });
+      if (!revokeRes.ok) {
+        const revokeData = await revokeRes.json().catch(() => ({}));
+        setError(revokeData.detail || 'Failed to revoke old key');
+        return;
+      }
+      // 2. Only create new key after revoke succeeds
       const res = await fetch(`/api/agents/${agentId}/api-keys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -138,7 +144,7 @@ export function AgentApiKeysSection({ agentId }: { agentId: string }) {
         setRawKeyId(data.id);
         fetchKeys();
       } else {
-        setError(data.detail || 'Failed to rotate');
+        setError(data.detail || 'Failed to create new key');
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error');

@@ -35,7 +35,10 @@ const SCOPE_PRESETS: Record<string, string[]> = {
   ],
 };
 
-const ALL_SCOPES = Object.values(API_KEY_SCOPES);
+const VALID_PRESETS = new Set(Object.keys(SCOPE_PRESETS));
+const ALL_SCOPES = Object.values(API_KEY_SCOPES) as string[];
+const VALID_SCOPE_SET = new Set(ALL_SCOPES);
+const LABEL_MAX_LENGTH = 80;
 
 // ── Shared auth helper ──────────────────────────────────────────────────
 
@@ -106,18 +109,68 @@ export async function POST(
       );
     }
 
-    const label = typeof body.label === 'string' ? body.label.trim() : undefined;
+    // Validate label
+    let label: string | undefined;
+    if (body.label !== undefined) {
+      if (typeof body.label !== 'string') {
+        return NextResponse.json(
+          { ok: false, error: 'invalid_label', detail: 'label must be a string' },
+          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+        );
+      }
+      const trimmed = body.label.trim();
+      if (trimmed.length > LABEL_MAX_LENGTH) {
+        return NextResponse.json(
+          { ok: false, error: 'invalid_label', detail: `label must be ${LABEL_MAX_LENGTH} characters or fewer` },
+          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+        );
+      }
+      if (trimmed.length > 0) label = trimmed;
+    }
 
     // Resolve scopes from preset or explicit list
     let scopes: string[] | undefined;
-    if (typeof body.preset === 'string' && SCOPE_PRESETS[body.preset]) {
+    if (body.preset !== undefined) {
+      if (typeof body.preset !== 'string' || !VALID_PRESETS.has(body.preset)) {
+        return NextResponse.json(
+          { ok: false, error: 'invalid_preset', detail: `preset must be one of: ${[...VALID_PRESETS].join(', ')}` },
+          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+        );
+      }
       scopes = SCOPE_PRESETS[body.preset];
-    } else if (Array.isArray(body.scopes)) {
-      const valid = body.scopes.filter(
-        (s: unknown): s is string =>
-          typeof s === 'string' && (ALL_SCOPES as readonly string[]).includes(s),
-      );
-      scopes = valid.length > 0 ? valid : undefined;
+    } else if (body.scopes !== undefined) {
+      if (!Array.isArray(body.scopes)) {
+        return NextResponse.json(
+          { ok: false, error: 'invalid_scopes', detail: 'scopes must be a string array' },
+          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+        );
+      }
+      // Validate every scope
+      const invalid: string[] = [];
+      const seen = new Set<string>();
+      const deduped: string[] = [];
+      for (const s of body.scopes) {
+        if (typeof s !== 'string') {
+          return NextResponse.json(
+            { ok: false, error: 'invalid_scope', detail: 'Each scope must be a string' },
+            { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+          );
+        }
+        if (!VALID_SCOPE_SET.has(s)) {
+          invalid.push(s);
+        }
+        if (!seen.has(s)) {
+          seen.add(s);
+          deduped.push(s);
+        }
+      }
+      if (invalid.length > 0) {
+        return NextResponse.json(
+          { ok: false, error: 'invalid_scope', detail: `Unknown scopes: ${invalid.join(', ')}` },
+          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+        );
+      }
+      scopes = deduped.length > 0 ? deduped : undefined;
     }
 
     const result = await createApiKey({
