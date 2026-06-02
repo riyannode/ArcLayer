@@ -8,7 +8,7 @@ import ArcMark from './ArcMark';
 
 /**
  * Unified top navigation — single source of truth for both landing (`/`) and
- * app pages (`/dashboard`, `/agents`, `/jobs`, `/docs`).
+ * app pages (`/dashboard`, `/agents`, `/docs`).
  *
  * Depth comes from behavior, not styling forks:
  *   - 4 nav items, same order, everywhere.

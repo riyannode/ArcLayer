@@ -9,7 +9,11 @@ function CreateRedirect() {
   const agent = searchParams.get('agent') || searchParams.get('agentId') || '';
 
   useEffect(() => {
-    router.replace('/dashboard');
+    if (agent && /^\d+$/.test(agent)) {
+      router.replace(`/agent/${agent}/escrow`);
+    } else {
+      router.replace('/dashboard');
+    }
   }, [agent, router]);
 
   return null;

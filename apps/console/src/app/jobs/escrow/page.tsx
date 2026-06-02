@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 /**
- * Legacy /jobs/escrow page — redirects to /a2a agent discovery.
+ * Legacy /jobs/escrow page — redirects to /dashboard.
  * The direct hire flow now lives at /agent/[id]/escrow.
  */
 export default function EscrowRedirectPage() {
