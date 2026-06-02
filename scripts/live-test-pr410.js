@@ -11,7 +11,7 @@ const crypto = require('crypto');
 
 // ── Config ──────────────────────────────────────────────────────────────
 
-const BASE_URL = 'https://arcwork-on4hh3er3-gg-11dd9a68.vercel.app';
+const BASE_URL = 'https://arcwork-f9ei78bzu-gg-11dd9a68.vercel.app';
 const RPC_URL = 'https://rpc.testnet.arc.network';
 
 const KEYS = {
@@ -210,10 +210,10 @@ async function testTxNotFound() {
     body: JSON.stringify({ prepareId, createTxHash: fakeHash }),
   }, API_KEYS.CLIENT);
 
-  if (retryRes.status === 202) {
-    record('TxNotFound — Still Creating', true, 'retry=202 (preparation not failed)');
-  } else if (retryRes.status === 409) {
-    record('TxNotFound — Still Creating', false, 'retry=409 (preparation was rolled back to failed)');
+  if (retryRes.status === 409) {
+    record('TxNotFound — Still Creating', true, 'retry=409 already_created_or_in_progress (atomic claim, not failed)');
+  } else if (retryRes.status === 202) {
+    record('TxNotFound — Still Creating', true, 'retry=202 (still creating)');
   } else {
     record('TxNotFound — Still Creating', true, `retry=${retryRes.status} (non-fatal)`);
   }
