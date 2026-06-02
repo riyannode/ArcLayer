@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useSignMessage } from 'wagmi';
+import { switchChain } from '@wagmi/core';
 import { loadAgentDetail } from '@/lib/indexer';
 import {
   fetchErc8183Metadata,
@@ -14,6 +15,9 @@ import {
   shortText,
 } from '@/lib/erc8183/agent-profile';
 import { useArcWallet } from '@/hooks/useArcWallet';
+import { useArcWrite } from '@/hooks/useArcWrite';
+import { CONTRACTS, ERC8183_AGENTIC_COMMERCE_ABI } from '@arclayer/sdk';
+import { config } from '@/lib/wagmi';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -188,6 +192,7 @@ function usdcToAtomic(amount: string): string {
 
 type PrepareResult = {
   ok: true;
+  prepareId: string | null;
   settlementMode: string;
   participants: {
     client: { agentId: string; controller: string };
@@ -210,6 +215,14 @@ type PrepareResult = {
   };
 };
 
+type CreatedResult = {
+  ok: true;
+  localJobId: string;
+  erc8183JobId: string;
+  createTxHash: string;
+  status: string;
+};
+
 /* ------------------------------------------------------------------ */
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
@@ -218,6 +231,7 @@ export default function DirectHireEscrowPage() {
   const params = useParams<{ id: string }>();
   const { address, isConnected } = useArcWallet();
   const { signMessageAsync } = useSignMessage();
+  const { writeContractAsync } = useArcWrite();
   const agentId = parseAgentId(params.id);
 
   /* ---- Wallet session state ---- */
@@ -254,6 +268,9 @@ export default function DirectHireEscrowPage() {
 
   const [preparing, setPreparing] = useState(false);
   const [prepareResult, setPrepareResult] = useState<PrepareResult | null>(null);
+  const [signing, setSigning] = useState(false);
+  const [signTxState, setSignTxState] = useState('');
+  const [createdResult, setCreatedResult] = useState<CreatedResult | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -456,6 +473,7 @@ export default function DirectHireEscrowPage() {
     setError('');
     setSuccess('');
     setPrepareResult(null);
+    setCreatedResult(null);
     setForm((s) => ({ ...s, [key]: value }));
   }
 
@@ -522,6 +540,66 @@ export default function DirectHireEscrowPage() {
       setError(e instanceof Error ? e.message : 'Prepare failed.');
     } finally {
       setPreparing(false);
+    }
+  }
+
+  /* ---- Sign Create Job ---- */
+  async function handleSignCreateJob() {
+    if (!prepareResult?.next?.createJob || !prepareResult.prepareId) return;
+
+    try {
+      setSigning(true);
+      setError('');
+      setSuccess('');
+      setCreatedResult(null);
+      setSignTxState('Switching to Arc Testnet…');
+
+      // Switch wallet to Arc Testnet
+      await switchChain(config, { chainId: 5042002 });
+
+      // Use prepareResult.next.createJob as single source of truth
+      const cj = prepareResult.next.createJob;
+      setSignTxState('Waiting for wallet signature…');
+
+      const createHash = await writeContractAsync({
+        address: CONTRACTS.ERC8183_AGENTIC_COMMERCE as `0x${string}`,
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as unknown as Parameters<typeof writeContractAsync>[0]['abi'],
+        functionName: 'createJob',
+        args: [
+          cj.provider as `0x${string}`,
+          cj.evaluator as `0x${string}`,
+          BigInt(cj.expiredAt),
+          cj.description,
+          cj.hook as `0x${string}`,
+        ],
+      });
+
+      // Confirm with backend
+      setSignTxState('Confirming JobCreated event…');
+      const confirmRes = await fetch('/api/erc8183-jobs/web-hire/created', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prepareId: prepareResult.prepareId,
+          createTxHash: createHash,
+        }),
+      });
+
+      const confirmData = await confirmRes.json();
+      if (!confirmRes.ok || !confirmData.ok) {
+        throw new Error(
+          confirmData.detail || confirmData.error || `Confirm failed (${confirmRes.status})`,
+        );
+      }
+
+      setCreatedResult(confirmData as CreatedResult);
+      setSuccess('ERC-8183 job created on-chain!');
+      setSignTxState('');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Signing failed.');
+      setSignTxState('');
+    } finally {
+      setSigning(false);
     }
   }
 
@@ -1009,9 +1087,60 @@ export default function DirectHireEscrowPage() {
                     </pre>
                   </div>
 
-                  <div className="mt-6 rounded-lg border border-[#F0B84A]/20 bg-[#F0B84A]/8 px-4 py-3 text-sm text-[#EAE4D8]/72">
-                    ⓘ Transaction signing is not included in this PR.
-                    The prepare result above shows the resolved instruction that would be signed.
+                  {/* Sign Create Job CTA — hidden until prepare succeeds */}
+                  {!createdResult && (
+                    <div className="mt-6">
+                      <button
+                        type="button"
+                        disabled={signing}
+                        onClick={handleSignCreateJob}
+                        className="h-12 w-full rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A]/40 px-10 text-sm font-semibold text-black transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/55 disabled:cursor-not-allowed disabled:border-[#F0B84A]/25 disabled:bg-[#F0B84A]/15 disabled:text-black/40"
+                      >
+                        {signing ? 'Signing…' : 'Sign Create Job →'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Signing status */}
+              {signTxState ? (
+                <div className="rounded-lg border border-[#F0B84A]/25 bg-[#F0B84A]/10 px-5 py-3 text-sm text-[#F0B84A]">
+                  {signTxState}
+                </div>
+              ) : null}
+
+              {/* Created result */}
+              {createdResult && (
+                <div className="rounded-xl border border-[#B8CD7E]/25 bg-[#B8CD7E]/5 p-6">
+                  <h3 className="text-lg font-semibold text-[#B8CD7E]">
+                    Job Created ✓
+                  </h3>
+
+                  <div className="mt-4 space-y-3">
+                    {([
+                      ['Local Job ID', createdResult.localJobId],
+                      ['ERC-8183 Job ID', createdResult.erc8183JobId],
+                      ['Create Tx Hash', shortText(createdResult.createTxHash, 16, 8)],
+                      ['Provider', prepareResult?.participants.provider.agentId ?? '—'],
+                      ['Evaluator', prepareResult?.participants.evaluator.agentId ?? '—'],
+                      ['Buyer', prepareResult?.participants.client.agentId ?? '—'],
+                      ['Budget', prepareResult ? `${prepareResult.budget.formatted} USDC` : '—'],
+                      ['Status', createdResult.status],
+                    ] as const).map(([label, value]) => (
+                      <div key={label} className="flex items-center justify-between gap-6">
+                        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/38">
+                          {label}
+                        </span>
+                        <span className="max-w-[60%] truncate text-right text-sm font-mono text-[#F4EFE5]">
+                          {value}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-5 rounded-lg border border-[#F0B84A]/20 bg-[#F0B84A]/8 px-4 py-3 text-sm text-[#EAE4D8]/72">
+                    ⓘ Funding/approval is handled in the next step.
                   </div>
                 </div>
               )}

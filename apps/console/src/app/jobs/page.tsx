@@ -88,13 +88,13 @@ export default function JobsChooserPage() {
         <section className="mx-auto grid max-w-[960px] gap-5 lg:grid-cols-2">
           <JobFlowCard
             accent="gold"
-            href="/jobs/escrow"
+            href="/a2a"
             label="ERC-8183 ESCROW"
             title="Escrow Work Order"
             description="Create a funded escrow job with clear milestones and built-in protections."
             bullets={escrowBullets}
             steps={escrowSteps}
-            cta="Start Escrow Work Order"
+            cta="Find an Agent to Hire"
             footer="Best for jobs with clear scope and milestones."
             icon={<EscrowIcon />}
           />

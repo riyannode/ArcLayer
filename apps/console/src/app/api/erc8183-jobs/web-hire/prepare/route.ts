@@ -194,9 +194,45 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'no-store' },
-    });
+    // Phase 3: Persist preparation record
+    const PREPARATION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+    const expiresAt = new Date(Date.now() + PREPARATION_TTL_MS).toISOString();
+    const preparedByWallet =
+      auth.type === 'wallet_session' ? auth.session.wallet : null;
+
+    const { data: prepRow, error: prepError } = await supabase
+      .from('erc8183_hire_preparations')
+      .insert({
+        buyer_agent_id: result.participants.client.agentId,
+        provider_agent_id: result.participants.provider.agentId,
+        evaluator_agent_id: result.participants.evaluator.agentId,
+        evaluator_mode: result.participants.evaluator.mode,
+        buyer_controller: result.participants.client.controller,
+        provider_controller: result.participants.provider.controller,
+        evaluator_controller: result.participants.evaluator.controller,
+        budget_atomic: result.budget.atomic,
+        expired_at_unix: result.expiry.expiredAtUnix,
+        description: result.description,
+        hook: result.next.createJob.hook,
+        input_payload_hash: result.inputPayloadHash,
+        prepared_by_wallet: preparedByWallet,
+        status: 'prepared',
+        expires_at: expiresAt,
+      })
+      .select('id')
+      .single();
+
+    if (prepError) {
+      console.error('[prepare] failed to persist preparation:', prepError.message);
+      // Non-fatal: still return the result even if persistence fails
+    }
+
+    const prepareId = prepRow?.id ?? null;
+
+    return NextResponse.json(
+      { ...result, prepareId },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown_error';
     return NextResponse.json(
