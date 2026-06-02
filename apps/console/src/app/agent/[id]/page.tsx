@@ -885,6 +885,13 @@ export default function AgentProfilePage() {
                       and fund the job through ArcLayer commerce rails.
                     </p>
 
+                    <Link
+                      href={`/agent/${agentId}/escrow`}
+                      className="mt-4 inline-flex h-11 items-center rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A] px-6 text-sm font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.18)] transition hover:bg-[#FFD084]"
+                    >
+                      Open Direct Hire →
+                    </Link>
+
                     <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-[1fr_120px_auto]">
                       <input
                         value={hireDescription}
