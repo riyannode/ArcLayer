@@ -12,10 +12,33 @@ Each bot runs as a separate PM2 process with its own wallet + API key.
 Client Bot ──createJob──▶ Provider Bot ──submit──▶ Evaluator Bot ──complete──▶ Done
    │                        │                         │
    ├─ random job template   ├─ capability filter       ├─ LLM or rules eval
-   ├─ setBudget             ├─ structured strategy     ├─ score >= 70 → complete
-   ├─ approve USDC          ├─ claim + running         └─ score < 70 → soft reject
+   ├─ wait for setBudget    ├─ on-chain getJob guard    ├─ score >= 70 → complete
+   ├─ approve USDC          ├─ claim + running          └─ score < 70 → soft reject
    └─ fund                  └─ submit tx
 ```
+
+### Critical: setBudget → Fund Ordering
+
+The ERC-8183 lifecycle **requires** the provider to call `setBudget` before the client
+can fund. The on-chain contract enforces this:
+
+1. `createJob` → on-chain status = **Open (0)**
+2. Provider calls `setBudget(jobId, amount, "0x")` → status stays **Open**, budget set
+3. Client calls `approve` + `fund` → status = **Funded (1)**
+4. Provider claims, runs, submits → status = **Submitted (2)**
+5. Evaluator completes → status = **Completed (3)**
+
+If the client funds before `setBudget`, the on-chain status moves to **Funded** with
+budget=0. After that, `setBudget` reverts with `WrongStatus (0x8e78f0cb)` because the
+contract requires `status == Open AND budget == 0`.
+
+**Bot protections (built-in):**
+- **Client** polls `api.getJob()` for `setBudgetTxHash` (or `job.txHashes.setBudgetTxHash`)
+  before calling fund. Also checks `lifecycleStatus` progression as fallback.
+- **Provider** reads on-chain `getJob(erc8183JobId)` before calling `setBudget`. Only
+  proceeds if `onchain.status === 0 (Open)` AND `onchain.budget === 0n`.
+- Both bots use `IGNORE_JOBS_BEFORE` to skip stale backlog jobs that may be in
+  inconsistent states.
 
 - **Creator/Client** creates random small-budget ERC-8183 jobs every 3 minutes.
   Each job picks a random template (market_summary, risk_check, sentiment_scan, execution_plan, data_quality_check).
@@ -90,10 +113,17 @@ cp evaluator-bot/.env.example evaluator-bot/.env
 ```
 
 Fill in:
-- `ARCLAYER_API_KEY` — generated from `/register/external-bot` on the deployed console
+- `CLIENT_API_KEY` / `WORKER_API_KEY` / `EVALUATOR_API_KEY` — role-specific API keys (preferred)
+- `ARCLAYER_API_KEY` — backward-compatible fallback (optional if role-specific key is set)
 - `*_PRIVATE_KEY` — wallet private key with USDC + gas
 - `*_ADDRESS` — corresponding wallet address
 - `WORKER_ID` — **must equal the worker/provider agent ID** (the API key's agentId)
+
+**API key resolution per role:**
+- Client bot uses `CLIENT_API_KEY` first, falls back to `ARCLAYER_API_KEY`
+- Provider bot uses `WORKER_API_KEY` first, falls back to `ARCLAYER_API_KEY`
+- Evaluator bot uses `EVALUATOR_API_KEY` first, falls back to `ARCLAYER_API_KEY`
+- If no key is found, the bot fails fast with a clear error
 
 For LLM evaluation, also fill in:
 - `LLM_BASE_URL` — OpenAI-compatible API endpoint
@@ -177,6 +207,134 @@ The bots work independently:
 - **Provider** polls every `JOB_POLL_INTERVAL_MS` (default 1 min) for matching jobs
 - **Evaluator** polls every `JOB_POLL_INTERVAL_MS` (default 1 min) for submitted jobs
 
+### Recommended: Split Runtime Per Role (Production)
+
+For production, deploy each bot from its own runtime folder so client and provider
+never share secrets, cwd, or `.env`. This also means bots keep running even if the
+repo is deleted or recloned.
+
+**Step 1 — Copy repo source to separate runtime folders:**
+
+```bash
+# Create isolated runtimes
+mkdir -p ~/arclayer-bots/erc8183-client ~/arclayer-bots/erc8183-provider ~/arclayer-bots/erc8183-evaluator
+
+# Copy shared code + client bot only
+rsync -av --exclude node_modules examples/external-erc8183-bots/{package.json,shared/,scripts/,client-bot/} \
+  ~/arclayer-bots/erc8183-client/
+
+# Copy shared code + provider bot only
+rsync -av --exclude node_modules examples/external-erc8183-bots/{package.json,shared/,scripts/,provider-bot/} \
+  ~/arclayer-bots/erc8183-provider/
+
+# Copy shared code + evaluator bot only
+rsync -av --exclude node_modules examples/external-erc8183-bots/{package.json,shared/,scripts/,evaluator-bot/} \
+  ~/arclayer-bots/erc8183-evaluator/
+
+# Install deps in each
+cd ~/arclayer-bots/erc8183-client && npm install
+cd ~/arclayer-bots/erc8183-provider && npm install
+cd ~/arclayer-bots/erc8183-evaluator && npm install
+```
+
+**Step 2 — Create role-specific `.env` files:**
+
+```bash
+# Client runtime — only client secrets
+cat > ~/arclayer-bots/erc8183-client/.env << 'EOF'
+ARCLAYER_BASE_URL=https://arclayers.xyz
+ARC_RPC_URL=https://rpc.testnet.arc.network
+ARC_CHAIN_ID=5042002
+CLIENT_ADDRESS=0x...
+CLIENT_PRIVATE_KEY=0x...
+CLIENT_API_KEY=ak_...
+BUYER_AGENT_ID=...
+PROVIDER_AGENT_ID=...
+PROVIDER_ADDRESS=0x...
+JOB_BUDGET_ATOMIC=100000
+JOB_CREATE_INTERVAL_MS=180000
+MAX_OPEN_JOBS=5
+AUTONOMOUS_TX=true
+FUND_INITIAL_DELAY_MS=5000
+FUND_MAX_RETRIES=5
+EOF
+
+# Provider runtime — only provider secrets
+cat > ~/arclayer-bots/erc8183-provider/.env << 'EOF'
+ARCLAYER_BASE_URL=https://arclayers.xyz
+ARC_RPC_URL=https://rpc.testnet.arc.network
+ARC_CHAIN_ID=5042002
+PROVIDER_AGENT_ID=...
+WORKER_ID=...
+WORKER_ADDRESS=0x...
+WORKER_PRIVATE_KEY=0x...
+WORKER_API_KEY=ak_...
+WORKER_CAPABILITIES=market-summary,risk-check,sentiment-scan,execution-plan,data-quality-check
+JOB_POLL_INTERVAL_MS=30000
+MAX_ACTIVE_JOBS=3
+AUTONOMOUS_TX=true
+EOF
+
+# Evaluator runtime — only evaluator secrets
+cat > ~/arclayer-bots/erc8183-evaluator/evaluator-bot/.env << 'EOF'
+ARCLAYER_BASE_URL=https://arclayers.xyz
+ARC_RPC_URL=https://rpc.testnet.arc.network
+ARC_CHAIN_ID=5042002
+EVALUATOR_AGENT_ID=...
+EVALUATOR_ADDRESS=0x...
+EVALUATOR_PRIVATE_KEY=0x...
+EVALUATOR_API_KEY=ak_...
+EVALUATOR_MODE=rules
+MIN_EVAL_SCORE=70
+JOB_POLL_INTERVAL_MS=60000
+MAX_ACTIVE_JOBS=3
+AUTONOMOUS_TX=true
+EOF
+```
+
+**Security rule:** Each runtime `.env` must contain only its role's secrets.
+Provider `.env` must never contain `CLIENT_PRIVATE_KEY`.
+
+**Step 3 — Start from isolated runtimes:**
+
+```bash
+pm2 start client-bot/index.js \
+  --name arclayer-erc8183-client \
+  --cwd ~/arclayer-bots/erc8183-client
+
+pm2 start provider-bot/index.js \
+  --name arclayer-erc8183-provider \
+  --cwd ~/arclayer-bots/erc8183-provider
+
+pm2 start evaluator-bot/index.js \
+  --name arclayer-erc8183-evaluator \
+  --cwd ~/arclayer-bots/erc8183-evaluator
+
+pm2 save
+```
+
+**Step 4 — Verify isolation:**
+
+```bash
+pm2 describe arclayer-erc8183-client | grep "exec cwd"
+# Should show: ~/arclayer-bots/erc8183-client
+
+pm2 describe arclayer-erc8183-provider | grep "exec cwd"
+# Should show: ~/arclayer-bots/erc8183-provider
+
+pm2 describe arclayer-erc8183-evaluator | grep "exec cwd"
+# Should show: ~/arclayer-bots/erc8183-evaluator
+```
+
+**Why split?**
+- Client bot never sees worker or evaluator private keys
+- Provider bot never sees client or evaluator private keys
+- Evaluator bot never sees client or worker private keys
+- External users can run only the worker bot (provider runtime)
+- Easier to rotate keys independently
+- PM2 process isolation is clearer
+- Bots survive repo deletion/reclone
+
 ## 6. Job Templates
 
 The client bot randomly picks from 5 job templates per creation cycle:
@@ -202,6 +360,8 @@ The evaluator bot uses LLM (when configured) to judge result quality.
 | `erc8183_job_not_funded` | Job hasn't been funded on-chain | Wait for client bot to complete the fund cycle |
 | `erc8183_job_not_claimed` | Provider tries to markRunning before claim | Provider handles this automatically in Phase 2 |
 | `insufficient_balance` | Wallet out of USDC | Top up wallet via Arc Testnet faucet |
+| `WrongStatus (0x8e78f0cb)` | Client funded before provider setBudget | Both bots now guard against this — see "setBudget → Fund Ordering" above |
+| `tx_hash_conflict` | Duplicate tx confirmation attempt | Safe to ignore — bot skips already-confirmed txs |
 | LLM evaluation failed | LLM_BASE_URL or LLM_API_KEY missing/wrong | Check LLM config; evaluator falls back to rules automatically |
 
 ## 8. Safety Guards
@@ -213,6 +373,10 @@ The evaluator bot uses LLM (when configured) to judge result quality.
 | `MAX_ACTIVE_JOBS` | 3 | Provider/evaluator — process at most N per cycle |
 | `MIN_EVAL_SCORE` | 70 | Evaluator — minimum score to approve (below = soft reject) |
 | `AUTONOMOUS_TX` | true | Required — enables on-chain signing |
+| `IGNORE_JOBS_BEFORE` | (blank) | ISO timestamp — skip jobs created before this time |
+| `SETBUDGET_POLL_MAX` | 120 | Client — max polls waiting for setBudgetTxHash |
+| `FUND_POLL_INTERVAL_MS` | 5000 | Client — ms between setBudget polls |
+| `CLAIM_TTL_SECONDS` | 600 | Provider — how long a claim is held before expiry |
 
 ## 9. Future Extensions
 

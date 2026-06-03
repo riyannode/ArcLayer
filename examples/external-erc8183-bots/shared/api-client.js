@@ -1,14 +1,13 @@
 /**
- * ERC-8183 HTTP client — wraps /api/erc8183-jobs routes.
- *
- * Each bot sends its own API key via Authorization header.
- * Routes return tx instructions (address, functionName, args).
- *
- * Role-aware API key resolution:
- *   client    → CLIENT_API_KEY || ARCLAYER_API_KEY
- *   provider  → WORKER_API_KEY || ARCLAYER_API_KEY
- *   evaluator → EVALUATOR_API_KEY || ARCLAYER_API_KEY
+ * ArcLayer API client — standalone HTTP wrapper.
+ * Authorization: Bearer ***
+ * Handles 401, 403, 409, 429, 5xx with retry.
+ * Never logs secrets.
  */
+const { log, error: logError } = require('./logger');
+
+const TX_NOT_FOUND_RETRY_DELAY_MS = 5000;
+const TX_NOT_FOUND_MAX_RETRIES = 3;
 
 let _role = '';
 
@@ -32,61 +31,65 @@ function getApiKey() {
   if (_role === 'evaluator') {
     return process.env.EVALUATOR_API_KEY || process.env.ARCLAYER_API_KEY || '';
   }
-  return process.env.ARCLAYER_API_KEY || '';
+  return process.env.ARCLAYER_API_KEY || process.env.CLIENT_API_KEY || process.env.WORKER_API_KEY || '';
 }
 
-/** Get the expected env var name for the current role (for error messages). */
-function getExpectedKeyEnv() {
-  if (_role === 'client') return 'CLIENT_API_KEY or ARCLAYER_API_KEY';
-  if (_role === 'provider' || _role === 'worker') return 'WORKER_API_KEY or ARCLAYER_API_KEY';
-  if (_role === 'evaluator') return 'EVALUATOR_API_KEY or ARCLAYER_API_KEY';
-  return 'ARCLAYER_API_KEY';
-}
-
-async function request(path, method, body) {
+async function request(path, method, body, retries = 0) {
   const url = `${getBaseUrl()}${path}`;
   const headers = { 'Content-Type': 'application/json' };
   const key = getApiKey();
-  if (!key) {
-    throw new Error(`Missing ${getExpectedKeyEnv()} — set the correct API key in .env`);
-  }
-  headers['Authorization'] = `Bearer ${key}`;
+  if (key) headers['Authorization'] = `Bearer ${key}`;
 
   const res = await fetch(url, {
     method,
     headers,
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
+
   const json = await res.json().catch(() => ({ ok: false, error: 'invalid_json' }));
+
+  // Handle tx_not_found with retry
+  if (res.status === 409 && json.error === 'tx_not_found' && retries < TX_NOT_FOUND_MAX_RETRIES) {
+    log('API', { retry: retries + 1, path, error: 'tx_not_found', delay: TX_NOT_FOUND_RETRY_DELAY_MS });
+    await new Promise((r) => setTimeout(r, TX_NOT_FOUND_RETRY_DELAY_MS));
+    return request(path, method, body, retries + 1);
+  }
+
+  // Handle rate limiting
+  if (res.status === 429) {
+    const retryAfter = parseInt(res.headers.get('retry-after') || '10', 10);
+    log('API', { retry: retries + 1, path, error: 'rate_limited', retryAfter });
+    await new Promise((r) => setTimeout(r, retryAfter * 1000));
+    return request(path, method, body, retries + 1);
+  }
+
   if (!res.ok) {
-    const err = new Error(json.error || `HTTP ${res.status}`);
+    const err = new Error(json.error || json.message || `HTTP ${res.status}`);
     err.status = res.status;
     err.body = json;
     throw err;
   }
+
   return json;
 }
 
 module.exports = {
-  /** Set bot role for API key resolution. Call once at startup. */
-  setRole,
-
-  /** Step 1 — create local job, returns createJob tx instruction */
+  /** Create local job, returns createJob tx instruction */
   async createJob(input) {
     return request('/api/erc8183-jobs', 'POST', input);
   },
 
-  /** Step 2 — confirm createJob tx, decode JobCreated */
+  /** Confirm createJob tx, decode JobCreated event */
   async confirmCreateTx(localJobId, createTxHash) {
     return request(`/api/erc8183-jobs/${localJobId}/created`, 'POST', { createTxHash });
   },
 
-  /** Step 3 — get setBudget tx instruction */
+  /** Get setBudget tx instruction */
   async setBudget(localJobId) {
     return request(`/api/erc8183-jobs/${localJobId}/set-budget`, 'POST', {});
   },
 
-  /** Step 4 — get approve + fund tx instructions */
+  /** Get approve + fund tx instructions */
   async fund(localJobId) {
     return request(`/api/erc8183-jobs/${localJobId}/fund`, 'POST', {});
   },
@@ -96,29 +99,34 @@ module.exports = {
     return request(`/api/erc8183-jobs/${localJobId}/tx`, 'POST', { txType, txHash });
   },
 
-  /** Step 5 — off-chain claim */
+  /** Off-chain claim */
   async claim(localJobId, { workerId, providerAgentId, claimTtlSeconds }) {
     return request(`/api/erc8183-jobs/${localJobId}/claim`, 'POST', { workerId, providerAgentId, claimTtlSeconds });
   },
 
-  /** Step 6 — off-chain running */
+  /** Off-chain running */
   async markRunning(localJobId, workerId) {
     return request(`/api/erc8183-jobs/${localJobId}/running`, 'POST', { workerId });
   },
 
-  /** Step 7 — submit result, returns submit tx instruction */
+  /** Submit result, returns submit tx instruction */
   async submit(localJobId, { workerId, resultPayload, proofPayload }) {
     return request(`/api/erc8183-jobs/${localJobId}/submit`, 'POST', { workerId, resultPayload, proofPayload });
   },
 
-  /** Step 8 — complete escrow */
+  /** Complete escrow */
   async complete(localJobId, { evaluatorAgentId, approved, reason }) {
     return request(`/api/erc8183-jobs/${localJobId}/complete`, 'POST', { evaluatorAgentId, approved, reason });
   },
 
-  /** GET job by localJobId */
+  /** GET job by localJobId — full detail including tx hashes and budget */
   async getJob(localJobId) {
     return request(`/api/erc8183-jobs/${localJobId}`, 'GET');
+  },
+
+  /** Reconcile local DB with on-chain state */
+  async reconcile(localJobId) {
+    return request(`/api/erc8183-jobs/${localJobId}/reconcile`, 'POST', {});
   },
 
   /** Poll for jobs — generic filter */

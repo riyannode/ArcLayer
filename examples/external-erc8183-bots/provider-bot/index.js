@@ -10,6 +10,7 @@
 require('dotenv').config({ path: __dirname + '/.env' });
 
 const api = require('../shared/erc8183-http-client');
+api.setRole('provider');
 const { createSigner } = require('../shared/tx-signer');
 const { required, requiredAddress, normalizePrivateKey } = require('../shared/env');
 const { sleep } = require('../shared/sleep');
@@ -188,6 +189,9 @@ function runWorkerStrategy(job) {
   return { resultPayload, proofPayload };
 }
 
+// ── On-chain status names ──────────────────────────────────────────────
+const ONCHAIN_STATUS = ['Open', 'Funded', 'Submitted', 'Completed', 'Rejected', 'Expired'];
+
 // ── Phase 1: Set budget on Open jobs ──────────────────────────────────
 
 async function phaseSetBudget() {
@@ -197,20 +201,100 @@ async function phaseSetBudget() {
     jobs = Array.isArray(result) ? result : result?.jobs || result?.data || [];
   } catch { jobs = []; }
 
+  const cutoff = process.env.IGNORE_JOBS_BEFORE ? new Date(process.env.IGNORE_JOBS_BEFORE).getTime() : 0;
+
   for (const job of (Array.isArray(jobs) ? jobs : [])) {
     const id = job.localJobId || job.id;
     if (processedIds.has(`budget-${id}`)) continue;
-    if (job.erc8183Status !== 'Open' && job.erc8183_status !== 'Open') continue;
+
+    // ── Guard 1: IGNORE_JOBS_BEFORE filter ──
+    if (cutoff) {
+      const jobTime = new Date(job.createdAt || job.created_at || 0).getTime();
+      if (jobTime < cutoff) {
+        processedIds.add(`budget-${id}`);
+        continue;
+      }
+    }
+
+    // ── Guard 2: provider agent match ──
     if (job.providerAgentId && job.providerAgentId !== PROVIDER_AGENT_ID) continue;
 
-    // Capability filter on setBudget too
+    // ── Guard 3: local DB status checks ──
+    // Skip if already has setBudgetTxHash
+    if (job.setBudgetTxHash) {
+      processedIds.add(`budget-${id}`);
+      continue;
+    }
+    // Skip if budget already set in local DB
+    const localBudget = parseInt(job.budgetAtomic || job.priceAtomic || '0', 10);
+    if (localBudget > 0 && job.lifecycleStatus && ['Funded', 'Submitted', 'Completed'].includes(job.lifecycleStatus)) {
+      processedIds.add(`budget-${id}`);
+      continue;
+    }
+    // Skip if erc8183Status is not Open
+    const localStatus = job.erc8183Status || job.erc8183_status || '';
+    if (localStatus && localStatus !== 'Open') {
+      console.log(`   [BUDGET] skip localStatus=${localStatus} job=${id}`);
+      processedIds.add(`budget-${id}`);
+      continue;
+    }
+
+    // Capability filter
     if (!hasCapability(job)) {
       console.log(`   [BUDGET] Skipping job ${id} — capability mismatch`);
       processedIds.add(`budget-${id}`);
       continue;
     }
 
-    console.log(`\n[${new Date().toISOString()}] [BUDGET] Open job: ${id}`);
+    const erc8183JobId = job.erc8183JobId;
+    if (!erc8183JobId) {
+      processedIds.add(`budget-${id}`);
+      continue;
+    }
+
+    // ── Guard 4: ON-CHAIN verification before setBudget ──
+    // Only call setBudget if on-chain status == Open (0) AND budget == 0
+    let onchainJob;
+    try {
+      onchainJob = await signer.readJob(erc8183JobId);
+    } catch { onchainJob = null; }
+
+    if (!onchainJob) {
+      console.log(`   [BUDGET] skip — cannot read on-chain job ${erc8183JobId}`);
+      processedIds.add(`budget-${id}`);
+      continue;
+    }
+
+    if (onchainJob.status !== 0) {
+      console.log(JSON.stringify({
+        phase: 'skip_set_budget_wrong_status',
+        localJobId: id,
+        erc8183JobId: String(erc8183JobId),
+        onchainStatus: onchainJob.status,
+        onchainStatusName: ONCHAIN_STATUS[onchainJob.status] || 'unknown',
+        onchainBudget: onchainJob.budget.toString(),
+        localLifecycleStatus: job.lifecycleStatus || '',
+        localBudget: String(localBudget),
+        reason: `on-chain status is ${ONCHAIN_STATUS[onchainJob.status] || onchainJob.status}, not Open`,
+      }));
+      processedIds.add(`budget-${id}`);
+      continue;
+    }
+
+    if (onchainJob.budget > 0n) {
+      console.log(JSON.stringify({
+        phase: 'skip_set_budget_already_set',
+        localJobId: id,
+        erc8183JobId: String(erc8183JobId),
+        onchainBudget: onchainJob.budget.toString(),
+        reason: 'on-chain budget already set',
+      }));
+      processedIds.add(`budget-${id}`);
+      continue;
+    }
+
+    // ── All guards passed — call setBudget ──
+    console.log(`\n[${new Date().toISOString()}] [BUDGET] Open job: ${id} (erc8183=${erc8183JobId}, onchain=Open, budget=0)`);
     try {
       const budgetTx = await api.setBudget(id);
       if (AUTONOMOUS_TX && budgetTx.tx) {
@@ -244,9 +328,21 @@ async function phaseClaimAndSubmit() {
     jobs = j1.concat(j2);
   } catch { jobs = []; }
 
+  const cutoff = process.env.IGNORE_JOBS_BEFORE ? new Date(process.env.IGNORE_JOBS_BEFORE).getTime() : 0;
+
   for (const job of (Array.isArray(jobs) ? jobs : [])) {
     const id = job.localJobId || job.id;
     if (processedIds.has(`claim-${id}`)) continue;
+
+    // IGNORE_JOBS_BEFORE filter
+    if (cutoff) {
+      const jobTime = new Date(job.createdAt || job.created_at || 0).getTime();
+      if (jobTime < cutoff) {
+        processedIds.add(`claim-${id}`);
+        continue;
+      }
+    }
+
     if (job.erc8183Status !== 'Funded') continue;
     if (job.providerAgentId && job.providerAgentId !== PROVIDER_AGENT_ID) continue;
 
