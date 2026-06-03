@@ -1,12 +1,17 @@
 /**
- * Bot onboarding — register ERC-8004 agent + sync to Supabase + create API key.
+ * Bot onboarding — register ERC-8004 agent via canonical HTTPS metadata draft.
+ *
+ * Flow (same as frontend):
+ *   1. POST /api/a2a/metadata/draft → get draftId, writeToken, metadataURI (HTTPS)
+ *   2. Mint ERC-8004 with HTTPS metadataURI
+ *   3. PATCH /api/a2a/metadata/draft/<draftId> with agentId + txHash
+ *   4. Sync to Supabase
+ *   5. Create API key
  *
  * Usage:
  *   node scripts/onboard-bot.js --pk <private-key> --name "My Bot" --preset client
  *   node scripts/onboard-bot.js --pk <private-key> --name "My Bot" --preset worker
- *
- * Calls POST /api/erc8004/identity/sync to immediately sync the registered
- * agent to Supabase — no manual DB upsert required.
+ *   node scripts/onboard-bot.js --pk <private-key> --name "My Bot" --preset evaluator
  */
 const { privateKeyToAccount } = require('viem/accounts');
 const { createPublicClient, createWalletClient, http, decodeEventLog } = require('viem');
@@ -20,6 +25,18 @@ const ERC8004_ABI = [
   { type: 'event', name: 'Transfer', inputs: [{ name: 'from', type: 'address', indexed: true }, { name: 'to', type: 'address', indexed: true }, { name: 'tokenId', type: 'uint256', indexed: true }] },
 ];
 
+const PRESET_CAPABILITIES = {
+  client: ['job-creation', 'escrow', 'fund_job', 'a2a_job'],
+  worker: ['claim_job', 'submit_work', 'submit_result', 'escrow', 'a2a_job'],
+  evaluator: ['approve_result', 'settle_job', 'escrow', 'a2a_job'],
+};
+
+const PRESET_ROLES = {
+  client: 'autonomous-client',
+  worker: 'provider',
+  evaluator: 'evaluator',
+};
+
 function parseArgs() {
   const args = process.argv.slice(2);
   const result = {};
@@ -31,6 +48,36 @@ function parseArgs() {
 
 function log(msg) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
+}
+
+async function createMetadataDraft(controller, metadata) {
+  log('draft: creating metadata draft...');
+  const res = await fetch(`${BASE_URL}/api/a2a/metadata/draft`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ controller, metadata }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error(`draft failed: ${data.error || JSON.stringify(data)}`);
+  }
+  log(`draft: draftId=${data.draftId} metadataURI=${data.metadataURI?.slice(0, 60)}...`);
+  return data;
+}
+
+async function patchDraft(draftId, writeToken, agentId, txHash, metadata) {
+  log('draft: patching with agentId + txHash...');
+  const res = await fetch(`${BASE_URL}/api/a2a/metadata/draft/${draftId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ writeToken, agentId, txHash, metadata }),
+  });
+  const data = await res.json();
+  if (!res.ok || !data.ok) {
+    throw new Error(`draft patch failed: ${data.error || JSON.stringify(data)}`);
+  }
+  log('draft: patched successfully');
+  return data;
 }
 
 async function registerOnChain(walletClient, publicClient, metadataURI) {
@@ -112,31 +159,46 @@ async function run() {
 
   log(`wallet: ${account.address}`);
 
-  // 1. Register on-chain
+  // Build canonical metadata (same shape as frontend)
   const metadata = {
-    schema: 'arclayer.agent/v1', name,
+    schema: 'arclayer.agent/v1',
+    name,
+    role: PRESET_ROLES[preset] || preset,
     description: `Automated ${preset} bot for ERC-8183 agentic commerce`,
-    categories: ['arclayer', 'agentic-commerce'], tags: ['arclayer', 'pm2-bot', preset],
+    categories: ['arclayer', 'agentic-commerce', 'erc8183-commerce'],
+    tags: ['arclayer', 'pm2-bot', preset, 'erc8183'],
+    capabilities: PRESET_CAPABILITIES[preset] || ['a2a_job'],
+    standard: 'erc8183',
+    autonomous: true,
   };
-  const metadataURI = `data:application/json,${encodeURIComponent(JSON.stringify(metadata))}`;
-  const reg = await registerOnChain(walletClient, publicClient, metadataURI);
+
+  // Step 1: Create metadata draft (HTTPS URI)
+  const draft = await createMetadataDraft(account.address, metadata);
+
+  // Step 2: Mint ERC-8004 with HTTPS metadataURI
+  const reg = await registerOnChain(walletClient, publicClient, draft.metadataURI);
   log(`register: tokenId=${reg.tokenId} tx=${reg.hash}`);
 
-  // 2. Sync to Supabase immediately
+  // Step 3: Sync to Supabase
   const syncResult = await syncToSupabase(reg.hash, account.address);
   const agentId = syncResult.tokenId || reg.tokenId;
   log(`agent: id=${agentId}`);
 
-  // 3. Wallet session
+  // Step 4: Patch draft with minted agentId + txHash
+  const finalMetadata = { ...metadata, agentId, updatedAt: new Date().toISOString() };
+  await patchDraft(draft.draftId, draft.writeToken, agentId, reg.hash, finalMetadata);
+
+  // Step 5: Wallet session
   const cookie = await walletSession(account);
 
-  // 4. Create API key
+  // Step 6: Create API key
   const keyResult = await createApiKey(cookie, agentId, `[onboarded] ${name}`, preset);
 
   console.log('\n=== ONBOARDING COMPLETE ===');
   console.log(`WALLET=${account.address}`);
   console.log(`AGENT_ID=${agentId}`);
   console.log(`REGISTER_TX=${reg.hash}`);
+  console.log(`METADATA_URI=${draft.metadataURI}`);
   console.log(`API_KEY=${keyResult.key || 'NONE'}`);
   console.log(`PRESET=${preset}`);
 }
