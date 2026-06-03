@@ -46,6 +46,12 @@ type JobDetail = {
     fundTxHash: string | null;
     submitTxHash: string | null;
     completeTxHash: string | null;
+    rejectTxHash: string | null;
+  };
+  rejection: {
+    rejectedAt: string | null;
+    rejectReasonText: string | null;
+    rejectReasonHash: string | null;
   };
   timestamps: {
     createdAt: string;
@@ -66,6 +72,14 @@ type ApiResponse = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────
+
+function isRejected(job: JobDetail): boolean {
+  return (
+    job.lifecycleStatus === 'Rejected' ||
+    job.localStatus === 'rejected' ||
+    job.onchainStatus === 'Rejected'
+  );
+}
 
 function shortDate(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -134,6 +148,7 @@ function timelineLabel(type: string): string {
     worker_running: 'Worker Running',
     submit_tx_confirmed: 'Deliverable Submitted',
     complete_tx_confirmed: 'Job Completed',
+    reject_tx_confirmed: 'Job Rejected',
   };
   return labels[type] ?? type.replace(/_/g, ' ');
 }
@@ -197,6 +212,39 @@ function ParticipantRow({
           </a>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Collapsible Text ─────────────────────────────────────────────────────
+
+function CollapsibleText({
+  text,
+  maxLength = 200,
+}: {
+  text: string;
+  maxLength?: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (text.length <= maxLength) {
+    return (
+      <p className="whitespace-pre-wrap text-[14px] leading-6 text-[#EAE4D8]/75">
+        {text}
+      </p>
+    );
+  }
+  return (
+    <div>
+      <p className="whitespace-pre-wrap text-[14px] leading-6 text-[#EAE4D8]/75">
+        {expanded ? text : text.slice(0, maxLength) + '…'}
+      </p>
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="mt-2 font-mono text-[11px] text-[#F3C536]/80 transition hover:text-[#F3C536]"
+      >
+        {expanded ? 'Show less' : 'Show full reason'}
+      </button>
     </div>
   );
 }
@@ -433,7 +481,48 @@ export default function Erc8183JobDetailPage() {
                   This job has expired.
                 </p>
               )}
+
+              {/* Chain & settlement info */}
+              <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[11px] text-[#EAE4D8]/50">
+                <span>Settlement: ERC-8183 Escrow</span>
+                <span>Chain: Arc Testnet</span>
+                {job.erc8183JobId && (
+                  <span>On-chain ID: {job.erc8183JobId}</span>
+                )}
+              </div>
             </div>
+
+            {/* Rejected banner */}
+            {isRejected(job) && (
+              <div className="rounded-xl border border-red-400/20 bg-[#080D13]/60 px-6 py-5">
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="inline-flex rounded-md border border-red-400/25 bg-red-400/10 px-3 py-1 font-mono text-[11px] text-red-300">
+                    Rejected
+                  </span>
+                  <span className="text-[13px] text-red-300/80">
+                    This job was rejected by the evaluator.
+                  </span>
+                </div>
+                {job.rejection.rejectedAt && (
+                  <p className="text-[12px] text-[#EAE4D8]/60">
+                    Rejected at: {shortDate(job.rejection.rejectedAt)}
+                  </p>
+                )}
+                {job.rejection.rejectReasonText && (
+                  <div className="mt-3">
+                    <div className="mb-1 font-mono text-[11px] uppercase tracking-[0.1em] text-red-300/70">
+                      Rejection Reason
+                    </div>
+                    <CollapsibleText text={job.rejection.rejectReasonText} />
+                  </div>
+                )}
+                {job.rejection.rejectReasonHash && (
+                  <p className="mt-2 font-mono text-[11px] text-[#EAE4D8]/50">
+                    Reason Hash: {shortHash(job.rejection.rejectReasonHash)}
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Description card */}
             {job.description && (
@@ -577,6 +666,13 @@ export default function Erc8183JobDetailPage() {
                   href={explorerTxUrl(job.txHashes.completeTxHash)}
                 />
               )}
+              {job.txHashes.rejectTxHash && (
+                <DetailRow
+                  label="Reject Tx"
+                  value={shortHash(job.txHashes.rejectTxHash)}
+                  href={explorerTxUrl(job.txHashes.rejectTxHash)}
+                />
+              )}
             </div>
 
             {/* Timeline card */}
@@ -591,7 +687,13 @@ export default function Erc8183JobDetailPage() {
                       key={`${ev.type}-${i}`}
                       className="flex items-start gap-3 border-b border-white/[0.04] py-3 last:border-b-0"
                     >
-                      <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#F3C536]/60" />
+                      <div
+                        className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
+                          ev.type === 'reject_tx_confirmed'
+                            ? 'bg-red-400/60'
+                            : 'bg-[#F3C536]/60'
+                        }`}
+                      />
                       <div className="min-w-0 flex-1">
                         <div className="text-[13px] text-[#F5F0E5]">
                           {timelineLabel(ev.type)}
@@ -648,6 +750,73 @@ export default function Erc8183JobDetailPage() {
                   label="Settled"
                   value={shortDate(job.timestamps.settledAt)}
                 />
+              )}
+              {job.rejection.rejectedAt && (
+                <DetailRow
+                  label="Rejected"
+                  value={shortDate(job.rejection.rejectedAt)}
+                />
+              )}
+            </div>
+
+            {/* Deliverable section — visible even when rejected */}
+            {job.payloads.deliverableHash && (
+              <div className="rounded-xl border border-white/[0.08] bg-[#080D13]/60 px-6 py-5">
+                <h2 className="mb-3 font-mono text-[12px] uppercase tracking-[0.14em] text-[#F3C536]">
+                  Deliverable
+                </h2>
+                <DetailRow
+                  label="Deliverable Hash"
+                  value={shortHash(job.payloads.deliverableHash)}
+                />
+                {job.timestamps.submittedAt && (
+                  <DetailRow
+                    label="Submitted At"
+                    value={shortDate(job.timestamps.submittedAt)}
+                  />
+                )}
+                {job.participants.provider.agentId && (
+                  <DetailRow
+                    label="Provider"
+                    value={job.participants.provider.agentId}
+                  />
+                )}
+              </div>
+            )}
+
+            {/* Reputation Impact card */}
+            <div className="rounded-xl border border-white/[0.08] bg-[#080D13]/60 px-6 py-5">
+              <h2 className="mb-3 font-mono text-[12px] uppercase tracking-[0.14em] text-[#F3C536]">
+                Reputation Impact
+              </h2>
+              {job.lifecycleStatus === 'Completed' ||
+              job.lifecycleStatus === 'Settled' ? (
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[14px] font-semibold text-emerald-300">
+                    +100
+                  </span>
+                  <span className="text-[13px] text-[#EAE4D8]/60">
+                    Provider reputation increased
+                  </span>
+                </div>
+              ) : isRejected(job) ? (
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[14px] font-semibold text-red-300">
+                    -50
+                  </span>
+                  <span className="text-[13px] text-[#EAE4D8]/60">
+                    Provider reputation decreased
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[14px] text-[#EAE4D8]/50">
+                    Pending
+                  </span>
+                  <span className="text-[13px] text-[#EAE4D8]/50">
+                    Reputation impact will be applied on completion or rejection
+                  </span>
+                </div>
               )}
             </div>
 

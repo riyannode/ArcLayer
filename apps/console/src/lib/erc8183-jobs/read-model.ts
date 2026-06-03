@@ -73,6 +73,7 @@ export function normalizeErc8183LifecycleStatus(
 
   // Fallback to tx hashes when on-chain status unavailable
   if (job.completeTxHash) return job.status === 'settled' ? 'Settled' : 'Completed';
+  if (job.rejectTxHash) return 'Rejected';
   if (job.submitTxHash) return 'Submitted';
   if (job.status === 'running') return 'Running';
   if (job.status === 'claimed') return 'Claimed';
@@ -179,6 +180,13 @@ export function buildErc8183Timeline(
       txHash: job.completeTxHash,
       payloadHash: job.reasonHash ?? undefined,
       createdAt: dbEventTs.get('complete_tx_confirmed') ?? job.createdAt,
+    });
+  }
+  if (job.rejectTxHash) {
+    events.push({
+      type: 'reject_tx_confirmed',
+      txHash: job.rejectTxHash,
+      createdAt: job.rejectedAt ?? dbEventTs.get('reject_tx_confirmed') ?? job.createdAt,
     });
   }
 
@@ -324,6 +332,12 @@ export interface Erc8183JobDetail {
     fundTxHash: string | null;
     submitTxHash: string | null;
     completeTxHash: string | null;
+    rejectTxHash: string | null;
+  };
+  rejection: {
+    rejectedAt: string | null;
+    rejectReasonText: string | null;
+    rejectReasonHash: string | null;
   };
   timestamps: {
     createdAt: string;
@@ -421,6 +435,12 @@ export async function buildErc8183JobDetail(
       fundTxHash: job.fundTxHash,
       submitTxHash: job.submitTxHash,
       completeTxHash: job.completeTxHash,
+      rejectTxHash: job.rejectTxHash,
+    },
+    rejection: {
+      rejectedAt: job.rejectedAt,
+      rejectReasonText: job.rejectReasonText,
+      rejectReasonHash: job.rejectReasonHash,
     },
     timestamps: {
       createdAt: job.createdAt,
