@@ -62,7 +62,9 @@ type AgentMetadata = {
   role?: string;
   description?: string;
   capability?: string[];
+  capabilities?: string[];
   categories?: string[];
+  tags?: string[];
   autonomous?: boolean;
   avatar?: string;
   endpoint?: string;
@@ -166,7 +168,9 @@ async function fetchMetadata(uri: string, agentId?: string): Promise<AgentMetada
       role: typeof json.role === 'string' ? json.role : undefined,
       description: typeof json.description === 'string' ? json.description : undefined,
       capability: Array.isArray(json.capability) ? json.capability.filter((x: unknown) => typeof x === 'string').slice(0, 8) : undefined,
+      capabilities: Array.isArray(json.capabilities) ? json.capabilities.filter((x: unknown) => typeof x === 'string').slice(0, 8) : undefined,
       categories: Array.isArray(json.categories) ? json.categories.filter((x: unknown) => typeof x === 'string').slice(0, 6) : undefined,
+      tags: Array.isArray(json.tags) ? json.tags.filter((x: unknown) => typeof x === 'string').slice(0, 8) : undefined,
       autonomous: typeof json.autonomous === 'boolean' ? json.autonomous : undefined,
       avatar: typeof json.avatar === 'string' ? json.avatar : undefined,
       skills: Array.isArray(json.skills) ? json.skills.filter((x: unknown) => typeof x === 'string').slice(0, 16) : undefined,
