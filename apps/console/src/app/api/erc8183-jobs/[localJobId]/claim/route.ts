@@ -10,7 +10,7 @@ import { escrowRail } from '@/lib/rails/responses';
 /**
  * POST /api/erc8183-jobs/[localJobId]/claim
  *
- * Off-chain worker metadata claim for ERC-8183 escrow jobs.
+ * Off-chain provider metadata claim for ERC-8183 escrow jobs.
  * Requires erc8183:claim scope.
  */
 export async function POST(
@@ -41,7 +41,7 @@ export async function POST(
           ...escrowRail(),
           error: 'erc8183_job_not_funded',
           message:
-            'Job must be funded on-chain (erc8183_status=Funded) before off-chain worker claim.',
+            'Job must be funded on-chain (erc8183_status=Funded) before off-chain provider claim.',
         },
         { status: 400 },
       );
@@ -60,14 +60,10 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { workerId, providerAgentId, claimTtlSeconds } = body;
+    const { providerAgentId, claimTtlSeconds } = body;
+    // Accept deprecated workerId as alias
+    const workerId: string | undefined = body.workerId;
 
-    if (!workerId || typeof workerId !== 'string') {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'workerId is required' },
-        { status: 400 },
-      );
-    }
     if (!providerAgentId || typeof providerAgentId !== 'string') {
       return NextResponse.json(
         { ok: false, ...escrowRail(), error: 'providerAgentId is required' },
@@ -93,7 +89,7 @@ export async function POST(
 
     await claimErc8183Job({
       localJobId: localJobId,
-      workerId,
+      workerId: workerId || providerAgentId,
       providerAgentId,
       claimTtlSeconds: claimTtlSeconds ?? undefined,
     });
@@ -107,7 +103,7 @@ export async function POST(
       workerId,
       providerAgentId,
       message:
-        'Off-chain worker metadata claimed. Proceed to POST /api/erc8183-jobs/[localJobId]/running.',
+        'Off-chain provider metadata claimed. Proceed to POST /api/erc8183-jobs/[localJobId]/running.',
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

@@ -6,7 +6,7 @@
  *
  * Role-aware API key resolution:
  *   client    → CLIENT_API_KEY || ARCLAYER_API_KEY
- *   provider  → WORKER_API_KEY || ARCLAYER_API_KEY
+ *   provider  → PROVIDER_API_KEY
  *   evaluator → EVALUATOR_API_KEY || ARCLAYER_API_KEY
  */
 
@@ -26,21 +26,21 @@ function getApiKey() {
   if (_role === 'client') {
     return process.env.CLIENT_API_KEY || process.env.ARCLAYER_API_KEY || '';
   }
-  if (_role === 'provider' || _role === 'worker') {
-    return process.env.WORKER_API_KEY || process.env.ARCLAYER_API_KEY || '';
+  if (_role === 'provider') {
+    return process.env.PROVIDER_API_KEY || '';
   }
   if (_role === 'evaluator') {
-    return process.env.EVALUATOR_API_KEY || process.env.ARCLAYER_API_KEY || '';
+    return process.env.EVALUATOR_API_KEY || '';
   }
-  return process.env.ARCLAYER_API_KEY || '';
+  return '';
 }
 
 /** Get the expected env var name for the current role (for error messages). */
 function getExpectedKeyEnv() {
   if (_role === 'client') return 'CLIENT_API_KEY or ARCLAYER_API_KEY';
-  if (_role === 'provider' || _role === 'worker') return 'WORKER_API_KEY or ARCLAYER_API_KEY';
-  if (_role === 'evaluator') return 'EVALUATOR_API_KEY or ARCLAYER_API_KEY';
-  return 'ARCLAYER_API_KEY';
+  if (_role === 'provider') return 'PROVIDER_API_KEY';
+  if (_role === 'evaluator') return 'EVALUATOR_API_KEY';
+  return 'CLIENT_API_KEY';
 }
 
 async function request(path, method, body) {
@@ -97,18 +97,18 @@ module.exports = {
   },
 
   /** Step 5 — off-chain claim */
-  async claim(localJobId, { workerId, providerAgentId, claimTtlSeconds }) {
-    return request(`/api/erc8183-jobs/${localJobId}/claim`, 'POST', { workerId, providerAgentId, claimTtlSeconds });
+  async claim(localJobId, { providerAgentId, claimTtlSeconds }) {
+    return request(`/api/erc8183-jobs/${localJobId}/claim`, 'POST', { providerAgentId, claimTtlSeconds });
   },
 
   /** Step 6 — off-chain running */
-  async markRunning(localJobId, workerId) {
-    return request(`/api/erc8183-jobs/${localJobId}/running`, 'POST', { workerId });
+  async markRunning(localJobId, providerAgentId) {
+    return request(`/api/erc8183-jobs/${localJobId}/running`, 'POST', { providerAgentId });
   },
 
   /** Step 7 — submit result, returns submit tx instruction */
-  async submit(localJobId, { workerId, resultPayload, proofPayload }) {
-    return request(`/api/erc8183-jobs/${localJobId}/submit`, 'POST', { workerId, resultPayload, proofPayload });
+  async submit(localJobId, { providerAgentId, resultPayload, proofPayload }) {
+    return request(`/api/erc8183-jobs/${localJobId}/submit`, 'POST', { providerAgentId, resultPayload, proofPayload });
   },
 
   /** Step 8 — complete escrow */

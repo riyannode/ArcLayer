@@ -25,7 +25,7 @@ import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004'
 import { config } from '@/lib/wagmi';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest/types';
 
-type AgentRole = 'worker' | 'evaluator' | 'autonomous-client';
+type AgentRole = 'provider' | 'evaluator' | 'autonomous-client';
 type RegisterStatus = 'idle' | 'pending' | 'success' | 'error';
 type SectionKey = 'identity' | 'profile' | 'review';
 type SectionStatus = 'Complete' | 'Pending';
@@ -72,11 +72,11 @@ type FormState = {
 };
 
 const ROLE_CONFIG: Record<AgentRole, RoleConfig> = {
-  worker: {
-    id: 'worker',
-    title: 'Worker Agent',
-    label: 'Worker',
-    description: 'Receives escrow jobs and submits work proof.',
+  provider: {
+    id: 'provider',
+    title: 'Provider Agent',
+    label: 'Provider',
+    description: 'Performs ERC-8183 work, sets budget, and submits deliverables.',
     identityRole: 'provider',
     manifestMode: 'seller',
     defaultCapabilities: ['claim_job', 'submit_work'],
@@ -476,7 +476,7 @@ function RegisterApiKeyCard({
       const res = await fetch(`/api/agents/${agentId}/api-keys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ preset: 'worker', label: 'PM2 Worker Key' }),
+        body: JSON.stringify({ preset: 'provider', label: 'PM2 Provider Key' }),
       });
       const data = await res.json();
       if (data.ok && data.key) {
@@ -501,7 +501,7 @@ function RegisterApiKeyCard({
   const envSnippet = `ARCLAYER_API_KEY=${rawKey ?? 'ak_...'}
 ARCLAYER_AGENT_ID=${agentId}
 ARCLAYER_BASE_URL=https://arclayers.xyz
-ARCLAYER_MODE=worker`;
+ARCLAYER_MODE=provider`;
 
   const copyEnv = async () => {
     await navigator.clipboard.writeText(envSnippet);
@@ -518,7 +518,7 @@ ARCLAYER_MODE=worker`;
         Create API Key for this Agent
       </h3>
       <p className="mt-1 text-[13px] leading-5 text-[#EAE4D8]/50">
-        Optional. Use this key to authenticate your PM2 worker bot with ArcLayer.
+        Optional. Use this key to authenticate your PM2 provider bot with ArcLayer.
       </p>
 
       {!rawKey && !error && (
@@ -974,7 +974,7 @@ export default function ERC8183EscrowRegisterPage() {
                     onChange={(value) => updateRole(value as AgentRole)}
                     options={[
                       { value: 'autonomous-client', label: 'Client (Create Job)' },
-                      { value: 'worker', label: 'Worker (Receive Job)' },
+                      { value: 'provider', label: 'Provider (Receive Job)' },
                       { value: 'evaluator', label: 'Evaluator (Review Job)' },
                     ]}
                   />
@@ -993,9 +993,9 @@ export default function ERC8183EscrowRegisterPage() {
                     />
 
                     <RoleButton
-                      role={ROLE_CONFIG.worker}
-                      active={form.role === 'worker'}
-                      onClick={() => updateRole('worker')}
+                      role={ROLE_CONFIG.provider}
+                      active={form.role === 'provider'}
+                      onClick={() => updateRole('provider')}
                     />
 
                     <RoleButton

@@ -151,17 +151,17 @@ export function buildErc8183Timeline(
   }
   if (job.claimedAt) {
     events.push({
-      type: 'worker_claimed',
+      type: 'provider_claimed',
       actorAgentId: job.workerId ?? undefined,
-      actorRole: 'worker',
+      actorRole: 'provider',
       createdAt: job.claimedAt,
     });
   }
   if (job.startedAt) {
     events.push({
-      type: 'worker_running',
+      type: 'provider_running',
       actorAgentId: job.workerId ?? undefined,
-      actorRole: 'worker',
+      actorRole: 'provider',
       createdAt: job.startedAt,
     });
   }
@@ -205,7 +205,7 @@ export function buildErc8183Timeline(
 
 // ── Allowed Actions ───────────────────────────────────────────────────────
 
-export type ActorRole = 'buyer' | 'provider' | 'worker' | 'evaluator' | 'admin';
+export type ActorRole = 'buyer' | 'provider' | 'evaluator' | 'admin';
 
 export function buildAllowedActions(
   job: Erc8183JobView,

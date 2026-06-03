@@ -18,7 +18,7 @@ import {
 const ERROR_CACHE = 'no-store, no-cache, max-age=0';
 
 const SCOPE_PRESETS: Record<string, string[]> = {
-  worker: [
+  provider: [
     API_KEY_SCOPES.ERC8183_CLAIM,
     API_KEY_SCOPES.ERC8183_RUNNING,
     API_KEY_SCOPES.ERC8183_SUBMIT,
@@ -131,6 +131,13 @@ export async function POST(
     // Resolve scopes from preset or explicit list
     let scopes: string[] | undefined;
     if (body.preset !== undefined) {
+      // Reject deprecated worker preset
+      if (body.preset === 'worker') {
+        return NextResponse.json(
+          { ok: false, error: 'deprecated_preset', detail: 'worker preset is deprecated for ERC-8183; use provider' },
+          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+        );
+      }
       if (typeof body.preset !== 'string' || !VALID_PRESETS.has(body.preset)) {
         return NextResponse.json(
           { ok: false, error: 'invalid_preset', detail: `preset must be one of: ${[...VALID_PRESETS].join(', ')}` },

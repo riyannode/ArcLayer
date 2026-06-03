@@ -112,7 +112,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
   });
 
   it('creates key successfully (201)', async () => {
-    const res = await POST(makePostRequest({ preset: 'worker' }, 'valid-token'), {
+    const res = await POST(makePostRequest({ preset: 'provider' }, 'valid-token'), {
       params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
@@ -126,7 +126,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
 
   it('calls createApiKey with correct params', async () => {
     await POST(
-      makePostRequest({ preset: 'worker', label: 'My Bot' }, 'valid-token'),
+      makePostRequest({ preset: 'provider', label: 'My Bot' }, 'valid-token'),
       { params: Promise.resolve({ id: AGENT_ID }) },
     );
 
@@ -225,7 +225,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
 
   it('non-string label rejected (400)', async () => {
     const res = await POST(
-      makePostRequest({ preset: 'worker', label: 123 }, 'valid-token'),
+      makePostRequest({ preset: 'provider', label: 123 }, 'valid-token'),
       { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
@@ -236,7 +236,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
 
   it('label over 80 chars rejected (400)', async () => {
     const res = await POST(
-      makePostRequest({ preset: 'worker', label: 'a'.repeat(81) }, 'valid-token'),
+      makePostRequest({ preset: 'provider', label: 'a'.repeat(81) }, 'valid-token'),
       { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
@@ -247,7 +247,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
 
   it('label exactly 80 chars accepted', async () => {
     const res = await POST(
-      makePostRequest({ preset: 'worker', label: 'a'.repeat(80) }, 'valid-token'),
+      makePostRequest({ preset: 'provider', label: 'a'.repeat(80) }, 'valid-token'),
       { params: Promise.resolve({ id: AGENT_ID }) },
     );
     const data = await res.json();
@@ -292,7 +292,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
   // ── Auth ──────────────────────────────────────────────────────────────
 
   it('missing auth returns 401', async () => {
-    const res = await POST(makePostRequest({ preset: 'worker' }), {
+    const res = await POST(makePostRequest({ preset: 'provider' }), {
       params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
@@ -303,7 +303,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
 
   it('invalid session returns 401', async () => {
     mocks.resolveSessionFromCookie.mockResolvedValue(null);
-    const res = await POST(makePostRequest({ preset: 'worker' }, 'bad-token'), {
+    const res = await POST(makePostRequest({ preset: 'provider' }, 'bad-token'), {
       params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
@@ -316,7 +316,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
     mocks.getLinkedErc8004AgentsForController.mockResolvedValue([
       { agentId: 'other-agent', tokenId: '999', controller: WALLET.toLowerCase() },
     ]);
-    const res = await POST(makePostRequest({ preset: 'worker' }, 'valid-token'), {
+    const res = await POST(makePostRequest({ preset: 'provider' }, 'valid-token'), {
       params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();
@@ -345,7 +345,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
 
   it('createApiKey failure returns 500', async () => {
     mocks.createApiKey.mockResolvedValue({ ok: false, error: 'db_error' });
-    const res = await POST(makePostRequest({ preset: 'worker' }, 'valid-token'), {
+    const res = await POST(makePostRequest({ preset: 'provider' }, 'valid-token'), {
       params: Promise.resolve({ id: AGENT_ID }),
     });
     const data = await res.json();

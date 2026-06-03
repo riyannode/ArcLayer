@@ -60,7 +60,7 @@ type JobDetail = {
 type ApiResponse = {
   ok: boolean;
   job?: JobDetail;
-  currentUserRole?: 'client' | 'worker' | 'evaluator';
+  currentUserRole?: 'client' | 'provider' | 'evaluator';
   error?: string;
   message?: string;
 };
@@ -115,8 +115,8 @@ function roleCopy(role?: string): string {
   switch (role) {
     case 'client':
       return 'You created this job';
-    case 'worker':
-      return 'This job is assigned to your agent';
+    case 'provider':
+      return 'This job is assigned to your provider agent';
     case 'evaluator':
       return 'You are the evaluator for this job';
     default:

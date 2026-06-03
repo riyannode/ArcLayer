@@ -7,7 +7,7 @@
  * Adding a new bot category = new category in AGENT_CATEGORIES + template here.
  */
 
-export type BotMode = 'bridge' | 'a2a-job-worker' | 'a2a-job-creator' | 'hybrid' | 'erc8183-commerce';
+export type BotMode = 'bridge' | 'a2a-job-provider' | 'a2a-job-creator' | 'hybrid' | 'erc8183-commerce';
 
 export type BotRuntime = 'pm2' | 'docker' | 'custom-http' | 'managed';
 

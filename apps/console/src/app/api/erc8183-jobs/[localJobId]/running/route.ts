@@ -10,7 +10,7 @@ import { escrowRail } from '@/lib/rails/responses';
 /**
  * POST /api/erc8183-jobs/[localJobId]/running
  *
- * Off-chain worker metadata transition for ERC-8183 escrow jobs.
+ * Off-chain provider metadata transition for ERC-8183 escrow jobs.
  * Requires erc8183:running scope.
  */
 export async function POST(
@@ -42,28 +42,31 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { workerId } = body;
+    // Accept providerAgentId as canonical, workerId as deprecated alias
+    const providerAgentId: string | undefined = body.providerAgentId;
+    const workerId: string | undefined = body.workerId;
+    const resolvedProviderId = providerAgentId || workerId;
 
-    if (!workerId || typeof workerId !== 'string') {
+    if (!resolvedProviderId || typeof resolvedProviderId !== 'string') {
       return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'workerId is required' },
+        { ok: false, ...escrowRail(), error: 'providerAgentId is required' },
         { status: 400 },
       );
     }
 
-    // Guard: only the assigned worker can mark the job as running
+    // Guard: only the assigned provider can mark the job as running
     // Admin keys (erc8183:admin) bypass this check
-    const runningAuthError = assertErc8183Participant(job, auth, ['worker']);
+    const runningAuthError = assertErc8183Participant(job, auth, ['provider']);
     if (runningAuthError) return runningAuthError;
 
-    // Guard: workerId must match the claimed worker
-    if (workerId !== job.workerId) {
+    // Guard: resolvedProviderId must match the claimed worker
+    if (resolvedProviderId !== job.workerId) {
       return NextResponse.json(
         {
           ok: false,
           ...escrowRail(),
-          error: 'worker_id_mismatch',
-          message: `Worker '${workerId}' does not match the claimed worker '${job.workerId}'.`,
+          error: 'provider_id_mismatch',
+          message: `Provider '${resolvedProviderId}' does not match the claimed provider '${job.workerId}'.`,
         },
         { status: 403 },
       );
@@ -71,7 +74,7 @@ export async function POST(
 
     await markErc8183JobRunning({
       localJobId: localJobId,
-      workerId,
+      workerId: resolvedProviderId,
     });
 
     return NextResponse.json({
@@ -80,9 +83,9 @@ export async function POST(
       localJobId: localJobId,
       erc8183JobId: job.erc8183JobId,
       status: 'running',
-      workerId,
+      providerAgentId: resolvedProviderId,
       message:
-        'Off-chain worker metadata set to running. Proceed to POST /api/erc8183-jobs/[localJobId]/submit.',
+        'Off-chain provider metadata set to running. Proceed to POST /api/erc8183-jobs/[localJobId]/submit.',
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

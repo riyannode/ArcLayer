@@ -98,7 +98,6 @@ export async function GET(
     const isEvaluator = job.evaluatorAgentId
       ? linkedAgentIds.has(job.evaluatorAgentId.toLowerCase())
       : false;
-    // workerId can differ from providerAgentId after claim
     const isWorker = job.workerId
       ? linkedAgentIds.has(job.workerId.toLowerCase())
       : false;
@@ -119,8 +118,8 @@ export async function GET(
       );
     }
 
-    // Determine current user role — priority: buyer > evaluator > worker/provider
-    let currentUserRole: 'client' | 'worker' | 'evaluator' = 'worker';
+    // Determine current user role — priority: buyer > evaluator > provider
+    let currentUserRole: 'client' | 'provider' | 'evaluator' = 'provider';
     if (isEvaluator) currentUserRole = 'evaluator';
     if (isBuyer) currentUserRole = 'client';
 

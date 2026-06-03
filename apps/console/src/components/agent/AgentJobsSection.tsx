@@ -5,7 +5,7 @@ import Link from 'next/link';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
-type PublicWorkerSummary = {
+type PublicProviderSummary = {
   localJobId: string;
   erc8183JobId: string | null;
   lifecycleStatus: string;
@@ -18,7 +18,7 @@ type PublicWorkerSummary = {
   inputPayloadHash: string;
 };
 
-type PrivateJobSummary = PublicWorkerSummary & {
+type PrivateJobSummary = PublicProviderSummary & {
   buyerAgentId: string;
   providerAgentId: string | null;
   evaluatorAgentId: string | null;
@@ -32,9 +32,9 @@ type ByAgentResponse = {
   ok: boolean;
   agentId: string;
   isOwner: boolean;
-  asWorkerPublic: PublicWorkerSummary[];
+  asProviderPublic: PublicProviderSummary[];
   asClient: PrivateJobSummary[];
-  asWorker: PrivateJobSummary[];
+  asProvider: PrivateJobSummary[];
   asEvaluator: PrivateJobSummary[];
   error?: string;
 };
@@ -92,7 +92,7 @@ function JobCard({
   job,
   roleLabel,
 }: {
-  job: PublicWorkerSummary | PrivateJobSummary;
+  job: PublicProviderSummary | PrivateJobSummary;
   roleLabel: string;
 }) {
   const nextAction =
@@ -154,7 +154,7 @@ function JobGroup({
   roleLabel,
 }: {
   title: string;
-  jobs: (PublicWorkerSummary | PrivateJobSummary)[];
+  jobs: (PublicProviderSummary | PrivateJobSummary)[];
   roleLabel: string;
 }) {
   if (jobs.length === 0) return null;
@@ -245,7 +245,7 @@ export function AgentJobsSection({ agentId }: { agentId: string }) {
   if (data.isOwner) {
     const total =
       data.asClient.length +
-      data.asWorker.length +
+      data.asProvider.length +
       data.asEvaluator.length;
 
     if (total === 0) {
@@ -264,9 +264,9 @@ export function AgentJobsSection({ agentId }: { agentId: string }) {
           roleLabel="Client"
         />
         <JobGroup
-          title="Jobs as Worker"
-          jobs={data.asWorker}
-          roleLabel="Worker"
+          title="Jobs as Provider"
+          jobs={data.asProvider}
+          roleLabel="Provider"
         />
         <JobGroup
           title="Jobs as Evaluator"
@@ -277,8 +277,8 @@ export function AgentJobsSection({ agentId }: { agentId: string }) {
     );
   }
 
-  // Public view: worker proof only
-  if (data.asWorkerPublic.length === 0) {
+  // Public view: provider proof only
+  if (data.asProviderPublic.length === 0) {
     return (
       <div className="py-8 text-center font-mono text-[12px] text-[#EAE4D8]/40">
         No job history available for this agent.
@@ -290,8 +290,8 @@ export function AgentJobsSection({ agentId }: { agentId: string }) {
     <div>
       <JobGroup
         title="Jobs assigned to this agent"
-        jobs={data.asWorkerPublic}
-        roleLabel="Worker"
+        jobs={data.asProviderPublic}
+        roleLabel="Provider"
       />
     </div>
   );

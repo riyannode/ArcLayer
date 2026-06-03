@@ -1,12 +1,12 @@
 /**
- * ERC-8183 Escrow Job Store — local mirror & worker metadata operations.
+ * ERC-8183 Escrow Job Store — local mirror & provider metadata operations.
  *
  * All functions operate on the shared agent_jobs table with
  * settlement_mode = 'erc8183_escrow'. No x402 calls, no private keys.
  *
  * The on-chain AgenticCommerce contract is the source of truth for
  * escrow state. This store is a local mirror for:
- *   - worker claim/running metadata
+ *   - provider claim/running metadata
  *   - payload/result storage
  *   - tx hash history
  *   - live UI history
@@ -571,10 +571,10 @@ export async function attachErc8183PreparedComplete(input: {
   if (error) throw new Error(`attachErc8183PreparedComplete failed: ${error.message}`);
 }
 
-// ─── Off-chain worker metadata ───────────────────────────────────────────────
+// ─── Off-chain provider metadata ─────────────────────────────────────────────
 
 /**
- * claimErc8183Job — off-chain worker metadata claim.
+ * claimErc8183Job — off-chain provider metadata claim.
  *
  * Allowed only when erc8183_status = 'Funded' and status = 'created'.
  * Sets status='claimed', worker_id, provider_agent_id, claimed_at, claim_expires_at.
@@ -625,9 +625,9 @@ export async function claimErc8183Job(input: {
 }
 
 /**
- * markErc8183JobRunning — off-chain worker metadata transition.
+ * markErc8183JobRunning — off-chain provider metadata transition.
  *
- * Allowed only when status = 'claimed' and worker_id matches the caller.
+ * Allowed only when status = 'claimed' and worker_id (provider) matches the caller.
  * Sets status = 'running', started_at.
  * This is off-chain metadata only.
  */

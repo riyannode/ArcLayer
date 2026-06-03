@@ -43,7 +43,7 @@ export async function POST(
       );
     }
 
-    // Guard: only the assigned worker or provider can submit results
+    // Guard: only the assigned provider can submit results
     const submitAuthError = assertErc8183Participant(job, auth, ['worker', 'provider']);
     if (submitAuthError) return submitAuthError;
 
