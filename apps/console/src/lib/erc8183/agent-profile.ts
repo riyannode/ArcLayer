@@ -33,6 +33,7 @@ export const ERC8183_AGENT_MARKERS = [
   'erc8183',
   'erc8183-commerce',
   'job-commerce',
+  'agentic-commerce',
 ] as const;
 
 /**
@@ -135,6 +136,29 @@ export function getErc8183Avatar(metadata?: Erc8183AgentMetadata | null) {
 
 export async function fetchErc8183Metadata(metadataURI?: string) {
   if (!metadataURI) return null;
+
+  // Support data:application/json URIs (inline metadata)
+  if (metadataURI.startsWith('data:application/json,')) {
+    try {
+      const encoded = metadataURI.slice('data:application/json,'.length);
+      const json = JSON.parse(decodeURIComponent(encoded)) as Erc8183AgentMetadata;
+      return { ...json, metadataURI };
+    } catch {
+      return null;
+    }
+  }
+  if (metadataURI.startsWith('data:application/json;base64,')) {
+    try {
+      const b64 = metadataURI.slice('data:application/json;base64,'.length);
+      const decoded = typeof atob !== 'undefined'
+        ? atob(b64)
+        : Buffer.from(b64, 'base64').toString('utf8');
+      const json = JSON.parse(decoded) as Erc8183AgentMetadata;
+      return { ...json, metadataURI };
+    } catch {
+      return null;
+    }
+  }
 
   const uri = ipfsToHttp(metadataURI);
 
