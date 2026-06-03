@@ -18,20 +18,23 @@ function getBaseUrl() {
 /** Set the bot role for API key resolution. Call once at bot startup. */
 function setRole(role) {
   _role = role;
+  if (process.env.ARCLAYER_API_KEY) {
+    console.warn('[api-client] WARNING: ARCLAYER_API_KEY is legacy and ignored. Use role-specific key: CLIENT_API_KEY, WORKER_API_KEY, or EVALUATOR_API_KEY.');
+  }
 }
 
-/** Resolve API key: role-specific env first, ARCLAYER_API_KEY fallback. */
+/** Resolve API key: role-specific env only. No shared-key fallback. */
 function getApiKey() {
   if (_role === 'client') {
-    return process.env.CLIENT_API_KEY || process.env.ARCLAYER_API_KEY || '';
+    return process.env.CLIENT_API_KEY || '';
   }
   if (_role === 'provider' || _role === 'worker') {
-    return process.env.WORKER_API_KEY || process.env.ARCLAYER_API_KEY || '';
+    return process.env.WORKER_API_KEY || '';
   }
   if (_role === 'evaluator') {
-    return process.env.EVALUATOR_API_KEY || process.env.ARCLAYER_API_KEY || '';
+    return process.env.EVALUATOR_API_KEY || '';
   }
-  return process.env.ARCLAYER_API_KEY || process.env.CLIENT_API_KEY || process.env.WORKER_API_KEY || '';
+  return '';
 }
 
 async function request(path, method, body, retries = 0) {

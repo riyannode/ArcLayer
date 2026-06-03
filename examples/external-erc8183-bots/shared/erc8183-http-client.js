@@ -5,9 +5,11 @@
  * Routes return tx instructions (address, functionName, args).
  *
  * Role-aware API key resolution:
- *   client    → CLIENT_API_KEY || ARCLAYER_API_KEY
- *   provider  → WORKER_API_KEY || ARCLAYER_API_KEY
- *   evaluator → EVALUATOR_API_KEY || ARCLAYER_API_KEY
+ *   client    → CLIENT_API_KEY (required)
+ *   provider  → WORKER_API_KEY (required)
+ *   evaluator → EVALUATOR_API_KEY (required)
+ *
+ * ARCLAYER_API_KEY is NOT supported. Each role must have its own isolated key.
  */
 
 let _role = '';
@@ -19,28 +21,31 @@ function getBaseUrl() {
 /** Set the bot role for API key resolution. Call once at bot startup. */
 function setRole(role) {
   _role = role;
+  if (process.env.ARCLAYER_API_KEY) {
+    console.warn('[erc8183-http-client] WARNING: ARCLAYER_API_KEY is legacy and ignored. Use role-specific key: CLIENT_API_KEY, WORKER_API_KEY, or EVALUATOR_API_KEY.');
+  }
 }
 
-/** Resolve API key: role-specific env first, ARCLAYER_API_KEY fallback. */
+/** Resolve API key: role-specific env only. No shared-key fallback. */
 function getApiKey() {
   if (_role === 'client') {
-    return process.env.CLIENT_API_KEY || process.env.ARCLAYER_API_KEY || '';
+    return process.env.CLIENT_API_KEY || '';
   }
   if (_role === 'provider' || _role === 'worker') {
-    return process.env.WORKER_API_KEY || process.env.ARCLAYER_API_KEY || '';
+    return process.env.WORKER_API_KEY || '';
   }
   if (_role === 'evaluator') {
-    return process.env.EVALUATOR_API_KEY || process.env.ARCLAYER_API_KEY || '';
+    return process.env.EVALUATOR_API_KEY || '';
   }
-  return process.env.ARCLAYER_API_KEY || '';
+  return '';
 }
 
-/** Get the expected env var name for the current role (for error messages). */
+/** Get the expected env var name for the current role. */
 function getExpectedKeyEnv() {
-  if (_role === 'client') return 'CLIENT_API_KEY or ARCLAYER_API_KEY';
-  if (_role === 'provider' || _role === 'worker') return 'WORKER_API_KEY or ARCLAYER_API_KEY';
-  if (_role === 'evaluator') return 'EVALUATOR_API_KEY or ARCLAYER_API_KEY';
-  return 'ARCLAYER_API_KEY';
+  if (_role === 'client') return 'CLIENT_API_KEY';
+  if (_role === 'provider' || _role === 'worker') return 'WORKER_API_KEY';
+  if (_role === 'evaluator') return 'EVALUATOR_API_KEY';
+  return 'a role-specific API key (CLIENT_API_KEY, WORKER_API_KEY, or EVALUATOR_API_KEY)';
 }
 
 async function request(path, method, body) {
