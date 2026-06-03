@@ -148,7 +148,7 @@ const CHECKS = [
     bot: 'client-bot',
     required: [
       'ARCLAYER_BASE_URL',
-      'ARCLAYER_API_KEY',
+      ['CLIENT_API_KEY', 'ARCLAYER_API_KEY'],
       'ARCLAYER_AGENT_ID',
       'BUYER_AGENT_ID',
       'CLIENT_ADDRESS',
@@ -164,7 +164,7 @@ const CHECKS = [
     bot: 'provider-bot',
     required: [
       'ARCLAYER_BASE_URL',
-      'ARCLAYER_API_KEY',
+      ['WORKER_API_KEY', 'ARCLAYER_API_KEY'],
       'ARCLAYER_AGENT_ID',
       ['PROVIDER_AGENT_ID', 'WORKER_AGENT_ID'],
       { key: 'WORKER_ID', optional: false },
@@ -177,7 +177,7 @@ const CHECKS = [
     bot: 'evaluator-bot',
     required: [
       'ARCLAYER_BASE_URL',
-      'ARCLAYER_API_KEY',
+      ['EVALUATOR_API_KEY', 'ARCLAYER_API_KEY'],
       'ARCLAYER_AGENT_ID',
       'EVALUATOR_AGENT_ID',
       'EVALUATOR_ADDRESS',

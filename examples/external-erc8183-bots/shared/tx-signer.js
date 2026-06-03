@@ -63,6 +63,28 @@ const AGENTIC_COMMERCE_ABI = [
     outputs: [],
   },
   {
+    name: 'getJob',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'jobId', type: 'uint256' }],
+    outputs: [
+      {
+        type: 'tuple',
+        components: [
+          { name: 'id', type: 'uint256' },
+          { name: 'client', type: 'address' },
+          { name: 'provider', type: 'address' },
+          { name: 'evaluator', type: 'address' },
+          { name: 'description', type: 'string' },
+          { name: 'budget', type: 'uint256' },
+          { name: 'expiredAt', type: 'uint256' },
+          { name: 'status', type: 'uint8' },
+          { name: 'hook', type: 'address' },
+        ],
+      },
+    ],
+  },
+  {
     name: 'fund',
     type: 'function',
     stateMutability: 'nonpayable',
@@ -172,6 +194,33 @@ function createSigner({ privateKey, rpcUrl }) {
         results.push(result);
       }
       return results;
+    },
+
+    /**
+     * Read on-chain job state via getJob().
+     * Returns { id, client, provider, evaluator, budget, expiredAt, status, hook } or null.
+     */
+    async readJob(erc8183JobId) {
+      try {
+        const job = await publicClient.readContract({
+          address: CONTRACTS.AGENTIC_COMMERCE,
+          abi: AGENTIC_COMMERCE_ABI,
+          functionName: 'getJob',
+          args: [BigInt(erc8183JobId)],
+        });
+        return {
+          id: job.id,
+          client: job.client,
+          provider: job.provider,
+          evaluator: job.evaluator,
+          budget: job.budget,
+          expiredAt: job.expiredAt,
+          status: Number(job.status),
+          hook: job.hook,
+        };
+      } catch {
+        return null;
+      }
     },
 
     /**
