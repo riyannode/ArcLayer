@@ -8,7 +8,7 @@
 export const EXTERNAL_BOT_SCOPES = {
   bridge: ['agent_bridge:write', 'agent_bridge:receipt'] as const,
   liveEvents: ['live_events:write', 'presence:write'] as const,
-  a2aJobWorker: ['jobs:claim', 'jobs:submit', 'jobs:verify', 'jobs:settle'] as const,
+  a2aJobProvider: ['jobs:claim', 'jobs:submit', 'jobs:verify', 'jobs:settle'] as const,
   a2aJobCreator: ['jobs:create'] as const,
   erc8183Commerce: [
     'erc8183:create',
@@ -29,14 +29,14 @@ export function scopesForMode(mode: string): string[] {
   switch (mode) {
     case 'bridge':
       return [...liveEvents, ...bridge];
-    case 'a2a-job-worker':
-      return [...EXTERNAL_BOT_SCOPES.a2aJobWorker, ...liveEvents, ...bridge];
+    case 'a2a-job-provider':
+      return [...EXTERNAL_BOT_SCOPES.a2aJobProvider, ...liveEvents, ...bridge];
     case 'a2a-job-creator':
       return [...EXTERNAL_BOT_SCOPES.a2aJobCreator, ...liveEvents, ...bridge];
     case 'hybrid':
       return [
         ...EXTERNAL_BOT_SCOPES.a2aJobCreator,
-        ...EXTERNAL_BOT_SCOPES.a2aJobWorker,
+        ...EXTERNAL_BOT_SCOPES.a2aJobProvider,
         ...liveEvents,
         ...bridge,
       ];

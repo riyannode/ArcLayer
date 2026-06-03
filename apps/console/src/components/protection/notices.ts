@@ -73,13 +73,13 @@ export const NOTICE_INSUFFICIENT_USDC: ProtectionInput = {
   dedupeKey: "balance:insufficient_usdc",
 };
 
-export const NOTICE_WORKER_EQUALS_CLIENT: ProtectionInput = {
+export const NOTICE_PROVIDER_EQUALS_CLIENT: ProtectionInput = {
   surface: "inline",
   severity: "error",
   title: "Invalid job role",
-  message: "Worker and client cannot be the same wallet. Choose a different worker wallet.",
-  technicalDetail: "JobEscrow revert: Worker is client",
-  dedupeKey: "jobs:worker_is_client",
+  message: "Provider and client cannot be the same wallet. Choose a different provider wallet.",
+  technicalDetail: "JobEscrow revert: Provider is client",
+  dedupeKey: "jobs:provider_is_client",
 };
 
 export const NOTICE_UNAUTHORIZED_EVALUATOR: ProtectionInput = {

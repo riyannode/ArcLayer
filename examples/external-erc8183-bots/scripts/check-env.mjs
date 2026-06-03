@@ -3,7 +3,7 @@
  * ERC-8183 Bot Env Preflight Checker
  *
  * Verifies each bot's .env has the required fields before starting PM2.
- * Supports Worker/Provider alias naming conventions.
+ * Supports provider naming conventions only.
  *
  * Usage:
  *   node scripts/check-env.mjs
@@ -132,6 +132,7 @@ function checkBot(botName, requiredKeys) {
 
   // Print effective config
   console.log(`\n  Effective config:`);
+  const agentId = env.PROVIDER_AGENT_ID || '?';
   const addr = env.PROVIDER_ADDRESS || env.CLIENT_ADDRESS || env.EVALUATOR_ADDRESS || '?';
   console.log(`  Agent ID: ${agentId}`);
   console.log(`  Address:  ${addr?.slice(0, 12) + '...'}`);
@@ -148,6 +149,7 @@ const CHECKS = [
     required: [
       'ARCLAYER_BASE_URL',
       'CLIENT_API_KEY',
+      'ARCLAYER_AGENT_ID',
       'BUYER_AGENT_ID',
       'CLIENT_ADDRESS',
       'CLIENT_PRIVATE_KEY',
@@ -174,6 +176,7 @@ const CHECKS = [
     required: [
       'ARCLAYER_BASE_URL',
       'EVALUATOR_API_KEY',
+      'ARCLAYER_AGENT_ID',
       'EVALUATOR_AGENT_ID',
       'EVALUATOR_ADDRESS',
       'EVALUATOR_PRIVATE_KEY',

@@ -19,8 +19,6 @@ const crypto = require('crypto');
 const BASE_URL = required('ARCLAYER_BASE_URL');
 
 const PROVIDER_AGENT_ID = required('PROVIDER_AGENT_ID');
-// workerId derived from provider for backend API compatibility
-const workerId = PROVIDER_AGENT_ID;
 
 const PROVIDER_ADDRESS = (() => {
   const addr = process.env.PROVIDER_ADDRESS;
@@ -41,7 +39,7 @@ const AUTONOMOUS_TX = process.env.AUTONOMOUS_TX === 'true';
 const CLAIM_TTL_SECONDS = parseInt(process.env.CLAIM_TTL_SECONDS || '600', 10);
 const MAX_ACTIVE_JOBS = parseInt(process.env.MAX_ACTIVE_JOBS || '3', 10);
 
-// ── Worker capabilities ──────────────────────────────────────────────────
+// ── Provider capabilities ────────────────────────────────────────────────
 const PROVIDER_CAPABILITIES = (process.env.PROVIDER_CAPABILITIES || '')
   .split(',')
   .map((s) => s.trim())
@@ -161,7 +159,7 @@ function runWorkerStrategy(job) {
   const durationMs = Date.now() - startTime;
 
   const resultPayload = {
-    workerId,
+    providerAgentId: PROVIDER_AGENT_ID,
     jobType,
     query,
     requiredCapability: capability,
@@ -178,7 +176,7 @@ function runWorkerStrategy(job) {
 
   const proofPayload = {
     runtime: 'pm2',
-    model: 'rules-provider',
+    model: 'rules-worker',
     capability,
     durationMs,
     provider: PROVIDER_AGENT_ID,
@@ -364,14 +362,14 @@ async function phaseClaimAndSubmit() {
     try {
       // Claim (skip if already claimed)
       if (!alreadyClaimed) {
-        const claimed = await api.claim(id, { workerId, providerAgentId: PROVIDER_AGENT_ID, claimTtlSeconds: CLAIM_TTL_SECONDS });
+        const claimed = await api.claim(id, { providerAgentId: PROVIDER_AGENT_ID, claimTtlSeconds: CLAIM_TTL_SECONDS });
         console.log(`   Claimed: status=${claimed.status}`);
       } else {
         console.log(`   Already claimed — skipping claim step`);
       }
 
       // Mark running
-      const running = await api.markRunning(id, workerId);
+      const running = await api.markRunning(id, PROVIDER_AGENT_ID);
       console.log(`   Running: status=${running.status}`);
 
       // Run strategy based on job type
@@ -379,7 +377,7 @@ async function phaseClaimAndSubmit() {
       console.log(`   Strategy: ${jobType} (confidence: ${resultPayload.confidence})`);
 
       // Submit
-      const submitted = await api.submit(id, { workerId, resultPayload, proofPayload });
+      const submitted = await api.submit(id, { providerAgentId: PROVIDER_AGENT_ID, resultPayload, proofPayload });
       console.log(`   deliverableHash: ${submitted.deliverableHash}`);
 
       if (AUTONOMOUS_TX) {

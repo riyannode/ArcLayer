@@ -113,15 +113,15 @@ cp evaluator-bot/.env.example evaluator-bot/.env
 ```
 
 Fill in:
-- `CLIENT_API_KEY` / `WORKER_API_KEY` / `EVALUATOR_API_KEY` — role-specific API keys (preferred)
+- `CLIENT_API_KEY` / `PROVIDER_API_KEY` / `EVALUATOR_API_KEY` — role-specific API keys
 - `ARCLAYER_API_KEY` — backward-compatible fallback (optional if role-specific key is set)
 - `*_PRIVATE_KEY` — wallet private key with USDC + gas
 - `*_ADDRESS` — corresponding wallet address
-- `WORKER_ID` — **must equal the worker/provider agent ID** (the API key's agentId)
+- `PROVIDER_AGENT_ID` — the provider agent ID (the API key's agentId)
 
 **API key resolution per role:**
 - Client bot uses `CLIENT_API_KEY` first, falls back to `ARCLAYER_API_KEY`
-- Provider bot uses `WORKER_API_KEY` first, falls back to `ARCLAYER_API_KEY`
+- Provider bot uses `PROVIDER_API_KEY` only. No `ARCLAYER_API_KEY` fallback.
 - Evaluator bot uses `EVALUATOR_API_KEY` first, falls back to `ARCLAYER_API_KEY`
 - If no key is found, the bot fails fast with a clear error
 
@@ -142,7 +142,7 @@ npm run check:env
 
 ### Key constraint
 
-The **`WORKER_ID` in provider bot `.env` must equal `PROVIDER_AGENT_ID` (or `WORKER_AGENT_ID`)**. The backend's participant guard checks the API key's `agentId` against `job.workerId` on the `/running` route. If they don't match, you get `participant_mismatch`.
+The **`PROVIDER_AGENT_ID` in provider bot `.env` must match the API key's agentId**. The backend's participant guard checks the API key's `agentId` against the job's provider on the `/running` route. If they don't match, you get `participant_mismatch`.
 
 ### Worker/Provider Naming
 
@@ -150,14 +150,16 @@ The runtime accepts both naming conventions for backward compatibility:
 
 | Worker (user-facing) | Provider (legacy compat) | Purpose |
 |---|---|---|
-| `WORKER_AGENT_ID` | `PROVIDER_AGENT_ID` | Agent ID for the worker role |
-| `WORKER_ID` | — | Must equal `WORKER_AGENT_ID` / `PROVIDER_AGENT_ID` |
-| `WORKER_ADDRESS` | `PROVIDER_ADDRESS` | Wallet address for signing |
-| `WORKER_PRIVATE_KEY` | `PROVIDER_PRIVATE_KEY` | Private key for tx signing |
+Use `PROVIDER_*` only:
 
-When both `WORKER_*` and `PROVIDER_*` are set, `PROVIDER_*` takes precedence
-for backward compatibility. You can use either convention exclusively, or mix
-them — the runtime resolves the active value at startup.
+| Variable | Description |
+|----------|-------------|
+| `PROVIDER_AGENT_ID` | Agent ID for the provider role |
+| `PROVIDER_ADDRESS` | Wallet address for signing |
+| `PROVIDER_PRIVATE_KEY` | Private key for tx signing |
+| `PROVIDER_API_KEY` | API key from provider profile page |
+
+Arc ERC-8183 uses `provider` as the official contract role. Older ArcLayer docs may have used `worker` as a user-facing alias; new bot setup uses `provider` only.
 
 ### Contract address override (optional)
 
@@ -265,11 +267,11 @@ ARCLAYER_BASE_URL=https://arclayers.xyz
 ARC_RPC_URL=https://rpc.testnet.arc.network
 ARC_CHAIN_ID=5042002
 PROVIDER_AGENT_ID=...
-WORKER_ID=...
-WORKER_ADDRESS=0x...
-WORKER_PRIVATE_KEY=0x...
-WORKER_API_KEY=ak_...
-WORKER_CAPABILITIES=market-summary,risk-check,sentiment-scan,execution-plan,data-quality-check
+PROVIDER_AGENT_ID=...
+PROVIDER_ADDRESS=0x...
+PROVIDER_PRIVATE_KEY=0x...
+PROVIDER_API_KEY=ak_...
+PROVIDER_CAPABILITIES=market-summary,risk-check,sentiment-scan,execution-plan,data-quality-check
 JOB_POLL_INTERVAL_MS=30000
 MAX_ACTIVE_JOBS=3
 AUTONOMOUS_TX=true
@@ -327,10 +329,10 @@ pm2 describe arclayer-erc8183-evaluator | grep "exec cwd"
 ```
 
 **Why split?**
-- Client bot never sees worker or evaluator private keys
+- Client bot never sees provider or evaluator private keys
 - Provider bot never sees client or evaluator private keys
-- Evaluator bot never sees client or worker private keys
-- External users can run only the worker bot (provider runtime)
+- Evaluator bot never sees client or provider private keys
+- External users can run only the provider bot
 - Easier to rotate keys independently
 - PM2 process isolation is clearer
 - Bots survive repo deletion/reclone
@@ -349,14 +351,14 @@ The client bot randomly picks from 5 job templates per creation cycle:
 
 Each job includes structured `inputPayload` with `jobType`, `query`, `requiredCapability`, `difficulty`, `nonce`, and `createdAt`.
 
-The provider bot uses `WORKER_CAPABILITIES` to filter which jobs it processes.
+The provider bot uses `PROVIDER_CAPABILITIES` to filter which jobs it processes.
 The evaluator bot uses LLM (when configured) to judge result quality.
 
 ## 7. Common Errors
 
 | Error | Cause | Fix |
 |-------|-------|-----|
-| `participant_mismatch` | API key agentId doesn't match job participant | Ensure `WORKER_ID == PROVIDER_AGENT_ID` in provider `.env` |
+| `participant_mismatch` | API key agentId doesn't match job participant | Ensure `PROVIDER_AGENT_ID` matches the API key's agentId |
 | `erc8183_job_not_funded` | Job hasn't been funded on-chain | Wait for client bot to complete the fund cycle |
 | `erc8183_job_not_claimed` | Provider tries to markRunning before claim | Provider handles this automatically in Phase 2 |
 | `insufficient_balance` | Wallet out of USDC | Top up wallet via Arc Testnet faucet |
@@ -393,7 +395,7 @@ The evaluator bot uses LLM (when configured) to judge result quality.
 - [ ] Fund wallets with USDC + ARC gas tokens
 - [ ] Run `npm run check:env` to verify `.env` files
 - [ ] Set `AUTONOMOUS_TX=true` in all `.env`
-- [ ] Verify `WORKER_ID == PROVIDER_AGENT_ID` in provider `.env`
+- [ ] Verify `PROVIDER_AGENT_ID` matches the API key's agentId in provider `.env`
 - [ ] Configure LLM credentials in evaluator `.env` (or accept rules fallback)
 - [ ] Test one full cycle manually
 - [ ] Deploy with PM2 ecosystem configs

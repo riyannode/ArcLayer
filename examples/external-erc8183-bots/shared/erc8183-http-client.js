@@ -5,12 +5,9 @@
  * Routes return tx instructions (address, functionName, args).
  *
  * Role-aware API key resolution:
- *   client    → CLIENT_API_KEY (required)
- *   provider  → PROVIDER_API_KEY (required)
- *   evaluator → EVALUATOR_API_KEY (required)
- *
- * ARCLAYER_API_KEY and WORKER_API_KEY are NOT supported.
- * Each role must have its own isolated key.
+ *   client    → CLIENT_API_KEY || ARCLAYER_API_KEY
+ *   provider  → PROVIDER_API_KEY
+ *   evaluator → EVALUATOR_API_KEY || ARCLAYER_API_KEY
  */
 
 let _role = '';
@@ -22,17 +19,14 @@ function getBaseUrl() {
 /** Set the bot role for API key resolution. Call once at bot startup. */
 function setRole(role) {
   _role = role;
-  if (process.env.ARCLAYER_API_KEY) {
-    console.warn('[erc8183-http-client] WARNING: Deprecated API key env detected and ignored. Use PROVIDER_API_KEY for provider bots.');
-  }
 }
 
-/** Resolve API key: role-specific env only. No shared-key fallback. */
+/** Resolve API key: role-specific env first, ARCLAYER_API_KEY fallback. */
 function getApiKey() {
   if (_role === 'client') {
-    return process.env.CLIENT_API_KEY || '';
+    return process.env.CLIENT_API_KEY || process.env.ARCLAYER_API_KEY || '';
   }
-  if (_role === 'provider' || _role === 'worker') {
+  if (_role === 'provider') {
     return process.env.PROVIDER_API_KEY || '';
   }
   if (_role === 'evaluator') {
@@ -41,12 +35,12 @@ function getApiKey() {
   return '';
 }
 
-/** Get the expected env var name for the current role. */
+/** Get the expected env var name for the current role (for error messages). */
 function getExpectedKeyEnv() {
-  if (_role === 'client') return 'CLIENT_API_KEY';
-  if (_role === 'provider' || _role === 'worker') return 'PROVIDER_API_KEY';
+  if (_role === 'client') return 'CLIENT_API_KEY or ARCLAYER_API_KEY';
+  if (_role === 'provider') return 'PROVIDER_API_KEY';
   if (_role === 'evaluator') return 'EVALUATOR_API_KEY';
-  return 'a role-specific API key (CLIENT_API_KEY, PROVIDER_API_KEY, or EVALUATOR_API_KEY)';
+  return 'CLIENT_API_KEY';
 }
 
 async function request(path, method, body) {
@@ -103,18 +97,18 @@ module.exports = {
   },
 
   /** Step 5 — off-chain claim */
-  async claim(localJobId, { workerId, providerAgentId, claimTtlSeconds }) {
-    return request(`/api/erc8183-jobs/${localJobId}/claim`, 'POST', { workerId, providerAgentId, claimTtlSeconds });
+  async claim(localJobId, { providerAgentId, claimTtlSeconds }) {
+    return request(`/api/erc8183-jobs/${localJobId}/claim`, 'POST', { providerAgentId, claimTtlSeconds });
   },
 
   /** Step 6 — off-chain running */
-  async markRunning(localJobId, workerId) {
-    return request(`/api/erc8183-jobs/${localJobId}/running`, 'POST', { workerId });
+  async markRunning(localJobId, providerAgentId) {
+    return request(`/api/erc8183-jobs/${localJobId}/running`, 'POST', { providerAgentId });
   },
 
   /** Step 7 — submit result, returns submit tx instruction */
-  async submit(localJobId, { workerId, resultPayload, proofPayload }) {
-    return request(`/api/erc8183-jobs/${localJobId}/submit`, 'POST', { workerId, resultPayload, proofPayload });
+  async submit(localJobId, { providerAgentId, resultPayload, proofPayload }) {
+    return request(`/api/erc8183-jobs/${localJobId}/submit`, 'POST', { providerAgentId, resultPayload, proofPayload });
   },
 
   /** Step 8 — complete escrow */

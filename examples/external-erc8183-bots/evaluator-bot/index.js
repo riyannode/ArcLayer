@@ -118,8 +118,8 @@ async function callLlm(systemPrompt, userPrompt) {
 }
 
 const LLM_SYSTEM_PROMPT = `You are an ERC-8183 job evaluator for an autonomous agentic commerce protocol.
-You will receive a job specification, worker result payload, and proof payload.
-Your task: evaluate whether the worker's output is high quality and meets the job requirements.
+You will receive a job specification, provider result payload, and proof payload.
+Your task: evaluate whether the provider's output is high quality and meets the job requirements.
 
 You MUST return strict JSON with these exact fields:
 {
@@ -182,11 +182,11 @@ Evaluate this work. Return JSON only.`;
 // ── Rules-based evaluation (fallback) ──────────────────────────────────
 
 function evaluateByRules(job, resultPayload, proofPayload) {
-  const workerId = resultPayload?.workerId || job.workerId || job.participants?.worker?.agentId;
+  const providerId = resultPayload?.providerAgentId || resultPayload?.workerId || job.workerId || job.participants?.provider?.agentId || job.participants?.worker?.agentId;
   const checks = {
     hasResult: Boolean(resultPayload && Object.keys(resultPayload).length > 0),
     hasProof: Boolean(proofPayload && Object.keys(proofPayload).length > 0),
-    hasWorkerId: Boolean(workerId),
+    hasProviderId: Boolean(providerId),
     hasConfidence: typeof resultPayload?.confidence === 'number' && resultPayload.confidence > 0,
     hasJobType: Boolean(resultPayload?.jobType),
     hasRunId: Boolean(resultPayload?.runId),
@@ -333,13 +333,12 @@ async function evaluateAndComplete(localJobId) {
           completeTxHash: completeResult.hash,
         });
 
-        // Check worker reputation after completion
+        // Check provider reputation after completion
         log('reputation_check_started', { localJobId });
         await sleep(5000);
         try {
-          const workerId = job.participants?.worker?.agentId || job.workerId;
           const providerId = job.participants?.provider?.agentId || job.providerAgentId;
-          const repId = workerId || providerId;
+          const repId = providerId || job.workerId;
           if (repId) {
             const repResp = await fetch(`${BASE_URL}/api/a2a/reputation/${repId}`);
             if (repResp.ok) {

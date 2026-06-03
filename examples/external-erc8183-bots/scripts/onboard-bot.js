@@ -33,7 +33,7 @@ const PRESET_CAPABILITIES = {
 
 const PRESET_ROLES = {
   client: 'autonomous-client',
-  worker: 'provider',  // deprecated alias
+  provider: 'provider',
   evaluator: 'evaluator',
 };
 
@@ -149,6 +149,12 @@ async function run() {
   const { pk, name, preset } = parseArgs();
   if (!pk || !name || !preset) {
     console.error('Usage: node scripts/onboard-bot.js --pk <private-key> --name "Bot Name" --preset client|provider|evaluator');
+    process.exit(1);
+  }
+
+  // Reject deprecated worker preset
+  if (preset === 'worker') {
+    console.error('Preset worker is deprecated for ERC-8183. Use --preset provider.');
     process.exit(1);
   }
 
