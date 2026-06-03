@@ -15,7 +15,6 @@ import {
   getErc8183Avatar,
   getErc8183Capabilities,
   getErc8183Links,
-  isErc8183CapabilityList,
   isErc8183ProfileMetadata,
   roleLabel,
   shortText,
@@ -443,13 +442,13 @@ export default function AgentProfilePage() {
     dashboardAgent?.description ||
     'ERC-8183 commerce agent for escrow-backed work, reputation, and settlement history.';
 
-  // ERC-8183 detection: explicit marker AND job capability (AND logic).
-  // Boolean(dashboardAgent) = trusted shortcut — dashboard route already enforces AND.
+  // ERC-8183 detection: dashboard shortcut OR metadata marker.
+  // Metadata marker (erc8183, agentic-commerce, etc.) is authoritative —
+  // if the agent declared ERC-8183 compliance at registration, it IS ERC-8183.
+  // Capabilities are optional enrichment (what the agent can DO), not a gate.
   const isErc8183Agent =
     Boolean(agent) &&
-    (Boolean(dashboardAgent) ||
-      (isErc8183ProfileMetadata(metadata) &&
-        isErc8183CapabilityList(capabilities)));
+    (Boolean(dashboardAgent) || isErc8183ProfileMetadata(metadata));
 
   const isOwner =
     isConnected &&
