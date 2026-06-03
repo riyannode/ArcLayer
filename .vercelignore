@@ -1,0 +1,13 @@
+node_modules/
+.next/
+.vercel/
+.git/
+*.log
+*.pem
+*.key
+.env
+.env.*
+.env.local
+.env.*.local
+.env.vercel.local
+.env.vercel.prod.local
