@@ -42,7 +42,7 @@ export function buildEnvBundle(input: {
         '# ERC-8183 bots load .env from their own directory.',
         '# Each role has a self-contained env file — see below.',
         '# Shared vars (ARCLAYER_BASE_URL, ARC_RPC_URL) are duplicated into each role file.',
-        '# Cross-role IDs (PROVIDER_AGENT_ID, WORKER_AGENT_ID, EVALUATOR_AGENT_ID) are in the client .env file.',
+        '# Cross-role IDs (PROVIDER_AGENT_ID, EVALUATOR_AGENT_ID) are in the client .env file.',
         '',
       ].join('\n'),
     };
@@ -74,13 +74,10 @@ export function buildEnvBundle(input: {
           `# CLIENT_ADDRESS=<your-0x-address>`,
           `# Paste your Arc Testnet private key:`,
           `# CLIENT_PRIVATE_KEY=<paste-on-vps>`,
-          `# ── Cross-role: provider/worker ──`,
+          `# ── Cross-role: provider ──`,
           `PROVIDER_AGENT_ID=${providerAgentId}`,
-          `WORKER_AGENT_ID=${providerAgentId}`,
-          `WORKER_ID=${providerAgentId}`,
           `# Paste the provider's Arc address:`,
           `# PROVIDER_ADDRESS=<provider-0x-address>`,
-          `# WORKER_ADDRESS=<provider-0x-address>`,
           `# ── Cross-role: evaluator ──`,
           `EVALUATOR_AGENT_ID=${evaluatorAgentId}`,
           `# Paste the evaluator's Arc address:`,
@@ -95,13 +92,8 @@ export function buildEnvBundle(input: {
 
       if (role.botRole === 'provider') {
         lines.push(
-          `# Worker is the user-facing name. PROVIDER_* is the legacy runtime env key.`,
+          `# Provider performs ERC-8183 work, sets budget, and submits deliverables.`,
           `PROVIDER_AGENT_ID=${agentId}`,
-          `WORKER_AGENT_ID=${agentId}`,
-          `WORKER_ID=${agentId}`,
-          `# Worker aliases (placeholders — paste actual values on VPS):`,
-          `# WORKER_ADDRESS=<your-0x-address>`,
-          `# WORKER_PRIVATE_KEY=<paste-on-vps>`,
           `# Paste your Arc Testnet address:`,
           `# PROVIDER_ADDRESS=<your-0x-address>`,
           `# Paste your Arc Testnet private key:`,

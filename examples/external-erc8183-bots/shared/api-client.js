@@ -25,13 +25,13 @@ function getApiKey() {
   if (_role === 'client') {
     return process.env.CLIENT_API_KEY || process.env.ARCLAYER_API_KEY || '';
   }
-  if (_role === 'provider' || _role === 'worker') {
-    return process.env.WORKER_API_KEY || process.env.ARCLAYER_API_KEY || '';
+  if (_role === 'provider') {
+    return process.env.PROVIDER_API_KEY || '';
   }
   if (_role === 'evaluator') {
-    return process.env.EVALUATOR_API_KEY || process.env.ARCLAYER_API_KEY || '';
+    return process.env.EVALUATOR_API_KEY || '';
   }
-  return process.env.ARCLAYER_API_KEY || process.env.CLIENT_API_KEY || process.env.WORKER_API_KEY || '';
+  return process.env.CLIENT_API_KEY || '';
 }
 
 async function request(path, method, body, retries = 0) {
@@ -100,18 +100,18 @@ module.exports = {
   },
 
   /** Off-chain claim */
-  async claim(localJobId, { workerId, providerAgentId, claimTtlSeconds }) {
-    return request(`/api/erc8183-jobs/${localJobId}/claim`, 'POST', { workerId, providerAgentId, claimTtlSeconds });
+  async claim(localJobId, { providerAgentId, claimTtlSeconds }) {
+    return request(`/api/erc8183-jobs/${localJobId}/claim`, 'POST', { providerAgentId, claimTtlSeconds });
   },
 
   /** Off-chain running */
-  async markRunning(localJobId, workerId) {
-    return request(`/api/erc8183-jobs/${localJobId}/running`, 'POST', { workerId });
+  async markRunning(localJobId, providerAgentId) {
+    return request(`/api/erc8183-jobs/${localJobId}/running`, 'POST', { providerAgentId });
   },
 
   /** Submit result, returns submit tx instruction */
-  async submit(localJobId, { workerId, resultPayload, proofPayload }) {
-    return request(`/api/erc8183-jobs/${localJobId}/submit`, 'POST', { workerId, resultPayload, proofPayload });
+  async submit(localJobId, { providerAgentId, resultPayload, proofPayload }) {
+    return request(`/api/erc8183-jobs/${localJobId}/submit`, 'POST', { providerAgentId, resultPayload, proofPayload });
   },
 
   /** Complete escrow */

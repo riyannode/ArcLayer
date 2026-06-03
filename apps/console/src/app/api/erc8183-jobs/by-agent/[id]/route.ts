@@ -4,8 +4,8 @@
  * Returns ERC-8183 jobs where this agent participates.
  *
  * Visibility model:
- * - No session / non-owner: returns public-safe worker job summaries only (asWorkerPublic)
- * - Owner session: returns grouped private lists (asClient, asWorker, asEvaluator)
+ * - No session / non-owner: returns public-safe provider job summaries only (asProviderPublic)
+ * - Owner session: returns grouped private lists (asClient, asProvider, asEvaluator)
  *
  * Do not expose private data (controllers, full descriptions, payloads) to non-owners.
  */
@@ -27,9 +27,9 @@ export const dynamic = 'force-dynamic';
 
 const NO_STORE = { 'Cache-Control': 'no-store, no-cache, max-age=0' } as const;
 
-// ── Public-safe worker summary ─────────────────────────────────────────────
+// ── Public-safe provider summary ─────────────────────────────────────────────
 
-interface PublicWorkerSummary {
+interface PublicProviderSummary {
   localJobId: string;
   erc8183JobId: string | null;
   lifecycleStatus: string;
@@ -42,9 +42,9 @@ interface PublicWorkerSummary {
   inputPayloadHash: string;
 }
 
-function toPublicWorkerSummary(
+function toPublicProviderSummary(
   job: Awaited<ReturnType<typeof listErc8183Jobs>>[number],
-): PublicWorkerSummary {
+): PublicProviderSummary {
   const desc = job.description ?? null;
   const shortDescription =
     desc && desc.length > 100 ? desc.slice(0, 97) + '...' : desc;
@@ -145,7 +145,7 @@ export async function GET(
 
     if (isOwner) {
       // Owner: return grouped private lists
-      const [asClient, asWorker, asEvaluator] = await Promise.all([
+      const [asClient, asProvider, asEvaluator] = await Promise.all([
         listErc8183Jobs({ buyerAgentId: agentId, limit: 100 }),
         listErc8183Jobs({ providerAgentId: agentId, limit: 100 }),
         listErc8183Jobs({ evaluatorAgentId: agentId, limit: 100 }),
@@ -157,17 +157,17 @@ export async function GET(
           ...escrowRail(),
           agentId,
           isOwner: true,
-          asWorkerPublic: [],
+          asProviderPublic: [],
           asClient: asClient.map(toPrivateJobSummary),
-          asWorker: asWorker.map(toPrivateJobSummary),
+          asProvider: asProvider.map(toPrivateJobSummary),
           asEvaluator: asEvaluator.map(toPrivateJobSummary),
         },
         { headers: NO_STORE },
       );
     }
 
-    // Public: return only safe worker summaries
-    const asWorker = await listErc8183Jobs({
+    // Public: return only safe provider summaries
+    const asProvider = await listErc8183Jobs({
       providerAgentId: agentId,
       limit: 100,
     });
@@ -178,9 +178,9 @@ export async function GET(
         ...escrowRail(),
         agentId,
         isOwner: false,
-        asWorkerPublic: asWorker.map(toPublicWorkerSummary),
+        asProviderPublic: asProvider.map(toPublicProviderSummary),
         asClient: [],
-        asWorker: [],
+        asProvider: [],
         asEvaluator: [],
       },
       { headers: NO_STORE },

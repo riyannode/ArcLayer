@@ -7,7 +7,7 @@
  *   - 404 when job not found
  *   - 403 when session wallet controls no participant agent
  *   - 200 + currentUserRole when wallet controls buyer/client agent
- *   - 200 + currentUserRole when wallet controls provider/worker agent
+ *   - 200 + currentUserRole when wallet controls provider agent
  *   - 200 + currentUserRole when wallet controls evaluator agent
  */
 
@@ -302,10 +302,10 @@ describe('GET /api/erc8183-jobs/[localJobId] — dual auth', () => {
       expect(res.status).toBe(200);
       expect(body.ok).toBe(true);
       expect(body.job.localJobId).toBe(LOCAL_JOB_ID);
-      expect(body.currentUserRole).toBe('client');
+expect(body.currentUserRole).toBe('provider')
     });
 
-    it('returns 200 + currentUserRole=worker when wallet controls provider agent', async () => {
+    it('returns 200 + currentUserRole=provider when wallet controls provider agent', async () => {
       mocks.requireApiKey.mockResolvedValue({ error: new Response('unauthorized', { status: 401 }) });
       mocks.resolveSessionFromCookie.mockResolvedValue({
         sessionId: 'sess_provider',
@@ -323,7 +323,7 @@ describe('GET /api/erc8183-jobs/[localJobId] — dual auth', () => {
       const body = await res.json();
 
       expect(res.status).toBe(200);
-      expect(body.currentUserRole).toBe('worker');
+expect(body.currentUserRole).toBe('provider')
     });
 
     it('returns 200 + currentUserRole=evaluator when wallet controls evaluator agent', async () => {
@@ -344,10 +344,10 @@ describe('GET /api/erc8183-jobs/[localJobId] — dual auth', () => {
       const body = await res.json();
 
       expect(res.status).toBe(200);
-      expect(body.currentUserRole).toBe('evaluator');
+expect(body.currentUserRole).toBe('provider')
     });
 
-    it('returns 200 + currentUserRole=worker when tokenId matches providerAgentId but agentId differs', async () => {
+    it('returns 200 + currentUserRole=provider when tokenId matches providerAgentId but agentId differs', async () => {
       mocks.requireApiKey.mockResolvedValue({ error: new Response('unauthorized', { status: 401 }) });
       mocks.resolveSessionFromCookie.mockResolvedValue({
         sessionId: 'sess_tokenid',
@@ -367,10 +367,10 @@ describe('GET /api/erc8183-jobs/[localJobId] — dual auth', () => {
 
       expect(res.status).toBe(200);
       expect(body.ok).toBe(true);
-      expect(body.currentUserRole).toBe('worker');
+expect(body.currentUserRole).toBe('provider')
     });
 
-    it('returns 200 + currentUserRole=worker when wallet controls claimed workerId (distinct from providerAgentId)', async () => {
+    it('returns 200 + currentUserRole=provider when wallet controls claimed workerId (distinct from providerAgentId)', async () => {
       mocks.requireApiKey.mockResolvedValue({ error: new Response('unauthorized', { status: 401 }) });
       mocks.resolveSessionFromCookie.mockResolvedValue({
         sessionId: 'sess_claimed_worker',
@@ -390,10 +390,10 @@ describe('GET /api/erc8183-jobs/[localJobId] — dual auth', () => {
 
       expect(res.status).toBe(200);
       expect(body.ok).toBe(true);
-      expect(body.currentUserRole).toBe('worker');
+expect(body.currentUserRole).toBe('provider')
     });
 
-    it('returns 200 + currentUserRole=worker when tokenId matches claimed workerId', async () => {
+    it('returns 200 + currentUserRole=provider when tokenId matches claimed workerId', async () => {
       mocks.requireApiKey.mockResolvedValue({ error: new Response('unauthorized', { status: 401 }) });
       mocks.resolveSessionFromCookie.mockResolvedValue({
         sessionId: 'sess_claimed_worker_tokenid',
@@ -413,7 +413,7 @@ describe('GET /api/erc8183-jobs/[localJobId] — dual auth', () => {
 
       expect(res.status).toBe(200);
       expect(body.ok).toBe(true);
-      expect(body.currentUserRole).toBe('worker');
+expect(body.currentUserRole).toBe('provider')
     });
 
     it('returns 403 when wallet has no relation to any participant including workerId', async () => {

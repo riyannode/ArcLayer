@@ -13,8 +13,8 @@ type ApiKeyMeta = {
 };
 
 const SCOPE_PRESETS: Record<string, { label: string; scopes: string[] }> = {
-  worker: {
-    label: 'Worker PM2 Bot',
+  provider: {
+    label: 'Provider PM2 Bot',
     scopes: ['erc8183:claim', 'erc8183:running', 'erc8183:submit', 'erc8183:tx'],
   },
   client: {
@@ -45,7 +45,7 @@ export function AgentApiKeysSection({ agentId }: { agentId: string }) {
   // Create key state
   const [showCreate, setShowCreate] = useState(false);
   const [createLabel, setCreateLabel] = useState('');
-  const [createPreset, setCreatePreset] = useState('worker');
+  const [createPreset, setCreatePreset] = useState('provider');
   const [creating, setCreating] = useState(false);
   const [rawKey, setRawKey] = useState<string | null>(null);
   const [rawKeyId, setRawKeyId] = useState<string | null>(null);
@@ -136,7 +136,7 @@ export function AgentApiKeysSection({ agentId }: { agentId: string }) {
         body: JSON.stringify({
           label: oldKey?.label || undefined,
           scopes: oldKey?.scopes && oldKey.scopes.length > 0 ? oldKey.scopes : undefined,
-          preset: oldKey?.scopes && oldKey.scopes.length > 0 ? undefined : 'worker',
+          preset: oldKey?.scopes && oldKey.scopes.length > 0 ? undefined : 'provider',
         }),
       });
       const data = await res.json();
@@ -162,7 +162,7 @@ export function AgentApiKeysSection({ agentId }: { agentId: string }) {
   const envSnippet = `ARCLAYER_API_KEY=${rawKey ?? 'ak_...'}
 ARCLAYER_AGENT_ID=${agentId}
 ARCLAYER_BASE_URL=https://arclayers.xyz
-ARCLAYER_MODE=worker`;
+ARCLAYER_MODE=provider`;
 
   const copyEnv = async () => {
     await navigator.clipboard.writeText(envSnippet);

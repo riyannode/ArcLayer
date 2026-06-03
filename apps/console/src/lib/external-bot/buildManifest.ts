@@ -87,7 +87,7 @@ export function buildExternalBotManifest(input: ManifestBuildInput): AgentManife
 function manifestMode(mode: string): 'seller' | 'buyer' | 'dual' {
   switch (mode) {
     case 'bridge':
-    case 'a2a-job-worker':
+    case 'a2a-job-provider':
       return 'seller';
     case 'a2a-job-creator':
       return 'buyer';

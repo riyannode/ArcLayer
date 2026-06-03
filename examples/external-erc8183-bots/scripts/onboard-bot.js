@@ -10,7 +10,7 @@
  *
  * Usage:
  *   node scripts/onboard-bot.js --pk <private-key> --name "My Bot" --preset client
- *   node scripts/onboard-bot.js --pk <private-key> --name "My Bot" --preset worker
+ *   node scripts/onboard-bot.js --pk <private-key> --name "My Bot" --preset provider
  *   node scripts/onboard-bot.js --pk <private-key> --name "My Bot" --preset evaluator
  */
 const { privateKeyToAccount } = require('viem/accounts');
@@ -27,13 +27,13 @@ const ERC8004_ABI = [
 
 const PRESET_CAPABILITIES = {
   client: ['job-creation', 'escrow', 'fund_job', 'a2a_job'],
-  worker: ['claim_job', 'submit_work', 'submit_result', 'escrow', 'a2a_job'],
+  provider: ['claim_job', 'submit_work', 'submit_result', 'escrow', 'a2a_job'],
   evaluator: ['approve_result', 'settle_job', 'escrow', 'a2a_job'],
 };
 
 const PRESET_ROLES = {
   client: 'autonomous-client',
-  worker: 'provider',
+  provider: 'provider',
   evaluator: 'evaluator',
 };
 
@@ -148,7 +148,13 @@ async function createApiKey(cookie, agentId, label, preset) {
 async function run() {
   const { pk, name, preset } = parseArgs();
   if (!pk || !name || !preset) {
-    console.error('Usage: node scripts/onboard-bot.js --pk <private-key> --name "Bot Name" --preset client|worker|evaluator');
+    console.error('Usage: node scripts/onboard-bot.js --pk <private-key> --name "Bot Name" --preset client|provider|evaluator');
+    process.exit(1);
+  }
+
+  // Reject deprecated worker preset
+  if (preset === 'worker') {
+    console.error('Preset worker is deprecated for ERC-8183. Use --preset provider.');
     process.exit(1);
   }
 
