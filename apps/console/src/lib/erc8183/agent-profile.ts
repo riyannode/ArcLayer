@@ -150,10 +150,15 @@ export async function fetchErc8183Metadata(metadataURI?: string) {
   if (metadataURI.startsWith('data:application/json;base64,')) {
     try {
       const b64 = metadataURI.slice('data:application/json;base64,'.length);
-      const decoded = typeof atob !== 'undefined'
-        ? atob(b64)
-        : Buffer.from(b64, 'base64').toString('utf8');
-      const json = JSON.parse(decoded) as Erc8183AgentMetadata;
+      let jsonStr: string;
+      if (typeof atob !== 'undefined') {
+        // Browser: atob returns Latin-1 bytes, decode as UTF-8 via TextDecoder
+        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        jsonStr = new TextDecoder('utf-8').decode(bytes);
+      } else {
+        jsonStr = Buffer.from(b64, 'base64').toString('utf8');
+      }
+      const json = JSON.parse(jsonStr) as Erc8183AgentMetadata;
       return { ...json, metadataURI };
     } catch {
       return null;
