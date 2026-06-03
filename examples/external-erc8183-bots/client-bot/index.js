@@ -42,6 +42,7 @@ const JOB_CREATE_INTERVAL_MS = parseInt(process.env.JOB_CREATE_INTERVAL_MS || '1
 const MAX_JOBS_PER_RUN = parseInt(process.env.MAX_JOBS_PER_RUN || '0', 10); // 0 = unlimited
 const MAX_OPEN_JOBS = parseInt(process.env.MAX_OPEN_JOBS || '5', 10);
 const AUTONOMOUS_TX = process.env.AUTONOMOUS_TX === 'true';
+const IGNORE_JOBS_BEFORE = process.env.IGNORE_JOBS_BEFORE || '';
 
 const signer = createSigner({ privateKey: CLIENT_PK, rpcUrl: ARC_RPC_URL });
 
@@ -92,6 +93,60 @@ function pickRandomTemplate() {
   };
 }
 
+// ── Fund existing jobs that already have setBudget ────────────────────
+
+const fundedJobIds = new Set();
+
+async function fundExistingJobs() {
+  let jobs;
+  try {
+    const existing = await api.listJobs({ status: 'created', limit: '100', buyerAgentId: BUYER_AGENT_ID });
+    jobs = Array.isArray(existing) ? existing : existing?.jobs || existing?.data || [];
+  } catch { jobs = []; }
+
+  const cutoff = IGNORE_JOBS_BEFORE ? new Date(IGNORE_JOBS_BEFORE).getTime() : 0;
+
+  for (const job of (Array.isArray(jobs) ? jobs : [])) {
+    const id = job.localJobId || job.id;
+    if (fundedJobIds.has(id)) continue;
+
+    // Skip stale jobs
+    if (cutoff) {
+      const jobTime = new Date(job.createdAt || job.created_at || 0).getTime();
+      if (jobTime < cutoff) { fundedJobIds.add(id); continue; }
+    }
+
+    // Only fund jobs that have setBudgetTxHash set
+    const setBudgetHash = job.setBudgetTxHash || job.txHashes?.setBudgetTxHash;
+    if (!setBudgetHash) continue;
+
+    console.log(`\n[${new Date().toISOString()}] [FUND] Funding existing job: ${id} (setBudget=${setBudgetHash.slice(0, 10)}...)`);
+    try {
+      const fundTxInstructions = await api.fund(id);
+      if (!fundTxInstructions.txs || fundTxInstructions.txs.length < 2) {
+        console.warn(`   Fund endpoint didn't return tx instructions`);
+        fundedJobIds.add(id);
+        continue;
+      }
+
+      const approveResult = await signer.sendTx(fundTxInstructions.txs[0]);
+      console.log(`   approve tx: ${approveResult.hash}`);
+      await sleep(2000);
+
+      const fundResult = await signer.sendTx(fundTxInstructions.txs[1]);
+      console.log(`   fund tx: ${fundResult.hash}`);
+      await sleep(2000);
+
+      const fundConfirmed = await api.confirmTx(id, 'fund', fundResult.hash);
+      console.log(`   Fund confirmed! status: ${fundConfirmed.erc8183Status}`);
+      console.log(`   ✅ Job ${id} funded successfully`);
+    } catch (err) {
+      console.error(`   [FUND] Failed:`, err.message);
+    }
+    fundedJobIds.add(id);
+  }
+}
+
 // ── Create + fund job ────────────────────────────────────────────────────
 
 async function createAndFundJob() {
@@ -106,10 +161,21 @@ async function createAndFundJob() {
   }
 
   try {
-    // Safety: check existing open jobs
+    // Safety: check existing open jobs (filter by IGNORE_JOBS_BEFORE to skip stale backlog)
     const existing = await api.listJobs({ status: 'created', limit: '100', buyerAgentId: BUYER_AGENT_ID });
     const existingList = Array.isArray(existing) ? existing : existing?.jobs || existing?.data || [];
-    const openCount = existingList.filter((j) => !j.erc8183Status || j.erc8183Status === 'Open' || j.erc8183Status === 'null').length;
+    const cutoff = IGNORE_JOBS_BEFORE ? new Date(IGNORE_JOBS_BEFORE).getTime() : 0;
+    const openCount = existingList.filter((j) => {
+      // Skip jobs that already progressed past Open
+      const ls = j.lifecycleStatus || '';
+      if (ls && ls !== 'Open' && ls !== 'CreatedOnchain') return false;
+      if (j.erc8183Status && j.erc8183Status !== 'Open') return false;
+      if (cutoff) {
+        const jobTime = new Date(j.createdAt || j.created_at || 0).getTime();
+        if (jobTime < cutoff) return false;
+      }
+      return true;
+    }).length;
     if (openCount >= MAX_OPEN_JOBS) {
       console.log(`   Too many open jobs (${openCount} >= ${MAX_OPEN_JOBS}) — skipping this cycle`);
       return;
@@ -157,29 +223,47 @@ async function createAndFundJob() {
       const confirmed = await api.confirmCreateTx(localJobId, createResult.hash);
       console.log(`   createJob confirmed! erc8183_job_id: ${confirmed.erc8183JobId}`);
 
-      // 3. Poll fund endpoint until provider sets budget
+      // 3. Wait for provider to setBudget — poll job detail for setBudgetTxHash
       console.log(`   Waiting for provider to setBudget...`);
-      const MAX_POLL = 60;
-      let fundTxInstructions = null;
-      for (let i = 0; i < MAX_POLL; i++) {
-        await sleep(2000);
+      const SETBUDGET_POLL_MAX = parseInt(process.env.SETBUDGET_POLL_MAX || '120', 10);
+      const FUND_POLL_INTERVAL_MS = parseInt(process.env.FUND_POLL_INTERVAL_MS || '5000', 10);
+      let setBudgetReady = false;
+      for (let i = 0; i < SETBUDGET_POLL_MAX; i++) {
+        await sleep(FUND_POLL_INTERVAL_MS);
         try {
-          const result = await api.fund(localJobId);
-          if (result.txs && result.txs.length >= 2) {
-            fundTxInstructions = result;
+          const jobResponse = await api.getJob(localJobId);
+          const jobDetail = jobResponse.job || jobResponse;
+          // setBudgetTxHash may be at job.txHashes.setBudgetTxHash or job.setBudgetTxHash
+          const setBudgetHash = jobDetail.setBudgetTxHash || jobDetail.txHashes?.setBudgetTxHash;
+          if (setBudgetHash) {
+            setBudgetReady = true;
+            console.log(`   setBudget confirmed in backend: ${setBudgetHash}`);
             break;
           }
-        } catch (err) {
-          // fund returns error if budget not set yet — keep polling
-          if (i % 5 === 0) console.log(`   Waiting... (${i * 2}s)`);
+          // Also check lifecycleStatus
+          if (jobDetail.lifecycleStatus && jobDetail.lifecycleStatus !== 'Open' && jobDetail.lifecycleStatus !== 'CreatedOnchain') {
+            setBudgetReady = true;
+            console.log(`   Budget already set (lifecycleStatus=${jobDetail.lifecycleStatus})`);
+            break;
+          }
+        } catch {
+          // ignore poll errors
         }
+        if (i % 6 === 0 && i > 0) console.log(`   Waiting for setBudget... (${i * FUND_POLL_INTERVAL_MS / 1000}s)`);
       }
 
-      if (!fundTxInstructions) {
+      if (!setBudgetReady) {
         console.warn(`   Timeout — provider didn't set budget`);
         return;
       }
       console.log(`   Provider set budget! Proceeding to fund.`);
+
+      // 4. Get fund tx instructions
+      const fundTxInstructions = await api.fund(localJobId);
+      if (!fundTxInstructions.txs || fundTxInstructions.txs.length < 2) {
+        console.warn(`   Fund endpoint didn't return tx instructions`);
+        return;
+      }
 
       // 4. Approve USDC + fund — use fundTxInstructions from poll
       const approveResult = await signer.sendTx(fundTxInstructions.txs[0]);
@@ -214,8 +298,12 @@ async function main() {
   console.log(`Interval: ${JOB_CREATE_INTERVAL_MS}ms`);
   console.log(`Templates: ${JOB_TEMPLATES.length} random types`);
 
+  await fundExistingJobs();
   await createAndFundJob();
-  setInterval(createAndFundJob, JOB_CREATE_INTERVAL_MS);
+  setInterval(async () => {
+    await fundExistingJobs();
+    await createAndFundJob();
+  }, JOB_CREATE_INTERVAL_MS);
 }
 
 main().catch((err) => {

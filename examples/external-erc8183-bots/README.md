@@ -12,10 +12,33 @@ Each bot runs as a separate PM2 process with its own wallet + API key.
 Client Bot ──createJob──▶ Provider Bot ──submit──▶ Evaluator Bot ──complete──▶ Done
    │                        │                         │
    ├─ random job template   ├─ capability filter       ├─ LLM or rules eval
-   ├─ setBudget             ├─ structured strategy     ├─ score >= 70 → complete
-   ├─ approve USDC          ├─ claim + running         └─ score < 70 → soft reject
+   ├─ wait for setBudget    ├─ on-chain getJob guard    ├─ score >= 70 → complete
+   ├─ approve USDC          ├─ claim + running          └─ score < 70 → soft reject
    └─ fund                  └─ submit tx
 ```
+
+### Critical: setBudget → Fund Ordering
+
+The ERC-8183 lifecycle **requires** the provider to call `setBudget` before the client
+can fund. The on-chain contract enforces this:
+
+1. `createJob` → on-chain status = **Open (0)**
+2. Provider calls `setBudget(jobId, amount, "0x")` → status stays **Open**, budget set
+3. Client calls `approve` + `fund` → status = **Funded (1)**
+4. Provider claims, runs, submits → status = **Submitted (2)**
+5. Evaluator completes → status = **Completed (3)**
+
+If the client funds before `setBudget`, the on-chain status moves to **Funded** with
+budget=0. After that, `setBudget` reverts with `WrongStatus (0x8e78f0cb)` because the
+contract requires `status == Open AND budget == 0`.
+
+**Bot protections (built-in):**
+- **Client** polls `api.getJob()` for `setBudgetTxHash` (or `job.txHashes.setBudgetTxHash`)
+  before calling fund. Also checks `lifecycleStatus` progression as fallback.
+- **Provider** reads on-chain `getJob(erc8183JobId)` before calling `setBudget`. Only
+  proceeds if `onchain.status === 0 (Open)` AND `onchain.budget === 0n`.
+- Both bots use `IGNORE_JOBS_BEFORE` to skip stale backlog jobs that may be in
+  inconsistent states.
 
 - **Creator/Client** creates random small-budget ERC-8183 jobs every 3 minutes.
   Each job picks a random template (market_summary, risk_check, sentiment_scan, execution_plan, data_quality_check).
@@ -337,6 +360,8 @@ The evaluator bot uses LLM (when configured) to judge result quality.
 | `erc8183_job_not_funded` | Job hasn't been funded on-chain | Wait for client bot to complete the fund cycle |
 | `erc8183_job_not_claimed` | Provider tries to markRunning before claim | Provider handles this automatically in Phase 2 |
 | `insufficient_balance` | Wallet out of USDC | Top up wallet via Arc Testnet faucet |
+| `WrongStatus (0x8e78f0cb)` | Client funded before provider setBudget | Both bots now guard against this — see "setBudget → Fund Ordering" above |
+| `tx_hash_conflict` | Duplicate tx confirmation attempt | Safe to ignore — bot skips already-confirmed txs |
 | LLM evaluation failed | LLM_BASE_URL or LLM_API_KEY missing/wrong | Check LLM config; evaluator falls back to rules automatically |
 
 ## 8. Safety Guards
@@ -348,6 +373,10 @@ The evaluator bot uses LLM (when configured) to judge result quality.
 | `MAX_ACTIVE_JOBS` | 3 | Provider/evaluator — process at most N per cycle |
 | `MIN_EVAL_SCORE` | 70 | Evaluator — minimum score to approve (below = soft reject) |
 | `AUTONOMOUS_TX` | true | Required — enables on-chain signing |
+| `IGNORE_JOBS_BEFORE` | (blank) | ISO timestamp — skip jobs created before this time |
+| `SETBUDGET_POLL_MAX` | 120 | Client — max polls waiting for setBudgetTxHash |
+| `FUND_POLL_INTERVAL_MS` | 5000 | Client — ms between setBudget polls |
+| `CLAIM_TTL_SECONDS` | 600 | Provider — how long a claim is held before expiry |
 
 ## 9. Future Extensions
 
