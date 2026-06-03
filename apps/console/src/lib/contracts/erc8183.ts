@@ -72,6 +72,7 @@ export type BudgetSetEvent = {
 export type JobFundedEvent = {
   eventName: 'JobFunded';
   jobId: bigint;
+  client: `0x${string}`;
   /** ERC-20 USDC atomic amount (6 decimals), not native 18-decimal gas balance. */
   amount: bigint;
 };
@@ -79,12 +80,14 @@ export type JobFundedEvent = {
 export type JobSubmittedEvent = {
   eventName: 'JobSubmitted';
   jobId: bigint;
+  worker: `0x${string}`;
   deliverable: Hex;
 };
 
 export type JobCompletedEvent = {
   eventName: 'JobCompleted';
   jobId: bigint;
+  evaluator: `0x${string}`;
   reason: Hex;
 };
 

@@ -280,6 +280,7 @@ export const ERC8183_AGENTIC_COMMERCE_ABI = [
     type: "event",
     inputs: [
       { name: "jobId", type: "uint256", indexed: true },
+      { name: "client", type: "address", indexed: true },
       { name: "amount", type: "uint256", indexed: false },
     ],
   },
@@ -288,6 +289,7 @@ export const ERC8183_AGENTIC_COMMERCE_ABI = [
     type: "event",
     inputs: [
       { name: "jobId", type: "uint256", indexed: true },
+      { name: "worker", type: "address", indexed: true },
       { name: "deliverable", type: "bytes32", indexed: false },
     ],
   },
@@ -296,6 +298,7 @@ export const ERC8183_AGENTIC_COMMERCE_ABI = [
     type: "event",
     inputs: [
       { name: "jobId", type: "uint256", indexed: true },
+      { name: "evaluator", type: "address", indexed: true },
       { name: "reason", type: "bytes32", indexed: false },
     ],
   },
