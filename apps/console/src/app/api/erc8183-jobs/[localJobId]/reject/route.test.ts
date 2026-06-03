@@ -306,6 +306,7 @@ describe('POST /api/erc8183-jobs/[localJobId]/reject', () => {
     expect(mocks.writeReputationFeedback).toHaveBeenCalledWith(
       expect.objectContaining({
         score: -50,
+        category: 2,
         context: 'erc8183_job_rejected',
       }),
     );
@@ -338,5 +339,31 @@ describe('POST /api/erc8183-jobs/[localJobId]/reject', () => {
     const res = await POST(makeRequest({ reasonText: 'test' }), { params: Promise.resolve({ localJobId: 'erc8183_test123' }) });
     expect(res.status).toBe(502);
     expect(mocks.markErc8183RejectFailed).toHaveBeenCalled();
+  });
+
+  // ── Signer mismatch ─────────────────────────────────────────────────
+
+  it('returns 503 if evaluator signer mismatches job evaluator address', async () => {
+    mocks.requireApiKey.mockResolvedValue({ key: { id: 'k1', agentId: '300', scopes: ['erc8183:reject'] } });
+    // Job evaluator is 0xEvaluator, but PK resolves to different address
+    mocks.getErc8183JobByLocalId.mockResolvedValue(makeJob({ evaluatorAddress: '0xEvaluatorJob' }));
+    mocks.privateKeyToAccount.mockReturnValue({ address: '0xDifferentSigner' });
+
+    const { POST } = await import('./route');
+    const res = await POST(makeRequest({ reasonText: 'test' }), { params: Promise.resolve({ localJobId: 'erc8183_test123' }) });
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error).toBe('evaluator_signer_mismatch');
+    expect(mocks.markErc8183RejectFailed).toHaveBeenCalledWith({ localJobId: 'erc8183_test123' });
+  });
+
+  it('proceeds when evaluator address matches signer', async () => {
+    mocks.requireApiKey.mockResolvedValue({ key: { id: 'k1', agentId: '300', scopes: ['erc8183:reject'] } });
+    mocks.getErc8183JobByLocalId.mockResolvedValue(makeJob({ evaluatorAddress: '0xEvaluator' }));
+    mocks.privateKeyToAccount.mockReturnValue({ address: '0xEvaluator' });
+
+    const { POST } = await import('./route');
+    const res = await POST(makeRequest({ reasonText: 'test' }), { params: Promise.resolve({ localJobId: 'erc8183_test123' }) });
+    expect(res.status).toBe(200);
   });
 });

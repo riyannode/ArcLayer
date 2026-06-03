@@ -227,8 +227,17 @@ export async function POST(
       );
     }
 
-    // Step 6: Create reasonHash = keccak256(toBytes(trimmedReason))
-    const reasonHash = keccak256(toBytes(trimmedReason));
+    // Step 6: Create canonical reason hash
+    const canonicalPayload = {
+      localJobId,
+      erc8183JobId: job.erc8183JobId,
+      providerAgentId: job.providerAgentId,
+      evaluatorAgentId: job.evaluatorAgentId,
+      deliverableHash: job.deliverableHash ?? null,
+      decision: 'reject',
+      reasonText: trimmedReason,
+    };
+    const reasonHash = keccak256(toBytes(JSON.stringify(canonicalPayload)));
 
     // Step 7: Call reject on-chain
     const evaluatorPk = normalizePrivateKey(
@@ -251,6 +260,21 @@ export async function POST(
     }
 
     const account = privateKeyToAccount(evaluatorPk);
+
+    // Signer mismatch guard — evaluator PK must match job evaluator address
+    if (job.evaluatorAddress && account.address.toLowerCase() !== job.evaluatorAddress.toLowerCase()) {
+      await markErc8183RejectFailed({ localJobId }).catch(() => {});
+      return NextResponse.json(
+        {
+          ok: false,
+          ...escrowRail(),
+          error: 'evaluator_signer_mismatch',
+          message: 'Configured evaluator private key does not match this job evaluator address.',
+        },
+        { status: 503 },
+      );
+    }
+
     const walletClient = createWalletClient({
       account,
       chain: arcTestnet,
@@ -389,7 +413,7 @@ export async function POST(
         writeReputationFeedback({
           agentTokenId,
           score: -50,
-          category: 1,
+          category: 2,
           comment: 'erc8183_job_rejected',
           metadataURI: `arclayer://jobs/${encodeURIComponent(localJobId)}`,
           proofURI: `arclayer://proof/job-reject/${encodeURIComponent(localJobId)}`,
