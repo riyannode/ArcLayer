@@ -148,6 +148,10 @@ function mapRow(row: Record<string, unknown>): Erc8183JobView {
     fundTxHash: row.fund_tx_hash ? String(row.fund_tx_hash) : null,
     submitTxHash: row.submit_tx_hash ? String(row.submit_tx_hash) : null,
     completeTxHash: row.complete_tx_hash ? String(row.complete_tx_hash) : null,
+    rejectTxHash: row.reject_tx_hash ? String(row.reject_tx_hash) : null,
+    rejectedAt: row.rejected_at ? String(row.rejected_at) : null,
+    rejectReasonText: row.reject_reason_text ? String(row.reject_reason_text) : null,
+    rejectReasonHash: row.reject_reason_hash ? String(row.reject_reason_hash) : null,
     createdAt: String(row.created_at),
     claimedAt: row.claimed_at ? String(row.claimed_at) : null,
     startedAt: row.started_at ? String(row.started_at) : null,
@@ -687,4 +691,110 @@ export async function updateErc8183Status(input: {
     .eq('settlement_mode', 'erc8183_escrow');
 
   if (error) throw new Error(`updateErc8183Status failed: ${error.message}`);
+}
+
+/**
+ * attachErc8183RejectTx — persist reject tx hash, reason, and status.
+ *
+ * Allowed only when erc8183_status is 'Submitted' (pending evaluation).
+ * Sets reject_tx_hash, rejected_at, reject_reason_text, reject_reason_hash,
+ * erc8183_status='Rejected', status='rejected'.
+ */
+export async function attachErc8183RejectTx(input: {
+  localJobId: string;
+  rejectTxHash: string;
+  rejectReasonText: string;
+  rejectReasonHash: string;
+}): Promise<void> {
+  const db = ensureDb();
+  const field = 'reject_tx_hash';
+
+  const existing = await readTxColumn(db, input.localJobId, field);
+
+  try {
+    assertImmutableTxHash({
+      existingTxHash: existing,
+      nextTxHash: input.rejectTxHash,
+      fieldName: field,
+    });
+  } catch (err) {
+    if (err instanceof Erc8183TxHashIdempotentError) return;
+    throw err;
+  }
+
+  const { data: updated, error } = await db
+    .from('agent_jobs')
+    .update({
+      reject_tx_hash: input.rejectTxHash,
+      rejected_at: new Date().toISOString(),
+      reject_reason_text: input.rejectReasonText,
+      reject_reason_hash: input.rejectReasonHash,
+      erc8183_status: 'Rejected',
+      status: 'rejected',
+    })
+    .eq('job_id', input.localJobId)
+    .eq('settlement_mode', 'erc8183_escrow')
+    .eq('erc8183_status', 'Submitted')
+    .is('reject_tx_hash', null)
+    .select('job_id');
+
+  if (error) throw new Error(`attachErc8183RejectTx failed: ${error.message}`);
+
+  if (!updated || updated.length === 0) {
+    const actual = await readTxColumn(db, input.localJobId, field);
+    if (actual && normalizeTxHash(actual) === normalizeTxHash(input.rejectTxHash)) return;
+    throw new Erc8183TxHashConflictError(field, actual ?? 'unknown', input.rejectTxHash);
+  }
+}
+
+/**
+ * claimErc8183Reject — atomic local claim before sending reject tx.
+ *
+ * Sets status='rejecting' only if the job is still in Submitted status
+ * and has no reject_tx_hash yet. Returns true if the claim succeeded,
+ * false if already claimed/finalized.
+ *
+ * This prevents the race where two evaluator requests both pass the
+ * Submitted check and both broadcast reject txs.
+ */
+export async function claimErc8183Reject(input: {
+  localJobId: string;
+}): Promise<boolean> {
+  const db = ensureDb();
+
+  const { data, error } = await db
+    .from('agent_jobs')
+    .update({ status: 'rejecting' })
+    .eq('job_id', input.localJobId)
+    .eq('settlement_mode', 'erc8183_escrow')
+    .eq('erc8183_status', 'Submitted')
+    .eq('status', 'submitted')
+    .is('reject_tx_hash', null)
+    .select('job_id');
+
+  if (error) throw new Error(`claimErc8183Reject failed: ${error.message}`);
+
+  return !!data && data.length > 0;
+}
+
+/**
+ * markErc8183RejectFailed — rollback status from 'rejecting' to 'submitted'.
+ *
+ * Called when the reject tx fails (writeContract error, revert, receipt timeout).
+ * Restores the job to a rejectable state so the evaluator can retry.
+ */
+export async function markErc8183RejectFailed(input: {
+  localJobId: string;
+}): Promise<void> {
+  const db = ensureDb();
+
+  const { error } = await db
+    .from('agent_jobs')
+    .update({ status: 'submitted' })
+    .eq('job_id', input.localJobId)
+    .eq('settlement_mode', 'erc8183_escrow')
+    .eq('status', 'rejecting')
+    .eq('erc8183_status', 'Submitted');
+
+  if (error) throw new Error(`markErc8183RejectFailed failed: ${error.message}`);
 }

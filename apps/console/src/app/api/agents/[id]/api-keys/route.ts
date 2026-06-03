@@ -31,6 +31,7 @@ const SCOPE_PRESETS: Record<string, string[]> = {
   ],
   evaluator: [
     API_KEY_SCOPES.ERC8183_COMPLETE,
+    API_KEY_SCOPES.ERC8183_REJECT,
     API_KEY_SCOPES.ERC8183_TX,
   ],
 };

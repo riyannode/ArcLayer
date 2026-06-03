@@ -23,7 +23,7 @@ const SCOPE_PRESETS: Record<string, { label: string; scopes: string[] }> = {
   },
   evaluator: {
     label: 'Evaluator Bot',
-    scopes: ['erc8183:complete', 'erc8183:tx'],
+    scopes: ['erc8183:complete', 'erc8183:reject', 'erc8183:tx'],
   },
 };
 

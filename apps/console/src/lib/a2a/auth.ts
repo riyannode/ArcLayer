@@ -20,6 +20,7 @@ export const API_KEY_SCOPES = {
   ERC8183_SUBMIT: 'erc8183:submit',
   ERC8183_COMPLETE: 'erc8183:complete',
   ERC8183_TX: 'erc8183:tx',
+  ERC8183_REJECT: 'erc8183:reject',
 } as const;
 
 // ─── Key generation ───────────────────────────────────────────────────────────
