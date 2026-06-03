@@ -3,20 +3,54 @@
  *
  * Each bot sends its own API key via Authorization header.
  * Routes return tx instructions (address, functionName, args).
+ *
+ * Role-aware API key resolution:
+ *   client    → CLIENT_API_KEY || ARCLAYER_API_KEY
+ *   provider  → WORKER_API_KEY || ARCLAYER_API_KEY
+ *   evaluator → EVALUATOR_API_KEY || ARCLAYER_API_KEY
  */
+
+let _role = '';
+
 function getBaseUrl() {
   return process.env.ARCLAYER_BASE_URL || 'https://arclayers.xyz';
 }
 
+/** Set the bot role for API key resolution. Call once at bot startup. */
+function setRole(role) {
+  _role = role;
+}
+
+/** Resolve API key: role-specific env first, ARCLAYER_API_KEY fallback. */
 function getApiKey() {
+  if (_role === 'client') {
+    return process.env.CLIENT_API_KEY || process.env.ARCLAYER_API_KEY || '';
+  }
+  if (_role === 'provider' || _role === 'worker') {
+    return process.env.WORKER_API_KEY || process.env.ARCLAYER_API_KEY || '';
+  }
+  if (_role === 'evaluator') {
+    return process.env.EVALUATOR_API_KEY || process.env.ARCLAYER_API_KEY || '';
+  }
   return process.env.ARCLAYER_API_KEY || '';
+}
+
+/** Get the expected env var name for the current role (for error messages). */
+function getExpectedKeyEnv() {
+  if (_role === 'client') return 'CLIENT_API_KEY or ARCLAYER_API_KEY';
+  if (_role === 'provider' || _role === 'worker') return 'WORKER_API_KEY or ARCLAYER_API_KEY';
+  if (_role === 'evaluator') return 'EVALUATOR_API_KEY or ARCLAYER_API_KEY';
+  return 'ARCLAYER_API_KEY';
 }
 
 async function request(path, method, body) {
   const url = `${getBaseUrl()}${path}`;
   const headers = { 'Content-Type': 'application/json' };
   const key = getApiKey();
-  if (key) headers['Authorization'] = `Bearer ${key}`;
+  if (!key) {
+    throw new Error(`Missing ${getExpectedKeyEnv()} — set the correct API key in .env`);
+  }
+  headers['Authorization'] = `Bearer ${key}`;
 
   const res = await fetch(url, {
     method,
@@ -34,6 +68,9 @@ async function request(path, method, body) {
 }
 
 module.exports = {
+  /** Set bot role for API key resolution. Call once at startup. */
+  setRole,
+
   /** Step 1 — create local job, returns createJob tx instruction */
   async createJob(input) {
     return request('/api/erc8183-jobs', 'POST', input);

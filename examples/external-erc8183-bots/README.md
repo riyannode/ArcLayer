@@ -90,10 +90,17 @@ cp evaluator-bot/.env.example evaluator-bot/.env
 ```
 
 Fill in:
-- `ARCLAYER_API_KEY` — generated from `/register/external-bot` on the deployed console
+- `CLIENT_API_KEY` / `WORKER_API_KEY` / `EVALUATOR_API_KEY` — role-specific API keys (preferred)
+- `ARCLAYER_API_KEY` — backward-compatible fallback (optional if role-specific key is set)
 - `*_PRIVATE_KEY` — wallet private key with USDC + gas
 - `*_ADDRESS` — corresponding wallet address
 - `WORKER_ID` — **must equal the worker/provider agent ID** (the API key's agentId)
+
+**API key resolution per role:**
+- Client bot uses `CLIENT_API_KEY` first, falls back to `ARCLAYER_API_KEY`
+- Provider bot uses `WORKER_API_KEY` first, falls back to `ARCLAYER_API_KEY`
+- Evaluator bot uses `EVALUATOR_API_KEY` first, falls back to `ARCLAYER_API_KEY`
+- If no key is found, the bot fails fast with a clear error
 
 For LLM evaluation, also fill in:
 - `LLM_BASE_URL` — OpenAI-compatible API endpoint
@@ -253,7 +260,7 @@ ARC_CHAIN_ID=5042002
 EVALUATOR_AGENT_ID=...
 EVALUATOR_ADDRESS=0x...
 EVALUATOR_PRIVATE_KEY=0x...
-ARCLAYER_API_KEY=ak_...
+EVALUATOR_API_KEY=ak_...
 EVALUATOR_MODE=rules
 MIN_EVAL_SCORE=70
 JOB_POLL_INTERVAL_MS=60000

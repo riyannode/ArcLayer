@@ -1,6 +1,6 @@
 /**
  * ArcLayer API client — standalone HTTP wrapper.
- * Authorization: Bearer <API_KEY>
+ * Authorization: Bearer ***
  * Handles 401, 403, 409, 429, 5xx with retry.
  * Never logs secrets.
  */
@@ -9,11 +9,28 @@ const { log, error: logError } = require('./logger');
 const TX_NOT_FOUND_RETRY_DELAY_MS = 5000;
 const TX_NOT_FOUND_MAX_RETRIES = 3;
 
+let _role = '';
+
 function getBaseUrl() {
   return process.env.ARCLAYER_BASE_URL || 'https://arclayers.xyz';
 }
 
+/** Set the bot role for API key resolution. Call once at bot startup. */
+function setRole(role) {
+  _role = role;
+}
+
+/** Resolve API key: role-specific env first, ARCLAYER_API_KEY fallback. */
 function getApiKey() {
+  if (_role === 'client') {
+    return process.env.CLIENT_API_KEY || process.env.ARCLAYER_API_KEY || '';
+  }
+  if (_role === 'provider' || _role === 'worker') {
+    return process.env.WORKER_API_KEY || process.env.ARCLAYER_API_KEY || '';
+  }
+  if (_role === 'evaluator') {
+    return process.env.EVALUATOR_API_KEY || process.env.ARCLAYER_API_KEY || '';
+  }
   return process.env.ARCLAYER_API_KEY || process.env.CLIENT_API_KEY || process.env.WORKER_API_KEY || '';
 }
 

@@ -15,6 +15,7 @@
 require('dotenv').config({ path: __dirname + '/.env' });
 
 const api = require('../shared/erc8183-http-client');
+api.setRole('evaluator');
 const { createSigner } = require('../shared/tx-signer');
 const { required, requiredAddress, normalizePrivateKey, optional, int, bool } = require('../shared/config');
 const { sleep } = require('../shared/sleep');
