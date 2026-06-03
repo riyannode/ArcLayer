@@ -132,8 +132,7 @@ function checkBot(botName, requiredKeys) {
 
   // Print effective config
   console.log(`\n  Effective config:`);
-  const agentId = env.PROVIDER_AGENT_ID || env.WORKER_AGENT_ID || '?';
-  const addr = env.PROVIDER_ADDRESS || env.WORKER_ADDRESS || env.CLIENT_ADDRESS || env.EVALUATOR_ADDRESS || '?';
+  const addr = env.PROVIDER_ADDRESS || env.CLIENT_ADDRESS || env.EVALUATOR_ADDRESS || '?';
   console.log(`  Agent ID: ${agentId}`);
   console.log(`  Address:  ${addr?.slice(0, 12) + '...'}`);
 }
@@ -149,12 +148,11 @@ const CHECKS = [
     required: [
       'ARCLAYER_BASE_URL',
       'CLIENT_API_KEY',
-      'ARCLAYER_AGENT_ID',
       'BUYER_AGENT_ID',
       'CLIENT_ADDRESS',
       'CLIENT_PRIVATE_KEY',
-      ['PROVIDER_AGENT_ID', 'WORKER_AGENT_ID'],
-      ['PROVIDER_ADDRESS', 'WORKER_ADDRESS'],
+      'PROVIDER_AGENT_ID',
+      'PROVIDER_ADDRESS',
       'EVALUATOR_AGENT_ID',
       'EVALUATOR_ADDRESS',
       'ARC_RPC_URL',
@@ -164,12 +162,10 @@ const CHECKS = [
     bot: 'provider-bot',
     required: [
       'ARCLAYER_BASE_URL',
-      'WORKER_API_KEY',
-      'ARCLAYER_AGENT_ID',
-      ['PROVIDER_AGENT_ID', 'WORKER_AGENT_ID'],
-      { key: 'WORKER_ID', optional: false },
-      ['PROVIDER_ADDRESS', 'WORKER_ADDRESS'],
-      ['PROVIDER_PRIVATE_KEY', 'WORKER_PRIVATE_KEY'],
+      'PROVIDER_API_KEY',
+      'PROVIDER_AGENT_ID',
+      'PROVIDER_ADDRESS',
+      'PROVIDER_PRIVATE_KEY',
       'ARC_RPC_URL',
     ],
   },
@@ -178,7 +174,6 @@ const CHECKS = [
     required: [
       'ARCLAYER_BASE_URL',
       'EVALUATOR_API_KEY',
-      'ARCLAYER_AGENT_ID',
       'EVALUATOR_AGENT_ID',
       'EVALUATOR_ADDRESS',
       'EVALUATOR_PRIVATE_KEY',

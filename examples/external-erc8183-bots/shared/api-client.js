@@ -19,7 +19,7 @@ function getBaseUrl() {
 function setRole(role) {
   _role = role;
   if (process.env.ARCLAYER_API_KEY) {
-    console.warn('[api-client] WARNING: ARCLAYER_API_KEY is legacy and ignored. Use role-specific key: CLIENT_API_KEY, WORKER_API_KEY, or EVALUATOR_API_KEY.');
+    console.warn('[api-client] WARNING: Deprecated API key env detected and ignored. Use PROVIDER_API_KEY for provider bots.');
   }
 }
 
@@ -29,7 +29,7 @@ function getApiKey() {
     return process.env.CLIENT_API_KEY || '';
   }
   if (_role === 'provider' || _role === 'worker') {
-    return process.env.WORKER_API_KEY || '';
+    return process.env.PROVIDER_API_KEY || '';
   }
   if (_role === 'evaluator') {
     return process.env.EVALUATOR_API_KEY || '';

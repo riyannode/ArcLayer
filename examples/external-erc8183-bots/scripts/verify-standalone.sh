@@ -97,16 +97,16 @@ for role in client provider evaluator; do
 
   case "$role" in
     client)
-      # Must NOT have WORKER_PRIVATE_KEY or EVALUATOR_PRIVATE_KEY
-      leaks=$(grep -cE "^(WORKER_PRIVATE_KEY|EVALUATOR_PRIVATE_KEY)=" "$env_file" 2>/dev/null || true)
+      # Must NOT have WORKER_* or ARCLAYER_API_KEY
+      leaks=$(grep -cE "^(WORKER_|ARCLAYER_API_KEY)" "$env_file" 2>/dev/null || true)
       ;;
     provider)
-      # Must NOT have CLIENT_PRIVATE_KEY or EVALUATOR_PRIVATE_KEY
-      leaks=$(grep -cE "^(CLIENT_PRIVATE_KEY|EVALUATOR_PRIVATE_KEY)=" "$env_file" 2>/dev/null || true)
+      # Must NOT have WORKER_* or ARCLAYER_API_KEY or deprecated WORKER_* / ARCLAYER_API_KEY
+      leaks=$(grep -cE "^(CLIENT_|EVALUATOR_|WORKER_|ARCLAYER_API_KEY)" "$env_file" 2>/dev/null || true)
       ;;
     evaluator)
-      # Must NOT have CLIENT_PRIVATE_KEY or WORKER_PRIVATE_KEY
-      leaks=$(grep -cE "^(CLIENT_PRIVATE_KEY|WORKER_PRIVATE_KEY)=" "$env_file" 2>/dev/null || true)
+      # Must NOT have WORKER_* or ARCLAYER_API_KEY
+      leaks=$(grep -cE "^(CLIENT_|PROVIDER_|WORKER_|ARCLAYER_API_KEY)" "$env_file" 2>/dev/null || true)
       ;;
   esac
 

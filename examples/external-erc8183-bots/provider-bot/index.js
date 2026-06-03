@@ -1,10 +1,10 @@
 /**
- * Provider bot — two-phase ERC-8183 job worker with capability-based strategy.
+ * Provider bot — two-phase ERC-8183 job provider with capability-based strategy.
  *
  * Phase 1: Set budget on open jobs (provider must set price on-chain)
  * Phase 2: Claim + run + submit on funded jobs
  *
- * Jobs are matched by inputPayload.requiredCapability against WORKER_CAPABILITIES.
+ * Jobs are matched by inputPayload.requiredCapability against PROVIDER_CAPABILITIES.
  * Results are structured per jobType instead of static echo.
  */
 require('dotenv').config({ path: __dirname + '/.env' });
@@ -18,22 +18,20 @@ const crypto = require('crypto');
 
 const BASE_URL = required('ARCLAYER_BASE_URL');
 
-// Provider legacy key wins for backward compatibility; WORKER_AGENT_ID is fallback.
-const PROVIDER_AGENT_ID = process.env.PROVIDER_AGENT_ID || required('WORKER_AGENT_ID');
-const WORKER_ID = process.env.WORKER_ID || PROVIDER_AGENT_ID;
+const PROVIDER_AGENT_ID = required('PROVIDER_AGENT_ID');
+// workerId derived from provider for backend API compatibility
+const workerId = PROVIDER_AGENT_ID;
 
-// Provider legacy key wins for backward compatibility; WORKER_ADDRESS is fallback.
 const PROVIDER_ADDRESS = (() => {
-  const addr = process.env.PROVIDER_ADDRESS || process.env.WORKER_ADDRESS;
-  if (!addr) throw new Error('Missing required env: PROVIDER_ADDRESS or WORKER_ADDRESS');
+  const addr = process.env.PROVIDER_ADDRESS;
+  if (!addr) throw new Error('Missing required env: PROVIDER_ADDRESS');
   if (!/^0x[a-fA-F0-9]{40}$/.test(addr)) throw new Error('PROVIDER_ADDRESS must be a valid 0x address');
   return addr;
 })();
 
-// Provider legacy key wins for backward compatibility; WORKER_PRIVATE_KEY is fallback.
 const PROVIDER_PK = (() => {
-  const pk = process.env.PROVIDER_PRIVATE_KEY || process.env.WORKER_PRIVATE_KEY;
-  if (!pk) throw new Error('Missing required env: PROVIDER_PRIVATE_KEY or WORKER_PRIVATE_KEY');
+  const pk = process.env.PROVIDER_PRIVATE_KEY;
+  if (!pk) throw new Error('Missing required env: PROVIDER_PRIVATE_KEY');
   return normalizePrivateKey(pk);
 })();
 
@@ -44,17 +42,17 @@ const CLAIM_TTL_SECONDS = parseInt(process.env.CLAIM_TTL_SECONDS || '600', 10);
 const MAX_ACTIVE_JOBS = parseInt(process.env.MAX_ACTIVE_JOBS || '3', 10);
 
 // ── Worker capabilities ──────────────────────────────────────────────────
-const WORKER_CAPABILITIES = (process.env.WORKER_CAPABILITIES || '')
+const PROVIDER_CAPABILITIES = (process.env.PROVIDER_CAPABILITIES || '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean);
 
 const signer = createSigner({ privateKey: PROVIDER_PK, rpcUrl: ARC_RPC_URL });
 console.log(`Provider signer address: ${signer.address}`);
-if (WORKER_CAPABILITIES.length > 0) {
-  console.log(`Worker capabilities: ${WORKER_CAPABILITIES.join(', ')}`);
+if (PROVIDER_CAPABILITIES.length > 0) {
+  console.log(`Provider capabilities: ${PROVIDER_CAPABILITIES.join(', ')}`);
 } else {
-  console.log(`Worker capabilities: <none> — will accept all jobs`);
+  console.log(`Provider capabilities: <none> — will accept all jobs`);
 }
 
 const processedIds = new Set();
@@ -65,7 +63,7 @@ function hasCapability(job) {
   const inputPayload = job.inputPayload || {};
   const required = inputPayload.requiredCapability;
   if (!required || required === '') return true; // no requirement = accept
-  return WORKER_CAPABILITIES.length === 0 || WORKER_CAPABILITIES.includes(required);
+  return PROVIDER_CAPABILITIES.length === 0 || PROVIDER_CAPABILITIES.includes(required);
 }
 
 // ── Worker strategy — structured output per jobType ──────────────────────
@@ -163,7 +161,7 @@ function runWorkerStrategy(job) {
   const durationMs = Date.now() - startTime;
 
   const resultPayload = {
-    workerId: WORKER_ID,
+    workerId,
     jobType,
     query,
     requiredCapability: capability,
@@ -180,7 +178,7 @@ function runWorkerStrategy(job) {
 
   const proofPayload = {
     runtime: 'pm2',
-    model: 'rules-worker',
+    model: 'rules-provider',
     capability,
     durationMs,
     provider: PROVIDER_AGENT_ID,
@@ -366,14 +364,14 @@ async function phaseClaimAndSubmit() {
     try {
       // Claim (skip if already claimed)
       if (!alreadyClaimed) {
-        const claimed = await api.claim(id, { workerId: WORKER_ID, providerAgentId: PROVIDER_AGENT_ID, claimTtlSeconds: CLAIM_TTL_SECONDS });
+        const claimed = await api.claim(id, { workerId, providerAgentId: PROVIDER_AGENT_ID, claimTtlSeconds: CLAIM_TTL_SECONDS });
         console.log(`   Claimed: status=${claimed.status}`);
       } else {
         console.log(`   Already claimed — skipping claim step`);
       }
 
       // Mark running
-      const running = await api.markRunning(id, WORKER_ID);
+      const running = await api.markRunning(id, workerId);
       console.log(`   Running: status=${running.status}`);
 
       // Run strategy based on job type
@@ -381,7 +379,7 @@ async function phaseClaimAndSubmit() {
       console.log(`   Strategy: ${jobType} (confidence: ${resultPayload.confidence})`);
 
       // Submit
-      const submitted = await api.submit(id, { workerId: WORKER_ID, resultPayload, proofPayload });
+      const submitted = await api.submit(id, { workerId, resultPayload, proofPayload });
       console.log(`   deliverableHash: ${submitted.deliverableHash}`);
 
       if (AUTONOMOUS_TX) {
@@ -406,7 +404,7 @@ async function main() {
   console.log(`URL: ${BASE_URL}`);
   console.log(`Provider: ${PROVIDER_AGENT_ID}`);
   console.log(`Address: ${PROVIDER_ADDRESS}`);
-  console.log(`Capabilities: ${WORKER_CAPABILITIES.join(', ') || '<all>'}`);
+  console.log(`Capabilities: ${PROVIDER_CAPABILITIES.join(', ') || '<all>'}`);
   console.log(`Poll interval: ${POLL_INTERVAL_MS}ms`);
 
   // Run both phases
