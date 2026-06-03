@@ -256,6 +256,45 @@ export const ERC8183_AGENTIC_COMMERCE_ABI = [
     ],
   },
   {
+    name: "reject",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "jobId", type: "uint256" },
+      { name: "reason", type: "bytes32" },
+      { name: "optParams", type: "bytes" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "claimRefund",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "jobId", type: "uint256" }],
+    outputs: [],
+  },
+  {
+    name: "jobCounter",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "jobHasBudget",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "jobId", type: "uint256" }],
+    outputs: [{ name: "hasBudget", type: "bool" }],
+  },
+  {
+    name: "paymentToken",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
     name: "JobCreated",
     type: "event",
     inputs: [
