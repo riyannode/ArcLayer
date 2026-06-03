@@ -11,3 +11,4 @@ node_modules/
 .env.*.local
 .env.vercel.local
 .env.vercel.prod.local
+# redeploy trigger Thu Jun  4 06:29:39 AM CST 2026
