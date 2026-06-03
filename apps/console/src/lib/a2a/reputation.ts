@@ -269,7 +269,7 @@ export async function writeReputationFeedback(input: ReputationFeedbackInput) {
   };
 }
 
-function extractAgentTokenId(value: string): string | null {
+export function extractAgentTokenId(value: string): string | null {
   const raw = String(value || '').trim();
 
   if (/^\d+$/.test(raw)) return raw;
