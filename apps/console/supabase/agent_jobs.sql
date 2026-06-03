@@ -22,7 +22,9 @@ CREATE TABLE IF NOT EXISTS public.agent_jobs (
     'settled',
     'failed',
     'cancelled',
-    'expired'
+    'expired',
+    'rejecting',
+    'rejected'
   )),
   input_payload        jsonb NOT NULL DEFAULT '{}'::jsonb,
   input_payload_hash   text NOT NULL,
