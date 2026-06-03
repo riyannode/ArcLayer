@@ -177,6 +177,105 @@ The bots work independently:
 - **Provider** polls every `JOB_POLL_INTERVAL_MS` (default 1 min) for matching jobs
 - **Evaluator** polls every `JOB_POLL_INTERVAL_MS` (default 1 min) for submitted jobs
 
+### Recommended: Split Runtime Per Role (Production)
+
+For production, deploy each bot from its own runtime folder so client and provider
+never share secrets, cwd, or `.env`. This also means bots keep running even if the
+repo is deleted or recloned.
+
+**Step 1 — Copy repo source to separate runtime folders:**
+
+```bash
+# Create isolated runtimes
+mkdir -p ~/arclayer-bots/erc8183-client ~/arclayer-bots/erc8183-provider
+
+# Copy shared code + client bot only
+rsync -av --exclude node_modules examples/external-erc8183-bots/{package.json,shared/,scripts/,client-bot/} \
+  ~/arclayer-bots/erc8183-client/
+
+# Copy shared code + provider bot only
+rsync -av --exclude node_modules examples/external-erc8183-bots/{package.json,shared/,scripts/,provider-bot/} \
+  ~/arclayer-bots/erc8183-provider/
+
+# Install deps in each
+cd ~/arclayer-bots/erc8183-client && npm install
+cd ~/arclayer-bots/erc8183-provider && npm install
+```
+
+**Step 2 — Create role-specific `.env` files:**
+
+```bash
+# Client runtime — only client secrets
+cat > ~/arclayer-bots/erc8183-client/.env << 'EOF'
+ARCLAYER_BASE_URL=https://arclayers.xyz
+ARC_RPC_URL=https://rpc.testnet.arc.network
+ARC_CHAIN_ID=5042002
+CLIENT_ADDRESS=0x...
+CLIENT_PRIVATE_KEY=0x...
+CLIENT_API_KEY=ak_...
+BUYER_AGENT_ID=...
+PROVIDER_AGENT_ID=...
+PROVIDER_ADDRESS=0x...
+JOB_BUDGET_ATOMIC=100000
+JOB_CREATE_INTERVAL_MS=180000
+MAX_OPEN_JOBS=5
+AUTONOMOUS_TX=true
+FUND_INITIAL_DELAY_MS=5000
+FUND_MAX_RETRIES=5
+EOF
+
+# Provider runtime — only provider secrets
+cat > ~/arclayer-bots/erc8183-provider/.env << 'EOF'
+ARCLAYER_BASE_URL=https://arclayers.xyz
+ARC_RPC_URL=https://rpc.testnet.arc.network
+ARC_CHAIN_ID=5042002
+PROVIDER_AGENT_ID=...
+WORKER_ID=...
+WORKER_ADDRESS=0x...
+WORKER_PRIVATE_KEY=0x...
+WORKER_API_KEY=ak_...
+WORKER_CAPABILITIES=market-summary,risk-check,sentiment-scan,execution-plan,data-quality-check
+JOB_POLL_INTERVAL_MS=30000
+MAX_ACTIVE_JOBS=3
+AUTONOMOUS_TX=true
+EOF
+```
+
+**Security rule:** Client `.env` must never contain `WORKER_PRIVATE_KEY`.
+Provider `.env` must never contain `CLIENT_PRIVATE_KEY`.
+
+**Step 3 — Start from isolated runtimes:**
+
+```bash
+pm2 start client-bot/index.js \
+  --name arclayer-erc8183-client \
+  --cwd ~/arclayer-bots/erc8183-client
+
+pm2 start provider-bot/index.js \
+  --name arclayer-erc8183-provider \
+  --cwd ~/arclayer-bots/erc8183-provider
+
+pm2 save
+```
+
+**Step 4 — Verify isolation:**
+
+```bash
+pm2 describe arclayer-erc8183-client | grep "exec cwd"
+# Should show: ~/arclayer-bots/erc8183-client
+
+pm2 describe arclayer-erc8183-provider | grep "exec cwd"
+# Should show: ~/arclayer-bots/erc8183-provider
+```
+
+**Why split?**
+- Client bot never sees worker private key
+- Provider bot never sees client private key
+- External users can run only the worker bot
+- Easier to rotate keys independently
+- PM2 process isolation is clearer
+- Bots survive repo deletion/reclone
+
 ## 6. Job Templates
 
 The client bot randomly picks from 5 job templates per creation cycle:
