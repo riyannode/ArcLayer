@@ -38,17 +38,23 @@ let _publicClient: ReturnType<typeof createPublicClient> | null = null;
 /** Create or return the cached Arc Testnet public client. */
 export function getArcPublicClient() {
   if (!_publicClient) {
+    // Prepend env-based RPC (e.g. Canteen private token) if set, with public fallback
+    const envRpc = process.env.ARC_RPC_URL;
+    const rpcUrls = envRpc
+      ? [envRpc, ...ARC_RPC_URLS.filter((url) => url !== envRpc)]
+      : [...ARC_RPC_URLS];
+
     _publicClient = createPublicClient({
       chain: {
         id: ARC_CHAIN_ID,
         name: 'Arc Testnet',
         nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 18 },
         rpcUrls: {
-          default: { http: [...ARC_RPC_URLS] },
-          public: { http: [...ARC_RPC_URLS] },
+          default: { http: rpcUrls },
+          public: { http: rpcUrls },
         },
       },
-      transport: fallback(ARC_RPC_URLS.map((url) => http(url))),
+      transport: fallback(rpcUrls.map((url) => http(url))),
     });
   }
   return _publicClient;
