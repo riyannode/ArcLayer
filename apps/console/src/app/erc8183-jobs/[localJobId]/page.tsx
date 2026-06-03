@@ -483,7 +483,7 @@ export default function Erc8183JobDetailPage() {
               )}
 
               {/* Chain & settlement info */}
-              <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[11px] text-[#EAE4D8]/40">
+              <div className="mt-4 flex flex-wrap gap-x-5 gap-y-1 font-mono text-[11px] text-[#EAE4D8]/50">
                 <span>Settlement: ERC-8183 Escrow</span>
                 <span>Chain: Arc Testnet</span>
                 {job.erc8183JobId && (
@@ -494,7 +494,7 @@ export default function Erc8183JobDetailPage() {
 
             {/* Rejected banner */}
             {isRejected(job) && (
-              <div className="rounded-xl border border-red-400/25 bg-red-950/15 px-6 py-5">
+              <div className="rounded-xl border border-red-400/20 bg-[#080D13]/60 px-6 py-5">
                 <div className="mb-2 flex items-center gap-2">
                   <span className="inline-flex rounded-md border border-red-400/25 bg-red-400/10 px-3 py-1 font-mono text-[11px] text-red-300">
                     Rejected
@@ -504,20 +504,20 @@ export default function Erc8183JobDetailPage() {
                   </span>
                 </div>
                 {job.rejection.rejectedAt && (
-                  <p className="text-[12px] text-[#EAE4D8]/50">
+                  <p className="text-[12px] text-[#EAE4D8]/60">
                     Rejected at: {shortDate(job.rejection.rejectedAt)}
                   </p>
                 )}
                 {job.rejection.rejectReasonText && (
                   <div className="mt-3">
-                    <div className="mb-1 font-mono text-[11px] uppercase tracking-[0.1em] text-red-300/60">
+                    <div className="mb-1 font-mono text-[11px] uppercase tracking-[0.1em] text-red-300/70">
                       Rejection Reason
                     </div>
                     <CollapsibleText text={job.rejection.rejectReasonText} />
                   </div>
                 )}
                 {job.rejection.rejectReasonHash && (
-                  <p className="mt-2 font-mono text-[11px] text-[#EAE4D8]/40">
+                  <p className="mt-2 font-mono text-[11px] text-[#EAE4D8]/50">
                     Reason Hash: {shortHash(job.rejection.rejectReasonHash)}
                   </p>
                 )}
@@ -810,10 +810,10 @@ export default function Erc8183JobDetailPage() {
                 </div>
               ) : (
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-[14px] text-[#EAE4D8]/40">
+                  <span className="font-mono text-[14px] text-[#EAE4D8]/50">
                     Pending
                   </span>
-                  <span className="text-[13px] text-[#EAE4D8]/40">
+                  <span className="text-[13px] text-[#EAE4D8]/50">
                     Reputation impact will be applied on completion or rejection
                   </span>
                 </div>
