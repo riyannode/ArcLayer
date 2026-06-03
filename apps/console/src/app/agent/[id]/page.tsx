@@ -33,6 +33,14 @@ import {
   Briefcase,
 } from 'lucide-react';
 
+// ─── Reputation overlay type ───────────────────────────────────────
+
+type ReputationOverlay = {
+  averageScore: string;
+  feedbackCount: number;
+  latestScore: string | null;
+};
+
 // ─── Types ──────────────────────────────────────────────────────────
 
 type IndexedJob = {
@@ -115,19 +123,20 @@ function buildReputationSeries(
   agent: IndexedAgent | undefined,
   jobs: IndexedJob[],
   proofs: IndexedProof[],
+  reputation: ReputationOverlay | null,
 ) {
-  const baseScore = Number(agent?.score ?? 0);
-  const reputation = Number(agent?.reputationScore ?? baseScore);
+  const baseScore = Number(reputation?.averageScore ?? agent?.score ?? 0);
+  const reputationScore = Number(reputation?.averageScore ?? agent?.reputationScore ?? baseScore);
   const completedJobs = jobs.filter(
     (job) => job.approved || job.status >= 3,
   ).length;
   const proofBoost = proofs.length * 2;
-  const seed = Math.max(0, reputation - completedJobs - proofBoost);
+  const seed = Math.max(0, reputationScore - completedJobs - proofBoost);
   return [
     seed,
     seed + Math.ceil(completedJobs / 2),
     seed + completedJobs,
-    Math.max(baseScore, reputation) + proofBoost,
+    Math.max(baseScore, reputationScore) + proofBoost,
   ];
 }
 
@@ -353,6 +362,7 @@ export default function AgentProfilePage() {
   const [showMetadataJson, setShowMetadataJson] = useState(false);
 
   const [dashboardAgent, setDashboardAgent] = useState<DashboardAgentRow | null>(null);
+  const [reputation, setReputation] = useState<ReputationOverlay | null>(null);
 
   // ─── Load agent detail + resolve metadata ──────────────────────────
   useEffect(() => {
@@ -396,10 +406,43 @@ export default function AgentProfilePage() {
           // Dashboard fetch is non-blocking fallback.
         }
 
+        // Fetch reputation from /api/a2a/reputation overlay.
+        // No-store: always fresh. Failure is non-blocking.
+        let repOverlay: ReputationOverlay | null = null;
+        try {
+          const repRes = await fetch(
+            `/api/a2a/reputation/${encodeURIComponent(agentId)}`,
+            { cache: 'no-store' },
+          );
+          if (repRes.ok) {
+            const repJson = await repRes.json();
+            // Shape A (envelope): repJson.reputation.score
+            // Shape B (raw indexer): repJson.averageScore
+            // Fallback: repJson.score
+            const resolvedScore = String(repJson?.reputation?.score ?? repJson?.averageScore ?? repJson?.score ?? '0');
+            const resolvedFeedbackCount = Number(repJson?.reputation?.stats?.callsServed ?? repJson?.feedbackCount ?? repJson?.stats?.callsServed ?? 0);
+            const resolvedLatestScore = repJson?.reputation?.feedback?.[0]?.score ?? repJson?.latestScore ?? null;
+            // Only overlay when the endpoint returned actual reputation data.
+            // The route returns HTTP 200 with score='0' and stats=null when
+            // the agent has no reputation row — don't let that clobber a
+            // nonzero score from /agents/{id}.
+            if (Number(resolvedScore) > 0 || resolvedFeedbackCount > 0) {
+              repOverlay = {
+                averageScore: resolvedScore,
+                feedbackCount: resolvedFeedbackCount,
+                latestScore: resolvedLatestScore,
+              };
+            }
+          }
+        } catch {
+          // Reputation fetch is non-blocking.
+        }
+
         if (!cancelled) {
           setProfile(data);
           setMetadata(resolvedMetadata);
           setDashboardAgent(dashboardRow);
+          setReputation(repOverlay);
           setDataSource(source);
         }
       } catch (e) {
@@ -410,6 +453,7 @@ export default function AgentProfilePage() {
           setProfile(null);
           setMetadata(null);
           setDashboardAgent(null);
+          setReputation(null);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -425,7 +469,7 @@ export default function AgentProfilePage() {
   const agent = profile?.agent;
   const jobs = profile?.jobs || [];
   const proofs = profile?.proofs || [];
-  const series = buildReputationSeries(agent, jobs, proofs);
+  const series = buildReputationSeries(agent, jobs, proofs, reputation);
 
   const capabilities = getErc8183Capabilities(metadata);
   const links = getErc8183Links(metadata);
@@ -623,7 +667,8 @@ export default function AgentProfilePage() {
                       <div className="mt-5 grid gap-3">
                         {(
                           [
-                            ['Score', agent.score || '0'],
+                            ['Score', reputation?.averageScore || agent.score || '0'],
+                            ['Feedback', String(reputation?.feedbackCount ?? 0)],
                             ['Jobs', String(jobs.length)],
                             ['Proofs', String(proofs.length)],
                           ] as const
@@ -719,8 +764,14 @@ export default function AgentProfilePage() {
                         <p>Settlement proofs: {proofs.length}</p>
                         <p>
                           Reputation score:{' '}
-                          {agent.reputationScore || agent.score || '0'}
+                          {reputation?.averageScore || agent.reputationScore || agent.score || '0'}
                         </p>
+                        {reputation?.feedbackCount != null && reputation.feedbackCount > 0 && (
+                          <p>Feedback count: {reputation.feedbackCount}</p>
+                        )}
+                        {reputation?.latestScore && (
+                          <p>Latest score: {reputation.latestScore}</p>
+                        )}
                       </div>
                     </div>
                   </div>
