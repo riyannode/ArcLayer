@@ -2,9 +2,9 @@
  * Tests for GET /api/erc8183-jobs/by-agent/[id]
  *
  * Visibility model:
- * - No session: returns ok with isOwner=false and asWorkerPublic only
- * - Unrelated session: returns ok with isOwner=false and asWorkerPublic only
- * - Owner session: returns isOwner=true and grouped asClient/asWorker/asEvaluator
+ * - No session: returns ok with isOwner=false and asProviderPublic only
+ * - Unrelated session: returns ok with isOwner=false and asProviderPublic only
+ * - Owner session: returns isOwner=true and grouped asClient/asProvider/asEvaluator
  * - Public response does not include private fields/controllers/raw payloads
  */
 
@@ -137,7 +137,7 @@ describe('GET /api/erc8183-jobs/by-agent/[id]', () => {
     mocks.getNextActionLabel.mockReturnValue('Awaiting Worker');
   });
 
-  it('returns ok with isOwner=false and asWorkerPublic only when no session', async () => {
+  it('returns ok with isOwner=false and asProviderPublic only when no session', async () => {
     mocks.resolveSessionFromCookie.mockResolvedValue(null);
     mocks.listErc8183Jobs.mockResolvedValue([MOCK_WORKER_JOB]);
 
@@ -147,9 +147,9 @@ describe('GET /api/erc8183-jobs/by-agent/[id]', () => {
     expect(res.status).toBe(200);
     expect(body.ok).toBe(true);
     expect(body.isOwner).toBe(false);
-    expect(body.asWorkerPublic).toHaveLength(1);
+    expect(body.asProviderPublic).toHaveLength(1);
     expect(body.asClient).toEqual([]);
-    expect(body.asWorker).toEqual([]);
+    expect(body.asProvider).toEqual([]);
     expect(body.asEvaluator).toEqual([]);
   });
 
@@ -159,7 +159,7 @@ describe('GET /api/erc8183-jobs/by-agent/[id]', () => {
 
     const res = await GET(makeRequest(), mockContext());
     const body = await res.json();
-    const pub = body.asWorkerPublic[0];
+    const pub = body.asProviderPublic[0];
 
     // Safe fields present
     expect(pub.localJobId).toBe('erc8183_abc123');
@@ -194,7 +194,7 @@ describe('GET /api/erc8183-jobs/by-agent/[id]', () => {
 
     expect(res.status).toBe(200);
     expect(body.isOwner).toBe(false);
-    expect(body.asWorkerPublic).toHaveLength(1);
+    expect(body.asProviderPublic).toHaveLength(1);
     expect(body.asClient).toEqual([]);
   });
 
@@ -208,10 +208,10 @@ describe('GET /api/erc8183-jobs/by-agent/[id]', () => {
     mocks.getLinkedErc8004AgentsForController.mockResolvedValue([
       { agentId: AGENT_ID, tokenId: AGENT_ID, controller: OWNER_WALLET.toLowerCase() },
     ]);
-    // Three separate calls for asClient, asWorker, asEvaluator
+    // Three separate calls for asClient, asProvider, asEvaluator
     mocks.listErc8183Jobs
       .mockResolvedValueOnce([MOCK_CLIENT_JOB])    // asClient (buyerAgentId)
-      .mockResolvedValueOnce([MOCK_WORKER_JOB])     // asWorker (providerAgentId)
+      .mockResolvedValueOnce([MOCK_WORKER_JOB])     // asProvider (providerAgentId)
       .mockResolvedValueOnce([MOCK_EVALUATOR_JOB]); // asEvaluator (evaluatorAgentId)
 
     const res = await GET(makeRequest('owner-token'), mockContext());
@@ -220,9 +220,9 @@ describe('GET /api/erc8183-jobs/by-agent/[id]', () => {
     expect(res.status).toBe(200);
     expect(body.ok).toBe(true);
     expect(body.isOwner).toBe(true);
-    expect(body.asWorkerPublic).toEqual([]);
+    expect(body.asProviderPublic).toEqual([]);
     expect(body.asClient).toHaveLength(1);
-    expect(body.asWorker).toHaveLength(1);
+    expect(body.asProvider).toHaveLength(1);
     expect(body.asEvaluator).toHaveLength(1);
 
     // Private fields present for owner
@@ -239,7 +239,7 @@ describe('GET /api/erc8183-jobs/by-agent/[id]', () => {
 
     expect(res.status).toBe(200);
     expect(body.isOwner).toBe(false);
-    expect(body.asWorkerPublic).toEqual([]);
+    expect(body.asProviderPublic).toEqual([]);
   });
 
   it('uses expiredAt not deadline', async () => {
@@ -248,7 +248,7 @@ describe('GET /api/erc8183-jobs/by-agent/[id]', () => {
 
     const res = await GET(makeRequest(), mockContext());
     const body = await res.json();
-    const pub = body.asWorkerPublic[0];
+    const pub = body.asProviderPublic[0];
 
     expect(pub.expiredAtUnix).toBeDefined();
     expect(pub.deadline).toBeUndefined();
@@ -263,7 +263,7 @@ describe('GET /api/erc8183-jobs/by-agent/[id]', () => {
 
     const res = await GET(makeRequest(), mockContext());
     const body = await res.json();
-    const pub = body.asWorkerPublic[0];
+    const pub = body.asProviderPublic[0];
 
     expect(pub.shortDescription).toHaveLength(100);
     expect(pub.shortDescription).toMatch(/\.\.\.$/);
