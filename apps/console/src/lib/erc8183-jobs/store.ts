@@ -746,3 +746,55 @@ export async function attachErc8183RejectTx(input: {
     throw new Erc8183TxHashConflictError(field, actual ?? 'unknown', input.rejectTxHash);
   }
 }
+
+/**
+ * claimErc8183Reject — atomic local claim before sending reject tx.
+ *
+ * Sets status='rejecting' only if the job is still in Submitted status
+ * and has no reject_tx_hash yet. Returns true if the claim succeeded,
+ * false if already claimed/finalized.
+ *
+ * This prevents the race where two evaluator requests both pass the
+ * Submitted check and both broadcast reject txs.
+ */
+export async function claimErc8183Reject(input: {
+  localJobId: string;
+}): Promise<boolean> {
+  const db = ensureDb();
+
+  const { data, error } = await db
+    .from('agent_jobs')
+    .update({ status: 'rejecting' })
+    .eq('job_id', input.localJobId)
+    .eq('settlement_mode', 'erc8183_escrow')
+    .eq('erc8183_status', 'Submitted')
+    .eq('status', 'submitted')
+    .is('reject_tx_hash', null)
+    .select('job_id');
+
+  if (error) throw new Error(`claimErc8183Reject failed: ${error.message}`);
+
+  return !!data && data.length > 0;
+}
+
+/**
+ * markErc8183RejectFailed — rollback status from 'rejecting' to 'submitted'.
+ *
+ * Called when the reject tx fails (writeContract error, revert, receipt timeout).
+ * Restores the job to a rejectable state so the evaluator can retry.
+ */
+export async function markErc8183RejectFailed(input: {
+  localJobId: string;
+}): Promise<void> {
+  const db = ensureDb();
+
+  const { error } = await db
+    .from('agent_jobs')
+    .update({ status: 'submitted' })
+    .eq('job_id', input.localJobId)
+    .eq('settlement_mode', 'erc8183_escrow')
+    .eq('status', 'rejecting')
+    .eq('erc8183_status', 'Submitted');
+
+  if (error) throw new Error(`markErc8183RejectFailed failed: ${error.message}`);
+}

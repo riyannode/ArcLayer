@@ -9,10 +9,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { keccak256, toBytes, createWalletClient, http, type Hex } from 'viem';
+import { keccak256, toBytes, isHex, createWalletClient, http, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { arcTestnet } from '@arclayer/sdk';
-import { getErc8183JobByLocalId, attachErc8183RejectTx } from '@/lib/erc8183-jobs/store';
+import { arcTestnet, CONTRACTS } from '@arclayer/sdk';
+import {
+  getErc8183JobByLocalId,
+  attachErc8183RejectTx,
+  claimErc8183Reject,
+  markErc8183RejectFailed,
+} from '@/lib/erc8183-jobs/store';
 import { assertErc8183Participant, isErc8183Admin } from '@/lib/erc8183-jobs/authz';
 import { readOnchainJob, getArcPublicClient } from '@/lib/erc8183-jobs/receipt';
 import { escrowRail } from '@/lib/rails/responses';
@@ -21,7 +26,8 @@ import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { writeReputationFeedback, extractAgentTokenId } from '@/lib/a2a/reputation';
 import { ERC8183_ABI } from '@/lib/contracts/erc8183';
 import { normalizePrivateKey } from '@/lib/a2a/utils';
-import { CONTRACTS } from '@arclayer/sdk';
+
+const MAX_REASON_LENGTH = 2000;
 
 /**
  * POST /api/erc8183-jobs/[localJobId]/reject
@@ -32,10 +38,10 @@ import { CONTRACTS } from '@arclayer/sdk';
  * 2. Load local ERC-8183 job
  * 3. Verify caller is evaluator for this job
  * 4. Verify job is Submitted (pending evaluation)
- * 5. Require reasonText
- * 6. Create reasonHash = keccak256(toBytes(reasonText))
- * 7. Call reject(onchainJobId, reasonHash, optParams) on proxy
- * 8. Store reject tx hash, reason, status
+ * 5. Atomic local claim (race guard)
+ * 6. Validate + hash reasonText
+ * 7. Call reject on-chain
+ * 8. Store reject result
  * 9. Fire-and-forget reputation write (-50 to provider)
  * 10. Return reject tx hash and local job status
  */
@@ -44,6 +50,8 @@ export async function POST(
   { params }: { params: Promise<{ localJobId: string }> },
 ) {
   const { localJobId } = await params;
+  let claimed = false;
+
   try {
     // Step 1: Authenticate evaluator API key
     const auth = await requireApiKey(req, API_KEY_SCOPES.ERC8183_REJECT);
@@ -87,7 +95,7 @@ export async function POST(
     }
 
     // Guard: cannot reject already rejected/completed jobs
-    if (job.status === 'rejected' || job.status === 'settled') {
+    if (job.status === 'rejected' || job.status === 'settled' || job.status === 'rejecting') {
       return NextResponse.json(
         {
           ok: false,
@@ -100,8 +108,21 @@ export async function POST(
       );
     }
 
-    // Read body
-    const body = await req.json();
+    // Read body — handle invalid JSON as 400
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        {
+          ok: false,
+          ...escrowRail(),
+          error: 'invalid_json',
+          message: 'Request body must be valid JSON.',
+        },
+        { status: 400 },
+      );
+    }
 
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return NextResponse.json(
@@ -110,8 +131,9 @@ export async function POST(
       );
     }
 
-    // Step 5: Require reasonText
-    const reasonText = body.reasonText as string | undefined;
+    // Step 5: Require reasonText + validate length
+    const bodyObj = body as Record<string, unknown>;
+    const reasonText = bodyObj.reasonText as string | undefined;
     if (!reasonText || typeof reasonText !== 'string' || reasonText.trim().length === 0) {
       return NextResponse.json(
         {
@@ -124,7 +146,32 @@ export async function POST(
       );
     }
 
-    const optParams = (body.optParams as string) || '0x';
+    const trimmedReason = reasonText.trim();
+    if (trimmedReason.length > MAX_REASON_LENGTH) {
+      return NextResponse.json(
+        {
+          ok: false,
+          ...escrowRail(),
+          error: 'reason_text_too_long',
+          message: `reasonText must be ${MAX_REASON_LENGTH} characters or less. Got ${trimmedReason.length}.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    // Validate optParams must be hex
+    const optParams = typeof bodyObj.optParams === 'string' ? bodyObj.optParams : '0x';
+    if (!isHex(optParams)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          ...escrowRail(),
+          error: 'invalid_opt_params',
+          message: 'optParams must be a 0x-prefixed hex string.',
+        },
+        { status: 400 },
+      );
+    }
 
     // Rate limit: 10 reject attempts per 5 minutes per key + job
     const rateLimit = checkMemoryRateLimit({
@@ -156,17 +203,42 @@ export async function POST(
       );
     }
 
-    // Step 6: Create reasonHash = keccak256(toBytes(reasonText))
-    const reasonHash = keccak256(toBytes(reasonText.trim()));
+    // Step 5b: Atomic local claim — prevents double-reject race
+    try {
+      claimed = await claimErc8183Reject({ localJobId });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[reject] claimErc8183Reject failed for job ${localJobId}:`, message);
+      return NextResponse.json(
+        { ok: false, ...escrowRail(), error: 'claim_failed', message },
+        { status: 500 },
+      );
+    }
 
-    // Step 7: Call reject(onchainJobId, reasonHash, optParams) on proxy
+    if (!claimed) {
+      return NextResponse.json(
+        {
+          ok: false,
+          ...escrowRail(),
+          error: 'reject_already_in_progress_or_finalized',
+          message: 'Reject is already in progress or job is no longer rejectable.',
+        },
+        { status: 409 },
+      );
+    }
+
+    // Step 6: Create reasonHash = keccak256(toBytes(trimmedReason))
+    const reasonHash = keccak256(toBytes(trimmedReason));
+
+    // Step 7: Call reject on-chain
     const evaluatorPk = normalizePrivateKey(
       process.env.ERC8183_EVALUATOR_PRIVATE_KEY ||
-      process.env.EVALUATOR_BOT_PK ||
-      process.env.REPUTATION_FEEDBACK_PRIVATE_KEY,
+      process.env.EVALUATOR_BOT_PK,
     );
 
     if (!evaluatorPk) {
+      // Rollback claim before returning
+      await markErc8183RejectFailed({ localJobId }).catch(() => {});
       return NextResponse.json(
         {
           ok: false,
@@ -188,8 +260,21 @@ export async function POST(
     const erc8183JobIdBigInt = BigInt(job.erc8183JobId);
 
     // Verify on-chain job is in Submitted status before sending reject
-    const onchainJob = await readOnchainJob(erc8183JobIdBigInt);
+    let onchainJob;
+    try {
+      onchainJob = await readOnchainJob(erc8183JobIdBigInt);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[reject] readOnchainJob failed for job ${localJobId}:`, message);
+      await markErc8183RejectFailed({ localJobId }).catch(() => {});
+      return NextResponse.json(
+        { ok: false, ...escrowRail(), error: 'onchain_read_failed', message },
+        { status: 502 },
+      );
+    }
+
     if (!onchainJob) {
+      await markErc8183RejectFailed({ localJobId }).catch(() => {});
       return NextResponse.json(
         {
           ok: false,
@@ -202,6 +287,7 @@ export async function POST(
     }
 
     if (onchainJob.erc8183Status !== 'Submitted') {
+      await markErc8183RejectFailed({ localJobId }).catch(() => {});
       return NextResponse.json(
         {
           ok: false,
@@ -226,6 +312,7 @@ export async function POST(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[reject] writeContract failed for job ${localJobId}:`, message);
+      await markErc8183RejectFailed({ localJobId }).catch(() => {});
       return NextResponse.json(
         {
           ok: false,
@@ -249,6 +336,7 @@ export async function POST(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`[reject] waitForTransactionReceipt failed for job ${localJobId}:`, message);
+      await markErc8183RejectFailed({ localJobId }).catch(() => {});
       return NextResponse.json(
         {
           ok: false,
@@ -262,6 +350,7 @@ export async function POST(
     }
 
     if (receipt.status !== 'success') {
+      await markErc8183RejectFailed({ localJobId }).catch(() => {});
       return NextResponse.json(
         {
           ok: false,
@@ -279,7 +368,7 @@ export async function POST(
       await attachErc8183RejectTx({
         localJobId,
         rejectTxHash,
-        rejectReasonText: reasonText.trim(),
+        rejectReasonText: trimmedReason,
         rejectReasonHash: reasonHash,
       });
     } catch (err) {
@@ -335,6 +424,10 @@ export async function POST(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[reject] unexpected error for job ${localJobId}:`, message);
+    // Rollback claim if we claimed but hit unexpected error
+    if (claimed) {
+      await markErc8183RejectFailed({ localJobId }).catch(() => {});
+    }
     return NextResponse.json(
       { ok: false, ...escrowRail(), error: 'reject_failed', message },
       { status: 500 },
