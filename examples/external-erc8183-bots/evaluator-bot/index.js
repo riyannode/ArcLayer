@@ -16,7 +16,7 @@ require('dotenv').config({ path: __dirname + '/.env' });
 
 const api = require('../shared/erc8183-http-client');
 const { createSigner } = require('../shared/tx-signer');
-const { required, requiredAddress, normalizePrivateKey } = require('../shared/env');
+const { required, requiredAddress, normalizePrivateKey, optional, int, bool } = require('../shared/config');
 const { sleep } = require('../shared/sleep');
 
 // ── Env ─────────────────────────────────────────────────────────────────
@@ -25,23 +25,59 @@ const EVALUATOR_AGENT_ID = required('EVALUATOR_AGENT_ID');
 const EVALUATOR_ADDRESS = requiredAddress('EVALUATOR_ADDRESS');
 const EVALUATOR_PK = normalizePrivateKey(required('EVALUATOR_PRIVATE_KEY'));
 const ARC_RPC_URL = required('ARC_RPC_URL');
-const POLL_INTERVAL_MS = parseInt(process.env.JOB_POLL_INTERVAL_MS || '60000', 10);
-const AUTONOMOUS_TX = process.env.AUTONOMOUS_TX === 'true';
-const EVALUATOR_MODE = process.env.EVALUATOR_MODE || 'rules';
-const MAX_ACTIVE_JOBS = parseInt(process.env.MAX_ACTIVE_JOBS || '3', 10);
-const MIN_EVAL_SCORE = parseInt(process.env.MIN_EVAL_SCORE || '70', 10);
+const POLL_INTERVAL_MS = int('JOB_POLL_INTERVAL_MS', 60000);
+const AUTONOMOUS_TX = bool('AUTONOMOUS_TX', true);
+const EVALUATOR_MODE = optional('EVALUATOR_MODE', 'rules');
+const MAX_ACTIVE_JOBS = int('MAX_ACTIVE_JOBS', 3);
+const MIN_EVAL_SCORE = int('MIN_EVAL_SCORE', 70);
+const IGNORE_JOBS_BEFORE = optional('IGNORE_JOBS_BEFORE', '');
+const RECOVER_OLD_JOBS = bool('RECOVER_OLD_JOBS', false);
 
 // LLM config
-const LLM_BASE_URL = process.env.LLM_BASE_URL || '';
-const LLM_MODEL = process.env.LLM_MODEL || 'xiaomi/mimo-v2-flash';
-const LLM_API_KEY = process.env.LLM_API_KEY || '';
+const LLM_BASE_URL = optional('LLM_BASE_URL', '');
+const LLM_MODEL = optional('LLM_MODEL', 'xiaomi/mimo-v2-flash');
+const LLM_API_KEY = optional('LLM_API_KEY', '');
+
+// ── Structured logger ───────────────────────────────────────────────────
+function log(phase, data = {}) {
+  const ts = new Date().toISOString();
+  const parts = Object.entries(data).map(([k, v]) => `${k}=${v}`);
+  console.log(`[${ts}] [EVALUATOR] phase=${phase} ${parts.join(' ')}`);
+}
+
+function logError(phase, data = {}) {
+  const ts = new Date().toISOString();
+  const parts = Object.entries(data).map(([k, v]) => `${k}=${v}`);
+  console.error(`[${ts}] [EVALUATOR] phase=${phase} ${parts.join(' ')}`);
+}
 
 // ── Signer ──────────────────────────────────────────────────────────────
 const signer = createSigner({ privateKey: EVALUATOR_PK, rpcUrl: ARC_RPC_URL });
-console.log(`Evaluator signer address: ${signer.address}`);
 
 // Track processed jobs
 const processedJobs = new Set();
+
+// ── Stale job filter ────────────────────────────────────────────────────
+function shouldIgnoreJob(job) {
+  if (RECOVER_OLD_JOBS) return false;
+  if (!IGNORE_JOBS_BEFORE) return false;
+
+  const jobTime = job.createdAt || job.created_at;
+  if (!jobTime) return false;
+
+  const jobTs = new Date(jobTime).getTime();
+  const cutoffTs = new Date(IGNORE_JOBS_BEFORE).getTime();
+  return jobTs < cutoffTs;
+}
+
+// ── Extract payloads (handles both flat and nested payloads structure) ──
+function extractPayloads(job) {
+  // Detail API nests under payloads{}, list API returns flat
+  const rp = job.resultPayload || job.payloads?.resultPayload || job.deliverable || {};
+  const pp = job.proofPayload || job.payloads?.proofPayload || job.proof || {};
+  const ip = job.inputPayload || job.payloads?.inputPayload || {};
+  return { resultPayload: rp, proofPayload: pp, inputPayload: ip };
+}
 
 // ── LLM evaluation ─────────────────────────────────────────────────────
 
@@ -103,8 +139,8 @@ Guidelines:
 async function evaluateByLlm(job, resultPayload, proofPayload) {
   const jobSpec = {
     description: job.description,
-    inputPayload: job.inputPayload,
-    budgetAtomic: job.budgetAtomic,
+    inputPayload: job.inputPayload || job.payloads?.inputPayload,
+    budgetAtomic: job.budgetAtomic || job.budget?.atomic,
   };
 
   const userPrompt = `JOB SPECIFICATION:
@@ -145,7 +181,7 @@ Evaluate this work. Return JSON only.`;
 // ── Rules-based evaluation (fallback) ──────────────────────────────────
 
 function evaluateByRules(job, resultPayload, proofPayload) {
-  const workerId = resultPayload?.workerId || job.workerId;
+  const workerId = resultPayload?.workerId || job.workerId || job.participants?.worker?.agentId;
   const checks = {
     hasResult: Boolean(resultPayload && Object.keys(resultPayload).length > 0),
     hasProof: Boolean(proofPayload && Object.keys(proofPayload).length > 0),
@@ -153,8 +189,8 @@ function evaluateByRules(job, resultPayload, proofPayload) {
     hasConfidence: typeof resultPayload?.confidence === 'number' && resultPayload.confidence > 0,
     hasJobType: Boolean(resultPayload?.jobType),
     hasRunId: Boolean(resultPayload?.runId),
-    hasOnChainTx: Boolean(job.submitTxHash || job.deliverableHash),
-    deliverableSubmitted: Boolean(job.deliverableHash || job.erc8183Status === 'Submitted'),
+    hasOnChainTx: Boolean(job.submitTxHash || job.deliverableHash || job.txHashes?.submitTxHash),
+    deliverableSubmitted: Boolean(job.deliverableHash || job.erc8183Status === 'Submitted' || job.lifecycleStatus === 'Submitted'),
   };
 
   const passed = Object.values(checks).filter(Boolean).length;
@@ -193,11 +229,20 @@ async function pollAndProcess() {
     if (!Array.isArray(jobs)) jobs = [];
 
     const submittedJobs = jobs.filter((job) => {
-      return (
-        job.evaluatorAgentId === EVALUATOR_AGENT_ID &&
-        job.erc8183Status === 'Submitted' &&
-        !processedJobs.has(job.localJobId || job.id)
-      );
+      const localJobId = job.localJobId || job.id;
+      const evaluatorMatch = job.evaluatorAgentId === EVALUATOR_AGENT_ID;
+      const statusMatch = job.erc8183Status === 'Submitted';
+      const notProcessed = !processedJobs.has(localJobId);
+
+      if (!evaluatorMatch || !statusMatch || !notProcessed) return false;
+
+      if (shouldIgnoreJob(job)) {
+        log('skip_stale_job', { localJobId, createdAt: job.createdAt || 'unknown' });
+        processedJobs.add(localJobId);
+        return false;
+      }
+
+      return true;
     });
 
     if (submittedJobs.length === 0) return;
@@ -205,16 +250,16 @@ async function pollAndProcess() {
     let processed = 0;
     for (const job of submittedJobs) {
       if (processed >= MAX_ACTIVE_JOBS) {
-        console.log(`   Hit MAX_ACTIVE_JOBS (${MAX_ACTIVE_JOBS}) — more jobs queued for next cycle`);
+        log('max_active_jobs_hit', { max: MAX_ACTIVE_JOBS });
         break;
       }
       const localJobId = job.localJobId || job.id;
-      console.log(`\n[${new Date().toISOString()}] Found submitted job: ${localJobId}`);
+      log('submitted_job_found', { localJobId, evaluatorId: job.evaluatorAgentId });
       await evaluateAndComplete(localJobId);
       processed++;
     }
   } catch (err) {
-    console.error(`   Poll error:`, err.message);
+    logError('poll_error', { error: err.message });
   }
 }
 
@@ -223,45 +268,51 @@ async function evaluateAndComplete(localJobId) {
     // 1. Get full job details
     const resp = await api.getJob(localJobId);
     const job = resp.job || resp;
-    const jobType = job.inputPayload?.jobType || 'unknown';
-    console.log(`   Job spec: ${job.description || 'n/a'} (type: ${jobType})`);
 
-    // 2. Extract result/proof
-    const resultPayload = job.resultPayload || job.deliverable || {};
-    const proofPayload = job.proofPayload || job.proof || {};
+    // Extract payloads (handles flat and nested structure)
+    const { resultPayload, proofPayload, inputPayload } = extractPayloads(job);
+    const jobType = inputPayload?.jobType || 'unknown';
 
-    console.log(`   Result: ${JSON.stringify(resultPayload).slice(0, 200)}`);
-    console.log(`   Proof: ${JSON.stringify(proofPayload).slice(0, 200)}`);
+    log('job_detail_loaded', {
+      localJobId,
+      jobType,
+      resultPayloadKeys: Object.keys(resultPayload).length,
+      proofPayloadKeys: Object.keys(proofPayload).length,
+    });
 
-    // 3. Run evaluation strategy
+    // 2. Run evaluation strategy
     let evaluation;
     const useLlm = EVALUATOR_MODE === 'llm' && LLM_BASE_URL && LLM_API_KEY;
 
     if (useLlm) {
-      console.log(`   Evaluating via LLM (${LLM_MODEL})...`);
+      log('evaluating_llm', { model: LLM_MODEL });
       try {
         evaluation = await evaluateByLlm(job, resultPayload, proofPayload);
       } catch (llmErr) {
-        console.warn(`   ⚠ LLM evaluation failed: ${llmErr.message} — falling back to rules`);
+        logError('llm_fallback', { error: llmErr.message });
         evaluation = evaluateByRules(job, resultPayload, proofPayload);
       }
     } else {
-      if (EVALUATOR_MODE === 'llm') {
-        console.warn(`   ⚠ EVALUATOR_MODE=llm but LLM_BASE_URL or LLM_API_KEY missing — using rules`);
-      }
       evaluation = evaluateByRules(job, resultPayload, proofPayload);
     }
 
-    console.log(`   Evaluation (${evaluation.mode}): approved=${evaluation.approved}, score=${evaluation.score}/${MIN_EVAL_SCORE}`);
-    console.log(`   Reason: ${evaluation.reason}`);
+    log('evaluation_result', {
+      mode: evaluation.mode,
+      approved: evaluation.approved,
+      score: evaluation.score,
+      minScore: MIN_EVAL_SCORE,
+      reason: evaluation.reason,
+    });
+
     if (evaluation.qualityFlags?.length > 0) {
-      console.log(`   Quality flags: ${evaluation.qualityFlags.join(', ')}`);
+      log('quality_flags', { flags: evaluation.qualityFlags.join(',') });
     }
 
-    // 4. Decision: approve or soft-reject
+    // 3. Decision: approve or soft-reject
     if (evaluation.approved && evaluation.score >= MIN_EVAL_SCORE) {
       // APPROVED — complete escrow
-      console.log(`   ✅ Approved — completing escrow...`);
+      log('complete_start', { localJobId });
+
       const completed = await api.complete(localJobId, {
         evaluatorAgentId: EVALUATOR_AGENT_ID,
         approved: true,
@@ -269,36 +320,61 @@ async function evaluateAndComplete(localJobId) {
       });
 
       if (AUTONOMOUS_TX) {
-        console.log(`   Signing complete tx...`);
+        log('complete_tx_signing', { localJobId });
         const completeResult = await signer.sendTx(completed.tx);
-        console.log(`   complete tx: ${completeResult.hash}`);
-        await sleep(2000);
+        log('complete_tx', { localJobId, tx: completeResult.hash });
+        await sleep(3000);
 
         const confirmed = await api.confirmTx(localJobId, 'complete', completeResult.hash);
-        console.log(`   Complete confirmed! status: ${confirmed.erc8183Status}`);
+        log('complete_confirmed', {
+          localJobId,
+          status: confirmed.erc8183Status || confirmed.lifecycleStatus || 'unknown',
+          completeTxHash: completeResult.hash,
+        });
+
+        // Check worker reputation after completion
+        log('reputation_check_started', { localJobId });
+        await sleep(5000);
+        try {
+          const workerId = job.participants?.worker?.agentId || job.workerId;
+          const providerId = job.participants?.provider?.agentId || job.providerAgentId;
+          const repId = workerId || providerId;
+          if (repId) {
+            const repResp = await fetch(`${BASE_URL}/api/a2a/reputation/${repId}`);
+            if (repResp.ok) {
+              const repData = await repResp.json();
+              log('reputation_updated', {
+                agentId: repId,
+                score: repData.score ?? repData.reputation?.score ?? 'unknown',
+                feedbackCount: repData.feedbackCount ?? repData.reputation?.feedbackCount ?? 'unknown',
+                callsServed: repData.callsServed ?? repData.reputation?.callsServed ?? 'unknown',
+              });
+            } else {
+              log('reputation_pending', { agentId: repId, httpStatus: repResp.status });
+            }
+          }
+        } catch (repErr) {
+          log('reputation_check_error', { error: repErr.message });
+        }
       } else {
-        console.log(`   [MANUAL TX] complete instruction:`);
-        console.log(`     ${JSON.stringify(completed.tx)}`);
+        log('complete_manual_mode', { localJobId });
       }
 
-      console.log(`   ✅ Job ${localJobId} completed`);
+      log('job_completed', { localJobId });
     } else {
       // SOFT REJECT — do NOT call complete
-      // Current ERC-8183 MVP does not support reject/slash/dispute path.
-      // Evaluator simply does not call complete. Escrow stays open.
-      console.warn(`   ❌ [evaluator] soft_reject job=${localJobId} score=${evaluation.score} reason="${evaluation.reason}"`);
-      if (evaluation.qualityFlags?.length > 0) {
-        console.warn(`   qualityFlags: [${evaluation.qualityFlags.join(', ')}]`);
-      }
-      console.warn(`   Note: Protocol-level slash/dispute not implemented in current ERC-8183 MVP.`);
-      console.warn(`   Job ${localJobId} — escrow remains open (no complete call made).`);
+      log('soft_reject', {
+        localJobId,
+        score: evaluation.score,
+        reason: evaluation.reason,
+      });
     }
 
     processedJobs.add(localJobId);
 
   } catch (err) {
-    console.error(`   ❌ Job ${localJobId} evaluation failed:`, err.message);
-    if (err.body) console.error('   body:', JSON.stringify(err.body));
+    logError('evaluation_failed', { localJobId, error: err.message });
+    if (err.body) logError('evaluation_failed_body', { body: JSON.stringify(err.body).slice(0, 200) });
     processedJobs.add(localJobId);
   }
 }
@@ -306,20 +382,23 @@ async function evaluateAndComplete(localJobId) {
 // ── Main ────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('=== ERC-8183 Evaluator Bot (autonomous job market) ===');
-  console.log(`URL: ${BASE_URL}`);
-  console.log(`Evaluator: ${EVALUATOR_AGENT_ID}`);
-  console.log(`Address: ${EVALUATOR_ADDRESS}`);
-  console.log(`Mode: ${EVALUATOR_MODE}`);
-  console.log(`Min score: ${MIN_EVAL_SCORE}`);
-  console.log(`Autonomous: ${AUTONOMOUS_TX}`);
-  console.log(`Poll interval: ${POLL_INTERVAL_MS}ms`);
+  log('startup', {
+    url: BASE_URL,
+    evaluatorId: EVALUATOR_AGENT_ID,
+    address: EVALUATOR_ADDRESS,
+    mode: EVALUATOR_MODE,
+    minScore: MIN_EVAL_SCORE,
+    autonomous: AUTONOMOUS_TX,
+    pollInterval: POLL_INTERVAL_MS,
+    ignoreBefore: IGNORE_JOBS_BEFORE || 'none',
+    recoverOld: RECOVER_OLD_JOBS,
+  });
 
   if (EVALUATOR_MODE === 'llm') {
     if (LLM_BASE_URL && LLM_API_KEY) {
-      console.log(`LLM: ${LLM_MODEL} @ ${LLM_BASE_URL}`);
+      log('llm_config', { model: LLM_MODEL, baseUrl: LLM_BASE_URL });
     } else {
-      console.warn(`⚠ EVALUATOR_MODE=llm but LLM_BASE_URL or LLM_API_KEY missing — will fallback to rules`);
+      logError('llm_missing_config', {});
     }
   }
 
@@ -328,6 +407,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('Fatal:', err.message);
+  logError('fatal', { error: err.message });
   process.exit(1);
 });

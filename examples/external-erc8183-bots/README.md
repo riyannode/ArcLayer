@@ -187,7 +187,7 @@ repo is deleted or recloned.
 
 ```bash
 # Create isolated runtimes
-mkdir -p ~/arclayer-bots/erc8183-client ~/arclayer-bots/erc8183-provider
+mkdir -p ~/arclayer-bots/erc8183-client ~/arclayer-bots/erc8183-provider ~/arclayer-bots/erc8183-evaluator
 
 # Copy shared code + client bot only
 rsync -av --exclude node_modules examples/external-erc8183-bots/{package.json,shared/,scripts/,client-bot/} \
@@ -197,9 +197,14 @@ rsync -av --exclude node_modules examples/external-erc8183-bots/{package.json,sh
 rsync -av --exclude node_modules examples/external-erc8183-bots/{package.json,shared/,scripts/,provider-bot/} \
   ~/arclayer-bots/erc8183-provider/
 
+# Copy shared code + evaluator bot only
+rsync -av --exclude node_modules examples/external-erc8183-bots/{package.json,shared/,scripts/,evaluator-bot/} \
+  ~/arclayer-bots/erc8183-evaluator/
+
 # Install deps in each
 cd ~/arclayer-bots/erc8183-client && npm install
 cd ~/arclayer-bots/erc8183-provider && npm install
+cd ~/arclayer-bots/erc8183-evaluator && npm install
 ```
 
 **Step 2 — Create role-specific `.env` files:**
@@ -239,9 +244,25 @@ JOB_POLL_INTERVAL_MS=30000
 MAX_ACTIVE_JOBS=3
 AUTONOMOUS_TX=true
 EOF
+
+# Evaluator runtime — only evaluator secrets
+cat > ~/arclayer-bots/erc8183-evaluator/evaluator-bot/.env << 'EOF'
+ARCLAYER_BASE_URL=https://arclayers.xyz
+ARC_RPC_URL=https://rpc.testnet.arc.network
+ARC_CHAIN_ID=5042002
+EVALUATOR_AGENT_ID=...
+EVALUATOR_ADDRESS=0x...
+EVALUATOR_PRIVATE_KEY=0x...
+ARCLAYER_API_KEY=ak_...
+EVALUATOR_MODE=rules
+MIN_EVAL_SCORE=70
+JOB_POLL_INTERVAL_MS=60000
+MAX_ACTIVE_JOBS=3
+AUTONOMOUS_TX=true
+EOF
 ```
 
-**Security rule:** Client `.env` must never contain `WORKER_PRIVATE_KEY`.
+**Security rule:** Each runtime `.env` must contain only its role's secrets.
 Provider `.env` must never contain `CLIENT_PRIVATE_KEY`.
 
 **Step 3 — Start from isolated runtimes:**
@@ -255,6 +276,10 @@ pm2 start provider-bot/index.js \
   --name arclayer-erc8183-provider \
   --cwd ~/arclayer-bots/erc8183-provider
 
+pm2 start evaluator-bot/index.js \
+  --name arclayer-erc8183-evaluator \
+  --cwd ~/arclayer-bots/erc8183-evaluator
+
 pm2 save
 ```
 
@@ -266,12 +291,16 @@ pm2 describe arclayer-erc8183-client | grep "exec cwd"
 
 pm2 describe arclayer-erc8183-provider | grep "exec cwd"
 # Should show: ~/arclayer-bots/erc8183-provider
+
+pm2 describe arclayer-erc8183-evaluator | grep "exec cwd"
+# Should show: ~/arclayer-bots/erc8183-evaluator
 ```
 
 **Why split?**
-- Client bot never sees worker private key
-- Provider bot never sees client private key
-- External users can run only the worker bot
+- Client bot never sees worker or evaluator private keys
+- Provider bot never sees client or evaluator private keys
+- Evaluator bot never sees client or worker private keys
+- External users can run only the worker bot (provider runtime)
 - Easier to rotate keys independently
 - PM2 process isolation is clearer
 - Bots survive repo deletion/reclone
