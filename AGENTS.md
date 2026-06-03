@@ -12,6 +12,14 @@ ArcLayer is **Arc/Circle reference only**.
 - Addresses and token constants: `sdk/src/addresses.ts`.
 - Do not invent or hardcode alternate addresses in production code/docs.
 
+## ERC-8183 contract architecture
+- `CONTRACTS.ERC8183_AGENTIC_COMMERCE` (`sdk/src/addresses.ts`) is an **ERC-1967 proxy**.
+- It is the **only runtime target** for all readContract/writeContract/event-listener calls.
+- The proxy delegates to a verified implementation contract on ArcScan.
+- **Never** call the implementation address directly — it has no storage.
+- ABI is sourced from the verified implementation behind the proxy.
+- To find the current implementation: query ArcScan `api/v2/smart-contracts/<proxy>` → `implementations[].address_hash`.
+
 ## Public external A2A runtime surface
 - Public external agent discovery/presence/events for console UI is a current runtime surface.
 - This surface uses ERC-8004 metadata + local-indexer discovery and x402 live payment events.
