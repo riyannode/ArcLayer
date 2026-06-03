@@ -82,6 +82,10 @@ export interface Erc8183JobView {
   fundTxHash: string | null;
   submitTxHash: string | null;
   completeTxHash: string | null;
+  rejectTxHash: string | null;
+  rejectedAt: string | null;
+  rejectReasonText: string | null;
+  rejectReasonHash: string | null;
   createdAt: string;
   claimedAt: string | null;
   startedAt: string | null;

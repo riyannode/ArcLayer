@@ -159,7 +159,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
 
     expect(mocks.createApiKey).toHaveBeenCalledWith(
       expect.objectContaining({
-        scopes: ['erc8183:complete', 'erc8183:tx'],
+        scopes: ['erc8183:complete', 'erc8183:reject', 'erc8183:tx'],
       }),
     );
   });

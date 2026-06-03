@@ -22,7 +22,9 @@ CREATE TABLE IF NOT EXISTS public.agent_jobs (
     'settled',
     'failed',
     'cancelled',
-    'expired'
+    'expired',
+    'rejecting',
+    'rejected'
   )),
   input_payload        jsonb NOT NULL DEFAULT '{}'::jsonb,
   input_payload_hash   text NOT NULL,
@@ -171,7 +173,11 @@ ADD COLUMN IF NOT EXISTS set_budget_tx_hash text,
 ADD COLUMN IF NOT EXISTS approve_tx_hash text,
 ADD COLUMN IF NOT EXISTS fund_tx_hash text,
 ADD COLUMN IF NOT EXISTS submit_tx_hash text,
-ADD COLUMN IF NOT EXISTS complete_tx_hash text;
+ADD COLUMN IF NOT EXISTS complete_tx_hash text,
+ADD COLUMN IF NOT EXISTS reject_tx_hash text,
+ADD COLUMN IF NOT EXISTS rejected_at timestamptz,
+ADD COLUMN IF NOT EXISTS reject_reason_text text,
+ADD COLUMN IF NOT EXISTS reject_reason_hash text;
 
 -- Indexes for ERC-8183 queries
 CREATE INDEX IF NOT EXISTS idx_agent_jobs_settlement_mode
@@ -183,3 +189,7 @@ CREATE INDEX IF NOT EXISTS idx_agent_jobs_erc8183_job_id
 CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_jobs_erc8183_job_id_not_null
   ON public.agent_jobs (erc8183_job_id)
   WHERE erc8183_job_id IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_agent_jobs_reject_tx_hash
+  ON public.agent_jobs (reject_tx_hash)
+  WHERE reject_tx_hash IS NOT NULL;
