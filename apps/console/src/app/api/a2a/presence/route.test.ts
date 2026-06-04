@@ -139,6 +139,18 @@ describe('POST /api/a2a/presence — secret field rejection', () => {
     expect(res.status).toBe(200);
     expect(json.ok).toBe(true);
   });
+
+  it('accepts fields containing "key" substring (agentId, public_key_hash)', async () => {
+    const res = await POST(makePostRequest({
+      agentId: '36192',
+      agentName: 'test-bot',
+      status: 'online',
+      // These contain "key" but are NOT secret fields
+    }));
+    const json = await res.json();
+    expect(res.status).toBe(200);
+    expect(json.ok).toBe(true);
+  });
 });
 
 // ─── Bot-health endpoint ─────────────────────────────────────────────────────

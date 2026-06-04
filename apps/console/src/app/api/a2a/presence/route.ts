@@ -20,10 +20,10 @@ function checkGlobalToken(request: Request): boolean {
 /**
  * Recursive secret-field rejection.
  * Scans all keys in plain objects and arrays.
- * Matches case-insensitive against a blocklist of secret-related key names.
+ * Matches case-insensitive after normalizing separators (underscores, hyphens, spaces removed).
+ * Exact blocklist — no broad substring like "key" or "private".
  */
 const SECRET_KEY_PATTERNS = [
-  'private',
   'privatekey',
   'apikey',
   'secret',
