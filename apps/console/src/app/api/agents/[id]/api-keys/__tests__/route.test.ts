@@ -34,7 +34,9 @@ vi.mock('@/lib/a2a/auth', () => ({
     ERC8183_RUNNING: 'erc8183:running',
     ERC8183_SUBMIT: 'erc8183:submit',
     ERC8183_COMPLETE: 'erc8183:complete',
+    ERC8183_REJECT: 'erc8183:reject',
     ERC8183_TX: 'erc8183:tx',
+    ERC8183_PRESENCE: 'erc8183:presence',
   },
 }));
 
@@ -133,7 +135,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
     expect(mocks.createApiKey).toHaveBeenCalledWith({
       agentId: AGENT_ID,
       label: 'My Bot',
-      scopes: ['erc8183:claim', 'erc8183:running', 'erc8183:submit', 'erc8183:tx'],
+      scopes: ['erc8183:claim', 'erc8183:running', 'erc8183:submit', 'erc8183:tx', 'erc8183:presence'],
       createdBy: WALLET.toLowerCase(),
     });
   });
@@ -146,7 +148,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
 
     expect(mocks.createApiKey).toHaveBeenCalledWith(
       expect.objectContaining({
-        scopes: ['erc8183:create', 'erc8183:confirm', 'erc8183:tx'],
+        scopes: ['erc8183:create', 'erc8183:confirm', 'erc8183:tx', 'erc8183:presence'],
       }),
     );
   });
@@ -159,7 +161,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
 
     expect(mocks.createApiKey).toHaveBeenCalledWith(
       expect.objectContaining({
-        scopes: ['erc8183:complete', 'erc8183:reject', 'erc8183:tx'],
+        scopes: ['erc8183:complete', 'erc8183:reject', 'erc8183:tx', 'erc8183:presence'],
       }),
     );
   });

@@ -129,8 +129,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  // Try per-agent API key auth with presence:write scope
-  const auth = await requireApiKey(request, ['presence:write']);
+  // Determine required scope based on runtimeType
+  const runtimeType = body.runtimeType as string | undefined;
+  let requiredScopes: string[];
+
+  if (runtimeType === 'erc8183-bot') {
+    requiredScopes = ['erc8183:presence'];
+  } else if (runtimeType === 'x402-agent') {
+    // Reserved for future x402 agent heartbeat — not yet implemented
+    return NextResponse.json(
+      { ok: false, error: 'unsupported_runtime_type', hint: 'x402:presence not yet implemented' },
+      { status: 501 },
+    );
+  } else {
+    // Legacy A2A bots: preserve existing presence:write behavior
+    requiredScopes = ['presence:write'];
+  }
+
+  const auth = await requireApiKey(request, requiredScopes);
   if (auth.error) return auth.error;
 
   // Enforce key.agentId === body.agentId

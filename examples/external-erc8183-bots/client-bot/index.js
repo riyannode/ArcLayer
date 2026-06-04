@@ -24,6 +24,7 @@ api.setRole('client');
 const { createSigner } = require('../shared/tx-signer');
 const { required, requiredAddress, normalizePrivateKey } = require('../shared/env');
 const { sleep } = require('../shared/sleep');
+const { startHeartbeat } = require('../shared/heartbeat');
 const crypto = require('crypto');
 
 // ── Env ─────────────────────────────────────────────────────────────────
@@ -45,6 +46,17 @@ const AUTONOMOUS_TX = process.env.AUTONOMOUS_TX === 'true';
 const IGNORE_JOBS_BEFORE = process.env.IGNORE_JOBS_BEFORE || '';
 
 const signer = createSigner({ privateKey: CLIENT_PK, rpcUrl: ARC_RPC_URL });
+
+// ── Heartbeat ───────────────────────────────────────────────────────────
+const CLIENT_AGENT_ID = required('CLIENT_AGENT_ID');
+const stopHeartbeat = startHeartbeat({
+  agentId: CLIENT_AGENT_ID,
+  role: 'client',
+  apiKey: required('CLIENT_API_KEY'),
+  baseUrl: BASE_URL,
+  processName: 'arclayer-erc8183-client',
+  chainId: parseInt(process.env.ARC_CHAIN_ID || '5042002', 10),
+});
 
 let jobCounter = 0;
 let jobsCreatedThisRun = 0;

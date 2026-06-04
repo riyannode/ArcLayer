@@ -14,6 +14,7 @@ api.setRole('provider');
 const { createSigner } = require('../shared/tx-signer');
 const { required, requiredAddress, normalizePrivateKey } = require('../shared/env');
 const { sleep } = require('../shared/sleep');
+const { startHeartbeat } = require('../shared/heartbeat');
 const crypto = require('crypto');
 
 const BASE_URL = required('ARCLAYER_BASE_URL');
@@ -47,6 +48,17 @@ const PROVIDER_CAPABILITIES = (process.env.PROVIDER_CAPABILITIES || '')
 
 const signer = createSigner({ privateKey: PROVIDER_PK, rpcUrl: ARC_RPC_URL });
 console.log(`Provider signer address: ${signer.address}`);
+
+// ── Heartbeat ───────────────────────────────────────────────────────────
+const stopHeartbeat = startHeartbeat({
+  agentId: PROVIDER_AGENT_ID,
+  role: 'provider',
+  apiKey: required('PROVIDER_API_KEY'),
+  baseUrl: BASE_URL,
+  processName: 'arclayer-erc8183-provider',
+  chainId: parseInt(process.env.ARC_CHAIN_ID || '5042002', 10),
+});
+
 if (PROVIDER_CAPABILITIES.length > 0) {
   console.log(`Provider capabilities: ${PROVIDER_CAPABILITIES.join(', ')}`);
 } else {

@@ -5,9 +5,9 @@
  * Routes return tx instructions (address, functionName, args).
  *
  * Role-aware API key resolution:
- *   client    → CLIENT_API_KEY || ARCLAYER_API_KEY
+ *   client    → CLIENT_API_KEY
  *   provider  → PROVIDER_API_KEY
- *   evaluator → EVALUATOR_API_KEY || ARCLAYER_API_KEY
+ *   evaluator → EVALUATOR_API_KEY
  */
 
 let _role = '';
@@ -21,10 +21,10 @@ function setRole(role) {
   _role = role;
 }
 
-/** Resolve API key: role-specific env first, ARCLAYER_API_KEY fallback. */
+/** Resolve API key: role-specific env only. No ARCLAYER_API_KEY fallback. */
 function getApiKey() {
   if (_role === 'client') {
-    return process.env.CLIENT_API_KEY || process.env.ARCLAYER_API_KEY || '';
+    return process.env.CLIENT_API_KEY || '';
   }
   if (_role === 'provider') {
     return process.env.PROVIDER_API_KEY || '';
@@ -37,7 +37,7 @@ function getApiKey() {
 
 /** Get the expected env var name for the current role (for error messages). */
 function getExpectedKeyEnv() {
-  if (_role === 'client') return 'CLIENT_API_KEY or ARCLAYER_API_KEY';
+  if (_role === 'client') return 'CLIENT_API_KEY';
   if (_role === 'provider') return 'PROVIDER_API_KEY';
   if (_role === 'evaluator') return 'EVALUATOR_API_KEY';
   return 'CLIENT_API_KEY';
