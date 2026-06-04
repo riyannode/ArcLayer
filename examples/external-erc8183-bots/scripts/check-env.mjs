@@ -17,7 +17,7 @@
  *   3 — rejected env vars found
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, statSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -261,10 +261,13 @@ if (!ONLY_ROLE || ONLY_ROLE === 'provider') {
     'LLM_MAX_TOKENS',
     'LLM_TEMPERATURE',
     'LLM_TIMEOUT_MS',
+    'PROVIDER_SKILL',
+    'PROVIDER_CUSTOM_SKILL_PATH',
   ], true);
 
   // Conditional: LLM env validation when PROVIDER_MODE=llm
-  const providerEnvPath = resolve(BOTS_DIR, 'provider-bot', '.env');
+  const providerBotDir = resolve(BOTS_DIR, 'provider-bot');
+  const providerEnvPath = resolve(providerBotDir, '.env');
   if (existsSync(providerEnvPath)) {
     const raw = readFileSync(providerEnvPath, 'utf8');
     const env = parseDotEnv(raw);
@@ -290,6 +293,52 @@ if (!ONLY_ROLE || ONLY_ROLE === 'provider') {
       checkOptional(env, 'LLM_TEMPERATURE', 'LLM_TEMPERATURE');
       checkOptional(env, 'LLM_TIMEOUT_MS', 'LLM_TIMEOUT_MS');
       checkOptional(env, 'MIN_JOB_BUDGET_ATOMIC', 'MIN_JOB_BUDGET_ATOMIC');
+    }
+
+    // Skill validation
+    const VALID_SKILL_KEYS = ['auto', 'smart-contract', 'frontend', 'backend', 'devops', 'data-analysis', 'general', 'other'];
+    const providerSkill = env.PROVIDER_SKILL || 'auto';
+    if (providerSkill !== 'auto' && !VALID_SKILL_KEYS.includes(providerSkill)) {
+      console.log(`  ✗ INVALID: PROVIDER_SKILL="${providerSkill}" (must be one of: ${VALID_SKILL_KEYS.join(', ')})`);
+      allPass = false;
+      exitCode = 1;
+    } else if (providerSkill !== 'auto') {
+      console.log(`  ✓ PROVIDER_SKILL: ${providerSkill}`);
+    } else {
+      console.log(`  - PROVIDER_SKILL: auto (default)`);
+    }
+
+    const customSkillPath = env.PROVIDER_CUSTOM_SKILL_PATH || '';
+    if (customSkillPath) {
+      const resolvedPath = resolve(providerBotDir, customSkillPath);
+      if (!existsSync(resolvedPath)) {
+        console.log(`  ✗ MISSING: PROVIDER_CUSTOM_SKILL_PATH file not found: ${resolvedPath}`);
+        allPass = false;
+        exitCode = 1;
+      } else {
+        try {
+          const stat = statSync(resolvedPath);
+          if (!stat.isFile()) {
+            console.log(`  ✗ INVALID: PROVIDER_CUSTOM_SKILL_PATH is not a file: ${resolvedPath}`);
+            allPass = false;
+            exitCode = 1;
+          } else if (stat.size > 50_000) {
+            console.log(`  ✗ TOO LARGE: PROVIDER_CUSTOM_SKILL_PATH is ${stat.size} bytes (max 50KB)`);
+            allPass = false;
+            exitCode = 1;
+          } else {
+            // Verify readable
+            readFileSync(resolvedPath, 'utf8');
+            console.log(`  ✓ PROVIDER_CUSTOM_SKILL_PATH: ${resolvedPath} (${stat.size} bytes)`);
+          }
+        } catch (err) {
+          console.log(`  ✗ UNREADABLE: PROVIDER_CUSTOM_SKILL_PATH: ${err.message}`);
+          allPass = false;
+          exitCode = 1;
+        }
+      }
+    } else {
+      console.log(`  - PROVIDER_CUSTOM_SKILL_PATH: (not set — optional)`);
     }
   }
 }

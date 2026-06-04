@@ -77,6 +77,50 @@ pm2 logs arclayer-erc8183-provider --lines 20
 - `LLM timeout after 60000ms` — increase `LLM_TIMEOUT_MS` or check LLM endpoint
 - `LLM_API_KEY is required` — set key, or use `LLM_PROVIDER=local` for no-auth
 
+### Provider Skill System
+
+Provider bots use layered skill.md files to specialize LLM behavior per domain.
+
+**Loading order:**
+1. **Base skill** (`skills/erc8183-provider.md`) — safety/protocol rules, always loaded
+2. **Type skill** — auto-selected from `PROVIDER_AGENT_TYPE`
+3. **Custom skill** — optional, loaded from `PROVIDER_CUSTOM_SKILL_PATH`
+
+**Environment variables:**
+- `PROVIDER_SKILL=auto` (default) — auto-detect type skill from `PROVIDER_AGENT_TYPE`
+- `PROVIDER_CUSTOM_SKILL_PATH=` — absolute path to custom .md file (optional)
+
+**Valid `PROVIDER_SKILL` values:**
+`auto`, `smart-contract`, `frontend`, `backend`, `devops`, `data-analysis`, `general`, `other`
+
+**Skill file mapping:**
+
+| Category | Skill file |
+|----------|-----------|
+| smart-contract | `skills/smart-contract-provider.md` |
+| frontend | `skills/frontend-provider.md` |
+| backend | `skills/backend-provider.md` |
+| devops | `skills/devops-provider.md` |
+| data-analysis | `skills/data-analysis-provider.md` |
+| design | `skills/general-provider.md` (no dedicated skill) |
+| documentation | `skills/general-provider.md` (no dedicated skill) |
+| analysis | `skills/general-provider.md` (no dedicated skill) |
+| general / other | `skills/general-provider.md` |
+
+**Custom skill example:**
+```bash
+cp skills/custom-provider.example.md /path/to/my-custom-skill.md
+# Edit my-custom-skill.md with your instructions
+# Set in .env:
+# PROVIDER_CUSTOM_SKILL_PATH=/path/to/my-custom-skill.md
+```
+
+**How it works:**
+- Skill content is prepended to the LLM system prompt
+- Base safety rules always take precedence — custom skills cannot override them
+- Strict JSON validation is the final authority — skill is prompt-only
+- Skill content is cached in memory after first load (no disk I/O per job)
+
 > **Standalone example.** This directory is NOT part of the root `pnpm-workspace.yaml`.
 > Install and run from this folder independently.
 
@@ -445,6 +489,9 @@ The evaluator bot uses LLM (when configured) to judge result quality.
 | `WrongStatus (0x8e78f0cb)` | Client funded before provider setBudget | Both bots now guard against this — see "setBudget → Fund Ordering" above |
 | `tx_hash_conflict` | Duplicate tx confirmation attempt | Safe to ignore — bot skips already-confirmed txs |
 | LLM evaluation failed | LLM_BASE_URL or LLM_API_KEY missing/wrong | Check LLM config; evaluator falls back to rules automatically |
+| `PROVIDER_SKILL invalid` | Unknown PROVIDER_SKILL value | Use one of: auto, smart-contract, frontend, backend, devops, data-analysis, general, other |
+| `Custom skill file not found` | PROVIDER_CUSTOM_SKILL_PATH points to missing file | Create the file or clear the env var |
+| `Custom skill file too large` | Custom skill exceeds 50KB limit | Reduce file size — skill is prompt context, keep focused |
 
 ## 8. Safety Guards
 
@@ -459,6 +506,25 @@ The evaluator bot uses LLM (when configured) to judge result quality.
 | `SETBUDGET_POLL_MAX` | 120 | Client — max polls waiting for setBudgetTxHash |
 | `FUND_POLL_INTERVAL_MS` | 5000 | Client — ms between setBudget polls |
 | `CLAIM_TTL_SECONDS` | 600 | Provider — how long a claim is held before expiry |
+
+### Skill Troubleshooting
+
+**Provider not loading custom skill:**
+- Check `PROVIDER_CUSTOM_SKILL_PATH` is an absolute path
+- Run: `node scripts/check-env.mjs --role=provider`
+- Check PM2 logs: `pm2 logs arclayer-erc8183-provider --lines 20`
+- Look for `[skills]` log lines — they show which files loaded and line counts
+
+**Skill not affecting LLM output:**
+- Skill is prompt-only — the LLM may not follow all instructions
+- Strict JSON validator is the final authority — invalid output = no submit
+- Check that `PROVIDER_AGENT_TYPE` matches your category (skill is auto-selected from it)
+- Check PM2 logs for `[skills] Loaded: base=...L, type=...(...L)` — confirms skill loaded
+
+**check-env fails with custom skill path:**
+- `MISSING`: file doesn't exist — create it or clear `PROVIDER_CUSTOM_SKILL_PATH`
+- `UNREADABLE`: file exists but can't be read — check permissions (`chmod 600`)
+- `TOO LARGE`: file exceeds 50KB — reduce size (skill is LLM prompt context)
 
 ## 9. Smart Contract Provider (LLM Mode)
 
