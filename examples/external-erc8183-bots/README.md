@@ -1,5 +1,33 @@
 # Autonomous ERC-8183 Job-Market Demo
 
+## Quick Install (One-Click)
+
+Install a standalone ERC-8183 bot on your VPS with one command:
+
+```bash
+curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash
+```
+
+The installer will:
+1. Ask you to choose a role (client / provider / evaluator)
+2. Prompt for Agent ID, wallet address, and API key
+3. Read your private key securely (hidden input — never echoed)
+4. Install the bot runtime under `~/arclayer-bots/erc8183-<role>/`
+5. Start the bot with PM2
+
+**Security:**
+- Private key is entered only in the VPS terminal, never in the browser
+- No secrets are embedded in the install command URL
+- Each role uses its own API key (`CLIENT_API_KEY`, `PROVIDER_API_KEY`, or `EVALUATOR_API_KEY`)
+- API keys must include the `erc8183:presence` scope for bot status heartbeat
+- Bot status appears as online/offline in your Agent Profile page through heartbeat
+
+**After install:**
+```bash
+pm2 status
+pm2 logs arclayer-erc8183-provider --lines 20
+```
+
 > **Standalone example.** This directory is NOT part of the root `pnpm-workspace.yaml`.
 > Install and run from this folder independently.
 
@@ -113,17 +141,17 @@ cp evaluator-bot/.env.example evaluator-bot/.env
 ```
 
 Fill in:
-- `CLIENT_API_KEY` / `PROVIDER_API_KEY` / `EVALUATOR_API_KEY` — role-specific API keys
-- `ARCLAYER_API_KEY` — backward-compatible fallback (optional if role-specific key is set)
+- `CLIENT_API_KEY` / `PROVIDER_API_KEY` / `EVALUATOR_API_KEY` — role-specific API keys only
 - `*_PRIVATE_KEY` — wallet private key with USDC + gas
 - `*_ADDRESS` — corresponding wallet address
-- `PROVIDER_AGENT_ID` — the provider agent ID (the API key's agentId)
+- `*_AGENT_ID` — the agent ID for that role
 
-**API key resolution per role:**
-- Client bot uses `CLIENT_API_KEY` first, falls back to `ARCLAYER_API_KEY`
+**API key rules:**
+- Client bot uses `CLIENT_API_KEY` only. No `ARCLAYER_API_KEY` fallback.
 - Provider bot uses `PROVIDER_API_KEY` only. No `ARCLAYER_API_KEY` fallback.
-- Evaluator bot uses `EVALUATOR_API_KEY` first, falls back to `ARCLAYER_API_KEY`
-- If no key is found, the bot fails fast with a clear error
+- Evaluator bot uses `EVALUATOR_API_KEY` only. No `ARCLAYER_API_KEY` fallback.
+- Each API key must include the `erc8183:presence` scope for bot status heartbeat.
+- If no key is found, the bot fails fast with a clear error.
 
 For LLM evaluation, also fill in:
 - `LLM_BASE_URL` — OpenAI-compatible API endpoint
@@ -144,13 +172,9 @@ npm run check:env
 
 The **`PROVIDER_AGENT_ID` in provider bot `.env` must match the API key's agentId**. The backend's participant guard checks the API key's `agentId` against the job's provider on the `/running` route. If they don't match, you get `participant_mismatch`.
 
-### Worker/Provider Naming
+### Role Naming
 
-The runtime accepts both naming conventions for backward compatibility:
-
-| Worker (user-facing) | Provider (legacy compat) | Purpose |
-|---|---|---|
-Use `PROVIDER_*` only:
+Use `PROVIDER_*` env vars only. The ERC-8183 contract uses `provider` as the official role.
 
 | Variable | Description |
 |----------|-------------|

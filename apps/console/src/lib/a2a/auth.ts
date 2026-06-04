@@ -21,6 +21,10 @@ export const API_KEY_SCOPES = {
   ERC8183_COMPLETE: 'erc8183:complete',
   ERC8183_TX: 'erc8183:tx',
   ERC8183_REJECT: 'erc8183:reject',
+  // ERC-8183 bot heartbeat/presence
+  ERC8183_PRESENCE: 'erc8183:presence',
+  // Reserved for future x402 agent heartbeat
+  X402_PRESENCE: 'x402:presence',
 } as const;
 
 // ─── Key generation ───────────────────────────────────────────────────────────

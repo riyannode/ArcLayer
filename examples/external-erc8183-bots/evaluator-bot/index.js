@@ -19,6 +19,7 @@ api.setRole('evaluator');
 const { createSigner } = require('../shared/tx-signer');
 const { required, requiredAddress, normalizePrivateKey, optional, int, bool } = require('../shared/config');
 const { sleep } = require('../shared/sleep');
+const { startHeartbeat } = require('../shared/heartbeat');
 
 // ── Env ─────────────────────────────────────────────────────────────────
 const BASE_URL = required('ARCLAYER_BASE_URL');
@@ -54,6 +55,16 @@ function logError(phase, data = {}) {
 
 // ── Signer ──────────────────────────────────────────────────────────────
 const signer = createSigner({ privateKey: EVALUATOR_PK, rpcUrl: ARC_RPC_URL });
+
+// ── Heartbeat ───────────────────────────────────────────────────────────
+const stopHeartbeat = startHeartbeat({
+  agentId: EVALUATOR_AGENT_ID,
+  role: 'evaluator',
+  apiKey: required('EVALUATOR_API_KEY'),
+  baseUrl: BASE_URL,
+  processName: 'arclayer-erc8183-evaluator',
+  chainId: parseInt(process.env.ARC_CHAIN_ID || '5042002', 10),
+});
 
 // Track processed jobs
 const processedJobs = new Set();
