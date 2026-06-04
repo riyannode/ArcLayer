@@ -16,6 +16,7 @@ const { required, requiredAddress, normalizePrivateKey } = require('../shared/en
 const { sleep } = require('../shared/sleep');
 const { startHeartbeat } = require('../shared/heartbeat');
 const crypto = require('crypto');
+const { runLlmTask } = require('./task-runner');
 
 const BASE_URL = required('ARCLAYER_BASE_URL');
 
@@ -39,6 +40,42 @@ const POLL_INTERVAL_MS = parseInt(process.env.JOB_POLL_INTERVAL_MS || '60000', 1
 const AUTONOMOUS_TX = process.env.AUTONOMOUS_TX === 'true';
 const CLAIM_TTL_SECONDS = parseInt(process.env.CLAIM_TTL_SECONDS || '600', 10);
 const MAX_ACTIVE_JOBS = parseInt(process.env.MAX_ACTIVE_JOBS || '3', 10);
+const MIN_JOB_BUDGET_ATOMIC = parseInt(process.env.MIN_JOB_BUDGET_ATOMIC || '0', 10);
+
+// ── Provider mode ────────────────────────────────────────────────────────
+const PROVIDER_MODE = (process.env.PROVIDER_MODE || 'template').toLowerCase();
+const PROVIDER_AGENT_TYPE = process.env.PROVIDER_AGENT_TYPE || '';
+
+// ── LLM config (validated at startup if PROVIDER_MODE=llm) ──────────────
+const LLM_CONFIG = (() => {
+  if (PROVIDER_MODE !== 'llm') return null;
+
+  const provider = process.env.LLM_PROVIDER || '';
+  const baseUrl = process.env.LLM_BASE_URL || '';
+  const apiKey = process.env.LLM_API_KEY || '';
+  const model = process.env.LLM_MODEL || '';
+  const maxTokens = parseInt(process.env.LLM_MAX_TOKENS || '2500', 10);
+  const temperature = parseFloat(process.env.LLM_TEMPERATURE || '0.2');
+  const timeoutMs = parseInt(process.env.LLM_TIMEOUT_MS || '60000', 10);
+
+  // Validate required LLM env
+  const errors = [];
+  if (!provider) errors.push('LLM_PROVIDER');
+  if (!baseUrl) errors.push('LLM_BASE_URL');
+  if (!model) errors.push('LLM_MODEL');
+  // LLM_API_KEY required unless provider is local/no-auth
+  const isLocalAuth = provider === 'local' || provider === 'no-auth';
+  if (!apiKey && !isLocalAuth) errors.push('LLM_API_KEY');
+
+  if (errors.length > 0) {
+    throw new Error(
+      `PROVIDER_MODE=llm requires: ${errors.join(', ')}. ` +
+      `Set these in .env or switch PROVIDER_MODE=template.`
+    );
+  }
+
+  return { provider, baseUrl, apiKey, model, maxTokens, temperature, timeoutMs };
+})();
 
 // ── Provider capabilities ────────────────────────────────────────────────
 const PROVIDER_CAPABILITIES = (process.env.PROVIDER_CAPABILITIES || '')
@@ -384,9 +421,44 @@ async function phaseClaimAndSubmit() {
       const running = await api.markRunning(id, PROVIDER_AGENT_ID);
       console.log(`   Running: status=${running.status}`);
 
-      // Run strategy based on job type
-      const { resultPayload, proofPayload } = runWorkerStrategy(job);
-      console.log(`   Strategy: ${jobType} (confidence: ${resultPayload.confidence})`);
+      // MIN_JOB_BUDGET_ATOMIC guard (check before calling LLM)
+      if (MIN_JOB_BUDGET_ATOMIC > 0) {
+        const jobBudget = parseInt(job.budgetAtomic || job.priceAtomic || '0', 10);
+        if (jobBudget < MIN_JOB_BUDGET_ATOMIC) {
+          console.log(`   [WORK] Skipping job ${id} — budget ${jobBudget} < min ${MIN_JOB_BUDGET_ATOMIC}`);
+          processedIds.add(`claim-${id}`);
+          continue;
+        }
+      }
+
+      // Run strategy based on provider mode
+      let resultPayload;
+      let proofPayload;
+      let strategy;
+
+      if (PROVIDER_MODE === 'llm') {
+        strategy = `llm:${LLM_CONFIG.model}`;
+        const llmEnv = {
+          baseUrl: LLM_CONFIG.baseUrl,
+          apiKey: LLM_CONFIG.apiKey,
+          model: LLM_CONFIG.model,
+          provider: LLM_CONFIG.provider,
+          agentType: PROVIDER_AGENT_TYPE || 'smart-contract',
+          providerAgentId: PROVIDER_AGENT_ID,
+          maxTokens: LLM_CONFIG.maxTokens,
+          temperature: LLM_CONFIG.temperature,
+          timeoutMs: LLM_CONFIG.timeoutMs,
+        };
+        const result = await runLlmTask(job, llmEnv);
+        resultPayload = result.resultPayload;
+        proofPayload = result.proofPayload;
+      } else {
+        strategy = `template:${jobType}`;
+        const result = runWorkerStrategy(job);
+        resultPayload = result.resultPayload;
+        proofPayload = result.proofPayload;
+      }
+      console.log(`   Strategy: ${strategy} (confidence: ${resultPayload.confidence})`);
 
       // Submit
       const submitted = await api.submit(id, { providerAgentId: PROVIDER_AGENT_ID, resultPayload, proofPayload });
@@ -414,8 +486,16 @@ async function main() {
   console.log(`URL: ${BASE_URL}`);
   console.log(`Provider: ${PROVIDER_AGENT_ID}`);
   console.log(`Address: ${PROVIDER_ADDRESS}`);
+  console.log(`Mode: ${PROVIDER_MODE}${PROVIDER_AGENT_TYPE ? ` (${PROVIDER_AGENT_TYPE})` : ''}`);
+  if (PROVIDER_MODE === 'llm') {
+    console.log(`LLM: ${LLM_CONFIG.provider} / ${LLM_CONFIG.model}`);
+    console.log(`LLM timeout: ${LLM_CONFIG.timeoutMs}ms, maxTokens: ${LLM_CONFIG.maxTokens}`);
+  }
   console.log(`Capabilities: ${PROVIDER_CAPABILITIES.join(', ') || '<all>'}`);
   console.log(`Poll interval: ${POLL_INTERVAL_MS}ms`);
+  if (MIN_JOB_BUDGET_ATOMIC > 0) {
+    console.log(`Min job budget: ${MIN_JOB_BUDGET_ATOMIC} atomic`);
+  }
 
   // Run both phases
   await phaseSetBudget();

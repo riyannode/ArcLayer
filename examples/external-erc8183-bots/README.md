@@ -404,7 +404,38 @@ The evaluator bot uses LLM (when configured) to judge result quality.
 | `FUND_POLL_INTERVAL_MS` | 5000 | Client — ms between setBudget polls |
 | `CLAIM_TTL_SECONDS` | 600 | Provider — how long a claim is held before expiry |
 
-## 9. Future Extensions
+## 9. Smart Contract Provider (LLM Mode)
+
+Run a provider bot that uses an LLM to process real smart-contract analysis jobs.
+
+**Env example** (add to provider `.env`):
+
+```bash
+PROVIDER_MODE=llm
+PROVIDER_AGENT_TYPE=smart-contract
+PROVIDER_CAPABILITIES=solidity,foundry,smart-contract-review,smart-contract-debug,abi-integration,erc8004,erc8183,x402
+
+LLM_PROVIDER=openai-compatible
+LLM_BASE_URL=https://api.blockchain.info/ai/api/v1
+LLM_API_KEY=<your-june-api-key>
+LLM_MODEL=deepseek/deepseek-v4-flash
+LLM_MAX_TOKENS=2500
+LLM_TEMPERATURE=0.2
+LLM_TIMEOUT_MS=60000
+MIN_JOB_BUDGET_ATOMIC=10000
+MAX_ACTIVE_JOBS=1
+JOB_POLL_INTERVAL_MS=60000
+```
+
+**How it works:**
+- `PROVIDER_MODE=llm` switches from template output to LLM-backed execution
+- LLM is only called after a valid assigned job is selected — never while idle
+- Output is strict JSON with summary, findings, confidence, and evidence
+- Invalid LLM output is not submitted — job stays retryable
+- `MIN_JOB_BUDGET_ATOMIC` skips low-budget jobs before calling LLM
+- Template mode (`PROVIDER_MODE=template` or unset) remains unchanged
+
+## 10. Future Extensions
 
 - **Protocol-level slash**: When ERC-8183 adds reject/dispute paths, evaluator can call `reject` instead of just skipping `complete`.
 - **Dynamic pricing**: Provider can adjust `setBudget` based on job difficulty.
@@ -412,7 +443,7 @@ The evaluator bot uses LLM (when configured) to judge result quality.
 - **Reputation system**: Track provider success rate across jobs.
 - **Timeout recovery**: Auto-recover escrow if evaluator doesn't respond within expiry.
 
-## 10. Production Checklist
+## 11. Production Checklist
 
 - [ ] Register all 3 agents in external registry
 - [ ] Generate role-scoped API keys (client/provider/evaluator)
