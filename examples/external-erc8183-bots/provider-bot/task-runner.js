@@ -8,7 +8,7 @@
 
 const crypto = require('crypto');
 const { callLLMJson } = require('../shared/llm-client');
-const { buildMessages } = require('./smart-contract-profile');
+const { buildMessages } = require('./role-aware-profile');
 
 const VALID_SEVERITIES = new Set(['info', 'low', 'medium', 'high', 'critical']);
 
@@ -38,6 +38,8 @@ async function runLlmTask(job, env) {
   const messages = buildMessages(job, {
     model: env.model,
     providerAgentId: env.providerAgentId,
+    agentType: env.agentType,
+    capabilities: env.capabilities,
   });
 
   // Call LLM
@@ -61,7 +63,7 @@ async function runLlmTask(job, env) {
   const durationMs = Date.now() - startTime;
 
   // Validate output
-  const validation = validateLlmOutput(llmResult);
+  const validation = validateLlmOutput(llmResult, env.agentType);
   if (!validation.valid) {
     console.error(`   [LLM] Validation failed: ${validation.errors.join('; ')}`);
     throw new Error(`LLM output invalid: ${validation.errors.join('; ')}`);
@@ -113,7 +115,7 @@ async function runLlmTask(job, env) {
  * Validate LLM output against required JSON shape.
  * Returns { valid: boolean, errors: string[] }
  */
-function validateLlmOutput(output) {
+function validateLlmOutput(output, expectedAgentType) {
   const errors = [];
 
   if (!output || typeof output !== 'object') {
@@ -150,9 +152,10 @@ function validateLlmOutput(output) {
     errors.push(`evidence.mode must be "llm", got: "${output.evidence?.mode}"`);
   }
 
-  // evidence.agentType must be "smart-contract"
-  if (output.evidence?.agentType !== 'smart-contract') {
-    errors.push(`evidence.agentType must be "smart-contract", got: "${output.evidence?.agentType}"`);
+  // evidence.agentType must match configured provider agent type
+  const expectedType = expectedAgentType || 'other';
+  if (output.evidence?.agentType !== expectedType) {
+    errors.push(`evidence.agentType must be "${expectedType}", got: "${output.evidence?.agentType}"`);
   }
 
   return { valid: errors.length === 0, errors };

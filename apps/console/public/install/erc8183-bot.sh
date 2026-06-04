@@ -170,6 +170,65 @@ select_role() {
   ok "Selected role: ${ROLE_LABEL}"
 }
 
+# ── Provider category selection ─────────────────────────────────────────
+
+select_provider_category() {
+  if [ "$ROLE" != "provider" ]; then
+    return
+  fi
+
+  # In dry-run mode, use defaults
+  if [ "$DRY_RUN" = true ]; then
+    PROVIDER_CATEGORY="${PROVIDER_CATEGORY:-other}"
+    PROVIDER_CATEGORY_LABEL="${PROVIDER_CATEGORY_LABEL:-Other}"
+    PROVIDER_AGENT_TYPE="${PROVIDER_AGENT_TYPE:-other}"
+    PROVIDER_CAPABILITIES="${PROVIDER_CAPABILITIES:-general,other}"
+    LLM_PROVIDER="${LLM_PROVIDER:-openai-compatible}"
+    LLM_BASE_URL="${LLM_BASE_URL:-https://example.com/v1}"
+    LLM_MODEL="${LLM_MODEL:-example-model}"
+    LLM_API_KEY="${LLM_API_KEY:-dry-run-placeholder}"
+    info "[dry-run] Provider category: ${PROVIDER_CATEGORY_LABEL} (default)"
+    return
+  fi
+
+  echo ""
+  echo -e "${BOLD}── Provider Category ──${NC}"
+  echo ""
+  echo "Which provider category did you register in the dashboard?"
+  echo ""
+  echo "  1) Smart Contract"
+  echo "  2) Frontend"
+  echo "  3) Backend"
+  echo "  4) DevOps"
+  echo "  5) Design"
+  echo "  6) Data Research"
+  echo "  7) Documentation"
+  echo "  8) Analysis"
+  echo "  9) Other"
+  echo ""
+
+  local choice
+  while true; do
+    tty_read -rp "Enter 1-9: " choice
+    case "$choice" in
+      1) PROVIDER_CATEGORY="smart-contract";  PROVIDER_CATEGORY_LABEL="Smart Contract";  PROVIDER_AGENT_TYPE="smart-contract";  PROVIDER_CAPABILITIES="smart-contract,solidity,audit,security-review,code-review"; break ;;
+      2) PROVIDER_CATEGORY="frontend";        PROVIDER_CATEGORY_LABEL="Frontend";         PROVIDER_AGENT_TYPE="frontend";        PROVIDER_CAPABILITIES="frontend,ui,react,nextjs"; break ;;
+      3) PROVIDER_CATEGORY="backend";         PROVIDER_CATEGORY_LABEL="Backend";          PROVIDER_AGENT_TYPE="backend";         PROVIDER_CAPABILITIES="backend,api,database,server"; break ;;
+      4) PROVIDER_CATEGORY="devops";          PROVIDER_CATEGORY_LABEL="DevOps";           PROVIDER_AGENT_TYPE="devops";          PROVIDER_CAPABILITIES="devops,infra,deployment,ci-cd"; break ;;
+      5) PROVIDER_CATEGORY="design";          PROVIDER_CATEGORY_LABEL="Design";           PROVIDER_AGENT_TYPE="design";          PROVIDER_CAPABILITIES="design,ui-design,ux,product-design"; break ;;
+      6) PROVIDER_CATEGORY="data-research";   PROVIDER_CATEGORY_LABEL="Data Research";    PROVIDER_AGENT_TYPE="data-research";   PROVIDER_CAPABILITIES="data-research,research,data-analysis"; break ;;
+      7) PROVIDER_CATEGORY="documentation";   PROVIDER_CATEGORY_LABEL="Documentation";    PROVIDER_AGENT_TYPE="documentation";   PROVIDER_CAPABILITIES="documentation,docs,technical-writing"; break ;;
+      8) PROVIDER_CATEGORY="analysis";        PROVIDER_CATEGORY_LABEL="Analysis";         PROVIDER_AGENT_TYPE="analysis";        PROVIDER_CAPABILITIES="analysis,reasoning,evaluation"; break ;;
+      9) PROVIDER_CATEGORY="other";           PROVIDER_CATEGORY_LABEL="Other";            PROVIDER_AGENT_TYPE="other";           PROVIDER_CAPABILITIES="general,other"; break ;;
+      *) warn "Invalid choice. Please enter a number between 1 and 9." ;;
+    esac
+  done
+
+  ok "Provider category: ${PROVIDER_CATEGORY_LABEL}"
+  debug "PROVIDER_AGENT_TYPE=${PROVIDER_AGENT_TYPE}"
+  debug "PROVIDER_CAPABILITIES=${PROVIDER_CAPABILITIES}"
+}
+
 # ── Validate Ethereum address ────────────────────────────────────────────────
 
 validate_address() {
@@ -193,7 +252,7 @@ collect_inputs() {
     WALLET_ADDRESS="${WALLET_ADDRESS:-0x0000000000000000000000000000000000000000}"
     API_KEY="${API_KEY:-ak_dry_run_placeholder}"
     PRIVATE_KEY="<dry-run: hidden>"
-    LLM_PROVIDER="none"
+    LLM_PROVIDER="${LLM_PROVIDER:-none}"
     if [ "$ROLE" = "client" ]; then
       PEER_PROVIDER_AGENT_ID="${PEER_PROVIDER_AGENT_ID:-99998}"
       PEER_PROVIDER_ADDRESS="${PEER_PROVIDER_ADDRESS:-0x0000000000000000000000000000000000000000}"
@@ -287,35 +346,84 @@ collect_inputs() {
     done
   fi
 
-  # LLM provider (optional)
-  echo ""
-  echo "Optional: LLM provider for evaluation (press Enter to skip):"
-  echo "  1) none (skip)"
-  echo "  2) OpenAI"
-  echo "  3) Anthropic"
-  echo "  4) Ollama"
-  echo "  5) Hermes"
-  echo "  6) OpenClaw"
-  echo ""
-
-  LLM_PROVIDER="none"
-  tty_read -rp "LLM provider [1]: " llm_choice
-  case "${llm_choice:-1}" in
-    1|"") LLM_PROVIDER="none" ;;
-    2)    LLM_PROVIDER="openai" ;;
-    3)    LLM_PROVIDER="anthropic" ;;
-    4)    LLM_PROVIDER="ollama" ;;
-    5)    LLM_PROVIDER="hermes" ;;
-    6)    LLM_PROVIDER="openclaw" ;;
-    *)    LLM_PROVIDER="none" ;;
-  esac
-
-  if [ "$LLM_PROVIDER" != "none" ]; then
-    tty_read -rp "LLM API base URL: " LLM_BASE_URL
-    tty_read -rsp "LLM API key: " LLM_API_KEY
+  # LLM configuration — required for provider, optional for evaluator
+  if [ "$ROLE" = "provider" ]; then
     echo ""
-    tty_read -rp "LLM model name [auto]: " LLM_MODEL
-    LLM_MODEL="${LLM_MODEL:-auto}"
+    echo -e "${BOLD}── LLM Configuration (required for provider) ──${NC}"
+    echo ""
+    echo "You must bring your own LLM provider and model."
+    echo "No default hosted model is configured."
+    echo ""
+
+    while true; do
+      tty_read -rp "LLM provider (e.g. openai-compatible, local, no-auth): " LLM_PROVIDER
+      if [ -n "$LLM_PROVIDER" ]; then
+        break
+      fi
+      warn "LLM_PROVIDER is required."
+    done
+
+    while true; do
+      tty_read -rp "LLM base URL (e.g. https://openrouter.ai/api/v1): " LLM_BASE_URL
+      if [ -n "$LLM_BASE_URL" ]; then
+        break
+      fi
+      warn "LLM_BASE_URL is required."
+    done
+
+    while true; do
+      tty_read -rp "LLM model (e.g. deepseek/deepseek-v4-flash, llama3): " LLM_MODEL
+      if [ -n "$LLM_MODEL" ]; then
+        break
+      fi
+      warn "LLM_MODEL is required."
+    done
+
+    # LLM_API_KEY required unless local/no-auth
+    local is_local_auth=false
+    if [ "$LLM_PROVIDER" = "local" ] || [ "$LLM_PROVIDER" = "no-auth" ]; then
+      is_local_auth=true
+    fi
+
+    if [ "$is_local_auth" = true ]; then
+      tty_read -rsp "LLM API key (optional for local/no-auth, press Enter to skip): " LLM_API_KEY
+      echo ""
+    else
+      while true; do
+        tty_read -rsp "LLM API key (hidden): " LLM_API_KEY
+        echo ""
+        if [ -n "$LLM_API_KEY" ]; then
+          break
+        fi
+        warn "LLM_API_KEY is required for $LLM_PROVIDER."
+      done
+    fi
+
+    ok "LLM configured: ${LLM_PROVIDER} / ${LLM_MODEL}"
+  elif [ "$ROLE" = "evaluator" ]; then
+    # Evaluator: LLM optional for evaluation
+    echo ""
+    echo "Optional: LLM provider for evaluation (press Enter to skip):"
+    echo "  1) none (skip)"
+    echo "  2) OpenAI-compatible"
+    echo "  3) Local (Ollama)"
+    echo ""
+
+    LLM_PROVIDER="none"
+    tty_read -rp "LLM provider [1]: " llm_choice
+    case "${llm_choice:-1}" in
+      1|"") LLM_PROVIDER="none" ;;
+      2)    LLM_PROVIDER="openai-compatible" ;;
+      3)    LLM_PROVIDER="local" ;;
+      *)    LLM_PROVIDER="none" ;;
+    esac
+
+    if [ "$LLM_PROVIDER" != "none" ]; then
+      tty_read -rp "LLM base URL: " LLM_BASE_URL
+      tty_read -rsp "LLM API key: " LLM_API_KEY
+      echo ""
+      tty_read -rp "LLM model name: " LLM_MODEL
+    fi
   fi
 }
 
@@ -431,16 +539,31 @@ PROVIDER_AGENT_ID=${AGENT_ID}
 PROVIDER_ADDRESS=${WALLET_ADDRESS}
 PROVIDER_PRIVATE_KEY=${private_key_normalized}
 PROVIDER_API_KEY=${API_KEY}
-PROVIDER_CAPABILITIES=market-summary,risk-check,sentiment-scan,execution-plan,data-quality-check
 ARC_CHAIN_ID=5042002
 ARC_RPC_URL=https://rpc.testnet.arc.network
 ARC_RPC_FALLBACK_URL=https://rpc.drpc.testnet.arc.network
-JOB_POLL_INTERVAL_MS=30000
+
+# Provider mode and category
+PROVIDER_MODE=llm
+PROVIDER_AGENT_TYPE=${PROVIDER_AGENT_TYPE}
+PROVIDER_CAPABILITIES=${PROVIDER_CAPABILITIES}
+
+# LLM Configuration (user-provided, no default model)
+LLM_PROVIDER=${LLM_PROVIDER}
+LLM_BASE_URL=${LLM_BASE_URL}
+LLM_MODEL=${LLM_MODEL}
+LLM_API_KEY=${LLM_API_KEY:-}
+LLM_MAX_TOKENS=2500
+LLM_TEMPERATURE=0.2
+LLM_TIMEOUT_MS=60000
+
+# Job settings
+JOB_POLL_INTERVAL_MS=60000
 MAX_ACTIVE_JOBS=3
 CLAIM_TTL_SECONDS=600
 AUTONOMOUS_TX=true
+MIN_JOB_BUDGET_ATOMIC=0
 IGNORE_JOBS_BEFORE=
-RECOVER_OLD_JOBS=false
 ENVEOF
       ;;
 
@@ -459,15 +582,15 @@ ENVEOF
       ;;
   esac
 
-  # Append LLM config if provided
-  if [ "$LLM_PROVIDER" != "none" ]; then
+  # Append LLM config for evaluator (provider already has it inline)
+  if [ "$ROLE" = "evaluator" ] && [ "$LLM_PROVIDER" != "none" ]; then
     cat >> "$env_file" << LLMEOF
 
 # LLM Configuration
 LLM_PROVIDER=${LLM_PROVIDER}
 LLM_BASE_URL=${LLM_BASE_URL:-}
 LLM_API_KEY=${LLM_API_KEY:-}
-LLM_MODEL=${LLM_MODEL:-xiaomi/mimo-v2-flash}
+LLM_MODEL=${LLM_MODEL:-}
 LLMEOF
   fi
 
@@ -547,6 +670,12 @@ print_summary() {
   echo -e "${BOLD}═══ Installation Complete ═══${NC}"
   echo ""
   echo -e "  Role:        ${GREEN}${ROLE_LABEL}${NC}"
+  if [ "$ROLE" = "provider" ]; then
+    echo -e "  Category:    ${GREEN}${PROVIDER_CATEGORY_LABEL}${NC}"
+    echo -e "  Agent Type:  ${PROVIDER_AGENT_TYPE}"
+    echo -e "  Capabilities: ${PROVIDER_CAPABILITIES}"
+    echo -e "  LLM:         ${LLM_PROVIDER:-none} / ${LLM_MODEL:-n/a}"
+  fi
   echo -e "  Agent ID:    ${AGENT_ID}"
   echo -e "  Install dir: ${target_dir}"
   echo -e "  Process:     ${process_name}"
@@ -581,6 +710,7 @@ trap cleanup EXIT
 main() {
   check_deps
   select_role
+  select_provider_category
   collect_inputs
   check_pm2
   install_runtime

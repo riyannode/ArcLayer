@@ -28,6 +28,53 @@ pm2 status
 pm2 logs arclayer-erc8183-provider --lines 20
 ```
 
+## Provider Setup (Role-Aware LLM)
+
+Install a provider bot with one command:
+
+```bash
+curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role provider
+```
+
+The installer will:
+1. Ask which provider category you registered as in the dashboard
+2. Prompt for provider credentials (Agent ID, wallet, API key, private key)
+3. Collect LLM configuration (you must bring your own model — no default hosted model)
+4. Generate `.env` with role-aware capabilities and LLM config
+5. Validate with `check-env` and start with PM2
+
+**Supported provider categories:**
+
+| # | Category | Slug | Capabilities |
+|---|----------|------|-------------|
+| 1 | Smart Contract | `smart-contract` | smart-contract, solidity, audit, security-review, code-review |
+| 2 | Frontend | `frontend` | frontend, ui, react, nextjs |
+| 3 | Backend | `backend` | backend, api, database, server |
+| 4 | DevOps | `devops` | devops, infra, deployment, ci-cd |
+| 5 | Design | `design` | design, ui-design, ux, product-design |
+| 6 | Data Research | `data-research` | data-research, research, data-analysis |
+| 7 | Documentation | `documentation` | documentation, docs, technical-writing |
+| 8 | Analysis | `analysis` | analysis, reasoning, evaluation |
+| 9 | Other | `other` | general, other |
+
+**LLM configuration:**
+- You must provide your own LLM provider and model
+- No default hosted model (no hardcoded DeepSeek, OpenAI, etc.)
+- `LLM_API_KEY` may be empty only for `LLM_PROVIDER=local` or `LLM_PROVIDER=no-auth`
+- The LLM output is validated against a strict JSON schema — invalid output means the job stays retryable
+
+**After install:**
+```bash
+pm2 status
+pm2 logs arclayer-erc8183-provider --lines 20
+```
+
+**Troubleshooting:**
+- `PROVIDER_MODE=llm requires: LLM_PROVIDER` — fill in LLM config in `.env`
+- `evidence.agentType must be "X"` — LLM returned wrong agentType; ensure `PROVIDER_AGENT_TYPE` matches your role
+- `LLM timeout after 60000ms` — increase `LLM_TIMEOUT_MS` or check LLM endpoint
+- `LLM_API_KEY is required` — set key, or use `LLM_PROVIDER=local` for no-auth
+
 > **Standalone example.** This directory is NOT part of the root `pnpm-workspace.yaml`.
 > Install and run from this folder independently.
 
@@ -153,10 +200,17 @@ Fill in:
 - Each API key must include the `erc8183:presence` scope for bot status heartbeat.
 - If no key is found, the bot fails fast with a clear error.
 
-For LLM evaluation, also fill in:
+For LLM-powered provider bots, also fill in:
+- `PROVIDER_MODE=llm` — enable LLM-backed task execution
+- `PROVIDER_AGENT_TYPE` — dashboard role slug (e.g. `smart-contract`, `frontend`, `backend`)
+- `PROVIDER_CAPABILITIES` — comma-separated capabilities matching your role
+- `LLM_PROVIDER` — your LLM provider (e.g. `openai-compatible`, `local`)
 - `LLM_BASE_URL` — OpenAI-compatible API endpoint
-- `LLM_API_KEY` — API key for the LLM service
-- `LLM_MODEL` — model name (default: `xiaomi/mimo-v2-flash`)
+- `LLM_MODEL` — model name (you must provide your own model)
+- `LLM_API_KEY` — API key for the LLM service (empty for `local`/`no-auth`)
+
+> **No default hosted model.** The provider must bring their own LLM provider/model.
+> `LLM_API_KEY` may be empty only when `LLM_PROVIDER=local` or `LLM_PROVIDER=no-auth`.
 
 **Never commit filled `.env` files.** A `.gitignore` in this folder already excludes them.
 
