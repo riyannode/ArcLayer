@@ -11,7 +11,7 @@ const nextConfig = {
     return [
       {
         source: '/invoice',
-        destination: '/docs',
+        destination: '/dashboard',
         permanent: false,
       },
       {

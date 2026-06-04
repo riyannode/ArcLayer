@@ -7,8 +7,6 @@
  */
 const items = [
   { label: 'INDEX', href: '#top' },
-  { label: 'PROTOCOL', href: '/protocol' },
-  { label: 'SDK', href: '/docs' },
   { label: 'AGENTS', href: '/agents' },
   { label: 'LIVE A2A AGENT', href: '/live-a2a-agent' },
 ];

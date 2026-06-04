@@ -42,11 +42,10 @@ const NotifBell = dynamic(() => import('./NotifBell'), {
 
 const NAV_LINKS = [
   { href: '/register', label: 'REGISTER', anchor: null },
+  { href: '/agent-setup', label: 'AGENT SETUP', anchor: null },
   { href: '/profile', label: 'PROFILE', anchor: null },
   { href: '/dashboard', label: 'DASHBOARD', anchor: null },
   { href: '/live-a2a-agent', label: 'LIVE A2A', anchor: null },
-  { href: '/protocol', label: 'PROTOCOL', anchor: null },
-  { href: '/docs', label: 'SDK', anchor: null },
 ] as const;
 
 export default function Navbar() {

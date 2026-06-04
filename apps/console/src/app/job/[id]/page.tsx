@@ -352,10 +352,10 @@ export default function JobDetailPage() {
         {/* Back link */}
         <div className="mb-8 flex items-center justify-between gap-4">
           <Link
-            href="/protocol"
+            href="/dashboard"
             className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition hover:text-[#F5F0E5]"
           >
-            ← Back to Protocol
+            ← Back to Dashboard
           </Link>
           {/* Fix #6: Only show indexer link when on-chain ID is known */}
           {resolvedOnchainJobId ? (
