@@ -12,7 +12,7 @@
 const DASHBOARD_PROVIDER_ROLES = {
   'smart-contract': {
     label: 'Smart Contract Agent',
-    capabilities: ['solidity', 'smart-contract', 'smart-contract-review'],
+    capabilities: ['smart-contract', 'solidity', 'foundry', 'smart-contract-review', 'smart-contract-debug', 'abi-integration', 'erc8004', 'erc8183', 'x402', 'security-review', 'code-review'],
     defaultCapability: 'solidity',
     expertise: 'Solidity, Foundry, ERC standards (ERC-8004, ERC-8183, ERC-20, ERC-721), smart contract auditing, gas optimization, and Arc Network (Circle\'s L1 where USDC is native gas).',
   },
@@ -209,11 +209,12 @@ function sanitizePayload(payload) {
   if (!payload || typeof payload !== 'object') return {};
 
   const SECRET_PATTERNS = /private[_]?key|api[_]?key|secret|token|password|auth|mnemonic|seed|authorization|cookie/i;
+  const SECRET_EXACT = new Set(['pk', 'walletKey', 'signerKey', 'payerKey', 'evaluatorKey', 'providerKey']);
 
   const clean = {};
   for (const [key, value] of Object.entries(payload)) {
-    // Skip keys matching secret patterns
-    if (SECRET_PATTERNS.test(key)) continue;
+    // Skip keys matching secret patterns or exact legacy names
+    if (SECRET_PATTERNS.test(key) || SECRET_EXACT.has(key)) continue;
     // Skip values that look like private keys, API keys, or auth tokens
     if (typeof value === 'string' && /^(0x[a-fA-F0-9]{64}|sk_|ak_|bearer\s)/i.test(value)) continue;
     clean[key] = value;
