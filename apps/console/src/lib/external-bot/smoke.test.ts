@@ -319,11 +319,80 @@ describe('buildInstallCommand', () => {
     });
 
     expect(cmd.title).toBe('One-Click ERC-8183 Bot Installer');
-    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash');
+    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash');
     // Security: no inline secrets
     expect(cmd.command).not.toContain('ak_');
     expect(cmd.command).not.toContain('PRIVATE_KEY');
     expect(cmd.command).not.toContain('git clone');
+  });
+
+  it('erc8183-escrow-bots with provider-only returns provider shortcut', () => {
+    const t = getTemplate('erc8183-escrow-bots');
+    if (!t) throw new Error('erc8183-escrow-bots template not found');
+
+    const bundle = buildEnvBundle({
+      template: t,
+      baseUrl: 'https://arclayers.xyz',
+      category: 'erc8183-jobs',
+      agentIds: ['36192'],
+      apiKeys: ['ak_provider'],
+      erc8004Ids: [],
+    });
+
+    const cmd = buildInstallCommand({
+      template: t,
+      envBundle: bundle,
+      roleNames: ['provider'],
+    });
+
+    expect(cmd.title).toBe('One-Click ERC-8183 Provider Installer');
+    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash');
+  });
+
+  it('erc8183-escrow-bots with client-only returns generic with --role client', () => {
+    const t = getTemplate('erc8183-escrow-bots');
+    if (!t) throw new Error('erc8183-escrow-bots template not found');
+
+    const bundle = buildEnvBundle({
+      template: t,
+      baseUrl: 'https://arclayers.xyz',
+      category: 'erc8183-jobs',
+      agentIds: ['36191'],
+      apiKeys: ['ak_client'],
+      erc8004Ids: [],
+    });
+
+    const cmd = buildInstallCommand({
+      template: t,
+      envBundle: bundle,
+      roleNames: ['client'],
+    });
+
+    expect(cmd.title).toBe('One-Click ERC-8183 Client Installer');
+    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role client');
+  });
+
+  it('erc8183-escrow-bots with evaluator-only returns generic with --role evaluator', () => {
+    const t = getTemplate('erc8183-escrow-bots');
+    if (!t) throw new Error('erc8183-escrow-bots template not found');
+
+    const bundle = buildEnvBundle({
+      template: t,
+      baseUrl: 'https://arclayers.xyz',
+      category: 'erc8183-jobs',
+      agentIds: ['36202'],
+      apiKeys: ['ak_evaluator'],
+      erc8004Ids: [],
+    });
+
+    const cmd = buildInstallCommand({
+      template: t,
+      envBundle: bundle,
+      roleNames: ['evaluator'],
+    });
+
+    expect(cmd.title).toBe('One-Click ERC-8183 Evaluator Installer');
+    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role evaluator');
   });
 });
 
