@@ -179,6 +179,17 @@ function checkBot(botName, rolePrefix, requiredKeys, optionalKeys = [], skipIfMi
     checkRequired(env, botName, key);
   }
 
+  // Either/or required keys — CLIENT_AGENT_ID or BUYER_AGENT_ID for client role
+  if (rolePrefix === 'CLIENT') {
+    const hasClientId = env.CLIENT_AGENT_ID && env.CLIENT_AGENT_ID !== '';
+    const hasBuyerId = env.BUYER_AGENT_ID && env.BUYER_AGENT_ID !== '';
+    if (!hasClientId && !hasBuyerId) {
+      console.log(`  ✗ Missing: CLIENT_AGENT_ID or BUYER_AGENT_ID (at least one required)`);
+      allPass = false;
+      exitCode = 1;
+    }
+  }
+
   // Optional keys
   for (const key of optionalKeys) {
     checkOptional(env, key);
@@ -202,13 +213,14 @@ if (ONLY_ROLE) console.log(`Role filter: ${ONLY_ROLE} only`);
 if (!ONLY_ROLE || ONLY_ROLE === 'client') checkBot('client-bot', 'CLIENT', [
   'ARCLAYER_BASE_URL',
   'CLIENT_API_KEY',
-  'CLIENT_AGENT_ID',
+  // CLIENT_AGENT_ID or BUYER_AGENT_ID — either is valid (see client-bot/index.js fallback)
   'CLIENT_ADDRESS',
   'CLIENT_PRIVATE_KEY',
   'ARC_RPC_URL',
 ], [
   'ARC_CHAIN_ID',
   'ARC_RPC_FALLBACK_URL',
+  'CLIENT_AGENT_ID',
   'BUYER_AGENT_ID',
   'PROVIDER_AGENT_ID',
   'PROVIDER_ADDRESS',
