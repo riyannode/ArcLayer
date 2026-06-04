@@ -7,11 +7,108 @@
  */
 
 const crypto = require('crypto');
-const { callLLMJson } = require('../shared/llm-client');
+const { callLLM } = require('../shared/llm-client');
 const { buildMessages } = require('./role-aware-profile');
 const { loadProviderSkills } = require('./skill-loader');
 
 const VALID_SEVERITIES = new Set(['info', 'low', 'medium', 'high', 'critical']);
+
+/** Max raw output length sent to repair prompt (chars). */
+const REPAIR_INPUT_MAX_CHARS = 4000;
+
+/**
+ * Try to parse LLM output as JSON — strips markdown fences first.
+ * Returns parsed object or null if not valid JSON.
+ *
+ * @param {string} raw - raw LLM output
+ * @returns {Object|null}
+ */
+function tryParseLlmJson(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  let cleaned = raw.trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '');
+    cleaned = cleaned.replace(/\n?```\s*$/, '');
+    cleaned = cleaned.trim();
+  }
+  try { return JSON.parse(cleaned); } catch { return null; }
+}
+
+/**
+ * Deterministic JSON repair — no LLM call.
+ * Attempts to extract a valid JSON object from malformed output.
+ *
+ * @param {string} raw - raw LLM output
+ * @returns {Object|null} - parsed object or null
+ */
+function tryDeterministicJsonRepair(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+
+  let cleaned = raw.trim();
+
+  // Strip markdown code fences
+  cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '');
+  cleaned = cleaned.replace(/\n?```\s*$/, '');
+  cleaned = cleaned.trim();
+
+  // Try direct parse after fence strip
+  try { return JSON.parse(cleaned); } catch { /* continue */ }
+
+  // Extract substring from first { to last }
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    const candidate = cleaned.slice(firstBrace, lastBrace + 1);
+    try { return JSON.parse(candidate); } catch { /* continue */ }
+  }
+
+  return null;
+}
+
+/**
+ * Call LLM with a repair-only prompt to fix malformed JSON.
+ * Passes the raw output (truncated) and asks for strict JSON only.
+ *
+ * @param {Object} env - LLM config
+ * @param {string} rawOutput - the malformed raw LLM output
+ * @returns {Promise<Object>} - parsed JSON object
+ */
+async function callLlmJsonRepair(env, rawOutput) {
+  const truncated = rawOutput.length > REPAIR_INPUT_MAX_CHARS
+    ? rawOutput.slice(0, REPAIR_INPUT_MAX_CHARS) + '\n... [truncated]'
+    : rawOutput;
+
+  const repairMessages = [
+    {
+      role: 'system',
+      content: 'You are a JSON repair assistant. You receive a malformed JSON string and return ONLY a valid JSON object. No explanation, no markdown fences, no extra text — only the raw JSON object.',
+    },
+    {
+      role: 'user',
+      content: `The following text was supposed to be a valid JSON object but is malformed. Repair it and return ONLY the corrected JSON object. Preserve all original data. If the JSON is irrecoverable, return {"error": "irrecoverable", "confidence": 0, "findings": [], "evidence": {"mode": "llm", "agentType": "${env.agentType}"}}.\n\n---\n${truncated}\n---`,
+    },
+  ];
+
+  const raw = await callLLM({
+    baseUrl: env.baseUrl,
+    apiKey: env.apiKey,
+    model: env.model,
+    messages: repairMessages,
+    maxTokens: env.maxTokens || 2500,
+    temperature: 0,  // deterministic for repair
+    timeoutMs: env.timeoutMs || 60000,
+  });
+
+  // Parse repair result with same fence-stripping
+  let cleaned = raw.trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '');
+    cleaned = cleaned.replace(/\n?```\s*$/, '');
+    cleaned = cleaned.trim();
+  }
+
+  return JSON.parse(cleaned);
+}
 
 /**
  * Run an LLM task for a given job.
@@ -29,6 +126,7 @@ const VALID_SEVERITIES = new Set(['info', 'low', 'medium', 'high', 'critical']);
  * @param {number} [env.timeoutMs=60000]
  * @param {string} [env.providerSkill='auto'] - PROVIDER_SKILL value
  * @param {string} [env.customSkillPath] - PROVIDER_CUSTOM_SKILL_PATH value
+ * @param {number} [env.jsonRepairRetries=1] - LLM JSON repair attempts (0..2)
  * @returns {Promise<{resultPayload: Object, proofPayload: Object}>}
  */
 async function runLlmTask(job, env) {
@@ -36,6 +134,7 @@ async function runLlmTask(job, env) {
   const runId = crypto.randomUUID();
   const jobType = job.inputPayload?.jobType || 'unknown';
   const requiredCapability = job.inputPayload?.requiredCapability || '';
+  const maxRepairRetries = Math.min(Math.max(env.jsonRepairRetries ?? 1, 0), 2);
 
   // Load skill content (cached — no disk I/O on repeat calls)
   const skillContent = loadProviderSkills({
@@ -53,27 +152,64 @@ async function runLlmTask(job, env) {
     skillContent,
   });
 
-  // Call LLM
+  // Call LLM with repair-on-failure loop
   let llmResult;
-  try {
-    llmResult = await callLLMJson({
-      baseUrl: env.baseUrl,
-      apiKey: env.apiKey,
-      model: env.model,
-      messages,
-      maxTokens: env.maxTokens || 2500,
-      temperature: env.temperature ?? 0.2,
-      timeoutMs: env.timeoutMs || 60000,
-    });
-  } catch (err) {
-    // LLM failure — log safe error, throw to leave job retryable
-    console.error(`   [LLM] Call failed: ${err.message}`);
-    throw err;
+  let rawOutput = null;
+  let repairUsed = false;
+
+  // Build LLM call options (reused for initial + repair calls)
+  const llmOpts = {
+    baseUrl: env.baseUrl,
+    apiKey: env.apiKey,
+    model: env.model,
+    messages,
+    maxTokens: env.maxTokens || 2500,
+    temperature: env.temperature ?? 0.2,
+    timeoutMs: env.timeoutMs || 60000,
+  };
+
+  // Step 0: Call LLM and get raw output
+  const raw = await callLLM(llmOpts);
+  rawOutput = raw;
+
+  // Step 1: Try deterministic parse (strip fences + direct parse)
+  llmResult = tryParseLlmJson(rawOutput);
+  if (llmResult) {
+    // Primary path — parsed successfully
+  } else if (maxRepairRetries > 0) {
+    // Step 2: Deterministic repair (extract JSON from prose, no LLM call)
+    const detResult = tryDeterministicJsonRepair(rawOutput);
+    if (detResult) {
+      console.log(`   [llm] deterministic JSON repair succeeded`);
+      llmResult = detResult;
+      repairUsed = true;
+    } else {
+      // Step 3: LLM repair call
+      for (let attempt = 1; attempt <= maxRepairRetries; attempt++) {
+        console.log(`   [llm] invalid JSON, attempting repair ${attempt}/${maxRepairRetries}`);
+        try {
+          llmResult = await callLlmJsonRepair(env, rawOutput);
+          console.log(`   [llm] JSON repair ${attempt} succeeded`);
+          repairUsed = true;
+          break;
+        } catch (repairErr) {
+          console.error(`   [llm] JSON repair ${attempt} failed: ${repairErr.message}`);
+          if (attempt === maxRepairRetries) {
+            console.error(`   [LLM] All repair attempts exhausted — skipping job`);
+            throw new Error(`LLM response is not valid JSON after repair: ${repairErr.message}`);
+          }
+        }
+      }
+    }
+  } else {
+    // No repair retries allowed — throw with truncated raw for logging
+    const snippet = rawOutput.length > 200 ? rawOutput.slice(0, 200) + '...' : rawOutput;
+    throw new Error(`LLM response is not valid JSON: ${snippet}`);
   }
 
   const durationMs = Date.now() - startTime;
 
-  // Validate output
+  // Validate output (same validator for original and repaired)
   const validation = validateLlmOutput(llmResult, env.agentType);
   if (!validation.valid) {
     console.error(`   [LLM] Validation failed: ${validation.errors.join('; ')}`);
@@ -117,6 +253,7 @@ async function runLlmTask(job, env) {
     durationMs,
     providerAgentId: env.providerAgentId,
     jobSpecHash,
+    repairUsed,
   };
 
   return { resultPayload, proofPayload };
@@ -172,4 +309,4 @@ function validateLlmOutput(output, expectedAgentType) {
   return { valid: errors.length === 0, errors };
 }
 
-module.exports = { runLlmTask, validateLlmOutput };
+module.exports = { runLlmTask, validateLlmOutput, tryDeterministicJsonRepair, tryParseLlmJson };

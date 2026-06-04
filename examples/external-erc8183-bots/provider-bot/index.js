@@ -6,6 +6,10 @@
  *
  * Jobs are matched by inputPayload.requiredCapability against PROVIDER_CAPABILITIES.
  * Results are structured per jobType instead of static echo.
+ *
+ * Stability: every per-job error is caught and logged — one bad job never
+ * kills the poll loop. Stale/broken jobs are cached in skippedJobIds so they
+ * are not retried every cycle.
  */
 require('dotenv').config({ path: __dirname + '/.env' });
 
@@ -46,6 +50,10 @@ const MIN_JOB_BUDGET_ATOMIC = parseInt(process.env.MIN_JOB_BUDGET_ATOMIC || '0',
 const PROVIDER_MODE = (process.env.PROVIDER_MODE || 'template').toLowerCase();
 const PROVIDER_AGENT_TYPE = process.env.PROVIDER_AGENT_TYPE || '';
 
+// ── IGNORE_JOBS_BEFORE — numeric ERC-8183 job id threshold ──────────────
+// If set, skip any job with erc8183JobId < this value.
+const IGNORE_JOBS_BEFORE = process.env.IGNORE_JOBS_BEFORE || '';
+
 // ── LLM config (validated at startup if PROVIDER_MODE=llm) ──────────────
 const LLM_CONFIG = (() => {
   if (PROVIDER_MODE !== 'llm') return null;
@@ -57,6 +65,7 @@ const LLM_CONFIG = (() => {
   const maxTokens = parseInt(process.env.LLM_MAX_TOKENS || '2500', 10);
   const temperature = parseFloat(process.env.LLM_TEMPERATURE || '0.2');
   const timeoutMs = parseInt(process.env.LLM_TIMEOUT_MS || '60000', 10);
+  const jsonRepairRetries = parseInt(process.env.LLM_JSON_REPAIR_RETRIES || '1', 10);
 
   // Validate required LLM env
   const errors = [];
@@ -74,7 +83,7 @@ const LLM_CONFIG = (() => {
     );
   }
 
-  return { provider, baseUrl, apiKey, model, maxTokens, temperature, timeoutMs };
+  return { provider, baseUrl, apiKey, model, maxTokens, temperature, timeoutMs, jsonRepairRetries };
 })();
 
 // ── Provider capabilities ────────────────────────────────────────────────
@@ -106,15 +115,85 @@ if (PROVIDER_CAPABILITIES.length > 0) {
   console.log(`Provider capabilities: <none> — will accept all jobs`);
 }
 
+if (IGNORE_JOBS_BEFORE) {
+  console.log(`IGNORE_JOBS_BEFORE: ${IGNORE_JOBS_BEFORE} (skip jobs with erc8183JobId < ${IGNORE_JOBS_BEFORE})`);
+}
+
+// ── Per-process caches ──────────────────────────────────────────────────
 const processedIds = new Set();
+const skippedJobIds = new Set();
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
+/** Extract a safe error message — never leaks keys or internals. */
+function getSafeErrorMessage(err) {
+  return err?.shortMessage || err?.details || err?.message || String(err);
+}
+
+/** Mark a job as permanently skipped for this process lifetime. */
+function rememberSkippedJob(job, reason) {
+  const key = job.localJobId || job.id || job.erc8183JobId;
+  if (!key) return;
+  skippedJobIds.add(String(key));
+  if (job.erc8183JobId) skippedJobIds.add(String(job.erc8183JobId));
+  console.warn(`   [skip] job ${key}: ${reason}`);
+}
+
+/** Check if a job has been marked as skipped. */
+function isSkippedJob(job) {
+  const localId = job.localJobId || job.id;
+  const ercId = job.erc8183JobId;
+  return (
+    (localId && skippedJobIds.has(String(localId))) ||
+    (ercId && skippedJobIds.has(String(ercId)))
+  );
+}
+
+/**
+ * Resolve the budget amount from a job, following client-driven priority.
+ * Returns 0 if no valid budget is found.
+ */
+function resolveJobBudget(job) {
+  const candidates = [
+    job.budgetAtomic,
+    job.budget,
+    job.inputPayload?.budgetAtomic,
+    job.inputPayload?.budget,
+    job.priceAtomic,
+    job.amount,
+  ];
+  for (const c of candidates) {
+    if (c === undefined || c === null || c === '') continue;
+    const n = parseInt(String(c), 10);
+    if (!isNaN(n) && n > 0) return n;
+  }
+  return 0;
+}
 
 // ── Capability filter ────────────────────────────────────────────────────
 
 function hasCapability(job) {
   const inputPayload = job.inputPayload || {};
-  const required = inputPayload.requiredCapability;
-  if (!required || required === '') return true; // no requirement = accept
-  return PROVIDER_CAPABILITIES.length === 0 || PROVIDER_CAPABILITIES.includes(required);
+  const req = inputPayload.requiredCapability;
+  if (!req || req === '') return true; // no requirement = accept
+  return PROVIDER_CAPABILITIES.length === 0 || PROVIDER_CAPABILITIES.includes(req);
+}
+
+/**
+ * Check whether this job is assigned to this provider.
+ * Verifies providerAgentId match and (if available) provider address match.
+ */
+function isAssignedToThisProvider(job) {
+  // providerAgentId must match
+  if (job.providerAgentId && String(job.providerAgentId) !== String(PROVIDER_AGENT_ID)) {
+    return false;
+  }
+  // provider address must match if available
+  const jobProviderAddr = job.providerAddress || job.participants?.provider?.address;
+  if (jobProviderAddr && jobProviderAddr.toLowerCase() !== PROVIDER_ADDRESS.toLowerCase()) {
+    return false;
+  }
+  return true;
 }
 
 // ── Worker strategy — structured output per jobType ──────────────────────
@@ -250,114 +329,115 @@ async function phaseSetBudget() {
     jobs = Array.isArray(result) ? result : result?.jobs || result?.data || [];
   } catch { jobs = []; }
 
-  const cutoff = process.env.IGNORE_JOBS_BEFORE ? new Date(process.env.IGNORE_JOBS_BEFORE).getTime() : 0;
-
   for (const job of (Array.isArray(jobs) ? jobs : [])) {
     const id = job.localJobId || job.id;
-    if (processedIds.has(`budget-${id}`)) continue;
+    const erc8183JobId = job.erc8183JobId;
 
-    // ── Guard 1: IGNORE_JOBS_BEFORE filter ──
-    if (cutoff) {
-      const jobTime = new Date(job.createdAt || job.created_at || 0).getTime();
-      if (jobTime < cutoff) {
+    try {
+      // ── Skip cache ──
+      if (isSkippedJob(job)) continue;
+      if (processedIds.has(`budget-${id}`)) continue;
+
+      // ── Guard: IGNORE_JOBS_BEFORE (numeric job id threshold) ──
+      if (IGNORE_JOBS_BEFORE && erc8183JobId) {
+        if (Number(erc8183JobId) < Number(IGNORE_JOBS_BEFORE)) {
+          console.log(`   [filter] skipping old job ${erc8183JobId} due to IGNORE_JOBS_BEFORE=${IGNORE_JOBS_BEFORE}`);
+          processedIds.add(`budget-${id}`);
+          rememberSkippedJob(job, `older than IGNORE_JOBS_BEFORE=${IGNORE_JOBS_BEFORE}`);
+          continue;
+        }
+      }
+
+      // ── Guard: assigned provider match ──
+      if (!isAssignedToThisProvider(job)) {
         processedIds.add(`budget-${id}`);
         continue;
       }
-    }
 
-    // ── Guard 2: provider agent match ──
-    if (job.providerAgentId && job.providerAgentId !== PROVIDER_AGENT_ID) continue;
-
-    // ── Guard 3: local DB status checks ──
-    // Skip if already has setBudgetTxHash
-    if (job.setBudgetTxHash) {
-      processedIds.add(`budget-${id}`);
-      continue;
-    }
-    // Skip if budget already set in local DB
-    const localBudget = parseInt(job.budgetAtomic || job.priceAtomic || '0', 10);
-    if (localBudget > 0 && job.lifecycleStatus && ['Funded', 'Submitted', 'Completed'].includes(job.lifecycleStatus)) {
-      processedIds.add(`budget-${id}`);
-      continue;
-    }
-    // Skip if erc8183Status is not Open
-    const localStatus = job.erc8183Status || job.erc8183_status || '';
-    if (localStatus && localStatus !== 'Open') {
-      console.log(`   [BUDGET] skip localStatus=${localStatus} job=${id}`);
-      processedIds.add(`budget-${id}`);
-      continue;
-    }
-
-    // Capability filter
-    if (!hasCapability(job)) {
-      console.log(`   [BUDGET] Skipping job ${id} — capability mismatch`);
-      processedIds.add(`budget-${id}`);
-      continue;
-    }
-
-    const erc8183JobId = job.erc8183JobId;
-    if (!erc8183JobId) {
-      processedIds.add(`budget-${id}`);
-      continue;
-    }
-
-    // ── Guard 4: ON-CHAIN verification before setBudget ──
-    // Only call setBudget if on-chain status == Open (0) AND budget == 0
-    let onchainJob;
-    try {
-      onchainJob = await signer.readJob(erc8183JobId);
-    } catch { onchainJob = null; }
-
-    if (!onchainJob) {
-      console.log(`   [BUDGET] skip — cannot read on-chain job ${erc8183JobId}`);
-      processedIds.add(`budget-${id}`);
-      continue;
-    }
-
-    if (onchainJob.status !== 0) {
-      console.log(JSON.stringify({
-        phase: 'skip_set_budget_wrong_status',
-        localJobId: id,
-        erc8183JobId: String(erc8183JobId),
-        onchainStatus: onchainJob.status,
-        onchainStatusName: ONCHAIN_STATUS[onchainJob.status] || 'unknown',
-        onchainBudget: onchainJob.budget.toString(),
-        localLifecycleStatus: job.lifecycleStatus || '',
-        localBudget: String(localBudget),
-        reason: `on-chain status is ${ONCHAIN_STATUS[onchainJob.status] || onchainJob.status}, not Open`,
-      }));
-      processedIds.add(`budget-${id}`);
-      continue;
-    }
-
-    if (onchainJob.budget > 0n) {
-      console.log(JSON.stringify({
-        phase: 'skip_set_budget_already_set',
-        localJobId: id,
-        erc8183JobId: String(erc8183JobId),
-        onchainBudget: onchainJob.budget.toString(),
-        reason: 'on-chain budget already set',
-      }));
-      processedIds.add(`budget-${id}`);
-      continue;
-    }
-
-    // ── All guards passed — call setBudget ──
-    console.log(`\n[${new Date().toISOString()}] [BUDGET] Open job: ${id} (erc8183=${erc8183JobId}, onchain=Open, budget=0)`);
-    try {
-      const budgetTx = await api.setBudget(id);
-      if (AUTONOMOUS_TX && budgetTx.tx) {
-        console.log(`   Signing setBudget tx...`);
-        const result = await signer.sendTx(budgetTx.tx);
-        console.log(`   setBudget tx: ${result.hash}`);
-        await sleep(2000);
-        const confirmed = await api.confirmTx(id, 'set_budget', result.hash);
-        console.log(`   setBudget confirmed! status: ${confirmed.erc8183Status}`);
+      // ── Guard: capability match ──
+      if (!hasCapability(job)) {
+        processedIds.add(`budget-${id}`);
+        continue;
       }
+
+      // ── Guard: local DB status checks ──
+      // Skip if already has setBudgetTxHash
+      if (job.setBudgetTxHash) {
+        processedIds.add(`budget-${id}`);
+        continue;
+      }
+      // Skip if lifecycleStatus is already past Open
+      const localStatus = job.lifecycleStatus || job.erc8183Status || job.erc8183_status || '';
+      if (localStatus && localStatus !== 'Open' && localStatus !== 'CreatedOnchain') {
+        processedIds.add(`budget-${id}`);
+        continue;
+      }
+
+      if (!erc8183JobId) {
+        processedIds.add(`budget-${id}`);
+        continue;
+      }
+
+      // ── Guard: client-budget-driven validation ──
+      const clientBudget = resolveJobBudget(job);
+      if (clientBudget <= 0) {
+        console.log(`   [budget] skip job ${id}: missing client budget`);
+        processedIds.add(`budget-${id}`);
+        rememberSkippedJob(job, 'missing client budget');
+        continue;
+      }
+      if (MIN_JOB_BUDGET_ATOMIC > 0 && clientBudget < MIN_JOB_BUDGET_ATOMIC) {
+        console.log(`   [budget] skip job ${id}: budget ${clientBudget} below minimum ${MIN_JOB_BUDGET_ATOMIC}`);
+        processedIds.add(`budget-${id}`);
+        rememberSkippedJob(job, `budget ${clientBudget} below minimum`);
+        continue;
+      }
+
+      // ── Guard: ON-CHAIN verification before setBudget ──
+      let onchainJob;
+      try {
+        onchainJob = await signer.readJob(erc8183JobId);
+      } catch { onchainJob = null; }
+
+      if (!onchainJob) {
+        processedIds.add(`budget-${id}`);
+        continue;
+      }
+
+      if (onchainJob.status !== 0) {
+        processedIds.add(`budget-${id}`);
+        continue;
+      }
+
+      if (onchainJob.budget > 0n) {
+        processedIds.add(`budget-${id}`);
+        continue;
+      }
+
+      // ── All guards passed — call setBudget with client budget ──
+      console.log(`\n[${new Date().toISOString()}] [BUDGET] Open job: ${id} (erc8183=${erc8183JobId}, onchain=Open, budget=0)`);
+      console.log(`   [budget] using client budget: ${clientBudget}`);
+
+      if (AUTONOMOUS_TX) {
+        const budgetTx = await api.setBudget(id);
+        if (budgetTx.tx) {
+          console.log(`   Signing setBudget tx...`);
+          const result = await signer.sendTx(budgetTx.tx);
+          console.log(`   setBudget tx: ${result.hash}`);
+          await sleep(2000);
+          const confirmed = await api.confirmTx(id, 'set_budget', result.hash);
+          console.log(`   [budget] setBudget confirmed! status: ${confirmed.erc8183Status}`);
+        }
+      }
+
+      processedIds.add(`budget-${id}`);
     } catch (err) {
-      console.error(`   [BUDGET] Failed:`, err.message);
+      const safeReason = getSafeErrorMessage(err);
+      console.error(`   [BUDGET] Failed job ${id}: ${safeReason}`);
+      processedIds.add(`budget-${id}`);
+      rememberSkippedJob(job, safeReason);
+      // Continue to next job — do NOT throw out of poll loop
     }
-    processedIds.add(`budget-${id}`);
   }
 }
 
@@ -377,53 +457,52 @@ async function phaseClaimAndSubmit() {
     jobs = j1.concat(j2);
   } catch { jobs = []; }
 
-  const cutoff = process.env.IGNORE_JOBS_BEFORE ? new Date(process.env.IGNORE_JOBS_BEFORE).getTime() : 0;
-
   for (const job of (Array.isArray(jobs) ? jobs : [])) {
     const id = job.localJobId || job.id;
-    if (processedIds.has(`claim-${id}`)) continue;
-
-    // IGNORE_JOBS_BEFORE filter
-    if (cutoff) {
-      const jobTime = new Date(job.createdAt || job.created_at || 0).getTime();
-      if (jobTime < cutoff) {
-        processedIds.add(`claim-${id}`);
-        continue;
-      }
-    }
-
-    if (job.erc8183Status !== 'Funded') continue;
-    if (job.providerAgentId && job.providerAgentId !== PROVIDER_AGENT_ID) continue;
-
-    // Capability filter
-    if (!hasCapability(job)) {
-      console.log(`   [WORK] Skipping job ${id} — capability mismatch`);
-      processedIds.add(`claim-${id}`);
-      continue;
-    }
-
-    // MIN_JOB_BUDGET_ATOMIC guard (check before claiming — avoids leaving
-    // underpriced jobs in claimed/running state with no submit)
-    if (MIN_JOB_BUDGET_ATOMIC > 0) {
-      const jobBudget = parseInt(job.budgetAtomic || job.priceAtomic || '0', 10);
-      if (jobBudget < MIN_JOB_BUDGET_ATOMIC) {
-        console.log(`   [WORK] Skipping job ${id} — budget ${jobBudget} < min ${MIN_JOB_BUDGET_ATOMIC}`);
-        processedIds.add(`claim-${id}`);
-        continue;
-      }
-    }
-
-    if (activeProcessed >= MAX_ACTIVE_JOBS) {
-      console.log(`   [WORK] Hit MAX_ACTIVE_JOBS (${MAX_ACTIVE_JOBS}) — waiting for next cycle`);
-      break;
-    }
-    activeProcessed++;
-
-    const alreadyClaimed = job.status === 'claimed';
-    const jobType = job.inputPayload?.jobType || 'unknown';
-    console.log(`\n[${new Date().toISOString()}] [WORK] ${alreadyClaimed ? 'Continue claimed' : 'New funded'} job: ${id} (${jobType})`);
 
     try {
+      if (isSkippedJob(job)) continue;
+      if (processedIds.has(`claim-${id}`)) continue;
+
+      // IGNORE_JOBS_BEFORE filter (numeric job id threshold)
+      if (IGNORE_JOBS_BEFORE && job.erc8183JobId) {
+        if (Number(job.erc8183JobId) < Number(IGNORE_JOBS_BEFORE)) {
+          processedIds.add(`claim-${id}`);
+          continue;
+        }
+      }
+
+      if (job.erc8183Status !== 'Funded') continue;
+
+      // Assigned provider guard
+      if (!isAssignedToThisProvider(job)) continue;
+
+      // Capability filter
+      if (!hasCapability(job)) {
+        processedIds.add(`claim-${id}`);
+        continue;
+      }
+
+      // MIN_JOB_BUDGET_ATOMIC guard
+      if (MIN_JOB_BUDGET_ATOMIC > 0) {
+        const jobBudget = resolveJobBudget(job);
+        if (jobBudget < MIN_JOB_BUDGET_ATOMIC) {
+          console.log(`   [WORK] Skipping job ${id} — budget ${jobBudget} < min ${MIN_JOB_BUDGET_ATOMIC}`);
+          processedIds.add(`claim-${id}`);
+          continue;
+        }
+      }
+
+      if (activeProcessed >= MAX_ACTIVE_JOBS) {
+        console.log(`   [WORK] Hit MAX_ACTIVE_JOBS (${MAX_ACTIVE_JOBS}) — waiting for next cycle`);
+        break;
+      }
+      activeProcessed++;
+
+      const alreadyClaimed = job.status === 'claimed';
+      const jobType = job.inputPayload?.jobType || 'unknown';
+      console.log(`\n[${new Date().toISOString()}] [WORK] ${alreadyClaimed ? 'Continue claimed' : 'New funded'} job: ${id} (${jobType})`);
+
       // Claim (skip if already claimed)
       if (!alreadyClaimed) {
         const claimed = await api.claim(id, { providerAgentId: PROVIDER_AGENT_ID, claimTtlSeconds: CLAIM_TTL_SECONDS });
@@ -456,6 +535,7 @@ async function phaseClaimAndSubmit() {
           timeoutMs: LLM_CONFIG.timeoutMs,
           providerSkill: PROVIDER_SKILL,
           customSkillPath: PROVIDER_CUSTOM_SKILL_PATH,
+          jsonRepairRetries: LLM_CONFIG.jsonRepairRetries,
         };
         const result = await runLlmTask(job, llmEnv);
         resultPayload = result.resultPayload;
@@ -466,7 +546,7 @@ async function phaseClaimAndSubmit() {
         resultPayload = result.resultPayload;
         proofPayload = result.proofPayload;
       }
-      console.log(`   Strategy: ${strategy} (confidence: ${resultPayload.confidence})`);
+      console.log(`   Strategy: ${strategy} (confidence: ${resultPayload.confidence})${proofPayload?.repairUsed ? ' [repair used]' : ''}`);
 
       // Submit
       const submitted = await api.submit(id, { providerAgentId: PROVIDER_AGENT_ID, resultPayload, proofPayload });
@@ -481,7 +561,9 @@ async function phaseClaimAndSubmit() {
       }
       console.log(`   ✅ Job ${id} submitted`);
     } catch (err) {
-      console.error(`   [WORK] Failed:`, err.message);
+      const safeReason = getSafeErrorMessage(err);
+      console.error(`   [WORK] Failed job ${id}: ${safeReason}`);
+      rememberSkippedJob(job, safeReason);
     }
     processedIds.add(`claim-${id}`);
   }
@@ -497,7 +579,7 @@ async function main() {
   console.log(`Mode: ${PROVIDER_MODE}${PROVIDER_AGENT_TYPE ? ` (${PROVIDER_AGENT_TYPE})` : ''}`);
   if (PROVIDER_MODE === 'llm') {
     console.log(`LLM: ${LLM_CONFIG.provider} / ${LLM_CONFIG.model}`);
-    console.log(`LLM timeout: ${LLM_CONFIG.timeoutMs}ms, maxTokens: ${LLM_CONFIG.maxTokens}`);
+    console.log(`LLM timeout: ${LLM_CONFIG.timeoutMs}ms, maxTokens: ${LLM_CONFIG.maxTokens}, jsonRepairRetries: ${LLM_CONFIG.jsonRepairRetries}`);
   }
   console.log(`Capabilities: ${PROVIDER_CAPABILITIES.join(', ') || '<all>'}`);
   console.log(`Poll interval: ${POLL_INTERVAL_MS}ms`);
@@ -505,13 +587,25 @@ async function main() {
     console.log(`Min job budget: ${MIN_JOB_BUDGET_ATOMIC} atomic`);
   }
 
-  // Run both phases
-  await phaseSetBudget();
-  await phaseClaimAndSubmit();
+  // Run both phases — wrapped so one phase error does not kill startup
+  try { await phaseSetBudget(); } catch (err) {
+    console.error(`[FATAL] phaseSetBudget startup error: ${getSafeErrorMessage(err)}`);
+  }
+  try { await phaseClaimAndSubmit(); } catch (err) {
+    console.error(`[FATAL] phaseClaimAndSubmit startup error: ${getSafeErrorMessage(err)}`);
+  }
 
   setInterval(async () => {
-    await phaseSetBudget();
-    await phaseClaimAndSubmit();
+    try {
+      await phaseSetBudget();
+    } catch (err) {
+      console.error(`[POLL] phaseSetBudget error: ${getSafeErrorMessage(err)}`);
+    }
+    try {
+      await phaseClaimAndSubmit();
+    } catch (err) {
+      console.error(`[POLL] phaseClaimAndSubmit error: ${getSafeErrorMessage(err)}`);
+    }
   }, POLL_INTERVAL_MS);
 }
 
