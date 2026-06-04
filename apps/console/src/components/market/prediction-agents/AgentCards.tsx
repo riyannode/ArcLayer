@@ -6,6 +6,7 @@ import {
   type PredictionAgentInput,
   type PredictionAgentView,
 } from './predictionAgentTypes';
+import { BotStatusPill, isValidAgentId } from '@/components/agent/BotStatusPill';
 
 export default function AgentCards({ agents }: { agents: PredictionAgentInput[] }) {
   const cards = orderPredictionAgentsByFlow(normalizePredictionAgents(agents));
@@ -70,6 +71,7 @@ function AgentCard({ agent }: { agent: PredictionAgentView }) {
           >
             {agent.status}
           </span>
+          {isValidAgentId(agent.id) && <BotStatusPill agentId={agent.id} compact />}
         </div>
       </div>
 

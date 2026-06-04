@@ -17,6 +17,54 @@ function checkGlobalToken(request: Request): boolean {
   return bearer === required || header === required;
 }
 
+/**
+ * Recursive secret-field rejection.
+ * Scans all keys in plain objects and arrays.
+ * Matches case-insensitive after normalizing separators (underscores, hyphens, spaces removed).
+ * Exact blocklist — no broad substring like "key" or "private".
+ */
+const SECRET_KEY_PATTERNS = [
+  'privatekey',
+  'apikey',
+  'secret',
+  'token',
+  'authorization',
+  'keyhash',
+  'password',
+  'mnemonic',
+  'seed',
+];
+
+function isSecretKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[\s_-]+/g, '');
+  for (const pattern of SECRET_KEY_PATTERNS) {
+    if (normalized.includes(pattern)) return true;
+  }
+  return false;
+}
+
+function hasSecretFields(value: unknown, depth = 0): boolean {
+  if (depth > 8) return false; // guard against deeply nested structures
+  if (!value || typeof value !== 'object') return false;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (hasSecretFields(item, depth + 1)) return true;
+    }
+    return false;
+  }
+
+  // Plain object — check keys
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    if (isSecretKey(key)) return true;
+    // Recurse into nested plain objects
+    const child = (value as Record<string, unknown>)[key];
+    if (child && typeof child === 'object' && hasSecretFields(child, depth + 1)) return true;
+  }
+
+  return false;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category')?.trim() || 'prediction-market-bots';
@@ -52,6 +100,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
   }
 
+  // Reject secret fields — recursive scan of all keys in body
+  if (hasSecretFields(body)) {
+    return NextResponse.json({ ok: false, error: 'secret_fields_rejected' }, { status: 400 });
+  }
+
   // Dual auth: global A2A_LIVE_EVENTS_TOKEN OR per-agent ARCLAYER_API_KEY
   if (checkGlobalToken(request)) {
     // Global token passes — proceed with write (backward compat)
@@ -61,6 +114,12 @@ export async function POST(request: NextRequest) {
       status: body.status,
       lastEventType: body.lastEventType ?? 'heartbeat',
       lastEventSummary: body.lastEventSummary ?? 'heartbeat',
+      role: body.role ?? undefined,
+      runtimeType: body.runtimeType ?? undefined,
+      processName: body.processName ?? undefined,
+      version: body.version ?? undefined,
+      chainId: body.chainId ?? undefined,
+      rpcOk: body.rpcOk ?? undefined,
     });
 
     if (!result.ok) {
@@ -88,6 +147,12 @@ export async function POST(request: NextRequest) {
     status: body.status,
     lastEventType: body.lastEventType ?? 'heartbeat',
     lastEventSummary: body.lastEventSummary ?? 'heartbeat',
+    role: body.role ?? undefined,
+    runtimeType: body.runtimeType ?? undefined,
+    processName: body.processName ?? undefined,
+    version: body.version ?? undefined,
+    chainId: body.chainId ?? undefined,
+    rpcOk: body.rpcOk ?? undefined,
   });
 
   if (!result.ok) {
