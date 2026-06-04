@@ -93,8 +93,18 @@ function startHeartbeat(opts) {
                 resolve();
               } else {
                 // Log status + truncated error body (no secrets)
-                const errPreview = data.slice(0, 120);
-                reject(new Error(`HTTP ${res.statusCode}: ${errPreview}`));
+                let errMessage = `HTTP ${res.statusCode}`;
+                try {
+                  const parsed = JSON.parse(data);
+                  if (parsed.error === 'missing_scope') {
+                    errMessage = `Heartbeat rejected: API key needs ${parsed.requiredScope || 'erc8183:presence'}. Create a new role-specific API key from Agent Profile.`;
+                  } else if (parsed.error) {
+                    errMessage = `HTTP ${res.statusCode}: ${parsed.error}`;
+                  }
+                } catch {
+                  errMessage = `HTTP ${res.statusCode}: ${data.slice(0, 80)}`;
+                }
+                reject(new Error(errMessage));
               }
             });
           },
