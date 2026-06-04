@@ -17,6 +17,16 @@ function checkGlobalToken(request: Request): boolean {
   return bearer === required || header === required;
 }
 
+/** Reject body if it contains obvious secret field names at top level. */
+const SECRET_FIELD_RE = /^(privateKey|PRIVATE_KEY|apiKey|API_KEY|secret|token)$/i;
+
+function hasSecretFields(body: Record<string, unknown>): boolean {
+  for (const key of Object.keys(body)) {
+    if (SECRET_FIELD_RE.test(key)) return true;
+  }
+  return false;
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category')?.trim() || 'prediction-market-bots';
@@ -52,6 +62,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
   }
 
+  // Reject obvious secret fields
+  if (hasSecretFields(body)) {
+    return NextResponse.json({ ok: false, error: 'secret_fields_rejected' }, { status: 400 });
+  }
+
   // Dual auth: global A2A_LIVE_EVENTS_TOKEN OR per-agent ARCLAYER_API_KEY
   if (checkGlobalToken(request)) {
     // Global token passes — proceed with write (backward compat)
@@ -61,6 +76,12 @@ export async function POST(request: NextRequest) {
       status: body.status,
       lastEventType: body.lastEventType ?? 'heartbeat',
       lastEventSummary: body.lastEventSummary ?? 'heartbeat',
+      role: body.role ?? undefined,
+      runtimeType: body.runtimeType ?? undefined,
+      processName: body.processName ?? undefined,
+      version: body.version ?? undefined,
+      chainId: body.chainId ?? undefined,
+      rpcOk: body.rpcOk ?? undefined,
     });
 
     if (!result.ok) {
@@ -88,6 +109,12 @@ export async function POST(request: NextRequest) {
     status: body.status,
     lastEventType: body.lastEventType ?? 'heartbeat',
     lastEventSummary: body.lastEventSummary ?? 'heartbeat',
+    role: body.role ?? undefined,
+    runtimeType: body.runtimeType ?? undefined,
+    processName: body.processName ?? undefined,
+    version: body.version ?? undefined,
+    chainId: body.chainId ?? undefined,
+    rpcOk: body.rpcOk ?? undefined,
   });
 
   if (!result.ok) {
