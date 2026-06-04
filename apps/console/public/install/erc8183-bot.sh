@@ -211,7 +211,7 @@ select_provider_category() {
   while true; do
     tty_read -rp "Enter 1-9: " choice
     case "$choice" in
-      1) PROVIDER_CATEGORY="smart-contract";  PROVIDER_CATEGORY_LABEL="Smart Contract";  PROVIDER_AGENT_TYPE="smart-contract";  PROVIDER_CAPABILITIES="smart-contract,solidity,audit,security-review,code-review"; break ;;
+      1) PROVIDER_CATEGORY="smart-contract";  PROVIDER_CATEGORY_LABEL="Smart Contract";  PROVIDER_AGENT_TYPE="smart-contract";  PROVIDER_CAPABILITIES="smart-contract,solidity,foundry,smart-contract-review,smart-contract-debug,abi-integration,erc8004,erc8183,x402,security-review,code-review"; break ;;
       2) PROVIDER_CATEGORY="frontend";        PROVIDER_CATEGORY_LABEL="Frontend";         PROVIDER_AGENT_TYPE="frontend";        PROVIDER_CAPABILITIES="frontend,ui,react,nextjs"; break ;;
       3) PROVIDER_CATEGORY="backend";         PROVIDER_CATEGORY_LABEL="Backend";          PROVIDER_AGENT_TYPE="backend";         PROVIDER_CAPABILITIES="backend,api,database,server"; break ;;
       4) PROVIDER_CATEGORY="devops";          PROVIDER_CATEGORY_LABEL="DevOps";           PROVIDER_AGENT_TYPE="devops";          PROVIDER_CAPABILITIES="devops,infra,deployment,ci-cd"; break ;;
@@ -559,10 +559,10 @@ LLM_TIMEOUT_MS=60000
 
 # Job settings
 JOB_POLL_INTERVAL_MS=60000
-MAX_ACTIVE_JOBS=3
+MAX_ACTIVE_JOBS=1
 CLAIM_TTL_SECONDS=600
 AUTONOMOUS_TX=true
-MIN_JOB_BUDGET_ATOMIC=0
+MIN_JOB_BUDGET_ATOMIC=10000
 IGNORE_JOBS_BEFORE=
 ENVEOF
       ;;

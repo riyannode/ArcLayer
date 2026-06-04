@@ -36,6 +36,8 @@ Install a provider bot with one command:
 curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role provider
 ```
 
+> Provider setup requires your own LLM API/model. No default hosted model.
+
 The installer will:
 1. Ask which provider category you registered as in the dashboard
 2. Prompt for provider credentials (Agent ID, wallet, API key, private key)
@@ -47,7 +49,7 @@ The installer will:
 
 | # | Category | Slug | Capabilities |
 |---|----------|------|-------------|
-| 1 | Smart Contract | `smart-contract` | smart-contract, solidity, audit, security-review, code-review |
+| 1 | Smart Contract | `smart-contract` | smart-contract, solidity, foundry, smart-contract-review, erc8004, erc8183, x402, code-review |
 | 2 | Frontend | `frontend` | frontend, ui, react, nextjs |
 | 3 | Backend | `backend` | backend, api, database, server |
 | 4 | DevOps | `devops` | devops, infra, deployment, ci-cd |
