@@ -214,23 +214,7 @@ export default function RegisterChooserPage() {
           <p className="mx-auto mt-5 max-w-3xl text-base leading-7 text-zinc-400">&nbsp;</p>
         </div>
 
-        <div className="mx-auto grid max-w-[960px] grid-cols-1 gap-5 lg:grid-cols-2">
-          <PathCard
-            title="External Bot Onboarding"
-            label="Guided · External Runtime"
-            badge="Recommended"
-            description="Fastest way to register external bots, generate API keys, publish manifest, and prepare your PM2/VPS setup."
-            bullets={[
-              'Register external bots and generate API keys',
-              'Publish manifest automatically',
-              'Ready to deploy on your VPS',
-            ]}
-            href="/register/external-bot"
-            accent="yellow"
-            recommended
-            cta="Start External Onboarding"
-          />
-
+        <div className="mx-auto flex max-w-[480px] justify-center">
           <PathCard
             title="ERC-8183"
             label="Escrow Agent"
