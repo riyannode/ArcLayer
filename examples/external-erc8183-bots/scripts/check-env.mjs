@@ -308,14 +308,16 @@ if (!ONLY_ROLE || ONLY_ROLE === 'provider') {
         console.log(`  ○ LLM_JSON_REPAIR_RETRIES: (not set — defaults to 1)`);
       }
 
-    // IGNORE_JOBS_BEFORE must be numeric (ERC-8183 job id threshold)
+    // IGNORE_JOBS_BEFORE must be a positive integer (ERC-8183 job id threshold)
     const ignoreBefore = env.IGNORE_JOBS_BEFORE || "";
-    if (ignoreBefore && isNaN(Number(ignoreBefore))) {
-      console.log(`  ✗ INVALID: IGNORE_JOBS_BEFORE="${ignoreBefore}" must be a numeric job id`);
-      allPass = false;
-      exitCode = 1;
-    } else if (ignoreBefore) {
-      console.log(`  ✓ IGNORE_JOBS_BEFORE: ${ignoreBefore} (skip jobs with erc8183JobId < ${ignoreBefore})`);
+    if (ignoreBefore) {
+      const num = Number(ignoreBefore);
+      if (isNaN(num) || num < 0 || !Number.isInteger(num)) {
+        console.log(`  ✗ INVALID: IGNORE_JOBS_BEFORE="${ignoreBefore}" must be a positive integer job id`);
+        exitCode = 1;
+      } else {
+        console.log(`  ✓ IGNORE_JOBS_BEFORE: ${ignoreBefore} (skip jobs with erc8183JobId < ${ignoreBefore})`);
+      }
     }
     }
 
