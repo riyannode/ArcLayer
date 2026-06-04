@@ -24,7 +24,13 @@ import { useArcWrite } from '@/hooks/useArcWrite';
 import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
 import { config } from '@/lib/wagmi';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest/types';
+import {
+  ERC8183_PUBLIC_ROLES,
+  normalizePublicRole,
+  type Erc8183PublicRole,
+} from '@/lib/erc8183/role-config';
 
+// Keep union broad for ROLE_CONFIG keys, but public UI only allows provider.
 type AgentRole = 'provider' | 'evaluator' | 'autonomous-client';
 type RegisterStatus = 'idle' | 'pending' | 'success' | 'error';
 type SectionKey = 'identity' | 'profile' | 'review';
@@ -108,7 +114,7 @@ const DEFAULT_FORM: FormState = {
   agentName: '',
   description: '',
   avatarUrl: '',
-  role: 'autonomous-client',
+  role: 'provider',
   category: '',
   capabilities: '',
   controllerWallet: '',
@@ -352,38 +358,56 @@ function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) 
 function RoleButton({
   role,
   active,
+  disabled,
+  badge,
   onClick,
 }: {
   role: RoleConfig;
   active: boolean;
+  disabled?: boolean;
+  badge?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={
-        active
-          ? 'rounded-md border border-[#F3C536]/45 bg-[#F3C536]/10 p-4 text-left transition'
-          : 'rounded-md border border-white/10 bg-white/[0.025] p-4 text-left transition hover:border-[#F3C536]/30 hover:bg-[#F3C536]/[0.04]'
+        disabled
+          ? 'cursor-not-allowed rounded-md border border-white/10 bg-white/[0.01] p-4 text-left opacity-50'
+          : active
+            ? 'rounded-md border border-[#F3C536]/45 bg-[#F3C536]/10 p-4 text-left transition'
+            : 'rounded-md border border-white/10 bg-white/[0.025] p-4 text-left transition hover:border-[#F3C536]/30 hover:bg-[#F3C536]/[0.04]'
       }
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className={active ? 'font-semibold text-[#F3C536]' : 'font-semibold text-[#F5F0E5]'}>
-            {role.title}
+          <div className="flex items-center gap-2">
+            <div className={active ? 'font-semibold text-[#F3C536]' : disabled ? 'font-semibold text-[#EAE4D8]/40' : 'font-semibold text-[#F5F0E5]'}>
+              {role.title}
+            </div>
+            {badge && (
+              <span className="rounded border border-[#F3C536]/20 bg-[#F3C536]/10 px-1.5 py-0.5 font-mono text-[8px] uppercase tracking-[0.12em] text-[#F3C536]/70">
+                {badge}
+              </span>
+            )}
           </div>
-          <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/55">{role.description}</p>
+          <p className={disabled ? 'mt-2 text-[12px] leading-5 text-[#EAE4D8]/30' : 'mt-2 text-[12px] leading-5 text-[#EAE4D8]/55'}>
+            {role.description}
+          </p>
         </div>
-        <div
-          className={
-            active
-              ? 'flex h-6 w-6 shrink-0 items-center justify-center rounded border border-[#F3C536] bg-[#F3C536] text-[#07090D]'
-              : 'h-6 w-6 shrink-0 rounded border border-white/20'
-          }
-        >
-          {active && <Check className="h-4 w-4" />}
-        </div>
+        {!disabled && (
+          <div
+            className={
+              active
+                ? 'flex h-6 w-6 shrink-0 items-center justify-center rounded border border-[#F3C536] bg-[#F3C536] text-[#07090D]'
+                : 'h-6 w-6 shrink-0 rounded border border-white/20'
+            }
+          >
+            {active && <Check className="h-4 w-4" />}
+          </div>
+        )}
       </div>
     </button>
   );
@@ -694,13 +718,18 @@ export default function ERC8183EscrowRegisterPage() {
   }
 
   function updateRole(nextRole: AgentRole) {
-    setForm((prev) => {
-      if (prev.role === nextRole) return prev;
+    // Public UI gate: only provider is enabled. Force provider for disabled roles.
+    // When client/evaluator are re-enabled in role-config.ts, this passes them through.
+    const publicKey = normalizePublicRole(nextRole);
+    const effectiveRole: AgentRole = publicKey === 'client' ? 'autonomous-client' : publicKey === 'evaluator' ? 'evaluator' : 'provider';
 
-      if (nextRole === 'autonomous-client') {
+    setForm((prev) => {
+      if (prev.role === effectiveRole) return prev;
+
+      if (effectiveRole === 'autonomous-client') {
         return {
           ...prev,
-          role: nextRole,
+          role: effectiveRole,
           category: '',
           capabilities: '',
         };
@@ -708,7 +737,7 @@ export default function ERC8183EscrowRegisterPage() {
 
       return {
         ...prev,
-        role: nextRole,
+        role: effectiveRole,
       };
     });
   }
@@ -973,11 +1002,14 @@ export default function ERC8183EscrowRegisterPage() {
                     value={form.role}
                     onChange={(value) => updateRole(value as AgentRole)}
                     options={[
-                      { value: 'autonomous-client', label: 'Client (Create Job)' },
                       { value: 'provider', label: 'Provider (Receive Job)' },
-                      { value: 'evaluator', label: 'Evaluator (Review Job)' },
+                      { value: 'autonomous-client', label: 'Client (Coming soon)' },
+                      { value: 'evaluator', label: 'Evaluator (Coming soon)' },
                     ]}
                   />
+                  <p className="mt-2 text-[11px] text-[#EAE4D8]/40">
+                    Start with a Provider agent. Client and Evaluator automation are being staged internally first.
+                  </p>
                 </FieldShell>
 
                 <div className="lg:col-span-2">
@@ -987,21 +1019,26 @@ export default function ERC8183EscrowRegisterPage() {
 
                   <div className="grid gap-3 md:grid-cols-3">
                     <RoleButton
-                      role={ROLE_CONFIG['autonomous-client']}
-                      active={form.role === 'autonomous-client'}
-                      onClick={() => updateRole('autonomous-client')}
+                      role={ROLE_CONFIG.provider}
+                      active={form.role === 'provider'}
+                      badge="Available"
+                      onClick={() => updateRole('provider')}
                     />
 
                     <RoleButton
-                      role={ROLE_CONFIG.provider}
-                      active={form.role === 'provider'}
-                      onClick={() => updateRole('provider')}
+                      role={ROLE_CONFIG['autonomous-client']}
+                      active={form.role === 'autonomous-client'}
+                      disabled
+                      badge="Coming soon"
+                      onClick={() => {}}
                     />
 
                     <RoleButton
                       role={ROLE_CONFIG.evaluator}
                       active={form.role === 'evaluator'}
-                      onClick={() => updateRole('evaluator')}
+                      disabled
+                      badge="Coming soon"
+                      onClick={() => {}}
                     />
                   </div>
                 </div>
