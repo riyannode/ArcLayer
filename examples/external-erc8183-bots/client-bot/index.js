@@ -68,7 +68,8 @@ let jobsCreatedThisRun = 0;
 
 // ── Random job templates ─────────────────────────────────────────────────
 
-const JOB_TEMPLATES = [
+// Base templates — always available, match default provider capabilities.
+const BASE_TEMPLATES = [
   {
     jobType: 'market_summary',
     query: 'Provide a concise market summary for the top 5 crypto assets by 24h volume.',
@@ -99,6 +100,77 @@ const JOB_TEMPLATES = [
     requiredCapability: 'data-quality-check',
     difficulty: 'easy',
   },
+];
+
+// Extra templates — opt-in via CLIENT_JOB_TYPES env.
+// Only use when the provider bot has matching capabilities and mode.
+const EXTRA_TEMPLATES = [
+  {
+    jobType: 'smart_contract_review',
+    query: 'Review the Solidity escrow contract below for security and correctness. Identify issues, explain severity, and recommend fixes.',
+    requiredCapability: 'solidity',
+    difficulty: 'medium',
+    task: 'smart-contract-review',
+    language: 'solidity',
+    contractName: 'SimpleEscrow',
+    code: [
+      'pragma solidity ^0.8.20;',
+      '',
+      'contract SimpleEscrow {',
+      '    address public buyer;',
+      '    address public seller;',
+      '    uint256 public amount;',
+      '    bool public funded;',
+      '    bool public released;',
+      '',
+      '    constructor(address _seller) {',
+      '        buyer = msg.sender;',
+      '        seller = _seller;',
+      '    }',
+      '',
+      '    function fund() external payable {',
+      '        require(msg.sender == buyer, "only buyer");',
+      '        require(!funded, "already funded");',
+      '        amount = msg.value;',
+      '        funded = true;',
+      '    }',
+      '',
+      '    function release() external {',
+      '        require(funded, "not funded");',
+      '        require(!released, "released");',
+      '        released = true;',
+      '        payable(seller).transfer(amount);',
+      '    }',
+      '',
+      '    function refund() external {',
+      '        require(msg.sender == buyer, "only buyer");',
+      '        require(funded, "not funded");',
+      '        payable(buyer).transfer(address(this).balance);',
+      '    }',
+      '}',
+    ].join('\n'),
+    expectedDeliverable: 'Strict JSON with summary, findings, recommendations, confidence, and evidence.',
+    acceptanceCriteria: [
+      'Must identify at least one meaningful smart contract issue if present',
+      'Must include severity per finding (info, low, medium, high, critical)',
+      'Must recommend concrete fixes',
+      'Must return valid strict JSON',
+      'Must not include markdown outside JSON',
+    ],
+  },
+];
+
+// CLIENT_JOB_TYPES: comma-separated list of extra job types to include.
+// Example: CLIENT_JOB_TYPES=smart_contract_review
+// Empty or unset = base templates only (backward compatible).
+const CLIENT_JOB_TYPES = (process.env.CLIENT_JOB_TYPES || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const JOB_TEMPLATES = [
+  ...BASE_TEMPLATES,
+  ...EXTRA_TEMPLATES.filter((t) => CLIENT_JOB_TYPES.includes(t.jobType)),
 ];
 
 function pickRandomTemplate() {
@@ -218,12 +290,7 @@ async function createAndFundJob() {
       description: `[${template.jobType}] ${template.query.slice(0, 80)}`,
       budgetAtomic: JOB_BUDGET_ATOMIC,
       inputPayload: {
-        jobType: template.jobType,
-        query: template.query,
-        requiredCapability: template.requiredCapability,
-        difficulty: template.difficulty,
-        nonce: template.nonce,
-        createdAt: template.createdAt,
+        ...template,
       },
     });
 
