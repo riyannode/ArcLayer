@@ -270,8 +270,12 @@ if (exitCode === 0) {
 } else {
   console.log(`❌ Some required env vars are missing. Check ✗ entries above.`);
 }
-console.log(`\nTip: After fixing, run:  pm2 start client-bot/ecosystem.config.cjs`);
-console.log(`                         pm2 start provider-bot/ecosystem.config.cjs`);
-console.log(`                         pm2 start evaluator-bot/ecosystem.config.cjs`);
+if (ONLY_ROLE) {
+  console.log(`\nTip: After fixing, run:  pm2 start ${ONLY_ROLE}-bot/ecosystem.config.cjs`);
+} else {
+  console.log(`\nTip: After fixing, run:  pm2 start client-bot/ecosystem.config.cjs`);
+  console.log(`                         pm2 start provider-bot/ecosystem.config.cjs`);
+  console.log(`                         pm2 start evaluator-bot/ecosystem.config.cjs`);
+}
 
 process.exit(exitCode);
