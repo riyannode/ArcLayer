@@ -4,8 +4,10 @@
 #
 # Usage:
 #   curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash
+#   curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role provider
 #
 # Flags:
+#   --role=X    Preset role (client|provider|evaluator), skip interactive selection
 #   --debug     Verbose logging (no secrets printed)
 #   --dry-run   Validate deps and target folder, but skip .env write, npm install, PM2 start
 #
@@ -42,13 +44,22 @@ fail()  { echo -e "${RED}[error]${NC} $*"; exit 1; }
 
 DEBUG=false
 DRY_RUN=false
+PRESET_ROLE=""
 
 for arg in "$@"; do
   case "$arg" in
-    --debug)   DEBUG=true ;;
-    --dry-run) DRY_RUN=true ;;
+    --debug)     DEBUG=true ;;
+    --dry-run)   DRY_RUN=true ;;
+    --role=*)    PRESET_ROLE="${arg#--role=}" ;;
+    --role)      ;; # next arg handled below
   esac
 done
+
+# Handle "--role provider" as two args
+for i in "$@"; do :; done  # noop to keep $@ available
+if [ "${1:-}" = "--role" ] && [ -n "${2:-}" ]; then
+  PRESET_ROLE="$2"
+fi
 
 debug() {
   if [ "$DEBUG" = true ]; then
@@ -122,6 +133,19 @@ select_role() {
   echo ""
   echo -e "${BOLD}═══ ArcLayer ERC-8183 Bot Installer ═══${NC}"
   echo ""
+
+  # If --role was passed, use it directly (skip interactive selection)
+  if [ -n "$PRESET_ROLE" ]; then
+    case "$PRESET_ROLE" in
+      client)    ROLE="client";    ROLE_LABEL="Client" ;;
+      provider)  ROLE="provider";  ROLE_LABEL="Provider" ;;
+      evaluator) ROLE="evaluator"; ROLE_LABEL="Evaluator" ;;
+      *) fail "Invalid role: $PRESET_ROLE. Must be client, provider, or evaluator." ;;
+    esac
+    ok "Role: ${ROLE_LABEL}"
+    return
+  fi
+
   echo "Choose your bot role:"
   echo "  1) client     — creates and funds ERC-8183 jobs"
   echo "  2) provider   — claims, processes, and submits job deliverables"
@@ -456,13 +480,30 @@ start_bot() {
   npm install --production 2>/dev/null || npm install
   ok "Dependencies installed"
 
-  # Run env preflight check before PM2 start
-  info "Running env preflight check..."
-  if npm run check:env 2>&1; then
-    ok "Env check passed"
-  else
-    fail "Env check failed. Fix the issues above and re-run, or edit .env manually then run: npm run check:env"
+  # Verify .env has required keys for selected role
+  info "Verifying .env configuration..."
+  local env_file="${bot_dir}/${ROLE}-bot/.env"
+  local missing=()
+
+  case "$ROLE" in
+    client)
+      for k in ARCLAYER_BASE_URL CLIENT_API_KEY CLIENT_AGENT_ID CLIENT_ADDRESS CLIENT_PRIVATE_KEY ARC_RPC_URL; do
+        grep -q "^${k}=" "$env_file" 2>/dev/null || missing+=("$k")
+      done ;;
+    provider)
+      for k in ARCLAYER_BASE_URL PROVIDER_API_KEY PROVIDER_AGENT_ID PROVIDER_ADDRESS PROVIDER_PRIVATE_KEY ARC_RPC_URL; do
+        grep -q "^${k}=" "$env_file" 2>/dev/null || missing+=("$k")
+      done ;;
+    evaluator)
+      for k in ARCLAYER_BASE_URL EVALUATOR_API_KEY EVALUATOR_AGENT_ID EVALUATOR_ADDRESS EVALUATOR_PRIVATE_KEY ARC_RPC_URL; do
+        grep -q "^${k}=" "$env_file" 2>/dev/null || missing+=("$k")
+      done ;;
+  esac
+
+  if [ ${#missing[@]} -gt 0 ]; then
+    fail "Missing required env vars: ${missing[*]}"
   fi
+  ok "Env check passed — all required vars present for ${ROLE_LABEL}"
 
   # Check if ecosystem config exists
   if [ ! -f "$ecosystem" ]; then

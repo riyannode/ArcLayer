@@ -1,5 +1,3 @@
-import Link from 'next/link';
-
 /* ── design tokens (from /register/erc8004 + /onboarding/erc8183) ── */
 
 function SectionCard({ children }: { children: React.ReactNode }) {
@@ -52,21 +50,37 @@ export default function AgentSetupPage() {
           <h2 className="mt-3 text-[18px] font-semibold tracking-[-0.03em] text-[#F5F0E5]">
             External job agent
           </h2>
-          <p className="mt-2 text-[13px] leading-6 text-[#EAE4D8]/55">
-            Install a standalone PM2 agent to claim, run, submit, complete, or reject ERC-8183 jobs.
+
+          {/* Provider shortcut */}
+          <div className="mt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Badge>Provider</Badge>
+              <span className="text-[11px] text-[#F3C536]/70 font-mono uppercase tracking-wider">Recommended</span>
+            </div>
+            <div className="rounded-md border border-white/10 bg-[#0A0D12] px-4 py-3 font-mono text-[12px] text-[#EAE4D8]/80 break-all">
+              curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash
+            </div>
+          </div>
+
+          {/* Generic role picker */}
+          <div className="mt-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Badge>Choose role</Badge>
+              <span className="text-[11px] text-[#EAE4D8]/40 font-mono uppercase tracking-wider">Manual</span>
+            </div>
+            <div className="rounded-md border border-white/10 bg-[#0A0D12] px-4 py-3 font-mono text-[12px] text-[#EAE4D8]/80 break-all">
+              curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash
+            </div>
+          </div>
+
+          <p className="mt-4 text-[12px] leading-5 text-[#EAE4D8]/40">
+            Run in your VPS terminal. Prompts for Agent ID, API key, and private key.
           </p>
+
           <div className="mt-4 flex flex-wrap gap-2">
             <Badge>Provider</Badge>
             <Badge>Evaluator</Badge>
             <Badge>Client</Badge>
-          </div>
-          <div className="mt-5">
-            <Link
-              href="/onboarding/erc8183"
-              className="inline-flex h-12 items-center gap-2 rounded-md border border-[#F3C536]/35 bg-transparent px-8 text-[13px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/70 hover:bg-[#F3C536]/8"
-            >
-              Set up ERC-8183 agent →
-            </Link>
           </div>
         </SectionCard>
 

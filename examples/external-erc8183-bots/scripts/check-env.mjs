@@ -127,10 +127,19 @@ function rejectCrossRoleSecrets(env, botName, allowedPrefix) {
 
 // ── Bot checks ─────────────────────────────────────────────────────────────
 
-function checkBot(botName, rolePrefix, requiredKeys, optionalKeys = []) {
+function checkBot(botName, rolePrefix, requiredKeys, optionalKeys = [], skipIfMissing = false) {
   const envPath = resolve(BOTS_DIR, botName, '.env');
   console.log(`\n── ${botName} ──────────────────────`);
   console.log(`File: ${envPath}`);
+
+  // Skip if .env doesn't exist and directory wasn't configured (standalone single-role install)
+  if (skipIfMissing && !existsSync(envPath)) {
+    const dirPath = resolve(BOTS_DIR, botName);
+    if (!existsSync(dirPath) || !existsSync(resolve(dirPath, '.env.example'))) {
+      console.log(`  ⊘ Skipped — not configured (single-role install)`);
+      return;
+    }
+  }
 
   if (!existsSync(envPath)) {
     console.log(`  ✗ .env not found`);
@@ -204,7 +213,7 @@ checkBot('client-bot', 'CLIENT', [
   'JOB_CREATE_INTERVAL_MS',
   'MAX_OPEN_JOBS',
   'AUTONOMOUS_TX',
-]);
+], true);
 
 // Provider: PROVIDER_* only
 checkBot('provider-bot', 'PROVIDER', [
@@ -224,7 +233,7 @@ checkBot('provider-bot', 'PROVIDER', [
   'AUTONOMOUS_TX',
   'IGNORE_JOBS_BEFORE',
   'RECOVER_OLD_JOBS',
-]);
+], true);
 
 // Evaluator: EVALUATOR_* only
 checkBot('evaluator-bot', 'EVALUATOR', [
@@ -244,7 +253,7 @@ checkBot('evaluator-bot', 'EVALUATOR', [
   'AUTONOMOUS_TX',
   'IGNORE_JOBS_BEFORE',
   'RECOVER_OLD_JOBS',
-]);
+], true);
 
 console.log(`\n═══════════════════════════════════════════════════════`);
 if (exitCode === 0) {
