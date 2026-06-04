@@ -319,7 +319,7 @@ describe('buildInstallCommand', () => {
     });
 
     expect(cmd.title).toBe('One-Click ERC-8183 Bot Installer');
-    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash');
+    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash');
     // Security: no inline secrets
     expect(cmd.command).not.toContain('ak_');
     expect(cmd.command).not.toContain('PRIVATE_KEY');
