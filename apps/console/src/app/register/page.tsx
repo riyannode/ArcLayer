@@ -189,7 +189,7 @@ export default function RegisterChooserPage() {
           </div>
 
           <Link
-            href="/docs"
+            href="/dashboard"
             className="text-[11px] font-medium text-zinc-400 transition hover:text-zinc-100"
           >
             ? Need help?
