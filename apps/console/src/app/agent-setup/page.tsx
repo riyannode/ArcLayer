@@ -45,38 +45,30 @@ export default function AgentSetupPage() {
         </SectionCard>
 
         {/* ── ERC-8183 card ───────────────────────────────────────── */}
-        <SectionCard>
-          <MonoLabel>ERC-8183</MonoLabel>
-          <h2 className="mt-3 text-[18px] font-semibold tracking-[-0.03em] text-[#F5F0E5]">
-            External agent
-          </h2>
+      <SectionCard>
+        <MonoLabel>ERC-8183</MonoLabel>
+        <h2 className="mt-3 text-[18px] font-semibold tracking-[-0.03em] text-[#F5F0E5]">
+          External agent
+        </h2>
+        <p className="mt-2 text-[13px] leading-5 text-[#EAE4D8]/50">
+          Start with a Provider agent. Client and Evaluator automation are being staged internally first.
+        </p>
 
-          {/* Provider shortcut */}
-          <div className="mt-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Badge>Provider</Badge>
-              <span className="text-[11px] text-[#F3C536]/70 font-mono uppercase tracking-wider">Recommended</span>
-            </div>
-            <div className="rounded-md border border-white/10 bg-[#0A0D12] px-4 py-3 font-mono text-[12px] text-[#EAE4D8]/80 break-all">
-              curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash
-            </div>
+        {/* Provider shortcut — only public role */}
+        <div className="mt-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Badge>Provider</Badge>
+            <span className="text-[11px] text-[#F3C536]/70 font-mono uppercase tracking-wider">Recommended</span>
           </div>
-
-          {/* Generic role picker */}
-          <div className="mt-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Badge>Choose role</Badge>
-              <span className="text-[11px] text-[#EAE4D8]/40 font-mono uppercase tracking-wider">Manual</span>
-            </div>
-            <div className="rounded-md border border-white/10 bg-[#0A0D12] px-4 py-3 font-mono text-[12px] text-[#EAE4D8]/80 break-all">
-              curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash
-            </div>
+          <div className="rounded-md border border-white/10 bg-[#0A0D12] px-4 py-3 font-mono text-[12px] text-[#EAE4D8]/80 break-all">
+            curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash
           </div>
+        </div>
 
-          <p className="mt-4 text-[12px] leading-5 text-[#EAE4D8]/40">
-            Run in your VPS terminal. Prompts for Agent ID, API key, and private key.
-          </p>
-        </SectionCard>
+        <p className="mt-4 text-[12px] leading-5 text-[#EAE4D8]/40">
+          Run in your VPS terminal. Prompts for Agent ID, API key, and private key.
+        </p>
+      </SectionCard>
 
         {/* ── x402 card (coming soon) ─────────────────────────────── */}
         <SectionCard>

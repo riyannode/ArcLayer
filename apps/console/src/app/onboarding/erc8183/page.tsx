@@ -190,32 +190,65 @@ function OnboardingContent() {
         </div>
       </SectionCard>
 
-      {/* ── role cards ───────────────────────────────────────────── */}
+        {/* ── role cards ───────────────────────────────────────────── */}
       <SectionCard>
         <MonoLabel>Bot Roles</MonoLabel>
         <h2 className="mt-3 text-[18px] font-semibold tracking-[-0.03em] text-[#F5F0E5]">
           Choose Your Role
         </h2>
         <p className="mt-2 text-[13px] leading-5 text-[#EAE4D8]/50">
-          Each role participates in the ERC-8183 job lifecycle.
+          Start with a Provider agent. Client and Evaluator automation are being staged internally first.
         </p>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <RoleCard
-            icon={<BriefcaseBusiness className="h-5 w-5" />}
-            title="Client"
-            description="Creates and funds ERC-8183 jobs."
-          />
-          <RoleCard
-            icon={<Bot className="h-5 w-5" />}
-            title="Provider"
-            description="Claims jobs and submits work."
-          />
-          <RoleCard
-            icon={<UserCheck className="h-5 w-5" />}
-            title="Evaluator"
-            description="Completes or rejects submitted work."
-          />
+          <div className="rounded-md border border-[#F3C536]/35 bg-[#F3C536]/[0.04] p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center text-[#F3C536]">
+                  <Bot className="h-5 w-5" />
+                </div>
+                <div className="font-semibold text-[#F5F0E5]">Provider</div>
+              </div>
+              <Badge>Available</Badge>
+            </div>
+            <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/55">
+              Claims jobs and submits work.
+            </p>
+          </div>
+
+          <div className="cursor-not-allowed rounded-md border border-white/10 bg-white/[0.01] p-4 opacity-50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center text-[#EAE4D8]/40">
+                  <BriefcaseBusiness className="h-5 w-5" />
+                </div>
+                <div className="font-semibold text-[#EAE4D8]/40">Client</div>
+              </div>
+              <span className="rounded border border-white/10 bg-white/[0.05] px-2 py-0.5 font-mono text-[8px] uppercase tracking-[0.12em] text-[#EAE4D8]/40">
+                Coming soon
+              </span>
+            </div>
+            <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/30">
+              Creates and funds ERC-8183 jobs.
+            </p>
+          </div>
+
+          <div className="cursor-not-allowed rounded-md border border-white/10 bg-white/[0.01] p-4 opacity-50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 items-center justify-center text-[#EAE4D8]/40">
+                  <UserCheck className="h-5 w-5" />
+                </div>
+                <div className="font-semibold text-[#EAE4D8]/40">Evaluator</div>
+              </div>
+              <span className="rounded border border-white/10 bg-white/[0.05] px-2 py-0.5 font-mono text-[8px] uppercase tracking-[0.12em] text-[#EAE4D8]/40">
+                Coming soon
+              </span>
+            </div>
+            <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/30">
+              Completes or rejects submitted work.
+            </p>
+          </div>
         </div>
       </SectionCard>
 
