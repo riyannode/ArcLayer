@@ -29,9 +29,9 @@ async function callLLM({
   timeoutMs = 60000,
 }) {
   if (!baseUrl) throw new Error('LLM_BASE_URL is required');
-  if (!apiKey) throw new Error('LLM_API_KEY is required');
   if (!model) throw new Error('LLM_MODEL is required');
   if (!messages || !messages.length) throw new Error('messages array is required');
+  // apiKey may be empty for local/no-auth providers — omit Authorization header in that case
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -39,12 +39,12 @@ async function callLLM({
   let res;
   try {
     const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+
     res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
+      headers,
       body: JSON.stringify({
         model,
         messages,

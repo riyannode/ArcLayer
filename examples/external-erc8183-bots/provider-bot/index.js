@@ -398,6 +398,17 @@ async function phaseClaimAndSubmit() {
       continue;
     }
 
+    // MIN_JOB_BUDGET_ATOMIC guard (check before claiming — avoids leaving
+    // underpriced jobs in claimed/running state with no submit)
+    if (MIN_JOB_BUDGET_ATOMIC > 0) {
+      const jobBudget = parseInt(job.budgetAtomic || job.priceAtomic || '0', 10);
+      if (jobBudget < MIN_JOB_BUDGET_ATOMIC) {
+        console.log(`   [WORK] Skipping job ${id} — budget ${jobBudget} < min ${MIN_JOB_BUDGET_ATOMIC}`);
+        processedIds.add(`claim-${id}`);
+        continue;
+      }
+    }
+
     if (activeProcessed >= MAX_ACTIVE_JOBS) {
       console.log(`   [WORK] Hit MAX_ACTIVE_JOBS (${MAX_ACTIVE_JOBS}) — waiting for next cycle`);
       break;
@@ -420,16 +431,6 @@ async function phaseClaimAndSubmit() {
       // Mark running
       const running = await api.markRunning(id, PROVIDER_AGENT_ID);
       console.log(`   Running: status=${running.status}`);
-
-      // MIN_JOB_BUDGET_ATOMIC guard (check before calling LLM)
-      if (MIN_JOB_BUDGET_ATOMIC > 0) {
-        const jobBudget = parseInt(job.budgetAtomic || job.priceAtomic || '0', 10);
-        if (jobBudget < MIN_JOB_BUDGET_ATOMIC) {
-          console.log(`   [WORK] Skipping job ${id} — budget ${jobBudget} < min ${MIN_JOB_BUDGET_ATOMIC}`);
-          processedIds.add(`claim-${id}`);
-          continue;
-        }
-      }
 
       // Run strategy based on provider mode
       let resultPayload;
