@@ -231,39 +231,6 @@ export default function RegisterChooserPage() {
           />
         </div>
 
-        {/* ── Agent Setup card (SectionCard style) ─────────────────── */}
-        <div className="mx-auto mt-8 max-w-[480px]">
-          <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
-            <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
-              Agent Setup
-            </div>
-            <h2 className="mt-3 text-[18px] font-semibold tracking-[-0.03em] text-[#F5F0E5]">
-              Set up your external agent
-            </h2>
-            <p className="mt-2 text-[13px] leading-6 text-[#EAE4D8]/55">
-              Install a standalone agent for ERC-8183 jobs. x402 agent setup will be added here later.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {['ERC-8183', 'x402 soon', 'PM2 bot'].map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded border border-[#F3C536]/20 bg-[#F3C536]/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#F3C536]"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-            <div className="mt-5">
-              <Link
-                href="/agent-setup"
-                className="inline-flex h-12 items-center gap-2 rounded-md border border-[#F3C536]/35 bg-transparent px-8 text-[13px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/70 hover:bg-[#F3C536]/8"
-              >
-                Start setup →
-              </Link>
-            </div>
-          </div>
-        </div>
-
         <div className="mx-auto mt-8 flex max-w-[960px] items-center gap-4 rounded-xl border border-white/10 bg-white/[0.035] px-6 py-4 text-zinc-300">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-yellow-300/30 bg-yellow-300/10 text-yellow-300">
             <ShieldIcon className="h-5 w-5" />
