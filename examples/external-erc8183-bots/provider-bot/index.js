@@ -65,6 +65,7 @@ const LLM_CONFIG = (() => {
   const maxTokens = parseInt(process.env.LLM_MAX_TOKENS || '2500', 10);
   const temperature = parseFloat(process.env.LLM_TEMPERATURE || '0.2');
   const timeoutMs = parseInt(process.env.LLM_TIMEOUT_MS || '60000', 10);
+  const jsonRepairRetries = parseInt(process.env.LLM_JSON_REPAIR_RETRIES || '1', 10);
 
   // Validate required LLM env
   const errors = [];
@@ -82,7 +83,7 @@ const LLM_CONFIG = (() => {
     );
   }
 
-  return { provider, baseUrl, apiKey, model, maxTokens, temperature, timeoutMs };
+  return { provider, baseUrl, apiKey, model, maxTokens, temperature, timeoutMs, jsonRepairRetries };
 })();
 
 // ── Provider capabilities ────────────────────────────────────────────────
@@ -534,6 +535,7 @@ async function phaseClaimAndSubmit() {
           timeoutMs: LLM_CONFIG.timeoutMs,
           providerSkill: PROVIDER_SKILL,
           customSkillPath: PROVIDER_CUSTOM_SKILL_PATH,
+          jsonRepairRetries: LLM_CONFIG.jsonRepairRetries,
         };
         const result = await runLlmTask(job, llmEnv);
         resultPayload = result.resultPayload;
@@ -544,7 +546,7 @@ async function phaseClaimAndSubmit() {
         resultPayload = result.resultPayload;
         proofPayload = result.proofPayload;
       }
-      console.log(`   Strategy: ${strategy} (confidence: ${resultPayload.confidence})`);
+      console.log(`   Strategy: ${strategy} (confidence: ${resultPayload.confidence})${proofPayload?.repairUsed ? ' [repair used]' : ''}`);
 
       // Submit
       const submitted = await api.submit(id, { providerAgentId: PROVIDER_AGENT_ID, resultPayload, proofPayload });
@@ -577,7 +579,7 @@ async function main() {
   console.log(`Mode: ${PROVIDER_MODE}${PROVIDER_AGENT_TYPE ? ` (${PROVIDER_AGENT_TYPE})` : ''}`);
   if (PROVIDER_MODE === 'llm') {
     console.log(`LLM: ${LLM_CONFIG.provider} / ${LLM_CONFIG.model}`);
-    console.log(`LLM timeout: ${LLM_CONFIG.timeoutMs}ms, maxTokens: ${LLM_CONFIG.maxTokens}`);
+    console.log(`LLM timeout: ${LLM_CONFIG.timeoutMs}ms, maxTokens: ${LLM_CONFIG.maxTokens}, jsonRepairRetries: ${LLM_CONFIG.jsonRepairRetries}`);
   }
   console.log(`Capabilities: ${PROVIDER_CAPABILITIES.join(', ') || '<all>'}`);
   console.log(`Poll interval: ${POLL_INTERVAL_MS}ms`);

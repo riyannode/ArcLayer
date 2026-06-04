@@ -261,6 +261,7 @@ if (!ONLY_ROLE || ONLY_ROLE === 'provider') {
     'LLM_MAX_TOKENS',
     'LLM_TEMPERATURE',
     'LLM_TIMEOUT_MS',
+    'LLM_JSON_REPAIR_RETRIES',
     'PROVIDER_SKILL',
     'PROVIDER_CUSTOM_SKILL_PATH',
   ], true);
@@ -293,6 +294,19 @@ if (!ONLY_ROLE || ONLY_ROLE === 'provider') {
       checkOptional(env, 'LLM_TEMPERATURE', 'LLM_TEMPERATURE');
       checkOptional(env, 'LLM_TIMEOUT_MS', 'LLM_TIMEOUT_MS');
       checkOptional(env, 'MIN_JOB_BUDGET_ATOMIC', 'MIN_JOB_BUDGET_ATOMIC');
+
+      // Validate LLM_JSON_REPAIR_RETRIES range (0..2)
+      if (env.LLM_JSON_REPAIR_RETRIES !== undefined) {
+        const val = parseInt(env.LLM_JSON_REPAIR_RETRIES, 10);
+        if (isNaN(val) || val < 0 || val > 2) {
+          console.log(`  ✗ LLM_JSON_REPAIR_RETRIES must be 0..2, got: ${env.LLM_JSON_REPAIR_RETRIES}`);
+          exitCode = 1;
+        } else {
+          console.log(`  ✓ LLM_JSON_REPAIR_RETRIES: ${val}`);
+        }
+      } else {
+        console.log(`  ○ LLM_JSON_REPAIR_RETRIES: (not set — defaults to 1)`);
+      }
 
     // IGNORE_JOBS_BEFORE must be numeric (ERC-8183 job id threshold)
     const ignoreBefore = env.IGNORE_JOBS_BEFORE || "";
