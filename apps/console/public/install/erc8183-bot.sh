@@ -468,7 +468,7 @@ start_bot() {
   # Dry-run: validate only, skip install + start
   if [ "$DRY_RUN" = true ]; then
     info "[dry-run] Would install deps in ${bot_dir}"
-    info "[dry-run] Would run: npm run check:env"
+    info "[dry-run] Would run: node scripts/check-env.mjs --role=${ROLE}"
     info "[dry-run] Would start PM2 process: ${process_name}"
     ok "[dry-run] Validation complete. No changes made."
     return
@@ -480,30 +480,13 @@ start_bot() {
   npm install --production 2>/dev/null || npm install
   ok "Dependencies installed"
 
-  # Verify .env has required keys for selected role
-  info "Verifying .env configuration..."
-  local env_file="${bot_dir}/${ROLE}-bot/.env"
-  local missing=()
-
-  case "$ROLE" in
-    client)
-      for k in ARCLAYER_BASE_URL CLIENT_API_KEY CLIENT_AGENT_ID CLIENT_ADDRESS CLIENT_PRIVATE_KEY ARC_RPC_URL; do
-        grep -q "^${k}=" "$env_file" 2>/dev/null || missing+=("$k")
-      done ;;
-    provider)
-      for k in ARCLAYER_BASE_URL PROVIDER_API_KEY PROVIDER_AGENT_ID PROVIDER_ADDRESS PROVIDER_PRIVATE_KEY ARC_RPC_URL; do
-        grep -q "^${k}=" "$env_file" 2>/dev/null || missing+=("$k")
-      done ;;
-    evaluator)
-      for k in ARCLAYER_BASE_URL EVALUATOR_API_KEY EVALUATOR_AGENT_ID EVALUATOR_ADDRESS EVALUATOR_PRIVATE_KEY ARC_RPC_URL; do
-        grep -q "^${k}=" "$env_file" 2>/dev/null || missing+=("$k")
-      done ;;
-  esac
-
-  if [ ${#missing[@]} -gt 0 ]; then
-    fail "Missing required env vars: ${missing[*]}"
+  # Verify .env with role-aware preflight checker
+  info "Running env preflight check..."
+  if node scripts/check-env.mjs --role="$ROLE" 2>&1; then
+    ok "Env check passed"
+  else
+    fail "Env check failed. Fix the issues above and re-run: node scripts/check-env.mjs --role=$ROLE"
   fi
-  ok "Env check passed — all required vars present for ${ROLE_LABEL}"
 
   # Check if ecosystem config exists
   if [ ! -f "$ecosystem" ]; then

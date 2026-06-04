@@ -48,7 +48,7 @@ export default function AgentSetupPage() {
         <SectionCard>
           <MonoLabel>ERC-8183</MonoLabel>
           <h2 className="mt-3 text-[18px] font-semibold tracking-[-0.03em] text-[#F5F0E5]">
-            External job agent
+            External agent
           </h2>
 
           {/* Provider shortcut */}
@@ -76,12 +76,6 @@ export default function AgentSetupPage() {
           <p className="mt-4 text-[12px] leading-5 text-[#EAE4D8]/40">
             Run in your VPS terminal. Prompts for Agent ID, API key, and private key.
           </p>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Badge>Provider</Badge>
-            <Badge>Evaluator</Badge>
-            <Badge>Client</Badge>
-          </div>
         </SectionCard>
 
         {/* ── x402 card (coming soon) ─────────────────────────────── */}

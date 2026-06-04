@@ -8,6 +8,7 @@
  * Usage:
  *   node scripts/check-env.mjs
  *   npm run check:env
+ *   node scripts/check-env.mjs --role=provider
  *
  * Exit codes:
  *   0 — all envs valid
@@ -22,6 +23,9 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BOTS_DIR = resolve(__dirname, '..');
+// ── Parse --role flag ────────────────────────────────────────────────────
+const ROLE_FLAG = process.argv.find(a => a.startsWith('--role='));
+const ONLY_ROLE = ROLE_FLAG ? ROLE_FLAG.split('=')[1] : null;
 
 let allPass = true;
 let exitCode = 0;
@@ -192,9 +196,10 @@ function checkBot(botName, rolePrefix, requiredKeys, optionalKeys = [], skipIfMi
 
 console.log('═ ERC-8183 Bot Env Preflight Check ═══════════════════');
 console.log(`Bots root: ${BOTS_DIR}`);
+if (ONLY_ROLE) console.log(`Role filter: ${ONLY_ROLE} only`);
 
 // Client: CLIENT_* only
-checkBot('client-bot', 'CLIENT', [
+if (!ONLY_ROLE || ONLY_ROLE === 'client') checkBot('client-bot', 'CLIENT', [
   'ARCLAYER_BASE_URL',
   'CLIENT_API_KEY',
   'CLIENT_AGENT_ID',
@@ -216,7 +221,7 @@ checkBot('client-bot', 'CLIENT', [
 ], true);
 
 // Provider: PROVIDER_* only
-checkBot('provider-bot', 'PROVIDER', [
+if (!ONLY_ROLE || ONLY_ROLE === 'provider') checkBot('provider-bot', 'PROVIDER', [
   'ARCLAYER_BASE_URL',
   'PROVIDER_API_KEY',
   'PROVIDER_AGENT_ID',
@@ -236,7 +241,7 @@ checkBot('provider-bot', 'PROVIDER', [
 ], true);
 
 // Evaluator: EVALUATOR_* only
-checkBot('evaluator-bot', 'EVALUATOR', [
+if (!ONLY_ROLE || ONLY_ROLE === 'evaluator') checkBot('evaluator-bot', 'EVALUATOR', [
   'ARCLAYER_BASE_URL',
   'EVALUATOR_API_KEY',
   'EVALUATOR_AGENT_ID',
