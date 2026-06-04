@@ -155,7 +155,7 @@ describe('POST /api/a2a/presence — secret field rejection', () => {
 
 // ─── Bot-health endpoint ─────────────────────────────────────────────────────
 
-import { GET as BotHealthGET } from '../../agents/[agentId]/bot-health/route';
+import { GET as BotHealthGET } from '../../agents/[id]/bot-health/route';
 
 describe('GET /api/agents/[agentId]/bot-health', () => {
   beforeEach(() => {
@@ -165,7 +165,7 @@ describe('GET /api/agents/[agentId]/bot-health', () => {
   it('returns offline when no presence found', async () => {
     mockMaybeSingle.mockResolvedValue({ data: null, error: null });
     const req = new NextRequest('http://localhost/api/agents/99999/bot-health');
-    const res = await BotHealthGET(req, { params: Promise.resolve({ agentId: '99999' }) });
+    const res = await BotHealthGET(req, { params: Promise.resolve({ id: '99999' }) });
     const json = await res.json();
     expect(json.status).toBe('offline');
     expect(json.ok).toBe(true);
@@ -175,7 +175,7 @@ describe('GET /api/agents/[agentId]/bot-health', () => {
     // getAgentPresenceById throws on DB errors
     mockMaybeSingle.mockRejectedValue(new Error('presence_read_failed: connection refused'));
     const req = new NextRequest('http://localhost/api/agents/123/bot-health');
-    const res = await BotHealthGET(req, { params: Promise.resolve({ agentId: '123' }) });
+    const res = await BotHealthGET(req, { params: Promise.resolve({ id: '123' }) });
     const json = await res.json();
     expect(json.status).toBe('unknown');
     expect(json.ok).toBe(false);
@@ -200,7 +200,7 @@ describe('GET /api/agents/[agentId]/bot-health', () => {
       rpcOk: true,
     });
     const req = new NextRequest('http://localhost/api/agents/36192/bot-health');
-    const res = await BotHealthGET(req, { params: Promise.resolve({ agentId: '36192' }) });
+    const res = await BotHealthGET(req, { params: Promise.resolve({ id: '36192' }) });
     const json = await res.json();
     expect(json.status).toBe('online');
     expect(json.role).toBe('provider');
@@ -225,7 +225,7 @@ describe('GET /api/agents/[agentId]/bot-health', () => {
       rpcOk: null,
     });
     const req = new NextRequest('http://localhost/api/agents/36192/bot-health');
-    const res = await BotHealthGET(req, { params: Promise.resolve({ agentId: '36192' }) });
+    const res = await BotHealthGET(req, { params: Promise.resolve({ id: '36192' }) });
     const json = await res.json();
     expect(json.status).toBe('offline');
   });
