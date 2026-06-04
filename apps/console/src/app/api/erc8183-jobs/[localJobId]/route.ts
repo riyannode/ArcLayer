@@ -16,7 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { buildErc8183JobDetail } from '@/lib/erc8183-jobs/read-model';
-import { getErc8183JobByLocalId } from '@/lib/erc8183-jobs/store';
+import { getErc8183JobByLocalId, getErc8183JobByOnchainId } from '@/lib/erc8183-jobs/store';
 import { escrowRail } from '@/lib/rails/responses';
 import {
   resolveSessionFromCookie,
@@ -35,6 +35,17 @@ export async function GET(
   try {
     const { localJobId } = await params;
 
+    // ── Resolve numeric on-chain ID to local job ID ─────────────────
+    // The URL param may be a numeric erc8183JobId (from /job/<onchainId>)
+    // or a local erc8183_* job ID. Resolve to localJobId for read-model.
+    let resolvedLocalJobId = localJobId;
+    if (/^\d+$/.test(localJobId)) {
+      const onchainJob = await getErc8183JobByOnchainId(localJobId);
+      if (onchainJob) {
+        resolvedLocalJobId = onchainJob.localJobId;
+      }
+    }
+
     // ── 1. Try API key auth first ──────────────────────────────────────
     const apiKeyAuth = await requireApiKey(req, [
       API_KEY_SCOPES.ERC8183_CREATE,
@@ -43,7 +54,7 @@ export async function GET(
 
     if (!apiKeyAuth.error) {
       // API key auth succeeded — preserve existing behavior
-      const detail = await buildErc8183JobDetail(localJobId);
+      const detail = await buildErc8183JobDetail(resolvedLocalJobId);
       if (!detail) {
         return NextResponse.json(
           { ok: false, ...escrowRail(), error: 'not_found' },
@@ -75,7 +86,7 @@ export async function GET(
     }
 
     // Load job
-    const job = await getErc8183JobByLocalId(localJobId);
+    const job = await getErc8183JobByLocalId(resolvedLocalJobId);
     if (!job) {
       return NextResponse.json(
         { ok: false, ...escrowRail(), error: 'not_found' },
@@ -110,7 +121,7 @@ export async function GET(
     }
 
     // Build full detail
-    const detail = await buildErc8183JobDetail(localJobId);
+    const detail = await buildErc8183JobDetail(resolvedLocalJobId);
     if (!detail) {
       return NextResponse.json(
         { ok: false, ...escrowRail(), error: 'not_found' },

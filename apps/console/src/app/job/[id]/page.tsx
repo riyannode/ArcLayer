@@ -25,6 +25,11 @@ function parseJobId(value: string | undefined) {
   return value && /^\d+$/.test(value) ? value : null;
 }
 
+/** Detect local job ID format (erc8183_...) */
+function isLocalJobId(value: string | undefined): boolean {
+  return !!value && value.startsWith('erc8183_');
+}
+
 type Action = 'submit' | 'complete' | null;
 
 type DeliverablePreview = {
@@ -108,8 +113,8 @@ type ApiJobDetail = {
       provider?: string;
       evaluator?: string;
     };
-    deliverableHash?: string;
     payloads?: {
+      deliverableHash?: string;
       resultPayload?: Record<string, unknown>;
       proofPayload?: Record<string, unknown>;
       inputPayload?: Record<string, unknown>;
@@ -120,7 +125,9 @@ type ApiJobDetail = {
 
 export default function JobDetailPage() {
   const params = useParams<{ id: string }>();
-  const jobId = parseJobId(params.id);
+  const rawId = params.id;
+  const isLocal = isLocalJobId(rawId);
+  const jobId = isLocal ? null : parseJobId(rawId);
   const { address, isConnected } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const [payload, setPayload] = useState<JobDetail | null>(null);
@@ -197,7 +204,7 @@ export default function JobDetailPage() {
   const timestamps = detail?.timestamps;
   const lifecycleStatus = detail?.lifecycleStatus;
   const onchainStatus = detail?.onchainStatus;
-  const deliverableHash = detail?.deliverableHash || safeJob?.deliverable;
+  const deliverableHash = detail?.payloads?.deliverableHash || safeJob?.deliverable;
 
   // Lifecycle stepper data
   const lifecycleSteps = [
