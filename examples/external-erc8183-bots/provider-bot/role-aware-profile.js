@@ -125,9 +125,10 @@ Rules:
  * @param {string} opts.agentType - role slug (e.g. 'smart-contract')
  * @param {string} [opts.roleLabel] - human-readable role label
  * @param {string[]} [opts.capabilities] - provider capabilities
+ * @param {string} [opts.skillContent] - combined skill.md content (base + type + custom)
  * @returns {Array} OpenAI messages array
  */
-function buildMessages(job, { model, providerAgentId, agentType, roleLabel, capabilities } = {}) {
+function buildMessages(job, { model, providerAgentId, agentType, roleLabel, capabilities, skillContent } = {}) {
   const roleConfig = DASHBOARD_PROVIDER_ROLES[agentType] || DASHBOARD_PROVIDER_ROLES['other'];
   const resolvedLabel = roleLabel || roleConfig.label;
   const resolvedAgentType = agentType || 'other';
@@ -196,8 +197,13 @@ function buildMessages(job, { model, providerAgentId, agentType, roleLabel, capa
 
   const systemPrompt = buildSystemPrompt(resolvedAgentType, resolvedLabel, roleConfig.expertise);
 
+  // Prepend skill content (base + type + custom) to system prompt
+  const fullSystemPrompt = skillContent
+    ? `${skillContent}\n\n---\n\n${systemPrompt}`
+    : systemPrompt;
+
   return [
-    { role: 'system', content: systemPrompt },
+    { role: 'system', content: fullSystemPrompt },
     { role: 'user', content: sections.join('\n') },
   ];
 }
