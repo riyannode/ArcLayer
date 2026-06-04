@@ -719,8 +719,9 @@ export default function ERC8183EscrowRegisterPage() {
 
   function updateRole(nextRole: AgentRole) {
     // Public UI gate: only provider is enabled. Force provider for disabled roles.
+    // When client/evaluator are re-enabled in role-config.ts, this passes them through.
     const publicKey = normalizePublicRole(nextRole);
-    const effectiveRole = (publicKey === 'provider' ? 'provider' : 'provider') as AgentRole;
+    const effectiveRole: AgentRole = publicKey === 'client' ? 'autonomous-client' : publicKey === 'evaluator' ? 'evaluator' : 'provider';
 
     setForm((prev) => {
       if (prev.role === effectiveRole) return prev;
