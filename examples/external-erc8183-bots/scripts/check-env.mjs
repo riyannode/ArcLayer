@@ -293,6 +293,16 @@ if (!ONLY_ROLE || ONLY_ROLE === 'provider') {
       checkOptional(env, 'LLM_TEMPERATURE', 'LLM_TEMPERATURE');
       checkOptional(env, 'LLM_TIMEOUT_MS', 'LLM_TIMEOUT_MS');
       checkOptional(env, 'MIN_JOB_BUDGET_ATOMIC', 'MIN_JOB_BUDGET_ATOMIC');
+
+    // IGNORE_JOBS_BEFORE must be numeric (ERC-8183 job id threshold)
+    const ignoreBefore = env.IGNORE_JOBS_BEFORE || "";
+    if (ignoreBefore && isNaN(Number(ignoreBefore))) {
+      console.log(`  ✗ INVALID: IGNORE_JOBS_BEFORE="${ignoreBefore}" must be a numeric job id`);
+      allPass = false;
+      exitCode = 1;
+    } else if (ignoreBefore) {
+      console.log(`  ✓ IGNORE_JOBS_BEFORE: ${ignoreBefore} (skip jobs with erc8183JobId < ${ignoreBefore})`);
+    }
     }
 
     // Skill validation
