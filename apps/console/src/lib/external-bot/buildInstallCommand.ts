@@ -69,7 +69,25 @@ pm2 status
   return { title: 'PM2 — market-agent-bridge', command: cmd.trim() };
 }
 
-function buildERC8183EscrowCommand(_envBundle: EnvBundle, _roleNames: string[]): InstallCommand {
+function buildERC8183EscrowCommand(_envBundle: EnvBundle, roleNames: string[]): InstallCommand {
+  // Single role → use shortcut or generic with --role flag
+  if (roleNames.length === 1) {
+    const role = roleNames[0];
+    if (role === 'provider') {
+      return {
+        title: 'One-Click ERC-8183 Provider Installer',
+        command: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
+      };
+    }
+    if (role === 'client' || role === 'evaluator') {
+      return {
+        title: `One-Click ERC-8183 ${role.charAt(0).toUpperCase() + role.slice(1)} Installer`,
+        command: `curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role ${role}`,
+      };
+    }
+  }
+
+  // Multiple roles or unknown → generic installer (interactive selection)
   return {
     title: 'One-Click ERC-8183 Bot Installer',
     command: 'curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash',
