@@ -83,6 +83,10 @@ const PROVIDER_CAPABILITIES = (process.env.PROVIDER_CAPABILITIES || '')
   .map((s) => s.trim())
   .filter(Boolean);
 
+// ── Provider skill config ───────────────────────────────────────────────
+const PROVIDER_SKILL = (process.env.PROVIDER_SKILL || 'auto').trim();
+const PROVIDER_CUSTOM_SKILL_PATH = (process.env.PROVIDER_CUSTOM_SKILL_PATH || '').trim();
+
 const signer = createSigner({ privateKey: PROVIDER_PK, rpcUrl: ARC_RPC_URL });
 console.log(`Provider signer address: ${signer.address}`);
 
@@ -450,6 +454,8 @@ async function phaseClaimAndSubmit() {
           maxTokens: LLM_CONFIG.maxTokens,
           temperature: LLM_CONFIG.temperature,
           timeoutMs: LLM_CONFIG.timeoutMs,
+          providerSkill: PROVIDER_SKILL,
+          customSkillPath: PROVIDER_CUSTOM_SKILL_PATH,
         };
         const result = await runLlmTask(job, llmEnv);
         resultPayload = result.resultPayload;

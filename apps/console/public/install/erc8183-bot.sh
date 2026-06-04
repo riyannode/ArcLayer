@@ -400,6 +400,20 @@ collect_inputs() {
     fi
 
     ok "LLM configured: ${LLM_PROVIDER} / ${LLM_MODEL}"
+
+    # Custom skill path — optional
+    echo ""
+    tty_read -rp "Custom provider skill path (optional, press Enter to skip): " PROVIDER_CUSTOM_SKILL_PATH
+    if [ -n "$PROVIDER_CUSTOM_SKILL_PATH" ]; then
+      if [ ! -f "$PROVIDER_CUSTOM_SKILL_PATH" ]; then
+        warn "Custom skill path does not exist yet. Create it before starting the bot."
+        warn "check-env will enforce file existence before PM2 start."
+      fi
+      ok "Custom skill path set: ${PROVIDER_CUSTOM_SKILL_PATH}"
+    else
+      PROVIDER_CUSTOM_SKILL_PATH=""
+    fi
+
   elif [ "$ROLE" = "evaluator" ]; then
     # Evaluator: LLM optional for evaluation
     echo ""
@@ -547,6 +561,8 @@ ARC_RPC_FALLBACK_URL=https://rpc.drpc.testnet.arc.network
 PROVIDER_MODE=llm
 PROVIDER_AGENT_TYPE=${PROVIDER_AGENT_TYPE}
 PROVIDER_CAPABILITIES=${PROVIDER_CAPABILITIES}
+PROVIDER_SKILL=auto
+PROVIDER_CUSTOM_SKILL_PATH=${PROVIDER_CUSTOM_SKILL_PATH:-}
 
 # LLM Configuration (user-provided, no default model)
 LLM_PROVIDER=${LLM_PROVIDER}

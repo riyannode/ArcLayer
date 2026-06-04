@@ -9,6 +9,7 @@
 const crypto = require('crypto');
 const { callLLMJson } = require('../shared/llm-client');
 const { buildMessages } = require('./role-aware-profile');
+const { loadProviderSkills } = require('./skill-loader');
 
 const VALID_SEVERITIES = new Set(['info', 'low', 'medium', 'high', 'critical']);
 
@@ -26,6 +27,8 @@ const VALID_SEVERITIES = new Set(['info', 'low', 'medium', 'high', 'critical']);
  * @param {number} [env.maxTokens=2500]
  * @param {number} [env.temperature=0.2]
  * @param {number} [env.timeoutMs=60000]
+ * @param {string} [env.providerSkill='auto'] - PROVIDER_SKILL value
+ * @param {string} [env.customSkillPath] - PROVIDER_CUSTOM_SKILL_PATH value
  * @returns {Promise<{resultPayload: Object, proofPayload: Object}>}
  */
 async function runLlmTask(job, env) {
@@ -34,12 +37,20 @@ async function runLlmTask(job, env) {
   const jobType = job.inputPayload?.jobType || 'unknown';
   const requiredCapability = job.inputPayload?.requiredCapability || '';
 
+  // Load skill content (cached — no disk I/O on repeat calls)
+  const skillContent = loadProviderSkills({
+    agentType: env.agentType,
+    providerSkill: env.providerSkill || 'auto',
+    customSkillPath: env.customSkillPath || '',
+  });
+
   // Build prompt (strips all secrets)
   const messages = buildMessages(job, {
     model: env.model,
     providerAgentId: env.providerAgentId,
     agentType: env.agentType,
     capabilities: env.capabilities,
+    skillContent,
   });
 
   // Call LLM
