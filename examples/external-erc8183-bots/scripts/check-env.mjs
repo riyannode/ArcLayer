@@ -233,24 +233,66 @@ if (!ONLY_ROLE || ONLY_ROLE === 'client') checkBot('client-bot', 'CLIENT', [
 ], true);
 
 // Provider: PROVIDER_* only
-if (!ONLY_ROLE || ONLY_ROLE === 'provider') checkBot('provider-bot', 'PROVIDER', [
-  'ARCLAYER_BASE_URL',
-  'PROVIDER_API_KEY',
-  'PROVIDER_AGENT_ID',
-  'PROVIDER_ADDRESS',
-  'PROVIDER_PRIVATE_KEY',
-  'ARC_RPC_URL',
-], [
-  'ARC_CHAIN_ID',
-  'ARC_RPC_FALLBACK_URL',
-  'PROVIDER_CAPABILITIES',
-  'JOB_POLL_INTERVAL_MS',
-  'MAX_ACTIVE_JOBS',
-  'CLAIM_TTL_SECONDS',
-  'AUTONOMOUS_TX',
-  'IGNORE_JOBS_BEFORE',
-  'RECOVER_OLD_JOBS',
-], true);
+if (!ONLY_ROLE || ONLY_ROLE === 'provider') {
+  checkBot('provider-bot', 'PROVIDER', [
+    'ARCLAYER_BASE_URL',
+    'PROVIDER_API_KEY',
+    'PROVIDER_AGENT_ID',
+    'PROVIDER_ADDRESS',
+    'PROVIDER_PRIVATE_KEY',
+    'ARC_RPC_URL',
+  ], [
+    'ARC_CHAIN_ID',
+    'ARC_RPC_FALLBACK_URL',
+    'PROVIDER_CAPABILITIES',
+    'JOB_POLL_INTERVAL_MS',
+    'MAX_ACTIVE_JOBS',
+    'CLAIM_TTL_SECONDS',
+    'AUTONOMOUS_TX',
+    'IGNORE_JOBS_BEFORE',
+    'RECOVER_OLD_JOBS',
+    'PROVIDER_MODE',
+    'PROVIDER_AGENT_TYPE',
+    'MIN_JOB_BUDGET_ATOMIC',
+    'LLM_PROVIDER',
+    'LLM_BASE_URL',
+    'LLM_MODEL',
+    'LLM_API_KEY',
+    'LLM_MAX_TOKENS',
+    'LLM_TEMPERATURE',
+    'LLM_TIMEOUT_MS',
+  ], true);
+
+  // Conditional: LLM env validation when PROVIDER_MODE=llm
+  const providerEnvPath = resolve(BOTS_DIR, 'provider-bot', '.env');
+  if (existsSync(providerEnvPath)) {
+    const raw = readFileSync(providerEnvPath, 'utf8');
+    const env = parseDotEnv(raw);
+    const mode = (env.PROVIDER_MODE || 'template').toLowerCase();
+
+    if (mode === 'llm') {
+      console.log(`\n  ── LLM mode validation ──`);
+      const isLocalAuth = env.LLM_PROVIDER === 'local' || env.LLM_PROVIDER === 'no-auth';
+
+      checkRequired(env, 'provider-bot', 'LLM_PROVIDER');
+      checkRequired(env, 'provider-bot', 'LLM_BASE_URL');
+      checkRequired(env, 'provider-bot', 'LLM_MODEL');
+      checkRequired(env, 'provider-bot', 'PROVIDER_AGENT_TYPE');
+      checkRequired(env, 'provider-bot', 'PROVIDER_CAPABILITIES');
+
+      if (!isLocalAuth) {
+        checkRequired(env, 'provider-bot', 'LLM_API_KEY');
+      } else {
+        checkOptional(env, 'LLM_API_KEY', 'LLM_API_KEY (local/no-auth — optional)');
+      }
+
+      checkOptional(env, 'LLM_MAX_TOKENS', 'LLM_MAX_TOKENS');
+      checkOptional(env, 'LLM_TEMPERATURE', 'LLM_TEMPERATURE');
+      checkOptional(env, 'LLM_TIMEOUT_MS', 'LLM_TIMEOUT_MS');
+      checkOptional(env, 'MIN_JOB_BUDGET_ATOMIC', 'MIN_JOB_BUDGET_ATOMIC');
+    }
+  }
+}
 
 // Evaluator: EVALUATOR_* only
 if (!ONLY_ROLE || ONLY_ROLE === 'evaluator') checkBot('evaluator-bot', 'EVALUATOR', [
