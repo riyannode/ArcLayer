@@ -76,6 +76,7 @@ type ApiJobDetail = {
   job: {
     localJobId: string;
     erc8183JobId: string;
+    description?: string;
     lifecycleStatus: string;
     localStatus: string;
     onchainStatus: string;
@@ -120,6 +121,7 @@ type ApiJobDetail = {
       inputPayload?: Record<string, unknown>;
     };
     allowedActions?: string[];
+    budget?: { atomic?: string; decimals?: number; formatted?: string };
   };
 };
 
@@ -147,10 +149,19 @@ export default function JobDetailPage() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showReason, setShowReason] = useState(false);
 
+  // ── Fix #1: For local IDs, use API detail as primary loading source ──
+  const [apiLoading, setApiLoading] = useState(isLocal);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      if (!jobId) { setError('Invalid job id.'); setIsLoading(false); return; }
+      // Fix #1: For local erc8183_* IDs, skip indexer load — API detail is primary
+      if (!jobId) {
+        if (isLocal) { setIsLoading(false); return; }
+        setError('Invalid job id.');
+        setIsLoading(false);
+        return;
+      }
       try {
         setIsLoading(true); setError(null);
         const { data, source } = await loadJobDetail(jobId);
@@ -161,19 +172,30 @@ export default function JobDetailPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [jobId]);
+  }, [jobId, isLocal]);
 
-  // ── Fetch local API detail for reject/lifecycle/timeline data ──
+  // ── Fetch local API detail — primary source for local IDs, overlay for numeric IDs ──
   useEffect(() => {
     if (!params.id) return;
     let cancelled = false;
+    if (isLocal) setApiLoading(true);
     fetch(`/api/erc8183-jobs/${params.id}`)
       .then(async (r) => {
         if (!r.ok) return;
         const data = await safeJsonCatch<ApiJobDetail | null>(r, null);
-        if (!cancelled && data) setApiDetail(data);
+        if (!cancelled && data) {
+          setApiDetail(data);
+          // Fix #1: For local IDs, load indexer data once we know the on-chain ID
+          if (isLocal && data.job?.erc8183JobId && !payload) {
+            try {
+              const { data: idxData, source } = await loadJobDetail(data.job.erc8183JobId);
+              if (!cancelled) { setPayload(idxData); setDataSource(source); }
+            } catch { /* non-fatal — API detail is primary */ }
+          }
+        }
       })
-      .catch(() => { /* non-blocking */ });
+      .catch(() => { /* non-blocking */ })
+      .finally(() => { if (!cancelled && isLocal) setApiLoading(false); });
     return () => { cancelled = true; };
   }, [params.id]);
 
@@ -206,23 +228,38 @@ export default function JobDetailPage() {
   const onchainStatus = detail?.onchainStatus;
   const deliverableHash = detail?.payloads?.deliverableHash || safeJob?.deliverable;
 
+  // ── Fix #2: Resolved IDs ──
+  const resolvedLocalJobId = detail?.localJobId ?? (isLocal ? rawId : undefined);
+  const resolvedOnchainJobId = detail?.erc8183JobId ?? jobId;
+
+  // ── Fix #3: Merged rejected detection ──
+  const isRejected =
+    lifecycleStatus === 'Rejected' ||
+    onchainStatus === 'Rejected' ||
+    detail?.localStatus === 'rejected' ||
+    safeJob?.status === 4 ||
+    !!txHashes?.rejectTxHash;
+
+  // ── Fix #4: Merged deliverable for all display/link/preview ──
+  const displayDeliverable = deliverableHash ?? safeJob?.deliverable;
+
   // Lifecycle stepper data
   const lifecycleSteps = [
     { label: 'Created', done: !!txHashes?.createTxHash || !!safeJob, txHash: txHashes?.createTxHash, ts: timestamps?.createdAt },
     { label: 'Budget Set', done: !!txHashes?.setBudgetTxHash, txHash: txHashes?.setBudgetTxHash },
     { label: 'Funded', done: !!txHashes?.fundTxHash, txHash: txHashes?.fundTxHash },
     { label: 'Submitted', done: !!txHashes?.submitTxHash, txHash: txHashes?.submitTxHash, ts: timestamps?.submittedAt },
-    { label: safeJob?.status === 4 ? 'Rejected' : 'Completed', done: !!txHashes?.completeTxHash || !!txHashes?.rejectTxHash, txHash: txHashes?.completeTxHash || txHashes?.rejectTxHash, ts: timestamps?.settledAt || rejection?.rejectedAt, isReject: !!txHashes?.rejectTxHash },
+    { label: isRejected ? 'Rejected' : 'Completed', done: !!txHashes?.completeTxHash || !!txHashes?.rejectTxHash, txHash: txHashes?.completeTxHash || txHashes?.rejectTxHash, ts: timestamps?.settledAt || rejection?.rejectedAt, isReject: !!txHashes?.rejectTxHash },
   ];
 
   // Auto-fetch deliverable JSON
   useEffect(() => {
     let cancelled = false;
-    if (isPlaceholderURI(safeJob?.deliverable)) {
+    if (isPlaceholderURI(displayDeliverable)) {
       setPreview(null); setPreviewError(null); setPreviewLoading(false);
       return;
     }
-    const url = ipfsToHttp(safeJob?.deliverable);
+    const url = ipfsToHttp(displayDeliverable);
     if (!url) { setPreview(null); setPreviewError(null); return; }
     setPreviewLoading(true); setPreviewError(null);
     fetch(url, { cache: 'no-store' })
@@ -237,20 +274,20 @@ export default function JobDetailPage() {
       })
       .finally(() => { if (!cancelled) setPreviewLoading(false); });
     return () => { cancelled = true; };
-  }, [safeJob?.deliverable]);
+  }, [displayDeliverable]);
 
   async function handleSubmitDeliverable() {
-    if (!jobId) return;
+    if (!resolvedOnchainJobId) return;
     try {
       setActiveAction('submit');
       setTxState('Submitting deliverable…');
       const hash = await writeContractAsync(
-        buildSubmitDeliverableConfig(BigInt(jobId), deliverableURI)
+        buildSubmitDeliverableConfig(BigInt(resolvedOnchainJobId), deliverableURI)
       );
       await waitForTransactionReceipt(config, { hash });
       setTxState('Receipt confirmed. Waiting for indexer refresh…');
       const next = await waitForIndexer<JobDetail>(
-        `/jobs/${jobId}`,
+        `/jobs/${resolvedOnchainJobId}`,
         (p) => p.job.deliverable === deliverableURI
       );
       setPayload(next);
@@ -260,15 +297,15 @@ export default function JobDetailPage() {
   }
 
   async function handleComplete() {
-    if (!jobId) return;
+    if (!resolvedOnchainJobId) return;
     try {
       setActiveAction('complete');
       setTxState('Completing job with ERC-8183 complete(jobId, reasonHash, "0x")…');
-      const hash = await writeContractAsync(buildCompleteJobConfig(BigInt(jobId), 'approved'));
+      const hash = await writeContractAsync(buildCompleteJobConfig(BigInt(resolvedOnchainJobId), 'approved'));
       await waitForTransactionReceipt(config, { hash });
       setTxState('Receipt confirmed. Waiting for indexer refresh…');
       const next = await waitForIndexer<JobDetail>(
-        `/jobs/${jobId}`,
+        `/jobs/${resolvedOnchainJobId}`,
         (p) => p.job.status === 3
       );
       setPayload(next);
@@ -320,14 +357,17 @@ export default function JobDetailPage() {
           >
             ← Back to Protocol
           </Link>
-          <a
-            href={`${INDEXER_BASE_URL}/jobs/${jobId || '0'}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition hover:text-[#F5F0E5]"
-          >
-            Indexer JSON ↗
-          </a>
+          {/* Fix #6: Only show indexer link when on-chain ID is known */}
+          {resolvedOnchainJobId ? (
+            <a
+              href={`${INDEXER_BASE_URL}/jobs/${resolvedOnchainJobId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition hover:text-[#F5F0E5]"
+            >
+              Indexer JSON ↗
+            </a>
+          ) : null}
         </div>
 
         {/* Error */}
@@ -341,19 +381,19 @@ export default function JobDetailPage() {
         <IndexerDegradedBanner visible={dataSource === 'rpc'} className="mb-6" />
 
         {/* Loading */}
-        {isLoading ? (
+        {(isLoading || apiLoading) ? (
           <div className="flex min-h-[420px] items-center justify-center rounded-xl border border-white/10 bg-[#080D13]/70">
             <div className="font-mono text-[12px] text-[#EAE4D8]/55">
               Loading ERC-8183 job...
             </div>
           </div>
-        ) : !safeJob ? (
+        ) : !safeJob && !detail ? (
           <div className="rounded-xl border border-[#F3C536]/24 bg-[#080D13]/78 p-10">
             <div className="font-mono text-[12px] uppercase tracking-[0.18em] text-[#F3C536]">
               Job Not Found
             </div>
             <h1 className="mt-4 text-[32px] font-semibold tracking-[-0.04em]">
-              No job record found for #{jobId}
+              No job record found for #{rawId}
             </h1>
           </div>
         ) : (
@@ -368,8 +408,8 @@ export default function JobDetailPage() {
                     <h1 className="text-[38px] font-semibold tracking-[-0.045em] text-[#F5F0E5]">
                       ERC-8183 Job
                     </h1>
-                    <span className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-[14px] ${statusBadgeColor(safeJob.status)}`}>
-                      {JOB_STATUS[safeJob.status]}
+                    <span className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-[14px] ${isRejected ? 'border-red-400/25 bg-red-400/10 text-red-300' : safeJob ? statusBadgeColor(safeJob.status) : 'border-white/15 bg-white/5 text-[#EAE4D8]/70'}`}>
+                      {isRejected ? 'Rejected' : safeJob ? JOB_STATUS[safeJob.status] : lifecycleStatus || 'Loading…'}
                     </span>
                     <span className="inline-flex items-center gap-2 rounded-md border border-[#F3C536]/25 bg-[#F3C536]/8 px-3 py-1.5 text-[14px] text-[#F3C536]">
                       ERC-8183 Escrow
@@ -380,9 +420,9 @@ export default function JobDetailPage() {
                   </div>
 
                   {/* Description */}
-                  {safeJob.description && (
+                  {(safeJob?.description || detail?.description) && (
                     <p className="mt-3 max-w-3xl text-[14px] leading-6 text-[#EAE4D8]/55">
-                      {safeJob.description}
+                      {safeJob?.description || detail?.description}
                     </p>
                   )}
 
@@ -390,21 +430,21 @@ export default function JobDetailPage() {
                   <div className="mt-8 grid max-w-[760px] gap-4 text-[15px] md:grid-cols-[150px_1fr]">
                     <div className="text-[#F3C536]">Local Job ID:</div>
                     <div className="flex items-center gap-2 font-mono text-[13px]">
-                      {params.id || '—'}
+                      {resolvedLocalJobId || rawId || '—'}
                     </div>
 
                     <div className="text-[#F3C536]">On-chain ID:</div>
                     <div className="flex items-center gap-2 font-mono text-[13px]">
-                      {jobId || '—'}
+                      {resolvedOnchainJobId || '—'}
                     </div>
 
                     <div className="text-[#F3C536]">Settlement:</div>
-                    <div>{lifecycleStatus || onchainStatus || JOB_STATUS[safeJob.status]}</div>
+                    <div>{lifecycleStatus || onchainStatus || (safeJob ? JOB_STATUS[safeJob.status] : '…')}</div>
 
-                    {safeJob.description && (
+                    {(safeJob?.description || detail?.description) && safeJob?.description !== detail?.description && (
                       <>
                         <div className="text-[#F3C536]">Description:</div>
-                        <div className="text-[#EAE4D8]/55">{safeJob.description}</div>
+                        <div className="text-[#EAE4D8]/55">{detail?.description || safeJob?.description}</div>
                       </>
                     )}
                   </div>
@@ -414,29 +454,29 @@ export default function JobDetailPage() {
 
             {/* ─── Metric Cards ───────────────────────────────────────── */}
             <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <MetricCard label="Status" value={lifecycleStatus || JOB_STATUS[safeJob.status]} />
+              <MetricCard label="Status" value={lifecycleStatus || (safeJob ? JOB_STATUS[safeJob.status] : '…')} />
               <MetricCard
                 label="Budget"
-                value={`${formatUSDC(safeBigInt(safeJob.budget))} USDC`}
-                sub={safeJob.fundedAmount && safeJob.fundedAmount !== safeJob.budget ? `Funded: ${formatUSDC(safeBigInt(safeJob.fundedAmount))} USDC` : undefined}
+                value={safeJob ? `${formatUSDC(safeBigInt(safeJob.budget))} USDC` : detail?.budget?.formatted ? `${detail.budget.formatted} USDC` : '…'}
+                sub={safeJob?.fundedAmount && safeJob.fundedAmount !== safeJob.budget ? `Funded: ${formatUSDC(safeBigInt(safeJob.fundedAmount))} USDC` : undefined}
               />
               <MetricCard
                 label="Reputation Impact"
-                value={safeJob.status === 3 ? '+100' : safeJob.status === 4 ? '-50' : 'Pending'}
-                valueColor={safeJob.status === 3 ? 'text-emerald-300' : safeJob.status === 4 ? 'text-red-300' : 'text-[#EAE4D8]/45'}
+                value={safeJob?.status === 3 ? '+100' : isRejected ? '-50' : 'Pending'}
+                valueColor={safeJob?.status === 3 ? 'text-emerald-300' : isRejected ? 'text-red-300' : 'text-[#EAE4D8]/45'}
               />
               <MetricCard
                 label="Settlement"
-                value={safeJob.status === 3 ? 'Completed' : safeJob.status === 4 ? 'Rejected' : safeJob.status === 5 ? 'Expired' : 'Pending'}
-                valueColor={safeJob.status === 3 ? 'text-emerald-300' : safeJob.status === 4 ? 'text-red-300' : 'text-[#EAE4D8]/45'}
+                value={safeJob?.status === 3 ? 'Completed' : isRejected ? 'Rejected' : safeJob?.status === 5 ? 'Expired' : 'Pending'}
+                valueColor={safeJob?.status === 3 ? 'text-emerald-300' : isRejected ? 'text-red-300' : 'text-[#EAE4D8]/45'}
               />
             </div>
 
             {/* ─── Participants ───────────────────────────────────────── */}
             <div className="mt-8 grid gap-4 sm:grid-cols-3">
-              <ParticipantCard label="Client" address={safeJob.client} />
-              <ParticipantCard label="Provider" address={safeJob.provider} />
-              <ParticipantCard label="Evaluator" address={safeJob.evaluator} />
+              <ParticipantCard label="Client" address={safeJob?.client || detail?.participants?.client || '—'} />
+              <ParticipantCard label="Provider" address={safeJob?.provider || detail?.participants?.provider || '—'} />
+              <ParticipantCard label="Evaluator" address={safeJob?.evaluator || detail?.participants?.evaluator || '—'} />
             </div>
 
             {/* ─── Lifecycle Stepper ──────────────────────────────────── */}
@@ -506,20 +546,20 @@ export default function JobDetailPage() {
             )}
 
             {/* ─── Rejected Section ───────────────────────────────────── */}
-            {safeJob.status === 4 && rejection && (
-              <div className="mt-8 overflow-hidden rounded-xl border border-red-500/25 bg-red-950/10 p-6">
+            {isRejected && (
+              <div className="mt-8 overflow-hidden rounded-xl border border-red-400/20 bg-[#080D13]/60 p-6">
                 <div className="flex items-center gap-3">
                   <span className="inline-flex items-center rounded-md border border-red-400/25 bg-red-400/10 px-3 py-1.5 text-[14px] text-red-300">
                     Rejected
                   </span>
-                  {rejection.rejectedAt && (
+                  {rejection?.rejectedAt && (
                     <span className="font-mono text-[10px] text-[#EAE4D8]/35">
                       {new Date(rejection.rejectedAt).toLocaleString()}
                     </span>
                   )}
                 </div>
 
-                {rejection.rejectReasonText && (
+                {rejection?.rejectReasonText && (
                   <div className="mt-4">
                     <button
                       onClick={() => setShowReason(!showReason)}
@@ -530,16 +570,16 @@ export default function JobDetailPage() {
                     </button>
                     {showReason && (
                       <p className="mt-2 rounded-lg border border-white/5 bg-black/20 p-4 text-[13px] leading-6 text-[#EAE4D8]/70">
-                        {rejection.rejectReasonText}
+                        {rejection?.rejectReasonText}
                       </p>
                     )}
                   </div>
                 )}
 
-                {rejection.rejectReasonHash && (
+                {rejection?.rejectReasonHash && (
                   <div className="mt-3 flex items-center gap-2">
                     <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#EAE4D8]/35">Reason Hash</span>
-                    <code className="font-mono text-[11px] text-[#EAE4D8]/55">{rejection.rejectReasonHash}</code>
+                    <code className="font-mono text-[11px] text-[#EAE4D8]/55">{rejection?.rejectReasonHash}</code>
                   </div>
                 )}
 
@@ -550,7 +590,7 @@ export default function JobDetailPage() {
             )}
 
             {/* ─── Deliverable ────────────────────────────────────────── */}
-            {deliverableHash && (
+            {displayDeliverable && (
               <div className="mt-8 overflow-hidden rounded-xl border border-[#1A2228] bg-[#080D13]/78 p-6">
                 <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
                   Deliverable
@@ -558,9 +598,9 @@ export default function JobDetailPage() {
                 <div className="mt-4 space-y-3">
                   <div className="flex items-center gap-3">
                     <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#EAE4D8]/35">Hash</span>
-                    <code className="flex-1 truncate font-mono text-[11px] text-[#EAE4D8]/55">{deliverableHash}</code>
+                    <code className="flex-1 truncate font-mono text-[11px] text-[#EAE4D8]/55">{displayDeliverable}</code>
                     <button
-                      onClick={() => copyToClipboard(deliverableHash, 'deliverable')}
+                      onClick={() => copyToClipboard(displayDeliverable, 'deliverable')}
                       className="shrink-0 text-[#C5A67C] transition hover:text-[#F5F0E5]"
                     >
                       {copiedField === 'deliverable' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
@@ -568,9 +608,9 @@ export default function JobDetailPage() {
                   </div>
 
                   {/* IPFS/HTTP link */}
-                  {ipfsToHttp(safeJob.deliverable) && !isPlaceholderURI(safeJob.deliverable) && (
+                  {ipfsToHttp(displayDeliverable) && !isPlaceholderURI(displayDeliverable) && (
                     <a
-                      href={ipfsToHttp(safeJob.deliverable)!}
+                      href={ipfsToHttp(displayDeliverable)!}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-block font-mono text-[11px] text-[#C5A67C] transition hover:text-[#F5F0E5]"
@@ -583,7 +623,7 @@ export default function JobDetailPage() {
                   {previewLoading && (
                     <p className="font-mono text-[11px] text-[#EAE4D8]/35">Fetching preview…</p>
                   )}
-                  {previewError && !isPlaceholderURI(safeJob.deliverable) && (
+                  {previewError && !isPlaceholderURI(displayDeliverable) && (
                     <p className="font-mono text-[11px] text-red-300/60">Preview unavailable — {previewError}</p>
                   )}
                   {preview && (
@@ -619,8 +659,8 @@ export default function JobDetailPage() {
                 </div>
                 <div className="rounded-lg border border-white/10 bg-black/20 p-4">
                   <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/45">Status</div>
-                  <div className={`mt-2 text-[22px] ${safeJob.status === 3 ? 'text-emerald-300' : safeJob.status === 4 ? 'text-red-300' : 'text-[#EAE4D8]/45'}`}>
-                    {safeJob.status === 3 ? 'Applied' : safeJob.status === 4 ? 'Applied' : 'Pending'}
+                  <div className={`mt-2 text-[22px] ${safeJob?.status === 3 ? 'text-emerald-300' : isRejected ? 'text-red-300' : 'text-[#EAE4D8]/45'}`}>
+                    {safeJob?.status === 3 ? 'Applied' : isRejected ? 'Applied' : 'Pending'}
                   </div>
                 </div>
               </div>
@@ -658,13 +698,13 @@ export default function JobDetailPage() {
               <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
                 <div>
                   <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
-                    Actions · {lifecycleStatus || JOB_STATUS[safeJob.status]}
+                    Actions · {lifecycleStatus || (safeJob ? JOB_STATUS[safeJob.status] : '…')}
                   </div>
                   <h2 className="mt-2 text-[24px] font-semibold tracking-[-0.03em] text-[#F5F0E5]">
-                    {safeJob.status === 3 ? 'Settlement complete' :
-                     safeJob.status === 4 ? 'Job rejected' :
-                     safeJob.status === 2 ? 'Review deliverable, then complete' :
-                     safeJob.status === 1 ? 'Funded — awaiting provider submission' :
+                    {safeJob?.status === 3 ? 'Settlement complete' :
+                     isRejected ? 'Job rejected' :
+                     safeJob?.status === 2 ? 'Review deliverable, then complete' :
+                     safeJob?.status === 1 ? 'Funded — awaiting provider submission' :
                      'Job lifecycle controls'}
                   </h2>
                 </div>
@@ -683,13 +723,13 @@ export default function JobDetailPage() {
 
               {/* Primary actions */}
               <div className="mt-5 space-y-3">
-                {safeJob.status === 2 && previewError && isEvaluator && (
+                {safeJob?.status === 2 && previewError && isEvaluator && (
                   <div className="rounded-lg border border-amber-400/25 bg-amber-400/5 px-4 py-3 font-mono text-[11px] text-amber-300">
                     Preview unavailable — you can still complete on-chain if you trust the submitted URI/hash.
                   </div>
                 )}
 
-                {safeJob.status === 2 && isEvaluator && (
+                {safeJob?.status === 2 && isEvaluator && (
                   <button
                     onClick={handleComplete}
                     disabled={!isConnected || activeAction !== null}
@@ -700,7 +740,7 @@ export default function JobDetailPage() {
                   </button>
                 )}
 
-                {safeJob.status === 2 && !isEvaluator && isConnected && (
+                {safeJob?.status === 2 && !isEvaluator && isConnected && (
                   <div className="rounded-lg border border-white/5 bg-black/20 px-4 py-3 font-mono text-[11px] text-[#EAE4D8]/35">
                     {isWorker
                       ? 'Deliverable submitted. Waiting for evaluator to complete via ERC-8183.'
@@ -708,13 +748,13 @@ export default function JobDetailPage() {
                   </div>
                 )}
 
-                {safeJob.status === 3 && (
+                {safeJob?.status === 3 && (
                   <div className="rounded-lg border border-emerald-400/25 bg-emerald-400/5 px-4 py-3 font-mono text-[11px] text-emerald-300">
                     ERC-8183 AgenticCommerce completion recorded.
                   </div>
                 )}
 
-                {safeJob.status < 2 && (
+                {safeJob && safeJob.status < 2 && (
                   <p className="font-mono text-[11px] text-[#EAE4D8]/35">
                     {safeJob.status === 1
                       ? 'Funded. The service provider should submit deliverable via ERC-8183 submit().'
@@ -814,6 +854,7 @@ function ParticipantCard({ label, address }: { label: string; address: string })
   );
 }
 
+// ─── TxRow helper ────────────────────────────────────────────────
 function TxRow({ label, hash, isReject }: { label: string; hash: string; isReject?: boolean }) {
   return (
     <div className="flex items-center justify-between rounded-lg border border-white/5 bg-black/20 px-4 py-2.5">
