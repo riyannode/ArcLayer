@@ -18,8 +18,11 @@ export const EXTERNAL_BOT_SCOPES = {
     'erc8183:submit',
     'erc8183:complete',
     'erc8183:tx',
+    'erc8183:presence',
   ] as const,
   x402Pay: ['x402:pay'] as const,
+  // Reserved for future x402 agent heartbeat
+  x402Presence: ['x402:presence'] as const,
 } as const;
 
 export function scopesForMode(mode: string): string[] {

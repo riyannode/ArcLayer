@@ -298,6 +298,33 @@ describe('buildInstallCommand', () => {
     expect(cmd.title).toContain('coming soon');
     expect(cmd.command).toContain('not yet available');
   });
+
+  it('erc8183-escrow-bots returns one-line installer (no git clone, no inline secrets)', () => {
+    const t = getTemplate('erc8183-escrow-bots');
+    if (!t) throw new Error('erc8183-escrow-bots template not found');
+
+    const bundle = buildEnvBundle({
+      template: t,
+      baseUrl: 'https://arclayers.xyz',
+      category: 'erc8183-jobs',
+      agentIds: ['36191', '36192', '36202'],
+      apiKeys: ['ak_client', 'ak_provider', 'ak_evaluator'],
+      erc8004Ids: [],
+    });
+
+    const cmd = buildInstallCommand({
+      template: t,
+      envBundle: bundle,
+      roleNames: ['client', 'provider', 'evaluator'],
+    });
+
+    expect(cmd.title).toBe('One-Click ERC-8183 Bot Installer');
+    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash');
+    // Security: no inline secrets
+    expect(cmd.command).not.toContain('ak_');
+    expect(cmd.command).not.toContain('PRIVATE_KEY');
+    expect(cmd.command).not.toContain('git clone');
+  });
 });
 
 describe('end-to-end consistency (fix #7)', () => {

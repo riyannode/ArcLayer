@@ -3,16 +3,18 @@
  * ERC-8183 Bot Env Preflight Checker
  *
  * Verifies each bot's .env has the required fields before starting PM2.
- * Supports provider naming conventions only.
+ * Strict mode: no ARCLAYER_API_KEY fallback, no WORKER_* env, no cross-role leaks.
  *
  * Usage:
  *   node scripts/check-env.mjs
  *   npm run check:env
+ *   node scripts/check-env.mjs --role=provider
  *
  * Exit codes:
  *   0 — all envs valid
  *   1 — one or more envs missing required fields
  *   2 — .env file not found
+ *   3 — rejected env vars found
  */
 
 import { readFileSync, existsSync } from 'fs';
@@ -21,6 +23,9 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BOTS_DIR = resolve(__dirname, '..');
+// ── Parse --role flag ────────────────────────────────────────────────────
+const ROLE_FLAG = process.argv.find(a => a.startsWith('--role='));
+const ONLY_ROLE = ROLE_FLAG ? ROLE_FLAG.split('=')[1] : null;
 
 let allPass = true;
 let exitCode = 0;
@@ -46,11 +51,7 @@ function parseDotEnv(text) {
   return env;
 }
 
-// ── Check helpers ──────────────────────────────────────────────────────────
-
-function getOr(value, ...alternatives) {
-  return value || alternatives.find((a) => a);
-}
+// ── Format value for logging (redact secrets) ──────────────────────────────
 
 function formatValue(key, value) {
   if (!value) return '<empty>';
@@ -60,25 +61,15 @@ function formatValue(key, value) {
   return value;
 }
 
-function checkRequired(env, botName, key, alternatives = []) {
-  const found = key.startsWith('*')
-    ? alternatives.some((alt) => env[alt])
-    : Boolean(env[key]) || alternatives.some((alt) => env[alt]);
+// ── Check helpers ──────────────────────────────────────────────────────────
 
-  if (found) {
-    const usedKey = env[key]
-      ? key
-      : alternatives.find((alt) => env[alt]);
-    if (alternatives.length > 0) {
-      const displayKeys = [key, ...alternatives].join(' / ');
-      console.log(`  ✓ ${displayKeys}: ${usedKey ? formatValue(usedKey, env[usedKey]) : 'set'}`);
-    } else {
-      console.log(`  ✓ ${key}: ${formatValue(key, env[key])}`);
-    }
+function checkRequired(env, botName, key) {
+  if (env[key]) {
+    console.log(`  ✓ ${key}: ${formatValue(key, env[key])}`);
     return true;
   }
 
-  console.log(`  ✗ MISSING: ${[key, ...alternatives].join(' / ')}`);
+  console.log(`  ✗ MISSING: ${key}`);
   allPass = false;
   exitCode = 1;
   return false;
@@ -93,12 +84,66 @@ function checkOptional(env, key, label) {
   return false;
 }
 
+// ── Reject helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Reject specific env keys. Returns true if any rejection triggered.
+ */
+function rejectKeys(env, botName, keys, reason) {
+  let rejected = false;
+  for (const key of keys) {
+    if (env[key]) {
+      console.log(`  ✗ REJECTED: ${key} — ${reason}`);
+      rejected = true;
+    }
+  }
+  if (rejected) {
+    allPass = false;
+    exitCode = 3;
+  }
+  return rejected;
+}
+
+/**
+ * Reject cross-role secrets (e.g. CLIENT_PRIVATE_KEY inside provider .env).
+ */
+function rejectCrossRoleSecrets(env, botName, allowedPrefix) {
+  const secretSuffixes = ['_PRIVATE_KEY', '_API_KEY'];
+  const rolePrefixes = ['CLIENT', 'PROVIDER', 'EVALUATOR'];
+  const foreignPrefixes = rolePrefixes.filter(p => p !== allowedPrefix);
+
+  let rejected = false;
+  for (const prefix of foreignPrefixes) {
+    for (const suffix of secretSuffixes) {
+      const key = prefix + suffix;
+      if (env[key]) {
+        console.log(`  ✗ REJECTED: ${key} — cross-role secret in ${botName} (expected ${allowedPrefix}_* only)`);
+        rejected = true;
+      }
+    }
+  }
+  if (rejected) {
+    allPass = false;
+    exitCode = 3;
+  }
+  return rejected;
+}
+
 // ── Bot checks ─────────────────────────────────────────────────────────────
 
-function checkBot(botName, requiredKeys) {
+function checkBot(botName, rolePrefix, requiredKeys, optionalKeys = [], skipIfMissing = false) {
   const envPath = resolve(BOTS_DIR, botName, '.env');
   console.log(`\n── ${botName} ──────────────────────`);
   console.log(`File: ${envPath}`);
+
+  // Skip if .env doesn't exist and directory wasn't configured (standalone single-role install)
+  if (skipIfMissing && !existsSync(envPath)) {
+    const dirPath = resolve(BOTS_DIR, botName);
+    if (!existsSync(dirPath) || !existsSync(resolve(dirPath, '.env.example'))) {
+      console.log(`  ⊘ Skipped — not configured (single-role install)`);
+      return;
+    }
+  }
 
   if (!existsSync(envPath)) {
     console.log(`  ✗ .env not found`);
@@ -111,89 +156,117 @@ function checkBot(botName, requiredKeys) {
   const raw = readFileSync(envPath, 'utf8');
   const env = parseDotEnv(raw);
 
-  for (const entry of requiredKeys) {
-    if (typeof entry === 'string') {
-      checkRequired(env, botName, entry);
-    } else if (Array.isArray(entry)) {
-      // [primary, ...alternatives]
-      checkRequired(env, botName, entry[0], entry.slice(1));
-    } else if (entry.or) {
-      // { or: [primary, ...alternatives] }
-      checkRequired(env, botName, entry.or[0], entry.or.slice(1));
-    } else if (entry.key) {
-      const { key: k, label, optional: opt } = entry;
-      if (opt) {
-        checkOptional(env, k, label);
-      } else {
-        checkRequired(env, botName, k, entry.alternatives || []);
+  // Reject globally forbidden keys
+  rejectKeys(env, botName, ['ARCLAYER_API_KEY'], 'no ARCLAYER_API_KEY fallback allowed');
+
+  // Reject cross-role secrets
+  rejectCrossRoleSecrets(env, botName, rolePrefix);
+
+  // Role-specific rejections
+  if (rolePrefix === 'PROVIDER') {
+    const workerKeys = Object.keys(env).filter(k => k.startsWith('WORKER_'));
+    if (workerKeys.length > 0) {
+      for (const k of workerKeys) {
+        console.log(`  ✗ REJECTED: ${k} — no WORKER_* env in provider role`);
       }
+      allPass = false;
+      exitCode = 3;
     }
+  }
+
+  // Required keys
+  for (const key of requiredKeys) {
+    checkRequired(env, botName, key);
+  }
+
+  // Optional keys
+  for (const key of optionalKeys) {
+    checkOptional(env, key);
   }
 
   // Print effective config
   console.log(`\n  Effective config:`);
-  const agentId = env.PROVIDER_AGENT_ID || '?';
-  const addr = env.PROVIDER_ADDRESS || env.CLIENT_ADDRESS || env.EVALUATOR_ADDRESS || '?';
+  const agentId = env[`${rolePrefix}_AGENT_ID`] || '?';
+  const addr = env[`${rolePrefix}_ADDRESS`] || '?';
   console.log(`  Agent ID: ${agentId}`);
-  console.log(`  Address:  ${addr?.slice(0, 12) + '...'}`);
+  console.log(`  Address:  ${typeof addr === 'string' && addr.length > 12 ? addr.slice(0, 12) + '...' : addr}`);
 }
 
 // ── Run checks ─────────────────────────────────────────────────────────────
 
 console.log('═ ERC-8183 Bot Env Preflight Check ═══════════════════');
 console.log(`Bots root: ${BOTS_DIR}`);
+if (ONLY_ROLE) console.log(`Role filter: ${ONLY_ROLE} only`);
 
-const CHECKS = [
-  {
-    bot: 'client-bot',
-    required: [
-      'ARCLAYER_BASE_URL',
-      'CLIENT_API_KEY',
-      'ARCLAYER_AGENT_ID',
-      'BUYER_AGENT_ID',
-      'CLIENT_ADDRESS',
-      'CLIENT_PRIVATE_KEY',
-      'PROVIDER_AGENT_ID',
-      'PROVIDER_ADDRESS',
-      'EVALUATOR_AGENT_ID',
-      'EVALUATOR_ADDRESS',
-      'ARC_RPC_URL',
-    ],
-  },
-  {
-    bot: 'provider-bot',
-    required: [
-      'ARCLAYER_BASE_URL',
-      'PROVIDER_API_KEY',
-      'PROVIDER_AGENT_ID',
-      'PROVIDER_ADDRESS',
-      'PROVIDER_PRIVATE_KEY',
-      'ARC_RPC_URL',
-    ],
-  },
-  {
-    bot: 'evaluator-bot',
-    required: [
-      'ARCLAYER_BASE_URL',
-      'EVALUATOR_API_KEY',
-      'ARCLAYER_AGENT_ID',
-      'EVALUATOR_AGENT_ID',
-      'EVALUATOR_ADDRESS',
-      'EVALUATOR_PRIVATE_KEY',
-      'ARC_RPC_URL',
-    ],
-  },
-];
+// Client: CLIENT_* only
+if (!ONLY_ROLE || ONLY_ROLE === 'client') checkBot('client-bot', 'CLIENT', [
+  'ARCLAYER_BASE_URL',
+  'CLIENT_API_KEY',
+  'CLIENT_AGENT_ID',
+  'CLIENT_ADDRESS',
+  'CLIENT_PRIVATE_KEY',
+  'ARC_RPC_URL',
+], [
+  'ARC_CHAIN_ID',
+  'ARC_RPC_FALLBACK_URL',
+  'BUYER_AGENT_ID',
+  'PROVIDER_AGENT_ID',
+  'PROVIDER_ADDRESS',
+  'EVALUATOR_AGENT_ID',
+  'EVALUATOR_ADDRESS',
+  'JOB_BUDGET_ATOMIC',
+  'JOB_CREATE_INTERVAL_MS',
+  'MAX_OPEN_JOBS',
+  'AUTONOMOUS_TX',
+], true);
 
-for (const check of CHECKS) {
-  checkBot(check.bot, check.required);
-}
+// Provider: PROVIDER_* only
+if (!ONLY_ROLE || ONLY_ROLE === 'provider') checkBot('provider-bot', 'PROVIDER', [
+  'ARCLAYER_BASE_URL',
+  'PROVIDER_API_KEY',
+  'PROVIDER_AGENT_ID',
+  'PROVIDER_ADDRESS',
+  'PROVIDER_PRIVATE_KEY',
+  'ARC_RPC_URL',
+], [
+  'ARC_CHAIN_ID',
+  'ARC_RPC_FALLBACK_URL',
+  'PROVIDER_CAPABILITIES',
+  'JOB_POLL_INTERVAL_MS',
+  'MAX_ACTIVE_JOBS',
+  'CLAIM_TTL_SECONDS',
+  'AUTONOMOUS_TX',
+  'IGNORE_JOBS_BEFORE',
+  'RECOVER_OLD_JOBS',
+], true);
+
+// Evaluator: EVALUATOR_* only
+if (!ONLY_ROLE || ONLY_ROLE === 'evaluator') checkBot('evaluator-bot', 'EVALUATOR', [
+  'ARCLAYER_BASE_URL',
+  'EVALUATOR_API_KEY',
+  'EVALUATOR_AGENT_ID',
+  'EVALUATOR_ADDRESS',
+  'EVALUATOR_PRIVATE_KEY',
+  'ARC_RPC_URL',
+], [
+  'ARC_CHAIN_ID',
+  'ARC_RPC_FALLBACK_URL',
+  'EVALUATOR_MODE',
+  'MIN_EVAL_SCORE',
+  'JOB_POLL_INTERVAL_MS',
+  'MAX_ACTIVE_JOBS',
+  'AUTONOMOUS_TX',
+  'IGNORE_JOBS_BEFORE',
+  'RECOVER_OLD_JOBS',
+], true);
 
 console.log(`\n═══════════════════════════════════════════════════════`);
 if (exitCode === 0) {
   console.log('✅ All env checks passed — bots ready to start.');
 } else if (exitCode === 2) {
   console.log(`❌ Missing .env files. Run cp .env.example .env in each bot dir first.`);
+} else if (exitCode === 3) {
+  console.log(`❌ Rejected env vars found. Remove forbidden keys and retry.`);
 } else {
   console.log(`❌ Some required env vars are missing. Check ✗ entries above.`);
 }

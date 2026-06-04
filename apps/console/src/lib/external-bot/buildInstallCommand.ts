@@ -69,43 +69,11 @@ pm2 status
   return { title: 'PM2 — market-agent-bridge', command: cmd.trim() };
 }
 
-function buildERC8183EscrowCommand(envBundle: EnvBundle, roleNames: string[]): InstallCommand {
-  const envSnippets = formatEnvBundleAsInstallCommands(envBundle);
-  const roleNameMap: Record<string, { pm2Name: string; dir: string }> = {
-    client: { pm2Name: 'arclayer-erc8183-client', dir: 'client-bot/ecosystem.config.cjs' },
-    provider: { pm2Name: 'arclayer-erc8183-provider', dir: 'provider-bot/ecosystem.config.cjs' },
-    evaluator: { pm2Name: 'arclayer-erc8183-evaluator', dir: 'evaluator-bot/ecosystem.config.cjs' },
+function buildERC8183EscrowCommand(_envBundle: EnvBundle, _roleNames: string[]): InstallCommand {
+  return {
+    title: 'One-Click ERC-8183 Bot Installer',
+    command: 'curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash',
   };
-  const deleteLines = roleNames.map((r) => {
-    const m = roleNameMap[r];
-    return `pm2 delete ${m?.pm2Name || r} 2>/dev/null || true`;
-  }).join('\n');
-  const startLines = roleNames.map((r) => {
-    const m = roleNameMap[r];
-    return `pm2 start ${m?.dir || `${r}-bot/ecosystem.config.cjs`}`;
-  }).join('\n');
-  const cmd = `# ── ERC-8183 Escrow Job Bot ───────────────────────────────
-git clone https://github.com/riyannode/ArcLayer.git
-cd ArcLayer/examples/external-erc8183-bots
-
-# ── Env files ─────────────────────────────────────────
-${envSnippets}
-
-# ── Install dependencies ──────────────────────────────
-npm install
-
-# ── Install PM2 (if missing) ──────────────────────────
-npm install -g pm2 2>/dev/null || true
-
-# ── Start processes ───────────────────────────────────
-${deleteLines}
-${startLines}
-pm2 save
-
-# ── Check status ──────────────────────────────────────
-pm2 status
-`;
-  return { title: 'PM2 — erc8183-escrow-bots', command: cmd.trim() };
 }
 
 function buildComingSoonCommand(template: ExternalBotTemplate): InstallCommand {

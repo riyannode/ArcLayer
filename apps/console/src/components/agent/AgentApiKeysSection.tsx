@@ -15,15 +15,15 @@ type ApiKeyMeta = {
 const SCOPE_PRESETS: Record<string, { label: string; scopes: string[] }> = {
   provider: {
     label: 'Provider PM2 Bot',
-    scopes: ['erc8183:claim', 'erc8183:running', 'erc8183:submit', 'erc8183:tx'],
+    scopes: ['erc8183:claim', 'erc8183:running', 'erc8183:submit', 'erc8183:tx', 'erc8183:presence'],
   },
   client: {
     label: 'Client Job Creator',
-    scopes: ['erc8183:create', 'erc8183:confirm', 'erc8183:tx'],
+    scopes: ['erc8183:create', 'erc8183:confirm', 'erc8183:tx', 'erc8183:presence'],
   },
   evaluator: {
     label: 'Evaluator Bot',
-    scopes: ['erc8183:complete', 'erc8183:reject', 'erc8183:tx'],
+    scopes: ['erc8183:complete', 'erc8183:reject', 'erc8183:tx', 'erc8183:presence'],
   },
 };
 
