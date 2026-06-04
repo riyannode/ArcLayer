@@ -48,7 +48,12 @@ const IGNORE_JOBS_BEFORE = process.env.IGNORE_JOBS_BEFORE || '';
 const signer = createSigner({ privateKey: CLIENT_PK, rpcUrl: ARC_RPC_URL });
 
 // ── Heartbeat ───────────────────────────────────────────────────────────
-const CLIENT_AGENT_ID = required('CLIENT_AGENT_ID');
+// Fall back to BUYER_AGENT_ID for backward compat — existing client .env files
+// only define BUYER_AGENT_ID; CLIENT_AGENT_ID is optional alias.
+const CLIENT_AGENT_ID = process.env.CLIENT_AGENT_ID || process.env.BUYER_AGENT_ID;
+if (!CLIENT_AGENT_ID) {
+  throw new Error('Either CLIENT_AGENT_ID or BUYER_AGENT_ID must be set');
+}
 const stopHeartbeat = startHeartbeat({
   agentId: CLIENT_AGENT_ID,
   role: 'client',
