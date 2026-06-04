@@ -72,7 +72,7 @@ pm2 status
 function buildERC8183EscrowCommand(_envBundle: EnvBundle, _roleNames: string[]): InstallCommand {
   return {
     title: 'One-Click ERC-8183 Bot Installer',
-    command: 'curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash',
+    command: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
   };
 }
 
