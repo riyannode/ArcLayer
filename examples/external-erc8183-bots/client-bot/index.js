@@ -68,7 +68,8 @@ let jobsCreatedThisRun = 0;
 
 // ── Random job templates ─────────────────────────────────────────────────
 
-const JOB_TEMPLATES = [
+// Base templates — always available, match default provider capabilities.
+const BASE_TEMPLATES = [
   {
     jobType: 'market_summary',
     query: 'Provide a concise market summary for the top 5 crypto assets by 24h volume.',
@@ -99,6 +100,11 @@ const JOB_TEMPLATES = [
     requiredCapability: 'data-quality-check',
     difficulty: 'easy',
   },
+];
+
+// Extra templates — opt-in via CLIENT_JOB_TYPES env.
+// Only use when the provider bot has matching capabilities and mode.
+const EXTRA_TEMPLATES = [
   {
     jobType: 'smart_contract_review',
     query: 'Review the Solidity escrow contract below for security and correctness. Identify issues, explain severity, and recommend fixes.',
@@ -152,6 +158,19 @@ const JOB_TEMPLATES = [
       'Must not include markdown outside JSON',
     ],
   },
+];
+
+// CLIENT_JOB_TYPES: comma-separated list of extra job types to include.
+// Example: CLIENT_JOB_TYPES=smart_contract_review
+// Empty or unset = base templates only (backward compatible).
+const CLIENT_JOB_TYPES = (process.env.CLIENT_JOB_TYPES || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const JOB_TEMPLATES = [
+  ...BASE_TEMPLATES,
+  ...EXTRA_TEMPLATES.filter((t) => CLIENT_JOB_TYPES.includes(t.jobType)),
 ];
 
 function pickRandomTemplate() {
