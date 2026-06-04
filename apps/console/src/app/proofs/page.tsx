@@ -24,10 +24,10 @@ export default function ProofsPage() {
       </p>
       <div className="flex gap-3">
         <Link
-          href="/protocol"
+          href="/dashboard"
           className="border border-white/10 px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-[#C5A67C] transition hover:border-[#C5A67C]/40 hover:bg-[rgba(197,166,124,0.06)]"
         >
-          Open Protocol →
+          Open Dashboard →
         </Link>
         <Link
           href="/"
