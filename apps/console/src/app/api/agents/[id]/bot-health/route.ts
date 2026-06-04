@@ -19,9 +19,9 @@ function deriveStatus(
 
 export async function GET(
   _request: Request,
-  { params }: { params: Promise<{ agentId: string }> },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { agentId } = await params;
+  const { id: agentId } = await params;
 
   try {
     const presence = await getAgentPresenceById(agentId);
