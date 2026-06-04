@@ -7,7 +7,7 @@
  */
 
 const crypto = require('crypto');
-const { callLLM, callLLMJson } = require('../shared/llm-client');
+const { callLLM } = require('../shared/llm-client');
 const { buildMessages } = require('./role-aware-profile');
 const { loadProviderSkills } = require('./skill-loader');
 
@@ -15,6 +15,24 @@ const VALID_SEVERITIES = new Set(['info', 'low', 'medium', 'high', 'critical']);
 
 /** Max raw output length sent to repair prompt (chars). */
 const REPAIR_INPUT_MAX_CHARS = 4000;
+
+/**
+ * Try to parse LLM output as JSON — strips markdown fences first.
+ * Returns parsed object or null if not valid JSON.
+ *
+ * @param {string} raw - raw LLM output
+ * @returns {Object|null}
+ */
+function tryParseLlmJson(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  let cleaned = raw.trim();
+  if (cleaned.startsWith('```')) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, '');
+    cleaned = cleaned.replace(/\n?```\s*$/, '');
+    cleaned = cleaned.trim();
+  }
+  try { return JSON.parse(cleaned); } catch { return null; }
+}
 
 /**
  * Deterministic JSON repair — no LLM call.
@@ -138,28 +156,35 @@ async function runLlmTask(job, env) {
   let llmResult;
   let rawOutput = null;
   let repairUsed = false;
-  try {
-    llmResult = await callLLMJson({
-      baseUrl: env.baseUrl,
-      apiKey: env.apiKey,
-      model: env.model,
-      messages,
-      maxTokens: env.maxTokens || 2500,
-      temperature: env.temperature ?? 0.2,
-      timeoutMs: env.timeoutMs || 60000,
-    });
-  } catch (initialErr) {
-    // Initial parse failed — attempt repair
-    rawOutput = initialErr.message;
 
-    // Step 1: Deterministic repair (no LLM call)
+  // Build LLM call options (reused for initial + repair calls)
+  const llmOpts = {
+    baseUrl: env.baseUrl,
+    apiKey: env.apiKey,
+    model: env.model,
+    messages,
+    maxTokens: env.maxTokens || 2500,
+    temperature: env.temperature ?? 0.2,
+    timeoutMs: env.timeoutMs || 60000,
+  };
+
+  // Step 0: Call LLM and get raw output
+  const raw = await callLLM(llmOpts);
+  rawOutput = raw;
+
+  // Step 1: Try deterministic parse (strip fences + direct parse)
+  llmResult = tryParseLlmJson(rawOutput);
+  if (llmResult) {
+    // Primary path — parsed successfully
+  } else if (maxRepairRetries > 0) {
+    // Step 2: Deterministic repair (extract JSON from prose, no LLM call)
     const detResult = tryDeterministicJsonRepair(rawOutput);
     if (detResult) {
       console.log(`   [llm] deterministic JSON repair succeeded`);
       llmResult = detResult;
       repairUsed = true;
-    } else if (maxRepairRetries > 0) {
-      // Step 2: LLM repair call
+    } else {
+      // Step 3: LLM repair call
       for (let attempt = 1; attempt <= maxRepairRetries; attempt++) {
         console.log(`   [llm] invalid JSON, attempting repair ${attempt}/${maxRepairRetries}`);
         try {
@@ -170,16 +195,16 @@ async function runLlmTask(job, env) {
         } catch (repairErr) {
           console.error(`   [llm] JSON repair ${attempt} failed: ${repairErr.message}`);
           if (attempt === maxRepairRetries) {
-            // All repair attempts exhausted
             console.error(`   [LLM] All repair attempts exhausted — skipping job`);
-            throw initialErr;
+            throw new Error(`LLM response is not valid JSON after repair: ${repairErr.message}`);
           }
         }
       }
-    } else {
-      // No repair retries allowed
-      throw initialErr;
     }
+  } else {
+    // No repair retries allowed — throw with truncated raw for logging
+    const snippet = rawOutput.length > 200 ? rawOutput.slice(0, 200) + '...' : rawOutput;
+    throw new Error(`LLM response is not valid JSON: ${snippet}`);
   }
 
   const durationMs = Date.now() - startTime;
@@ -284,4 +309,4 @@ function validateLlmOutput(output, expectedAgentType) {
   return { valid: errors.length === 0, errors };
 }
 
-module.exports = { runLlmTask, validateLlmOutput, tryDeterministicJsonRepair };
+module.exports = { runLlmTask, validateLlmOutput, tryDeterministicJsonRepair, tryParseLlmJson };
