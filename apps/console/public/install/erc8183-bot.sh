@@ -56,6 +56,33 @@ debug() {
   fi
 }
 
+# ── TTY for interactive input ────────────────────────────────────────────────
+# When invoked via curl | bash, stdin is the pipe, not the terminal.
+# Open /dev/tty for all interactive prompts so read works correctly.
+
+TTY_FD=0
+
+if [ -t 0 ]; then
+  # stdin is already a terminal (e.g. bash script.sh)
+  TTY_FD=0
+else
+  # stdin is a pipe (e.g. curl ... | bash) — try opening /dev/tty
+  if ( exec 0</dev/tty ) 2>/dev/null; then
+    exec 3</dev/tty
+    TTY_FD=3
+  else
+    # No working TTY — fall back to stdin with warning
+    echo -e "${YELLOW}[warn]${NC} No terminal detected. Interactive prompts may not work."
+    echo -e "${YELLOW}[warn]${NC} If running via curl | bash, ensure a TTY is available."
+    TTY_FD=0
+  fi
+fi
+
+# Wrapper: read from terminal regardless of how script was invoked
+tty_read() {
+  read "$@" <&$TTY_FD
+}
+
 # ── Preflight checks ─────────────────────────────────────────────────────────
 
 check_deps() {
@@ -103,7 +130,7 @@ select_role() {
 
   local choice
   while true; do
-    read -rp "Enter 1, 2, or 3: " choice
+    tty_read -rp "Enter 1, 2, or 3: " choice
     case "$choice" in
       1) ROLE="client";     ROLE_LABEL="Client";     break ;;
       2) ROLE="provider";   ROLE_LABEL="Provider";   break ;;
@@ -115,6 +142,16 @@ select_role() {
   ok "Selected role: ${ROLE_LABEL}"
 }
 
+# ── Validate Ethereum address ────────────────────────────────────────────────
+
+validate_address() {
+  local val="$1"
+  if [[ "$val" =~ ^0x[a-fA-F0-9]{40}$ ]]; then
+    return 0
+  fi
+  return 1
+}
+
 # ── Collect user inputs ──────────────────────────────────────────────────────
 
 collect_inputs() {
@@ -124,7 +161,7 @@ collect_inputs() {
 
   # Agent ID
   while true; do
-    read -rp "Agent ID (numeric, from ERC-8004 registration): " AGENT_ID
+    tty_read -rp "Agent ID (numeric, from ERC-8004 registration): " AGENT_ID
     if [[ "$AGENT_ID" =~ ^[0-9]+$ ]]; then
       break
     fi
@@ -133,8 +170,8 @@ collect_inputs() {
 
   # Wallet address
   while true; do
-    read -rp "Wallet address (0x...): " WALLET_ADDRESS
-    if [[ "$WALLET_ADDRESS" =~ ^0x[a-fA-F0-9]{40}$ ]]; then
+    tty_read -rp "Wallet address (0x...): " WALLET_ADDRESS
+    if validate_address "$WALLET_ADDRESS"; then
       break
     fi
     warn "Invalid Ethereum address. Must be 0x + 40 hex chars."
@@ -142,7 +179,7 @@ collect_inputs() {
 
   # API key
   while true; do
-    read -rp "API key (ak_...): " API_KEY
+    tty_read -rp "API key (ak_...): " API_KEY
     if [[ "$API_KEY" =~ ^ak_ ]]; then
       break
     fi
@@ -153,13 +190,57 @@ collect_inputs() {
   echo ""
   info "Private key will be hidden (no echo)."
   while true; do
-    read -rsp "Wallet private key: " PRIVATE_KEY
+    tty_read -rsp "Wallet private key: " PRIVATE_KEY
     echo ""
     if [ -n "$PRIVATE_KEY" ]; then
       break
     fi
     warn "Private key cannot be empty."
   done
+
+  # Client role needs peer addresses for job creation
+  if [ "$ROLE" = "client" ]; then
+    echo ""
+    info "Client bot creates jobs that need a provider and evaluator."
+    info "Enter the provider and evaluator agent IDs + wallet addresses."
+    echo ""
+
+    # Provider agent ID
+    while true; do
+      tty_read -rp "Provider Agent ID (numeric): " PEER_PROVIDER_AGENT_ID
+      if [[ "$PEER_PROVIDER_AGENT_ID" =~ ^[0-9]+$ ]]; then
+        break
+      fi
+      warn "Agent ID must be a numeric value."
+    done
+
+    # Provider wallet address
+    while true; do
+      tty_read -rp "Provider wallet address (0x...): " PEER_PROVIDER_ADDRESS
+      if validate_address "$PEER_PROVIDER_ADDRESS"; then
+        break
+      fi
+      warn "Invalid Ethereum address."
+    done
+
+    # Evaluator agent ID
+    while true; do
+      tty_read -rp "Evaluator Agent ID (numeric): " PEER_EVALUATOR_AGENT_ID
+      if [[ "$PEER_EVALUATOR_AGENT_ID" =~ ^[0-9]+$ ]]; then
+        break
+      fi
+      warn "Agent ID must be a numeric value."
+    done
+
+    # Evaluator wallet address
+    while true; do
+      tty_read -rp "Evaluator wallet address (0x...): " PEER_EVALUATOR_ADDRESS
+      if validate_address "$PEER_EVALUATOR_ADDRESS"; then
+        break
+      fi
+      warn "Invalid Ethereum address."
+    done
+  fi
 
   # LLM provider (optional)
   echo ""
@@ -173,7 +254,7 @@ collect_inputs() {
   echo ""
 
   LLM_PROVIDER="none"
-  read -rp "LLM provider [1]: " llm_choice
+  tty_read -rp "LLM provider [1]: " llm_choice
   case "${llm_choice:-1}" in
     1|"") LLM_PROVIDER="none" ;;
     2)    LLM_PROVIDER="openai" ;;
@@ -185,10 +266,10 @@ collect_inputs() {
   esac
 
   if [ "$LLM_PROVIDER" != "none" ]; then
-    read -rp "LLM API base URL: " LLM_BASE_URL
-    read -rsp "LLM API key: " LLM_API_KEY
+    tty_read -rp "LLM API base URL: " LLM_BASE_URL
+    tty_read -rsp "LLM API key: " LLM_API_KEY
     echo ""
-    read -rp "LLM model name [auto]: " LLM_MODEL
+    tty_read -rp "LLM model name [auto]: " LLM_MODEL
     LLM_MODEL="${LLM_MODEL:-auto}"
   fi
 }
@@ -202,6 +283,14 @@ install_runtime() {
   echo ""
   echo -e "${BOLD}── Installing ${ROLE_LABEL} Bot ──${NC}"
   echo ""
+
+  # Dry-run: validate target only
+  if [ "$DRY_RUN" = true ]; then
+    info "[dry-run] Would install to ${target_dir}"
+    info "[dry-run] Would sparse clone from ${REPO_URL}"
+    ok "[dry-run] Validation complete. No changes made."
+    return
+  fi
 
   # Create target directory
   mkdir -p "$target_dir"
@@ -262,6 +351,11 @@ generate_env() {
 
   info "Generating .env for ${ROLE_LABEL}..."
 
+  if [ "$DRY_RUN" = true ]; then
+    info "[dry-run] Would write .env to ${env_file}"
+    return
+  fi
+
   case "$ROLE" in
     client)
       cat > "$env_file" << ENVEOF
@@ -274,6 +368,10 @@ BUYER_AGENT_ID=${AGENT_ID}
 CLIENT_ADDRESS=${WALLET_ADDRESS}
 CLIENT_PRIVATE_KEY=${private_key_normalized}
 CLIENT_API_KEY=${API_KEY}
+PROVIDER_AGENT_ID=${PEER_PROVIDER_AGENT_ID}
+PROVIDER_ADDRESS=${PEER_PROVIDER_ADDRESS}
+EVALUATOR_AGENT_ID=${PEER_EVALUATOR_AGENT_ID}
+EVALUATOR_ADDRESS=${PEER_EVALUATOR_ADDRESS}
 ARC_CHAIN_ID=5042002
 ARC_RPC_URL=https://rpc.testnet.arc.network
 ARC_RPC_FALLBACK_URL=https://rpc.drpc.testnet.arc.network
@@ -332,7 +430,7 @@ LLMEOF
   ok ".env written (chmod 600)"
 }
 
-# ── Install deps + start PM2 ─────────────────────────────────────────────────
+# ── Install deps + run check-env + start PM2 ─────────────────────────────────
 
 start_bot() {
   local bot_dir="${BOTS_DIR}/erc8183-${ROLE}"
@@ -423,6 +521,15 @@ print_summary() {
   echo "  • To rotate keys: edit .env then pm2 restart ${process_name}"
   echo ""
 }
+
+# ── Cleanup TTY fd ────────────────────────────────────────────────────────────
+
+cleanup() {
+  if [ "${TTY_FD:-0}" -eq 3 ]; then
+    exec 3<&-
+  fi
+}
+trap cleanup EXIT
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
