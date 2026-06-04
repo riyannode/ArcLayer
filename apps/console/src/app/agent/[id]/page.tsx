@@ -21,6 +21,7 @@ import {
   type Erc8183AgentMetadata,
 } from '@/lib/erc8183/agent-profile';
 import type { DashboardAgentRow } from '@/lib/dashboard/erc8183-agents';
+import { BotStatusPill, isValidAgentId } from '@/components/agent/BotStatusPill';
 import {
   BadgeCheck,
   ShieldCheck,
@@ -588,6 +589,7 @@ export default function AgentProfilePage() {
                     <span className="inline-flex items-center gap-2 rounded-md border border-[#F3C536]/25 bg-[#F3C536]/8 px-3 py-1.5 text-[14px] text-[#F3C536]">
                       ERC-8183 Commerce
                     </span>
+                    {isValidAgentId(String(agentId)) && <BotStatusPill agentId={String(agentId)} />}
                   </div>
 
                   <p className="mt-3 max-w-2xl text-[14px] leading-6 text-[#EAE4D8]/55">

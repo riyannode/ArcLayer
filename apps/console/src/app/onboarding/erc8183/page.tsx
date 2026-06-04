@@ -259,8 +259,7 @@ function OnboardingContent() {
           Bot Health
         </h2>
         <p className="mt-2 text-[13px] leading-5 text-[#EAE4D8]/50">
-          After installer support is added, this section will show whether your
-          bot is online.
+          After installation, check your Agent Profile or Dashboard to see bot online status.
         </p>
 
         <div className="mt-4">

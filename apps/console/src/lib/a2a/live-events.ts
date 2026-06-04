@@ -53,6 +53,13 @@ export type AgentPresenceInput = {
   status?: AgentPresenceStatus;
   lastEventType?: string | null;
   lastEventSummary?: string | null;
+  // Optional ERC-8183 bot metadata
+  role?: string | null;
+  runtimeType?: string | null;
+  processName?: string | null;
+  version?: string | null;
+  chainId?: number | null;
+  rpcOk?: boolean | null;
 };
 
 function cleanString(value: unknown): string | null {
@@ -128,6 +135,13 @@ export async function upsertAgentPresence(input: AgentPresenceInput): Promise<{ 
       last_event_type: cleanString(input.lastEventType),
       last_event_summary: cleanString(input.lastEventSummary),
       updated_at: now,
+      // Optional ERC-8183 bot metadata (only write if provided, keeps existing values otherwise)
+      ...(input.role !== undefined && { role: cleanString(input.role) }),
+      ...(input.runtimeType !== undefined && { runtime_type: cleanString(input.runtimeType) }),
+      ...(input.processName !== undefined && { process_name: cleanString(input.processName) }),
+      ...(input.version !== undefined && { version: cleanString(input.version) }),
+      ...(input.chainId !== undefined && { chain_id: input.chainId }),
+      ...(input.rpcOk !== undefined && { rpc_ok: input.rpcOk }),
     },
     { onConflict: 'agent_id' },
   );
@@ -224,17 +238,18 @@ export async function listAgentPresenceByCategory(category: string) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from(PRESENCE_TABLE)
-    .select('agent_id, agent_name, status, last_heartbeat_at, last_event_type, last_event_summary, updated_at')
+    .select('agent_id, agent_name, status, last_heartbeat_at, last_event_type, last_event_summary, updated_at, role, runtime_type, process_name, version, chain_id, rpc_ok')
     .in('agent_id', ids);
 
-  const byId = new Map((data ?? []).map((row) => [row.agent_id, row]));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byId = new Map((data ?? []).map((row: any) => [row.agent_id, row]));
 
   if (error) {
     console.error('[a2a.presence] list error', error.message);
   }
 
   return ids.map((agentId) => {
-    const row = byId.get(agentId);
+    const row = byId.get(agentId) as Record<string, any> | undefined;
     return {
       agentId,
       agentName: row?.agent_name ?? null,
@@ -243,6 +258,49 @@ export async function listAgentPresenceByCategory(category: string) {
       lastEventType: row?.last_event_type ?? null,
       lastEventSummary: row?.last_event_summary ?? null,
       updatedAt: row?.updated_at ?? null,
+      role: row?.role ?? null,
+      runtimeType: row?.runtime_type ?? null,
+      processName: row?.process_name ?? null,
+      version: row?.version ?? null,
+      chainId: row?.chain_id ?? null,
+      rpcOk: row?.rpc_ok ?? null,
     };
   });
+}
+
+/** Read a single agent's presence by agent_id (for bot-health endpoint).
+ *  Returns null if not found. Throws on DB errors so callers can distinguish. */
+export async function getAgentPresenceById(agentId: string) {
+  const id = cleanString(agentId);
+  if (!id) return null;
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from(PRESENCE_TABLE)
+    .select('agent_id, agent_name, status, last_heartbeat_at, last_event_type, last_event_summary, updated_at, role, runtime_type, process_name, version, chain_id, rpc_ok')
+    .eq('agent_id', id)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[a2a.presence] getAgentPresenceById error', error.message);
+    throw new Error(`presence_read_failed: ${error.message}`);
+  }
+
+  if (!data) return null;
+
+  return {
+    agentId: data.agent_id,
+    agentName: data.agent_name ?? null,
+    status: data.status ?? 'offline',
+    lastHeartbeatAt: data.last_heartbeat_at ?? null,
+    lastEventType: data.last_event_type ?? null,
+    lastEventSummary: data.last_event_summary ?? null,
+    updatedAt: data.updated_at ?? null,
+    role: data.role ?? null,
+    runtimeType: data.runtime_type ?? null,
+    processName: data.process_name ?? null,
+    version: data.version ?? null,
+    chainId: data.chain_id ?? null,
+    rpcOk: data.rpc_ok ?? null,
+  };
 }
