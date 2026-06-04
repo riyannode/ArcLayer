@@ -17,13 +17,51 @@ function checkGlobalToken(request: Request): boolean {
   return bearer === required || header === required;
 }
 
-/** Reject body if it contains obvious secret field names at top level. */
-const SECRET_FIELD_RE = /^(privateKey|PRIVATE_KEY|apiKey|API_KEY|secret|token)$/i;
+/**
+ * Recursive secret-field rejection.
+ * Scans all keys in plain objects and arrays.
+ * Matches case-insensitive against a blocklist of secret-related key names.
+ */
+const SECRET_KEY_PATTERNS = [
+  'private',
+  'privatekey',
+  'apikey',
+  'secret',
+  'token',
+  'authorization',
+  'keyhash',
+  'password',
+  'mnemonic',
+  'seed',
+];
 
-function hasSecretFields(body: Record<string, unknown>): boolean {
-  for (const key of Object.keys(body)) {
-    if (SECRET_FIELD_RE.test(key)) return true;
+function isSecretKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[\s_-]+/g, '');
+  for (const pattern of SECRET_KEY_PATTERNS) {
+    if (normalized.includes(pattern)) return true;
   }
+  return false;
+}
+
+function hasSecretFields(value: unknown, depth = 0): boolean {
+  if (depth > 8) return false; // guard against deeply nested structures
+  if (!value || typeof value !== 'object') return false;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (hasSecretFields(item, depth + 1)) return true;
+    }
+    return false;
+  }
+
+  // Plain object — check keys
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    if (isSecretKey(key)) return true;
+    // Recurse into nested plain objects
+    const child = (value as Record<string, unknown>)[key];
+    if (child && typeof child === 'object' && hasSecretFields(child, depth + 1)) return true;
+  }
+
   return false;
 }
 
@@ -62,7 +100,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
   }
 
-  // Reject obvious secret fields
+  // Reject secret fields — recursive scan of all keys in body
   if (hasSecretFields(body)) {
     return NextResponse.json({ ok: false, error: 'secret_fields_rejected' }, { status: 400 });
   }

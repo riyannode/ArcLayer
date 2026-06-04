@@ -268,7 +268,8 @@ export async function listAgentPresenceByCategory(category: string) {
   });
 }
 
-/** Read a single agent's presence by agent_id (for bot-health endpoint). */
+/** Read a single agent's presence by agent_id (for bot-health endpoint).
+ *  Returns null if not found. Throws on DB errors so callers can distinguish. */
 export async function getAgentPresenceById(agentId: string) {
   const id = cleanString(agentId);
   if (!id) return null;
@@ -282,7 +283,7 @@ export async function getAgentPresenceById(agentId: string) {
 
   if (error) {
     console.error('[a2a.presence] getAgentPresenceById error', error.message);
-    return null;
+    throw new Error(`presence_read_failed: ${error.message}`);
   }
 
   if (!data) return null;

@@ -46,6 +46,18 @@ const STATUS_STYLES: Record<string, { dot: string; pill: string; text: string }>
   },
 };
 
+/** Filter out non-agent-ID strings (empty, whitespace, obviously garbage). */
+function isValidAgentId(id: string | null | undefined): boolean {
+  if (!id || typeof id !== 'string') return false;
+  const trimmed = id.trim();
+  if (!trimmed || trimmed.length < 2) return false;
+  // Numeric IDs (ERC-8004 token IDs like "36192")
+  if (/^\d{2,}$/.test(trimmed)) return true;
+  // Canonical slug IDs (like "hermes-oracle", "apollo-analyzer")
+  if (/^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/i.test(trimmed)) return true;
+  return false;
+}
+
 export function BotStatusPill({
   agentId,
   compact = false,
@@ -57,12 +69,17 @@ export function BotStatusPill({
 
   const fetchHealth = useCallback(async () => {
     try {
-      const res = await fetch(`/api/agents/${agentId}/bot-health`, { cache: 'no-store' });
-      if (!res.ok) return;
+      const res = await fetch(`/api/agents/${encodeURIComponent(agentId)}/bot-health`, { cache: 'no-store' });
+      if (!res.ok) {
+        // If fetch fails and no prior state, set unknown explicitly
+        setHealth((prev) => prev ?? { ok: false, agentId, status: 'unknown', lastSeenAt: null, role: null, runtimeType: null, processName: null, version: null, chainId: null, rpcOk: null });
+        return;
+      }
       const json = (await res.json()) as BotHealth;
       setHealth(json);
     } catch {
-      // keep last known state
+      // If fetch fails and no prior state, set unknown explicitly
+      setHealth((prev) => prev ?? { ok: false, agentId, status: 'unknown', lastSeenAt: null, role: null, runtimeType: null, processName: null, version: null, chainId: null, rpcOk: null });
     }
   }, [agentId]);
 
@@ -96,3 +113,5 @@ export function BotStatusPill({
     </span>
   );
 }
+
+export { isValidAgentId };
