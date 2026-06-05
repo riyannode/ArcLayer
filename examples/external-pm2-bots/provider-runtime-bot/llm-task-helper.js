@@ -8,7 +8,7 @@
  *   - examples/external-erc8183-bots/provider-bot/skill-loader.js (loadProviderSkills)
  *
  * No code duplication. Loads via require() from the existing path.
- * Computes deliverableHash from actual LLM output (SHA-256 of JSON).
+ * Computes deliverableHash from full deliverablePayload (deep canonical stringify).
  * Never logs API keys or raw LLM content.
  */
 
@@ -16,23 +16,19 @@ const crypto = require('crypto');
 const path = require('path');
 
 // ── Resolve paths to existing modules ───────────────────────────────────────
-// These are relative to this file's directory.
 const EXTERNAL_BOTS_DIR = path.resolve(__dirname, '../../external-erc8183-bots');
 const PROVIDER_BOT_DIR = path.join(EXTERNAL_BOTS_DIR, 'provider-bot');
 const SHARED_DIR = path.join(EXTERNAL_BOTS_DIR, 'shared');
 
-// Lazy-loaded modules (loaded once on first use)
+// Lazy-loaded module (loaded once on first use)
 let _runLlmTask = null;
-let _loadProviderSkills = null;
-let _buildMessages = null;
 
 function loadModules() {
-  if (_runLlmTask) return; // already loaded
+  if (_runLlmTask) return;
 
   try {
+    // runLlmTask() internally loads loadProviderSkills + buildMessages — no need to load here
     _runLlmTask = require(path.join(PROVIDER_BOT_DIR, 'task-runner.js')).runLlmTask;
-    _loadProviderSkills = require(path.join(PROVIDER_BOT_DIR, 'skill-loader.js')).loadProviderSkills;
-    _buildMessages = require(path.join(PROVIDER_BOT_DIR, 'role-aware-profile.js')).buildMessages;
   } catch (err) {
     throw new Error(
       `Failed to load LLM task modules from ${EXTERNAL_BOTS_DIR}. ` +
@@ -41,8 +37,31 @@ function loadModules() {
   }
 }
 
+// ── Deep Canonical Stringify ────────────────────────────────────────────────
+// Recursively sorts all object keys at every nesting level.
+// Produces deterministic JSON regardless of key insertion order.
+// Handles: objects, arrays, primitives, null, nested structures.
+
+function stableStringify(value) {
+  if (value === null || value === undefined) return JSON.stringify(value);
+  if (typeof value !== 'object') return JSON.stringify(value);
+
+  if (Array.isArray(value)) {
+    const items = value.map((v) => stableStringify(v));
+    return `[${items.join(',')}]`;
+  }
+
+  // Object — sort keys recursively
+  const keys = Object.keys(value).sort();
+  const pairs = keys.map((k) => `${JSON.stringify(k)}:${stableStringify(value[k])}`);
+  return `{${pairs.join(',')}}`;
+}
+
+// ── LLM Config Validation ───────────────────────────────────────────────────
+
 /**
  * Validate LLM env config at startup. Throws if required vars missing.
+ * Fails fast — no placeholder fallback.
  *
  * @param {Object} env - process.env
  * @returns {Object} resolved LLM config
@@ -69,20 +88,25 @@ function validateLlmConfig(env) {
   if (errors.length > 0) {
     throw new Error(
       `LLM config incomplete: ${errors.join(', ')}. ` +
-      `Set these in .env. Required for real deliverable generation.`
+      `Set these in .env. Required for deliverable generation.`
     );
   }
 
   return { provider, baseUrl, apiKey, model, maxTokens, temperature, timeoutMs, jsonRepairRetries };
 }
 
+// ── LLM Task Execution ──────────────────────────────────────────────────────
+
 /**
  * Run LLM task for a job and return { resultPayload, proofPayload, deliverableHash }.
+ *
+ * The deliverableHash is computed from the FULL deliverablePayload (not just resultPayload).
+ * Uses deep canonical stringify to ensure deterministic hashing regardless of key order.
  *
  * @param {Object} job - full job object (from MCP jobs.get_public or indexer)
  * @param {Object} llmConfig - validated LLM config from validateLlmConfig()
  * @param {Object} botConfig - { agentId, agentType, capabilities, providerSkill, customSkillPath }
- * @returns {Promise<{ resultPayload: Object, proofPayload: Object, deliverableHash: string }>}
+ * @returns {Promise<{ resultPayload: Object, proofPayload: Object, deliverableHash: string, deliverablePayload: Object }>}
  */
 async function runLlmTaskForJob(job, llmConfig, botConfig) {
   loadModules();
@@ -104,21 +128,27 @@ async function runLlmTaskForJob(job, llmConfig, botConfig) {
     jsonRepairRetries: llmConfig.jsonRepairRetries,
   };
 
-  // Load skills (cached after first call)
-  const skillContent = _loadProviderSkills({
-    agentType: llmEnv.agentType,
-    providerSkill: llmEnv.providerSkill,
-    customSkillPath: llmEnv.customSkillPath,
-  });
-
-  // Run existing task-runner (handles LLM call, JSON parse, repair, validation)
+  // runLlmTask() loads skills internally via loadProviderSkills() — no need to call here.
+  // Run existing task-runner (handles LLM call, JSON parse, repair, validation, skill loading)
   const { resultPayload, proofPayload } = await _runLlmTask(job, llmEnv);
 
-  // Compute deliverableHash from actual result (SHA-256 of deterministic JSON)
-  const deliverableString = JSON.stringify(resultPayload, Object.keys(resultPayload).sort());
+  // Build full deliverablePayload (the actual onchain deliverable)
+  const deliverablePayload = {
+    schema: 'arclayer.provider.deliverable.v1',
+    jobId: job.id || job.localJobId || '',
+    erc8183JobId: job.erc8183JobId || '',
+    providerAgentId: botConfig.agentId,
+    runtime: 'llm',
+    resultPayload,
+    proofPayload,
+    createdAt: new Date().toISOString(),
+  };
+
+  // Deep canonical stringify — deterministic regardless of key insertion order
+  const deliverableString = stableStringify(deliverablePayload);
   const deliverableHash = '0x' + crypto.createHash('sha256').update(deliverableString).digest('hex');
 
-  return { resultPayload, proofPayload, deliverableHash };
+  return { resultPayload, proofPayload, deliverableHash, deliverablePayload };
 }
 
-module.exports = { validateLlmConfig, runLlmTaskForJob };
+module.exports = { validateLlmConfig, runLlmTaskForJob, stableStringify };

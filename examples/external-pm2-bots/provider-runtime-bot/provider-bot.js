@@ -51,20 +51,8 @@ const CAPABILITIES = optionalEnv('PROVIDER_CAPABILITIES', '')
   .filter(Boolean);
 const POLL_INTERVAL = parseInt(optionalEnv('POLL_INTERVAL_MS', '15000'), 10);
 
-// ── LLM Config (validated at startup) ──────────────────────────────────────
-const LLM_CONFIG = (() => {
-  const hasLlm = process.env.LLM_BASE_URL && process.env.LLM_MODEL;
-  if (!hasLlm) {
-    console.warn('[STARTUP] LLM_BASE_URL/LLM_MODEL not set — will use placeholder deliverables');
-    return null;
-  }
-  try {
-    return validateLlmConfig(process.env);
-  } catch (err) {
-    console.error(`[FATAL] ${err.message}`);
-    process.exit(1);
-  }
-})();
+// ── LLM Config (validated at startup — required) ───────────────────────────
+const LLM_CONFIG = validateLlmConfig(process.env);
 
 // ── Bot Config (passed to LLM task runner) ─────────────────────────────────
 const BOT_CONFIG = {
@@ -164,6 +152,7 @@ async function handleDirectJob(jobId, resumePlan) {
         status: 'tx_sent',
         txHash,
         note: `setBudget tx sent: ${txHash}`,
+        metadata: { txHash },
       });
 
       console.log(`[DIRECT] setBudget tx sent for job ${jobId}: ${txHash}`);
@@ -180,13 +169,61 @@ async function handleDirectJob(jobId, resumePlan) {
 
   // ── Funded: run LLM + submit ─────────────────────────────────────────────
   if (onchainStatus === 'Funded') {
-    // Guard: if submit_tx_sent, check if it actually landed before retrying
+    // Guard: if submit_tx_sent, check receipt before retrying
     if (phase === 'submit_tx_sent') {
-      console.log(`[DIRECT] Job ${jobId}: submit_tx_sent — checking onchain status`);
-      // On next poll, if onchain is still Funded, we'll retry.
-      // If onchain is Submitted, the Submitted branch below handles it.
-      // For now, don't blindly re-submit.
-      return;
+      const txHash = lastCheckpoint?.metadata?.txHash || lastCheckpoint?.tx_hash;
+      const submittedAt = lastCheckpoint?.created_at ? new Date(lastCheckpoint.created_at).getTime() : 0;
+      const ageMs = Date.now() - submittedAt;
+      const TX_RECEIPT_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+      if (!txHash) {
+        // No txHash stored — checkpoint was incomplete, retry submit
+        console.warn(`[DIRECT] Job ${jobId}: submit_tx_sent but no txHash in checkpoint — will retry`);
+        // Fall through to deliverable_ready / LLM execution below
+      } else if (ageMs < TX_RECEIPT_TIMEOUT_MS) {
+        // Recent tx — check receipt
+        try {
+          const { createPublicClient, http } = await import('viem');
+          const { arcTestnet } = await import('viem/chains');
+          const publicClient = createPublicClient({ chain: arcTestnet, transport: http() });
+          const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+
+          if (receipt) {
+            if (receipt.status === 'success') {
+              // Tx confirmed — next poll should detect onchain Submitted
+              console.log(`[DIRECT] Job ${jobId}: submit tx ${txHash} confirmed onchain`);
+              return;
+            } else {
+              // Tx reverted — mark failed, allow retry
+              console.error(`[DIRECT] Job ${jobId}: submit tx ${txHash} REVERTED`);
+              await client.writeCheckpoint(jobId, {
+                phase: 'submit_tx_failed',
+                status: 'failed',
+                note: `Submit tx reverted: ${txHash}`,
+                metadata: { txHash, receiptStatus: receipt.status },
+              });
+              return;
+            }
+          }
+          // No receipt yet — tx still pending, wait
+          console.log(`[DIRECT] Job ${jobId}: submit tx ${txHash} pending (${Math.round(ageMs / 1000)}s)`);
+          return;
+        } catch (err) {
+          // RPC error — can't check receipt, wait for next poll
+          console.warn(`[DIRECT] Job ${jobId}: receipt check failed: ${err.message}`);
+          return;
+        }
+      } else {
+        // Tx older than timeout and still no onchain Submitted — likely dropped
+        console.error(`[DIRECT] Job ${jobId}: submit tx ${txHash} timed out after ${Math.round(ageMs / 1000)}s`);
+        await client.writeCheckpoint(jobId, {
+          phase: 'submit_tx_failed',
+          status: 'failed',
+          note: `Submit tx timed out after ${Math.round(ageMs / 1000)}s — may have been dropped`,
+          metadata: { txHash, ageMs },
+        });
+        return;
+      }
     }
 
     // Guard: if runtime_failed, don't retry LLM in the same run
@@ -211,16 +248,6 @@ async function handleDirectJob(jobId, resumePlan) {
 
     // If no deliverableHash yet, run LLM
     if (!deliverableHash) {
-      if (!LLM_CONFIG) {
-        console.error(`[DIRECT] Job ${jobId}: LLM not configured — cannot generate deliverable`);
-        await client.writeCheckpoint(jobId, {
-          phase: 'runtime_failed',
-          status: 'failed',
-          note: 'LLM_BASE_URL/LLM_MODEL not configured. Cannot generate deliverable.',
-        });
-        return;
-      }
-
       // Fetch full job detail for LLM
       let jobDetail;
       try {
@@ -320,7 +347,7 @@ async function handleDirectJob(jobId, resumePlan) {
         txHash,
         deliverableHash,
         note: `Submit tx sent: ${txHash}`,
-        metadata: { deliverableHash },
+        metadata: { txHash, deliverableHash },
       });
 
       console.log(`[DIRECT] Submit tx sent for job ${jobId}: ${txHash}`);
@@ -537,12 +564,8 @@ async function main() {
   console.log(`  Agent: ${AGENT_ID}`);
   console.log(`  Address: ${PROVIDER_ADDRESS}`);
   console.log(`  Auto-apply: ${AUTO_APPLY}`);
-  if (LLM_CONFIG) {
-    console.log(`  LLM: ${LLM_CONFIG.provider} / ${LLM_CONFIG.model}`);
-    console.log(`  LLM timeout: ${LLM_CONFIG.timeoutMs}ms, maxTokens: ${LLM_CONFIG.maxTokens}`);
-  } else {
-    console.log('  LLM: NOT CONFIGURED (placeholder deliverables only)');
-  }
+  console.log(`  LLM: ${LLM_CONFIG.provider} / ${LLM_CONFIG.model}`);
+  console.log(`  LLM timeout: ${LLM_CONFIG.timeoutMs}ms, maxTokens: ${LLM_CONFIG.maxTokens}`);
   console.log(`  Poll interval: ${POLL_INTERVAL}ms`);
   console.log('═══════════════════════════════════════════════════════════════');
 
