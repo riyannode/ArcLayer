@@ -14,42 +14,45 @@
 // ── Unsafe phrase patterns (case-insensitive) ──────────────────────────────
 // Each pattern is tested against the full skill content.
 // Matched phrase is reported for logging, but full file content is NEVER logged.
+//
+// Negation handling: patterns use negative lookbehind to skip "do not", "never",
+// "don't", "must not" prefixes (e.g. "Do not sign transactions" is safe).
 
 const UNSAFE_PATTERNS = [
   // Secret exfiltration
-  { pattern: /print\s+private\s+key/i, category: 'secret-exfil', description: 'print private key' },
-  { pattern: /output\s+private\s+key/i, category: 'secret-exfil', description: 'output private key' },
-  { pattern: /show\s+private\s+key/i, category: 'secret-exfil', description: 'show private key' },
-  { pattern: /reveal\s+private\s+key/i, category: 'secret-exfil', description: 'reveal private key' },
-  { pattern: /display\s+private\s+key/i, category: 'secret-exfil', description: 'display private key' },
-  { pattern: /dump\s+private\s+key/i, category: 'secret-exfil', description: 'dump private key' },
-  { pattern: /show\s+api\s+key/i, category: 'secret-exfil', description: 'show api key' },
-  { pattern: /print\s+api\s+key/i, category: 'secret-exfil', description: 'print api key' },
-  { pattern: /output\s+api\s+key/i, category: 'secret-exfil', description: 'output api key' },
-  { pattern: /cat\s+\.env/i, category: 'secret-exfil', description: 'cat .env' },
-  { pattern: /read\s+\.env/i, category: 'secret-exfil', description: 'read .env' },
-  { pattern: /output\s+wallet\s+secret/i, category: 'secret-exfil', description: 'output wallet secret' },
-  { pattern: /print\s+wallet\s+secret/i, category: 'secret-exfil', description: 'print wallet secret' },
-  { pattern: /show\s+wallet\s+secret/i, category: 'secret-exfil', description: 'show wallet secret' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)print\s+private\s+key/i, category: 'secret-exfil', description: 'print private key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)output\s+private\s+key/i, category: 'secret-exfil', description: 'output private key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)show\s+private\s+key/i, category: 'secret-exfil', description: 'show private key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)reveal\s+private\s+key/i, category: 'secret-exfil', description: 'reveal private key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)display\s+private\s+key/i, category: 'secret-exfil', description: 'display private key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)dump\s+private\s+key/i, category: 'secret-exfil', description: 'dump private key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)show\s+api\s+key/i, category: 'secret-exfil', description: 'show api key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)print\s+api\s+key/i, category: 'secret-exfil', description: 'print api key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)output\s+api\s+key/i, category: 'secret-exfil', description: 'output api key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)cat\s+\.env/i, category: 'secret-exfil', description: 'cat .env' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)read\s+\.env/i, category: 'secret-exfil', description: 'read .env' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)output\s+wallet\s+secret/i, category: 'secret-exfil', description: 'output wallet secret' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)print\s+wallet\s+secret/i, category: 'secret-exfil', description: 'print wallet secret' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)show\s+wallet\s+secret/i, category: 'secret-exfil', description: 'show wallet secret' },
 
   // Schema override attempts
-  { pattern: /ignore\s+json\s+schema/i, category: 'schema-override', description: 'ignore json schema' },
-  { pattern: /do\s+not\s+return\s+json/i, category: 'schema-override', description: 'do not return json' },
-  { pattern: /output\s+markdown\s+instead\s+of\s+json/i, category: 'schema-override', description: 'output markdown instead of json' },
-  { pattern: /return\s+markdown\s+instead\s+of\s+json/i, category: 'schema-override', description: 'return markdown instead of json' },
-  { pattern: /skip\s+json\s+validation/i, category: 'schema-override', description: 'skip json validation' },
-  { pattern: /bypass\s+validation/i, category: 'schema-override', description: 'bypass validation' },
-  { pattern: /disable\s+validation/i, category: 'schema-override', description: 'disable validation' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)ignore\s+json\s+schema/i, category: 'schema-override', description: 'ignore json schema' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)do\s+not\s+return\s+json/i, category: 'schema-override', description: 'do not return json' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)output\s+markdown\s+instead\s+of\s+json/i, category: 'schema-override', description: 'output markdown instead of json' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)return\s+markdown\s+instead\s+of\s+json/i, category: 'schema-override', description: 'return markdown instead of json' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)skip\s+json\s+validation/i, category: 'schema-override', description: 'skip json validation' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)bypass\s+validation/i, category: 'schema-override', description: 'bypass validation' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)disable\s+validation/i, category: 'schema-override', description: 'disable validation' },
 
   // Transaction control
-  { pattern: /sign\s+transaction/i, category: 'tx-control', description: 'sign transaction' },
-  { pattern: /send\s+transaction/i, category: 'tx-control', description: 'send transaction' },
-  { pattern: /fund\s+job/i, category: 'tx-control', description: 'fund job' },
-  { pattern: /settle\s+job/i, category: 'tx-control', description: 'settle job' },
-  { pattern: /reject\s+job/i, category: 'tx-control', description: 'reject job' },
-  { pattern: /refund\s+job/i, category: 'tx-control', description: 'refund job' },
-  { pattern: /approve\s+.*spending/i, category: 'tx-control', description: 'approve spending' },
-  { pattern: /transfer\s+.*usdc/i, category: 'tx-control', description: 'transfer USDC' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)sign\s+transaction/i, category: 'tx-control', description: 'sign transaction' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)send\s+transaction/i, category: 'tx-control', description: 'send transaction' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)fund\s+job/i, category: 'tx-control', description: 'fund job' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)settle\s+job/i, category: 'tx-control', description: 'settle job' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)reject\s+job/i, category: 'tx-control', description: 'reject job' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)refund\s+job/i, category: 'tx-control', description: 'refund job' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)approve\s+.*spending/i, category: 'tx-control', description: 'approve spending' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)transfer\s+.*usdc/i, category: 'tx-control', description: 'transfer USDC' },
 ];
 
 /**

@@ -29,7 +29,7 @@ const { startHeartbeat } = require('../shared/heartbeat');
 const crypto = require('crypto');
 const { runLlmTask } = require('./task-runner');
 const { createProviderState } = require('./provider-state');
-const { getLastCustomSkillValidation } = require('./skill-loader');
+const { getLastCustomSkillValidation, loadProviderSkills } = require('./skill-loader');
 
 const BASE_URL = required('ARCLAYER_BASE_URL');
 
@@ -712,6 +712,15 @@ async function main() {
   console.log(`Poll interval: ${POLL_INTERVAL_MS}ms`);
   if (MIN_JOB_BUDGET_ATOMIC > 0) {
     console.log(`Min job budget: ${MIN_JOB_BUDGET_ATOMIC} atomic`);
+  }
+
+  // Eagerly load skills at startup (validates custom skill path + scanner)
+  if (PROVIDER_MODE === 'llm') {
+    loadProviderSkills({
+      agentType: PROVIDER_AGENT_TYPE || 'other',
+      providerSkill: PROVIDER_SKILL,
+      customSkillPath: PROVIDER_CUSTOM_SKILL_PATH,
+    });
   }
 
   // Log custom skill status
