@@ -18,7 +18,7 @@ import {
   USDC_ABI,
   CONTRACTS,
 } from '@arclayer/sdk';
-import { getArcPublicClient } from '@/lib/erc8183-jobs/receipt';
+import { readOnchainJob, getArcPublicClient } from '@/lib/erc8183-jobs/receipt';
 import { indexerUrl } from '@/lib/indexer';
 import type { McpToolContext } from './registry';
 import { MCP_ERRORS, McpError } from './errors';
@@ -41,6 +41,12 @@ const STATUS_LABELS: Record<number, string> = {
   5: 'Expired',
 };
 
+/** Regex for a valid 0x-prefixed 32-byte hex string. */
+const BYTES32_RE = /^0x[0-9a-fA-F]{64}$/;
+
+/** Regex for a decimal string with optional single dot, no scientific notation. */
+const DECIMAL_RE = /^\d+(\.\d+)?$/;
+
 // ── Pure Helpers ──────────────────────────────────────────────────────────
 
 /** Parse a string to a positive bigint, throwing McpError on failure. */
@@ -56,73 +62,147 @@ export function parsePositiveBigInt(value: string, label: string): bigint {
   return n;
 }
 
-/** Convert a USDC decimal string (e.g. "1.5") to atomic units (6 decimals). */
+/**
+ * Convert a USDC decimal string to atomic units (6 decimals) using exact
+ * fixed-point parsing. No floating-point arithmetic.
+ *
+ * Rules:
+ * - Rejects scientific notation (e.g. "1e3").
+ * - Rejects negative/zero.
+ * - Rejects more than 6 fractional digits.
+ * - Rejects values that produce zero atomic units.
+ * - Normalises one comma to dot for locale convenience.
+ */
 export function parseUsdcToAtomic(value: string): bigint {
-  const cleaned = value.trim().replace(',', '.');
-  if (!cleaned || isNaN(Number(cleaned))) {
-    throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'Invalid USDC amount');
+  let cleaned = value.trim();
+
+  // Normalise one comma to dot
+  if (cleaned.includes(',') && !cleaned.includes('.')) {
+    cleaned = cleaned.replace(',', '.');
   }
-  const num = Number(cleaned);
-  if (num <= 0) {
+
+  // Must be a plain decimal string — no scientific notation, no sign
+  if (!DECIMAL_RE.test(cleaned)) {
+    throw new McpError(
+      MCP_ERRORS.VALIDATION_ERROR,
+      'Invalid USDC amount: must be a plain decimal number (e.g. "1.5")',
+    );
+  }
+
+  const [intPart, fracPart = ''] = cleaned.split('.');
+
+  // Reject more than 6 fractional digits
+  if (fracPart.length > 6) {
+    throw new McpError(
+      MCP_ERRORS.VALIDATION_ERROR,
+      `Invalid USDC amount: max 6 decimal places, got ${fracPart.length}`,
+    );
+  }
+
+  // Pad fractional part to exactly 6 digits
+  const fracPadded = fracPart.padEnd(6, '0');
+
+  const atomic = BigInt(intPart) * 1_000_000n + BigInt(fracPadded);
+
+  if (atomic <= 0n) {
     throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'USDC amount must be > 0');
   }
-  // Multiply by 1e6 and round to avoid floating point issues
-  const atomic = Math.round(num * 1e6);
-  return BigInt(atomic);
+
+  return atomic;
 }
 
 /** Format atomic USDC units (6 decimals) to human-readable string. */
 export function formatAtomicUsdc(atomic: bigint | string): string {
-  const n = Number(atomic) / 1e6;
-  return `${n.toFixed(6)} USDC`;
+  const n = BigInt(atomic);
+  const intPart = n / 1_000_000n;
+  const fracPart = n % 1_000_000n;
+  return `${intPart}.${fracPart.toString().padStart(6, '0')} USDC`;
 }
 
-/** Validate and return a bytes32 reason hash, or hash a reason string. */
+/**
+ * Validate and return a bytes32 reason hash, or hash a reason string.
+ * If the reason string looks like a 0x-prefixed 66-char hex, validate it strictly.
+ */
 export function resolveBytes32Reason(
   reasonHash?: string,
   reason?: string,
 ): Hex {
   if (reasonHash) {
     const trimmed = reasonHash.trim();
-    if (!/^0x[0-9a-fA-F]{64}$/.test(trimmed)) {
+    if (!BYTES32_RE.test(trimmed)) {
       throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'reasonHash must be 0x-prefixed 32-byte hex');
     }
     return trimmed as Hex;
   }
   if (reason) {
     const r = reason.trim();
-    if (r.startsWith('0x') && r.length === 66) return r as Hex;
+    // If it looks like a bytes32 hex literal, validate strictly
+    if (r.startsWith('0x')) {
+      if (!BYTES32_RE.test(r)) {
+        throw new McpError(
+          MCP_ERRORS.VALIDATION_ERROR,
+          'reason starting with 0x must be exactly 32 bytes (0x + 64 hex chars)',
+        );
+      }
+      return r as Hex;
+    }
     return keccak256(toBytes(r)) as Hex;
   }
   return keccak256(toBytes('approved')) as Hex;
 }
 
-/** Validate and return a bytes32 deliverable hash, or hash a deliverable string. */
+/**
+ * Validate and return a bytes32 deliverable hash, or hash a deliverable string.
+ * If the deliverable string looks like a 0x-prefixed 66-char hex, validate it strictly.
+ */
 export function resolveDeliverableHash(
   deliverableHash?: string,
   deliverable?: string,
 ): Hex {
   if (deliverableHash) {
     const trimmed = deliverableHash.trim();
-    if (!/^0x[0-9a-fA-F]{64}$/.test(trimmed)) {
+    if (!BYTES32_RE.test(trimmed)) {
       throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'deliverableHash must be 0x-prefixed 32-byte hex');
     }
     return trimmed as Hex;
   }
   if (deliverable) {
-    return keccak256(toBytes(deliverable.trim())) as Hex;
+    const d = deliverable.trim();
+    if (d.startsWith('0x')) {
+      if (!BYTES32_RE.test(d)) {
+        throw new McpError(
+          MCP_ERRORS.VALIDATION_ERROR,
+          'deliverable starting with 0x must be exactly 32 bytes (0x + 64 hex chars)',
+        );
+      }
+      return d as Hex;
+    }
+    return keccak256(toBytes(d)) as Hex;
   }
   throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'deliverableHash or deliverable required');
 }
 
-/** Clamp deadline minutes to [15, 43200] and return as integer. */
+/**
+ * Parse and clamp deadline minutes. Must be an integer — rejects floats silently
+ * truncated. Range: [15, 43200]. Default: 1440 (24h).
+ */
 export function clampDeadlineMinutes(minutes?: number): number {
   if (minutes === undefined || minutes === null) return 1440; // default 24h
-  const n = Math.floor(Number(minutes));
-  if (isNaN(n) || n < 1) {
+  if (!Number.isFinite(minutes) || !Number.isInteger(minutes) || minutes < 1) {
     throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'deadlineMinutes must be a positive integer');
   }
-  return Math.max(15, Math.min(43200, n));
+  return Math.max(15, Math.min(43200, minutes));
+}
+
+/**
+ * Parse optParams bytes argument. Defaults to "0x". Must be 0x-prefixed hex.
+ */
+export function parseOptParams(value?: string): Hex {
+  const v = (value ?? '0x').trim() || '0x';
+  if (!v.startsWith('0x') || !/^0x([0-9a-fA-F]{2})*$/.test(v)) {
+    throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'optParams must be 0x-prefixed hex bytes');
+  }
+  return v as Hex;
 }
 
 /** Return human-readable status label for a numeric on-chain status. */
@@ -130,11 +210,6 @@ export function statusLabel(status: number | bigint | null | undefined): string 
   if (status === null || status === undefined) return 'Unknown';
   const n = Number(status);
   return STATUS_LABELS[n] ?? `Unknown(${n})`;
-}
-
-/** Determine if a job is in a terminal state. */
-function isTerminal(status: number): boolean {
-  return status === 3 || status === 4 || status === 5; // Completed, Rejected, Expired
 }
 
 /** Determine if a job is expired based on expiredAt timestamp. */
@@ -205,11 +280,52 @@ function validateNonZeroAddress(value: string, label: string): `0x${string}` {
   return addr;
 }
 
+// ── Shared on-chain read helper ───────────────────────────────────────────
+
+/**
+ * Read a job via readOnchainJob (named-object, no raw tuple indexing).
+ * Returns the normalised job record or null.
+ * Falls back to indexer if contract read fails.
+ */
+type OnchainJobResult = NonNullable<Awaited<ReturnType<typeof readOnchainJob>>>;
+
+async function readJobSafe(
+  jobId: bigint,
+  jobIdRaw: string,
+): Promise<{ job: OnchainJobResult; source: 'contract' } | { job: Record<string, unknown>; source: 'indexer' } | null> {
+  // Try on-chain first
+  try {
+    const job = await readOnchainJob(jobId);
+    if (job) return { job, source: 'contract' };
+  } catch {
+    // Fall through to indexer
+  }
+
+  // Fallback to indexer
+  try {
+    const res = await fetch(indexerUrl(`/jobs/${encodeURIComponent(jobIdRaw)}`), {
+      cache: 'no-store',
+    });
+    if (res.ok) {
+      const body = await res.json().catch(() => null);
+      if (body) {
+        // Indexer may return { job, proof } wrapper or flat job object
+        const jobData = (body.job && typeof body.job === 'object') ? body.job : body;
+        return { job: jobData, source: 'indexer' };
+      }
+    }
+  } catch {
+    // Both failed
+  }
+
+  return null;
+}
+
 // ── Read Handlers ─────────────────────────────────────────────────────────
 
 /**
- * jobs.get_onchain_status — Read on-chain job state via AgenticCommerce.getJob.
- * Falls back to indexer if contract read fails.
+ * jobs.get_onchain_status — Read on-chain job state via readOnchainJob().
+ * Falls back to indexer. Unwraps indexer { job, proof } response.
  */
 export async function handleJobsGetOnchainStatus(
   args: Record<string, unknown>,
@@ -218,58 +334,14 @@ export async function handleJobsGetOnchainStatus(
   if (!jobIdRaw) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
   const jobId = parsePositiveBigInt(jobIdRaw, 'jobId');
 
-  let source: 'contract' | 'indexer' = 'contract';
-  let job: Record<string, unknown> | null = null;
-
-  // Try on-chain read first
-  try {
-    const client = getArcPublicClient();
-    const result = await client.readContract({
-      address: CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address,
-      abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
-      functionName: 'getJob',
-      args: [jobId],
-    });
-    if (result) {
-      const tuple = result as unknown as readonly [
-        bigint, string, string, string, string, bigint, bigint, number, string,
-      ];
-      job = {
-        id: tuple[0].toString(),
-        client: tuple[1],
-        provider: tuple[2],
-        evaluator: tuple[3],
-        description: tuple[4],
-        budget: tuple[5].toString(),
-        expiredAt: tuple[6].toString(),
-        status: Number(tuple[7]),
-        hook: tuple[8],
-      };
-    }
-  } catch {
-    source = 'indexer';
-  }
-
-  // Fallback to indexer
-  if (!job) {
-    try {
-      const res = await fetch(indexerUrl(`/jobs/${encodeURIComponent(jobIdRaw)}`), {
-        cache: 'no-store',
-      });
-      if (res.ok) {
-        job = await res.json();
-        source = 'indexer';
-      }
-    } catch {
-      // Both failed
-    }
-  }
-
-  if (!job) {
+  const result = await readJobSafe(jobId, jobIdRaw);
+  if (!result) {
     throw new McpError(MCP_ERRORS.NOT_FOUND, `Job ${jobIdRaw} not found on-chain or in indexer`);
   }
 
-  // Read additional on-chain data
+  const { job, source } = result;
+
+  // Read additional on-chain data (only when contract read succeeded)
   let hasBudget: boolean | null = null;
   let paymentToken: string | null = null;
   if (source === 'contract') {
@@ -308,9 +380,9 @@ export async function handleJobsGetOnchainStatus(
     provider: (job as any).provider ?? null,
     evaluator: (job as any).evaluator ?? null,
     description: (job as any).description ?? null,
-    budgetAtomic: (job as any).budget ?? null,
+    budgetAtomic: (job as any).budget?.toString?.() ?? (job as any).budget ?? null,
     budgetUsdc: (job as any).budget ? formatAtomicUsdc((job as any).budget) : null,
-    expiredAt: (job as any).expiredAt ?? null,
+    expiredAt: (job as any).expiredAt?.toString?.() ?? (job as any).expiredAt ?? null,
     hook: (job as any).hook ?? null,
     hasBudget,
     paymentToken,
@@ -328,42 +400,16 @@ export async function handleJobsGetLifecycleSummary(
   if (!jobIdRaw) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
   const jobId = parsePositiveBigInt(jobIdRaw, 'jobId');
 
-  // Read job on-chain
-  let job: {
-    client: string;
-    provider: string;
-    evaluator: string;
-    budget: bigint;
-    expiredAt: bigint;
-    status: number;
-  } | null = null;
-
+  // Use readOnchainJob for named-object parsing (no raw tuple indexing)
+  let job: OnchainJobResult;
   try {
-    const client = getArcPublicClient();
-    const result = await client.readContract({
-      address: CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address,
-      abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
-      functionName: 'getJob',
-      args: [jobId],
-    });
-    if (result) {
-      const tuple = result as unknown as readonly [
-        bigint, string, string, string, string, bigint, bigint, number, string,
-      ];
-      job = {
-        client: tuple[1],
-        provider: tuple[2],
-        evaluator: tuple[3],
-        budget: tuple[5],
-        expiredAt: tuple[6],
-        status: Number(tuple[7]),
-      };
+    const result = await readOnchainJob(jobId);
+    if (!result) {
+      throw new McpError(MCP_ERRORS.NOT_FOUND, `Job ${jobIdRaw} not found on-chain`);
     }
-  } catch {
-    throw new McpError(MCP_ERRORS.NOT_FOUND, `Job ${jobIdRaw} not found on-chain`);
-  }
-
-  if (!job) {
+    job = result;
+  } catch (e) {
+    if (e instanceof McpError) throw e;
     throw new McpError(MCP_ERRORS.NOT_FOUND, `Job ${jobIdRaw} not found on-chain`);
   }
 
@@ -374,7 +420,7 @@ export async function handleJobsGetLifecycleSummary(
   let nextActor: string;
   let nextAction: string;
   let recommendedTool: string;
-  let notes: string[] = [];
+  const notes: string[] = [];
   let terminal = false;
 
   switch (job.status) {
@@ -491,7 +537,6 @@ export async function handleClientPrepareCreateJobForSession(
   if (args.evaluator && String(args.evaluator).trim()) {
     evaluator = validateAddress(String(args.evaluator), 'evaluator');
   } else {
-    // Default to session owner (self-evaluation)
     evaluator = session.ownerAddress as `0x${string}`;
   }
 
@@ -633,27 +678,16 @@ export async function handleClientPrepareSetProviderForSession(
   const jobId = parsePositiveBigInt(jobIdRaw, 'jobId');
   const provider = validateNonZeroAddress(String(args.provider || ''), 'provider');
 
-  // Optionally read on-chain state to warn
+  // Read on-chain state to warn via readOnchainJob
   let warning: string | null = null;
   try {
-    const client = getArcPublicClient();
-    const result = await client.readContract({
-      address: CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address,
-      abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
-      functionName: 'getJob',
-      args: [jobId],
-    });
-    if (result) {
-      const tuple = result as unknown as readonly [
-        bigint, string, string, string, string, bigint, bigint, number, string,
-      ];
-      const currentProvider = tuple[2];
-      const status = Number(tuple[7]);
-      if (currentProvider.toLowerCase() !== ZERO_ADDRESS) {
-        warning = `Job already has provider ${currentProvider}. setProvider may revert.`;
+    const job = await readOnchainJob(jobId);
+    if (job) {
+      if (job.provider.toLowerCase() !== ZERO_ADDRESS) {
+        warning = `Job already has provider ${job.provider}. setProvider may revert.`;
       }
-      if (status !== 0) {
-        warning = `Job status is ${statusLabel(status)} (${status}). setProvider requires Open (0). May revert.`;
+      if (job.status !== 0) {
+        warning = `Job status is ${statusLabel(job.status)} (${job.status}). setProvider requires Open (0). May revert.`;
       }
     }
   } catch {
@@ -710,7 +744,7 @@ export async function handleProviderPrepareSetBudgetForSession(
     throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'amountAtomic or amountUsdc required');
   }
 
-  const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+  const optParams = parseOptParams(args.optParams ? String(args.optParams) : undefined);
 
   const data = encodeFunctionData({
     abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
@@ -743,6 +777,7 @@ export async function handleProviderPrepareSetBudgetForSession(
 /**
  * client.prepare_fund_job_bundle_for_session — Approve + fund bundle.
  * Checks USDC allowance if clientAddress available. Returns ordered txs.
+ * Uses readOnchainJob to read budget (no raw tuple indexing).
  */
 export async function handleClientPrepareFundJobBundleForSession(
   args: Record<string, unknown>,
@@ -752,7 +787,7 @@ export async function handleClientPrepareFundJobBundleForSession(
   const jobIdRaw = String(args.jobId || '').trim();
   if (!jobIdRaw) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
   const jobId = parsePositiveBigInt(jobIdRaw, 'jobId');
-  const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+  const optParams = parseOptParams(args.optParams ? String(args.optParams) : undefined);
 
   // Determine amount: from args or read budget from on-chain
   let amountAtomic: bigint | null = null;
@@ -762,21 +797,12 @@ export async function handleClientPrepareFundJobBundleForSession(
     amountAtomic = parseUsdcToAtomic(String(args.amountUsdc));
   }
 
-  // If amount not provided, read budget from getJob
+  // If amount not provided, read budget via readOnchainJob
   if (!amountAtomic) {
     try {
-      const client = getArcPublicClient();
-      const result = await client.readContract({
-        address: CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address,
-        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
-        functionName: 'getJob',
-        args: [jobId],
-      });
-      if (result) {
-        const tuple = result as unknown as readonly [
-          bigint, string, string, string, string, bigint, bigint, number, string,
-        ];
-        amountAtomic = tuple[5]; // budget
+      const job = await readOnchainJob(jobId);
+      if (job) {
+        amountAtomic = job.budget;
         if (amountAtomic <= 0n) {
           throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'Job has no budget set. Call setBudget first.');
         }
@@ -820,11 +846,7 @@ export async function handleClientPrepareFundJobBundleForSession(
         args: [clientAddress as Address, CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address],
       }) as bigint;
 
-      if (allowance >= amountAtomic) {
-        approveNeeded = false;
-      } else {
-        approveNeeded = true;
-      }
+      approveNeeded = allowance < amountAtomic;
     } catch {
       approveNeeded = null;
       warning = 'Could not read USDC allowance. Returning conservative approve + fund bundle.';
@@ -891,7 +913,7 @@ export async function handleProviderPrepareSubmitJobForSession(
     args.deliverable ? String(args.deliverable) : undefined,
   );
 
-  const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+  const optParams = parseOptParams(args.optParams ? String(args.optParams) : undefined);
 
   const data = encodeFunctionData({
     abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
@@ -939,7 +961,7 @@ export async function handleEvaluatorPrepareCompleteJobForSession(
     args.reason ? String(args.reason) : undefined,
   );
 
-  const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+  const optParams = parseOptParams(args.optParams ? String(args.optParams) : undefined);
 
   const data = encodeFunctionData({
     abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
@@ -971,6 +993,7 @@ export async function handleEvaluatorPrepareCompleteJobForSession(
 
 /**
  * client.prepare_reject_job_for_session — Client rejects/cancels Open job.
+ * Uses readOnchainJob for status warning (no raw tuple indexing).
  */
 export async function handleClientPrepareRejectJobForSession(
   args: Record<string, unknown>,
@@ -986,26 +1009,14 @@ export async function handleClientPrepareRejectJobForSession(
     args.reason ? String(args.reason) : 'client_rejected',
   );
 
-  const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+  const optParams = parseOptParams(args.optParams ? String(args.optParams) : undefined);
 
-  // Warn if job not Open
+  // Warn if job not Open — uses readOnchainJob (named object)
   let warning: string | null = null;
   try {
-    const client = getArcPublicClient();
-    const result = await client.readContract({
-      address: CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address,
-      abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
-      functionName: 'getJob',
-      args: [jobId],
-    });
-    if (result) {
-      const tuple = result as unknown as readonly [
-        bigint, string, string, string, string, bigint, bigint, number, string,
-      ];
-      const status = Number(tuple[7]);
-      if (status !== 0) {
-        warning = `Job status is ${statusLabel(status)} (${status}). Client reject is intended for Open (0) jobs. May revert.`;
-      }
+    const job = await readOnchainJob(jobId);
+    if (job && job.status !== 0) {
+      warning = `Job status is ${statusLabel(job.status)} (${job.status}). Client reject is intended for Open (0) jobs. May revert.`;
     }
   } catch {
     // Non-critical
@@ -1042,6 +1053,7 @@ export async function handleClientPrepareRejectJobForSession(
 /**
  * evaluator.prepare_reject_job_for_session — Evaluator rejects Funded/Submitted job.
  * If escrow exists, funds are refunded to client.
+ * Uses readOnchainJob for status warning (no raw tuple indexing).
  */
 export async function handleEvaluatorPrepareRejectJobForSession(
   args: Record<string, unknown>,
@@ -1057,26 +1069,14 @@ export async function handleEvaluatorPrepareRejectJobForSession(
     args.reason ? String(args.reason) : 'rejected',
   );
 
-  const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+  const optParams = parseOptParams(args.optParams ? String(args.optParams) : undefined);
 
-  // Warn if job not Funded/Submitted
+  // Warn if job not Funded/Submitted — uses readOnchainJob (named object)
   let warning: string | null = null;
   try {
-    const client = getArcPublicClient();
-    const result = await client.readContract({
-      address: CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address,
-      abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
-      functionName: 'getJob',
-      args: [jobId],
-    });
-    if (result) {
-      const tuple = result as unknown as readonly [
-        bigint, string, string, string, string, bigint, bigint, number, string,
-      ];
-      const status = Number(tuple[7]);
-      if (status !== 1 && status !== 2) {
-        warning = `Job status is ${statusLabel(status)} (${status}). Evaluator reject is intended for Funded (1) or Submitted (2) jobs. May revert.`;
-      }
+    const job = await readOnchainJob(jobId);
+    if (job && job.status !== 1 && job.status !== 2) {
+      warning = `Job status is ${statusLabel(job.status)} (${job.status}). Evaluator reject is intended for Funded (1) or Submitted (2) jobs. May revert.`;
     }
   } catch {
     // Non-critical
@@ -1114,6 +1114,7 @@ export async function handleEvaluatorPrepareRejectJobForSession(
  * client.prepare_claim_refund_for_session — Claim refund after expiry.
  * Returns escrow to client for expired Funded/Submitted jobs.
  * Signature: claimRefund(uint256 jobId) — no optParams.
+ * Uses readOnchainJob for state warnings (no raw tuple indexing).
  */
 export async function handleClientPrepareClaimRefundForSession(
   args: Record<string, unknown>,
@@ -1124,25 +1125,16 @@ export async function handleClientPrepareClaimRefundForSession(
   if (!jobIdRaw) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
   const jobId = parsePositiveBigInt(jobIdRaw, 'jobId');
 
-  // Read on-chain state for warnings
+  // Read on-chain state for warnings via readOnchainJob
   let expiredAt: bigint | null = null;
   let status: number | null = null;
   let warning: string | null = null;
 
   try {
-    const client = getArcPublicClient();
-    const result = await client.readContract({
-      address: CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address,
-      abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
-      functionName: 'getJob',
-      args: [jobId],
-    });
-    if (result) {
-      const tuple = result as unknown as readonly [
-        bigint, string, string, string, string, bigint, bigint, number, string,
-      ];
-      expiredAt = tuple[6];
-      status = Number(tuple[7]);
+    const job = await readOnchainJob(jobId);
+    if (job) {
+      expiredAt = job.expiredAt;
+      status = job.status;
 
       if (status !== 1 && status !== 2) {
         warning = `Job status is ${statusLabel(status)} (${status}). claimRefund is intended for Funded (1) or Submitted (2) jobs after expiry. May revert.`;
