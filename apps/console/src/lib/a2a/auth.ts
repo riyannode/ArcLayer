@@ -117,17 +117,23 @@ export async function verifyApiKey(rawKey: string): Promise<VerifiedKey | null> 
 
 export async function revokeApiKey(keyId: string, agentId: string): Promise<boolean> {
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase
+
+  // Atomic update: only succeeds if key exists, belongs to agent, and is not already revoked
+  const { data, error } = await supabase
     .from(TABLE)
     .update({ revoked_at: new Date().toISOString() })
     .eq('id', keyId)
-    .eq('agent_id', agentId);
+    .eq('agent_id', agentId)
+    .is('revoked_at', null)
+    .select('id')
+    .maybeSingle();
 
   if (error) {
     console.error('[auth] revokeApiKey error', error.message);
     return false;
   }
-  return true;
+
+  return !!data;
 }
 
 // ─── Middleware ───────────────────────────────────────────────────────────────

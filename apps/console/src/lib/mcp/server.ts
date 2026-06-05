@@ -41,6 +41,11 @@ import {
   handleRequestRegisterAgentApproval,
   handleGetRegistrationStatus,
 } from './identity-tools';
+import {
+  handleCreateApiKey,
+  handleListApiKeys,
+  handleRevokeApiKey,
+} from './api-key-tools';
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
@@ -755,6 +760,56 @@ export function registerAllTools(): void {
     legacyAliases: [],
     kind: 'read',
     handler: handleGetRegistrationStatus,
+  });
+
+  // ── AUTH: API key management ─────────────────────────────────────────────
+
+  registerTool({
+    name: 'provider.create_api_key',
+    domain: 'provider',
+    description:
+      'Create an API key for a registered agent. Preset "provider" or "client". Returns raw key ONCE. Requires MCP Bearer token and agent ownership.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Agent ID or token ID.' },
+      { name: 'preset', type: 'string', description: 'Key preset: "provider" (default) or "client".' },
+      { name: 'label', type: 'string', description: 'Optional human-readable label (max 80 chars).' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleCreateApiKey,
+  });
+
+  registerTool({
+    name: 'provider.list_api_keys',
+    domain: 'provider',
+    description:
+      'List API key metadata for an agent. Returns id, prefix, label, scopes, status. Never returns raw key or hash. Requires MCP Bearer token and agent ownership.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Agent ID or token ID.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleListApiKeys,
+  });
+
+  registerTool({
+    name: 'provider.revoke_api_key',
+    domain: 'provider',
+    description:
+      'Revoke an API key by ID. Requires MCP Bearer token and agent ownership.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Agent ID or token ID.' },
+      { name: 'keyId', type: 'string', required: true, description: 'API key ID to revoke.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleRevokeApiKey,
   });
 }
 

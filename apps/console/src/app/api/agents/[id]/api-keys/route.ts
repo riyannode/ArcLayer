@@ -14,6 +14,7 @@ import {
   getLinkedErc8004AgentsForController,
   SESSION_COOKIE_NAME,
 } from '@/lib/auth/wallet-session';
+import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
 
 const ERROR_CACHE = 'no-store, no-cache, max-age=0';
 
@@ -46,6 +47,12 @@ const LABEL_MAX_LENGTH = 80;
 
 // ── Shared auth helper ──────────────────────────────────────────────────
 
+/**
+ * Verify wallet session + agent ownership.
+ * Supports both:
+ * - Legacy EOA-minted agents (controller = owner EOA)
+ * - New Agent Account-minted agents (controller = linked Circle Agent Account)
+ */
 async function verifyOwnership(
   req: NextRequest,
   agentId: string,
@@ -75,21 +82,36 @@ async function verifyOwnership(
     };
   }
 
+  // Check legacy EOA-minted agents
   const linkedAgents = await getLinkedErc8004AgentsForController(session.wallet);
-  const ownsAgent = linkedAgents.some(
+  const ownsEoaAgent = linkedAgents.some(
     (a) => a.tokenId === agentId || a.agentId === agentId,
   );
-  if (!ownsAgent) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { ok: false, error: 'forbidden', detail: 'Session wallet does not control this agent' },
-        { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
-      ),
-    };
+  if (ownsEoaAgent) {
+    return { ok: true, wallet: session.wallet };
   }
 
-  return { ok: true, wallet: session.wallet };
+  // Check Agent Account-minted agents (controller = linked Circle Agent Account)
+  const agentAccount = await getActiveAgentAccountForOwner(session.wallet);
+  if (agentAccount?.agentAccountAddress) {
+    const agentAccountLinked = await getLinkedErc8004AgentsForController(
+      agentAccount.agentAccountAddress,
+    );
+    const ownsAccountAgent = agentAccountLinked.some(
+      (a) => a.tokenId === agentId || a.agentId === agentId,
+    );
+    if (ownsAccountAgent) {
+      return { ok: true, wallet: session.wallet };
+    }
+  }
+
+  return {
+    ok: false,
+    response: NextResponse.json(
+      { ok: false, error: 'forbidden', detail: 'Session wallet does not control this agent' },
+      { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
+    ),
+  };
 }
 
 // ── POST: Create API key ────────────────────────────────────────────────
