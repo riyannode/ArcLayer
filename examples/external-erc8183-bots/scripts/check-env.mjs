@@ -5,6 +5,10 @@
  * Verifies each bot's .env has the required fields before starting PM2.
  * Strict mode: no ARCLAYER_API_KEY fallback, no WORKER_* env, no cross-role leaks.
  *
+ * v2: Validates PROVIDER_STATE_FILE, PROVIDER_JOB_ERROR_BACKOFF_MS,
+ *     PROVIDER_MAX_JOB_ERRORS, and enhanced PROVIDER_CUSTOM_SKILL_PATH
+ *     (absolute path, regular file, size, unsafe phrase scanner).
+ *
  * Usage:
  *   node scripts/check-env.mjs
  *   npm run check:env
@@ -17,8 +21,8 @@
  *   3 — rejected env vars found
  */
 
-import { readFileSync, existsSync, statSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { readFileSync, existsSync, statSync, lstatSync, realpathSync, accessSync, constants } from 'fs';
+import { resolve, dirname, basename, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -127,6 +131,231 @@ function rejectCrossRoleSecrets(env, botName, allowedPrefix) {
     exitCode = 3;
   }
   return rejected;
+}
+
+// ── Unsafe phrase scanner (inline for check-env — no external import) ───────
+
+const UNSAFE_PHRASES = [
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)print\s+private\s+key/i, description: 'print private key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)output\s+private\s+key/i, description: 'output private key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)show\s+private\s+key/i, description: 'show private key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)reveal\s+private\s+key/i, description: 'reveal private key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)display\s+private\s+key/i, description: 'display private key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)dump\s+private\s+key/i, description: 'dump private key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)show\s+api\s+key/i, description: 'show api key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)print\s+api\s+key/i, description: 'print api key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)output\s+api\s+key/i, description: 'output api key' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)cat\s+\.env/i, description: 'cat .env' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)read\s+\.env/i, description: 'read .env' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)output\s+wallet\s+secret/i, description: 'output wallet secret' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)print\s+wallet\s+secret/i, description: 'print wallet secret' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)show\s+wallet\s+secret/i, description: 'show wallet secret' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)ignore\s+json\s+schema/i, description: 'ignore json schema' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)do\s+not\s+return\s+json/i, description: 'do not return json' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)output\s+markdown\s+instead\s+of\s+json/i, description: 'output markdown instead of json' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)return\s+markdown\s+instead\s+of\s+json/i, description: 'return markdown instead of json' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)skip\s+json\s+validation/i, description: 'skip json validation' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)bypass\s+validation/i, description: 'bypass validation' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)disable\s+validation/i, description: 'disable validation' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)sign\s+transaction/i, description: 'sign transaction' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)send\s+transaction/i, description: 'send transaction' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)fund\s+job/i, description: 'fund job' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)settle\s+job/i, description: 'settle job' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)reject\s+job/i, description: 'reject job' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)refund\s+job/i, description: 'refund job' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)approve\s+.*spending/i, description: 'approve spending' },
+  { pattern: /(?<!do not\s)(?<!don't\s)(?<!never\s)(?<!must not\s)transfer\s+.*usdc/i, description: 'transfer USDC' },
+];
+
+function scanForUnsafePhrases(content) {
+  const matches = [];
+  const seen = new Set();
+  for (const { pattern, description } of UNSAFE_PHRASES) {
+    if (pattern.test(content) && !seen.has(description)) {
+      seen.add(description);
+      matches.push(description);
+    }
+  }
+  return matches;
+}
+
+// ── Provider state file validation ─────────────────────────────────────────
+
+function validateProviderStateFile(env, botDir) {
+  const rawPath = env.PROVIDER_STATE_FILE || '';
+  if (!rawPath) {
+    console.log(`  - PROVIDER_STATE_FILE: (not set — uses default in bot directory)`);
+    return true;
+  }
+
+  const resolvedPath = isAbsolute(rawPath) ? rawPath : resolve(botDir, rawPath);
+  const dir = dirname(resolvedPath);
+
+  // Check directory is writable
+  try {
+    accessSync(dir, constants.W_OK);
+    console.log(`  ✓ PROVIDER_STATE_FILE: ${basename(resolvedPath)} (directory writable)`);
+    return true;
+  } catch {
+    console.log(`  ✗ PROVIDER_STATE_FILE: directory not writable: ${dir}`);
+    allPass = false;
+    exitCode = 1;
+    return false;
+  }
+}
+
+// ── Backoff env validation ────────────────────────────────────────────────
+
+function validateBackoffEnv(env) {
+  // PROVIDER_JOB_ERROR_BACKOFF_MS
+  const backoffRaw = env.PROVIDER_JOB_ERROR_BACKOFF_MS;
+  if (backoffRaw !== undefined && backoffRaw !== '') {
+    const val = parseInt(backoffRaw, 10);
+    if (isNaN(val) || val < 1000 || val > 3600000) {
+      console.log(`  ✗ PROVIDER_JOB_ERROR_BACKOFF_MS must be 1000..3600000, got: ${backoffRaw}`);
+      allPass = false;
+      exitCode = 1;
+    } else {
+      console.log(`  ✓ PROVIDER_JOB_ERROR_BACKOFF_MS: ${val}`);
+    }
+  } else {
+    console.log(`  - PROVIDER_JOB_ERROR_BACKOFF_MS: (not set — defaults to 60000)`);
+  }
+
+  // PROVIDER_MAX_JOB_ERRORS
+  const maxErrorsRaw = env.PROVIDER_MAX_JOB_ERRORS;
+  if (maxErrorsRaw !== undefined && maxErrorsRaw !== '') {
+    const val = parseInt(maxErrorsRaw, 10);
+    if (isNaN(val) || val < 1 || val > 10) {
+      console.log(`  ✗ PROVIDER_MAX_JOB_ERRORS must be 1..10, got: ${maxErrorsRaw}`);
+      allPass = false;
+      exitCode = 1;
+    } else {
+      console.log(`  ✓ PROVIDER_MAX_JOB_ERRORS: ${val}`);
+    }
+  } else {
+    console.log(`  - PROVIDER_MAX_JOB_ERRORS: (not set — defaults to 3)`);
+  }
+}
+
+// ── Custom skill validation (enhanced v2) ──────────────────────────────────
+
+function validateCustomSkill(env, botDir) {
+  const customSkillPath = env.PROVIDER_CUSTOM_SKILL_PATH || '';
+  if (!customSkillPath) {
+    console.log(`  - PROVIDER_CUSTOM_SKILL_PATH: (not set — optional)`);
+    return true;
+  }
+
+  const trimmed = customSkillPath.trim();
+  if (!trimmed) {
+    console.log(`  - PROVIDER_CUSTOM_SKILL_PATH: (empty — optional)`);
+    return true;
+  }
+
+  // Must be absolute for production
+  if (!isAbsolute(trimmed)) {
+    console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH must be absolute path, got: ${trimmed}`);
+    allPass = false;
+    exitCode = 1;
+    return false;
+  }
+
+  const resolvedPath = resolve(trimmed);
+
+  // Check existence
+  if (!existsSync(resolvedPath)) {
+    console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH file not found: ${basename(resolvedPath)}`);
+    allPass = false;
+    exitCode = 1;
+    return false;
+  }
+
+  let stat;
+  try {
+    // lstat first to detect symlinks
+    stat = lstatSync(resolvedPath);
+  } catch (err) {
+    console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH cannot stat: ${err.message}`);
+    allPass = false;
+    exitCode = 1;
+    return false;
+  }
+
+  // Symlink handling: resolve and validate target
+  let finalStat = stat;
+  let finalPath = resolvedPath;
+  if (stat.isSymbolicLink()) {
+    try {
+      const realPath = realpathSync(resolvedPath);
+      finalStat = statSync(realPath);
+      finalPath = realPath;
+    } catch (err) {
+      console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH symlink target unreadable: ${err.message}`);
+      allPass = false;
+      exitCode = 1;
+      return false;
+    }
+  }
+
+  // Must be regular file
+  if (!finalStat.isFile()) {
+    console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH is not a regular file: ${basename(finalPath)}`);
+    allPass = false;
+    exitCode = 1;
+    return false;
+  }
+
+  // Reject .env files (check both symlink name AND resolved target)
+  const name = basename(finalPath).toLowerCase();
+  const linkName = basename(resolvedPath).toLowerCase();
+  if (name === '.env' || name.endsWith('.env') || linkName === '.env' || linkName.endsWith('.env')) {
+    console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH must not be a .env file`);
+    allPass = false;
+    exitCode = 1;
+    return false;
+  }
+
+  // Size checks
+  if (finalStat.size === 0) {
+    console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH file is empty (0 bytes)`);
+    allPass = false;
+    exitCode = 1;
+    return false;
+  }
+
+  if (finalStat.size > 50_000) {
+    console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH is too large: ${finalStat.size} bytes (max 50KB)`);
+    allPass = false;
+    exitCode = 1;
+    return false;
+  }
+
+  // Readable check + content scan
+  let content;
+  try {
+    content = readFileSync(finalPath, 'utf8');
+  } catch (err) {
+    console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH unreadable: ${err.message}`);
+    allPass = false;
+    exitCode = 1;
+    return false;
+  }
+
+  // Unsafe phrase scanner
+  const unsafeMatches = scanForUnsafePhrases(content);
+  if (unsafeMatches.length > 0) {
+    console.log(`  ✗ UNSAFE CUSTOM SKILL — contains dangerous phrases:`);
+    for (const phrase of unsafeMatches) {
+      console.log(`    ✗ "${phrase}"`);
+    }
+    allPass = false;
+    exitCode = 1;
+    return false;
+  }
+
+  console.log(`  ✓ PROVIDER_CUSTOM_SKILL_PATH: ${basename(resolvedPath)} (${finalStat.size} bytes) — scanner PASS`);
+  return true;
 }
 
 // ── Bot checks ─────────────────────────────────────────────────────────────
@@ -249,6 +478,7 @@ if (!ONLY_ROLE || ONLY_ROLE === 'provider') {
     'MAX_ACTIVE_JOBS',
     'CLAIM_TTL_SECONDS',
     'AUTONOMOUS_TX',
+    'REQUIRE_ASSIGNED_PROVIDER',
     'IGNORE_JOBS_BEFORE',
     'RECOVER_OLD_JOBS',
     'PROVIDER_MODE',
@@ -264,6 +494,9 @@ if (!ONLY_ROLE || ONLY_ROLE === 'provider') {
     'LLM_JSON_REPAIR_RETRIES',
     'PROVIDER_SKILL',
     'PROVIDER_CUSTOM_SKILL_PATH',
+    'PROVIDER_STATE_FILE',
+    'PROVIDER_JOB_ERROR_BACKOFF_MS',
+    'PROVIDER_MAX_JOB_ERRORS',
   ], true);
 
   // Conditional: LLM env validation when PROVIDER_MODE=llm
@@ -334,38 +567,17 @@ if (!ONLY_ROLE || ONLY_ROLE === 'provider') {
       console.log(`  - PROVIDER_SKILL: auto (default)`);
     }
 
-    const customSkillPath = env.PROVIDER_CUSTOM_SKILL_PATH || '';
-    if (customSkillPath) {
-      const resolvedPath = resolve(providerBotDir, customSkillPath);
-      if (!existsSync(resolvedPath)) {
-        console.log(`  ✗ MISSING: PROVIDER_CUSTOM_SKILL_PATH file not found: ${resolvedPath}`);
-        allPass = false;
-        exitCode = 1;
-      } else {
-        try {
-          const stat = statSync(resolvedPath);
-          if (!stat.isFile()) {
-            console.log(`  ✗ INVALID: PROVIDER_CUSTOM_SKILL_PATH is not a file: ${resolvedPath}`);
-            allPass = false;
-            exitCode = 1;
-          } else if (stat.size > 50_000) {
-            console.log(`  ✗ TOO LARGE: PROVIDER_CUSTOM_SKILL_PATH is ${stat.size} bytes (max 50KB)`);
-            allPass = false;
-            exitCode = 1;
-          } else {
-            // Verify readable
-            readFileSync(resolvedPath, 'utf8');
-            console.log(`  ✓ PROVIDER_CUSTOM_SKILL_PATH: ${resolvedPath} (${stat.size} bytes)`);
-          }
-        } catch (err) {
-          console.log(`  ✗ UNREADABLE: PROVIDER_CUSTOM_SKILL_PATH: ${err.message}`);
-          allPass = false;
-          exitCode = 1;
-        }
-      }
-    } else {
-      console.log(`  - PROVIDER_CUSTOM_SKILL_PATH: (not set — optional)`);
-    }
+    // ── Enhanced custom skill validation (v2) ──
+    console.log(`\n  ── Custom skill validation ──`);
+    validateCustomSkill(env, providerBotDir);
+
+    // ── Provider state file validation ──
+    console.log(`\n  ── Provider state file ──`);
+    validateProviderStateFile(env, providerBotDir);
+
+    // ── Backoff env validation ──
+    console.log(`\n  ── Backoff env validation ──`);
+    validateBackoffEnv(env);
   }
 }
 
