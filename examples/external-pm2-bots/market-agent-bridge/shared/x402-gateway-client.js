@@ -2,6 +2,12 @@
  * x402 Circle Gateway Client — per-agent EOA payer for external PM2 bots.
  *
  * Uses Circle GatewayClient from @circle-fin/x402-batching/client.
+ * GatewayClient handles the full 402 flow automatically:
+ *   1. Makes initial request
+ *   2. If 402, finds Gateway batching option
+ *   3. Signs payment authorization
+ *   4. Retries with Payment-Signature header
+ *
  * Each bot uses its OWN private key (from env). Never shares a platform payer.
  *
  * Env vars:
@@ -9,17 +15,8 @@
  *   ARCLAYER_AGENT_ID              — Agent ID (ERC-8004)
  *   ARCLAYER_API_KEY               — API key for auth-protected resources
  *   ARCLAYER_RUNTIME_ID            — Runtime/process identifier (optional)
- *   X402_RAIL                      — 'circle-gateway' (default)
  *   X402_GATEWAY_CHAIN             — 'arcTestnet' (default)
  *   X402_GATEWAY_PAYER_PRIVATE_KEY — EOA private key (NEVER commit)
- *   X402_GATEWAY_MAX_PRICE_RAW     — Max price in atomic units (default 10000)
- *
- * Flow:
- *   1. Instantiate GatewayClient with agent's own payer EOA private key.
- *   2. Call protected resource using client.pay().
- *   3. Include API key + agent context in headers.
- *   4. Parse PAYMENT-RESPONSE.
- *   5. Return structured result.
  *
  * DO NOT store private keys in code, DB, or version control.
  */
@@ -29,7 +26,6 @@ require("dotenv").config({ path: path.join(process.cwd(), ".env") });
 
 const BASE_URL = (process.env.ARCLAYER_BASE_URL || "https://arclayers.xyz").replace(/\/$/, "");
 const DEFAULT_RESOURCE = "/api/x402/bridge-access";
-const MAX_PRICE_RAW = process.env.X402_GATEWAY_MAX_PRICE_RAW || "10000";
 const GATEWAY_CHAIN = process.env.X402_GATEWAY_CHAIN || "arcTestnet";
 
 function normalizePrivateKey(value) {
@@ -65,12 +61,15 @@ async function gatewayClientForAgent(privateKey) {
 /**
  * Pay for an x402 protected resource using Circle Gateway.
  *
+ * GatewayClient.pay(url, options) handles the full 402 flow:
+ * - Initial request → 402 challenge → sign → retry with payment header
+ * - Returns PayResult with { data, amount, formattedAmount, transaction, status }
+ *
  * @param {Object} params
  * @param {string} params.resource — Resource path (e.g. '/api/x402/bridge-access')
  * @param {string} [params.method='POST'] — HTTP method
  * @param {Object} [params.body={}] — Request body
- * @param {Object} [params.headers={}] — Extra headers
- * @param {string} [params.maxPriceRaw] — Max price override
+ * @param {Object} [params.headers={}] — Extra headers (e.g. Authorization)
  * @returns {Promise<Object>} Structured result with ok, payer, paymentId, etc.
  */
 async function payForGatewayResource({
@@ -78,7 +77,6 @@ async function payForGatewayResource({
   method = "POST",
   body = {},
   headers: extraHeaders = {},
-  maxPriceRaw,
 } = {}) {
   const privateKey = normalizePrivateKey(
     process.env.X402_GATEWAY_PAYER_PRIVATE_KEY || process.env.WALLET_PRIVATE_KEY
@@ -98,77 +96,13 @@ async function payForGatewayResource({
   const sessionId = body.sessionId || null;
   const jobId = body.jobId || null;
 
-  // Step 1: Get 402 challenge
-  const challengeUrl = `${BASE_URL}${resource}?rail=circle-gateway-passkey`;
-  const challengeHeaders = {
-    "content-type": "application/json",
-    accept: "application/json",
-  };
-  if (apiKey) {
-    challengeHeaders["authorization"] = `Bearer ${apiKey}`;
-  }
+  // Build headers: API key + agent context
+  const headers = { ...extraHeaders };
+  if (apiKey) headers["authorization"] = `Bearer ${apiKey}`;
+  if (agentId) headers["x-arclayer-agent-id"] = agentId;
+  if (runtimeId) headers["x-arclayer-runtime-id"] = runtimeId;
 
-  let first;
-  try {
-    first = await fetch(challengeUrl, {
-      method,
-      headers: challengeHeaders,
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    return { ok: false, error: "challenge_fetch_failed", message: err.message };
-  }
-
-  if (first.status !== 402) {
-    const data = await first.json().catch(() => ({}));
-    // Resource may not require payment
-    if (first.ok) {
-      return {
-        ok: true,
-        alreadyPaid: true,
-        payer: null,
-        paymentId: null,
-        transaction: null,
-        agentId,
-        sessionId,
-        jobId,
-        response: data,
-      };
-    }
-    return {
-      ok: false,
-      error: data.error || "challenge_failed",
-      status: first.status,
-      message: data.message || `Expected 402, got ${first.status}`,
-    };
-  }
-
-  const challenge = await first.json().catch(() => ({}));
-  if (!Array.isArray(challenge.accepts) || challenge.accepts.length === 0) {
-    return { ok: false, error: "no_accepts", message: "x402 challenge returned no payment options" };
-  }
-
-  // Step 2: Find Circle Gateway requirement
-  // Server emits: extra.name='GatewayWalletBatched', extra.transferMethod='gateway-batched-eip3009', network='eip155:5042002'
-  const gatewayReq = challenge.accepts.find(
-    (a) =>
-      a &&
-      a.scheme === "exact" &&
-      (a.extra?.name === "GatewayWalletBatched" ||
-        a.extra?.transferMethod === "gateway-batched-eip3009")
-  ) || challenge.accepts.find(
-    (a) => a && a.scheme === "exact" && String(a.network || "").includes("5042002")
-  );
-
-  if (!gatewayReq) {
-    return {
-      ok: false,
-      error: "no_gateway_requirement",
-      message: "x402 challenge did not return a Circle Gateway requirement. Check allowedRails.",
-    };
-  }
-
-  // Step 3: Create GatewayClient and pay
+  // Create GatewayClient
   let client;
   try {
     client = await gatewayClientForAgent(privateKey);
@@ -176,74 +110,54 @@ async function payForGatewayResource({
     return { ok: false, error: "gateway_client_init_failed", message: err.message };
   }
 
-  const price = maxPriceRaw || MAX_PRICE_RAW;
+  // GatewayClient.pay() handles the full 402 flow:
+  // 1. Makes initial request to URL
+  // 2. If 402, parses challenge and finds GatewayWalletBatched option
+  // 3. Signs EIP-3009 authorization against GatewayWallet contract
+  // 4. Retries with PAYMENT-SIGNATURE header
+  const url = `${BASE_URL}${resource}`;
 
-  // Build payment using GatewayClient
-  let paymentPayload;
+  let payResult;
   try {
-    paymentPayload = await client.pay(gatewayReq, price);
+    payResult = await client.pay(url, {
+      method,
+      body: body && Object.keys(body).length > 0 ? body : undefined,
+      headers,
+    });
   } catch (err) {
     return { ok: false, error: "gateway_pay_failed", message: err.message };
   }
 
-  // Step 4: Send paid request
-  const paidHeaders = {
-    "content-type": "application/json",
-    accept: "application/json",
-    "PAYMENT-SIGNATURE": Buffer.from(JSON.stringify(paymentPayload)).toString("base64"),
-  };
-  if (apiKey) {
-    paidHeaders["authorization"] = `Bearer ${apiKey}`;
-  }
-  // Include agent context in headers
-  if (agentId) paidHeaders["x-arclayer-agent-id"] = agentId;
-  if (runtimeId) paidHeaders["x-arclayer-runtime-id"] = runtimeId;
+  // Parse PAYMENT-RESPONSE from response headers
+  // GatewayClient returns raw Response-like; we need to extract payment info
+  const data = payResult.data;
+  const status = payResult.status;
 
-  let paid;
-  try {
-    paid = await fetch(`${BASE_URL}${resource}`, {
-      method,
-      headers: paidHeaders,
-      body: JSON.stringify(body),
-    });
-  } catch (err) {
-    return { ok: false, error: "paid_fetch_failed", message: err.message };
-  }
+  // GatewayClient may not expose response headers directly.
+  // Extract what we can from the PayResult.
+  const transaction = payResult.transaction || null;
+  const amount = payResult.formattedAmount || String(payResult.amount || "");
 
-  const data = await paid.json().catch(() => ({}));
-  const paymentResponse = decodePaymentResponse(
-    paid.headers.get("payment-response") || paid.headers.get("PAYMENT-RESPONSE")
-  );
-
-  if (!paid.ok) {
+  if (status >= 400) {
     return {
       ok: false,
-      error: data.error || "paid_request_failed",
-      status: paid.status,
-      message: data.message || `Paid request failed: ${paid.status}`,
+      error: (data && data.error) || "paid_request_failed",
+      status,
+      message: (data && data.message) || `Paid request failed: ${status}`,
       detail: data,
-      paymentResponse,
     };
   }
 
-  const responseTx = paymentResponse?.transaction || data.transaction || data.txHash || null;
-  const responsePaymentId = paymentResponse?.paymentId || data.paymentId || null;
-
   return {
     ok: true,
-    payer: paymentResponse?.payer || data.payer || null,
-    payTo: paymentResponse?.payTo || null,
-    amount: paymentResponse?.amount || null,
-    transaction: responseTx,
-    txHash: responseTx,
-    paymentId: responsePaymentId,
-    agentId: paymentResponse?.agentId || agentId,
-    runtimeId: paymentResponse?.runtimeId || runtimeId,
-    sessionId: paymentResponse?.sessionId || sessionId,
-    jobId: paymentResponse?.jobId || jobId,
-    payerVerified: paymentResponse?.payerVerified || false,
-    mode: paymentResponse?.mode || "circle-gateway",
-    paymentResponse,
+    payer: client.address,
+    amount,
+    transaction,
+    agentId,
+    runtimeId,
+    sessionId,
+    jobId,
+    mode: "circle-gateway",
     response: data,
   };
 }

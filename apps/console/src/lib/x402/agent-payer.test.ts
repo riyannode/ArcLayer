@@ -196,3 +196,75 @@ describe('assertX402PayerMatches', () => {
     }
   });
 });
+
+// ── Full binding flow: resolve + assert + mismatch rejection ───────────────
+// Simulates the middleware's agentPayerBinding path with wrong payer key.
+
+describe('full binding flow: wrong payer rejects before settlement', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('resolves registered payer then rejects x402_payer_mismatch for wrong key', async () => {
+    // Setup: agent exists, has registered payer PAYER_ADDR
+    mockFrom.mockImplementation(((table: string) => {
+      if (table === 'erc8004_agents') {
+        return {
+          select: () => ({
+            or: () => ({
+              limit: () => ({
+                maybeSingle: vi.fn().mockResolvedValue({
+                  data: { token_id: AGENT_ID, agent_id: AGENT_ID, controller: CONTROLLER },
+                  error: null,
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      if (table === 'agent_x402_payers') {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: () => ({
+                  is: () => ({
+                    limit: () => ({
+                      maybeSingle: vi.fn().mockResolvedValue({
+                        data: { payer_address: PAYER_ADDR, rail: 'circle-gateway', status: 'active', revoked_at: null },
+                        error: null,
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      return { select: mockSelect };
+    }) as any);
+
+    // Step 1: Resolver finds registered payer
+    const resolved = await resolveRequiredAgentX402Payer(AGENT_ID, 'circle-gateway');
+    expect(resolved.payerAddress).toBe(PAYER_ADDR);
+    expect(resolved.controllerAddress).toBe(CONTROLLER);
+
+    // Step 2: Wrong payer pays (simulates bot with wrong private key)
+    const wrongPayer = OTHER_PAYER; // different EOA, not registered
+    const matchResult = assertX402PayerMatches({
+      actualPayer: wrongPayer,
+      expectedPayer: resolved.payerAddress,
+      agentId: resolved.agentId,
+    });
+
+    // Step 3: Must reject BEFORE settlement
+    expect(matchResult.ok).toBe(false);
+    if (!matchResult.ok) {
+      expect(matchResult.error).toBe('x402_payer_mismatch');
+      expect(matchResult.status).toBe(403);
+      expect(matchResult.detail.expectedPayer).toBe(PAYER_ADDR);
+      expect(matchResult.detail.actualPayer).toBe(OTHER_PAYER);
+    }
+  });
+});
