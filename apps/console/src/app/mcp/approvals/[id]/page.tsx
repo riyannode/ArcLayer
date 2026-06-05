@@ -380,24 +380,41 @@ export default function McpApprovalPage() {
       }
       setApproval(submitData.approval);
 
-      // Confirm receipt
+      // Confirm receipt — backend fetches on-chain receipt, derives status
       setPhase('confirming');
-      const confirmRes = await fetch(`/api/mcp/approvals/${approvalId}/page`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'confirm',
-          receiptStatus: 'success',
-          txHash,
-        }),
-      });
-      const confirmData = await confirmRes.json();
-      if (!confirmRes.ok || !confirmData.ok) {
-        setError(confirmData.error || 'Confirm failed (tx was submitted, polling for status)');
-      } else {
-        setApproval(confirmData.approval);
+      let confirmData: Record<string, unknown> | null = null;
+      let confirmRetries = 0;
+      const MAX_CONFIRM_RETRIES = 5;
+
+      while (confirmRetries < MAX_CONFIRM_RETRIES) {
+        const confirmRes = await fetch(`/api/mcp/approvals/${approvalId}/page`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'confirm', txHash }),
+        });
+        confirmData = await confirmRes.json();
+
+        // receipt_not_ready — retry after delay (tx not yet indexed)
+        if (confirmRes.status === 409 || (confirmData && confirmData.error === 'receipt_not_ready')) {
+          confirmRetries++;
+          if (confirmRetries < MAX_CONFIRM_RETRIES) {
+            await new Promise((r) => setTimeout(r, 3000));
+            continue;
+          }
+        }
+        break;
       }
-      setPhase('confirmed');
+
+      if (!confirmData || !confirmData.ok) {
+        setError(
+          String((confirmData && confirmData.error) || 'Confirm failed (tx was submitted, polling for status)'),
+        );
+        // Stay in submitting phase — poll will catch it
+        setPhase('submitting');
+      } else {
+        setApproval(confirmData.approval as Approval);
+        setPhase('confirmed');
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Transaction failed';
       setError(msg);

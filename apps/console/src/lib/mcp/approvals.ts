@@ -21,6 +21,8 @@
  */
 
 import { randomBytes } from 'node:crypto';
+import { createPublicClient, http } from 'viem';
+import { arcTestnet } from '@arclayer/sdk';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import type { McpSession } from '@/lib/agent-accounts/types';
 import { checkPolicyV1, snapshotPolicy, type PolicyCheckInput } from '@/lib/mcp/policy';
@@ -474,6 +476,8 @@ export async function approveApprovalByWallet(
     .from('mcp_action_approvals')
     .update({ status: 'approved', approved_at: nowIso() })
     .eq('id', approval.id)
+    .eq('owner_address', approval.ownerAddress.toLowerCase())
+    .eq('agent_account_address', approval.agentAccountAddress.toLowerCase())
     .eq('status', 'awaiting_approval')
     .select('*')
     .maybeSingle();
@@ -507,6 +511,8 @@ export async function cancelApprovalByWallet(
     .from('mcp_action_approvals')
     .update({ status: 'cancelled', cancelled_at: nowIso() })
     .eq('id', approval.id)
+    .eq('owner_address', approval.ownerAddress.toLowerCase())
+    .eq('agent_account_address', approval.agentAccountAddress.toLowerCase())
     .in('status', ['awaiting_approval', 'approved'])
     .select('*')
     .maybeSingle();
@@ -546,6 +552,8 @@ export async function submitApprovalByWallet(
     .from('mcp_action_approvals')
     .update({ status: 'submitted', tx_hash: txHash, submitted_at: nowIso() })
     .eq('id', approval.id)
+    .eq('owner_address', approval.ownerAddress.toLowerCase())
+    .eq('agent_account_address', approval.agentAccountAddress.toLowerCase())
     .eq('status', 'approved')
     .select('*')
     .maybeSingle();
@@ -560,44 +568,75 @@ export async function submitApprovalByWallet(
 /**
  * Confirm an approval via wallet auth.
  * Caller must verify approval.ownerAddress matches authenticated wallet.
+ *
+ * DERIVES receiptStatus from on-chain receipt — never trusts client.
+ * - Fetches tx receipt from Arc RPC by approval.txHash (or provided txHash).
+ * - receipt.status === 'success' → confirmed
+ * - receipt.status === 'reverted' → failed
+ * - receipt not found → returns { ok: false, error: 'receipt_not_ready' }
  */
 export async function confirmApprovalByWallet(
   approval: McpActionApproval,
-  params: { txHash?: string; blockNumber?: number; receiptStatus: string },
+  params: { txHash?: string },
 ): Promise<TransitionResponse> {
-  if (params.receiptStatus !== 'success' && params.receiptStatus !== 'reverted') {
-    return {
-      ok: false,
-      error: 'invalid_receipt_status',
-      detail: 'receiptStatus must be exactly "success" or "reverted".',
-    };
-  }
-
   if (approval.status !== 'submitted') {
     return { ok: false, error: `invalid_transition:${approval.status}_to_confirmed` };
   }
 
-  if (params.txHash) {
-    if (!/^0x[0-9a-fA-F]{64}$/.test(params.txHash)) {
-      return { ok: false, error: 'invalid_tx_hash' };
-    }
-    if (approval.txHash && params.txHash.toLowerCase() !== approval.txHash.toLowerCase()) {
-      return {
-        ok: false,
-        error: 'tx_hash_mismatch',
-        detail: `Submitted txHash is ${approval.txHash}, cannot overwrite with ${params.txHash}.`,
-      };
-    }
+  // Resolve txHash: use submitted hash, or accept matching provided hash
+  const txHash = params.txHash ?? approval.txHash;
+  if (!txHash || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+    return { ok: false, error: 'invalid_tx_hash' };
   }
 
-  const newStatus = params.receiptStatus === 'reverted' ? 'failed' : 'confirmed';
+  // If caller provides txHash, it must match the submitted txHash
+  if (params.txHash && approval.txHash && params.txHash.toLowerCase() !== approval.txHash.toLowerCase()) {
+    return {
+      ok: false,
+      error: 'tx_hash_mismatch',
+      detail: `Submitted txHash is ${approval.txHash}, cannot overwrite with ${params.txHash}.`,
+    };
+  }
+
+  // Fetch receipt from Arc RPC — this is the source of truth
+  const rpcUrl = process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network';
+  let receiptStatus: 'success' | 'reverted';
+  let blockNumber: number | undefined;
+
+  try {
+    const client = createPublicClient({
+      chain: arcTestnet,
+      transport: http(rpcUrl),
+    });
+
+    const receipt = await client.getTransactionReceipt({
+      hash: txHash as `0x${string}`,
+    });
+
+    if (!receipt) {
+      return { ok: false, error: 'receipt_not_ready', detail: 'Transaction receipt not yet available. Retry in a few seconds.' };
+    }
+
+    receiptStatus = receipt.status === 'success' ? 'success' : 'reverted';
+    blockNumber = Number(receipt.blockNumber);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // TransactionNotFound or RPC error — receipt not ready
+    if (msg.includes('not found') || msg.includes('NotFound') || msg.includes('TransactionNotFound')) {
+      return { ok: false, error: 'receipt_not_ready', detail: 'Transaction not yet indexed. Retry in a few seconds.' };
+    }
+    return { ok: false, error: 'receipt_fetch_failed', detail: msg };
+  }
+
+  const newStatus = receiptStatus === 'reverted' ? 'failed' : 'confirmed';
   const updateFields: Record<string, unknown> = {
     status: newStatus,
     confirmed_at: nowIso(),
   };
 
-  if (params.txHash && !approval.txHash) {
-    updateFields.tx_hash = params.txHash;
+  // Set txHash if not already set
+  if (!approval.txHash) {
+    updateFields.tx_hash = txHash;
   }
 
   if (newStatus === 'failed') {
@@ -609,6 +648,8 @@ export async function confirmApprovalByWallet(
     .from('mcp_action_approvals')
     .update(updateFields)
     .eq('id', approval.id)
+    .eq('owner_address', approval.ownerAddress.toLowerCase())
+    .eq('agent_account_address', approval.agentAccountAddress.toLowerCase())
     .eq('status', 'submitted')
     .select('*')
     .maybeSingle();

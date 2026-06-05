@@ -4,12 +4,13 @@
  * GET  /api/mcp/approvals/[id]/page  → fetch approval (wallet cookie auth)
  * POST /api/mcp/approvals/[id]/page  → transition approval (wallet cookie auth)
  *
- * Body for POST: { action: 'approve' | 'cancel' | 'submit' | 'confirm', txHash?, receiptStatus?, blockNumber? }
+ * Body for POST: { action: 'approve' | 'cancel' | 'submit' | 'confirm', txHash? }
  *
  * Security:
  * - Auth via wallet session cookie (not MCP Bearer token).
  * - Approval ownerAddress must match authenticated wallet.
  * - Expired approvals rejected.
+ * - confirm action fetches receipt from Arc RPC — client cannot force success.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -56,6 +57,7 @@ function transitionErrorResponse(result: { ok: false; error: string; detail?: st
   const status = result.error.includes('not_found') ? 404
     : result.error.includes('expired') ? 410
     : result.error.includes('invalid_transition') ? 409
+    : result.error.includes('receipt_not_ready') ? 409
     : 400;
 
   return NextResponse.json(
@@ -179,16 +181,8 @@ export async function POST(
     }
 
     case 'confirm': {
-      const receiptStatus = typeof body.receiptStatus === 'string' ? body.receiptStatus.trim() : '';
-      if (!receiptStatus) {
-        return NextResponse.json(
-          { ok: false, error: 'missing_receipt_status' },
-          { status: 400 },
-        );
-      }
       const txHash = typeof body.txHash === 'string' ? body.txHash.trim() : undefined;
-      const blockNumber = typeof body.blockNumber === 'number' ? body.blockNumber : undefined;
-      result = await confirmApprovalByWallet(approval, { txHash, blockNumber, receiptStatus });
+      result = await confirmApprovalByWallet(approval, { txHash });
       break;
     }
   }
