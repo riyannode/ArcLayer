@@ -63,6 +63,9 @@ const PROVIDER_AGENT_TYPE = process.env.PROVIDER_AGENT_TYPE || '';
 // If set, skip any job with erc8183JobId < this value.
 const IGNORE_JOBS_BEFORE = process.env.IGNORE_JOBS_BEFORE || '';
 
+// ── REQUIRE_ASSIGNED_PROVIDER — reject jobs not assigned to this provider ──
+const REQUIRE_ASSIGNED_PROVIDER = process.env.REQUIRE_ASSIGNED_PROVIDER === 'true';
+
 // ── Durable state file ──────────────────────────────────────────────────
 const PROVIDER_STATE_FILE = process.env.PROVIDER_STATE_FILE || __dirname + '/provider-state.json';
 
@@ -75,6 +78,7 @@ let lastLoopAt = null;
 let lastErrorAt = null;
 let lastErrorCode = null;
 let processedJobsCount = 0;
+let polling = false; // Prevent overlapping poll cycles
 
 // ── LLM config (validated at startup if PROVIDER_MODE=llm) ──────────────
 const LLM_CONFIG = (() => {
@@ -159,6 +163,10 @@ if (IGNORE_JOBS_BEFORE) {
   console.log(`IGNORE_JOBS_BEFORE: ${IGNORE_JOBS_BEFORE} (skip jobs with erc8183JobId < ${IGNORE_JOBS_BEFORE})`);
 }
 
+if (REQUIRE_ASSIGNED_PROVIDER) {
+  console.log(`REQUIRE_ASSIGNED_PROVIDER: true — unassigned jobs will be permanently skipped`);
+}
+
 console.log(`Provider state file: ${PROVIDER_STATE_FILE}`);
 console.log(`Job error backoff: ${JOB_ERROR_BACKOFF_MS}ms, max errors per job: ${MAX_JOB_ERRORS}`);
 
@@ -170,7 +178,11 @@ const skippedJobIds = new Set();
 
 /** Extract a safe error message — never leaks keys or internals. */
 function getSafeErrorMessage(err) {
-  return err?.shortMessage || err?.details || err?.message || String(err);
+  let msg = err?.shortMessage || err?.details || err?.message || String(err);
+  // Sanitize potential secret leaks from API error bodies
+  msg = msg.replace(/(ak_|sk_|pk:|Bearer |PRIVATE_KEY=|API_KEY=)[^\s,;)}\]]+/gi, '$1<redacted>');
+  msg = msg.replace(/0x[a-fA-F0-9]{64,}/gi, '0x<redacted>');
+  return msg;
 }
 
 /** Mark a job as permanently skipped for this process lifetime AND durable state. */
@@ -190,8 +202,8 @@ function isSkippedJob(job) {
   const localId = job.localJobId || job.id;
   const ercId = job.erc8183JobId;
   return (
-    (localId && (skippedJobIds.has(String(localId)) || providerState.isSkipped(localId))) ||
-    (ercId && (skippedJobIds.has(String(ercId)) || providerState.isSkipped(ercId)))
+    (localId && (skippedJobIds.has(String(localId)) || providerState.isSkipped(localId) || providerState.isBadJob(localId))) ||
+    (ercId && (skippedJobIds.has(String(ercId)) || providerState.isSkipped(ercId) || providerState.isBadJob(ercId)))
   );
 }
 
@@ -437,6 +449,9 @@ async function phaseSetBudget() {
       // ── Guard: assigned provider match ──
       if (!isAssignedToThisProvider(job)) {
         processedIds.add(`budget-${id}`);
+        if (REQUIRE_ASSIGNED_PROVIDER) {
+          rememberSkippedJob(job, 'wrong providerAgentId or providerAddress');
+        }
         continue;
       }
 
@@ -575,7 +590,13 @@ async function phaseClaimAndSubmit() {
       if (job.erc8183Status !== 'Funded') continue;
 
       // Assigned provider guard
-      if (!isAssignedToThisProvider(job)) continue;
+      if (!isAssignedToThisProvider(job)) {
+        processedIds.add(`claim-${id}`);
+        if (REQUIRE_ASSIGNED_PROVIDER) {
+          rememberSkippedJob(job, 'wrong providerAgentId or providerAddress');
+        }
+        continue;
+      }
 
       // Capability filter
       if (!hasCapability(job)) {
@@ -745,6 +766,11 @@ async function main() {
   lastLoopAt = Date.now();
 
   setInterval(async () => {
+    if (polling) {
+      console.warn(`[POLL] Previous cycle still running — skipping this tick`);
+      return;
+    }
+    polling = true;
     try {
       await phaseSetBudget();
     } catch (err) {
@@ -760,6 +786,7 @@ async function main() {
       lastErrorCode = 'POLL_WORK_ERROR';
     }
     lastLoopAt = Date.now();
+    polling = false;
   }, POLL_INTERVAL_MS);
 }
 

@@ -218,6 +218,13 @@ function loadState(filePath) {
     state.lastErrorAt = typeof parsed.lastErrorAt === 'number' ? parsed.lastErrorAt : null;
     state.createdAt = typeof parsed.createdAt === 'number' ? parsed.createdAt : Date.now();
 
+    // Trim all maps on load — prevents unbounded growth across restarts
+    trimMap(state.skippedJobIds);
+    trimMap(state.knownBadJobIds);
+    trimMap(state.lastSubmittedJobIds);
+    trimMap(state.lastSetBudgetJobIds);
+    trimMap(state.jobErrors);
+
     console.log(`[state] Loaded provider state from ${path.basename(filePath)}: ` +
       `skipped=${Object.keys(state.skippedJobIds).length}, ` +
       `bad=${Object.keys(state.knownBadJobIds).length}, ` +
