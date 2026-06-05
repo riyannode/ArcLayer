@@ -61,6 +61,12 @@ import {
   markResourcePaymentFailed,
 } from './resource-payment-store';
 import type { PaymentRequirements, PaymentPayload } from './exact/types';
+import {
+  resolveRequiredAgentX402Payer,
+  assertX402PayerMatches,
+  type AgentX402Rail,
+} from './agent-payer';
+import { recordAgentX402Ledger } from './agent-ledger';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -117,6 +123,24 @@ export interface X402MiddlewareOptions {
    * Routes MUST set requireResourceContext: false when using this option.
    */
   settleBeforeHandler?: boolean;
+  /**
+   * Optional per-agent payer binding for Circle Gateway routes.
+   * When `required: true`, the middleware enforces that the actual payer
+   * from the Gateway payment proof matches the registered x402 payer
+   * for the agent. Rejects before settlement if mismatch or missing.
+   * Only use on routes where external agents must pay with their own EOA.
+   * Does NOT apply to Arc Native payments (those use a different flow).
+   */
+  agentPayerBinding?: {
+    required: boolean;
+    rail: AgentX402Rail;
+    getContext: (req: NextRequest) => Promise<{
+      agentId: string;
+      runtimeId?: string | null;
+      sessionId?: string | null;
+      jobId?: string | null;
+    }>;
+  };
 }
 
 function resolvePayTo(override?: `0x${string}`): `0x${string}` {
@@ -485,6 +509,42 @@ async function handleGateway(
     }
   }
 
+  // ─── Per-agent payer binding (Circle Gateway only) ──────────────────────
+  // Enforce actual payer == registered agent payer BEFORE settlement.
+  // If agentPayerBinding.required, reject immediately on mismatch/missing.
+  let agentContext: { agentId: string; controllerAddress: string; expectedPayer: string; runtimeId?: string | null; sessionId?: string | null; jobId?: string | null } | null = null;
+  if (opts.agentPayerBinding?.required) {
+    const actualPayer = earlyPayer ?? verifyResult.payer ?? null;
+    try {
+      const rawCtx = await opts.agentPayerBinding.getContext(req);
+      const expected = await resolveRequiredAgentX402Payer(
+        rawCtx.agentId,
+        opts.agentPayerBinding.rail,
+      );
+      agentContext = { ...rawCtx, agentId: expected.agentId, controllerAddress: expected.controllerAddress, expectedPayer: expected.payerAddress };
+      const matchResult = assertX402PayerMatches({
+        actualPayer,
+        expectedPayer: expected.payerAddress,
+        agentId: expected.agentId,
+      });
+      if (!matchResult.ok) {
+        if (earlyPayer) await releaseAccessSession(earlyPayer, opts.resource, 'circle-gateway');
+        return NextResponse.json(
+          { ok: false, error: matchResult.error, ...matchResult.detail },
+          { status: matchResult.status, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
+      }
+    } catch (err) {
+      const code = (err as { code?: string }).code ?? 'agent_payer_resolution_failed';
+      const msg = err instanceof Error ? err.message : 'Agent payer resolution failed';
+      if (earlyPayer) await releaseAccessSession(earlyPayer, opts.resource, 'circle-gateway');
+      return NextResponse.json(
+        { ok: false, error: code, message: msg },
+        { status: code === 'agent_x402_payer_not_configured' ? 403 : 500, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+  }
+
   const claim = await claimGatewaySettlement({
     paymentId,
     payer: earlyPayer ?? verifyResult.payer ?? undefined,
@@ -553,9 +613,36 @@ async function handleGateway(
       transaction: settleResult.transaction ?? null,
       resource: opts.resource,
       status: 'settled',
+      ...(agentContext ? {
+        agentId: agentContext.agentId,
+        runtimeId: agentContext.runtimeId ?? undefined,
+        sessionId: agentContext.sessionId ?? undefined,
+        jobId: agentContext.jobId ?? undefined,
+        expectedPayer: agentContext.expectedPayer,
+        payerVerified: true,
+      } : {}),
     });
   } catch (e) {
     console.error('[x402-gw] Failed to record payment:', e);
+  }
+
+  // Record in agent ledger (non-blocking, best-effort)
+  if (agentContext) {
+    recordAgentX402Ledger({
+      agentId: agentContext.agentId,
+      controllerAddress: agentContext.controllerAddress,
+      payerAddress: payer,
+      expectedPayer: agentContext.expectedPayer,
+      runtimeId: agentContext.runtimeId ?? null,
+      sessionId: agentContext.sessionId ?? null,
+      jobId: agentContext.jobId ?? null,
+      resource: opts.resource,
+      rail: 'circle-gateway',
+      amount: requirements.amount,
+      paymentId,
+      settlementRef: settleResult.transaction ?? null,
+      status: 'settled',
+    }).catch(() => undefined);
   }
 
   // Consume (replay protection)
@@ -587,6 +674,14 @@ async function handleGateway(
     payer,
     amount: requirements.amount,
     paymentId,
+    ...(agentContext ? {
+      agentId: agentContext.agentId,
+      runtimeId: agentContext.runtimeId ?? undefined,
+      sessionId: agentContext.sessionId ?? undefined,
+      jobId: agentContext.jobId ?? undefined,
+      expectedPayer: agentContext.expectedPayer,
+      payerVerified: true,
+    } : {}),
   };
   response.headers.set('PAYMENT-RESPONSE', encodePaymentResponse(paymentResponse));
 
