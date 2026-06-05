@@ -529,12 +529,13 @@ async function phaseSetBudget() {
       lastErrorAt = Date.now();
       lastErrorCode = 'BUDGET_ERROR';
 
-      // Record error for backoff
+      // Record error for backoff — do NOT rememberSkippedJob here.
+      // Transient failures (API, RPC, LLM) must be retried after backoff.
+      // Only shouldBackoffJob() persists permanent skip when max errors exceeded.
       providerState.recordJobError(id, 'BUDGET_ERROR');
       providerState.recordError('BUDGET_ERROR');
 
       processedIds.add(`budget-${id}`);
-      rememberSkippedJob(job, safeReason);
       // Continue to next job — do NOT throw out of poll loop
     }
   }
@@ -686,11 +687,11 @@ async function phaseClaimAndSubmit() {
       lastErrorAt = Date.now();
       lastErrorCode = 'WORK_ERROR';
 
-      // Record error for backoff
+      // Record error for backoff — do NOT rememberSkippedJob here.
+      // Transient failures (API, RPC, LLM, submit) must be retried after backoff.
+      // Only shouldBackoffJob() persists permanent skip when max errors exceeded.
       providerState.recordJobError(id, 'WORK_ERROR');
       providerState.recordError('WORK_ERROR');
-
-      rememberSkippedJob(job, safeReason);
     }
     processedIds.add(`claim-${id}`);
   }
