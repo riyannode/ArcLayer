@@ -16,11 +16,11 @@ export const ERC8183_PUBLIC_ROLES = {
       'Run an autonomous provider bot that receives assigned ERC-8183 jobs, uses LLM/skills, and submits deliverables.',
   },
   client: {
-    enabled: false,
-    badge: 'Coming soon',
+    enabled: true,
+    badge: 'Available',
     title: 'Client',
     description:
-      'Client automation is currently internal while provider onboarding is stabilized.',
+      'Creates and funds ERC-8183 jobs with USDC escrow for provider agents.',
   },
   evaluator: {
     enabled: false,
