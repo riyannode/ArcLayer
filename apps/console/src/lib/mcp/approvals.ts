@@ -209,6 +209,26 @@ export async function getApproval(
 }
 
 /**
+ * Get an approval by ID without session scoping.
+ * Used by the approval page where user authenticates via wallet cookie.
+ * Caller MUST verify ownerAddress matches the authenticated wallet.
+ */
+export async function getApprovalById(
+  approvalId: string,
+): Promise<McpActionApproval | null> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('mcp_action_approvals')
+    .select('*')
+    .eq('id', approvalId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return mapApprovalRow(data as Record<string, unknown>);
+}
+
+/**
  * Get the effective status of an approval.
  * Returns 'expired' if the approval has expired but status wasn't updated yet.
  */
@@ -419,6 +439,209 @@ export async function confirmApproval(
     .update(updateFields)
     .eq('id', approvalId)
     .eq('session_id', session.id)
+    .eq('status', 'submitted')
+    .select('*')
+    .maybeSingle();
+
+  if (error || !data) {
+    return { ok: false, error: 'confirm_failed' };
+  }
+
+  return { ok: true, approval: mapApprovalRow(data as Record<string, unknown>) };
+}
+
+// ── Wallet-auth transitions (for approval page) ──────────────────────────
+// These functions operate on an already-fetched approval where the caller
+// has already verified wallet ownership. No session scoping in the DB query.
+
+/**
+ * Approve an approval via wallet auth.
+ * Caller must verify approval.ownerAddress matches authenticated wallet.
+ */
+export async function approveApprovalByWallet(
+  approval: McpActionApproval,
+): Promise<TransitionResponse> {
+  const effective = getEffectiveStatus(approval);
+  if (effective === 'expired') {
+    return { ok: false, error: 'approval_expired' };
+  }
+  if (effective !== 'awaiting_approval') {
+    return { ok: false, error: `invalid_transition:${effective}_to_approved` };
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('mcp_action_approvals')
+    .update({ status: 'approved', approved_at: nowIso() })
+    .eq('id', approval.id)
+    .eq('owner_address', approval.ownerAddress.toLowerCase())
+    .eq('agent_account_address', approval.agentAccountAddress.toLowerCase())
+    .eq('status', 'awaiting_approval')
+    .select('*')
+    .maybeSingle();
+
+  if (error || !data) {
+    return { ok: false, error: 'approve_failed' };
+  }
+
+  return { ok: true, approval: mapApprovalRow(data as Record<string, unknown>) };
+}
+
+/**
+ * Cancel an approval via wallet auth.
+ * Caller must verify approval.ownerAddress matches authenticated wallet.
+ */
+export async function cancelApprovalByWallet(
+  approval: McpActionApproval,
+): Promise<TransitionResponse> {
+  const effective = getEffectiveStatus(approval);
+
+  if (effective === 'cancelled') {
+    return { ok: true, approval };
+  }
+
+  if (effective !== 'awaiting_approval' && effective !== 'approved') {
+    return { ok: false, error: `invalid_transition:${effective}_to_cancelled` };
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('mcp_action_approvals')
+    .update({ status: 'cancelled', cancelled_at: nowIso() })
+    .eq('id', approval.id)
+    .eq('owner_address', approval.ownerAddress.toLowerCase())
+    .eq('agent_account_address', approval.agentAccountAddress.toLowerCase())
+    .in('status', ['awaiting_approval', 'approved'])
+    .select('*')
+    .maybeSingle();
+
+  if (error || !data) {
+    return { ok: false, error: 'cancel_failed' };
+  }
+
+  return { ok: true, approval: mapApprovalRow(data as Record<string, unknown>) };
+}
+
+/**
+ * Submit txHash for an approval via wallet auth.
+ * Caller must verify approval.ownerAddress matches authenticated wallet.
+ */
+export async function submitApprovalByWallet(
+  approval: McpActionApproval,
+  txHash: string,
+): Promise<TransitionResponse> {
+  if (!txHash || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+    return { ok: false, error: 'invalid_tx_hash' };
+  }
+
+  const effective = getEffectiveStatus(approval);
+  if (effective === 'expired') {
+    return { ok: false, error: 'approval_expired' };
+  }
+  if (effective === 'cancelled') {
+    return { ok: false, error: 'approval_cancelled' };
+  }
+  if (effective !== 'approved') {
+    return { ok: false, error: `invalid_transition:${effective}_to_submitted` };
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('mcp_action_approvals')
+    .update({ status: 'submitted', tx_hash: txHash, submitted_at: nowIso() })
+    .eq('id', approval.id)
+    .eq('owner_address', approval.ownerAddress.toLowerCase())
+    .eq('agent_account_address', approval.agentAccountAddress.toLowerCase())
+    .eq('status', 'approved')
+    .select('*')
+    .maybeSingle();
+
+  if (error || !data) {
+    return { ok: false, error: 'submit_failed' };
+  }
+
+  return { ok: true, approval: mapApprovalRow(data as Record<string, unknown>) };
+}
+
+/**
+ * Confirm an approval via wallet auth.
+ * Caller must verify approval.ownerAddress matches authenticated wallet.
+ *
+ * DERIVES receiptStatus from on-chain receipt — never trusts client.
+ * - Fetches tx receipt from Arc RPC by approval.txHash (or provided txHash).
+ * - receipt.status === 'success' → confirmed
+ * - receipt.status === 'reverted' → failed
+ * - receipt not found → returns { ok: false, error: 'receipt_not_ready' }
+ */
+export async function confirmApprovalByWallet(
+  approval: McpActionApproval,
+  params: { txHash?: string },
+): Promise<TransitionResponse> {
+  if (approval.status !== 'submitted') {
+    return { ok: false, error: `invalid_transition:${approval.status}_to_confirmed` };
+  }
+
+  // Resolve txHash: use submitted hash, or accept matching provided hash
+  const txHash = params.txHash ?? approval.txHash;
+  if (!txHash || !/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+    return { ok: false, error: 'invalid_tx_hash' };
+  }
+
+  // If caller provides txHash, it must match the submitted txHash
+  if (params.txHash && approval.txHash && params.txHash.toLowerCase() !== approval.txHash.toLowerCase()) {
+    return {
+      ok: false,
+      error: 'tx_hash_mismatch',
+      detail: `Submitted txHash is ${approval.txHash}, cannot overwrite with ${params.txHash}.`,
+    };
+  }
+
+  // Fetch receipt from Arc RPC — this is the source of truth
+  // Uses SDK's shared publicClient (same RPC config as all on-chain reads)
+  const { publicClient } = await import('@arclayer/sdk');
+  let receiptStatus: 'success' | 'reverted';
+
+  try {
+    const receipt = await publicClient.getTransactionReceipt({
+      hash: txHash as `0x${string}`,
+    });
+
+    if (!receipt) {
+      return { ok: false, error: 'receipt_not_ready', detail: 'Transaction receipt not yet available. Retry in a few seconds.' };
+    }
+
+    receiptStatus = receipt.status === 'success' ? 'success' : 'reverted';
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // TransactionNotFound or RPC error — receipt not ready
+    if (msg.includes('not found') || msg.includes('NotFound') || msg.includes('TransactionNotFound')) {
+      return { ok: false, error: 'receipt_not_ready', detail: 'Transaction not yet indexed. Retry in a few seconds.' };
+    }
+    return { ok: false, error: 'receipt_fetch_failed', detail: msg };
+  }
+
+  const newStatus = receiptStatus === 'reverted' ? 'failed' : 'confirmed';
+  const updateFields: Record<string, unknown> = {
+    status: newStatus,
+    confirmed_at: nowIso(),
+  };
+
+  // Set txHash if not already set
+  if (!approval.txHash) {
+    updateFields.tx_hash = txHash;
+  }
+
+  if (newStatus === 'failed') {
+    updateFields.error = 'transaction_reverted';
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from('mcp_action_approvals')
+    .update(updateFields)
+    .eq('id', approval.id)
+    .eq('owner_address', approval.ownerAddress.toLowerCase())
+    .eq('agent_account_address', approval.agentAccountAddress.toLowerCase())
     .eq('status', 'submitted')
     .select('*')
     .maybeSingle();
