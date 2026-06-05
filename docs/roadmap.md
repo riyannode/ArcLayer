@@ -38,7 +38,7 @@ Prove full MCP onboarding path. Tests for identity + API key tools. Negative tes
 Improve /profile funding center. Owner/Agent balances, deposit address, clear instructions. No backend custody.
 
 **PR #459 — MCP ERC-8183 Read + Prepare Tools v1**
-jobs.list_public, client.prepare_create_job_for_session, provider.prepare_claim/submit. Tx instructions only.
+jobs.list_public, client.prepare_create_job_for_session, provider.prepare_submit, provider.prepare_complete. Tx instructions only.
 
 **PR #460 — ERC-8183 Approval Deep Links**
 Extend approvalUrl pattern to job actions. Approval summary with action, jobId, amounts. Server-side receipt confirm.
