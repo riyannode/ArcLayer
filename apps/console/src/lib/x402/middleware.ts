@@ -512,7 +512,7 @@ async function handleGateway(
   // ─── Per-agent payer binding (Circle Gateway only) ──────────────────────
   // Enforce actual payer == registered agent payer BEFORE settlement.
   // If agentPayerBinding.required, reject immediately on mismatch/missing.
-  let agentContext: { agentId: string; controllerAddress: string; runtimeId?: string | null; sessionId?: string | null; jobId?: string | null } | null = null;
+  let agentContext: { agentId: string; controllerAddress: string; expectedPayer: string; runtimeId?: string | null; sessionId?: string | null; jobId?: string | null } | null = null;
   if (opts.agentPayerBinding?.required) {
     const actualPayer = earlyPayer ?? verifyResult.payer ?? null;
     try {
@@ -521,7 +521,7 @@ async function handleGateway(
         rawCtx.agentId,
         opts.agentPayerBinding.rail,
       );
-      agentContext = { ...rawCtx, controllerAddress: expected.controllerAddress };
+      agentContext = { ...rawCtx, agentId: expected.agentId, controllerAddress: expected.controllerAddress, expectedPayer: expected.payerAddress };
       const matchResult = assertX402PayerMatches({
         actualPayer,
         expectedPayer: expected.payerAddress,
@@ -618,6 +618,8 @@ async function handleGateway(
         runtimeId: agentContext.runtimeId ?? undefined,
         sessionId: agentContext.sessionId ?? undefined,
         jobId: agentContext.jobId ?? undefined,
+        expectedPayer: agentContext.expectedPayer,
+        payerVerified: true,
       } : {}),
     });
   } catch (e) {
@@ -630,7 +632,7 @@ async function handleGateway(
       agentId: agentContext.agentId,
       controllerAddress: agentContext.controllerAddress,
       payerAddress: payer,
-      expectedPayer: payer,
+      expectedPayer: agentContext.expectedPayer,
       runtimeId: agentContext.runtimeId ?? null,
       sessionId: agentContext.sessionId ?? null,
       jobId: agentContext.jobId ?? null,
@@ -677,7 +679,7 @@ async function handleGateway(
       runtimeId: agentContext.runtimeId ?? undefined,
       sessionId: agentContext.sessionId ?? undefined,
       jobId: agentContext.jobId ?? undefined,
-      expectedPayer: payer,
+      expectedPayer: agentContext.expectedPayer,
       payerVerified: true,
     } : {}),
   };
