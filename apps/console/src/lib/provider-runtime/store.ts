@@ -811,7 +811,8 @@ export async function listAssignedJobs(
   providerAddress: string,
   limit = 20,
 ): Promise<unknown[]> {
-  const normalizedAddr = providerAddress.toLowerCase();
+  // Validate and normalize address (rejects zero, applies EIP-55 checksum)
+  const normalizedAddr = validateProviderAddress(providerAddress).toLowerCase();
   const cappedLimit = Math.min(Math.max(limit, 1), 50);
 
   const indexerUrl = process.env.INDEXER_URL || 'http://localhost:3535';
@@ -904,33 +905,63 @@ export async function applyToOpenJob(
       );
     }
   } catch (err: unknown) {
-    // Re-throw our own errors
+    // Re-throw our own errors (validation failures from onchain read)
     if (err && typeof err === 'object' && 'code' in err) throw err;
-    // If RPC fails, try indexer fallback
+
+    // RPC failed — try indexer fallback to verify job is valid
     const indexerUrl = process.env.INDEXER_URL || 'http://localhost:3535';
+    let verified = false;
     try {
       const res = await fetch(`${indexerUrl}/jobs/${encodeURIComponent(input.jobId)}`, { cache: 'no-store' });
-      if (res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const jobData = (body.job && typeof body.job === 'object') ? body.job : body;
-        const status = String(jobData.status || '').toLowerCase();
-        const provider = String(jobData.provider || '').toLowerCase();
-        if (status !== 'open' && status !== '0') {
-          throw Object.assign(
-            new Error(`Job ${input.jobId} is ${status}, not Open. Cannot apply.`),
-            { code: 'wrong_status' },
-          );
-        }
-        if (provider !== ZERO_ADDRESS && provider !== '0x0' && provider !== '') {
-          throw Object.assign(
-            new Error(`Job ${input.jobId} already has provider. Not an open job.`),
-            { code: 'already_assigned' },
-          );
-        }
+      if (!res.ok) {
+        throw Object.assign(
+          new Error(`Cannot verify job ${input.jobId}: onchain RPC failed and indexer returned ${res.status}`),
+          { code: 'verification_failed' },
+        );
       }
+      const body = await res.json().catch(() => ({}));
+      const jobData = (body.job && typeof body.job === 'object') ? body.job : body;
+      const status = String(jobData.status || '').toLowerCase();
+      const provider = String(jobData.provider || '').toLowerCase();
+
+      if (status !== 'open' && status !== '0') {
+        throw Object.assign(
+          new Error(`Job ${input.jobId} is ${status}, not Open. Cannot apply.`),
+          { code: 'wrong_status' },
+        );
+      }
+      if (provider !== ZERO_ADDRESS.toLowerCase() && provider !== '0x0' && provider !== '') {
+        throw Object.assign(
+          new Error(`Job ${input.jobId} already has provider. Not an open job.`),
+          { code: 'already_assigned' },
+        );
+      }
+
+      // Check expiry from indexer data
+      const expiredAt = jobData.expiredAt ?? jobData.expired_at;
+      if (expiredAt && Number(expiredAt) > 0 && Number(expiredAt) < Date.now() / 1000) {
+        throw Object.assign(
+          new Error(`Job ${input.jobId} has expired. Cannot apply.`),
+          { code: 'job_expired' },
+        );
+      }
+
+      verified = true;
     } catch (fallbackErr: unknown) {
+      // Re-throw validation errors from indexer
       if (fallbackErr && typeof fallbackErr === 'object' && 'code' in fallbackErr) throw fallbackErr;
-      // If both onchain and indexer fail, warn but allow (best-effort)
+      // Both onchain and indexer verification failed — reject application
+      throw Object.assign(
+        new Error(`Cannot verify job ${input.jobId}: onchain RPC and indexer both failed. Refusing to apply without verification.`),
+        { code: 'verification_failed' },
+      );
+    }
+
+    if (!verified) {
+      throw Object.assign(
+        new Error(`Cannot verify job ${input.jobId}. Refusing to apply.`),
+        { code: 'verification_failed' },
+      );
     }
   }
 
