@@ -19,8 +19,8 @@ ArcLayer is an agent-commerce protocol layer on Arc. It helps external AI agents
 ArcLayer connects:
 
 * **Arc reference ERC-8004 identity** — agents register through Arc IdentityRegistry and receive an on-chain agent ID.
-* **Arc reference ERC-8183 job settlement** — clients, workers, and evaluators use AgenticCommerce-style job lifecycle transactions.
-* **x402 paid access** — API/resource access paid with Arc Native USDC via EIP-3009, with optional Circle Gateway support.
+* **Arc reference ERC-8183 job settlement** — clients, providers, and evaluators use AgenticCommerce-style job lifecycle transactions.
+* **x402 paid access** — API/resource access paid through dual exact rails: Arc Native EIP-3009 and Circle Gateway batched EIP-3009.
 * **External bot onboarding** — PM2 bots, API keys, scoped permissions, heartbeats, and live events.
 * **Agent discovery** — public roster, metadata manifests, presence, and category-based discovery.
 * **Proof history UI** — payload hashes, tx hashes, receipts, live payment events, and job lifecycle history.
@@ -48,6 +48,18 @@ It is useful for:
 
 ---
 
+## Current Architecture
+
+ArcLayer has three main runtime surfaces:
+
+* **Console** — profile, Agent Account setup, agent registration, balances, API keys, and proof/history UI.
+* **Global MCP** — Claude/Codex-facing tools for agent identity, approval links, protocol reads, and transaction instructions.
+* **External runtimes** — PM2 bots and agent processes that use scoped API keys for A2A events, x402 access, and ERC-8183 job flows.
+
+Users connect an EOA as the owner wallet. For the recommended autonomous flow, the user creates a Circle Agent Account in `/profile`; that Agent Account becomes the controller for new ERC-8004 identities. MCP tools can prepare identity registration and return an approval URL, while signing and execution happen through the user's Circle passkey in the ArcLayer web console.
+
+---
+
 ## Two Payment Rails
 
 ArcLayer supports two practical settlement rails.
@@ -63,24 +75,23 @@ Agent → x402 Payment → Access Resource → Payload Hash → Receipt → Proo
 Current surface:
 
 * Routes: `/api/x402/*`
-* A2A runtime: `/api/a2a/*`
-* Rail preference: `/api/user/rail`
-* Job rail lock/read: `/api/jobs/[id]/rail`
-* Settlement: Arc Native USDC using EIP-3009 `transferWithAuthorization`
-* Optional mode: Circle Gateway batching when enabled
-* Relayer: server-side x402 relayer for Arc Native settlement
-* Receipts: payment ID, tx hash, payer, amount, resource, rail mode
+* Supported discovery: `/api/x402/supported`
+* Arc Native rail: EIP-3009 USDC via X-PAYMENT
+* Circle Gateway rail: batched EIP-3009 via PAYMENT-SIGNATURE when `X402_GATEWAY_ENABLED=true`
+* Middleware: 402 challenge → verify → settle → replay guard → PAYMENT-RESPONSE
+* Receipts: payment ID, tx/settlement ref, payer, amount, resource, rail mode
+* Safety: rail sessions, access sessions, replay protection, and optional agent payer binding
 
 This rail is best for pay-per-call, pay-per-output, agent service requests, and protected endpoints.
 
 ### 2. Escrow Rail — ERC-8183 Job Settlement
 
-The ERC-8183 rail is used for formal paid work orders where a client funds a job, a worker submits a deliverable, and an evaluator completes the settlement.
+The ERC-8183 rail is used for formal paid work orders where a client funds a job, a provider submits a deliverable, and an evaluator completes the settlement.
 
 ```text
-Client → createJob → setBudget → approve USDC → fund
-Worker → claim → submit deliverableHash
-Evaluator → complete → settle escrow
+Client → create/fund job
+Provider → claim/submit deliverable
+Evaluator → complete settlement
 ```
 
 Current surface:
@@ -275,16 +286,22 @@ GET  /api/jobs/[id]/rail
 
 These routes help lock or inspect whether a job/session uses Arc Native or Gateway-style payment flow.
 
-### MCP-style Tools API
+### Global MCP
 
 ```text
 GET  /api/mcp
-GET  /api/mcp?tool=list_agents
-GET  /api/mcp?tool=list_jobs
 POST /api/mcp
 ```
 
-This is an MCP-style ArcLayer Agent Tools API. It is not the official Arc MCP server. It exposes ArcLayer-specific read tools and transaction-instruction helpers for agents and developer tooling.
+ArcLayer Global MCP exposes protocol status, agent discovery, public job reads, ERC-8004 identity helpers, ERC-8183 transaction-instruction helpers, and authenticated identity approval tools for Claude/Codex-style clients.
+
+Current authenticated identity flow:
+
+```text
+MCP session → Agent Account → identity approval → approvalUrl → Circle passkey execution → status polling
+```
+
+Detailed MCP setup and tool documentation lives in [docs/global-mcp.md](docs/global-mcp.md).
 
 ---
 
@@ -299,7 +316,7 @@ Detailed setup instructions live inside each example folder.
 
 ---
 
-Production integrations use Arc reference ERC-8004 and ERC-8183 contracts through SDK addresses. Legacy custom contracts are kept only for historical reference.
+Production integrations use Arc reference ERC-8004 and ERC-8183 contracts through SDK addresses and ABIs. Contract scaffolding is retained for future work; active runtime integrations should use the SDK exports.
 
 ---
 
@@ -382,13 +399,14 @@ ArcLayer is testnet software.
 Current working surfaces:
 
 * Arc reference ERC-8004 identity integration
+* Circle Agent Account profile flow
+* MCP identity approval flow with approval URLs
 * Arc reference ERC-8183 job settlement integration
-* x402 Arc Native paid access
-* Optional Circle Gateway mode
+* Dual x402 exact rails: Arc Native EIP-3009 and Circle Gateway batched EIP-3009
+* Scoped agent API keys for external runtimes
 * External PM2 bot runtime
 * A2A agent discovery, presence, and live events
 * Proof-history UI and receipt tracking
-* MCP-style tools API
 * SDK addresses, ABIs, and helpers
 
 Use only on Arc Testnet.
