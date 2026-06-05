@@ -16,6 +16,20 @@ import {
 } from '@arclayer/sdk';
 import { indexerUrl } from '@/lib/indexer';
 import {
+  handleJobsGetOnchainStatus,
+  handleJobsGetLifecycleSummary,
+  handleClientPrepareCreateJobForSession,
+  handleClientPrepareCreateOpenJobForSession,
+  handleClientPrepareSetProviderForSession,
+  handleProviderPrepareSetBudgetForSession,
+  handleClientPrepareFundJobBundleForSession,
+  handleProviderPrepareSubmitJobForSession,
+  handleEvaluatorPrepareCompleteJobForSession,
+  handleClientPrepareRejectJobForSession,
+  handleEvaluatorPrepareRejectJobForSession,
+  handleClientPrepareClaimRefundForSession,
+} from './erc8183-tools';
+import {
   type McpToolDefinition,
   type McpToolContext,
   type RequestContext,
@@ -692,6 +706,217 @@ export function registerAllTools(): void {
         invariants: ['Only the evaluator can call complete.', 'Job must have a submitted deliverable.'],
       };
     },
+  });
+
+  // ── READ: ERC-8183 on-chain status ───────────────────────────────────────
+
+  registerTool({
+    name: 'jobs.get_onchain_status',
+    domain: 'jobs',
+    description:
+      'Read on-chain ERC-8183 job state via AgenticCommerce.getJob(). Falls back to indexer if contract read fails.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: (args) => handleJobsGetOnchainStatus(args),
+  });
+
+  registerTool({
+    name: 'jobs.get_lifecycle_summary',
+    domain: 'jobs',
+    description:
+      'Compute next actor/action for an ERC-8183 job based on on-chain state. Supports both direct hire and open/global flows.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: (args) => handleJobsGetLifecycleSummary(args),
+  });
+
+  // ── SESSION-AWARE: ERC-8183 lifecycle prepare ────────────────────────────
+
+  registerTool({
+    name: 'client.prepare_create_job_for_session',
+    domain: 'jobs',
+    description:
+      'Build unsigned calldata for AgenticCommerce.createJob (direct hire flow). Provider is required and non-zero. Requires MCP Bearer session.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'provider', type: 'string', required: true, description: 'Provider/worker wallet address (non-zero).' },
+      { name: 'evaluator', type: 'string', description: 'Evaluator wallet address. Defaults to session owner for self-evaluation.' },
+      { name: 'description', type: 'string', required: true, description: 'Job description (max 2048 chars).' },
+      { name: 'deadlineMinutes', type: 'number', description: 'Minutes until job expires (15-43200, default 1440).' },
+      { name: 'hook', type: 'string', description: 'Optional hook contract address (default: 0x0).' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleClientPrepareCreateJobForSession(args, ctx),
+  });
+
+  registerTool({
+    name: 'client.prepare_create_open_job_for_session',
+    domain: 'jobs',
+    description:
+      'Build unsigned calldata for AgenticCommerce.createJob with provider=address(0) (open/global job board flow). Provider must be assigned later via setProvider. Requires MCP Bearer session.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'evaluator', type: 'string', description: 'Evaluator wallet address. Defaults to session owner for self-evaluation.' },
+      { name: 'description', type: 'string', required: true, description: 'Job description (max 2048 chars).' },
+      { name: 'deadlineMinutes', type: 'number', description: 'Minutes until job expires (15-43200, default 1440).' },
+      { name: 'hook', type: 'string', description: 'Optional hook contract address (default: 0x0).' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleClientPrepareCreateOpenJobForSession(args, ctx),
+  });
+
+  registerTool({
+    name: 'client.prepare_set_provider_for_session',
+    domain: 'jobs',
+    description:
+      'Build unsigned calldata for AgenticCommerce.setProvider(jobId, provider). Assigns/hires a provider for an open job created with provider=address(0). Verified 2-arg on-chain signature. Requires MCP Bearer session.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'provider', type: 'string', required: true, description: 'Provider/worker wallet address (non-zero).' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleClientPrepareSetProviderForSession(args, ctx),
+  });
+
+  registerTool({
+    name: 'provider.prepare_set_budget_for_session',
+    domain: 'jobs',
+    description:
+      'Build unsigned calldata for AgenticCommerce.setBudget(jobId, amount, optParams). Can be called by client or provider while job is Open. Requires MCP Bearer session.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'amountAtomic', type: 'string', description: 'Budget in USDC atomic units (6 decimals).' },
+      { name: 'amountUsdc', type: 'string', description: 'Budget in USDC (e.g. "1.5"). Converted to 6-decimal atomic.' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleProviderPrepareSetBudgetForSession(args, ctx),
+  });
+
+  registerTool({
+    name: 'client.prepare_fund_job_bundle_for_session',
+    domain: 'jobs',
+    description:
+      'Build ordered unsigned txs for USDC approve + AgenticCommerce.fund(jobId, optParams). Checks USDC allowance if clientAddress is provided; returns fund-only if sufficient. Requires MCP Bearer session.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'amountAtomic', type: 'string', description: 'Fund amount in USDC atomic units. If omitted, reads budget from on-chain.' },
+      { name: 'amountUsdc', type: 'string', description: 'Fund amount in USDC (e.g. "1.5").' },
+      { name: 'clientAddress', type: 'string', description: 'Client wallet address for allowance check.' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload for fund (default "0x").' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleClientPrepareFundJobBundleForSession(args, ctx),
+  });
+
+  registerTool({
+    name: 'provider.prepare_submit_job_for_session',
+    domain: 'jobs',
+    description:
+      'Build unsigned calldata for AgenticCommerce.submit(jobId, deliverableHash, optParams). Requires MCP Bearer session.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'deliverableHash', type: 'string', description: 'Keccak256 hash of the deliverable (0x-prefixed 32-byte hex).' },
+      { name: 'deliverable', type: 'string', description: 'Deliverable content string (will be keccak256-hashed).' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleProviderPrepareSubmitJobForSession(args, ctx),
+  });
+
+  registerTool({
+    name: 'evaluator.prepare_complete_job_for_session',
+    domain: 'jobs',
+    description:
+      'Build unsigned calldata for AgenticCommerce.complete(jobId, reasonHash, optParams). Releases escrowed USDC to provider. Requires MCP Bearer session.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'reason', type: 'string', description: 'Reason string (will be keccak256-hashed). Default: "approved".' },
+      { name: 'reasonHash', type: 'string', description: 'Pre-computed bytes32 reason hash (takes precedence).' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleEvaluatorPrepareCompleteJobForSession(args, ctx),
+  });
+
+  registerTool({
+    name: 'client.prepare_reject_job_for_session',
+    domain: 'jobs',
+    description:
+      'Build unsigned calldata for AgenticCommerce.reject(jobId, reasonHash, optParams). Client rejects/cancels an Open job before funding. Requires MCP Bearer session.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'reason', type: 'string', description: 'Reason string (will be keccak256-hashed). Default: "client_rejected".' },
+      { name: 'reasonHash', type: 'string', description: 'Pre-computed bytes32 reason hash (takes precedence).' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleClientPrepareRejectJobForSession(args, ctx),
+  });
+
+  registerTool({
+    name: 'evaluator.prepare_reject_job_for_session',
+    domain: 'jobs',
+    description:
+      'Build unsigned calldata for AgenticCommerce.reject(jobId, reasonHash, optParams). Evaluator rejects a Funded or Submitted job. If escrow exists, funds are refunded to client. Requires MCP Bearer session.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'reason', type: 'string', description: 'Reason string (will be keccak256-hashed). Default: "rejected".' },
+      { name: 'reasonHash', type: 'string', description: 'Pre-computed bytes32 reason hash (takes precedence).' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleEvaluatorPrepareRejectJobForSession(args, ctx),
+  });
+
+  registerTool({
+    name: 'client.prepare_claim_refund_for_session',
+    domain: 'jobs',
+    description:
+      'Build unsigned calldata for AgenticCommerce.claimRefund(jobId). Returns escrow to client after job expiry. Signature: claimRefund(uint256 jobId) — no optParams. Requires MCP Bearer session.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleClientPrepareClaimRefundForSession(args, ctx),
   });
 
   // ── READ: identity / agent account ────────────────────────────────────────

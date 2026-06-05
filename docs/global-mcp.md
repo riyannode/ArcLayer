@@ -313,6 +313,77 @@ ARCLAYER_MODE=client
 
 ---
 
+## ERC-8183 Lifecycle Tools (PR #459)
+
+Full ERC-8183 lifecycle prepare + read tools via MCP. Supports both direct hire and open/global job board flows.
+
+### Two Flows
+
+**A. Direct Hire** — client already knows provider:
+```
+createJob(provider, evaluator, expiredAt, description, hook)
+→ setBudget → approve USDC → fund → submit → complete/reject/claimRefund
+```
+
+**B. Open/Global Job Board** — client does not know provider yet:
+```
+createJob(provider=0x0, evaluator, expiredAt, description, hook)
+→ job appears as open/global → providers apply/bid offchain
+→ client calls setProvider(jobId, provider) to assign
+→ setBudget → approve USDC → fund → submit → complete/reject/claimRefund
+```
+
+### Escrow Model
+
+- `fund()` — USDC enters escrow
+- `complete()` — evaluator releases USDC to provider
+- `reject()` — returns escrow to client
+- `claimRefund()` — returns escrow to client after expiry
+
+### On-chain Status Enum
+
+| Value | Label | Terminal |
+|---|---|---|
+| 0 | Open | No |
+| 1 | Funded | No |
+| 2 | Submitted | No |
+| 3 | Completed | Yes (provider paid) |
+| 4 | Rejected | Yes (client refunded) |
+| 5 | Expired | Yes (client refunded) |
+
+### Read Tools (public, no auth)
+
+- `jobs.get_onchain_status` — Read on-chain job state via `AgenticCommerce.getJob()`. Falls back to indexer.
+- `jobs.get_lifecycle_summary` — Compute next actor/action from on-chain state.
+
+### Session-Aware Prepare Tools (require MCP Bearer)
+
+| Tool | Actor | Description |
+|---|---|---|
+| `client.prepare_create_job_for_session` | client | Direct hire: provider required, non-zero |
+| `client.prepare_create_open_job_for_session` | client | Open/global: provider=0x0 |
+| `client.prepare_set_provider_for_session` | client | Assign provider to open job |
+| `provider.prepare_set_budget_for_session` | provider/client | Set job budget |
+| `client.prepare_fund_job_bundle_for_session` | client | Approve + fund bundle with allowance check |
+| `provider.prepare_submit_job_for_session` | provider | Submit deliverable |
+| `evaluator.prepare_complete_job_for_session` | evaluator | Release escrow to provider |
+| `client.prepare_reject_job_for_session` | client | Cancel Open job |
+| `evaluator.prepare_reject_job_for_session` | evaluator | Reject Funded/Submitted job |
+| `client.prepare_claim_refund_for_session` | client | Claim refund after expiry |
+
+### Key Notes
+
+- All prepare tools return unsigned tx instructions. No backend signing.
+- `_for_session` tools include session context: `ownerAddress`, `agentAccountAddress`, `recommendedSigner`.
+- `recommendedSigner = agentAccountAddress ?? ownerAddress`.
+- `setProvider` verified on-chain: `setProvider(uint256 jobId, address provider_)` — 2 args, no optParams.
+- `claimRefund` signature: `claimRefund(uint256 jobId)` — no optParams.
+- Fund bundle checks USDC `allowance(owner, spender)` if clientAddress provided; conservative fallback otherwise.
+- No private keys. No tx execution. No approvalUrl (comes next).
+- x402 not included in this PR.
+
+---
+
 ## Architecture
 
 ```
