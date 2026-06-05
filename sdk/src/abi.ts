@@ -295,6 +295,16 @@ export const ERC8183_AGENTIC_COMMERCE_ABI = [
     outputs: [{ name: "", type: "address" }],
   },
   {
+    name: "setProvider",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "jobId", type: "uint256" },
+      { name: "provider_", type: "address" },
+    ],
+    outputs: [],
+  },
+  {
     name: "JobCreated",
     type: "event",
     inputs: [
@@ -339,6 +349,14 @@ export const ERC8183_AGENTIC_COMMERCE_ABI = [
       { name: "jobId", type: "uint256", indexed: true },
       { name: "evaluator", type: "address", indexed: true },
       { name: "reason", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    name: "ProviderSet",
+    type: "event",
+    inputs: [
+      { name: "jobId", type: "uint256", indexed: true },
+      { name: "provider", type: "address", indexed: true },
     ],
   },
 ] as const;

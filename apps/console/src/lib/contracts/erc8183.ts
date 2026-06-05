@@ -91,12 +91,19 @@ export type JobCompletedEvent = {
   reason: Hex;
 };
 
+export type ProviderSetEvent = {
+  eventName: 'ProviderSet';
+  jobId: bigint;
+  provider: `0x${string}`;
+};
+
 export type ERC8183JobLifecycleEvent =
   | JobCreatedEvent
   | BudgetSetEvent
   | JobFundedEvent
   | JobSubmittedEvent
-  | JobCompletedEvent;
+  | JobCompletedEvent
+  | ProviderSetEvent;
 
 type ERC8183EventName = ERC8183JobLifecycleEvent['eventName'];
 
@@ -140,8 +147,12 @@ export function parseJobCompleted(log: EventLogLike): JobCompletedEvent | null {
   return decodeERC8183Event(log, 'JobCompleted') as JobCompletedEvent | null;
 }
 
+export function parseProviderSet(log: EventLogLike): ProviderSetEvent | null {
+  return decodeERC8183Event(log, 'ProviderSet') as ProviderSetEvent | null;
+}
+
 export function parseERC8183JobLifecycleEvent(log: EventLogLike): ERC8183JobLifecycleEvent | null {
-  for (const eventName of ['JobCreated', 'BudgetSet', 'JobFunded', 'JobSubmitted', 'JobCompleted'] as const) {
+  for (const eventName of ['JobCreated', 'BudgetSet', 'JobFunded', 'JobSubmitted', 'JobCompleted', 'ProviderSet'] as const) {
     const parsed = decodeERC8183Event(log, eventName);
     if (parsed) return parsed;
   }
