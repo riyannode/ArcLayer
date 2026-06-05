@@ -204,6 +204,18 @@ export function parseOptParams(value?: string): Hex {
   return v as Hex;
 }
 
+/** Serialize a value for JSON output, converting bigint to string. */
+function jsonSafe(value: unknown): unknown {
+  if (typeof value === 'bigint') return value.toString();
+  if (Array.isArray(value)) return value.map(jsonSafe);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, jsonSafe(v)]),
+    );
+  }
+  return value;
+}
+
 /** Return human-readable status label for a numeric on-chain status. */
 export function statusLabel(status: number | bigint | null | undefined): string {
   if (status === null || status === undefined) return 'Unknown';
@@ -385,7 +397,7 @@ export async function handleJobsGetOnchainStatus(
     hook: (job as any).hook ?? null,
     hasBudget,
     paymentToken,
-    raw: job,
+    raw: jsonSafe(job),
   };
 }
 
