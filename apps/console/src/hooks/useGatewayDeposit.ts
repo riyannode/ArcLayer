@@ -1,11 +1,9 @@
 'use client';
 
 /**
- * useGatewayDeposit — Hybrid deposit hook for Circle GatewayWallet.
+ * useGatewayDeposit — EOA deposit hook for Circle GatewayWallet.
  *
- * Routes through:
- *   - EOA (Reown/wagmi): sequential approve → deposit (user pays gas)
- *   - Passkey (Circle bundler): atomic userOp [approve, deposit] (gasless)
+ * Routes through EOA (Reown/wagmi): sequential approve → deposit (user pays gas).
  *
  * Safety:
  *   - Exact approve amount (no unlimited allowance)

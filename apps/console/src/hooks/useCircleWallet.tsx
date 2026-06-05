@@ -38,8 +38,8 @@ interface CircleWalletState {
   smartAccount: Awaited<ReturnType<typeof toCircleSmartAccount>> | null;
   bundlerClient: BundlerClient | null;
   publicClient: PublicClient | null;
-  login: () => Promise<void>;
-  register: (username: string) => Promise<void>;
+  login: () => Promise<Address>;
+  register: (username: string) => Promise<Address>;
   logout: () => void;
 }
 
@@ -50,8 +50,8 @@ const DEFAULT_STATE: CircleWalletState = {
   smartAccount: null,
   bundlerClient: null,
   publicClient: null,
-  login: async () => {},
-  register: async () => {},
+  login: async () => '' as Address,
+  register: async () => '' as Address,
   logout: () => {},
 };
 
@@ -87,8 +87,8 @@ export function CircleWalletProvider({ children }: { children: ReactNode }) {
 
   // Initialize smart account from credential
   const initSmartAccount = useCallback(
-    async (cred: Awaited<ReturnType<typeof toWebAuthnCredential>>) => {
-      if (!publicClient) return;
+    async (cred: Awaited<ReturnType<typeof toWebAuthnCredential>>): Promise<Address> => {
+      if (!publicClient) throw new Error('Circle SDK not configured');
 
       const account = await toCircleSmartAccount({
         client: publicClient,
@@ -114,6 +114,8 @@ export function CircleWalletProvider({ children }: { children: ReactNode }) {
           JSON.stringify({ id: cred.id, publicKey: cred.publicKey }),
         );
       }
+
+      return account.address as Address;
     },
     [publicClient],
   );
@@ -129,7 +131,7 @@ export function CircleWalletProvider({ children }: { children: ReactNode }) {
 
   // Register new passkey
   const register = useCallback(
-    async (username: string) => {
+    async (username: string): Promise<Address> => {
       if (!passkeyTransport) throw new Error('Circle SDK not configured');
 
       const cred = await toWebAuthnCredential({
@@ -137,20 +139,20 @@ export function CircleWalletProvider({ children }: { children: ReactNode }) {
         mode: WebAuthnMode.Register,
         username,
       });
-      await initSmartAccount(cred);
+      return await initSmartAccount(cred);
     },
     [passkeyTransport, initSmartAccount],
   );
 
   // Login with existing passkey
-  const login = useCallback(async () => {
+  const login = useCallback(async (): Promise<Address> => {
     if (!passkeyTransport) throw new Error('Circle SDK not configured');
 
     const cred = await toWebAuthnCredential({
       transport: passkeyTransport,
       mode: WebAuthnMode.Login,
     });
-    await initSmartAccount(cred);
+    return await initSmartAccount(cred);
   }, [passkeyTransport, initSmartAccount]);
 
   // Logout
