@@ -90,10 +90,12 @@ async function signAndSendTx(txInstruction) {
     transport: http(),
   });
 
-  // Send pre-encoded calldata directly
+  // Send pre-encoded calldata directly (value defaults to 0n for setBudget/submit)
+  const value = txInstruction.value ? BigInt(txInstruction.value) : 0n;
   const hash = await walletClient.sendTransaction({
     to,
     data,
+    value,
   });
 
   console.log(`[TX] Sent: ${hash}`);
@@ -289,7 +291,7 @@ async function discoverOpenJobs() {
 
 /**
  * Discover direct-assigned jobs where provider = this bot's address.
- * These are jobs created by a client with provider already set.
+ * Checks Open, Funded, and Submitted statuses — catches jobs at any active phase.
  */
 async function discoverDirectJobs() {
   console.log('[DIRECT] Checking for direct-assigned jobs...');
@@ -315,13 +317,22 @@ async function discoverDirectJobs() {
     // Start a run for the first direct-assigned job
     const job = jobs[0];
     const jobId = String(job.jobId ?? job.job_id ?? job.id);
+    const status = String(job.status || '').toLowerCase();
 
-    console.log(`[DIRECT] Starting run for direct-assigned job ${jobId}`);
-    await client.startJobRun(jobId, 'budget_tx_sent');
+    // Determine initial phase based on on-chain status
+    let initialPhase = 'budget_tx_sent'; // Open → need setBudget
+    if (status === 'funded' || status === '1') {
+      initialPhase = 'funded_detected'; // Funded → need submit
+    } else if (status === 'submitted' || status === '2') {
+      initialPhase = 'submitted_confirmed'; // Submitted → wait evaluator
+    }
+
+    console.log(`[DIRECT] Starting run for job ${jobId} (onchain status: ${status})`);
+    await client.startJobRun(jobId, initialPhase);
     await client.writeCheckpoint(jobId, {
       phase: 'open_job_found',
       status: 'discovered',
-      note: `Direct-assigned job discovered: provider=${PROVIDER_ADDRESS}`,
+      note: `Direct-assigned job discovered: provider=${PROVIDER_ADDRESS}, onchain_status=${status}`,
     });
   } catch (err) {
     console.error('[DIRECT] Discovery error:', err.message);
@@ -348,7 +359,7 @@ async function pollCycle() {
       if (resumePlan.terminal) {
         console.log(`[POLL] Active job ${jobId} is terminal: ${resumePlan.reason}`);
         processedJobIds.add(jobId);
-      } else if (resumePlan.providerAssigned) {
+      } else if (resumePlan.providerAssignedToThisBot) {
         // Direct assigned job — handle it
         await handleDirectJob(jobId, resumePlan);
       } else if (resumePlan.nextAction === 'wait_for_client_setProvider') {

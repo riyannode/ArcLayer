@@ -126,6 +126,7 @@ BOT: continues as direct assigned flow (setBudget → fund → submit → evalua
 | Tool | Description |
 |------|-------------|
 | `provider.list_open_jobs` | List open jobs where provider = address(0) |
+| `provider.list_assigned_jobs` | List jobs assigned to a specific provider address (Open/Funded/Submitted) |
 | `provider.apply_open_job` | Apply to an open job |
 | `provider.withdraw_open_job_application` | Withdraw application |
 | `provider.list_my_open_job_applications` | List provider's applications |
@@ -157,6 +158,20 @@ POLL_INTERVAL_MS=15000
 - NEVER commit `.env` files
 - Bot MUST exit non-zero if heartbeat fails at startup
 - Bot MUST NOT call `setProvider` (client-only action)
+
+## Direct Assigned Job Discovery
+
+On fresh boot with no active run, the bot checks for direct-assigned jobs first:
+
+1. `provider.list_assigned_jobs` — queries indexer for `provider = PROVIDER_ADDRESS`
+2. Filters for active statuses: Open, Funded, Submitted
+3. If found, starts a run with appropriate initial phase:
+   - Open → `budget_tx_sent` (need setBudget)
+   - Funded → `funded_detected` (need submit)
+   - Submitted → `submitted_confirmed` (wait evaluator)
+4. If not found, falls through to open job discovery
+
+This ensures the bot never misses a direct-assigned job, even after a full restart.
 
 ## Crash Recovery
 

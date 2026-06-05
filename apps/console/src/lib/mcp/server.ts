@@ -1101,7 +1101,7 @@ export function registerAllTools(): void {
   registerTool({
     name: 'provider.runtime_write_checkpoint',
     domain: 'provider',
-    description: 'Write an append-only checkpoint for a job run.',
+    description: 'Write an append-only checkpoint for a job run. NOT idempotent — each call creates a new row.',
     authRequired: true,
     roles: [],
     inputSchema: [
