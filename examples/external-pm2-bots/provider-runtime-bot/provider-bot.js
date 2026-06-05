@@ -19,6 +19,8 @@
  */
 
 const { ArclayerMcpClient } = require('./shared/arclayer-mcp-client');
+const { validateLlmConfig, runLlmTaskForJob } = require('./llm-task-helper');
+const crypto = require('crypto');
 
 // ── Env Validation ────────────────────────────────────────────────────────
 
@@ -48,6 +50,30 @@ const CAPABILITIES = optionalEnv('PROVIDER_CAPABILITIES', '')
   .map((s) => s.trim())
   .filter(Boolean);
 const POLL_INTERVAL = parseInt(optionalEnv('POLL_INTERVAL_MS', '15000'), 10);
+
+// ── LLM Config (validated at startup) ──────────────────────────────────────
+const LLM_CONFIG = (() => {
+  const hasLlm = process.env.LLM_BASE_URL && process.env.LLM_MODEL;
+  if (!hasLlm) {
+    console.warn('[STARTUP] LLM_BASE_URL/LLM_MODEL not set — will use placeholder deliverables');
+    return null;
+  }
+  try {
+    return validateLlmConfig(process.env);
+  } catch (err) {
+    console.error(`[FATAL] ${err.message}`);
+    process.exit(1);
+  }
+})();
+
+// ── Bot Config (passed to LLM task runner) ─────────────────────────────────
+const BOT_CONFIG = {
+  agentId: AGENT_ID,
+  agentType: optionalEnv('PROVIDER_AGENT_TYPE', 'other'),
+  capabilities: CAPABILITIES,
+  providerSkill: optionalEnv('PROVIDER_SKILL', 'auto'),
+  customSkillPath: optionalEnv('PROVIDER_CUSTOM_SKILL_PATH', ''),
+};
 
 // ── Client ────────────────────────────────────────────────────────────────
 
@@ -106,19 +132,25 @@ async function signAndSendTx(txInstruction) {
 
 /**
  * Handle a direct assigned job where provider = this bot's address.
+ *
+ * Resume-safe:
+ * - If deliverable_ready checkpoint exists with stored hash → reuse it
+ * - If submit_tx_sent → check onchain before retrying
+ * - LLM failure → runtime_failed checkpoint → no submit
  */
 async function handleDirectJob(jobId, resumePlan) {
   const onchainStatus = resumePlan.onchainStatus;
   const phase = resumePlan.lastCheckpoint?.phase;
+  const lastCheckpoint = resumePlan.lastCheckpoint;
 
   console.log(`[DIRECT] Job ${jobId}: onchain=${onchainStatus}, phase=${phase}`);
 
+  // ── Open: set budget ────────────────────────────────────────────────────
   if (onchainStatus === 'Open') {
     if (phase === 'budget_tx_failed') {
       console.log(`[DIRECT] Retrying setBudget for job ${jobId}`);
     }
 
-    // Set budget
     const budgetUsdc = MAX_QUOTE_USDC || '1.0';
     console.log(`[DIRECT] Setting budget: ${budgetUsdc} USDC for job ${jobId}`);
 
@@ -127,8 +159,6 @@ async function handleDirectJob(jobId, resumePlan) {
     try {
       const txHash = await signAndSendTx(txData);
 
-      // Write ONLY budget_tx_sent with txHash — do NOT write budget_confirmed
-      // until receipt/onchain status confirms the tx landed
       await client.writeCheckpoint(jobId, {
         phase: 'budget_tx_sent',
         status: 'tx_sent',
@@ -148,28 +178,149 @@ async function handleDirectJob(jobId, resumePlan) {
     return;
   }
 
+  // ── Funded: run LLM + submit ─────────────────────────────────────────────
   if (onchainStatus === 'Funded') {
-    if (phase === 'submit_tx_failed') {
-      console.log(`[DIRECT] Retrying submit for job ${jobId}`);
+    // Guard: if submit_tx_sent, check if it actually landed before retrying
+    if (phase === 'submit_tx_sent') {
+      console.log(`[DIRECT] Job ${jobId}: submit_tx_sent — checking onchain status`);
+      // On next poll, if onchain is still Funded, we'll retry.
+      // If onchain is Submitted, the Submitted branch below handles it.
+      // For now, don't blindly re-submit.
+      return;
     }
 
-    // Prepare deliverable (placeholder — real bot would generate actual deliverable)
-    const deliverableHash = '0x' + '0'.repeat(64); // placeholder
-    console.log(`[DIRECT] Submitting deliverable for job ${jobId}`);
+    // Guard: if runtime_failed, don't retry LLM in the same run
+    if (phase === 'runtime_failed') {
+      console.log(`[DIRECT] Job ${jobId}: runtime_failed — LLM execution failed. Manual intervention needed.`);
+      return;
+    }
+
+    // Check if we already have a deliverableHash from a previous run (resume case)
+    let deliverableHash = null;
+    let resultPayload = null;
+    let proofPayload = null;
+
+    if (phase === 'deliverable_ready' || phase === 'runtime_completed') {
+      // Resume: extract deliverableHash from checkpoint metadata
+      const metadata = lastCheckpoint?.metadata || {};
+      deliverableHash = metadata.deliverableHash || lastCheckpoint?.deliverable_hash;
+      if (deliverableHash) {
+        console.log(`[DIRECT] Job ${jobId}: reusing deliverableHash from checkpoint: ${deliverableHash.slice(0, 18)}...`);
+      }
+    }
+
+    // If no deliverableHash yet, run LLM
+    if (!deliverableHash) {
+      if (!LLM_CONFIG) {
+        console.error(`[DIRECT] Job ${jobId}: LLM not configured — cannot generate deliverable`);
+        await client.writeCheckpoint(jobId, {
+          phase: 'runtime_failed',
+          status: 'failed',
+          note: 'LLM_BASE_URL/LLM_MODEL not configured. Cannot generate deliverable.',
+        });
+        return;
+      }
+
+      // Fetch full job detail for LLM
+      let jobDetail;
+      try {
+        jobDetail = await client.getJob(jobId);
+        if (!jobDetail) throw new Error('Job not found');
+      } catch (err) {
+        console.error(`[DIRECT] Job ${jobId}: failed to fetch job detail: ${err.message}`);
+        await client.writeCheckpoint(jobId, {
+          phase: 'runtime_failed',
+          status: 'failed',
+          note: `Failed to fetch job detail: ${err.message}`,
+        });
+        return;
+      }
+
+      // Normalize job shape for runLlmTask
+      const normalizedJob = {
+        id: jobId,
+        localJobId: jobId,
+        erc8183JobId: jobId,
+        description: jobDetail.description || jobDetail.inputPayload?.description || '',
+        inputPayload: jobDetail.inputPayload || {},
+        budgetAtomic: jobDetail.budgetAtomic || jobDetail.budget || '',
+      };
+
+      // Write runtime_started checkpoint
+      await client.writeCheckpoint(jobId, {
+        phase: 'runtime_started',
+        status: 'running',
+        note: `LLM execution started: ${LLM_CONFIG.model}`,
+        metadata: { model: LLM_CONFIG.model, provider: LLM_CONFIG.provider },
+      });
+      console.log(`[DIRECT] Job ${jobId}: running LLM task (${LLM_CONFIG.model})...`);
+
+      try {
+        const result = await runLlmTaskForJob(normalizedJob, LLM_CONFIG, BOT_CONFIG);
+        resultPayload = result.resultPayload;
+        proofPayload = result.proofPayload;
+        deliverableHash = result.deliverableHash;
+
+        // Write runtime_completed checkpoint
+        await client.writeCheckpoint(jobId, {
+          phase: 'runtime_completed',
+          status: 'completed',
+          note: `LLM completed: confidence=${resultPayload.confidence}, hash=${deliverableHash.slice(0, 18)}...`,
+          metadata: {
+            deliverableHash,
+            confidence: resultPayload.confidence,
+            model: LLM_CONFIG.model,
+            provider: LLM_CONFIG.provider,
+            runtime: 'llm',
+            createdAt: new Date().toISOString(),
+          },
+        });
+        console.log(`[DIRECT] Job ${jobId}: LLM completed, confidence=${resultPayload.confidence}`);
+      } catch (err) {
+        // LLM failure — do NOT submit
+        await client.writeCheckpoint(jobId, {
+          phase: 'runtime_failed',
+          status: 'failed',
+          note: `LLM execution failed: ${err.message}`,
+          metadata: { model: LLM_CONFIG.model, provider: LLM_CONFIG.provider },
+        });
+        console.error(`[DIRECT] Job ${jobId}: LLM failed: ${err.message}`);
+        return; // Do not proceed to submit
+      }
+
+      // Write deliverable_ready checkpoint (stores hash for resume)
+      await client.writeCheckpoint(jobId, {
+        phase: 'deliverable_ready',
+        status: 'ready',
+        deliverableHash,
+        note: `Deliverable ready: ${deliverableHash.slice(0, 18)}...`,
+        metadata: {
+          deliverableHash,
+          confidence: resultPayload.confidence,
+          model: LLM_CONFIG.model,
+          provider: LLM_CONFIG.provider,
+          runtime: 'llm',
+          createdAt: new Date().toISOString(),
+        },
+      });
+    }
+
+    // Submit the deliverable
+    console.log(`[DIRECT] Submitting deliverable for job ${jobId}: ${deliverableHash.slice(0, 18)}...`);
 
     try {
       const txData = await client.prepareSubmitJob(jobId, deliverableHash);
 
       const txHash = await signAndSendTx(txData);
 
-      // Write ONLY submit_tx_sent with txHash — do NOT write submitted_confirmed
-      // until receipt/onchain status confirms the tx landed
+      // Write ONLY submit_tx_sent — do NOT write submitted_confirmed
       await client.writeCheckpoint(jobId, {
         phase: 'submit_tx_sent',
         status: 'tx_sent',
         txHash,
         deliverableHash,
         note: `Submit tx sent: ${txHash}`,
+        metadata: { deliverableHash },
       });
 
       console.log(`[DIRECT] Submit tx sent for job ${jobId}: ${txHash}`);
@@ -184,18 +335,29 @@ async function handleDirectJob(jobId, resumePlan) {
     return;
   }
 
+  // ── Submitted: wait for evaluator ────────────────────────────────────────
   if (onchainStatus === 'Submitted') {
+    if (phase !== 'submitted_detected') {
+      await client.writeCheckpoint(jobId, {
+        phase: 'submitted_detected',
+        status: 'confirmed',
+        note: 'Onchain status is Submitted. Waiting for evaluator.',
+      });
+    }
     console.log(`[DIRECT] Job ${jobId}: waiting for evaluator`);
     return;
   }
 
+  // ── Terminal states ──────────────────────────────────────────────────────
   if (onchainStatus === 'Completed' || onchainStatus === 'Rejected' || onchainStatus === 'Expired') {
     const terminalPhase = `${onchainStatus.toLowerCase()}_detected`;
-    await client.writeCheckpoint(jobId, {
-      phase: terminalPhase,
-      status: 'terminal',
-      note: `Job ${onchainStatus}`,
-    });
+    if (phase !== terminalPhase) {
+      await client.writeCheckpoint(jobId, {
+        phase: terminalPhase,
+        status: 'terminal',
+        note: `Job ${onchainStatus}`,
+      });
+    }
     console.log(`[DIRECT] Job ${jobId} terminal: ${onchainStatus}`);
     return;
   }
@@ -371,10 +533,16 @@ async function pollCycle() {
 
 async function main() {
   console.log('═══════════════════════════════════════════════════════════════');
-  console.log('  Provider Runtime Bot v1 (PR #461)');
+  console.log('  Provider Runtime Bot v2 (PR #461 — LLM-backed)');
   console.log(`  Agent: ${AGENT_ID}`);
   console.log(`  Address: ${PROVIDER_ADDRESS}`);
   console.log(`  Auto-apply: ${AUTO_APPLY}`);
+  if (LLM_CONFIG) {
+    console.log(`  LLM: ${LLM_CONFIG.provider} / ${LLM_CONFIG.model}`);
+    console.log(`  LLM timeout: ${LLM_CONFIG.timeoutMs}ms, maxTokens: ${LLM_CONFIG.maxTokens}`);
+  } else {
+    console.log('  LLM: NOT CONFIGURED (placeholder deliverables only)');
+  }
   console.log(`  Poll interval: ${POLL_INTERVAL}ms`);
   console.log('═══════════════════════════════════════════════════════════════');
 

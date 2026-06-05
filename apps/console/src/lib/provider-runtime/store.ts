@@ -123,8 +123,13 @@ export const PROVIDER_PHASES = [
   'waiting_for_funding',
   'funded_detected',
   'deliverable_prepared',
+  'runtime_started',
+  'runtime_completed',
+  'runtime_failed',
+  'deliverable_ready',
   'submit_tx_sent',
   'submitted_confirmed',
+  'submitted_detected',
   'completed_detected',
   'rejected_detected',
   'expired_detected',
@@ -670,15 +675,43 @@ async function buildResumePlan(
   }
 
   if (onchainStatus === 'Funded') {
+    // LLM execution in progress — let it finish
+    if (phase === 'runtime_started') {
+      result.nextAction = 'wait_for_llm_completion';
+      result.reason = 'LLM execution in progress. Wait for completion or timeout.';
+      return result;
+    }
+    // LLM completed but deliverable not yet ready (shouldn't happen normally)
+    if (phase === 'runtime_completed') {
+      result.nextAction = 'prepare_deliverable';
+      result.reason = 'LLM completed. Compute deliverableHash and submit.';
+      return result;
+    }
+    // LLM failed — manual intervention needed
+    if (phase === 'runtime_failed') {
+      result.nextAction = 'none';
+      result.terminal = true;
+      result.reason = 'LLM execution failed. Manual intervention or retry needed.';
+      return result;
+    }
+    // Deliverable ready — submit it
+    if (phase === 'deliverable_ready' || phase === 'deliverable_prepared') {
+      result.nextAction = 'submit_deliverable';
+      result.recommendedTool = 'provider.prepare_submit_job_for_session';
+      result.reason = 'Deliverable ready. Submit to onchain.';
+      return result;
+    }
+    // Submit tx sent — check if it landed
     if (phase === 'submit_tx_sent' || phase === 'submit_tx_failed') {
       result.nextAction = 'check_submit_status';
       result.recommendedTool = 'provider.runtime_get_context';
       result.reason = 'Submit tx sent. Check if it confirmed onchain.';
       return result;
     }
-    result.nextAction = 'submit_deliverable';
+    // Default for Funded: need to run LLM
+    result.nextAction = 'run_llm_and_submit';
     result.recommendedTool = 'provider.prepare_submit_job_for_session';
-    result.reason = 'Job funded. Prepare and submit deliverable.';
+    result.reason = 'Job funded. Run LLM to generate deliverable, then submit.';
     return result;
   }
 
