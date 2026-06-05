@@ -85,22 +85,37 @@ export async function resolveRequiredAgentX402Payer(
   // Try agent_id first, then token_id fallback.
   let agent: Record<string, unknown> | null = null;
 
-  const { data: byAgentId } = await supabase
+  const { data: byAgentId, error: byAgentIdError } = await supabase
     .from('erc8004_agents')
     .select('token_id, agent_id, controller')
     .eq('agent_id', agentId)
     .limit(1)
     .maybeSingle();
 
+  if (byAgentIdError) {
+    throw Object.assign(
+      new Error(`Failed to lookup agent by agent_id: ${byAgentIdError.message}`),
+      { code: 'agent_lookup_failed' },
+    );
+  }
+
   if (byAgentId) {
     agent = byAgentId;
   } else {
-    const { data: byTokenId } = await supabase
+    const { data: byTokenId, error: byTokenIdError } = await supabase
       .from('erc8004_agents')
       .select('token_id, agent_id, controller')
       .eq('token_id', agentId)
       .limit(1)
       .maybeSingle();
+
+    if (byTokenIdError) {
+      throw Object.assign(
+        new Error(`Failed to lookup agent by token_id: ${byTokenIdError.message}`),
+        { code: 'agent_lookup_failed' },
+      );
+    }
+
     agent = byTokenId;
   }
 

@@ -53,25 +53,29 @@ function mockFromTwoStep(opts: {
   agentByAgentId: Record<string, unknown> | null;
   agentByTokenId?: Record<string, unknown> | null;
   payerRow: Record<string, unknown> | null;
+  agentIdError?: string | null;
+  tokenIdError?: string | null;
 }) {
-  let agentQueryCount = 0;
-
   return ((table: string) => {
     if (table === 'erc8004_agents') {
       return {
         select: () => ({
           eq: (_col: string, _val: string) => {
-            agentQueryCount++;
             // First query: agent_id lookup
             if (_col === 'agent_id') {
+              if (opts.agentIdError) {
+                return { limit: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: { message: opts.agentIdError } }) }) };
+              }
               if (opts.agentByAgentId) {
                 return { limit: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data: opts.agentByAgentId, error: null }) }) };
               }
-              // Return null for agent_id, so resolver tries token_id
               return { limit: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }) };
             }
             // Second query: token_id fallback
             if (_col === 'token_id') {
+              if (opts.tokenIdError) {
+                return { limit: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: { message: opts.tokenIdError } }) }) };
+              }
               const fallback = opts.agentByTokenId ?? opts.agentByAgentId;
               return { limit: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data: fallback, error: null }) }) };
             }
@@ -218,6 +222,40 @@ describe('resolveRequiredAgentX402Payer', () => {
 
     await expect(resolveRequiredAgentX402Payer(AGENT_ID))
       .rejects.toMatchObject({ code: 'agent_x402_payer_not_configured' });
+  });
+
+  it('throws agent_lookup_failed on agent_id query error (no silent fallback)', async () => {
+    mockFrom.mockImplementation(mockFromTwoStep({
+      agentByAgentId: null,
+      payerRow: null,
+      agentIdError: 'connection timeout',
+    }));
+
+    await expect(resolveRequiredAgentX402Payer(AGENT_ID))
+      .rejects.toMatchObject({ code: 'agent_lookup_failed' });
+  });
+
+  it('throws agent_lookup_failed on token_id fallback query error', async () => {
+    mockFrom.mockImplementation(mockFromTwoStep({
+      agentByAgentId: null, // agent_id returns null → triggers token_id fallback
+      payerRow: null,
+      tokenIdError: 'RLS policy violation',
+    }));
+
+    await expect(resolveRequiredAgentX402Payer(AGENT_ID))
+      .rejects.toMatchObject({ code: 'agent_lookup_failed' });
+  });
+
+  it('throws agent_not_found only when both lookups succeed with null data', async () => {
+    mockFrom.mockImplementation(mockFromTwoStep({
+      agentByAgentId: null,
+      agentByTokenId: null,
+      payerRow: null,
+      // No errors — both queries succeed but return null
+    }));
+
+    await expect(resolveRequiredAgentX402Payer('nonexistent'))
+      .rejects.toMatchObject({ code: 'agent_not_found' });
   });
 });
 
