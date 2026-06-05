@@ -18,7 +18,7 @@ function MonoLabel({ children }: { children: React.ReactNode }) {
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded border border-[#F3C536]/20 bg-[#F3C536]/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#F3C536]">
+    <span className="rounded-md border border-[#F3C536]/20 bg-[#F3C536]/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#F3C536]">
       {children}
     </span>
   );
