@@ -14,7 +14,7 @@ import {
   CONTRACTS,
   ARC_TOKENS,
 } from '@arclayer/sdk';
-import { indexerUrl, pingIndexer } from '@/lib/indexer';
+import { indexerUrl } from '@/lib/indexer';
 import {
   type McpToolDefinition,
   type McpToolContext,
@@ -105,17 +105,45 @@ export function registerAllTools(): void {
     legacyAliases: ['protocol_overview'],
     kind: 'read',
     handler: async () => {
-      const indexerOk = await pingIndexer();
+      const HEALTH_BUDGET_MS = 2000;
+      const ts = new Date().toISOString();
+
+      // Probe indexer with hard timeout — never hang the MCP call.
+      let indexerOk = false;
       let overview: unknown = null;
+      try {
+        const pingRes = await fetch(indexerUrl('/health'), {
+          cache: 'no-store',
+          signal: AbortSignal.timeout(HEALTH_BUDGET_MS),
+        });
+        indexerOk = pingRes.ok;
+      } catch {
+        indexerOk = false;
+      }
+
       if (indexerOk) {
         try {
-          const res = await fetch(indexerUrl('/overview'), { cache: 'no-store' });
+          const res = await fetch(indexerUrl('/overview'), {
+            cache: 'no-store',
+            signal: AbortSignal.timeout(HEALTH_BUDGET_MS),
+          });
           overview = await res.json().catch(() => null);
         } catch {
           /* swallow — overview is optional */
         }
       }
-      return { ok: true, indexerOk, timestamp: new Date().toISOString(), overview };
+
+      if (!indexerOk) {
+        return {
+          ok: true,
+          status: 'degraded',
+          indexerOk: false,
+          reason: 'indexer_timeout',
+          timestamp: ts,
+        };
+      }
+
+      return { ok: true, status: 'healthy', indexerOk: true, timestamp: ts, overview };
     },
   });
 
