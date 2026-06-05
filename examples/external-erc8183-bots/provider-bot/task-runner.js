@@ -202,9 +202,8 @@ async function runLlmTask(job, env) {
       }
     }
   } else {
-    // No repair retries allowed — throw with truncated raw for logging
-    const snippet = rawOutput.length > 200 ? rawOutput.slice(0, 200) + '...' : rawOutput;
-    throw new Error(`LLM response is not valid JSON: ${snippet}`);
+    // No repair retries allowed — throw without raw content (may contain secrets)
+    throw new Error(`LLM response is not valid JSON (${rawOutput.length} chars, first=${JSON.stringify(rawOutput.slice(0, 20))})`);
   }
 
   const durationMs = Date.now() - startTime;

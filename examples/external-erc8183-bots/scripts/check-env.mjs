@@ -21,7 +21,7 @@
  *   3 — rejected env vars found
  */
 
-import { readFileSync, existsSync, statSync, realpathSync, accessSync, constants } from 'fs';
+import { readFileSync, existsSync, statSync, lstatSync, realpathSync, accessSync, constants } from 'fs';
 import { resolve, dirname, basename, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -273,7 +273,8 @@ function validateCustomSkill(env, botDir) {
 
   let stat;
   try {
-    stat = statSync(resolvedPath);
+    // lstat first to detect symlinks
+    stat = lstatSync(resolvedPath);
   } catch (err) {
     console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH cannot stat: ${err.message}`);
     allPass = false;
@@ -281,17 +282,34 @@ function validateCustomSkill(env, botDir) {
     return false;
   }
 
-  // Must be regular file (statSync follows symlinks)
-  if (!stat.isFile()) {
-    console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH is not a regular file: ${basename(resolvedPath)}`);
+  // Symlink handling: resolve and validate target
+  let finalStat = stat;
+  let finalPath = resolvedPath;
+  if (stat.isSymbolicLink()) {
+    try {
+      const realPath = realpathSync(resolvedPath);
+      finalStat = statSync(realPath);
+      finalPath = realPath;
+    } catch (err) {
+      console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH symlink target unreadable: ${err.message}`);
+      allPass = false;
+      exitCode = 1;
+      return false;
+    }
+  }
+
+  // Must be regular file
+  if (!finalStat.isFile()) {
+    console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH is not a regular file: ${basename(finalPath)}`);
     allPass = false;
     exitCode = 1;
     return false;
   }
 
-  // Reject .env files
-  const name = basename(resolvedPath).toLowerCase();
-  if (name === '.env' || name.endsWith('.env')) {
+  // Reject .env files (check both symlink name AND resolved target)
+  const name = basename(finalPath).toLowerCase();
+  const linkName = basename(resolvedPath).toLowerCase();
+  if (name === '.env' || name.endsWith('.env') || linkName === '.env' || linkName.endsWith('.env')) {
     console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH must not be a .env file`);
     allPass = false;
     exitCode = 1;
@@ -299,15 +317,15 @@ function validateCustomSkill(env, botDir) {
   }
 
   // Size checks
-  if (stat.size === 0) {
+  if (finalStat.size === 0) {
     console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH file is empty (0 bytes)`);
     allPass = false;
     exitCode = 1;
     return false;
   }
 
-  if (stat.size > 50_000) {
-    console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH is too large: ${stat.size} bytes (max 50KB)`);
+  if (finalStat.size > 50_000) {
+    console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH is too large: ${finalStat.size} bytes (max 50KB)`);
     allPass = false;
     exitCode = 1;
     return false;
@@ -316,7 +334,7 @@ function validateCustomSkill(env, botDir) {
   // Readable check + content scan
   let content;
   try {
-    content = readFileSync(resolvedPath, 'utf8');
+    content = readFileSync(finalPath, 'utf8');
   } catch (err) {
     console.log(`  ✗ PROVIDER_CUSTOM_SKILL_PATH unreadable: ${err.message}`);
     allPass = false;
@@ -336,7 +354,7 @@ function validateCustomSkill(env, botDir) {
     return false;
   }
 
-  console.log(`  ✓ PROVIDER_CUSTOM_SKILL_PATH: ${basename(resolvedPath)} (${stat.size} bytes) — scanner PASS`);
+  console.log(`  ✓ PROVIDER_CUSTOM_SKILL_PATH: ${basename(resolvedPath)} (${finalStat.size} bytes) — scanner PASS`);
   return true;
 }
 
@@ -460,6 +478,7 @@ if (!ONLY_ROLE || ONLY_ROLE === 'provider') {
     'MAX_ACTIVE_JOBS',
     'CLAIM_TTL_SECONDS',
     'AUTONOMOUS_TX',
+    'REQUIRE_ASSIGNED_PROVIDER',
     'IGNORE_JOBS_BEFORE',
     'RECOVER_OLD_JOBS',
     'PROVIDER_MODE',
