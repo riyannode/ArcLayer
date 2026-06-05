@@ -136,10 +136,38 @@ export function registerAllTools(): void {
     kind: 'read',
     handler: async (args) => {
       const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(50, args.limit)) : undefined;
+      const roleFilter = typeof args.role === 'string' ? args.role.toLowerCase().trim() : undefined;
+      const capabilityFilter = typeof args.capability === 'string' ? args.capability.toLowerCase().trim() : undefined;
       const res = await fetch(indexerUrl('/agents'), { cache: 'no-store' });
       const json = await res.json().catch(() => ({}));
-      const list = Array.isArray(json) ? json : json.agents || json.data || [];
-      return { agents: limit ? list.slice(0, limit) : list, total: list.length };
+      let list: unknown[] = Array.isArray(json) ? json : json.agents || json.data || [];
+
+      // Apply role filter: match agent.role, agent.roles[].name, or agent.roles[].id
+      if (roleFilter) {
+        list = list.filter((a: any) => {
+          const primary = String(a.role || '').toLowerCase();
+          const roleNames = Array.isArray(a.roles)
+            ? a.roles.map((r: any) => String(r.name || r.id || '').toLowerCase())
+            : [];
+          return primary.includes(roleFilter) || roleNames.some((r: string) => r.includes(roleFilter));
+        });
+      }
+
+      // Apply capability filter: match any entry in agent.capabilities array
+      if (capabilityFilter) {
+        list = list.filter((a: any) => {
+          const caps: string[] = Array.isArray(a.capabilities)
+            ? a.capabilities.map((c: any) => String(c).toLowerCase())
+            : [];
+          return caps.some((c) => c.includes(capabilityFilter));
+        });
+      }
+
+      return {
+        agents: limit ? list.slice(0, limit) : list,
+        total: list.length,
+        filters: { role: roleFilter || null, capability: capabilityFilter || null },
+      };
     },
   });
 
@@ -731,7 +759,7 @@ export async function handleMcpPost(
         json: jsonRpcResult(id, {
           protocolVersion: PROTOCOL_VERSION,
           serverInfo: { name: MCP_SERVER_NAME, version: MCP_VERSION },
-          capabilities: { tools: true },
+          capabilities: { tools: {} },
         }),
         status: 200,
       };
