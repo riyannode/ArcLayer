@@ -60,6 +60,17 @@ import {
   handleListApiKeys,
   handleRevokeApiKey,
 } from './api-key-tools';
+import {
+  handleProviderRuntimeGetContext,
+  handleProviderRuntimeHeartbeat,
+  handleProviderRuntimeStartJob,
+  handleProviderRuntimeWriteCheckpoint,
+  handleProviderRuntimeGetResumePlan,
+  handleProviderListOpenJobs,
+  handleProviderApplyOpenJob,
+  handleProviderWithdrawOpenJobApplication,
+  handleProviderListMyOpenJobApplications,
+} from './provider-runtime-tools';
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
@@ -1035,6 +1046,162 @@ export function registerAllTools(): void {
     legacyAliases: [],
     kind: 'read',
     handler: handleRevokeApiKey,
+  });
+
+  // ── Provider Runtime Tools (PR #461) ───────────────────────────────────────
+
+  registerTool({
+    name: 'provider.runtime_get_context',
+    domain: 'provider',
+    description:
+      'Get provider runtime context: state, active run, latest checkpoint, active applications, resume plan.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleProviderRuntimeGetContext,
+  });
+
+  registerTool({
+    name: 'provider.runtime_heartbeat',
+    domain: 'provider',
+    description: 'Update provider last_seen_at. Creates runtime state if missing.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleProviderRuntimeHeartbeat,
+  });
+
+  registerTool({
+    name: 'provider.runtime_start_job',
+    domain: 'provider',
+    description:
+      'Start a new job run or return existing active run. Idempotent on provider:agentId:job:jobId.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'phase', type: 'string', description: 'Initial phase (default: budget_tx_sent).' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleProviderRuntimeStartJob,
+  });
+
+  registerTool({
+    name: 'provider.runtime_write_checkpoint',
+    domain: 'provider',
+    description: 'Write an append-only checkpoint for a job run.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'runId', type: 'string', description: 'Run ID (auto-resolved if omitted).' },
+      { name: 'phase', type: 'string', required: true, description: 'Checkpoint phase.' },
+      { name: 'status', type: 'string', required: true, description: 'Checkpoint status.' },
+      { name: 'txHash', type: 'string', description: 'Transaction hash (if applicable).' },
+      { name: 'deliverableHash', type: 'string', description: 'Deliverable hash (if applicable).' },
+      { name: 'payloadHash', type: 'string', description: 'Payload hash (if applicable).' },
+      { name: 'note', type: 'string', description: 'Human-readable note.' },
+      { name: 'metadata', type: 'object', description: 'Additional metadata.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleProviderRuntimeWriteCheckpoint,
+  });
+
+  registerTool({
+    name: 'provider.runtime_get_resume_plan',
+    domain: 'provider',
+    description: 'Compute next provider action from checkpoint + on-chain state.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'jobId', type: 'string', description: 'Specific job ID (optional, uses active run if omitted).' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleProviderRuntimeGetResumePlan,
+  });
+
+  registerTool({
+    name: 'provider.list_open_jobs',
+    domain: 'provider',
+    description:
+      'List open/global jobs where provider = address(0). Server-side filtered, bounded pagination.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'limit', type: 'number', description: 'Max results (1-50, default 20).' },
+      { name: 'minBudgetUsdc', type: 'string', description: 'Minimum budget in USDC.' },
+      { name: 'includeExpired', type: 'boolean', description: 'Include expired jobs (default false).' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleProviderListOpenJobs,
+  });
+
+  registerTool({
+    name: 'provider.apply_open_job',
+    domain: 'provider',
+    description:
+      'Apply to an open/global job. Provider bot must NOT call setProvider — client assigns onchain.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'providerAddress', type: 'string', required: true, description: 'Provider wallet address.' },
+      { name: 'quoteAmountUsdc', type: 'string', description: 'Quote amount in USDC (e.g. "1.5").' },
+      { name: 'quoteAmountAtomic', type: 'string', description: 'Quote amount in atomic units (6 decimals).' },
+      { name: 'message', type: 'string', description: 'Application message.' },
+      { name: 'capabilities', type: 'object', description: 'Provider capabilities array.' },
+      { name: 'metadata', type: 'object', description: 'Additional metadata.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleProviderApplyOpenJob,
+  });
+
+  registerTool({
+    name: 'provider.withdraw_open_job_application',
+    domain: 'provider',
+    description: 'Withdraw an open job application.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleProviderWithdrawOpenJobApplication,
+  });
+
+  registerTool({
+    name: 'provider.list_my_open_job_applications',
+    domain: 'provider',
+    description: "List provider's open job applications.",
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'status', type: 'string', description: 'Filter by status (submitted, withdrawn, selected, rejected, expired).' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleProviderListMyOpenJobApplications,
   });
 }
 
