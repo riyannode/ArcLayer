@@ -476,7 +476,7 @@ export default function AgentProfilePage() {
     setLinking(true);
     setLinkError('');
     try {
-      const res = await fetch('/api/profile/agent-account/link', {
+      const res = await fetch('/api/profile/agent-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agentAccountAddress: linkAddress }),
