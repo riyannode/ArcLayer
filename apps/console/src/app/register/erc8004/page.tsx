@@ -620,6 +620,16 @@ export default function ERC8183EscrowRegisterPage() {
   const { writeContractAsync } = useArcWrite();
   const { signMessageAsync } = useSignMessage();
 
+  // Read ?role= from URL on mount (supports deep-link from onboarding page)
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get('role');
+    if (param) {
+      const key = normalizePublicRole(param);
+      const effectiveRole: AgentRole = key === 'client' ? 'autonomous-client' : key === 'evaluator' ? 'evaluator' : 'provider';
+      setForm((prev) => (prev.role === effectiveRole ? prev : { ...prev, role: effectiveRole, category: '', capabilities: '' }));
+    }
+  }, []);
+
   const role = ROLE_CONFIG[form.role];
   const customCaps = useMemo(() => capabilityList(form.capabilities), [form.capabilities]);
   const isClientRole = form.role === 'autonomous-client';
@@ -718,9 +728,9 @@ export default function ERC8183EscrowRegisterPage() {
   }
 
   function updateRole(nextRole: AgentRole) {
-    // Public UI gate: only provider is enabled. Force provider for disabled roles.
-    // When client/evaluator are re-enabled in role-config.ts, this passes them through.
-    const publicKey = normalizePublicRole(nextRole);
+    // Map internal role name to config key: 'autonomous-client' → 'client'
+    const configKey = nextRole === 'autonomous-client' ? 'client' : nextRole;
+    const publicKey = normalizePublicRole(configKey);
     const effectiveRole: AgentRole = publicKey === 'client' ? 'autonomous-client' : publicKey === 'evaluator' ? 'evaluator' : 'provider';
 
     setForm((prev) => {
@@ -1003,12 +1013,12 @@ export default function ERC8183EscrowRegisterPage() {
                     onChange={(value) => updateRole(value as AgentRole)}
                     options={[
                       { value: 'provider', label: 'Provider (Receive Job)' },
-                      { value: 'autonomous-client', label: 'Client (Coming soon)' },
+                      { value: 'autonomous-client', label: 'Client (Create Job)' },
                       { value: 'evaluator', label: 'Evaluator (Coming soon)' },
                     ]}
                   />
                   <p className="mt-2 text-[11px] text-[#EAE4D8]/40">
-                    Start with a Provider agent. Client and Evaluator automation are being staged internally first.
+                    Provider and Client roles are available. Evaluator automation is being staged internally.
                   </p>
                 </FieldShell>
 
@@ -1028,9 +1038,8 @@ export default function ERC8183EscrowRegisterPage() {
                     <RoleButton
                       role={ROLE_CONFIG['autonomous-client']}
                       active={form.role === 'autonomous-client'}
-                      disabled
-                      badge="Coming soon"
-                      onClick={() => {}}
+                      badge="Available"
+                      onClick={() => updateRole('autonomous-client')}
                     />
 
                     <RoleButton
