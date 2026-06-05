@@ -10,6 +10,13 @@
  * Stability: every per-job error is caught and logged — one bad job never
  * kills the poll loop. Stale/broken jobs are cached in skippedJobIds so they
  * are not retried every cycle.
+ *
+ * v2 hardening:
+ *   - Durable provider state file (survives PM2 restart)
+ *   - Per-job error backoff with configurable thresholds
+ *   - Custom skill safety scanner integration
+ *   - Health diagnostics in heartbeat
+ *   - Idempotency guards from persisted state
  */
 require('dotenv').config({ path: __dirname + '/.env' });
 
@@ -21,6 +28,8 @@ const { sleep } = require('../shared/sleep');
 const { startHeartbeat } = require('../shared/heartbeat');
 const crypto = require('crypto');
 const { runLlmTask } = require('./task-runner');
+const { createProviderState } = require('./provider-state');
+const { getLastCustomSkillValidation } = require('./skill-loader');
 
 const BASE_URL = required('ARCLAYER_BASE_URL');
 
@@ -53,6 +62,19 @@ const PROVIDER_AGENT_TYPE = process.env.PROVIDER_AGENT_TYPE || '';
 // ── IGNORE_JOBS_BEFORE — numeric ERC-8183 job id threshold ──────────────
 // If set, skip any job with erc8183JobId < this value.
 const IGNORE_JOBS_BEFORE = process.env.IGNORE_JOBS_BEFORE || '';
+
+// ── Durable state file ──────────────────────────────────────────────────
+const PROVIDER_STATE_FILE = process.env.PROVIDER_STATE_FILE || __dirname + '/provider-state.json';
+
+// ── Per-job error backoff ───────────────────────────────────────────────
+const JOB_ERROR_BACKOFF_MS = parseInt(process.env.PROVIDER_JOB_ERROR_BACKOFF_MS || '60000', 10);
+const MAX_JOB_ERRORS = parseInt(process.env.PROVIDER_MAX_JOB_ERRORS || '3', 10);
+
+// ── Health diagnostics tracking ─────────────────────────────────────────
+let lastLoopAt = null;
+let lastErrorAt = null;
+let lastErrorCode = null;
+let processedJobsCount = 0;
 
 // ── LLM config (validated at startup if PROVIDER_MODE=llm) ──────────────
 const LLM_CONFIG = (() => {
@@ -99,7 +121,10 @@ const PROVIDER_CUSTOM_SKILL_PATH = (process.env.PROVIDER_CUSTOM_SKILL_PATH || ''
 const signer = createSigner({ privateKey: PROVIDER_PK, rpcUrl: ARC_RPC_URL });
 console.log(`Provider signer address: ${signer.address}`);
 
-// ── Heartbeat ───────────────────────────────────────────────────────────
+// ── Initialize durable state ────────────────────────────────────────────
+const providerState = createProviderState(PROVIDER_STATE_FILE);
+
+// ── Heartbeat with health diagnostics ───────────────────────────────────
 const stopHeartbeat = startHeartbeat({
   agentId: PROVIDER_AGENT_ID,
   role: 'provider',
@@ -107,6 +132,21 @@ const stopHeartbeat = startHeartbeat({
   baseUrl: BASE_URL,
   processName: 'arclayer-erc8183-provider',
   chainId: parseInt(process.env.ARC_CHAIN_ID || '5042002', 10),
+  getDiagnostics() {
+    const counts = providerState.getCounts();
+    const skillValidation = getLastCustomSkillValidation();
+    return {
+      lastLoopAt,
+      lastErrorAt: lastErrorAt || counts.lastErrorAt,
+      lastErrorCode: lastErrorCode || counts.lastErrorCode,
+      skippedJobsCount: counts.skippedJobsCount,
+      processedJobsCount,
+      repairCount: counts.repairCount,
+      providerState: (lastErrorAt && Date.now() - lastErrorAt < 120_000) ? 'degraded' : 'healthy',
+      customSkillConfigured: skillValidation?.configured || false,
+      customSkillScannerPass: skillValidation?.scannerPass ?? true,
+    };
+  },
 });
 
 if (PROVIDER_CAPABILITIES.length > 0) {
@@ -119,7 +159,10 @@ if (IGNORE_JOBS_BEFORE) {
   console.log(`IGNORE_JOBS_BEFORE: ${IGNORE_JOBS_BEFORE} (skip jobs with erc8183JobId < ${IGNORE_JOBS_BEFORE})`);
 }
 
-// ── Per-process caches ──────────────────────────────────────────────────
+console.log(`Provider state file: ${PROVIDER_STATE_FILE}`);
+console.log(`Job error backoff: ${JOB_ERROR_BACKOFF_MS}ms, max errors per job: ${MAX_JOB_ERRORS}`);
+
+// ── Per-process caches (supplement to durable state) ─────────────────────
 const processedIds = new Set();
 const skippedJobIds = new Set();
 
@@ -130,23 +173,57 @@ function getSafeErrorMessage(err) {
   return err?.shortMessage || err?.details || err?.message || String(err);
 }
 
-/** Mark a job as permanently skipped for this process lifetime. */
+/** Mark a job as permanently skipped for this process lifetime AND durable state. */
 function rememberSkippedJob(job, reason) {
   const key = job.localJobId || job.id || job.erc8183JobId;
   if (!key) return;
   skippedJobIds.add(String(key));
   if (job.erc8183JobId) skippedJobIds.add(String(job.erc8183JobId));
+  // Persist to durable state
+  providerState.skipJob(key, reason);
+  if (job.erc8183JobId) providerState.skipJob(job.erc8183JobId, reason);
   console.warn(`   [skip] job ${key}: ${reason}`);
 }
 
-/** Check if a job has been marked as skipped. */
+/** Check if a job has been marked as skipped (memory + durable state). */
 function isSkippedJob(job) {
   const localId = job.localJobId || job.id;
   const ercId = job.erc8183JobId;
   return (
-    (localId && skippedJobIds.has(String(localId))) ||
-    (ercId && skippedJobIds.has(String(ercId)))
+    (localId && (skippedJobIds.has(String(localId)) || providerState.isSkipped(localId))) ||
+    (ercId && (skippedJobIds.has(String(ercId)) || providerState.isSkipped(ercId)))
   );
+}
+
+/**
+ * Check if a job should be backed off due to repeated errors.
+ * Returns true if the job should be skipped (still in backoff window or max errors exceeded).
+ */
+function shouldBackoffJob(job) {
+  const key = job.localJobId || job.id || job.erc8183JobId;
+  if (!key) return false;
+
+  // Check if job was already submitted or budget-set (idempotency from durable state)
+  if (providerState.wasSubmitted(key) || providerState.wasSubmitted(job.erc8183JobId)) {
+    return true;
+  }
+
+  const errors = providerState.getJobErrors(key);
+  if (!errors) return false;
+
+  // Max errors exceeded — mark as bad and skip permanently
+  if (errors.count >= MAX_JOB_ERRORS) {
+    providerState.markBadJob(key, `max errors (${MAX_JOB_ERRORS}) exceeded`);
+    rememberSkippedJob(job, `max errors exceeded (${errors.count}/${MAX_JOB_ERRORS})`);
+    return true;
+  }
+
+  // Backoff window check
+  if (errors.lastAt && (Date.now() - errors.lastAt) < JOB_ERROR_BACKOFF_MS) {
+    return true; // Still in backoff
+  }
+
+  return false;
 }
 
 /**
@@ -334,9 +411,18 @@ async function phaseSetBudget() {
     const erc8183JobId = job.erc8183JobId;
 
     try {
-      // ── Skip cache ──
+      // ── Skip cache (memory + durable) ──
       if (isSkippedJob(job)) continue;
       if (processedIds.has(`budget-${id}`)) continue;
+
+      // ── Idempotency: skip if already setBudget in durable state ──
+      if (providerState.wasSetBudget(id) || (erc8183JobId && providerState.wasSetBudget(erc8183JobId))) {
+        processedIds.add(`budget-${id}`);
+        continue;
+      }
+
+      // ── Backoff check ──
+      if (shouldBackoffJob(job)) continue;
 
       // ── Guard: IGNORE_JOBS_BEFORE (numeric job id threshold) ──
       if (IGNORE_JOBS_BEFORE && erc8183JobId) {
@@ -364,6 +450,8 @@ async function phaseSetBudget() {
       // Skip if already has setBudgetTxHash
       if (job.setBudgetTxHash) {
         processedIds.add(`budget-${id}`);
+        providerState.recordSetBudget(id);
+        if (erc8183JobId) providerState.recordSetBudget(erc8183JobId);
         continue;
       }
       // Skip if lifecycleStatus is already past Open
@@ -427,6 +515,10 @@ async function phaseSetBudget() {
           await sleep(2000);
           const confirmed = await api.confirmTx(id, 'set_budget', result.hash);
           console.log(`   [budget] setBudget confirmed! status: ${confirmed.erc8183Status}`);
+
+          // Record in durable state for idempotency
+          providerState.recordSetBudget(id);
+          if (erc8183JobId) providerState.recordSetBudget(erc8183JobId);
         }
       }
 
@@ -434,6 +526,13 @@ async function phaseSetBudget() {
     } catch (err) {
       const safeReason = getSafeErrorMessage(err);
       console.error(`   [BUDGET] Failed job ${id}: ${safeReason}`);
+      lastErrorAt = Date.now();
+      lastErrorCode = 'BUDGET_ERROR';
+
+      // Record error for backoff
+      providerState.recordJobError(id, 'BUDGET_ERROR');
+      providerState.recordError('BUDGET_ERROR');
+
       processedIds.add(`budget-${id}`);
       rememberSkippedJob(job, safeReason);
       // Continue to next job — do NOT throw out of poll loop
@@ -493,6 +592,15 @@ async function phaseClaimAndSubmit() {
         }
       }
 
+      // ── Idempotency: skip if already submitted in durable state ──
+      if (providerState.wasSubmitted(id) || (job.erc8183JobId && providerState.wasSubmitted(job.erc8183JobId))) {
+        processedIds.add(`claim-${id}`);
+        continue;
+      }
+
+      // ── Backoff check ──
+      if (shouldBackoffJob(job)) continue;
+
       if (activeProcessed >= MAX_ACTIVE_JOBS) {
         console.log(`   [WORK] Hit MAX_ACTIVE_JOBS (${MAX_ACTIVE_JOBS}) — waiting for next cycle`);
         break;
@@ -540,6 +648,11 @@ async function phaseClaimAndSubmit() {
         const result = await runLlmTask(job, llmEnv);
         resultPayload = result.resultPayload;
         proofPayload = result.proofPayload;
+
+        // Track repair usage in durable state
+        if (proofPayload?.repairUsed) {
+          providerState.incrementRepair();
+        }
       } else {
         strategy = `template:${jobType}`;
         const result = runWorkerStrategy(job);
@@ -559,10 +672,24 @@ async function phaseClaimAndSubmit() {
         const conf = await api.confirmTx(id, 'submit', sResult.hash);
         console.log(`   Submit confirmed! status: ${conf.erc8183Status}`);
       }
+
+      // Record success in durable state
+      providerState.recordSubmit(id);
+      if (job.erc8183JobId) providerState.recordSubmit(job.erc8183JobId);
+      providerState.clearJobErrors(id);
+      processedJobsCount++;
+
       console.log(`   ✅ Job ${id} submitted`);
     } catch (err) {
       const safeReason = getSafeErrorMessage(err);
       console.error(`   [WORK] Failed job ${id}: ${safeReason}`);
+      lastErrorAt = Date.now();
+      lastErrorCode = 'WORK_ERROR';
+
+      // Record error for backoff
+      providerState.recordJobError(id, 'WORK_ERROR');
+      providerState.recordError('WORK_ERROR');
+
       rememberSkippedJob(job, safeReason);
     }
     processedIds.add(`claim-${id}`);
@@ -587,6 +714,16 @@ async function main() {
     console.log(`Min job budget: ${MIN_JOB_BUDGET_ATOMIC} atomic`);
   }
 
+  // Log custom skill status
+  const skillValidation = getLastCustomSkillValidation();
+  if (skillValidation) {
+    console.log(`Custom skill configured: ${skillValidation.configured ? 'yes' : 'no'}`);
+    if (skillValidation.configured) {
+      console.log(`Custom skill file: ${skillValidation.basename} (${skillValidation.size} bytes)`);
+      console.log(`Custom skill scanner: ${skillValidation.scannerPass ? 'PASS' : 'FAIL'}`);
+    }
+  }
+
   // Run both phases — wrapped so one phase error does not kill startup
   try { await phaseSetBudget(); } catch (err) {
     console.error(`[FATAL] phaseSetBudget startup error: ${getSafeErrorMessage(err)}`);
@@ -595,18 +732,29 @@ async function main() {
     console.error(`[FATAL] phaseClaimAndSubmit startup error: ${getSafeErrorMessage(err)}`);
   }
 
+  lastLoopAt = Date.now();
+
   setInterval(async () => {
     try {
       await phaseSetBudget();
     } catch (err) {
       console.error(`[POLL] phaseSetBudget error: ${getSafeErrorMessage(err)}`);
+      lastErrorAt = Date.now();
+      lastErrorCode = 'POLL_BUDGET_ERROR';
     }
     try {
       await phaseClaimAndSubmit();
     } catch (err) {
       console.error(`[POLL] phaseClaimAndSubmit error: ${getSafeErrorMessage(err)}`);
+      lastErrorAt = Date.now();
+      lastErrorCode = 'POLL_WORK_ERROR';
     }
+    lastLoopAt = Date.now();
   }, POLL_INTERVAL_MS);
 }
+
+// Save state on exit
+process.on('SIGINT', () => { providerState.stop(); process.exit(0); });
+process.on('SIGTERM', () => { providerState.stop(); process.exit(0); });
 
 main().catch((err) => { console.error('Fatal:', err.message); process.exit(1); });

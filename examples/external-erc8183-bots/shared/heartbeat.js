@@ -4,6 +4,10 @@
  * POSTs presence to /api/a2a/presence every 30–60 seconds.
  * Uses role-specific API key in Authorization header.
  * Never sends secrets in body. Logs warning on failure, never crashes.
+ *
+ * v2: Accepts optional getDiagnostics() function to include health
+ * fields (lastLoopAt, lastErrorAt, skippedJobsCount, etc.) in the
+ * heartbeat payload. Extra fields are safe — API ignores unknown fields.
  */
 
 const https = require('https');
@@ -24,6 +28,7 @@ const HEARTBEAT_TIMEOUT_MS = 10_000;
  * @param {string} opts.processName - PM2 process name (e.g. "arclayer-erc8183-provider")
  * @param {number} [opts.chainId=5042002] - Arc chain ID
  * @param {function} [opts.rpcCheck] - Optional async function returning boolean for rpcOk
+ * @param {function} [opts.getDiagnostics] - Optional function returning health diagnostic fields
  */
 function startHeartbeat(opts) {
   const {
@@ -34,6 +39,7 @@ function startHeartbeat(opts) {
     processName,
     chainId = 5042002,
     rpcCheck,
+    getDiagnostics,
   } = opts;
 
   if (!agentId || !role || !apiKey || !baseUrl || !processName) {
@@ -56,6 +62,14 @@ function startHeartbeat(opts) {
       }
     }
 
+    // Collect diagnostics (safe — no secrets)
+    let diagnostics = {};
+    if (typeof getDiagnostics === 'function') {
+      try {
+        diagnostics = getDiagnostics() || {};
+      } catch { /* never crash heartbeat */ }
+    }
+
     const body = JSON.stringify({
       agentId,
       role,
@@ -65,6 +79,7 @@ function startHeartbeat(opts) {
       version: VERSION,
       chainId,
       rpcOk,
+      ...diagnostics,
     });
 
     try {
