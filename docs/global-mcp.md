@@ -176,6 +176,90 @@ Stack traces are **never** exposed in API responses. Error messages are redacted
 
 ---
 
+## MCP ApprovalUrl Flow (Identity Registration)
+
+MCP supports ERC-8004 identity registration through a Circle passkey approval flow. No private keys are held by the server.
+
+```text
+1. User configures MCP in Claude/Codex with Bearer session token
+2. Claude calls identity.get_agent_account → gets owner + agent account addresses
+3. Claude calls identity.request_register_agent_approval(name, role, capabilities, description)
+4. MCP validates metadata → builds calldata → creates approval → returns approvalId + approvalUrl
+5. User opens approvalUrl in browser → approves with Circle passkey
+6. Circle executor submits tx on-chain → identity minted to Agent Account
+7. Claude polls identity.get_registration_status(approvalId) → confirmed
+```
+
+### Authenticated Identity Tools
+
+All require `Authorization: Bearer <arc_mcp_sess_***>` header.
+
+| Tool | Kind | Description |
+|------|------|-------------|
+| `identity.get_agent_account` | read | Get the agent account (Circle Smart Account) bound to the session |
+| `identity.prepare_register_agent_for_session` | tx_instruction | Validate metadata + build calldata (no approval) |
+| `identity.request_register_agent_approval` | tx_instruction | Validate + build calldata + create approval |
+| `identity.get_registration_status` | read | Check approval status (pending/approved/confirmed/failed) |
+
+---
+
+## MCP API Key Tools (PR #456)
+
+After identity mint, users can create/list/revoke API keys through MCP without visiting the console.
+
+### Authenticated API Key Tools
+
+All require `Authorization: Bearer <arc_mcp_sess_***>` header.
+
+| Tool | Kind | Description |
+|------|------|-------------|
+| `provider.create_api_key` | read | Create API key for an agent. Returns raw key ONCE. |
+| `provider.list_api_keys` | read | List key metadata (id, prefix, label, scopes, status). Never returns raw key. |
+| `provider.revoke_api_key` | read | Revoke a key by ID. |
+
+### Args
+
+**provider.create_api_key:**
+- `agentId` (required) — Agent ID or token ID
+- `preset` (optional, default "provider") — "provider" or "client"
+- `label` (optional) — Human-readable label
+
+**provider.list_api_keys:**
+- `agentId` (required)
+
+**provider.revoke_api_key:**
+- `agentId` (required)
+- `keyId` (required)
+
+### Presets and Scopes
+
+**provider preset:**
+- `erc8183:claim` — Claim jobs
+- `erc8183:running` — Report running status
+- `erc8183:submit` — Submit deliverables
+- `erc8183:tx` — Execute transactions
+- `erc8183:presence` — Heartbeat/presence
+
+**client preset:**
+- `erc8183:create` — Create jobs
+- `erc8183:confirm` — Confirm/fund jobs
+- `erc8183:tx` — Execute transactions
+- `erc8183:presence` — Heartbeat/presence
+
+Evaluator preset will be added later.
+
+### Security
+
+- MCP Bearer auth required for all API key operations
+- Raw key appears ONCE in create response — never stored or returned again
+- `list` returns metadata only (no raw key, no key hash)
+- `revoke` only works for owned agents
+- No private keys held by the server
+- No wallet signing or tx execution in API key tools
+- Ownership validated against both EOA and Circle Agent Account controllers
+
+---
+
 ## Architecture
 
 ```
