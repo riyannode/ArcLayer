@@ -899,7 +899,7 @@ export default function ERC8183EscrowRegisterPage() {
             metadataURI: effectiveMetadataURI,
             form,
             agentManifest: finalManifest,
-            nextStep: 'PM2 setup will be available in separate flow.',
+            nextStep: 'Identity minted. Set up agent operation in Agent Setup.',
           },
           null,
           2,
@@ -979,7 +979,7 @@ export default function ERC8183EscrowRegisterPage() {
                 <div>
                   <div className="font-semibold text-[#F5F0E5]">Next step</div>
                   <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
-                    Continue to ERC-8183 PM2 setup after mint.
+                    Identity minted. Next, set up how this agent will operate.
                   </p>
                 </div>
               </div>
@@ -1210,7 +1210,7 @@ export default function ERC8183EscrowRegisterPage() {
                     <StatusBox label="Identity" value={mintedAgentId ? `Agent ${mintedAgentId}` : 'Pending'} active={Boolean(mintedAgentId)} />
                     <StatusBox label="Metadata" value={metadataReady ? 'Ready' : 'Incomplete'} active={metadataReady} />
                     <StatusBox label="Controller" value={controller ? shortAddress(controller) : 'Connect wallet'} active={Boolean(controller)} />
-                    <StatusBox label="Next" value="ERC-8183 PM2 setup" active={registerStatus === 'success'} />
+                    <StatusBox label="Next" value="Agent Setup" active={registerStatus === 'success'} />
                   </div>
 
                   <label className="mt-6 flex items-start gap-3 rounded-md border border-white/10 bg-white/[0.025] p-4">
@@ -1246,7 +1246,7 @@ export default function ERC8183EscrowRegisterPage() {
                 {notice}
                 {registerStatus === 'success' && (
                   <div className="mt-2 text-[#EAE4D8]/70">
-                    PM2 setup will be available in separate flow.
+                    Identity minted. Next, set up how this agent will operate.
                   </div>
                 )}
               </div>
@@ -1256,9 +1256,28 @@ export default function ERC8183EscrowRegisterPage() {
               <RegisterApiKeyCard agentId={mintedAgentId} address={address} signMessageAsync={signMessageAsync} />
             )}
 
+            {registerStatus === 'success' && (
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href="/profile"
+                  className="inline-flex h-12 items-center gap-3 rounded-md border border-[#F3C536]/45 bg-transparent px-8 text-[13px] font-semibold text-[#F3C536] transition hover:bg-[#F3C536]/10"
+                >
+                  Open Profile
+                </a>
+                <a
+                  href="/agent-setup"
+                  className="inline-flex h-12 items-center gap-3 rounded-md bg-[#F3C536] px-8 text-[13px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
+                >
+                  Continue to Agent Setup
+                </a>
+              </div>
+            )}
+
             <div className="sticky bottom-0 z-20 flex flex-col gap-4 rounded-t-xl border-t border-white/10 bg-[#05070A]/92 px-5 py-5 backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
               <p className="text-[13px] leading-6 text-[#EAE4D8]/55">
-                Register identity here. Configure PM2 bots in the separate setup flow.
+                {registerStatus === 'success'
+                  ? 'Identity minted successfully. Continue to profile or agent setup.'
+                  : 'Register identity here. Configure agents in the setup flow.'}
               </p>
 
               <div className="flex flex-col gap-3 sm:flex-row">

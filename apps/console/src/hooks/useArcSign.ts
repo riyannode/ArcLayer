@@ -1,13 +1,11 @@
 'use client';
 
 /**
- * Dual-mode message signing hook.
+ * EOA-only message signing hook.
  *
- * Drop-in replacement for wagmi's useSignMessage that routes through:
- *   - Circle smart account signMessage (passkey-backed) when mode === 'passkey'
- *   - wagmi signMessageAsync (EOA wallet prompt) when mode === 'eoa'
+ * Drop-in replacement for wagmi's useSignMessage.
+ * Uses EOA wallet prompt for signing.
  *
- * API shape stays identical so callers don't need to branch:
  *   const { signMessageAsync, isPending } = useArcSign();
  *   const sig = await signMessageAsync({ message });
  */
@@ -17,7 +15,7 @@ import { useSignMessage } from 'wagmi';
 import { useArcWallet } from './useArcWallet';
 
 export function useArcSign() {
-  const { mode, smartAccount } = useArcWallet();
+  const { mode } = useArcWallet();
   const [isPending, setIsPending] = useState(false);
 
   const { signMessageAsync: wagmiSign } = useSignMessage();
@@ -30,20 +28,12 @@ export function useArcSign() {
 
       setIsPending(true);
       try {
-        if (mode === 'passkey') {
-          if (!smartAccount) {
-            throw new Error('Circle smart account not ready. Try reconnecting.');
-          }
-          return await smartAccount.signMessage({ message });
-        } else {
-          // EOA path
-          return await wagmiSign({ message });
-        }
+        return await wagmiSign({ message });
       } finally {
         setIsPending(false);
       }
     },
-    [mode, smartAccount, wagmiSign],
+    [mode, wagmiSign],
   );
 
   return { signMessageAsync, isPending, mode };

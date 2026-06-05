@@ -48,4 +48,4 @@ curl -s -X POST https://arclayers.xyz/api/mcp \
 
 - Public manifest: <https://arclayers.xyz/.well-known/agent.json>
 - MCP endpoint: <https://arclayers.xyz/api/mcp>
-- Connect docs: <https://arclayers.xyz/connect>
+- Setup guide: <https://arclayers.xyz/agent-setup>
