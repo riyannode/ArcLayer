@@ -77,7 +77,7 @@ app.get('/health', (_req, res) => {
 // ─── Job execution endpoint ───────────────────────────────────────────
 app.post('/jobs/run', async (req, res) => {
   // TODO: Add x402 payment verification middleware
-  // See: https://arclayers.xyz/connect for x402 middleware examples
+  // See: https://arclayers.xyz/agent-setup for x402 middleware examples
 
   const { jobId, input } = req.body;
 
