@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { useArcWallet } from '@/hooks/useArcWallet';
+import { useCircleWallet } from '@/hooks/useCircleWallet';
 
 // ── Agent Account types ───────────────────────────────────────────────────
 
@@ -291,6 +292,12 @@ function LinkButton({ href, label, icon }: { href?: string; label: string; icon:
 
 export default function AgentProfilePage() {
   const { isConnected, address, ready } = useArcWallet();
+  const {
+    authenticated: circleAuthenticated,
+    address: circleAddress,
+    login: circleLogin,
+    register: circleRegister,
+  } = useCircleWallet();
   const [agents, setAgents] = useState<ProfileAgent[]>(EMPTY_AGENTS);
   const [selectedAgentId, setSelectedAgentId] = useState('');
   const [activeTab, setActiveTab] = useState<TabKey>('basic');
@@ -303,9 +310,14 @@ export default function AgentProfilePage() {
   // Agent Account state
   const [agentAccount, setAgentAccount] = useState<AgentAccountInfo | null>(null);
   const [agentAccountLoading, setAgentAccountLoading] = useState(false);
-  const [linkAddress, setLinkAddress] = useState('');
-  const [linking, setLinking] = useState(false);
-  const [linkError, setLinkError] = useState('');
+  const [creatingAgent, setCreatingAgent] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [showPasskeyRegister, setShowPasskeyRegister] = useState(false);
+  const [registerUsername, setRegisterUsername] = useState('');
+  const [showManualLink, setShowManualLink] = useState(false);
+  const [manualLinkAddress, setManualLinkAddress] = useState('');
+  const [manualLinking, setManualLinking] = useState(false);
+  const [manualLinkError, setManualLinkError] = useState('');
 
   // Balance state
   const [ownerBalance, setOwnerBalance] = useState<BalanceInfo | null>(null);
@@ -471,31 +483,101 @@ export default function AgentProfilePage() {
     }
   }
 
-  async function handleLinkAgentAccount() {
-    if (!linkAddress) return;
-    setLinking(true);
-    setLinkError('');
+  async function handleCreateAgentAccount() {
+    setCreatingAgent(true);
+    setCreateError('');
+    try {
+      // Step 1: Try Circle login (existing passkey)
+      if (!circleAuthenticated) {
+        try {
+          await circleLogin();
+        } catch (e) {
+          const msg = e instanceof Error ? e.message.toLowerCase() : '';
+          const cancelled = msg.includes('cancel') || msg.includes('abort') || msg.includes('notallowed');
+          if (cancelled) {
+            setCreatingAgent(false);
+            return;
+          }
+          // No existing passkey — show register modal
+          setShowPasskeyRegister(true);
+          setCreatingAgent(false);
+          return;
+        }
+      }
+
+      // Step 2: Circle smart account is ready, link it
+      await linkCircleAddress();
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : 'Failed to create agent account');
+    } finally {
+      setCreatingAgent(false);
+    }
+  }
+
+  async function handlePasskeyRegister() {
+    if (!registerUsername.trim()) return;
+    setCreatingAgent(true);
+    setCreateError('');
+    try {
+      await circleRegister(registerUsername.trim());
+      setShowPasskeyRegister(false);
+      setRegisterUsername('');
+      // After register, link the new Circle address
+      await linkCircleAddress();
+    } catch (e) {
+      setCreateError(e instanceof Error ? e.message : 'Passkey registration failed');
+    } finally {
+      setCreatingAgent(false);
+    }
+  }
+
+  async function linkCircleAddress() {
+    const addr = circleAddress;
+    if (!addr) {
+      setCreateError('Circle smart account not ready. Try again.');
+      return;
+    }
+
+    const res = await fetch('/api/profile/agent-account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentAccountAddress: addr }),
+    });
+    const json = await res.json();
+    if (!res.ok || !json.ok) {
+      setCreateError(json.error || 'Failed to link agent account');
+      return;
+    }
+    setAgentAccount(json);
+    if (address && json.agentAccountAddress) {
+      void loadBalances(address, json.agentAccountAddress);
+    }
+  }
+
+  async function handleManualLink() {
+    if (!manualLinkAddress) return;
+    setManualLinking(true);
+    setManualLinkError('');
     try {
       const res = await fetch('/api/profile/agent-account', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentAccountAddress: linkAddress }),
+        body: JSON.stringify({ agentAccountAddress: manualLinkAddress }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {
-        setLinkError(json.error || 'Failed to link agent account');
+        setManualLinkError(json.error || 'Failed to link agent account');
         return;
       }
       setAgentAccount(json);
-      setLinkAddress('');
-      // Reload balances with new agent account
+      setManualLinkAddress('');
       if (address && json.agentAccountAddress) {
         void loadBalances(address, json.agentAccountAddress);
       }
     } catch {
-      setLinkError('Network error');
+      setManualLinkError('Network error');
     } finally {
-      setLinking(false);
+      setManualLinking(false);
     }
   }
 
@@ -626,22 +708,40 @@ export default function AgentProfilePage() {
 
               {/* CTAs */}
               <div className="mt-4 flex flex-wrap gap-3">
-                {!hasAgentAccount && (
-                  <div className="flex items-center gap-3">
+                {!hasAgentAccount && !showPasskeyRegister && (
+                  <button
+                    type="button"
+                    onClick={handleCreateAgentAccount}
+                    disabled={creatingAgent}
+                    className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
+                  >
+                    {creatingAgent ? 'Creating...' : 'Create Agent Account'}
+                  </button>
+                )}
+                {showPasskeyRegister && (
+                  <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      placeholder="0x... Agent Account address"
-                      value={linkAddress}
-                      onChange={(e) => { setLinkAddress(e.target.value); setLinkError(''); }}
-                      className="h-10 w-[280px] rounded-md border border-white/10 bg-[#0A0D12] px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                      value={registerUsername}
+                      onChange={(e) => { setRegisterUsername(e.target.value); setCreateError(''); }}
+                      placeholder="Choose a username"
+                      className="h-10 w-[200px] rounded-md border border-white/10 bg-[#0A0D12] px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                      autoFocus
                     />
                     <button
                       type="button"
-                      onClick={handleLinkAgentAccount}
-                      disabled={linking || !linkAddress}
+                      onClick={handlePasskeyRegister}
+                      disabled={creatingAgent || !registerUsername.trim()}
                       className="h-10 rounded-md bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
                     >
-                      {linking ? 'Linking...' : 'Link Agent Account'}
+                      {creatingAgent ? 'Creating...' : 'Create Passkey'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowPasskeyRegister(false); setCreateError(''); }}
+                      className="h-10 rounded-md border border-white/10 px-3 text-[12px] text-[#EAE4D8]/60 transition hover:text-[#F5F0E5]"
+                    >
+                      Cancel
                     </button>
                   </div>
                 )}
@@ -656,7 +756,40 @@ export default function AgentProfilePage() {
                   </Link>
                 )}
               </div>
-              {linkError && <p className="mt-2 text-[12px] text-red-400">{linkError}</p>}
+              {createError && <p className="mt-2 text-[12px] text-red-400">{createError}</p>}
+
+              {/* Advanced: manual link */}
+              {!hasAgentAccount && (
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowManualLink((v) => !v)}
+                    className="text-[11px] text-[#EAE4D8]/35 transition hover:text-[#EAE4D8]/60"
+                  >
+                    {showManualLink ? '▾ Hide' : '▸ Advanced: link existing address'}
+                  </button>
+                  {showManualLink && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="0x... Agent Account address"
+                        value={manualLinkAddress}
+                        onChange={(e) => { setManualLinkAddress(e.target.value); setManualLinkError(''); }}
+                        className="h-9 w-[260px] rounded-md border border-white/10 bg-[#0A0D12] px-3 font-mono text-[11px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleManualLink}
+                        disabled={manualLinking || !manualLinkAddress}
+                        className="h-9 rounded-md border border-white/10 px-3 text-[11px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
+                      >
+                        {manualLinking ? 'Linking...' : 'Link'}
+                      </button>
+                    </div>
+                  )}
+                  {manualLinkError && <p className="mt-1 text-[11px] text-red-400">{manualLinkError}</p>}
+                </div>
+              )}
             </div>
 
             {/* Wallet & Funding */}
