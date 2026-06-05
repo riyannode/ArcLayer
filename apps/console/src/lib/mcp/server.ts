@@ -799,7 +799,7 @@ export function registerAllTools(): void {
     name: 'provider.prepare_set_budget_for_session',
     domain: 'jobs',
     description:
-      'Build unsigned calldata for AgenticCommerce.setBudget(jobId, amount, optParams). Can be called by client or provider while job is Open. Requires MCP Bearer session.',
+      'Build unsigned calldata for AgenticCommerce.setBudget(jobId, amount, optParams). Current Arc Testnet deployment requires the assigned provider to call this while the job is Open. Requires MCP Bearer session.',
     authRequired: true,
     roles: [],
     inputSchema: [

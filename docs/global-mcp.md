@@ -322,7 +322,7 @@ Full ERC-8183 lifecycle prepare + read tools via MCP. Supports both direct hire 
 **A. Direct Hire** — client already knows provider:
 ```
 createJob(provider, evaluator, expiredAt, description, hook)
-→ setBudget → approve USDC → fund → submit → complete/reject/claimRefund
+→ provider calls setBudget → client approve USDC → client fund → provider submit → evaluator complete/reject/client claimRefund
 ```
 
 **B. Open/Global Job Board** — client does not know provider yet:
@@ -330,7 +330,7 @@ createJob(provider, evaluator, expiredAt, description, hook)
 createJob(provider=0x0, evaluator, expiredAt, description, hook)
 → job appears as open/global → providers apply/bid offchain
 → client calls setProvider(jobId, provider) to assign
-→ setBudget → approve USDC → fund → submit → complete/reject/claimRefund
+→ provider calls setBudget → client approve USDC → client fund → provider submit → evaluator complete/reject/client claimRefund
 ```
 
 ### Escrow Model
@@ -376,10 +376,11 @@ createJob(provider=0x0, evaluator, expiredAt, description, hook)
 - All prepare tools return unsigned tx instructions. No backend signing.
 - `_for_session` tools include session context: `ownerAddress`, `agentAccountAddress`, `recommendedSigner`.
 - `recommendedSigner = agentAccountAddress ?? ownerAddress`.
+- **`setBudget` is provider-only on the current Arc Testnet deployment.** Client-set budget reverts with `Unauthorized()`. The assigned provider must call `setBudget` while the job is Open.
 - `setProvider` verified on-chain: `setProvider(uint256 jobId, address provider_)` — 2 args, no optParams.
 - `claimRefund` signature: `claimRefund(uint256 jobId)` — no optParams.
 - Fund bundle checks USDC `allowance(owner, spender)` if clientAddress provided; conservative fallback otherwise.
-- No private keys. No tx execution. No approvalUrl (comes next).
+- No private keys. No tx execution. No approvalUrl (comes next PR).
 - x402 not included in this PR.
 
 ---

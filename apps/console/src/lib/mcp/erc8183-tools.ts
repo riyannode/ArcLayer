@@ -442,10 +442,10 @@ export async function handleJobsGetLifecycleSummary(
         recommendedTool = 'client.prepare_set_provider_for_session';
         notes.push('Open/global job — provider must be assigned before funding.');
       } else if (!hasBudget) {
-        nextActor = 'client or provider';
+        nextActor = 'provider';
         nextAction = 'set budget';
         recommendedTool = 'provider.prepare_set_budget_for_session';
-        notes.push('Provider-set budget recommended for quote flow. Client-set budget also valid for fixed-price.');
+        notes.push('Current Arc Testnet deployment requires provider-set budget.');
       } else {
         nextActor = 'client';
         nextAction = 'approve + fund';
@@ -590,7 +590,7 @@ export async function handleClientPrepareCreateJobForSession(
     },
     lifecycle: [
       '1. createJob → get jobId from JobCreated event',
-      '2. provider/client calls setBudget(jobId, amount, "0x")',
+      '2. provider calls setBudget(jobId, amount, "0x")',
       '3. USDC.approve(AgenticCommerce, amount)',
       '4. fund(jobId, "0x")',
       '5. submit(jobId, deliverableHash, "0x")',
@@ -666,7 +666,7 @@ export async function handleClientPrepareCreateOpenJobForSession(
     lifecycle: [
       '1. createJob(provider=0x0) → get jobId from JobCreated event',
       '2. client calls setProvider(jobId, provider) to assign provider',
-      '3. provider/client calls setBudget(jobId, amount, "0x")',
+      '3. provider calls setBudget(jobId, amount, "0x")',
       '4. USDC.approve(AgenticCommerce, amount)',
       '5. fund(jobId, "0x")',
       '6. submit(jobId, deliverableHash, "0x")',
@@ -771,10 +771,10 @@ export async function handleProviderPrepareSetBudgetForSession(
     value: '0x0',
     signingRequired: true,
     signing: {
-      how: 'Send from the provider or client, depending on the negotiation flow. Provider-set budget is recommended for provider quote flow.',
+      how: 'Send from the assigned provider wallet. Current Arc Testnet deployment enforces provider-only setBudget while job is Open.',
       rpc: 'Arc Testnet',
       gasHint: '~80000',
-      actor: 'provider or client',
+      actor: 'provider',
     },
     session: sessionContext(session),
     derived: {
