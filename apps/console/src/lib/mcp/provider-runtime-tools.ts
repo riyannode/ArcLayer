@@ -12,6 +12,7 @@
 import type { McpToolContext } from './registry';
 import { MCP_ERRORS, McpError } from './errors';
 import { resolveMcpSessionByToken } from '@/lib/agent-accounts/store';
+import { resolveAgentOwnership } from './api-key-tools';
 import type { McpSession } from '@/lib/agent-accounts/types';
 import { jsonSafe } from './erc8183-tools';
 import {
@@ -61,6 +62,44 @@ function buildAuth(session: McpSession, agentId: string): ProviderAuthContext {
   return { session, agentId };
 }
 
+/**
+ * Map store error codes to McpError instances.
+ * Prevents raw Error from becoming INTERNAL_ERROR via thrownToMcpError.
+ */
+function rethrowAsMcpError(err: unknown, fallbackMessage: string): never {
+  if (err instanceof McpError) throw err;
+
+  const code = err && typeof err === 'object' && 'code' in err ? (err as { code: string }).code : null;
+  const message = err instanceof Error ? err.message : fallbackMessage;
+
+  switch (code) {
+    case 'invalid_agent_id':
+    case 'validation_error':
+    case 'invalid_address':
+      throw new McpError(MCP_ERRORS.VALIDATION_ERROR, message);
+    case 'forbidden':
+    case 'agent_account_inactive':
+      throw new McpError(MCP_ERRORS.FORBIDDEN, message);
+    case 'not_found':
+    case 'no_active_run':
+      throw new McpError(MCP_ERRORS.NOT_FOUND, message);
+    case 'wrong_status':
+    case 'already_assigned':
+    case 'job_expired':
+    case 'conflict':
+      throw new McpError(MCP_ERRORS.VALIDATION_ERROR, message);
+    case 'heartbeat_failed':
+    case 'start_run_failed':
+    case 'checkpoint_failed':
+    case 'apply_failed':
+    case 'withdraw_failed':
+    case 'indexer_error':
+      throw new McpError(MCP_ERRORS.INTERNAL_ERROR, message);
+    default:
+      throw new McpError(MCP_ERRORS.INTERNAL_ERROR, message);
+  }
+}
+
 // ── Tool Handlers ─────────────────────────────────────────────────────────
 
 /**
@@ -79,7 +118,12 @@ export async function handleProviderRuntimeGetContext(
 
   const providerAddress = typeof args.providerAddress === 'string' ? args.providerAddress.trim() : undefined;
 
-  const context = await getProviderRuntimeContext(agentId, buildAuth(session, agentId), providerAddress);
+  let context;
+  try {
+    context = await getProviderRuntimeContext(agentId, buildAuth(session, agentId), providerAddress);
+  } catch (err) {
+    rethrowAsMcpError(err, 'Failed to get provider runtime context');
+  }
 
   return jsonSafe({
     agentId,
@@ -105,7 +149,11 @@ export async function handleProviderRuntimeHeartbeat(
   const agentId = typeof args.agentId === 'string' ? args.agentId.trim() : '';
   if (!agentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'agentId required');
 
-  await heartbeatProvider(agentId, buildAuth(session, agentId));
+  try {
+    await heartbeatProvider(agentId, buildAuth(session, agentId));
+  } catch (err) {
+    rethrowAsMcpError(err, 'Heartbeat failed');
+  }
 
   return { ok: true, agentId, status: 'active' };
 }
@@ -135,7 +183,12 @@ export async function handleProviderRuntimeStartJob(
     );
   }
 
-  const run = await startProviderJobRun(agentId, jobId, phase as ProviderPhase, buildAuth(session, agentId));
+  let run;
+  try {
+    run = await startProviderJobRun(agentId, jobId, phase as ProviderPhase, buildAuth(session, agentId));
+  } catch (err) {
+    rethrowAsMcpError(err, 'Failed to start job run');
+  }
 
   return jsonSafe({
     runId: run.id,
@@ -176,23 +229,28 @@ export async function handleProviderRuntimeWriteCheckpoint(
     );
   }
 
-  const checkpoint = await writeProviderCheckpoint(
-    {
-      agentId,
-      jobId,
-      runId: typeof args.runId === 'string' ? args.runId : undefined,
-      phase: phase as ProviderPhase,
-      status,
-      txHash: typeof args.txHash === 'string' ? args.txHash : undefined,
-      deliverableHash: typeof args.deliverableHash === 'string' ? args.deliverableHash : undefined,
-      payloadHash: typeof args.payloadHash === 'string' ? args.payloadHash : undefined,
-      note: typeof args.note === 'string' ? args.note : undefined,
-      metadata: typeof args.metadata === 'object' && args.metadata !== null
-        ? (args.metadata as Record<string, unknown>)
-        : undefined,
-    },
-    buildAuth(session, agentId),
-  );
+  let checkpoint;
+  try {
+    checkpoint = await writeProviderCheckpoint(
+      {
+        agentId,
+        jobId,
+        runId: typeof args.runId === 'string' ? args.runId : undefined,
+        phase: phase as ProviderPhase,
+        status,
+        txHash: typeof args.txHash === 'string' ? args.txHash : undefined,
+        deliverableHash: typeof args.deliverableHash === 'string' ? args.deliverableHash : undefined,
+        payloadHash: typeof args.payloadHash === 'string' ? args.payloadHash : undefined,
+        note: typeof args.note === 'string' ? args.note : undefined,
+        metadata: typeof args.metadata === 'object' && args.metadata !== null
+          ? (args.metadata as Record<string, unknown>)
+          : undefined,
+      },
+      buildAuth(session, agentId),
+    );
+  } catch (err) {
+    rethrowAsMcpError(err, 'Failed to write checkpoint');
+  }
 
   return jsonSafe({
     checkpointId: checkpoint.id,
@@ -222,7 +280,12 @@ export async function handleProviderRuntimeGetResumePlan(
   const jobId = typeof args.jobId === 'string' ? args.jobId.trim() : undefined;
   const providerAddress = typeof args.providerAddress === 'string' ? args.providerAddress.trim() : undefined;
 
-  const plan = await getProviderResumePlan(agentId, buildAuth(session, agentId), jobId, providerAddress);
+  let plan;
+  try {
+    plan = await getProviderResumePlan(agentId, buildAuth(session, agentId), jobId, providerAddress);
+  } catch (err) {
+    rethrowAsMcpError(err, 'Failed to get resume plan');
+  }
 
   if (!plan) {
     return jsonSafe({
@@ -258,6 +321,7 @@ export async function handleProviderListOpenJobs(
   // Validate agentId ownership (ensures caller controls this agent)
   const { validateAgentId } = await import('@/lib/x402/agent-payer');
   validateAgentId(agentId);
+  await resolveAgentOwnership(session, agentId);
 
   const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(50, args.limit)) : 20;
   const minBudgetUsdc = typeof args.minBudgetUsdc === 'string' ? args.minBudgetUsdc : undefined;
@@ -295,21 +359,26 @@ export async function handleProviderApplyOpenJob(
   if (!jobId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
   if (!providerAddress) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'providerAddress required');
 
-  const app = await applyToOpenJob(
-    {
-      agentId,
-      jobId,
-      providerAddress,
-      quoteAmountUsdc: typeof args.quoteAmountUsdc === 'string' ? args.quoteAmountUsdc : undefined,
-      quoteAmountAtomic: typeof args.quoteAmountAtomic === 'string' ? args.quoteAmountAtomic : undefined,
-      message: typeof args.message === 'string' ? args.message : undefined,
-      capabilities: Array.isArray(args.capabilities) ? args.capabilities.map(String) : undefined,
-      metadata: typeof args.metadata === 'object' && args.metadata !== null
-        ? (args.metadata as Record<string, unknown>)
-        : undefined,
-    },
-    buildAuth(session, agentId),
-  );
+  let app;
+  try {
+    app = await applyToOpenJob(
+      {
+        agentId,
+        jobId,
+        providerAddress,
+        quoteAmountUsdc: typeof args.quoteAmountUsdc === 'string' ? args.quoteAmountUsdc : undefined,
+        quoteAmountAtomic: typeof args.quoteAmountAtomic === 'string' ? args.quoteAmountAtomic : undefined,
+        message: typeof args.message === 'string' ? args.message : undefined,
+        capabilities: Array.isArray(args.capabilities) ? args.capabilities.map(String) : undefined,
+        metadata: typeof args.metadata === 'object' && args.metadata !== null
+          ? (args.metadata as Record<string, unknown>)
+          : undefined,
+      },
+      buildAuth(session, agentId),
+    );
+  } catch (err) {
+    rethrowAsMcpError(err, 'Failed to apply to open job');
+  }
 
   return jsonSafe({
     applicationId: app.id,

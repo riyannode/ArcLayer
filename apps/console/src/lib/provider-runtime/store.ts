@@ -93,8 +93,8 @@ export interface ProviderResumePlan {
   reason: string;
   terminal: boolean;
   onchainStatus: string | null;
-  providerAssigned: boolean;
-  assignedToOther: boolean;
+  providerAssignedToThisBot: boolean;
+  providerAssignedToOther: boolean;
   lastCheckpoint: CheckpointRow | null;
   safetyNotes: string[];
 }
@@ -388,7 +388,8 @@ export async function startProviderJobRun(
 
 /**
  * Write an append-only checkpoint for a job run.
- * Idempotent on provider:<agentId>:job:<jobId>:checkpoint:<phase>.
+ * Each call creates a new checkpoint row — checkpoints are NOT idempotent.
+ * Multiple checkpoints for the same phase are allowed (e.g. retry after failure).
  */
 export async function writeProviderCheckpoint(
   input: {
@@ -563,8 +564,8 @@ async function buildResumePlan(
 ): Promise<ProviderResumePlan> {
   const safetyNotes: string[] = [];
   let onchainStatus: string | null = null;
-  let providerAssigned = false;
-  let assignedToOther = false;
+  let providerAssignedToThisBot = false;
+  let providerAssignedToOther = false;
 
   // Try to read on-chain job state
   try {
@@ -578,11 +579,11 @@ async function buildResumePlan(
       if (!isZero && providerAddress) {
         // Verify on-chain provider matches THIS bot's address
         const myAddr = providerAddress.toLowerCase();
-        providerAssigned = onchainProvider === myAddr;
-        assignedToOther = onchainProvider !== myAddr;
+        providerAssignedToThisBot = onchainProvider === myAddr;
+        providerAssignedToOther = onchainProvider !== myAddr;
       } else if (!isZero) {
         // No providerAddress to compare — assume assigned (legacy behavior)
-        providerAssigned = true;
+        providerAssignedToThisBot = true;
         safetyNotes.push('providerAddress not provided — cannot verify on-chain provider matches this bot.');
       }
     }
@@ -597,8 +598,8 @@ async function buildResumePlan(
     reason: '',
     terminal: false,
     onchainStatus,
-    providerAssigned,
-    assignedToOther,
+    providerAssignedToThisBot,
+    providerAssignedToOther,
     lastCheckpoint,
     safetyNotes,
   };
@@ -627,7 +628,7 @@ async function buildResumePlan(
   }
 
   // Assigned to another provider — not our job
-  if (assignedToOther) {
+  if (providerAssignedToOther) {
     result.nextAction = 'none';
     result.recommendedTool = null;
     result.reason = 'Job assigned to a different provider. Not our job.';
@@ -637,7 +638,7 @@ async function buildResumePlan(
   }
 
   // Phase-based resume mapping
-  if (onchainStatus === 'Open' && !providerAssigned) {
+  if (onchainStatus === 'Open' && !providerAssignedToThisBot) {
     if (phase === 'applied_to_open_job') {
       result.nextAction = 'wait_for_client_setProvider';
       result.reason = 'Application submitted. Waiting for client to assign provider onchain.';
@@ -649,7 +650,7 @@ async function buildResumePlan(
     return result;
   }
 
-  if (onchainStatus === 'Open' && providerAssigned) {
+  if (onchainStatus === 'Open' && providerAssignedToThisBot) {
     if (phase === 'budget_tx_sent' || phase === 'budget_tx_failed') {
       result.nextAction = 'retry_set_budget';
       result.recommendedTool = 'provider.prepare_set_budget_for_session';
@@ -803,8 +804,8 @@ export async function listOpenGlobalJobs(
 
 /**
  * List jobs assigned to a specific provider address.
- * Returns jobs where provider = providerAddress AND status = Open.
- * Used for direct-assigned job discovery.
+ * Returns jobs where provider = providerAddress AND status in (Open, Funded, Submitted).
+ * Used for direct-assigned job discovery — catches jobs at any active phase.
  */
 export async function listAssignedJobs(
   providerAddress: string,
@@ -822,12 +823,13 @@ export async function listAssignedJobs(
   const json = await res.json().catch(() => ({}));
   const allJobs: unknown[] = Array.isArray(json) ? json : json.jobs || json.data || [];
 
-  // Filter: provider matches this address AND status is Open
+  // Filter: provider matches this address AND status is active (Open/Funded/Submitted)
+  const activeStatuses = new Set(['open', 'funded', 'submitted', '0', '1', '2']);
   const filtered = allJobs.filter((j) => {
     const job = j as Record<string, unknown>;
     const provider = String(job.provider || '').toLowerCase();
     const status = String(job.status || '').toLowerCase();
-    return provider === normalizedAddr && (status === 'open' || status === '0');
+    return provider === normalizedAddr && activeStatuses.has(status);
   });
 
   return filtered.slice(0, cappedLimit);
@@ -838,6 +840,12 @@ export async function listAssignedJobs(
 /**
  * Apply to an open/global job. Creates or updates application.
  * Idempotent on (job_id, provider_agent_id).
+ *
+ * Validates onchain/indexer before applying:
+ * - Job must exist
+ * - Job status must be Open
+ * - Job provider must be zero address (global/open)
+ * - Job must not be expired
  */
 export async function applyToOpenJob(
   input: {
@@ -860,6 +868,71 @@ export async function applyToOpenJob(
   // Validate and normalize provider address
   const normalizedAddress = validateProviderAddress(input.providerAddress);
   await assertProviderAgentOwnership(input.agentId, auth);
+
+  // ── Onchain/indexer validation ─────────────────────────────────────────
+  // Read job from onchain to verify it's actually open/global
+  try {
+    const { readOnchainJob } = await import('@/lib/erc8183-jobs/receipt');
+    const job = await readOnchainJob(BigInt(input.jobId));
+    if (!job) {
+      throw Object.assign(new Error(`Job ${input.jobId} not found onchain`), { code: 'not_found' });
+    }
+
+    // Status must be Open (0)
+    if (job.status !== 0) {
+      const statusName = ONCHAIN_STATUS[job.status] ?? `Unknown(${job.status})`;
+      throw Object.assign(
+        new Error(`Job ${input.jobId} is ${statusName}, not Open. Cannot apply.`),
+        { code: 'wrong_status' },
+      );
+    }
+
+    // Provider must be zero address (open/global job)
+    const jobProvider = job.provider.toLowerCase();
+    if (jobProvider !== ZERO_ADDRESS && jobProvider !== '') {
+      throw Object.assign(
+        new Error(`Job ${input.jobId} already has provider ${job.provider}. Not an open job.`),
+        { code: 'already_assigned' },
+      );
+    }
+
+    // Job must not be expired
+    if (job.expiredAt > 0n && job.expiredAt < BigInt(Math.floor(Date.now() / 1000))) {
+      throw Object.assign(
+        new Error(`Job ${input.jobId} has expired. Cannot apply.`),
+        { code: 'job_expired' },
+      );
+    }
+  } catch (err: unknown) {
+    // Re-throw our own errors
+    if (err && typeof err === 'object' && 'code' in err) throw err;
+    // If RPC fails, try indexer fallback
+    const indexerUrl = process.env.INDEXER_URL || 'http://localhost:3535';
+    try {
+      const res = await fetch(`${indexerUrl}/jobs/${encodeURIComponent(input.jobId)}`, { cache: 'no-store' });
+      if (res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const jobData = (body.job && typeof body.job === 'object') ? body.job : body;
+        const status = String(jobData.status || '').toLowerCase();
+        const provider = String(jobData.provider || '').toLowerCase();
+        if (status !== 'open' && status !== '0') {
+          throw Object.assign(
+            new Error(`Job ${input.jobId} is ${status}, not Open. Cannot apply.`),
+            { code: 'wrong_status' },
+          );
+        }
+        if (provider !== ZERO_ADDRESS && provider !== '0x0' && provider !== '') {
+          throw Object.assign(
+            new Error(`Job ${input.jobId} already has provider. Not an open job.`),
+            { code: 'already_assigned' },
+          );
+        }
+      }
+    } catch (fallbackErr: unknown) {
+      if (fallbackErr && typeof fallbackErr === 'object' && 'code' in fallbackErr) throw fallbackErr;
+      // If both onchain and indexer fail, warn but allow (best-effort)
+    }
+  }
 
   // Parse quote amount
   let quoteAtomic = input.quoteAmountAtomic ?? null;

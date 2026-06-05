@@ -115,6 +115,7 @@ curl -s https://arclayers.xyz/api/mcp \
 | `provider.runtime_write_checkpoint` | Append checkpoint to active run |
 | `provider.runtime_get_resume_plan` | Compute next action from checkpoint + onchain |
 | `provider.list_open_jobs` | List open jobs where provider = address(0) |
+| `provider.list_assigned_jobs` | List jobs assigned to a specific provider address (Open/Funded/Submitted) |
 | `provider.apply_open_job` | Apply to an open/global job |
 | `provider.withdraw_open_job_application` | Withdraw application |
 | `provider.list_my_open_job_applications` | List provider's applications |
