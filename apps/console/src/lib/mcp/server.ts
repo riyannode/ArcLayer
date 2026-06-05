@@ -67,6 +67,7 @@ import {
   handleProviderRuntimeWriteCheckpoint,
   handleProviderRuntimeGetResumePlan,
   handleProviderListOpenJobs,
+  handleProviderListAssignedJobs,
   handleProviderApplyOpenJob,
   handleProviderWithdrawOpenJobApplication,
   handleProviderListMyOpenJobApplications,
@@ -1059,6 +1060,7 @@ export function registerAllTools(): void {
     roles: [],
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'providerAddress', type: 'string', description: 'Provider wallet address. If provided, resume plan verifies on-chain provider matches.' },
     ],
     legacyAliases: [],
     kind: 'read',
@@ -1128,6 +1130,7 @@ export function registerAllTools(): void {
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'jobId', type: 'string', description: 'Specific job ID (optional, uses active run if omitted).' },
+      { name: 'providerAddress', type: 'string', description: 'Provider wallet address. Verifies on-chain provider matches this bot.' },
     ],
     legacyAliases: [],
     kind: 'read',
@@ -1150,6 +1153,23 @@ export function registerAllTools(): void {
     legacyAliases: [],
     kind: 'read',
     handler: handleProviderListOpenJobs,
+  });
+
+  registerTool({
+    name: 'provider.list_assigned_jobs',
+    domain: 'provider',
+    description:
+      'List jobs assigned to a specific provider address (provider = address, status = Open). For direct-assigned job discovery.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'providerAddress', type: 'string', required: true, description: 'Provider wallet address to search for.' },
+      { name: 'limit', type: 'number', description: 'Max results (1-50, default 20).' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleProviderListAssignedJobs,
   });
 
   registerTool({

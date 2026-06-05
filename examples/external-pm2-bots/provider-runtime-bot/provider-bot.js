@@ -62,14 +62,24 @@ const client = new ArclayerMcpClient({
 /**
  * Sign and send a transaction using viem locally.
  * Private key NEVER leaves this machine.
+ *
+ * The MCP prepare tools return pre-encoded calldata: { to, data, value }.
+ * We send them directly — no re-encoding.
  */
 async function signAndSendTx(txInstruction) {
   if (!PRIVATE_KEY) {
     throw new Error('PROVIDER_PRIVATE_KEY not set — cannot sign transactions');
   }
 
+  // MCP tools return { to, data, value } — pre-encoded calldata
+  const to = txInstruction.to;
+  const data = txInstruction.data;
+  if (!to || !data) {
+    throw new Error(`Invalid tx instruction: missing to/data. Keys: ${Object.keys(txInstruction).join(', ')}`);
+  }
+
   // Dynamic import viem (ESM)
-  const { createWalletClient, http, encodeFunctionData, parseAbi } = await import('viem');
+  const { createWalletClient, http } = await import('viem');
   const { privateKeyToAccount } = await import('viem/accounts');
   const { arcTestnet } = await import('viem/chains');
 
@@ -80,15 +90,9 @@ async function signAndSendTx(txInstruction) {
     transport: http(),
   });
 
-  // Encode the function call
-  const data = encodeFunctionData({
-    abi: parseAbi([txInstruction.abiFragment || 'function setBudget(uint256 jobId, uint256 amount, bytes optParams)']),
-    functionName: txInstruction.functionName,
-    args: txInstruction.args,
-  });
-
+  // Send pre-encoded calldata directly
   const hash = await walletClient.sendTransaction({
-    to: txInstruction.address,
+    to,
     data,
   });
 
@@ -283,6 +287,47 @@ async function discoverOpenJobs() {
   }
 }
 
+/**
+ * Discover direct-assigned jobs where provider = this bot's address.
+ * These are jobs created by a client with provider already set.
+ */
+async function discoverDirectJobs() {
+  console.log('[DIRECT] Checking for direct-assigned jobs...');
+
+  try {
+    const result = await client.listAssignedJobs(PROVIDER_ADDRESS);
+    const jobs = result.jobs || [];
+
+    if (jobs.length === 0) {
+      console.log('[DIRECT] No direct-assigned jobs found');
+      return;
+    }
+
+    console.log(`[DIRECT] Found ${jobs.length} direct-assigned job(s)`);
+
+    // Get existing active runs to avoid duplicates
+    const context = await client.getContext(PROVIDER_ADDRESS);
+    if (context.activeRun) {
+      console.log(`[DIRECT] Already have active run for job ${context.activeRun.job_id}, skipping discovery`);
+      return;
+    }
+
+    // Start a run for the first direct-assigned job
+    const job = jobs[0];
+    const jobId = String(job.jobId ?? job.job_id ?? job.id);
+
+    console.log(`[DIRECT] Starting run for direct-assigned job ${jobId}`);
+    await client.startJobRun(jobId, 'budget_tx_sent');
+    await client.writeCheckpoint(jobId, {
+      phase: 'open_job_found',
+      status: 'discovered',
+      note: `Direct-assigned job discovered: provider=${PROVIDER_ADDRESS}`,
+    });
+  } catch (err) {
+    console.error('[DIRECT] Discovery error:', err.message);
+  }
+}
+
 // ── Main Loop ─────────────────────────────────────────────────────────────
 
 let running = true;
@@ -293,8 +338,8 @@ async function pollCycle() {
     // 1. Heartbeat
     await client.heartbeat();
 
-    // 2. Get resume plan
-    const context = await client.getContext();
+    // 2. Get resume plan (with provider address for verification)
+    const context = await client.getContext(PROVIDER_ADDRESS);
     const resumePlan = context.resumePlan;
 
     if (resumePlan && context.activeRun) {
@@ -316,8 +361,13 @@ async function pollCycle() {
         console.log(`[POLL] Job ${jobId}: next=${resumePlan.nextAction}, tool=${resumePlan.recommendedTool}`);
       }
     } else {
-      // No active job — discover open jobs
-      await discoverOpenJobs();
+      // No active job — check direct-assigned jobs first, then open jobs
+      await discoverDirectJobs();
+      // Only check open jobs if still no active run after direct discovery
+      const recheck = await client.getContext(PROVIDER_ADDRESS);
+      if (!recheck.activeRun) {
+        await discoverOpenJobs();
+      }
     }
   } catch (err) {
     console.error(`[POLL] Cycle error:`, err.message);
@@ -340,7 +390,7 @@ async function main() {
     console.log('[STARTUP] Heartbeat OK');
 
     console.log('[STARTUP] Getting context...');
-    const context = await client.getContext();
+    const context = await client.getContext(PROVIDER_ADDRESS);
     console.log(`[STARTUP] Runtime state: ${context.runtimeState?.status || 'none'}`);
     console.log(`[STARTUP] Active run: ${context.activeRun?.job_id || 'none'}`);
     console.log(`[STARTUP] Active applications: ${context.activeApplications?.length || 0}`);
