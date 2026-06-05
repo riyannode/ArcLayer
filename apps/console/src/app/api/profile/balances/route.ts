@@ -10,12 +10,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createPublicClient, http, formatUnits, isAddress, getAddress, type Hex } from 'viem';
 import { arcTestnet } from 'viem/chains';
+import { ARC_RPC_URLS, ARC_TOKENS, ARC_ERC20_USDC_DECIMALS } from '@arclayer/sdk';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const USDC_ADDRESS = '0x3600000000000000000000000000000000000000' as Hex;
-const USDC_DECIMALS = 6;
+const USDC_ADDRESS = ARC_TOKENS.USDC as Hex;
+const USDC_DECIMALS = ARC_ERC20_USDC_DECIMALS;
 
 const ERC20_BALANCE_ABI = [
   {
@@ -29,7 +30,7 @@ const ERC20_BALANCE_ABI = [
 
 const client = createPublicClient({
   chain: arcTestnet,
-  transport: http('https://rpc.drpc.testnet.arc.network'),
+  transport: http(process.env.ARC_RPC_URL || ARC_RPC_URLS[0]),
 });
 
 async function getUsdcBalance(address: string): Promise<{ raw: string; formatted: string }> {
