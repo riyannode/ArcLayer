@@ -283,18 +283,23 @@ export async function handleRequestRegisterAgentApproval(
     );
   }
 
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, '') || 'https://arclayers.xyz';
+  const approvalUrl = `${baseUrl}/mcp/approvals/${result.approval.id}`;
+
   return {
     ok: true,
     approvalId: result.approval.id,
+    approvalUrl,
     ownerAddress: session.ownerAddress,
     agentAccountAddress: session.agentAccountAddress,
     controllerAddress: session.agentAccountAddress,
     metadataURI,
     metadataHash,
     summary: result.approval.summary,
-    status: result.approval.status,
+    status: 'pending_user_approval' as const,
     expiresAt: result.approval.expiresAt,
-    note: 'Approval created. Use identity.get_registration_status to check progress. Actual signing happens via frontend Circle passkey bridge.',
+    action: result.approval.action,
+    note: 'Approval created. Open approvalUrl to approve and execute with Circle passkey. Use identity.get_registration_status to check progress.',
   };
 }
 
