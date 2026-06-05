@@ -199,7 +199,9 @@ export async function POST(
       .in('id', existing.map((r) => r.id));
   }
 
-  // Insert new active payer row
+  // Insert new active payer row.
+  // If a concurrent request already inserted an active payer for this agent+rail,
+  // the unique partial index will reject. Return 409 active_payer_race.
   const { data: inserted, error: insertError } = await supabase
     .from('agent_x402_payers')
     .insert({
@@ -214,9 +216,19 @@ export async function POST(
     .single();
 
   if (insertError || !inserted) {
+    // Postgres unique violation code 23505 — concurrent insert race
+    const isUniqueViolation = insertError?.code === '23505' ||
+      insertError?.message?.includes('unique') ||
+      insertError?.message?.includes('duplicate');
     return NextResponse.json(
-      { ok: false, error: 'insert_failed', detail: insertError?.message ?? 'Unknown error' },
-      { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
+      {
+        ok: false,
+        error: isUniqueViolation ? 'active_payer_race' : 'insert_failed',
+        detail: isUniqueViolation
+          ? 'Concurrent payer registration detected. Retry the request.'
+          : (insertError?.message ?? 'Unknown error'),
+      },
+      { status: isUniqueViolation ? 409 : 500, headers: { 'Cache-Control': ERROR_CACHE } },
     );
   }
 
@@ -260,38 +272,33 @@ export async function DELETE(
 
   const supabase = getSupabaseAdmin();
 
-  // Find active payer
-  const { data: active } = await supabase
-    .from('agent_x402_payers')
-    .select('id')
-    .eq('agent_id', auth.canonicalAgentId)
-    .eq('rail', rail)
-    .eq('status', 'active')
-    .is('revoked_at', null)
-    .limit(1)
-    .maybeSingle();
-
-  if (!active) {
-    return NextResponse.json(
-      { ok: false, error: 'no_active_payer', detail: `No active ${rail} payer found for agent ${auth.canonicalAgentId}` },
-      { status: 404, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
-  }
-
-  // Soft-revoke
-  const { error: revokeError } = await supabase
+  // Atomic: single UPDATE with filters, returns updated row or null.
+  // No race between select + update.
+  const { data: revoked, error: revokeError } = await supabase
     .from('agent_x402_payers')
     .update({
       status: 'revoked',
       revoked_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .eq('id', active.id);
+    .eq('agent_id', auth.canonicalAgentId)
+    .eq('rail', rail)
+    .eq('status', 'active')
+    .is('revoked_at', null)
+    .select('id')
+    .maybeSingle();
 
   if (revokeError) {
     return NextResponse.json(
       { ok: false, error: 'revoke_failed', detail: revokeError.message },
       { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
+    );
+  }
+
+  if (!revoked) {
+    return NextResponse.json(
+      { ok: false, error: 'no_active_payer', detail: `No active ${rail} payer found for agent ${auth.canonicalAgentId}` },
+      { status: 404, headers: { 'Cache-Control': ERROR_CACHE } },
     );
   }
 
