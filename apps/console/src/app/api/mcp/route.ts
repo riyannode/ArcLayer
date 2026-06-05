@@ -20,6 +20,7 @@ function buildContext(req: NextRequest, method: string): RequestContext {
     method,
     userAgent: req.headers.get('user-agent'),
     ip: req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? null,
+    authorization: req.headers.get('authorization'),
   };
 }
 

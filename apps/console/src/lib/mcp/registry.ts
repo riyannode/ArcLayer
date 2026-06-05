@@ -13,6 +13,8 @@ export interface RequestContext {
   method: string;
   userAgent?: string | null;
   ip?: string | null;
+  /** Authorization header value (Bearer token). Used by authenticated tools. */
+  authorization?: string | null;
 }
 
 /** Context available to every tool handler at invocation time. */
