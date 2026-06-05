@@ -1013,12 +1013,12 @@ export default function ERC8183EscrowRegisterPage() {
                     onChange={(value) => updateRole(value as AgentRole)}
                     options={[
                       { value: 'provider', label: 'Provider (Receive Job)' },
-                      { value: 'autonomous-client', label: 'Client (Coming soon)' },
+                      { value: 'autonomous-client', label: 'Client (Create Job)' },
                       { value: 'evaluator', label: 'Evaluator (Coming soon)' },
                     ]}
                   />
                   <p className="mt-2 text-[11px] text-[#EAE4D8]/40">
-                    Start with a Provider agent. Client and Evaluator automation are being staged internally first.
+                    Provider and Client roles are available. Evaluator automation is being staged internally.
                   </p>
                 </FieldShell>
 
@@ -1038,9 +1038,8 @@ export default function ERC8183EscrowRegisterPage() {
                     <RoleButton
                       role={ROLE_CONFIG['autonomous-client']}
                       active={form.role === 'autonomous-client'}
-                      disabled
-                      badge="Coming soon"
-                      onClick={() => {}}
+                      badge="Available"
+                      onClick={() => updateRole('autonomous-client')}
                     />
 
                     <RoleButton
