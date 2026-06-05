@@ -73,6 +73,8 @@ type ProfileAgent = {
   txHash?: string;
   metadata: AgentMetadata;
   updatedAt?: string;
+  /** Which wallet controls this agent: EOA (legacy) or Agent Account (Circle) */
+  source?: 'eoa' | 'agent_account';
 };
 
 type ProfileResponse = {
@@ -324,39 +326,53 @@ export default function AgentProfilePage() {
   const [agentBalance, setAgentBalance] = useState<BalanceInfo | null>(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
 
-  async function loadAgents(controller: string, signal?: AbortSignal) {
+  async function loadAgents(ownerAddr: string, agentAccountAddr?: string | null, signal?: AbortSignal) {
     setLoading(true);
     setNotice('');
 
     try {
-      const normalizedController = controller.toLowerCase();
+      const normalizedOwner = ownerAddr.toLowerCase();
+      const normalizedAgent = agentAccountAddr?.toLowerCase();
 
-      const res = await fetch(
-        `/api/a2a/metadata/profile?controller=${encodeURIComponent(controller)}`,
-        {
-          cache: 'no-store',
-          signal,
-        },
+      // Fetch from both controllers in parallel
+      const controllers = [ownerAddr];
+      if (agentAccountAddr && normalizedAgent !== normalizedOwner) {
+        controllers.push(agentAccountAddr);
+      }
+
+      const results = await Promise.all(
+        controllers.map(async (ctrl) => {
+          const res = await fetch(
+            `/api/a2a/metadata/profile?controller=${encodeURIComponent(ctrl)}`,
+            { cache: 'no-store', signal },
+          );
+          const json = (await res.json()) as ProfileResponse;
+          if (!res.ok || !json.ok) return [];
+          const source: 'eoa' | 'agent_account' =
+            ctrl.toLowerCase() === normalizedAgent ? 'agent_account' : 'eoa';
+          return (json.agents || [])
+            .filter((a) => a.status === 'minted' && a.agentId)
+            .map((a) => ({ ...a, source }));
+        }),
       );
-
-      const json = (await res.json()) as ProfileResponse;
 
       if (signal?.aborted) return;
 
-      if (!res.ok || !json.ok) {
-        throw new Error(json.error || 'Failed to load profile agents.');
+      // Merge and dedupe by agentId (agent_account wins over eoa)
+      const byId = new Map<string, ProfileAgent>();
+      for (const agent of results[0] || []) {
+        byId.set(agent.agentId, agent);
+      }
+      for (const agent of results[1] || []) {
+        byId.set(agent.agentId, agent); // overwrites eoa entry if duplicate
       }
 
-      if (json.controller?.toLowerCase() !== normalizedController) {
-        return;
-      }
+      const merged = Array.from(byId.values());
 
-      const minted = (json.agents || []).filter((agent) => agent.status === 'minted' && agent.agentId);
-
-      setAgents(minted);
+      setAgents(merged);
       setSelectedAgentId((current) => {
-        if (current && minted.some((agent) => agent.agentId === current)) return current;
-        return minted[0]?.agentId || '';
+        if (current && merged.some((agent) => agent.agentId === current)) return current;
+        return merged[0]?.agentId || '';
       });
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
@@ -383,10 +399,10 @@ export default function AgentProfilePage() {
 
     const controller = new AbortController();
 
-    void loadAgents(address, controller.signal);
+    void loadAgents(address, agentAccount?.agentAccountAddress, controller.signal);
 
     return () => controller.abort();
-  }, [ready, isConnected, address]);
+  }, [ready, isConnected, address, agentAccount?.agentAccountAddress]);
 
   const selectedAgent = useMemo(() => {
     return agents.find((agent) => agent.agentId === selectedAgentId) || agents[0] || null;
@@ -1003,6 +1019,11 @@ export default function AgentProfilePage() {
                         <span className="h-2 w-2 rounded-full bg-emerald-400" />
                         Minted
                       </div>
+                      {agent.source === 'agent_account' && (
+                        <div className="mt-1 text-[10px] tracking-[0.12em] text-[#F3C536]/60">
+                          Agent Account
+                        </div>
+                      )}
                     </div>
                   </button>
                 );
@@ -1272,7 +1293,7 @@ export default function AgentProfilePage() {
             {address && (
               <button
                 type="button"
-                onClick={() => loadAgents(address)}
+                onClick={() => loadAgents(address, agentAccount?.agentAccountAddress)}
                 className="inline-flex items-center gap-2 text-rose-100 underline decoration-rose-300/40 underline-offset-4"
               >
                 <RefreshCcw className="h-3.5 w-3.5" />
