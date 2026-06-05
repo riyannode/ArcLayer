@@ -35,6 +35,12 @@ import {
   thrownToMcpError,
 } from './errors';
 import { redactString } from './redact';
+import {
+  handleGetAgentAccount,
+  handlePrepareRegisterAgent,
+  handleRequestRegisterAgentApproval,
+  handleGetRegistrationStatus,
+} from './identity-tools';
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
@@ -681,6 +687,74 @@ export function registerAllTools(): void {
         invariants: ['Only the evaluator can call complete.', 'Job must have a submitted deliverable.'],
       };
     },
+  });
+
+  // ── READ: identity / agent account ────────────────────────────────────────
+
+  registerTool({
+    name: 'identity.get_agent_account',
+    domain: 'identity',
+    description:
+      'Get the agent account (Circle Smart Account) bound to the authenticated MCP session. Returns owner and agent account addresses.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleGetAgentAccount,
+  });
+
+  registerTool({
+    name: 'identity.prepare_register_agent_for_session',
+    domain: 'identity',
+    description:
+      'Validate agent metadata and build encoded calldata for ERC-8004 IdentityRegistry.register(metadataURI). Authenticated — requires MCP Bearer token. Does NOT create approval or execute tx.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'name', type: 'string', required: true, description: 'Agent name (max 128 chars).' },
+      { name: 'role', type: 'string', required: true, description: 'Agent role: provider, client, evaluator, agent, oracle, analyzer, executor, worker, buyer, settler.' },
+      { name: 'capabilities', type: 'array', required: true, description: 'Array of capability strings (non-empty, max 20).' },
+      { name: 'description', type: 'string', required: true, description: 'Agent description (max 1024 chars).' },
+      { name: 'endpoint', type: 'string', description: 'Optional endpoint URL.' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: handlePrepareRegisterAgent,
+  });
+
+  registerTool({
+    name: 'identity.request_register_agent_approval',
+    domain: 'identity',
+    description:
+      'Prepare + create approval for ERC-8004 identity registration in one call. Validates metadata, builds calldata, creates approval via approval engine. Returns approval ID for tracking.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'name', type: 'string', required: true, description: 'Agent name (max 128 chars).' },
+      { name: 'role', type: 'string', required: true, description: 'Agent role: provider, client, evaluator, agent, oracle, analyzer, executor, worker, buyer, settler.' },
+      { name: 'capabilities', type: 'array', required: true, description: 'Array of capability strings (non-empty, max 20).' },
+      { name: 'description', type: 'string', required: true, description: 'Agent description (max 1024 chars).' },
+      { name: 'endpoint', type: 'string', description: 'Optional endpoint URL.' },
+    ],
+    legacyAliases: ['register_agent_approval'],
+    kind: 'tx_instruction',
+    handler: handleRequestRegisterAgentApproval,
+  });
+
+  registerTool({
+    name: 'identity.get_registration_status',
+    domain: 'identity',
+    description:
+      'Get the status of an identity registration approval. Returns approval status, addresses, timestamps, and summary.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'approvalId', type: 'string', required: true, description: 'Approval ID from request_register_agent_approval.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleGetRegistrationStatus,
   });
 }
 
