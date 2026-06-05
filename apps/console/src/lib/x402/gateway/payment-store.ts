@@ -42,6 +42,13 @@ export interface GatewayPaymentEvidence {
   asset?: string;
   network?: string;
   resource?: string;
+  /** Agent context (optional — only set for per-agent payer binding routes). */
+  agentId?: string;
+  runtimeId?: string;
+  sessionId?: string;
+  jobId?: string;
+  expectedPayer?: string;
+  payerVerified?: boolean;
   /**
    * Settlement reference. For Gateway this is Circle's internal UUID, NOT an EVM tx hash.
    * Kept named `transaction` for backward compat with existing call sites that pass through
@@ -65,6 +72,12 @@ interface GatewayPaymentRow {
   network: string | null;
   resource: string | null;
   gateway_settlement_id: string | null;
+  agent_id: string | null;
+  runtime_id: string | null;
+  session_id: string | null;
+  job_id: string | null;
+  expected_payer: string | null;
+  payer_verified: boolean;
   verify_payload: Record<string, unknown>;
   settle_payload: Record<string, unknown>;
   verified_at: string | null;
@@ -120,6 +133,12 @@ function rowToEvidence(row: GatewayPaymentRow): GatewayPaymentEvidence {
     asset: row.asset ?? undefined,
     network: row.network ?? undefined,
     resource: row.resource ?? undefined,
+    agentId: row.agent_id ?? undefined,
+    runtimeId: row.runtime_id ?? undefined,
+    sessionId: row.session_id ?? undefined,
+    jobId: row.job_id ?? undefined,
+    expectedPayer: row.expected_payer ?? undefined,
+    payerVerified: row.payer_verified ?? false,
     transaction: row.gateway_settlement_id ?? undefined,
     verifiedAt: row.verified_at ? Date.parse(row.verified_at) : undefined,
     settledAt: row.settled_at ? Date.parse(row.settled_at) : undefined,
@@ -167,6 +186,14 @@ export async function recordGatewayPayment(
 
   if (evidence.verifiedAt !== undefined) patch.verified_at = new Date(evidence.verifiedAt).toISOString();
   if (evidence.settledAt !== undefined) patch.settled_at = new Date(evidence.settledAt).toISOString();
+
+  // Agent context (optional — only set for per-agent payer binding routes)
+  if (evidence.agentId !== undefined) patch.agent_id = evidence.agentId;
+  if (evidence.runtimeId !== undefined) patch.runtime_id = evidence.runtimeId;
+  if (evidence.sessionId !== undefined) patch.session_id = evidence.sessionId;
+  if (evidence.jobId !== undefined) patch.job_id = evidence.jobId;
+  if (evidence.expectedPayer !== undefined) patch.expected_payer = evidence.expectedPayer;
+  if (evidence.payerVerified !== undefined) patch.payer_verified = evidence.payerVerified;
 
   if (evidence.raw && Object.keys(evidence.raw).length > 0) {
     if (dbStatus === 'verified') {
