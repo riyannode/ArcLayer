@@ -413,6 +413,14 @@ Use only on Arc Testnet.
 
 ---
 
+## Roadmap
+
+Done: #450 MCP Registry · #451 Sessions · #452 Approvals · #453 Identity Tools · #454 Profile + Agent Account · #455 Approval Deep Link · #456 API Key Tools + Prompt Template
+
+Next: #457 E2E Tests · #458 Funding UX · #459 ERC-8183 MCP Tools · #460 ERC-8183 Approvals · #461 x402 MCP · #462 Evaluator Role
+
+---
+
 ## License
 
 MIT
