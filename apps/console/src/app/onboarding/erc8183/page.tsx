@@ -15,6 +15,10 @@ import {
   Terminal,
   UserCheck,
 } from 'lucide-react';
+import {
+  ERC8183_PUBLIC_ROLES,
+  getPublicRoleEntries,
+} from '@/lib/erc8183/role-config';
 
 /* ── design tokens (from /register/erc8004) ────────────────────── */
 
@@ -197,58 +201,60 @@ function OnboardingContent() {
           Choose Your Role
         </h2>
         <p className="mt-2 text-[13px] leading-5 text-[#EAE4D8]/50">
-          Start with a Provider agent. Client and Evaluator automation are being staged internally first.
+          Select your bot role. Provider and Client are available now.
         </p>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-md border border-[#F3C536]/35 bg-[#F3C536]/[0.04] p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center text-[#F3C536]">
-                  <Bot className="h-5 w-5" />
-                </div>
-                <div className="font-semibold text-[#F5F0E5]">Provider</div>
-              </div>
-              <Badge>Available</Badge>
-            </div>
-            <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/55">
-              Claims jobs and submits work.
-            </p>
-          </div>
+          {getPublicRoleEntries().map((entry) => {
+            const roleIcons: Record<string, React.ReactNode> = {
+              provider: <Bot className="h-5 w-5" />,
+              client: <BriefcaseBusiness className="h-5 w-5" />,
+              evaluator: <UserCheck className="h-5 w-5" />,
+            };
+            const icon = roleIcons[entry.key] ?? <Bot className="h-5 w-5" />;
+            const isActive = entry.enabled;
 
-          <div className="cursor-not-allowed rounded-md border border-white/10 bg-white/[0.01] p-4 opacity-50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center text-[#EAE4D8]/40">
-                  <BriefcaseBusiness className="h-5 w-5" />
+            return isActive ? (
+              <Link
+                key={entry.key}
+                href={`/register/erc8004?role=${entry.key}`}
+                className="rounded-md border border-[#F3C536]/35 bg-[#F3C536]/[0.04] p-4 transition hover:border-[#F3C536]/60 hover:bg-[#F3C536]/[0.08]"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center text-[#F3C536]">
+                      {icon}
+                    </div>
+                    <div className="font-semibold text-[#F5F0E5]">{entry.title}</div>
+                  </div>
+                  <Badge>{entry.badge}</Badge>
                 </div>
-                <div className="font-semibold text-[#EAE4D8]/40">Client</div>
-              </div>
-              <span className="rounded border border-white/10 bg-white/[0.05] px-2 py-0.5 font-mono text-[8px] uppercase tracking-[0.12em] text-[#EAE4D8]/40">
-                Coming soon
-              </span>
-            </div>
-            <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/30">
-              Creates and funds ERC-8183 jobs.
-            </p>
-          </div>
-
-          <div className="cursor-not-allowed rounded-md border border-white/10 bg-white/[0.01] p-4 opacity-50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center text-[#EAE4D8]/40">
-                  <UserCheck className="h-5 w-5" />
+                <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/55">
+                  {entry.description}
+                </p>
+              </Link>
+            ) : (
+              <div
+                key={entry.key}
+                className="cursor-not-allowed rounded-md border border-white/10 bg-white/[0.01] p-4 opacity-50"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-8 w-8 items-center justify-center text-[#EAE4D8]/40">
+                      {icon}
+                    </div>
+                    <div className="font-semibold text-[#EAE4D8]/40">{entry.title}</div>
+                  </div>
+                  <span className="rounded border border-white/10 bg-white/[0.05] px-2 py-0.5 font-mono text-[8px] uppercase tracking-[0.12em] text-[#EAE4D8]/40">
+                    {entry.badge}
+                  </span>
                 </div>
-                <div className="font-semibold text-[#EAE4D8]/40">Evaluator</div>
+                <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/30">
+                  {entry.description}
+                </p>
               </div>
-              <span className="rounded border border-white/10 bg-white/[0.05] px-2 py-0.5 font-mono text-[8px] uppercase tracking-[0.12em] text-[#EAE4D8]/40">
-                Coming soon
-              </span>
-            </div>
-            <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/30">
-              Completes or rejects submitted work.
-            </p>
-          </div>
+            );
+          })}
         </div>
       </SectionCard>
 

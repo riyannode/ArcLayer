@@ -620,6 +620,16 @@ export default function ERC8183EscrowRegisterPage() {
   const { writeContractAsync } = useArcWrite();
   const { signMessageAsync } = useSignMessage();
 
+  // Read ?role= from URL on mount (supports deep-link from onboarding page)
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get('role');
+    if (param) {
+      const key = normalizePublicRole(param);
+      const effectiveRole: AgentRole = key === 'client' ? 'autonomous-client' : key === 'evaluator' ? 'evaluator' : 'provider';
+      setForm((prev) => (prev.role === effectiveRole ? prev : { ...prev, role: effectiveRole, category: '', capabilities: '' }));
+    }
+  }, []);
+
   const role = ROLE_CONFIG[form.role];
   const customCaps = useMemo(() => capabilityList(form.capabilities), [form.capabilities]);
   const isClientRole = form.role === 'autonomous-client';
