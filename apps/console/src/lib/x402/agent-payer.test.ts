@@ -59,7 +59,7 @@ describe('resolveRequiredAgentX402Payer', () => {
     });
 
     let callCount = 0;
-    mockFrom.mockImplementation((table: string) => {
+    mockFrom.mockImplementation(((table: string) => {
       callCount++;
       if (table === 'erc8004_agents') {
         return { select: () => ({ or: () => ({ limit: () => ({ maybeSingle: agentMock }) }) }) };
@@ -68,7 +68,7 @@ describe('resolveRequiredAgentX402Payer', () => {
         return { select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ is: () => ({ limit: () => ({ maybeSingle: payerMock }) }) }) }) }) }) };
       }
       return { select: mockSelect };
-    });
+    }) as any);
 
     const result = await resolveRequiredAgentX402Payer(AGENT_ID, 'circle-gateway');
 
@@ -79,19 +79,19 @@ describe('resolveRequiredAgentX402Payer', () => {
   });
 
   it('throws agent_not_found when agent does not exist', async () => {
-    mockFrom.mockImplementation((table: string) => {
+    mockFrom.mockImplementation(((table: string) => {
       if (table === 'erc8004_agents') {
         return { select: () => ({ or: () => ({ limit: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: 'not found' }) }) }) }) };
       }
       return { select: mockSelect };
-    });
+    }) as any);
 
     await expect(resolveRequiredAgentX402Payer('nonexistent'))
       .rejects.toMatchObject({ code: 'agent_not_found' });
   });
 
   it('throws agent_x402_payer_not_configured when no active payer', async () => {
-    mockFrom.mockImplementation((table: string) => {
+    mockFrom.mockImplementation(((table: string) => {
       if (table === 'erc8004_agents') {
         return { select: () => ({ or: () => ({ limit: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data: { token_id: AGENT_ID, agent_id: AGENT_ID, controller: CONTROLLER }, error: null }) }) }) }) };
       }
@@ -99,7 +99,7 @@ describe('resolveRequiredAgentX402Payer', () => {
         return { select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ is: () => ({ limit: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }) }) }) }) }) }) };
       }
       return { select: mockSelect };
-    });
+    }) as any);
 
     await expect(resolveRequiredAgentX402Payer(AGENT_ID))
       .rejects.toMatchObject({ code: 'agent_x402_payer_not_configured' });
@@ -107,7 +107,7 @@ describe('resolveRequiredAgentX402Payer', () => {
 
   it('never falls back to platform payer', async () => {
     // Even if there's a "platform" payer in some other table, resolver only reads agent_x402_payers
-    mockFrom.mockImplementation((table: string) => {
+    mockFrom.mockImplementation(((table: string) => {
       if (table === 'erc8004_agents') {
         return { select: () => ({ or: () => ({ limit: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data: { token_id: AGENT_ID, agent_id: AGENT_ID, controller: CONTROLLER }, error: null }) }) }) }) };
       }
@@ -116,7 +116,7 @@ describe('resolveRequiredAgentX402Payer', () => {
         return { select: () => ({ eq: () => ({ eq: () => ({ eq: () => ({ is: () => ({ limit: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }) }) }) }) }) }) };
       }
       return { select: mockSelect };
-    });
+    }) as any);
 
     await expect(resolveRequiredAgentX402Payer(AGENT_ID))
       .rejects.toMatchObject({ code: 'agent_x402_payer_not_configured' });

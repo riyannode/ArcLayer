@@ -512,19 +512,20 @@ async function handleGateway(
   // ─── Per-agent payer binding (Circle Gateway only) ──────────────────────
   // Enforce actual payer == registered agent payer BEFORE settlement.
   // If agentPayerBinding.required, reject immediately on mismatch/missing.
-  let agentContext: { agentId: string; runtimeId?: string | null; sessionId?: string | null; jobId?: string | null } | null = null;
+  let agentContext: { agentId: string; controllerAddress: string; runtimeId?: string | null; sessionId?: string | null; jobId?: string | null } | null = null;
   if (opts.agentPayerBinding?.required) {
     const actualPayer = earlyPayer ?? verifyResult.payer ?? null;
     try {
-      agentContext = await opts.agentPayerBinding.getContext(req);
+      const rawCtx = await opts.agentPayerBinding.getContext(req);
       const expected = await resolveRequiredAgentX402Payer(
-        agentContext.agentId,
+        rawCtx.agentId,
         opts.agentPayerBinding.rail,
       );
+      agentContext = { ...rawCtx, controllerAddress: expected.controllerAddress };
       const matchResult = assertX402PayerMatches({
         actualPayer,
         expectedPayer: expected.payerAddress,
-        agentId: agentContext.agentId,
+        agentId: expected.agentId,
       });
       if (!matchResult.ok) {
         if (earlyPayer) await releaseAccessSession(earlyPayer, opts.resource, 'circle-gateway');
@@ -627,7 +628,7 @@ async function handleGateway(
   if (agentContext) {
     recordAgentX402Ledger({
       agentId: agentContext.agentId,
-      controllerAddress: '0x0000000000000000000000000000000000000000', // resolved by resolver
+      controllerAddress: agentContext.controllerAddress,
       payerAddress: payer,
       expectedPayer: payer,
       runtimeId: agentContext.runtimeId ?? null,

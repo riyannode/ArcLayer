@@ -148,16 +148,16 @@ async function payForGatewayResource({
     return { ok: false, error: "no_accepts", message: "x402 challenge returned no payment options" };
   }
 
-  // Step 2: Find circle-gateway requirement
+  // Step 2: Find Circle Gateway requirement
+  // Server emits: extra.name='GatewayWalletBatched', extra.transferMethod='gateway-batched-eip3009', network='eip155:5042002'
   const gatewayReq = challenge.accepts.find(
     (a) =>
       a &&
       a.scheme === "exact" &&
-      (a.extra?.name === "circle-batching" ||
-        a.extra?.name === "circle-gateway" ||
-        String(a.network || "").includes("gateway"))
+      (a.extra?.name === "GatewayWalletBatched" ||
+        a.extra?.transferMethod === "gateway-batched-eip3009")
   ) || challenge.accepts.find(
-    (a) => a && a.scheme === "exact" && String(a.network || "").includes("gateway")
+    (a) => a && a.scheme === "exact" && String(a.network || "").includes("5042002")
   );
 
   if (!gatewayReq) {
