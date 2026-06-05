@@ -105,42 +105,20 @@ export function registerAllTools(): void {
     legacyAliases: ['protocol_overview'],
     kind: 'read',
     handler: async () => {
-      const HEALTH_BUDGET_MS = 2000;
+      const BUDGET_MS = 2000;
       const ts = new Date().toISOString();
 
-      // Probe indexer with hard timeout — never hang the MCP call.
-      let indexerOk = false;
-      let overview: unknown = null;
-      try {
-        const pingRes = await fetch(indexerUrl('/health'), {
-          cache: 'no-store',
-          signal: AbortSignal.timeout(HEALTH_BUDGET_MS),
-        });
-        indexerOk = pingRes.ok;
-      } catch {
-        indexerOk = false;
-      }
+      // Run health + overview in parallel under a single 2s budget.
+      const [healthResult, overviewResult] = await Promise.allSettled([
+        fetch(indexerUrl('/health'), { cache: 'no-store', signal: AbortSignal.timeout(BUDGET_MS) }),
+        fetch(indexerUrl('/overview'), { cache: 'no-store', signal: AbortSignal.timeout(BUDGET_MS) }).then((r) => r.json().catch(() => null)),
+      ]);
 
-      if (indexerOk) {
-        try {
-          const res = await fetch(indexerUrl('/overview'), {
-            cache: 'no-store',
-            signal: AbortSignal.timeout(HEALTH_BUDGET_MS),
-          });
-          overview = await res.json().catch(() => null);
-        } catch {
-          /* swallow — overview is optional */
-        }
-      }
+      const indexerOk = healthResult.status === 'fulfilled' && healthResult.value.ok;
+      const overview = overviewResult.status === 'fulfilled' ? overviewResult.value : null;
 
       if (!indexerOk) {
-        return {
-          ok: true,
-          status: 'degraded',
-          indexerOk: false,
-          reason: 'indexer_timeout',
-          timestamp: ts,
-        };
+        return { ok: true, status: 'degraded', indexerOk: false, reason: 'indexer_timeout', timestamp: ts };
       }
 
       return { ok: true, status: 'healthy', indexerOk: true, timestamp: ts, overview };
