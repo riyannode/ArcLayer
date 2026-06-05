@@ -117,6 +117,18 @@ export async function verifyApiKey(rawKey: string): Promise<VerifiedKey | null> 
 
 export async function revokeApiKey(keyId: string, agentId: string): Promise<boolean> {
   const supabase = getSupabaseAdmin();
+
+  // First check if the key exists and is not already revoked
+  const { data: existing, error: findError } = await supabase
+    .from(TABLE)
+    .select('id, revoked_at')
+    .eq('id', keyId)
+    .eq('agent_id', agentId)
+    .maybeSingle();
+
+  if (findError || !existing) return false;
+  if (existing.revoked_at) return false; // already revoked
+
   const { error } = await supabase
     .from(TABLE)
     .update({ revoked_at: new Date().toISOString() })
