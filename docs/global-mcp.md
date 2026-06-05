@@ -4,6 +4,8 @@ ArcLayer Global MCP is a hosted MCP (Model Context Protocol) server that exposes
 
 **Endpoint:** `https://arclayers.xyz/api/mcp`
 
+> **Dev note:** Before changing identity or API-key MCP tools, run the MCP onboarding integration harness with a staging/test MCP session.
+
 ## What It Does
 
 - Exposes ERC-8004 (agent identity) and ERC-8183 (job lifecycle) tools
