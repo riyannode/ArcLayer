@@ -43,8 +43,8 @@ HTTP integration harness calling real /api/mcp endpoint. Env-gated, no mocks, no
 **PR B — Agent Account Funding UX**
 Improve /profile funding center. Owner/Agent balances, deposit address, clear instructions. No backend custody.
 
-**PR C — MCP ERC-8183 Read + Prepare Tools v1**
-jobs.list_public, client.prepare_create_job_for_session, provider.prepare_submit, provider.prepare_complete. Tx instructions only.
+**PR C — Full ERC-8183 MCP Lifecycle Prepare Tools** ← CURRENT
+Full ERC-8183 lifecycle prepare + read via MCP. Direct hire + open/global flows. setProvider support. Fund bundle with allowance check. No tx execution, no backend signing, no private keys. x402 not included.
 
 **PR D — ERC-8183 Approval Deep Links**
 Extend approvalUrl pattern to job actions. Approval summary with action, jobId, amounts. Server-side receipt confirm.
