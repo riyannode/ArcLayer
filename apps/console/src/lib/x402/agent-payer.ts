@@ -28,34 +28,83 @@ export type PayerMatchResult =
   | { ok: true }
   | { ok: false; status: number; error: string; detail: Record<string, unknown> };
 
+// ── Validation ─────────────────────────────────────────────────────────────
+
+const AGENT_ID_RE = /^[a-zA-Z0-9_-]+$/;
+const MAX_AGENT_ID_LENGTH = 128;
+
+/**
+ * Validate agentId format. Rejects injection vectors and overly long IDs.
+ * @throws Error with code 'invalid_agent_id' if validation fails.
+ */
+export function validateAgentId(agentId: string): void {
+  if (!agentId || typeof agentId !== 'string') {
+    throw Object.assign(
+      new Error('agentId is required'),
+      { code: 'invalid_agent_id' },
+    );
+  }
+  if (agentId.length > MAX_AGENT_ID_LENGTH) {
+    throw Object.assign(
+      new Error(`agentId exceeds max length (${MAX_AGENT_ID_LENGTH})`),
+      { code: 'invalid_agent_id' },
+    );
+  }
+  if (!AGENT_ID_RE.test(agentId)) {
+    throw Object.assign(
+      new Error('agentId contains invalid characters (allowed: a-z, A-Z, 0-9, _, -)'),
+      { code: 'invalid_agent_id' },
+    );
+  }
+}
+
 // ── Resolver ───────────────────────────────────────────────────────────────
 
 /**
  * Resolve the required x402 payer for an agent.
  *
- * 1. Reads erc8004_agents by agent_id or token_id (read-only, no modification).
- * 2. Reads active payer from agent_x402_payers.
- * 3. If missing or revoked → throws. No platform payer fallback.
+ * 1. Validates agentId format (injection guard).
+ * 2. Reads erc8004_agents by agent_id first, then token_id fallback (two separate queries, no .or()).
+ * 3. Reads active payer from agent_x402_payers.
+ * 4. If missing or revoked → throws. No platform payer fallback.
  *
- * @throws Error with code 'agent_x402_payer_not_configured' if no active payer.
+ * @throws Error with code 'invalid_agent_id' if agentId fails format validation.
  * @throws Error with code 'agent_not_found' if agent doesn't exist in erc8004_agents.
+ * @throws Error with code 'agent_x402_payer_not_configured' if no active payer.
  */
 export async function resolveRequiredAgentX402Payer(
   agentId: string,
   rail: AgentX402Rail = 'circle-gateway',
 ): Promise<AgentX402PayerResolution> {
+  validateAgentId(agentId);
+
   const supabase = getSupabaseAdmin();
 
   // Step 1: Resolve agent from erc8004_agents (read-only).
-  // Try agent_id first, then token_id. Use canonical DB agent_id.
-  const { data: agent, error: agentError } = await supabase
+  // Two separate queries to avoid .or() string interpolation with user input.
+  // Try agent_id first, then token_id fallback.
+  let agent: Record<string, unknown> | null = null;
+
+  const { data: byAgentId } = await supabase
     .from('erc8004_agents')
     .select('token_id, agent_id, controller')
-    .or(`agent_id.eq.${agentId},token_id.eq.${agentId}`)
+    .eq('agent_id', agentId)
     .limit(1)
     .maybeSingle();
 
-  if (agentError || !agent) {
+  if (byAgentId) {
+    agent = byAgentId;
+  } else {
+    const { data: byTokenId } = await supabase
+      .from('erc8004_agents')
+      .select('token_id, agent_id, controller')
+      .eq('token_id', agentId)
+      .limit(1)
+      .maybeSingle();
+    agent = byTokenId;
+  }
+
+  if (!agent) {
     throw Object.assign(
       new Error(`Agent not found: ${agentId}`),
       { code: 'agent_not_found' },

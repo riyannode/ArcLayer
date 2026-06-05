@@ -19,6 +19,7 @@ import {
   getLinkedErc8004AgentsForController,
   SESSION_COOKIE_NAME,
 } from '@/lib/auth/wallet-session';
+import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
 import type { AgentX402Rail } from '@/lib/x402/agent-payer';
 
 const ERROR_CACHE = 'no-store, no-cache, max-age=0';
@@ -59,21 +60,40 @@ async function verifyOwnership(
   const ownedAgent = linkedAgents.find(
     (a) => a.tokenId === agentId || a.agentId === agentId,
   );
-  if (!ownedAgent) {
+  if (ownedAgent) {
     return {
-      ok: false,
-      response: NextResponse.json(
-        { ok: false, error: 'forbidden', detail: 'Session wallet does not control this agent' },
-        { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
-      ),
+      ok: true,
+      wallet: session.wallet,
+      canonicalAgentId: ownedAgent.agentId,
+      controller: session.wallet,
     };
   }
 
+  // Check Agent Account-minted agents (controller = linked Circle Agent Account)
+  const agentAccount = await getActiveAgentAccountForOwner(session.wallet);
+  if (agentAccount?.agentAccountAddress) {
+    const agentAccountLinked = await getLinkedErc8004AgentsForController(
+      agentAccount.agentAccountAddress,
+    );
+    const ownsAccountAgent = agentAccountLinked.find(
+      (a) => a.tokenId === agentId || a.agentId === agentId,
+    );
+    if (ownsAccountAgent) {
+      return {
+        ok: true,
+        wallet: session.wallet,
+        canonicalAgentId: ownsAccountAgent.agentId,
+        controller: agentAccount.agentAccountAddress,
+      };
+    }
+  }
+
   return {
-    ok: true,
-    wallet: session.wallet,
-    canonicalAgentId: ownedAgent.agentId,
-    controller: session.wallet,
+    ok: false,
+    response: NextResponse.json(
+      { ok: false, error: 'forbidden', detail: 'Session wallet does not control this agent' },
+      { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
+    ),
   };
 }
 

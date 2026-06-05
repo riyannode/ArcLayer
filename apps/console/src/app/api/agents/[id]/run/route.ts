@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402';
+import type { AgentX402Rail } from '@/lib/x402/agent-payer';
 
 export const runtime = 'nodejs';
 
@@ -52,5 +53,19 @@ export async function POST(req: NextRequest) {
     description: 'x402-protected agent run endpoint',
     liveAgentId: String(agentId),
     liveAgentName: PREDICTION_BOT_NAMES[String(agentId)] || `Agent ${agentId}`,
+    allowedRails: ['circle-gateway-passkey'],
+    agentPayerBinding: {
+      required: true,
+      rail: 'circle-gateway' as AgentX402Rail,
+      getContext: async (req: NextRequest) => {
+        const id = parseAgentId(req);
+        return {
+          agentId: String(id ?? agentId),
+          runtimeId: req.headers.get('x-arclayer-runtime-id') || null,
+          sessionId: null,
+          jobId: null,
+        };
+      },
+    },
   })(req);
 }

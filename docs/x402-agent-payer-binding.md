@@ -145,6 +145,55 @@ Send the same payment proof twice.
 
 **Expected:** Second attempt returns `409 payment_replayed`
 
+### Test 5: Invalid agentId → Reject
+
+Call resolver with injection chars or >128 chars:
+
+```ts
+resolveRequiredAgentX402Payer('36191; DROP TABLE') // → invalid_agent_id
+resolveRequiredAgentX402Payer('a'.repeat(129))      // → invalid_agent_id
+```
+
+**Expected:** `invalid_agent_id` error (400)
+
+### Test 6: Circle Agent Account Ownership
+
+Register payer for an agent whose controller is a Circle Agent Account (not EOA).
+Login with the owner wallet that created the Agent Account.
+
+**Expected:** Ownership check passes via `getActiveAgentAccountForOwner()` → `getLinkedErc8004AgentsForController()`.
+
+### Test 7: Bound Route — Missing Payer Rejected Before Settlement
+
+Call `/api/agents/:id/run` without registering a payer first.
+
+**Expected:** `403 agent_x402_payer_not_configured` — middleware rejects before `claimGatewaySettlement()`.
+
+### Test 8: Bound Route — Payer Mismatch Rejected Before Settlement
+
+Register payer A, pay from payer B's EOA on `/api/agents/:id/run`.
+
+**Expected:** `403 x402_payer_mismatch` — middleware rejects before settlement.
+
+### Test 9: Bound Route — Correct Payer Accepted
+
+Register payer A, pay from payer A's EOA on `/api/agents/:id/run`.
+
+**Expected:** `200` success, `PAYMENT-RESPONSE` includes `agentId`, `expectedPayer`, `payerVerified: true`.
+
+### Test 10: Ledger Records Agent Context
+
+After successful payment, check ledger:
+
+```sql
+SELECT agent_id, expected_payer, payer_address, controller_address, status
+FROM agent_x402_payment_ledger
+WHERE agent_id = '36191'
+ORDER BY created_at DESC LIMIT 1;
+```
+
+**Expected:** `agent_id`, `expected_payer`, `payer_address` all populated. `payer_address = expected_payer`.
+
 ---
 
 ## Architecture Summary
@@ -174,12 +223,22 @@ External Bot (PM2)
 | File | Change |
 |------|--------|
 | `supabase/migrations/0022_x402_agent_payer_binding.sql` | New: payer table, ledger table, RPC safety, gateway extension |
-| `apps/console/src/lib/x402/agent-payer.ts` | New: resolver + assertion helpers |
+| `apps/console/src/lib/x402/agent-payer.ts` | Resolver + assertion + `validateAgentId()` (two-step query, no `.or()`) |
 | `apps/console/src/lib/x402/agent-ledger.ts` | New: ledger recording |
-| `apps/console/src/app/api/agents/[id]/x402-payer/route.ts` | New: GET/POST/DELETE payer API |
+| `apps/console/src/app/api/agents/[id]/x402-payer/route.ts` | GET/POST/DELETE payer API with dual-controller ownership |
+| `apps/console/src/app/api/agents/[id]/run/route.ts` | Bound route: `agentPayerBinding.required = true`, `allowedRails: ['circle-gateway-passkey']` |
 | `apps/console/src/lib/x402/middleware.ts` | Patch: agentPayerBinding option + payer check in handleGateway |
 | `apps/console/src/lib/x402/gateway/payment-store.ts` | Patch: extend types + recordGatewayPayment with agent context |
 | `examples/external-pm2-bots/market-agent-bridge/shared/x402-gateway-client.js` | New: Gateway bot client |
-| `apps/console/src/lib/x402/agent-payer.test.ts` | New: resolver + assertion tests |
+| `apps/console/src/lib/x402/agent-payer.test.ts` | 24 tests: validateAgentId, resolver, assertion, binding flow |
+| `docs/x402-agent-payer-binding.md` | Manual verification guide (10 test scenarios) |
 
 **Not modified:** ERC-8004, ERC-8183, contracts, existing native x402 client.
+
+## Security Hardening (PR #457)
+
+- **`.or()` injection removed**: Resolver uses two separate `.eq()` queries instead of `.or(`agent_id.eq.${userInput}`)`.
+- **agentId validation**: `/^[a-zA-Z0-9_-]+$/`, max 128 chars. Rejects before any DB query.
+- **Dual-controller ownership**: API route supports both EOA-controlled and Circle Agent Account-controlled agents.
+- **Bound route**: `/api/agents/:id/run` requires registered payer, rejects mismatch before settlement.
+- **No shared payer fallback**: Missing payer → 403. Mismatch → 403. Both reject before `claimGatewaySettlement()`.
