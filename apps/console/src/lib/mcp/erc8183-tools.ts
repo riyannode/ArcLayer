@@ -1,7 +1,7 @@
 /**
  * MCP ERC-8183 Lifecycle Tools — Full prepare + read tools.
  *
- * PR #459: Exposes safe ERC-8183 lifecycle tools through MCP.
+ * Exposes safe ERC-8183 lifecycle tools through MCP.
  *
  * Two flows:
  * A. Direct hire: client knows provider → createJob(provider, ...) → lifecycle.
@@ -29,7 +29,6 @@ import type { McpSession } from '@/lib/agent-accounts/types';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const ARC_CHAIN_ID = 5042002;
-const ARC_RPC = 'https://rpc.testnet.arc.network';
 
 /** On-chain ERC-8183 status enum values. */
 const STATUS_LABELS: Record<number, string> = {
@@ -564,7 +563,7 @@ export async function handleClientPrepareCreateJobForSession(
     signingRequired: true,
     signing: {
       how: 'Send from the client wallet on Arc Testnet.',
-      rpc: ARC_RPC,
+      rpc: 'Arc Testnet',
       gasHint: '~300000',
       actor: 'client',
     },
@@ -634,7 +633,7 @@ export async function handleClientPrepareCreateOpenJobForSession(
     signingRequired: true,
     signing: {
       how: 'Send from the client wallet on Arc Testnet.',
-      rpc: ARC_RPC,
+      rpc: 'Arc Testnet',
       gasHint: '~300000',
       actor: 'client',
     },
@@ -709,7 +708,7 @@ export async function handleClientPrepareSetProviderForSession(
     signingRequired: true,
     signing: {
       how: 'Send from the client wallet. Job must be Open and current provider must be address(0). This hires/assigns a provider for an open job.',
-      rpc: ARC_RPC,
+      rpc: 'Arc Testnet',
       gasHint: '~80000',
       actor: 'client',
     },
@@ -761,7 +760,7 @@ export async function handleProviderPrepareSetBudgetForSession(
     signingRequired: true,
     signing: {
       how: 'Send from the provider or client, depending on the negotiation flow. Provider-set budget is recommended for provider quote flow.',
-      rpc: ARC_RPC,
+      rpc: 'Arc Testnet',
       gasHint: '~80000',
       actor: 'provider or client',
     },
@@ -880,7 +879,7 @@ export async function handleClientPrepareFundJobBundleForSession(
     signingRequired: true,
     signing: {
       how: 'Send from the client wallet that holds USDC. Execute in order.',
-      rpc: ARC_RPC,
+      rpc: 'Arc Testnet',
       gasHint: approveNeeded === false ? '~120000' : '~170000 (approve + fund)',
       actor: 'client',
     },
@@ -930,7 +929,7 @@ export async function handleProviderPrepareSubmitJobForSession(
     signingRequired: true,
     signing: {
       how: 'Send from the provider wallet assigned to this job.',
-      rpc: ARC_RPC,
+      rpc: 'Arc Testnet',
       gasHint: '~200000',
       actor: 'provider',
     },
@@ -978,7 +977,7 @@ export async function handleEvaluatorPrepareCompleteJobForSession(
     signingRequired: true,
     signing: {
       how: 'Send from the evaluator wallet. Releases escrowed USDC to provider.',
-      rpc: ARC_RPC,
+      rpc: 'Arc Testnet',
       gasHint: '~150000',
       actor: 'evaluator',
     },
@@ -1037,7 +1036,7 @@ export async function handleClientPrepareRejectJobForSession(
     signingRequired: true,
     signing: {
       how: 'Send from the client wallet. Cancels an Open job before funding.',
-      rpc: ARC_RPC,
+      rpc: 'Arc Testnet',
       gasHint: '~100000',
       actor: 'client',
     },
@@ -1097,7 +1096,7 @@ export async function handleEvaluatorPrepareRejectJobForSession(
     signingRequired: true,
     signing: {
       how: 'Send from the evaluator wallet. Rejects a Funded or Submitted job. If escrow exists, funds are refunded to client.',
-      rpc: ARC_RPC,
+      rpc: 'Arc Testnet',
       gasHint: '~100000',
       actor: 'evaluator',
     },
@@ -1163,7 +1162,7 @@ export async function handleClientPrepareClaimRefundForSession(
     signingRequired: true,
     signing: {
       how: 'Send from the client wallet (or anyone). Returns escrow to client after job expiry.',
-      rpc: ARC_RPC,
+      rpc: 'Arc Testnet',
       gasHint: '~100000',
       actor: 'client (or anyone)',
     },
