@@ -147,6 +147,32 @@ export async function getActiveAgentAccountForOwner(
 }
 
 /**
+ * Get active agent account by owner + agent account address.
+ * Verifies BOTH owner_address and agent_account_address match.
+ * Returns null if not found, inactive, or owner mismatch.
+ * This is the strict validation helper for identity tools.
+ */
+export async function getActiveAgentAccountForOwnerAndAddress(
+  ownerAddress: string,
+  agentAccountAddress: string,
+): Promise<AgentAccount | null> {
+  const owner = normalizeAddress(ownerAddress);
+  const agentAccount = normalizeAddress(agentAccountAddress);
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('arclayer_agent_accounts')
+    .select('*')
+    .eq('owner_address', owner.toLowerCase())
+    .eq('agent_account_address', agentAccount.toLowerCase())
+    .eq('status', 'active')
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return mapAgentAccountRow(data as Record<string, unknown>);
+}
+
+/**
  * Get agent account by its address.
  * Returns null if not found.
  */
