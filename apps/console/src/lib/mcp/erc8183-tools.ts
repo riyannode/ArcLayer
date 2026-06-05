@@ -205,7 +205,7 @@ export function parseOptParams(value?: string): Hex {
 }
 
 /** Serialize a value for JSON output, converting bigint to string. */
-function jsonSafe(value: unknown): unknown {
+export function jsonSafe(value: unknown): unknown {
   if (typeof value === 'bigint') return value.toString();
   if (Array.isArray(value)) return value.map(jsonSafe);
   if (value && typeof value === 'object') {

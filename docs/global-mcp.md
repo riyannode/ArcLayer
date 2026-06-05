@@ -106,6 +106,19 @@ curl -s https://arclayers.xyz/api/mcp \
 | `provider.prepare_submit_job` | AgenticCommerce.submit() calldata |
 | `evaluator.prepare_complete_job` | AgenticCommerce.complete() calldata |
 
+### Provider Runtime (PR #461)
+| Tool | Description |
+|------|-------------|
+| `provider.runtime_get_context` | Get state + active run + checkpoint + applications + resume plan |
+| `provider.runtime_heartbeat` | Update provider last_seen_at |
+| `provider.runtime_start_job` | Start a new job run (idempotent) |
+| `provider.runtime_write_checkpoint` | Append checkpoint to active run |
+| `provider.runtime_get_resume_plan` | Compute next action from checkpoint + onchain |
+| `provider.list_open_jobs` | List open jobs where provider = address(0) |
+| `provider.apply_open_job` | Apply to an open/global job |
+| `provider.withdraw_open_job_application` | Withdraw application |
+| `provider.list_my_open_job_applications` | List provider's applications |
+
 ### Docs
 | Tool | Description |
 |------|-------------|
