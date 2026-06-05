@@ -3,6 +3,7 @@
  *
  * Revoke an API key. Requires wallet session auth.
  * Only agent controller/owner can revoke keys.
+ * Supports both EOA-minted and Agent Account-minted agents.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -12,6 +13,7 @@ import {
   getLinkedErc8004AgentsForController,
   SESSION_COOKIE_NAME,
 } from '@/lib/auth/wallet-session';
+import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
 
 const ERROR_CACHE = 'no-store, no-cache, max-age=0';
 
@@ -39,12 +41,28 @@ export async function DELETE(
       );
     }
 
-    // Verify ownership
+    // Verify ownership — check EOA-minted agents first
     const linkedAgents = await getLinkedErc8004AgentsForController(session.wallet);
-    const ownsAgent = linkedAgents.some(
+    const ownsEoaAgent = linkedAgents.some(
       (a) => a.tokenId === agentId || a.agentId === agentId,
     );
-    if (!ownsAgent) {
+
+    let hasOwnership = ownsEoaAgent;
+
+    // Also check Agent Account-minted agents
+    if (!hasOwnership) {
+      const agentAccount = await getActiveAgentAccountForOwner(session.wallet);
+      if (agentAccount?.agentAccountAddress) {
+        const agentAccountLinked = await getLinkedErc8004AgentsForController(
+          agentAccount.agentAccountAddress,
+        );
+        hasOwnership = agentAccountLinked.some(
+          (a) => a.tokenId === agentId || a.agentId === agentId,
+        );
+      }
+    }
+
+    if (!hasOwnership) {
       return NextResponse.json(
         { ok: false, error: 'forbidden', detail: 'Session wallet does not control this agent' },
         { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
