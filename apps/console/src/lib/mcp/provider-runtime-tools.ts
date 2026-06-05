@@ -87,6 +87,7 @@ function rethrowAsMcpError(err: unknown, fallbackMessage: string): never {
     case 'already_assigned':
     case 'job_expired':
     case 'conflict':
+    case 'verification_failed':
       throw new McpError(MCP_ERRORS.VALIDATION_ERROR, message);
     case 'heartbeat_failed':
     case 'start_run_failed':
@@ -454,9 +455,10 @@ export async function handleProviderListAssignedJobs(
   if (!agentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'agentId required');
   if (!providerAddress) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'providerAddress required');
 
-  // Validate agentId ownership
+  // Validate agentId ownership (ensures caller controls this agent)
   const { validateAgentId } = await import('@/lib/x402/agent-payer');
   validateAgentId(agentId);
+  await resolveAgentOwnership(session, agentId);
 
   const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(50, args.limit)) : 20;
 

@@ -124,30 +124,19 @@ async function handleDirectJob(jobId, resumePlan) {
 
     const txData = await client.prepareSetBudget(jobId, budgetUsdc);
 
-    await client.writeCheckpoint(jobId, {
-      phase: 'budget_tx_sent',
-      status: 'tx_sent',
-      note: `setBudget ${budgetUsdc} USDC`,
-    });
-
     try {
       const txHash = await signAndSendTx(txData);
+
+      // Write ONLY budget_tx_sent with txHash — do NOT write budget_confirmed
+      // until receipt/onchain status confirms the tx landed
       await client.writeCheckpoint(jobId, {
         phase: 'budget_tx_sent',
         status: 'tx_sent',
         txHash,
-        note: `setBudget tx: ${txHash}`,
+        note: `setBudget tx sent: ${txHash}`,
       });
 
-      // Wait for confirmation (simplified — production should poll receipt)
-      await client.writeCheckpoint(jobId, {
-        phase: 'budget_confirmed',
-        status: 'confirmed',
-        txHash,
-        note: 'Budget set. Waiting for client to fund.',
-      });
-
-      console.log(`[DIRECT] Budget set for job ${jobId}: ${txHash}`);
+      console.log(`[DIRECT] setBudget tx sent for job ${jobId}: ${txHash}`);
     } catch (err) {
       await client.writeCheckpoint(jobId, {
         phase: 'budget_tx_failed',
@@ -171,24 +160,19 @@ async function handleDirectJob(jobId, resumePlan) {
     try {
       const txData = await client.prepareSubmitJob(jobId, deliverableHash);
 
+      const txHash = await signAndSendTx(txData);
+
+      // Write ONLY submit_tx_sent with txHash — do NOT write submitted_confirmed
+      // until receipt/onchain status confirms the tx landed
       await client.writeCheckpoint(jobId, {
         phase: 'submit_tx_sent',
         status: 'tx_sent',
-        deliverableHash,
-        note: 'Submit tx sent',
-      });
-
-      const txHash = await signAndSendTx(txData);
-
-      await client.writeCheckpoint(jobId, {
-        phase: 'submitted_confirmed',
-        status: 'confirmed',
         txHash,
         deliverableHash,
-        note: `Submit confirmed: ${txHash}`,
+        note: `Submit tx sent: ${txHash}`,
       });
 
-      console.log(`[DIRECT] Submitted deliverable for job ${jobId}: ${txHash}`);
+      console.log(`[DIRECT] Submit tx sent for job ${jobId}: ${txHash}`);
     } catch (err) {
       await client.writeCheckpoint(jobId, {
         phase: 'submit_tx_failed',
