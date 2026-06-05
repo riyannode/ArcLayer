@@ -46,25 +46,24 @@ const SCOPE_PRESETS: Record<string, string[]> = {
 
 const ALLOWED_PRESETS = new Set(Object.keys(SCOPE_PRESETS));
 
-const ENV_SNIPPETS: Record<string, string> = {
-  provider: [
-    'ARCLAYER_API_KEY=',
-    'ARCLAYER_AGENT_ID=',
-    'ARCLAYER_BASE_URL=https://arclayers.xyz',
-    'ARCLAYER_MODE=provider',
-  ].join('\n'),
-  client: [
-    'ARCLAYER_API_KEY=',
-    'ARCLAYER_AGENT_ID=',
-    'ARCLAYER_BASE_URL=https://arclayers.xyz',
-    'ARCLAYER_MODE=client',
-  ].join('\n'),
-};
-
 const INSTALL_COMMANDS: Record<string, string> = {
   provider: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
-  client: 'curl -fsSL https://arclayers.xyz/install/erc8183-client.sh | bash',
+  // client install script not yet available — falls back to provider command
+  client: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
 };
+
+// ── Input validation ──────────────────────────────────────────────────────
+
+/**
+ * Strict agent ID validation.
+ * Must be a numeric token ID (digits only) or a short alphanumeric agent ID.
+ * Rejects anything with special characters, spaces, or injection patterns.
+ */
+function isValidAgentId(id: string): boolean {
+  if (!id || id.length > 128) return false;
+  // Numeric token ID (e.g. "36191") or alphanumeric agent ID (e.g. "abc123")
+  return /^[a-zA-Z0-9_-]+$/.test(id);
+}
 
 // ── Session auth helper ───────────────────────────────────────────────────
 
@@ -109,20 +108,40 @@ export async function resolveAgentOwnership(
   session: McpSession,
   agentId: string,
 ): Promise<Record<string, unknown>> {
-  const supabase = getSupabaseAdmin();
-
-  // Find agent by agent_id or token_id
-  const { data: agents, error } = await supabase
-    .from('erc8004_agents')
-    .select('*')
-    .or(`agent_id.eq.${agentId},token_id.eq.${agentId}`)
-    .limit(1);
-
-  if (error) {
-    throw new McpError(MCP_ERRORS.INTERNAL_ERROR, `DB query failed: ${error.message}`);
+  // Strict input validation — reject injection patterns
+  if (!isValidAgentId(agentId)) {
+    throw new McpError(
+      MCP_ERRORS.VALIDATION_ERROR,
+      'agentId must be alphanumeric (digits, letters, hyphens, underscores), max 128 chars',
+    );
   }
 
-  const agent = agents?.[0];
+  const supabase = getSupabaseAdmin();
+
+  // Two separate queries instead of .or() interpolation to avoid injection
+  const [byAgentId, byTokenId] = await Promise.all([
+    supabase
+      .from('erc8004_agents')
+      .select('*')
+      .eq('agent_id', agentId)
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from('erc8004_agents')
+      .select('*')
+      .eq('token_id', agentId)
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (byAgentId.error && byTokenId.error) {
+    throw new McpError(
+      MCP_ERRORS.INTERNAL_ERROR,
+      `DB query failed: ${byAgentId.error.message}`,
+    );
+  }
+
+  const agent = byAgentId.data ?? byTokenId.data;
   if (!agent) {
     throw new McpError(MCP_ERRORS.NOT_FOUND, `Agent not found: ${agentId}`);
   }
@@ -221,6 +240,14 @@ export async function handleCreateApiKey(
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, '') || 'https://arclayers.xyz';
 
+  // Build envSnippet dynamically with actual key and agent ID
+  const envSnippet = [
+    `ARCLAYER_API_KEY=${result.key}`,
+    `ARCLAYER_AGENT_ID=${resolvedAgentId}`,
+    `ARCLAYER_BASE_URL=${baseUrl}`,
+    `ARCLAYER_MODE=${preset}`,
+  ].join('\n');
+
   return {
     ok: true,
     agentId: resolvedAgentId,
@@ -229,7 +256,7 @@ export async function handleCreateApiKey(
     key: result.key, // raw key — shown once only
     scopes: SCOPE_PRESETS[preset],
     preset,
-    envSnippet: ENV_SNIPPETS[preset],
+    envSnippet,
     installCommand: INSTALL_COMMANDS[preset],
     warning: 'Store the key now — it will NOT be shown again. Use envSnippet to configure your PM2 bot.',
   };
