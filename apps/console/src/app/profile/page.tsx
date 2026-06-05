@@ -488,9 +488,12 @@ export default function AgentProfilePage() {
     setCreateError('');
     try {
       // Step 1: Try Circle login (existing passkey)
-      if (!circleAuthenticated) {
+      let addr: string | undefined;
+      if (circleAuthenticated && circleAddress) {
+        addr = circleAddress;
+      } else {
         try {
-          await circleLogin();
+          addr = await circleLogin();
         } catch (e) {
           const msg = e instanceof Error ? e.message.toLowerCase() : '';
           const cancelled = msg.includes('cancel') || msg.includes('abort') || msg.includes('notallowed');
@@ -505,8 +508,8 @@ export default function AgentProfilePage() {
         }
       }
 
-      // Step 2: Circle smart account is ready, link it
-      await linkCircleAddress();
+      // Step 2: link the returned address directly (no React state race)
+      if (addr) await linkCircleAddress(addr);
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Failed to create agent account');
     } finally {
@@ -519,11 +522,11 @@ export default function AgentProfilePage() {
     setCreatingAgent(true);
     setCreateError('');
     try {
-      await circleRegister(registerUsername.trim());
+      const addr = await circleRegister(registerUsername.trim());
       setShowPasskeyRegister(false);
       setRegisterUsername('');
-      // After register, link the new Circle address
-      await linkCircleAddress();
+      // Link the returned address directly (no React state race)
+      await linkCircleAddress(addr);
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : 'Passkey registration failed');
     } finally {
@@ -531,8 +534,7 @@ export default function AgentProfilePage() {
     }
   }
 
-  async function linkCircleAddress() {
-    const addr = circleAddress;
+  async function linkCircleAddress(addr: string) {
     if (!addr) {
       setCreateError('Circle smart account not ready. Try again.');
       return;
