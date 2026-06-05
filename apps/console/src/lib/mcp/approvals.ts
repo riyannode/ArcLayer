@@ -21,8 +21,6 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { createPublicClient, http } from 'viem';
-import { arcTestnet } from '@arclayer/sdk';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import type { McpSession } from '@/lib/agent-accounts/types';
 import { checkPolicyV1, snapshotPolicy, type PolicyCheckInput } from '@/lib/mcp/policy';
@@ -599,17 +597,12 @@ export async function confirmApprovalByWallet(
   }
 
   // Fetch receipt from Arc RPC — this is the source of truth
-  const rpcUrl = process.env.ARC_RPC_URL ?? 'https://rpc.testnet.arc.network';
+  // Uses SDK's shared publicClient (same RPC config as all on-chain reads)
+  const { publicClient } = await import('@arclayer/sdk');
   let receiptStatus: 'success' | 'reverted';
-  let blockNumber: number | undefined;
 
   try {
-    const client = createPublicClient({
-      chain: arcTestnet,
-      transport: http(rpcUrl),
-    });
-
-    const receipt = await client.getTransactionReceipt({
+    const receipt = await publicClient.getTransactionReceipt({
       hash: txHash as `0x${string}`,
     });
 
@@ -618,7 +611,6 @@ export async function confirmApprovalByWallet(
     }
 
     receiptStatus = receipt.status === 'success' ? 'success' : 'reverted';
-    blockNumber = Number(receipt.blockNumber);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // TransactionNotFound or RPC error — receipt not ready
