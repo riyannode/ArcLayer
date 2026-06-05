@@ -94,6 +94,7 @@ export interface ProviderResumePlan {
   terminal: boolean;
   onchainStatus: string | null;
   providerAssigned: boolean;
+  assignedToOther: boolean;
   lastCheckpoint: CheckpointRow | null;
   safetyNotes: string[];
 }
@@ -190,10 +191,12 @@ export async function assertProviderAgentOwnership(
 /**
  * Get or create runtime state for a provider agent.
  * Also returns active run, latest checkpoint, active applications, and resume plan.
+ * If providerAddress is provided, resume plan verifies on-chain provider matches.
  */
 export async function getProviderRuntimeContext(
   agentId: string,
   auth: ProviderAuthContext,
+  providerAddress?: string,
 ): Promise<{
   runtimeState: RuntimeStateRow | null;
   activeRun: JobRunRow | null;
@@ -252,7 +255,7 @@ export async function getProviderRuntimeContext(
   // Build resume plan if there's an active run
   let resumePlan: ProviderResumePlan | null = null;
   if (activeRun) {
-    resumePlan = await buildResumePlan(agentId, activeRun, latestCheckpoint);
+    resumePlan = await buildResumePlan(agentId, activeRun, latestCheckpoint, providerAddress);
   }
 
   return {
@@ -550,15 +553,18 @@ export async function failProviderJobRun(
 
 /**
  * Build a resume plan by combining checkpoint state with on-chain job status.
+ * If providerAddress is provided, verifies on-chain provider matches this bot.
  */
 async function buildResumePlan(
   agentId: string,
   run: JobRunRow,
   lastCheckpoint: CheckpointRow | null,
+  providerAddress?: string,
 ): Promise<ProviderResumePlan> {
   const safetyNotes: string[] = [];
   let onchainStatus: string | null = null;
   let providerAssigned = false;
+  let assignedToOther = false;
 
   // Try to read on-chain job state
   try {
@@ -566,9 +572,19 @@ async function buildResumePlan(
     const job = await readOnchainJob(BigInt(run.job_id));
     if (job) {
       onchainStatus = ONCHAIN_STATUS[job.status] ?? `Unknown(${job.status})`;
-      providerAssigned =
-        job.provider.toLowerCase() !== ZERO_ADDRESS &&
-        job.provider.toLowerCase() !== '';
+      const onchainProvider = job.provider.toLowerCase();
+      const isZero = onchainProvider === ZERO_ADDRESS || onchainProvider === '';
+
+      if (!isZero && providerAddress) {
+        // Verify on-chain provider matches THIS bot's address
+        const myAddr = providerAddress.toLowerCase();
+        providerAssigned = onchainProvider === myAddr;
+        assignedToOther = onchainProvider !== myAddr;
+      } else if (!isZero) {
+        // No providerAddress to compare — assume assigned (legacy behavior)
+        providerAssigned = true;
+        safetyNotes.push('providerAddress not provided — cannot verify on-chain provider matches this bot.');
+      }
     }
   } catch {
     safetyNotes.push('Could not read on-chain job state. RPC may be unavailable.');
@@ -582,6 +598,7 @@ async function buildResumePlan(
     terminal: false,
     onchainStatus,
     providerAssigned,
+    assignedToOther,
     lastCheckpoint,
     safetyNotes,
   };
@@ -597,7 +614,7 @@ async function buildResumePlan(
   if (onchainStatus === 'Rejected') {
     result.nextAction = 'none';
     result.recommendedTool = null;
-    result.reason = 'Job rejected by evaluator. Client refunded.';
+    result.reason = 'Job rejected by evaluator or client. Provider not paid.';
     result.terminal = true;
     return result;
   }
@@ -606,6 +623,16 @@ async function buildResumePlan(
     result.recommendedTool = null;
     result.reason = 'Job expired. Client can claim refund.';
     result.terminal = true;
+    return result;
+  }
+
+  // Assigned to another provider — not our job
+  if (assignedToOther) {
+    result.nextAction = 'none';
+    result.recommendedTool = null;
+    result.reason = 'Job assigned to a different provider. Not our job.';
+    result.terminal = true;
+    safetyNotes.push('On-chain provider does not match this bot. Do NOT call setBudget.');
     return result;
   }
 
@@ -670,11 +697,13 @@ async function buildResumePlan(
 
 /**
  * Get resume plan for a provider agent (convenience wrapper).
+ * If providerAddress is provided, verifies on-chain provider matches.
  */
 export async function getProviderResumePlan(
   agentId: string,
   auth: ProviderAuthContext,
   jobId?: string,
+  providerAddress?: string,
 ): Promise<ProviderResumePlan | null> {
   validateAgentId(agentId);
   await assertProviderAgentOwnership(agentId, auth);
@@ -707,7 +736,7 @@ export async function getProviderResumePlan(
     .limit(1)
     .maybeSingle();
 
-  return buildResumePlan(agentId, run as JobRunRow, cp as CheckpointRow | null);
+  return buildResumePlan(agentId, run as JobRunRow, cp as CheckpointRow | null, providerAddress);
 }
 
 // ── Open Job Listing ───────────────────────────────────────────────────────
@@ -770,6 +799,38 @@ export async function listOpenGlobalJobs(
   });
 
   return filtered.slice(0, limit);
+}
+
+/**
+ * List jobs assigned to a specific provider address.
+ * Returns jobs where provider = providerAddress AND status = Open.
+ * Used for direct-assigned job discovery.
+ */
+export async function listAssignedJobs(
+  providerAddress: string,
+  limit = 20,
+): Promise<unknown[]> {
+  const normalizedAddr = providerAddress.toLowerCase();
+  const cappedLimit = Math.min(Math.max(limit, 1), 50);
+
+  const indexerUrl = process.env.INDEXER_URL || 'http://localhost:3535';
+  const res = await fetch(`${indexerUrl}/jobs`, { cache: 'no-store' });
+  if (!res.ok) {
+    throw Object.assign(new Error(`Indexer fetch failed: ${res.status}`), { code: 'indexer_error' });
+  }
+
+  const json = await res.json().catch(() => ({}));
+  const allJobs: unknown[] = Array.isArray(json) ? json : json.jobs || json.data || [];
+
+  // Filter: provider matches this address AND status is Open
+  const filtered = allJobs.filter((j) => {
+    const job = j as Record<string, unknown>;
+    const provider = String(job.provider || '').toLowerCase();
+    const status = String(job.status || '').toLowerCase();
+    return provider === normalizedAddr && (status === 'open' || status === '0');
+  });
+
+  return filtered.slice(0, cappedLimit);
 }
 
 // ── Open Job Applications ──────────────────────────────────────────────────

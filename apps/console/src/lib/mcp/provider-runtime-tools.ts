@@ -23,6 +23,7 @@ import {
   failProviderJobRun,
   getProviderResumePlan,
   listOpenGlobalJobs,
+  listAssignedJobs,
   applyToOpenJob,
   withdrawOpenJobApplication,
   listProviderApplications,
@@ -76,7 +77,9 @@ export async function handleProviderRuntimeGetContext(
   const agentId = typeof args.agentId === 'string' ? args.agentId.trim() : '';
   if (!agentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'agentId required');
 
-  const context = await getProviderRuntimeContext(agentId, buildAuth(session, agentId));
+  const providerAddress = typeof args.providerAddress === 'string' ? args.providerAddress.trim() : undefined;
+
+  const context = await getProviderRuntimeContext(agentId, buildAuth(session, agentId), providerAddress);
 
   return jsonSafe({
     agentId,
@@ -217,8 +220,9 @@ export async function handleProviderRuntimeGetResumePlan(
   if (!agentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'agentId required');
 
   const jobId = typeof args.jobId === 'string' ? args.jobId.trim() : undefined;
+  const providerAddress = typeof args.providerAddress === 'string' ? args.providerAddress.trim() : undefined;
 
-  const plan = await getProviderResumePlan(agentId, buildAuth(session, agentId), jobId);
+  const plan = await getProviderResumePlan(agentId, buildAuth(session, agentId), jobId, providerAddress);
 
   if (!plan) {
     return jsonSafe({
@@ -361,5 +365,38 @@ export async function handleProviderListMyOpenJobApplications(
     agentId,
     applications,
     total: applications.length,
+  });
+}
+
+/**
+ * provider.list_assigned_jobs
+ *
+ * List jobs assigned to a specific provider address (provider = address, status = Open).
+ * Used for direct-assigned job discovery.
+ */
+export async function handleProviderListAssignedJobs(
+  args: Record<string, unknown>,
+  ctx: McpToolContext,
+): Promise<unknown> {
+  const session = await requireMcpSession(ctx);
+  const agentId = typeof args.agentId === 'string' ? args.agentId.trim() : '';
+  const providerAddress = typeof args.providerAddress === 'string' ? args.providerAddress.trim() : '';
+
+  if (!agentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'agentId required');
+  if (!providerAddress) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'providerAddress required');
+
+  // Validate agentId ownership
+  const { validateAgentId } = await import('@/lib/x402/agent-payer');
+  validateAgentId(agentId);
+
+  const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(50, args.limit)) : 20;
+
+  const jobs = await listAssignedJobs(providerAddress, limit);
+
+  return jsonSafe({
+    agentId,
+    providerAddress,
+    jobs,
+    total: jobs.length,
   });
 }

@@ -67,12 +67,15 @@ class ArclayerMcpClient {
     return this.callTool('provider.runtime_heartbeat');
   }
 
-  async getContext() {
-    return this.callTool('provider.runtime_get_context');
+  async getContext(providerAddress) {
+    return this.callTool('provider.runtime_get_context', providerAddress ? { providerAddress } : {});
   }
 
-  async getResumePlan(jobId) {
-    return this.callTool('provider.runtime_get_resume_plan', jobId ? { jobId } : {});
+  async getResumePlan(jobId, providerAddress) {
+    const args = {};
+    if (jobId) args.jobId = jobId;
+    if (providerAddress) args.providerAddress = providerAddress;
+    return this.callTool('provider.runtime_get_resume_plan', args);
   }
 
   async startJobRun(jobId, phase) {
@@ -85,6 +88,10 @@ class ArclayerMcpClient {
 
   async listOpenJobs(filters = {}) {
     return this.callTool('provider.list_open_jobs', filters);
+  }
+
+  async listAssignedJobs(providerAddress, limit) {
+    return this.callTool('provider.list_assigned_jobs', { providerAddress, limit: limit || 50 });
   }
 
   async applyOpenJob(jobId, providerAddress, opts = {}) {
