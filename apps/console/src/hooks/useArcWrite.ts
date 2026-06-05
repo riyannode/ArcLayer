@@ -1,19 +1,17 @@
 'use client';
 
 /**
- * Dual-mode contract write hook.
+ * EOA-only contract write hook.
  *
- * Drop-in replacement for wagmi's useWriteContract that routes through:
- *   - Circle bundler + paymaster (gasless) when mode === 'passkey'
- *   - wagmi writeContractAsync (user pays gas) when mode === 'eoa'
+ * Drop-in replacement for wagmi's useWriteContract.
+ * Uses EOA wallet for transactions (user pays gas).
  *
- * API shape stays identical so pages don't need changes:
  *   const { writeContractAsync, isPending } = useArcWrite();
  *   const txHash = await writeContractAsync({ address, abi, functionName, args });
  */
 
 import { useCallback, useState } from 'react';
-import { type Abi, type Address, encodeFunctionData } from 'viem';
+import { type Abi, type Address } from 'viem';
 import { useWriteContract } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useArcWallet } from './useArcWallet';
@@ -28,11 +26,10 @@ interface WriteConfig {
 }
 
 export function useArcWrite() {
-  const { mode, bundlerClient } = useArcWallet();
+  const { mode } = useArcWallet();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  // wagmi hook for EOA path
   const { writeContractAsync: wagmiWrite } = useWriteContract();
 
   const writeContractAsync = useCallback(
@@ -45,48 +42,18 @@ export function useArcWrite() {
       setError(null);
 
       try {
-        if (mode === 'passkey') {
-          // ── Circle bundler path (gasless) ──────────────────────────
-          if (!bundlerClient) {
-            throw new Error('Circle bundler not ready. Try reconnecting.');
-          }
+        const hash = await wagmiWrite({
+          address: writeConfig.address,
+          abi: writeConfig.abi,
+          functionName: writeConfig.functionName,
+          args: writeConfig.args ? [...writeConfig.args] : [],
+          value: writeConfig.value,
+        });
 
-          const callData = encodeFunctionData({
-            abi: writeConfig.abi,
-            functionName: writeConfig.functionName,
-            args: writeConfig.args ?? [],
-          });
+        // Wait for inclusion so callers get a confirmed hash
+        await waitForTransactionReceipt(config, { hash });
 
-          const userOpHash = await bundlerClient.sendUserOperation({
-            calls: [
-              {
-                to: writeConfig.address,
-                data: callData,
-                value: writeConfig.value ?? BigInt(0),
-              },
-            ],
-          });
-
-          const { receipt } = await bundlerClient.waitForUserOperationReceipt({
-            hash: userOpHash,
-          });
-
-          return receipt.transactionHash;
-        } else {
-          // ── EOA / wagmi path (user pays gas) ───────────────────────
-          const hash = await wagmiWrite({
-            address: writeConfig.address,
-            abi: writeConfig.abi,
-            functionName: writeConfig.functionName,
-            args: writeConfig.args ? [...writeConfig.args] : [],
-            value: writeConfig.value,
-          });
-
-          // Wait for inclusion so callers get a confirmed hash
-          await waitForTransactionReceipt(config, { hash });
-
-          return hash;
-        }
+        return hash;
       } catch (err) {
         const e = err instanceof Error ? err : new Error(String(err));
         setError(e);
@@ -95,7 +62,7 @@ export function useArcWrite() {
         setIsPending(false);
       }
     },
-    [mode, bundlerClient, wagmiWrite],
+    [mode, wagmiWrite],
   );
 
   return { writeContractAsync, isPending, error, mode };
