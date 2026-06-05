@@ -1,0 +1,821 @@
+/**
+ * ArcLayer Global MCP — Server.
+ *
+ * Contains all tool implementations, registration, and MCP JSON-RPC dispatch.
+ * Route layer is a thin passthrough; all logic lives here.
+ */
+
+import { encodeFunctionData, keccak256, toBytes, type Hex } from 'viem';
+import {
+  ERC8004_IDENTITY_REGISTRY_ABI,
+  ERC8004_REPUTATION_REGISTRY_ABI,
+  ERC8004_VALIDATION_REGISTRY_ABI,
+  ERC8183_AGENTIC_COMMERCE_ABI,
+  CONTRACTS,
+  ARC_TOKENS,
+} from '@arclayer/sdk';
+import { indexerUrl, pingIndexer } from '@/lib/indexer';
+import {
+  type McpToolDefinition,
+  type McpToolContext,
+  type RequestContext,
+  registerTool,
+  getTool,
+  listTools,
+  hasTool,
+  toMcpToolSchema,
+} from './registry';
+import {
+  MCP_ERRORS,
+  McpError,
+  okResult,
+  errorResult,
+  jsonRpcResult,
+  jsonRpcError,
+  thrownToMcpError,
+} from './errors';
+import { redactString } from './redact';
+
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+
+const ARC_CHAIN_ID = 5042002;
+const ARC_RPC = 'https://rpc.drpc.testnet.arc.network';
+const MCP_VERSION = '0.1.0';
+const MCP_SERVER_NAME = 'arclayer-global-mcp';
+const PROTOCOL_VERSION = '2024-11-05';
+
+// ─── TOOL REGISTRATION ───────────────────────────────────────────────────────
+
+let registered = false;
+
+/**
+ * Register all tools into the global registry.
+ * Idempotent — safe to call multiple times.
+ */
+export function registerAllTools(): void {
+  if (registered) return;
+  registered = true;
+
+  // ── READ: protocol ──────────────────────────────────────────────────────
+
+  registerTool({
+    name: 'protocol.status',
+    domain: 'protocol',
+    description: 'Get Arc Network configuration: chain ID, RPC, contracts, explorer, faucet.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [],
+    legacyAliases: ['arc_network_info'],
+    kind: 'read',
+    handler: async () => ({
+      network: 'Arc Testnet',
+      chainId: ARC_CHAIN_ID,
+      rpc: ARC_RPC,
+      explorer: 'https://testnet.arcscan.app',
+      faucet: 'https://faucet.circle.com',
+      nativeGasToken: 'USDC (18 decimals)',
+      contracts: {
+        identityRegistry_ERC8004: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+        reputationRegistry_ERC8004: CONTRACTS.ERC8004_REPUTATION_REGISTRY,
+        validationRegistry_ERC8004: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+        agenticCommerce_ERC8183: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        usdc_ERC20: CONTRACTS.USDC,
+        eurc: ARC_TOKENS.EURC,
+      },
+      cctpDomain: 26,
+      supportedStandards: ['ERC-8004', 'ERC-8183', 'x402'],
+      mcpVersion: MCP_VERSION,
+      docs: {
+        main: 'https://docs.arc.io',
+        mcpDocs: 'https://docs.arc.io/ai/mcp',
+        mcpServer: 'https://docs.arc.io/mcp',
+        erc8004: 'https://docs.arc.io/arc/tutorials/register-your-first-ai-agent.md',
+        erc8183: 'https://docs.arc.io/arc/tutorials/create-your-first-erc-8183-job.md',
+      },
+    }),
+  });
+
+  registerTool({
+    name: 'protocol.health',
+    domain: 'protocol',
+    description: 'Aggregate protocol health: indexer liveness + timestamp.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [],
+    legacyAliases: ['protocol_overview'],
+    kind: 'read',
+    handler: async () => {
+      const indexerOk = await pingIndexer();
+      let overview: unknown = null;
+      if (indexerOk) {
+        try {
+          const res = await fetch(indexerUrl('/overview'), { cache: 'no-store' });
+          overview = await res.json().catch(() => null);
+        } catch {
+          /* swallow — overview is optional */
+        }
+      }
+      return { ok: true, indexerOk, timestamp: new Date().toISOString(), overview };
+    },
+  });
+
+  // ── READ: agents ─────────────────────────────────────────────────────────
+
+  registerTool({
+    name: 'agents.discover',
+    domain: 'agents',
+    description: 'List all registered agents from the indexer.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'limit', type: 'number', description: 'Optional max count (1-50).' },
+      { name: 'role', type: 'string', description: 'Optional role filter.' },
+      { name: 'capability', type: 'string', description: 'Optional capability filter.' },
+    ],
+    legacyAliases: ['list_agents'],
+    kind: 'read',
+    handler: async (args) => {
+      const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(50, args.limit)) : undefined;
+      const res = await fetch(indexerUrl('/agents'), { cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      const list = Array.isArray(json) ? json : json.agents || json.data || [];
+      return { agents: limit ? list.slice(0, limit) : list, total: list.length };
+    },
+  });
+
+  registerTool({
+    name: 'agents.get',
+    domain: 'agents',
+    description: 'Get a single agent by tokenId (ERC-8004 NFT ID).',
+    authRequired: false,
+    roles: [],
+    inputSchema: [{ name: 'tokenId', type: 'string', required: true, description: 'ERC-8004 NFT token ID.' }],
+    legacyAliases: ['get_agent'],
+    kind: 'read',
+    handler: async (args) => {
+      const id = String(args.tokenId || '').trim();
+      if (!id) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'tokenId required');
+      const res = await fetch(indexerUrl(`/agents/${encodeURIComponent(id)}`), { cache: 'no-store' });
+      if (!res.ok) throw new McpError(MCP_ERRORS.NOT_FOUND, `agent not found (indexer ${res.status})`);
+      return res.json();
+    },
+  });
+
+  // ── READ: jobs ───────────────────────────────────────────────────────────
+
+  registerTool({
+    name: 'jobs.list_public',
+    domain: 'jobs',
+    description: 'List jobs from the indexer. Supports optional status filter.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'status', type: 'string', description: 'created | funded | submitted | completed' },
+      { name: 'limit', type: 'number', description: 'Optional max count (1-50).' },
+    ],
+    legacyAliases: ['list_jobs'],
+    kind: 'read',
+    handler: async (args) => {
+      const status = typeof args.status === 'string' ? args.status.toLowerCase() : undefined;
+      const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(50, args.limit)) : undefined;
+      const res = await fetch(indexerUrl('/jobs'), { cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      let list: unknown[] = Array.isArray(json) ? json : json.jobs || json.data || [];
+      if (status) list = list.filter((j: any) => String(j.status || '').toLowerCase().includes(status));
+      return { jobs: limit ? list.slice(0, limit) : list, total: list.length };
+    },
+  });
+
+  registerTool({
+    name: 'jobs.get_public',
+    domain: 'jobs',
+    description: 'Get a single job by jobId.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [{ name: 'jobId', type: 'string', required: true, description: 'Job ID.' }],
+    legacyAliases: ['get_job'],
+    kind: 'read',
+    handler: async (args) => {
+      const id = String(args.jobId || '').trim();
+      if (!id) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
+      const res = await fetch(indexerUrl(`/jobs/${encodeURIComponent(id)}`), { cache: 'no-store' });
+      if (!res.ok) throw new McpError(MCP_ERRORS.NOT_FOUND, `job not found (indexer ${res.status})`);
+      return res.json();
+    },
+  });
+
+  // ── READ: docs ───────────────────────────────────────────────────────────
+
+  registerTool({
+    name: 'docs.arc_search',
+    domain: 'docs',
+    description: 'Search Arc Network documentation by scanning https://docs.arc.io/llms.txt.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [{ name: 'query', type: 'string', required: true, description: 'Search query for Arc docs.' }],
+    legacyAliases: ['arc_docs_search'],
+    kind: 'read',
+    handler: async (args) => {
+      const query = String(args.query || '').trim();
+      if (!query) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'query required');
+      const res = await fetch('https://docs.arc.io/llms.txt', { cache: 'no-store' });
+      if (!res.ok) return { error: `fetch failed: ${res.status}`, fallback: 'https://docs.arc.io' };
+      const text = await res.text();
+      const lines = text.split('\n');
+      const matches = lines.filter((l) => l.toLowerCase().includes(query.toLowerCase()));
+      return {
+        source: 'https://docs.arc.io/llms.txt',
+        query,
+        results: matches.slice(0, 20),
+        totalMatches: matches.length,
+        fullDocsUrl: 'https://docs.arc.io',
+        mcpServer: 'https://docs.arc.io/mcp',
+      };
+    },
+  });
+
+  // ── TX INSTRUCTION: identity / ERC-8004 registration ─────────────────────
+
+  registerTool({
+    name: 'identity.prepare_register_agent',
+    domain: 'identity',
+    description:
+      'Build unsigned calldata for ERC-8004 IdentityRegistry.register(metadataURI). Returns tx instructions; the caller signs and sends.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'metadataURI', type: 'string', required: true, description: 'Public agent manifest URL (HTTPS or IPFS).' },
+    ],
+    legacyAliases: ['register_agent_calldata'],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const metadataURI = String(args.metadataURI || '').trim();
+      if (!metadataURI) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'metadataURI required');
+      const data = encodeFunctionData({
+        abi: ERC8004_IDENTITY_REGISTRY_ABI as any,
+        functionName: 'register',
+        args: [metadataURI],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+        data,
+        value: '0x0',
+        signingRequired: true,
+        signing: {
+          how: 'Send this transaction from your controller wallet on Arc Testnet (chainId 5042002).',
+          rpc: ARC_RPC,
+          gasHint: '~200000',
+        },
+        notes: [
+          'tokenId is emitted in the Transfer(from=0x0, to, tokenId) event in the tx receipt.',
+          'metadataURI should point to a public agent manifest (e.g. /.well-known/agent.json).',
+          'ArcLayer never holds your private key. Sign + broadcast yourself.',
+        ],
+      };
+    },
+  });
+
+  // ── TX INSTRUCTION: reputation / feedback ─────────────────────────────────
+
+  registerTool({
+    name: 'reputation.give_feedback',
+    domain: 'reputation',
+    description: 'Build unsigned calldata for ERC-8004 ReputationRegistry.giveFeedback(...).',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'agentTokenId', type: 'string', required: true },
+      { name: 'score', type: 'string', required: true },
+      { name: 'category', type: 'string', required: true },
+      { name: 'comment', type: 'string', required: true },
+      { name: 'metadataURI', type: 'string', required: true },
+      { name: 'proofURI', type: 'string', required: true },
+      { name: 'context', type: 'string', required: true },
+      { name: 'ref', type: 'string', required: true },
+    ],
+    legacyAliases: ['give_feedback_calldata'],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const data = encodeFunctionData({
+        abi: ERC8004_REPUTATION_REGISTRY_ABI as any,
+        functionName: 'giveFeedback',
+        args: [
+          BigInt(String(args.agentTokenId || '').trim()),
+          BigInt(String(args.score || '').trim()),
+          Number(String(args.category || '').trim()),
+          String(args.comment || '').trim(),
+          String(args.metadataURI || '').trim(),
+          String(args.proofURI || '').trim(),
+          String(args.context || '').trim(),
+          String(args.ref || '').trim(),
+        ],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8004_REPUTATION_REGISTRY,
+        data,
+        value: '0x0',
+        signingRequired: true,
+        signing: { how: 'Send from the feedback author wallet on Arc Testnet.', rpc: ARC_RPC },
+      };
+    },
+  });
+
+  // ── TX INSTRUCTION: validation ────────────────────────────────────────────
+
+  registerTool({
+    name: 'validation.request_calldata',
+    domain: 'validation',
+    description: 'Build unsigned calldata for ERC-8004 ValidationRegistry.validationRequest(...).',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'validator', type: 'string', required: true },
+      { name: 'agentTokenId', type: 'string', required: true },
+      { name: 'taskUri', type: 'string', required: true },
+      { name: 'requestHash', type: 'string', required: true },
+    ],
+    legacyAliases: ['validation_request_calldata'],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const data = encodeFunctionData({
+        abi: ERC8004_VALIDATION_REGISTRY_ABI as any,
+        functionName: 'validationRequest',
+        args: [
+          String(args.validator || '').trim() as Hex,
+          BigInt(String(args.agentTokenId || '').trim()),
+          String(args.taskUri || '').trim(),
+          String(args.requestHash || '').trim() as Hex,
+        ],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+        data,
+        value: '0x0',
+        signingRequired: true,
+        signing: { how: 'Send from requester/controller wallet on Arc Testnet.', rpc: ARC_RPC },
+      };
+    },
+  });
+
+  registerTool({
+    name: 'validation.response_calldata',
+    domain: 'validation',
+    description: 'Build unsigned calldata for ERC-8004 ValidationRegistry.validationResponse(...).',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'requestHash', type: 'string', required: true },
+      { name: 'status', type: 'string', required: true },
+      { name: 'resultUri', type: 'string', required: true },
+      { name: 'resultHash', type: 'string', required: true },
+      { name: 'reason', type: 'string', required: true },
+    ],
+    legacyAliases: ['validation_response_calldata'],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const data = encodeFunctionData({
+        abi: ERC8004_VALIDATION_REGISTRY_ABI as any,
+        functionName: 'validationResponse',
+        args: [
+          String(args.requestHash || '').trim() as Hex,
+          Number(String(args.status || '').trim()),
+          String(args.resultUri || '').trim(),
+          String(args.resultHash || '').trim() as Hex,
+          String(args.reason || '').trim(),
+        ],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+        data,
+        value: '0x0',
+        signingRequired: true,
+        signing: { how: 'Send from assigned validator wallet on Arc Testnet.', rpc: ARC_RPC },
+      };
+    },
+  });
+
+  registerTool({
+    name: 'validation.status_read',
+    domain: 'validation',
+    description: 'Read helper for ValidationRegistry.getValidationStatus([requestHash]).',
+    authRequired: false,
+    roles: [],
+    inputSchema: [{ name: 'requestHash', type: 'string', required: true }],
+    legacyAliases: ['validation_status_read'],
+    kind: 'read',
+    handler: async (args) => ({
+      method: 'getValidationStatus',
+      contract: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+      abiFunction: 'getValidationStatus(bytes32 requestHash)',
+      note: 'Use your own Arc Testnet RPC client to call this read method.',
+      args: [String(args.requestHash || '').trim()],
+    }),
+  });
+
+  // ── TX INSTRUCTION: ERC-8183 job lifecycle ────────────────────────────────
+
+  registerTool({
+    name: 'client.prepare_create_job',
+    domain: 'jobs',
+    description:
+      'Build unsigned calldata for ERC-8183 AgenticCommerce.createJob(provider, evaluator, expiredAt, description, hook).',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'provider', type: 'string', required: true, description: 'Provider/worker wallet address.' },
+      { name: 'evaluator', type: 'string', required: true, description: 'Evaluator wallet address.' },
+      { name: 'expiredAt', type: 'string', required: true, description: 'Unix timestamp when job expires.' },
+      { name: 'description', type: 'string', required: true, description: 'Job description string.' },
+      { name: 'hook', type: 'string', description: 'Optional hook contract address (default: 0x0).' },
+    ],
+    legacyAliases: ['create_job_calldata'],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const provider = String(args.provider || '').trim();
+      const evaluator = String(args.evaluator || '').trim();
+      const expiredAt = String(args.expiredAt || '').trim();
+      const description = String(args.description || '').trim();
+      const hook = String(args.hook || '0x0000000000000000000000000000000000000000').trim();
+      if (!provider || !evaluator || !expiredAt || !description) {
+        throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'provider, evaluator, expiredAt, description required');
+      }
+      if (!/^0x[a-fA-F0-9]{40}$/.test(provider)) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'provider is not a valid address');
+      if (!/^0x[a-fA-F0-9]{40}$/.test(evaluator)) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'evaluator is not a valid address');
+      const data = encodeFunctionData({
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
+        functionName: 'createJob',
+        args: [provider as Hex, evaluator as Hex, BigInt(expiredAt), description, hook as Hex],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        data,
+        value: '0x0',
+        signingRequired: true,
+        signing: { how: 'Send from the client wallet on Arc Testnet.', rpc: ARC_RPC, gasHint: '~300000' },
+        lifecycle: [
+          '1. createJob → get jobId from JobCreated event',
+          '2. provider calls setBudget(jobId, amount, "0x")',
+          '3. USDC.approve(AgenticCommerce, amount)',
+          '4. fund(jobId, "0x")',
+          '5. submit(jobId, deliverableHash, "0x")',
+          '6. complete(jobId, reasonHash, "0x")',
+        ],
+      };
+    },
+  });
+
+  registerTool({
+    name: 'provider.prepare_set_budget',
+    domain: 'jobs',
+    description: 'Build unsigned calldata for ERC-8183 AgenticCommerce.setBudget(jobId, amount, optParams).',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'amount', type: 'string', required: true, description: 'Budget in USDC atomic units (6 decimals).' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
+    ],
+    legacyAliases: ['set_budget_calldata'],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const jobIdRaw = String(args.jobId || '').trim();
+      const amountRaw = String(args.amount || '').trim();
+      const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+      if (!jobIdRaw || !amountRaw) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId, amount required');
+      const data = encodeFunctionData({
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
+        functionName: 'setBudget',
+        args: [BigInt(jobIdRaw), BigInt(amountRaw), optParams],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        data,
+        value: '0x0',
+        signingRequired: true,
+        derived: { jobId: jobIdRaw, budgetAtomic: amountRaw, budgetUsdc: `${Number(amountRaw) / 1e6} USDC` },
+        signing: { how: 'Send from the provider wallet assigned to this job.', rpc: ARC_RPC, gasHint: '~80000' },
+      };
+    },
+  });
+
+  registerTool({
+    name: 'client.prepare_approve_usdc',
+    domain: 'jobs',
+    description: 'Build unsigned calldata for USDC.approve(AgenticCommerce, amount). Must be called before fund().',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'amount', type: 'string', required: true, description: 'Amount in USDC atomic units (6 decimals).' },
+    ],
+    legacyAliases: ['approve_usdc_calldata'],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const amountRaw = String(args.amount || '').trim();
+      if (!amountRaw) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'amount required');
+      const data = encodeFunctionData({
+        abi: [{ name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] }] as any,
+        functionName: 'approve',
+        args: [CONTRACTS.ERC8183_AGENTIC_COMMERCE as Hex, BigInt(amountRaw)],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.USDC,
+        data,
+        value: '0x0',
+        signingRequired: true,
+        derived: { spender: CONTRACTS.ERC8183_AGENTIC_COMMERCE, amountAtomic: amountRaw, amountUsdc: `${Number(amountRaw) / 1e6} USDC` },
+        signing: { how: 'Send from the client wallet that holds USDC.', rpc: ARC_RPC, gasHint: '~50000' },
+      };
+    },
+  });
+
+  registerTool({
+    name: 'client.prepare_fund_job',
+    domain: 'jobs',
+    description: 'Build unsigned calldata for ERC-8183 AgenticCommerce.fund(jobId, optParams).',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
+    ],
+    legacyAliases: ['fund_job_calldata'],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const jobIdRaw = String(args.jobId || '').trim();
+      const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+      if (!jobIdRaw) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
+      const data = encodeFunctionData({
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
+        functionName: 'fund',
+        args: [BigInt(jobIdRaw), optParams],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        data,
+        value: '0x0',
+        signingRequired: true,
+        signing: { how: 'Send from the client wallet. USDC.approve must have been called first.', rpc: ARC_RPC, gasHint: '~120000' },
+        prerequisites: ['Call provider.prepare_set_budget first.', 'Call client.prepare_approve_usdc to approve escrow.'],
+      };
+    },
+  });
+
+  registerTool({
+    name: 'provider.prepare_submit_job',
+    domain: 'jobs',
+    description: 'Build unsigned calldata for ERC-8183 AgenticCommerce.submit(jobId, deliverableHash, optParams).',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'deliverableHash', type: 'string', required: true, description: 'Keccak256 hash of the deliverable content.' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
+    ],
+    legacyAliases: ['submit_job_calldata'],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const jobIdRaw = String(args.jobId || '').trim();
+      const deliverableHash = String(args.deliverableHash || '').trim();
+      const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+      if (!jobIdRaw || !deliverableHash) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId, deliverableHash required');
+      const data = encodeFunctionData({
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
+        functionName: 'submit',
+        args: [BigInt(jobIdRaw), deliverableHash as Hex, optParams],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        data,
+        value: '0x0',
+        signingRequired: true,
+        signing: { how: 'Send from the provider wallet assigned to this job.', rpc: ARC_RPC, gasHint: '~200000' },
+        invariants: ['Only the designated provider can submit.', 'Job must be in funded state.'],
+      };
+    },
+  });
+
+  registerTool({
+    name: 'evaluator.prepare_complete_job',
+    domain: 'jobs',
+    description: 'Build unsigned calldata for ERC-8183 AgenticCommerce.complete(jobId, reason, optParams).',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'reason', type: 'string', description: 'Reason string (will be keccak256-hashed) OR a 0x-prefixed 32-byte hash.' },
+      { name: 'reasonHash', type: 'string', description: 'Optional pre-computed bytes32 reason hash; takes precedence.' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
+    ],
+    legacyAliases: ['complete_job_calldata'],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const jobIdRaw = String(args.jobId || '').trim();
+      if (!jobIdRaw) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
+      const reasonHashRaw = String(args.reasonHash || '').trim();
+      const reasonRaw = String(args.reason || '').trim();
+      const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+      let resolvedReason: Hex;
+      if (reasonHashRaw) {
+        if (!/^0x[0-9a-fA-F]{64}$/.test(reasonHashRaw)) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'reasonHash must be 0x-prefixed 32-byte hex');
+        resolvedReason = reasonHashRaw as Hex;
+      } else if (reasonRaw) {
+        resolvedReason = (reasonRaw.startsWith('0x') && reasonRaw.length === 66 ? reasonRaw : keccak256(toBytes(reasonRaw))) as Hex;
+      } else {
+        resolvedReason = keccak256(toBytes('approved')) as Hex;
+      }
+      const data = encodeFunctionData({
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
+        functionName: 'complete',
+        args: [BigInt(jobIdRaw), resolvedReason, optParams],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        data,
+        value: '0x0',
+        signingRequired: true,
+        signing: { how: 'Send from the evaluator wallet. Releases escrowed USDC to provider.', rpc: ARC_RPC, gasHint: '~150000' },
+        invariants: ['Only the evaluator can call complete.', 'Job must have a submitted deliverable.'],
+      };
+    },
+  });
+}
+
+// ─── MANIFEST ────────────────────────────────────────────────────────────────
+
+export function buildManifest(_ctx?: RequestContext) {
+  registerAllTools();
+  return {
+    name: MCP_SERVER_NAME,
+    version: MCP_VERSION,
+    description:
+      'ArcLayer Global MCP — agentic commerce tools on Arc Testnet. This is NOT the official Arc MCP server (https://docs.arc.io/mcp).',
+    network: {
+      name: 'Arc Testnet',
+      chainId: ARC_CHAIN_ID,
+      rpc: ARC_RPC,
+      explorer: 'https://testnet.arcscan.app',
+      faucet: 'https://faucet.circle.com',
+    },
+    contracts: {
+      identityRegistry_ERC8004: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+      reputationRegistry_ERC8004: CONTRACTS.ERC8004_REPUTATION_REGISTRY,
+      validationRegistry_ERC8004: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
+      agenticCommerce_ERC8183: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      usdc_ERC20: CONTRACTS.USDC,
+      eurc: ARC_TOKENS.EURC,
+    },
+    tools: listTools().map((t) => ({
+      name: t.name,
+      description: t.description,
+      kind: t.kind,
+      args: t.inputSchema,
+    })),
+    docs: {
+      arc: 'https://docs.arc.io',
+      llms: 'https://docs.arc.io/llms.txt',
+      mcp: 'https://docs.arc.io/mcp',
+    },
+  };
+}
+
+// ─── INVOKE TOOL ─────────────────────────────────────────────────────────────
+
+async function invokeTool(
+  name: string,
+  args: Record<string, unknown>,
+  context: McpToolContext,
+): Promise<unknown> {
+  registerAllTools();
+  const tool = getTool(name);
+  if (!tool) {
+    throw new McpError(MCP_ERRORS.UNKNOWN_TOOL, `Unknown tool: ${name}`);
+  }
+  return tool.handler(args, context);
+}
+
+// ─── HANDLE POST ─────────────────────────────────────────────────────────────
+
+export async function handleMcpPost(
+  body: unknown,
+  ctx: RequestContext,
+): Promise<{ json: unknown; status: number }> {
+  registerAllTools();
+  const mcpCtx: McpToolContext = { request: ctx };
+
+  // Validate basic JSON-RPC shape
+  if (!body || typeof body !== 'object') {
+    return { json: jsonRpcError(null, MCP_ERRORS.INVALID_REQUEST, 'Request body must be a JSON object'), status: 400 };
+  }
+
+  const b = body as Record<string, unknown>;
+  const id = (b.id as string | number | null) ?? null;
+
+  // ── JSON-RPC shape: { method, params } ─────────────────────────────────
+  if (typeof b.method === 'string') {
+    const method = b.method;
+    const params = (b.params && typeof b.params === 'object' ? b.params : {}) as Record<string, unknown>;
+
+    // initialize
+    if (method === 'initialize') {
+      return {
+        json: jsonRpcResult(id, {
+          protocolVersion: PROTOCOL_VERSION,
+          serverInfo: { name: MCP_SERVER_NAME, version: MCP_VERSION },
+          capabilities: { tools: true },
+        }),
+        status: 200,
+      };
+    }
+
+    // tools/list
+    if (method === 'tools/list') {
+      const toolsList = listTools().map(toMcpToolSchema);
+      return { json: jsonRpcResult(id, { tools: toolsList }), status: 200 };
+    }
+
+    // tools/call
+    if (method === 'tools/call') {
+      const toolName = params.name;
+      if (typeof toolName !== 'string' || !toolName.trim()) {
+        return { json: jsonRpcError(id, MCP_ERRORS.VALIDATION_ERROR, 'params.name must be a non-empty string'), status: 400 };
+      }
+      const toolArgs = (params.arguments && typeof params.arguments === 'object' ? params.arguments : {}) as Record<string, unknown>;
+      try {
+        const result = await invokeTool(toolName.trim(), toolArgs, mcpCtx);
+        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        return { json: jsonRpcResult(id, okResult(text, result as Record<string, unknown>)), status: 200 };
+      } catch (e) {
+        const mcpErr = thrownToMcpError(e);
+        return { json: jsonRpcError(id, mcpErr.code, redactString(mcpErr.message)), status: mcpErr.status };
+      }
+    }
+
+    // Legacy method fallback: treat method as a tool name/alias
+    if (hasTool(method)) {
+      try {
+        const result = await invokeTool(method, params, mcpCtx);
+        return { json: jsonRpcResult(id, { tool: method, kind: getTool(method)?.kind, result }), status: 200 };
+      } catch (e) {
+        const mcpErr = thrownToMcpError(e);
+        return { json: jsonRpcError(id, mcpErr.code, redactString(mcpErr.message)), status: mcpErr.status };
+      }
+    }
+
+    // Unknown method
+    return { json: jsonRpcError(id, MCP_ERRORS.UNKNOWN_METHOD, `Unknown method: ${method}`), status: 400 };
+  }
+
+  // ── Simple shape: { tool, args } ───────────────────────────────────────
+  if (typeof b.tool === 'string') {
+    const toolArgs = (b.args && typeof b.args === 'object' ? b.args : {}) as Record<string, unknown>;
+    try {
+      const result = await invokeTool(b.tool, toolArgs, mcpCtx);
+      return { json: { tool: b.tool, kind: getTool(b.tool)?.kind, result }, status: 200 };
+    } catch (e) {
+      const mcpErr = thrownToMcpError(e);
+      return { json: { tool: b.tool, error: redactString(mcpErr.message) }, status: mcpErr.status };
+    }
+  }
+
+  return { json: jsonRpcError(id, MCP_ERRORS.INVALID_REQUEST, 'Provide { tool, args } or { jsonrpc, method, params }'), status: 400 };
+}
+
+// ─── HANDLE GET ──────────────────────────────────────────────────────────────
+
+export async function handleMcpGet(
+  searchParams: URLSearchParams,
+  ctx: RequestContext,
+): Promise<unknown> {
+  registerAllTools();
+  const toolName = searchParams.get('tool');
+  const mcpCtx: McpToolContext = { request: ctx };
+
+  // GET without tool → manifest
+  if (!toolName) {
+    return buildManifest(ctx);
+  }
+
+  // GET with tool → invoke
+  const args: Record<string, unknown> = {};
+  searchParams.forEach((v, k) => {
+    if (k !== 'tool') args[k] = v;
+  });
+
+  try {
+    const result = await invokeTool(toolName, args, mcpCtx);
+    return { tool: toolName, kind: getTool(toolName)?.kind, result };
+  } catch (e) {
+    const mcpErr = thrownToMcpError(e);
+    return { tool: toolName, error: redactString(mcpErr.message) };
+  }
+}
