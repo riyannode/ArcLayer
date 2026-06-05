@@ -1,11 +1,9 @@
 'use client';
 
 /**
- * useGatewayDeposit — Hybrid deposit hook for Circle GatewayWallet.
+ * useGatewayDeposit — EOA deposit hook for Circle GatewayWallet.
  *
- * Routes through:
- *   - EOA (Reown/wagmi): sequential approve → deposit (user pays gas)
- *   - Passkey (Circle bundler): atomic userOp [approve, deposit] (gasless)
+ * Routes through EOA (Reown/wagmi): sequential approve → deposit (user pays gas).
  *
  * Safety:
  *   - Exact approve amount (no unlimited allowance)
@@ -17,7 +15,6 @@
 import { useCallback, useState } from 'react';
 import {
   createPublicClient,
-  encodeFunctionData,
   formatUnits,
   getAddress,
   http,
@@ -61,7 +58,7 @@ export interface GatewayDepositState {
 export function useGatewayDeposit(
   onSuccess?: () => void,
 ): GatewayDepositState {
-  const { mode, address, bundlerClient } = useArcWallet();
+  const { mode, address } = useArcWallet();
   const { writeContractAsync: wagmiWrite } = useWriteContract();
 
   const [step, setStep] = useState<DepositStep>('idle');
@@ -125,80 +122,33 @@ export function useGatewayDeposit(
 
         const needsApprove = allowance < amountUnits;
 
-        if (mode === 'passkey') {
-          // ── PASSKEY PATH: atomic userOp via Circle bundler ─────────────
-          if (!bundlerClient) {
-            setError('Circle bundler not ready. Try reconnecting.');
-            setStep('error');
-            return;
-          }
-
-          setStep(needsApprove ? 'approving' : 'depositing');
-
-          const calls: Array<{ to: Address; data: `0x${string}`; value: bigint }> = [];
-
-          if (needsApprove) {
-            calls.push({
-              to: USDC,
-              data: encodeFunctionData({
-                abi: ERC20_ABI,
-                functionName: 'approve',
-                args: [GATEWAY_WALLET, amountUnits],
-              }),
-              value: BigInt(0),
-            });
-          }
-
-          calls.push({
-            to: GATEWAY_WALLET,
-            data: encodeFunctionData({
-              abi: GATEWAY_WALLET_ABI,
-              functionName: 'deposit',
-              args: [USDC, amountUnits],
-            }),
-            value: BigInt(0),
+        // ── EOA PATH: sequential approve → deposit via Reown/wagmi ─────
+        if (needsApprove) {
+          setStep('approving');
+          const approveHash = await wagmiWrite({
+            address: USDC,
+            abi: ERC20_ABI,
+            functionName: 'approve',
+            args: [GATEWAY_WALLET, amountUnits],
           });
-
-          setStep('depositing');
-          const userOpHash = await bundlerClient.sendUserOperation({ calls });
-
-          setStep('confirming');
-          const { receipt } = await bundlerClient.waitForUserOperationReceipt({
-            hash: userOpHash,
-          });
-
-          setTxHash(receipt.transactionHash);
-          setStep('success');
-          onSuccess?.();
-        } else {
-          // ── EOA PATH: sequential approve → deposit via Reown/wagmi ─────
-          if (needsApprove) {
-            setStep('approving');
-            const approveHash = await wagmiWrite({
-              address: USDC,
-              abi: ERC20_ABI,
-              functionName: 'approve',
-              args: [GATEWAY_WALLET, amountUnits],
-            });
-            await waitForTransactionReceipt(config, { hash: approveHash });
-            setApproveTxHash(approveHash);
-          }
-
-          setStep('depositing');
-          const depositHash = await wagmiWrite({
-            address: GATEWAY_WALLET,
-            abi: GATEWAY_WALLET_ABI,
-            functionName: 'deposit',
-            args: [USDC, amountUnits],
-          });
-
-          setStep('confirming');
-          await waitForTransactionReceipt(config, { hash: depositHash });
-
-          setTxHash(depositHash);
-          setStep('success');
-          onSuccess?.();
+          await waitForTransactionReceipt(config, { hash: approveHash });
+          setApproveTxHash(approveHash);
         }
+
+        setStep('depositing');
+        const depositHash = await wagmiWrite({
+          address: GATEWAY_WALLET,
+          abi: GATEWAY_WALLET_ABI,
+          functionName: 'deposit',
+          args: [USDC, amountUnits],
+        });
+
+        setStep('confirming');
+        await waitForTransactionReceipt(config, { hash: depositHash });
+
+        setTxHash(depositHash);
+        setStep('success');
+        onSuccess?.();
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         // User rejected in wallet — don't show as error, just reset
@@ -210,7 +160,7 @@ export function useGatewayDeposit(
         setStep('error');
       }
     },
-    [mode, address, bundlerClient, wagmiWrite, onSuccess, reset],
+    [mode, address, wagmiWrite, onSuccess, reset],
   );
 
   return { step, error, txHash, approveTxHash, deposit, reset };

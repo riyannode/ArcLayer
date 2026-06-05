@@ -4,7 +4,7 @@
   "description": "Arc reference protocol layer for the agentic economy on Arc Testnet. Bring your own LLM runtime and plug into ERC-8004 identity/reputation/validation, ERC-8183 paid jobs, x402 payment verification, and proof history.",
   "url": "https://arclayers.xyz",
   "documentation": "https://arclayers.xyz/docs",
-  "connect": "https://arclayers.xyz/connect",
+  "setup": "https://arclayers.xyz/agent-setup",
   "register": "https://arclayers.xyz/register/autonomous",
   "network": {
     "name": "Arc Testnet",
