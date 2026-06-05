@@ -24,6 +24,20 @@ import {
 } from 'lucide-react';
 import { useArcWallet } from '@/hooks/useArcWallet';
 
+// ── Agent Account types ───────────────────────────────────────────────────
+
+type AgentAccountInfo = {
+  ownerAddress: string;
+  agentAccountAddress: string | null;
+  status: string;
+  chainId: number;
+};
+
+type BalanceInfo = {
+  raw: string;
+  formatted: string;
+};
+
 type AgentMetadata = {
   schema?: string;
   version?: number;
@@ -286,6 +300,18 @@ export default function AgentProfilePage() {
   const [reputation, setReputation] = useState<ReputationResponse | null>(null);
   const [reputationLoading, setReputationLoading] = useState(false);
 
+  // Agent Account state
+  const [agentAccount, setAgentAccount] = useState<AgentAccountInfo | null>(null);
+  const [agentAccountLoading, setAgentAccountLoading] = useState(false);
+  const [linkAddress, setLinkAddress] = useState('');
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState('');
+
+  // Balance state
+  const [ownerBalance, setOwnerBalance] = useState<BalanceInfo | null>(null);
+  const [agentBalance, setAgentBalance] = useState<BalanceInfo | null>(null);
+  const [balancesLoading, setBalancesLoading] = useState(false);
+
   async function loadAgents(controller: string, signal?: AbortSignal) {
     setLoading(true);
     setNotice('');
@@ -407,6 +433,87 @@ export default function AgentProfilePage() {
   const latestFeedback = reputationFeedback[0] || null;
   const latestFeedbackTx = latestFeedback?.txHash || '';
 
+  // ── Agent Account fetching ──────────────────────────────────────────────
+
+  const hasAgentAccount = agentAccount?.agentAccountAddress != null;
+
+  async function loadAgentAccount() {
+    setAgentAccountLoading(true);
+    try {
+      const res = await fetch('/api/profile/agent-account', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        setAgentAccount(json);
+      }
+    } catch {
+      // silent
+    } finally {
+      setAgentAccountLoading(false);
+    }
+  }
+
+  async function loadBalances(owner: string, agent?: string | null) {
+    if (!owner) return;
+    setBalancesLoading(true);
+    try {
+      const params = new URLSearchParams({ owner });
+      if (agent) params.set('agentAccount', agent);
+      const res = await fetch(`/api/profile/balances?${params}`, { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        setOwnerBalance(json.owner?.usdc ?? null);
+        setAgentBalance(json.agentAccount?.usdc ?? null);
+      }
+    } catch {
+      // silent
+    } finally {
+      setBalancesLoading(false);
+    }
+  }
+
+  async function handleLinkAgentAccount() {
+    if (!linkAddress) return;
+    setLinking(true);
+    setLinkError('');
+    try {
+      const res = await fetch('/api/profile/agent-account/link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentAccountAddress: linkAddress }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        setLinkError(json.error || 'Failed to link agent account');
+        return;
+      }
+      setAgentAccount(json);
+      setLinkAddress('');
+      // Reload balances with new agent account
+      if (address && json.agentAccountAddress) {
+        void loadBalances(address, json.agentAccountAddress);
+      }
+    } catch {
+      setLinkError('Network error');
+    } finally {
+      setLinking(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!ready || !isConnected) {
+      setAgentAccount(null);
+      setOwnerBalance(null);
+      setAgentBalance(null);
+      return;
+    }
+    void loadAgentAccount();
+  }, [ready, isConnected, address]);
+
+  useEffect(() => {
+    if (!address) return;
+    void loadBalances(address, agentAccount?.agentAccountAddress);
+  }, [address, agentAccount?.agentAccountAddress]);
+
   return (
     <main className="min-h-screen bg-[#05070A] text-[#F5F0E5]">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(243,197,54,0.06),transparent_28%),radial-gradient(circle_at_80%_8%,rgba(255,255,255,0.035),transparent_22%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent_46%)]" />
@@ -455,6 +562,202 @@ export default function AgentProfilePage() {
             </div>
           </div>
         </div>
+
+        {/* ── Account Overview + Wallet & Funding ─────────────────────── */}
+        {isConnected && (
+          <div className="mt-10 grid gap-6 lg:grid-cols-2">
+            {/* Account Overview */}
+            <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
+              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
+                Account Overview
+              </div>
+
+              {/* Owner Wallet */}
+              <div className="mt-4 grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-3">
+                <div className="text-[13px] text-[#EAE4D8]/60">Owner Wallet</div>
+                <div className="flex items-center gap-2">
+                  <span className="truncate font-mono text-[13px] text-[#F5F0E5]">
+                    {shortAddress(address)}
+                  </span>
+                  {address && (
+                    <button type="button" onClick={() => copyToClipboard(address)} className="text-[#EAE4D8]/45 transition hover:text-[#F3C536]">
+                      <Clipboard className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <span className="ml-auto rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
+                    Connected
+                  </span>
+                </div>
+              </div>
+
+              {/* Agent Account */}
+              <div className="grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-3">
+                <div className="text-[13px] text-[#EAE4D8]/60">Agent Account</div>
+                <div className="flex items-center gap-2">
+                  {hasAgentAccount ? (
+                    <>
+                      <span className="truncate font-mono text-[13px] text-[#F5F0E5]">
+                        {shortAddress(agentAccount?.agentAccountAddress ?? '')}
+                      </span>
+                      <button type="button" onClick={() => copyToClipboard(agentAccount?.agentAccountAddress ?? '')} className="text-[#EAE4D8]/45 transition hover:text-[#F3C536]">
+                        <Clipboard className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="ml-auto rounded-md border border-[#F3C536]/20 bg-[#F3C536]/10 px-2 py-0.5 font-mono text-[10px] text-[#F3C536]">
+                        Active
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[13px] text-[#EAE4D8]/40">Not created</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Agent Identity */}
+              <div className="grid grid-cols-[1fr_1fr] items-center gap-3 py-3">
+                <div className="text-[13px] text-[#EAE4D8]/60">Agent Identity</div>
+                <div className="text-[13px] text-[#F5F0E5]">
+                  {agents.length > 0 ? `Agent ${agents[0].agentId}` : 'No Agent ID yet'}
+                </div>
+              </div>
+
+              <p className="mt-1 text-[11px] leading-5 text-[#EAE4D8]/35">
+                Used as ERC-8004 controller and agent operating account.
+              </p>
+
+              {/* CTAs */}
+              <div className="mt-4 flex flex-wrap gap-3">
+                {!hasAgentAccount && (
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="text"
+                      placeholder="0x... Agent Account address"
+                      value={linkAddress}
+                      onChange={(e) => { setLinkAddress(e.target.value); setLinkError(''); }}
+                      className="h-10 w-[280px] rounded-md border border-white/10 bg-[#0A0D12] px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleLinkAgentAccount}
+                      disabled={linking || !linkAddress}
+                      className="h-10 rounded-md bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
+                    >
+                      {linking ? 'Linking...' : 'Link Agent Account'}
+                    </button>
+                  </div>
+                )}
+                {hasAgentAccount && agents.length === 0 && (
+                  <Link href="/register/erc8004" className="inline-flex h-10 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-5 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10">
+                    <Plus className="h-4 w-4" /> Register ERC-8004 Agent
+                  </Link>
+                )}
+                {hasAgentAccount && agents.length > 0 && (
+                  <Link href="/agent-setup" className="inline-flex h-10 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-5 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10">
+                    <Bot className="h-4 w-4" /> Open Agent Setup
+                  </Link>
+                )}
+              </div>
+              {linkError && <p className="mt-2 text-[12px] text-red-400">{linkError}</p>}
+            </div>
+
+            {/* Wallet & Funding */}
+            <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
+              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
+                Wallet & Funding
+              </div>
+
+              {!hasAgentAccount ? (
+                <div className="mt-6 text-center">
+                  <p className="text-[13px] text-[#EAE4D8]/45">
+                    Create an Agent Account first to get a deposit address.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* Balances */}
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                        Owner Wallet USDC
+                      </div>
+                      <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
+                        {balancesLoading ? '...' : ownerBalance?.formatted ?? '0.00'}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                        Agent Account USDC
+                      </div>
+                      <div className="mt-2 text-[18px] font-semibold text-[#F3C536]">
+                        {balancesLoading ? '...' : agentBalance?.formatted ?? '0.00'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Deposit Address */}
+                  <div className="mt-4 rounded-md border border-white/10 bg-[#0A0D12] px-4 py-3">
+                    <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                      Deposit Address
+                    </div>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="min-w-0 truncate font-mono text-[12px] text-[#F5F0E5]">
+                        {agentAccount?.agentAccountAddress}
+                      </span>
+                      <button type="button" onClick={() => copyToClipboard(agentAccount?.agentAccountAddress ?? '')} className="shrink-0 text-[#EAE4D8]/45 transition hover:text-[#F3C536]">
+                        <Clipboard className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="mt-2 flex items-center gap-3 text-[11px] text-[#EAE4D8]/35">
+                      <span>Network: Arc Testnet</span>
+                      <span>Token: USDC</span>
+                    </div>
+                  </div>
+
+                  <p className="mt-3 text-[11px] leading-5 text-[#EAE4D8]/35">
+                    Send USDC on Arc Testnet to your Agent Account address.
+                  </p>
+
+                  {/* Actions */}
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { if (address) void loadBalances(address, agentAccount?.agentAccountAddress); }}
+                      disabled={balancesLoading}
+                      className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
+                    >
+                      <RefreshCcw className={`h-3.5 w-3.5 ${balancesLoading ? 'animate-spin' : ''}`} />
+                      Refresh Balances
+                    </button>
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex h-10 cursor-not-allowed items-center rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/30"
+                    >
+                      Withdraw — Coming soon
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Setup section ────────────────────────────────────────────── */}
+        {isConnected && hasAgentAccount && (
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <Link href="/agent-setup" className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 transition hover:border-[#F3C536]/30">
+              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Manual PM2 Bot</div>
+              <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/50">
+                Run an external provider bot on your VPS.
+              </p>
+            </Link>
+            <Link href="/agent-setup" className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 transition hover:border-[#F3C536]/30">
+              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">MCP for Claude / Codex</div>
+              <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/50">
+                Manage ArcLayer actions through approval-gated MCP tools.
+              </p>
+            </Link>
+          </div>
+        )}
 
         {!ready || loading ? (
           <div className="mt-10 flex min-h-[420px] items-center justify-center rounded-xl border border-white/10 bg-[#080D13]/70">
