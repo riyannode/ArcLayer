@@ -258,6 +258,31 @@ type TabKey = 'basic' | 'capabilities' | 'links' | 'reputation' | 'metadata';
 
 const EMPTY_AGENTS: ProfileAgent[] = [];
 
+/** Map raw passkey/Circle errors to user-friendly copy. */
+function mapPasskeyError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const lower = raw.toLowerCase();
+
+  // WebAuthn credential creation failed on non-production origin
+  if (lower.includes('credentials') || lower.includes('credential')) {
+    return 'Passkey credential creation failed. Try using arclayers.xyz, a new passkey name, or clear existing passkeys for this site.';
+  }
+  // User cancelled the passkey prompt
+  if (lower.includes('cancel') || lower.includes('abort') || lower.includes('notallowed')) {
+    return ''; // silent — user action, not an error
+  }
+  // WebAuthn not supported
+  if (lower.includes('not supported') || lower.includes('notavailable')) {
+    return 'WebAuthn is not supported on this browser. Try Chrome or Safari on a device with biometrics.';
+  }
+  // Network / RPC errors
+  if (lower.includes('network') || lower.includes('fetch') || lower.includes('timeout')) {
+    return 'Network error. Check your connection and try again.';
+  }
+  // Fallback — show sanitized message
+  return raw.length > 200 ? raw.slice(0, 200) + '…' : raw || 'Passkey registration failed.';
+}
+
 function shortAddress(value?: string) {
   if (!value) return '—';
   if (value.length < 14) return value;
@@ -446,6 +471,13 @@ export default function AgentProfilePage() {
   const [notice, setNotice] = useState('');
   const [reputation, setReputation] = useState<ReputationResponse | null>(null);
   const [reputationLoading, setReputationLoading] = useState(false);
+
+  // Preview domain guard — passkey creation only works on production origin
+  const isPreviewDomain = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const origin = window.location.origin;
+    return origin.includes('vercel.app') || origin.includes('localhost') || (origin !== 'https://arclayers.xyz' && !origin.includes('127.0.0.1'));
+  }, []);
 
   // Agent Account state
   const [agentAccount, setAgentAccount] = useState<AgentAccountInfo | null>(null);
@@ -660,6 +692,13 @@ export default function AgentProfilePage() {
     setCreatingAgent(true);
     setCreateError('');
     try {
+      // Preview domain guard — passkey creation requires production origin
+      if (isPreviewDomain) {
+        setCreateError('Passkey creation is only supported on arclayers.xyz. Preview deployments can display profile data, but Circle Agent Account creation must be done on the production domain.');
+        setCreatingAgent(false);
+        return;
+      }
+
       // Step 1: Try Circle login (existing passkey)
       let addr: string | undefined;
       if (circleAuthenticated && circleAddress) {
@@ -684,7 +723,7 @@ export default function AgentProfilePage() {
       // Step 2: link the returned address directly (no React state race)
       if (addr) await linkCircleAddress(addr);
     } catch (e) {
-      setCreateError(e instanceof Error ? e.message : 'Failed to create agent account');
+      setCreateError(mapPasskeyError(e));
     } finally {
       setCreatingAgent(false);
     }
@@ -701,7 +740,8 @@ export default function AgentProfilePage() {
       // Link the returned address directly (no React state race)
       await linkCircleAddress(addr);
     } catch (e) {
-      setCreateError(e instanceof Error ? e.message : 'Passkey registration failed');
+      const mapped = mapPasskeyError(e);
+      setCreateError(mapped || 'Passkey registration failed');
     } finally {
       setCreatingAgent(false);
     }
@@ -883,7 +923,16 @@ export default function AgentProfilePage() {
 
               {/* CTAs */}
               <div className="mt-4 flex flex-wrap gap-3">
-                {!hasAgentAccount && !showPasskeyRegister && (
+                {!hasAgentAccount && !showPasskeyRegister && isPreviewDomain && (
+                  <p className="text-[12px] leading-5 text-[#EAE4D8]/50">
+                    Passkey creation is only supported on{' '}
+                    <a href="https://arclayers.xyz/profile" target="_blank" rel="noreferrer" className="text-[#F3C536] underline decoration-[#F3C536]/30 hover:decoration-[#F3C536]">
+                      arclayers.xyz
+                    </a>
+                    . Preview deployments can display profile data, but Agent Account creation must be done on the production domain.
+                  </p>
+                )}
+                {!hasAgentAccount && !showPasskeyRegister && !isPreviewDomain && (
                   <button
                     type="button"
                     onClick={handleCreateAgentAccount}
