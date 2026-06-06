@@ -308,7 +308,7 @@ export async function getProviderRuntimeContext(
 
   // Fallback: if no active run from state, check directly for active runs
   if (!activeRun) {
-    const { data: run } = await supabase
+    const { data: run, error: fbErr } = await supabase
       .from('agent_job_runs')
       .select('*')
       .eq('agent_id', agentId)
@@ -317,6 +317,7 @@ export async function getProviderRuntimeContext(
       .order('started_at', { ascending: false })
       .limit(1)
       .maybeSingle();
+    console.log(`[getProviderRuntimeContext] fallback: agent=${agentId}, found=${!!run}, error=${fbErr?.message ?? 'none'}, runId=${run?.id ?? 'null'}`);
     activeRun = run as JobRunRow | null;
 
     // If we found a run via fallback, sync the runtime state
