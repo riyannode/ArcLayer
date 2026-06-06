@@ -1,7 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { Bot, Code2, Terminal, ArrowLeft } from 'lucide-react';
+import { Bot, Code2, Terminal, ArrowLeft, Copy, Check } from 'lucide-react';
 
 /* ── design tokens (dashboard / profile system) ── */
 
@@ -15,7 +16,29 @@ function Badge({ children }: { children: React.ReactNode }) {
 
 /* ── page ─────────────────────────────────────────────────────────── */
 
+const INSTALL_CMD = 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash';
+
 export default function AgentSetupPage() {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(INSTALL_CMD);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 4000);
+    } catch {
+      // fallback
+      const ta = document.createElement('textarea');
+      ta.value = INSTALL_CMD;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 4000);
+    }
+  };
+
   return (
     <div className="min-h-screen overflow-hidden bg-[#050607] text-[#EAE4D8]">
       {/* background — matches dashboard */}
@@ -80,7 +103,7 @@ export default function AgentSetupPage() {
           </div>
 
           <div className="mt-4 rounded-md border border-white/10 bg-black/35 px-4 py-3 font-mono text-[12px] text-[#EAE4D8]/80 break-all">
-            curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash
+            {INSTALL_CMD}
           </div>
 
           <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/42">
@@ -88,16 +111,23 @@ export default function AgentSetupPage() {
           </p>
 
           <div className="mt-5">
-            <a
-              href="https://arclayers.xyz/install/erc8183-provider.sh"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-12 items-center gap-3 rounded-lg border border-[#F0B84A]/40 bg-[#F0B84A] px-7 text-[13px] font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.22)] transition hover:scale-[1.01] hover:bg-[#FFD084]"
+            <button
+              type="button"
+              onClick={handleCopy}
+              className={`inline-flex h-12 items-center gap-3 rounded-lg border px-7 text-[13px] font-semibold transition ${
+                copied
+                  ? 'border-[#B8CD7E]/40 bg-[#B8CD7E]/10 text-[#B8CD7E]'
+                  : 'border-[#F0B84A]/40 bg-[#F0B84A] text-black shadow-[0_0_34px_rgba(240,184,74,0.22)] hover:scale-[1.01] hover:bg-[#FFD084]'
+              }`}
             >
-              <Terminal className="h-4 w-4" />
-              Set up Provider Bot
-            </a>
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+              {copied ? 'Copied. Paste this into your VPS terminal.' : 'Copy install command'}
+            </button>
           </div>
+
+          <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/35">
+            Do not run this from your phone/browser. Paste the command into your VPS terminal.
+          </p>
         </div>
 
         {/* Option 2: MCP for Claude/Codex */}
