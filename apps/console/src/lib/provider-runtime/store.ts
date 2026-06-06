@@ -306,31 +306,42 @@ export async function getProviderRuntimeContext(
     activeRun = run as JobRunRow | null;
   }
 
-  // Fallback: if no active run from state, check directly for active runs
+  // Fallback: if no active run from state, check directly for active runs.
+  // Use limit(1) from array — maybeSingle() returns null if >1 rows exist.
   if (!activeRun) {
-    const { data: run, error: fbErr } = await supabase
+    const { data: runs, error: fbErr } = await supabase
       .from('agent_job_runs')
       .select('*')
       .eq('agent_id', agentId)
       .eq('role', 'provider')
       .eq('run_status', 'active')
       .order('started_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    console.log(`[getProviderRuntimeContext] fallback: agent=${agentId}, found=${!!run}, error=${fbErr?.message ?? 'none'}, runId=${run?.id ?? 'null'}`);
-    activeRun = run as JobRunRow | null;
+      .limit(1);
 
-    // If we found a run via fallback, sync the runtime state
-    if (activeRun && state) {
-      await supabase
-        .from('agent_runtime_state')
-        .update({
-          active_job_id: activeRun.job_id,
-          active_run_id: activeRun.id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('agent_id', agentId)
-        .eq('role', 'provider');
+    if (fbErr) {
+      console.error(`[getProviderRuntimeContext] fallback query error: ${fbErr.message}`);
+    }
+
+    const run = runs?.[0] as JobRunRow | undefined ?? null;
+    if (run) {
+      console.log(`[getProviderRuntimeContext] fallback found active run: ${run.id} for job ${run.job_id}`);
+      activeRun = run;
+
+      // Sync runtime state so next call doesn't need fallback
+      if (state) {
+        const { error: syncErr } = await supabase
+          .from('agent_runtime_state')
+          .update({
+            active_job_id: run.job_id,
+            active_run_id: run.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('agent_id', agentId)
+          .eq('role', 'provider');
+        if (syncErr) {
+          console.error(`[getProviderRuntimeContext] fallback sync error: ${syncErr.message}`);
+        }
+      }
     }
   }
 
@@ -435,41 +446,50 @@ export async function startProviderJobRun(
     .limit(1)
     .maybeSingle();
 
+  let run: JobRunRow;
+
   if (existing) {
-    return existing as JobRunRow;
-  }
+    run = existing as JobRunRow;
+  } else {
+    // Create new run
+    const { data: newRun, error } = await supabase
+      .from('agent_job_runs')
+      .insert({
+        agent_id: agentId,
+        role: 'provider',
+        job_id: jobId,
+        run_status: 'active',
+        phase,
+        idempotency_key: idempotencyKey,
+        started_at: now,
+        updated_at: now,
+      })
+      .select()
+      .single();
 
-  // Create new run
-  const { data: run, error } = await supabase
-    .from('agent_job_runs')
-    .insert({
-      agent_id: agentId,
-      role: 'provider',
-      job_id: jobId,
-      run_status: 'active',
-      phase,
-      idempotency_key: idempotencyKey,
-      started_at: now,
-      updated_at: now,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    // Handle unique constraint violation (race condition)
-    if (error.code === '23505') {
-      const { data: raced } = await supabase
-        .from('agent_job_runs')
-        .select('*')
-        .eq('idempotency_key', idempotencyKey)
-        .limit(1)
-        .maybeSingle();
-      if (raced) return raced as JobRunRow;
+    if (error) {
+      // Handle unique constraint violation (race condition)
+      if (error.code === '23505') {
+        const { data: raced } = await supabase
+          .from('agent_job_runs')
+          .select('*')
+          .eq('idempotency_key', idempotencyKey)
+          .limit(1)
+          .maybeSingle();
+        if (raced) {
+          run = raced as JobRunRow;
+        } else {
+          throw Object.assign(new Error(`startJobRun race but no run found`), { code: 'start_run_failed' });
+        }
+      } else {
+        throw Object.assign(new Error(`startJobRun failed: ${error.message}`), { code: 'start_run_failed' });
+      }
+    } else {
+      run = newRun as JobRunRow;
     }
-    throw Object.assign(new Error(`startJobRun failed: ${error.message}`), { code: 'start_run_failed' });
   }
 
-  // Update runtime state with active job/run
+  // ALWAYS sync active job/run to runtime state — regardless of insert vs existing vs race
   const { error: upsertError } = await supabase
     .from('agent_runtime_state')
     .upsert(
@@ -485,10 +505,12 @@ export async function startProviderJobRun(
     );
 
   if (upsertError) {
-    console.error(`[startProviderJobRun] Failed to update runtime state: ${upsertError.message}`);
+    console.error(`[startProviderJobRun] runtime_state upsert failed: ${upsertError.message}`);
+    // Do NOT hide the failure — but don't crash the run creation either.
+    // getContext fallback will still try to find the run directly.
   }
 
-  return run as JobRunRow;
+  return run;
 }
 
 /**
