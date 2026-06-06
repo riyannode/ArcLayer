@@ -1088,8 +1088,20 @@ export default function AgentProfilePage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => void agentGatewayDeposit.deposit(actionAmount, agentAccount?.agentAccountAddress ?? '')}
-                        disabled={!actionAmount || !circleAuthenticated || !agentAccount?.agentAccountAddress || !bundlerClient || (agentGatewayDeposit.step !== 'idle' && agentGatewayDeposit.step !== 'error')}
+                        onClick={async () => {
+                          const addr = agentAccount?.agentAccountAddress ?? '';
+                          if (!addr) return;
+                          // Login with passkey if not authenticated
+                          if (!circleAuthenticated) {
+                            try {
+                              await circleLogin();
+                            } catch {
+                              return; // login cancelled/failed
+                            }
+                          }
+                          void agentGatewayDeposit.deposit(actionAmount, addr);
+                        }}
+                        disabled={!actionAmount || !agentAccount?.agentAccountAddress || (agentGatewayDeposit.step !== 'idle' && agentGatewayDeposit.step !== 'error')}
                         className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
                       >
                         {agentGatewayDeposit.step === 'checking' || agentGatewayDeposit.step === 'depositing' || agentGatewayDeposit.step === 'confirming'
@@ -1099,12 +1111,14 @@ export default function AgentProfilePage() {
                     </div>
                     <p className="mt-2 text-[11px] text-[#EAE4D8]/35">
                       {!circleAuthenticated
-                        ? 'Login with passkey first to deposit from Agent Account.'
-                        : 'Deposits USDC from Agent Account into the Gateway. Gateway balance increases for the Agent Account address.'}
+                        ? 'Click to login with passkey and deposit from Agent Account.'
+                        : agentGatewayDeposit.error
+                          ? agentGatewayDeposit.error
+                          : 'Deposits USDC from Agent Account into the Gateway. Gateway balance increases for the Agent Account address.'}
                     </p>
-                    {process.env.NODE_ENV === 'development' && circleAuthenticated && (
+                    {process.env.NODE_ENV === 'development' && (
                       <p className="mt-1 font-mono text-[9px] text-[#EAE4D8]/25">
-                        circle={circleAddress?.slice(0, 10)}… bundler={bundlerClient?.account?.address?.slice(0, 10)}… agent={agentAccount?.agentAccountAddress?.slice(0, 10)}…
+                        circle={circleAddress?.slice(0, 10) || '…'}… bundler={bundlerClient?.account?.address?.slice(0, 10) || '…'}… agent={agentAccount?.agentAccountAddress?.slice(0, 10) || '…'}…
                       </p>
                     )}
                   </div>
