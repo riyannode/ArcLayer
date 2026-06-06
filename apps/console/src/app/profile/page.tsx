@@ -384,19 +384,17 @@ export default function AgentProfilePage() {
   const [agentGateway, setAgentGateway] = useState<BalanceInfo | null>(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
 
-  // Fund Agent Account state
-  const [fundAmount, setFundAmount] = useState('');
-  const [showFundForm, setShowFundForm] = useState(false);
+  // Shared action amount state (Fund Agent Account + Deposit to Gateway)
+  const [actionAmount, setActionAmount] = useState('');
   const fundAgent = useFundAgentAccount(() => {
     if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
-    setFundAmount('');
-    setShowFundForm(false);
+    setActionAmount('');
   });
 
   // Gateway deposit state
-  const [gatewayAmount, setGatewayAmount] = useState('1.00');
   const gatewayDeposit = useGatewayDeposit(() => {
     if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
+    setActionAmount('');
   });
 
   // Wallet session signing (for authenticated API calls)
@@ -1017,102 +1015,78 @@ export default function AgentProfilePage() {
                     Your EOA is the owner and funding source. Your Agent Account is the operational account for agent actions.
                   </p>
 
-                  {/* ── Fund Agent Account ─────────────────────────────── */}
-                  {showFundForm ? (
-                    <div className="mt-4 rounded-md border border-white/10 bg-[#0A0D12] p-4">
-                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                        Fund Agent Account
-                      </div>
-                      <p className="mt-1 text-[11px] text-[#EAE4D8]/35">
-                        Transfer USDC from your owner wallet to your Agent Account.
-                      </p>
-                      <div className="mt-3 flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="Amount (USDC)"
-                          value={fundAmount}
-                          onChange={(e) => { setFundAmount(e.target.value); fundAgent.reset(); }}
-                          className="h-9 w-[160px] rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void fundAgent.fund(fundAmount, agentAccount?.agentAccountAddress ?? '')}
-                          disabled={!fundAmount || (fundAgent.step !== 'idle' && fundAgent.step !== 'error')}
-                          className="h-9 rounded-md bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
-                        >
-                          {fundAgent.step === 'checking' || fundAgent.step === 'transferring' || fundAgent.step === 'confirming'
-                            ? 'Sending...'
-                            : 'Send'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setShowFundForm(false); setFundAmount(''); fundAgent.reset(); }}
-                          className="h-9 rounded-md border border-white/10 px-3 text-[12px] text-[#EAE4D8]/60 transition hover:text-[#F5F0E5]"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                      {fundAgent.error && (
-                        <p className="mt-2 text-[11px] text-red-400">{fundAgent.error}</p>
-                      )}
-                      {fundAgent.txHash && (
-                        <p className="mt-2 text-[11px] text-emerald-400">
-                          Sent ✓{' '}
-                          <a
-                            href={`https://testnet.arcscan.app/tx/${fundAgent.txHash}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="underline decoration-emerald-400/40 hover:text-emerald-300"
-                          >
-                            {shortAddress(fundAgent.txHash)}
-                          </a>
-                        </p>
-                      )}
-                    </div>
-                  ) : null}
-
                   {/* ── Actions ────────────────────────────────────────── */}
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => { if (address) void loadBalances(address, agentAccount?.agentAccountAddress); }}
-                      disabled={balancesLoading}
-                      className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
-                    >
-                      <RefreshCcw className={`h-3.5 w-3.5 ${balancesLoading ? 'animate-spin' : ''}`} />
-                      Refresh Balances
-                    </button>
-                    {!showFundForm && (
-                      <button
-                        type="button"
-                        onClick={() => { setShowFundForm(true); fundAgent.reset(); }}
-                        className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
-                      >
-                        Fund Agent Account
-                      </button>
-                    )}
-                    <div className="flex items-center gap-2">
+                  <div className="mt-5">
+                    <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/40">
+                      Amount (USDC)
+                    </label>
+                    <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end">
                       <input
                         type="number"
                         min="0"
                         step="0.01"
-                        placeholder="Amount"
-                        value={gatewayAmount}
-                        onChange={(e) => { setGatewayAmount(e.target.value); gatewayDeposit.reset(); }}
-                        className="h-10 w-[100px] rounded-md border border-white/10 bg-transparent px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                        placeholder="1.00"
+                        value={actionAmount}
+                        onChange={(e) => { setActionAmount(e.target.value); fundAgent.reset(); gatewayDeposit.reset(); }}
+                        className="h-10 w-full rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[13px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40 sm:w-[160px]"
                       />
                       <button
                         type="button"
-                        onClick={() => void gatewayDeposit.deposit(gatewayAmount)}
-                        disabled={(gatewayDeposit.step !== 'idle' && gatewayDeposit.step !== 'error' && gatewayDeposit.step !== 'success') || !gatewayAmount}
-                        className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
+                        onClick={() => void fundAgent.fund(actionAmount, agentAccount?.agentAccountAddress ?? '')}
+                        disabled={!actionAmount || (fundAgent.step !== 'idle' && fundAgent.step !== 'error')}
+                        className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
+                      >
+                        {fundAgent.step === 'checking' || fundAgent.step === 'transferring' || fundAgent.step === 'confirming'
+                          ? 'Sending...'
+                          : 'Fund Agent Account'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void gatewayDeposit.deposit(actionAmount)}
+                        disabled={(gatewayDeposit.step !== 'idle' && gatewayDeposit.step !== 'error' && gatewayDeposit.step !== 'success') || !actionAmount}
+                        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-5 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40 sm:w-auto"
                       >
                         Deposit EOA → Gateway
                       </button>
                     </div>
+                    <p className="mt-2 text-[11px] text-[#EAE4D8]/35">
+                      Use the same amount field, then choose where to send funds.
+                    </p>
                   </div>
+
+                  {/* ── Refresh Balances ─────────────────────────────────── */}
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => { if (address) void loadBalances(address, agentAccount?.agentAccountAddress); }}
+                      disabled={balancesLoading}
+                      className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-transparent px-4 text-[11px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
+                    >
+                      <RefreshCcw className={`h-3 w-3 ${balancesLoading ? 'animate-spin' : ''}`} />
+                      Refresh Balances
+                    </button>
+                  </div>
+
+                  {/* ── Status messages ──────────────────────────────────── */}
+                  {fundAgent.error && (
+                    <p className="mt-2 text-[11px] text-red-400">{fundAgent.error}</p>
+                  )}
+                  {fundAgent.txHash && (
+                    <p className="mt-2 text-[11px] text-emerald-400">
+                      Fund sent ✓{' '}
+                      <a
+                        href={`https://testnet.arcscan.app/tx/${fundAgent.txHash}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline decoration-emerald-400/40 hover:text-emerald-300"
+                      >
+                        {shortAddress(fundAgent.txHash)}
+                      </a>
+                    </p>
+                  )}
+                  {gatewayDeposit.error && (
+                    <p className="mt-2 text-[11px] text-red-400">{gatewayDeposit.error}</p>
+                  )}
                   {gatewayDeposit.txHash && (
                     <p className="mt-2 text-[11px] text-emerald-400">
                       Gateway deposit sent ✓{' '}
@@ -1125,9 +1099,6 @@ export default function AgentProfilePage() {
                         {shortAddress(gatewayDeposit.txHash)}
                       </a>
                     </p>
-                  )}
-                  {gatewayDeposit.error && (
-                    <p className="mt-2 text-[11px] text-red-400">{gatewayDeposit.error}</p>
                   )}
                 </>
               )}
