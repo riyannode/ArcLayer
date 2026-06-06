@@ -25,7 +25,6 @@ import {
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { useFundAgentAccount } from '@/hooks/useFundAgentAccount';
-import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
 import { useSignMessage } from 'wagmi';
 
 // ── Agent Account types ───────────────────────────────────────────────────
@@ -387,12 +386,6 @@ export default function AgentProfilePage() {
   // Shared action amount state (Fund Agent Account + Deposit to Gateway)
   const [actionAmount, setActionAmount] = useState('');
   const fundAgent = useFundAgentAccount(() => {
-    if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
-    setActionAmount('');
-  });
-
-  // Gateway deposit state
-  const gatewayDeposit = useGatewayDeposit(() => {
     if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
     setActionAmount('');
   });
@@ -967,7 +960,7 @@ export default function AgentProfilePage() {
                 <>
                   {/* ── Owner Wallet Balances ──────────────────────────── */}
                   <div className="mt-4 text-[12px] font-medium text-[#EAE4D8]/60">Owner Wallet</div>
-                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-2">
                     <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
                       <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
                         USDC
@@ -976,15 +969,6 @@ export default function AgentProfilePage() {
                         {balancesLoading && !useMockData ? '...' : effectiveOwnerBalance?.formatted ?? '0.00'}
                       </div>
                       <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-20 balance</div>
-                    </div>
-                    <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
-                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                        x402 Gateway
-                      </div>
-                      <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
-                        {balancesLoading && !useMockData ? '...' : effectiveOwnerGateway?.formatted ?? '—'}
-                      </div>
-                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">Paid API access</div>
                     </div>
                   </div>
 
@@ -1027,7 +1011,7 @@ export default function AgentProfilePage() {
                         step="0.01"
                         placeholder="1.00"
                         value={actionAmount}
-                        onChange={(e) => { setActionAmount(e.target.value); fundAgent.reset(); gatewayDeposit.reset(); }}
+                        onChange={(e) => { setActionAmount(e.target.value); fundAgent.reset(); }}
                         className="h-10 w-full rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[13px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40 sm:w-[160px]"
                       />
                       <button
@@ -1042,15 +1026,14 @@ export default function AgentProfilePage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => void gatewayDeposit.deposit(actionAmount)}
-                        disabled={(gatewayDeposit.step !== 'idle' && gatewayDeposit.step !== 'error' && gatewayDeposit.step !== 'success') || !actionAmount}
-                        className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
+                        disabled
+                        className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition opacity-40 sm:w-auto"
                       >
-                        Deposit x402
+                        Deposit Agent Account → x402 Gateway
                       </button>
                     </div>
                     <p className="mt-2 text-[11px] text-[#EAE4D8]/35">
-                      Use the same amount field, then choose where to send funds.
+                      Coming after Circle Agent Account Gateway deposit is verified.
                     </p>
                   </div>
 
@@ -1081,22 +1064,6 @@ export default function AgentProfilePage() {
                         className="underline decoration-emerald-400/40 hover:text-emerald-300"
                       >
                         {shortAddress(fundAgent.txHash)}
-                      </a>
-                    </p>
-                  )}
-                  {gatewayDeposit.error && (
-                    <p className="mt-2 text-[11px] text-red-400">{gatewayDeposit.error}</p>
-                  )}
-                  {gatewayDeposit.txHash && (
-                    <p className="mt-2 text-[11px] text-emerald-400">
-                      Gateway deposit sent ✓{' '}
-                      <a
-                        href={`https://testnet.arcscan.app/tx/${gatewayDeposit.txHash}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline decoration-emerald-400/40 hover:text-emerald-300"
-                      >
-                        {shortAddress(gatewayDeposit.txHash)}
                       </a>
                     </p>
                   )}
