@@ -25,144 +25,7 @@ import {
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { useFundAgentAccount } from '@/hooks/useFundAgentAccount';
-import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
 import { useSignMessage } from 'wagmi';
-
-// ── MCP Prompt Template data ─────────────────────────────────────────────
-
-type ProviderAgentType = {
-  key: string;
-  label: string;
-  name: string;
-  capabilities: string;
-  description: string;
-};
-
-const PROVIDER_AGENT_TYPES: ProviderAgentType[] = [
-  { key: 'smart-contract', label: 'Smart Contract Agent', name: 'Solidity Audit Bot', capabilities: 'smart-contract, solidity-audit', description: 'I can review Solidity contracts and submit ERC-8183 job deliverables.' },
-  { key: 'frontend', label: 'Frontend Agent', name: 'Frontend Implementation Bot', capabilities: 'frontend, react, ui-implementation', description: 'I can implement frontend tasks, build UI components, and submit ERC-8183 job deliverables.' },
-  { key: 'backend', label: 'Backend Agent', name: 'Backend API Bot', capabilities: 'backend, api, database', description: 'I can build backend services, API routes, and database integrations for ERC-8183 job deliverables.' },
-  { key: 'devops', label: 'DevOps Agent', name: 'DevOps Automation Bot', capabilities: 'devops, deployment, monitoring', description: 'I can handle deployment, monitoring, environment setup, and infrastructure tasks.' },
-  { key: 'design', label: 'Design Agent', name: 'Product Design Bot', capabilities: 'design, ui-ux, product-design', description: 'I can create design reviews, UI structure, and product experience recommendations.' },
-  { key: 'data-research', label: 'Data Research Agent', name: 'Data Research Bot', capabilities: 'research, data-analysis, market-data', description: 'I can research data, summarize findings, and submit structured deliverables.' },
-  { key: 'documentation', label: 'Documentation Agent', name: 'Documentation Bot', capabilities: 'documentation, technical-writing', description: 'I can write docs, README updates, integration guides, and technical explanations.' },
-  { key: 'analysis', label: 'Analysis Agent', name: 'Analysis Bot', capabilities: 'analysis, evaluation, reasoning', description: 'I can analyze requirements, review outputs, and produce structured reports.' },
-  { key: 'payment', label: 'Payment Agent', name: 'Payment Integration Bot', capabilities: 'x402, payments, usdc', description: 'I can help with payment flows, x402 access, USDC settlement, and receipt workflows.' },
-  { key: 'other', label: 'Other', name: 'Custom Provider Agent', capabilities: 'general, automation', description: 'I can perform general agentic tasks and submit structured job deliverables.' },
-];
-
-function buildProviderPrompt(agentType: ProviderAgentType): string {
-  return [
-    `Register me on ArcLayer as a provider.`,
-    `Name: ${agentType.name}`,
-    `Role: provider`,
-    `Capabilities: ${agentType.capabilities}`,
-    `Description: ${agentType.description}`,
-    ``,
-    `After the agent identity is minted, create a provider API key for this agent and return the .env snippet for my PM2 bot.`,
-  ].join('\n');
-}
-
-const CLIENT_PROMPT = [
-  `Register me on ArcLayer as a client.`,
-  `Name: Job Creator Agent`,
-  `Role: client`,
-  `Capabilities: job-creation, escrow-funding`,
-  `Description: I can create ERC-8183 jobs, fund work, and coordinate providers.`,
-  ``,
-  `After the agent identity is minted, prepare this agent for client-side job creation flows.`,
-].join('\n');
-
-function McpPromptCard() {
-  const [mode, setMode] = useState<'provider' | 'client'>('provider');
-  const [selectedType, setSelectedType] = useState<string>('smart-contract');
-  const [copied, setCopied] = useState(false);
-
-  const agentType = PROVIDER_AGENT_TYPES.find((t) => t.key === selectedType) || PROVIDER_AGENT_TYPES[0];
-  const prompt = mode === 'provider' ? buildProviderPrompt(agentType) : CLIENT_PROMPT;
-
-  async function handleCopy() {
-    await navigator.clipboard.writeText(prompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <div className="mt-6 rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
-      <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
-        MCP Prompt Template
-      </div>
-      <p className="mt-2 text-[13px] leading-5 text-[#EAE4D8]/50">
-        Choose an agent type and copy a Claude/Codex MCP prompt.
-      </p>
-
-      {/* Mode toggle */}
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={() => setMode('provider')}
-          className={
-            mode === 'provider'
-              ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
-              : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
-          }
-        >
-          Provider Bot <span className="ml-1 text-[10px] opacity-70">Recommended</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('client')}
-          className={
-            mode === 'client'
-              ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
-              : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
-          }
-        >
-          Client Bot
-        </button>
-      </div>
-
-      {/* Provider: Agent Type selector */}
-      {mode === 'provider' && (
-        <div className="mt-4">
-          <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/40">
-            Agent Type
-          </label>
-          <select
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value)}
-            className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0A0D12] px-3 text-[13px] text-[#F5F0E5] outline-none focus:border-[#F3C536]/40"
-          >
-            {PROVIDER_AGENT_TYPES.map((t) => (
-              <option key={t.key} value={t.key}>{t.label}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Prompt box */}
-      <div className="mt-4 rounded-md border border-white/10 bg-white/[0.025] p-4">
-        <pre className="whitespace-pre-wrap font-mono text-[11px] leading-5 text-[#EAE4D8]/65">
-          {prompt}
-        </pre>
-      </div>
-
-      {/* Copy button */}
-      <div className="mt-3 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
-        >
-          {copied ? 'Copied ✓' : 'Copy Prompt'}
-        </button>
-        <span className="text-[11px] text-[#EAE4D8]/35">
-          Paste into Claude or Codex with the ArcLayer MCP configured.
-        </span>
-      </div>
-    </div>
-  );
-}
 
 // ── Agent Account types ───────────────────────────────────────────────────
 
@@ -520,19 +383,11 @@ export default function AgentProfilePage() {
   const [agentGateway, setAgentGateway] = useState<BalanceInfo | null>(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
 
-  // Fund Agent Account state
-  const [fundAmount, setFundAmount] = useState('');
-  const [showFundForm, setShowFundForm] = useState(false);
+  // Shared action amount state (Fund Agent Account + Deposit to Gateway)
+  const [actionAmount, setActionAmount] = useState('');
   const fundAgent = useFundAgentAccount(() => {
     if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
-    setFundAmount('');
-    setShowFundForm(false);
-  });
-
-  // Gateway deposit state
-  const [gatewayAmount, setGatewayAmount] = useState('1.00');
-  const gatewayDeposit = useGatewayDeposit(() => {
-    if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
+    setActionAmount('');
   });
 
   // Wallet session signing (for authenticated API calls)
@@ -1105,7 +960,7 @@ export default function AgentProfilePage() {
                 <>
                   {/* ── Owner Wallet Balances ──────────────────────────── */}
                   <div className="mt-4 text-[12px] font-medium text-[#EAE4D8]/60">Owner Wallet</div>
-                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-2">
                     <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
                       <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
                         USDC
@@ -1114,15 +969,6 @@ export default function AgentProfilePage() {
                         {balancesLoading && !useMockData ? '...' : effectiveOwnerBalance?.formatted ?? '0.00'}
                       </div>
                       <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-20 balance</div>
-                    </div>
-                    <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
-                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                        x402 Gateway
-                      </div>
-                      <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
-                        {balancesLoading && !useMockData ? '...' : effectiveOwnerGateway?.formatted ?? '—'}
-                      </div>
-                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">Paid API access</div>
                     </div>
                   </div>
 
@@ -1153,117 +999,73 @@ export default function AgentProfilePage() {
                     Your EOA is the owner and funding source. Your Agent Account is the operational account for agent actions.
                   </p>
 
-                  {/* ── Fund Agent Account ─────────────────────────────── */}
-                  {showFundForm ? (
-                    <div className="mt-4 rounded-md border border-white/10 bg-[#0A0D12] p-4">
-                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                        Fund Agent Account
-                      </div>
-                      <p className="mt-1 text-[11px] text-[#EAE4D8]/35">
-                        Transfer USDC from your owner wallet to your Agent Account.
-                      </p>
-                      <div className="mt-3 flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="Amount (USDC)"
-                          value={fundAmount}
-                          onChange={(e) => { setFundAmount(e.target.value); fundAgent.reset(); }}
-                          className="h-9 w-[160px] rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void fundAgent.fund(fundAmount, agentAccount?.agentAccountAddress ?? '')}
-                          disabled={!fundAmount || (fundAgent.step !== 'idle' && fundAgent.step !== 'error')}
-                          className="h-9 rounded-md bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
-                        >
-                          {fundAgent.step === 'checking' || fundAgent.step === 'transferring' || fundAgent.step === 'confirming'
-                            ? 'Sending...'
-                            : 'Send'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setShowFundForm(false); setFundAmount(''); fundAgent.reset(); }}
-                          className="h-9 rounded-md border border-white/10 px-3 text-[12px] text-[#EAE4D8]/60 transition hover:text-[#F5F0E5]"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                      {fundAgent.error && (
-                        <p className="mt-2 text-[11px] text-red-400">{fundAgent.error}</p>
-                      )}
-                      {fundAgent.txHash && (
-                        <p className="mt-2 text-[11px] text-emerald-400">
-                          Sent ✓{' '}
-                          <a
-                            href={`https://testnet.arcscan.app/tx/${fundAgent.txHash}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="underline decoration-emerald-400/40 hover:text-emerald-300"
-                          >
-                            {shortAddress(fundAgent.txHash)}
-                          </a>
-                        </p>
-                      )}
-                    </div>
-                  ) : null}
-
                   {/* ── Actions ────────────────────────────────────────── */}
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => { if (address) void loadBalances(address, agentAccount?.agentAccountAddress); }}
-                      disabled={balancesLoading}
-                      className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
-                    >
-                      <RefreshCcw className={`h-3.5 w-3.5 ${balancesLoading ? 'animate-spin' : ''}`} />
-                      Refresh Balances
-                    </button>
-                    {!showFundForm && (
-                      <button
-                        type="button"
-                        onClick={() => { setShowFundForm(true); fundAgent.reset(); }}
-                        className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
-                      >
-                        Fund Agent Account
-                      </button>
-                    )}
-                    <div className="flex items-center gap-2">
+                  <div className="mt-5">
+                    <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/40">
+                      Amount (USDC)
+                    </label>
+                    <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end">
                       <input
                         type="number"
                         min="0"
                         step="0.01"
-                        placeholder="Amount"
-                        value={gatewayAmount}
-                        onChange={(e) => { setGatewayAmount(e.target.value); gatewayDeposit.reset(); }}
-                        className="h-10 w-[100px] rounded-md border border-white/10 bg-transparent px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                        placeholder="1.00"
+                        value={actionAmount}
+                        onChange={(e) => { setActionAmount(e.target.value); fundAgent.reset(); }}
+                        className="h-10 w-full rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[13px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40 sm:w-[160px]"
                       />
                       <button
                         type="button"
-                        onClick={() => void gatewayDeposit.deposit(gatewayAmount)}
-                        disabled={(gatewayDeposit.step !== 'idle' && gatewayDeposit.step !== 'error' && gatewayDeposit.step !== 'success') || !gatewayAmount}
-                        className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
+                        onClick={() => void fundAgent.fund(actionAmount, agentAccount?.agentAccountAddress ?? '')}
+                        disabled={!actionAmount || (fundAgent.step !== 'idle' && fundAgent.step !== 'error')}
+                        className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
                       >
-                        Deposit EOA → Gateway
+                        {fundAgent.step === 'checking' || fundAgent.step === 'transferring' || fundAgent.step === 'confirming'
+                          ? 'Sending...'
+                          : 'Fund Agent Account'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled
+                        className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition opacity-40 sm:w-auto"
+                      >
+                        Deposit Agent Account → x402 Gateway
                       </button>
                     </div>
+                    <p className="mt-2 text-[11px] text-[#EAE4D8]/35">
+                      Coming after Circle Agent Account Gateway deposit is verified.
+                    </p>
                   </div>
-                  {gatewayDeposit.txHash && (
+
+                  {/* ── Refresh Balances ─────────────────────────────────── */}
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => { if (address) void loadBalances(address, agentAccount?.agentAccountAddress); }}
+                      disabled={balancesLoading}
+                      className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 bg-transparent px-4 text-[11px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
+                    >
+                      <RefreshCcw className={`h-3 w-3 ${balancesLoading ? 'animate-spin' : ''}`} />
+                      Refresh Balances
+                    </button>
+                  </div>
+
+                  {/* ── Status messages ──────────────────────────────────── */}
+                  {fundAgent.error && (
+                    <p className="mt-2 text-[11px] text-red-400">{fundAgent.error}</p>
+                  )}
+                  {fundAgent.txHash && (
                     <p className="mt-2 text-[11px] text-emerald-400">
-                      Gateway deposit sent ✓{' '}
+                      Fund sent ✓{' '}
                       <a
-                        href={`https://testnet.arcscan.app/tx/${gatewayDeposit.txHash}`}
+                        href={`https://testnet.arcscan.app/tx/${fundAgent.txHash}`}
                         target="_blank"
                         rel="noreferrer"
                         className="underline decoration-emerald-400/40 hover:text-emerald-300"
                       >
-                        {shortAddress(gatewayDeposit.txHash)}
+                        {shortAddress(fundAgent.txHash)}
                       </a>
                     </p>
-                  )}
-                  {gatewayDeposit.error && (
-                    <p className="mt-2 text-[11px] text-red-400">{gatewayDeposit.error}</p>
                   )}
                 </>
               )}
@@ -1271,26 +1073,6 @@ export default function AgentProfilePage() {
           </div>
         )}
 
-        {/* ── Setup section ────────────────────────────────────────────── */}
-        {isConnected && effectiveHasAgentAccount && (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <Link href="/agent-setup" className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 transition hover:border-[#F3C536]/30">
-              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Manual PM2 Bot</div>
-              <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/50">
-                Run an external provider bot on your VPS.
-              </p>
-            </Link>
-            <Link href="/agent-setup" className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 transition hover:border-[#F3C536]/30">
-              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">MCP for Claude / Codex</div>
-              <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/50">
-                Manage ArcLayer actions through approval-gated MCP tools.
-              </p>
-            </Link>
-          </div>
-        )}
-
-        {/* ── MCP Prompt Template ──────────────────────────────── */}
-        {isConnected && effectiveHasAgentAccount && <McpPromptCard />}
 
         {!ready || loading ? (
           <div className="mt-10 flex min-h-[420px] items-center justify-center rounded-xl border border-white/10 bg-[#080D13]/70">
