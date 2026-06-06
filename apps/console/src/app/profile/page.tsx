@@ -479,6 +479,15 @@ export default function AgentProfilePage() {
     return origin.includes('vercel.app') || origin.includes('localhost') || (origin !== 'https://arclayers.xyz' && !origin.includes('127.0.0.1'));
   }, []);
 
+  // Preview mock data — only on non-production domains, never on arclayers.xyz
+  const PREVIEW_MOCK = {
+    agentAccountAddress: '0x1111111111111111111111111111111111111111',
+    ownerUsdc: { raw: '10000000', formatted: '10.00' },
+    agentUsdc: { raw: '2000000', formatted: '2.00' },
+    ownerGateway: { raw: '1000000', formatted: '1.00' },
+    agentGateway: { raw: '0', formatted: '0.00' },
+  };
+
   // Agent Account state
   const [agentAccount, setAgentAccount] = useState<AgentAccountInfo | null>(null);
   const [agentAccountLoading, setAgentAccountLoading] = useState(false);
@@ -651,6 +660,19 @@ export default function AgentProfilePage() {
   // ── Agent Account fetching ──────────────────────────────────────────────
 
   const hasAgentAccount = agentAccount?.agentAccountAddress != null;
+
+  // When on preview domain with no real Agent Account, use mock data for design review
+  const useMockData = isPreviewDomain && !hasAgentAccount;
+
+  // Effective values — mock overrides real when in preview mode
+  const effectiveAgentAccount = useMockData
+    ? { ...agentAccount, agentAccountAddress: PREVIEW_MOCK.agentAccountAddress, ownerAddress: address || '', status: 'active', chainId: 5042002, walletProvider: 'circle_modular', accountType: 'circle_smart_account', id: '', createdAt: '', updatedAt: '' }
+    : agentAccount;
+  const effectiveHasAgentAccount = useMockData || hasAgentAccount;
+  const effectiveOwnerBalance = useMockData ? PREVIEW_MOCK.ownerUsdc : ownerBalance;
+  const effectiveAgentBalance = useMockData ? PREVIEW_MOCK.agentUsdc : agentBalance;
+  const effectiveOwnerGateway = useMockData ? PREVIEW_MOCK.ownerGateway : ownerGateway;
+  const effectiveAgentGateway = useMockData ? PREVIEW_MOCK.agentGateway : agentGateway;
 
   async function loadAgentAccount() {
     setAgentAccountLoading(true);
@@ -891,12 +913,12 @@ export default function AgentProfilePage() {
               <div className="grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-3">
                 <div className="text-[13px] text-[#EAE4D8]/60">Agent Account</div>
                 <div className="flex items-center gap-2">
-                  {hasAgentAccount ? (
+                  {effectiveHasAgentAccount ? (
                     <>
                       <span className="truncate font-mono text-[13px] text-[#F5F0E5]">
-                        {shortAddress(agentAccount?.agentAccountAddress ?? '')}
+                        {shortAddress(effectiveAgentAccount?.agentAccountAddress ?? '')}
                       </span>
-                      <button type="button" onClick={() => copyToClipboard(agentAccount?.agentAccountAddress ?? '')} className="text-[#EAE4D8]/45 transition hover:text-[#F3C536]">
+                      <button type="button" onClick={() => copyToClipboard(effectiveAgentAccount?.agentAccountAddress ?? '')} className="text-[#EAE4D8]/45 transition hover:text-[#F3C536]">
                         <Clipboard className="h-3.5 w-3.5" />
                       </button>
                       <span className="ml-auto rounded-md border border-[#F3C536]/20 bg-[#F3C536]/10 px-2 py-0.5 font-mono text-[10px] text-[#F3C536]">
@@ -923,7 +945,7 @@ export default function AgentProfilePage() {
 
               {/* CTAs */}
               <div className="mt-4 flex flex-wrap gap-3">
-                {!hasAgentAccount && !showPasskeyRegister && isPreviewDomain && (
+                {!effectiveHasAgentAccount && !showPasskeyRegister && isPreviewDomain && (
                   <p className="text-[12px] leading-5 text-[#EAE4D8]/50">
                     Passkey creation is only supported on{' '}
                     <a href="https://arclayers.xyz/profile" target="_blank" rel="noreferrer" className="text-[#F3C536] underline decoration-[#F3C536]/30 hover:decoration-[#F3C536]">
@@ -932,7 +954,7 @@ export default function AgentProfilePage() {
                     . Preview deployments can display profile data, but Agent Account creation must be done on the production domain.
                   </p>
                 )}
-                {!hasAgentAccount && !showPasskeyRegister && !isPreviewDomain && (
+                {!effectiveHasAgentAccount && !showPasskeyRegister && !isPreviewDomain && (
                   <button
                     type="button"
                     onClick={handleCreateAgentAccount}
@@ -969,12 +991,12 @@ export default function AgentProfilePage() {
                     </button>
                   </div>
                 )}
-                {hasAgentAccount && agents.length === 0 && (
+                {effectiveHasAgentAccount && agents.length === 0 && (
                   <Link href="/register/erc8004" className="inline-flex h-10 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-5 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10">
                     <Plus className="h-4 w-4" /> Register ERC-8004 Agent
                   </Link>
                 )}
-                {hasAgentAccount && agents.length > 0 && (
+                {effectiveHasAgentAccount && agents.length > 0 && (
                   <Link href="/agent-setup" className="inline-flex h-10 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-5 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10">
                     <Bot className="h-4 w-4" /> Open Agent Setup
                   </Link>
@@ -983,7 +1005,7 @@ export default function AgentProfilePage() {
               {createError && <p className="mt-2 text-[12px] text-red-400">{createError}</p>}
 
               {/* Advanced: manual link */}
-              {!hasAgentAccount && (
+              {!effectiveHasAgentAccount && (
                 <div className="mt-4">
                   <button
                     type="button"
@@ -1018,11 +1040,18 @@ export default function AgentProfilePage() {
 
             {/* Wallet & Funding */}
             <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
-              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
-                Wallet & Funding
+              <div className="flex items-center gap-3">
+                <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
+                  Wallet & Funding
+                </div>
+                {useMockData && (
+                  <span className="rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-amber-300">
+                    Preview mock data
+                  </span>
+                )}
               </div>
 
-              {!hasAgentAccount ? (
+              {!effectiveHasAgentAccount ? (
                 <div className="mt-6 text-center">
                   <p className="text-[13px] text-[#EAE4D8]/45">
                     Create an Agent Account first to get a deposit address.
@@ -1038,7 +1067,7 @@ export default function AgentProfilePage() {
                         USDC
                       </div>
                       <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
-                        {balancesLoading ? '...' : ownerBalance?.formatted ?? '0.00'}
+                        {balancesLoading && !useMockData ? '...' : effectiveOwnerBalance?.formatted ?? '0.00'}
                       </div>
                       <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-20 balance</div>
                     </div>
@@ -1047,7 +1076,7 @@ export default function AgentProfilePage() {
                         x402 Gateway
                       </div>
                       <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
-                        {balancesLoading ? '...' : ownerGateway?.formatted ?? '0.00'}
+                        {balancesLoading && !useMockData ? '...' : effectiveOwnerGateway?.formatted ?? '0.00'}
                       </div>
                       <div className="mt-1 text-[10px] text-[#EAE4D8]/30">Paid API access</div>
                     </div>
@@ -1061,7 +1090,7 @@ export default function AgentProfilePage() {
                         USDC
                       </div>
                       <div className="mt-2 text-[18px] font-semibold text-[#F3C536]">
-                        {balancesLoading ? '...' : agentBalance?.formatted ?? '0.00'}
+                        {balancesLoading && !useMockData ? '...' : effectiveAgentBalance?.formatted ?? '0.00'}
                       </div>
                       <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-8004 / ERC-8183</div>
                     </div>
@@ -1070,7 +1099,7 @@ export default function AgentProfilePage() {
                         x402 Gateway
                       </div>
                       <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
-                        {balancesLoading ? '...' : agentGateway?.formatted ?? '—'}
+                        {balancesLoading && !useMockData ? '...' : effectiveAgentGateway?.formatted ?? '—'}
                       </div>
                       <div className="mt-1 text-[10px] text-[#EAE4D8]/30">Read-only</div>
                     </div>
@@ -1199,7 +1228,7 @@ export default function AgentProfilePage() {
         )}
 
         {/* ── Setup section ────────────────────────────────────────────── */}
-        {isConnected && hasAgentAccount && (
+        {isConnected && effectiveHasAgentAccount && (
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <Link href="/agent-setup" className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 transition hover:border-[#F3C536]/30">
               <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Manual PM2 Bot</div>
@@ -1216,8 +1245,8 @@ export default function AgentProfilePage() {
           </div>
         )}
 
-        {/* ── MCP Prompt Template ──────────────────────────────────────── */}
-        {isConnected && hasAgentAccount && <McpPromptCard />}
+        {/* ── MCP Prompt Template ──────────────────────────────── */}
+        {isConnected && effectiveHasAgentAccount && <McpPromptCard />}
 
         {!ready || loading ? (
           <div className="mt-10 flex min-h-[420px] items-center justify-center rounded-xl border border-white/10 bg-[#080D13]/70">
