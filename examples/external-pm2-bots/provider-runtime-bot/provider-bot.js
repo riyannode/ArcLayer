@@ -557,7 +557,7 @@ async function discoverOpenJobs() {
  * Discover direct-assigned jobs where provider = this bot's address.
  * Checks Open, Funded, and Submitted statuses — catches jobs at any active phase.
  */
-async function discoverDirectJobs() {
+async function discoverDirectJobs(skipJobIds = new Set()) {
   console.log('[DIRECT] Checking for direct-assigned jobs...');
 
   try {
@@ -572,10 +572,18 @@ async function discoverDirectJobs() {
 
     console.log(`[DIRECT] Found ${jobs.length} direct-assigned job(s)`);
 
-    // Filter out already-processed jobs
+    // Filter out already-processed jobs AND jobs with active runs
+    // Also skip jobs with terminal onchain statuses (Completed=3, Rejected=4, Expired=5)
+    const TERMINAL_STATUSES = new Set(['completed', 'rejected', 'expired', '3', '4', '5']);
     const newJobs = jobs.filter((j) => {
       const jid = String(j.jobId ?? j.job_id ?? j.id);
-      return !processedJobIds.has(jid);
+      const st = String(j.status || '').toLowerCase();
+      if (processedJobIds.has(jid) || skipJobIds.has(jid)) return false;
+      if (TERMINAL_STATUSES.has(st)) {
+        processedJobIds.add(jid); // remember for future cycles
+        return false;
+      }
+      return true;
     });
 
     if (newJobs.length === 0) {
@@ -599,6 +607,14 @@ async function discoverDirectJobs() {
     console.log(`[DIRECT] Starting run for job ${jobId} (onchain status: ${status})`);
     const runResult = await client.startJobRun(jobId, initialPhase);
     console.log(`[DIRECT] startJobRun result:`, JSON.stringify(runResult).slice(0, 200));
+
+    // If the run is already terminal (completed/failed), skip it
+    if (runResult.runStatus === 'completed' || runResult.runStatus === 'failed') {
+      console.log(`[DIRECT] Job ${jobId} run already ${runResult.runStatus}, skipping`);
+      processedJobIds.add(jobId);
+      return;
+    }
+
     await client.writeCheckpoint(jobId, {
       phase: 'open_job_found',
       status: 'discovered',
@@ -657,7 +673,10 @@ async function pollCycle() {
     }
 
     // No active job OR active job is terminal — discover new jobs
-    await discoverDirectJobs();
+    // Skip the active job ID to avoid re-discovering it
+    const skipIds = new Set();
+    if (context.activeRun?.job_id) skipIds.add(context.activeRun.job_id);
+    await discoverDirectJobs(skipIds);
     // Only check open jobs if still no active run after direct discovery
     const recheck = await client.getContext(PROVIDER_ADDRESS);
     if (!recheck.activeRun) {
