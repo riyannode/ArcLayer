@@ -1,7 +1,9 @@
+const agentId = process.env.ARCLAYER_AGENT_ID || 'unknown';
+
 module.exports = {
   apps: [
     {
-      name: 'arclayer-provider-runtime',
+      name: `arclayer-provider-runtime-${agentId}`,
       script: 'provider-bot.js',
       cwd: __dirname,
       interpreter: 'node',
