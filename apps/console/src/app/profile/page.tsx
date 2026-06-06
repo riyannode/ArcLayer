@@ -24,6 +24,8 @@ import {
 } from 'lucide-react';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
+import { useFundAgentAccount } from '@/hooks/useFundAgentAccount';
+import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
 
 // ── MCP Prompt Template data ─────────────────────────────────────────────
 
@@ -460,7 +462,24 @@ export default function AgentProfilePage() {
   // Balance state
   const [ownerBalance, setOwnerBalance] = useState<BalanceInfo | null>(null);
   const [agentBalance, setAgentBalance] = useState<BalanceInfo | null>(null);
+  const [ownerGateway, setOwnerGateway] = useState<BalanceInfo | null>(null);
+  const [agentGateway, setAgentGateway] = useState<BalanceInfo | null>(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
+
+  // Fund Agent Account state
+  const [fundAmount, setFundAmount] = useState('');
+  const [showFundForm, setShowFundForm] = useState(false);
+  const fundAgent = useFundAgentAccount(() => {
+    if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
+    setFundAmount('');
+    setShowFundForm(false);
+  });
+
+  // Gateway deposit state
+  const [gatewayAmount, setGatewayAmount] = useState('1.00');
+  const gatewayDeposit = useGatewayDeposit(() => {
+    if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
+  });
 
   async function loadAgents(ownerAddr: string, agentAccountAddr?: string | null, signal?: AbortSignal) {
     setLoading(true);
@@ -627,6 +646,8 @@ export default function AgentProfilePage() {
         const json = await res.json();
         setOwnerBalance(json.owner?.usdc ?? null);
         setAgentBalance(json.agentAccount?.usdc ?? null);
+        setOwnerGateway(json.owner?.gateway ?? null);
+        setAgentGateway(json.agentAccount?.gateway ?? null);
       }
     } catch {
       // silent
@@ -960,50 +981,113 @@ export default function AgentProfilePage() {
                 </div>
               ) : (
                 <>
-                  {/* Balances */}
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {/* ── Owner Wallet Balances ──────────────────────────── */}
+                  <div className="mt-4 text-[12px] font-medium text-[#EAE4D8]/60">Owner Wallet</div>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
                       <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                        Owner Wallet USDC
+                        USDC
                       </div>
                       <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
                         {balancesLoading ? '...' : ownerBalance?.formatted ?? '0.00'}
                       </div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-20 balance</div>
                     </div>
                     <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
                       <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                        Agent Account USDC
+                        x402 Gateway
+                      </div>
+                      <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
+                        {balancesLoading ? '...' : ownerGateway?.formatted ?? '0.00'}
+                      </div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">Paid API access</div>
+                    </div>
+                  </div>
+
+                  {/* ── Agent Account Balances ─────────────────────────── */}
+                  <div className="mt-4 text-[12px] font-medium text-[#EAE4D8]/60">Agent Account</div>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                        USDC
                       </div>
                       <div className="mt-2 text-[18px] font-semibold text-[#F3C536]">
                         {balancesLoading ? '...' : agentBalance?.formatted ?? '0.00'}
                       </div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-8004 / ERC-8183</div>
                     </div>
-                  </div>
-
-                  {/* Deposit Address */}
-                  <div className="mt-4 rounded-md border border-white/10 bg-[#0A0D12] px-4 py-3">
-                    <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                      Deposit Address
-                    </div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="min-w-0 truncate font-mono text-[12px] text-[#F5F0E5]">
-                        {agentAccount?.agentAccountAddress}
-                      </span>
-                      <button type="button" onClick={() => copyToClipboard(agentAccount?.agentAccountAddress ?? '')} className="shrink-0 text-[#EAE4D8]/45 transition hover:text-[#F3C536]">
-                        <Clipboard className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <div className="mt-2 flex items-center gap-3 text-[11px] text-[#EAE4D8]/35">
-                      <span>Network: Arc Testnet</span>
-                      <span>Token: USDC</span>
+                    <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                        x402 Gateway
+                      </div>
+                      <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
+                        {balancesLoading ? '...' : agentGateway?.formatted ?? '—'}
+                      </div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">Read-only</div>
                     </div>
                   </div>
 
                   <p className="mt-3 text-[11px] leading-5 text-[#EAE4D8]/35">
-                    Send USDC on Arc Testnet to your Agent Account address.
+                    Your EOA is the owner and funding source. Your Agent Account is the operational account for agent actions.
                   </p>
 
-                  {/* Actions */}
+                  {/* ── Fund Agent Account ─────────────────────────────── */}
+                  {showFundForm ? (
+                    <div className="mt-4 rounded-md border border-white/10 bg-[#0A0D12] p-4">
+                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                        Fund Agent Account
+                      </div>
+                      <p className="mt-1 text-[11px] text-[#EAE4D8]/35">
+                        Transfer USDC from your owner wallet to your Agent Account.
+                      </p>
+                      <div className="mt-3 flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Amount (USDC)"
+                          value={fundAmount}
+                          onChange={(e) => { setFundAmount(e.target.value); fundAgent.reset(); }}
+                          className="h-9 w-[160px] rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void fundAgent.fund(fundAmount, agentAccount?.agentAccountAddress ?? '')}
+                          disabled={!fundAmount || (fundAgent.step !== 'idle' && fundAgent.step !== 'error')}
+                          className="h-9 rounded-md bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
+                        >
+                          {fundAgent.step === 'checking' || fundAgent.step === 'transferring' || fundAgent.step === 'confirming'
+                            ? 'Sending...'
+                            : 'Send'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setShowFundForm(false); setFundAmount(''); fundAgent.reset(); }}
+                          className="h-9 rounded-md border border-white/10 px-3 text-[12px] text-[#EAE4D8]/60 transition hover:text-[#F5F0E5]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      {fundAgent.error && (
+                        <p className="mt-2 text-[11px] text-red-400">{fundAgent.error}</p>
+                      )}
+                      {fundAgent.txHash && (
+                        <p className="mt-2 text-[11px] text-emerald-400">
+                          Sent ✓{' '}
+                          <a
+                            href={`https://testnet.arcscan.app/tx/${fundAgent.txHash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="underline decoration-emerald-400/40 hover:text-emerald-300"
+                          >
+                            {shortAddress(fundAgent.txHash)}
+                          </a>
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {/* ── Actions ────────────────────────────────────────── */}
                   <div className="mt-4 flex flex-wrap gap-3">
                     <button
                       type="button"
@@ -1014,14 +1098,51 @@ export default function AgentProfilePage() {
                       <RefreshCcw className={`h-3.5 w-3.5 ${balancesLoading ? 'animate-spin' : ''}`} />
                       Refresh Balances
                     </button>
-                    <button
-                      type="button"
-                      disabled
-                      className="inline-flex h-10 cursor-not-allowed items-center rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/30"
-                    >
-                      Withdraw — Coming soon
-                    </button>
+                    {!showFundForm && (
+                      <button
+                        type="button"
+                        onClick={() => { setShowFundForm(true); fundAgent.reset(); }}
+                        className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
+                      >
+                        Fund Agent Account
+                      </button>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Amount"
+                        value={gatewayAmount}
+                        onChange={(e) => { setGatewayAmount(e.target.value); gatewayDeposit.reset(); }}
+                        className="h-10 w-[100px] rounded-md border border-white/10 bg-transparent px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void gatewayDeposit.deposit(gatewayAmount)}
+                        disabled={(gatewayDeposit.step !== 'idle' && gatewayDeposit.step !== 'error' && gatewayDeposit.step !== 'success') || !gatewayAmount}
+                        className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
+                      >
+                        Deposit EOA → Gateway
+                      </button>
+                    </div>
                   </div>
+                  {gatewayDeposit.txHash && (
+                    <p className="mt-2 text-[11px] text-emerald-400">
+                      Gateway deposit sent ✓{' '}
+                      <a
+                        href={`https://testnet.arcscan.app/tx/${gatewayDeposit.txHash}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline decoration-emerald-400/40 hover:text-emerald-300"
+                      >
+                        {shortAddress(gatewayDeposit.txHash)}
+                      </a>
+                    </p>
+                  )}
+                  {gatewayDeposit.error && (
+                    <p className="mt-2 text-[11px] text-red-400">{gatewayDeposit.error}</p>
+                  )}
                 </>
               )}
             </div>
