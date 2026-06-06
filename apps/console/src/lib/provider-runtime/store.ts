@@ -151,6 +151,15 @@ async function fetchFromIndexer(path: string, opts?: { timeout?: number }): Prom
         continue;
       }
 
+      // Guard: clone and peek — if body is empty/trivial, try next URL
+      // (Cloudflare tunnel returns 200 with empty body instead of failing)
+      const cloned = res.clone();
+      const peekText = await cloned.text().catch(() => '');
+      if (!peekText || peekText.trim().length < 3) {
+        errors.push(`${baseUrl} → empty response body`);
+        continue;
+      }
+
       return res;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
