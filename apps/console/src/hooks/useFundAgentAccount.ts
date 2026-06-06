@@ -9,7 +9,7 @@
  * Safety:
  *   - Exact transfer amount (no unlimited approval)
  *   - Balance pre-check (reject if insufficient USDC)
- *   - Amount validation (> 0)
+ *   - Amount validation (> 0, max 6 decimals, no scientific notation)
  */
 
 import { useCallback, useState } from 'react';
@@ -18,9 +18,11 @@ import {
   formatUnits,
   getAddress,
   http,
+  isAddress,
   parseUnits,
   type Address,
 } from 'viem';
+import { arcTestnet } from '@arclayer/sdk';
 import { useWriteContract } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useArcWallet } from './useArcWallet';
@@ -73,7 +75,7 @@ export function useFundAgentAccount(
         return;
       }
 
-      if (!toAddress || !getAddress(toAddress)) {
+      if (!toAddress || !isAddress(toAddress)) {
         setError('Invalid Agent Account address');
         setStep('error');
         return;
@@ -84,10 +86,10 @@ export function useFundAgentAccount(
       setTxHash(null);
 
       try {
-        // Validate amount string before parsing (parseUnits rejects 1e3, >6 decimals)
+        // Validate amount string before parsing
         const trimmed = amount.trim();
-        if (!trimmed || !/^\d+(\.\d+)?$/.test(trimmed)) {
-          setError('Enter a valid amount (e.g. 1.50)');
+        if (!trimmed || !/^\d+(\.\d{1,6})?$/.test(trimmed)) {
+          setError('Enter a valid amount with up to 6 decimals (e.g. 1.50)');
           setStep('error');
           return;
         }
@@ -99,7 +101,10 @@ export function useFundAgentAccount(
           return;
         }
 
-        const publicClient = createPublicClient({ transport: http(ARC_RPC) });
+        const publicClient = createPublicClient({
+          chain: arcTestnet,
+          transport: http(ARC_RPC),
+        });
 
         // Pre-flight: check EOA USDC balance
         const balance = await publicClient.readContract({
@@ -111,7 +116,7 @@ export function useFundAgentAccount(
 
         if (balance < amountUnits) {
           setError(
-            `Insufficient USDC. Have ${formatUnits(balance, 6)}, need ${amount}.`,
+            `Insufficient USDC. Have ${formatUnits(balance, 6)}, need ${trimmed}.`,
           );
           setStep('error');
           return;
