@@ -24,7 +24,7 @@ export default function HomeFooterStrip() {
             <span className="aureo-mono-label whitespace-nowrap" style={{ fontSize: '10.5px' }}>
               {k}
             </span>
-            <span className="font-mono text-[12.5px] text-[#EAE4D8] whitespace-nowrap">
+            <span className="font-mono text-[12.5px] text-[#F5F0E5] whitespace-nowrap">
               {v}
             </span>
           </div>

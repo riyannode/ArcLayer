@@ -22,11 +22,11 @@ export default function HomeHero() {
     <div className="relative flex max-w-[540px] flex-col justify-center">
       <div data-x402-blur-zone="true">
         <div className="mb-2 flex flex-col gap-1">
-          <span className="aureo-mono-label">IDENTITY → JOBS → VALIDATION → REPUTATION</span>
+          <span className="aureo-mono-label text-[#C5A67C]">IDENTITY → JOBS → VALIDATION → REPUTATION</span>
         </div>
 
         <h1
-          className="aureo-display text-[#EAE4D8]"
+          className="aureo-display text-[#F5F0E5]"
           style={{
             fontSize: 'clamp(32px, 3.2vw, 58px)',
             lineHeight: 0.9,
