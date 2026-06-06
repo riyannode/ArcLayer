@@ -127,7 +127,7 @@ async function signAndSendTx(txInstruction) {
   const walletClient = createWalletClient({
     account,
     chain: arcTestnet,
-    transport: http(),
+    transport: http('https://arc-testnet.drpc.org'),
   });
 
   // Send pre-encoded calldata directly (value defaults to 0n for setBudget/submit)
@@ -157,10 +157,78 @@ async function handleDirectJob(jobId, resumePlan) {
   const phase = resumePlan.lastCheckpoint?.phase;
   const lastCheckpoint = resumePlan.lastCheckpoint;
 
+  // Create publicClient for receipt checks (with drpc fallback)
+  const { createPublicClient, http } = await import('viem');
+  const { arcTestnet } = await import('viem/chains');
+  const publicClient = createPublicClient({
+    chain: arcTestnet,
+    transport: http('https://arc-testnet.drpc.org'),
+  });
+
   console.log(`[DIRECT] Job ${jobId}: onchain=${onchainStatus}, phase=${phase}`);
 
   // ── Open: set budget ────────────────────────────────────────────────────
   if (onchainStatus === 'Open') {
+    // Already confirmed budget — waiting for client to fund
+    if (phase === 'budget_confirmed') {
+      console.log(`[DIRECT] Job ${jobId}: budget confirmed, waiting for client to fund`);
+      return;
+    }
+
+    // Already sent budget tx — check receipt before retrying
+    if (phase === 'budget_tx_sent') {
+      const txHash = lastCheckpoint?.metadata?.txHash || lastCheckpoint?.tx_hash;
+      console.log(`[DIRECT] Job ${jobId}: budget tx already sent (${txHash}), checking receipt...`);
+      if (txHash) {
+        try {
+          const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+          if (receipt) {
+            if (receipt.status === 'success') {
+              console.log(`[DIRECT] Job ${jobId}: setBudget tx confirmed! Writing budget_confirmed checkpoint`);
+              await client.writeCheckpoint(jobId, {
+                phase: 'budget_confirmed',
+                status: 'confirmed',
+                txHash,
+                note: `setBudget confirmed onchain: ${txHash}`,
+                metadata: { txHash },
+              });
+              return;
+            } else {
+              console.error(`[DIRECT] Job ${jobId}: setBudget tx REVERTED`);
+              await client.writeCheckpoint(jobId, {
+                phase: 'budget_tx_failed',
+                status: 'failed',
+                note: `setBudget reverted: ${txHash}`,
+                metadata: { txHash },
+              });
+              // Fall through to retry
+            }
+          } else {
+            // No receipt yet — check age
+            const sentAt = lastCheckpoint?.created_at ? new Date(lastCheckpoint.created_at).getTime() : 0;
+            const ageMs = Date.now() - sentAt;
+            if (ageMs > 5 * 60 * 1000) {
+              console.error(`[DIRECT] Job ${jobId}: setBudget tx dropped after ${Math.round(ageMs / 1000)}s, will retry`);
+              await client.writeCheckpoint(jobId, {
+                phase: 'budget_tx_failed',
+                status: 'failed',
+                note: `setBudget tx dropped after ${Math.round(ageMs / 1000)}s`,
+                metadata: { txHash },
+              });
+              // Fall through to retry
+            } else {
+              console.log(`[DIRECT] Job ${jobId}: setBudget tx ${txHash} still pending (${Math.round(ageMs / 1000)}s)`);
+              return;
+            }
+          }
+        } catch (err) {
+          console.warn(`[DIRECT] Job ${jobId}: receipt check failed: ${err.message}, will retry next cycle`);
+          return;
+        }
+      }
+      return;
+    }
+
     if (phase === 'budget_tx_failed') {
       console.log(`[DIRECT] Retrying setBudget for job ${jobId}`);
     }
@@ -209,9 +277,6 @@ async function handleDirectJob(jobId, resumePlan) {
       } else if (ageMs < TX_RECEIPT_TIMEOUT_MS) {
         // Recent tx — check receipt
         try {
-          const { createPublicClient, http } = await import('viem');
-          const { arcTestnet } = await import('viem/chains');
-          const publicClient = createPublicClient({ chain: arcTestnet, transport: http() });
           const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
 
           if (receipt) {
@@ -497,6 +562,7 @@ async function discoverDirectJobs() {
 
   try {
     const result = await client.listAssignedJobs(PROVIDER_ADDRESS);
+    console.log('[DIRECT] MCP response:', JSON.stringify(result).slice(0, 300));
     const jobs = result.jobs || [];
 
     if (jobs.length === 0) {
@@ -564,17 +630,17 @@ async function pollCycle() {
         processedJobIds.add(jobId);
         // IMPORTANT: fall through to discovery below — don't return
       } else if (resumePlan.providerAssignedToThisBot) {
-        // Direct assigned job — handle it
-        await handleDirectJob(jobId, resumePlan);
-        return; // handled, don't discover
+        // Direct assigned job — check if actionable or just waiting
+        if (resumePlan.nextAction === 'wait_for_client_funding' || resumePlan.nextAction === 'wait_for_evaluator') {
+          console.log(`[POLL] Job ${jobId}: ${resumePlan.nextAction} — checking for new jobs too`);
+          // Fall through to discovery
+        } else {
+          // Actionable — handle it
+          await handleDirectJob(jobId, resumePlan);
+          return; // handled, don't discover
+        }
       } else if (resumePlan.nextAction === 'wait_for_client_setProvider') {
         console.log(`[POLL] Job ${jobId}: waiting for client to assign provider`);
-        return; // waiting, don't discover
-      } else if (resumePlan.nextAction === 'wait_for_client_funding') {
-        console.log(`[POLL] Job ${jobId}: waiting for client to fund`);
-        return; // waiting, don't discover
-      } else if (resumePlan.nextAction === 'wait_for_evaluator') {
-        console.log(`[POLL] Job ${jobId}: waiting for evaluator`);
         return; // waiting, don't discover
       } else {
         console.log(`[POLL] Job ${jobId}: next=${resumePlan.nextAction}, tool=${resumePlan.recommendedTool}`);

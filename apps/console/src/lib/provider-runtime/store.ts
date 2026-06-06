@@ -202,6 +202,7 @@ export const PROVIDER_PHASES = [
   'expired_detected',
   'budget_tx_failed',
   'submit_tx_failed',
+  'runtime_retry_requested',
   'failed',
 ] as const;
 
@@ -622,6 +623,136 @@ export async function failProviderJobRun(
     .eq('active_run_id', runId);
 }
 
+// ── Retry Failed Runs ─────────────────────────────────────────────────────
+
+const MAX_RETRY_COUNT = 3;
+const RETRYABLE_PHASES = ['runtime_failed', 'submit_tx_failed'] as const;
+
+/**
+ * Retry a failed provider job run.
+ *
+ * Allowed only when:
+ * - Latest checkpoint phase is runtime_failed or submit_tx_failed
+ * - On-chain job status is still Funded (not Submitted/Completed/etc.)
+ * - Retry count < MAX_RETRY_COUNT
+ *
+ * Behavior:
+ * - Sets run_status back to 'active'
+ * - Writes checkpoint phase=runtime_retry_requested
+ * - Clears active_job_id/active_run_id so bot can re-acquire
+ * - Returns the updated run
+ */
+export async function retryProviderJobRun(
+  agentId: string,
+  jobId: string,
+  reason: string,
+  auth: ProviderAuthContext,
+): Promise<{ runId: string; retryCount: number; phase: string }> {
+  validateAgentId(agentId);
+  if (!jobId?.trim()) {
+    throw Object.assign(new Error('jobId required'), { code: 'validation_error' });
+  }
+  await assertProviderAgentOwnership(agentId, auth);
+
+  const supabase = getSupabaseAdmin();
+  const idempotencyKey = buildRunIdempotencyKey(agentId, jobId);
+  const now = new Date().toISOString();
+
+  // 1. Find the latest run for this job (any status)
+  const { data: run } = await supabase
+    .from('agent_job_runs')
+    .select('*')
+    .eq('idempotency_key', idempotencyKey)
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!run) {
+    throw Object.assign(new Error(`No run found for job ${jobId}`), { code: 'not_found' });
+  }
+
+  // 2. Get latest checkpoint to verify phase
+  const { data: lastCp } = await supabase
+    .from('agent_job_checkpoints')
+    .select('*')
+    .eq('run_id', run.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const phase = lastCp?.phase ?? run.phase;
+  if (!(RETRYABLE_PHASES as readonly string[]).includes(phase)) {
+    throw Object.assign(
+      new Error(`Cannot retry: latest phase is '${phase}'. Allowed: ${RETRYABLE_PHASES.join(', ')}`),
+      { code: 'wrong_status' },
+    );
+  }
+
+  // 3. Check retry count from checkpoint metadata
+  const existingRetryCount = (lastCp?.metadata as Record<string, unknown>)?.retryCount;
+  const retryCount = typeof existingRetryCount === 'number' ? existingRetryCount : 0;
+  if (retryCount >= MAX_RETRY_COUNT) {
+    throw Object.assign(
+      new Error(`Max retry count (${MAX_RETRY_COUNT}) reached for job ${jobId}`),
+      { code: 'conflict' },
+    );
+  }
+
+  // 4. Verify on-chain status is still Funded
+  try {
+    const { readOnchainJob } = await import('@/lib/erc8183-jobs/receipt');
+    const job = await readOnchainJob(BigInt(jobId));
+    if (job) {
+      const onchainStatus = ONCHAIN_STATUS[job.status] ?? `Unknown(${job.status})`;
+      if (onchainStatus !== 'Funded') {
+        throw Object.assign(
+          new Error(`Cannot retry: on-chain status is '${onchainStatus}', expected 'Funded'`),
+          { code: 'wrong_status' },
+        );
+      }
+    }
+  } catch (err) {
+    if (err && typeof err === 'object' && 'code' in err) throw err;
+    // RPC failure — allow retry but warn
+    console.warn(`[retryProviderJobRun] Could not verify on-chain status for job ${jobId}:`, err);
+  }
+
+  // 5. Set run back to active
+  await supabase
+    .from('agent_job_runs')
+    .update({ run_status: 'active', completed_at: null, updated_at: now })
+    .eq('id', run.id)
+    .eq('agent_id', agentId);
+
+  // 6. Re-set active job/run in runtime state
+  await supabase
+    .from('agent_runtime_state')
+    .update({
+      active_job_id: jobId,
+      active_run_id: run.id,
+      last_error: null,
+      updated_at: now,
+    })
+    .eq('agent_id', agentId)
+    .eq('role', 'provider');
+
+  // 7. Write retry checkpoint
+  await supabase
+    .from('agent_job_checkpoints')
+    .insert({
+      run_id: run.id,
+      agent_id: agentId,
+      job_id: jobId,
+      role: 'provider',
+      phase: 'runtime_retry_requested',
+      status: 'retry',
+      note: reason || `Retry #${retryCount + 1} requested`,
+      metadata: { retryCount: retryCount + 1, reason: reason || 'manual retry' },
+    });
+
+  return { runId: run.id, retryCount: retryCount + 1, phase: 'runtime_retry_requested' };
+}
+
 // ── Resume Plan ────────────────────────────────────────────────────────────
 
 /**
@@ -759,6 +890,13 @@ async function buildResumePlan(
       result.nextAction = 'none';
       result.terminal = true;
       result.reason = 'LLM execution failed. Manual intervention or retry needed.';
+      return result;
+    }
+    // Retry requested — re-attempt LLM
+    if (phase === 'runtime_retry_requested') {
+      result.nextAction = 'run_llm_and_submit';
+      result.recommendedTool = 'provider.prepare_submit_job_for_session';
+      result.reason = 'Retry granted. Re-attempt LLM execution and submit.';
       return result;
     }
     // Deliverable ready — submit it
