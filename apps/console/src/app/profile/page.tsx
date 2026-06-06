@@ -767,10 +767,10 @@ export default function AgentProfilePage() {
         <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
           <div>
             <h1 className="text-[46px] font-semibold tracking-[-0.055em] text-[#F5F0E5] sm:text-[54px]">
-              Agent Profile
+              Profile & Funding
             </h1>
             <p className="mt-4 text-[16px] text-[#EAE4D8]/60">
-              View and manage your registered agents.
+              Manage your wallet, agents, and funding.
             </p>
           </div>
 
@@ -888,7 +888,7 @@ export default function AgentProfilePage() {
               </div>
 
               <p className="mt-1 text-[11px] leading-5 text-[#EAE4D8]/35">
-                Used as ERC-8004 controller and agent operating account.
+                Optional. Used as ERC-8004 controller for provider bots and x402/agent operations.
               </p>
 
               {/* CTAs */}
@@ -1000,11 +1000,24 @@ export default function AgentProfilePage() {
               </div>
 
               {!effectiveHasAgentAccount ? (
-                <div className="mt-6 text-center">
-                  <p className="text-[13px] text-[#EAE4D8]/45">
-                    Create an Agent Account first to get a deposit address.
+                <>
+                  {/* Owner Wallet always visible */}
+                  <div className="mt-4 text-[12px] font-medium text-[#EAE4D8]/60">Owner Wallet</div>
+                  <div className="mt-2">
+                    <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                        USDC
+                      </div>
+                      <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
+                        {balancesLoading && !useMockData ? '...' : effectiveOwnerBalance?.formatted ?? '0.00'}
+                      </div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-20 balance</div>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-[11px] leading-5 text-[#EAE4D8]/35">
+                    Clients can create and fund ERC-8183 jobs with the owner wallet. Agent Account setup is only needed for provider bots and x402/agent operations.
                   </p>
-                </div>
+                </>
               ) : (
                 <>
                   {/* ── Owner Wallet Balances ──────────────────────────── */}
