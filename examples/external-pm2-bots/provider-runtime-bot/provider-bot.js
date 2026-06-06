@@ -686,6 +686,29 @@ async function pollCycle() {
       } else if (resumePlan.providerAssignedToThisBot) {
         // Direct assigned job — check if actionable or just waiting
         if (resumePlan.nextAction === 'wait_for_client_funding' || resumePlan.nextAction === 'wait_for_evaluator') {
+          // Expiry guard: if onchain expiredAt has passed, release provider from stuck state
+          try {
+            const status = await client.getOnchainStatus(jobId);
+            const expiredAt = Number(status?.expiredAt || 0);
+            if (expiredAt > 0 && expiredAt < Date.now() / 1000) {
+              console.log(`[DIRECT] Job ${jobId} expired while waiting for funding. Releasing provider run.`);
+              await client.writeCheckpoint(jobId, {
+                phase: 'expired_detected',
+                status: 'terminal',
+                note: `Job expired onchain at ${new Date(expiredAt * 1000).toISOString()}. Provider released.`,
+              });
+              processedJobIds.add(jobId);
+              try {
+                await client.completeRun(jobId, context.activeRun.id);
+                console.log(`[POLL] Completed run for expired job ${jobId}`);
+              } catch (err) {
+                console.warn(`[POLL] Failed to complete run for expired ${jobId}: ${err.message}`);
+              }
+              return; // fall through to discovery on next cycle
+            }
+          } catch (checkErr) {
+            console.warn(`[POLL] Expiry check failed for ${jobId}: ${checkErr.message}`);
+          }
           console.log(`[POLL] Job ${jobId}: ${resumePlan.nextAction} — waiting (no discovery while active)`);
           return; // BLOCK discovery — active non-terminal run exists
         } else {
