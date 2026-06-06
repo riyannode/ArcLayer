@@ -135,15 +135,8 @@ function McpPromptCard() {
         </div>
       )}
 
-      {/* Prompt box */}
-      <div className="mt-4 rounded-md border border-white/10 bg-white/[0.025] p-4">
-        <pre className="whitespace-pre-wrap font-mono text-[11px] leading-5 text-[#EAE4D8]/65">
-          {prompt}
-        </pre>
-      </div>
-
       {/* Copy button */}
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-4 flex items-center gap-3">
         <button
           type="button"
           onClick={handleCopy}
@@ -152,7 +145,7 @@ function McpPromptCard() {
           {copied ? 'Copied ✓' : 'Copy Prompt'}
         </button>
         <span className="text-[11px] text-[#EAE4D8]/35">
-          Paste into Claude or Codex with the ArcLayer MCP configured.
+          Copy the recommended MCP prompt for this agent type.
         </span>
       </div>
     </div>
