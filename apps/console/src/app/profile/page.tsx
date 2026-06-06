@@ -1044,9 +1044,9 @@ export default function AgentProfilePage() {
                         type="button"
                         onClick={() => void gatewayDeposit.deposit(actionAmount)}
                         disabled={(gatewayDeposit.step !== 'idle' && gatewayDeposit.step !== 'error' && gatewayDeposit.step !== 'success') || !actionAmount}
-                        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-md border border-white/10 bg-transparent px-5 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40 sm:w-auto"
+                        className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
                       >
-                        Deposit EOA → Gateway
+                        Deposit x402
                       </button>
                     </div>
                     <p className="mt-2 text-[11px] text-[#EAE4D8]/35">
