@@ -283,7 +283,7 @@ export default function AgentSetupPage() {
           </div>
 
           <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">
-            Use Claude, Codex, Cursor, or another MCP client to manage ArcLayer actions through approval-gated MCP tools.
+            Use Claude, Codex, Cursor, or another MCP client
           </p>
 
           <div className="mt-4 space-y-2">
