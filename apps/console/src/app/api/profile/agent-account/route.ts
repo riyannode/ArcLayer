@@ -9,11 +9,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveSessionFromCookie, SESSION_COOKIE_NAME } from '@/lib/auth/wallet-session';
+import { resolveSessionFromCookie, SESSION_COOKIE_NAME, getLinkedErc8004AgentsForController } from '@/lib/auth/wallet-session';
 import {
   getActiveAgentAccountForOwner,
   upsertAgentAccountForOwner,
 } from '@/lib/agent-accounts/store';
+import { ensureA2aPayerBinding } from '@/lib/x402/agent-payer';
 import { isAddress, getAddress } from 'viem';
 
 export const runtime = 'nodejs';
@@ -80,6 +81,22 @@ export async function POST(req: NextRequest) {
     ownerAddress,
     agentAccountAddress,
   });
+
+  // Auto-bind A2A x402 payer for all agents controlled by this owner.
+  // If agent has a Circle Agent Account → that account is the A2A payer.
+  // Fire-and-forget: don't fail the account creation if binding fails.
+  try {
+    const linkedAgents = await getLinkedErc8004AgentsForController(ownerAddress);
+    for (const agent of linkedAgents) {
+      await ensureA2aPayerBinding({
+        agentId: agent.agentId,
+        controllerAddress: ownerAddress,
+        agentAccountAddress,
+      }).catch(() => {}); // non-blocking
+    }
+  } catch {
+    // Non-critical: A2A binding is best-effort on account creation
+  }
 
   return NextResponse.json({
     ok: true,

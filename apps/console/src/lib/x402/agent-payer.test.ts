@@ -90,9 +90,11 @@ function mockFromTwoStep(opts: {
           eq: () => ({
             eq: () => ({
               eq: () => ({
-                is: () => ({
-                  limit: () => ({
-                    maybeSingle: vi.fn().mockResolvedValue({ data: opts.payerRow, error: null }),
+                eq: () => ({
+                  is: () => ({
+                    limit: () => ({
+                      maybeSingle: vi.fn().mockResolvedValue({ data: opts.payerRow, error: null }),
+                    }),
                   }),
                 }),
               }),
@@ -256,6 +258,65 @@ describe('resolveRequiredAgentX402Payer', () => {
 
     await expect(resolveRequiredAgentX402Payer('nonexistent'))
       .rejects.toMatchObject({ code: 'agent_not_found' });
+  });
+
+  it('defaults to homepage scope when scope not specified', async () => {
+    const AGENT_ACCOUNT_ADDR = getAddress('0xabcdefabcdefabcdefabcdefabcdefabcdefabcd');
+    mockFrom.mockImplementation(mockFromTwoStep({
+      agentByAgentId: { token_id: AGENT_ID, agent_id: AGENT_ID, controller: CONTROLLER },
+      payerRow: { payer_address: PAYER_ADDR, rail: 'circle-gateway', scope: 'homepage', status: 'active', revoked_at: null },
+    }));
+
+    // No scope arg → defaults to 'homepage'
+    const result = await resolveRequiredAgentX402Payer(AGENT_ID, 'circle-gateway');
+
+    expect(result.payerAddress).toBe(PAYER_ADDR);
+  });
+
+  it('resolves a2a scope to Agent Account payer when explicitly requested', async () => {
+    const AGENT_ACCOUNT_ADDR = getAddress('0xabcdefabcdefabcdefabcdefabcdefabcdefabcd');
+    // Mock returns Agent Account payer when scope=a2a is in the query chain
+    mockFrom.mockImplementation(((table: string) => {
+      if (table === 'erc8004_agents') {
+        return {
+          select: () => ({
+            eq: (col: string) => {
+              if (col === 'agent_id') {
+                return { limit: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data: { token_id: AGENT_ID, agent_id: AGENT_ID, controller: CONTROLLER }, error: null }) }) };
+              }
+              return { limit: () => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }) };
+            },
+          }),
+        };
+      }
+      if (table === 'agent_x402_payers') {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: () => ({
+                  eq: () => ({
+                    is: () => ({
+                      limit: () => ({
+                        maybeSingle: vi.fn().mockResolvedValue({
+                          data: { payer_address: AGENT_ACCOUNT_ADDR, rail: 'circle-gateway', scope: 'a2a', status: 'active', revoked_at: null },
+                          error: null,
+                        }),
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            }),
+          }),
+        };
+      }
+      return { select: mockSelect };
+    }) as any);
+
+    const result = await resolveRequiredAgentX402Payer(AGENT_ID, 'circle-gateway', 'a2a');
+
+    expect(result.payerAddress).toBe(AGENT_ACCOUNT_ADDR);
   });
 });
 

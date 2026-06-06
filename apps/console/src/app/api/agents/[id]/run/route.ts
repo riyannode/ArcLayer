@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402';
-import type { AgentX402Rail } from '@/lib/x402/agent-payer';
+import type { AgentX402Rail, AgentX402Scope } from '@/lib/x402/agent-payer';
 
 export const runtime = 'nodejs';
 
@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
     agentPayerBinding: {
       required: true,
       rail: 'circle-gateway' as AgentX402Rail,
+      scope: 'homepage' as AgentX402Scope,
       getContext: async (req: NextRequest) => {
         const id = parseAgentId(req);
         return {

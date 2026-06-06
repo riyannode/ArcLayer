@@ -385,6 +385,11 @@ export default function AgentProfilePage() {
   const [agentGateway, setAgentGateway] = useState<BalanceInfo | null>(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
 
+  // A2A x402 payer state
+  const [a2aPayerEnabled, setA2aPayerEnabled] = useState(false);
+  const [a2aPayerMessage, setA2aPayerMessage] = useState('');
+  const [a2aPayerLoading, setA2aPayerLoading] = useState(false);
+
   // Shared action amount state (Fund Agent Account + Deposit to Gateway)
   const [actionAmount, setActionAmount] = useState('');
   const fundAgent = useFundAgentAccount(() => {
@@ -563,6 +568,21 @@ export default function AgentProfilePage() {
       // silent
     } finally {
       setAgentAccountLoading(false);
+    }
+
+    // Load A2A payer status
+    setA2aPayerLoading(true);
+    try {
+      const res = await fetch('/api/profile/a2a-payer', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        setA2aPayerEnabled(json.a2aPayerEnabled ?? false);
+        setA2aPayerMessage(json.message ?? '');
+      }
+    } catch {
+      // silent
+    } finally {
+      setA2aPayerLoading(false);
     }
   }
 
@@ -747,10 +767,10 @@ export default function AgentProfilePage() {
         <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
           <div>
             <h1 className="text-[46px] font-semibold tracking-[-0.055em] text-[#F5F0E5] sm:text-[54px]">
-              Agent Profile
+              Profile & Funding
             </h1>
             <p className="mt-4 text-[16px] text-[#EAE4D8]/60">
-              View and manage your registered agents.
+              Manage your wallet, agents, and funding.
             </p>
           </div>
 
@@ -836,6 +856,29 @@ export default function AgentProfilePage() {
                 </div>
               </div>
 
+              {/* A2A x402 Payer */}
+              <div className="grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-3">
+                <div className="text-[13px] text-[#EAE4D8]/60">A2A x402 Payer</div>
+                <div className="flex items-center gap-2">
+                  {a2aPayerLoading ? (
+                    <span className="text-[13px] text-[#EAE4D8]/40">Loading...</span>
+                  ) : effectiveHasAgentAccount && a2aPayerEnabled ? (
+                    <>
+                      <span className="truncate font-mono text-[13px] text-[#F5F0E5]">
+                        Agent Account
+                      </span>
+                      <span className="ml-auto rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
+                        Active
+                      </span>
+                    </>
+                  ) : effectiveHasAgentAccount ? (
+                    <span className="text-[13px] text-[#EAE4D8]/40">Binding pending</span>
+                  ) : (
+                    <span className="text-[13px] text-[#EAE4D8]/40">Create Agent Account first</span>
+                  )}
+                </div>
+              </div>
+
               {/* Agent Identity */}
               <div className="grid grid-cols-[1fr_1fr] items-center gap-3 py-3">
                 <div className="text-[13px] text-[#EAE4D8]/60">Agent Identity</div>
@@ -845,7 +888,7 @@ export default function AgentProfilePage() {
               </div>
 
               <p className="mt-1 text-[11px] leading-5 text-[#EAE4D8]/35">
-                Used as ERC-8004 controller and agent operating account.
+                Optional. Used as ERC-8004 controller for provider bots and x402/agent operations.
               </p>
 
               {/* CTAs */}
@@ -957,11 +1000,24 @@ export default function AgentProfilePage() {
               </div>
 
               {!effectiveHasAgentAccount ? (
-                <div className="mt-6 text-center">
-                  <p className="text-[13px] text-[#EAE4D8]/45">
-                    Create an Agent Account first to get a deposit address.
+                <>
+                  {/* Owner Wallet always visible */}
+                  <div className="mt-4 text-[12px] font-medium text-[#EAE4D8]/60">Owner Wallet</div>
+                  <div className="mt-2">
+                    <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                        USDC
+                      </div>
+                      <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
+                        {balancesLoading && !useMockData ? '...' : effectiveOwnerBalance?.formatted ?? '0.00'}
+                      </div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-20 balance</div>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-[11px] leading-5 text-[#EAE4D8]/35">
+                    Clients can create and fund ERC-8183 jobs with the owner wallet. Agent Account setup is only needed for provider bots and x402/agent operations.
                   </p>
-                </div>
+                </>
               ) : (
                 <>
                   {/* ── Owner Wallet Balances ──────────────────────────── */}
@@ -1032,8 +1088,20 @@ export default function AgentProfilePage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => void agentGatewayDeposit.deposit(actionAmount, agentAccount?.agentAccountAddress ?? '')}
-                        disabled={!actionAmount || !circleAuthenticated || !agentAccount?.agentAccountAddress || circleAddress.toLowerCase() !== (agentAccount?.agentAccountAddress ?? '').toLowerCase() || (agentGatewayDeposit.step !== 'idle' && agentGatewayDeposit.step !== 'error')}
+                        onClick={async () => {
+                          const addr = agentAccount?.agentAccountAddress ?? '';
+                          if (!addr) return;
+                          // Login with passkey if not authenticated
+                          if (!circleAuthenticated) {
+                            try {
+                              await circleLogin();
+                            } catch {
+                              return; // login cancelled/failed
+                            }
+                          }
+                          void agentGatewayDeposit.deposit(actionAmount, addr);
+                        }}
+                        disabled={!actionAmount || !agentAccount?.agentAccountAddress || (agentGatewayDeposit.step !== 'idle' && agentGatewayDeposit.step !== 'error')}
                         className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
                       >
                         {agentGatewayDeposit.step === 'checking' || agentGatewayDeposit.step === 'depositing' || agentGatewayDeposit.step === 'confirming'
@@ -1043,11 +1111,16 @@ export default function AgentProfilePage() {
                     </div>
                     <p className="mt-2 text-[11px] text-[#EAE4D8]/35">
                       {!circleAuthenticated
-                        ? 'Login with passkey first to deposit from Agent Account.'
-                        : agentAccount?.agentAccountAddress && circleAddress.toLowerCase() !== agentAccount.agentAccountAddress.toLowerCase()
-                          ? 'Circle account mismatch. Login with the passkey linked to this Agent Account.'
+                        ? 'Click to login with passkey and deposit from Agent Account.'
+                        : agentGatewayDeposit.error
+                          ? agentGatewayDeposit.error
                           : 'Deposits USDC from Agent Account into the Gateway. Gateway balance increases for the Agent Account address.'}
                     </p>
+                    {process.env.NODE_ENV === 'development' && (
+                      <p className="mt-1 font-mono text-[9px] text-[#EAE4D8]/25">
+                        circle={circleAddress?.slice(0, 10) || '…'}… bundler={bundlerClient?.account?.address?.slice(0, 10) || '…'}… agent={agentAccount?.agentAccountAddress?.slice(0, 10) || '…'}…
+                      </p>
+                    )}
                   </div>
 
                   {/* ── Refresh Balances ─────────────────────────────────── */}
