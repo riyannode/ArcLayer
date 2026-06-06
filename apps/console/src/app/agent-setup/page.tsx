@@ -3,23 +3,7 @@
 import Link from 'next/link';
 import { Bot, Code2, Terminal, ArrowLeft } from 'lucide-react';
 
-/* ── design tokens (from /profile + /register/erc8004) ── */
-
-function SectionCard({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
-      {children}
-    </div>
-  );
-}
-
-function MonoLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
-      {children}
-    </div>
-  );
-}
+/* ── design tokens (dashboard / profile system) ── */
 
 function Badge({ children }: { children: React.ReactNode }) {
   return (
@@ -33,68 +17,74 @@ function Badge({ children }: { children: React.ReactNode }) {
 
 export default function AgentSetupPage() {
   return (
-    <main className="min-h-screen bg-[#05070A] text-[#F5F0E5]">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(243,197,54,0.06),transparent_28%),radial-gradient(circle_at_80%_8%,rgba(255,255,255,0.035),transparent_22%),linear-gradient(180deg,rgba(255,255,255,0.025),transparent_46%)]" />
+    <div className="min-h-screen overflow-hidden bg-[#050607] text-[#EAE4D8]">
+      {/* background — matches dashboard */}
+      <div className="pointer-events-none fixed inset-0 opacity-80">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_0%,rgba(197,166,124,0.20),transparent_36%),radial-gradient(circle_at_20%_18%,rgba(255,255,255,0.045),transparent_24%),linear-gradient(180deg,#07090C_0%,#050607_55%,#020203_100%)]" />
+        <div className="absolute left-[-10%] top-[118px] h-[420px] w-[120%] rounded-[100%] border-t border-[#C5A67C]/20 bg-[radial-gradient(ellipse_at_center,rgba(197,166,124,0.10),transparent_65%)]" />
+        <div className="absolute inset-0 opacity-[0.10] [background-image:linear-gradient(rgba(255,255,255,0.06)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:48px_48px]" />
+      </div>
 
-      <div className="relative mx-auto max-w-2xl space-y-6 px-4 py-10">
+      <main className="relative mx-auto max-w-2xl px-4 py-10">
         {/* Back link */}
-        <Link href="/profile" className="inline-flex items-center gap-2 text-[13px] text-[#EAE4D8]/55 transition hover:text-[#F3C536]">
+        <Link href="/profile" className="mb-6 inline-flex items-center gap-2 text-[13px] text-[#EAE4D8]/55 transition hover:text-[#F3C536]">
           <ArrowLeft className="h-4 w-4" /> Back to Profile
         </Link>
 
         {/* Header */}
-        <SectionCard>
-          <MonoLabel>Agent Setup</MonoLabel>
-          <h1 className="mt-3 text-[22px] font-semibold tracking-[-0.04em] text-[#F5F0E5]">
+        <section className="mb-6">
+          <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Agent Setup</div>
+          <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.04em] text-[#F4EFE5] md:text-[34px]">
             Choose how your agent operates
           </h1>
-          <p className="mt-2 text-[13px] leading-6 text-[#EAE4D8]/55">
+          <p className="mt-2 max-w-xl text-[14px] leading-6 text-[#EAE4D8]/62">
             After identity registration, set up how this agent will execute on ArcLayer.
           </p>
-        </SectionCard>
+        </section>
 
         {/* Status strip */}
-        <div className="flex flex-wrap gap-3">
+        <div className="mb-6 flex flex-wrap gap-3">
           <Badge>Owner Wallet</Badge>
           <Badge>Agent Account</Badge>
           <Badge>Agent ID</Badge>
           <Badge>Funding Status</Badge>
         </div>
 
-        {/* Option 1: Manual PM2 Provider Bot */}
-        <SectionCard>
+        {/* Option 1: External PM2 Provider Bot */}
+        <div className="mb-5 rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#F3C536]/20 bg-[#F3C536]/8 text-[#F3C536]">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]">
               <Terminal className="h-5 w-5" />
             </div>
             <div>
-              <MonoLabel>Option 1</MonoLabel>
-              <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F5F0E5]">
-                Manual PM2 Provider Bot
+              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Option 1</div>
+              <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F4EFE5]">
+                External PM2 Provider Bot
               </h2>
             </div>
           </div>
 
-          <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/50">
-            Run an external provider bot on your VPS. Handles ERC-8183 job delivery autonomously.
+          <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">
+            Run a self-hosted ERC-8183 provider bot on your VPS. It uses your ERC-8004 Agent ID, MCP session, provider wallet, and LLM key. Signing stays local.
           </p>
 
           <div className="mt-4 space-y-2">
-            <div className="text-[12px] text-[#EAE4D8]/40">Needs:</div>
+            <div className="text-[12px] text-[#EAE4D8]/42">Needs:</div>
             <div className="flex flex-wrap gap-2">
               <Badge>Agent ID</Badge>
-              <Badge>API Key</Badge>
+              <Badge>MCP Session</Badge>
               <Badge>Provider wallet</Badge>
+              <Badge>LLM key</Badge>
               <Badge>VPS terminal</Badge>
             </div>
           </div>
 
-          <div className="mt-4 rounded-md border border-white/10 bg-[#0A0D12] px-4 py-3 font-mono text-[12px] text-[#EAE4D8]/80 break-all">
+          <div className="mt-4 rounded-md border border-white/10 bg-black/35 px-4 py-3 font-mono text-[12px] text-[#EAE4D8]/80 break-all">
             curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash
           </div>
 
-          <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/40">
-            Run in your VPS terminal. Prompts for Agent ID, API key, and private key.
+          <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/42">
+            Run in your VPS terminal. Prompts for Agent ID, MCP token, provider wallet key, and LLM config.
           </p>
 
           <div className="mt-5">
@@ -102,34 +92,34 @@ export default function AgentSetupPage() {
               href="https://arclayers.xyz/install/erc8183-provider.sh"
               target="_blank"
               rel="noreferrer"
-              className="inline-flex h-12 items-center gap-3 rounded-md border border-[#F3C536]/45 bg-transparent px-8 text-[13px] font-semibold text-[#F3C536] transition hover:bg-[#F3C536]/10"
+              className="inline-flex h-12 items-center gap-3 rounded-lg border border-[#F0B84A]/40 bg-[#F0B84A] px-7 text-[13px] font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.22)] transition hover:scale-[1.01] hover:bg-[#FFD084]"
             >
               <Terminal className="h-4 w-4" />
-              Manual PM2 Setup
+              Set up Provider Bot
             </a>
           </div>
-        </SectionCard>
+        </div>
 
         {/* Option 2: MCP for Claude/Codex */}
-        <SectionCard>
+        <div className="mb-5 rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-[#F3C536]/20 bg-[#F3C536]/8 text-[#F3C536]">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]">
               <Code2 className="h-5 w-5" />
             </div>
             <div>
-              <MonoLabel>Option 2</MonoLabel>
-              <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F5F0E5]">
+              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Option 2</div>
+              <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F4EFE5]">
                 MCP for Claude / Codex
               </h2>
             </div>
           </div>
 
-          <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/50">
-            Use Claude, Codex, Cursor, or another MCP client to manage ArcLayer actions through approval-gated tools.
+          <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">
+            Use Claude, Codex, Cursor, or another MCP client to manage ArcLayer actions through approval-gated MCP tools.
           </p>
 
           <div className="mt-4 space-y-2">
-            <div className="text-[12px] text-[#EAE4D8]/40">Needs:</div>
+            <div className="text-[12px] text-[#EAE4D8]/42">Needs:</div>
             <div className="flex flex-wrap gap-2">
               <Badge>Owner Wallet</Badge>
               <Badge>Agent Account</Badge>
@@ -141,28 +131,28 @@ export default function AgentSetupPage() {
           <div className="mt-5">
             <Link
               href="/profile"
-              className="inline-flex h-12 items-center gap-3 rounded-md border border-[#F3C536]/45 bg-transparent px-8 text-[13px] font-semibold text-[#F3C536] transition hover:bg-[#F3C536]/10"
+              className="inline-flex h-12 items-center gap-3 rounded-lg border border-[#C5A67C]/45 bg-black/20 px-7 text-[13px] font-semibold text-[#F0B84A] transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/10"
             >
               <Bot className="h-4 w-4" />
               Set up MCP Session
             </Link>
           </div>
 
-          <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/40">
+          <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/42">
             MCP session creation is available in your Profile under Account Overview.
           </p>
-        </SectionCard>
+        </div>
 
         {/* Deposit note */}
         <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 text-center">
-          <p className="text-[12px] text-[#EAE4D8]/40">
+          <p className="text-[12px] text-[#EAE4D8]/42">
             Need to fund your Agent Account?{' '}
             <Link href="/profile" className="text-[#F3C536] transition hover:text-[#FFE070]">
               Go to Profile → Wallet & Funding
             </Link>
           </p>
         </div>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
