@@ -630,6 +630,36 @@ async function discoverDirectJobs(skipJobIds = new Set()) {
 let running = true;
 let processedJobIds = new Set();
 
+// Production guard: max active runs (default 1)
+const MAX_ACTIVE_RUNS = parseInt(process.env.PROVIDER_MAX_ACTIVE_RUNS || '1', 10);
+
+// Phases that allow discovery (terminal or failed)
+const DISCOVERY_ALLOWED_PHASES = new Set([
+  'completed_detected',
+  'runtime_completed',
+  'runtime_failed',
+  'submit_tx_failed',
+  'budget_tx_failed',
+  'expired_detected',
+  'rejected_detected',
+  'cancelled_detected',
+]);
+
+function isDiscoveryAllowed(context) {
+  // No active run → discovery allowed
+  if (!context.activeRun) return true;
+
+  // Active run with terminal resume plan → discovery allowed
+  if (context.resumePlan?.terminal) return true;
+
+  // Active run with discovery-allowed phase → discovery allowed
+  const phase = context.activeRun.phase || '';
+  if (DISCOVERY_ALLOWED_PHASES.has(phase)) return true;
+
+  // Non-terminal active run → BLOCK discovery
+  return false;
+}
+
 async function pollCycle() {
   try {
     // 1. Heartbeat
@@ -652,12 +682,12 @@ async function pollCycle() {
         } catch (err) {
           console.warn(`[POLL] Failed to complete run for ${jobId}: ${err.message}`);
         }
-        // IMPORTANT: fall through to discovery below — don't return
+        // Fall through to discovery — terminal run is now cleared
       } else if (resumePlan.providerAssignedToThisBot) {
         // Direct assigned job — check if actionable or just waiting
         if (resumePlan.nextAction === 'wait_for_client_funding' || resumePlan.nextAction === 'wait_for_evaluator') {
-          console.log(`[POLL] Job ${jobId}: ${resumePlan.nextAction} — checking for new jobs too`);
-          // Fall through to discovery
+          console.log(`[POLL] Job ${jobId}: ${resumePlan.nextAction} — waiting (no discovery while active)`);
+          return; // BLOCK discovery — active non-terminal run exists
         } else {
           // Actionable — handle it
           await handleDirectJob(jobId, resumePlan);
@@ -670,6 +700,12 @@ async function pollCycle() {
         console.log(`[POLL] Job ${jobId}: next=${resumePlan.nextAction}, tool=${resumePlan.recommendedTool}`);
         return; // unknown, don't discover
       }
+    }
+
+    // Discovery guard: only discover if allowed
+    if (!isDiscoveryAllowed(context)) {
+      console.log(`[POLL] Discovery blocked — active run in phase ${context.activeRun?.phase}`);
+      return;
     }
 
     // No active job OR active job is terminal — discover new jobs
