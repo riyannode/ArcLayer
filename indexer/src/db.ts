@@ -155,6 +155,19 @@ db.exec(`
   );
 `);
 
+// Add indexes for filtered job queries
+for (const statement of [
+  "CREATE INDEX IF NOT EXISTS idx_jobs_worker ON jobs(worker)",
+  "CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)",
+  "CREATE INDEX IF NOT EXISTS idx_jobs_worker_status ON jobs(worker, status)",
+]) {
+  try {
+    db.exec(statement);
+  } catch {
+    // Index already exists.
+  }
+}
+
 for (const statement of [
   "ALTER TABLE agents ADD COLUMN token_id TEXT NOT NULL DEFAULT ''",
   "ALTER TABLE agents ADD COLUMN source TEXT NOT NULL DEFAULT 'erc8004_identity_registry'",
@@ -539,8 +552,45 @@ export async function syncProjectionStore(
   }
 }
 
-export function readJobs() {
-  return db.prepare(`SELECT * FROM jobs ORDER BY CAST(id AS INTEGER) DESC`).all().map((row) => {
+export function readJobsFiltered(options: {
+  limit?: number;
+  provider?: string;
+  statuses?: number[];
+  includeExpired?: boolean;
+} = {}) {
+  const limit = Math.min(Math.max(Number(options.limit) || 50, 1), 500);
+
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+
+  if (options.provider) {
+    // Case-insensitive match on worker column (which stores provider address)
+    conditions.push(`LOWER(worker) = ?`);
+    params.push(options.provider.toLowerCase());
+  }
+
+  if (options.statuses && options.statuses.length > 0) {
+    const placeholders = options.statuses.map(() => `?`).join(`,`);
+    conditions.push(`status IN (${placeholders})`);
+    params.push(...options.statuses);
+  }
+
+  if (options.includeExpired === false) {
+    // Exclude expired (status=6) and rejected (status=5) unless explicitly requested
+    if (!options.statuses || !options.statuses.includes(6)) {
+      conditions.push(`status != 6`);
+    }
+    if (!options.statuses || !options.statuses.includes(5)) {
+      conditions.push(`status != 5`);
+    }
+  }
+
+  const where = conditions.length > 0 ? `WHERE ${conditions.join(` AND `)}` : ``;
+  const sql = `SELECT * FROM jobs ${where} ORDER BY CAST(id AS INTEGER) DESC LIMIT ?`;
+  params.push(limit);
+
+  const typedParams = params as Array<string | number | null>;
+  return db.prepare(sql).all(...typedParams).map((row) => {
     const status = Number(row.status);
     return {
       id: row.id as string,
@@ -564,6 +614,10 @@ export function readJobs() {
       },
     };
   });
+}
+
+export function readJobs() {
+  return readJobsFiltered({ limit: 500 });
 }
 
 export function readJobById(jobId: string) {
