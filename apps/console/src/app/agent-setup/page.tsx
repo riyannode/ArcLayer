@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Bot, Clipboard, Code2, Terminal, ArrowLeft, Copy, Check } from 'lucide-react';
+import { Bot, Code2, Terminal, ArrowLeft, Copy, Check } from 'lucide-react';
 
 /* ── design tokens (dashboard / profile system) ── */
 
@@ -59,105 +59,15 @@ const CLIENT_PROMPT = [
   `After the agent identity is minted, prepare this agent for client-side job creation flows.`,
 ].join('\n');
 
-function McpPromptCard() {
-  const [mode, setMode] = useState<'provider' | 'client'>('provider');
-  const [selectedType, setSelectedType] = useState<string>('smart-contract');
-  const [copied, setCopied] = useState(false);
-
-  const agentType = PROVIDER_AGENT_TYPES.find((t) => t.key === selectedType) || PROVIDER_AGENT_TYPES[0];
-  const prompt = mode === 'provider' ? buildProviderPrompt(agentType) : CLIENT_PROMPT;
-
-  async function handleCopy() {
-    await navigator.clipboard.writeText(prompt);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  return (
-    <div className="mb-5 rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]">
-          <Clipboard className="h-5 w-5" />
-        </div>
-        <div>
-          <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Option 3</div>
-          <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F4EFE5]">
-            MCP Prompt Template
-          </h2>
-        </div>
-      </div>
-
-      <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">
-        Choose an agent type and copy a Claude/Codex MCP prompt.
-      </p>
-
-      {/* Mode toggle */}
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={() => setMode('provider')}
-          className={
-            mode === 'provider'
-              ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
-              : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
-          }
-        >
-          Provider Bot <span className="ml-1 text-[10px] opacity-70">Recommended</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setMode('client')}
-          className={
-            mode === 'client'
-              ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
-              : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
-          }
-        >
-          Client Bot
-        </button>
-      </div>
-
-      {/* Provider: Agent Type selector */}
-      {mode === 'provider' && (
-        <div className="mt-4">
-          <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/40">
-            Agent Type
-          </label>
-          <select
-            value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value)}
-            className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0A0D12] px-3 text-[13px] text-[#F5F0E5] outline-none focus:border-[#F3C536]/40"
-          >
-            {PROVIDER_AGENT_TYPES.map((t) => (
-              <option key={t.key} value={t.key}>{t.label}</option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Copy button */}
-      <div className="mt-4 flex items-center gap-3">
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
-        >
-          {copied ? 'Copied ✓' : 'Copy Prompt'}
-        </button>
-        <span className="text-[11px] text-[#EAE4D8]/35">
-          Copy the recommended MCP prompt for this agent type.
-        </span>
-      </div>
-    </div>
-  );
-}
-
 /* ── page ─────────────────────────────────────────────────────────── */
 
 const INSTALL_CMD = 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash';
 
 export default function AgentSetupPage() {
   const [copied, setCopied] = useState(false);
+  const [mcpMode, setMcpMode] = useState<'provider' | 'client'>('provider');
+  const [mcpSelectedType, setMcpSelectedType] = useState<string>('smart-contract');
+  const [mcpCopied, setMcpCopied] = useState(false);
 
   const handleCopy = async () => {
     try {
@@ -175,6 +85,14 @@ export default function AgentSetupPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 4000);
     }
+  };
+
+  const handleCopyPrompt = async () => {
+    const agentType = PROVIDER_AGENT_TYPES.find((t) => t.key === mcpSelectedType) || PROVIDER_AGENT_TYPES[0];
+    const prompt = mcpMode === 'provider' ? buildProviderPrompt(agentType) : CLIENT_PROMPT;
+    await navigator.clipboard.writeText(prompt);
+    setMcpCopied(true);
+    setTimeout(() => setMcpCopied(false), 2000);
   };
 
   return (
@@ -265,7 +183,7 @@ export default function AgentSetupPage() {
           </p>
         </div>
 
-        {/* Option 2: MCP for Claude/Codex */}
+        {/* Option 2: MCP Setup */}
         <div className="mb-5 rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]">
@@ -274,7 +192,7 @@ export default function AgentSetupPage() {
             <div>
               <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Option 2</div>
               <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F4EFE5]">
-                MCP for Claude / Codex
+                MCP Setup
               </h2>
             </div>
           </div>
@@ -303,10 +221,72 @@ export default function AgentSetupPage() {
             </Link>
           </div>
 
-        </div>
+          {/* Divider */}
+          <div className="my-5 border-t border-white/10" />
 
-        {/* Option 3: MCP Prompt Template */}
-        <McpPromptCard />
+          {/* MCP Prompt copy */}
+          <p className="text-[13px] leading-5 text-[#EAE4D8]/62">
+            Choose an agent type and copy a Claude/Codex MCP prompt.
+          </p>
+
+          {/* Mode toggle */}
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMcpMode('provider')}
+              className={
+                mcpMode === 'provider'
+                  ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
+                  : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
+              }
+            >
+              Provider Bot <span className="ml-1 text-[10px] opacity-70">Recommended</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMcpMode('client')}
+              className={
+                mcpMode === 'client'
+                  ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
+                  : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
+              }
+            >
+              Client Bot
+            </button>
+          </div>
+
+          {/* Provider: Agent Type selector */}
+          {mcpMode === 'provider' && (
+            <div className="mt-4">
+              <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/40">
+                Agent Type
+              </label>
+              <select
+                value={mcpSelectedType}
+                onChange={(e) => setMcpSelectedType(e.target.value)}
+                className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0A0D12] px-3 text-[13px] text-[#F5F0E5] outline-none focus:border-[#F3C536]/40"
+              >
+                {PROVIDER_AGENT_TYPES.map((t) => (
+                  <option key={t.key} value={t.key}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Copy button */}
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleCopyPrompt}
+              className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
+            >
+              {mcpCopied ? 'Copied ✓' : 'Copy MCP Prompt'}
+            </button>
+            <span className="text-[11px] text-[#EAE4D8]/35">
+              Copy the recommended MCP prompt for this agent type.
+            </span>
+          </div>
+        </div>
 
         {/* Deposit note */}
         <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 text-center">
