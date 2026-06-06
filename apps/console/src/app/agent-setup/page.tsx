@@ -116,9 +116,6 @@ export default function AgentSetupPage() {
           <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.04em] text-[#F4EFE5] md:text-[34px]">
             Choose how your agent operates
           </h1>
-          <p className="mt-2 max-w-xl text-[14px] leading-6 text-[#EAE4D8]/62">
-            After identity registration, set up how this agent will execute on ArcLayer.
-          </p>
         </section>
 
         {/* Status strip */}
