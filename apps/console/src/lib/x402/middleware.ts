@@ -65,6 +65,7 @@ import {
   resolveRequiredAgentX402Payer,
   assertX402PayerMatches,
   type AgentX402Rail,
+  type AgentX402Scope,
 } from './agent-payer';
 import { recordAgentX402Ledger } from './agent-ledger';
 
@@ -134,6 +135,7 @@ export interface X402MiddlewareOptions {
   agentPayerBinding?: {
     required: boolean;
     rail: AgentX402Rail;
+    scope?: AgentX402Scope;
     getContext: (req: NextRequest) => Promise<{
       agentId: string;
       runtimeId?: string | null;
@@ -520,6 +522,7 @@ async function handleGateway(
       const expected = await resolveRequiredAgentX402Payer(
         rawCtx.agentId,
         opts.agentPayerBinding.rail,
+        opts.agentPayerBinding.scope,
       );
       agentContext = { ...rawCtx, agentId: expected.agentId, controllerAddress: expected.controllerAddress, expectedPayer: expected.payerAddress };
       const matchResult = assertX402PayerMatches({
