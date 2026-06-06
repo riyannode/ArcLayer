@@ -309,6 +309,7 @@ install_runtime() {
   [ -f "$src_dir/package-lock.json" ] && cp "$src_dir/package-lock.json" "$INSTALL_DIR/"
   cp "$src_dir/provider-bot.js" "$INSTALL_DIR/"
   cp "$src_dir/llm-task-helper.js" "$INSTALL_DIR/"
+  cp "$src_dir/check-env.mjs" "$INSTALL_DIR/"
   cp "$src_dir/ecosystem.config.cjs" "$INSTALL_DIR/"
   cp -r "$src_dir/shared" "$INSTALL_DIR/"
 

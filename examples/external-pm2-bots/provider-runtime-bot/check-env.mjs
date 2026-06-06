@@ -96,9 +96,26 @@ if (env.PROVIDER_PRIVATE_KEY && env.PROVIDER_ADDRESS) {
   }
 }
 
-// Custom skill path
-if (env.PROVIDER_CUSTOM_SKILL_PATH && !existsSync(env.PROVIDER_CUSTOM_SKILL_PATH)) {
-  warnings.push(`PROVIDER_CUSTOM_SKILL_PATH does not exist: ${env.PROVIDER_CUSTOM_SKILL_PATH}`);
+// Custom skill path — fail closed if set but missing/unreadable
+if (env.PROVIDER_CUSTOM_SKILL_PATH && env.PROVIDER_CUSTOM_SKILL_PATH.trim()) {
+  const skillPath = env.PROVIDER_CUSTOM_SKILL_PATH.trim();
+  if (!existsSync(skillPath)) {
+    errors.push(`PROVIDER_CUSTOM_SKILL_PATH file not found: ${skillPath}`);
+  } else {
+    try {
+      const { readFileSync, statSync } = await import('fs');
+      const stat = statSync(skillPath);
+      if (!stat.isFile()) {
+        errors.push(`PROVIDER_CUSTOM_SKILL_PATH is not a file: ${skillPath}`);
+      } else if (stat.size === 0) {
+        errors.push(`PROVIDER_CUSTOM_SKILL_PATH is empty: ${skillPath}`);
+      } else {
+        readFileSync(skillPath, 'utf8');
+      }
+    } catch (err) {
+      errors.push(`PROVIDER_CUSTOM_SKILL_PATH unreadable: ${err.message}`);
+    }
+  }
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────
@@ -126,7 +143,7 @@ if (errors.length > 0) {
 // Print config summary (no secrets)
 console.log(`  Agent ID:      ${env.ARCLAYER_AGENT_ID}`);
 console.log(`  Address:       ${env.PROVIDER_ADDRESS}`);
-console.log(`  MCP Token:     ${env.ARCLAYER_MCP_TOKEN.slice(0, 20)}...`);
+console.log(`  MCP Token:     ${env.ARCLAYER_MCP_TOKEN ? '(set)' : '(empty)'}`);
 console.log(`  LLM Provider:  ${env.LLM_PROVIDER}`);
 console.log(`  LLM Model:     ${env.LLM_MODEL}`);
 console.log(`  LLM Key:       ${env.LLM_API_KEY ? '(set)' : '(empty)'}`);
