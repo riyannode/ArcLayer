@@ -16,6 +16,7 @@ import { getSupabaseAdmin } from './supabaseClient';
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export type AgentX402Rail = 'circle-gateway' | 'arc-native';
+export type AgentX402Scope = 'homepage' | 'a2a';
 
 export type AgentX402PayerResolution = {
   agentId: string;
@@ -75,6 +76,7 @@ export function validateAgentId(agentId: string): void {
 export async function resolveRequiredAgentX402Payer(
   agentId: string,
   rail: AgentX402Rail = 'circle-gateway',
+  scope: AgentX402Scope = 'homepage',
 ): Promise<AgentX402PayerResolution> {
   validateAgentId(agentId);
 
@@ -129,12 +131,13 @@ export async function resolveRequiredAgentX402Payer(
   const canonicalAgentId = String(agent.agent_id ?? agent.token_id ?? agentId);
   const controller = String(agent.controller ?? '');
 
-  // Step 2: Read active payer from agent_x402_payers.
+  // Step 2: Read active payer from agent_x402_payers (always scoped).
   const { data: payerRow, error: payerError } = await supabase
     .from('agent_x402_payers')
-    .select('payer_address, rail, status, revoked_at')
+    .select('payer_address, rail, scope, status, revoked_at')
     .eq('agent_id', canonicalAgentId)
     .eq('rail', rail)
+    .eq('scope', scope)
     .eq('status', 'active')
     .is('revoked_at', null)
     .limit(1)
@@ -224,4 +227,110 @@ export function assertX402PayerMatches(input: {
   }
 
   return { ok: true };
+}
+
+// ── A2A Payer Auto-Binding ────────────────────────────────────────────────
+
+/**
+ * Ensure an A2A x402 payer binding exists for an agent.
+ *
+ * If the agent has an active Agent Account (circleAgentAccountAddress),
+ * upserts an `agent_x402_payers` row with:
+ *   agentTokenId → payerAddress = circleAgentAccountAddress
+ *   rail = circle-gateway, scope = a2a
+ *
+ * Idempotent: if an active a2a binding already exists with the same payer,
+ * returns it. If payer changed, revokes old and inserts new.
+ *
+ * @returns The active A2A payer binding, or null if no Agent Account provided.
+ */
+export async function ensureA2aPayerBinding(input: {
+  agentId: string;
+  controllerAddress: string;
+  agentAccountAddress: string;
+}): Promise<{ payerAddress: string; rail: AgentX402Rail; scope: AgentX402Scope } | null> {
+  const { agentId, controllerAddress, agentAccountAddress } = input;
+
+  if (!agentAccountAddress || !isAddress(agentAccountAddress)) return null;
+
+  const supabase = getSupabaseAdmin();
+  const normalizedPayer = getAddress(agentAccountAddress);
+  const normalizedController = getAddress(controllerAddress);
+  const rail: AgentX402Rail = 'circle-gateway';
+  const scope: AgentX402Scope = 'a2a';
+
+  // Check if active a2a binding already exists
+  const { data: existing } = await supabase
+    .from('agent_x402_payers')
+    .select('id, payer_address')
+    .eq('agent_id', agentId)
+    .eq('rail', rail)
+    .eq('scope', scope)
+    .eq('status', 'active')
+    .is('revoked_at', null)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    // Already bound to same payer — nothing to do
+    const existingPayer = getAddress((existing as Record<string, unknown>).payer_address as string);
+    if (existingPayer === normalizedPayer) {
+      return { payerAddress: normalizedPayer, rail, scope };
+    }
+    // Payer changed — revoke old binding
+    await supabase
+      .from('agent_x402_payers')
+      .update({ status: 'revoked', revoked_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', (existing as Record<string, unknown>).id as string);
+  }
+
+  // Insert new a2a binding
+  const { error: insertError } = await supabase
+    .from('agent_x402_payers')
+    .insert({
+      agent_id: agentId,
+      controller_address: normalizedController,
+      payer_address: normalizedPayer,
+      rail,
+      scope,
+      status: 'active',
+      verified_at: new Date().toISOString(),
+    });
+
+  // Ignore unique violation (concurrent insert race)
+  if (insertError && insertError.code !== '23505') {
+    throw new Error(`a2a_payer_bind_failed: ${insertError.message}`);
+  }
+
+  return { payerAddress: normalizedPayer, rail, scope };
+}
+
+/**
+ * Get the active A2A x402 payer for an agent (read-only).
+ * Returns null if no active a2a binding exists.
+ */
+export async function getActiveA2aPayer(
+  agentId: string,
+): Promise<{ payerAddress: string; rail: AgentX402Rail; scope: AgentX402Scope } | null> {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from('agent_x402_payers')
+    .select('payer_address, rail, scope')
+    .eq('agent_id', agentId)
+    .eq('rail', 'circle-gateway')
+    .eq('scope', 'a2a')
+    .eq('status', 'active')
+    .is('revoked_at', null)
+    .limit(1)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  const row = data as Record<string, unknown>;
+  return {
+    payerAddress: getAddress(row.payer_address as string),
+    rail: row.rail as AgentX402Rail,
+    scope: row.scope as AgentX402Scope,
+  };
 }

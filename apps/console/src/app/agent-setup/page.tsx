@@ -239,17 +239,6 @@ export default function AgentSetupPage() {
             >
               Provider Bot <span className="ml-1 text-[10px] opacity-70">Recommended</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setMcpMode('client')}
-              className={
-                mcpMode === 'client'
-                  ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
-                  : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
-              }
-            >
-              Client Bot
-            </button>
           </div>
 
           {/* Provider: Agent Type selector */}
