@@ -244,9 +244,6 @@ export default function AgentSetupPage() {
             {INSTALL_CMD}
           </div>
 
-          <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/42">
-            Run in your VPS terminal. Prompts for Agent ID, MCP token, provider wallet key, and LLM config.
-          </p>
 
           <div className="mt-5">
             <button
