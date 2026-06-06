@@ -71,6 +71,7 @@ import {
   handleProviderApplyOpenJob,
   handleProviderWithdrawOpenJobApplication,
   handleProviderListMyOpenJobApplications,
+  handleProviderRuntimeRetryJob,
 } from './provider-runtime-tools';
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -1222,6 +1223,23 @@ export function registerAllTools(): void {
     legacyAliases: [],
     kind: 'read',
     handler: handleProviderListMyOpenJobApplications,
+  });
+
+  registerTool({
+    name: 'provider.runtime_retry_job',
+    domain: 'provider',
+    description:
+      'Retry a failed provider job run. Allowed only if latest phase is runtime_failed or submit_tx_failed, on-chain status is Funded, and retry count < 3.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID to retry.' },
+      { name: 'reason', type: 'string', description: 'Reason for retry (default: manual retry).' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleProviderRuntimeRetryJob,
   });
 }
 

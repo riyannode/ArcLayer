@@ -22,6 +22,7 @@ import {
   writeProviderCheckpoint,
   completeProviderJobRun,
   failProviderJobRun,
+  retryProviderJobRun,
   getProviderResumePlan,
   listOpenGlobalJobs,
   listAssignedJobs,
@@ -469,5 +470,43 @@ export async function handleProviderListAssignedJobs(
     providerAddress,
     jobs,
     total: jobs.length,
+  });
+}
+
+/**
+ * provider.runtime_retry_job
+ *
+ * Retry a failed provider job run. Allowed only when:
+ * - Latest checkpoint phase is runtime_failed or submit_tx_failed
+ * - On-chain status is still Funded
+ * - Retry count < 3
+ */
+export async function handleProviderRuntimeRetryJob(
+  args: Record<string, unknown>,
+  ctx: McpToolContext,
+): Promise<unknown> {
+  const session = await requireMcpSession(ctx);
+  const agentId = typeof args.agentId === 'string' ? args.agentId.trim() : '';
+  const jobId = typeof args.jobId === 'string' ? args.jobId.trim() : '';
+  const reason = typeof args.reason === 'string' ? args.reason.trim() : 'manual retry';
+
+  if (!agentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'agentId required');
+  if (!jobId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
+
+  let result;
+  try {
+    result = await retryProviderJobRun(agentId, jobId, reason, buildAuth(session, agentId));
+  } catch (err) {
+    rethrowAsMcpError(err, 'Failed to retry job run');
+  }
+
+  return jsonSafe({
+    ok: true,
+    agentId,
+    jobId,
+    runId: result.runId,
+    retryCount: result.retryCount,
+    phase: result.phase,
+    note: `Retry #${result.retryCount} granted. Bot will re-attempt on next poll cycle.`,
   });
 }
