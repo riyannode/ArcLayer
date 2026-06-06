@@ -76,7 +76,7 @@ export function validateAgentId(agentId: string): void {
 export async function resolveRequiredAgentX402Payer(
   agentId: string,
   rail: AgentX402Rail = 'circle-gateway',
-  scope?: AgentX402Scope,
+  scope: AgentX402Scope = 'homepage',
 ): Promise<AgentX402PayerResolution> {
   validateAgentId(agentId);
 
@@ -131,21 +131,15 @@ export async function resolveRequiredAgentX402Payer(
   const canonicalAgentId = String(agent.agent_id ?? agent.token_id ?? agentId);
   const controller = String(agent.controller ?? '');
 
-  // Step 2: Read active payer from agent_x402_payers.
-  let payerQuery = supabase
+  // Step 2: Read active payer from agent_x402_payers (always scoped).
+  const { data: payerRow, error: payerError } = await supabase
     .from('agent_x402_payers')
     .select('payer_address, rail, scope, status, revoked_at')
     .eq('agent_id', canonicalAgentId)
     .eq('rail', rail)
+    .eq('scope', scope)
     .eq('status', 'active')
-    .is('revoked_at', null);
-
-  // Filter by scope if provided (a2a vs homepage)
-  if (scope) {
-    payerQuery = payerQuery.eq('scope', scope);
-  }
-
-  const { data: payerRow, error: payerError } = await payerQuery
+    .is('revoked_at', null)
     .limit(1)
     .maybeSingle();
 
