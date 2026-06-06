@@ -1,13 +1,15 @@
 /**
- * LLM Task Helper — bridges existing task-runner.js into provider-runtime-bot.
+ * LLM Task Helper — LLM-backed job execution for provider-runtime-bot.
  *
- * Reuses:
- *   - examples/external-erc8183-bots/provider-bot/task-runner.js (runLlmTask)
- *   - examples/external-erc8183-bots/shared/llm-client.js (callLLM)
- *   - examples/external-erc8183-bots/provider-bot/role-aware-profile.js (buildMessages)
- *   - examples/external-erc8183-bots/provider-bot/skill-loader.js (loadProviderSkills)
+ * Self-contained: all LLM execution modules are bundled in ./shared/.
+ * No external dependencies on legacy external-erc8183-bots.
  *
- * No code duplication. Loads via require() from the existing path.
+ * Bundled modules:
+ *   - shared/task-runner.js (runLlmTask)
+ *   - shared/llm-client.js (callLLM)
+ *   - shared/role-aware-profile.js (buildMessages)
+ *   - shared/skill-loader.js (loadProviderSkills)
+ *
  * Computes deliverableHash from full deliverablePayload (deep canonical stringify).
  * Never logs API keys or raw LLM content.
  */
@@ -15,10 +17,8 @@
 const crypto = require('crypto');
 const path = require('path');
 
-// ── Resolve paths to existing modules ───────────────────────────────────────
-const EXTERNAL_BOTS_DIR = path.resolve(__dirname, '../../external-erc8183-bots');
-const PROVIDER_BOT_DIR = path.join(EXTERNAL_BOTS_DIR, 'provider-bot');
-const SHARED_DIR = path.join(EXTERNAL_BOTS_DIR, 'shared');
+// ── Resolve paths to bundled modules ───────────────────────────────────────
+const SHARED_DIR = path.join(__dirname, 'shared');
 
 // Lazy-loaded module (loaded once on first use)
 let _runLlmTask = null;
@@ -28,11 +28,11 @@ function loadModules() {
 
   try {
     // runLlmTask() internally loads loadProviderSkills + buildMessages — no need to load here
-    _runLlmTask = require(path.join(PROVIDER_BOT_DIR, 'task-runner.js')).runLlmTask;
+    _runLlmTask = require(path.join(SHARED_DIR, 'task-runner.js')).runLlmTask;
   } catch (err) {
     throw new Error(
-      `Failed to load LLM task modules from ${EXTERNAL_BOTS_DIR}. ` +
-      `Ensure examples/external-erc8183-bots exists. Error: ${err.message}`
+      `Failed to load LLM task modules from ${SHARED_DIR}. ` +
+      `Ensure shared/ directory exists with task-runner.js. Error: ${err.message}`
     );
   }
 }
