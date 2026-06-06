@@ -24,6 +24,9 @@ import {
 } from 'lucide-react';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
+import { useFundAgentAccount } from '@/hooks/useFundAgentAccount';
+import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
+import { useSignMessage } from 'wagmi';
 
 // ── MCP Prompt Template data ─────────────────────────────────────────────
 
@@ -256,6 +259,43 @@ type TabKey = 'basic' | 'capabilities' | 'links' | 'reputation' | 'metadata';
 
 const EMPTY_AGENTS: ProfileAgent[] = [];
 
+/** Map raw passkey/Circle errors to user-friendly copy. */
+function mapPasskeyError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const lower = raw.toLowerCase();
+
+  // WebAuthn credential creation failed on non-production origin
+  if (lower.includes('credentials') || lower.includes('credential')) {
+    return 'Passkey credential creation failed. Try using arclayers.xyz, a new passkey name, or clear existing passkeys for this site.';
+  }
+  // User cancelled the passkey prompt
+  if (lower.includes('cancel') || lower.includes('abort') || lower.includes('notallowed')) {
+    return ''; // silent — user action, not an error
+  }
+  // WebAuthn not supported
+  if (lower.includes('not supported') || lower.includes('notavailable')) {
+    return 'WebAuthn is not supported on this browser. Try Chrome or Safari on a device with biometrics.';
+  }
+  // Wallet session / auth errors
+  if (lower.includes('not_authenticated') || lower.includes('session')) {
+    return 'Wallet session expired or missing. Please reconnect and sign the wallet session message.';
+  }
+  // User rejected signing (wallet popup dismissed)
+  if (lower.includes('user rejected') || lower.includes('rejected')) {
+    return ''; // silent — user action
+  }
+  // Nonce/signing errors
+  if (lower.includes('nonce') || lower.includes('signature')) {
+    return 'Wallet signature failed. Try reconnecting your wallet and signing again.';
+  }
+  // Network / RPC errors
+  if (lower.includes('network') || lower.includes('fetch') || lower.includes('timeout')) {
+    return 'Network error. Check your connection and try again.';
+  }
+  // Fallback — show sanitized message
+  return raw.length > 200 ? raw.slice(0, 200) + '…' : raw || 'Passkey registration failed.';
+}
+
 function shortAddress(value?: string) {
   if (!value) return '—';
   if (value.length < 14) return value;
@@ -445,6 +485,22 @@ export default function AgentProfilePage() {
   const [reputation, setReputation] = useState<ReputationResponse | null>(null);
   const [reputationLoading, setReputationLoading] = useState(false);
 
+  // Preview domain guard — passkey creation only works on production origin
+  const isPreviewDomain = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    const origin = window.location.origin;
+    return origin.includes('vercel.app') || origin.includes('localhost') || (origin !== 'https://arclayers.xyz' && !origin.includes('127.0.0.1'));
+  }, []);
+
+  // Preview mock data — only on non-production domains, never on arclayers.xyz
+  const PREVIEW_MOCK = {
+    agentAccountAddress: '0x1111111111111111111111111111111111111111',
+    ownerUsdc: { raw: '10000000', formatted: '10.00' },
+    agentUsdc: { raw: '2000000', formatted: '2.00' },
+    ownerGateway: { raw: '1000000', formatted: '1.00' },
+    agentGateway: { raw: '0', formatted: '0.00' },
+  };
+
   // Agent Account state
   const [agentAccount, setAgentAccount] = useState<AgentAccountInfo | null>(null);
   const [agentAccountLoading, setAgentAccountLoading] = useState(false);
@@ -460,7 +516,27 @@ export default function AgentProfilePage() {
   // Balance state
   const [ownerBalance, setOwnerBalance] = useState<BalanceInfo | null>(null);
   const [agentBalance, setAgentBalance] = useState<BalanceInfo | null>(null);
+  const [ownerGateway, setOwnerGateway] = useState<BalanceInfo | null>(null);
+  const [agentGateway, setAgentGateway] = useState<BalanceInfo | null>(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
+
+  // Fund Agent Account state
+  const [fundAmount, setFundAmount] = useState('');
+  const [showFundForm, setShowFundForm] = useState(false);
+  const fundAgent = useFundAgentAccount(() => {
+    if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
+    setFundAmount('');
+    setShowFundForm(false);
+  });
+
+  // Gateway deposit state
+  const [gatewayAmount, setGatewayAmount] = useState('1.00');
+  const gatewayDeposit = useGatewayDeposit(() => {
+    if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
+  });
+
+  // Wallet session signing (for authenticated API calls)
+  const { signMessageAsync } = useSignMessage();
 
   async function loadAgents(ownerAddr: string, agentAccountAddr?: string | null, signal?: AbortSignal) {
     setLoading(true);
@@ -601,6 +677,19 @@ export default function AgentProfilePage() {
 
   const hasAgentAccount = agentAccount?.agentAccountAddress != null;
 
+  // When on preview domain with no real Agent Account, use mock data for design review
+  const useMockData = isPreviewDomain && !hasAgentAccount;
+
+  // Effective values — mock overrides real when in preview mode
+  const effectiveAgentAccount = useMockData
+    ? { ...agentAccount, agentAccountAddress: PREVIEW_MOCK.agentAccountAddress, ownerAddress: address || '', status: 'active', chainId: 5042002, walletProvider: 'circle_modular', accountType: 'circle_smart_account', id: '', createdAt: '', updatedAt: '' }
+    : agentAccount;
+  const effectiveHasAgentAccount = useMockData || hasAgentAccount;
+  const effectiveOwnerBalance = useMockData ? PREVIEW_MOCK.ownerUsdc : ownerBalance;
+  const effectiveAgentBalance = useMockData ? PREVIEW_MOCK.agentUsdc : agentBalance;
+  const effectiveOwnerGateway = useMockData ? PREVIEW_MOCK.ownerGateway : ownerGateway;
+  const effectiveAgentGateway = useMockData ? PREVIEW_MOCK.agentGateway : agentGateway;
+
   async function loadAgentAccount() {
     setAgentAccountLoading(true);
     try {
@@ -627,6 +716,8 @@ export default function AgentProfilePage() {
         const json = await res.json();
         setOwnerBalance(json.owner?.usdc ?? null);
         setAgentBalance(json.agentAccount?.usdc ?? null);
+        setOwnerGateway(json.owner?.gateway ?? null);
+        setAgentGateway(json.agentAccount?.gateway ?? null);
       }
     } catch {
       // silent
@@ -639,6 +730,27 @@ export default function AgentProfilePage() {
     setCreatingAgent(true);
     setCreateError('');
     try {
+      // Preview domain guard — passkey creation requires production origin
+      if (isPreviewDomain) {
+        setCreateError('Passkey creation is only supported on arclayers.xyz. Preview deployments can display profile data, but Circle Agent Account creation must be done on the production domain.');
+        setCreatingAgent(false);
+        return;
+      }
+
+      // Ensure ArcLayer wallet session exists before authenticated API calls
+      if (!address) {
+        setCreateError('Connect your wallet first.');
+        setCreatingAgent(false);
+        return;
+      }
+      const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
+      const sessionOk = await ensureWalletSession(address, signMessageAsync);
+      if (!sessionOk.ok) {
+        setCreateError(mapPasskeyError(new Error(sessionOk.error)));
+        setCreatingAgent(false);
+        return;
+      }
+
       // Step 1: Try Circle login (existing passkey)
       let addr: string | undefined;
       if (circleAuthenticated && circleAddress) {
@@ -663,7 +775,7 @@ export default function AgentProfilePage() {
       // Step 2: link the returned address directly (no React state race)
       if (addr) await linkCircleAddress(addr);
     } catch (e) {
-      setCreateError(e instanceof Error ? e.message : 'Failed to create agent account');
+      setCreateError(mapPasskeyError(e));
     } finally {
       setCreatingAgent(false);
     }
@@ -674,13 +786,28 @@ export default function AgentProfilePage() {
     setCreatingAgent(true);
     setCreateError('');
     try {
+      // Ensure wallet session before authenticated linking
+      if (!address) {
+        setCreateError('Connect your wallet first.');
+        setCreatingAgent(false);
+        return;
+      }
+      const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
+      const sessionOk = await ensureWalletSession(address, signMessageAsync);
+      if (!sessionOk.ok) {
+        setCreateError(mapPasskeyError(new Error(sessionOk.error)));
+        setCreatingAgent(false);
+        return;
+      }
+
       const addr = await circleRegister(registerUsername.trim());
       setShowPasskeyRegister(false);
       setRegisterUsername('');
       // Link the returned address directly (no React state race)
       await linkCircleAddress(addr);
     } catch (e) {
-      setCreateError(e instanceof Error ? e.message : 'Passkey registration failed');
+      const mapped = mapPasskeyError(e);
+      setCreateError(mapped || 'Passkey registration failed');
     } finally {
       setCreatingAgent(false);
     }
@@ -830,12 +957,12 @@ export default function AgentProfilePage() {
               <div className="grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-3">
                 <div className="text-[13px] text-[#EAE4D8]/60">Agent Account</div>
                 <div className="flex items-center gap-2">
-                  {hasAgentAccount ? (
+                  {effectiveHasAgentAccount ? (
                     <>
                       <span className="truncate font-mono text-[13px] text-[#F5F0E5]">
-                        {shortAddress(agentAccount?.agentAccountAddress ?? '')}
+                        {shortAddress(effectiveAgentAccount?.agentAccountAddress ?? '')}
                       </span>
-                      <button type="button" onClick={() => copyToClipboard(agentAccount?.agentAccountAddress ?? '')} className="text-[#EAE4D8]/45 transition hover:text-[#F3C536]">
+                      <button type="button" onClick={() => copyToClipboard(effectiveAgentAccount?.agentAccountAddress ?? '')} className="text-[#EAE4D8]/45 transition hover:text-[#F3C536]">
                         <Clipboard className="h-3.5 w-3.5" />
                       </button>
                       <span className="ml-auto rounded-md border border-[#F3C536]/20 bg-[#F3C536]/10 px-2 py-0.5 font-mono text-[10px] text-[#F3C536]">
@@ -862,7 +989,16 @@ export default function AgentProfilePage() {
 
               {/* CTAs */}
               <div className="mt-4 flex flex-wrap gap-3">
-                {!hasAgentAccount && !showPasskeyRegister && (
+                {!effectiveHasAgentAccount && !showPasskeyRegister && isPreviewDomain && (
+                  <p className="text-[12px] leading-5 text-[#EAE4D8]/50">
+                    Passkey creation is only supported on{' '}
+                    <a href="https://arclayers.xyz/profile" target="_blank" rel="noreferrer" className="text-[#F3C536] underline decoration-[#F3C536]/30 hover:decoration-[#F3C536]">
+                      arclayers.xyz
+                    </a>
+                    . Preview deployments can display profile data, but Agent Account creation must be done on the production domain.
+                  </p>
+                )}
+                {!effectiveHasAgentAccount && !showPasskeyRegister && !isPreviewDomain && (
                   <button
                     type="button"
                     onClick={handleCreateAgentAccount}
@@ -899,12 +1035,12 @@ export default function AgentProfilePage() {
                     </button>
                   </div>
                 )}
-                {hasAgentAccount && agents.length === 0 && (
+                {effectiveHasAgentAccount && agents.length === 0 && (
                   <Link href="/register/erc8004" className="inline-flex h-10 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-5 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10">
                     <Plus className="h-4 w-4" /> Register ERC-8004 Agent
                   </Link>
                 )}
-                {hasAgentAccount && agents.length > 0 && (
+                {effectiveHasAgentAccount && agents.length > 0 && (
                   <Link href="/agent-setup" className="inline-flex h-10 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-5 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10">
                     <Bot className="h-4 w-4" /> Open Agent Setup
                   </Link>
@@ -913,7 +1049,7 @@ export default function AgentProfilePage() {
               {createError && <p className="mt-2 text-[12px] text-red-400">{createError}</p>}
 
               {/* Advanced: manual link */}
-              {!hasAgentAccount && (
+              {!effectiveHasAgentAccount && (
                 <div className="mt-4">
                   <button
                     type="button"
@@ -948,11 +1084,18 @@ export default function AgentProfilePage() {
 
             {/* Wallet & Funding */}
             <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
-              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
-                Wallet & Funding
+              <div className="flex items-center gap-3">
+                <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
+                  Wallet & Funding
+                </div>
+                {useMockData && (
+                  <span className="rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-amber-300">
+                    Preview mock data
+                  </span>
+                )}
               </div>
 
-              {!hasAgentAccount ? (
+              {!effectiveHasAgentAccount ? (
                 <div className="mt-6 text-center">
                   <p className="text-[13px] text-[#EAE4D8]/45">
                     Create an Agent Account first to get a deposit address.
@@ -960,50 +1103,113 @@ export default function AgentProfilePage() {
                 </div>
               ) : (
                 <>
-                  {/* Balances */}
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {/* ── Owner Wallet Balances ──────────────────────────── */}
+                  <div className="mt-4 text-[12px] font-medium text-[#EAE4D8]/60">Owner Wallet</div>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
                       <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                        Owner Wallet USDC
+                        USDC
                       </div>
                       <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
-                        {balancesLoading ? '...' : ownerBalance?.formatted ?? '0.00'}
+                        {balancesLoading && !useMockData ? '...' : effectiveOwnerBalance?.formatted ?? '0.00'}
                       </div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-20 balance</div>
                     </div>
                     <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
                       <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                        Agent Account USDC
+                        x402 Gateway
                       </div>
-                      <div className="mt-2 text-[18px] font-semibold text-[#F3C536]">
-                        {balancesLoading ? '...' : agentBalance?.formatted ?? '0.00'}
+                      <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
+                        {balancesLoading && !useMockData ? '...' : effectiveOwnerGateway?.formatted ?? '—'}
                       </div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">Paid API access</div>
                     </div>
                   </div>
 
-                  {/* Deposit Address */}
-                  <div className="mt-4 rounded-md border border-white/10 bg-[#0A0D12] px-4 py-3">
-                    <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                      Deposit Address
+                  {/* ── Agent Account Balances ─────────────────────────── */}
+                  <div className="mt-4 text-[12px] font-medium text-[#EAE4D8]/60">Agent Account</div>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                        USDC
+                      </div>
+                      <div className="mt-2 text-[18px] font-semibold text-[#F3C536]">
+                        {balancesLoading && !useMockData ? '...' : effectiveAgentBalance?.formatted ?? '0.00'}
+                      </div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-8004 / ERC-8183</div>
                     </div>
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="min-w-0 truncate font-mono text-[12px] text-[#F5F0E5]">
-                        {agentAccount?.agentAccountAddress}
-                      </span>
-                      <button type="button" onClick={() => copyToClipboard(agentAccount?.agentAccountAddress ?? '')} className="shrink-0 text-[#EAE4D8]/45 transition hover:text-[#F3C536]">
-                        <Clipboard className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <div className="mt-2 flex items-center gap-3 text-[11px] text-[#EAE4D8]/35">
-                      <span>Network: Arc Testnet</span>
-                      <span>Token: USDC</span>
+                    <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                        x402 Gateway
+                      </div>
+                      <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
+                        {balancesLoading && !useMockData ? '...' : effectiveAgentGateway?.formatted ?? '—'}
+                      </div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">Read-only</div>
                     </div>
                   </div>
 
                   <p className="mt-3 text-[11px] leading-5 text-[#EAE4D8]/35">
-                    Send USDC on Arc Testnet to your Agent Account address.
+                    Your EOA is the owner and funding source. Your Agent Account is the operational account for agent actions.
                   </p>
 
-                  {/* Actions */}
+                  {/* ── Fund Agent Account ─────────────────────────────── */}
+                  {showFundForm ? (
+                    <div className="mt-4 rounded-md border border-white/10 bg-[#0A0D12] p-4">
+                      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                        Fund Agent Account
+                      </div>
+                      <p className="mt-1 text-[11px] text-[#EAE4D8]/35">
+                        Transfer USDC from your owner wallet to your Agent Account.
+                      </p>
+                      <div className="mt-3 flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Amount (USDC)"
+                          value={fundAmount}
+                          onChange={(e) => { setFundAmount(e.target.value); fundAgent.reset(); }}
+                          className="h-9 w-[160px] rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void fundAgent.fund(fundAmount, agentAccount?.agentAccountAddress ?? '')}
+                          disabled={!fundAmount || (fundAgent.step !== 'idle' && fundAgent.step !== 'error')}
+                          className="h-9 rounded-md bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
+                        >
+                          {fundAgent.step === 'checking' || fundAgent.step === 'transferring' || fundAgent.step === 'confirming'
+                            ? 'Sending...'
+                            : 'Send'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setShowFundForm(false); setFundAmount(''); fundAgent.reset(); }}
+                          className="h-9 rounded-md border border-white/10 px-3 text-[12px] text-[#EAE4D8]/60 transition hover:text-[#F5F0E5]"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      {fundAgent.error && (
+                        <p className="mt-2 text-[11px] text-red-400">{fundAgent.error}</p>
+                      )}
+                      {fundAgent.txHash && (
+                        <p className="mt-2 text-[11px] text-emerald-400">
+                          Sent ✓{' '}
+                          <a
+                            href={`https://testnet.arcscan.app/tx/${fundAgent.txHash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="underline decoration-emerald-400/40 hover:text-emerald-300"
+                          >
+                            {shortAddress(fundAgent.txHash)}
+                          </a>
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {/* ── Actions ────────────────────────────────────────── */}
                   <div className="mt-4 flex flex-wrap gap-3">
                     <button
                       type="button"
@@ -1014,14 +1220,51 @@ export default function AgentProfilePage() {
                       <RefreshCcw className={`h-3.5 w-3.5 ${balancesLoading ? 'animate-spin' : ''}`} />
                       Refresh Balances
                     </button>
-                    <button
-                      type="button"
-                      disabled
-                      className="inline-flex h-10 cursor-not-allowed items-center rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/30"
-                    >
-                      Withdraw — Coming soon
-                    </button>
+                    {!showFundForm && (
+                      <button
+                        type="button"
+                        onClick={() => { setShowFundForm(true); fundAgent.reset(); }}
+                        className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
+                      >
+                        Fund Agent Account
+                      </button>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Amount"
+                        value={gatewayAmount}
+                        onChange={(e) => { setGatewayAmount(e.target.value); gatewayDeposit.reset(); }}
+                        className="h-10 w-[100px] rounded-md border border-white/10 bg-transparent px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void gatewayDeposit.deposit(gatewayAmount)}
+                        disabled={(gatewayDeposit.step !== 'idle' && gatewayDeposit.step !== 'error' && gatewayDeposit.step !== 'success') || !gatewayAmount}
+                        className="inline-flex h-10 items-center gap-2 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
+                      >
+                        Deposit EOA → Gateway
+                      </button>
+                    </div>
                   </div>
+                  {gatewayDeposit.txHash && (
+                    <p className="mt-2 text-[11px] text-emerald-400">
+                      Gateway deposit sent ✓{' '}
+                      <a
+                        href={`https://testnet.arcscan.app/tx/${gatewayDeposit.txHash}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline decoration-emerald-400/40 hover:text-emerald-300"
+                      >
+                        {shortAddress(gatewayDeposit.txHash)}
+                      </a>
+                    </p>
+                  )}
+                  {gatewayDeposit.error && (
+                    <p className="mt-2 text-[11px] text-red-400">{gatewayDeposit.error}</p>
+                  )}
                 </>
               )}
             </div>
@@ -1029,7 +1272,7 @@ export default function AgentProfilePage() {
         )}
 
         {/* ── Setup section ────────────────────────────────────────────── */}
-        {isConnected && hasAgentAccount && (
+        {isConnected && effectiveHasAgentAccount && (
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <Link href="/agent-setup" className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 transition hover:border-[#F3C536]/30">
               <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Manual PM2 Bot</div>
@@ -1046,8 +1289,8 @@ export default function AgentProfilePage() {
           </div>
         )}
 
-        {/* ── MCP Prompt Template ──────────────────────────────────────── */}
-        {isConnected && hasAgentAccount && <McpPromptCard />}
+        {/* ── MCP Prompt Template ──────────────────────────────── */}
+        {isConnected && effectiveHasAgentAccount && <McpPromptCard />}
 
         {!ready || loading ? (
           <div className="mt-10 flex min-h-[420px] items-center justify-center rounded-xl border border-white/10 bg-[#080D13]/70">
