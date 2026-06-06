@@ -250,3 +250,36 @@ This ensures the bot never misses a direct-assigned job, even after a full resta
 6. Bot continues from exact point of failure
 
 No RAM-only state. All state in Supabase. Bot is fully disposable.
+
+## Production Readiness
+
+### Direct-Assigned Jobs ✅ Production-Ready
+
+Direct-assigned jobs (where `provider` is set to a specific address at job creation) are fully production-ready:
+
+- LLM-backed deliverable generation
+- Crash-safe checkpoint resume
+- Receipt verification before retry
+- No unbounded indexer queries
+
+### Open/Global Jobs ⚠️ Requires Indexer Fix
+
+Open/global job discovery (`provider.list_open_jobs`) requires the production indexer to support server-side filtering:
+
+- `GET /jobs?provider=<address>&status=open,funded,submitted&limit=50`
+- `GET /jobs/open?limit=50&includeExpired=false`
+
+**Do not enable `PROVIDER_AUTO_APPLY_OPEN_JOBS=true` against an unbounded `/jobs` endpoint.**
+
+### Checkpoint Semantics
+
+| Checkpoint | When Written |
+|------------|--------------|
+| `budget_tx_sent` | After `sendTransaction` returns txHash |
+| `budget_confirmed` | After BudgetSet event or onchain status verification |
+| `submit_tx_sent` | After `sendTransaction` returns txHash |
+| `submitted_confirmed` | After JobSubmitted event or onchain status verification |
+| `submitted_detected` | After onchain status = Submitted |
+| `completed_detected` | After onchain status = Completed |
+
+**Rule:** `*_confirmed` checkpoints require actual verification (event or onchain read), NOT just txHash receipt.

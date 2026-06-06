@@ -129,16 +129,29 @@ async function fetchFromIndexer(path: string, opts?: { timeout?: number }): Prom
   const errors: string[] = [];
   const separator = path.includes('?') ? '&' : '?';
   // Add bounded limit to prevent fetching all 89k+ records
-  const boundedPath = path.includes('limit=') ? path : `${path}${separator}limit=500`;
+  const boundedPath = path.includes('limit=') ? path : `${path}${separator}limit=50`;
+  const timeout = opts?.timeout ?? 25_000;
+  const MAX_RESPONSE_BYTES = 5 * 1024 * 1024; // 5MB
 
   for (const baseUrl of urls) {
     try {
       const res = await fetch(`${baseUrl}${boundedPath}`, {
         cache: 'no-store',
-        signal: opts?.timeout ? AbortSignal.timeout(opts.timeout) : AbortSignal.timeout(25_000),
+        signal: AbortSignal.timeout(timeout),
       });
-      if (res.ok) return res;
-      errors.push(`${baseUrl} → ${res.status}`);
+      if (!res.ok) {
+        errors.push(`${baseUrl} → ${res.status}`);
+        continue;
+      }
+
+      // Guard: reject oversized responses before reading body
+      const contentLength = res.headers.get('content-length');
+      if (contentLength && Number(contentLength) > MAX_RESPONSE_BYTES) {
+        errors.push(`${baseUrl} → response too large (${Math.round(Number(contentLength) / 1024 / 1024)}MB > 5MB)`);
+        continue;
+      }
+
+      return res;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`${baseUrl} → ${msg}`);
@@ -829,54 +842,34 @@ export async function listOpenGlobalJobs(
 ): Promise<unknown[]> {
   const limit = Math.min(Math.max(filters.limit ?? 20, 1), 50);
 
-  // Fetch from indexer with automatic URL fallback
-  const res = await fetchFromIndexer('/jobs');
+  // Use server-side filtered endpoint: /jobs/open
+  const includeExpired = filters.includeExpired ? 'true' : 'false';
+  const res = await fetchFromIndexer(`/jobs/open?limit=${limit}&includeExpired=${includeExpired}`);
   if (!res.ok) {
     throw Object.assign(new Error(`Indexer fetch failed: ${res.status}`), { code: 'indexer_error' });
   }
 
   const json = await res.json().catch(() => ({}));
-  const allJobs: unknown[] = Array.isArray(json) ? json : json.jobs || json.data || [];
+  const jobs: unknown[] = Array.isArray(json) ? json : json.jobs || json.data || [];
 
-  // Server-side filter: provider = 0x0 AND status = Open
-  const filtered = allJobs.filter((j) => {
-    const job = j as Record<string, unknown>;
-    const provider = String(job.provider || '').toLowerCase();
-    const status = String(job.status || '').toLowerCase();
-
-    // Must be open with zero provider
-    if (provider !== ZERO_ADDRESS.toLowerCase() && provider !== '0x0' && provider !== '') {
-      return false;
-    }
-    if (status !== 'open' && status !== '0') {
-      return false;
-    }
-
-    // Optional: exclude expired
-    if (!filters.includeExpired) {
-      const expiredAt = job.expiredAt ?? job.expired_at;
-      if (expiredAt && Number(expiredAt) > 0 && Number(expiredAt) < Date.now() / 1000) {
-        return false;
-      }
-    }
-
-    // Optional: min budget filter
-    if (filters.minBudgetUsdc) {
+  // Apply client-side filters that indexer doesn't support (minBudget, capability)
+  if (filters.minBudgetUsdc) {
+    return jobs.filter((j) => {
+      const job = j as Record<string, unknown>;
       const budget = job.budget ?? job.budgetAtomic ?? job.budget_atomic;
       if (budget) {
         try {
-          const budgetNum = Number(budget) / 1e6; // atomic to USDC
-          if (budgetNum < Number(filters.minBudgetUsdc)) return false;
+          const budgetNum = Number(budget) / 1e6;
+          return budgetNum >= Number(filters.minBudgetUsdc);
         } catch {
-          // Skip budget filter if parse fails
+          return true; // Include if can't parse
         }
       }
-    }
+      return true;
+    });
+  }
 
-    return true;
-  });
-
-  return filtered.slice(0, limit);
+  return jobs;
 }
 
 /**
@@ -892,21 +885,15 @@ export async function listAssignedJobs(
   const normalizedAddr = validateProviderAddress(providerAddress).toLowerCase();
   const cappedLimit = Math.min(Math.max(limit, 1), 50);
 
-  const res = await fetchFromIndexer('/jobs');
+  // Use server-side filtered endpoint: provider + active statuses
+  const res = await fetchFromIndexer(
+    `/jobs?provider=${encodeURIComponent(normalizedAddr)}&status=open,funded,submitted&limit=${cappedLimit}`,
+  );
 
   const json = await res.json().catch(() => ({}));
-  const allJobs: unknown[] = Array.isArray(json) ? json : json.jobs || json.data || [];
+  const jobs: unknown[] = Array.isArray(json) ? json : json.jobs || json.data || [];
 
-  // Filter: provider matches this address AND status is active (Open/Funded/Submitted)
-  const activeStatuses = new Set(['open', 'funded', 'submitted', '0', '1', '2']);
-  const filtered = allJobs.filter((j) => {
-    const job = j as Record<string, unknown>;
-    const provider = String(job.provider || '').toLowerCase();
-    const status = String(job.status || '').toLowerCase();
-    return provider === normalizedAddr && activeStatuses.has(status);
-  });
-
-  return filtered.slice(0, cappedLimit);
+  return jobs;
 }
 
 // ── Open Job Applications ──────────────────────────────────────────────────

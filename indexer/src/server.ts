@@ -27,6 +27,7 @@ import {
   readJobById,
   readJobEvents,
   readJobs,
+  readJobsFiltered,
   readMetaValue,
   readOverview,
   readOverviewSummary,
@@ -226,7 +227,45 @@ createServer((req, res) => {
   }
 
   if (url.pathname === "/jobs") {
-    writeJson(res, readJobs());
+    const limit = url.searchParams.get("limit");
+    const provider = url.searchParams.get("provider") || undefined;
+    const statusParam = url.searchParams.get("status");
+    const includeExpired = url.searchParams.get("includeExpired") === "true";
+
+    let statuses: number[] | undefined;
+    if (statusParam) {
+      const STATUS_MAP: Record<string, number> = {
+        open: 0, funded: 1, submitted: 2, completed: 3, rejected: 4, expired: 5,
+      };
+      statuses = statusParam.split(",").map((s) => {
+        const trimmed = s.trim().toLowerCase();
+        const mapped = STATUS_MAP[trimmed];
+        return mapped !== undefined ? mapped : Number(trimmed);
+      }).filter((n) => !isNaN(n));
+    }
+
+    writeJson(res, readJobsFiltered({
+      limit: limit ? Number(limit) : undefined,
+      provider,
+      statuses,
+      includeExpired,
+    }));
+    return;
+  }
+
+  if (url.pathname === "/jobs/open") {
+    const limit = url.searchParams.get("limit");
+    const includeExpired = url.searchParams.get("includeExpired") === "true";
+    // Open jobs: status=0 (Open), provider (worker) = zero address
+    const allOpen = readJobsFiltered({
+      limit: limit ? Number(limit) : 50,
+      statuses: [0],
+      includeExpired,
+    });
+    // Filter for provider = zero address (open/global jobs)
+    const ZERO = "0x0000000000000000000000000000000000000000";
+    const openGlobal = allOpen.filter((j) => j.provider.toLowerCase() === ZERO);
+    writeJson(res, openGlobal);
     return;
   }
 
@@ -345,7 +384,7 @@ createServer((req, res) => {
   writeJson(res, {
     ok: true,
     mode: "arc-reference-100%",
-    endpoints: ["/health", "/overview/summary", "/overview", "/jobs", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug", "/reputation", "/reputation/:agentTokenId"],
+    endpoints: ["/health", "/overview/summary", "/overview", "/jobs", "/jobs/open", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug", "/reputation", "/reputation/:agentTokenId"],
     eventCount: Number(readMetaValue("event_count") || "0"),
     lastSyncedBlock: readMetaValue("last_synced_block"),
     lastSyncedAgentBlock: readMetaValue("last_synced_agent_block"),
