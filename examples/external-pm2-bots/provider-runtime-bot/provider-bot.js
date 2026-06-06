@@ -54,6 +54,23 @@ const POLL_INTERVAL = parseInt(optionalEnv('POLL_INTERVAL_MS', '15000'), 10);
 // ── LLM Config (validated at startup — required) ───────────────────────────
 const LLM_CONFIG = validateLlmConfig(process.env);
 
+// ── Address Validation (fail-fast at startup) ──────────────────────────────
+// privateKeyToAccount is synchronous — validate immediately
+if (PRIVATE_KEY) {
+  try {
+    const { privateKeyToAccount: _pkCheck } = require('viem/accounts');
+    const derived = _pkCheck(PRIVATE_KEY).address;
+    if (derived.toLowerCase() !== PROVIDER_ADDRESS.toLowerCase()) {
+      console.error(`[FATAL] PROVIDER_PRIVATE_KEY address (${derived}) does not match PROVIDER_ADDRESS (${PROVIDER_ADDRESS})`);
+      process.exit(1);
+    }
+    console.log(`[STARTUP] Key address verified: ${derived}`);
+  } catch (e) {
+    console.error(`[FATAL] Key validation failed: ${e.message}`);
+    process.exit(1);
+  }
+}
+
 // ── Bot Config (passed to LLM task runner) ─────────────────────────────────
 const BOT_CONFIG = {
   agentId: AGENT_ID,
@@ -83,6 +100,15 @@ const client = new ArclayerMcpClient({
 async function signAndSendTx(txInstruction) {
   if (!PRIVATE_KEY) {
     throw new Error('PROVIDER_PRIVATE_KEY not set — cannot sign transactions');
+  }
+
+  // Validate private key address matches PROVIDER_ADDRESS
+  const { privateKeyToAccount: _pk2a } = await import('viem/accounts');
+  const derivedAddr = _pk2a(PRIVATE_KEY).address;
+  if (derivedAddr.toLowerCase() !== PROVIDER_ADDRESS.toLowerCase()) {
+    throw new Error(
+      `[SECURITY] PROVIDER_PRIVATE_KEY address (${derivedAddr}) does not match PROVIDER_ADDRESS (${PROVIDER_ADDRESS}). Aborting.`
+    );
   }
 
   // MCP tools return { to, data, value } — pre-encoded calldata
@@ -480,15 +506,19 @@ async function discoverDirectJobs() {
 
     console.log(`[DIRECT] Found ${jobs.length} direct-assigned job(s)`);
 
-    // Get existing active runs to avoid duplicates
-    const context = await client.getContext(PROVIDER_ADDRESS);
-    if (context.activeRun) {
-      console.log(`[DIRECT] Already have active run for job ${context.activeRun.job_id}, skipping discovery`);
+    // Filter out already-processed jobs
+    const newJobs = jobs.filter((j) => {
+      const jid = String(j.jobId ?? j.job_id ?? j.id);
+      return !processedJobIds.has(jid);
+    });
+
+    if (newJobs.length === 0) {
+      console.log('[DIRECT] All discovered jobs already processed');
       return;
     }
 
-    // Start a run for the first direct-assigned job
-    const job = jobs[0];
+    // Start a run for the first new direct-assigned job
+    const job = newJobs[0];
     const jobId = String(job.jobId ?? job.job_id ?? job.id);
     const status = String(job.status || '').toLowerCase();
 
@@ -532,26 +562,32 @@ async function pollCycle() {
       if (resumePlan.terminal) {
         console.log(`[POLL] Active job ${jobId} is terminal: ${resumePlan.reason}`);
         processedJobIds.add(jobId);
+        // IMPORTANT: fall through to discovery below — don't return
       } else if (resumePlan.providerAssignedToThisBot) {
         // Direct assigned job — handle it
         await handleDirectJob(jobId, resumePlan);
+        return; // handled, don't discover
       } else if (resumePlan.nextAction === 'wait_for_client_setProvider') {
         console.log(`[POLL] Job ${jobId}: waiting for client to assign provider`);
+        return; // waiting, don't discover
       } else if (resumePlan.nextAction === 'wait_for_client_funding') {
         console.log(`[POLL] Job ${jobId}: waiting for client to fund`);
+        return; // waiting, don't discover
       } else if (resumePlan.nextAction === 'wait_for_evaluator') {
         console.log(`[POLL] Job ${jobId}: waiting for evaluator`);
+        return; // waiting, don't discover
       } else {
         console.log(`[POLL] Job ${jobId}: next=${resumePlan.nextAction}, tool=${resumePlan.recommendedTool}`);
+        return; // unknown, don't discover
       }
-    } else {
-      // No active job — check direct-assigned jobs first, then open jobs
-      await discoverDirectJobs();
-      // Only check open jobs if still no active run after direct discovery
-      const recheck = await client.getContext(PROVIDER_ADDRESS);
-      if (!recheck.activeRun) {
-        await discoverOpenJobs();
-      }
+    }
+
+    // No active job OR active job is terminal — discover new jobs
+    await discoverDirectJobs();
+    // Only check open jobs if still no active run after direct discovery
+    const recheck = await client.getContext(PROVIDER_ADDRESS);
+    if (!recheck.activeRun) {
+      await discoverOpenJobs();
     }
   } catch (err) {
     console.error(`[POLL] Cycle error:`, err.message);
