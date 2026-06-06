@@ -1089,7 +1089,7 @@ export default function AgentProfilePage() {
                       <button
                         type="button"
                         onClick={() => void agentGatewayDeposit.deposit(actionAmount, agentAccount?.agentAccountAddress ?? '')}
-                        disabled={!actionAmount || !circleAuthenticated || !agentAccount?.agentAccountAddress || circleAddress.toLowerCase() !== (agentAccount?.agentAccountAddress ?? '').toLowerCase() || (agentGatewayDeposit.step !== 'idle' && agentGatewayDeposit.step !== 'error')}
+                        disabled={!actionAmount || !circleAuthenticated || !agentAccount?.agentAccountAddress || !bundlerClient || (agentGatewayDeposit.step !== 'idle' && agentGatewayDeposit.step !== 'error')}
                         className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
                       >
                         {agentGatewayDeposit.step === 'checking' || agentGatewayDeposit.step === 'depositing' || agentGatewayDeposit.step === 'confirming'
@@ -1100,10 +1100,13 @@ export default function AgentProfilePage() {
                     <p className="mt-2 text-[11px] text-[#EAE4D8]/35">
                       {!circleAuthenticated
                         ? 'Login with passkey first to deposit from Agent Account.'
-                        : agentAccount?.agentAccountAddress && circleAddress.toLowerCase() !== agentAccount.agentAccountAddress.toLowerCase()
-                          ? 'Circle account mismatch. Login with the passkey linked to this Agent Account.'
-                          : 'Deposits USDC from Agent Account into the Gateway. Gateway balance increases for the Agent Account address.'}
+                        : 'Deposits USDC from Agent Account into the Gateway. Gateway balance increases for the Agent Account address.'}
                     </p>
+                    {process.env.NODE_ENV === 'development' && circleAuthenticated && (
+                      <p className="mt-1 font-mono text-[9px] text-[#EAE4D8]/25">
+                        circle={circleAddress?.slice(0, 10)}… bundler={bundlerClient?.account?.address?.slice(0, 10)}… agent={agentAccount?.agentAccountAddress?.slice(0, 10)}…
+                      </p>
+                    )}
                   </div>
 
                   {/* ── Refresh Balances ─────────────────────────────────── */}
