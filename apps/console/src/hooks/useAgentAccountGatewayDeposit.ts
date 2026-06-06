@@ -93,13 +93,6 @@ export function useAgentAccountGatewayDeposit(
         return;
       }
 
-      const amountUnits = parseUnits(trimmed, 6);
-      if (amountUnits <= BigInt(0)) {
-        setError('Amount must be greater than 0');
-        setStep('error');
-        return;
-      }
-
       setStep('checking');
       setError(null);
       setUserOpHash(null);
@@ -108,6 +101,13 @@ export function useAgentAccountGatewayDeposit(
       const agentAddr = getAddress(agentAccountAddress);
 
       try {
+        const amountUnits = parseUnits(trimmed, 6);
+        if (amountUnits <= BigInt(0)) {
+          setError('Amount must be greater than 0');
+          setStep('error');
+          return;
+        }
+
         const publicClient = createPublicClient({
           chain: arcTestnet,
           transport: http(ARC_RPC),
