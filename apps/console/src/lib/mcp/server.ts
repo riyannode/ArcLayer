@@ -72,6 +72,7 @@ import {
   handleProviderWithdrawOpenJobApplication,
   handleProviderListMyOpenJobApplications,
   handleProviderRuntimeRetryJob,
+  handleProviderRuntimeCompleteRun,
 } from './provider-runtime-tools';
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -1240,6 +1241,23 @@ export function registerAllTools(): void {
     legacyAliases: [],
     kind: 'read',
     handler: handleProviderRuntimeRetryJob,
+  });
+
+  registerTool({
+    name: 'provider.runtime_complete_run',
+    domain: 'provider',
+    description:
+      'Mark a job run as completed. Clears active job/run from runtime state. Used by bot to clean up terminal jobs.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'runId', type: 'string', required: true, description: 'Run ID to complete.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleProviderRuntimeCompleteRun,
   });
 }
 

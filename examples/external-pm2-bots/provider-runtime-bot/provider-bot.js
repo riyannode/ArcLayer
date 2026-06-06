@@ -628,6 +628,13 @@ async function pollCycle() {
       if (resumePlan.terminal) {
         console.log(`[POLL] Active job ${jobId} is terminal: ${resumePlan.reason}`);
         processedJobIds.add(jobId);
+        // Clear the run from runtime state so getContext returns null next time
+        try {
+          await client.completeRun(jobId, context.activeRun.id);
+          console.log(`[POLL] Completed run for terminal job ${jobId}`);
+        } catch (err) {
+          console.warn(`[POLL] Failed to complete run for ${jobId}: ${err.message}`);
+        }
         // IMPORTANT: fall through to discovery below — don't return
       } else if (resumePlan.providerAssignedToThisBot) {
         // Direct assigned job — check if actionable or just waiting

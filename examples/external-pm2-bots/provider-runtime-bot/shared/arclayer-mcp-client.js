@@ -110,6 +110,10 @@ class ArclayerMcpClient {
     return this.callTool('provider.list_my_open_job_applications', status ? { status } : {});
   }
 
+  async completeRun(jobId, runId) {
+    return this.callTool('provider.runtime_complete_run', { jobId, runId });
+  }
+
   // ── ERC-8183 Lifecycle Tools ────────────────────────────────────────────
 
   async prepareSetBudget(jobId, amountUsdc) {

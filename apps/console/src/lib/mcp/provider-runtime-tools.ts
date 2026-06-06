@@ -510,3 +510,32 @@ export async function handleProviderRuntimeRetryJob(
     note: `Retry #${result.retryCount} granted. Bot will re-attempt on next poll cycle.`,
   });
 }
+
+/**
+ * provider.runtime_complete_run
+ *
+ * Mark a job run as completed (terminal cleanup).
+ * Clears active_job_id and active_run_id from runtime state.
+ * Used by bot when it detects a terminal onchain status (Completed/Rejected/Expired).
+ */
+export async function handleProviderRuntimeCompleteRun(
+  args: Record<string, unknown>,
+  ctx: McpToolContext,
+): Promise<unknown> {
+  const session = await requireMcpSession(ctx);
+  const agentId = typeof args.agentId === 'string' ? args.agentId.trim() : '';
+  const jobId = typeof args.jobId === 'string' ? args.jobId.trim() : '';
+  const runId = typeof args.runId === 'string' ? args.runId.trim() : '';
+
+  if (!agentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'agentId required');
+  if (!jobId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
+  if (!runId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'runId required');
+
+  try {
+    await completeProviderJobRun(agentId, jobId, runId, buildAuth(session, agentId));
+  } catch (err) {
+    rethrowAsMcpError(err, 'Failed to complete run');
+  }
+
+  return jsonSafe({ ok: true, agentId, jobId, runId, status: 'completed' });
+}
