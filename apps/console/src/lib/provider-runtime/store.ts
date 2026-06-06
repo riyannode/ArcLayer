@@ -106,6 +106,44 @@ export interface OpenJobFilter {
   includeExpired?: boolean;
 }
 
+// ── Indexer URL Resolution ──────────────────────────────────────────────────
+
+/** Candidate indexer URLs in priority order. */
+function getIndexerUrls(): string[] {
+  const urls = [
+    process.env.INDEXER_URL,
+    process.env.INDEXER_INTERNAL_URL,
+    process.env.NEXT_PUBLIC_INDEXER_URL,
+    'http://localhost:3535',
+  ].filter(Boolean) as string[];
+  return [...new Set(urls)]; // dedupe
+}
+
+/**
+ * Fetch from indexer with automatic fallback across multiple URLs.
+ * Returns the first successful response, or throws if all fail.
+ */
+async function fetchFromIndexer(path: string): Promise<Response> {
+  const urls = getIndexerUrls();
+  const errors: string[] = [];
+
+  for (const baseUrl of urls) {
+    try {
+      const res = await fetch(`${baseUrl}${path}`, { cache: 'no-store' });
+      if (res.ok) return res;
+      errors.push(`${baseUrl} → ${res.status}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`${baseUrl} → ${msg}`);
+    }
+  }
+
+  throw Object.assign(
+    new Error(`All indexer URLs failed: ${errors.join('; ')}`),
+    { code: 'indexer_error' },
+  );
+}
+
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -784,9 +822,8 @@ export async function listOpenGlobalJobs(
 ): Promise<unknown[]> {
   const limit = Math.min(Math.max(filters.limit ?? 20, 1), 50);
 
-  // Fetch from indexer (no filter support — returns all jobs)
-  const indexerUrl = process.env.INDEXER_URL || process.env.INDEXER_INTERNAL_URL || process.env.NEXT_PUBLIC_INDEXER_URL || 'http://localhost:3535';
-  const res = await fetch(`${indexerUrl}/jobs`, { cache: 'no-store' });
+  // Fetch from indexer with automatic URL fallback
+  const res = await fetchFromIndexer('/jobs');
   if (!res.ok) {
     throw Object.assign(new Error(`Indexer fetch failed: ${res.status}`), { code: 'indexer_error' });
   }
@@ -848,11 +885,7 @@ export async function listAssignedJobs(
   const normalizedAddr = validateProviderAddress(providerAddress).toLowerCase();
   const cappedLimit = Math.min(Math.max(limit, 1), 50);
 
-  const indexerUrl = process.env.INDEXER_URL || process.env.INDEXER_INTERNAL_URL || process.env.NEXT_PUBLIC_INDEXER_URL || 'http://localhost:3535';
-  const res = await fetch(`${indexerUrl}/jobs`, { cache: 'no-store' });
-  if (!res.ok) {
-    throw Object.assign(new Error(`Indexer fetch failed: ${res.status}`), { code: 'indexer_error' });
-  }
+  const res = await fetchFromIndexer('/jobs');
 
   const json = await res.json().catch(() => ({}));
   const allJobs: unknown[] = Array.isArray(json) ? json : json.jobs || json.data || [];
@@ -942,10 +975,9 @@ export async function applyToOpenJob(
     if (err && typeof err === 'object' && 'code' in err) throw err;
 
     // RPC failed — try indexer fallback to verify job is valid
-    const indexerUrl = process.env.INDEXER_URL || process.env.INDEXER_INTERNAL_URL || process.env.NEXT_PUBLIC_INDEXER_URL || 'http://localhost:3535';
     let verified = false;
     try {
-      const res = await fetch(`${indexerUrl}/jobs/${encodeURIComponent(input.jobId)}`, { cache: 'no-store' });
+      const res = await fetchFromIndexer(`/jobs/${encodeURIComponent(input.jobId)}`);
       if (!res.ok) {
         throw Object.assign(
           new Error(`Cannot verify job ${input.jobId}: onchain RPC failed and indexer returned ${res.status}`),
