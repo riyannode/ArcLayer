@@ -23,6 +23,7 @@ import {
   formatUnits,
   getAddress,
   http,
+  isAddress,
   parseUnits,
   type Address,
 } from 'viem';
@@ -78,8 +79,23 @@ export function useAgentAccountGatewayDeposit(
         return;
       }
 
-      if (!agentAccountAddress || !getAddress(agentAccountAddress)) {
+      if (!agentAccountAddress || !isAddress(agentAccountAddress)) {
         setError('Invalid Agent Account address');
+        setStep('error');
+        return;
+      }
+
+      // Validate amount string before parsing (reject scientific notation, >6 decimals)
+      const trimmed = (amount ?? '').trim();
+      if (!trimmed || !/^\d+(\.\d{1,6})?$/.test(trimmed)) {
+        setError('Enter a valid amount with up to 6 decimals (e.g. 1.50)');
+        setStep('error');
+        return;
+      }
+
+      const amountUnits = parseUnits(trimmed, 6);
+      if (amountUnits <= BigInt(0)) {
+        setError('Amount must be greater than 0');
         setStep('error');
         return;
       }
@@ -90,12 +106,6 @@ export function useAgentAccountGatewayDeposit(
       setTxHash(null);
 
       const agentAddr = getAddress(agentAccountAddress);
-      const amountUnits = parseUnits(amount, 6);
-      if (amountUnits <= BigInt(0)) {
-        setError('Amount must be greater than 0');
-        setStep('error');
-        return;
-      }
 
       try {
         const publicClient = createPublicClient({
@@ -113,7 +123,7 @@ export function useAgentAccountGatewayDeposit(
 
         if (balance < amountUnits) {
           setError(
-            `Insufficient USDC on Agent Account. Have ${formatUnits(balance, 6)}, need ${amount}.`,
+            `Insufficient USDC on Agent Account. Have ${formatUnits(balance, 6)}, need ${trimmed}.`,
           );
           setStep('error');
           return;
