@@ -385,6 +385,11 @@ export default function AgentProfilePage() {
   const [agentGateway, setAgentGateway] = useState<BalanceInfo | null>(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
 
+  // A2A x402 payer state
+  const [a2aPayerEnabled, setA2aPayerEnabled] = useState(false);
+  const [a2aPayerMessage, setA2aPayerMessage] = useState('');
+  const [a2aPayerLoading, setA2aPayerLoading] = useState(false);
+
   // Shared action amount state (Fund Agent Account + Deposit to Gateway)
   const [actionAmount, setActionAmount] = useState('');
   const fundAgent = useFundAgentAccount(() => {
@@ -563,6 +568,21 @@ export default function AgentProfilePage() {
       // silent
     } finally {
       setAgentAccountLoading(false);
+    }
+
+    // Load A2A payer status
+    setA2aPayerLoading(true);
+    try {
+      const res = await fetch('/api/profile/a2a-payer', { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        setA2aPayerEnabled(json.a2aPayerEnabled ?? false);
+        setA2aPayerMessage(json.message ?? '');
+      }
+    } catch {
+      // silent
+    } finally {
+      setA2aPayerLoading(false);
     }
   }
 
@@ -832,6 +852,29 @@ export default function AgentProfilePage() {
                     </>
                   ) : (
                     <span className="text-[13px] text-[#EAE4D8]/40">Not created</span>
+                  )}
+                </div>
+              </div>
+
+              {/* A2A x402 Payer */}
+              <div className="grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-3">
+                <div className="text-[13px] text-[#EAE4D8]/60">A2A x402 Payer</div>
+                <div className="flex items-center gap-2">
+                  {a2aPayerLoading ? (
+                    <span className="text-[13px] text-[#EAE4D8]/40">Loading...</span>
+                  ) : effectiveHasAgentAccount && a2aPayerEnabled ? (
+                    <>
+                      <span className="truncate font-mono text-[13px] text-[#F5F0E5]">
+                        Agent Account
+                      </span>
+                      <span className="ml-auto rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
+                        Active
+                      </span>
+                    </>
+                  ) : effectiveHasAgentAccount ? (
+                    <span className="text-[13px] text-[#EAE4D8]/40">Binding pending</span>
+                  ) : (
+                    <span className="text-[13px] text-[#EAE4D8]/40">Create Agent Account first</span>
                   )}
                 </div>
               </div>
