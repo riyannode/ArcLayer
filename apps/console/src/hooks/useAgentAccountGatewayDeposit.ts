@@ -85,6 +85,15 @@ export function useAgentAccountGatewayDeposit(
         return;
       }
 
+      // Defense-in-depth: verify bundler account matches the linked Agent Account.
+      // UI should disable before this, but guard anyway to prevent wrong-SCA execution.
+      const bundlerAddr = (bundlerClient.account?.address ?? '').toLowerCase();
+      if (bundlerAddr && bundlerAddr !== agentAccountAddress.toLowerCase()) {
+        setError('Circle account mismatch. Login with the passkey linked to this Agent Account.');
+        setStep('error');
+        return;
+      }
+
       // Validate amount string before parsing (reject scientific notation, >6 decimals)
       const trimmed = (amount ?? '').trim();
       if (!trimmed || !/^\d+(\.\d{1,6})?$/.test(trimmed)) {
