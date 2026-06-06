@@ -304,17 +304,44 @@ export async function getProviderRuntimeContext(
       .limit(1)
       .maybeSingle();
     activeRun = run as JobRunRow | null;
+  }
 
-    if (activeRun) {
-      const { data: cp } = await supabase
-        .from('agent_job_checkpoints')
-        .select('*')
-        .eq('run_id', activeRun.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      latestCheckpoint = cp as CheckpointRow | null;
+  // Fallback: if no active run from state, check directly for active runs
+  if (!activeRun) {
+    const { data: run } = await supabase
+      .from('agent_job_runs')
+      .select('*')
+      .eq('agent_id', agentId)
+      .eq('role', 'provider')
+      .eq('run_status', 'active')
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    activeRun = run as JobRunRow | null;
+
+    // If we found a run via fallback, sync the runtime state
+    if (activeRun && state) {
+      await supabase
+        .from('agent_runtime_state')
+        .update({
+          active_job_id: activeRun.job_id,
+          active_run_id: activeRun.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('agent_id', agentId)
+        .eq('role', 'provider');
     }
+  }
+
+  if (activeRun) {
+    const { data: cp } = await supabase
+      .from('agent_job_checkpoints')
+      .select('*')
+      .eq('run_id', activeRun.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    latestCheckpoint = cp as CheckpointRow | null;
   }
 
   // Get active applications
