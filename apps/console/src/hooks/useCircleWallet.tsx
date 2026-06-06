@@ -134,12 +134,37 @@ export function CircleWalletProvider({ children }: { children: ReactNode }) {
     async (username: string): Promise<Address> => {
       if (!passkeyTransport) throw new Error('Circle SDK not configured');
 
-      const cred = await toWebAuthnCredential({
-        transport: passkeyTransport,
-        mode: WebAuthnMode.Register,
-        username,
+      // ── Diagnostic logging for passkey creation ──────────────────────
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'SSR';
+      const isProd = origin === 'https://arclayers.xyz';
+      const ua = typeof navigator !== 'undefined' ? navigator.userAgent : 'SSR';
+      const webAuthnAvailable = typeof window !== 'undefined' && !!window.PublicKeyCredential;
+
+      console.log('[circle-register] diagnostics', {
+        origin,
+        isProd,
+        webAuthnAvailable,
+        ua: ua.slice(0, 80),
       });
-      return await initSmartAccount(cred);
+
+      try {
+        const cred = await toWebAuthnCredential({
+          transport: passkeyTransport,
+          mode: WebAuthnMode.Register,
+          username,
+        });
+        console.log('[circle-register] credential created', { credId: cred.id?.slice(0, 16) });
+        return await initSmartAccount(cred);
+      } catch (e) {
+        const err = e instanceof Error ? e : new Error(String(e));
+        console.error('[circle-register] failed', {
+          step: 'toWebAuthnCredential',
+          name: err.name,
+          message: err.message,
+          cause: (err as { cause?: unknown }).cause ?? null,
+        });
+        throw e;
+      }
     },
     [passkeyTransport, initSmartAccount],
   );
@@ -148,11 +173,26 @@ export function CircleWalletProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (): Promise<Address> => {
     if (!passkeyTransport) throw new Error('Circle SDK not configured');
 
-    const cred = await toWebAuthnCredential({
-      transport: passkeyTransport,
-      mode: WebAuthnMode.Login,
-    });
-    return await initSmartAccount(cred);
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'SSR';
+    console.log('[circle-login] diagnostics', { origin });
+
+    try {
+      const cred = await toWebAuthnCredential({
+        transport: passkeyTransport,
+        mode: WebAuthnMode.Login,
+      });
+      console.log('[circle-login] credential resolved', { credId: cred.id?.slice(0, 16) });
+      return await initSmartAccount(cred);
+    } catch (e) {
+      const err = e instanceof Error ? e : new Error(String(e));
+      console.error('[circle-login] failed', {
+        step: 'toWebAuthnCredential',
+        name: err.name,
+        message: err.message,
+        cause: (err as { cause?: unknown }).cause ?? null,
+      });
+      throw e;
+    }
   }, [passkeyTransport, initSmartAccount]);
 
   // Logout
