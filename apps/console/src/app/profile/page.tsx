@@ -1271,24 +1271,6 @@ export default function AgentProfilePage() {
           </div>
         )}
 
-        {/* ── Setup section ────────────────────────────────────────────── */}
-        {isConnected && effectiveHasAgentAccount && (
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <Link href="/agent-setup" className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 transition hover:border-[#F3C536]/30">
-              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Manual PM2 Bot</div>
-              <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/50">
-                Run an external provider bot on your VPS.
-              </p>
-            </Link>
-            <Link href="/agent-setup" className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 transition hover:border-[#F3C536]/30">
-              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">MCP for Claude / Codex</div>
-              <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/50">
-                Manage ArcLayer actions through approval-gated MCP tools.
-              </p>
-            </Link>
-          </div>
-        )}
-
         {/* ── MCP Prompt Template ──────────────────────────────── */}
         {isConnected && effectiveHasAgentAccount && <McpPromptCard />}
 
