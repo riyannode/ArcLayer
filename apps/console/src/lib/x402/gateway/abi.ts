@@ -39,7 +39,7 @@ export const GATEWAY_WALLET_ABI = [
   },
 ] as const;
 
-/** Minimal ERC-20 ABI for approve/allowance/balanceOf. */
+/** Minimal ERC-20 ABI for approve/allowance/balanceOf/transfer. */
 export const ERC20_ABI = [
   {
     type: 'function',
@@ -64,6 +64,16 @@ export const ERC20_ABI = [
     name: 'approve',
     inputs: [
       { name: 'spender', type: 'address' },
+      { name: 'value', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+  },
+  {
+    type: 'function',
+    stateMutability: 'nonpayable',
+    name: 'transfer',
+    inputs: [
+      { name: 'to', type: 'address' },
       { name: 'value', type: 'uint256' },
     ],
     outputs: [{ name: '', type: 'bool' }],
