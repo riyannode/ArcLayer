@@ -24,6 +24,7 @@ import {
   getAddress,
   http,
   isAddress,
+  parseGwei,
   parseUnits,
   type Address,
 } from 'viem';
@@ -172,8 +173,14 @@ export function useAgentAccountGatewayDeposit(
         });
 
         // ── Send batched userOp ───────────────────────────────────────
+        // Circle bundler requires maxPriorityFeePerGas >= 1 gwei.
+        // Arc testnet fee estimation returns ~0.005 gwei which is too low.
         setStep('depositing');
-        const hash = await bundlerClient.sendUserOperation({ calls });
+        const hash = await bundlerClient.sendUserOperation({
+          calls,
+          maxPriorityFeePerGas: parseGwei('1'),
+          maxFeePerGas: parseGwei('50'),
+        });
         setUserOpHash(hash);
 
         // ── Wait for userOp receipt ───────────────────────────────────
@@ -189,6 +196,11 @@ export function useAgentAccountGatewayDeposit(
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes('User rejected') || msg.includes('user rejected')) {
           reset();
+          return;
+        }
+        if (msg.includes('maxPriorityFeePerGas') || msg.includes('precheck failed')) {
+          setError('Circle bundler rejected the user operation because priority fee was too low. Please retry; gas parameters were adjusted.');
+          setStep('error');
           return;
         }
         setError(msg);
