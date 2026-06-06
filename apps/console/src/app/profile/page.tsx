@@ -26,6 +26,7 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { useFundAgentAccount } from '@/hooks/useFundAgentAccount';
 import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
+import { useSignMessage } from 'wagmi';
 
 // ── MCP Prompt Template data ─────────────────────────────────────────────
 
@@ -275,6 +276,18 @@ function mapPasskeyError(error: unknown): string {
   if (lower.includes('not supported') || lower.includes('notavailable')) {
     return 'WebAuthn is not supported on this browser. Try Chrome or Safari on a device with biometrics.';
   }
+  // Wallet session / auth errors
+  if (lower.includes('not_authenticated') || lower.includes('session')) {
+    return 'Wallet session expired or missing. Please reconnect and sign the wallet session message.';
+  }
+  // User rejected signing (wallet popup dismissed)
+  if (lower.includes('user rejected') || lower.includes('rejected')) {
+    return ''; // silent — user action
+  }
+  // Nonce/signing errors
+  if (lower.includes('nonce') || lower.includes('signature')) {
+    return 'Wallet signature failed. Try reconnecting your wallet and signing again.';
+  }
   // Network / RPC errors
   if (lower.includes('network') || lower.includes('fetch') || lower.includes('timeout')) {
     return 'Network error. Check your connection and try again.';
@@ -522,6 +535,9 @@ export default function AgentProfilePage() {
     if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
   });
 
+  // Wallet session signing (for authenticated API calls)
+  const { signMessageAsync } = useSignMessage();
+
   async function loadAgents(ownerAddr: string, agentAccountAddr?: string | null, signal?: AbortSignal) {
     setLoading(true);
     setNotice('');
@@ -721,6 +737,20 @@ export default function AgentProfilePage() {
         return;
       }
 
+      // Ensure ArcLayer wallet session exists before authenticated API calls
+      if (!address) {
+        setCreateError('Connect your wallet first.');
+        setCreatingAgent(false);
+        return;
+      }
+      const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
+      const sessionOk = await ensureWalletSession(address, signMessageAsync);
+      if (!sessionOk.ok) {
+        setCreateError(mapPasskeyError(new Error(sessionOk.error)));
+        setCreatingAgent(false);
+        return;
+      }
+
       // Step 1: Try Circle login (existing passkey)
       let addr: string | undefined;
       if (circleAuthenticated && circleAddress) {
@@ -756,6 +786,20 @@ export default function AgentProfilePage() {
     setCreatingAgent(true);
     setCreateError('');
     try {
+      // Ensure wallet session before authenticated linking
+      if (!address) {
+        setCreateError('Connect your wallet first.');
+        setCreatingAgent(false);
+        return;
+      }
+      const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
+      const sessionOk = await ensureWalletSession(address, signMessageAsync);
+      if (!sessionOk.ok) {
+        setCreateError(mapPasskeyError(new Error(sessionOk.error)));
+        setCreatingAgent(false);
+        return;
+      }
+
       const addr = await circleRegister(registerUsername.trim());
       setShowPasskeyRegister(false);
       setRegisterUsername('');
