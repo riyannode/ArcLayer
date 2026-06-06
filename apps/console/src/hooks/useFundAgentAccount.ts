@@ -83,14 +83,22 @@ export function useFundAgentAccount(
       setError(null);
       setTxHash(null);
 
-      const amountUnits = parseUnits(amount, 6);
-      if (amountUnits <= BigInt(0)) {
-        setError('Amount must be greater than 0');
-        setStep('error');
-        return;
-      }
-
       try {
+        // Validate amount string before parsing (parseUnits rejects 1e3, >6 decimals)
+        const trimmed = amount.trim();
+        if (!trimmed || !/^\d+(\.\d+)?$/.test(trimmed)) {
+          setError('Enter a valid amount (e.g. 1.50)');
+          setStep('error');
+          return;
+        }
+
+        const amountUnits = parseUnits(trimmed, 6);
+        if (amountUnits <= BigInt(0)) {
+          setError('Amount must be greater than 0');
+          setStep('error');
+          return;
+        }
+
         const publicClient = createPublicClient({ transport: http(ARC_RPC) });
 
         // Pre-flight: check EOA USDC balance
