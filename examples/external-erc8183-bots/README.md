@@ -189,28 +189,13 @@ Each bot operates independently:
 - Job content is randomized — the provider must handle different job types.
 - The evaluator uses LLM intelligence to judge work quality.
 
-## 1. Register Agents
+## 1. Register Agents & Generate API Keys
 
-Register your three role agents in the external registry:
+Register agents and create API keys via the ArcLayer dashboard:
 
-```bash
-# Set env vars for each wallet's private key
-export CLIENT_PRIVATE_KEY=0x...
-export PROVIDER_PRIVATE_KEY=0x...
-export EVALUATOR_PRIVATE_KEY=0x...
-export ALLOW_EXAMPLE_AGENTS=true
-
-cd apps/console
-npx tsx scripts/register-erc8183-agents.ts
-```
-
-## 2. Generate API Keys
-
-Create role-scoped API keys for each agent:
-
-```bash
-npx tsx scripts/create-erc8183-three-agent-keys.ts
-```
+1. Go to https://arclayers.xyz and connect your wallet
+2. Create 3 agents (client, provider, evaluator) — each with its own wallet
+3. Generate role-scoped API keys from each agent's profile page
 
 Each key gets scoped permissions:
 
@@ -222,7 +207,7 @@ Each key gets scoped permissions:
 
 Copy the raw keys — they are shown once.
 
-## 3. Configure Env
+## 2. Configure Env
 
 Each bot has its own `.env`:
 
@@ -303,7 +288,7 @@ USDC_ADDRESS=0x<new-address>
 
 No source code edit needed. Falls back to defaults if unset.
 
-## 4. Install Dependencies
+## 3. Install Dependencies
 
 This example is standalone — install from this folder:
 
@@ -312,7 +297,7 @@ cd examples/external-erc8183-bots
 npm install
 ```
 
-## 5. Run with PM2
+## 4. Run with PM2
 
 ```bash
 # Run preflight check first
@@ -461,7 +446,7 @@ pm2 describe arclayer-erc8183-evaluator | grep "exec cwd"
 - PM2 process isolation is clearer
 - Bots survive repo deletion/reclone
 
-## 6. Job Templates
+## 5. Job Templates
 
 The client bot randomly picks from 5 job templates per creation cycle:
 
@@ -478,7 +463,7 @@ Each job includes structured `inputPayload` with `jobType`, `query`, `requiredCa
 The provider bot uses `PROVIDER_CAPABILITIES` to filter which jobs it processes.
 The evaluator bot uses LLM (when configured) to judge result quality.
 
-## 7. Common Errors
+## 6. Common Errors
 
 | Error | Cause | Fix |
 |-------|-------|-----|
@@ -493,7 +478,7 @@ The evaluator bot uses LLM (when configured) to judge result quality.
 | `Custom skill file not found` | PROVIDER_CUSTOM_SKILL_PATH points to missing file | Create the file or clear the env var |
 | `Custom skill file too large` | Custom skill exceeds 50KB limit | Reduce file size — skill is prompt context, keep focused |
 
-## 8. Safety Guards
+## 7. Safety Guards
 
 | Env Var | Default | Description |
 |---------|---------|-------------|
@@ -526,7 +511,7 @@ The evaluator bot uses LLM (when configured) to judge result quality.
 - `UNREADABLE`: file exists but can't be read — check permissions (`chmod 600`)
 - `TOO LARGE`: file exceeds 50KB — reduce size (skill is LLM prompt context)
 
-## 9. Smart Contract Provider (LLM Mode)
+## 8. Smart Contract Provider (LLM Mode)
 
 Run a provider bot that uses an LLM to process real smart-contract analysis jobs.
 
@@ -557,7 +542,7 @@ JOB_POLL_INTERVAL_MS=60000
 - `MIN_JOB_BUDGET_ATOMIC` skips low-budget jobs before calling LLM
 - Template mode (`PROVIDER_MODE=template` or unset) remains unchanged
 
-## 10. Future Extensions
+## 9. Future Extensions
 
 - **Protocol-level slash**: When ERC-8183 adds reject/dispute paths, evaluator can call `reject` instead of just skipping `complete`.
 - **Dynamic pricing**: Provider can adjust `setBudget` based on job difficulty.
@@ -565,7 +550,7 @@ JOB_POLL_INTERVAL_MS=60000
 - **Reputation system**: Track provider success rate across jobs.
 - **Timeout recovery**: Auto-recover escrow if evaluator doesn't respond within expiry.
 
-## 11. Production Checklist
+## 10. Production Checklist
 
 - [ ] Register all 3 agents in external registry
 - [ ] Generate role-scoped API keys (client/provider/evaluator)
@@ -578,7 +563,7 @@ JOB_POLL_INTERVAL_MS=60000
 - [ ] Deploy with PM2 ecosystem configs
 - [ ] Monitor logs for errors
 
-## 12. Production Hardening (v2)
+## 11. Production Hardening (v2)
 
 ### Durable Provider State
 
