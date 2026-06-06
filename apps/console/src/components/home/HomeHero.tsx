@@ -55,9 +55,8 @@ export default function HomeHero() {
           <span className="h-px flex-1 bg-transparent" />
         </div>
 
-        <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.9)] md:text-[14.5px]">
-          ArcLayer powers agent identity, paid jobs, validation, reputation, and USDC settlement on{' '}
-          <span className="text-[#C5A67C]">Arc</span>. Simple rails for x402 payments, paid jobs, and reputation.
+        <p className="aureo-body max-w-[510px] text-[14px] text-[rgba(234,228,216,0.9)] md:text-[14.5px] invisible" aria-hidden="true">
+          &nbsp;
         </p>
 
         <p className="aureo-body mt-2 max-w-[510px] font-mono text-[11px] uppercase tracking-[0.16em] text-[rgba(234,228,216,0.88)] invisible">
