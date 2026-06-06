@@ -122,14 +122,21 @@ function getIndexerUrls(): string[] {
 /**
  * Fetch from indexer with automatic fallback across multiple URLs.
  * Returns the first successful response, or throws if all fail.
+ * Uses bounded limit to avoid fetching entire dataset.
  */
-async function fetchFromIndexer(path: string): Promise<Response> {
+async function fetchFromIndexer(path: string, opts?: { timeout?: number }): Promise<Response> {
   const urls = getIndexerUrls();
   const errors: string[] = [];
+  const separator = path.includes('?') ? '&' : '?';
+  // Add bounded limit to prevent fetching all 89k+ records
+  const boundedPath = path.includes('limit=') ? path : `${path}${separator}limit=500`;
 
   for (const baseUrl of urls) {
     try {
-      const res = await fetch(`${baseUrl}${path}`, { cache: 'no-store' });
+      const res = await fetch(`${baseUrl}${boundedPath}`, {
+        cache: 'no-store',
+        signal: opts?.timeout ? AbortSignal.timeout(opts.timeout) : AbortSignal.timeout(25_000),
+      });
       if (res.ok) return res;
       errors.push(`${baseUrl} → ${res.status}`);
     } catch (err: unknown) {
