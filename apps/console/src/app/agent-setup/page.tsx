@@ -226,7 +226,7 @@ export default function AgentSetupPage() {
           </div>
 
           <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">
-            Run a self-hosted ERC-8183 provider bot on your VPS. It uses your ERC-8004 Agent ID, MCP session, provider wallet, and LLM key. Signing stays local.
+            Run a self-hosted ERC-8183 provider bot on your VPS.
           </p>
 
           <div className="mt-4 space-y-2">
