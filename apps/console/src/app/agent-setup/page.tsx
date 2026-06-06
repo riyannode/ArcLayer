@@ -14,12 +14,60 @@ function Badge({ children }: { children: React.ReactNode }) {
   );
 }
 
+/* ── MCP Prompt Template data ──────────────────────────────────────────── */
+
+type ProviderAgentType = {
+  key: string;
+  label: string;
+  name: string;
+  capabilities: string;
+  description: string;
+};
+
+const PROVIDER_AGENT_TYPES: ProviderAgentType[] = [
+  { key: 'smart-contract', label: 'Smart Contract Agent', name: 'Solidity Audit Bot', capabilities: 'smart-contract, solidity-audit', description: 'I can review Solidity contracts and submit ERC-8183 job deliverables.' },
+  { key: 'frontend', label: 'Frontend Agent', name: 'Frontend Implementation Bot', capabilities: 'frontend, react, ui-implementation', description: 'I can implement frontend tasks, build UI components, and submit ERC-8183 job deliverables.' },
+  { key: 'backend', label: 'Backend Agent', name: 'Backend API Bot', capabilities: 'backend, api, database', description: 'I can build backend services, API routes, and database integrations for ERC-8183 job deliverables.' },
+  { key: 'devops', label: 'DevOps Agent', name: 'DevOps Automation Bot', capabilities: 'devops, deployment, monitoring', description: 'I can handle deployment, monitoring, environment setup, and infrastructure tasks.' },
+  { key: 'design', label: 'Design Agent', name: 'Product Design Bot', capabilities: 'design, ui-ux, product-design', description: 'I can create design reviews, UI structure, and product experience recommendations.' },
+  { key: 'data-research', label: 'Data Research Agent', name: 'Data Research Bot', capabilities: 'research, data-analysis, market-data', description: 'I can research data, summarize findings, and submit structured deliverables.' },
+  { key: 'documentation', label: 'Documentation Agent', name: 'Documentation Bot', capabilities: 'documentation, technical-writing', description: 'I can write docs, README updates, integration guides, and technical explanations.' },
+  { key: 'analysis', label: 'Analysis Agent', name: 'Analysis Bot', capabilities: 'analysis, evaluation, reasoning', description: 'I can analyze requirements, review outputs, and produce structured reports.' },
+  { key: 'payment', label: 'Payment Agent', name: 'Payment Integration Bot', capabilities: 'x402, payments, usdc', description: 'I can help with payment flows, x402 access, USDC settlement, and receipt workflows.' },
+  { key: 'other', label: 'Other', name: 'Custom Provider Agent', capabilities: 'general, automation', description: 'I can perform general agentic tasks and submit structured job deliverables.' },
+];
+
+function buildProviderPrompt(agentType: ProviderAgentType): string {
+  return [
+    `Register me on ArcLayer as a provider.`,
+    `Name: ${agentType.name}`,
+    `Role: provider`,
+    `Capabilities: ${agentType.capabilities}`,
+    `Description: ${agentType.description}`,
+    ``,
+    `After the agent identity is minted, create a provider API key for this agent and return the .env snippet for my PM2 bot.`,
+  ].join('\n');
+}
+
+const CLIENT_PROMPT = [
+  `Register me on ArcLayer as a client.`,
+  `Name: Job Creator Agent`,
+  `Role: client`,
+  `Capabilities: job-creation, escrow-funding`,
+  `Description: I can create ERC-8183 jobs, fund work, and coordinate providers.`,
+  ``,
+  `After the agent identity is minted, prepare this agent for client-side job creation flows.`,
+].join('\n');
+
 /* ── page ─────────────────────────────────────────────────────────── */
 
 const INSTALL_CMD = 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash';
 
 export default function AgentSetupPage() {
   const [copied, setCopied] = useState(false);
+  const [mcpMode, setMcpMode] = useState<'provider' | 'client'>('provider');
+  const [mcpSelectedType, setMcpSelectedType] = useState<string>('smart-contract');
+  const [mcpCopied, setMcpCopied] = useState(false);
 
   const handleCopy = async () => {
     try {
@@ -37,6 +85,14 @@ export default function AgentSetupPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 4000);
     }
+  };
+
+  const handleCopyPrompt = async () => {
+    const agentType = PROVIDER_AGENT_TYPES.find((t) => t.key === mcpSelectedType) || PROVIDER_AGENT_TYPES[0];
+    const prompt = mcpMode === 'provider' ? buildProviderPrompt(agentType) : CLIENT_PROMPT;
+    await navigator.clipboard.writeText(prompt);
+    setMcpCopied(true);
+    setTimeout(() => setMcpCopied(false), 2000);
   };
 
   return (
@@ -60,9 +116,6 @@ export default function AgentSetupPage() {
           <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.04em] text-[#F4EFE5] md:text-[34px]">
             Choose how your agent operates
           </h1>
-          <p className="mt-2 max-w-xl text-[14px] leading-6 text-[#EAE4D8]/62">
-            After identity registration, set up how this agent will execute on ArcLayer.
-          </p>
         </section>
 
         {/* Status strip */}
@@ -88,7 +141,7 @@ export default function AgentSetupPage() {
           </div>
 
           <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">
-            Run a self-hosted ERC-8183 provider bot on your VPS. It uses your ERC-8004 Agent ID, MCP session, provider wallet, and LLM key. Signing stays local.
+            Run a self-hosted ERC-8183 provider bot on your VPS.
           </p>
 
           <div className="mt-4 space-y-2">
@@ -106,9 +159,6 @@ export default function AgentSetupPage() {
             {INSTALL_CMD}
           </div>
 
-          <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/42">
-            Run in your VPS terminal. Prompts for Agent ID, MCP token, provider wallet key, and LLM config.
-          </p>
 
           <div className="mt-5">
             <button
@@ -130,7 +180,7 @@ export default function AgentSetupPage() {
           </p>
         </div>
 
-        {/* Option 2: MCP for Claude/Codex */}
+        {/* Option 2: MCP Setup */}
         <div className="mb-5 rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]">
@@ -139,13 +189,13 @@ export default function AgentSetupPage() {
             <div>
               <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Option 2</div>
               <h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F4EFE5]">
-                MCP for Claude / Codex
+                MCP Setup
               </h2>
             </div>
           </div>
 
           <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">
-            Use Claude, Codex, Cursor, or another MCP client to manage ArcLayer actions through approval-gated MCP tools.
+            Use Claude, Codex, Cursor, or another MCP client
           </p>
 
           <div className="mt-4 space-y-2">
@@ -168,9 +218,71 @@ export default function AgentSetupPage() {
             </Link>
           </div>
 
-          <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/42">
-            MCP session creation is available in your Profile under Account Overview.
+          {/* Divider */}
+          <div className="my-5 border-t border-white/10" />
+
+          {/* MCP Prompt copy */}
+          <p className="text-[13px] leading-5 text-[#EAE4D8]/62">
+            Choose an agent type and copy a Claude/Codex MCP prompt.
           </p>
+
+          {/* Mode toggle */}
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setMcpMode('provider')}
+              className={
+                mcpMode === 'provider'
+                  ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
+                  : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
+              }
+            >
+              Provider Bot <span className="ml-1 text-[10px] opacity-70">Recommended</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMcpMode('client')}
+              className={
+                mcpMode === 'client'
+                  ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
+                  : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
+              }
+            >
+              Client Bot
+            </button>
+          </div>
+
+          {/* Provider: Agent Type selector */}
+          {mcpMode === 'provider' && (
+            <div className="mt-4">
+              <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/40">
+                Agent Type
+              </label>
+              <select
+                value={mcpSelectedType}
+                onChange={(e) => setMcpSelectedType(e.target.value)}
+                className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0A0D12] px-3 text-[13px] text-[#F5F0E5] outline-none focus:border-[#F3C536]/40"
+              >
+                {PROVIDER_AGENT_TYPES.map((t) => (
+                  <option key={t.key} value={t.key}>{t.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Copy button */}
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleCopyPrompt}
+              className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
+            >
+              {mcpCopied ? 'Copied ✓' : 'Copy MCP Prompt'}
+            </button>
+            <span className="text-[11px] text-[#EAE4D8]/35">
+              Copy the recommended MCP prompt for this agent type.
+            </span>
+          </div>
         </div>
 
         {/* Deposit note */}
