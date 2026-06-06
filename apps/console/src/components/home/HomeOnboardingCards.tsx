@@ -12,7 +12,7 @@ import { HOME_PATHS } from '@/data/home-paths';
 export default function HomeOnboardingCards() {
   return (
     <div className="mt-5 section-reveal" style={{ animationDelay: '0.55s' }}>
-      <span className="aureo-mono-label mb-3 block text-[#EAE4D8]/72">
+      <span className="aureo-mono-label mb-3 block text-[#C5A67C]">
         CHOOSE YOUR PATH
       </span>
 
@@ -38,7 +38,7 @@ export default function HomeOnboardingCards() {
             </span>
 
             {/* Title */}
-            <span className="mb-3 font-mono text-[14px] font-semibold leading-snug text-[#EAE4D8]">
+            <span className="mb-3 font-mono text-[14px] font-semibold leading-snug text-[#F5F0E5]">
               {path.title}
             </span>
 

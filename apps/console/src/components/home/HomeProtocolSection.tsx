@@ -29,7 +29,7 @@ export default function HomeProtocolSection() {
             GETTING STARTED
           </span>
           <h2
-            className="aureo-display mt-2 text-[#EAE4D8]"
+            className="aureo-display mt-2 text-[#F5F0E5]"
             style={{ fontSize: 'clamp(20px, 2vw, 32px)', lineHeight: 1.1 }}
           >
             Choose your path
@@ -62,7 +62,7 @@ export default function HomeProtocolSection() {
               </span>
 
               {/* Title */}
-              <h3 className="mb-2 font-mono text-[13px] font-medium leading-snug text-[#EAE4D8]">
+              <h3 className="mb-2 font-mono text-[13px] font-medium leading-snug text-[#F5F0E5]">
                 {path.title}
               </h3>
 
