@@ -25,6 +25,7 @@ import {
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { useFundAgentAccount } from '@/hooks/useFundAgentAccount';
+import { useAgentAccountGatewayDeposit } from '@/hooks/useAgentAccountGatewayDeposit';
 import { useSignMessage } from 'wagmi';
 
 // ── Agent Account types ───────────────────────────────────────────────────
@@ -338,6 +339,7 @@ export default function AgentProfilePage() {
     address: circleAddress,
     login: circleLogin,
     register: circleRegister,
+    bundlerClient,
   } = useCircleWallet();
   const [agents, setAgents] = useState<ProfileAgent[]>(EMPTY_AGENTS);
   const [selectedAgentId, setSelectedAgentId] = useState('');
@@ -386,6 +388,10 @@ export default function AgentProfilePage() {
   // Shared action amount state (Fund Agent Account + Deposit to Gateway)
   const [actionAmount, setActionAmount] = useState('');
   const fundAgent = useFundAgentAccount(() => {
+    if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
+    setActionAmount('');
+  });
+  const agentGatewayDeposit = useAgentAccountGatewayDeposit(bundlerClient, () => {
     if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
     setActionAmount('');
   });
@@ -1026,14 +1032,21 @@ export default function AgentProfilePage() {
                       </button>
                       <button
                         type="button"
-                        disabled
-                        className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition opacity-40 sm:w-auto"
+                        onClick={() => void agentGatewayDeposit.deposit(actionAmount, agentAccount?.agentAccountAddress ?? '')}
+                        disabled={!actionAmount || !circleAuthenticated || !agentAccount?.agentAccountAddress || circleAddress.toLowerCase() !== (agentAccount?.agentAccountAddress ?? '').toLowerCase() || (agentGatewayDeposit.step !== 'idle' && agentGatewayDeposit.step !== 'error')}
+                        className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
                       >
-                        Deposit Agent Account → x402 Gateway
+                        {agentGatewayDeposit.step === 'checking' || agentGatewayDeposit.step === 'depositing' || agentGatewayDeposit.step === 'confirming'
+                          ? 'Depositing...'
+                          : 'Deposit Agent Account → x402 Gateway'}
                       </button>
                     </div>
                     <p className="mt-2 text-[11px] text-[#EAE4D8]/35">
-                      Coming after Circle Agent Account Gateway deposit is verified.
+                      {!circleAuthenticated
+                        ? 'Login with passkey first to deposit from Agent Account.'
+                        : agentAccount?.agentAccountAddress && circleAddress.toLowerCase() !== agentAccount.agentAccountAddress.toLowerCase()
+                          ? 'Circle account mismatch. Login with the passkey linked to this Agent Account.'
+                          : 'Deposits USDC from Agent Account into the Gateway. Gateway balance increases for the Agent Account address.'}
                     </p>
                   </div>
 
@@ -1064,6 +1077,22 @@ export default function AgentProfilePage() {
                         className="underline decoration-emerald-400/40 hover:text-emerald-300"
                       >
                         {shortAddress(fundAgent.txHash)}
+                      </a>
+                    </p>
+                  )}
+                  {agentGatewayDeposit.error && (
+                    <p className="mt-2 text-[11px] text-red-400">{agentGatewayDeposit.error}</p>
+                  )}
+                  {agentGatewayDeposit.txHash && (
+                    <p className="mt-2 text-[11px] text-emerald-400">
+                      Gateway deposit ✓{' '}
+                      <a
+                        href={`https://testnet.arcscan.app/tx/${agentGatewayDeposit.txHash}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="underline decoration-emerald-400/40 hover:text-emerald-300"
+                      >
+                        {shortAddress(agentGatewayDeposit.txHash)}
                       </a>
                     </p>
                   )}
