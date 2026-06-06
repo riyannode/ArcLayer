@@ -306,9 +306,6 @@ export default function AgentSetupPage() {
             </Link>
           </div>
 
-          <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/42">
-            MCP session creation is available in your Profile under Account Overview.
-          </p>
         </div>
 
         {/* Option 3: MCP Prompt Template */}
