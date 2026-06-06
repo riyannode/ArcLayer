@@ -1120,7 +1120,7 @@ export default function AgentProfilePage() {
                         x402 Gateway
                       </div>
                       <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
-                        {balancesLoading && !useMockData ? '...' : effectiveOwnerGateway?.formatted ?? '0.00'}
+                        {balancesLoading && !useMockData ? '...' : effectiveOwnerGateway?.formatted ?? '—'}
                       </div>
                       <div className="mt-1 text-[10px] text-[#EAE4D8]/30">Paid API access</div>
                     </div>
