@@ -442,7 +442,7 @@ export async function startProviderJobRun(
   }
 
   // Update runtime state with active job/run
-  await supabase
+  const { error: upsertError } = await supabase
     .from('agent_runtime_state')
     .upsert(
       {
@@ -455,6 +455,10 @@ export async function startProviderJobRun(
       },
       { onConflict: 'agent_id,role' },
     );
+
+  if (upsertError) {
+    console.error(`[startProviderJobRun] Failed to update runtime state: ${upsertError.message}`);
+  }
 
   return run as JobRunRow;
 }
@@ -576,7 +580,7 @@ export async function completeProviderJobRun(
     .eq('agent_id', agentId);
 
   // Clear active job/run from runtime state
-  await supabase
+  const { data: cleared, error: clearError } = await supabase
     .from('agent_runtime_state')
     .update({
       active_job_id: null,
@@ -585,7 +589,10 @@ export async function completeProviderJobRun(
     })
     .eq('agent_id', agentId)
     .eq('role', 'provider')
-    .eq('active_run_id', runId);
+    .eq('active_run_id', runId)
+    .select();
+
+  console.log(`[completeProviderJobRun] agent=${agentId}, jobId=${jobId}, runId=${runId}, cleared=${cleared?.length ?? 0}, error=${clearError?.message ?? 'none'}`);
 }
 
 /**

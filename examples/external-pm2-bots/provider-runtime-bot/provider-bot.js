@@ -597,7 +597,8 @@ async function discoverDirectJobs() {
     }
 
     console.log(`[DIRECT] Starting run for job ${jobId} (onchain status: ${status})`);
-    await client.startJobRun(jobId, initialPhase);
+    const runResult = await client.startJobRun(jobId, initialPhase);
+    console.log(`[DIRECT] startJobRun result:`, JSON.stringify(runResult).slice(0, 200));
     await client.writeCheckpoint(jobId, {
       phase: 'open_job_found',
       status: 'discovered',
