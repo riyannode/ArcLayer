@@ -3,18 +3,23 @@
  *
  * GET: Returns A2A x402 payer status for the authenticated wallet's agents.
  *
- * If an ERC-8004 agent has a Circle Agent Account, that Agent Account address
- * is automatically the x402 payer for A2A circle-gateway payments.
+ * Lazy repair: if an agent has an Agent Account but no A2A binding,
+ * auto-creates the binding. Idempotent. Handles:
+ * 1. Agent Account created after agents
+ * 2. Agent created after Agent Account
+ * 3. Existing users before migration
  *
- * Read-only. No mutation. No private keys.
+ * Binds agents controlled by BOTH owner EOA and agentAccountAddress,
+ * since MCP identity flow mints agents to agentAccountAddress.
  *
- * Scope: x402 A2A payer status for profile page display.
+ * Read-only response. Mutation is internal (ensureA2aPayerBinding only).
+ * No private keys. No Phase 3 x402 verify/settle.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveSessionFromCookie, SESSION_COOKIE_NAME, getLinkedErc8004AgentsForController } from '@/lib/auth/wallet-session';
 import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
-import { getActiveA2aPayer } from '@/lib/x402/agent-payer';
+import { getActiveA2aPayer, ensureA2aPayerBinding } from '@/lib/x402/agent-payer';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -46,19 +51,51 @@ export async function GET(req: NextRequest) {
     }, { status: 200, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 
-  // Find agents controlled by this wallet
-  const linkedAgents = await getLinkedErc8004AgentsForController(wallet);
+  const agentAccountAddr = agentAccount.agentAccountAddress;
 
-  // Check if any agent has an active A2A payer binding
-  const agentA2aPayers: Array<{ agentId: string; payerAddress: string }> = [];
+  // Enumerate agents controlled by BOTH owner EOA and agentAccountAddress.
+  // MCP identity flow mints agents to agentAccountAddress, not owner EOA.
+  const [ownerAgents, accountAgents] = await Promise.all([
+    getLinkedErc8004AgentsForController(wallet),
+    agentAccountAddr.toLowerCase() !== wallet.toLowerCase()
+      ? getLinkedErc8004AgentsForController(agentAccountAddr)
+      : Promise.resolve([]),
+  ]);
 
-  for (const agent of linkedAgents) {
+  // Dedupe by agentId (accountAgents wins if overlap)
+  const agentMap = new Map<string, { agentId: string; controller: string }>();
+  for (const a of ownerAgents) agentMap.set(a.agentId, { agentId: a.agentId, controller: wallet });
+  for (const a of accountAgents) agentMap.set(a.agentId, { agentId: a.agentId, controller: agentAccountAddr });
+  const allAgents = [...agentMap.values()];
+
+  // Check each agent for A2A binding; lazy-repair if missing
+  const agentA2aPayers: Array<{ agentId: string; payerAddress: string; repaired?: boolean }> = [];
+
+  for (const agent of allAgents) {
     const binding = await getActiveA2aPayer(agent.agentId);
     if (binding) {
       agentA2aPayers.push({
         agentId: agent.agentId,
         payerAddress: binding.payerAddress,
       });
+    } else {
+      // Lazy repair: create missing A2A binding
+      try {
+        const result = await ensureA2aPayerBinding({
+          agentId: agent.agentId,
+          controllerAddress: agent.controller,
+          agentAccountAddress: agentAccountAddr,
+        });
+        if (result) {
+          agentA2aPayers.push({
+            agentId: agent.agentId,
+            payerAddress: result.payerAddress,
+            repaired: true,
+          });
+        }
+      } catch {
+        // Non-critical: report pending if repair fails
+      }
     }
   }
 
@@ -67,7 +104,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     hasAgentAccount: true,
-    agentAccountAddress: agentAccount.agentAccountAddress,
+    agentAccountAddress: agentAccountAddr,
     a2aPayerEnabled,
     agents: agentA2aPayers,
     message: a2aPayerEnabled
