@@ -20,10 +20,11 @@ import {
   SESSION_COOKIE_NAME,
 } from '@/lib/auth/wallet-session';
 import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
-import type { AgentX402Rail } from '@/lib/x402/agent-payer';
+import type { AgentX402Rail, AgentX402Scope } from '@/lib/x402/agent-payer';
 
 const ERROR_CACHE = 'no-store, no-cache, max-age=0';
 const VALID_RAILS = new Set<AgentX402Rail>(['circle-gateway', 'arc-native']);
+const VALID_SCOPES = new Set<AgentX402Scope>(['homepage', 'a2a']);
 
 // ── Shared auth helper ─────────────────────────────────────────────────────
 
@@ -108,11 +109,20 @@ export async function GET(
   const auth = await verifyOwnership(req, agentId);
   if (!auth.ok) return auth.response;
 
+  // Optional scope filter
+  const scopeFilter = req.nextUrl.searchParams.get('scope') as AgentX402Scope | null;
+
   const supabase = getSupabaseAdmin();
-  const { data: payers, error } = await supabase
+  let query = supabase
     .from('agent_x402_payers')
-    .select('id, agent_id, controller_address, payer_address, rail, status, verified_at, revoked_at, created_at, updated_at')
-    .eq('agent_id', auth.canonicalAgentId)
+    .select('id, agent_id, controller_address, payer_address, rail, scope, status, verified_at, revoked_at, created_at, updated_at')
+    .eq('agent_id', auth.canonicalAgentId);
+
+  if (scopeFilter && VALID_SCOPES.has(scopeFilter)) {
+    query = query.eq('scope', scopeFilter);
+  }
+
+  const { data: payers, error } = await query
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -132,6 +142,7 @@ export async function GET(
         controllerAddress: row.controller_address,
         payerAddress: row.payer_address,
         rail: row.rail,
+        scope: row.scope ?? 'homepage',
         status: row.status,
         verifiedAt: row.verified_at,
         revokedAt: row.revoked_at,
@@ -158,6 +169,7 @@ export async function POST(
   const body = await req.clone().json().catch(() => ({} as Record<string, unknown>));
   const rawPayer = typeof body.payerAddress === 'string' ? body.payerAddress.trim() : '';
   const rawRail = typeof body.rail === 'string' ? body.rail.trim() : 'circle-gateway';
+  const rawScope = typeof body.scope === 'string' ? body.scope.trim() : 'homepage';
 
   // Validate payer address
   if (!rawPayer || !isAddress(rawPayer)) {
@@ -175,16 +187,26 @@ export async function POST(
     );
   }
 
+  // Validate scope
+  if (!VALID_SCOPES.has(rawScope as AgentX402Scope)) {
+    return NextResponse.json(
+      { ok: false, error: 'invalid_scope', detail: `Scope must be one of: ${[...VALID_SCOPES].join(', ')}` },
+      { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+    );
+  }
+
   const payerAddress = getAddress(rawPayer);
   const rail = rawRail as AgentX402Rail;
+  const scope = rawScope as AgentX402Scope;
   const supabase = getSupabaseAdmin();
 
-  // Soft-revoke existing active payer for same agent + rail
+  // Soft-revoke existing active payer for same agent + rail + scope
   const { data: existing } = await supabase
     .from('agent_x402_payers')
     .select('id')
     .eq('agent_id', auth.canonicalAgentId)
     .eq('rail', rail)
+    .eq('scope', scope)
     .eq('status', 'active')
     .is('revoked_at', null);
 
@@ -200,7 +222,7 @@ export async function POST(
   }
 
   // Insert new active payer row.
-  // If a concurrent request already inserted an active payer for this agent+rail,
+  // If a concurrent request already inserted an active payer for this agent+rail+scope,
   // the unique partial index will reject. Return 409 active_payer_race.
   const { data: inserted, error: insertError } = await supabase
     .from('agent_x402_payers')
@@ -209,10 +231,11 @@ export async function POST(
       controller_address: getAddress(auth.controller),
       payer_address: payerAddress,
       rail,
+      scope,
       status: 'active',
       verified_at: new Date().toISOString(),
     })
-    .select('id, agent_id, controller_address, payer_address, rail, status, verified_at, created_at')
+    .select('id, agent_id, controller_address, payer_address, rail, scope, status, verified_at, created_at')
     .single();
 
   if (insertError || !inserted) {
@@ -241,6 +264,7 @@ export async function POST(
         controllerAddress: inserted.controller_address,
         payerAddress: inserted.payer_address,
         rail: inserted.rail,
+        scope: (inserted as Record<string, unknown>).scope ?? 'homepage',
         status: inserted.status,
         verifiedAt: inserted.verified_at,
         createdAt: inserted.created_at,
@@ -261,11 +285,19 @@ export async function DELETE(
   const auth = await verifyOwnership(req, agentId);
   if (!auth.ok) return auth.response;
 
-  // Parse optional rail from query string
+  // Parse optional rail + scope from query string
   const rail = (req.nextUrl.searchParams.get('rail') || 'circle-gateway') as AgentX402Rail;
   if (!VALID_RAILS.has(rail)) {
     return NextResponse.json(
       { ok: false, error: 'invalid_rail', detail: `Rail must be one of: ${[...VALID_RAILS].join(', ')}` },
+      { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+    );
+  }
+
+  const scope = (req.nextUrl.searchParams.get('scope') || 'homepage') as AgentX402Scope;
+  if (!VALID_SCOPES.has(scope)) {
+    return NextResponse.json(
+      { ok: false, error: 'invalid_scope', detail: `Scope must be one of: ${[...VALID_SCOPES].join(', ')}` },
       { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
     );
   }
@@ -283,6 +315,7 @@ export async function DELETE(
     })
     .eq('agent_id', auth.canonicalAgentId)
     .eq('rail', rail)
+    .eq('scope', scope)
     .eq('status', 'active')
     .is('revoked_at', null)
     .select('id')
