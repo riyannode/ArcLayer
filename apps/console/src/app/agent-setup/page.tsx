@@ -201,7 +201,7 @@ export default function AgentSetupPage() {
           </div>
 
           <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">
-            Use Claude, Codex, Cursor, or another MCP client
+            Use Claude, Codex, Cursor, or another MCP client to request ERC-8004 identity registration. The identity is registered to your Agent Account and approved through the browser signing bridge.
           </p>
 
           <div className="mt-4 space-y-2">
@@ -209,7 +209,8 @@ export default function AgentSetupPage() {
             <div className="flex flex-wrap gap-2">
               <Badge>Owner Wallet</Badge>
               <Badge>Agent Account</Badge>
-              <Badge>MCP Session</Badge>
+              <Badge>MCP Identity Session</Badge>
+              <Badge>Browser Signing Bridge</Badge>
               <Badge>Claude / Codex config</Badge>
             </div>
           </div>
@@ -219,7 +220,7 @@ export default function AgentSetupPage() {
               <McpSigningSessionCard address={address} />
             ) : (
               <div className="rounded-md border border-white/10 bg-black/20 px-5 py-4 text-[13px] text-[#EAE4D8]/55">
-                Connect your wallet to start an MCP signing session.
+                Connect your wallet to start the browser signing bridge.
               </div>
             )}
           </div>
@@ -229,7 +230,7 @@ export default function AgentSetupPage() {
 
           {/* MCP Prompt copy */}
           <p className="text-[13px] leading-5 text-[#EAE4D8]/62">
-            Choose an agent type and copy a Claude/Codex MCP prompt.
+            Choose an agent type and copy a Claude/Codex MCP identity-registration prompt.
           </p>
 
           {/* Mode toggle */}
