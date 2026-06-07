@@ -25,7 +25,7 @@ set -euo pipefail
 
 REPO_URL="https://github.com/riyannode/ArcLayer.git"
 BOTS_DIR="$HOME/arclayer-bots"
-VERSION="0.1.0"
+VERSION="2.0.0"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -141,28 +141,41 @@ select_role() {
   # If --role was passed, use it directly (skip interactive selection)
   if [ -n "$PRESET_ROLE" ]; then
     case "$PRESET_ROLE" in
-      client)    ROLE="client";    ROLE_LABEL="Client" ;;
       provider)  ROLE="provider";  ROLE_LABEL="Provider" ;;
       evaluator) ROLE="evaluator"; ROLE_LABEL="Evaluator" ;;
-      *) fail "Invalid role: $PRESET_ROLE. Must be client, provider, or evaluator." ;;
+      client)
+        echo ""
+        echo -e "${RED}═══ DEPRECATED ═══${NC}"
+        echo ""
+        echo "The client bot is deprecated."
+        echo ""
+        echo "Client actions (createJob, fund) are now handled via:"
+        echo "  1. ArcLayer Profile → Client Mode"
+        echo "  2. MCP Signing Session (browser wallet)"
+        echo ""
+        echo "See: https://arclayers.xyz/profile"
+        echo ""
+        exit 1
+        ;;
+      *) fail "Invalid role: $PRESET_ROLE. Must be provider or evaluator." ;;
     esac
     ok "Role: ${ROLE_LABEL}"
     return
   fi
 
   echo "Choose your bot role:"
-  echo "  1) client     — creates and funds ERC-8183 jobs"
-  echo "  2) provider   — claims, processes, and submits job deliverables"
-  echo "  3) evaluator  — reviews submitted work and completes/rejects escrow"
+  echo "  1) provider   — claims, processes, and submits job deliverables"
+  echo "  2) evaluator  — reviews submitted work and completes/rejects escrow"
+  echo ""
+  echo "  (client is deprecated — use ArcLayer Profile Client Mode)"
   echo ""
 
   local choice
   while true; do
-    tty_read -rp "Enter 1, 2, or 3: " choice
+    tty_read -rp "Enter 1 or 2: " choice
     case "$choice" in
-      1) ROLE="client";     ROLE_LABEL="Client";     break ;;
-      2) ROLE="provider";   ROLE_LABEL="Provider";   break ;;
-      3) ROLE="evaluator";  ROLE_LABEL="Evaluator";  break ;;
+      1) ROLE="provider";   ROLE_LABEL="Provider";   break ;;
+      2) ROLE="evaluator";  ROLE_LABEL="Evaluator";  break ;;
       *) warn "Invalid choice. Please enter 1, 2, or 3." ;;
     esac
   done
@@ -249,16 +262,10 @@ collect_inputs() {
   # In dry-run mode, use placeholder values and skip all prompts
   if [ "$DRY_RUN" = true ]; then
     AGENT_ID="${AGENT_ID:-99999}"
+    MCP_TOKEN="${MCP_TOKEN:-arc_mcp_sess_dry_run_placeholder}"
     WALLET_ADDRESS="${WALLET_ADDRESS:-0x0000000000000000000000000000000000000000}"
-    API_KEY="${API_KEY:-ak_dry_run_placeholder}"
     PRIVATE_KEY="<dry-run: hidden>"
     LLM_PROVIDER="${LLM_PROVIDER:-none}"
-    if [ "$ROLE" = "client" ]; then
-      PEER_PROVIDER_AGENT_ID="${PEER_PROVIDER_AGENT_ID:-99998}"
-      PEER_PROVIDER_ADDRESS="${PEER_PROVIDER_ADDRESS:-0x0000000000000000000000000000000000000000}"
-      PEER_EVALUATOR_AGENT_ID="${PEER_EVALUATOR_AGENT_ID:-99997}"
-      PEER_EVALUATOR_ADDRESS="${PEER_EVALUATOR_ADDRESS:-0x0000000000000000000000000000000000000000}"
-    fi
     info "[dry-run] Using placeholder values — no secrets collected"
     return
   fi
@@ -272,6 +279,15 @@ collect_inputs() {
     warn "Agent ID must be a numeric value."
   done
 
+  # MCP session token
+  while true; do
+    tty_read -rp "MCP session token (arc_mcp_sess_...): " MCP_TOKEN
+    if [[ "$MCP_TOKEN" =~ ^arc_mcp_sess_ ]]; then
+      break
+    fi
+    warn "MCP token must start with arc_mcp_sess_."
+  done
+
   # Wallet address
   while true; do
     tty_read -rp "Wallet address (0x...): " WALLET_ADDRESS
@@ -279,15 +295,6 @@ collect_inputs() {
       break
     fi
     warn "Invalid Ethereum address. Must be 0x + 40 hex chars."
-  done
-
-  # API key
-  while true; do
-    tty_read -rp "API key (ak_...): " API_KEY
-    if [[ "$API_KEY" =~ ^ak_ ]]; then
-      break
-    fi
-    warn "API key must start with ak_."
   done
 
   # Private key (hidden input)
@@ -301,50 +308,6 @@ collect_inputs() {
     fi
     warn "Private key cannot be empty."
   done
-
-  # Client role needs peer addresses for job creation
-  if [ "$ROLE" = "client" ]; then
-    echo ""
-    info "Client bot creates jobs that need a provider and evaluator."
-    info "Enter the provider and evaluator agent IDs + wallet addresses."
-    echo ""
-
-    # Provider agent ID
-    while true; do
-      tty_read -rp "Provider Agent ID (numeric): " PEER_PROVIDER_AGENT_ID
-      if [[ "$PEER_PROVIDER_AGENT_ID" =~ ^[0-9]+$ ]]; then
-        break
-      fi
-      warn "Agent ID must be a numeric value."
-    done
-
-    # Provider wallet address
-    while true; do
-      tty_read -rp "Provider wallet address (0x...): " PEER_PROVIDER_ADDRESS
-      if validate_address "$PEER_PROVIDER_ADDRESS"; then
-        break
-      fi
-      warn "Invalid Ethereum address."
-    done
-
-    # Evaluator agent ID
-    while true; do
-      tty_read -rp "Evaluator Agent ID (numeric): " PEER_EVALUATOR_AGENT_ID
-      if [[ "$PEER_EVALUATOR_AGENT_ID" =~ ^[0-9]+$ ]]; then
-        break
-      fi
-      warn "Agent ID must be a numeric value."
-    done
-
-    # Evaluator wallet address
-    while true; do
-      tty_read -rp "Evaluator wallet address (0x...): " PEER_EVALUATOR_ADDRESS
-      if validate_address "$PEER_EVALUATOR_ADDRESS"; then
-        break
-      fi
-      warn "Invalid Ethereum address."
-    done
-  fi
 
   # LLM configuration — required for provider, optional for evaluator
   if [ "$ROLE" = "provider" ]; then
@@ -415,37 +378,73 @@ collect_inputs() {
     fi
 
   elif [ "$ROLE" = "evaluator" ]; then
-    # Evaluator: LLM optional for evaluation
+    # Evaluator: LLM required for evaluation
     echo ""
-    echo "Optional: LLM provider for evaluation (press Enter to skip):"
-    echo "  1) none (skip)"
-    echo "  2) OpenAI-compatible"
-    echo "  3) Local (Ollama)"
+    echo -e "${BOLD}── LLM Configuration (required for evaluator) ──${NC}"
+    echo ""
+    echo "Evaluator uses LLM to evaluate submitted job deliverables."
     echo ""
 
-    LLM_PROVIDER="none"
-    tty_read -rp "LLM provider [1]: " llm_choice
-    case "${llm_choice:-1}" in
-      1|"") LLM_PROVIDER="none" ;;
-      2)    LLM_PROVIDER="openai-compatible" ;;
-      3)    LLM_PROVIDER="local" ;;
-      *)    LLM_PROVIDER="none" ;;
-    esac
+    while true; do
+      tty_read -rp "LLM provider (e.g. openai, openrouter, local, no-auth): " LLM_PROVIDER
+      if [ -n "$LLM_PROVIDER" ]; then
+        break
+      fi
+      warn "LLM_PROVIDER is required."
+    done
 
-    if [ "$LLM_PROVIDER" != "none" ]; then
-      tty_read -rp "LLM base URL: " LLM_BASE_URL
-      tty_read -rsp "LLM API key: " LLM_API_KEY
-      echo ""
-      tty_read -rp "LLM model name: " LLM_MODEL
+    while true; do
+      tty_read -rp "LLM base URL (e.g. https://api.openai.com/v1): " LLM_BASE_URL
+      if [ -n "$LLM_BASE_URL" ]; then
+        break
+      fi
+      warn "LLM_BASE_URL is required."
+    done
+
+    while true; do
+      tty_read -rp "Evaluator model (e.g. gpt-4.1-mini): " EVALUATOR_MODEL
+      if [ -n "$EVALUATOR_MODEL" ]; then
+        break
+      fi
+      warn "EVALUATOR_MODEL is required."
+    done
+
+    # LLM_API_KEY required unless local/no-auth
+    local is_local_auth=false
+    if [ "$LLM_PROVIDER" = "local" ] || [ "$LLM_PROVIDER" = "no-auth" ]; then
+      is_local_auth=true
     fi
+
+    if [ "$is_local_auth" = true ]; then
+      tty_read -rsp "LLM API key (optional for local/no-auth, press Enter to skip): " LLM_API_KEY
+      echo ""
+    else
+      while true; do
+        tty_read -rsp "LLM API key (hidden): " LLM_API_KEY
+        echo ""
+        if [ -n "$LLM_API_KEY" ]; then
+          break
+        fi
+        warn "LLM_API_KEY is required for $LLM_PROVIDER."
+      done
+    fi
+
+    ok "LLM configured: ${LLM_PROVIDER} / ${EVALUATOR_MODEL}"
   fi
 }
 
 # ── Sparse clone + copy ──────────────────────────────────────────────────────
 
 install_runtime() {
-  local tmp_dir="/tmp/arclayer-install-$$"
-  local target_dir="${BOTS_DIR}/erc8183-${ROLE}"
+  local tmp_dir="/tmp/arclayer-${ROLE}-install-$$"
+  local target_dir="${BOTS_DIR}/${ROLE}-runtime-bot"
+  local bot_subdir=""
+
+  case "$ROLE" in
+    provider)  bot_subdir="examples/external-pm2-bots/provider-runtime-bot" ;;
+    evaluator) bot_subdir="examples/external-pm2-bots/evaluator-runtime-bot" ;;
+    *) fail "Internal error: unknown role $ROLE" ;;
+  esac
 
   echo ""
   echo -e "${BOLD}── Installing ${ROLE_LABEL} Bot ──${NC}"
@@ -455,6 +454,7 @@ install_runtime() {
   if [ "$DRY_RUN" = true ]; then
     info "[dry-run] Would install to ${target_dir}"
     info "[dry-run] Would sparse clone from ${REPO_URL}"
+    info "[dry-run] Bot subdir: ${bot_subdir}"
     ok "[dry-run] Validation complete. No changes made."
     return
   fi
@@ -472,30 +472,37 @@ install_runtime() {
     || fail "Failed to clone repo. Check your internet connection."
 
   cd "$tmp_dir"
-  git sparse-checkout set examples/external-erc8183-bots 2>/dev/null \
+  git sparse-checkout set "$bot_subdir" 2>/dev/null \
     || fail "Failed to set sparse checkout."
 
   # Verify source exists
-  local src_dir="$tmp_dir/examples/external-erc8183-bots"
+  local src_dir="$tmp_dir/$bot_subdir"
   if [ ! -d "$src_dir" ]; then
     rm -rf "$tmp_dir"
     fail "Source directory not found in repo."
   fi
 
   # Copy shared + selected role only
-  info "Copying ${ROLE_LABEL} runtime files..."
+  info "Copying ${ROLE_LABEL} runtime files from ${bot_subdir}..."
   cp "$src_dir/package.json" "$target_dir/"
   [ -f "$src_dir/package-lock.json" ] && cp "$src_dir/package-lock.json" "$target_dir/"
 
-  # Copy shared directory
-  cp -r "$src_dir/shared" "$target_dir/"
-  # Copy scripts directory
-  cp -r "$src_dir/scripts" "$target_dir/"
-  # Copy selected role bot directory
-  cp -r "$src_dir/${ROLE}-bot" "$target_dir/"
+  # Copy all JS files
+  for f in "$src_dir"/*.js; do
+    [ -f "$f" ] && cp "$f" "$target_dir/"
+  done
 
-  # Copy .gitignore if present
-  [ -f "$src_dir/.gitignore" ] && cp "$src_dir/.gitignore" "$target_dir/"
+  # Copy shared directory
+  [ -d "$src_dir/shared" ] && cp -r "$src_dir/shared" "$target_dir/"
+
+  # Copy ecosystem config
+  [ -f "$src_dir/ecosystem.config.cjs" ] && cp "$src_dir/ecosystem.config.cjs" "$target_dir/"
+
+  # Copy check-env if present
+  [ -f "$src_dir/check-env.mjs" ] && cp "$src_dir/check-env.mjs" "$target_dir/"
+
+  # Copy .env.example if present
+  [ -f "$src_dir/.env.example" ] && cp "$src_dir/.env.example" "$target_dir/"
 
   # Copy README for reference
   [ -f "$src_dir/README.md" ] && cp "$src_dir/README.md" "$target_dir/"
@@ -508,7 +515,7 @@ install_runtime() {
 # ── Generate .env ─────────────────────────────────────────────────────────────
 
 generate_env() {
-  local env_file="${BOTS_DIR}/erc8183-${ROLE}/${ROLE}-bot/.env"
+  local env_file="${BOTS_DIR}/${ROLE}-runtime-bot/.env"
   local private_key_normalized="$PRIVATE_KEY"
 
   # Ensure 0x prefix on private key
@@ -524,45 +531,18 @@ generate_env() {
   fi
 
   case "$ROLE" in
-    client)
-      cat > "$env_file" << ENVEOF
-# ArcLayer ERC-8183 Client Bot — generated by installer
-ARCLAYER_BASE_URL=https://arclayers.xyz
-CLIENT_AGENT_ID=${AGENT_ID}
-# BUYER_AGENT_ID kept for backward compat — client-bot/index.js falls back to it
-# if CLIENT_AGENT_ID is not set. Safe to remove once all setups use CLIENT_AGENT_ID.
-BUYER_AGENT_ID=${AGENT_ID}
-CLIENT_ADDRESS=${WALLET_ADDRESS}
-CLIENT_PRIVATE_KEY=${private_key_normalized}
-CLIENT_API_KEY=${API_KEY}
-PROVIDER_AGENT_ID=${PEER_PROVIDER_AGENT_ID}
-PROVIDER_ADDRESS=${PEER_PROVIDER_ADDRESS}
-EVALUATOR_AGENT_ID=${PEER_EVALUATOR_AGENT_ID}
-EVALUATOR_ADDRESS=${PEER_EVALUATOR_ADDRESS}
-ARC_CHAIN_ID=5042002
-ARC_RPC_URL=https://rpc.testnet.arc.network
-ARC_RPC_FALLBACK_URL=https://rpc.drpc.testnet.arc.network
-ENVEOF
-      ;;
-
     provider)
       cat > "$env_file" << ENVEOF
 # ArcLayer ERC-8183 Provider Bot — generated by installer
 ARCLAYER_BASE_URL=https://arclayers.xyz
-PROVIDER_AGENT_ID=${AGENT_ID}
+ARCLAYER_MCP_TOKEN=${MCP_TOKEN}
+ARCLAYER_AGENT_ID=${AGENT_ID}
 PROVIDER_ADDRESS=${WALLET_ADDRESS}
 PROVIDER_PRIVATE_KEY=${private_key_normalized}
-PROVIDER_API_KEY=${API_KEY}
+PROVIDER_MODE=provider
 ARC_CHAIN_ID=5042002
 ARC_RPC_URL=https://rpc.testnet.arc.network
 ARC_RPC_FALLBACK_URL=https://rpc.drpc.testnet.arc.network
-
-# Provider mode and category
-PROVIDER_MODE=llm
-PROVIDER_AGENT_TYPE=${PROVIDER_AGENT_TYPE}
-PROVIDER_CAPABILITIES=${PROVIDER_CAPABILITIES}
-PROVIDER_SKILL=auto
-PROVIDER_CUSTOM_SKILL_PATH=${PROVIDER_CUSTOM_SKILL_PATH:-}
 
 # LLM Configuration (user-provided, no default model)
 LLM_PROVIDER=${LLM_PROVIDER}
@@ -574,12 +554,7 @@ LLM_TEMPERATURE=0.2
 LLM_TIMEOUT_MS=60000
 
 # Job settings
-JOB_POLL_INTERVAL_MS=60000
-MAX_ACTIVE_JOBS=1
-CLAIM_TTL_SECONDS=600
-AUTONOMOUS_TX=true
-MIN_JOB_BUDGET_ATOMIC=10000
-IGNORE_JOBS_BEFORE=
+POLL_INTERVAL_MS=15000
 ENVEOF
       ;;
 
@@ -587,26 +562,31 @@ ENVEOF
       cat > "$env_file" << ENVEOF
 # ArcLayer ERC-8183 Evaluator Bot — generated by installer
 ARCLAYER_BASE_URL=https://arclayers.xyz
-EVALUATOR_AGENT_ID=${AGENT_ID}
+ARCLAYER_MCP_TOKEN=${MCP_TOKEN}
+ARCLAYER_NETWORK=arc-testnet
 EVALUATOR_ADDRESS=${WALLET_ADDRESS}
 EVALUATOR_PRIVATE_KEY=${private_key_normalized}
-EVALUATOR_API_KEY=${API_KEY}
+EVALUATOR_SIGNER_MODE=legacy-eoa
+EVALUATOR_AUTO_COMPLETE=true
+EVALUATOR_AUTO_REJECT=true
+EVALUATOR_MIN_CONFIDENCE=0.80
+EVALUATOR_MAX_JOBS_PER_LOOP=3
 ARC_CHAIN_ID=5042002
 ARC_RPC_URL=https://rpc.testnet.arc.network
-ARC_RPC_FALLBACK_URL=https://rpc.drpc.testnet.arc.network
+POLL_INTERVAL_MS=15000
 ENVEOF
       ;;
   esac
 
   # Append LLM config for evaluator (provider already has it inline)
-  if [ "$ROLE" = "evaluator" ] && [ "$LLM_PROVIDER" != "none" ]; then
+  if [ "$ROLE" = "evaluator" ]; then
     cat >> "$env_file" << LLMEOF
 
 # LLM Configuration
 LLM_PROVIDER=${LLM_PROVIDER}
 LLM_BASE_URL=${LLM_BASE_URL:-}
 LLM_API_KEY=${LLM_API_KEY:-}
-LLM_MODEL=${LLM_MODEL:-}
+EVALUATOR_MODEL=${EVALUATOR_MODEL:-gpt-4.1-mini}
 LLMEOF
   fi
 
@@ -617,9 +597,9 @@ LLMEOF
 # ── Install deps + run check-env + start PM2 ─────────────────────────────────
 
 start_bot() {
-  local bot_dir="${BOTS_DIR}/erc8183-${ROLE}"
-  local ecosystem="${bot_dir}/${ROLE}-bot/ecosystem.config.cjs"
-  local process_name="arclayer-erc8183-${ROLE}"
+  local bot_dir="${BOTS_DIR}/${ROLE}-runtime-bot"
+  local ecosystem="${bot_dir}/ecosystem.config.cjs"
+  local process_name="arclayer-${ROLE}-runtime"
 
   echo ""
   echo -e "${BOLD}── Starting ${ROLE_LABEL} Bot ──${NC}"
@@ -628,7 +608,7 @@ start_bot() {
   # Dry-run: validate only, skip install + start
   if [ "$DRY_RUN" = true ]; then
     info "[dry-run] Would install deps in ${bot_dir}"
-    info "[dry-run] Would run: node scripts/check-env.mjs --role=${ROLE}"
+    info "[dry-run] Would run preflight check"
     info "[dry-run] Would start PM2 process: ${process_name}"
     ok "[dry-run] Validation complete. No changes made."
     return
@@ -640,19 +620,28 @@ start_bot() {
   npm install --production 2>/dev/null || npm install
   ok "Dependencies installed"
 
-  # Verify .env with role-aware preflight checker
-  info "Running env preflight check..."
-  if node scripts/check-env.mjs --role="$ROLE" 2>&1; then
-    ok "Env check passed"
+  # Run preflight check if available
+  info "Running preflight check..."
+  if [ -f "${bot_dir}/check-env.mjs" ]; then
+    if node check-env.mjs 2>&1; then
+      ok "Preflight check passed"
+    else
+      fail "Preflight check failed. Fix the issues above, edit .env, then re-run: cd ${bot_dir} && node check-env.mjs"
+    fi
   else
-    fail "Env check failed. Fix the issues above and re-run: node scripts/check-env.mjs --role=$ROLE"
+    info "No check-env.mjs found, skipping preflight"
   fi
 
   # Check if ecosystem config exists
   if [ ! -f "$ecosystem" ]; then
     warn "ecosystem.config.cjs not found at ${ecosystem}"
     warn "Starting bot directly instead..."
-    pm2 start "${ROLE}-bot/index.js" \
+    local main_js=""
+    case "$ROLE" in
+      provider)  main_js="provider-bot.js" ;;
+      evaluator) main_js="evaluator-bot.js" ;;
+    esac
+    pm2 start "$main_js" \
       --name "$process_name" \
       --cwd "$bot_dir" \
       --max-restarts 10 \
@@ -679,18 +668,17 @@ start_bot() {
 # ── Print summary ─────────────────────────────────────────────────────────────
 
 print_summary() {
-  local target_dir="${BOTS_DIR}/erc8183-${ROLE}"
-  local process_name="arclayer-erc8183-${ROLE}"
+  local target_dir="${BOTS_DIR}/${ROLE}-runtime-bot"
+  local process_name="arclayer-${ROLE}-runtime"
 
   echo ""
   echo -e "${BOLD}═══ Installation Complete ═══${NC}"
   echo ""
   echo -e "  Role:        ${GREEN}${ROLE_LABEL}${NC}"
   if [ "$ROLE" = "provider" ]; then
-    echo -e "  Category:    ${GREEN}${PROVIDER_CATEGORY_LABEL}${NC}"
-    echo -e "  Agent Type:  ${PROVIDER_AGENT_TYPE}"
-    echo -e "  Capabilities: ${PROVIDER_CAPABILITIES}"
-    echo -e "  LLM:         ${LLM_PROVIDER:-none} / ${LLM_MODEL:-n/a}"
+    echo -e "  LLM:         ${LLM_PROVIDER} / ${LLM_MODEL}"
+  elif [ "$ROLE" = "evaluator" ]; then
+    echo -e "  LLM:         ${LLM_PROVIDER} / ${EVALUATOR_MODEL}"
   fi
   echo -e "  Agent ID:    ${AGENT_ID}"
   echo -e "  Install dir: ${target_dir}"
@@ -706,7 +694,7 @@ print_summary() {
   echo -e "  Bot status will appear as online in your Agent Profile page."
   echo ""
   echo -e "${BOLD}── Security Reminder ──${NC}"
-  echo "  • Your .env is at: ${target_dir}/${ROLE}-bot/.env (chmod 600)"
+  echo "  • Your .env is at: ${target_dir}/.env (chmod 600)"
   echo "  • Never share your private key or API key"
   echo "  • To rotate keys: edit .env then pm2 restart ${process_name}"
   echo ""
@@ -726,7 +714,6 @@ trap cleanup EXIT
 main() {
   check_deps
   select_role
-  select_provider_category
   collect_inputs
   check_pm2
   install_runtime
