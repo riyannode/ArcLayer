@@ -35,6 +35,8 @@ import {
   readProofs,
   readReputation,
   readReputationByAgent,
+  readErc8183ReputationByProvider,
+  readErc8183ReputationAll,
   syncProjectionStore,
   writeMetaValue,
 } from "./db";
@@ -381,10 +383,34 @@ createServer((req, res) => {
     return;
   }
 
+  if (url.pathname === "/erc8183-reputation") {
+    writeJson(res, readErc8183ReputationAll());
+    return;
+  }
+
+  if (url.pathname.startsWith("/erc8183-reputation/")) {
+    const providerId = decodeURIComponent(url.pathname.replace("/erc8183-reputation/", ""));
+    if (!providerId.trim()) {
+      res.statusCode = 400;
+      writeJson(res, { error: "Invalid provider address." });
+      return;
+    }
+
+    const rep = readErc8183ReputationByProvider(providerId);
+    if (!rep) {
+      res.statusCode = 404;
+      writeJson(res, { error: "No ERC-8183 jobs found for this provider." });
+      return;
+    }
+
+    writeJson(res, rep);
+    return;
+  }
+
   writeJson(res, {
     ok: true,
     mode: "arc-reference-100%",
-    endpoints: ["/health", "/overview/summary", "/overview", "/jobs", "/jobs/open", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug", "/reputation", "/reputation/:agentTokenId"],
+    endpoints: ["/health", "/overview/summary", "/overview", "/jobs", "/jobs/open", "/jobs/:id", "/agents", "/agents/:id", "/proofs", "/job-events", "/agent-events", "/agent-debug", "/reputation", "/reputation/:agentTokenId", "/erc8183-reputation", "/erc8183-reputation/:providerAddress"],
     eventCount: Number(readMetaValue("event_count") || "0"),
     lastSyncedBlock: readMetaValue("last_synced_block"),
     lastSyncedAgentBlock: readMetaValue("last_synced_agent_block"),

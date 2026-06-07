@@ -151,8 +151,18 @@ function computeScore(stats: {
 export async function getErc8183AgentReputationMap(
   agentKeys?: string[],
 ): Promise<Map<string, Erc8183AgentReputation>> {
-  const db = getSupabaseAdmin();
   const result = new Map<string, Erc8183AgentReputation>();
+
+  let db: ReturnType<typeof getSupabaseAdmin>;
+  try {
+    db = getSupabaseAdmin();
+  } catch (error) {
+    console.warn(
+      '[erc8183-reputation] Supabase unavailable; skipping enrichment',
+      error instanceof Error ? error.message : String(error),
+    );
+    return result;
+  }
 
   // Fetch all ERC-8183 escrow jobs — single query, compute in-memory.
   // Supabase .select() returns max 1000 by default; bump to 5000.

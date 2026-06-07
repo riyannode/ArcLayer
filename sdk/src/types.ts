@@ -16,7 +16,7 @@ export type IndexedAgentEvent = {
   skillHash?: `0x${string}`;
 };
 
-/** ERC-8183 AgenticCommerce — JobCreated/BudgetSet/JobFunded/JobSubmitted/JobCompleted. */
+/** ERC-8183 AgenticCommerce — JobCreated/BudgetSet/JobFunded/JobSubmitted/JobCompleted/JobRejected/JobExpired. */
 export type IndexedJobEvent = {
   eventName:
     | "JobCreated"
@@ -24,6 +24,8 @@ export type IndexedJobEvent = {
     | "JobFunded"
     | "JobSubmitted"
     | "JobCompleted"
+    | "JobRejected"
+    | "JobExpired"
     // Legacy compat:
     | "DeliverableSubmitted"
     | "JobSettled";
@@ -41,6 +43,7 @@ export type IndexedJobEvent = {
   amount?: bigint;
   deliverable?: `0x${string}`;
   reason?: `0x${string}`;
+  rejector?: Address;
   // Legacy compat fields:
   worker?: Address;
   payout?: bigint;

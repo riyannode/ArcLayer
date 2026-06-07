@@ -352,6 +352,22 @@ export const ERC8183_AGENTIC_COMMERCE_ABI = [
     ],
   },
   {
+    name: "JobRejected",
+    type: "event",
+    inputs: [
+      { name: "jobId", type: "uint256", indexed: true },
+      { name: "rejector", type: "address", indexed: true },
+      { name: "reason", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    name: "JobExpired",
+    type: "event",
+    inputs: [
+      { name: "jobId", type: "uint256", indexed: true },
+    ],
+  },
+  {
     name: "ProviderSet",
     type: "event",
     inputs: [
