@@ -5,10 +5,11 @@
  *
  * Read-only. No private keys. No tx execution.
  * Uses viem public client to read ERC-20 balanceOf.
+ * Uses Gateway REST API for unified balance (on-chain deposits() removed in contract upgrade).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createPublicClient, http, formatUnits, isAddress, getAddress, type Hex } from 'viem';
+import { createPublicClient, http, formatUnits, isAddress, getAddress, parseUnits, type Hex } from 'viem';
 import { arcTestnet } from 'viem/chains';
 import { ARC_RPC_URLS, ARC_TOKENS, ARC_ERC20_USDC_DECIMALS } from '@arclayer/sdk';
 
@@ -28,25 +29,14 @@ const ERC20_BALANCE_ABI = [
   },
 ] as const;
 
-const GATEWAY_DEPOSITS_ABI = [
-  {
-    name: 'deposits',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [
-      { name: 'depositor', type: 'address' },
-      { name: 'token', type: 'address' },
-    ],
-    outputs: [{ type: 'uint256' }],
-  },
-] as const;
-
 const client = createPublicClient({
   chain: arcTestnet,
   transport: http(process.env.ARC_RPC_URL || ARC_RPC_URLS[0]),
 });
 
-const GATEWAY_WALLET_ADDRESS = '0x0077777d7EBA4688BDeF3E311b846F25870A19B9' as Hex;
+/** Arc Testnet CCTP domain for Gateway balance queries. */
+const ARC_GATEWAY_DOMAIN = 26;
+const GATEWAY_API_BASE = process.env.GATEWAY_API_URL || 'https://gateway-api-testnet.circle.com/v1';
 
 async function getUsdcBalance(address: string): Promise<{ raw: string; formatted: string }> {
   try {
@@ -62,15 +52,31 @@ async function getUsdcBalance(address: string): Promise<{ raw: string; formatted
   }
 }
 
+/**
+ * Query Gateway unified balance via Circle REST API.
+ * The on-chain `deposits(address,address)` was removed in a contract upgrade;
+ * the REST API is the canonical way to read Gateway balances.
+ */
 async function getGatewayBalance(address: string): Promise<{ raw: string; formatted: string } | null> {
   try {
-    const raw = await client.readContract({
-      address: GATEWAY_WALLET_ADDRESS,
-      abi: GATEWAY_DEPOSITS_ABI,
-      functionName: 'deposits',
-      args: [getAddress(address), USDC_ADDRESS],
+    const res = await fetch(`${GATEWAY_API_BASE}/balances`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token: 'USDC',
+        sources: [{ domain: ARC_GATEWAY_DOMAIN, depositor: getAddress(address) }],
+      }),
     });
-    return { raw: raw.toString(), formatted: formatUnits(raw, USDC_DECIMALS) };
+    if (!res.ok) return null;
+    const data = await res.json();
+    const entry = data?.balances?.find(
+      (b: { domain: number; depositor: string }) =>
+        b.domain === ARC_GATEWAY_DOMAIN && b.depositor.toLowerCase() === address.toLowerCase(),
+    );
+    if (!entry || !entry.balance) return { raw: '0', formatted: '0.000000' };
+    // Gateway API returns decimal string like "3.000000"
+    const raw = parseUnits(entry.balance, USDC_DECIMALS);
+    return { raw: raw.toString(), formatted: entry.balance };
   } catch {
     return null;
   }
