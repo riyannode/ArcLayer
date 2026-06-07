@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Bot, Code2, Terminal, ArrowLeft, Copy, Check } from 'lucide-react';
+import { Code2, Terminal, ArrowLeft, Copy, Check } from 'lucide-react';
+import { useAccount } from 'wagmi';
+import { McpSigningSessionCard } from '@/components/profile/McpSigningSessionCard';
 
 /* ── design tokens (dashboard / profile system) ── */
 
@@ -64,6 +66,7 @@ const CLIENT_PROMPT = [
 const INSTALL_CMD = 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash';
 
 export default function AgentSetupPage() {
+  const { address, isConnected } = useAccount();
   const [copied, setCopied] = useState(false);
   const [mcpMode, setMcpMode] = useState<'provider' | 'client'>('provider');
   const [mcpSelectedType, setMcpSelectedType] = useState<string>('smart-contract');
@@ -212,13 +215,13 @@ export default function AgentSetupPage() {
           </div>
 
           <div className="mt-5">
-            <Link
-              href="/profile"
-              className="inline-flex h-12 items-center gap-3 rounded-lg border border-[#C5A67C]/45 bg-black/20 px-7 text-[13px] font-semibold text-[#F0B84A] transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/10"
-            >
-              <Bot className="h-4 w-4" />
-              Set up MCP Session
-            </Link>
+            {isConnected && address ? (
+              <McpSigningSessionCard address={address} />
+            ) : (
+              <div className="rounded-md border border-white/10 bg-black/20 px-5 py-4 text-[13px] text-[#EAE4D8]/55">
+                Connect your wallet to start an MCP signing session.
+              </div>
+            )}
           </div>
 
           {/* Divider */}
