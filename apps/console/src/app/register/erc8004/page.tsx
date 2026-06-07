@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { waitForTransactionReceipt } from '@wagmi/core';
-import { type Address, encodeFunctionData } from 'viem';
+import { type Address, encodeFunctionData, parseGwei } from 'viem';
 import { useSignMessage } from 'wagmi';
 import {
   ArrowLeft,
@@ -625,26 +625,58 @@ export default function ERC8183EscrowRegisterPage() {
   const { authenticated: circleAuthenticated, login: circleLogin, address: circleAddress, bundlerClient } = useCircleWallet();
   const { signMessageAsync } = useSignMessage();
 
-  // Fetch Agent Account on mount
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+  // Fetch Agent Account — re-fetches when wallet connects (needs session cookie)
+  const fetchAgentAccount = useMemo(() => {
+    return async function loadAgentAccount(addr?: string) {
       try {
         const res = await fetch('/api/profile/agent-account', { cache: 'no-store' });
-        if (res.ok && !cancelled) {
+        if (res.ok) {
           const json = await res.json();
           if (json.agentAccountAddress && json.status === 'active') {
             setAgentAccount({ agentAccountAddress: json.agentAccountAddress, status: json.status });
+          } else {
+            setAgentAccount(null);
+          }
+        } else if (res.status === 401 && addr) {
+          // 401 = no session cookie. Ensure wallet session then retry.
+          const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
+          const sessionOk = await ensureWalletSession(addr, signMessageAsync);
+          if (sessionOk.ok) {
+            const retry = await fetch('/api/profile/agent-account', { cache: 'no-store' });
+            if (retry.ok) {
+              const json = await retry.json();
+              if (json.agentAccountAddress && json.status === 'active') {
+                setAgentAccount({ agentAccountAddress: json.agentAccountAddress, status: json.status });
+              }
+            }
           }
         }
       } catch {
         // silent
       } finally {
-        if (!cancelled) setAgentAccountLoading(false);
+        setAgentAccountLoading(false);
       }
+    };
+  }, [signMessageAsync]);
+
+  // Fetch on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      await fetchAgentAccount();
+      if (cancelled) return;
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [fetchAgentAccount]);
+
+  // Re-fetch when wallet connects (session cookie becomes available)
+  useEffect(() => {
+    if (!address || !isConnected) return;
+    // Only re-fetch if we haven't found an agent account yet
+    if (agentAccount) return;
+    setAgentAccountLoading(true);
+    fetchAgentAccount(address);
+  }, [address, isConnected, agentAccount, fetchAgentAccount]);
 
   // Read ?role= from URL on mount (supports deep-link from onboarding page)
   useEffect(() => {
@@ -881,6 +913,11 @@ export default function ERC8183EscrowRegisterPage() {
       try {
         setNotice('Login with passkey to use Agent Wallet...');
         await circleLogin();
+        // After login, React state (bundlerClient/circleAddress) is stale in this render.
+        // Stop and ask user to click Mint again — by then state will be updated.
+        setRegisterStatus('idle');
+        setNotice('Passkey login successful. Click Mint Identity again to continue.');
+        return;
       } catch (e) {
         const msg = e instanceof Error ? e.message.toLowerCase() : '';
         const cancelled = msg.includes('cancel') || msg.includes('abort') || msg.includes('notallowed');
@@ -933,7 +970,7 @@ export default function ERC8183EscrowRegisterPage() {
         }
 
         // Verify Circle address matches expected Agent Account
-        if (circleAddress.toLowerCase() !== agentAccountAddress.toLowerCase()) {
+        if (!circleAddress || circleAddress.toLowerCase() !== agentAccountAddress.toLowerCase()) {
           setRegisterStatus('error');
           setNotice('Agent Account mismatch. Re-login with passkey.');
           return;
@@ -947,6 +984,8 @@ export default function ERC8183EscrowRegisterPage() {
           args: [effectiveMetadataURI],
         });
 
+        // Circle bundler requires maxPriorityFeePerGas >= 1 gwei.
+        // Arc testnet fee estimation returns ~0.005 gwei which is too low.
         const userOpHash = await bundlerClient.sendUserOperation({
           calls: [
             {
@@ -955,6 +994,8 @@ export default function ERC8183EscrowRegisterPage() {
               value: BigInt(0),
             },
           ],
+          maxPriorityFeePerGas: parseGwei('1'),
+          maxFeePerGas: parseGwei('50'),
         });
 
         setNotice('Waiting for User Operation confirmation...');
