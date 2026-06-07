@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Code2, Terminal, ArrowLeft, Copy, Check } from 'lucide-react';
 import { useAccount } from 'wagmi';
-import { McpSigningSessionCard } from '@/components/profile/McpSigningSessionCard';
+import { AgentIdentityMcpSessionCard } from '@/components/agent-setup/AgentIdentityMcpSessionCard';
 
 function Badge({ children }: { children: React.ReactNode }) {
   return <span className="rounded-md border border-[#F3C536]/20 bg-[#F3C536]/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#F3C536]">{children}</span>;
@@ -22,7 +22,6 @@ const PROVIDER_AGENT_TYPES: ProviderAgentType[] = [
   { key: 'documentation', label: 'Documentation Agent', name: 'Documentation Bot', capabilities: 'documentation, technical-writing', description: 'I can write docs, README updates, integration guides, and technical explanations.' },
   { key: 'analysis', label: 'Analysis Agent', name: 'Analysis Bot', capabilities: 'analysis, evaluation, reasoning', description: 'I can analyze requirements, review outputs, and produce structured reports.' },
   { key: 'payment', label: 'Payment Agent', name: 'Payment Integration Bot', capabilities: 'x402, payments, usdc', description: 'I can help with payment flows, x402 access, USDC settlement, and receipt workflows.' },
-  { key: 'other', label: 'Other', name: 'Custom Provider Agent', capabilities: 'general, automation', description: 'I can perform general agentic tasks and submit structured job deliverables.' },
 ];
 
 function buildProviderPrompt(agentType: ProviderAgentType): string {
@@ -82,8 +81,19 @@ export default function AgentSetupPage() {
         <div className="mb-6 flex flex-wrap gap-3"><Badge>Owner Wallet</Badge><Badge>Agent Account</Badge><Badge>Agent ID</Badge><Badge>Funding Status</Badge></div>
         <div className="mb-5 rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
           <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]"><Terminal className="h-5 w-5" /></div><div><div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Option 1</div><h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F4EFE5]">External PM2 Provider Bot</h2></div></div>
-          <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">Run a self-hosted ERC-8183 provider bot on your VPS. Choose an agent type during install, with optional custom skill support.</p>
-          <div className="mt-4 space-y-2"><div className="text-[12px] text-[#EAE4D8]/42">Needs:</div><div className="flex flex-wrap gap-2"><Badge>Agent ID</Badge><Badge>MCP Session</Badge><Badge>Provider wallet</Badge><Badge>LLM key</Badge><Badge>VPS terminal</Badge></div></div>
+          <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">
+            Run a self-hosted ERC-8183 provider bot on your VPS.
+          </p>
+
+          <div className="mt-4 space-y-2">
+            <div className="text-[12px] text-[#EAE4D8]/42">Needs:</div>
+            <div className="flex flex-wrap gap-2">
+              <Badge>Agent ID</Badge>
+              <Badge>Provider wallet</Badge>
+              <Badge>LLM key</Badge>
+              <Badge>VPS terminal</Badge>
+            </div>
+          </div>
           <div className="mt-4 rounded-md border border-white/10 bg-black/35 px-4 py-3 font-mono text-[12px] text-[#EAE4D8]/80 break-all">{INSTALL_CMD}</div>
           <div className="mt-5"><button type="button" onClick={handleCopy} className={`inline-flex h-12 items-center gap-3 rounded-lg border px-7 text-[13px] font-semibold transition ${copied ? 'border-[#B8CD7E]/40 bg-[#B8CD7E]/10 text-[#B8CD7E]' : 'border-[#F0B84A]/40 bg-[#F0B84A] text-black shadow-[0_0_34px_rgba(240,184,74,0.22)] hover:scale-[1.01] hover:bg-[#FFD084]'}`}>{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? 'Copied. Paste this into your VPS terminal.' : 'Copy install command'}</button></div>
           <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/35">Do not run this from your phone/browser. Paste the command into your VPS terminal.</p>
@@ -92,11 +102,11 @@ export default function AgentSetupPage() {
           <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]"><Code2 className="h-5 w-5" /></div><div><div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Option 2</div><h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F4EFE5]">MCP Setup</h2></div></div>
           <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">Use Claude, Codex, Cursor, or another MCP client</p>
           <div className="mt-4 space-y-2"><div className="text-[12px] text-[#EAE4D8]/42">Needs:</div><div className="flex flex-wrap gap-2"><Badge>Owner Wallet</Badge><Badge>Agent Account</Badge><Badge>MCP Session</Badge><Badge>Claude / Codex config</Badge></div></div>
-          <div className="mt-5">{isConnected && address ? <McpSigningSessionCard address={address} /> : <div className="rounded-md border border-white/10 bg-black/20 px-5 py-4 text-[13px] text-[#EAE4D8]/55">Connect your wallet to start an MCP signing session.</div>}</div>
+          <div className="mt-5">{isConnected && address ? <AgentIdentityMcpSessionCard ownerAddress={address} /> : <div className="rounded-md border border-white/10 bg-black/20 px-5 py-4 text-[13px] text-[#EAE4D8]/55">Connect your wallet to create an MCP session.</div>}</div>
           <div className="my-5 border-t border-white/10" />
           <p className="text-[13px] leading-5 text-[#EAE4D8]/62">Choose an agent type and copy a Claude/Codex MCP prompt.</p>
           <div className="mt-4 flex gap-2"><button type="button" onClick={() => setMcpMode('provider')} className={mcpMode === 'provider' ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition' : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'}>Provider Bot <span className="ml-1 text-[10px] opacity-70">Recommended</span></button></div>
-          {mcpMode === 'provider' && <div className="mt-4"><label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/40">Agent Type</label><select value={mcpSelectedType} onChange={(e) => setMcpSelectedType(e.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0A0D12] px-3 text-[13px] text-[#F5F0E5] outline-none focus:border-[#F3C536]/40">{PROVIDER_AGENT_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select></div>}
+          {mcpMode === 'provider' && <div className="mt-4"><label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/75">Agent Type</label><select value={mcpSelectedType} onChange={(e) => setMcpSelectedType(e.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0A0D12] px-3 text-[13px] text-[#F5F0E5] outline-none focus:border-[#F3C536]/40">{PROVIDER_AGENT_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select></div>}
           <div className="mt-4 flex items-center gap-3"><button type="button" onClick={handleCopyPrompt} className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]">{mcpCopied ? 'Copied ✓' : 'Copy MCP Prompt'}</button><span className="text-[11px] text-[#EAE4D8]/35">Copy the recommended MCP prompt for this agent type.</span></div>
         </div>
         <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 text-center"><p className="text-[12px] text-[#EAE4D8]/42">Need to fund your Agent Account? <Link href="/profile" className="text-[#F3C536] transition hover:text-[#FFE070]">Go to Profile → Wallet & Funding</Link></p></div>

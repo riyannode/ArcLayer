@@ -104,15 +104,6 @@ export default function PredictionMarketBotsPage() {
         {/* Classification Lanes (all agents) */}
         <ClassificationLanes agents={agents} />
 
-        {/* Register CTA */}
-        <div className="flex justify-end">
-          <Link
-            href="/register/external-bot?category=prediction-market-bots"
-            className="inline-flex items-center gap-2 rounded border border-white/[0.035] bg-[#050505] px-4 py-2 font-mono text-[10px] uppercase tracking-[1.5px] text-[#C5A67C]/70 transition-[border-color,color,background-color] hover:border-white/[0.08] hover:bg-[#060606] hover:text-[#C5A67C]"
-          >
-            Register Bot →
-          </Link>
-        </div>
 
         {/* Bottom spacer — preserves page height after footer removal */}
         <div className="h-[480px]" />

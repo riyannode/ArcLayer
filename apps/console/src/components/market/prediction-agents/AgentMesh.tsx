@@ -512,12 +512,6 @@ export default function AgentMesh({ agents, reasoning }: AgentMeshProps) {
             <span className="font-mono text-[11px] tracking-[1.5px] text-[#C5A67C]/60">
               NO ONLINE AGENTS
             </span>
-            <a
-              href="/register/external-bot?category=prediction-market-bots"
-              className="font-mono text-[10px] tracking-[1.5px] text-[#C5A67C]/70 underline-offset-2 hover:underline"
-            >
-              Register a bot →
-            </a>
           </div>
         )}
       </div>
