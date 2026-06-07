@@ -31,6 +31,15 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
+/** Format atomic USDC units (6 decimals) to human-readable string. */
+function formatAmount(atomic: string): string {
+  const n = BigInt(atomic);
+  const intPart = n / 1_000_000n;
+  const fracPart = n % 1_000_000n;
+  if (fracPart === 0n) return intPart.toString();
+  return `${intPart}.${fracPart.toString().padStart(6, '0').replace(/0+$/, '')}`;
+}
+
 function requireSigningSession(): string {
   if (!SIGNING_SESSION_ID) {
     throw new McpError(
@@ -159,15 +168,8 @@ export async function handleRequestFundJobWebSign(
   const amountBigInt = BigInt(amount);
   const commerceAddr = CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address;
 
-  // Fund bundle: setBudget + USDC approve + fund(jobId)
-  // setBudget must be called before approve+fund (provider-only on current deployment,
-  // but included here for completeness — web-session signing is client-side)
-  const setBudgetData = encodeFunctionData({
-    abi: ERC8183_AGENTIC_COMMERCE_ABI,
-    functionName: 'setBudget',
-    args: [BigInt(jobId), amountBigInt, '0x' as Hex],
-  });
-
+  // Fund bundle: USDC approve + fund(jobId)
+  // setBudget is provider-side only — client must not include it.
   const approveData = encodeFunctionData({
     abi: USDC_ABI,
     functionName: 'approve',
@@ -182,18 +184,11 @@ export async function handleRequestFundJobWebSign(
 
   const transactions: SigningTransaction[] = [
     {
-      kind: 'erc8183_set_budget',
-      to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
-      data: setBudgetData,
-      value: '0',
-      summary: `Set budget ${amount} USDC for job #${jobId}`,
-    },
-    {
       kind: 'usdc_approve',
       to: ARC_TOKENS.USDC,
       data: approveData,
       value: '0',
-      summary: `Approve ${amount} USDC for job #${jobId}`,
+      summary: `Approve ${formatAmount(amount)} USDC for job #${jobId}`,
     },
     {
       kind: 'erc8183_fund',
@@ -207,7 +202,7 @@ export async function handleRequestFundJobWebSign(
   const result = await createSigningRequest(
     'fund_job',
     transactions,
-    { actionType: 'fund_job', jobId, amountUsdc: amount },
+    { actionType: 'fund_job', jobId, amountAtomic: amount },
   );
 
   return {
