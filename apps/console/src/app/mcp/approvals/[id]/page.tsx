@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { type Address } from 'viem';
+import { type Address, parseGwei } from 'viem';
 import { useSignMessage } from 'wagmi';
 import {
   ArrowLeft,
@@ -336,9 +336,9 @@ export default function McpApprovalPage() {
     }
 
     // Verify Circle address matches approval's agent account
-    if (circleAddress.toLowerCase() !== approval.agentAccountAddress.toLowerCase()) {
+    if (!circleAddress || circleAddress.toLowerCase() !== approval.agentAccountAddress.toLowerCase()) {
       setError(
-        `Circle Agent Account mismatch. Expected ${shortAddress(approval.agentAccountAddress)}, got ${shortAddress(circleAddress)}.`,
+        `Circle Agent Account mismatch. Expected ${shortAddress(approval.agentAccountAddress)}, got ${shortAddress(circleAddress || 'none')}.`,
       );
       return;
     }
@@ -348,6 +348,8 @@ export default function McpApprovalPage() {
 
     try {
       // Send user operation via Circle Smart Account bundler
+      // Circle bundler requires maxPriorityFeePerGas >= 1 gwei.
+      // Arc testnet fee estimation returns ~0.005 gwei which is too low.
       const userOpHash = await bundlerClient.sendUserOperation({
         calls: [
           {
@@ -356,6 +358,8 @@ export default function McpApprovalPage() {
             value: BigInt(approval.value || '0x0'),
           },
         ],
+        maxPriorityFeePerGas: parseGwei('1'),
+        maxFeePerGas: parseGwei('50'),
       });
 
       // Wait for the user operation to be included
