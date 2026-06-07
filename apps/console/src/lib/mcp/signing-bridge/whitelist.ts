@@ -43,6 +43,7 @@ const ALLOWED_CONTRACTS = new Set<string>([
 
 const ERC8183_SELECTORS = new Set<string>([
   '0x41528812', // createJob
+  '0xdd4ae9d4', // setBudget
   '0xe25ba707', // fund
   '0xd75bbdf3', // complete
   '0x41dd26f5', // reject
@@ -213,6 +214,7 @@ export function selectorLabel(to: string, selector: string): string {
   if (toLower === CONTRACTS.ERC8183_AGENTIC_COMMERCE.toLowerCase()) {
     const labels: Record<string, string> = {
       '0x41528812': 'Create Job',
+      '0xdd4ae9d4': 'Set Budget',
       '0xe25ba707': 'Fund Job',
       '0xd75bbdf3': 'Complete Job',
       '0x41dd26f5': 'Reject Job',
