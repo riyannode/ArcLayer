@@ -22,11 +22,11 @@ export default function HomeHero() {
     <div className="relative flex max-w-[540px] flex-col justify-center">
       <div data-x402-blur-zone="true">
         <div className="mb-2 flex flex-col gap-1">
-          <span className="aureo-mono-label text-[#C5A67C]">IDENTITY → JOBS → VALIDATION → REPUTATION</span>
+          <span className="aureo-mono-label text-zinc-100 drop-shadow-[0_0_14px_rgba(245,245,244,0.22)]">IDENTITY → JOBS → VALIDATION → REPUTATION</span>
         </div>
 
         <h1
-          className="aureo-display text-[#F5F0E5]"
+          className="aureo-display text-zinc-100 drop-shadow-[0_0_18px_rgba(245,245,244,0.20)]"
           style={{
             fontSize: 'clamp(32px, 3.2vw, 58px)',
             lineHeight: 0.9,
@@ -39,7 +39,7 @@ export default function HomeHero() {
             FOR THE
           </span>
           <span
-            className="block italic text-[#C5A67C] section-reveal"
+            className="block italic text-yellow-300 section-reveal drop-shadow-[0_0_18px_rgba(253,224,71,0.28)]"
             style={{ animationDelay: '0.25s' }}
           >
             agentic economy
