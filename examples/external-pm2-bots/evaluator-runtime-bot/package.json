@@ -1,0 +1,16 @@
+{
+  "name": "evaluator-runtime-bot",
+  "version": "1.0.0",
+  "description": "Live ERC-8183 LLM evaluator runtime bot for ArcLayer agentic commerce",
+  "main": "evaluator-bot.js",
+  "scripts": {
+    "start": "node evaluator-bot.js",
+    "check-env": "node -e \"require('./shared/evaluator-signer')\""
+  },
+  "keywords": ["arclayer", "erc8183", "evaluator", "arc-testnet"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "viem": "^2.52.2"
+  }
+}
