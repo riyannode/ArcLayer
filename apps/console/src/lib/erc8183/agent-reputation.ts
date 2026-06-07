@@ -49,6 +49,8 @@ function isCompleted(row: JobRow): boolean {
 
 function isSubmitted(row: JobRow): boolean {
   if (isCompleted(row)) return false;
+  // Exclude terminal states — a rejected job may still have submit_tx_hash set
+  if (isRejected(row) || isFailed(row) || isExpired(row)) return false;
   return (
     row.status === 'submitted' ||
     row.erc8183_status === 'Submitted' ||
@@ -58,6 +60,8 @@ function isSubmitted(row: JobRow): boolean {
 
 function isActive(row: JobRow): boolean {
   if (isCompleted(row) || isSubmitted(row)) return false;
+  // Exclude terminal states
+  if (isRejected(row) || isFailed(row) || isExpired(row)) return false;
   return (
     ['created', 'claimed', 'running', 'settlement_pending'].includes(row.status ?? '') ||
     ['Open', 'Funded'].includes(row.erc8183_status ?? '')
@@ -204,16 +208,16 @@ export async function getErc8183AgentReputationMap(
         // Recency: check settled_at or updated_at
         const ts = job.settled_at || job.updated_at || job.created_at;
         if (ts && new Date(ts).getTime() >= sevenDaysAgo) completedLast7d++;
-      } else if (isSubmitted(job)) {
-        submittedJobs++;
-      } else if (isActive(job)) {
-        activeJobs++;
       } else if (isRejected(job)) {
         rejectedJobs++;
       } else if (isFailed(job)) {
         failedJobs++;
       } else if (isExpired(job)) {
         expiredJobs++;
+      } else if (isSubmitted(job)) {
+        submittedJobs++;
+      } else if (isActive(job)) {
+        activeJobs++;
       }
 
       // Track latest update
@@ -267,27 +271,33 @@ export async function enrichAgentsWithReputation(
 ): Promise<Record<string, unknown>[]> {
   if (agents.length === 0) return agents;
 
-  // Collect all possible keys for matching
-  const allKeys: string[] = [];
-  for (const agent of agents) {
-    const agentId = agent.agentId ? String(agent.agentId) : '';
-    const tokenId = agent.tokenId ? String(agent.tokenId) : '';
-    if (agentId) allKeys.push(agentId);
-    if (tokenId && tokenId !== agentId) allKeys.push(tokenId);
-  }
-
-  const repMap = await getErc8183AgentReputationMap(allKeys);
-
-  for (const agent of agents) {
-    const agentId = agent.agentId ? String(agent.agentId).toLowerCase() : '';
-    const tokenId = agent.tokenId ? String(agent.tokenId).toLowerCase() : '';
-    const rep = repMap.get(agentId) || repMap.get(tokenId);
-
-    if (rep) {
-      agent.reputationScore = String(rep.score);
-      agent.score = String(rep.score);
-      agent.reputation = rep;
+  try {
+    // Collect all possible keys for matching
+    const allKeys: string[] = [];
+    for (const agent of agents) {
+      const agentId = agent.agentId ? String(agent.agentId) : '';
+      const tokenId = agent.tokenId ? String(agent.tokenId) : '';
+      if (agentId) allKeys.push(agentId);
+      if (tokenId && tokenId !== agentId) allKeys.push(tokenId);
     }
+
+    const repMap = await getErc8183AgentReputationMap(allKeys);
+
+    for (const agent of agents) {
+      const agentId = agent.agentId ? String(agent.agentId).toLowerCase() : '';
+      const tokenId = agent.tokenId ? String(agent.tokenId).toLowerCase() : '';
+      const rep = repMap.get(agentId) || repMap.get(tokenId);
+
+      if (rep) {
+        agent.reputationScore = String(rep.score);
+        agent.score = String(rep.score);
+        agent.reputation = rep;
+      }
+    }
+  } catch (err) {
+    // Best-effort: if Supabase is unavailable or query fails, skip enrichment.
+    // This keeps registered-only mode and other paths working without Supabase.
+    console.warn('[erc8183-reputation] enrichment skipped:', err instanceof Error ? err.message : 'unknown');
   }
 
   return agents;
