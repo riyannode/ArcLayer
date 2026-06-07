@@ -258,7 +258,16 @@ export function registerAllTools(): void {
     legacyAliases: ['list_jobs'],
     kind: 'read',
     handler: async (args) => {
+      const STATUS_MAP: Record<string, number> = {
+        created: 0, open: 0,
+        funded: 1,
+        submitted: 2,
+        completed: 3, complete: 3,
+        rejected: 4, reject: 4,
+        expired: 5, expire: 5,
+      };
       const status = typeof args.status === 'string' ? args.status.toLowerCase() : undefined;
+      const statusNum = status ? STATUS_MAP[status] : undefined;
       const evaluatorFilter = typeof args.evaluatorAddress === 'string' ? args.evaluatorAddress.toLowerCase() : undefined;
       const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(50, args.limit)) : undefined;
       const res = await fetch(indexerUrl('/jobs'), { cache: 'no-store' });
@@ -267,7 +276,8 @@ export function registerAllTools(): void {
       if (status) list = list.filter((j: any) => {
         const s = String(j.status || '').toLowerCase();
         const label = String(j.statusLabel || '').toLowerCase();
-        return s.includes(status) || label.includes(status);
+        const num = typeof j.status === 'number' ? j.status : Number(j.status);
+        return s.includes(status) || label.includes(status) || (statusNum !== undefined && num === statusNum);
       });
       if (evaluatorFilter) list = list.filter((j: any) => String(j.evaluator || j.evaluatorAddress || '').toLowerCase() === evaluatorFilter);
       return { jobs: limit ? list.slice(0, limit) : list, total: list.length };
