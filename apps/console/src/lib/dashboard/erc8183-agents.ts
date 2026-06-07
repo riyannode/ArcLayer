@@ -139,7 +139,8 @@ export function toDashboardAgentRow(agent: any): DashboardAgentRow {
   const name = metadata?.name || agent?.name || `Agent ${id.slice(0, 8) || 'Unknown'}`;
   const jobs = Array.isArray(agent?.jobs) ? agent.jobs : [];
   const linkedJobCount = jobs.length;
-  const reputation = String(agent?.reputationScore || agent?.score || '0');
+  const reputationDetail = agent?.reputation || {};
+  const reputation = String(agent?.reputationScore || agent?.score || reputationDetail?.score || '0');
 
   return {
     id,
@@ -156,9 +157,11 @@ export function toDashboardAgentRow(agent: any): DashboardAgentRow {
     budgetUsdc: parsePriceUsdc(metadata?.price),
     jobCount: linkedJobCount,
     statusMeta:
-      linkedJobCount > 0
-        ? `${linkedJobCount} linked job${linkedJobCount === 1 ? '' : 's'}`
-        : 'Available for escrow work',
+      reputationDetail.totalJobs && reputationDetail.totalJobs > 0
+        ? `${reputationDetail.completedJobs ?? 0}/${reputationDetail.totalJobs} completed · ${reputationDetail.tier ?? 'New'}`
+        : linkedJobCount > 0
+          ? `${linkedJobCount} linked job${linkedJobCount === 1 ? '' : 's'}`
+          : 'Available for escrow work',
     reputation,
     status: 'Open',
     profileHref: profileId ? `/agent/${encodeURIComponent(profileId)}` : '#',
