@@ -35,6 +35,11 @@ function wantsHtml(req: NextRequest): boolean {
   return accept.includes('text/html');
 }
 
+function wantsPrettyJson(req: NextRequest): boolean {
+  const { searchParams } = new URL(req.url);
+  return searchParams.get('format') === 'json' || searchParams.get('pretty') === '1';
+}
+
 function mcpLandingHtml(origin: string): string {
   const endpoint = `${origin}/api/mcp`;
 
@@ -58,6 +63,7 @@ function mcpLandingHtml(origin: string): string {
       --code: #0b1220;
     }
     * { box-sizing: border-box; }
+    html { overflow-x: hidden; }
     body {
       margin: 0;
       min-height: 100vh;
@@ -71,6 +77,7 @@ function mcpLandingHtml(origin: string): string {
       align-items: center;
       justify-content: center;
       padding: 32px;
+      overflow-x: hidden;
     }
     main {
       width: 100%;
@@ -80,6 +87,7 @@ function mcpLandingHtml(origin: string): string {
       border-radius: 24px;
       padding: 32px;
       box-shadow: 0 24px 80px rgba(0,0,0,0.38);
+      overflow: hidden;
     }
     .badge {
       display: inline-flex;
@@ -108,11 +116,12 @@ function mcpLandingHtml(origin: string): string {
     }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 14px;
       margin: 24px 0;
     }
     .card {
+      min-width: 0;
       border: 1px solid var(--border);
       background: var(--panel);
       border-radius: 16px;
@@ -124,10 +133,18 @@ function mcpLandingHtml(origin: string): string {
       color: var(--text);
     }
     .card span, .card code { color: var(--soft); }
+    .card code {
+      display: block;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+      white-space: normal;
+    }
     code, pre {
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     }
     pre {
+      max-width: 100%;
       background: var(--code);
       border: 1px solid var(--border);
       border-radius: 16px;
@@ -169,6 +186,36 @@ function mcpLandingHtml(origin: string): string {
       letter-spacing: .08em;
       text-transform: uppercase;
     }
+    @media (max-width: 640px) {
+      body {
+        align-items: flex-start;
+        padding: 18px;
+        padding-top: 40px;
+      }
+      main {
+        border-radius: 20px;
+        padding: 22px;
+      }
+      h1 {
+        font-size: clamp(38px, 11vw, 52px);
+        letter-spacing: -0.06em;
+      }
+      p {
+        font-size: 15px;
+      }
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      pre {
+        font-size: 13px;
+      }
+      .actions {
+        flex-direction: column;
+      }
+      .button {
+        width: 100%;
+      }
+    }
   </style>
 </head>
 <body>
@@ -202,8 +249,7 @@ function mcpLandingHtml(origin: string): string {
   -d '{"jsonrpc":"2.0","id":"1","method":"tools/list","params":{}}'</pre>
 
     <div class="actions">
-      <a class="button primary" href="${endpoint}?format=json">View JSON manifest</a>
-      <a class="button" href="/docs">Open docs</a>
+      <a class="button primary" href="${endpoint}?format=json">View pretty JSON manifest</a>
       <a class="button" href="/">Open console</a>
     </div>
   </main>
@@ -226,6 +272,17 @@ export async function GET(req: NextRequest) {
   }
 
   const result = await handleMcpGet(url.searchParams, ctx);
+
+  if (wantsPrettyJson(req)) {
+    return new NextResponse(JSON.stringify(result, null, 2), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'no-store',
+      },
+    });
+  }
+
   return NextResponse.json(result);
 }
 
