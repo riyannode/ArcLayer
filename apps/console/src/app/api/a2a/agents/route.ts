@@ -15,6 +15,7 @@ import { listStoredManifests } from '@/lib/a2a/roster';
 import { listRegisteredExternalAgents } from '@/lib/a2a/external-registry';
 import { CONTRACTS } from '@arclayer/sdk';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
+import { enrichAgentsWithReputation } from '@/lib/erc8183/agent-reputation';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -367,6 +368,8 @@ export async function GET(request: Request) {
       };
     });
 
+    await enrichAgentsWithReputation(allAgents);
+
     const { visibleAgents, mode } = applyCanonicalFilter(allAgents);
 
     return NextResponse.json({
@@ -421,6 +424,8 @@ export async function GET(request: Request) {
           };
         })
       ).filter((agent) => !isHiddenAgent(agent.agentId));
+
+      await enrichAgentsWithReputation(allAgents);
 
       const { visibleAgents, mode } = applyCanonicalFilter(allAgents);
 
@@ -581,6 +586,8 @@ export async function GET(request: Request) {
     const allAgents = Array.from(merged.values()).filter(
       (agent) => !isHiddenAgent(agent.agentId),
     );
+
+    await enrichAgentsWithReputation(allAgents);
 
     const { visibleAgents, mode } = applyCanonicalFilter(allAgents);
 
