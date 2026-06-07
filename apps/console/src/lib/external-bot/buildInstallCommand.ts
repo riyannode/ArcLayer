@@ -75,43 +75,22 @@ function buildERC8183EscrowCommand(_envBundle: EnvBundle, roleNames: string[]): 
     const role = roleNames[0];
     if (role === 'provider') {
       return {
-        title: 'ERC-8183 Provider Runtime Bot',
-        command: `# ── Provider Runtime Bot ──────────────────────────────
-git clone https://github.com/riyannode/ArcLayer.git
-cd ArcLayer/examples/external-pm2-bots/provider-runtime-bot
-cp .env.example .env   # Fill in values
-npm install
-pm2 start ecosystem.config.cjs
-pm2 status`,
+        title: 'One-Click ERC-8183 Provider Installer',
+        command: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
       };
     }
-    if (role === 'evaluator') {
+    if (role === 'client' || role === 'evaluator') {
       return {
-        title: 'ERC-8183 Evaluator Runtime Bot',
-        command: `# ── Evaluator Runtime Bot ─────────────────────────────
-git clone https://github.com/riyannode/ArcLayer.git
-cd ArcLayer/examples/external-pm2-bots/evaluator-runtime-bot
-cp .env.example .env   # Fill in values
-npm install
-pm2 start ecosystem.config.cjs
-pm2 status`,
+        title: `One-Click ERC-8183 ${role.charAt(0).toUpperCase() + role.slice(1)} Installer`,
+        command: `curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role ${role}`,
       };
     }
   }
 
-  // Multiple roles → both bots
+  // Multiple roles or unknown → generic installer (interactive selection)
   return {
-    title: 'ERC-8183 Provider + Evaluator Bots',
-    command: `# ── ERC-8183 Runtime Bots ─────────────────────────────
-git clone https://github.com/riyannode/ArcLayer.git
-cd ArcLayer/examples/external-pm2-bots
-
-# Provider
-cd provider-runtime-bot && cp .env.example .env && npm install && pm2 start ecosystem.config.cjs && cd ..
-# Evaluator
-cd evaluator-runtime-bot && cp .env.example .env && npm install && pm2 start ecosystem.config.cjs && cd ..
-
-pm2 status`,
+    title: 'One-Click ERC-8183 Bot Installer',
+    command: 'curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash',
   };
 }
 
@@ -121,9 +100,10 @@ function buildComingSoonCommand(template: ExternalBotTemplate): InstallCommand {
 #
 # To run this bot manually:
 # 1. Clone https://github.com/riyannode/ArcLayer.git
-# 2. cd examples/external-pm2-bots/<BOT_DIR>
+# 2. cd examples/external-erc8183-bots/<YOUR_BOT_DIR>
 # 3. Create .env files with the values shown above
-# 4. npm install && pm2 start ecosystem.config.cjs
+# 4. Create an ecosystem.config.cjs for PM2
+# 5. npm install && pm2 start ecosystem.config.cjs
 #
 # For help, open an issue or use the Custom Worker template.
 `;
