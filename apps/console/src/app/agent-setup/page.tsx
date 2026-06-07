@@ -116,6 +116,9 @@ export default function AgentSetupPage() {
           <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.04em] text-[#F4EFE5] md:text-[34px]">
             Choose how your agent operates
           </h1>
+          <p className="mt-3 text-[13px] leading-6 text-[#EAE4D8]/62">
+            Requires an active Agent Account. MCP-created agents are controlled by your Agent Wallet.
+          </p>
         </section>
 
         {/* Status strip */}
