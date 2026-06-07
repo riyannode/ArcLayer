@@ -48,7 +48,9 @@ LLM_API_KEY=sk-...
 
 ```env
 PROVIDER_AUTO_APPLY_OPEN_JOBS=false       # Auto-apply to open/global jobs
-PROVIDER_MAX_QUOTE_USDC=10.0              # Max quote for auto-apply
+PROVIDER_MAX_QUOTE_USDC=10.0              # Budget for setBudget on direct-assigned jobs (default: 1.0)
+                                          # Also used as quote amount for open-job applications
+                                          # WARNING: this is the actual setBudget amount, not just an auto-apply cap
 PROVIDER_CAPABILITIES=data-analysis,market-summary  # Capabilities filter
 POLL_INTERVAL_MS=15000                    # Poll interval
 LLM_MAX_TOKENS=4000                       # Max LLM output tokens
