@@ -61,6 +61,7 @@ export function McpSigningSessionCard({ address }: { address?: string }) {
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [activeRequest, setActiveRequest] = useState<PendingRequest | null>(null);
+  const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -212,8 +213,15 @@ export function McpSigningSessionCard({ address }: { address?: string }) {
 
   const handleRequestDone = useCallback(() => {
     setActiveRequest(null);
+    setDismissedIds(new Set());
     void pollPending();
   }, [pollPending]);
+
+  // Dismiss a request (user closed modal without approving)
+  const handleDismiss = useCallback((requestId: string) => {
+    setActiveRequest(null);
+    setDismissedIds((prev) => new Set(prev).add(requestId));
+  }, []);
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -399,18 +407,19 @@ export function McpSigningSessionCard({ address }: { address?: string }) {
         />
       )}
 
-      {/* Auto-open modal when pending request arrives */}
-      {pendingRequests.length > 0 && !activeRequest && (
-        <SigningRequestModal
-          request={pendingRequests[0]}
-          address={address}
-          onClose={() => {
-            // User dismissed — don't auto-open again for this request
-            setActiveRequest(null);
-          }}
-          onDone={handleRequestDone}
-        />
-      )}
+      {/* Auto-open modal when pending request arrives (not dismissed) */}
+      {(() => {
+        const undismissed = pendingRequests.find((r) => !dismissedIds.has(r.id));
+        if (!undismissed || activeRequest) return null;
+        return (
+          <SigningRequestModal
+            request={undismissed}
+            address={address}
+            onClose={() => handleDismiss(undismissed.id)}
+            onDone={handleRequestDone}
+          />
+        );
+      })()}
     </>
   );
 }

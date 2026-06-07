@@ -208,6 +208,18 @@ export async function createRequest(
     throw new Error('Session not found or not active');
   }
 
+  // Derive expectedClientWallet from session if not provided
+  const resolvedWallet = expectedClientWallet?.trim()
+    ? expectedClientWallet.trim()
+    : session.owner_wallet;
+
+  // If wallet was explicitly provided, verify it matches session owner
+  if (expectedClientWallet?.trim()) {
+    if (expectedClientWallet.toLowerCase() !== session.owner_wallet.toLowerCase()) {
+      throw new Error('expectedClientWallet does not match session owner_wallet');
+    }
+  }
+
   // Validate chain
   validateChainId(chainId);
 
@@ -222,7 +234,7 @@ export async function createRequest(
       session_id: sessionId,
       action_type: actionType,
       chain_id: chainId,
-      expected_client_wallet: expectedClientWallet.toLowerCase(),
+      expected_client_wallet: resolvedWallet.toLowerCase(),
       transactions,
       summary: summary ?? null,
       status: 'pending',
@@ -274,21 +286,33 @@ export async function getRequest(requestId: string): Promise<McpSigningRequest |
 /**
  * Atomic claim: move pending → signing.
  * Only one caller can win. Returns the claimed request or null if already claimed.
+ *
+ * Hardened conditions:
+ * - status must be 'pending'
+ * - expires_at must be > now (not expired)
+ * - parent session must be active and not expired
  */
 export async function claimRequest(
   requestId: string,
   sessionId: string,
 ): Promise<McpSigningRequest | null> {
+  const now = new Date().toISOString();
+
+  // Verify parent session is active and not expired
+  const session = await getActiveSession(sessionId);
+  if (!session) return null;
+
   const { data, error } = await supabase()
     .from('mcp_signing_requests')
     .update({
       status: 'signing',
       claimed_by_session: sessionId,
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     })
     .eq('id', requestId)
     .eq('session_id', sessionId)
     .eq('status', 'pending')
+    .gt('expires_at', now)
     .select('*')
     .maybeSingle();
 
@@ -304,7 +328,7 @@ export async function markSubmitted(
   requestId: string,
   txHash: string,
 ): Promise<boolean> {
-  const { error } = await supabase()
+  const { data, error } = await supabase()
     .from('mcp_signing_requests')
     .update({
       status: 'submitted',
@@ -316,7 +340,7 @@ export async function markSubmitted(
     .select('id')
     .maybeSingle();
 
-  return !error;
+  return !!data && !error;
 }
 
 /**
@@ -330,7 +354,7 @@ export async function markConfirmed(
   // Use first txHash as primary if not already set
   const primaryHash = result.txHashes[0] ?? null;
 
-  const { error } = await supabase()
+  const { data, error } = await supabase()
     .from('mcp_signing_requests')
     .update({
       status: 'confirmed',
@@ -343,14 +367,14 @@ export async function markConfirmed(
     .select('id')
     .maybeSingle();
 
-  return !error;
+  return !!data && !error;
 }
 
 /**
  * Cancel a request (pending → cancelled, or signing → cancelled).
  */
 export async function cancelRequest(requestId: string): Promise<boolean> {
-  const { error } = await supabase()
+  const { data, error } = await supabase()
     .from('mcp_signing_requests')
     .update({
       status: 'cancelled',
@@ -361,7 +385,7 @@ export async function cancelRequest(requestId: string): Promise<boolean> {
     .select('id')
     .maybeSingle();
 
-  return !error;
+  return !!data && !error;
 }
 
 /**
