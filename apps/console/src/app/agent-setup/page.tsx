@@ -30,7 +30,6 @@ export default function AgentSetupPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 4000);
     } catch {
-      // fallback
       const ta = document.createElement('textarea');
       ta.value = INSTALL_CMD;
       document.body.appendChild(ta);
@@ -44,7 +43,6 @@ export default function AgentSetupPage() {
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#050607] text-[#EAE4D8]">
-      {/* background — matches dashboard */}
       <div className="pointer-events-none fixed inset-0 opacity-80">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_0%,rgba(197,166,124,0.20),transparent_36%),radial-gradient(circle_at_20%_18%,rgba(255,255,255,0.045),transparent_24%),linear-gradient(180deg,#07090C_0%,#050607_55%,#020203_100%)]" />
         <div className="absolute left-[-10%] top-[118px] h-[420px] w-[120%] rounded-[100%] border-t border-[#C5A67C]/20 bg-[radial-gradient(ellipse_at_center,rgba(197,166,124,0.10),transparent_65%)]" />
@@ -52,12 +50,10 @@ export default function AgentSetupPage() {
       </div>
 
       <main className="relative mx-auto max-w-2xl px-4 py-10">
-        {/* Back link */}
         <Link href="/profile" className="mb-6 inline-flex items-center gap-2 text-[13px] text-[#EAE4D8]/55 transition hover:text-[#F3C536]">
           <ArrowLeft className="h-4 w-4" /> Back to Profile
         </Link>
 
-        {/* Header */}
         <section className="mb-6">
           <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Agent Setup</div>
           <h1 className="mt-3 text-[28px] font-semibold tracking-[-0.04em] text-[#F4EFE5] md:text-[34px]">
@@ -68,7 +64,6 @@ export default function AgentSetupPage() {
           </p>
         </section>
 
-        {/* Status strip */}
         <div className="mb-6 flex flex-wrap gap-3">
           <Badge>Owner Wallet</Badge>
           <Badge>Agent Account</Badge>
@@ -76,7 +71,6 @@ export default function AgentSetupPage() {
           <Badge>Funding Status</Badge>
         </div>
 
-        {/* Option 1: External PM2 Provider Bot */}
         <div className="mb-5 rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]">
@@ -109,7 +103,6 @@ export default function AgentSetupPage() {
             {INSTALL_CMD}
           </div>
 
-
           <div className="mt-5">
             <button
               type="button"
@@ -130,7 +123,6 @@ export default function AgentSetupPage() {
           </p>
         </div>
 
-        {/* Option 2: MCP Setup */}
         <div className="mb-5 rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]">
@@ -145,14 +137,16 @@ export default function AgentSetupPage() {
           </div>
 
           <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">
-            Use Claude, Codex, Cursor, or another MCP client to request ERC-8004 identity registration. The identity is registered to your Agent Account and approved through the browser signing bridge.
+            Use Claude, Codex, Cursor, or another MCP client
           </p>
 
           <div className="mt-4 space-y-2">
             <div className="text-[12px] text-[#EAE4D8]/42">Needs:</div>
             <div className="flex flex-wrap gap-2">
-              <Badge>MCP Identity Session</Badge>
-              <Badge>Browser Signing Bridge</Badge>
+              <Badge>Owner Wallet</Badge>
+              <Badge>Agent Account</Badge>
+              <Badge>MCP Session</Badge>
+              <Badge>Claude / Codex config</Badge>
             </div>
           </div>
 
@@ -161,13 +155,12 @@ export default function AgentSetupPage() {
               <McpSigningSessionCard address={address} />
             ) : (
               <div className="rounded-md border border-white/10 bg-black/20 px-5 py-4 text-[13px] text-[#EAE4D8]/55">
-                Connect your wallet to start the browser signing bridge.
+                Connect your wallet to start an MCP signing session.
               </div>
             )}
           </div>
         </div>
 
-        {/* Deposit note */}
         <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 text-center shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
           <p className="break-words text-[12px] leading-5 text-[#EAE4D8]/42">
             Need to fund your Agent Account?{' '}
