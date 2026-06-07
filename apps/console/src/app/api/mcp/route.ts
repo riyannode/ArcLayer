@@ -249,7 +249,7 @@ function mcpLandingHtml(origin: string): string {
   -d '{"jsonrpc":"2.0","id":"1","method":"tools/list","params":{}}'</pre>
 
     <div class="actions">
-      <a class="button primary" href="${endpoint}?format=json">View pretty JSON manifest</a>
+      <a class="button primary" href="${endpoint}?format=json">View JSON manifest</a>
       <a class="button" href="/">Open console</a>
     </div>
   </main>
