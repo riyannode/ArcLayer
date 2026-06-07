@@ -414,11 +414,6 @@ Current working surfaces:
 Use only on Arc Testnet.
 
 ---
-
-## Roadmap
-
-See [docs/roadmap.md](docs/roadmap.md).
-
 ---
 
 ## License
