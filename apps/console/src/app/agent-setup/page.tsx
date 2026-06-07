@@ -16,51 +16,6 @@ function Badge({ children }: { children: React.ReactNode }) {
   );
 }
 
-/* ── MCP Prompt Template data ──────────────────────────────────────────── */
-
-type ProviderAgentType = {
-  key: string;
-  label: string;
-  name: string;
-  capabilities: string;
-  description: string;
-};
-
-const PROVIDER_AGENT_TYPES: ProviderAgentType[] = [
-  { key: 'smart-contract', label: 'Smart Contract Agent', name: 'Solidity Audit Bot', capabilities: 'smart-contract, solidity-audit', description: 'I can review Solidity contracts and submit ERC-8183 job deliverables.' },
-  { key: 'frontend', label: 'Frontend Agent', name: 'Frontend Implementation Bot', capabilities: 'frontend, react, ui-implementation', description: 'I can implement frontend tasks, build UI components, and submit ERC-8183 job deliverables.' },
-  { key: 'backend', label: 'Backend Agent', name: 'Backend API Bot', capabilities: 'backend, api, database', description: 'I can build backend services, API routes, and database integrations for ERC-8183 job deliverables.' },
-  { key: 'devops', label: 'DevOps Agent', name: 'DevOps Automation Bot', capabilities: 'devops, deployment, monitoring', description: 'I can handle deployment, monitoring, environment setup, and infrastructure tasks.' },
-  { key: 'design', label: 'Design Agent', name: 'Product Design Bot', capabilities: 'design, ui-ux, product-design', description: 'I can create design reviews, UI structure, and product experience recommendations.' },
-  { key: 'data-research', label: 'Data Research Agent', name: 'Data Research Bot', capabilities: 'research, data-analysis, market-data', description: 'I can research data, summarize findings, and submit structured deliverables.' },
-  { key: 'documentation', label: 'Documentation Agent', name: 'Documentation Bot', capabilities: 'documentation, technical-writing', description: 'I can write docs, README updates, integration guides, and technical explanations.' },
-  { key: 'analysis', label: 'Analysis Agent', name: 'Analysis Bot', capabilities: 'analysis, evaluation, reasoning', description: 'I can analyze requirements, review outputs, and produce structured reports.' },
-  { key: 'payment', label: 'Payment Agent', name: 'Payment Integration Bot', capabilities: 'x402, payments, usdc', description: 'I can help with payment flows, x402 access, USDC settlement, and receipt workflows.' },
-  { key: 'other', label: 'Other', name: 'Custom Provider Agent', capabilities: 'general, automation', description: 'I can perform general agentic tasks and submit structured job deliverables.' },
-];
-
-function buildProviderPrompt(agentType: ProviderAgentType): string {
-  return [
-    `Register me on ArcLayer as a provider.`,
-    `Name: ${agentType.name}`,
-    `Role: provider`,
-    `Capabilities: ${agentType.capabilities}`,
-    `Description: ${agentType.description}`,
-    ``,
-    `After the agent identity is minted, create a provider API key for this agent and return the .env snippet for my PM2 bot.`,
-  ].join('\n');
-}
-
-const CLIENT_PROMPT = [
-  `Register me on ArcLayer as a client.`,
-  `Name: Job Creator Agent`,
-  `Role: client`,
-  `Capabilities: job-creation, escrow-funding`,
-  `Description: I can create ERC-8183 jobs, fund work, and coordinate providers.`,
-  ``,
-  `After the agent identity is minted, prepare this agent for client-side job creation flows.`,
-].join('\n');
-
 /* ── page ─────────────────────────────────────────────────────────── */
 
 const INSTALL_CMD = 'curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role provider';
@@ -68,9 +23,6 @@ const INSTALL_CMD = 'curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | b
 export default function AgentSetupPage() {
   const { address, isConnected } = useAccount();
   const [copied, setCopied] = useState(false);
-  const [mcpMode, setMcpMode] = useState<'provider' | 'client'>('provider');
-  const [mcpSelectedType, setMcpSelectedType] = useState<string>('smart-contract');
-  const [mcpCopied, setMcpCopied] = useState(false);
 
   const handleCopy = async () => {
     try {
@@ -88,14 +40,6 @@ export default function AgentSetupPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 4000);
     }
-  };
-
-  const handleCopyPrompt = async () => {
-    const agentType = PROVIDER_AGENT_TYPES.find((t) => t.key === mcpSelectedType) || PROVIDER_AGENT_TYPES[0];
-    const prompt = mcpMode === 'provider' ? buildProviderPrompt(agentType) : CLIENT_PROMPT;
-    await navigator.clipboard.writeText(prompt);
-    setMcpCopied(true);
-    setTimeout(() => setMcpCopied(false), 2000);
   };
 
   return (
@@ -207,11 +151,8 @@ export default function AgentSetupPage() {
           <div className="mt-4 space-y-2">
             <div className="text-[12px] text-[#EAE4D8]/42">Needs:</div>
             <div className="flex flex-wrap gap-2">
-              <Badge>Owner Wallet</Badge>
-              <Badge>Agent Account</Badge>
               <Badge>MCP Identity Session</Badge>
               <Badge>Browser Signing Bridge</Badge>
-              <Badge>Claude / Codex config</Badge>
             </div>
           </div>
 
@@ -224,66 +165,11 @@ export default function AgentSetupPage() {
               </div>
             )}
           </div>
-
-          {/* Divider */}
-          <div className="my-5 border-t border-white/10" />
-
-          {/* MCP Prompt copy */}
-          <p className="text-[13px] leading-5 text-[#EAE4D8]/62">
-            Choose an agent type and copy a Claude/Codex MCP identity-registration prompt.
-          </p>
-
-          {/* Mode toggle */}
-          <div className="mt-4 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setMcpMode('provider')}
-              className={
-                mcpMode === 'provider'
-                  ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
-                  : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
-              }
-            >
-              Provider Bot <span className="ml-1 text-[10px] opacity-70">Recommended</span>
-            </button>
-          </div>
-
-          {/* Provider: Agent Type selector */}
-          {mcpMode === 'provider' && (
-            <div className="mt-4">
-              <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/40">
-                Agent Type
-              </label>
-              <select
-                value={mcpSelectedType}
-                onChange={(e) => setMcpSelectedType(e.target.value)}
-                className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0A0D12] px-3 text-[13px] text-[#F5F0E5] outline-none focus:border-[#F3C536]/40"
-              >
-                {PROVIDER_AGENT_TYPES.map((t) => (
-                  <option key={t.key} value={t.key}>{t.label}</option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Copy button */}
-          <div className="mt-4 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={handleCopyPrompt}
-              className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]"
-            >
-              {mcpCopied ? 'Copied ✓' : 'Copy MCP Prompt'}
-            </button>
-            <span className="text-[11px] text-[#EAE4D8]/35">
-              Copy the recommended MCP prompt for this agent type.
-            </span>
-          </div>
         </div>
 
         {/* Deposit note */}
-        <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 text-center">
-          <p className="text-[12px] text-[#EAE4D8]/42">
+        <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 text-center shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
+          <p className="break-words text-[12px] leading-5 text-[#EAE4D8]/42">
             Need to fund your Agent Account?{' '}
             <Link href="/profile" className="text-[#F3C536] transition hover:text-[#FFE070]">
               Go to Profile → Wallet & Funding
