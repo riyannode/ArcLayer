@@ -350,6 +350,7 @@ export default function AgentProfilePage() {
   const [notice, setNotice] = useState('');
   const [reputation, setReputation] = useState<ReputationResponse | null>(null);
   const [reputationLoading, setReputationLoading] = useState(false);
+  const [profileView, setProfileView] = useState<'agent' | 'client'>('agent');
 
   // Preview domain guard — passkey creation only works on production origin
   const isPreviewDomain = useMemo(() => {
@@ -1175,8 +1176,36 @@ export default function AgentProfilePage() {
         )}
 
 
-        {/* ── MCP Signing Session ──────────────────────────────────────── */}
-        {isConnected && address && (
+        {/* ── Profile View Toggle ───────────────────────────────────────── */}
+        {isConnected && address && agents.length > 0 && (
+          <div className="mt-10 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setProfileView('agent')}
+              className={
+                profileView === 'agent'
+                  ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
+                  : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
+              }
+            >
+              Agent Profile
+            </button>
+            <button
+              type="button"
+              onClick={() => setProfileView('client')}
+              className={
+                profileView === 'client'
+                  ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
+                  : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
+              }
+            >
+              Client Mode
+            </button>
+          </div>
+        )}
+
+        {/* ── MCP Signing Session (Client Mode only, or no agents) ─────── */}
+        {isConnected && address && (agents.length === 0 || profileView === 'client') && (
           <div className="mt-10">
             <McpSigningSessionCard address={address} />
           </div>
@@ -1220,7 +1249,7 @@ export default function AgentProfilePage() {
               </Link>
             </div>
           </div>
-        ) : (
+        ) : profileView === 'client' ? null : (
           <>
             <div className="mt-10 overflow-hidden rounded-xl border border-[#1A2228] bg-[#080D13]/78 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]">
               <div className="relative grid min-h-[300px] gap-8 p-8 md:grid-cols-[230px_1fr]">
