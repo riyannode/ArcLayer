@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { indexerUrl } from '@/lib/indexer';
+import { getErc8183AgentReputationMap, type Erc8183AgentReputation } from '@/lib/erc8183/agent-reputation';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -32,12 +33,43 @@ export async function GET(
     );
   }
 
+  // Check computed ERC-8183 reputation first
+  let erc8183Rep: Erc8183AgentReputation | null = null;
+  try {
+    const repMap = await getErc8183AgentReputationMap([tokenId]);
+    erc8183Rep = repMap.get(tokenId) ?? null;
+  } catch {
+    // Non-blocking
+  }
+
   try {
     const res = await fetch(indexerUrl(`/reputation/${tokenId}`), {
       cache: 'no-store',
     });
 
     if (!res.ok) {
+      // If indexer has no data but we have ERC-8183 reputation, return that
+      if (erc8183Rep && erc8183Rep.totalJobs > 0) {
+        return NextResponse.json({
+          ok: true,
+          agentId: tokenId,
+          tokenId,
+          score: String(erc8183Rep.score),
+          stats: { callsServed: erc8183Rep.completedJobs, reputationScore: String(erc8183Rep.score) },
+          feedback: [],
+          source: 'erc8183_agent_jobs',
+          updatedAt: erc8183Rep.updatedAt,
+          reputation: {
+            score: String(erc8183Rep.score),
+            tier: erc8183Rep.tier,
+            stats: { callsServed: erc8183Rep.completedJobs, reputationScore: String(erc8183Rep.score) },
+            feedback: [],
+            source: 'erc8183_agent_jobs',
+            updatedAt: erc8183Rep.updatedAt,
+          },
+        });
+      }
+
       const score = '0';
       return NextResponse.json({
         ok: true,
@@ -58,7 +90,15 @@ export async function GET(
 
     const data = await res.json();
 
-    const score = data.averageScore ?? '0';
+    // Use ERC-8183 score when available (real job activity), indexer score as fallback
+    const indexerScore = data.averageScore ?? '0';
+    const score = erc8183Rep && erc8183Rep.totalJobs > 0
+      ? String(erc8183Rep.score)
+      : indexerScore;
+    const source = erc8183Rep && erc8183Rep.totalJobs > 0
+      ? 'erc8183_agent_jobs'
+      : 'erc8004_reputation_indexer';
+
     const stats = {
       callsServed: data.feedbackCount ?? 0,
       callsFailed: 0,
@@ -70,7 +110,7 @@ export async function GET(
       reputationScore: score,
     };
     const feedback = data.events ?? [];
-    const updatedAt = data.updatedAt ?? null;
+    const updatedAt = erc8183Rep?.updatedAt ?? data.updatedAt ?? null;
 
     return NextResponse.json({
       ok: true,
@@ -79,17 +119,40 @@ export async function GET(
       score,
       stats,
       feedback,
-      source: 'erc8004_reputation_indexer',
+      source,
       updatedAt,
       reputation: {
         score,
+        tier: erc8183Rep?.tier,
         stats,
         feedback,
-        source: 'erc8004_reputation_indexer',
+        source,
         updatedAt,
       },
     });
   } catch (error) {
+    // If indexer fails but we have ERC-8183 reputation, return that
+    if (erc8183Rep && erc8183Rep.totalJobs > 0) {
+      return NextResponse.json({
+        ok: true,
+        agentId: tokenId,
+        tokenId,
+        score: String(erc8183Rep.score),
+        stats: { callsServed: erc8183Rep.completedJobs, reputationScore: String(erc8183Rep.score) },
+        feedback: [],
+        source: 'erc8183_agent_jobs',
+        updatedAt: erc8183Rep.updatedAt,
+        reputation: {
+          score: String(erc8183Rep.score),
+          tier: erc8183Rep.tier,
+          stats: { callsServed: erc8183Rep.completedJobs, reputationScore: String(erc8183Rep.score) },
+          feedback: [],
+          source: 'erc8183_agent_jobs',
+          updatedAt: erc8183Rep.updatedAt,
+        },
+      });
+    }
+
     const score = '0';
     const message = error instanceof Error ? error.message : 'reputation_indexer_unavailable';
 
