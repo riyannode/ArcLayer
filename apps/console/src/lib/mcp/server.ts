@@ -74,6 +74,14 @@ import {
   handleProviderRuntimeRetryJob,
   handleProviderRuntimeCompleteRun,
 } from './provider-runtime-tools';
+import {
+  handleRequestCreateJobWebSign,
+  handleRequestFundJobWebSign,
+  handleRequestCompleteJobWebSign,
+  handleRequestRejectJobWebSign,
+  handleRequestClaimRefundWebSign,
+  handleGetSigningRequestStatus,
+} from './signing-bridge-tools';
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
@@ -1258,6 +1266,105 @@ export function registerAllTools(): void {
     legacyAliases: [],
     kind: 'read',
     handler: handleProviderRuntimeCompleteRun,
+  });
+
+  // ── WEB SIGNING BRIDGE: MCP → Profile signing ──────────────────────────
+
+  registerTool({
+    name: 'client.request_create_job_web_sign',
+    domain: 'jobs',
+    description:
+      'Create an ERC-8183 job via web-session signing. Sends signing request to open ArcLayer Profile. Requires ARCLAYER_SIGNING_SESSION_ID.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'provider', type: 'string', required: true, description: 'Provider/worker wallet address.' },
+      { name: 'evaluator', type: 'string', required: true, description: 'Evaluator wallet address (non-zero, usually client wallet).' },
+      { name: 'expiredAt', type: 'string', required: true, description: 'Job deadline as Unix seconds string.' },
+      { name: 'description', type: 'string', required: true, description: 'Job description.' },
+      { name: 'hook', type: 'string', description: 'Hook address (default: 0x).' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleRequestCreateJobWebSign(args, ctx),
+  });
+
+  registerTool({
+    name: 'client.request_fund_job_web_sign',
+    domain: 'jobs',
+    description:
+      'Fund a job that already has budget set (provider must set budget first). Builds USDC approve + fund bundle. This tool does not set budget.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'amount', type: 'string', description: 'Amount in USDC atomic units (optional — derived from on-chain budget if omitted, must match if provided).' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleRequestFundJobWebSign(args, ctx),
+  });
+
+  registerTool({
+    name: 'client.request_complete_job_web_sign',
+    domain: 'jobs',
+    description:
+      'Complete an ERC-8183 job via web-session signing. Releases escrow to provider.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'reasonHash', type: 'string', description: 'Reason hash (bytes32). Defaults to keccak256("approved").' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleRequestCompleteJobWebSign(args, ctx),
+  });
+
+  registerTool({
+    name: 'client.request_reject_job_web_sign',
+    domain: 'jobs',
+    description:
+      'Reject an ERC-8183 job via web-session signing.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'reasonHash', type: 'string', description: 'Reason hash (bytes32). Defaults to keccak256("approved").' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleRequestRejectJobWebSign(args, ctx),
+  });
+
+  registerTool({
+    name: 'client.request_claim_refund_web_sign',
+    domain: 'jobs',
+    description:
+      'Claim refund for an expired ERC-8183 job via web-session signing.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+    ],
+    legacyAliases: [],
+    kind: 'tx_instruction',
+    handler: (args, ctx) => handleRequestClaimRefundWebSign(args, ctx),
+  });
+
+  registerTool({
+    name: 'client.get_signing_request_status',
+    domain: 'jobs',
+    description:
+      'Poll the status of a web-session signing request. Returns txHash, jobId (for createJob), and result.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'requestId', type: 'string', required: true, description: 'Signing request ID.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: (args, ctx) => handleGetSigningRequestStatus(args, ctx),
   });
 }
 
