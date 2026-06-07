@@ -299,7 +299,7 @@ describe('buildInstallCommand', () => {
     expect(cmd.command).toContain('not yet available');
   });
 
-  it('erc8183-escrow-bots returns one-line installer (no git clone, no inline secrets)', () => {
+  it('erc8183-escrow-bots returns git clone + pm2 command (no inline secrets)', () => {
     const t = getTemplate('erc8183-escrow-bots');
     if (!t) throw new Error('erc8183-escrow-bots template not found');
 
@@ -318,12 +318,12 @@ describe('buildInstallCommand', () => {
       roleNames: ['client', 'provider', 'evaluator'],
     });
 
-    expect(cmd.title).toBe('One-Click ERC-8183 Bot Installer');
-    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash');
+    expect(cmd.title).toContain('ERC-8183');
+    expect(cmd.command).toContain('git clone');
+    expect(cmd.command).toContain('pm2 start');
     // Security: no inline secrets
     expect(cmd.command).not.toContain('ak_');
     expect(cmd.command).not.toContain('PRIVATE_KEY');
-    expect(cmd.command).not.toContain('git clone');
   });
 
   it('erc8183-escrow-bots with provider-only returns provider shortcut', () => {
@@ -345,11 +345,12 @@ describe('buildInstallCommand', () => {
       roleNames: ['provider'],
     });
 
-    expect(cmd.title).toBe('One-Click ERC-8183 Provider Installer');
-    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash');
+    expect(cmd.title).toBe('ERC-8183 Provider Runtime Bot');
+    expect(cmd.command).toContain('provider-runtime-bot');
+    expect(cmd.command).toContain('pm2 start');
   });
 
-  it('erc8183-escrow-bots with client-only returns generic with --role client', () => {
+  it('erc8183-escrow-bots with client-only returns multi-bot command', () => {
     const t = getTemplate('erc8183-escrow-bots');
     if (!t) throw new Error('erc8183-escrow-bots template not found');
 
@@ -368,11 +369,12 @@ describe('buildInstallCommand', () => {
       roleNames: ['client'],
     });
 
-    expect(cmd.title).toBe('One-Click ERC-8183 Client Installer');
-    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role client');
+    // Client-only falls through to generic multi-bot command
+    expect(cmd.title).toContain('ERC-8183');
+    expect(cmd.command).toContain('git clone');
   });
 
-  it('erc8183-escrow-bots with evaluator-only returns generic with --role evaluator', () => {
+  it('erc8183-escrow-bots with evaluator-only returns evaluator shortcut', () => {
     const t = getTemplate('erc8183-escrow-bots');
     if (!t) throw new Error('erc8183-escrow-bots template not found');
 
@@ -391,8 +393,9 @@ describe('buildInstallCommand', () => {
       roleNames: ['evaluator'],
     });
 
-    expect(cmd.title).toBe('One-Click ERC-8183 Evaluator Installer');
-    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role evaluator');
+    expect(cmd.title).toBe('ERC-8183 Evaluator Runtime Bot');
+    expect(cmd.command).toContain('evaluator-runtime-bot');
+    expect(cmd.command).toContain('pm2 start');
   });
 });
 

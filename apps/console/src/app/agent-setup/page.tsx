@@ -63,7 +63,11 @@ const CLIENT_PROMPT = [
 
 /* ── page ─────────────────────────────────────────────────────────── */
 
-const INSTALL_CMD = 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash';
+const INSTALL_CMD = [
+  'git clone https://github.com/riyannode/ArcLayer.git',
+  'cd ArcLayer/examples/external-pm2-bots/provider-runtime-bot',
+  'cp .env.example .env && npm install && pm2 start ecosystem.config.cjs',
+].join(' && ');
 
 export default function AgentSetupPage() {
   const { address, isConnected } = useAccount();

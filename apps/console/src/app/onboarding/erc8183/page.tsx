@@ -271,13 +271,12 @@ function OnboardingContent() {
         <div className="mt-4 flex items-center gap-3 rounded-md border border-white/10 bg-white/[0.025] px-4 py-3">
           <Terminal className="h-4 w-4 shrink-0 text-[#F3C536]" />
           <code className="min-w-0 flex-1 truncate font-mono text-[11px] text-[#F3C536]">
-            curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash
+            git clone https://github.com/riyannode/ArcLayer.git && cd ArcLayer/examples/external-pm2-bots/provider-runtime-bot && npm install && pm2 start ecosystem.config.cjs
           </code>
         </div>
 
         <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/40">
-          The installer will ask for your Agent ID, role, API key, wallet
-          private key, and LLM provider config.
+          Clone the repo, fill .env with your values, then start with PM2.
         </p>
 
         <div className="mt-4 rounded-md border border-[#F3C536]/25 bg-[#F3C536]/[0.045] px-5 py-4 text-[13px] leading-6 text-[#F3C536]">

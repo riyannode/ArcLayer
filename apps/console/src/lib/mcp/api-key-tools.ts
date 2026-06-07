@@ -47,9 +47,10 @@ const SCOPE_PRESETS: Record<string, string[]> = {
 const ALLOWED_PRESETS = new Set(Object.keys(SCOPE_PRESETS));
 
 const INSTALL_COMMANDS: Record<string, string> = {
-  provider: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
-  // client install script not yet available — falls back to provider command
-  client: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
+  provider:
+    'git clone https://github.com/riyannode/ArcLayer.git && cd ArcLayer/examples/external-pm2-bots/provider-runtime-bot && cp .env.example .env && npm install && pm2 start ecosystem.config.cjs',
+  evaluator:
+    'git clone https://github.com/riyannode/ArcLayer.git && cd ArcLayer/examples/external-pm2-bots/evaluator-runtime-bot && cp .env.example .env && npm install && pm2 start ecosystem.config.cjs',
 };
 
 // ── Input validation ──────────────────────────────────────────────────────
