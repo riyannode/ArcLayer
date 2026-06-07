@@ -67,6 +67,7 @@ class ArclayerMcpClient {
   /**
    * List jobs filtered by evaluator address and status.
    * Uses jobs.list_public with evaluatorAddress filter.
+   * Falls back to local indexer if MCP returns empty (production indexer down).
    *
    * @param {string} evaluatorAddress
    * @param {string} status - 'submitted' | 'funded' | 'created' | 'completed'
@@ -74,20 +75,66 @@ class ArclayerMcpClient {
    * @returns {Promise<{ jobs: Array, total: number }>}
    */
   async listEvaluatorJobs(evaluatorAddress, status = 'submitted', limit = 50) {
-    return this.callTool('jobs.list_public', {
-      status,
-      evaluatorAddress,
-      limit,
-    });
+    try {
+      const result = await this.callTool('jobs.list_public', {
+        status,
+        evaluatorAddress,
+        limit,
+      });
+      if (result && result.total > 0) return result;
+    } catch {
+      // MCP failed, fall through to local indexer
+    }
+
+    // Fallback: fetch from local indexer directly
+    try {
+      const localUrl = process.env.LOCAL_INDEXER_URL || 'http://localhost:3535';
+      const res = await fetch(`${localUrl}/jobs`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.ok) {
+        const all = await res.json();
+        const list = Array.isArray(all) ? all : [];
+        const filtered = list.filter((j) => {
+          const statusMatch = !status || String(j.statusLabel || '').toLowerCase() === status.toLowerCase();
+          const evalMatch = !evaluatorAddress || String(j.evaluator || '').toLowerCase() === evaluatorAddress.toLowerCase();
+          return statusMatch && evalMatch;
+        });
+        return { jobs: filtered.slice(0, limit), total: filtered.length };
+      }
+    } catch {
+      // Local indexer also failed
+    }
+
+    return { jobs: [], total: 0 };
   }
 
   /**
    * Get a single job by jobId from the indexer.
+   * Falls back to local indexer if MCP returns empty.
    * @param {string} jobId
    * @returns {Promise<Object>}
    */
   async getJob(jobId) {
-    return this.callTool('jobs.get_public', { jobId });
+    try {
+      const result = await this.callTool('jobs.get_public', { jobId });
+      if (result && (result.id || result.job)) return result;
+    } catch {
+      // MCP failed, fall through
+    }
+
+    // Fallback: local indexer
+    try {
+      const localUrl = process.env.LOCAL_INDEXER_URL || 'http://localhost:3535';
+      const res = await fetch(`${localUrl}/jobs/${encodeURIComponent(jobId)}`, {
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (res.ok) return await res.json();
+    } catch {
+      // ignore
+    }
+
+    return null;
   }
 
   /**
