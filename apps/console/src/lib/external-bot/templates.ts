@@ -105,7 +105,7 @@ const erc8183ClientRole: BotRole = {
   defaultAgentId: 'erc8183-client',
   botRole: 'client',
   capabilities: ['create_job', 'fund_escrow', 'approve_usdc', 'onchain_tx'],
-  endpointPath: 'client-bot/index.js',
+  endpointPath: '(browser wallet)',
   scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:create', 'erc8183:confirm', 'erc8183:tx', 'erc8183:presence'],
 };
 
@@ -117,7 +117,7 @@ const erc8183ProviderRole: BotRole = {
   defaultAgentId: 'erc8183-provider',
   botRole: 'provider',
   capabilities: ['set_budget', 'claim_job', 'submit_work', 'onchain_tx'],
-  endpointPath: 'provider-bot/index.js',
+  endpointPath: 'provider-runtime-bot/provider-bot.js',
   scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:claim', 'erc8183:running', 'erc8183:submit', 'erc8183:tx', 'erc8183:presence'],
 };
 
@@ -127,7 +127,7 @@ const erc8183EvaluatorRole: BotRole = {
   defaultAgentId: 'erc8183-evaluator',
   botRole: 'evaluator',
   capabilities: ['evaluate', 'settle', 'complete_job', 'onchain_tx'],
-  endpointPath: 'evaluator-bot/index.js',
+  endpointPath: 'evaluator-runtime-bot/evaluator-bot.js',
   scopes: ['agent_bridge:write', 'agent_bridge:receipt', 'erc8183:complete', 'erc8183:reject', 'erc8183:tx', 'erc8183:presence'],
 };
 
