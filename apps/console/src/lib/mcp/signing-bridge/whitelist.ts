@@ -32,7 +32,6 @@ const ALLOWED_CONTRACTS = new Set<string>([
  *
  * ERC-8183 AgenticCommerce:
  *   createJob(address,address,uint256,string,bytes)  → 0x41528812
- *   setBudget(uint256,uint256,bytes)                  → 0xdd4ae9d4
  *   fund(uint256,bytes)                              → 0xe25ba707
  *   complete(uint256,bytes32,bytes)                   → 0xd75bbdf3
  *   reject(uint256,bytes32,bytes)                     → 0x41dd26f5
@@ -44,7 +43,6 @@ const ALLOWED_CONTRACTS = new Set<string>([
 
 const ERC8183_SELECTORS = new Set<string>([
   '0x41528812', // createJob
-  '0xdd4ae9d4', // setBudget
   '0xe25ba707', // fund
   '0xd75bbdf3', // complete
   '0x41dd26f5', // reject
@@ -85,7 +83,7 @@ export type SigningRequestSummary = {
   providerAddress?: string;
   evaluatorAddress?: string;
   jobId?: string;
-  amountUsdc?: string;
+  amountAtomic?: string;
   deadline?: string;
 };
 
@@ -215,7 +213,6 @@ export function selectorLabel(to: string, selector: string): string {
   if (toLower === CONTRACTS.ERC8183_AGENTIC_COMMERCE.toLowerCase()) {
     const labels: Record<string, string> = {
       '0x41528812': 'Create Job',
-      '0xdd4ae9d4': 'Set Budget',
       '0xe25ba707': 'Fund Job',
       '0xd75bbdf3': 'Complete Job',
       '0x41dd26f5': 'Reject Job',
