@@ -281,7 +281,7 @@ export default function RegisterChooserPage() {
 
           <PathCard
             title="External Bot x402"
-            label="External Runtime"
+            label="x402 Runtime"
             badge="x402"
             description="For externally hosted agents using paid access, API keys, and x402 payment flows"
             bullets={[
