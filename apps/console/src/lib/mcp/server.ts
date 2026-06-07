@@ -264,7 +264,11 @@ export function registerAllTools(): void {
       const res = await fetch(indexerUrl('/jobs'), { cache: 'no-store' });
       const json = await res.json().catch(() => ({}));
       let list: unknown[] = Array.isArray(json) ? json : json.jobs || json.data || [];
-      if (status) list = list.filter((j: any) => String(j.status || '').toLowerCase().includes(status));
+      if (status) list = list.filter((j: any) => {
+        const s = String(j.status || '').toLowerCase();
+        const label = String(j.statusLabel || '').toLowerCase();
+        return s.includes(status) || label.includes(status);
+      });
       if (evaluatorFilter) list = list.filter((j: any) => String(j.evaluator || j.evaluatorAddress || '').toLowerCase() === evaluatorFilter);
       return { jobs: limit ? list.slice(0, limit) : list, total: list.length };
     },
@@ -729,6 +733,52 @@ export function registerAllTools(): void {
         signingRequired: true,
         signing: { how: 'Send from the evaluator wallet. Releases escrowed USDC to provider.', rpc: ARC_RPC, gasHint: '~150000' },
         invariants: ['Only the evaluator can call complete.', 'Job must have a submitted deliverable.'],
+      };
+    },
+  });
+
+  registerTool({
+    name: 'evaluator.prepare_reject_job',
+    domain: 'jobs',
+    description: 'Build unsigned calldata for ERC-8183 AgenticCommerce.reject(jobId, reason, optParams).',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
+      { name: 'reason', type: 'string', description: 'Reason string (will be keccak256-hashed) OR a 0x-prefixed 32-byte hash.' },
+      { name: 'reasonHash', type: 'string', description: 'Optional pre-computed bytes32 reason hash; takes precedence.' },
+      { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
+    ],
+    legacyAliases: ['reject_job_calldata'],
+    kind: 'tx_instruction',
+    handler: async (args) => {
+      const jobIdRaw = String(args.jobId || '').trim();
+      if (!jobIdRaw) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
+      const reasonHashRaw = String(args.reasonHash || '').trim();
+      const reasonRaw = String(args.reason || '').trim();
+      const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
+      let resolvedReason: Hex;
+      if (reasonHashRaw) {
+        if (!/^0x[0-9a-fA-F]{64}$/.test(reasonHashRaw)) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'reasonHash must be 0x-prefixed 32-byte hex');
+        resolvedReason = reasonHashRaw as Hex;
+      } else if (reasonRaw) {
+        resolvedReason = (reasonRaw.startsWith('0x') && reasonRaw.length === 66 ? reasonRaw : keccak256(toBytes(reasonRaw))) as Hex;
+      } else {
+        resolvedReason = keccak256(toBytes('rejected')) as Hex;
+      }
+      const data = encodeFunctionData({
+        abi: ERC8183_AGENTIC_COMMERCE_ABI as any,
+        functionName: 'reject',
+        args: [BigInt(jobIdRaw), resolvedReason, optParams],
+      });
+      return {
+        chainId: ARC_CHAIN_ID,
+        to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        data,
+        value: '0x0',
+        signingRequired: true,
+        signing: { how: 'Send from the evaluator wallet. Rejects the job and refunds escrow to client.', rpc: ARC_RPC, gasHint: '~100000' },
+        invariants: ['Only the evaluator can call reject.', 'Job must be Funded or Submitted.'],
       };
     },
   });

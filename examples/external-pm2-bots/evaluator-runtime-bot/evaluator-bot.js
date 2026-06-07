@@ -253,13 +253,24 @@ async function processJob(job) {
   // Run LLM evaluation
   let result;
   try {
-    const deliverableHash = jobDetail.deliverableHash || job.deliverableHash || '';
-    const deliverableHashPresent = Boolean(deliverableHash && deliverableHash !== '0x' && deliverableHash !== '0x0000000000000000000000000000000000000000000000000000000000000000');
+    // Indexer response: field is "deliverable" (not "deliverableHash")
+    // Also check job (wrapper) and direct fields
+    const deliverableHash = jobDetail.deliverable || job.deliverable || job.deliverableHash || '';
+
+    // Fetch deliverable content if URI is available
+    let deliverableContent = '';
+    const deliverableURI = jobDetail.deliverableURI || job.deliverableURI || '';
+    if (deliverableURI && deliverableURI.startsWith('http')) {
+      try {
+        const dRes = await fetch(deliverableURI, { signal: AbortSignal.timeout(10_000) });
+        if (dRes.ok) deliverableContent = await dRes.text();
+      } catch { /* non-critical */ }
+    }
 
     result = await evaluateJob(
       {
         jobId,
-        status: jobDetail.status || 'Submitted',
+        status: jobDetail.statusLabel || jobDetail.status || 'Submitted',
         provider: jobDetail.provider || job.provider || '',
         description: jobDetail.description || '',
         inputPayload: jobDetail.inputPayload,
@@ -267,15 +278,15 @@ async function processJob(job) {
         requiredCapability: jobDetail.requiredCapability || jobDetail.inputPayload?.requiredCapability || '',
         expectedDeliverable: jobDetail.expectedDeliverable || jobDetail.inputPayload?.expectedDeliverable || '',
         deliverableHash,
-        deliverableContent: jobDetail.deliverableContent || '',
-        deliverableURI: jobDetail.deliverableURI || '',
+        deliverableContent: deliverableContent || jobDetail.deliverableContent || '',
+        deliverableURI,
         proofContent: jobDetail.proofContent || '',
-        createdAt: jobDetail.createdAt || '',
+        createdAt: jobDetail.createdAt || jobDetail.createdAtBlock || '',
       },
       LLM_CONFIG,
       {
         minConfidence: MIN_CONFIDENCE,
-        deliverableHashPresent,
+        deliverableHashPresent: Boolean(deliverableHash && deliverableHash !== '0x' && deliverableHash !== '0x0000000000000000000000000000000000000000000000000000000000000000'),
       }
     );
   } catch (err) {
