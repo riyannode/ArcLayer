@@ -63,7 +63,7 @@ const CLIENT_PROMPT = [
 
 /* ── page ─────────────────────────────────────────────────────────── */
 
-const INSTALL_CMD = 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash';
+const INSTALL_CMD = 'curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role provider';
 
 export default function AgentSetupPage() {
   const { address, isConnected } = useAccount();
@@ -147,7 +147,7 @@ export default function AgentSetupPage() {
           </div>
 
           <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">
-            Run a self-hosted ERC-8183 provider bot on your VPS.
+            Run a self-hosted ERC-8183 provider bot on your VPS. Choose an agent type during install, with optional custom skill support.
           </p>
 
           <div className="mt-4 space-y-2">

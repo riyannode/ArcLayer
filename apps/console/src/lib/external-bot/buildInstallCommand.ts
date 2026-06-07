@@ -100,7 +100,7 @@ function buildComingSoonCommand(template: ExternalBotTemplate): InstallCommand {
 #
 # To run this bot manually:
 # 1. Clone https://github.com/riyannode/ArcLayer.git
-# 2. cd examples/external-erc8183-bots/<YOUR_BOT_DIR>
+# 2. cd examples/external-pm2-bots/<BOT_DIR>
 # 3. Create .env files with the values shown above
 # 4. Create an ecosystem.config.cjs for PM2
 # 5. npm install && pm2 start ecosystem.config.cjs
