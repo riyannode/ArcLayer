@@ -125,9 +125,10 @@ function buildReputationSeries(
   jobs: IndexedJob[],
   proofs: IndexedProof[],
   reputation: ReputationOverlay | null,
+  dashboardReputation?: string,
 ) {
-  const baseScore = Number(reputation?.averageScore ?? agent?.score ?? 0);
-  const reputationScore = Number(reputation?.averageScore ?? agent?.reputationScore ?? baseScore);
+  const baseScore = Number(reputation?.averageScore ?? dashboardReputation ?? agent?.score ?? 0);
+  const reputationScore = Number(reputation?.averageScore ?? dashboardReputation ?? agent?.reputationScore ?? baseScore);
   const completedJobs = jobs.filter(
     (job) => job.approved || job.status >= 3,
   ).length;
@@ -470,7 +471,15 @@ export default function AgentProfilePage() {
   const agent = profile?.agent;
   const jobs = profile?.jobs || [];
   const proofs = profile?.proofs || [];
-  const series = buildReputationSeries(agent, jobs, proofs, reputation);
+  const series = buildReputationSeries(agent, jobs, proofs, reputation, dashboardAgent?.reputation);
+
+  // Computed ERC-8183 score: overlay → dashboard → indexer → '0'
+  const computedScore =
+    reputation?.averageScore ||
+    dashboardAgent?.reputation ||
+    agent?.reputationScore ||
+    agent?.score ||
+    '0';
 
   const capabilities = getErc8183Capabilities(metadata);
   const links = getErc8183Links(metadata);
@@ -669,7 +678,7 @@ export default function AgentProfilePage() {
                       <div className="mt-5 grid gap-3">
                         {(
                           [
-                            ['Score', reputation?.averageScore || agent.score || '0'],
+                            ['Score', computedScore],
                             ['Feedback', String(reputation?.feedbackCount ?? 0)],
                             ['Jobs', String(jobs.length)],
                             ['Proofs', String(proofs.length)],
@@ -766,7 +775,7 @@ export default function AgentProfilePage() {
                         <p>Settlement proofs: {proofs.length}</p>
                         <p>
                           Reputation score:{' '}
-                          {reputation?.averageScore || agent.reputationScore || agent.score || '0'}
+                          {computedScore}
                         </p>
                         {reputation?.feedbackCount != null && reputation.feedbackCount > 0 && (
                           <p>Feedback count: {reputation.feedbackCount}</p>

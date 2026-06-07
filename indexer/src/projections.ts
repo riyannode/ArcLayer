@@ -67,9 +67,12 @@ export function projectJobsFromEvents(events: IndexedJobEvent[]) {
     const fundedEvents = jobEvents.filter((event) => event.eventName === "JobFunded") as any[];
     const submitted = [...jobEvents].reverse().find((event) => event.eventName === "JobSubmitted") as any;
     const completed = [...jobEvents].reverse().find((event) => event.eventName === "JobCompleted") as any;
+    const rejected = [...jobEvents].reverse().find((event) => event.eventName === "JobRejected") as any;
+    const expired = [...jobEvents].reverse().find((event) => event.eventName === "JobExpired") as any;
     const totalFunded = fundedEvents.reduce((sum, event) => sum + BigInt(event.amount ?? 0), BigInt(0));
     const budget = BigInt(latestBudget?.amount ?? 0);
-    const status = completed ? 3 : submitted ? 2 : totalFunded > BigInt(0) ? 1 : 0;
+    // Terminal priority: Completed > Rejected > Expired > Submitted > Funded > Open
+    const status = completed ? 3 : rejected ? 4 : expired ? 5 : submitted ? 2 : totalFunded > BigInt(0) ? 1 : 0;
     const statusLabel = ["Open", "Funded", "Submitted", "Completed", "Rejected", "Expired"][status];
 
     return {
@@ -85,7 +88,8 @@ export function projectJobsFromEvents(events: IndexedJobEvent[]) {
       createdAtBlock: String(created?.blockNumber ?? jobEvents[0]?.blockNumber ?? 0),
       updatedAtBlock: String(jobEvents[jobEvents.length - 1]?.blockNumber ?? 0),
       deliverable: submitted?.deliverable ?? "0x0000000000000000000000000000000000000000000000000000000000000000",
-      completionReason: completed?.reason ?? "0x0000000000000000000000000000000000000000000000000000000000000000",
+      completionReason: completed?.reason ?? rejected?.reason ?? "0x0000000000000000000000000000000000000000000000000000000000000000",
+      rejector: rejected?.rejector ?? undefined,
       status,
       statusLabel,
       createdAt: String(created?.blockNumber ?? jobEvents[0]?.blockNumber ?? 0),
