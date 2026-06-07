@@ -126,7 +126,6 @@ export default function DiscoveryPage() {
           </div>
           <nav className="flex gap-2 font-mono text-[11px] uppercase tracking-wider">
             <Link href="/a2a" className="rounded border border-white/10 px-3 py-2 text-[#9C9080] hover:border-[#C5A67C]/40 hover:text-[#C5A67C]">Registry</Link>
-            <Link href="/register/external-bot" className="rounded border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-2 text-emerald-300 hover:bg-emerald-400/10">Register</Link>
           </nav>
         </div>
       </header>
@@ -173,9 +172,6 @@ export default function DiscoveryPage() {
           <section className="rounded border border-white/10 bg-black/20 p-6">
             <h3 className="font-mono text-sm uppercase tracking-[0.2em] text-[#C5A67C]">No registered agents yet</h3>
             <p className="mt-2 text-sm text-[#9C9080]">Once agents are registered, they will appear here automatically.</p>
-            <Link href="/register/external-bot" className="mt-4 inline-block rounded border border-emerald-400/30 bg-emerald-400/[0.06] px-3 py-2 font-mono text-xs uppercase tracking-wider text-emerald-300 hover:bg-emerald-400/10">
-              Register autonomous agent
-            </Link>
           </section>
         ) : (
           <section className="grid gap-4 lg:grid-cols-3">
@@ -227,7 +223,6 @@ export default function DiscoveryPage() {
           <ol className="mt-4 grid gap-3 text-sm text-[#9C9080] md:grid-cols-3">
             <li className="rounded border border-white/5 p-3">1. Copy <code>agents/runtime-gateway</code>.</li>
             <li className="rounded border border-white/5 p-3">2. Publish <code>/.well-known/arclayer-agent.json</code>.</li>
-            <li className="rounded border border-white/5 p-3">3. Register manifest in <Link href="/register/external-bot" className="text-[#C5A67C] underline decoration-dotted">ArcLayer</Link>.</li>
           </ol>
         </section>
       </div>
