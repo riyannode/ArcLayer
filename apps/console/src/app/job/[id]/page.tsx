@@ -9,7 +9,11 @@ import { useArcWrite } from '@/hooks/useArcWrite';
 import {
   buildCompleteJobConfig,
   buildSubmitDeliverableConfig,
+  buildFundJobConfig,
+  ARC_TOKENS,
+  CONTRACTS as SDK_CONTRACTS,
 } from '@arclayer/sdk';
+import { readContract } from '@wagmi/core';
 import { CONTRACTS, formatUSDC, getExplorerAddressUrl, shortenAddress } from '@/lib/contracts';
 import { config } from '@/lib/wagmi';
 import { fetchIndexerJson, INDEXER_BASE_URL, type JobDetail, waitForIndexer, loadJobDetail, type DataSource } from '@/lib/indexer';
@@ -21,6 +25,12 @@ import { Copy, Check, ChevronDown, ChevronRight } from 'lucide-react';
 
 const JOB_STATUS = ['Open', 'Funded', 'Submitted', 'Completed', 'Rejected', 'Expired'] as const;
 
+/** Minimal ERC-20 ABI for approve + allowance. */
+const ERC20_APPROVE_ABI = [
+  { name: 'approve', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ name: '', type: 'bool' }] },
+  { name: 'allowance', type: 'function', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ name: '', type: 'uint256' }] },
+] as const;
+
 function parseJobId(value: string | undefined) {
   return value && /^\d+$/.test(value) ? value : null;
 }
@@ -30,7 +40,7 @@ function isLocalJobId(value: string | undefined): boolean {
   return !!value && value.startsWith('erc8183_');
 }
 
-type Action = 'submit' | 'complete' | null;
+type Action = 'submit' | 'complete' | 'fund' | 'claimRefund' | null;
 
 type DeliverablePreview = {
   agentId?: string;
@@ -240,6 +250,15 @@ export default function JobDetailPage() {
     safeJob?.status === 4 ||
     !!txHashes?.rejectTxHash;
 
+  // ── Claim Refund eligibility: Funded/Submitted + expired ──
+  const expiredAtMs = safeJob?.expiredAt ? Number(safeJob.expiredAt) * 1000 : null;
+  const isRefundableByTimeout = Boolean(
+    isClient &&
+    expiredAtMs &&
+    (safeJob?.status === 1 || safeJob?.status === 2) &&
+    Date.now() >= expiredAtMs,
+  );
+
   // ── Fix #4: Merged deliverable for all display/link/preview ──
   const displayDeliverable = deliverableHash ?? safeJob?.deliverable;
 
@@ -311,6 +330,78 @@ export default function JobDetailPage() {
       setPayload(next);
       setTxState('Job completed and indexed.');
     } catch (e) { setTxState(e instanceof Error ? e.message : 'complete failed.'); }
+    finally { setActiveAction(null); }
+  }
+
+  async function handleFund() {
+    if (!resolvedOnchainJobId || !address) return;
+    try {
+      setActiveAction('fund');
+      setTxState('Checking USDC allowance…');
+
+      const budget = safeJob?.budget ? BigInt(safeJob.budget) : null;
+      if (!budget || budget <= 0n) {
+        setTxState('Job has no budget set. Provider must call setBudget first.');
+        setActiveAction(null);
+        return;
+      }
+
+      // Check existing allowance
+      const currentAllowance = await readContract(config, {
+        address: ARC_TOKENS.USDC as `0x${string}`,
+        abi: ERC20_APPROVE_ABI,
+        functionName: 'allowance',
+        args: [address as `0x${string}`, SDK_CONTRACTS.ERC8183_AGENTIC_COMMERCE as `0x${string}`],
+      });
+
+      if (currentAllowance < budget) {
+        setTxState('Approving USDC for escrow…');
+        const approveHash = await writeContractAsync({
+          address: ARC_TOKENS.USDC as `0x${string}`,
+          abi: ERC20_APPROVE_ABI as unknown as typeof ERC20_APPROVE_ABI,
+          functionName: 'approve',
+          args: [SDK_CONTRACTS.ERC8183_AGENTIC_COMMERCE as `0x${string}`, budget],
+        });
+        await waitForTransactionReceipt(config, { hash: approveHash });
+        setTxState('USDC approved. Funding job…');
+      } else {
+        setTxState('Allowance sufficient. Funding job…');
+      }
+
+      const fundHash = await writeContractAsync(buildFundJobConfig(BigInt(resolvedOnchainJobId)));
+      await waitForTransactionReceipt(config, { hash: fundHash });
+      setTxState('Receipt confirmed. Waiting for indexer refresh…');
+      const next = await waitForIndexer<JobDetail>(
+        `/jobs/${resolvedOnchainJobId}`,
+        (p) => p.job.status === 1
+      );
+      setPayload(next);
+      setTxState('Job funded and indexed.');
+    } catch (e) { setTxState(e instanceof Error ? e.message : 'fund failed.'); }
+    finally { setActiveAction(null); }
+  }
+
+  async function handleClaimRefund() {
+    if (!resolvedOnchainJobId) return;
+    try {
+      setActiveAction('claimRefund');
+      setTxState('Claiming refund via ERC-8183 claimRefund(jobId)…');
+      // claimRefund takes only jobId — no optParams (verified on-chain ABI)
+      const hash = await writeContractAsync({
+        address: SDK_CONTRACTS.ERC8183_AGENTIC_COMMERCE as `0x${string}`,
+        abi: [{ name: 'claimRefund', type: 'function', stateMutability: 'nonpayable', inputs: [{ name: 'jobId', type: 'uint256' }], outputs: [] }] as const,
+        functionName: 'claimRefund',
+        args: [BigInt(resolvedOnchainJobId)],
+      });
+      await waitForTransactionReceipt(config, { hash });
+      setTxState('Receipt confirmed. Waiting for indexer refresh…');
+      const next = await waitForIndexer<JobDetail>(
+        `/jobs/${resolvedOnchainJobId}`,
+        (p) => p.job.status === 5
+      );
+      setPayload(next);
+      setTxState('Refund claimed and indexed.');
+    } catch (e) { setTxState(e instanceof Error ? e.message : 'claim refund failed.'); }
     finally { setActiveAction(null); }
   }
 
@@ -760,6 +851,30 @@ export default function JobDetailPage() {
                       ? 'Funded. The service provider should submit deliverable via ERC-8183 submit().'
                       : 'Job not yet funded. Use setBudget, USDC approve, then fund(jobId, 0x).'}
                   </p>
+                )}
+
+                {/* Fund Job — client only, when budget set and not yet funded */}
+                {safeJob?.status === 0 && isClient && safeJob?.budget && BigInt(safeJob.budget) > 0n && (
+                  <button
+                    onClick={handleFund}
+                    disabled={!isConnected || activeAction !== null}
+                    className="inline-flex h-11 items-center rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A] px-6 text-sm font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.18)] transition hover:bg-[#FFD084] disabled:opacity-50"
+                    title="ERC-8183 approve + fund(jobId, 0x)"
+                  >
+                    {activeAction === 'fund' ? 'Funding…' : 'Fund Job'}
+                  </button>
+                )}
+
+                {/* Claim Refund — client only, when Funded/Submitted + expired */}
+                {safeJob && isRefundableByTimeout && (
+                  <button
+                    onClick={handleClaimRefund}
+                    disabled={!isConnected || activeAction !== null}
+                    className="inline-flex h-11 items-center rounded-lg border border-[#F3C536]/35 bg-black/20 px-5 font-mono text-[12px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/60 hover:bg-[#F3C536]/8 disabled:opacity-50"
+                    title="ERC-8183 claimRefund(jobId)"
+                  >
+                    {activeAction === 'claimRefund' ? 'Claiming…' : 'Claim Refund'}
+                  </button>
                 )}
               </div>
 
