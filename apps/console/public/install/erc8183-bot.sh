@@ -557,6 +557,10 @@ LLM_TIMEOUT_MS=60000
 
 # Job settings
 POLL_INTERVAL_MS=15000
+
+# Skill configuration (auto-selects type skill from PROVIDER_AGENT_TYPE)
+PROVIDER_SKILL=auto
+PROVIDER_CUSTOM_SKILL_PATH=${PROVIDER_CUSTOM_SKILL_PATH:-}
 ENVEOF
       ;;
 
