@@ -98,8 +98,6 @@ Current autonomous provider/evaluator runtimes do not use delegated Circle Agent
 
 Circle delegated/session execution for headless PM2 bots is planned, but must remain not_configured until Circle exposes or confirms a supported delegated/session executor path.
 
-Do not claim that provider/evaluator bots currently run through delegated Circle Agent Wallet.
-
 ## ERC-8004 Identity
 
 Use ArcLayer’s current SDK/address helpers as the canonical source.
@@ -184,7 +182,7 @@ Never call unregistered tools.
 
 Never claim Circle delegated runtime support until it is implemented and verified.
 
-## Mobile Limitation
+## MCP
 
 Claude mobile can help explain ArcLayer, but it cannot run local MCP tools or maintain ArcLayer MCP pairing.
 
