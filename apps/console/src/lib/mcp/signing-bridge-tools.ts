@@ -17,6 +17,7 @@ import {
   CONTRACTS,
   ARC_TOKENS,
 } from '@arclayer/sdk';
+import { readOnchainJob } from '@/lib/erc8183-jobs/receipt';
 import type { McpToolContext } from './registry';
 import { MCP_ERRORS, McpError } from './errors';
 import type { SigningTransaction, SigningRequestSummary } from './signing-bridge/whitelist';
@@ -163,14 +164,47 @@ export async function handleRequestFundJobWebSign(
   const amount = String(args.amount || '').trim();
 
   if (!jobId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
-  if (!amount || !/^\d+$/.test(amount)) {
-    throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'amount must be a positive integer (USDC atomic units)');
+
+  // Read on-chain job to verify budget is set
+  let job;
+  try {
+    job = await readOnchainJob(BigInt(jobId));
+  } catch {
+    throw new McpError(MCP_ERRORS.NOT_FOUND, `Job ${jobId} not found on-chain`);
+  }
+  if (!job) {
+    throw new McpError(MCP_ERRORS.NOT_FOUND, `Job ${jobId} not found on-chain`);
   }
 
-  const amountBigInt = BigInt(amount);
-  if (amountBigInt <= 0n) {
-    throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'amount must be > 0');
+  // Budget must be set by provider before client can fund
+  if (!job.budget || job.budget <= 0n) {
+    throw new McpError(
+      MCP_ERRORS.CONFLICT,
+      'Job budget is not set yet. Provider must set budget first before client can fund.',
+    );
   }
+
+  const onChainBudget = job.budget;
+
+  // If amount is provided, validate it matches on-chain budget
+  if (amount) {
+    if (!/^\d+$/.test(amount)) {
+      throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'amount must be a positive integer (USDC atomic units)');
+    }
+    const amountBigInt = BigInt(amount);
+    if (amountBigInt <= 0n) {
+      throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'amount must be > 0');
+    }
+    if (amountBigInt !== onChainBudget) {
+      throw new McpError(
+        MCP_ERRORS.VALIDATION_ERROR,
+        `amount (${amount}) does not match on-chain budget (${onChainBudget.toString()}). Fund the exact budget amount.`,
+      );
+    }
+  }
+
+  // Use on-chain budget as the approve/fund amount
+  const fundAmount = onChainBudget.toString();
   const commerceAddr = CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address;
 
   // Fund bundle: USDC approve + fund(jobId)
@@ -178,7 +212,7 @@ export async function handleRequestFundJobWebSign(
   const approveData = encodeFunctionData({
     abi: USDC_ABI,
     functionName: 'approve',
-    args: [commerceAddr, amountBigInt],
+    args: [commerceAddr, onChainBudget],
   });
 
   const fundData = encodeFunctionData({
@@ -193,7 +227,7 @@ export async function handleRequestFundJobWebSign(
       to: ARC_TOKENS.USDC,
       data: approveData,
       value: '0',
-      summary: `Approve ${formatAmount(amount)} USDC for job #${jobId}`,
+      summary: `Approve ${formatAmount(fundAmount)} USDC for job #${jobId}`,
     },
     {
       kind: 'erc8183_fund',
@@ -207,7 +241,7 @@ export async function handleRequestFundJobWebSign(
   const result = await createSigningRequest(
     'fund_job',
     transactions,
-    { actionType: 'fund_job', jobId, amountAtomic: amount },
+    { actionType: 'fund_job', jobId, amountAtomic: fundAmount },
   );
 
   return {

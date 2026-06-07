@@ -1293,12 +1293,12 @@ export function registerAllTools(): void {
     name: 'client.request_fund_job_web_sign',
     domain: 'jobs',
     description:
-      'Fund an ERC-8183 job via web-session signing. Sends approve+fund bundle to ArcLayer Profile.',
+      'Fund a job that already has budget set (provider must set budget first). Builds USDC approve + fund bundle. This tool does not set budget.',
     authRequired: false,
     roles: [],
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
-      { name: 'amount', type: 'string', required: true, description: 'Amount in USDC atomic units (6 decimals).' },
+      { name: 'amount', type: 'string', description: 'Amount in USDC atomic units (optional — derived from on-chain budget if omitted, must match if provided).' },
     ],
     legacyAliases: [],
     kind: 'tx_instruction',
