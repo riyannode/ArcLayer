@@ -108,6 +108,9 @@ examples/external-erc8183-bots/*/.env
 # Circle commerce bot secrets (real configs with API keys / private keys)
 examples/external-pm2-bots/circle-agent-gate-bots/bot.config.*.json
 !examples/external-pm2-bots/circle-agent-gate-bots/bot.config.example.json
+
+# Evaluator runtime bot state checkpoint (contains tx hashes, job states)
+examples/external-pm2-bots/evaluator-runtime-bot/.arclayer-evaluator-state.json
 apps/console/scripts/gen-commerce-keys.js
 
 # Generated/indexer artifacts
