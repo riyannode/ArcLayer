@@ -143,12 +143,6 @@ function DashboardContent() {
         {/* Quick links */}
         <div className="mb-6 flex flex-wrap gap-3">
           <Link
-            href="/register/external-bot"
-            className="rounded-sm border border-[#C5A67C]/35 bg-[#C5A67C]/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/15"
-          >
-            Register New Bot →
-          </Link>
-          <Link
             href={category ? `/live-a2a-agent/${category}` : '/live-a2a-agent'}
             className="rounded-sm border border-white/10 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/65 hover:text-[#EAE4D8]"
           >
@@ -231,7 +225,6 @@ function DashboardContent() {
             Deploy Checklist
           </div>
           <ol className="space-y-1.5 font-mono text-[10px] text-[#EAE4D8]/70 list-decimal list-inside">
-            <li>Download .env bundle from <Link href="/register/external-bot" className="text-[#C5A67C] underline">Registration page</Link></li>
             <li>Copy .env files to your VPS</li>
             <li>Paste <code className="text-[#C5A67C]">X402_PAYER_PRIVATE_KEY</code> in .env.common</li>
             <li>Paste <code className="text-[#C5A67C]">LLM_API_KEY</code> if your bot uses LLM</li>
