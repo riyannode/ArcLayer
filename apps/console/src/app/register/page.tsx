@@ -1,6 +1,9 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
+import Link from "next/link";
+
+const EXTERNAL_BOT_X402_STATUS = "Coming soon";
+const EXTERNAL_BOT_X402_ENABLED = false;
 
 type PathCardProps = {
   title: string;
@@ -9,22 +12,28 @@ type PathCardProps = {
   description: string;
   bullets: string[];
   href: string;
-  accent: 'yellow' | 'green';
+  accent: "yellow" | "green";
   recommended?: boolean;
   cta: string;
+  disabled?: boolean;
+  statusLabel?: string;
 };
 
-function StackIcon({ className = '' }: { className?: string }) {
+function StackIcon({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M12 3 3.5 7.5 12 12l8.5-4.5L12 3Z" stroke="currentColor" strokeWidth="1.7" />
+      <path
+        d="M12 3 3.5 7.5 12 12l8.5-4.5L12 3Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+      />
       <path d="M5 11.5 12 15l7-3.5" stroke="currentColor" strokeWidth="1.7" />
       <path d="M5 16 12 19.5 19 16" stroke="currentColor" strokeWidth="1.7" />
     </svg>
   );
 }
 
-function BriefcaseIcon({ className = '' }: { className?: string }) {
+function BriefcaseIcon({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
       <path
@@ -42,7 +51,7 @@ function BriefcaseIcon({ className = '' }: { className?: string }) {
   );
 }
 
-function ShieldIcon({ className = '' }: { className?: string }) {
+function ShieldIcon({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
       <path
@@ -54,11 +63,22 @@ function ShieldIcon({ className = '' }: { className?: string }) {
   );
 }
 
-function ArrowRightIcon({ className = '' }: { className?: string }) {
+function ArrowRightIcon({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path d="M5 12h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <path d="m13 6 6 6-6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M5 12h14"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="m13 6 6 6-6 6"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -73,90 +93,117 @@ function PathCard({
   accent,
   recommended,
   cta,
+  disabled = false,
+  statusLabel,
 }: PathCardProps) {
-  const isYellow = accent === 'yellow';
+  const isYellow = accent === "yellow";
 
-  const accentText = isYellow ? 'text-yellow-300' : 'text-emerald-300';
-  const accentBorder = isYellow ? 'border-yellow-400/40' : 'border-emerald-400/35';
-  const accentBg = isYellow ? 'bg-yellow-400/10' : 'bg-emerald-400/10';
+  const accentText = isYellow ? "text-yellow-300" : "text-emerald-300";
+  const accentBorder = isYellow
+    ? "border-yellow-400/40"
+    : "border-emerald-400/35";
+  const accentBg = isYellow ? "bg-yellow-400/10" : "bg-emerald-400/10";
   const buttonClass = isYellow
-    ? 'bg-yellow-300 text-black hover:bg-yellow-200'
-    : 'border border-emerald-400/70 text-emerald-300 hover:bg-emerald-400/10';
+    ? "bg-yellow-300 text-black hover:bg-yellow-200"
+    : "border border-emerald-400/70 text-emerald-300 hover:bg-emerald-400/10";
 
   return (
     <div
       className={[
-        'relative flex min-h-[400px] flex-col rounded-xl border bg-black/35 p-5',
-        'shadow-[0_0_80px_rgba(0,0,0,0.35)] backdrop-blur-sm transition',
-        'hover:-translate-y-1 hover:bg-white/[0.035]',
+        "relative flex min-h-[400px] flex-col overflow-hidden rounded-xl border bg-black/35 p-5",
+        "shadow-[0_0_80px_rgba(0,0,0,0.35)] backdrop-blur-sm transition",
+        disabled ? "opacity-90" : "hover:-translate-y-1 hover:bg-white/[0.035]",
         accentBorder,
-        recommended ? 'shadow-[0_0_55px_rgba(250,204,21,0.12)]' : '',
-      ].join(' ')}
+        recommended ? "shadow-[0_0_55px_rgba(250,204,21,0.12)]" : "",
+      ].join(" ")}
     >
-      {recommended ? (
-        <div className="absolute right-5 top-5 rounded-md border border-yellow-300/35 bg-yellow-300/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.28em] text-yellow-300">
-          Recommended
-        </div>
-      ) : (
-        <div className="absolute right-5 top-5 rounded-md border border-emerald-300/35 bg-emerald-300/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.28em] text-emerald-300">
-          {badge}
-        </div>
-      )}
+      {disabled ? (
+        <div className="pointer-events-none absolute inset-0 z-10 bg-black/10 backdrop-blur-[1px]" />
+      ) : null}
 
-      <div
-        className={[
-          'mb-5 flex h-14 w-14 items-center justify-center rounded-lg border',
-          accentBorder,
-          accentBg,
-          accentText,
-        ].join(' ')}
-      >
-        {isYellow ? <StackIcon className="h-7 w-7" /> : <BriefcaseIcon className="h-7 w-7" />}
-      </div>
-
-      <div className={`mb-2 text-[10px] font-bold uppercase tracking-[0.34em] ${accentText}`}>
-        {label}
-      </div>
-
-      <h2 className="text-xl font-semibold tracking-tight text-zinc-100">
-        {title}
-      </h2>
-
-      <p className="mt-2 max-w-[520px] text-[13px] leading-6 text-zinc-400">
-        {description}
-      </p>
-
-      <div className="my-5 h-px w-full bg-white/10" />
-
-      <div className="space-y-3">
-        {bullets.map((item) => (
-          <div key={item} className="flex items-center gap-3 text-zinc-300">
-            <span
-              className={[
-                'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[9px]',
-                accentBorder,
-                accentText,
-              ].join(' ')}
-            >
-              ✓
-            </span>
-            <span className="text-[13px]">{item}</span>
+      <div className="relative z-20">
+        {disabled && statusLabel ? (
+          <div className="absolute right-0 top-0 rounded-md border border-yellow-300/35 bg-yellow-300/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.28em] text-yellow-300">
+            {statusLabel}
           </div>
-        ))}
+        ) : recommended ? (
+          <div className="absolute right-0 top-0 rounded-md border border-yellow-300/35 bg-yellow-300/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.28em] text-yellow-300">
+            Recommended
+          </div>
+        ) : (
+          <div className="absolute right-0 top-0 rounded-md border border-emerald-300/35 bg-emerald-300/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.28em] text-emerald-300">
+            {badge}
+          </div>
+        )}
+
+        <div
+          className={[
+            "mb-5 flex h-14 w-14 items-center justify-center rounded-lg border",
+            accentBorder,
+            accentBg,
+            accentText,
+            disabled ? "opacity-80" : "",
+          ].join(" ")}
+        >
+          {isYellow ? (
+            <StackIcon className="h-7 w-7" />
+          ) : (
+            <BriefcaseIcon className="h-7 w-7" />
+          )}
+        </div>
+
+        <div
+          className={`mb-2 text-[10px] font-bold uppercase tracking-[0.34em] ${accentText}`}
+        >
+          {label}
+        </div>
+
+        <h2 className="text-xl font-semibold tracking-tight text-zinc-100">
+          {title}
+        </h2>
+
+        <p className="mt-2 max-w-[520px] text-[13px] leading-6 text-zinc-400">
+          {description}
+        </p>
+
+        <div className="my-5 h-px w-full bg-white/10" />
+
+        <div className="space-y-3">
+          {bullets.map((item) => (
+            <div key={item} className="flex items-center gap-3 text-zinc-300">
+              <span
+                className={[
+                  "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[9px]",
+                  accentBorder,
+                  accentText,
+                ].join(" ")}
+              >
+                ✓
+              </span>
+              <span className="text-[13px]">{item}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div className="mt-auto pt-6">
-        <Link
-          href={href}
-          className={[
-            'group flex h-11 w-full items-center justify-center gap-2 rounded-md px-4',
-            'text-[13px] font-semibold transition',
-            buttonClass,
-          ].join(' ')}
-        >
-          {cta}
-          <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-1" />
-        </Link>
+      <div className="relative z-20 mt-auto pt-6">
+        {disabled ? (
+          <div className="flex h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-md border border-yellow-300/25 bg-yellow-300/5 px-4 text-[13px] font-semibold text-yellow-200/45">
+            {cta}
+          </div>
+        ) : (
+          <Link
+            href={href}
+            className={[
+              "group flex h-11 w-full items-center justify-center gap-2 rounded-md px-4",
+              "text-[13px] font-semibold transition",
+              buttonClass,
+            ].join(" ")}
+          >
+            {cta}
+            <ArrowRightIcon className="h-4 w-4 transition group-hover:translate-x-1" />
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -169,8 +216,8 @@ export default function RegisterChooserPage() {
         className="absolute inset-0 opacity-[0.22]"
         style={{
           backgroundImage:
-            'radial-gradient(circle at 1px 1px, rgba(255,255,255,0.22) 1px, transparent 0)',
-          backgroundSize: '34px 34px',
+            "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.22) 1px, transparent 0)",
+          backgroundSize: "34px 34px",
         }}
       />
 
@@ -211,23 +258,42 @@ export default function RegisterChooserPage() {
             Choose a <span className="italic text-[#C5A67C]">registration</span>
           </h1>
 
-          <p className="mx-auto mt-5 max-w-3xl text-base leading-7 text-zinc-400">&nbsp;</p>
+          <p className="mx-auto mt-5 max-w-3xl text-base leading-7 text-zinc-400">
+            &nbsp;
+          </p>
         </div>
 
-        <div className="mx-auto flex max-w-[480px] justify-center">
+        <div className="mx-auto grid max-w-[980px] gap-5 md:grid-cols-2">
           <PathCard
             title="ERC-8183"
             label="Escrow Agent"
             badge="ERC-8183"
             description="For agents that use escrow jobs"
             bullets={[
-              'Create and fund jobs onchain with USDC',
-              'Submit deliverable hash for evaluation',
-              'Receive USDC settlement from escrow',
+              "Create and fund jobs onchain with USDC",
+              "Submit deliverable hash for evaluation",
+              "Receive USDC settlement from escrow",
             ]}
             href="/register/erc8004"
             accent="green"
             cta="Start Escrow Agent Registration"
+          />
+
+          <PathCard
+            title="External Bot x402"
+            label="External Runtime"
+            badge="x402"
+            description="For externally hosted agents using paid access, API keys, and x402 payment flows"
+            bullets={[
+              "Create API-key authenticated external agents",
+              "Expose paid services through x402 access",
+              "Connect off-platform runtimes to ArcLayer jobs",
+            ]}
+            href="/agent-setup"
+            accent="yellow"
+            cta="Start External Bot Setup"
+            disabled={!EXTERNAL_BOT_X402_ENABLED}
+            statusLabel={EXTERNAL_BOT_X402_STATUS}
           />
         </div>
 
@@ -238,7 +304,7 @@ export default function RegisterChooserPage() {
 
           <div>
             <p className="text-sm font-semibold text-zinc-100">
-              Both paths create an on-chain ERC-8004 agent identity.
+              Registration paths create an on-chain ERC-8004 agent identity.
             </p>
             <p className="mt-0.5 text-[11px] text-zinc-500">
               You can review and edit details in the next steps before minting.
