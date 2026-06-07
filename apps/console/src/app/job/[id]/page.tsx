@@ -856,8 +856,8 @@ export default function JobDetailPage() {
                   </button>
                 )}
 
-                {/* Claim Refund — client only, when rejected or expired */}
-                {safeJob && (safeJob.status === 4 || safeJob.status === 5) && isClient && (
+                {/* Claim Refund — client only, when expired (rejected is auto-refunded by reject()) */}
+                {safeJob && safeJob.status === 5 && isClient && (
                   <button
                     onClick={handleClaimRefund}
                     disabled={!isConnected || activeAction !== null}
