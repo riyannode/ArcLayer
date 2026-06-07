@@ -253,7 +253,7 @@ No RAM-only state. All state in Supabase. Bot is fully disposable.
 
 ## Production Readiness
 
-### Direct-Assigned Jobs ✅ Production-Ready
+### Direct-Assigned Jobs ✅ Ready
 
 Direct-assigned jobs (where `provider` is set to a specific address at job creation) are fully production-ready:
 
