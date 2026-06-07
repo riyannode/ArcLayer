@@ -163,9 +163,14 @@ export async function handleRequestFundJobWebSign(
   const amount = String(args.amount || '').trim();
 
   if (!jobId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
-  if (!amount) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'amount required (USDC atomic units)');
+  if (!amount || !/^\d+$/.test(amount)) {
+    throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'amount must be a positive integer (USDC atomic units)');
+  }
 
   const amountBigInt = BigInt(amount);
+  if (amountBigInt <= 0n) {
+    throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'amount must be > 0');
+  }
   const commerceAddr = CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address;
 
   // Fund bundle: USDC approve + fund(jobId)
