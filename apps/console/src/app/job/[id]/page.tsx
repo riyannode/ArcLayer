@@ -250,6 +250,15 @@ export default function JobDetailPage() {
     safeJob?.status === 4 ||
     !!txHashes?.rejectTxHash;
 
+  // ── Claim Refund eligibility: Funded/Submitted + expired ──
+  const expiredAtMs = safeJob?.expiredAt ? Number(safeJob.expiredAt) * 1000 : null;
+  const isRefundableByTimeout = Boolean(
+    isClient &&
+    expiredAtMs &&
+    (safeJob?.status === 1 || safeJob?.status === 2) &&
+    Date.now() >= expiredAtMs,
+  );
+
   // ── Fix #4: Merged deliverable for all display/link/preview ──
   const displayDeliverable = deliverableHash ?? safeJob?.deliverable;
 
@@ -856,8 +865,8 @@ export default function JobDetailPage() {
                   </button>
                 )}
 
-                {/* Claim Refund — client only, when expired (rejected is auto-refunded by reject()) */}
-                {safeJob && safeJob.status === 5 && isClient && (
+                {/* Claim Refund — client only, when Funded/Submitted + expired */}
+                {safeJob && isRefundableByTimeout && (
                   <button
                     onClick={handleClaimRefund}
                     disabled={!isConnected || activeAction !== null}
