@@ -59,7 +59,7 @@ function mcpLandingHtml(origin: string): string {
       --text: #f8fafc;
       --muted: #94a3b8;
       --soft: #cbd5e1;
-      --accent: #67e8f9;
+      --accent: #facc15;
       --code: #0b1220;
     }
     * { box-sizing: border-box; }
@@ -69,8 +69,8 @@ function mcpLandingHtml(origin: string): string {
       min-height: 100vh;
       font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background:
-        radial-gradient(circle at top left, rgba(103,232,249,0.16), transparent 34rem),
-        radial-gradient(circle at bottom right, rgba(99,102,241,0.16), transparent 34rem),
+        radial-gradient(circle at top left, rgba(250,204,21,0.16), transparent 34rem),
+        radial-gradient(circle at bottom right, rgba(245,158,11,0.16), transparent 34rem),
         var(--bg);
       color: var(--text);
       display: flex;
@@ -91,7 +91,7 @@ function mcpLandingHtml(origin: string): string {
     }
     .badge {
       display: inline-flex;
-      border: 1px solid rgba(103,232,249,0.32);
+      border: 1px solid rgba(250,204,21,0.32);
       color: var(--accent);
       border-radius: 999px;
       padding: 6px 10px;
@@ -172,8 +172,8 @@ function mcpLandingHtml(origin: string): string {
       background: var(--panel-strong);
     }
     .button.primary {
-      border-color: rgba(103,232,249,0.36);
-      color: #061018;
+      border-color: rgba(250,204,21,0.36);
+      color: #1a1400;
       background: var(--accent);
       font-weight: 700;
     }
