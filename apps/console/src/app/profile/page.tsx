@@ -1063,7 +1063,7 @@ export default function AgentProfilePage() {
 
                   {/* ── Actions ────────────────────────────────────────── */}
                   <div className="mt-5">
-                    <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/40">
+                    <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/70">
                       Amount (USDC)
                     </label>
                     <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end">
