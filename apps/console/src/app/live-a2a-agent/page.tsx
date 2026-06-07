@@ -57,9 +57,6 @@ export default function LiveA2AAgentPage() {
         <section className="rounded-sm border border-white/10 bg-black/25 p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#C5A67C]">Agent Categories</div>
-            <div className="flex gap-2">
-              <Link href="/live-a2a-agent/jobs" className="rounded-sm border border-white/10 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#EAE4D8]/65 hover:border-[#C5A67C]/35 hover:text-[#C5A67C]">Jobs →</Link>
-            </div>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {AGENT_CATEGORIES.map((category) => (
