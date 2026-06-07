@@ -836,7 +836,7 @@ export default function AgentProfilePage() {
 
               {/* Agent Account */}
               <div className="grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-3">
-                <div className="text-[13px] text-[#EAE4D8]/60">Agent Account</div>
+                <div className="text-[13px] text-[#EAE4D8]/60">Agent Wallet</div>
                 <div className="flex items-center gap-2">
                   {effectiveHasAgentAccount ? (
                     <>
@@ -1011,7 +1011,7 @@ export default function AgentProfilePage() {
                       <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
                         {balancesLoading && !useMockData ? '...' : effectiveOwnerBalance?.formatted ?? '0.00'}
                       </div>
-                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-20 balance</div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/50">EOA</div>
                     </div>
                   </div>
                   <p className="mt-3 text-[11px] leading-5 text-[#EAE4D8]/35">
@@ -1030,12 +1030,12 @@ export default function AgentProfilePage() {
                       <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
                         {balancesLoading && !useMockData ? '...' : effectiveOwnerBalance?.formatted ?? '0.00'}
                       </div>
-                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-20 balance</div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/50">EOA</div>
                     </div>
                   </div>
 
                   {/* ── Agent Account Balances ─────────────────────────── */}
-                  <div className="mt-4 text-[12px] font-medium text-[#EAE4D8]/60">Agent Account</div>
+                  <div className="mt-4 text-[12px] font-medium text-[#EAE4D8]/60">Agent Wallet</div>
                   <div className="mt-2 grid gap-3 sm:grid-cols-2">
                     <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
                       <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
@@ -1044,22 +1044,20 @@ export default function AgentProfilePage() {
                       <div className="mt-2 text-[18px] font-semibold text-[#F3C536]">
                         {balancesLoading && !useMockData ? '...' : effectiveAgentBalance?.formatted ?? '0.00'}
                       </div>
-                      <div className="mt-1 text-[10px] text-[#EAE4D8]/30">ERC-8004 / ERC-8183</div>
+                      <div className="mt-1 text-[10px] text-[#EAE4D8]/50">Circle Wallet</div>
                     </div>
                     <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
                       <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
                         x402 Gateway
                       </div>
-                      <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
+                      <div className="mt-2 text-[18px] font-semibold text-[#F3C536]">
                         {balancesLoading && !useMockData ? '...' : effectiveAgentGateway?.formatted ?? '—'}
                       </div>
                       <div className="mt-1 text-[10px] text-[#EAE4D8]/30">Read-only</div>
                     </div>
                   </div>
 
-                  <p className="mt-3 text-[11px] leading-5 text-[#EAE4D8]/35">
-                    Your EOA is the owner and funding source. Your Agent Account is the operational account for agent actions.
-                  </p>
+                  <div className="mt-3"></div>
 
                   {/* ── Actions ────────────────────────────────────────── */}
                   <div className="mt-5">
