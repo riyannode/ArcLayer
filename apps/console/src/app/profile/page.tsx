@@ -27,6 +27,7 @@ import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { useFundAgentAccount } from '@/hooks/useFundAgentAccount';
 import { useAgentAccountGatewayDeposit } from '@/hooks/useAgentAccountGatewayDeposit';
 import { useSignMessage } from 'wagmi';
+import { McpSigningSessionCard } from '@/components/profile/McpSigningSessionCard';
 
 // ── Agent Account types ───────────────────────────────────────────────────
 
@@ -1173,6 +1174,13 @@ export default function AgentProfilePage() {
           </div>
         )}
 
+
+        {/* ── MCP Signing Session ──────────────────────────────────────── */}
+        {isConnected && address && (
+          <div className="mt-10">
+            <McpSigningSessionCard address={address} />
+          </div>
+        )}
 
         {!ready || loading ? (
           <div className="mt-10 flex min-h-[420px] items-center justify-center rounded-xl border border-white/10 bg-[#080D13]/70">
