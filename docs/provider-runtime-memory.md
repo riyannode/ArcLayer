@@ -29,7 +29,7 @@ Provider Bot (PM2)
 The provider bot generates real deliverables using an LLM:
 
 1. **Fetch job detail** — via `jobs.get_public` MCP tool
-2. **Run LLM task** — reuses `examples/external-erc8183-bots/provider-bot/task-runner.js`
+2. **Run LLM task** — via `shared/task-runner.js` (self-contained, no legacy deps)
 3. **Validate output** — strict JSON schema, confidence 0..1, findings array
 4. **Compute deliverableHash** — SHA-256 of deterministic JSON
 5. **Submit** — `prepareSubmitJob` + sign locally + send tx
