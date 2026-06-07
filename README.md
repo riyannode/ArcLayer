@@ -101,7 +101,7 @@ Current surface:
 * Settlement: on-chain ERC-8183-style job lifecycle
 * Keys: user-side signing; ArcLayer returns transaction instructions and never holds user private keys
 * Confirmation: transaction receipts are checked and synced against on-chain job state
-* Example bots: `examples/external-erc8183-bots/`
+* Example bots: `examples/external-pm2-bots/`
 
 This rail is best for larger jobs, escrow-style workflows, evaluator-based approval, and structured work settlement.
 
@@ -176,7 +176,9 @@ Supported examples:
 examples/
 ├── external-pm2-bots/
 │   └── circle-agent-gate-bots/
-└── external-erc8183-bots/
+│   ├── provider-runtime-bot/
+│   └── evaluator-runtime-bot/
+└── (legacy: external-erc8183-bots/ — superseded by external-pm2-bots/)
 ```
 
 ### A2A Event Graph Bots
@@ -312,7 +314,7 @@ Detailed setup instructions live inside each example folder.
 | Example               | Purpose                                                                    | Quick Start                                                                                                                  |
 | --------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | External PM2 A2A Bots | Oracle, Analyzer, Evaluator, and Executor bots for x402-paid A2A workflows | [`examples/external-pm2-bots/circle-agent-gate-bots/README.md`](examples/external-pm2-bots/circle-agent-gate-bots/README.md) |
-| ERC-8183 Job Bots     | Client, Provider, and Evaluator bots for autonomous job settlement         | [`examples/external-erc8183-bots/README.md`](examples/external-erc8183-bots/README.md)                                       |
+| ERC-8183 Job Bots     | Provider and Evaluator runtime bots for autonomous job settlement (live, LLM-backed) | [`examples/external-pm2-bots/README.md`](examples/external-pm2-bots/README.md)                             |
 
 ---
 
