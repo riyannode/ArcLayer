@@ -247,22 +247,25 @@ export function registerAllTools(): void {
   registerTool({
     name: 'jobs.list_public',
     domain: 'jobs',
-    description: 'List jobs from the indexer. Supports optional status filter.',
+    description: 'List jobs from the indexer. Supports optional status and evaluatorAddress filters.',
     authRequired: false,
     roles: [],
     inputSchema: [
       { name: 'status', type: 'string', description: 'created | funded | submitted | completed' },
+      { name: 'evaluatorAddress', type: 'string', description: 'Filter by evaluator address (case-insensitive).' },
       { name: 'limit', type: 'number', description: 'Optional max count (1-50).' },
     ],
     legacyAliases: ['list_jobs'],
     kind: 'read',
     handler: async (args) => {
       const status = typeof args.status === 'string' ? args.status.toLowerCase() : undefined;
+      const evaluatorFilter = typeof args.evaluatorAddress === 'string' ? args.evaluatorAddress.toLowerCase() : undefined;
       const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(50, args.limit)) : undefined;
       const res = await fetch(indexerUrl('/jobs'), { cache: 'no-store' });
       const json = await res.json().catch(() => ({}));
       let list: unknown[] = Array.isArray(json) ? json : json.jobs || json.data || [];
       if (status) list = list.filter((j: any) => String(j.status || '').toLowerCase().includes(status));
+      if (evaluatorFilter) list = list.filter((j: any) => String(j.evaluator || j.evaluatorAddress || '').toLowerCase() === evaluatorFilter);
       return { jobs: limit ? list.slice(0, limit) : list, total: list.length };
     },
   });
