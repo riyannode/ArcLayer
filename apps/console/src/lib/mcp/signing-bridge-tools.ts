@@ -56,7 +56,7 @@ async function createSigningRequest(
       sessionId,
       actionType,
       chainId: ARC_CHAIN_ID,
-      expectedClientWallet: expectedClientWallet || process.env.ARCLAYER_CLIENT_WALLET || '',
+      expectedClientWallet: process.env.ARCLAYER_CLIENT_WALLET || '',
       transactions,
       summary,
     }),

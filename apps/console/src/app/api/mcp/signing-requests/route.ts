@@ -30,9 +30,7 @@ export async function POST(req: NextRequest) {
     }
 
     const expectedClientWallet = String(body.expectedClientWallet || '').trim();
-    if (!expectedClientWallet) {
-      return NextResponse.json({ ok: false, error: 'expectedClientWallet required' }, { status: 400 });
-    }
+    // Optional — derived from session.owner_wallet if omitted
 
     const transactions = body.transactions as SigningTransaction[] | undefined;
     if (!Array.isArray(transactions) || transactions.length === 0) {
