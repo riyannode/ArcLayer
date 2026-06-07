@@ -266,6 +266,8 @@ collect_inputs() {
     WALLET_ADDRESS="${WALLET_ADDRESS:-0x0000000000000000000000000000000000000000}"
     PRIVATE_KEY="<dry-run: hidden>"
     LLM_PROVIDER="${LLM_PROVIDER:-none}"
+    LLM_MODEL="${LLM_MODEL:-dry-run-model}"
+    EVALUATOR_MODEL="${EVALUATOR_MODEL:-dry-run-model}"
     info "[dry-run] Using placeholder values — no secrets collected"
     return
   fi
