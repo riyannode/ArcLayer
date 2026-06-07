@@ -1,4 +1,4 @@
-import type { A2AOnChain, AutonomousFeed, Job, NetworkAgent, Overview, Proof, RegisteredAgent } from '@/types/agent-network';
+import type { A2AOnChain, AgentReputationDetail, AutonomousFeed, Job, NetworkAgent, Overview, Proof, RegisteredAgent } from '@/types/agent-network';
 import { asArray, asString, asNumber } from '@/lib/safeShape';
 import { safeBigInt } from '@/lib/safeNumber';
 
@@ -132,7 +132,8 @@ export function buildAgentNetwork({
         metadataURI: asString(reg.metadataURI),
         source: reg.source || 'erc8004_identity_registry',
         avatar: asString(meta?.avatar) || undefined,
-        reputation: asNumber((reg as any).reputationScore, 0),
+        reputation: asNumber((reg as any).reputationScore ?? (reg as any).score ?? (reg as any).reputation?.score, 0),
+        reputationDetail: (reg as any).reputation as AgentReputationDetail | undefined,
         callsServed: receipts.length,
         jobsCompleted: completed,
         revenueRaw: volumeRaw,

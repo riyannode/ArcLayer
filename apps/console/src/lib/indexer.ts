@@ -12,6 +12,17 @@
 
 import { safeJson } from '@/lib/safeFetch';
 
+/**
+ * Indexer provider adapter boundary.
+ * - "custom" (default): current self-hosted indexer at INDEXER_BASE_URL
+ * - "goldsky": reserved for future Goldsky migration (not implemented)
+ *
+ * Set NEXT_PUBLIC_INDEXER_PROVIDER=custom|goldsky to switch.
+ */
+export type IndexerProvider = 'custom' | 'goldsky';
+export const INDEXER_PROVIDER: IndexerProvider =
+  (process.env.NEXT_PUBLIC_INDEXER_PROVIDER as IndexerProvider) || 'custom';
+
 export const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || 'https://indexer.arclayers.xyz';
 
 export function indexerUrl(path: string) {

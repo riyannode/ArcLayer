@@ -347,9 +347,15 @@ export function writeMetaValue(key: string, value: string) {
 }
 
 function normalizeJobForCompatibilitySchema(job: ReturnType<typeof projectJobsFromEvents>[number]) {
+  // Use provider address as agentId fallback instead of "0"
+  const agentId = job.provider && job.provider !== "0x0000000000000000000000000000000000000000"
+    ? job.provider.toLowerCase()
+    : job.client && job.client !== "0x0000000000000000000000000000000000000000"
+      ? job.client.toLowerCase()
+      : "0";
   return {
     id: job.id,
-    agentId: "0",
+    agentId,
     client: job.client,
     worker: job.provider,
     evaluator: job.evaluator,
@@ -903,4 +909,149 @@ export function readReputationByAgent(agentTokenId: string) {
     updatedAt: row.updated_at as string,
     events,
   };
+}
+
+// ── ERC-8183 Provider Reputation (computed from indexed jobs) ─────────────
+
+export type Erc8183ProviderReputation = {
+  agentId: string;
+  score: number;
+  tier: "New" | "Excellent" | "Reliable" | "Emerging" | "Unproven";
+  totalJobs: number;
+  completedJobs: number;
+  submittedJobs: number;
+  activeJobs: number;
+  rejectedJobs: number;
+  failedJobs: number;
+  expiredJobs: number;
+  totalVolumeAtomic: string;
+  totalVolumeUsdc: number;
+  completedLast7d: number;
+  updatedAt: string;
+};
+
+function computeErc8183ReputationFromJobs(
+  agentId: string,
+  jobs: Array<{ status: number; fundedAmount: string; createdAt: string }>,
+): Erc8183ProviderReputation {
+  let completedJobs = 0;
+  let submittedJobs = 0;
+  let activeJobs = 0;
+  let rejectedJobs = 0;
+  let failedJobs = 0;
+  let expiredJobs = 0;
+  let totalVolumeAtomic = BigInt(0);
+  let completedLast7d = 0;
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  for (const job of jobs) {
+    switch (job.status) {
+      case 3: // Completed
+        completedJobs++;
+        totalVolumeAtomic += BigInt(job.fundedAmount || "0");
+        // Use createdAt as proxy for settlement time (indexer doesn't track settled_at)
+        if (Number(job.createdAt) * 1000 >= sevenDaysAgo) completedLast7d++;
+        break;
+      case 4: // Rejected
+        rejectedJobs++;
+        break;
+      case 5: // Expired
+        expiredJobs++;
+        break;
+      case 2: // Submitted
+        submittedJobs++;
+        break;
+      case 1: // Funded
+      case 0: // Open
+        activeJobs++;
+        break;
+      default:
+        // Unknown status — count as active
+        activeJobs++;
+    }
+  }
+
+  const totalJobs = jobs.length;
+  const totalVolumeUsdc = Number(totalVolumeAtomic) / 1_000_000;
+
+  // Same formula as PR #480
+  const baseScore = totalJobs > 0 ? 10 : 0;
+  const completionScore = completedJobs * 12;
+  const submittedScore = submittedJobs * 4;
+  const activeScore = activeJobs * 1;
+  const reliabilityScore = totalJobs > 0 ? Math.round((completedJobs / totalJobs) * 25) : 0;
+  const volumeScore = Math.min(20, Math.floor(totalVolumeUsdc / 1));
+  const recencyScore = completedLast7d > 0 ? 5 : 0;
+  const penaltyScore = rejectedJobs * 8 + failedJobs * 10 + expiredJobs * 4;
+
+  const rawScore =
+    baseScore +
+    completionScore +
+    submittedScore +
+    activeScore +
+    reliabilityScore +
+    volumeScore +
+    recencyScore -
+    penaltyScore;
+
+  const score = Math.max(0, Math.min(100, rawScore));
+
+  let tier: Erc8183ProviderReputation["tier"];
+  if (totalJobs === 0) tier = "New";
+  else if (score >= 80) tier = "Excellent";
+  else if (score >= 60) tier = "Reliable";
+  else if (score >= 35) tier = "Emerging";
+  else tier = "Unproven";
+
+  return {
+    agentId,
+    score,
+    tier,
+    totalJobs,
+    completedJobs,
+    submittedJobs,
+    activeJobs,
+    rejectedJobs,
+    failedJobs,
+    expiredJobs,
+    totalVolumeAtomic: totalVolumeAtomic.toString(),
+    totalVolumeUsdc,
+    completedLast7d,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function readErc8183ReputationByProvider(providerAddress: string): Erc8183ProviderReputation | null {
+  const normalized = providerAddress.toLowerCase();
+  const jobs = db.prepare(
+    `SELECT status, funded_amount, created_at FROM jobs WHERE worker = ? ORDER BY CAST(created_at AS INTEGER) DESC`,
+  ).all(normalized) as Array<{ status: number; funded_amount: string; created_at: string }>;
+
+  if (jobs.length === 0) return null;
+
+  return computeErc8183ReputationFromJobs(
+    normalized,
+    jobs.map((j) => ({ status: j.status, fundedAmount: j.funded_amount, createdAt: j.created_at })),
+  );
+}
+
+export function readErc8183ReputationAll(): Erc8183ProviderReputation[] {
+  const rows = db.prepare(
+    `SELECT worker, status, funded_amount, created_at FROM jobs WHERE worker != '0x0000000000000000000000000000000000000000' ORDER BY worker, CAST(created_at AS INTEGER)`,
+  ).all() as Array<{ worker: string; status: number; funded_amount: string; created_at: string }>;
+
+  const byWorker = new Map<string, Array<{ status: number; fundedAmount: string; createdAt: string }>>();
+  for (const row of rows) {
+    const w = row.worker.toLowerCase();
+    const arr = byWorker.get(w) ?? [];
+    arr.push({ status: row.status, fundedAmount: row.funded_amount, createdAt: row.created_at });
+    byWorker.set(w, arr);
+  }
+
+  const results: Erc8183ProviderReputation[] = [];
+  for (const [worker, jobs] of byWorker) {
+    results.push(computeErc8183ReputationFromJobs(worker, jobs));
+  }
+
+  return results.sort((a, b) => b.score - a.score);
 }

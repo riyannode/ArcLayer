@@ -71,6 +71,23 @@ export type RegisteredAgentSource =
   | 'registry'
   | string;
 
+export type AgentReputationDetail = {
+  source?: string;
+  score?: number;
+  tier?: string;
+  totalJobs?: number;
+  completedJobs?: number;
+  submittedJobs?: number;
+  activeJobs?: number;
+  rejectedJobs?: number;
+  failedJobs?: number;
+  expiredJobs?: number;
+  totalVolumeAtomic?: string;
+  totalVolumeUsdc?: number;
+  completedLast7d?: number;
+  updatedAt?: string;
+};
+
 export type RegisteredAgent = {
   /**
    * Canonical ArcLayer agent ID.
@@ -95,6 +112,7 @@ export type RegisteredAgent = {
   skillHash?: string;
   reputationScore?: string;
   score?: string;
+  reputation?: AgentReputationDetail;
   jobs?: string[];
   proofTokenIds?: string[];
   metadata: RegisteredAgentMetadata | null;
@@ -116,6 +134,7 @@ export type NetworkAgent = {
   source: RegisteredAgentSource;
   avatar?: string;
   reputation: number;
+  reputationDetail?: AgentReputationDetail;
   callsServed: number;
   jobsCompleted: number;
   revenueRaw: string;
