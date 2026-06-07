@@ -174,7 +174,7 @@ export function AgentIdentityMcpSessionCard({
 
           <div className="mt-4">
             <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/65">
-              Agent Account Address
+              Agent Wallet Address
             </label>
 
             <input
