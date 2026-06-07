@@ -27,6 +27,8 @@ const ARC_CHAIN_ID = 5042002;
 const ARC_BASE_URL = process.env.ARCLAYER_BASE_URL || 'https://arclayers.xyz';
 const SIGNING_SESSION_ID = process.env.ARCLAYER_SIGNING_SESSION_ID || '';
 
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function requireSigningSession(): string {
@@ -92,7 +94,7 @@ export async function handleRequestCreateJobWebSign(
   const evaluator = String(args.evaluator || '').trim();
   const expiredAt = String(args.expiredAt || '').trim();
   const description = String(args.description || '').trim();
-  const hook = String(args.hook || '0x').trim();
+  const hook = String(args.hook || ZERO_ADDRESS).trim();
 
   if (!provider) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'provider required');
   if (!evaluator) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'evaluator required');
@@ -157,7 +159,15 @@ export async function handleRequestFundJobWebSign(
   const amountBigInt = BigInt(amount);
   const commerceAddr = CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address;
 
-  // Fund bundle: USDC approve + fund(jobId)
+  // Fund bundle: setBudget + USDC approve + fund(jobId)
+  // setBudget must be called before approve+fund (provider-only on current deployment,
+  // but included here for completeness — web-session signing is client-side)
+  const setBudgetData = encodeFunctionData({
+    abi: ERC8183_AGENTIC_COMMERCE_ABI,
+    functionName: 'setBudget',
+    args: [BigInt(jobId), amountBigInt, '0x' as Hex],
+  });
+
   const approveData = encodeFunctionData({
     abi: USDC_ABI,
     functionName: 'approve',
@@ -171,6 +181,13 @@ export async function handleRequestFundJobWebSign(
   });
 
   const transactions: SigningTransaction[] = [
+    {
+      kind: 'erc8183_set_budget',
+      to: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      data: setBudgetData,
+      value: '0',
+      summary: `Set budget ${amount} USDC for job #${jobId}`,
+    },
     {
       kind: 'usdc_approve',
       to: ARC_TOKENS.USDC,
