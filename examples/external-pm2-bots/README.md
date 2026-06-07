@@ -122,10 +122,6 @@ cd ~/arclayer-bots/evaluator-runtime && npm install
 
 Each runtime gets its own `.env` with only that role's secrets.
 
-## Local Indexer Fallback
-
-When the production ArcLayer indexer is down, both bots can fall back to a local indexer running on `localhost:3535` (or custom `LOCAL_INDEXER_URL`). This is automatic — the bots try MCP first, then fall back.
-
 ## Common Errors
 
 | Error | Cause | Fix |
