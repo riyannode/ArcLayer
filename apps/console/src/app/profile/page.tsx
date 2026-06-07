@@ -352,6 +352,9 @@ export default function AgentProfilePage() {
   const [reputationLoading, setReputationLoading] = useState(false);
   const [profileView, setProfileView] = useState<'agent' | 'client'>('agent');
 
+  // Gate: only show toggle/MCP card after profile data has loaded
+  const profileLoaded = ready && !loading;
+
   // Preview domain guard — passkey creation only works on production origin
   const isPreviewDomain = useMemo(() => {
     if (typeof window === 'undefined') return false;
@@ -1177,7 +1180,7 @@ export default function AgentProfilePage() {
 
 
         {/* ── Profile View Toggle ───────────────────────────────────────── */}
-        {isConnected && address && agents.length > 0 && (
+        {isConnected && address && profileLoaded && agents.length > 0 && (
           <div className="mt-10 flex gap-2">
             <button
               type="button"
@@ -1205,7 +1208,7 @@ export default function AgentProfilePage() {
         )}
 
         {/* ── MCP Signing Session (Client Mode only, or no agents) ─────── */}
-        {isConnected && address && (agents.length === 0 || profileView === 'client') && (
+        {isConnected && address && profileLoaded && (agents.length === 0 || profileView === 'client') && (
           <div className="mt-10">
             <McpSigningSessionCard address={address} />
           </div>
