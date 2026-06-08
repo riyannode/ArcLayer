@@ -37,6 +37,7 @@ import {
 // ─── Reputation overlay type ───────────────────────────────────────
 
 type ReputationOverlay = {
+  score: string;
   averageScore: string;
   feedbackCount: number;
   latestScore: string | null;
@@ -127,8 +128,16 @@ function buildReputationSeries(
   reputation: ReputationOverlay | null,
   dashboardReputation?: string,
 ) {
-  const baseScore = Number(reputation?.averageScore ?? dashboardReputation ?? agent?.score ?? 0);
-  const reputationScore = Number(reputation?.averageScore ?? dashboardReputation ?? agent?.reputationScore ?? baseScore);
+  const baseScore = Number(
+    reputation?.score ?? reputation?.averageScore ?? dashboardReputation ?? agent?.score ?? 0,
+  );
+  const reputationScore = Number(
+    reputation?.score ??
+      reputation?.averageScore ??
+      dashboardReputation ??
+      agent?.reputationScore ??
+      baseScore,
+  );
   const completedJobs = jobs.filter(
     (job) => job.approved || job.status >= 3,
   ).length;
@@ -430,7 +439,8 @@ export default function AgentProfilePage() {
             // nonzero score from /agents/{id}.
             if (Number(resolvedScore) > 0 || resolvedFeedbackCount > 0) {
               repOverlay = {
-                averageScore: resolvedScore,
+                score: resolvedScore,
+                averageScore: String(repJson?.averageScore ?? '0'),
                 feedbackCount: resolvedFeedbackCount,
                 latestScore: resolvedLatestScore,
               };
@@ -468,18 +478,30 @@ export default function AgentProfilePage() {
   }, [agentId]);
 
   // ─── Computed values ───────────────────────────────────────────────
+  function firstPositiveScore(
+    ...values: Array<string | number | null | undefined>
+  ): string {
+    for (const value of values) {
+      const normalized = String(value ?? '').trim();
+      if (Number(normalized) > 0) return normalized;
+    }
+
+    return '0';
+  }
+
   const agent = profile?.agent;
   const jobs = profile?.jobs || [];
   const proofs = profile?.proofs || [];
   const series = buildReputationSeries(agent, jobs, proofs, reputation, dashboardAgent?.reputation);
 
-  // Computed ERC-8183 score: overlay → dashboard → indexer → '0'
-  const computedScore =
-    reputation?.averageScore ||
-    dashboardAgent?.reputation ||
-    agent?.reputationScore ||
-    agent?.score ||
-    '0';
+  // Computed ERC-8183 score: dashboard → overlay → indexer → '0'
+  const computedScore = firstPositiveScore(
+    dashboardAgent?.reputation,
+    reputation?.score,
+    agent?.reputationScore,
+    agent?.score,
+    reputation?.averageScore,
+  );
 
   const capabilities = getErc8183Capabilities(metadata);
   const links = getErc8183Links(metadata);
