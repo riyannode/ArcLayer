@@ -51,6 +51,10 @@ interface AgentJobRow {
   fund_tx_hash: string | null;
   submit_tx_hash: string | null;
   complete_tx_hash: string | null;
+  reject_tx_hash: string | null;
+  rejected_at: string | null;
+  reject_reason_text: string | null;
+  reject_reason_hash: string | null;
   created_at: string;
   claimed_at: string | null;
   started_at: string | null;
@@ -81,6 +85,7 @@ function applyJobFilters(
       const v = ((row as unknown) as Record<string, unknown>)[f.col];
       if (f.op === 'eq') return v === f.val;
       if (f.op === 'is') return f.val === null ? v === null : v !== null;
+      if (f.op === 'in') return (f.val as unknown[]).includes(v);
       return true;
     }),
   );
@@ -125,6 +130,10 @@ const fakeSupabase = {
           fund_tx_hash: null,
           submit_tx_hash: null,
           complete_tx_hash: null,
+          reject_tx_hash: null,
+          rejected_at: null,
+          reject_reason_text: null,
+          reject_reason_hash: null,
           worker_id: null,
           provider_agent_id: row.provider_agent_id as string ?? null,
           evaluator_agent_id: row.evaluator_agent_id as string ?? null,
@@ -149,6 +158,10 @@ const fakeSupabase = {
           },
           is: (col: string, val: unknown) => {
             filters.push({ op: 'is', col, val });
+            return query;
+          },
+          in: (col: string, val: unknown[]) => {
+            filters.push({ op: 'in', col, val });
             return query;
           },
           single: () => {
@@ -179,6 +192,10 @@ const fakeSupabase = {
             filters.push({ op: 'is', col, val });
             return query;
           },
+          in: (col: string, val: unknown[]) => {
+            filters.push({ op: 'in', col, val });
+            return query;
+          },
           select: (selCol: string) => {
             // After select, resolve with matched rows
             const matched = applyJobFilters(jobRows, filters);
@@ -188,6 +205,7 @@ const fakeSupabase = {
                 const v = ((row as unknown) as Record<string, unknown>)[f.col];
                 if (f.op === 'eq') return v === f.val;
                 if (f.op === 'is') return f.val === null ? v === null : v !== null;
+                if (f.op === 'in') return (f.val as unknown[]).includes(v);
                 return true;
               });
               return matches ? ({ ...row, ...patch } as unknown as AgentJobRow) : row;
@@ -206,6 +224,7 @@ const fakeSupabase = {
                 const v = ((row as unknown) as Record<string, unknown>)[f.col];
                 if (f.op === 'eq') return v === f.val;
                 if (f.op === 'is') return f.val === null ? v === null : v !== null;
+                if (f.op === 'in') return (f.val as unknown[]).includes(v);
                 return true;
               });
               return matches ? { ...row, ...patch } : row;
@@ -229,6 +248,7 @@ import {
   getErc8183JobByOnchainId,
   claimErc8183Job,
   markErc8183JobRunning,
+  attachErc8183RejectTx,
   Erc8183TxHashConflictError,
   Erc8183TxHashIdempotentError,
 } from './store';
@@ -483,5 +503,54 @@ describe('ERC-8183 store', () => {
         workerId: 'worker-001',
       }),
     ).rejects.toThrow(/not_running/);
+  });
+
+  describe('attachErc8183RejectTx', () => {
+    const rejectInput = (localJobId: string, rejectTxHash = '0xreject') => ({
+      localJobId,
+      rejectTxHash,
+      rejectReasonText: 'rejected',
+      rejectReasonHash: '0xreason',
+    });
+
+    for (const erc8183Status of ['Open', 'Funded', 'Submitted'] as const) {
+      it(`works from ${erc8183Status}`, async () => {
+        const job = await createLocalErc8183Job(SAMPLE_INPUT);
+        await simulateDbUpdate(job.localJobId, { erc8183_status: erc8183Status });
+
+        await attachErc8183RejectTx(rejectInput(job.localJobId));
+
+        const row = jobRows.find((candidate) => candidate.job_id === job.localJobId);
+        expect(row).toMatchObject({
+          erc8183_status: 'Rejected',
+          status: 'rejected',
+          reject_tx_hash: '0xreject',
+          reject_reason_text: 'rejected',
+          reject_reason_hash: '0xreason',
+        });
+      });
+    }
+
+    it('does not overwrite Completed', async () => {
+      const job = await createLocalErc8183Job(SAMPLE_INPUT);
+      await simulateDbUpdate(job.localJobId, { erc8183_status: 'Completed', status: 'settled' });
+
+      await expect(attachErc8183RejectTx(rejectInput(job.localJobId))).rejects.toBeInstanceOf(
+        Erc8183TxHashConflictError,
+      );
+
+      const row = jobRows.find((candidate) => candidate.job_id === job.localJobId);
+      expect(row?.erc8183_status).toBe('Completed');
+      expect(row?.status).toBe('settled');
+      expect(row?.reject_tx_hash).toBeNull();
+    });
+
+    it('is idempotent for the same reject tx hash', async () => {
+      const job = await createLocalErc8183Job(SAMPLE_INPUT);
+      await simulateDbUpdate(job.localJobId, { erc8183_status: 'Submitted' });
+
+      await attachErc8183RejectTx(rejectInput(job.localJobId));
+      await expect(attachErc8183RejectTx(rejectInput(job.localJobId))).resolves.toBeUndefined();
+    });
   });
 });
