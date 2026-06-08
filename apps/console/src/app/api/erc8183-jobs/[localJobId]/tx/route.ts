@@ -14,6 +14,7 @@ import {
   attachErc8183SubmitTx,
   attachErc8183CompleteTx,
   attachErc8183RejectTx,
+  updateErc8183Status,
   Erc8183TxHashConflictError,
 } from '@/lib/erc8183-jobs/store';
 import { assertErc8183Participant, isErc8183Admin } from '@/lib/erc8183-jobs/authz';
@@ -28,14 +29,15 @@ import {
   parseJobSubmitted,
   parseJobCompleted,
   parseJobRejected,
+  parseJobExpired,
 } from '@/lib/contracts/erc8183';
 import { ARC_TOKENS } from '@arclayer/sdk';
 import type { Erc8183JobView } from '@/lib/erc8183-jobs/types';
 import type { ConfirmedReceipt } from '@/lib/erc8183-jobs/receipt';
 
-type TxType = 'set_budget' | 'approve' | 'fund' | 'submit' | 'complete' | 'reject';
+type TxType = 'set_budget' | 'approve' | 'fund' | 'submit' | 'complete' | 'reject' | 'claim_refund';
 
-const VALID_TX_TYPES: TxType[] = ['set_budget', 'approve', 'fund', 'submit', 'complete', 'reject'];
+const VALID_TX_TYPES: TxType[] = ['set_budget', 'approve', 'fund', 'submit', 'complete', 'reject', 'claim_refund'];
 
 // ── Approval event decoder ────────────────────────────────────────────────
 
@@ -149,6 +151,15 @@ function findJobRejectedEvent(receipt: ConfirmedReceipt, expectedJobId: bigint) 
   for (const log of receipt.logs ?? []) {
     if (!isAgenticCommerceLog(log)) continue;
     const ev = parseJobRejected(log);
+    if (ev && ev.jobId === expectedJobId) return ev;
+  }
+  return null;
+}
+
+function findJobExpiredEvent(receipt: ConfirmedReceipt, expectedJobId: bigint) {
+  for (const log of receipt.logs ?? []) {
+    if (!isAgenticCommerceLog(log)) continue;
+    const ev = parseJobExpired(log);
     if (ev && ev.jobId === expectedJobId) return ev;
   }
   return null;
@@ -269,6 +280,7 @@ export async function POST(
       submit: ['worker', 'provider'],
       complete: ['evaluator', 'buyer'],
       reject: ['evaluator', 'buyer'],
+      claim_refund: ['buyer'],
     };
     if (txType && !isErc8183Admin(auth.key.scopes)) {
       const allowed = txRoleMap[txType];
@@ -686,6 +698,12 @@ export async function POST(
             buyerAgentId: job.buyerAgentId,
             jobId: localJobId,
             delivered: true,
+            deliverableHash: job.deliverableHash ?? undefined,
+            reasonHash: job.reasonHash ?? undefined,
+            submitTxHash: job.submitTxHash ?? undefined,
+            completeTxHash: txHash,
+            proofPayloadHash: job.proofPayloadHash ?? undefined,
+            resultPayloadHash: job.resultPayloadHash ?? undefined,
           }).catch((err) => {
             console.error('[erc8183:complete] recordDelivery failed:', err);
           });
@@ -774,6 +792,12 @@ export async function POST(
             buyerAgentId: job.buyerAgentId,
             jobId: localJobId,
             delivered: false,
+            deliverableHash: job.deliverableHash ?? undefined,
+            rejectReasonHash: job.rejectReasonHash ?? undefined,
+            submitTxHash: job.submitTxHash ?? undefined,
+            rejectTxHash: txHash,
+            proofPayloadHash: job.proofPayloadHash ?? undefined,
+            resultPayloadHash: job.resultPayloadHash ?? undefined,
           }).catch((err) => {
             console.error('[erc8183:reject] recordDelivery failed:', err);
           });
@@ -785,6 +809,55 @@ export async function POST(
           localJobId,
           erc8183JobId: job.erc8183JobId,
           txType: 'reject',
+          txHash,
+          erc8183Status: onchainJob.erc8183Status,
+          onchainStatus: onchainJob.status,
+          blockNumber: Number(receipt.blockNumber),
+        });
+      }
+
+      case 'claim_refund': {
+        // Parse JobExpired if emitted, but keep readOnchainJob as source of truth.
+        findJobExpiredEvent(receipt, erc8183JobIdBigInt);
+
+        const onchainJob = await readOnchainJob(erc8183JobIdBigInt);
+        if (!onchainJob) {
+          return NextResponse.json(
+            { ok: false, ...escrowRail(), error: 'onchain_job_not_found', message: 'Job not found on-chain after claimRefund tx.' },
+            { status: 422 },
+          );
+        }
+
+        const refundProvenanceError = validateOnchainJobMatch(onchainJob, job, 'claim_refund');
+        if (refundProvenanceError) return refundProvenanceError;
+
+        if (onchainJob.status !== 5 || onchainJob.erc8183Status !== 'Expired') {
+          return NextResponse.json(
+            {
+              ok: false,
+              ...escrowRail(),
+              error: 'onchain_status_not_expired',
+              txType: 'claim_refund',
+              erc8183Status: onchainJob.erc8183Status,
+              onchainStatus: onchainJob.status,
+              message: 'On-chain job is not in Expired status after claimRefund.',
+            },
+            { status: 422 },
+          );
+        }
+
+        await updateErc8183Status({
+          localJobId,
+          erc8183Status: onchainJob.erc8183Status,
+          status: 'expired',
+        });
+
+        return NextResponse.json({
+          ok: true,
+          ...escrowRail(),
+          localJobId,
+          erc8183JobId: job.erc8183JobId,
+          txType: 'claim_refund',
           txHash,
           erc8183Status: onchainJob.erc8183Status,
           onchainStatus: onchainJob.status,
