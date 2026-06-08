@@ -134,10 +134,13 @@ ArcLayer integrates with Arc reference ERC-8183 AgenticCommerce for job settleme
 
 ```solidity
 createJob(provider, evaluator, expiredAt, description, hook)
+setProvider(jobId, provider)
 setBudget(jobId, amount, "0x")
 fund(jobId, "0x")
 submit(jobId, deliverableHash, "0x")
 complete(jobId, reasonHash, "0x")
+reject(jobId, reasonHash, "0x")
+claimRefund(jobId)
 ```
 
 ArcLayer does not custody user keys for ERC-8183 jobs. It creates local job records, returns transaction instructions, confirms submitted transaction hashes, and syncs the local view from the on-chain contract state.
