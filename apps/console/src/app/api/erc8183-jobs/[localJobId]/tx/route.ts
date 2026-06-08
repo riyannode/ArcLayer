@@ -715,15 +715,14 @@ export async function POST(
           );
         }
 
-        const expectedReason = job.rejectReasonHash ?? job.reasonHash;
-        if (expectedReason && !sameHex(rejectedEvent.reason, expectedReason)) {
+        if (job.rejectReasonHash && !sameHex(rejectedEvent.reason, job.rejectReasonHash)) {
           return NextResponse.json(
             {
               ok: false,
               ...escrowRail(),
               error: 'event_reason_mismatch',
               txType: 'reject',
-              expectedReason,
+              expectedReason: job.rejectReasonHash,
               eventReason: rejectedEvent.reason,
             },
             { status: 422 },
@@ -740,6 +739,21 @@ export async function POST(
 
         const rejectProvenanceError = validateOnchainJobMatch(onchainJob, job, 'reject');
         if (rejectProvenanceError) return rejectProvenanceError;
+
+        if (onchainJob.status !== 4 && onchainJob.erc8183Status !== 'Rejected') {
+          return NextResponse.json(
+            {
+              ok: false,
+              ...escrowRail(),
+              error: 'onchain_status_not_rejected',
+              txType: 'reject',
+              erc8183Status: onchainJob.erc8183Status,
+              onchainStatus: onchainJob.status,
+              message: 'On-chain job is not in Rejected status.',
+            },
+            { status: 422 },
+          );
+        }
 
         await attachErc8183RejectTx({
           localJobId,

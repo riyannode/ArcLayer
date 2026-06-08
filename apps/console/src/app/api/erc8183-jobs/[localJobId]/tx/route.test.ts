@@ -406,6 +406,25 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete/reject + recordDel
     expect(mocks.attachErc8183RejectTx).not.toHaveBeenCalled();
   });
 
+  it('does not compare complete reasonHash when rejectReasonHash is absent', async () => {
+    mocks.getErc8183JobByLocalId.mockResolvedValue(makeJob({
+      reasonHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      rejectReasonHash: null,
+    }));
+    mocks.readOnchainJob.mockResolvedValue({
+      ...makeOnchainJob(),
+      status: 4,
+      erc8183Status: 'Rejected',
+    });
+
+    const req = makeRequest({ txType: 'reject', txHash: TX_HASH });
+    const res = await POST(req, { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) });
+    const body = await res.json();
+
+    expect(body.ok).toBe(true);
+    expect(mocks.attachErc8183RejectTx).toHaveBeenCalledTimes(1);
+  });
+
   it('returns 422 when reject reason does not match the prepared reason hash', async () => {
     mocks.getErc8183JobByLocalId.mockResolvedValue(makeJob({
       rejectReasonHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
@@ -422,6 +441,23 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete/reject + recordDel
       expectedReason: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       eventReason: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     });
+    expect(mocks.attachErc8183RejectTx).not.toHaveBeenCalled();
+  });
+
+  it('returns 422 when on-chain job is not Rejected', async () => {
+    mocks.getErc8183JobByLocalId.mockResolvedValue(makeJob({ rejectReasonHash: null }));
+    mocks.readOnchainJob.mockResolvedValue({
+      ...makeOnchainJob(),
+      status: 2,
+      erc8183Status: 'Submitted',
+    });
+
+    const req = makeRequest({ txType: 'reject', txHash: TX_HASH });
+    const res = await POST(req, { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) });
+    const body = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(body.error).toBe('onchain_status_not_rejected');
     expect(mocks.attachErc8183RejectTx).not.toHaveBeenCalled();
   });
 
