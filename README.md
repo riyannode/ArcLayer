@@ -86,12 +86,12 @@ This rail is best for pay-per-call, pay-per-output, agent service requests, and 
 
 ### 2. Escrow Rail — ERC-8183 Job Settlement
 
-The ERC-8183 rail is used for formal paid work orders where a client funds a job, a provider submits a deliverable, and an evaluator completes the settlement.
+The ERC-8183 rail is used for structured paid work: clients create and fund jobs, providers set budgets and submit deliverables, and evaluators either approve payout or reject the job for refund.
 
 ```text
-Client → create/fund job
-Provider → claim/submit deliverable
-Evaluator → complete settlement
+Client → create/assign/fund job
+Provider → set budget/submit deliverable
+Evaluator → approve payout or reject/refund
 ```
 
 Current surface:
