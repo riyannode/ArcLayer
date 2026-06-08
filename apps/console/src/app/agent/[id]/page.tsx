@@ -37,6 +37,7 @@ import {
 // ─── Reputation overlay type ───────────────────────────────────────
 
 type ReputationOverlay = {
+  score: string;
   averageScore: string;
   feedbackCount: number;
   latestScore: string | null;
@@ -127,8 +128,16 @@ function buildReputationSeries(
   reputation: ReputationOverlay | null,
   dashboardReputation?: string,
 ) {
-  const baseScore = Number(reputation?.averageScore ?? dashboardReputation ?? agent?.score ?? 0);
-  const reputationScore = Number(reputation?.averageScore ?? dashboardReputation ?? agent?.reputationScore ?? baseScore);
+  const baseScore = Number(
+    reputation?.score ?? reputation?.averageScore ?? dashboardReputation ?? agent?.score ?? 0,
+  );
+  const reputationScore = Number(
+    reputation?.score ??
+      reputation?.averageScore ??
+      dashboardReputation ??
+      agent?.reputationScore ??
+      baseScore,
+  );
   const completedJobs = jobs.filter(
     (job) => job.approved || job.status >= 3,
   ).length;
@@ -430,7 +439,8 @@ export default function AgentProfilePage() {
             // nonzero score from /agents/{id}.
             if (Number(resolvedScore) > 0 || resolvedFeedbackCount > 0) {
               repOverlay = {
-                averageScore: resolvedScore,
+                score: resolvedScore,
+                averageScore: String(repJson?.averageScore ?? '0'),
                 feedbackCount: resolvedFeedbackCount,
                 latestScore: resolvedLatestScore,
               };
@@ -487,9 +497,10 @@ export default function AgentProfilePage() {
   // Computed ERC-8183 score: dashboard → overlay → indexer → '0'
   const computedScore = firstPositiveScore(
     dashboardAgent?.reputation,
-    reputation?.averageScore,
+    reputation?.score,
     agent?.reputationScore,
     agent?.score,
+    reputation?.averageScore,
   );
 
   const capabilities = getErc8183Capabilities(metadata);
