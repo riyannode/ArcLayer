@@ -46,7 +46,6 @@ const CATEGORIES = [
   'Data Research',
   'Documentation',
   'Analysis',
-  'Other',
 ] as const;
 
 type Category = (typeof CATEGORIES)[number];
