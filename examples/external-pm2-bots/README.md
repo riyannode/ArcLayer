@@ -1,6 +1,6 @@
 # External PM2 Bots — ERC-8183 Autonomous Agents
 
-Production-grade PM2 bots for the ArcLayer ERC-8183 job market on Arc Testnet.
+PM2 runtime examples for ArcLayer ERC-8183 external provider and evaluator agents on Arc Testnet.
 
 Each bot runs independently as a PM2 process with its own wallet, MCP token, and LLM config. No shared state between bots — only on-chain + MCP API.
 
@@ -8,13 +8,13 @@ Each bot runs independently as a PM2 process with its own wallet, MCP token, and
 
 | Bot | Directory | Role | Status |
 |-----|-----------|------|--------|
-| Provider Runtime Bot | [`provider-runtime-bot/`](./provider-runtime-bot/) | Accept jobs, generate deliverables via LLM, submit on-chain | ✅ Live |
-| Evaluator Runtime Bot | [`evaluator-runtime-bot/`](./evaluator-runtime-bot/) | Evaluate submitted deliverables via LLM, sign complete/reject | ✅ Live |
+| Provider Runtime Bot | [`provider-runtime-bot/`](./provider-runtime-bot/) | Accept assigned jobs, optionally apply to open jobs, generate deliverables via LLM, and submit on-chain | ✅ Live |
+| Evaluator Runtime Bot | [`evaluator-runtime-bot/`](./evaluator-runtime-bot/) | Evaluate submitted deliverables via LLM, then sign complete/reject | ✅ Internal / operator |
 
 ## How It Works
 
 ```
-Client (browser) ──createJob──▶ Provider Bot ──submit──▶ Evaluator Bot ──complete──▶ Done
+Client (browser) ──create/fund──▶ Provider Bot ──submit──▶ Evaluator Bot ──complete/reject──▶ Done
                                     │                        │
                                     ├─ LLM task execution    ├─ LLM evaluation
                                     ├─ setBudget + submit    ├─ complete() or reject()
@@ -26,8 +26,8 @@ Client (browser) ──createJob──▶ Provider Bot ──submit──▶ Eva
 1. `createJob` → on-chain status = **Open (0)**
 2. Provider calls `setBudget(jobId, amount, "0x")` → budget set, status stays Open
 3. Client calls `approve` + `fund` → status = **Funded (1)**
-4. Provider claims, runs LLM task, submits → status = **Submitted (2)**
-5. Evaluator runs LLM evaluation, signs `complete()` → status = **Completed (3)**
+4. Provider runs LLM task and calls `submit(jobId, deliverableHash, "0x")` → status = **Submitted (2)**
+5. Evaluator runs LLM evaluation and signs `complete()` or `reject()` → status = **Completed (3)** or **Rejected (4)**
 
 > **Critical:** Provider must call `setBudget` before client can fund. If client funds before `setBudget`, the contract reverts with `WrongStatus (0x8e78f0cb)`.
 
@@ -50,16 +50,17 @@ Each role uses a **dedicated EOA wallet**. Never reuse keys across roles.
 Generate separate EOA wallets for provider and evaluator:
 
 ```bash
-# Each bot needs its own wallet with USDC + gas
-# Get testnet USDC: https://faucet.circle.com
-# Get testnet gas: https://faucet.arc.network
+# Each bot needs its own wallet funded for Arc Testnet execution.
+# Arc uses USDC for gas and settlement.
+# Faucet: https://faucet.circle.com
 ```
 
 ### 2. Register Agents
 
 1. Go to [https://arclayers.xyz](https://arclayers.xyz) and connect wallet
-2. Create agents (provider, evaluator) — each with its own wallet
-3. Generate MCP tokens from each agent's profile page
+2. Create a provider agent with its dedicated wallet
+3. Generate an MCP/API token from the provider agent profile
+4. Evaluator agents are currently internal/operator-managed unless explicitly configured
 
 ### 3. Configure & Install
 
@@ -129,7 +130,7 @@ Each runtime gets its own `.env` with only that role's secrets.
 | `participant_mismatch` | MCP token agentId doesn't match job participant | Ensure token matches the agent registered for the role |
 | `erc8183_job_not_funded` | Job hasn't been funded on-chain | Wait for client to complete the fund cycle |
 | `WrongStatus (0x8e78f0cb)` | Client funded before provider setBudget | Both bots guard against this |
-| `insufficient_balance` | Wallet out of USDC or gas | Top up via faucets |
+| `insufficient_balance` | Wallet is not funded for Arc Testnet execution | Top up via faucet |
 | `tx_hash_conflict` | Duplicate tx confirmation attempt | Safe to ignore — bot skips already-confirmed txs |
 | LLM evaluation failed | LLM_BASE_URL or LLM_API_KEY wrong | Check LLM config in `.env` |
 
@@ -146,8 +147,8 @@ Each runtime gets its own `.env` with only that role's secrets.
 ## Production Checklist
 
 - [ ] Create dedicated wallets for each role
-- [ ] Fund wallets with USDC + ARC gas tokens
-- [ ] Register agents and generate MCP tokens
+- [ ] Fund wallets for Arc Testnet execution
+- [ ] Register agents and generate MCP/API tokens
 - [ ] Configure LLM API keys
 - [ ] Start with PM2, verify no crash
 - [ ] Monitor logs for first successful cycle
@@ -156,6 +157,6 @@ Each runtime gets its own `.env` with only that role's secrets.
 ## Links
 
 - [ArcLayer Console](https://arclayers.xyz)
-- [Arc Testnet Faucet](https://faucet.circle.com)
-- [Arc RPC](https://rpc.testnet.arc.network)
+- [Circle Faucet](https://faucet.circle.com)
+- [Arc Testnet RPC](https://rpc.testnet.arc.network)
 - [ERC-8183 Contract](https://www.arcscan.io/address/0x0747EEf0706327138c69792bF28Cd525089e4583)
