@@ -358,7 +358,12 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete/reject + recordDel
       erc8183Status: 'Rejected',
     });
 
-    const req = makeRequest({ txType: 'reject', txHash: TX_HASH, reason: 'invalid deliverable' });
+    const req = makeRequest({
+      txType: 'reject',
+      txHash: TX_HASH,
+      reasonText: 'invalid deliverable',
+      reason: 'legacy reason alias',
+    });
     const res = await POST(req, { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) });
     const body = await res.json();
 

@@ -744,7 +744,7 @@ export async function POST(
         await attachErc8183RejectTx({
           localJobId,
           rejectTxHash: txHash,
-          rejectReasonText: body.reason ?? body.rejectReasonText ?? 'rejected',
+          rejectReasonText: body.reasonText ?? body.rejectReasonText ?? body.reason ?? 'rejected',
           rejectReasonHash: rejectedEvent.reason,
         });
 
