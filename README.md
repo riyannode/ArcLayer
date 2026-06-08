@@ -417,7 +417,6 @@ Current working surfaces:
 Use only on Arc Testnet.
 
 ---
----
 
 ## License
 
