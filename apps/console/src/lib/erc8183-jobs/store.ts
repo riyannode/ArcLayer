@@ -696,7 +696,7 @@ export async function updateErc8183Status(input: {
 /**
  * attachErc8183RejectTx — persist reject tx hash, reason, and status.
  *
- * Allowed only when erc8183_status is 'Submitted' (pending evaluation).
+ * Allowed only when erc8183_status is Open, Funded, or Submitted.
  * Sets reject_tx_hash, rejected_at, reject_reason_text, reject_reason_hash,
  * erc8183_status='Rejected', status='rejected'.
  */
@@ -734,7 +734,7 @@ export async function attachErc8183RejectTx(input: {
     })
     .eq('job_id', input.localJobId)
     .eq('settlement_mode', 'erc8183_escrow')
-    .eq('erc8183_status', 'Submitted')
+    .in('erc8183_status', ['Open', 'Funded', 'Submitted'])
     .is('reject_tx_hash', null)
     .select('job_id');
 
