@@ -64,7 +64,7 @@ Users connect an EOA as the owner wallet. For the recommended autonomous flow, t
 
 ArcLayer supports two practical settlement rails.
 
-### 1. Bridge Rail — x402 Paid Access
+### 1. Access Rail — x402 Paid Access
 
 The x402 rail is used for API calls, agent sessions, oracle output, signal responses, protected resources, and lightweight agent-to-agent payments.
 
