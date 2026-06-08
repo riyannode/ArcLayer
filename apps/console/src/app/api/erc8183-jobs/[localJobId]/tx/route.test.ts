@@ -26,12 +26,14 @@ const mocks = vi.hoisted(() => ({
   attachErc8183ApproveTx: vi.fn(),
   attachErc8183FundTx: vi.fn(),
   attachErc8183SubmitTx: vi.fn(),
+  updateErc8183Status: vi.fn(),
   assertErc8183Participant: vi.fn(),
   isErc8183Admin: vi.fn(),
   escrowRail: vi.fn(),
   checkMemoryRateLimit: vi.fn(),
   parseJobCompleted: vi.fn(),
   parseJobRejected: vi.fn(),
+  parseJobExpired: vi.fn(),
   parseBudgetSet: vi.fn(),
   parseJobFunded: vi.fn(),
   parseJobSubmitted: vi.fn(),
@@ -57,6 +59,7 @@ vi.mock('@/lib/erc8183-jobs/store', () => ({
   attachErc8183SubmitTx: mocks.attachErc8183SubmitTx,
   attachErc8183CompleteTx: mocks.attachErc8183CompleteTx,
   attachErc8183RejectTx: mocks.attachErc8183RejectTx,
+  updateErc8183Status: mocks.updateErc8183Status,
   Erc8183TxHashConflictError: class extends Error {
     constructor(
       public fieldName: string,
@@ -99,6 +102,7 @@ vi.mock('@/lib/contracts/erc8183', () => ({
   parseJobSubmitted: mocks.parseJobSubmitted,
   parseJobCompleted: mocks.parseJobCompleted,
   parseJobRejected: mocks.parseJobRejected,
+  parseJobExpired: mocks.parseJobExpired,
 }));
 
 vi.mock('@arclayer/sdk', () => ({
@@ -229,16 +233,73 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete/reject + recordDel
       jobId: JOB_ID_BIGINT,
       reason: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     });
+    mocks.parseJobExpired.mockReturnValue(null);
 
     // Default: tx attachment succeeds
     mocks.attachErc8183CompleteTx.mockResolvedValue(undefined);
     mocks.attachErc8183RejectTx.mockResolvedValue(undefined);
+    mocks.updateErc8183Status.mockResolvedValue(undefined);
 
     // Default: recordDelivery succeeds
     mocks.recordDelivery.mockResolvedValue({ txHash: '0xrep' });
 
     // Default: escrow rail
     mocks.escrowRail.mockReturnValue({ rail: 'escrow', settlementMode: 'erc8183_escrow' });
+  });
+
+  it('confirms claim_refund from on-chain Expired status without requiring JobExpired', async () => {
+    mocks.readOnchainJob.mockResolvedValue({
+      ...makeOnchainJob(),
+      status: 5,
+      erc8183Status: 'Expired',
+    });
+
+    const req = makeRequest({ txType: 'claim_refund', txHash: TX_HASH });
+    const res = await POST(req, { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) });
+    const body = await res.json();
+
+    expect(body).toMatchObject({
+      ok: true,
+      localJobId: LOCAL_JOB_ID,
+      erc8183JobId: '42',
+      txType: 'claim_refund',
+      txHash: TX_HASH,
+      erc8183Status: 'Expired',
+      onchainStatus: 5,
+      blockNumber: 45000000,
+    });
+    expect(mocks.assertErc8183Participant).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      ['buyer'],
+    );
+    expect(mocks.parseJobExpired).toHaveBeenCalled();
+    expect(mocks.updateErc8183Status).toHaveBeenCalledWith({
+      localJobId: LOCAL_JOB_ID,
+      erc8183Status: 'Expired',
+      status: 'expired',
+    });
+  });
+
+  it('returns 422 when claim_refund does not produce Expired on-chain status', async () => {
+    mocks.readOnchainJob.mockResolvedValue({
+      ...makeOnchainJob(),
+      status: 1,
+      erc8183Status: 'Funded',
+    });
+
+    const req = makeRequest({ txType: 'claim_refund', txHash: TX_HASH });
+    const res = await POST(req, { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) });
+    const body = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(body).toMatchObject({
+      error: 'onchain_status_not_expired',
+      txType: 'claim_refund',
+      erc8183Status: 'Funded',
+      onchainStatus: 1,
+    });
+    expect(mocks.updateErc8183Status).not.toHaveBeenCalled();
   });
 
   it('calls recordDelivery with workerId when workerId exists', async () => {
@@ -248,12 +309,12 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete/reject + recordDel
 
     expect(body.ok).toBe(true);
     expect(mocks.recordDelivery).toHaveBeenCalledTimes(1);
-    expect(mocks.recordDelivery).toHaveBeenCalledWith({
+    expect(mocks.recordDelivery).toHaveBeenCalledWith(expect.objectContaining({
       providerAgentId: WORKER_AGENT,
       buyerAgentId: BUYER_AGENT,
       jobId: LOCAL_JOB_ID,
       delivered: true,
-    });
+    }));
   });
 
   it('calls recordDelivery with providerAgentId when workerId is missing', async () => {
@@ -265,11 +326,40 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete/reject + recordDel
 
     expect(body.ok).toBe(true);
     expect(mocks.recordDelivery).toHaveBeenCalledTimes(1);
-    expect(mocks.recordDelivery).toHaveBeenCalledWith({
+    expect(mocks.recordDelivery).toHaveBeenCalledWith(expect.objectContaining({
       providerAgentId: PROVIDER_AGENT,
       buyerAgentId: BUYER_AGENT,
       jobId: LOCAL_JOB_ID,
       delivered: true,
+    }));
+  });
+
+  it('passes complete proof-binding fields to recordDelivery', async () => {
+    const deliverableHash = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const proofPayloadHash = 'proof-hash';
+    const resultPayloadHash = 'result-hash';
+    mocks.getErc8183JobByLocalId.mockResolvedValue(makeJob({
+      deliverableHash,
+      proofPayloadHash,
+      resultPayloadHash,
+    }));
+
+    const req = makeRequest({ txType: 'complete', txHash: TX_HASH });
+    const res = await POST(req, { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) });
+    const body = await res.json();
+
+    expect(body.ok).toBe(true);
+    expect(mocks.recordDelivery).toHaveBeenCalledWith({
+      providerAgentId: WORKER_AGENT,
+      buyerAgentId: BUYER_AGENT,
+      jobId: LOCAL_JOB_ID,
+      delivered: true,
+      deliverableHash,
+      reasonHash: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+      submitTxHash: '0x5555',
+      completeTxHash: TX_HASH,
+      proofPayloadHash,
+      resultPayloadHash,
     });
   });
 
@@ -310,12 +400,12 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete/reject + recordDel
 
     expect(body.ok).toBe(true);
     expect(mocks.recordDelivery).toHaveBeenCalledTimes(1);
-    expect(mocks.recordDelivery).toHaveBeenCalledWith({
+    expect(mocks.recordDelivery).toHaveBeenCalledWith(expect.objectContaining({
       providerAgentId: PROVIDER_AGENT,
       buyerAgentId: BUYER_AGENT,
       jobId: LOCAL_JOB_ID,
       delivered: true,
-    });
+    }));
   });
 
   it('does not call recordDelivery when both workerId and providerAgentId have invalid format', async () => {
@@ -350,7 +440,10 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete/reject + recordDel
   it('confirms reject, attaches the reject tx, and records delivery as failed', async () => {
     mocks.getErc8183JobByLocalId.mockResolvedValue(makeJob({
       erc8183Status: 'Submitted',
+      deliverableHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       rejectReasonHash: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+      proofPayloadHash: 'proof-hash',
+      resultPayloadHash: 'result-hash',
     }));
     mocks.readOnchainJob.mockResolvedValue({
       ...makeOnchainJob(),
@@ -390,6 +483,12 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete/reject + recordDel
       buyerAgentId: BUYER_AGENT,
       jobId: LOCAL_JOB_ID,
       delivered: false,
+      deliverableHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      rejectReasonHash: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+      submitTxHash: '0x5555',
+      rejectTxHash: TX_HASH,
+      proofPayloadHash: 'proof-hash',
+      resultPayloadHash: 'result-hash',
     });
   });
 
