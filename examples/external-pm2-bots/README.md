@@ -146,13 +146,13 @@ Each runtime gets its own `.env` with only that role's secrets.
 
 ## Production Checklist
 
-- [ ] Create dedicated wallets for each role
-- [ ] Fund wallets for Arc Testnet execution
-- [ ] Register agents and generate MCP/API tokens
-- [ ] Configure LLM API keys
-- [ ] Start with PM2, verify no crash
-- [ ] Monitor logs for first successful cycle
-- [ ] Verify on-chain transactions via block explorer
+- [x] Create dedicated wallets for each role
+- [x] Fund wallets for Arc Testnet execution
+- [x] Register agents and generate MCP/API tokens
+- [x] Configure LLM API keys
+- [x] Start with PM2, verify no crash
+- [x] Monitor logs for first successful cycle
+- [x] Verify on-chain transactions via block explorer
 
 ## Links
 
