@@ -87,6 +87,10 @@ function isExpired(row: JobRow): boolean {
   );
 }
 
+function clampScore(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
 function computeScore(stats: {
   totalJobs: number;
   completedJobs: number;
@@ -110,33 +114,67 @@ function computeScore(stats: {
     completedLast7d,
   } = stats;
 
-  const baseScore = totalJobs > 0 ? 10 : 0;
-  const completionScore = completedJobs * 12;
-  const submittedScore = submittedJobs * 4;
-  const activeScore = activeJobs * 1;
-  const reliabilityScore = totalJobs > 0 ? Math.round((completedJobs / totalJobs) * 25) : 0;
-  const volumeScore = Math.min(20, Math.floor(totalVolumeUsdc / 1));
-  const recencyScore = completedLast7d > 0 ? 5 : 0;
-  const penaltyScore = rejectedJobs * 8 + failedJobs * 10 + expiredJobs * 4;
+  const closedJobs =
+    completedJobs +
+    rejectedJobs +
+    failedJobs +
+    expiredJobs;
+
+  // Bayesian-smoothed quality score.
+  // Prevents a provider with only 1 completed job from instantly looking perfect.
+  const qualityScore =
+    closedJobs > 0
+      ? Math.round(((completedJobs + 1) / (closedJobs + 2)) * 45)
+      : 0;
+
+  // Completed-job experience grows but saturates.
+  const experienceScore = Math.min(
+    20,
+    Math.round((Math.log1p(completedJobs) / Math.log1p(20)) * 20),
+  );
+
+  // Volume should help but not dominate.
+  const volumeScore = Math.min(
+    10,
+    Math.round((Math.log1p(totalVolumeUsdc) / Math.log1p(100)) * 10),
+  );
+
+  // Recent successful work gives a small boost.
+  const recencyScore = Math.min(10, completedLast7d * 2);
+
+  // Submitted/active jobs are only weak positive signals.
+  const progressScore = Math.min(5, submittedJobs * 2 + activeJobs);
+
+  const penaltyScore =
+    rejectedJobs * 8 +
+    failedJobs * 10 +
+    expiredJobs * 4;
 
   const rawScore =
-    baseScore +
-    completionScore +
-    submittedScore +
-    activeScore +
-    reliabilityScore +
+    qualityScore +
+    experienceScore +
     volumeScore +
-    recencyScore -
+    recencyScore +
+    progressScore -
     penaltyScore;
 
-  const reputationScore = Math.max(0, Math.min(100, rawScore));
+  const reputationScore = clampScore(rawScore);
 
   let tier: Erc8183AgentReputation['tier'];
-  if (totalJobs === 0) tier = 'New';
-  else if (reputationScore >= 80) tier = 'Excellent';
-  else if (reputationScore >= 60) tier = 'Reliable';
-  else if (reputationScore >= 35) tier = 'Emerging';
-  else tier = 'Unproven';
+
+  if (totalJobs === 0) {
+    tier = 'New';
+  } else if (completedJobs < 2) {
+    tier = 'Unproven';
+  } else if (reputationScore >= 80 && completedJobs >= 5) {
+    tier = 'Excellent';
+  } else if (reputationScore >= 60 && completedJobs >= 3) {
+    tier = 'Reliable';
+  } else if (reputationScore >= 35 && completedJobs >= 2) {
+    tier = 'Emerging';
+  } else {
+    tier = 'Unproven';
+  }
 
   return { reputationScore, tier };
 }

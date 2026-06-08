@@ -540,6 +540,16 @@ export default function AgentProfilePage() {
   const selectedName = selectedAgent ? getAgentName(selectedAgent) : 'Agent Name';
 
   const reputationScore = reputation?.reputation?.score ?? reputation?.score ?? '0';
+  const reputationSource =
+    reputation?.reputation?.source ??
+    reputation?.source ??
+    'erc8004_reputation_indexer';
+  const reputationSourceLabel =
+    reputationSource === 'erc8183_agent_jobs'
+      ? 'ERC-8183'
+      : reputationSource === 'erc8004_reputation_indexer'
+        ? 'ERC-8004'
+        : 'ArcLayer';
   const reputationFeedback = reputation?.reputation?.feedback ?? reputation?.feedback ?? [];
   const latestFeedback = reputationFeedback[0] || null;
   const latestFeedbackTx = latestFeedback?.txHash || '';
@@ -1487,7 +1497,7 @@ export default function AgentProfilePage() {
                       </h3>
 
                       <p className="mt-3 text-[14px] leading-6 text-[#EAE4D8]/55">
-                        Feedback written to the ERC-8004 Reputation Registry and indexed by ArcLayer.
+                        Reputation is indexed by ArcLayer from ERC-8183 job history and ERC-8004 feedback records.
                       </p>
 
                       <div className="mt-6 grid gap-3 sm:grid-cols-2">
@@ -1524,7 +1534,7 @@ export default function AgentProfilePage() {
                         <InfoRow
                           icon={<ShieldCheck className="h-4 w-4" />}
                           label="Source"
-                          value="ERC-8004"
+                          value={reputationSourceLabel}
                         />
                         <InfoRow
                           icon={<KeyRound className="h-4 w-4" />}
