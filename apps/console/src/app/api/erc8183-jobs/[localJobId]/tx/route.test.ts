@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   readOnchainJob: vi.fn(),
   getArcPublicClient: vi.fn(),
   attachErc8183CompleteTx: vi.fn(),
+  attachErc8183RejectTx: vi.fn(),
   attachErc8183SetBudgetTx: vi.fn(),
   attachErc8183ApproveTx: vi.fn(),
   attachErc8183FundTx: vi.fn(),
@@ -30,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   escrowRail: vi.fn(),
   checkMemoryRateLimit: vi.fn(),
   parseJobCompleted: vi.fn(),
+  parseJobRejected: vi.fn(),
   parseBudgetSet: vi.fn(),
   parseJobFunded: vi.fn(),
   parseJobSubmitted: vi.fn(),
@@ -54,6 +56,7 @@ vi.mock('@/lib/erc8183-jobs/store', () => ({
   attachErc8183FundTx: mocks.attachErc8183FundTx,
   attachErc8183SubmitTx: mocks.attachErc8183SubmitTx,
   attachErc8183CompleteTx: mocks.attachErc8183CompleteTx,
+  attachErc8183RejectTx: mocks.attachErc8183RejectTx,
   Erc8183TxHashConflictError: class extends Error {
     constructor(
       public fieldName: string,
@@ -95,6 +98,7 @@ vi.mock('@/lib/contracts/erc8183', () => ({
   parseJobFunded: mocks.parseJobFunded,
   parseJobSubmitted: mocks.parseJobSubmitted,
   parseJobCompleted: mocks.parseJobCompleted,
+  parseJobRejected: mocks.parseJobRejected,
 }));
 
 vi.mock('@arclayer/sdk', () => ({
@@ -192,7 +196,7 @@ function makeRequest(body: Record<string, unknown>) {
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
-describe('POST /api/erc8183-jobs/[localJobId]/tx — complete + recordDelivery', () => {
+describe('POST /api/erc8183-jobs/[localJobId]/tx — complete/reject + recordDelivery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
@@ -221,8 +225,14 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete + recordDelivery',
       reason: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
     });
 
-    // Default: attachErc8183CompleteTx succeeds
+    mocks.parseJobRejected.mockReturnValue({
+      jobId: JOB_ID_BIGINT,
+      reason: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+    });
+
+    // Default: tx attachment succeeds
     mocks.attachErc8183CompleteTx.mockResolvedValue(undefined);
+    mocks.attachErc8183RejectTx.mockResolvedValue(undefined);
 
     // Default: recordDelivery succeeds
     mocks.recordDelivery.mockResolvedValue({ txHash: '0xrep' });
@@ -335,5 +345,96 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete + recordDelivery',
     expect(body.txHash).toBe(TX_HASH);
     expect(body.erc8183Status).toBe('Completed');
     expect(body.message).toContain('escrow settled');
+  });
+
+  it('confirms reject, attaches the reject tx, and records delivery as failed', async () => {
+    mocks.getErc8183JobByLocalId.mockResolvedValue(makeJob({
+      erc8183Status: 'Submitted',
+      rejectReasonHash: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+    }));
+    mocks.readOnchainJob.mockResolvedValue({
+      ...makeOnchainJob(),
+      status: 4,
+      erc8183Status: 'Rejected',
+    });
+
+    const req = makeRequest({ txType: 'reject', txHash: TX_HASH, reason: 'invalid deliverable' });
+    const res = await POST(req, { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) });
+    const body = await res.json();
+
+    expect(body).toMatchObject({
+      ok: true,
+      rail: 'escrow',
+      settlementMode: 'erc8183_escrow',
+      localJobId: LOCAL_JOB_ID,
+      erc8183JobId: '42',
+      txType: 'reject',
+      txHash: TX_HASH,
+      erc8183Status: 'Rejected',
+      onchainStatus: 4,
+      blockNumber: 45000000,
+    });
+    expect(mocks.attachErc8183RejectTx).toHaveBeenCalledWith({
+      localJobId: LOCAL_JOB_ID,
+      rejectTxHash: TX_HASH,
+      rejectReasonText: 'invalid deliverable',
+      rejectReasonHash: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+    });
+    expect(mocks.recordDelivery).toHaveBeenCalledWith({
+      providerAgentId: WORKER_AGENT,
+      buyerAgentId: BUYER_AGENT,
+      jobId: LOCAL_JOB_ID,
+      delivered: false,
+    });
+  });
+
+  it('returns 422 when reject receipt has no matching JobRejected event', async () => {
+    mocks.parseJobRejected.mockReturnValue(null);
+
+    const req = makeRequest({ txType: 'reject', txHash: TX_HASH });
+    const res = await POST(req, { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) });
+    const body = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(body.error).toBe('missing_expected_event');
+    expect(body.txType).toBe('reject');
+    expect(mocks.attachErc8183RejectTx).not.toHaveBeenCalled();
+  });
+
+  it('returns 422 when reject reason does not match the prepared reason hash', async () => {
+    mocks.getErc8183JobByLocalId.mockResolvedValue(makeJob({
+      rejectReasonHash: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    }));
+
+    const req = makeRequest({ txType: 'reject', txHash: TX_HASH });
+    const res = await POST(req, { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) });
+    const body = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(body).toMatchObject({
+      error: 'event_reason_mismatch',
+      txType: 'reject',
+      expectedReason: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      eventReason: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+    });
+    expect(mocks.attachErc8183RejectTx).not.toHaveBeenCalled();
+  });
+
+  it('does not fail reject confirmation when recordDelivery throws', async () => {
+    mocks.getErc8183JobByLocalId.mockResolvedValue(makeJob({ erc8183Status: 'Submitted' }));
+    mocks.readOnchainJob.mockResolvedValue({
+      ...makeOnchainJob(),
+      status: 4,
+      erc8183Status: 'Rejected',
+    });
+    mocks.recordDelivery.mockRejectedValue(new Error('on-chain write failed'));
+
+    const req = makeRequest({ txType: 'reject', txHash: TX_HASH });
+    const res = await POST(req, { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) });
+    const body = await res.json();
+
+    expect(body.ok).toBe(true);
+    expect(body.txType).toBe('reject');
+    expect(mocks.attachErc8183RejectTx).toHaveBeenCalledTimes(1);
   });
 });

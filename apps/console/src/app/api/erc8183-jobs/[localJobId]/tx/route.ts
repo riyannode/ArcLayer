@@ -13,6 +13,7 @@ import {
   attachErc8183FundTx,
   attachErc8183SubmitTx,
   attachErc8183CompleteTx,
+  attachErc8183RejectTx,
   Erc8183TxHashConflictError,
 } from '@/lib/erc8183-jobs/store';
 import { assertErc8183Participant, isErc8183Admin } from '@/lib/erc8183-jobs/authz';
@@ -26,14 +27,15 @@ import {
   parseJobFunded,
   parseJobSubmitted,
   parseJobCompleted,
+  parseJobRejected,
 } from '@/lib/contracts/erc8183';
 import { ARC_TOKENS } from '@arclayer/sdk';
 import type { Erc8183JobView } from '@/lib/erc8183-jobs/types';
 import type { ConfirmedReceipt } from '@/lib/erc8183-jobs/receipt';
 
-type TxType = 'set_budget' | 'approve' | 'fund' | 'submit' | 'complete';
+type TxType = 'set_budget' | 'approve' | 'fund' | 'submit' | 'complete' | 'reject';
 
-const VALID_TX_TYPES: TxType[] = ['set_budget', 'approve', 'fund', 'submit', 'complete'];
+const VALID_TX_TYPES: TxType[] = ['set_budget', 'approve', 'fund', 'submit', 'complete', 'reject'];
 
 // ── Approval event decoder ────────────────────────────────────────────────
 
@@ -138,6 +140,15 @@ function findJobCompletedEvent(receipt: ConfirmedReceipt, expectedJobId: bigint)
   for (const log of receipt.logs ?? []) {
     if (!isAgenticCommerceLog(log)) continue;
     const ev = parseJobCompleted(log);
+    if (ev && ev.jobId === expectedJobId) return ev;
+  }
+  return null;
+}
+
+function findJobRejectedEvent(receipt: ConfirmedReceipt, expectedJobId: bigint) {
+  for (const log of receipt.logs ?? []) {
+    if (!isAgenticCommerceLog(log)) continue;
+    const ev = parseJobRejected(log);
     if (ev && ev.jobId === expectedJobId) return ev;
   }
   return null;
@@ -257,6 +268,7 @@ export async function POST(
       fund: ['buyer'],
       submit: ['worker', 'provider'],
       complete: ['evaluator', 'buyer'],
+      reject: ['evaluator', 'buyer'],
     };
     if (txType && !isErc8183Admin(auth.key.scopes)) {
       const allowed = txRoleMap[txType];
@@ -690,6 +702,79 @@ export async function POST(
           onchainStatus: onchainJob.status,
           blockNumber: Number(receipt.blockNumber),
           message: 'Complete confirmed. Job escrow settled on-chain.',
+        });
+      }
+
+      case 'reject': {
+        const rejectedEvent = findJobRejectedEvent(receipt, erc8183JobIdBigInt);
+        if (!rejectedEvent) {
+          return eventError(
+            'missing_expected_event',
+            'reject',
+            'reject tx receipt does not contain a matching JobRejected event for this job.',
+          );
+        }
+
+        const expectedReason = job.rejectReasonHash ?? job.reasonHash;
+        if (expectedReason && !sameHex(rejectedEvent.reason, expectedReason)) {
+          return NextResponse.json(
+            {
+              ok: false,
+              ...escrowRail(),
+              error: 'event_reason_mismatch',
+              txType: 'reject',
+              expectedReason,
+              eventReason: rejectedEvent.reason,
+            },
+            { status: 422 },
+          );
+        }
+
+        const onchainJob = await readOnchainJob(erc8183JobIdBigInt);
+        if (!onchainJob) {
+          return NextResponse.json(
+            { ok: false, ...escrowRail(), error: 'onchain_job_not_found', message: 'Job not found on-chain after reject tx.' },
+            { status: 422 },
+          );
+        }
+
+        const rejectProvenanceError = validateOnchainJobMatch(onchainJob, job, 'reject');
+        if (rejectProvenanceError) return rejectProvenanceError;
+
+        await attachErc8183RejectTx({
+          localJobId,
+          rejectTxHash: txHash,
+          rejectReasonText: body.reason ?? body.rejectReasonText ?? 'rejected',
+          rejectReasonHash: rejectedEvent.reason,
+        });
+
+        const hasValidTokenIdFormat = (v: string | null | undefined): boolean =>
+          !!v && (/^\d+$/.test(v) || /:\d+$/.test(v));
+        const reputationWorkerAgentId =
+          hasValidTokenIdFormat(job.workerId) ? job.workerId
+          : hasValidTokenIdFormat(job.providerAgentId) ? job.providerAgentId
+          : null;
+        if (reputationWorkerAgentId) {
+          recordDelivery({
+            providerAgentId: reputationWorkerAgentId,
+            buyerAgentId: job.buyerAgentId,
+            jobId: localJobId,
+            delivered: false,
+          }).catch((err) => {
+            console.error('[erc8183:reject] recordDelivery failed:', err);
+          });
+        }
+
+        return NextResponse.json({
+          ok: true,
+          ...escrowRail(),
+          localJobId,
+          erc8183JobId: job.erc8183JobId,
+          txType: 'reject',
+          txHash,
+          erc8183Status: onchainJob.erc8183Status,
+          onchainStatus: onchainJob.status,
+          blockNumber: Number(receipt.blockNumber),
         });
       }
     }
