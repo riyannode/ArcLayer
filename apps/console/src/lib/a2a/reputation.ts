@@ -288,6 +288,15 @@ export async function recordDelivery(opts: {
   jobId: string;
   amount?: bigint;
   delivered: boolean;
+  outcome?: string;
+  deliverableHash?: string | null;
+  reasonHash?: string | null;
+  rejectReasonHash?: string | null;
+  submitTxHash?: string | null;
+  completeTxHash?: string | null;
+  rejectTxHash?: string | null;
+  proofPayloadHash?: string | null;
+  resultPayloadHash?: string | null;
 }): Promise<{ txHash?: string; error?: string }> {
   const agentTokenId = extractAgentTokenId(opts.providerAgentId);
 
@@ -299,16 +308,28 @@ export async function recordDelivery(opts: {
   }
 
   try {
-    const ref = keccak256(
-      toBytes(
-        [
-          'arclayer-delivery-feedback',
-          agentTokenId,
-          opts.jobId,
-          opts.delivered ? 'delivered' : 'failed',
-        ].join(':'),
-      ),
-    );
+    const outcome = opts.outcome || (opts.delivered ? 'delivered' : 'failed');
+    const refParts = [
+      'arclayer-delivery-feedback',
+      agentTokenId,
+      opts.jobId,
+      outcome,
+    ];
+
+    for (const value of [
+      opts.deliverableHash,
+      opts.reasonHash,
+      opts.rejectReasonHash,
+      opts.submitTxHash,
+      opts.completeTxHash,
+      opts.rejectTxHash,
+      opts.proofPayloadHash,
+      opts.resultPayloadHash,
+    ]) {
+      if (value) refParts.push(value);
+    }
+
+    const ref = keccak256(toBytes(refParts.join(':')));
 
     const result = await writeReputationFeedback({
       agentTokenId,
