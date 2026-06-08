@@ -468,18 +468,29 @@ export default function AgentProfilePage() {
   }, [agentId]);
 
   // ─── Computed values ───────────────────────────────────────────────
+  function firstPositiveScore(
+    ...values: Array<string | number | null | undefined>
+  ): string {
+    for (const value of values) {
+      const normalized = String(value ?? '').trim();
+      if (Number(normalized) > 0) return normalized;
+    }
+
+    return '0';
+  }
+
   const agent = profile?.agent;
   const jobs = profile?.jobs || [];
   const proofs = profile?.proofs || [];
   const series = buildReputationSeries(agent, jobs, proofs, reputation, dashboardAgent?.reputation);
 
   // Computed ERC-8183 score: dashboard → overlay → indexer → '0'
-  const computedScore =
-    dashboardAgent?.reputation ||
-    reputation?.averageScore ||
-    agent?.reputationScore ||
-    agent?.score ||
-    '0';
+  const computedScore = firstPositiveScore(
+    dashboardAgent?.reputation,
+    reputation?.averageScore,
+    agent?.reputationScore,
+    agent?.score,
+  );
 
   const capabilities = getErc8183Capabilities(metadata);
   const links = getErc8183Links(metadata);
