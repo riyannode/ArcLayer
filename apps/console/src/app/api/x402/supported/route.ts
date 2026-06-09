@@ -22,7 +22,8 @@ export function GET() {
   const amount = process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC;
   const payTo = process.env.X402_RECEIVER_ADDRESS || process.env.X402_PAY_TO;
   const includeGatewayDemoAccept = process.env.X402_INCLUDE_GATEWAY_DEMO_ACCEPT === 'true';
-  const gatewayContractAddress = getGatewayContractAddressServer();
+  const gatewayEnabled = isGatewayEnabled();
+  const gatewayContractAddress = gatewayEnabled ? getGatewayContractAddressServer() : null;
 
   const arcNativeExact = {
     x402Version: X402_VERSION_V2,
@@ -42,28 +43,29 @@ export function GET() {
     },
   };
 
-  const gatewayBatched = {
-    x402Version: X402_VERSION_V2,
-    scheme: 'exact',
-    network: GATEWAY_NETWORK_NAME,
-    asset: USDC_ADDRESS,
-    assetSymbol: 'USDC',
-    decimals: 6,
-    amount,
-    payTo,
-    facilitator: '/api/x402',
-    maxTimeoutSeconds,
-    extra: {
-      name: CIRCLE_BATCHING_NAME,
-      version: CIRCLE_BATCHING_VERSION,
-      verifyingContract: gatewayContractAddress,
-      supportedChain: GATEWAY_NETWORK_NAME,
-      transferMethod: 'gateway-batched-eip3009',
-      status: 'live',
-    },
-  };
+  const gatewayBatched = gatewayContractAddress
+    ? {
+      x402Version: X402_VERSION_V2,
+      scheme: 'exact',
+      network: GATEWAY_NETWORK_NAME,
+      asset: USDC_ADDRESS,
+      assetSymbol: 'USDC',
+      decimals: 6,
+      amount,
+      payTo,
+      facilitator: '/api/x402',
+      maxTimeoutSeconds,
+      extra: {
+        name: CIRCLE_BATCHING_NAME,
+        version: CIRCLE_BATCHING_VERSION,
+        verifyingContract: gatewayContractAddress,
+        supportedChain: GATEWAY_NETWORK_NAME,
+        transferMethod: 'gateway-batched-eip3009',
+        status: 'live',
+      },
+    }
+    : null;
 
-  const gatewayEnabled = isGatewayEnabled();
   const kinds: Array<Record<string, unknown>> = [
     {
       x402Version: X402_VERSION_V2,
@@ -79,7 +81,7 @@ export function GET() {
       },
     },
   ];
-  if (gatewayEnabled) {
+  if (gatewayContractAddress) {
     kinds.push({
       x402Version: X402_VERSION_V2,
       scheme: 'exact',
@@ -96,9 +98,9 @@ export function GET() {
     });
   }
 
-  const accepts: Array<typeof arcNativeExact | typeof gatewayBatched> = [];
+  const accepts: Array<Record<string, unknown>> = [];
   if (payTo) accepts.push(arcNativeExact);
-  if (gatewayEnabled && includeGatewayDemoAccept && payTo) accepts.push(gatewayBatched);
+  if (gatewayBatched && includeGatewayDemoAccept && payTo) accepts.push(gatewayBatched);
 
   return NextResponse.json({
     kinds,
@@ -111,7 +113,7 @@ export function GET() {
       required: PAYMENT_REQUIRED_HEADER,
       response: 'PAYMENT-RESPONSE',
     },
-    networks: gatewayEnabled
+    networks: gatewayContractAddress
       ? [
         {
           network: ARC_TESTNET_CAIP2_NETWORK,
