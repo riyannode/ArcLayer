@@ -21,7 +21,7 @@ export function GET() {
   const maxTimeoutSeconds = Number(process.env.X402_REQUIREMENT_TTL_SECONDS || '300');
   const amount = process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC;
   const payTo = process.env.X402_RECEIVER_ADDRESS || process.env.X402_PAY_TO;
-  if (!payTo) throw new Error('Missing X402_RECEIVER_ADDRESS or X402_PAY_TO');
+  const includeGatewayDemoAccept = process.env.X402_INCLUDE_GATEWAY_DEMO_ACCEPT === 'true';
   const gatewayContractAddress = getGatewayContractAddressServer();
 
   const arcNativeExact = {
@@ -96,9 +96,13 @@ export function GET() {
     });
   }
 
+  const accepts: Array<typeof arcNativeExact | typeof gatewayBatched> = [];
+  if (payTo) accepts.push(arcNativeExact);
+  if (gatewayEnabled && includeGatewayDemoAccept && payTo) accepts.push(gatewayBatched);
+
   return NextResponse.json({
     kinds,
-    accepts: gatewayEnabled ? [arcNativeExact, gatewayBatched] : [arcNativeExact],
+    accepts,
     facilitator: 'ArcLayer',
     version: String(X402_VERSION_V2),
     headers: {
