@@ -3,10 +3,10 @@
  *
  * POST /api/mcp/sessions/create
  * Auth: wallet session cookie (owner must be logged in).
- * Body: { agentAccountAddress (required), permissions?, expiresInDays? }
+ * Body: { mode?: 'eoa' | 'agent-account', agentAccountAddress?, permissions?, expiresInDays? }
  *
  * Creates a new MCP session for the authenticated wallet owner.
- * Upserts the agent account binding (owner → Circle Smart Account).
+ * Defaults to EOA mode; Agent Account mode is feature-flagged.
  * Returns the raw token ONCE — caller must save it.
  *
  * PR 451 constraints:
@@ -34,13 +34,6 @@ const DEFAULT_PERMISSIONS: McpSessionPermissions = {
 };
 
 export async function POST(req: NextRequest) {
-  if (process.env.MCP_AGENT_ACCOUNT_IDENTITY_ENABLED !== 'true') {
-    return NextResponse.json(
-      { ok: false, error: 'agent_account_mcp_disabled', detail: 'Agent Account MCP identity mode is temporarily disabled. Use EOA registration.' },
-      { status: 403 },
-    );
-  }
-
   // 1. Authenticate wallet session
   const auth = await authenticateWalletRequest(req);
   if (!auth.authenticated) {
@@ -61,17 +54,37 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 3. Validate agentAccountAddress (required)
-  const rawAddress = typeof body.agentAccountAddress === 'string'
-    ? body.agentAccountAddress.trim()
-    : '';
-  if (!rawAddress || !isAddress(rawAddress)) {
+  const mode = typeof body.mode === 'string' ? body.mode.trim() : 'eoa';
+  if (!['eoa', 'agent-account'].includes(mode)) {
     return NextResponse.json(
-      { ok: false, error: 'invalid_agent_account_address', detail: 'Valid EVM address required in agentAccountAddress.' },
+      { ok: false, error: 'invalid_mode', detail: 'mode must be eoa or agent-account.' },
       { status: 400 },
     );
   }
-  const agentAccountAddress = getAddress(rawAddress);
+
+  if (mode === 'agent-account' && process.env.MCP_AGENT_ACCOUNT_IDENTITY_ENABLED !== 'true') {
+    return NextResponse.json(
+      { ok: false, error: 'agent_account_mcp_disabled', detail: 'Agent Account MCP identity mode is temporarily disabled. Use EOA registration.' },
+      { status: 403 },
+    );
+  }
+
+  // 3. Validate controller/signing address for the requested mode
+  const ownerAddress = getAddress(auth.wallet);
+  let agentAccountAddress = ownerAddress;
+
+  if (mode === 'agent-account') {
+    const rawAddress = typeof body.agentAccountAddress === 'string'
+      ? body.agentAccountAddress.trim()
+      : '';
+    if (!rawAddress || !isAddress(rawAddress)) {
+      return NextResponse.json(
+        { ok: false, error: 'invalid_agent_account_address', detail: 'Valid EVM address required in agentAccountAddress.' },
+        { status: 400 },
+      );
+    }
+    agentAccountAddress = getAddress(rawAddress);
+  }
 
   // 4. Force autoApprove=false (PR 451 — approval engine doesn't exist yet)
   if (body.autoApprove === true) {
@@ -99,13 +112,13 @@ export async function POST(req: NextRequest) {
 
   // 7. Upsert agent account binding + create session
   try {
-    const ownerAddress = getAddress(auth.wallet);
-
-    // Upsert: deactivate old binding, insert new active one
-    await upsertAgentAccountForOwner({
-      ownerAddress,
-      agentAccountAddress,
-    });
+    // Upsert only in Agent Account mode; EOA mode binds the session to ownerAddress.
+    if (mode === 'agent-account') {
+      await upsertAgentAccountForOwner({
+        ownerAddress,
+        agentAccountAddress,
+      });
+    }
 
     // Create session (autoApprove forced false)
     const result = await createMcpSession({
@@ -124,6 +137,9 @@ export async function POST(req: NextRequest) {
         id: result.session.id,
         ownerAddress: result.session.ownerAddress,
         agentAccountAddress: result.session.agentAccountAddress,
+        controllerAddress: mode === 'eoa' ? ownerAddress : agentAccountAddress,
+        signerAddress: mode === 'eoa' ? ownerAddress : agentAccountAddress,
+        mode,
         permissions: result.session.permissions,
         autoApprove: result.session.autoApprove,
         expiresAt: result.session.expiresAt,

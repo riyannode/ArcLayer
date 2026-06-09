@@ -27,6 +27,7 @@ import {
 } from '@/lib/erc8183-jobs/web-hire-contract';
 import { escrowRail } from '@/lib/rails/responses';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
+import { getAgentAccountByAddress } from '@/lib/agent-accounts/store';
 import {
   resolveSessionFromCookie,
   getLinkedErc8004AgentsForController,
@@ -47,6 +48,7 @@ const IDENTITY_ERRORS = new Set([
   'buyer_controller_mismatch',
   'provider_controller_mismatch',
   'evaluator_controller_mismatch',
+  'agent_account_controller_disabled',
 ]);
 
 // ── Auth types ────────────────────────────────────────────────────────────
@@ -183,7 +185,7 @@ export async function POST(req: NextRequest) {
     // Phase 2: Resolve agentId → controller from erc8004_agents DB
     const supabase = getSupabaseAdmin();
     const resolve = createSupabaseIdentityResolver(supabase);
-    const result = await resolveIdentityAndBuild(validated, resolve);
+    const result = await resolveIdentityAndBuild(validated, resolve, getAgentAccountByAddress);
 
     if (!result.ok) {
       const status = IDENTITY_ERRORS.has(result.error) ? 422 : 400;

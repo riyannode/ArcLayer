@@ -21,12 +21,13 @@ import {
   parseUnits,
   type Address,
 } from 'viem';
-import { useWriteContract } from 'wagmi';
+import { useAccount, useWriteContract } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
 import { useArcWallet } from './useArcWallet';
 import { config } from '@/lib/wagmi';
 import { GATEWAY_WALLET_ABI, ERC20_ABI } from '@/lib/x402/gateway/abi';
 import {
+  ARC_TESTNET_CHAIN_ID,
   GATEWAY_WALLET_ADDRESS,
   USDC_ADDRESS,
 } from '@/lib/x402/constants';
@@ -59,6 +60,7 @@ export function useGatewayDeposit(
   onSuccess?: () => void,
 ): GatewayDepositState {
   const { mode, address } = useArcWallet();
+  const { chainId } = useAccount();
   const { writeContractAsync: wagmiWrite } = useWriteContract();
 
   const [step, setStep] = useState<DepositStep>('idle');
@@ -85,6 +87,12 @@ export function useGatewayDeposit(
       setError(null);
       setTxHash(null);
       setApproveTxHash(null);
+
+      if (chainId !== ARC_TESTNET_CHAIN_ID) {
+        setError('Wrong network. Switch wallet to Arc Testnet before depositing.');
+        setStep('error');
+        return;
+      }
 
       const amountUnits = parseUnits(amount, 6);
       if (amountUnits <= BigInt(0)) {
@@ -130,8 +138,9 @@ export function useGatewayDeposit(
             abi: ERC20_ABI,
             functionName: 'approve',
             args: [GATEWAY_WALLET, amountUnits],
+            chainId: ARC_TESTNET_CHAIN_ID,
           });
-          await waitForTransactionReceipt(config, { hash: approveHash });
+          await waitForTransactionReceipt(config, { hash: approveHash, chainId: ARC_TESTNET_CHAIN_ID });
           setApproveTxHash(approveHash);
         }
 
@@ -141,10 +150,11 @@ export function useGatewayDeposit(
           abi: GATEWAY_WALLET_ABI,
           functionName: 'deposit',
           args: [USDC, amountUnits],
+          chainId: ARC_TESTNET_CHAIN_ID,
         });
 
         setStep('confirming');
-        await waitForTransactionReceipt(config, { hash: depositHash });
+        await waitForTransactionReceipt(config, { hash: depositHash, chainId: ARC_TESTNET_CHAIN_ID });
 
         setTxHash(depositHash);
         setStep('success');
@@ -160,7 +170,7 @@ export function useGatewayDeposit(
         setStep('error');
       }
     },
-    [mode, address, wagmiWrite, onSuccess, reset],
+    [mode, address, chainId, wagmiWrite, onSuccess, reset],
   );
 
   return { step, error, txHash, approveTxHash, deposit, reset };

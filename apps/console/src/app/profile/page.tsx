@@ -26,10 +26,29 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { useFundAgentAccount } from '@/hooks/useFundAgentAccount';
 import { useAgentAccountGatewayDeposit } from '@/hooks/useAgentAccountGatewayDeposit';
+import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
 import { useSignMessage } from 'wagmi';
+import { createPublicClient, formatUnits, getAddress, http } from 'viem';
 import { McpSigningSessionCard } from '@/components/profile/McpSigningSessionCard';
+import { USDC_ADDRESS } from '@/lib/x402/constants';
 
 // ── Agent Account types ───────────────────────────────────────────────────
+
+type GatewayBalanceResponse = {
+  depositedUsdc: string | null;
+  depositedAtomic?: string;
+  method?: string;
+  error?: string;
+};
+
+const ARC_RPC = process.env.NEXT_PUBLIC_ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
+const USDC = getAddress(USDC_ADDRESS);
+const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
+const ARC_EXPLORER_TX_BASE = 'https://testnet.arcscan.app/tx';
+
+function getArcTxUrl(hash: string): string {
+  return `${ARC_EXPLORER_TX_BASE}/${hash}`;
+}
 
 type AgentAccountInfo = {
   ownerAddress: string;
@@ -391,6 +410,11 @@ export default function AgentProfilePage() {
   const [ownerGateway, setOwnerGateway] = useState<BalanceInfo | null>(null);
   const [agentGateway, setAgentGateway] = useState<BalanceInfo | null>(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
+  const [eoaUsdcBalance, setEoaUsdcBalance] = useState<BalanceInfo | null>(null);
+  const [eoaGatewayBalance, setEoaGatewayBalance] = useState<BalanceInfo | null>(null);
+  const [eoaBalanceLoading, setEoaBalanceLoading] = useState(false);
+  const [eoaBalanceError, setEoaBalanceError] = useState<string | null>(null);
+  const [eoaGatewayAmount, setEoaGatewayAmount] = useState('');
 
   // A2A x402 payer state
   const [a2aPayerEnabled, setA2aPayerEnabled] = useState(false);
@@ -406,6 +430,10 @@ export default function AgentProfilePage() {
   const agentGatewayDeposit = useAgentAccountGatewayDeposit(bundlerClient, () => {
     if (address) void loadBalances(address, agentAccount?.agentAccountAddress);
     setActionAmount('');
+  });
+  const eoaGatewayDeposit = useGatewayDeposit(() => {
+    if (address) void refreshEoaFundingBalances(address);
+    setEoaGatewayAmount('');
   });
 
   // Wallet session signing (for authenticated API calls)
@@ -605,6 +633,41 @@ export default function AgentProfilePage() {
     }
   }
 
+  async function refreshEoaFundingBalances(owner: string) {
+    if (!owner) return;
+
+    setEoaBalanceLoading(true);
+    setEoaBalanceError(null);
+
+    try {
+      const [gatewayRes, usdcBalance] = await Promise.all([
+        fetch(`/api/x402/gateway-balance?address=${encodeURIComponent(owner)}`, { cache: 'no-store' })
+          .then((res) => res.json() as Promise<GatewayBalanceResponse>),
+        createPublicClient({ transport: http(ARC_RPC) }).readContract({
+          address: USDC,
+          abi: BALANCE_ABI,
+          functionName: 'balanceOf',
+          args: [owner as `0x${string}`],
+        }),
+      ]);
+
+      setEoaGatewayBalance({
+        raw: gatewayRes.depositedAtomic ?? '0',
+        formatted: gatewayRes.depositedUsdc ?? '0.000000',
+      });
+      setEoaUsdcBalance({
+        raw: usdcBalance.toString(),
+        formatted: formatUnits(usdcBalance, 6),
+      });
+    } catch (error) {
+      setEoaBalanceError(error instanceof Error ? error.message : String(error));
+      setEoaGatewayBalance((prev) => prev ?? { raw: '0', formatted: '0.000000' });
+      setEoaUsdcBalance((prev) => prev ?? { raw: '0', formatted: '0.000000' });
+    } finally {
+      setEoaBalanceLoading(false);
+    }
+  }
+
   async function loadBalances(owner: string, agent?: string | null) {
     if (!owner) return;
     setBalancesLoading(true);
@@ -615,8 +678,8 @@ export default function AgentProfilePage() {
       if (res.ok) {
         const json = await res.json();
         setOwnerBalance(json.owner?.usdc ?? null);
-        setAgentBalance(json.agentAccount?.usdc ?? null);
         setOwnerGateway(json.owner?.gateway ?? null);
+        setAgentBalance(json.agentAccount?.usdc ?? null);
         setAgentGateway(json.agentAccount?.gateway ?? null);
       }
     } catch {
@@ -776,6 +839,16 @@ export default function AgentProfilePage() {
     if (!address) return;
     void loadBalances(address, agentAccount?.agentAccountAddress);
   }, [address, agentAccount?.agentAccountAddress]);
+
+  useEffect(() => {
+    if (!address) {
+      setEoaUsdcBalance(null);
+      setEoaGatewayBalance(null);
+      setEoaBalanceError(null);
+      return;
+    }
+    void refreshEoaFundingBalances(address);
+  }, [address]);
 
   return (
     <main className="min-h-screen bg-[#05070A] text-[#F5F0E5]">
@@ -1004,6 +1077,98 @@ export default function AgentProfilePage() {
               )}
             </div>
 
+            <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
+              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
+                EOA Gateway Funding
+              </div>
+              <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/50">
+                Deposit USDC from the connected EOA into Circle Gateway.
+              </p>
+              <p className="mt-2 rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-[11px] leading-5 text-amber-200/80">
+                Gateway deposits are address-specific. Connect the payer EOA before depositing.
+              </p>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                    Connected EOA address
+                  </div>
+                  <div className="mt-2 truncate font-mono text-[13px] text-[#F5F0E5]">
+                    {shortAddress(address)}
+                  </div>
+                </div>
+                <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                    EOA USDC balance
+                  </div>
+                  <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
+                    {eoaBalanceLoading ? '...' : eoaUsdcBalance?.formatted ?? '0.000000'}
+                  </div>
+                </div>
+                <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
+                    EOA Gateway balance
+                  </div>
+                  <div className="mt-2 text-[18px] font-semibold text-[#F3C536]">
+                    {eoaBalanceLoading ? '...' : eoaGatewayBalance?.formatted ?? '0.000000'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/38">
+                  Amount (USDC)
+                </label>
+                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="1.00"
+                    value={eoaGatewayAmount}
+                    onChange={(e) => { setEoaGatewayAmount(e.target.value); eoaGatewayDeposit.reset(); }}
+                    className="h-10 w-full rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[13px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40 sm:w-[160px]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void eoaGatewayDeposit.deposit(eoaGatewayAmount)}
+                    disabled={!eoaGatewayAmount || (eoaGatewayDeposit.step !== 'idle' && eoaGatewayDeposit.step !== 'error')}
+                    className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
+                  >
+                    {eoaGatewayDeposit.step === 'checking' || eoaGatewayDeposit.step === 'approving' || eoaGatewayDeposit.step === 'depositing' || eoaGatewayDeposit.step === 'confirming'
+                      ? 'Depositing...'
+                      : 'Deposit EOA → Gateway'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-3 text-[11px] leading-5 text-[#EAE4D8]/40">
+                Deposit status: <span className="font-mono text-[#EAE4D8]/70">{eoaGatewayDeposit.step}</span>
+              </div>
+              {eoaGatewayDeposit.approveTxHash && (
+                <p className="mt-2 text-[11px] text-emerald-400">
+                  Approval tx ✓{' '}
+                  <a href={getArcTxUrl(eoaGatewayDeposit.approveTxHash)} target="_blank" rel="noreferrer" className="underline decoration-emerald-400/40 hover:text-emerald-300">
+                    {shortAddress(eoaGatewayDeposit.approveTxHash)}
+                  </a>
+                </p>
+              )}
+              {eoaGatewayDeposit.txHash && (
+                <p className="mt-2 text-[11px] text-emerald-400">
+                  Gateway deposit tx ✓{' '}
+                  <a href={getArcTxUrl(eoaGatewayDeposit.txHash)} target="_blank" rel="noreferrer" className="underline decoration-emerald-400/40 hover:text-emerald-300">
+                    {shortAddress(eoaGatewayDeposit.txHash)}
+                  </a>
+                </p>
+              )}
+              {eoaBalanceError && (
+                <p className="mt-2 text-[11px] text-red-400">{eoaBalanceError}</p>
+              )}
+              {eoaGatewayDeposit.error && (
+                <p className="mt-2 text-[11px] text-red-400">{eoaGatewayDeposit.error}</p>
+              )}
+            </div>
+
             {agentAccountEnabled && (
             <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
               <div className="flex items-center gap-3">
@@ -1191,7 +1356,6 @@ export default function AgentProfilePage() {
             )}
           </div>
         )}
-
 
         {/* ── Profile View Toggle ───────────────────────────────────────── */}
         {isConnected && address && profileLoaded && agents.length > 0 && (
