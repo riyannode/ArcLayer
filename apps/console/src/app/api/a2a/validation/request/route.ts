@@ -32,6 +32,12 @@ function statusFor(message: string) {
   return 500;
 }
 
+function publicErrorMessage(message: string): string {
+  const status = statusFor(message);
+  if (status < 500) return message;
+  return 'internal_error';
+}
+
 export async function POST(request: Request) {
   try {
     requireAdmin(request);
@@ -42,7 +48,11 @@ export async function POST(request: Request) {
     return humanJson(request, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const status = statusFor(message);
+    const publicMessage = publicErrorMessage(message);
 
-    return humanJson(request, { ok: false, error: message, source: 'erc8004_validation_registry' }, { status: statusFor(message) });
+    console.error('validation/request failed', error);
+
+    return humanJson(request, { ok: false, error: publicMessage, source: 'erc8004_validation_registry' }, { status });
   }
 }

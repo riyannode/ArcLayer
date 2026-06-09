@@ -41,6 +41,12 @@ function errorStatus(message: string): number {
   return 500;
 }
 
+function publicErrorMessage(message: string): string {
+  const status = errorStatus(message);
+  if (status < 500) return message;
+  return 'internal_error';
+}
+
 function requireAdmin(request: Request) {
   const expected = process.env.REPUTATION_FEEDBACK_API_KEY;
 
@@ -90,13 +96,17 @@ export async function POST(request: Request) {
     return json(request, 200, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const status = errorStatus(message);
+    const publicMessage = publicErrorMessage(message);
+
+    console.error('reputation/feedback failed', error);
 
     return json(
       request,
-      errorStatus(message),
+      status,
       {
         ok: false,
-        error: message,
+        error: publicMessage,
         source: 'erc8004_reputation_registry',
       },
     );

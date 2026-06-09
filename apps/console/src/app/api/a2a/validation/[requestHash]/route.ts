@@ -16,7 +16,11 @@ export async function GET(
     return humanJson(_request, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const isClientError = message.endsWith('_required') || message.endsWith('_invalid');
+    const publicMessage = isClientError ? message : 'internal_error';
 
-    return humanJson(_request, { ok: false, error: message, source: 'erc8004_validation_registry' }, { status: 400 });
+    console.error('validation/[requestHash] failed', error);
+
+    return humanJson(_request, { ok: false, error: publicMessage, source: 'erc8004_validation_registry' }, { status: 400 });
   }
 }
