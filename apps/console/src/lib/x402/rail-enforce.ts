@@ -14,7 +14,7 @@ export type Rail = 'native' | 'gateway';
  */
 export async function enforceRailHeader(
   req: Request,
-  body?: Record<string, unknown>,
+  body?: Record<string, unknown> | null,
 ): Promise<NextResponse | null> {
   const headerRail = req.headers.get('x-arc-rail')?.trim().toLowerCase();
   if (!headerRail) {
@@ -135,7 +135,7 @@ export async function getJobRail(jobId: string): Promise<Rail | null> {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-async function extractWallet(req: Request, body?: Record<string, unknown>): Promise<string | null> {
+async function extractWallet(req: Request, body?: Record<string, unknown> | null): Promise<string | null> {
   // Try query param first (GET requests).
   const url = new URL(req.url);
   const qWallet = normalizeWallet(url.searchParams.get('wallet'));
@@ -145,7 +145,7 @@ async function extractWallet(req: Request, body?: Record<string, unknown>): Prom
   const hWallet = normalizeWallet(req.headers.get('x-arc-wallet'));
   if (hWallet) return hWallet;
 
-  const parsedBody = body ?? await readJsonBody(req);
+  const parsedBody = body === undefined ? await readJsonBody(req) : body;
   if (!parsedBody) return null;
 
   return (

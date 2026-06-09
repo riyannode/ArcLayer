@@ -72,6 +72,25 @@ describe('enforceRailHeader', () => {
     expect(response).toBeNull();
   });
 
+  it('returns structured 400 for malformed JSON with X-ARC-RAIL instead of throwing', async () => {
+    const { verifyDualPayment } = await import('@/app/api/x402/_lib');
+
+    const result = await verifyDualPayment(new Request('http://localhost/api/x402/verify', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-arc-rail': 'native',
+      },
+      body: '{"x402Version":',
+    }));
+
+    expect('response' in result).toBe(true);
+    const response = (result as { response: Response }).response;
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ ok: false });
+  });
+
   it('rejects a DB rail mismatch', async () => {
     railPreferences.set(wallet, 'gateway');
     const { enforceRailHeader } = await import('./rail-enforce');
