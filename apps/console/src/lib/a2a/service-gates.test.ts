@@ -2,10 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { A2AAgentServiceGate } from './service-gates';
 
 const rows: A2AAgentServiceGate[] = [];
+const calls = {
+  insert: 0,
+  update: 0,
+  upsert: 0,
+};
+let nextInsertError: { code: string; message: string } | null = null;
 
 function makeGate(overrides: Partial<A2AAgentServiceGate>): A2AAgentServiceGate {
   return {
-    id: overrides.id ?? `${overrides.service_agent_id}-${overrides.gate_key}-${overrides.market}`,
+    id: overrides.id ?? `${overrides.service_agent_id ?? 'oracle-a'}-${overrides.gate_key ?? 'default'}-${overrides.market ?? '*'}`,
     service_agent_id: overrides.service_agent_id ?? 'oracle-a',
     gate_key: overrides.gate_key ?? 'default',
     category: overrides.category ?? 'prediction-market-bots',
@@ -30,11 +36,10 @@ type Filter = { column: keyof A2AAgentServiceGate; value: unknown };
 
 class QueryBuilder {
   private filters: Filter[] = [];
-  private selected = false;
-  private upsertRow: Partial<A2AAgentServiceGate> | null = null;
+  private insertRow: Partial<A2AAgentServiceGate> | null = null;
+  private updateRow: Partial<A2AAgentServiceGate> | null = null;
 
   select() {
-    this.selected = true;
     return this;
   }
 
@@ -47,20 +52,61 @@ class QueryBuilder {
     return Promise.resolve({ data: this.filtered(), error: null });
   }
 
-  upsert(row: Partial<A2AAgentServiceGate>) {
-    this.upsertRow = row;
+  maybeSingle() {
+    return Promise.resolve({ data: this.filtered()[0] ?? null, error: null });
+  }
+
+  insert(row: Partial<A2AAgentServiceGate>) {
+    calls.insert += 1;
+    this.insertRow = row;
     return this;
   }
 
+  update(row: Partial<A2AAgentServiceGate>) {
+    calls.update += 1;
+    this.updateRow = row;
+    return this;
+  }
+
+  upsert() {
+    calls.upsert += 1;
+    throw new Error('Supabase upsert must not be used for service gates');
+  }
+
   single() {
-    if (!this.upsertRow || !this.selected) return Promise.resolve({ data: null, error: new Error('bad query') });
+    if (this.insertRow) return Promise.resolve(this.commitInsert());
+    if (this.updateRow) return Promise.resolve(this.commitUpdate());
+    return Promise.resolve({ data: this.filtered()[0] ?? null, error: null });
+  }
+
+  private commitInsert() {
+    if (nextInsertError) {
+      const error = nextInsertError;
+      nextInsertError = null;
+      rows.push(makeGate({
+        ...(this.insertRow as Partial<A2AAgentServiceGate>),
+        id: 'gate-concurrent',
+        price_atomic: '999',
+      }));
+      return { data: null, error };
+    }
+
     const row = makeGate({
-      ...this.upsertRow,
-      id: 'gate-upserted',
+      ...(this.insertRow as Partial<A2AAgentServiceGate>),
+      id: 'gate-inserted',
       created_at: '2026-01-01T00:00:00.000Z',
-    } as Partial<A2AAgentServiceGate>);
+    });
     rows.push(row);
-    return Promise.resolve({ data: row, error: null });
+    return { data: row, error: null };
+  }
+
+  private commitUpdate() {
+    const matches = this.filtered();
+    const existing = matches[0];
+    if (!existing) return { data: null, error: new Error('row not found') };
+
+    Object.assign(existing, this.updateRow, { updated_at: (this.updateRow?.updated_at as string | undefined) ?? existing.updated_at });
+    return { data: existing, error: null };
   }
 
   private filtered() {
@@ -84,6 +130,10 @@ import {
 describe('A2A service gate resolver', () => {
   beforeEach(() => {
     rows.length = 0;
+    calls.insert = 0;
+    calls.update = 0;
+    calls.upsert = 0;
+    nextInsertError = null;
   });
 
   it('uses exact market before wildcard', async () => {
@@ -194,5 +244,66 @@ describe('A2A service gate resolver', () => {
       payTo: '0x0000000000000000000000000000000000000001',
     });
     expect(gate.pay_to).toBe('0x0000000000000000000000000000000000000001');
+    expect(calls.upsert).toBe(0);
+  });
+
+  it('updates an existing active gate instead of inserting', async () => {
+    rows.push(makeGate({ id: 'gate-existing', price_atomic: '1000' }));
+
+    const gate = await upsertServiceGate({
+      serviceAgentId: 'oracle-a',
+      gateKey: 'default',
+      serviceRole: 'oracle',
+      scope: 'market_data',
+      accessType: 'oracle_data',
+      priceAtomic: '3000',
+      isActive: false,
+    });
+
+    expect(gate.id).toBe('gate-existing');
+    expect(gate.price_atomic).toBe('3000');
+    expect(gate.is_active).toBe(false);
+    expect(rows).toHaveLength(1);
+    expect(calls.update).toBe(1);
+    expect(calls.insert).toBe(0);
+    expect(calls.upsert).toBe(0);
+  });
+
+  it('inserts a new gate when no active identity exists', async () => {
+    const gate = await upsertServiceGate({
+      serviceAgentId: 'oracle-a',
+      gateKey: 'default',
+      serviceRole: 'oracle',
+      scope: 'market_data',
+      accessType: 'oracle_data',
+      priceAtomic: '3000',
+    });
+
+    expect(gate.id).toBe('gate-inserted');
+    expect(gate.price_atomic).toBe('3000');
+    expect(rows).toHaveLength(1);
+    expect(calls.insert).toBe(1);
+    expect(calls.update).toBe(0);
+    expect(calls.upsert).toBe(0);
+  });
+
+  it('handles insert unique violation by re-selecting and updating the active gate', async () => {
+    nextInsertError = { code: '23505', message: 'duplicate key value violates unique constraint' };
+
+    const gate = await upsertServiceGate({
+      serviceAgentId: 'oracle-a',
+      gateKey: 'default',
+      serviceRole: 'oracle',
+      scope: 'market_data',
+      accessType: 'oracle_data',
+      priceAtomic: '3000',
+    });
+
+    expect(gate.id).toBe('gate-concurrent');
+    expect(gate.price_atomic).toBe('3000');
+    expect(rows).toHaveLength(1);
+    expect(calls.insert).toBe(1);
+    expect(calls.update).toBe(1);
+    expect(calls.upsert).toBe(0);
   });
 });
