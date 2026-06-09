@@ -212,6 +212,10 @@ function asDbError(error: unknown, action: string): ServiceGateError {
   });
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  return (error as { code?: unknown })?.code === "23505";
+}
+
 function selectColumns() {
   return "id, service_agent_id, gate_key, category, service_role, scope, access_type, market, price_atomic, currency, rail, pay_to, reputation_eligible, llm_receipt_required, is_active, metadata, created_at, updated_at";
 }
@@ -228,6 +232,49 @@ export async function listServiceGates(
 
   if (error) throw asDbError(error, "list");
   return (data ?? []) as unknown as A2AAgentServiceGate[];
+}
+
+async function findActiveServiceGateByIdentity(input: {
+  serviceAgentId: string;
+  gateKey: string;
+  category: string;
+  serviceRole: string;
+  scope: string;
+  accessType: string;
+  market: string;
+  rail: ServiceGateRail;
+}): Promise<A2AAgentServiceGate | null> {
+  const { data, error } = await getSupabaseAdmin()
+    .from(TABLE)
+    .select(selectColumns())
+    .eq("service_agent_id", input.serviceAgentId)
+    .eq("gate_key", input.gateKey)
+    .eq("category", input.category)
+    .eq("service_role", input.serviceRole)
+    .eq("scope", input.scope)
+    .eq("access_type", input.accessType)
+    .eq("market", input.market)
+    .eq("rail", input.rail)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as unknown as A2AAgentServiceGate | null;
+}
+
+async function updateServiceGateById(
+  id: string,
+  row: Record<string, unknown>,
+): Promise<A2AAgentServiceGate> {
+  const { data, error } = await getSupabaseAdmin()
+    .from(TABLE)
+    .update(row)
+    .eq("id", id)
+    .select(selectColumns())
+    .single();
+
+  if (error) throw error;
+  return data as unknown as A2AAgentServiceGate;
 }
 
 export async function upsertServiceGate(
@@ -247,6 +294,16 @@ export async function upsertServiceGate(
   const priceAtomic = assertPositiveAtomic(input.priceAtomic);
   const payTo = normalizeOptionalAddress(input.payTo);
 
+  const identity = {
+    serviceAgentId,
+    gateKey,
+    category,
+    serviceRole,
+    scope,
+    accessType,
+    market,
+    rail,
+  };
   const row = {
     service_agent_id: serviceAgentId,
     gate_key: gateKey,
@@ -266,14 +323,25 @@ export async function upsertServiceGate(
     updated_at: new Date().toISOString(),
   };
 
-  const { data, error } = await getSupabaseAdmin()
-    .from(TABLE)
-    .upsert(row, { onConflict: "service_agent_id,gate_key" })
-    .select(selectColumns())
-    .single();
+  try {
+    const existing = await findActiveServiceGateByIdentity(identity);
+    if (existing) return await updateServiceGateById(existing.id, row);
 
-  if (error) throw asDbError(error, "upsert");
-  return data as unknown as A2AAgentServiceGate;
+    const { data, error } = await getSupabaseAdmin()
+      .from(TABLE)
+      .insert(row)
+      .select(selectColumns())
+      .single();
+
+    if (!error) return data as unknown as A2AAgentServiceGate;
+    if (!isUniqueViolation(error)) throw error;
+
+    const concurrent = await findActiveServiceGateByIdentity(identity);
+    if (!concurrent) throw error;
+    return await updateServiceGateById(concurrent.id, row);
+  } catch (error) {
+    throw asDbError(error, "upsert");
+  }
 }
 
 async function queryActiveServiceGates(input: {
