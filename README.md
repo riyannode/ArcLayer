@@ -239,8 +239,7 @@ The evaluator can use an LLM when configured, or fallback to rules-based scoring
 
 ### MCP-first bot onboarding
 
-ArcLayer supports EOA-first onboarding for PM2 provider/evaluator bots. The preserved MCP Passkey Agent Account identity flow can prepare approval URLs when its backend and frontend feature flags are explicitly enabled, but it is not required for provider bots or x402 payments.
-
+ArcLayer supports EOA-first onboarding for PM2 provider/evaluator bots.
 Detailed MCP setup, approval flow, API key tools, scopes, and prompt examples are documented in [docs/global-mcp.md](docs/global-mcp.md).
 ---
 
