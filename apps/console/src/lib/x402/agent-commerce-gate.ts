@@ -6,6 +6,7 @@ import { sanitizeLlmReceipt } from '@/lib/x402/llm-receipt';
 import { getActiveServiceGate, normalizeOptionalAddress } from '@/lib/a2a/service-gates';
 import {
   normalizeAgentCommerceGateRequest,
+  validateAgentCommerceBuyerPolicy,
   validateAgentCommerceFallbackPolicy,
   type AgentCommerceGateContext,
   type AgentCommerceNormalizedGateContext,
@@ -95,6 +96,16 @@ export function withPredictionMarketSellerCommerceGate(
       return errorJson(session.status, session.error, session.message, session.details);
     }
 
+    const buyerPolicy = validateAgentCommerceBuyerPolicy(ctx);
+    if (!buyerPolicy.ok) {
+      return errorJson(
+        buyerPolicy.status,
+        buyerPolicy.error,
+        buyerPolicy.message,
+        buyerPolicy.details,
+      );
+    }
+
     const serviceGate = await getActiveServiceGate({
       serviceAgentId: ctx.sellerAgentId,
       gateKey: ctx.gateKey,
@@ -121,6 +132,23 @@ export function withPredictionMarketSellerCommerceGate(
         serviceRole: ctx.sellerRole,
         gateKey: ctx.gateKey,
       });
+    }
+
+    if (!serviceGate && ctx.gateKey) {
+      return errorJson(
+        404,
+        'service_gate_not_found',
+        'Requested service gate was not found or is inactive.',
+        {
+          serviceAgentId: ctx.sellerAgentId,
+          serviceRole: ctx.sellerRole,
+          gateKey: ctx.gateKey,
+          category: ctx.category,
+          scope: ctx.scope,
+          accessType: ctx.accessType,
+          market: ctx.market,
+        },
+      );
     }
 
     let sellerProfile: Awaited<ReturnType<typeof resolveSellerCommerceProfile>> | null = null;

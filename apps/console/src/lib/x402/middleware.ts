@@ -739,10 +739,21 @@ async function handleGateway(
   return response;
 }
 
+const ALLOWED_RESOURCE_ACTOR_ROLES = new Set([
+  'oracle',
+  'analyzer',
+  'evaluator',
+  'executor',
+  'buyer',
+  'provider',
+  'worker',
+  'settler',
+]);
+
 function normalizeResourceActorRole(value: unknown): string | null {
   if (typeof value !== 'string') return null;
-  const role = value.trim().toLowerCase().replace(/[^a-z0-9:_-]+/g, '-').replace(/^-+|-+$/g, '');
-  return role.length > 0 && role.length <= 64 ? role : null;
+  const role = value.trim().toLowerCase();
+  return ALLOWED_RESOURCE_ACTOR_ROLES.has(role) ? role : null;
 }
 
 // ─── Native verify + settle (Arc EIP-3009 pattern) ───────────────────────────
@@ -777,7 +788,7 @@ async function handleNative(
     }
     if (!role) {
       return NextResponse.json(
-        { ok: false, error: 'invalid_role', message: 'role must be a non-empty service role slug up to 64 characters.' },
+        { ok: false, error: 'invalid_role', message: 'role must be a canonical resource actor role.' },
         { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
       );
     }

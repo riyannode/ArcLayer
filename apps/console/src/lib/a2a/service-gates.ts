@@ -216,6 +216,17 @@ function isUniqueViolation(error: unknown): boolean {
   return (error as { code?: unknown })?.code === "23505";
 }
 
+type ServiceGateIdentity = {
+  serviceAgentId: string;
+  gateKey: string;
+  category: string;
+  serviceRole: string;
+  scope: string;
+  accessType: string;
+  market: string;
+  rail: ServiceGateRail;
+};
+
 function selectColumns() {
   return "id, service_agent_id, gate_key, category, service_role, scope, access_type, market, price_atomic, currency, rail, pay_to, reputation_eligible, llm_receipt_required, is_active, metadata, created_at, updated_at";
 }
@@ -234,16 +245,9 @@ export async function listServiceGates(
   return (data ?? []) as unknown as A2AAgentServiceGate[];
 }
 
-async function findActiveServiceGateByIdentity(input: {
-  serviceAgentId: string;
-  gateKey: string;
-  category: string;
-  serviceRole: string;
-  scope: string;
-  accessType: string;
-  market: string;
-  rail: ServiceGateRail;
-}): Promise<A2AAgentServiceGate | null> {
+async function findActiveServiceGateByIdentity(
+  input: ServiceGateIdentity,
+): Promise<A2AAgentServiceGate | null> {
   const { data, error } = await getSupabaseAdmin()
     .from(TABLE)
     .select(selectColumns())
@@ -277,6 +281,19 @@ async function updateServiceGateById(
   return data as unknown as A2AAgentServiceGate;
 }
 
+async function insertServiceGateRow(
+  row: Record<string, unknown>,
+): Promise<A2AAgentServiceGate> {
+  const { data, error } = await getSupabaseAdmin()
+    .from(TABLE)
+    .insert(row)
+    .select(selectColumns())
+    .single();
+
+  if (error) throw error;
+  return data as unknown as A2AAgentServiceGate;
+}
+
 export async function upsertServiceGate(
   input: UpsertServiceGateInput,
 ): Promise<A2AAgentServiceGate> {
@@ -294,16 +311,15 @@ export async function upsertServiceGate(
   const priceAtomic = assertPositiveAtomic(input.priceAtomic);
   const payTo = normalizeOptionalAddress(input.payTo);
 
-  const identity = {
-    serviceAgentId,
-    gateKey,
-    category,
-    serviceRole,
-    scope,
-    accessType,
-    market,
-    rail,
-  };
+  if (input.currency !== undefined && input.currency !== "USDC") {
+    throw serviceGateError(
+      "invalid_currency",
+      "currency must be USDC",
+      400,
+      { currency: input.currency },
+    );
+  }
+
   const row = {
     service_agent_id: serviceAgentId,
     gate_key: gateKey,
@@ -313,7 +329,7 @@ export async function upsertServiceGate(
     access_type: accessType,
     market,
     price_atomic: priceAtomic,
-    currency: input.currency || "USDC",
+    currency: "USDC",
     rail,
     pay_to: payTo,
     reputation_eligible: input.reputationEligible ?? true,
@@ -323,26 +339,38 @@ export async function upsertServiceGate(
     updated_at: new Date().toISOString(),
   };
 
+  const identity: ServiceGateIdentity = {
+    serviceAgentId,
+    gateKey,
+    category,
+    serviceRole,
+    scope,
+    accessType,
+    market,
+    rail,
+  };
+
   try {
     const existing = await findActiveServiceGateByIdentity(identity);
-    if (existing) return await updateServiceGateById(existing.id, row);
+    if (existing) {
+      return await updateServiceGateById(existing.id, row);
+    }
 
-    const { data, error } = await getSupabaseAdmin()
-      .from(TABLE)
-      .insert(row)
-      .select(selectColumns())
-      .single();
+    try {
+      return await insertServiceGateRow(row);
+    } catch (error) {
+      if (!isUniqueViolation(error)) throw error;
 
-    if (!error) return data as unknown as A2AAgentServiceGate;
-    if (!isUniqueViolation(error)) throw error;
+      const racedExisting = await findActiveServiceGateByIdentity(identity);
+      if (!racedExisting) throw error;
 
-    const concurrent = await findActiveServiceGateByIdentity(identity);
-    if (!concurrent) throw error;
-    return await updateServiceGateById(concurrent.id, row);
+      return await updateServiceGateById(racedExisting.id, row);
+    }
   } catch (error) {
     throw asDbError(error, "upsert");
   }
 }
+
 
 async function queryActiveServiceGates(input: {
   serviceAgentId: string;

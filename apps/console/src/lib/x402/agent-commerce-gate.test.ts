@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 const mocks = vi.hoisted(() => ({
   serviceGate: null as null | Record<string, unknown>,
   sellerProfile: null as null | Record<string, unknown>,
+  sellerProfileCalls: 0,
   withX402Options: null as null | Record<string, unknown>,
 }));
 
@@ -28,9 +29,12 @@ vi.mock('@/lib/a2a/service-gates', () => ({
 }));
 
 vi.mock('@/lib/a2a/commerce-profile', () => ({
-  resolveSellerCommerceProfile: vi.fn(async () => mocks.sellerProfile ?? {
-    agent_id: 'seller-agent',
-    price_atomic: '1',
+  resolveSellerCommerceProfile: vi.fn(async () => {
+    mocks.sellerProfileCalls += 1;
+    return mocks.sellerProfile ?? {
+      agent_id: 'seller-agent',
+      price_atomic: '1',
+    };
   }),
 }));
 
@@ -46,7 +50,6 @@ vi.mock('@/lib/x402/middleware', () => ({
 }));
 
 import { withPredictionMarketSellerCommerceGate } from './agent-commerce-gate';
-import { normalizeAgentCommerceGateRequest } from './agent-commerce-policy';
 
 function request(body: Record<string, unknown>) {
   return new NextRequest('https://example.test/api/x402/agent-commerce-gate', {
@@ -75,6 +78,7 @@ describe('agent commerce service gate behavior', () => {
   beforeEach(() => {
     mocks.serviceGate = null;
     mocks.sellerProfile = { agent_id: 'seller-agent', price_atomic: '7' };
+    mocks.sellerProfileCalls = 0;
     mocks.withX402Options = null;
   });
 
@@ -124,15 +128,57 @@ describe('agent commerce service gate behavior', () => {
     expect(json.error).toBe('seller_role_not_allowed');
   });
 
-  it('rejects buyer-supplied sellerPayTo', () => {
-    const resolved = normalizeAgentCommerceGateRequest(baseBody({
-      sellerPayTo: '0x0000000000000000000000000000000000000002',
-    }));
+  it('rejects unknown buyerRole even when a matching active service gate exists', async () => {
+    mocks.serviceGate = {
+      id: 'gate-custom',
+      price_atomic: '10000',
+      reputation_eligible: false,
+      llm_receipt_required: false,
+      pay_to: null,
+    };
 
-    expect(resolved).toMatchObject({ ok: false, status: 400, error: 'seller_pay_to_not_allowed' });
+    const response = await withPredictionMarketSellerCommerceGate()(request(baseBody({
+      buyerRole: 'custom-buyer',
+      sellerRole: 'custom-oracle',
+      gateKey: 'premium',
+    })));
+    const json = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(json.error).toBe('buyer_role_not_allowed');
+    expect(mocks.withX402Options).toBeNull();
   });
 
-  it('preserves legacy seller profile fallback', async () => {
+  it('returns service_gate_not_found for an explicit gateKey with no active gate', async () => {
+    const response = await withPredictionMarketSellerCommerceGate()(request(baseBody({ gateKey: 'missing' })));
+    const json = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(json.error).toBe('service_gate_not_found');
+    expect(json.details.gateKey).toBe('missing');
+  });
+
+  it('does not fallback to seller profile when an explicit gateKey is missing or inactive', async () => {
+    const response = await withPredictionMarketSellerCommerceGate()(request(baseBody({ gateKey: 'inactive' })));
+    const json = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(json.error).toBe('service_gate_not_found');
+    expect(mocks.sellerProfileCalls).toBe(0);
+    expect(mocks.withX402Options).toBeNull();
+  });
+
+  it('rejects buyer-supplied sellerPayTo', async () => {
+    const response = await withPredictionMarketSellerCommerceGate()(request(baseBody({
+      sellerPayTo: '0x0000000000000000000000000000000000000002',
+    })));
+    const json = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(json.error).toBe('seller_pay_to_not_allowed');
+  });
+
+  it('preserves legacy seller profile fallback when no gateKey is supplied', async () => {
     mocks.sellerProfile = { agent_id: 'seller-agent', price_atomic: '7' };
 
     const response = await withPredictionMarketSellerCommerceGate()(request(baseBody()));
