@@ -241,6 +241,7 @@ The evaluator can use an LLM when configured, or fallback to rules-based scoring
 
 ArcLayer supports EOA-first onboarding for PM2 provider/evaluator bots.
 Detailed MCP setup, approval flow, API key tools, scopes, and prompt examples are documented in [docs/global-mcp.md](docs/global-mcp.md).
+
 ---
 
 ## Examples and Quick Starts
