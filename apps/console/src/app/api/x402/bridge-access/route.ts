@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { NextResponse, type NextRequest } from 'next/server';
 import { withNative } from '@/lib/x402/middleware';
 import { latestBridgeSession, listBridgeEvents, listBridgeReceipts, stablePayloadHash } from '@/lib/agent-bridge/store';
@@ -13,26 +14,23 @@ async function handler(req: NextRequest) {
   const body = await req.json().catch(() => ({} as Record<string, unknown>));
   const requestedScopeRaw = typeof body.scope === 'string' ? body.scope.trim() : '';
   if (!SCOPES.has(requestedScopeRaw as BridgeScope)) {
-    return NextResponse.json(
-      { ok: false, ...bridgeRail(), error: 'invalid_scope', message: 'Scope must be summary, full_events, receipts, payload, external_trace, or market_data.' },
-      { status: 400 },
-    );
+    return humanJson(req, { ok: false, ...bridgeRail(), error: 'invalid_scope', message: 'Scope must be summary, full_events, receipts, payload, external_trace, or market_data.' }, { status: 400 });
   }
   const requestedScope = requestedScopeRaw as BridgeScope;
   const role = typeof body.role === 'string' ? body.role.trim().toLowerCase() : '';
   if (!['oracle', 'analyzer', 'evaluator', 'executor'].includes(role)) {
-    return NextResponse.json({ ok: false, ...bridgeRail(), error: 'invalid_role', message: 'Role must be oracle, analyzer, evaluator, or executor.' }, { status: 400 });
+    return humanJson(req, { ok: false, ...bridgeRail(), error: 'invalid_role', message: 'Role must be oracle, analyzer, evaluator, or executor.' }, { status: 400 });
   }
   const latest = await latestBridgeSession();
   const hasInputSession = typeof body.sessionId === 'string' && body.sessionId.trim().length > 0;
   const sessionId = hasInputSession ? String(body.sessionId).trim() : null;
   if (!sessionId) {
-    return NextResponse.json({ ok: false, ...bridgeRail(), error: 'invalid_session', message: 'Missing bridge session id.' }, { status: 400 });
+    return humanJson(req, { ok: false, ...bridgeRail(), error: 'invalid_session', message: 'Missing bridge session id.' }, { status: 400 });
   }
   if (latest?.sessionId !== sessionId) {
     const existingEvents = await listBridgeEvents({ sessionId, limit: 1 });
     if (!existingEvents.length) {
-      return NextResponse.json({ ok: false, ...bridgeRail(), error: 'rail_session_not_found', sessionId, scope: requestedScope, message: 'Bridge session was not found or already expired.' }, { status: 404 });
+      return humanJson(req, { ok: false, ...bridgeRail(), error: 'rail_session_not_found', sessionId, scope: requestedScope, message: 'Bridge session was not found or already expired.' }, { status: 404 });
     }
   }
 
@@ -61,7 +59,7 @@ async function handler(req: NextRequest) {
   const receipts = ['summary', 'full_events', 'receipts', 'external_trace', 'market_data'].includes(requestedScope) ? sessionReceipts : [];
   const payloadHash = stablePayloadHash({ sessionId, scope: requestedScope, eventCount: events.length, receiptCount: receipts.length });
 
-  const response = NextResponse.json({
+  const response = humanJson(req, {
     ok: true,
     ...bridgeRail(),
     access: 'unlocked',

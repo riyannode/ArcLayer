@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * POST /api/erc8183-jobs/web-hire/created
  *
@@ -72,20 +73,14 @@ async function attemptAuth(
   const cookieValue = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!cookieValue) {
     return {
-      error: NextResponse.json(
-        { ok: false, error: 'unauthorized', detail: 'API key or wallet session required' },
-        { status: 401, headers: { 'Cache-Control': ERROR_CACHE } },
-      ),
+      error: humanJson(req, { ok: false, error: 'unauthorized', detail: 'API key or wallet session required' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } }),
     };
   }
 
   const session = await resolveSessionFromCookie(cookieValue);
   if (!session) {
     return {
-      error: NextResponse.json(
-        { ok: false, error: 'invalid_session', detail: 'Wallet session is invalid or expired' },
-        { status: 401, headers: { 'Cache-Control': ERROR_CACHE } },
-      ),
+      error: humanJson(req, { ok: false, error: 'invalid_session', detail: 'Wallet session is invalid or expired' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } }),
     };
   }
 
@@ -139,28 +134,19 @@ export async function POST(req: NextRequest) {
 
     // Guard: body must be a non-null object
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_body', detail: 'Request body must be a JSON object' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'invalid_body', detail: 'Request body must be a JSON object' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // Validate prepareId
     const prepareId = body.prepareId as string | undefined;
     if (!prepareId || typeof prepareId !== 'string') {
-      return NextResponse.json(
-        { ok: false, error: 'missing_prepareId', detail: 'prepareId is required' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'missing_prepareId', detail: 'prepareId is required' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // Validate createTxHash
     const createTxHash = body.createTxHash as string | undefined;
     if (!createTxHash || typeof createTxHash !== 'string' || !TX_HASH_RE.test(createTxHash)) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_tx_hash', detail: 'createTxHash must match /^0x[a-fA-F0-9]{64}$/' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'invalid_tx_hash', detail: 'createTxHash must match /^0x[a-fA-F0-9]{64}$/' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // ── Atomic claim: prepared → creating ──────────────────────────────
@@ -174,10 +160,7 @@ export async function POST(req: NextRequest) {
 
     if (claimError) {
       console.error('[created] failed to claim preparation:', claimError.message);
-      return NextResponse.json(
-        { ok: false, error: 'preparation_claim_failed', detail: claimError.message },
-        { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'preparation_claim_failed', detail: claimError.message }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     if (!claimedRows || claimedRows.length === 0) {
@@ -189,22 +172,16 @@ export async function POST(req: NextRequest) {
         .maybeSingle();
 
       if (!existing) {
-        return NextResponse.json(
-          { ok: false, error: 'preparation_not_found', detail: `No preparation found for prepareId "${prepareId}"` },
-          { status: 404, headers: { 'Cache-Control': ERROR_CACHE } },
-        );
+        return humanJson(req, { ok: false, error: 'preparation_not_found', detail: `No preparation found for prepareId "${prepareId}"` }, { status: 404, headers: { 'Cache-Control': ERROR_CACHE } });
       }
 
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           error: 'already_created_or_in_progress',
           detail: `Preparation status is "${existing.status}", expected "prepared"`,
           ...(existing.erc8183_job_id ? { erc8183JobId: existing.erc8183_job_id } : {}),
           ...(existing.create_tx_hash ? { createTxHash: existing.create_tx_hash } : {}),
-        },
-        { status: 409, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+        }, { status: 409, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     const prep = claimedRows[0] as PreparationRow;
@@ -218,10 +195,7 @@ export async function POST(req: NextRequest) {
         .eq('id', prepareId)
         .eq('status', 'creating');
 
-      return NextResponse.json(
-        { ok: false, error: 'preparation_expired', detail: 'This preparation has expired. Please prepare again.' },
-        { status: 410, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'preparation_expired', detail: 'This preparation has expired. Please prepare again.' }, { status: 410, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // If wallet session auth, enforce buyer ownership
@@ -234,14 +208,11 @@ export async function POST(req: NextRequest) {
           .eq('id', prepareId)
           .eq('status', 'creating');
 
-        return NextResponse.json(
-          {
+        return humanJson(req, {
             ok: false,
             error: 'buyer_not_linked',
             detail: `Preparation buyer agent "${prep.buyer_agent_id}" is not linked to session wallet ${auth.session.wallet}`,
-          },
-          { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
-        );
+          }, { status: 403, headers: { 'Cache-Control': ERROR_CACHE } });
       }
     }
 
@@ -249,10 +220,7 @@ export async function POST(req: NextRequest) {
     const receipt = await readTransactionReceipt(createTxHash as Hex);
     if (!receipt) {
       // Don't rollback — tx may arrive later. Keep status='creating' so retry works.
-      return NextResponse.json(
-        { ok: false, error: 'tx_not_found', detail: 'Transaction not found. It may not have been mined yet. Retry after a few seconds.' },
-        { status: 202, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'tx_not_found', detail: 'Transaction not found. It may not have been mined yet. Retry after a few seconds.' }, { status: 202, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // Confirm tx succeeded
@@ -263,10 +231,7 @@ export async function POST(req: NextRequest) {
         .eq('id', prepareId)
         .eq('status', 'creating');
 
-      return NextResponse.json(
-        { ok: false, error: 'tx_reverted', detail: 'createJob transaction reverted on-chain.' },
-        { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'tx_reverted', detail: 'createJob transaction reverted on-chain.' }, { status: 422, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // ── Verify tx sender = buyer controller ────────────────────────────
@@ -279,14 +244,11 @@ export async function POST(req: NextRequest) {
         .eq('id', prepareId)
         .eq('status', 'creating');
 
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           error: 'tx_sender_mismatch',
           detail: `Transaction sender ${txSender} does not match preparation buyer controller ${expectedBuyer}`,
-        },
-        { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+        }, { status: 422, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // Decode JobCreated event
@@ -298,10 +260,7 @@ export async function POST(req: NextRequest) {
         .eq('id', prepareId)
         .eq('status', 'creating');
 
-      return NextResponse.json(
-        { ok: false, error: 'job_created_event_not_found', detail: 'Could not decode JobCreated event from receipt logs.' },
-        { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'job_created_event_not_found', detail: 'Could not decode JobCreated event from receipt logs.' }, { status: 422, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     const erc8183JobId = decodedEvent.jobId.toString();
@@ -316,14 +275,11 @@ export async function POST(req: NextRequest) {
         .eq('id', prepareId)
         .eq('status', 'creating');
 
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           error: 'event_provider_mismatch',
           detail: `Decoded JobCreated.provider ${decodedProvider} does not match preparation provider ${expectedProvider}`,
-        },
-        { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+        }, { status: 422, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     const decodedEvaluator = decodedEvent.evaluator.toLowerCase();
@@ -335,14 +291,11 @@ export async function POST(req: NextRequest) {
         .eq('id', prepareId)
         .eq('status', 'creating');
 
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           error: 'event_evaluator_mismatch',
           detail: `Decoded JobCreated.evaluator ${decodedEvaluator} does not match preparation evaluator ${expectedEvaluator}`,
-        },
-        { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+        }, { status: 422, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // ── Verify client, expiredAt, hook match preparation ───────────────
@@ -355,14 +308,11 @@ export async function POST(req: NextRequest) {
         .eq('id', prepareId)
         .eq('status', 'creating');
 
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           error: 'event_client_mismatch',
           detail: `Decoded JobCreated.client ${decodedClient} does not match preparation buyer controller ${expectedClient}`,
-        },
-        { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+        }, { status: 422, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     if (decodedEvent.expiredAt.toString() !== prep.expired_at_unix) {
@@ -372,14 +322,11 @@ export async function POST(req: NextRequest) {
         .eq('id', prepareId)
         .eq('status', 'creating');
 
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           error: 'event_expired_at_mismatch',
           detail: `Decoded JobCreated.expiredAt ${decodedEvent.expiredAt.toString()} does not match preparation expired_at_unix ${prep.expired_at_unix}`,
-        },
-        { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+        }, { status: 422, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     const decodedHook = decodedEvent.hook.toLowerCase();
@@ -391,14 +338,11 @@ export async function POST(req: NextRequest) {
         .eq('id', prepareId)
         .eq('status', 'creating');
 
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           error: 'event_hook_mismatch',
           detail: `Decoded JobCreated.hook ${decodedHook} does not match preparation hook ${expectedHook}`,
-        },
-        { status: 422, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+        }, { status: 422, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // ── Create local ERC-8183 job record ───────────────────────────────
@@ -434,21 +378,15 @@ export async function POST(req: NextRequest) {
       .eq('id', prepareId)
       .eq('status', 'creating');
 
-    return NextResponse.json(
-      {
+    return humanJson(req, {
         ok: true,
         localJobId: job.localJobId,
         erc8183JobId,
         createTxHash,
         status: 'created',
-      },
-      { headers: { 'Cache-Control': 'no-store' } },
-    );
+      }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown_error';
-    return NextResponse.json(
-      { ok: false, error: 'created_failed', detail: message },
-      { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'created_failed', detail: message }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 }

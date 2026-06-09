@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * GET /api/erc8004/identity/[agentId]
  *
@@ -5,7 +6,7 @@
  * Reads from erc8004_agents table (synced via /api/erc8004/identity/sync).
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 
 export const dynamic = 'force-dynamic';
@@ -40,10 +41,7 @@ export async function GET(
     const { agentId } = await params;
 
     if (!agentId || agentId.trim().length === 0) {
-      return NextResponse.json(
-        { ok: false, error: 'missing_agentId' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'missing_agentId' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     const supabase = getSupabaseAdmin();
@@ -54,28 +52,16 @@ export async function GET(
       .maybeSingle();
 
     if (error) {
-      return NextResponse.json(
-        { ok: false, error: 'query_failed', detail: error.message },
-        { status: 502, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'query_failed', detail: error.message }, { status: 502, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     if (!data) {
-      return NextResponse.json(
-        { ok: false, error: 'not_found', agentId: agentId.trim() },
-        { status: 404, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'not_found', agentId: agentId.trim() }, { status: 404, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
-    return NextResponse.json(
-      { ok: true, agent: toAgent(data) },
-      { headers: { 'Cache-Control': CACHE } },
-    );
+    return humanJson(req, { ok: true, agent: toAgent(data) }, { headers: { 'Cache-Control': CACHE } });
   } catch (err) {
     const detail = err instanceof Error ? err.message : 'unknown_error';
-    return NextResponse.json(
-      { ok: false, error: 'identity_route_failed', detail },
-      { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'identity_route_failed', detail }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 }

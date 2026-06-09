@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
 import {
   createValidationRequest,
   type ValidationRequestInput,
@@ -39,13 +39,10 @@ export async function POST(request: Request) {
     const body = (await request.json()) as ValidationRequestInput;
     const result = await createValidationRequest(body);
 
-    return NextResponse.json(result);
+    return humanJson(request, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    return NextResponse.json(
-      { ok: false, error: message, source: 'erc8004_validation_registry' },
-      { status: statusFor(message) },
-    );
+    return humanJson(request, { ok: false, error: message, source: 'erc8004_validation_registry' }, { status: statusFor(message) });
   }
 }

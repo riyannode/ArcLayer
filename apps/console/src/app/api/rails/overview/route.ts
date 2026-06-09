@@ -1,7 +1,8 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * GET /api/rails/overview — rail counts separated by settlement_mode
  */
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { escrowRail, bridgeRail } from '@/lib/rails/responses';
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
 
     if (bridgeEventsErr) throw new Error(`bridge events count: ${bridgeEventsErr.message}`);
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       rails: {
         escrow: {
@@ -65,9 +66,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { ok: false, error: 'rails_overview_failed', message },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, error: 'rails_overview_failed', message }, { status: 500 });
   }
 }

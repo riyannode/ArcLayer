@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
 import { getAgentPresenceById } from '@/lib/a2a/live-events';
 
 export const dynamic = 'force-dynamic';
@@ -27,7 +27,7 @@ export async function GET(
     const presence = await getAgentPresenceById(agentId);
 
     if (!presence) {
-      return NextResponse.json({
+      return humanJson(_request, {
         ok: true,
         agentId,
         status: 'offline',
@@ -43,7 +43,7 @@ export async function GET(
 
     const status = deriveStatus(presence.lastHeartbeatAt, presence.updatedAt);
 
-    return NextResponse.json({
+    return humanJson(_request, {
       ok: true,
       agentId: presence.agentId,
       status,
@@ -56,7 +56,7 @@ export async function GET(
       rpcOk: presence.rpcOk,
     });
   } catch {
-    return NextResponse.json({
+    return humanJson(_request, {
       ok: false,
       agentId,
       status: 'unknown',

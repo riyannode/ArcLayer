@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { keccak256, toBytes } from 'viem';
 import { CONTRACTS } from '@arclayer/sdk';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
@@ -20,23 +21,17 @@ export async function POST(
 
     // MVP: rejections not supported yet
     if (!approved) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'unsupported_rejection_flow',
           message: 'Rejection flow is not supported in MVP. Set approved=true or use a manual dispute process.',
-        },
-        { status: 400 },
-      );
+        }, { status: 400 });
     }
 
     const job = await getErc8183JobByLocalId(localJobId);
     if (!job) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
-        { status: 404 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' }, { status: 404 });
     }
 
     // Guard: only the evaluator or buyer (client) can complete the job
@@ -44,10 +39,7 @@ export async function POST(
     if (completeAuthError) return completeAuthError;
 
     if (!job.erc8183JobId) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'create_job_pending', message: 'createJob tx must be confirmed first.' },
-        { status: 400 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'create_job_pending', message: 'createJob tx must be confirmed first.' }, { status: 400 });
     }
 
     const reason = body.reason ?? 'deliverable-approved';
@@ -65,7 +57,7 @@ export async function POST(
       args: [job.erc8183JobId, reasonHash, '0x'],
     };
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       ...escrowRail(),
       nextAction: 'complete',
@@ -77,9 +69,6 @@ export async function POST(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { ok: false, ...escrowRail(), error: 'complete_failed', message },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, ...escrowRail(), error: 'complete_failed', message }, { status: 500 });
   }
 }

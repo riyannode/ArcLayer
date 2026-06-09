@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
 import { indexerUrl } from '@/lib/indexer';
 import type { Hex } from 'viem';
 import { isHiddenAgent } from '@/lib/a2a/hidden-agents';
@@ -372,7 +372,7 @@ export async function GET(request: Request) {
 
     const { visibleAgents, mode } = applyCanonicalFilter(allAgents);
 
-    return NextResponse.json({
+    return humanJson(request, {
       registry: 'external-registry',
       agents: visibleAgents,
       totalRegistered: allAgents.length,
@@ -429,8 +429,7 @@ export async function GET(request: Request) {
 
       const { visibleAgents, mode } = applyCanonicalFilter(allAgents);
 
-      return NextResponse.json(
-        {
+      return humanJson(request, {
           registry: AGENT_REGISTRY,
           sourceMode: 'erc8004-supabase',
           resolvedSource: 'erc8004-supabase',
@@ -444,14 +443,11 @@ export async function GET(request: Request) {
           categoryFilter,
           scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
           timestamp: new Date().toISOString(),
-        },
-        { headers: { 'Cache-Control': AGENTS_CACHE_CONTROL } },
-      );
+        }, { headers: { 'Cache-Control': AGENTS_CACHE_CONTROL } });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'erc8004_supabase_source_failed';
 
-      return NextResponse.json(
-        {
+      return humanJson(request, {
           registry: AGENT_REGISTRY,
           sourceMode: 'erc8004-supabase',
           resolvedSource: 'erc8004-supabase',
@@ -465,9 +461,7 @@ export async function GET(request: Request) {
           scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
           error: 'erc8004_supabase_source_failed',
           detail: message,
-        },
-        { status: 502, headers: { 'Cache-Control': 'no-store, no-cache, max-age=0' } },
-      );
+        }, { status: 502, headers: { 'Cache-Control': 'no-store, no-cache, max-age=0' } });
     }
   }
 
@@ -591,7 +585,7 @@ export async function GET(request: Request) {
 
     const { visibleAgents, mode } = applyCanonicalFilter(allAgents);
 
-    return NextResponse.json({
+    return humanJson(request, {
       registry: AGENT_REGISTRY,
       agents: visibleAgents,
       totalRegistered: allAgents.length,
@@ -608,8 +602,7 @@ export async function GET(request: Request) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'registry_sync_failed';
 
-    return NextResponse.json(
-      {
+    return humanJson(request, {
         registry: AGENT_REGISTRY,
         agents: [],
         totalRegistered: 0,
@@ -617,8 +610,6 @@ export async function GET(request: Request) {
         scan: { fromBlock: null, toBlock: null, chunks: 0, maxRange: '0', source },
         error: 'registry_sync_failed',
         detail: message,
-      },
-      { status: 502, headers: { 'Cache-Control': 'no-store, no-cache, max-age=0' } },
-    );
+      }, { status: 502, headers: { 'Cache-Control': 'no-store, no-cache, max-age=0' } });
   }
 }

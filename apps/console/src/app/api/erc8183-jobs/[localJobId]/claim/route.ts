@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import {
   getErc8183JobByLocalId,
@@ -23,10 +24,7 @@ export async function POST(
     if (auth.error) return auth.error;
     const job = await getErc8183JobByLocalId(localJobId);
     if (!job) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
-        { status: 404 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' }, { status: 404 });
     }
 
     // Guard: only the provider can claim this job
@@ -35,28 +33,22 @@ export async function POST(
 
     // Guard: must be funded on-chain before off-chain claim
     if (job.erc8183Status !== 'Funded') {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'erc8183_job_not_funded',
           message:
             'Job must be funded on-chain (erc8183_status=Funded) before off-chain provider claim.',
-        },
-        { status: 400 },
-      );
+        }, { status: 400 });
     }
 
     if (job.status !== 'created') {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'erc8183_job_already_claimed',
           message: `Job is in status '${job.status}', expected 'created'.`,
-        },
-        { status: 409 },
-      );
+        }, { status: 409 });
     }
 
     const body = await req.json();
@@ -65,16 +57,12 @@ export async function POST(
     const workerId: string | undefined = body.workerId;
 
     if (!providerAgentId || typeof providerAgentId !== 'string') {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'providerAgentId is required' },
-        { status: 400 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'providerAgentId is required' }, { status: 400 });
     }
 
     // Guard: providerAgentId in body must match authenticated key
     if (isErc8183Admin(auth.key.scopes) === false && providerAgentId !== auth.key.agentId) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'participant_mismatch',
@@ -82,9 +70,7 @@ export async function POST(
           expectedAgentId: providerAgentId,
           authenticatedAgentId: auth.key.agentId,
           hint: 'providerAgentId in claim body must match the authenticated key agentId.',
-        },
-        { status: 403 },
-      );
+        }, { status: 403 });
     }
 
     await claimErc8183Job({
@@ -94,7 +80,7 @@ export async function POST(
       claimTtlSeconds: claimTtlSeconds ?? undefined,
     });
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       ...escrowRail(),
       localJobId: localJobId,
@@ -108,9 +94,6 @@ export async function POST(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('[erc8183-jobs] POST /claim failed:', message);
-    return NextResponse.json(
-      { ok: false, ...escrowRail(), error: 'claim_failed', message },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, ...escrowRail(), error: 'claim_failed', message }, { status: 500 });
   }
 }

@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { claimA2AJob } from '@/lib/a2a/jobs';
 import { requireApiKey } from '@/lib/a2a/auth';
 import { applyRateLimit } from '@/lib/rate-limit';
@@ -23,10 +24,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const agentId = auth.key.agentId;
   if (!(await requireRegisteredExternalAgent(agentId))) {
     console.warn(`[a2a] rejected unregistered external agent agentId=${agentId}`);
-    return NextResponse.json({ ok: false, error: 'unregistered_external_agent' }, { status: 403 });
+    return humanJson(req, { ok: false, error: 'unregistered_external_agent' }, { status: 403 });
   }
 
   const result = await claimA2AJob(id, agentId);
-  if (!result.ok) return NextResponse.json(result, { status: result.error === 'job_not_found' ? 404 : 409 });
-  return NextResponse.json(result);
+  if (!result.ok) return humanJson(req, result, { status: result.error === 'job_not_found' ? 404 : 409 });
+  return humanJson(req, result);
 }

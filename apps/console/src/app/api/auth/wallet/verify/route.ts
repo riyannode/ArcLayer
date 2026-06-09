@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * POST /api/auth/wallet/verify
  *
@@ -10,7 +11,7 @@
  *   - Returns { ok: true, wallet, expiresAt }
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   verifyAndCreateSession,
   buildSessionCookie,
@@ -25,24 +26,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     if (!body.wallet || typeof body.wallet !== 'string') {
-      return NextResponse.json(
-        { ok: false, error: 'missing_wallet', detail: 'wallet is required' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'missing_wallet', detail: 'wallet is required' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     if (!body.nonce || typeof body.nonce !== 'string') {
-      return NextResponse.json(
-        { ok: false, error: 'missing_nonce', detail: 'nonce is required' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'missing_nonce', detail: 'nonce is required' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     if (!body.signature || typeof body.signature !== 'string') {
-      return NextResponse.json(
-        { ok: false, error: 'missing_signature', detail: 'signature is required' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'missing_signature', detail: 'signature is required' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     const result = await verifyAndCreateSession({
@@ -59,20 +51,14 @@ export async function POST(req: NextRequest) {
             ? 400
             : 401;
 
-      return NextResponse.json(
-        { ok: false, error: result.error, detail: result.detail },
-        { status, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: result.error, detail: result.detail }, { status, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
-    const res = NextResponse.json(
-      {
+    const res = humanJson(req, {
         ok: true,
         wallet: result.session.wallet,
         expiresAt: result.session.expiresAt,
-      },
-      { headers: { 'Cache-Control': 'no-store' } },
-    );
+      }, { headers: { 'Cache-Control': 'no-store' } });
 
     // Set httpOnly session cookie
     if (result.cookieToken) {
@@ -82,9 +68,6 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown_error';
-    return NextResponse.json(
-      { ok: false, error: 'verify_failed', detail: message },
-      { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'verify_failed', detail: message }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 }

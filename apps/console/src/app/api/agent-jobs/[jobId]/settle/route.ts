@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * POST /api/agent-jobs/[jobId]/settle — ArcLayer off-chain job settlement via x402 Arc-native payment
  *
@@ -33,7 +34,7 @@ export const POST = (() => {
     const jobId = settleIdx >= 2 ? segments[settleIdx - 1] : null;
 
     if (!jobId) {
-      return NextResponse.json({ ok: false, error: 'invalid_job_id' }, { status: 400 });
+      return humanJson(req, { ok: false, error: 'invalid_job_id' }, { status: 400 });
     }
 
     const auth = await requireApiKey(req, API_KEY_SCOPES.JOBS_SETTLE);
@@ -41,45 +42,39 @@ export const POST = (() => {
 
     const job = await getAgentJob(jobId);
     if (!job) {
-      return NextResponse.json({ ok: false, error: 'job_not_found' }, { status: 404 });
+      return humanJson(req, { ok: false, error: 'job_not_found' }, { status: 404 });
     }
 
     // Block ERC-8183 escrow jobs — they use AgenticCommerce.complete(), not x402 settle
     if (job.settlement_mode === 'erc8183_escrow') {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           error: 'erc8183_jobs_must_complete_onchain',
           message:
             'This job uses ERC-8183 escrow settlement. Use AgenticCommerce.complete(), not x402 settle.',
-        },
-        { status: 409 },
-      );
+        }, { status: 409 });
     }
 
     // Validate status — allow verified or settlement_pending
     if (job.status !== 'verified' && job.status !== 'settlement_pending') {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_status', message: `Job status is ${job.status}, expected verified or settlement_pending` },
-        { status: 400 },
-      );
+      return humanJson(req, { ok: false, error: 'invalid_status', message: `Job status is ${job.status}, expected verified or settlement_pending` }, { status: 400 });
     }
 
     const body = await req.clone().json().catch(() => ({}));
     const buyerAgentId = typeof body.buyerAgentId === 'string' ? body.buyerAgentId.trim() : null;
     if (!buyerAgentId) {
-      return NextResponse.json({ ok: false, error: 'buyerAgentId is required' }, { status: 400 });
+      return humanJson(req, { ok: false, error: 'buyerAgentId is required' }, { status: 400 });
     }
     if (buyerAgentId !== auth.key.agentId) {
-      return NextResponse.json({ ok: false, error: 'agent_id_mismatch', field: 'buyerAgentId' }, { status: 403 });
+      return humanJson(req, { ok: false, error: 'agent_id_mismatch', field: 'buyerAgentId' }, { status: 403 });
     }
     if (job.buyer_agent_id !== buyerAgentId) {
-      return NextResponse.json({ ok: false, error: 'buyer_mismatch' }, { status: 403 });
+      return humanJson(req, { ok: false, error: 'buyer_mismatch' }, { status: 403 });
     }
 
     const priceAtomic = job.price_atomic;
     if (!priceAtomic || priceAtomic === '0') {
-      return NextResponse.json({ ok: false, error: 'zero_price' }, { status: 400 });
+      return humanJson(req, { ok: false, error: 'zero_price' }, { status: 400 });
     }
 
     // Create middleware with actual job resource and price
@@ -88,7 +83,7 @@ export const POST = (() => {
       async (_innerReq: NextRequest) => {
         // x402 proof is verified — safe to mark settlement_pending now
         await markJobSettlementPending({ jobId, buyerAgentId });
-        return NextResponse.json({
+        return humanJson(_innerReq, {
           ok: true,
           jobId,
           buyerAgentId,

@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * GET /api/erc8183-jobs/[localJobId] — get ERC-8183 escrow job detail
  *
@@ -13,7 +14,7 @@
  *   - Session but not participant → 403
  *   - Participant → full detail + currentUserRole
  */
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { buildErc8183JobDetail } from '@/lib/erc8183-jobs/read-model';
 import { getErc8183JobByLocalId, getErc8183JobByOnchainId } from '@/lib/erc8183-jobs/store';
@@ -56,42 +57,27 @@ export async function GET(
       // API key auth succeeded — preserve existing behavior
       const detail = await buildErc8183JobDetail(resolvedLocalJobId);
       if (!detail) {
-        return NextResponse.json(
-          { ok: false, ...escrowRail(), error: 'not_found' },
-          { status: 404, headers: NO_STORE },
-        );
+        return humanJson(req, { ok: false, ...escrowRail(), error: 'not_found' }, { status: 404, headers: NO_STORE });
       }
-      return NextResponse.json(
-        { ok: true, ...escrowRail(), job: detail },
-        { headers: NO_STORE },
-      );
+      return humanJson(req, { ok: true, ...escrowRail(), job: detail }, { headers: NO_STORE });
     }
 
     // ── 2. API key auth failed — try wallet session ────────────────────
     const cookie = req.cookies.get(SESSION_COOKIE_NAME)?.value ?? null;
 
     if (!cookie) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'unauthorized', message: 'No session or API key provided' },
-        { status: 401, headers: NO_STORE },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'unauthorized', message: 'No session or API key provided' }, { status: 401, headers: NO_STORE });
     }
 
     const session = await resolveSessionFromCookie(cookie);
     if (!session) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'unauthorized', message: 'Invalid or expired session' },
-        { status: 401, headers: NO_STORE },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'unauthorized', message: 'Invalid or expired session' }, { status: 401, headers: NO_STORE });
     }
 
     // Load job
     const job = await getErc8183JobByLocalId(resolvedLocalJobId);
     if (!job) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'not_found' },
-        { status: 404, headers: NO_STORE },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'not_found' }, { status: 404, headers: NO_STORE });
     }
 
     // Check participant access — compare both agentId and tokenId
@@ -114,19 +100,13 @@ export async function GET(
       : false;
 
     if (!isBuyer && !isProvider && !isEvaluator && !isWorker) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'forbidden', message: 'Session wallet does not control a participant agent' },
-        { status: 403, headers: NO_STORE },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'forbidden', message: 'Session wallet does not control a participant agent' }, { status: 403, headers: NO_STORE });
     }
 
     // Build full detail
     const detail = await buildErc8183JobDetail(resolvedLocalJobId);
     if (!detail) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'not_found' },
-        { status: 404, headers: NO_STORE },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'not_found' }, { status: 404, headers: NO_STORE });
     }
 
     // Determine current user role — priority: buyer > evaluator > provider
@@ -134,15 +114,9 @@ export async function GET(
     if (isEvaluator) currentUserRole = 'evaluator';
     if (isBuyer) currentUserRole = 'client';
 
-    return NextResponse.json(
-      { ok: true, ...escrowRail(), job: detail, currentUserRole },
-      { headers: NO_STORE },
-    );
+    return humanJson(req, { ok: true, ...escrowRail(), job: detail, currentUserRole }, { headers: NO_STORE });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { ok: false, error: 'get_failed', message },
-      { status: 500, headers: NO_STORE },
-    );
+    return humanJson(req, { ok: false, error: 'get_failed', message }, { status: 500, headers: NO_STORE });
   }
 }

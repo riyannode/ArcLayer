@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { CONTRACTS } from '@arclayer/sdk';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { createLocalErc8183Job, listErc8183Jobs } from '@/lib/erc8183-jobs/store';
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
       limit: Math.min(Number(searchParams.get('limit')) || 50, 200),
     });
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       ...escrowRail(),
       count: jobs.length,
@@ -29,10 +30,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { ok: false, error: 'list_failed', message },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, error: 'list_failed', message }, { status: 500 });
   }
 }
 
@@ -45,8 +43,7 @@ export async function POST(req: NextRequest) {
     // Guard: buyerAgentId must match the authenticated key — prevents
     // impersonation even with a valid erc8183:create-scoped API key
     if (isErc8183Admin(auth.key.scopes) === false && body.buyerAgentId !== auth.key.agentId) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'participant_mismatch',
@@ -54,9 +51,7 @@ export async function POST(req: NextRequest) {
           expectedAgentId: body.buyerAgentId,
           authenticatedAgentId: auth.key.agentId,
           hint: 'buyerAgentId must match the authenticated API key agentId (or use an admin/erc8183:admin-scoped key).',
-        },
-        { status: 403 },
-      );
+        }, { status: 403 });
     }
 
     // Validate required fields
@@ -66,10 +61,7 @@ export async function POST(req: NextRequest) {
     ] as const;
     for (const field of required) {
       if (!body[field]) {
-        return NextResponse.json(
-          { ok: false, error: 'missing_field', message: `Missing required field: ${field}` },
-          { status: 400 },
-        );
+        return humanJson(req, { ok: false, error: 'missing_field', message: `Missing required field: ${field}` }, { status: 400 });
       }
     }
 
@@ -101,7 +93,7 @@ export async function POST(req: NextRequest) {
       ],
     };
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       ...escrowRail(),
       nextAction: 'createJob',
@@ -111,9 +103,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { ok: false, error: 'create_failed', message },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, error: 'create_failed', message }, { status: 500 });
   }
 }

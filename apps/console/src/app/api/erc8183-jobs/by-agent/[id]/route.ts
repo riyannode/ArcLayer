@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * GET /api/erc8183-jobs/by-agent/[id] — ERC-8183 jobs by agent profile
  *
@@ -10,7 +11,7 @@
  * Do not expose private data (controllers, full descriptions, payloads) to non-owners.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   resolveSessionFromCookie,
   getLinkedErc8004AgentsForController,
@@ -151,8 +152,7 @@ export async function GET(
         listErc8183Jobs({ evaluatorAgentId: agentId, limit: 100 }),
       ]);
 
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: true,
           ...escrowRail(),
           agentId,
@@ -161,9 +161,7 @@ export async function GET(
           asClient: asClient.map(toPrivateJobSummary),
           asProvider: asProvider.map(toPrivateJobSummary),
           asEvaluator: asEvaluator.map(toPrivateJobSummary),
-        },
-        { headers: NO_STORE },
-      );
+        }, { headers: NO_STORE });
     }
 
     // Public: return only safe provider summaries
@@ -172,8 +170,7 @@ export async function GET(
       limit: 100,
     });
 
-    return NextResponse.json(
-      {
+    return humanJson(req, {
         ok: true,
         ...escrowRail(),
         agentId,
@@ -182,14 +179,9 @@ export async function GET(
         asClient: [],
         asProvider: [],
         asEvaluator: [],
-      },
-      { headers: NO_STORE },
-    );
+      }, { headers: NO_STORE });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { ok: false, error: 'by_agent_failed', message },
-      { status: 500, headers: NO_STORE },
-    );
+    return humanJson(req, { ok: false, error: 'by_agent_failed', message }, { status: 500, headers: NO_STORE });
   }
 }

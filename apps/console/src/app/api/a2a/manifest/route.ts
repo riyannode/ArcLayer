@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   recoverMessageAddress,
@@ -21,13 +22,13 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const agentId = url.searchParams.get('agentId')?.trim();
   if (!agentId) {
-    return NextResponse.json({ error: 'agentId is required' }, { status: 400 });
+    return humanJson(req, { error: 'agentId is required' }, { status: 400 });
   }
   const record = await getManifest(agentId);
   if (!record) {
-    return NextResponse.json({ error: 'manifest not found' }, { status: 404 });
+    return humanJson(req, { error: 'manifest not found' }, { status: 404 });
   }
-  return NextResponse.json({ ok: true, manifest: record.manifest, controller: record.controller });
+  return humanJson(req, { ok: true, manifest: record.manifest, controller: record.controller });
 }
 
 /**
@@ -50,11 +51,11 @@ async function postHandler(req: NextRequest): Promise<NextResponse> {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return humanJson(req, { error: 'Invalid JSON body' }, { status: 400 });
   }
 
   if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'Body must be an object' }, { status: 400 });
+    return humanJson(req, { error: 'Body must be an object' }, { status: 400 });
   }
 
   const { manifest: rawManifest, signature, ts } = body as {
@@ -64,22 +65,22 @@ async function postHandler(req: NextRequest): Promise<NextResponse> {
   };
 
   if (typeof signature !== 'string' || !/^0x[a-fA-F0-9]+$/.test(signature)) {
-    return NextResponse.json({ error: 'signature must be a 0x-prefixed hex string' }, { status: 400 });
+    return humanJson(req, { error: 'signature must be a 0x-prefixed hex string' }, { status: 400 });
   }
   if (typeof ts !== 'number' || !Number.isFinite(ts)) {
-    return NextResponse.json({ error: 'ts must be a unix-seconds number' }, { status: 400 });
+    return humanJson(req, { error: 'ts must be a unix-seconds number' }, { status: 400 });
   }
 
   // Anti-replay: reject stale or future-dated signatures
   const now = Math.floor(Date.now() / 1000);
   if (Math.abs(now - ts) > MAX_TIMESTAMP_SKEW_SEC) {
-    return NextResponse.json({ error: 'signature timestamp out of bounds' }, { status: 400 });
+    return humanJson(req, { error: 'signature timestamp out of bounds' }, { status: 400 });
   }
 
   // Parse + validate manifest
   const parsed = parseManifest(rawManifest);
   if (!parsed.ok) {
-    return NextResponse.json({ error: parsed.error }, { status: 400 });
+    return humanJson(req, { error: parsed.error }, { status: 400 });
   }
   const manifest = parsed.manifest;
 
@@ -91,7 +92,7 @@ async function postHandler(req: NextRequest): Promise<NextResponse> {
   try {
     signer = (await recoverMessageAddress({ message, signature: signature as `0x${string}` })).toLowerCase();
   } catch {
-    return NextResponse.json({ error: 'invalid signature' }, { status: 400 });
+    return humanJson(req, { error: 'invalid signature' }, { status: 400 });
   }
 
   // On-chain controller binding
@@ -100,10 +101,7 @@ async function postHandler(req: NextRequest): Promise<NextResponse> {
   if (onchainController) {
     // Registered agent — signer MUST match on-chain controller.
     if (signer !== onchainController) {
-      return NextResponse.json(
-        { error: 'signer is not the on-chain controller for this agent' },
-        { status: 403 }
-      );
+      return humanJson(req, { error: 'signer is not the on-chain controller for this agent' }, { status: 403 });
     }
   }
   // else: TOFU — agent not yet registered. First writer claims pending manifest;
@@ -119,10 +117,10 @@ async function postHandler(req: NextRequest): Promise<NextResponse> {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 500 });
+    return humanJson(req, { error: result.error }, { status: 500 });
   }
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     agentId: manifest.agentId,
     manifestHash: hash,

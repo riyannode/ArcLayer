@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402';
 
@@ -15,7 +16,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
     const { jobDescription, urgency } = body;
 
     if (!jobDescription) {
-      return NextResponse.json({ ok: false, error: 'missing_job_description' }, { status: 400 });
+      return humanJson(req, { ok: false, error: 'missing_job_description' }, { status: 400 });
     }
 
     // Simulate quote computation based on complexity
@@ -23,7 +24,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
     const urgencyMultiplier = urgency === 'high' ? 2.0 : urgency === 'medium' ? 1.5 : 1.0;
     const estimatedCost = (basePrice * urgencyMultiplier).toFixed(4);
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       paid: true,
       quote: {
@@ -35,7 +36,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ ok: false, error: err?.message || 'quote_failed' }, { status: 500 });
+    return humanJson(req, { ok: false, error: err?.message || 'quote_failed' }, { status: 500 });
   }
 }
 
