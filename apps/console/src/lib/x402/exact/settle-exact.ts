@@ -40,7 +40,24 @@ import {
 } from './native-payment-store';
 import { verifyExactSettlementProof } from './verify-settlement-proof';
 
-const MIN_RELAYER_NATIVE_GAS = parseUnits('0.01', 18);
+const DEFAULT_RELAYER_NATIVE_GAS = '0.01';
+
+function defaultRelayerNativeGasThreshold(): bigint {
+  return parseUnits(DEFAULT_RELAYER_NATIVE_GAS, 18);
+}
+
+export function parseRelayerNativeGasThreshold(
+  value = process.env.X402_MIN_RELAYER_NATIVE_GAS,
+): bigint {
+  try {
+    const parsed = parseUnits(value ?? DEFAULT_RELAYER_NATIVE_GAS, 18);
+    return parsed > 0n ? parsed : defaultRelayerNativeGasThreshold();
+  } catch {
+    return defaultRelayerNativeGasThreshold();
+  }
+}
+
+const MIN_RELAYER_NATIVE_GAS = parseRelayerNativeGasThreshold();
 
 const TRANSFER_WITH_AUTHORIZATION_ABI = [
   {
@@ -177,10 +194,10 @@ async function settleOnChain(input: SettleExactInput): Promise<SettleResponse> {
       address: account.address,
     });
 
-    // Need at least some gas — 0.01 native USDC in 18-decimal base units
+    // Need at least some native gas token balance in 18-decimal base units.
     if (relayerBalance < MIN_RELAYER_NATIVE_GAS) {
-      await markNativeFailed({ paymentId: paymentIdentifier, errorReason: 'relayer_unfunded', errorMessage: 'Relayer wallet has insufficient USDC for gas' }).catch(() => undefined);
-      return { ...settleErr('relayer_unfunded', 'Relayer wallet has insufficient USDC for gas'), paymentIdentifier };
+      await markNativeFailed({ paymentId: paymentIdentifier, errorReason: 'relayer_unfunded', errorMessage: 'Relayer wallet has insufficient native gas token for gas' }).catch(() => undefined);
+      return { ...settleErr('relayer_unfunded', 'Relayer wallet has insufficient native gas token for gas'), paymentIdentifier };
     }
 
     // ─── Step 6: Submit transferWithAuthorization ──────────────────────────────
