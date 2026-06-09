@@ -739,6 +739,23 @@ async function handleGateway(
   return response;
 }
 
+const ALLOWED_RESOURCE_ACTOR_ROLES = new Set([
+  'oracle',
+  'analyzer',
+  'evaluator',
+  'executor',
+  'buyer',
+  'provider',
+  'worker',
+  'settler',
+]);
+
+function normalizeResourceActorRole(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const role = value.trim().toLowerCase();
+  return ALLOWED_RESOURCE_ACTOR_ROLES.has(role) ? role : null;
+}
+
 // ─── Native verify + settle (Arc EIP-3009 pattern) ───────────────────────────
 
 async function handleNative(
@@ -754,8 +771,7 @@ async function handleNative(
     : ({} as Record<string, unknown>);
   const scope = typeof reqBody.scope === 'string' && reqBody.scope.trim().length > 0 ? reqBody.scope.trim() : null;
   const inputSessionId = typeof reqBody.sessionId === 'string' && reqBody.sessionId.trim().length > 0 ? reqBody.sessionId.trim() : null;
-  const ALLOWED_ROLES = ['oracle', 'analyzer', 'evaluator', 'executor', 'buyer', 'provider', 'worker', 'settler'];
-  const role = typeof reqBody.role === 'string' && ALLOWED_ROLES.includes(reqBody.role.trim().toLowerCase()) ? reqBody.role.trim().toLowerCase() : null;
+  const role = normalizeResourceActorRole(reqBody.role);
 
   if (needsResourceContext) {
     if (!inputSessionId) {
@@ -772,11 +788,13 @@ async function handleNative(
     }
     if (!role) {
       return NextResponse.json(
-        { ok: false, error: 'invalid_role', message: 'role must be one of: analyzer, evaluator, executor, buyer, provider, worker, settler.' },
+        { ok: false, error: 'invalid_role', message: 'role must be a canonical resource actor role.' },
         { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
       );
     }
   }
+
+  const resourceRole = role ?? '';
 
   // ─── Resource payment store readiness guard ─────────────────────────────────
   // Do not settle any bridge-access or agent-job payment if the idempotency
@@ -1143,7 +1161,7 @@ async function handleNative(
   const resourcePaymentKey = buildResourcePaymentKey({
     sessionId: inputSessionId,
     scope,
-    role,
+    role: resourceRole,
     resource: opts.resource,
   });
   const existingResourcePayment = await getResourcePayment(resourcePaymentKey);
@@ -1269,7 +1287,7 @@ async function handleNative(
     paymentKey: resourcePaymentKey,
     sessionId: inputSessionId,
     scope,
-    role,
+    role: resourceRole,
     payer: String(authorization.from),
     resource: opts.resource,
     payTo: String(requirements.payTo),
@@ -1496,7 +1514,7 @@ async function handleNative(
         transaction: settleResult.transaction ?? null,
         payloadHash: response.headers.get('X-Agent-Bridge-Payload-Hash'),
         metadata: {
-          role,
+          role: resourceRole,
           scope,
           source: 'x402-autopay',
           payer: authorization.from,
