@@ -44,6 +44,11 @@ type GatewayBalanceResponse = {
 const ARC_RPC = process.env.NEXT_PUBLIC_ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
 const USDC = getAddress(USDC_ADDRESS);
 const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
+const ARC_EXPLORER_TX_BASE = 'https://testnet.arcscan.app/tx';
+
+function getArcTxUrl(hash: string): string {
+  return `${ARC_EXPLORER_TX_BASE}/${hash}`;
+}
 
 type AgentAccountInfo = {
   ownerAddress: string;
@@ -1143,7 +1148,7 @@ export default function AgentProfilePage() {
               {eoaGatewayDeposit.approveTxHash && (
                 <p className="mt-2 text-[11px] text-emerald-400">
                   Approval tx ✓{' '}
-                  <a href={`https://testnet.arcscan.app/tx/${eoaGatewayDeposit.approveTxHash}`} target="_blank" rel="noreferrer" className="underline decoration-emerald-400/40 hover:text-emerald-300">
+                  <a href={getArcTxUrl(eoaGatewayDeposit.approveTxHash)} target="_blank" rel="noreferrer" className="underline decoration-emerald-400/40 hover:text-emerald-300">
                     {shortAddress(eoaGatewayDeposit.approveTxHash)}
                   </a>
                 </p>
@@ -1151,7 +1156,7 @@ export default function AgentProfilePage() {
               {eoaGatewayDeposit.txHash && (
                 <p className="mt-2 text-[11px] text-emerald-400">
                   Gateway deposit tx ✓{' '}
-                  <a href={`https://testnet.arcscan.app/tx/${eoaGatewayDeposit.txHash}`} target="_blank" rel="noreferrer" className="underline decoration-emerald-400/40 hover:text-emerald-300">
+                  <a href={getArcTxUrl(eoaGatewayDeposit.txHash)} target="_blank" rel="noreferrer" className="underline decoration-emerald-400/40 hover:text-emerald-300">
                     {shortAddress(eoaGatewayDeposit.txHash)}
                   </a>
                 </p>
