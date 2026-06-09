@@ -405,6 +405,10 @@ export default function AgentProfilePage() {
   const [ownerGateway, setOwnerGateway] = useState<BalanceInfo | null>(null);
   const [agentGateway, setAgentGateway] = useState<BalanceInfo | null>(null);
   const [balancesLoading, setBalancesLoading] = useState(false);
+  const [eoaUsdcBalance, setEoaUsdcBalance] = useState<BalanceInfo | null>(null);
+  const [eoaGatewayBalance, setEoaGatewayBalance] = useState<BalanceInfo | null>(null);
+  const [eoaBalanceLoading, setEoaBalanceLoading] = useState(false);
+  const [eoaBalanceError, setEoaBalanceError] = useState<string | null>(null);
   const [eoaGatewayAmount, setEoaGatewayAmount] = useState('');
 
   // A2A x402 payer state
@@ -423,7 +427,7 @@ export default function AgentProfilePage() {
     setActionAmount('');
   });
   const eoaGatewayDeposit = useGatewayDeposit(() => {
-    if (address) void refreshBalances(address, agentAccount?.agentAccountAddress);
+    if (address) void refreshEoaFundingBalances(address);
     setEoaGatewayAmount('');
   });
 
@@ -624,33 +628,39 @@ export default function AgentProfilePage() {
     }
   }
 
-  async function refreshEoaGatewayBalances(owner: string) {
-    const [gatewayRes, usdcBalance] = await Promise.all([
-      fetch(`/api/x402/gateway-balance?address=${encodeURIComponent(owner)}`, { cache: 'no-store' })
-        .then((res) => res.json() as Promise<GatewayBalanceResponse>),
-      createPublicClient({ transport: http(ARC_RPC) }).readContract({
-        address: USDC,
-        abi: BALANCE_ABI,
-        functionName: 'balanceOf',
-        args: [owner as `0x${string}`],
-      }),
-    ]);
+  async function refreshEoaFundingBalances(owner: string) {
+    if (!owner) return;
 
-    setOwnerGateway({
-      raw: gatewayRes.depositedAtomic ?? '0',
-      formatted: gatewayRes.depositedUsdc ?? '0.000000',
-    });
-    setOwnerBalance({
-      raw: usdcBalance.toString(),
-      formatted: formatUnits(usdcBalance, 6),
-    });
-  }
+    setEoaBalanceLoading(true);
+    setEoaBalanceError(null);
 
-  async function refreshBalances(owner: string, agent?: string | null) {
-    await Promise.all([
-      loadBalances(owner, agent),
-      loadAgentAccount(),
-    ]);
+    try {
+      const [gatewayRes, usdcBalance] = await Promise.all([
+        fetch(`/api/x402/gateway-balance?address=${encodeURIComponent(owner)}`, { cache: 'no-store' })
+          .then((res) => res.json() as Promise<GatewayBalanceResponse>),
+        createPublicClient({ transport: http(ARC_RPC) }).readContract({
+          address: USDC,
+          abi: BALANCE_ABI,
+          functionName: 'balanceOf',
+          args: [owner as `0x${string}`],
+        }),
+      ]);
+
+      setEoaGatewayBalance({
+        raw: gatewayRes.depositedAtomic ?? '0',
+        formatted: gatewayRes.depositedUsdc ?? '0.000000',
+      });
+      setEoaUsdcBalance({
+        raw: usdcBalance.toString(),
+        formatted: formatUnits(usdcBalance, 6),
+      });
+    } catch (error) {
+      setEoaBalanceError(error instanceof Error ? error.message : String(error));
+      setEoaGatewayBalance((prev) => prev ?? { raw: '0', formatted: '0.000000' });
+      setEoaUsdcBalance((prev) => prev ?? { raw: '0', formatted: '0.000000' });
+    } finally {
+      setEoaBalanceLoading(false);
+    }
   }
 
   async function loadBalances(owner: string, agent?: string | null) {
@@ -659,12 +669,11 @@ export default function AgentProfilePage() {
     try {
       const params = new URLSearchParams({ owner });
       if (agent) params.set('agentAccount', agent);
-      const [profileRes] = await Promise.all([
-        fetch(`/api/profile/balances?${params}`, { cache: 'no-store' }),
-        refreshEoaGatewayBalances(owner),
-      ]);
-      if (profileRes.ok) {
-        const json = await profileRes.json();
+      const res = await fetch(`/api/profile/balances?${params}`, { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        setOwnerBalance(json.owner?.usdc ?? null);
+        setOwnerGateway(json.owner?.gateway ?? null);
         setAgentBalance(json.agentAccount?.usdc ?? null);
         setAgentGateway(json.agentAccount?.gateway ?? null);
       }
@@ -825,6 +834,16 @@ export default function AgentProfilePage() {
     if (!address) return;
     void loadBalances(address, agentAccount?.agentAccountAddress);
   }, [address, agentAccount?.agentAccountAddress]);
+
+  useEffect(() => {
+    if (!address) {
+      setEoaUsdcBalance(null);
+      setEoaGatewayBalance(null);
+      setEoaBalanceError(null);
+      return;
+    }
+    void refreshEoaFundingBalances(address);
+  }, [address]);
 
   return (
     <main className="min-h-screen bg-[#05070A] text-[#F5F0E5]">
@@ -1078,7 +1097,7 @@ export default function AgentProfilePage() {
                     EOA USDC balance
                   </div>
                   <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
-                    {balancesLoading && !useMockData ? '...' : effectiveOwnerBalance?.formatted ?? '0.00'}
+                    {eoaBalanceLoading ? '...' : eoaUsdcBalance?.formatted ?? '0.000000'}
                   </div>
                 </div>
                 <div className="rounded-md border border-white/10 bg-white/[0.025] p-4">
@@ -1086,7 +1105,7 @@ export default function AgentProfilePage() {
                     EOA Gateway balance
                   </div>
                   <div className="mt-2 text-[18px] font-semibold text-[#F3C536]">
-                    {balancesLoading && !useMockData ? '...' : effectiveOwnerGateway?.formatted ?? '0.000000'}
+                    {eoaBalanceLoading ? '...' : eoaGatewayBalance?.formatted ?? '0.000000'}
                   </div>
                 </div>
               </div>
@@ -1136,6 +1155,9 @@ export default function AgentProfilePage() {
                     {shortAddress(eoaGatewayDeposit.txHash)}
                   </a>
                 </p>
+              )}
+              {eoaBalanceError && (
+                <p className="mt-2 text-[11px] text-red-400">{eoaBalanceError}</p>
               )}
               {eoaGatewayDeposit.error && (
                 <p className="mt-2 text-[11px] text-red-400">{eoaGatewayDeposit.error}</p>

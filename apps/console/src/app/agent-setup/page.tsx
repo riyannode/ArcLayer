@@ -33,7 +33,6 @@ const CLIENT_PROMPT = [`Register me on ArcLayer as a client.`, `Name: Job Creato
 const INSTALL_CMD = 'curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role provider';
 
 export default function AgentSetupPage() {
-  const agentAccountEnabled = process.env.NEXT_PUBLIC_AGENT_ACCOUNT_ENABLED === 'true';
   const { address, isConnected } = useAccount();
   const [copied, setCopied] = useState(false);
   const [mcpMode, setMcpMode] = useState<'provider' | 'client'>('provider');
@@ -100,7 +99,6 @@ export default function AgentSetupPage() {
           <div className="mt-5"><button type="button" onClick={handleCopy} className={`inline-flex h-12 items-center gap-3 rounded-lg border px-7 text-[13px] font-semibold transition ${copied ? 'border-[#B8CD7E]/40 bg-[#B8CD7E]/10 text-[#B8CD7E]' : 'border-[#F0B84A]/40 bg-[#F0B84A] text-black shadow-[0_0_34px_rgba(240,184,74,0.22)] hover:scale-[1.01] hover:bg-[#FFD084]'}`}>{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? 'Copied. Paste this into your VPS terminal.' : 'Copy install command'}</button></div>
           <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/35">Do not run this from your phone/browser. Paste the command into your VPS terminal.</p>
         </div>
-        {agentAccountEnabled ? (
         <div className="mb-5 rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
           <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]"><Code2 className="h-5 w-5" /></div><div><div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Option 2</div><h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F4EFE5]">MCP Setup</h2></div></div>
           <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">
@@ -114,7 +112,7 @@ export default function AgentSetupPage() {
               Live MCP
             </a>
           </p>
-          <div className="mt-4 space-y-2"><div className="text-[12px] text-[#EAE4D8]/42">Needs:</div><div className="flex flex-wrap gap-2"><Badge>Owner Wallet</Badge><Badge>Agent Account</Badge><Badge>MCP Session</Badge><Badge>Claude / Codex config</Badge></div></div>
+          <div className="mt-4 space-y-2"><div className="text-[12px] text-[#EAE4D8]/42">Needs:</div><div className="flex flex-wrap gap-2"><Badge>Owner Wallet</Badge><Badge>EOA Session</Badge><Badge>MCP Token</Badge><Badge>Claude / Codex config</Badge></div></div>
           <div className="mt-5">{isConnected && address ? <AgentIdentityMcpSessionCard ownerAddress={address} /> : <div className="rounded-md border border-white/10 bg-black/20 px-5 py-4 text-[13px] text-[#EAE4D8]/55">Connect your wallet to create an MCP session.</div>}</div>
           <div className="my-5 border-t border-white/10" />
           <p className="text-[13px] leading-5 text-[#EAE4D8]/62">Choose an agent type and copy a Claude/Codex MCP prompt.</p>
@@ -122,13 +120,6 @@ export default function AgentSetupPage() {
           {mcpMode === 'provider' && <div className="mt-4"><label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/75">Agent Type</label><select value={mcpSelectedType} onChange={(e) => setMcpSelectedType(e.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0A0D12] px-3 text-[13px] text-[#F5F0E5] outline-none focus:border-[#F3C536]/40">{PROVIDER_AGENT_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select></div>}
           <div className="mt-4 flex items-center gap-3"><button type="button" onClick={handleCopyPrompt} className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070]">{mcpCopied ? 'Copied ✓' : 'Copy MCP Prompt'}</button><span className="text-[11px] text-[#EAE4D8]/35">Copy the recommended MCP prompt for this agent type.</span></div>
         </div>
-        ) : (
-          <div className="mb-5 rounded-lg border border-white/10 bg-[#07090D]/60 px-7 py-5 opacity-70">
-            <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Option 2 · Future</div>
-            <h2 className="mt-2 text-[18px] font-semibold text-[#F4EFE5]">Passkey Agent Account / MCP identity</h2>
-            <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">Optional passkey identity mode is currently feature-gated. Use the recommended PM2 Bot EOA path.</p>
-          </div>
-        )}
 
         <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 text-center"><p className="text-[12px] text-[#EAE4D8]/42">Need runtime details? <Link href="/profile" className="text-[#F3C536] transition hover:text-[#FFE070]">Go to Profile</Link></p></div>
       </main>
