@@ -42,7 +42,8 @@ export async function POST(request: Request) {
     return humanJson(request, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    console.error('validation request failed', error);
 
-    return humanJson(request, { ok: false, error: message, source: 'erc8004_validation_registry' }, { status: statusFor(message) });
+    return humanJson(request, { ok: false, error: 'internal_error', source: 'erc8004_validation_registry' }, { status: statusFor(message) });
   }
 }

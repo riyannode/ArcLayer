@@ -15,8 +15,8 @@ export async function GET(
     const result = await getValidationStatus(requestHash as Hex);
     return humanJson(_request, result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    console.error('validation status lookup failed', error);
 
-    return humanJson(_request, { ok: false, error: message, source: 'erc8004_validation_registry' }, { status: 400 });
+    return humanJson(_request, { ok: false, error: 'internal_error', source: 'erc8004_validation_registry' }, { status: 400 });
   }
 }
