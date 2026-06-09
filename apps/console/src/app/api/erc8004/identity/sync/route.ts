@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * POST /api/erc8004/identity/sync
  *
@@ -8,7 +9,7 @@
  * If user mints agent 31380, backend can sync immediately from tx hash.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { isAddress } from 'viem';
 import { syncErc8004Identity } from '@/lib/erc8004/sync';
 
@@ -22,17 +23,11 @@ export async function POST(req: NextRequest) {
 
     // Validate required fields
     if (!body.txHash || typeof body.txHash !== 'string' || !/^0x[a-fA-F0-9]{64}$/.test(body.txHash)) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_txHash', detail: 'txHash must be a 0x-prefixed 66-char hex string (0x + 64 hex chars)' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'invalid_txHash', detail: 'txHash must be a 0x-prefixed 66-char hex string (0x + 64 hex chars)' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     if (!body.expectedController || !isAddress(body.expectedController)) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_expectedController', detail: 'expectedController must be a valid EVM address' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'invalid_expectedController', detail: 'expectedController must be a valid EVM address' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     const result = await syncErc8004Identity({
@@ -43,7 +38,7 @@ export async function POST(req: NextRequest) {
       writeToken: body.writeToken,
     });
 
-    return NextResponse.json(result, {
+    return humanJson(req, result, {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (err) {
@@ -58,9 +53,6 @@ export async function POST(req: NextRequest) {
       message.startsWith('upsert_failed') ? 502 :
       500;
 
-    return NextResponse.json(
-      { ok: false, error: 'sync_failed', detail: message },
-      { status, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'sync_failed', detail: message }, { status, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 }

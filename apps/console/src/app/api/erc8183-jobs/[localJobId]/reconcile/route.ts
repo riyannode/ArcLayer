@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * POST /api/erc8183-jobs/[localJobId]/reconcile
  *
@@ -6,7 +7,7 @@
  * Does NOT overwrite tx hashes.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { requireApiKey, API_KEY_SCOPES } from '@/lib/a2a/auth';
 import { reconcileErc8183Job } from '@/lib/erc8183-jobs/reconcile';
 import { escrowRail } from '@/lib/rails/responses';
@@ -29,7 +30,7 @@ export async function POST(
     const { localJobId } = await params;
     const result = await reconcileErc8183Job(localJobId);
 
-    return NextResponse.json(result, {
+    return humanJson(req, result, {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (err) {
@@ -43,9 +44,6 @@ export async function POST(
       message.startsWith('reconcile_update_failed') ? 502 :
       500;
 
-    return NextResponse.json(
-      { ok: false, ...escrowRail(), error: 'reconcile_failed', detail: message },
-      { status, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, ...escrowRail(), error: 'reconcile_failed', detail: message }, { status, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 }

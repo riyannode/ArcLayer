@@ -1,7 +1,8 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * GET /api/health/schema — verify expected DB columns, tables, and RPC functions exist
  */
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 
 export const runtime = 'nodejs';
@@ -58,7 +59,7 @@ async function checkRpcFunctions(
   return expected.map((name) => ({ name, present: present.has(name) }));
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const supabase = getSupabaseAdmin();
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
@@ -127,7 +128,7 @@ export async function GET() {
     const totalMissing = columnMissing.length + rpcMissing.length;
     const healthy = totalMissing === 0;
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: healthy,
       status: healthy ? 'healthy' : 'degraded',
       columns: {
@@ -147,9 +148,6 @@ export async function GET() {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { ok: false, status: 'error', error: message, timestamp: new Date().toISOString() },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, status: 'error', error: message, timestamp: new Date().toISOString() }, { status: 500 });
   }
 }

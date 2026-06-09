@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
 import { getManifest } from '@/lib/a2a/manifest';
 import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
 
@@ -23,25 +23,22 @@ async function getOnchainController(agentId: string): Promise<string | null> {
 export async function GET(_req: Request, { params }: { params: Promise<{ agentId: string }> }) {
   const { agentId } = await params;
   if (!agentId || !/^[0-9]+$/.test(agentId)) {
-    return NextResponse.json({ error: 'invalid agentId' }, { status: 400 });
+    return humanJson(_req, { error: 'invalid agentId' }, { status: 400 });
   }
 
   const stored = await getManifest(agentId);
   if (!stored) {
-    return NextResponse.json({ error: 'manifest not found' }, { status: 404 });
+    return humanJson(_req, { error: 'manifest not found' }, { status: 404 });
   }
 
   // Cross-verify against on-chain controller — drop stale TOFU rows where
   // the on-chain controller now disagrees with the stored signer.
   const onchainController = await getOnchainController(agentId);
   if (onchainController && stored.signer && stored.signer !== onchainController) {
-    return NextResponse.json(
-      { error: 'manifest controller mismatch with on-chain registration' },
-      { status: 410 }
-    );
+    return humanJson(_req, { error: 'manifest controller mismatch with on-chain registration' }, { status: 410 });
   }
 
-  return NextResponse.json({
+  return humanJson(_req, {
     agentId: stored.agentId,
     manifest: stored.manifest,
     manifestHash: stored.manifestHash,

@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402';
 
@@ -15,7 +16,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   const jobId = segments[segments.indexOf('jobs') + 1];
 
   if (!jobId || jobId === '[id]') {
-    return NextResponse.json({ ok: false, error: 'missing_job_id' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'missing_job_id' }, { status: 400 });
   }
 
   try {
@@ -23,13 +24,13 @@ async function handler(req: NextRequest): Promise<NextResponse> {
     const { agentId, proofType, proofData, summary } = body;
 
     if (!agentId || !proofData) {
-      return NextResponse.json({ ok: false, error: 'missing_fields', message: 'agentId and proofData required' }, { status: 400 });
+      return humanJson(req, { ok: false, error: 'missing_fields', message: 'agentId and proofData required' }, { status: 400 });
     }
 
     const { createHash } = await import('crypto');
     const receiptId = `receipt_${createHash('sha256').update(JSON.stringify({ jobId, agentId, proofData, ts: Date.now() })).digest('hex').slice(0, 16)}`;
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       paid: true,
       receipt: {
@@ -43,7 +44,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ ok: false, error: err?.message || 'proof_submission_failed' }, { status: 500 });
+    return humanJson(req, { ok: false, error: err?.message || 'proof_submission_failed' }, { status: 500 });
   }
 }
 

@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * /api/agents/[id]/x402-payer
  *
@@ -39,10 +40,7 @@ async function verifyOwnership(
   if (!cookieValue) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { ok: false, error: 'unauthorized', detail: 'Wallet session required' },
-        { status: 401, headers: { 'Cache-Control': ERROR_CACHE } },
-      ),
+      response: humanJson(req, { ok: false, error: 'unauthorized', detail: 'Wallet session required' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } }),
     };
   }
 
@@ -50,10 +48,7 @@ async function verifyOwnership(
   if (!session) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { ok: false, error: 'invalid_session', detail: 'Wallet session is invalid or expired' },
-        { status: 401, headers: { 'Cache-Control': ERROR_CACHE } },
-      ),
+      response: humanJson(req, { ok: false, error: 'invalid_session', detail: 'Wallet session is invalid or expired' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } }),
     };
   }
 
@@ -91,10 +86,7 @@ async function verifyOwnership(
 
   return {
     ok: false,
-    response: NextResponse.json(
-      { ok: false, error: 'forbidden', detail: 'Session wallet does not control this agent' },
-      { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
-    ),
+    response: humanJson(req, { ok: false, error: 'forbidden', detail: 'Session wallet does not control this agent' }, { status: 403, headers: { 'Cache-Control': ERROR_CACHE } }),
   };
 }
 
@@ -126,14 +118,10 @@ export async function GET(
     .order('created_at', { ascending: false });
 
   if (error) {
-    return NextResponse.json(
-      { ok: false, error: 'query_failed', detail: error.message },
-      { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'query_failed', detail: error.message }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 
-  return NextResponse.json(
-    {
+  return humanJson(req, {
       ok: true,
       agentId: auth.canonicalAgentId,
       payers: (payers ?? []).map((row) => ({
@@ -149,9 +137,7 @@ export async function GET(
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       })),
-    },
-    { status: 200, headers: { 'Cache-Control': ERROR_CACHE } },
-  );
+    }, { status: 200, headers: { 'Cache-Control': ERROR_CACHE } });
 }
 
 // ── POST: Register/update payer ────────────────────────────────────────────
@@ -173,26 +159,17 @@ export async function POST(
 
   // Validate payer address
   if (!rawPayer || !isAddress(rawPayer)) {
-    return NextResponse.json(
-      { ok: false, error: 'invalid_payer_address', detail: 'A valid EVM address is required.' },
-      { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'invalid_payer_address', detail: 'A valid EVM address is required.' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 
   // Validate rail
   if (!VALID_RAILS.has(rawRail as AgentX402Rail)) {
-    return NextResponse.json(
-      { ok: false, error: 'invalid_rail', detail: `Rail must be one of: ${[...VALID_RAILS].join(', ')}` },
-      { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'invalid_rail', detail: `Rail must be one of: ${[...VALID_RAILS].join(', ')}` }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 
   // Validate scope
   if (!VALID_SCOPES.has(rawScope as AgentX402Scope)) {
-    return NextResponse.json(
-      { ok: false, error: 'invalid_scope', detail: `Scope must be one of: ${[...VALID_SCOPES].join(', ')}` },
-      { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'invalid_scope', detail: `Scope must be one of: ${[...VALID_SCOPES].join(', ')}` }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 
   const payerAddress = getAddress(rawPayer);
@@ -202,10 +179,7 @@ export async function POST(
   if (scope === 'a2a' && process.env.AGENT_ACCOUNT_AS_RUNTIME_PAYER_ENABLED !== 'true') {
     const agentAccount = await getActiveAgentAccountForOwner(auth.wallet);
     if (agentAccount?.agentAccountAddress.toLowerCase() === payerAddress.toLowerCase()) {
-      return NextResponse.json(
-        { ok: false, error: 'agent_account_runtime_payer_disabled', detail: 'Register a dedicated Bot EOA as the A2A x402 payer.' },
-        { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'agent_account_runtime_payer_disabled', detail: 'Register a dedicated Bot EOA as the A2A x402 payer.' }, { status: 403, headers: { 'Cache-Control': ERROR_CACHE } });
     }
   }
 
@@ -254,20 +228,16 @@ export async function POST(
     const isUniqueViolation = insertError?.code === '23505' ||
       insertError?.message?.includes('unique') ||
       insertError?.message?.includes('duplicate');
-    return NextResponse.json(
-      {
+    return humanJson(req, {
         ok: false,
         error: isUniqueViolation ? 'active_payer_race' : 'insert_failed',
         detail: isUniqueViolation
           ? 'Concurrent payer registration detected. Retry the request.'
           : (insertError?.message ?? 'Unknown error'),
-      },
-      { status: isUniqueViolation ? 409 : 500, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+      }, { status: isUniqueViolation ? 409 : 500, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 
-  return NextResponse.json(
-    {
+  return humanJson(req, {
       ok: true,
       agentId: inserted.agent_id,
       payer: {
@@ -280,9 +250,7 @@ export async function POST(
         verifiedAt: inserted.verified_at,
         createdAt: inserted.created_at,
       },
-    },
-    { status: 200, headers: { 'Cache-Control': ERROR_CACHE } },
-  );
+    }, { status: 200, headers: { 'Cache-Control': ERROR_CACHE } });
 }
 
 // ── DELETE: Revoke active payer ────────────────────────────────────────────
@@ -299,18 +267,12 @@ export async function DELETE(
   // Parse optional rail + scope from query string
   const rail = (req.nextUrl.searchParams.get('rail') || 'circle-gateway') as AgentX402Rail;
   if (!VALID_RAILS.has(rail)) {
-    return NextResponse.json(
-      { ok: false, error: 'invalid_rail', detail: `Rail must be one of: ${[...VALID_RAILS].join(', ')}` },
-      { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'invalid_rail', detail: `Rail must be one of: ${[...VALID_RAILS].join(', ')}` }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 
   const scope = (req.nextUrl.searchParams.get('scope') || 'homepage') as AgentX402Scope;
   if (!VALID_SCOPES.has(scope)) {
-    return NextResponse.json(
-      { ok: false, error: 'invalid_scope', detail: `Scope must be one of: ${[...VALID_SCOPES].join(', ')}` },
-      { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'invalid_scope', detail: `Scope must be one of: ${[...VALID_SCOPES].join(', ')}` }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 
   const supabase = getSupabaseAdmin();
@@ -333,26 +295,17 @@ export async function DELETE(
     .maybeSingle();
 
   if (revokeError) {
-    return NextResponse.json(
-      { ok: false, error: 'revoke_failed', detail: revokeError.message },
-      { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'revoke_failed', detail: revokeError.message }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 
   if (!revoked) {
-    return NextResponse.json(
-      { ok: false, error: 'no_active_payer', detail: `No active ${rail} payer found for agent ${auth.canonicalAgentId}` },
-      { status: 404, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'no_active_payer', detail: `No active ${rail} payer found for agent ${auth.canonicalAgentId}` }, { status: 404, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 
-  return NextResponse.json(
-    {
+  return humanJson(req, {
       ok: true,
       agentId: auth.canonicalAgentId,
       rail,
       message: `Active ${rail} payer revoked.`,
-    },
-    { status: 200, headers: { 'Cache-Control': ERROR_CACHE } },
-  );
+    }, { status: 200, headers: { 'Cache-Control': ERROR_CACHE } });
 }

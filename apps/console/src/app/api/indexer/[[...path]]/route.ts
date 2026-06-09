@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { NextRequest, NextResponse } from 'next/server';
 
 /**
@@ -50,9 +51,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Indexer upstream unreachable.';
-    return NextResponse.json(
-      { error: 'Indexer upstream unreachable.', detail: message, target },
-      { status: 502 },
-    );
+    return humanJson(request, { error: 'Indexer upstream unreachable.', detail: message, target }, { status: 502 });
   }
 }

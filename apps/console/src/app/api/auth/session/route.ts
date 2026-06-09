@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * GET /api/auth/session
  *
@@ -5,7 +6,7 @@
  * including linked ERC-8004 agents for the authenticated wallet.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   resolveSessionFromCookie,
   getLinkedErc8004AgentsForController,
@@ -20,19 +21,13 @@ export async function GET(req: NextRequest) {
   const cookieValue = req.cookies.get(SESSION_COOKIE_NAME)?.value;
 
   if (!cookieValue) {
-    return NextResponse.json(
-      { ok: true, authenticated: false, linkedAgents: EMPTY_LINKED_AGENTS },
-      { headers: { 'Cache-Control': 'no-store' } },
-    );
+    return humanJson(req, { ok: true, authenticated: false, linkedAgents: EMPTY_LINKED_AGENTS }, { headers: { 'Cache-Control': 'no-store' } });
   }
 
   const session = await resolveSessionFromCookie(cookieValue);
 
   if (!session) {
-    const res = NextResponse.json(
-      { ok: true, authenticated: false, linkedAgents: EMPTY_LINKED_AGENTS },
-      { headers: { 'Cache-Control': 'no-store' } },
-    );
+    const res = humanJson(req, { ok: true, authenticated: false, linkedAgents: EMPTY_LINKED_AGENTS }, { headers: { 'Cache-Control': 'no-store' } });
     res.headers.set(
       'Set-Cookie',
       `${SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
@@ -42,14 +37,11 @@ export async function GET(req: NextRequest) {
 
   const linkedAgents = await getLinkedErc8004AgentsForController(session.wallet);
 
-  return NextResponse.json(
-    {
+  return humanJson(req, {
       ok: true,
       authenticated: true,
       wallet: session.wallet,
       expiresAt: session.expiresAt,
       linkedAgents,
-    },
-    { headers: { 'Cache-Control': 'no-store' } },
-  );
+    }, { headers: { 'Cache-Control': 'no-store' } });
 }

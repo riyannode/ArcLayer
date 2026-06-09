@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * x402 Resource Payment Health Check — server-only diagnostic route.
  *
@@ -7,7 +8,7 @@
  * Runtime: nodejs — no Edge, no client-side import.
  */
 import 'server-only';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   assertResourcePaymentStoreReady,
   buildResourcePaymentKey,
@@ -25,7 +26,7 @@ function verifyAuth(req: NextRequest): boolean {
 
 export async function GET(req: NextRequest) {
   if (!verifyAuth(req)) {
-    return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+    return humanJson(req, { ok: false, error: 'unauthorized' }, { status: 401 });
   }
 
   const envInfo = {
@@ -53,7 +54,7 @@ export async function GET(req: NextRequest) {
     error = err instanceof Error ? err.message : 'unknown_error';
   }
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: tableReachable,
     tableReachable,
     canRead,

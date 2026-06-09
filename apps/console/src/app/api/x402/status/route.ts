@@ -1,12 +1,13 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { isGatewayEnabled, probeGatewayRuntimeSupport } from '@/lib/x402';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const gateway = await probeGatewayRuntimeSupport().catch((error) => ({ ok: false, error: error instanceof Error ? error.message : String(error) }));
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     facilitator: 'ArcLayer',
     version: 2,

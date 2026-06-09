@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import {
   getErc8183JobByLocalId,
@@ -36,10 +37,7 @@ export async function POST(
 
     const job = await getErc8183JobByLocalId(localJobId);
     if (!job) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
-        { status: 404 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' }, { status: 404 });
     }
 
     // Guard: only the buyer can confirm the on-chain createJob tx
@@ -48,7 +46,7 @@ export async function POST(
 
     // Prevent re-attaching if already confirmed
     if (job.erc8183JobId) {
-      return NextResponse.json({
+      return humanJson(req, {
         ok: true,
         ...escrowRail(),
         localJobId: localJobId,
@@ -62,36 +60,24 @@ export async function POST(
     const createTxHash = body.createTxHash as Hex | undefined;
 
     if (!createTxHash || typeof createTxHash !== 'string' || !createTxHash.startsWith('0x')) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'invalid_tx_hash', message: 'Valid createTxHash (0x-prefixed) is required.' },
-        { status: 400 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'invalid_tx_hash', message: 'Valid createTxHash (0x-prefixed) is required.' }, { status: 400 });
     }
 
     // Step 1: read transaction receipt
     const receipt = await readTransactionReceipt(createTxHash);
     if (!receipt) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'tx_not_found', message: 'Transaction not found. It may not have been mined yet. Retry after a few seconds.' },
-        { status: 202 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'tx_not_found', message: 'Transaction not found. It may not have been mined yet. Retry after a few seconds.' }, { status: 202 });
     }
 
     // Step 2: confirm receipt success
     if (receipt.status !== 'success') {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'tx_reverted', message: 'createJob transaction reverted on-chain.' },
-        { status: 422 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'tx_reverted', message: 'createJob transaction reverted on-chain.' }, { status: 422 });
     }
 
     // Step 3: decode JobCreated event (mandatory)
     const decodedEvent = decodeJobCreatedFromReceipt(receipt);
     if (!decodedEvent) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'job_created_event_not_found', message: 'Could not decode JobCreated event from receipt logs. Verify the tx was sent to the correct AgenticCommerce contract.' },
-        { status: 422 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'job_created_event_not_found', message: 'Could not decode JobCreated event from receipt logs. Verify the tx was sent to the correct AgenticCommerce contract.' }, { status: 422 });
     }
 
     const erc8183JobId = decodedEvent.jobId.toString();
@@ -100,71 +86,56 @@ export async function POST(
     const localClient = (job.clientAddress ?? '').toLowerCase();
     const decodedClient = decodedEvent.client.toLowerCase();
     if (localClient && decodedClient !== localClient) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'event_client_mismatch',
           message: `Decoded JobCreated.client ${decodedClient} does not match local job client ${localClient}.`,
-        },
-        { status: 422 },
-      );
+        }, { status: 422 });
     }
 
     const localProvider = (job.providerAddress ?? '').toLowerCase();
     const decodedProvider = decodedEvent.provider.toLowerCase();
     if (localProvider && decodedProvider !== localProvider) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'event_provider_mismatch',
           message: `Decoded JobCreated.provider ${decodedProvider} does not match local job provider ${localProvider}.`,
-        },
-        { status: 422 },
-      );
+        }, { status: 422 });
     }
 
     const localEval = (job.evaluatorAddress ?? '').toLowerCase();
     const decodedEval = decodedEvent.evaluator.toLowerCase();
     const zeroAddress = '0x0000000000000000000000000000000000000000';
     if (localEval && decodedEval !== localEval && decodedEval !== zeroAddress) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'event_evaluator_mismatch',
           message: `Decoded JobCreated.evaluator ${decodedEval} does not match local job evaluator ${localEval} or zero address.`,
-        },
-        { status: 422 },
-      );
+        }, { status: 422 });
     }
 
     const localExpiredAt = job.expiredAtUnix ? BigInt(job.expiredAtUnix) : null;
     if (localExpiredAt !== null && decodedEvent.expiredAt !== localExpiredAt) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'event_expired_at_mismatch',
           message: `Decoded JobCreated.expiredAt ${decodedEvent.expiredAt} does not match local job expiredAt ${localExpiredAt}.`,
-        },
-        { status: 422 },
-      );
+        }, { status: 422 });
     }
 
     const localHook = (job.hookAddress ?? '0x0000000000000000000000000000000000000000').toLowerCase();
     const decodedHook = decodedEvent.hook.toLowerCase();
     if (decodedHook !== localHook) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'event_hook_mismatch',
           message: `Decoded JobCreated.hook ${decodedHook} does not match local job hook ${localHook}.`,
-        },
-        { status: 422 },
-      );
+        }, { status: 422 });
     }
 
     // Step 5: store results
@@ -174,7 +145,7 @@ export async function POST(
       erc8183JobId,
     });
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       ...escrowRail(),
       localJobId: localJobId,
@@ -186,9 +157,6 @@ export async function POST(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { ok: false, ...escrowRail(), error: 'confirm_create_failed', message },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, ...escrowRail(), error: 'confirm_create_failed', message }, { status: 500 });
   }
 }

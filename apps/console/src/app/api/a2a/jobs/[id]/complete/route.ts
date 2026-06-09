@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { createPublicClient, fallback, getAddress, http, isHex, type Address, type Hex } from 'viem';
 import { ARC_RPC_URLS, arcTestnet } from '@arclayer/sdk';
 import { requireApiKey } from '@/lib/a2a/auth';
@@ -30,8 +31,8 @@ function makeArcPublicClient() {
   });
 }
 
-function jsonError(error: string, status = 400, details?: Record<string, unknown>) {
-  return NextResponse.json({ ok: false, error, ...(details ?? {}) }, { status });
+function jsonError(req: NextRequest, error: string, status = 400, details?: Record<string, unknown>) {
+  return humanJson(req, { ok: false, error, ...(details ?? {}) }, { status });
 }
 
 function normalizeHex(value: string, field: string): Hex {
@@ -75,11 +76,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (limited) return limited;
 
   const body = await req.json().catch(() => null);
-  if (!body || typeof body !== 'object') return jsonError('invalid_json', 400);
+  if (!body || typeof body !== 'object') return jsonError(req, 'invalid_json', 400);
 
   const completeTxValue = (body as CompleteBody).complete_tx;
   if (completeTxValue === undefined || completeTxValue === null || String(completeTxValue).trim() === '') {
-    return jsonError('missing_required_fields', 400, { fields: ['complete_tx'] });
+    return jsonError(req, 'missing_required_fields', 400, { fields: ['complete_tx'] });
   }
 
   let completeTx: Hex;
@@ -87,7 +88,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     completeTx = normalizeHex(String(completeTxValue), 'complete_tx');
   } catch (error) {
     const message = error instanceof Error ? error.message : 'complete_tx_invalid_hex';
-    return jsonError(message, 400);
+    return jsonError(req, message, 400);
   }
 
   const supabase = getSupabaseAdmin();
@@ -97,12 +98,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .eq('id', id)
     .maybeSingle();
 
-  if (fetchErr || !job) return jsonError('job_not_found', 404);
+  if (fetchErr || !job) return jsonError(req, 'job_not_found', 404);
 
   const row = job as A2AJobRow;
-  if (!row.is_onchain) return jsonError('job_not_onchain', 400);
-  if (!row.onchain_job_id) return jsonError('onchain_job_id_missing', 400);
-  if (!isSubmittedOrLater(row)) return jsonError('job_not_submitted', 400);
+  if (!row.is_onchain) return jsonError(req, 'job_not_onchain', 400);
+  if (!row.onchain_job_id) return jsonError(req, 'onchain_job_id_missing', 400);
+  if (!isSubmittedOrLater(row)) return jsonError(req, 'job_not_submitted', 400);
 
   const client = makeArcPublicClient();
   let receipt: Awaited<ReturnType<typeof client.getTransactionReceipt>>;
@@ -110,22 +111,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     receipt = await client.getTransactionReceipt({ hash: completeTx });
   } catch (error) {
     console.error('[complete] getTransactionReceipt error:', error);
-    return jsonError('complete_tx_receipt_not_found', 400);
+    return jsonError(req, 'complete_tx_receipt_not_found', 400);
   }
 
-  if (receipt.status !== 'success') return jsonError('complete_tx_failed', 400);
+  if (receipt.status !== 'success') return jsonError(req, 'complete_tx_failed', 400);
 
   let completedEvent: ReturnType<typeof extractJobCompletedFromReceipt>;
   try {
     completedEvent = extractJobCompletedFromReceipt(receipt);
   } catch (error) {
     console.error('[complete] JobCompleted event parse error:', error);
-    return jsonError('job_completed_event_not_found', 400);
+    return jsonError(req, 'job_completed_event_not_found', 400);
   }
 
   const onchainJobId = String(row.onchain_job_id);
   if (completedEvent.jobId.toString() !== onchainJobId) {
-    return jsonError('job_completed_event_job_id_mismatch', 400, {
+    return jsonError(req, 'job_completed_event_job_id_mismatch', 400, {
       expected: onchainJobId,
       actual: completedEvent.jobId.toString(),
     });
@@ -140,25 +141,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ]);
   } catch (error) {
     console.error('[complete] on-chain verification error:', error);
-    return jsonError('onchain_job_verification_failed', 400);
+    return jsonError(req, 'onchain_job_verification_failed', 400);
   }
 
   if (!sameAddress(tx.from, onchainJob.evaluator)) {
-    return jsonError('complete_tx_evaluator_mismatch', 403, {
+    return jsonError(req, 'complete_tx_evaluator_mismatch', 403, {
       expected: onchainJob.evaluator,
       actual: getAddress(tx.from),
     });
   }
 
   if (row.evaluator && !sameAddress(row.evaluator, onchainJob.evaluator)) {
-    return jsonError('db_evaluator_mismatch', 409, {
+    return jsonError(req, 'db_evaluator_mismatch', 409, {
       expected: getAddress(row.evaluator as Address),
       actual: onchainJob.evaluator,
     });
   }
 
   if (onchainJob.status !== ERC8183JobStatus.Completed) {
-    return jsonError('onchain_job_not_completed', 400, {
+    return jsonError(req, 'onchain_job_not_completed', 400, {
       expected: ERC8183JobStatus.Completed.toString(),
       actual: onchainJob.status.toString(),
     });
@@ -178,10 +179,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { data, error } = await supabase.from('a2a_jobs').update(updatePayload).eq('id', id).select().single();
   if (error) {
     console.error('[complete] a2a_jobs update error:', error.message);
-    return jsonError('db_error', 500);
+    return jsonError(req, 'db_error', 500);
   }
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     job: withA2AJobNamespace(data as any),
     receipt: {

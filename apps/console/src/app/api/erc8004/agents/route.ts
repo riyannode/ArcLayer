@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { getAddress, isAddress } from 'viem';
 
@@ -41,15 +41,12 @@ export async function GET(request: Request) {
       : undefined;
 
     if (controller?.trim() && !normalizedController) {
-      return NextResponse.json(
-        {
+      return humanJson(request, {
           ok: false,
           error: 'invalid_controller_address',
           detail: 'controller must be a valid EVM address',
           agents: [],
-        },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE_CONTROL } },
-      );
+        }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE_CONTROL } });
     }
 
     const limit = Math.min(Math.max(Number(limitRaw) || 100, 1), 500);
@@ -75,40 +72,31 @@ export async function GET(request: Request) {
     const { data, error } = await query;
 
     if (error) {
-      return NextResponse.json(
-        {
+      return humanJson(request, {
           ok: false,
           error: 'erc8004_agents_query_failed',
           detail: error.message,
           agents: [],
-        },
-        { status: 502, headers: { 'Cache-Control': ERROR_CACHE_CONTROL } },
-      );
+        }, { status: 502, headers: { 'Cache-Control': ERROR_CACHE_CONTROL } });
     }
 
     const agents = (data ?? []).map(toAgent);
 
-    return NextResponse.json(
-      {
+    return humanJson(request, {
         ok: true,
         source: 'supabase_erc8004_agents',
         agents,
         total: agents.length,
         timestamp: new Date().toISOString(),
-      },
-      { headers: { 'Cache-Control': CACHE_CONTROL } },
-    );
+      }, { headers: { 'Cache-Control': CACHE_CONTROL } });
   } catch (err) {
     const detail = err instanceof Error ? err.message : 'unknown_error';
 
-    return NextResponse.json(
-      {
+    return humanJson(request, {
         ok: false,
         error: 'erc8004_agents_route_failed',
         detail,
         agents: [],
-      },
-      { status: 500, headers: { 'Cache-Control': ERROR_CACHE_CONTROL } },
-    );
+      }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE_CONTROL } });
   }
 }

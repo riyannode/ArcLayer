@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { listAgentLiveEventsByCategory, recordAgentLiveEvent } from '@/lib/a2a/live-events';
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
   try {
     const events = await listAgentLiveEventsByCategory(category, Number.isFinite(limit) ? limit : 50);
 
-    return NextResponse.json({
+    return humanJson(request, {
       ok: true,
       source: process.env.A2A_AGENT_ROSTER_SOURCE || 'local-indexer',
       category,
@@ -34,7 +35,7 @@ export async function GET(request: Request) {
       timestamp: new Date().toISOString(),
     });
   } catch {
-    return NextResponse.json({
+    return humanJson(request, {
       ok: false,
       source: 'local-indexer',
       category,
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
   // Read body once
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object') {
-    return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
+    return humanJson(request, { ok: false, error: 'invalid_json' }, { status: 400 });
   }
 
   // Dual auth: global A2A_LIVE_EVENTS_TOKEN OR per-agent ARCLAYER_API_KEY
@@ -72,10 +73,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.ok) {
-      return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+      return humanJson(request, { ok: false, error: result.error }, { status: 400 });
     }
 
-    return NextResponse.json({ ok: true });
+    return humanJson(request, { ok: true });
   }
 
   // Try per-agent API key auth with live_events:write scope
@@ -84,10 +85,7 @@ export async function POST(request: NextRequest) {
 
   // Enforce key.agentId === body.agentId
   if (auth.key.agentId !== body.agentId) {
-    return NextResponse.json(
-      { ok: false, error: 'agent_id_mismatch', key_agent: auth.key.agentId, body_agent: body.agentId },
-      { status: 403 },
-    );
+    return humanJson(request, { ok: false, error: 'agent_id_mismatch', key_agent: auth.key.agentId, body_agent: body.agentId }, { status: 403 });
   }
 
   const result = await recordAgentLiveEvent({
@@ -106,8 +104,8 @@ export async function POST(request: NextRequest) {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+    return humanJson(request, { ok: false, error: result.error }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true });
+  return humanJson(request, { ok: true });
 }

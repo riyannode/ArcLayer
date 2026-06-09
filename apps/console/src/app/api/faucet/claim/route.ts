@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * POST /api/faucet/claim — Send 1 test USDC to the requesting wallet.
  *
@@ -9,7 +10,7 @@
  *
  * Flow: reserve pending → transfer USDC → update status
  */
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createHmac } from 'crypto';
 import { createPublicClient, createWalletClient, formatUnits, getAddress, http, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -50,31 +51,31 @@ export async function POST(req: NextRequest) {
   try {
     // ─── Gate: faucet enabled ───
     if (process.env.FAUCET_ENABLED !== 'true') {
-      return NextResponse.json({ ok: false, error: 'faucet_disabled', circleFaucetUrl: CIRCLE_FAUCET_URL }, { status: 503 });
+      return humanJson(req, { ok: false, error: 'faucet_disabled', circleFaucetUrl: CIRCLE_FAUCET_URL }, { status: 503 });
     }
 
     const privateKey = process.env.FAUCET_PRIVATE_KEY as `0x${string}` | undefined;
     if (!privateKey) {
-      return NextResponse.json({ ok: false, error: 'faucet_not_configured', circleFaucetUrl: CIRCLE_FAUCET_URL }, { status: 500 });
+      return humanJson(req, { ok: false, error: 'faucet_not_configured', circleFaucetUrl: CIRCLE_FAUCET_URL }, { status: 500 });
     }
 
     // ─── Parse + validate address ───
     const body = await req.json().catch(() => null);
     if (!body?.address) {
-      return NextResponse.json({ ok: false, error: 'missing_address' }, { status: 400 });
+      return humanJson(req, { ok: false, error: 'missing_address' }, { status: 400 });
     }
 
     let recipient: `0x${string}`;
     try {
       recipient = getAddress(body.address);
     } catch {
-      return NextResponse.json({ ok: false, error: 'invalid_address' }, { status: 400 });
+      return humanJson(req, { ok: false, error: 'invalid_address' }, { status: 400 });
     }
 
     // ─── Validate IP ───
     const ip = getClientIp(req);
     if (!ip || ip === 'unknown') {
-      return NextResponse.json({ ok: false, error: 'ip_required', circleFaucetUrl: CIRCLE_FAUCET_URL }, { status: 429 });
+      return humanJson(req, { ok: false, error: 'ip_required', circleFaucetUrl: CIRCLE_FAUCET_URL }, { status: 429 });
     }
     const ipHash = hashIp(ip);
 
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
     ]);
 
     if (userBalance >= minUserBalance) {
-      return NextResponse.json({
+      return humanJson(req, {
         ok: false,
         error: 'wallet_already_funded',
         balance: formatUnits(userBalance, 6),
@@ -97,7 +98,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (treasuryBalance < amount) {
-      return NextResponse.json({
+      return humanJson(req, {
         ok: false,
         error: 'treasury_empty',
         treasury: privateKeyToAccount(privateKey).address,
@@ -118,12 +119,12 @@ export async function POST(req: NextRequest) {
     });
 
     if (reserveError) {
-      return NextResponse.json({ ok: false, error: reserveError.message, circleFaucetUrl: CIRCLE_FAUCET_URL }, { status: 500 });
+      return humanJson(req, { ok: false, error: reserveError.message, circleFaucetUrl: CIRCLE_FAUCET_URL }, { status: 500 });
     }
 
     const reserve = reserveRows?.[0];
     if (!reserve?.ok) {
-      return NextResponse.json({
+      return humanJson(req, {
         ok: false,
         error: reserve?.reason ?? 'claim_rejected',
         retryAfterSeconds: reserve?.retry_after_seconds ?? 86400,
@@ -151,7 +152,7 @@ export async function POST(req: NextRequest) {
 
       if (markSentError) {
         console.error('[faucet] failed to mark claim sent', markSentError);
-        return NextResponse.json({
+        return humanJson(req, {
           ok: true,
           txHash,
           amount: process.env.FAUCET_AMOUNT_USDC ?? '1',
@@ -160,7 +161,7 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      return NextResponse.json({
+      return humanJson(req, {
         ok: true,
         txHash,
         amount: process.env.FAUCET_AMOUNT_USDC ?? '1',
@@ -177,7 +178,7 @@ export async function POST(req: NextRequest) {
         console.error('[faucet] failed to mark claim failed', markFailedError);
       }
 
-      return NextResponse.json({
+      return humanJson(req, {
         ok: false,
         error: 'transfer_failed',
         detail: txError instanceof Error ? txError.message : String(txError),
@@ -185,7 +186,7 @@ export async function POST(req: NextRequest) {
       }, { status: 500 });
     }
   } catch (err) {
-    return NextResponse.json({
+    return humanJson(req, {
       ok: false,
       error: err instanceof Error ? err.message : String(err),
       circleFaucetUrl: CIRCLE_FAUCET_URL,
