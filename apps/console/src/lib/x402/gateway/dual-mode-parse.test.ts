@@ -71,6 +71,30 @@ describe('parseDualPaymentBody explicit rail mode', () => {
     expect(parsed).toMatchObject({ ok: true, mode: 'native' });
   });
 
+  it('routes gateway by paymentRequirements.extra.name/version even when transferMethod and paymentPayload.extra are absent', () => {
+    const parsed = parseDualPaymentBody(gatewayBody({
+      mode: undefined,
+      paymentRequirements: {
+        scheme: 'exact',
+        network: GATEWAY_NETWORK_NAME,
+        asset: USDC_ADDRESS,
+        amount: '1000',
+        payTo,
+        maxTimeoutSeconds: 300,
+        extra: {
+          name: 'GatewayWalletBatched',
+          version: '1',
+        },
+      },
+      paymentPayload: {
+        from,
+        payload: { from },
+      },
+    }));
+
+    expect(parsed).toMatchObject({ ok: true, mode: 'gateway' });
+  });
+
   it('rejects explicit mode gateway with a native payload', () => {
     const parsed = parseDualPaymentBody(nativeBody({ mode: 'gateway' }));
     expect(parsed).toMatchObject({ ok: false, status: 400, body: { error: 'rail_payload_mismatch' } });
