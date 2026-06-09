@@ -194,7 +194,7 @@ Stack traces are **never** exposed in API responses. Error messages are redacted
 
 ## MCP ApprovalUrl Flow (Identity Registration)
 
-MCP supports ERC-8004 identity registration through a Circle passkey approval flow. No private keys are held by the server.
+MCP preserves an optional ERC-8004 Passkey Agent Account approval flow. It is feature-gated and disabled by default; connected EOA registration is the default identity path. No private keys are held by the server.
 
 ```text
 1. User configures MCP in Claude/Codex with Bearer session token

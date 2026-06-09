@@ -57,6 +57,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  if (process.env.AGENT_ACCOUNT_BACKEND_ENABLED !== 'true') {
+    return NextResponse.json(
+      { ok: false, error: 'agent_account_disabled', detail: 'Agent Account mode is temporarily disabled. Use EOA bot mode.' },
+      { status: 403 },
+    );
+  }
+
   const wallet = await getWallet(req);
   if (!wallet) {
     return NextResponse.json({ ok: false, error: 'not_authenticated' }, { status: 401 });
@@ -82,20 +89,20 @@ export async function POST(req: NextRequest) {
     agentAccountAddress,
   });
 
-  // Auto-bind A2A x402 payer for all agents controlled by this owner.
-  // If agent has a Circle Agent Account → that account is the A2A payer.
-  // Fire-and-forget: don't fail the account creation if binding fails.
-  try {
-    const linkedAgents = await getLinkedErc8004AgentsForController(ownerAddress);
-    for (const agent of linkedAgents) {
-      await ensureA2aPayerBinding({
-        agentId: agent.agentId,
-        controllerAddress: ownerAddress,
-        agentAccountAddress,
-      }).catch(() => {}); // non-blocking
+  if (process.env.AGENT_ACCOUNT_A2A_AUTO_BIND_ENABLED === 'true') {
+    // Optional passkey mode: bind the Agent Account as A2A payer for owned agents.
+    try {
+      const linkedAgents = await getLinkedErc8004AgentsForController(ownerAddress);
+      for (const agent of linkedAgents) {
+        await ensureA2aPayerBinding({
+          agentId: agent.agentId,
+          controllerAddress: ownerAddress,
+          agentAccountAddress,
+        }).catch(() => {});
+      }
+    } catch {
+      // Non-critical: optional A2A binding is best-effort on account creation
     }
-  } catch {
-    // Non-critical: A2A binding is best-effort on account creation
   }
 
   return NextResponse.json({
