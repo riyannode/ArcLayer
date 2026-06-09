@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { CONTRACTS, ARC_TOKENS } from '@arclayer/sdk';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { getErc8183JobByLocalId } from '@/lib/erc8183-jobs/store';
@@ -27,10 +28,7 @@ export async function POST(
     if (auth.error) return auth.error;
     const job = await getErc8183JobByLocalId(localJobId);
     if (!job) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
-        { status: 404 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' }, { status: 404 });
     }
 
     // Guard: only the buyer (client) can approve+fund the escrow
@@ -38,80 +36,62 @@ export async function POST(
     if (fundAuthError) return fundAuthError;
 
     if (!job.erc8183JobId) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'create_job_pending', message: 'createJob tx must be confirmed first.' },
-        { status: 400 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'create_job_pending', message: 'createJob tx must be confirmed first.' }, { status: 400 });
     }
 
     // ── Local guards ──────────────────────────────────────────────────────
 
     // 1. setBudget must be confirmed before fund is allowed
     if (!job.setBudgetTxHash) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'budget_not_set',
           message: 'Provider must set budget before client can fund this job.',
-        },
-        { status: 409 },
-      );
+        }, { status: 409 });
     }
 
     // 2. priceAtomic must be present and positive
     const priceAtomic = Number(job.priceAtomic);
     if (!job.priceAtomic || Number.isNaN(priceAtomic) || priceAtomic <= 0) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'budget_zero',
           message: 'Job budget is zero or missing. Provider must set a valid budget first.',
-        },
-        { status: 409 },
-      );
+        }, { status: 409 });
     }
 
     // 3. Already funded — idempotency guard
     if (job.fundTxHash) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'already_funded',
           message: 'This job has already been funded.',
-        },
-        { status: 409 },
-      );
+        }, { status: 409 });
     }
 
     // 4. Lifecycle status must be fundable
     if (job.status && UNFUNDABLE_LOCAL_STATUSES.has(job.status)) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'job_not_fundable_status',
           message: `Job status '${job.status}' is not fundable.`,
-        },
-        { status: 409 },
-      );
+        }, { status: 409 });
     }
 
     // 5. Job expiry check — null/undefined/0 = not expired
     if (job.expiredAtUnix && Number(job.expiredAtUnix) > 0) {
       const expiredAtMs = Number(job.expiredAtUnix) * 1000;
       if (Date.now() > expiredAtMs) {
-        return NextResponse.json(
-          {
+        return humanJson(req, {
             ok: false,
             ...escrowRail(),
             error: 'job_expired',
             message: 'This job has expired and can no longer be funded.',
-          },
-          { status: 409 },
-        );
+          }, { status: 409 });
       }
     }
 
@@ -120,41 +100,32 @@ export async function POST(
     const onchainJob = await readOnchainJob(BigInt(job.erc8183JobId));
 
     if (!onchainJob) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'rpc_unavailable',
           message: 'Unable to verify on-chain job state. Please try again.',
-        },
-        { status: 503 },
-      );
+        }, { status: 503 });
     }
 
     // 6. On-chain budget must be set (> 0)
     if (onchainJob.budget === 0n) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'budget_not_set',
           message: 'On-chain budget is zero. Provider must call setBudget before funding.',
-        },
-        { status: 409 },
-      );
+        }, { status: 409 });
     }
 
     // 7. On-chain status must be Open (0) for funding
     if (onchainJob.status !== ERC8183JobStatus.Open) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'job_not_fundable_status',
           message: `On-chain job status is '${onchainJob.erc8183Status}', not Open. Cannot fund.`,
-        },
-        { status: 409 },
-      );
+        }, { status: 409 });
     }
 
     // ── Budget mismatch warning (non-blocking) ────────────────────────────
@@ -180,7 +151,7 @@ export async function POST(
       args: [job.erc8183JobId, '0x'],
     };
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       ...escrowRail(),
       nextAction: 'approveAndFund',
@@ -191,9 +162,6 @@ export async function POST(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { ok: false, ...escrowRail(), error: 'fund_failed', message },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, ...escrowRail(), error: 'fund_failed', message }, { status: 500 });
   }
 }

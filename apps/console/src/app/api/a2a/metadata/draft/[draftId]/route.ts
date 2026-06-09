@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import {
   getMetadataDraft,
   updateMetadataDraft,
@@ -15,10 +16,10 @@ export async function GET(
   const record = await getMetadataDraft(draftId);
 
   if (!record) {
-    return NextResponse.json({ error: 'metadata draft not found' }, { status: 404 });
+    return humanJson(_req, { error: 'metadata draft not found' }, { status: 404 });
   }
 
-  return NextResponse.json(record.metadata, {
+  return humanJson(_req, record.metadata, {
     headers: {
       'cache-control': 'no-store',
     },
@@ -36,11 +37,11 @@ export async function PATCH(
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return humanJson(req, { error: 'Invalid JSON body' }, { status: 400 });
   }
 
   if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'Body must be an object' }, { status: 400 });
+    return humanJson(req, { error: 'Body must be an object' }, { status: 400 });
   }
 
   const { writeToken, metadata, agentId, txHash } = body as {
@@ -51,11 +52,11 @@ export async function PATCH(
   };
 
   if (typeof writeToken !== 'string' || !writeToken) {
-    return NextResponse.json({ error: 'writeToken is required' }, { status: 400 });
+    return humanJson(req, { error: 'writeToken is required' }, { status: 400 });
   }
 
   if (!metadata || typeof metadata !== 'object') {
-    return NextResponse.json({ error: 'metadata must be an object' }, { status: 400 });
+    return humanJson(req, { error: 'metadata must be an object' }, { status: 400 });
   }
 
   const result = await updateMetadataDraft({
@@ -67,8 +68,8 @@ export async function PATCH(
   });
 
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 403 });
+    return humanJson(req, { error: result.error }, { status: 403 });
   }
 
-  return NextResponse.json({ ok: true });
+  return humanJson(req, { ok: true });
 }

@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { createA2AJob, listA2AJobs } from '@/lib/a2a/jobs';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { withX402 } from '@/lib/x402';
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
   const cacheKey = req.url;
   const cached = jobsCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
-    return NextResponse.json(cached.payload, {
+    return humanJson(req, cached.payload, {
       headers: { 'Cache-Control': JOBS_CACHE_CONTROL },
     });
   }
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
   });
   const payload = { ok: true, jobs };
   jobsCache.set(cacheKey, { expiresAt: Date.now() + JOBS_TTL_MS, payload });
-  return NextResponse.json(payload, {
+  return humanJson(req, payload, {
     headers: { 'Cache-Control': JOBS_CACHE_CONTROL },
   });
 }
@@ -41,10 +42,10 @@ async function postHandler(req: NextRequest) {
   if (limited) return limited;
 
   const body = await req.json().catch(() => null);
-  if (!body || typeof body !== 'object') return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
+  if (!body || typeof body !== 'object') return humanJson(req, { ok: false, error: 'invalid_json' }, { status: 400 });
   const { title, description, category, roleId, budget, requester, agentId, input } = body as Record<string, unknown>;
   if (typeof title !== 'string' || typeof description !== 'string' || !title.trim() || !description.trim()) {
-    return NextResponse.json({ ok: false, error: 'missing_fields', message: 'title and description are required' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'missing_fields', message: 'title and description are required' }, { status: 400 });
   }
   const result = await createA2AJob({
     title,
@@ -57,12 +58,9 @@ async function postHandler(req: NextRequest) {
     input,
   });
   if (!result.ok) {
-    return NextResponse.json(
-      { ok: false, error: result.error, detail: result.detail },
-      { status: 502, headers: { 'Cache-Control': 'no-store, no-cache, max-age=0' } },
-    );
+    return humanJson(req, { ok: false, error: result.error, detail: result.detail }, { status: 502, headers: { 'Cache-Control': 'no-store, no-cache, max-age=0' } });
   }
-  return NextResponse.json({ ok: true, job: result.job }, { status: 201 });
+  return humanJson(req, { ok: true, job: result.job }, { status: 201 });
 }
 
 // 0.000001 USDC = 1 atomic (6 decimals). Creating a job is a paid action.

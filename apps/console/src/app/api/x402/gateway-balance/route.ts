@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { getAddress, isAddress, parseUnits } from 'viem';
 
 export const runtime = 'nodejs';
@@ -9,7 +10,7 @@ const GATEWAY_API_BASE = process.env.GATEWAY_API_URL || 'https://gateway-api-tes
 export async function GET(req: NextRequest) {
   const address = req.nextUrl.searchParams.get('address');
   if (!address || !isAddress(address)) {
-    return NextResponse.json({ error: 'valid address query param required' }, { status: 400 });
+    return humanJson(req, { error: 'valid address query param required' }, { status: 400 });
   }
 
   const depositor = getAddress(address);
@@ -25,7 +26,7 @@ export async function GET(req: NextRequest) {
     });
 
     if (!res.ok) {
-      return NextResponse.json({
+      return humanJson(req, {
         depositedUsdc: null,
         method: 'gateway-api',
         error: `Gateway API returned ${res.status}`,
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
     );
 
     if (!entry || !entry.balance) {
-      return NextResponse.json({
+      return humanJson(req, {
         depositedUsdc: '0.000000',
         depositedAtomic: '0',
         method: 'gateway-api',
@@ -48,13 +49,13 @@ export async function GET(req: NextRequest) {
 
     const raw = parseUnits(entry.balance, 6);
 
-    return NextResponse.json({
+    return humanJson(req, {
       depositedUsdc: entry.balance,
       depositedAtomic: raw.toString(),
       method: 'gateway-api',
     });
   } catch {
-    return NextResponse.json({
+    return humanJson(req, {
       depositedUsdc: null,
       method: 'error',
       error: 'failed_to_query_gateway_api',

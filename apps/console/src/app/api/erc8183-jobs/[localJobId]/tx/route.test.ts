@@ -11,6 +11,7 @@
 
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { encodeAbiParameters, encodeEventTopics } from 'viem';
 
 // ── Hoisted mocks ─────────────────────────────────────────────────────────
 
@@ -173,6 +174,32 @@ function makeReceipt() {
   };
 }
 
+function makeApprovalReceipt() {
+  const owner = '0xF5f11E68fbcbfa20De9208709aB60fF81509Cb20' as `0x${string}`;
+  const spender = '0x0747000000000000000000000000000000000000' as `0x${string}`;
+
+  return {
+    ...makeReceipt(),
+    logs: [{
+      address: '0x3600000000000000000000000000000000000000' as `0x${string}`,
+      data: encodeAbiParameters([{ type: 'uint256' }], [2_000_000n]),
+      topics: encodeEventTopics({
+        abi: [{
+          type: 'event',
+          name: 'Approval',
+          inputs: [
+            { type: 'address', name: 'owner', indexed: true },
+            { type: 'address', name: 'spender', indexed: true },
+            { type: 'uint256', name: 'value', indexed: false },
+          ],
+        }],
+        eventName: 'Approval',
+        args: { owner, spender },
+      }),
+    }],
+  };
+}
+
 function makeOnchainJob() {
   return {
     client: '0xF5f11E68fbcbfa20De9208709aB60fF81509Cb20',
@@ -190,15 +217,57 @@ function makeOnchainJob() {
   };
 }
 
-function makeRequest(body: Record<string, unknown>) {
+function makeRawRequest(body: string, accept = 'application/json') {
   return new NextRequest(`http://localhost/api/erc8183-jobs/${LOCAL_JOB_ID}/tx`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ak_test' },
+    headers: {
+      Accept: accept,
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ak_test',
+    },
+    body,
+  });
+}
+
+function makeRequest(body: Record<string, unknown>, accept = 'application/json') {
+  return new NextRequest(`http://localhost/api/erc8183-jobs/${LOCAL_JOB_ID}/tx`, {
+    method: 'POST',
+    headers: {
+      Accept: accept,
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer ak_test',
+    },
     body: JSON.stringify(body),
   });
 }
 
+const SENSITIVE_HEADERS = [
+  'Cache-Control',
+  'PAYMENT-RESPONSE',
+  'X-PAYMENT',
+  'X-PAYMENT-RESPONSE',
+  'PAYMENT-SIGNATURE',
+  'Retry-After',
+  'X-RateLimit-Limit',
+  'X-RateLimit-Remaining',
+  'X-RateLimit-Reset',
+] as const;
+
+async function captureResponse(res: Response) {
+  const text = await res.text();
+  return {
+    status: res.status,
+    headers: Object.fromEntries(SENSITIVE_HEADERS.map((header) => [header, res.headers.get(header)])),
+    body: JSON.parse(text),
+    text,
+  };
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('POST /api/erc8183-jobs/[localJobId]/tx — complete/reject + recordDelivery', () => {
   beforeEach(() => {
@@ -245,6 +314,146 @@ describe('POST /api/erc8183-jobs/[localJobId]/tx — complete/reject + recordDel
 
     // Default: escrow rail
     mocks.escrowRail.mockReturnValue({ rail: 'escrow', settlementMode: 'erc8183_escrow' });
+  });
+
+
+  it('returns stable invalid_json across Accept modes for malformed JSON bodies', async () => {
+    const applicationJson = await captureResponse(await POST(
+      makeRawRequest('{', 'application/json'),
+      { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) },
+    ));
+    const textHtml = await captureResponse(await POST(
+      makeRawRequest('{', 'text/html'),
+      { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) },
+    ));
+
+    expect(textHtml.status).toBe(applicationJson.status);
+    expect(textHtml.headers).toEqual(applicationJson.headers);
+    expect(textHtml.body).toEqual(applicationJson.body);
+    expect(applicationJson.text).not.toContain('\n  ');
+    expect(textHtml.text).toContain('\n  ');
+    expect(applicationJson.status).toBe(400);
+    expect(applicationJson.body).toMatchObject({
+      ok: false,
+      rail: 'escrow',
+      settlementMode: 'erc8183_escrow',
+      error: 'invalid_json',
+      message: 'Request body must be JSON.',
+    });
+  });
+
+
+  it('redacts generic tx confirmation failures across Accept modes', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mocks.readTransactionReceipt.mockRejectedValue(new Error('raw receipt rpc secret'));
+
+    const applicationJson = await captureResponse(await POST(
+      makeRequest({ txType: 'complete', txHash: TX_HASH }, 'application/json'),
+      { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) },
+    ));
+    const textHtml = await captureResponse(await POST(
+      makeRequest({ txType: 'complete', txHash: TX_HASH }, 'text/html'),
+      { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) },
+    ));
+
+    expect(textHtml.status).toBe(applicationJson.status);
+    expect(textHtml.headers).toEqual(applicationJson.headers);
+    expect(textHtml.body).toEqual(applicationJson.body);
+    expect(applicationJson.text).not.toContain('\n  ');
+    expect(textHtml.text).toContain('\n  ');
+    expect(applicationJson.status).toBe(500);
+    expect(applicationJson.body).toMatchObject({
+      ok: false,
+      rail: 'escrow',
+      settlementMode: 'erc8183_escrow',
+      error: 'tx_confirmation_failed',
+      message: 'Transaction confirmation failed. Please retry or contact support if the issue persists.',
+    });
+    expect(applicationJson.text).not.toContain('raw receipt rpc secret');
+    expect(textHtml.text).not.toContain('raw receipt rpc secret');
+    consoleError.mockRestore();
+  });
+
+  it('redacts allowance_check_failed provider errors across Accept modes', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mocks.readTransactionReceipt.mockResolvedValue(makeApprovalReceipt());
+    mocks.getArcPublicClient.mockReturnValue({
+      readContract: vi.fn().mockRejectedValue(new Error('raw rpc provider secret')),
+    });
+
+    const applicationJson = await captureResponse(await POST(
+      makeRequest({ txType: 'approve', txHash: TX_HASH }, 'application/json'),
+      { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) },
+    ));
+    const textHtml = await captureResponse(await POST(
+      makeRequest({ txType: 'approve', txHash: TX_HASH }, 'text/html'),
+      { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) },
+    ));
+
+    expect(textHtml.status).toBe(applicationJson.status);
+    expect(textHtml.headers).toEqual(applicationJson.headers);
+    expect(textHtml.body).toEqual(applicationJson.body);
+    expect(applicationJson.text).not.toContain('\n  ');
+    expect(textHtml.text).toContain('\n  ');
+    expect(applicationJson.status).toBe(503);
+    expect(applicationJson.body).toMatchObject({
+      ok: false,
+      rail: 'escrow',
+      settlementMode: 'erc8183_escrow',
+      error: 'allowance_check_failed',
+      txType: 'approve',
+      message: 'Failed to verify USDC allowance after approve tx.',
+    });
+    expect(applicationJson.text).not.toContain('raw rpc provider secret');
+    expect(textHtml.text).not.toContain('raw rpc provider secret');
+    consoleError.mockRestore();
+  });
+
+  it('preserves status, sensitive headers, and body schema across Accept modes for stable rate-limit errors', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    const resetAt = Date.now() + 60_000;
+    mocks.checkMemoryRateLimit.mockReturnValue({
+      ok: false,
+      limit: 20,
+      remaining: 0,
+      resetAt,
+    });
+
+    const applicationJson = await captureResponse(await POST(
+      makeRequest({ txType: 'complete', txHash: TX_HASH }, 'application/json'),
+      { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) },
+    ));
+    const textHtml = await captureResponse(await POST(
+      makeRequest({ txType: 'complete', txHash: TX_HASH }, 'text/html'),
+      { params: Promise.resolve({ localJobId: LOCAL_JOB_ID }) },
+    ));
+
+    expect(textHtml.status).toBe(applicationJson.status);
+    expect(textHtml.headers).toEqual(applicationJson.headers);
+    expect(textHtml.body).toEqual(applicationJson.body);
+    expect(applicationJson.text).not.toContain('\n  ');
+    expect(textHtml.text).toContain('\n  ');
+    expect(applicationJson.status).toBe(429);
+    expect(applicationJson.headers).toMatchObject({
+      'Cache-Control': null,
+      'PAYMENT-RESPONSE': null,
+      'X-PAYMENT': null,
+      'X-PAYMENT-RESPONSE': null,
+      'PAYMENT-SIGNATURE': null,
+      'Retry-After': '60',
+      'X-RateLimit-Limit': '20',
+      'X-RateLimit-Remaining': '0',
+      'X-RateLimit-Reset': String(Math.ceil(resetAt / 1000)),
+    });
+    expect(applicationJson.body).toMatchObject({
+      ok: false,
+      rail: 'escrow',
+      settlementMode: 'erc8183_escrow',
+      error: 'rate_limited',
+      limit: 20,
+      remaining: 0,
+    });
   });
 
   it('confirms claim_refund from on-chain Expired status without requiring JobExpired', async () => {

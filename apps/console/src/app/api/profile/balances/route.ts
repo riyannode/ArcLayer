@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * Profile — USDC balances for owner + agent account.
  *
@@ -8,7 +9,7 @@
  * Uses Gateway REST API for unified balance (on-chain deposits() removed in contract upgrade).
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createPublicClient, http, formatUnits, isAddress, getAddress, parseUnits, type Hex } from 'viem';
 import { arcTestnet } from 'viem/chains';
 import { ARC_RPC_URLS, ARC_TOKENS, ARC_ERC20_USDC_DECIMALS } from '@arclayer/sdk';
@@ -87,7 +88,7 @@ export async function GET(req: NextRequest) {
   const agentAccount = req.nextUrl.searchParams.get('agentAccount');
 
   if (!owner || !isAddress(owner)) {
-    return NextResponse.json({ ok: false, error: 'invalid_owner' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'invalid_owner' }, { status: 400 });
   }
 
   const [ownerBalance, ownerGateway] = await Promise.all([
@@ -106,7 +107,7 @@ export async function GET(req: NextRequest) {
     agentGateway = ag;
   }
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     owner: {
       address: getAddress(owner),

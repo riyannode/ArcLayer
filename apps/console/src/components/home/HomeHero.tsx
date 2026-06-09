@@ -2,6 +2,8 @@
 
 import dynamic from 'next/dynamic';
 
+const SHOW_HOME_X402_PANEL = false;
+
 const X402DemoPanel = dynamic(() => import('@/components/x402/X402DemoPanel'), {
   ssr: false,
   loading: () => <div className="h-[120px] animate-pulse rounded-lg bg-[rgba(234,228,216,0.04)]" />,
@@ -64,13 +66,17 @@ export default function HomeHero() {
         </p>
       </div>
 
-      <div
-        data-x402-unlock-zone="true"
-        className="mt-5 section-reveal"
-        style={{ animationDelay: '0.35s' }}
-      >
-        <X402DemoPanel compact ticketOnly />
-      </div>
+      {SHOW_HOME_X402_PANEL ? (
+        <div
+          data-x402-unlock-zone="true"
+          className="mt-5 section-reveal"
+          style={{ animationDelay: '0.35s' }}
+        >
+          <X402DemoPanel compact ticketOnly />
+        </div>
+      ) : (
+        <div className="mt-5 h-[120px]" aria-hidden="true" />
+      )}
 
       <div
         data-x402-unlock-zone="true"

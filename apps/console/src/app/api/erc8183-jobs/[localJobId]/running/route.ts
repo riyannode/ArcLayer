@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import {
   getErc8183JobByLocalId,
@@ -23,22 +24,16 @@ export async function POST(
     if (auth.error) return auth.error;
     const job = await getErc8183JobByLocalId(localJobId);
     if (!job) {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' },
-        { status: 404 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' }, { status: 404 });
     }
 
     if (job.status !== 'claimed') {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'erc8183_job_not_claimed',
           message: `Job is in status '${job.status}', expected 'claimed'. Claim the job first via POST /api/erc8183-jobs/[localJobId]/claim.`,
-        },
-        { status: 400 },
-      );
+        }, { status: 400 });
     }
 
     const body = await req.json();
@@ -48,10 +43,7 @@ export async function POST(
     const resolvedProviderId = providerAgentId || workerId;
 
     if (!resolvedProviderId || typeof resolvedProviderId !== 'string') {
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: 'providerAgentId is required' },
-        { status: 400 },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: 'providerAgentId is required' }, { status: 400 });
     }
 
     // Guard: only the assigned provider can mark the job as running
@@ -61,15 +53,12 @@ export async function POST(
 
     // Guard: resolvedProviderId must match the claimed worker
     if (resolvedProviderId !== job.workerId) {
-      return NextResponse.json(
-        {
+      return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'provider_id_mismatch',
           message: `Provider '${resolvedProviderId}' does not match the claimed provider '${job.workerId}'.`,
-        },
-        { status: 403 },
-      );
+        }, { status: 403 });
     }
 
     await markErc8183JobRunning({
@@ -77,7 +66,7 @@ export async function POST(
       workerId: resolvedProviderId,
     });
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       ...escrowRail(),
       localJobId: localJobId,
@@ -90,9 +79,6 @@ export async function POST(
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     console.error('[erc8183-jobs] POST /running failed:', message);
-    return NextResponse.json(
-      { ok: false, ...escrowRail(), error: 'running_failed', message },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, ...escrowRail(), error: 'running_failed', message }, { status: 500 });
   }
 }

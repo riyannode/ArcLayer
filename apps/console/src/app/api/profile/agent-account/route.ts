@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * Profile — Agent Account link/read.
  *
@@ -8,7 +9,7 @@
  * No tx execution. No private keys.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { resolveSessionFromCookie, SESSION_COOKIE_NAME, getLinkedErc8004AgentsForController } from '@/lib/auth/wallet-session';
 import {
   getActiveAgentAccountForOwner,
@@ -30,13 +31,13 @@ async function getWallet(req: NextRequest): Promise<string | null> {
 export async function GET(req: NextRequest) {
   const wallet = await getWallet(req);
   if (!wallet) {
-    return NextResponse.json({ ok: false, error: 'not_authenticated' }, { status: 401 });
+    return humanJson(req, { ok: false, error: 'not_authenticated' }, { status: 401 });
   }
 
   const account = await getActiveAgentAccountForOwner(wallet);
 
   if (!account) {
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       ownerAddress: getAddress(wallet),
       agentAccountAddress: null,
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     ownerAddress: account.ownerAddress,
     agentAccountAddress: account.agentAccountAddress,
@@ -58,27 +59,24 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   if (process.env.AGENT_ACCOUNT_BACKEND_ENABLED !== 'true') {
-    return NextResponse.json(
-      { ok: false, error: 'agent_account_disabled', detail: 'Agent Account mode is temporarily disabled. Use EOA bot mode.' },
-      { status: 403 },
-    );
+    return humanJson(req, { ok: false, error: 'agent_account_disabled', detail: 'Agent Account mode is temporarily disabled. Use EOA bot mode.' }, { status: 403 });
   }
 
   const wallet = await getWallet(req);
   if (!wallet) {
-    return NextResponse.json({ ok: false, error: 'not_authenticated' }, { status: 401 });
+    return humanJson(req, { ok: false, error: 'not_authenticated' }, { status: 401 });
   }
 
   let body: Record<string, unknown> = {};
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'invalid_json' }, { status: 400 });
   }
 
   const raw = typeof body.agentAccountAddress === 'string' ? body.agentAccountAddress.trim() : '';
   if (!raw || !isAddress(raw)) {
-    return NextResponse.json({ ok: false, error: 'invalid_address' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'invalid_address' }, { status: 400 });
   }
 
   const agentAccountAddress = getAddress(raw);
@@ -105,7 +103,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     ownerAddress: account.ownerAddress,
     agentAccountAddress: account.agentAccountAddress,

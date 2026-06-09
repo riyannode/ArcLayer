@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * /api/agents/[id]/api-keys
  *
@@ -64,10 +65,7 @@ async function verifyOwnership(
   if (!cookieValue) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { ok: false, error: 'unauthorized', detail: 'Wallet session required' },
-        { status: 401, headers: { 'Cache-Control': ERROR_CACHE } },
-      ),
+      response: humanJson(req, { ok: false, error: 'unauthorized', detail: 'Wallet session required' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } }),
     };
   }
 
@@ -75,10 +73,7 @@ async function verifyOwnership(
   if (!session) {
     return {
       ok: false,
-      response: NextResponse.json(
-        { ok: false, error: 'invalid_session', detail: 'Wallet session is invalid or expired' },
-        { status: 401, headers: { 'Cache-Control': ERROR_CACHE } },
-      ),
+      response: humanJson(req, { ok: false, error: 'invalid_session', detail: 'Wallet session is invalid or expired' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } }),
     };
   }
 
@@ -107,10 +102,7 @@ async function verifyOwnership(
 
   return {
     ok: false,
-    response: NextResponse.json(
-      { ok: false, error: 'forbidden', detail: 'Session wallet does not control this agent' },
-      { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
-    ),
+    response: humanJson(req, { ok: false, error: 'forbidden', detail: 'Session wallet does not control this agent' }, { status: 403, headers: { 'Cache-Control': ERROR_CACHE } }),
   };
 }
 
@@ -129,27 +121,18 @@ export async function POST(
     // Parse body
     const body = await req.json();
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_body', detail: 'Request body must be a JSON object' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'invalid_body', detail: 'Request body must be a JSON object' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // Validate label
     let label: string | undefined;
     if (body.label !== undefined) {
       if (typeof body.label !== 'string') {
-        return NextResponse.json(
-          { ok: false, error: 'invalid_label', detail: 'label must be a string' },
-          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-        );
+        return humanJson(req, { ok: false, error: 'invalid_label', detail: 'label must be a string' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
       }
       const trimmed = body.label.trim();
       if (trimmed.length > LABEL_MAX_LENGTH) {
-        return NextResponse.json(
-          { ok: false, error: 'invalid_label', detail: `label must be ${LABEL_MAX_LENGTH} characters or fewer` },
-          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-        );
+        return humanJson(req, { ok: false, error: 'invalid_label', detail: `label must be ${LABEL_MAX_LENGTH} characters or fewer` }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
       }
       if (trimmed.length > 0) label = trimmed;
     }
@@ -159,24 +142,15 @@ export async function POST(
     if (body.preset !== undefined) {
       // Reject deprecated worker preset
       if (body.preset === 'worker') {
-        return NextResponse.json(
-          { ok: false, error: 'deprecated_preset', detail: 'worker preset is deprecated for ERC-8183; use provider' },
-          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-        );
+        return humanJson(req, { ok: false, error: 'deprecated_preset', detail: 'worker preset is deprecated for ERC-8183; use provider' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
       }
       if (typeof body.preset !== 'string' || !VALID_PRESETS.has(body.preset)) {
-        return NextResponse.json(
-          { ok: false, error: 'invalid_preset', detail: `preset must be one of: ${[...VALID_PRESETS].join(', ')}` },
-          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-        );
+        return humanJson(req, { ok: false, error: 'invalid_preset', detail: `preset must be one of: ${[...VALID_PRESETS].join(', ')}` }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
       }
       scopes = SCOPE_PRESETS[body.preset];
     } else if (body.scopes !== undefined) {
       if (!Array.isArray(body.scopes)) {
-        return NextResponse.json(
-          { ok: false, error: 'invalid_scopes', detail: 'scopes must be a string array' },
-          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-        );
+        return humanJson(req, { ok: false, error: 'invalid_scopes', detail: 'scopes must be a string array' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
       }
       // Validate every scope
       const invalid: string[] = [];
@@ -184,10 +158,7 @@ export async function POST(
       const deduped: string[] = [];
       for (const s of body.scopes) {
         if (typeof s !== 'string') {
-          return NextResponse.json(
-            { ok: false, error: 'invalid_scope', detail: 'Each scope must be a string' },
-            { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-          );
+          return humanJson(req, { ok: false, error: 'invalid_scope', detail: 'Each scope must be a string' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
         }
         if (!VALID_SCOPE_SET.has(s)) {
           invalid.push(s);
@@ -198,10 +169,7 @@ export async function POST(
         }
       }
       if (invalid.length > 0) {
-        return NextResponse.json(
-          { ok: false, error: 'invalid_scope', detail: `Unknown scopes: ${invalid.join(', ')}` },
-          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-        );
+        return humanJson(req, { ok: false, error: 'invalid_scope', detail: `Unknown scopes: ${invalid.join(', ')}` }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
       }
       scopes = deduped.length > 0 ? deduped : undefined;
     }
@@ -214,22 +182,13 @@ export async function POST(
     });
 
     if (!result.ok) {
-      return NextResponse.json(
-        { ok: false, error: 'create_failed', detail: result.error },
-        { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'create_failed', detail: result.error }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
-    return NextResponse.json(
-      { ok: true, key: result.key, keyPrefix: result.keyPrefix, id: result.id },
-      { status: 201, headers: { 'Cache-Control': 'no-store' } },
-    );
+    return humanJson(req, { ok: true, key: result.key, keyPrefix: result.keyPrefix, id: result.id }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown_error';
-    return NextResponse.json(
-      { ok: false, error: 'api_key_create_failed', detail: message },
-      { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'api_key_create_failed', detail: message }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 }
 
@@ -253,10 +212,7 @@ export async function GET(
       .order('created_at', { ascending: false });
 
     if (error) {
-      return NextResponse.json(
-        { ok: false, error: 'list_failed', detail: error.message },
-        { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'list_failed', detail: error.message }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     const keys = (data ?? []).map((row) => ({
@@ -269,15 +225,9 @@ export async function GET(
       status: row.revoked_at ? 'revoked' : 'active',
     }));
 
-    return NextResponse.json(
-      { ok: true, keys },
-      { headers: { 'Cache-Control': 'no-store' } },
-    );
+    return humanJson(req, { ok: true, keys }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown_error';
-    return NextResponse.json(
-      { ok: false, error: 'api_key_list_failed', detail: message },
-      { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'api_key_list_failed', detail: message }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 }

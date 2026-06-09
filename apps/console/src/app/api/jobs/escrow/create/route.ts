@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { CONTRACTS } from '@arclayer/sdk';
 import { createLocalErc8183Job } from '@/lib/erc8183-jobs/store';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
@@ -27,19 +28,13 @@ export async function POST(req: NextRequest) {
     ] as const;
     for (const field of required) {
       if (!body[field]) {
-        return NextResponse.json(
-          { ok: false, error: 'missing_field', message: `Missing required field: ${field}` },
-          { status: 400 },
-        );
+        return humanJson(req, { ok: false, error: 'missing_field', message: `Missing required field: ${field}` }, { status: 400 });
       }
     }
 
     // ERC-8183: evaluator MUST be non-zero (reverts on zero address)
     if (String(body.evaluatorAddress).toLowerCase() === '0x0000000000000000000000000000000000000000') {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_evaluator', message: 'evaluatorAddress cannot be the zero address. Use the client wallet as evaluator.' },
-        { status: 400 },
-      );
+      return humanJson(req, { ok: false, error: 'invalid_evaluator', message: 'evaluatorAddress cannot be the zero address. Use the client wallet as evaluator.' }, { status: 400 });
     }
 
     // Create local job record
@@ -70,7 +65,7 @@ export async function POST(req: NextRequest) {
       ],
     };
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       ...escrowRail(),
       nextAction: 'createJob',
@@ -80,9 +75,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { ok: false, error: 'create_failed', message },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, error: 'create_failed', message }, { status: 500 });
   }
 }

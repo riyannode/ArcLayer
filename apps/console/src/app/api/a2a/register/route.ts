@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
 import { isAddress } from 'viem';
 import { registerExternalAgent } from '@/lib/a2a/external-registry';
 import { verifyExternalRegistrationAuth } from '@/lib/a2a/registration-auth';
@@ -16,14 +16,14 @@ export async function POST(request: Request) {
     const message = typeof body?.message === 'string' ? body.message : undefined;
     const signature = typeof body?.signature === 'string' ? body.signature : undefined;
 
-    if (!agentId) return NextResponse.json({ error: 'invalid_agent_id' }, { status: 400 });
-    if (!isAddress(address)) return NextResponse.json({ error: 'invalid_address' }, { status: 400 });
+    if (!agentId) return humanJson(request, { error: 'invalid_agent_id' }, { status: 400 });
+    if (!isAddress(address)) return humanJson(request, { error: 'invalid_address' }, { status: 400 });
     if (endpoint) {
       const ok = endpoint.startsWith('http://') || endpoint.startsWith('https://');
-      if (!ok) return NextResponse.json({ error: 'invalid_endpoint' }, { status: 400 });
+      if (!ok) return humanJson(request, { error: 'invalid_endpoint' }, { status: 400 });
     }
     if (body?.capabilities !== undefined && !Array.isArray(body.capabilities)) {
-      return NextResponse.json({ error: 'invalid_capabilities' }, { status: 400 });
+      return humanJson(request, { error: 'invalid_capabilities' }, { status: 400 });
     }
 
     const { signatureVerified } = await verifyExternalRegistrationAuth({ address, message, signature });
@@ -40,14 +40,14 @@ export async function POST(request: Request) {
       source: 'external-registration',
     });
 
-    return NextResponse.json(result.agent, { status: result.created ? 201 : 200 });
+    return humanJson(request, result.agent, { status: result.created ? 201 : 200 });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'internal_error';
     if (message === 'invalid_address' || message === 'signature_required' || message === 'invalid_signature') {
-      return NextResponse.json({ error: message }, { status: 400 });
+      return humanJson(request, { error: message }, { status: 400 });
     }
-    if (message === 'duplicate_agent_id') return NextResponse.json({ error: message }, { status: 409 });
-    if (message === 'external_registry_path_not_configured') return NextResponse.json({ error: message }, { status: 503 });
-    return NextResponse.json({ error: 'internal_error' }, { status: 500 });
+    if (message === 'duplicate_agent_id') return humanJson(request, { error: message }, { status: 409 });
+    if (message === 'external_registry_path_not_configured') return humanJson(request, { error: message }, { status: 503 });
+    return humanJson(request, { error: 'internal_error' }, { status: 500 });
   }
 }

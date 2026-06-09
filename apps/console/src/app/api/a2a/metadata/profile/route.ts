@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { getAgentsByController } from '@/lib/a2a/metadata-drafts/store';
 
 export const dynamic = 'force-dynamic';
@@ -12,16 +13,13 @@ export async function GET(req: NextRequest) {
   const raw = req.nextUrl.searchParams.get('controller');
 
   if (!isAddress(raw)) {
-    return NextResponse.json(
-      { ok: false, error: 'controller must be a valid wallet address (0x...)' },
-      { status: 400 },
-    );
+    return humanJson(req, { ok: false, error: 'controller must be a valid wallet address (0x...)' }, { status: 400 });
   }
 
   const controller = raw as string;
   const agents = await getAgentsByController(controller);
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     controller: controller.toLowerCase(),
     agents: agents.map((a) => ({

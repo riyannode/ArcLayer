@@ -1,7 +1,8 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * GET /api/agent-bridge/sessions/[sessionId] — bridge session detail
  */
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { listBridgeEvents, listBridgeReceipts, stablePayloadHash } from '@/lib/agent-bridge/store';
 import { bridgeRail } from '@/lib/rails/responses';
@@ -22,10 +23,7 @@ export async function GET(
     ]);
 
     if (!events.length && !receipts.length) {
-      return NextResponse.json(
-        { ok: false, ...bridgeRail(), error: 'session_not_found', sessionId, message: 'Bridge session not found.' },
-        { status: 404 },
-      );
+      return humanJson(_req, { ok: false, ...bridgeRail(), error: 'session_not_found', sessionId, message: 'Bridge session not found.' }, { status: 404 });
     }
 
     const payloadHash = stablePayloadHash({
@@ -34,7 +32,7 @@ export async function GET(
       receiptCount: receipts.length,
     });
 
-    return NextResponse.json({
+    return humanJson(_req, {
       ok: true,
       ...bridgeRail(),
       sessionId,
@@ -46,9 +44,6 @@ export async function GET(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json(
-      { ok: false, ...bridgeRail(), error: 'session_detail_failed', message },
-      { status: 500 },
-    );
+    return humanJson(_req, { ok: false, ...bridgeRail(), error: 'session_detail_failed', message }, { status: 500 });
   }
 }

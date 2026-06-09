@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { requireApiKey } from '@/lib/a2a/auth';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { createWebhook, listWebhooks } from '@/lib/a2a/webhooks';
@@ -17,12 +18,12 @@ async function postHandler(req: NextRequest) {
 
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== 'object') {
-    return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'invalid_json' }, { status: 400 });
   }
 
   const { url, events } = body as { url?: string; events?: string[] };
   if (!url || typeof url !== 'string' || !url.startsWith('https://')) {
-    return NextResponse.json({ ok: false, error: 'url_required_https' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'url_required_https' }, { status: 400 });
   }
 
   const result = await createWebhook({
@@ -31,9 +32,9 @@ async function postHandler(req: NextRequest) {
     events: events as any,
   });
 
-  if (!result.ok) return NextResponse.json(result, { status: 500 });
+  if (!result.ok) return humanJson(req, result, { status: 500 });
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     webhook: result.webhook,
     secret: result.secret, // shown once
@@ -53,5 +54,5 @@ export async function GET(req: NextRequest) {
   if (auth.error) return auth.error;
 
   const hooks = await listWebhooks(auth.key.agentId);
-  return NextResponse.json({ ok: true, webhooks: hooks });
+  return humanJson(req, { ok: true, webhooks: hooks });
 }

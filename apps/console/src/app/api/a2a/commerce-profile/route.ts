@@ -1,21 +1,19 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { getCommerceProfile, upsertCommerceProfile } from '@/lib/a2a/commerce-profile';
 
-function errorResponse(error: unknown, fallbackStatus = 400) {
+function errorResponse(req: NextRequest, error: unknown, fallbackStatus = 400) {
   const message = error instanceof Error ? error.message : 'unknown error';
   const status = typeof (error as { status?: unknown })?.status === 'number'
     ? (error as { status: number }).status
     : fallbackStatus;
 
-  return NextResponse.json(
-    {
+  return humanJson(req, {
       ok: false,
       error: (error as { code?: string })?.code || 'commerce_profile_error',
       message,
-    },
-    { status },
-  );
+    }, { status });
 }
 
 export async function GET(req: NextRequest) {
@@ -27,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   const profile = await getCommerceProfile(auth.key.agentId);
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     agentId: auth.key.agentId,
     profile,
@@ -48,14 +46,11 @@ export async function POST(req: NextRequest) {
     : auth.key.agentId;
 
   if (agentId !== auth.key.agentId) {
-    return NextResponse.json(
-      {
+    return humanJson(req, {
         ok: false,
         error: 'agent_id_mismatch',
         message: 'agentId must match the authenticated API key owner.',
-      },
-      { status: 403 },
-    );
+      }, { status: 403 });
   }
 
   try {
@@ -82,11 +77,11 @@ export async function POST(req: NextRequest) {
         : {},
     });
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       profile,
     });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(req, error);
   }
 }

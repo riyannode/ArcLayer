@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
 import {
   isErc8183CommerceAgent,
   toDashboardAgentRow,
@@ -71,8 +71,7 @@ export async function GET(request: Request) {
       .map((agent: any) => toDashboardAgentRow(agent))
       .filter((agent: DashboardAgentRow) => agent.id.length > 0 && agent.profileHref !== '#');
 
-    return NextResponse.json(
-      {
+    return humanJson(request, {
         ok: true,
         source: 'canonical-a2a-agents',
         dashboard: 'erc8183-commerce',
@@ -81,14 +80,11 @@ export async function GET(request: Request) {
         totalVisible: agents.length,
         agents,
         timestamp: new Date().toISOString(),
-      },
-      { headers: { 'Cache-Control': CACHE_CONTROL } },
-    );
+      }, { headers: { 'Cache-Control': CACHE_CONTROL } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'erc8183_dashboard_agents_failed';
 
-    return NextResponse.json(
-      {
+    return humanJson(request, {
         ok: false,
         source: 'canonical-a2a-agents',
         dashboard: 'erc8183-commerce',
@@ -97,11 +93,9 @@ export async function GET(request: Request) {
         error: 'erc8183_dashboard_agents_failed',
         detail: message,
         timestamp: new Date().toISOString(),
-      },
-      {
+      }, {
         status: 502,
         headers: { 'Cache-Control': 'no-store, no-cache, max-age=0' },
-      },
-    );
+      });
   }
 }
