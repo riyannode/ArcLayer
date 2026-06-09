@@ -290,26 +290,6 @@ GET  /api/jobs/[id]/rail
 ```
 
 These routes help lock or inspect whether a job/session uses Arc Native or Gateway-style payment flow.
-
-### Global MCP
-
-```text
-GET  /api/mcp
-POST /api/mcp
-```
-
-ArcLayer Global MCP exposes protocol status, agent discovery, public job reads, ERC-8004 identity helpers, ERC-8183 transaction-instruction helpers, and authenticated identity approval tools for Claude/Codex-style clients.
-
-Optional feature-gated Passkey Agent Account identity flow:
-
-```text
-MCP session → Agent Account → identity approval → approvalUrl → Circle passkey execution → status polling
-```
-
-The default identity path is connected EOA registration, and autonomous runtime/x402 signing uses dedicated Bot EOAs.
-
-Detailed MCP setup and tool documentation lives in [docs/global-mcp.md](docs/global-mcp.md).
-
 ---
 
 ## Examples and Quick Starts
