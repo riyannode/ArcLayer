@@ -38,6 +38,7 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { useArcSign } from '@/hooks/useArcSign';
 import { useX402PaidFetch } from '@/hooks/useX402PaidFetch';
+import { X402ActionGate } from '@/components/x402/X402ActionGate';
 import { safeJson } from '@/lib/safeFetch';
 import { buildRegisterAgentConfig } from '@arclayer/sdk';
 import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
@@ -882,13 +883,15 @@ export default function ExternalBotWizard() {
                 Next: Manifest →
               </button>
             ) : (
-              <button
-                onClick={handleRegister}
-                disabled={isBusy}
-                className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition-colors hover:bg-[#C5A67C]/20 disabled:opacity-40"
-              >
-                {isBusy ? 'Registering…' : `Register Agent${activeTemplate && activeTemplate.roles.length > 1 ? 's' : ''}`}
-              </button>
+              <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+                <button
+                  onClick={handleRegister}
+                  disabled={isBusy}
+                  className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] transition-colors hover:bg-[#C5A67C]/20 disabled:opacity-40"
+                >
+                  {isBusy ? 'Registering…' : `Register Agent${activeTemplate && activeTemplate.roles.length > 1 ? 's' : ''}`}
+                </button>
+              </X402ActionGate>
             )}
             <button onClick={back} className="px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/80 hover:text-[#EAE4D8]">
               ← Back
@@ -921,13 +924,15 @@ export default function ExternalBotWizard() {
                 Next: API Keys →
               </button>
             ) : (
-              <button
-                onClick={handlePublishManifest}
-                disabled={isBusy}
-                className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/20 disabled:opacity-40"
-              >
-                {isBusy ? 'Publishing…' : `Publish Manifest${activeTemplate && activeTemplate.roles.length > 1 ? 's' : ''}`}
-              </button>
+              <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+                <button
+                  onClick={handlePublishManifest}
+                  disabled={isBusy}
+                  className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/20 disabled:opacity-40"
+                >
+                  {isBusy ? 'Publishing…' : `Publish Manifest${activeTemplate && activeTemplate.roles.length > 1 ? 's' : ''}`}
+                </button>
+              </X402ActionGate>
             )}
             <button onClick={back} className="px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/80 hover:text-[#EAE4D8]">
               ← Back
@@ -966,13 +971,15 @@ export default function ExternalBotWizard() {
                 Next: Export →
               </button>
             ) : (
-              <button
-                onClick={handleGenerateKeys}
-                disabled={isBusy}
-                className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/20 disabled:opacity-40"
-              >
-                {isBusy ? 'Generating…' : `Generate API Key${activeTemplate && activeTemplate.roles.length > 1 ? 's' : ''}`}
-              </button>
+              <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+                <button
+                  onClick={handleGenerateKeys}
+                  disabled={isBusy}
+                  className="rounded-sm border border-[#C5A67C] bg-[#C5A67C]/10 px-5 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#C5A67C] hover:bg-[#C5A67C]/20 disabled:opacity-40"
+                >
+                  {isBusy ? 'Generating…' : `Generate API Key${activeTemplate && activeTemplate.roles.length > 1 ? 's' : ''}`}
+                </button>
+              </X402ActionGate>
             )}
             <button onClick={back} className="px-3 py-2 font-mono text-[10px] text-[#EAE4D8]/80 hover:text-[#EAE4D8]">
               ← Back

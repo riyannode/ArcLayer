@@ -28,7 +28,6 @@ import { useFundAgentAccount } from '@/hooks/useFundAgentAccount';
 import { useAgentAccountGatewayDeposit } from '@/hooks/useAgentAccountGatewayDeposit';
 import { useSignMessage } from 'wagmi';
 import { McpSigningSessionCard } from '@/components/profile/McpSigningSessionCard';
-import { X402ActionGate } from '@/components/x402/X402ActionGate';
 
 // ── Agent Account types ───────────────────────────────────────────────────
 
@@ -919,16 +918,14 @@ export default function AgentProfilePage() {
                   </p>
                 )}
                 {!effectiveHasAgentAccount && !showPasskeyRegister && !isPreviewDomain && (
-                  <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-                    <button
-                      type="button"
-                      onClick={handleCreateAgentAccount}
-                      disabled={creatingAgent}
-                      className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
-                    >
-                      {creatingAgent ? 'Creating...' : 'Create Agent Account'}
-                    </button>
-                  </X402ActionGate>
+                  <button
+                    type="button"
+                    onClick={handleCreateAgentAccount}
+                    disabled={creatingAgent}
+                    className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
+                  >
+                    {creatingAgent ? 'Creating...' : 'Create Agent Account'}
+                  </button>
                 )}
                 {showPasskeyRegister && (
                   <div className="flex items-center gap-2">
@@ -940,16 +937,14 @@ export default function AgentProfilePage() {
                       className="h-10 w-[200px] rounded-md border border-white/10 bg-[#0A0D12] px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
                       autoFocus
                     />
-                    <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-                      <button
-                        type="button"
-                        onClick={handlePasskeyRegister}
-                        disabled={creatingAgent || !registerUsername.trim()}
-                        className="h-10 rounded-md bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
-                      >
-                        {creatingAgent ? 'Creating...' : 'Create Passkey'}
-                      </button>
-                    </X402ActionGate>
+                    <button
+                      type="button"
+                      onClick={handlePasskeyRegister}
+                      disabled={creatingAgent || !registerUsername.trim()}
+                      className="h-10 rounded-md bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
+                    >
+                      {creatingAgent ? 'Creating...' : 'Create Passkey'}
+                    </button>
                     <button
                       type="button"
                       onClick={() => { setShowPasskeyRegister(false); setCreateError(''); }}
@@ -991,16 +986,14 @@ export default function AgentProfilePage() {
                         onChange={(e) => { setManualLinkAddress(e.target.value); setManualLinkError(''); }}
                         className="h-9 w-[260px] rounded-md border border-white/10 bg-[#0A0D12] px-3 font-mono text-[11px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
                       />
-                      <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-                        <button
-                          type="button"
-                          onClick={handleManualLink}
-                          disabled={manualLinking || !manualLinkAddress}
-                          className="h-9 rounded-md border border-white/10 px-3 text-[11px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
-                        >
-                          {manualLinking ? 'Linking...' : 'Link'}
-                        </button>
-                      </X402ActionGate>
+                      <button
+                        type="button"
+                        onClick={handleManualLink}
+                        disabled={manualLinking || !manualLinkAddress}
+                        className="h-9 rounded-md border border-white/10 px-3 text-[11px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
+                      >
+                        {manualLinking ? 'Linking...' : 'Link'}
+                      </button>
                     </div>
                   )}
                   {manualLinkError && <p className="mt-1 text-[11px] text-red-400">{manualLinkError}</p>}
@@ -1096,40 +1089,38 @@ export default function AgentProfilePage() {
                         onChange={(e) => { setActionAmount(e.target.value); fundAgent.reset(); }}
                         className="h-10 w-full rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[13px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40 sm:w-[160px]"
                       />
-                      <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-                        <button
-                          type="button"
-                          onClick={() => void fundAgent.fund(actionAmount, agentAccount?.agentAccountAddress ?? '')}
-                          disabled={!actionAmount || (fundAgent.step !== 'idle' && fundAgent.step !== 'error')}
-                          className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
-                        >
-                          {fundAgent.step === 'checking' || fundAgent.step === 'transferring' || fundAgent.step === 'confirming'
-                            ? 'Sending...'
-                            : 'Fund Agent Account'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            const addr = agentAccount?.agentAccountAddress ?? '';
-                            if (!addr) return;
-                            // Login with passkey if not authenticated
-                            if (!circleAuthenticated) {
-                              try {
-                                await circleLogin();
-                              } catch {
-                                return; // login cancelled/failed
-                              }
+                      <button
+                        type="button"
+                        onClick={() => void fundAgent.fund(actionAmount, agentAccount?.agentAccountAddress ?? '')}
+                        disabled={!actionAmount || (fundAgent.step !== 'idle' && fundAgent.step !== 'error')}
+                        className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
+                      >
+                        {fundAgent.step === 'checking' || fundAgent.step === 'transferring' || fundAgent.step === 'confirming'
+                          ? 'Sending...'
+                          : 'Fund Agent Account'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const addr = agentAccount?.agentAccountAddress ?? '';
+                          if (!addr) return;
+                          // Login with passkey if not authenticated
+                          if (!circleAuthenticated) {
+                            try {
+                              await circleLogin();
+                            } catch {
+                              return; // login cancelled/failed
                             }
-                            void agentGatewayDeposit.deposit(actionAmount, addr);
-                          }}
-                          disabled={!actionAmount || !agentAccount?.agentAccountAddress || (agentGatewayDeposit.step !== 'idle' && agentGatewayDeposit.step !== 'error')}
-                          className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
-                        >
-                          {agentGatewayDeposit.step === 'checking' || agentGatewayDeposit.step === 'depositing' || agentGatewayDeposit.step === 'confirming'
-                            ? 'Depositing...'
-                            : 'Deposit Agent Account → x402 Gateway'}
-                        </button>
-                      </X402ActionGate>
+                          }
+                          void agentGatewayDeposit.deposit(actionAmount, addr);
+                        }}
+                        disabled={!actionAmount || !agentAccount?.agentAccountAddress || (agentGatewayDeposit.step !== 'idle' && agentGatewayDeposit.step !== 'error')}
+                        className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
+                      >
+                        {agentGatewayDeposit.step === 'checking' || agentGatewayDeposit.step === 'depositing' || agentGatewayDeposit.step === 'confirming'
+                          ? 'Depositing...'
+                          : 'Deposit Agent Account → x402 Gateway'}
+                      </button>
                     </div>
                     <p className="mt-2 text-[11px] text-[#EAE4D8]/35">
                       {!circleAuthenticated

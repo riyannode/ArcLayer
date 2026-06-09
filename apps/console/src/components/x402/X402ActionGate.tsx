@@ -27,7 +27,11 @@ export function X402ActionGate({
   const { hasAccess, loading } = useX402Access();
 
   if (loading) {
-    return <div className="opacity-50 pointer-events-none">{children}</div>;
+    return (
+      <div className="opacity-50 pointer-events-none" aria-hidden="true" inert>
+        {children}
+      </div>
+    );
   }
 
   if (hasAccess) {
@@ -44,7 +48,11 @@ export function X402ActionGate({
 
   return (
     <div className="relative">
-      <div className="opacity-40 pointer-events-none select-none" aria-disabled="true">
+      <div
+        className="opacity-40 pointer-events-none select-none"
+        aria-hidden="true"
+        inert
+      >
         {children}
       </div>
       <div className="absolute inset-0 flex items-center justify-center bg-[rgba(0,0,0,0.4)] rounded-lg backdrop-blur-[2px]">

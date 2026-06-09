@@ -9,7 +9,6 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { ERC8183_ABI } from '@/lib/contracts/erc8183';
 import { USDC_ADDRESS } from '@/lib/x402/constants';
 import type { NetworkAgent } from '@/types/agent-network';
-import { X402ActionGate } from '@/components/x402/X402ActionGate';
 
 const AGENTIC_COMMERCE = '0x0747EEf0706327138c69792bF28Cd525089e4583' as const;
 const USDC_ABI = [
@@ -249,18 +248,16 @@ export function CreateJobPanel({
                 </div>
               )}
 
-              <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  disabled={!providerAddress || !providerAddress.startsWith('0x')}
-                  className="w-full rounded border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {!providerAddress || !providerAddress.startsWith('0x')
-                    ? 'Agent has no wallet'
-                    : `Create & Fund Job · ${budget} USDC`}
-                </button>
-              </X402ActionGate>
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={!providerAddress || !providerAddress.startsWith('0x')}
+                className="w-full rounded border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#C5A67C] transition hover:bg-[#C5A67C]/20 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {!providerAddress || !providerAddress.startsWith('0x')
+                  ? 'Agent has no wallet'
+                  : `Create & Fund Job · ${budget} USDC`}
+              </button>
             </div>
           </>
         ) : step === 'done' ? (

@@ -8,7 +8,6 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X402ActionGate } from '@/components/x402/X402ActionGate';
 import { Clipboard, KeyRound, Loader2, RefreshCcw, Wifi, X } from 'lucide-react';
 import { useSignMessage } from 'wagmi';
 import { SigningRequestModal } from './SigningRequestModal';
@@ -337,8 +336,7 @@ export function McpSigningSessionCard({ address }: { address?: string }) {
             )}
 
             {/* Actions */}
-            <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-              <div className="mt-5 flex items-center gap-3">
+            <div className="mt-5 flex items-center gap-3">
               {isActive && (
                 <button
                   type="button"
@@ -365,9 +363,8 @@ export function McpSigningSessionCard({ address }: { address?: string }) {
                   )}
                   Start New Session
                 </button>
-                )}
-              </div>
-            </X402ActionGate>
+              )}
+            </div>
           </>
         ) : (
           /* No session — show create button */
@@ -376,21 +373,19 @@ export function McpSigningSessionCard({ address }: { address?: string }) {
               Start a signing session to allow MCP to request transactions
               that you approve in this browser.
             </p>
-            <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={loading}
-                className="mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-black transition hover:bg-[#F3C536]/90 disabled:opacity-40"
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={loading}
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-black transition hover:bg-[#F3C536]/90 disabled:opacity-40"
             >
               {loading ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
                 <KeyRound className="h-3.5 w-3.5" />
               )}
-                Start MCP Signing Session
-              </button>
-            </X402ActionGate>
+              Start MCP Signing Session
+            </button>
           </div>
         )}
 

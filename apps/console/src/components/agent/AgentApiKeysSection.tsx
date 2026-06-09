@@ -350,15 +350,16 @@ ARCLAYER_MODE=provider`;
               </div>
 
               {k.status === 'active' && (
-                <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-                  <div className="flex shrink-0 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleRotate(k.id)}
-                    className="h-8 rounded-md border border-[#F3C536]/25 bg-transparent px-3 text-[10px] font-semibold uppercase tracking-wider text-[#F3C536] transition hover:bg-[#F3C536]/8"
-                  >
-                    Rotate Key
-                  </button>
+                <div className="flex shrink-0 gap-2">
+                  <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+                    <button
+                      type="button"
+                      onClick={() => handleRotate(k.id)}
+                      className="h-8 rounded-md border border-[#F3C536]/25 bg-transparent px-3 text-[10px] font-semibold uppercase tracking-wider text-[#F3C536] transition hover:bg-[#F3C536]/8"
+                    >
+                      Rotate Key
+                    </button>
+                  </X402ActionGate>
                   <button
                     type="button"
                     onClick={() => handleRevoke(k.id)}
@@ -366,8 +367,7 @@ ARCLAYER_MODE=provider`;
                   >
                     Revoke Key
                   </button>
-                  </div>
-                </X402ActionGate>
+                </div>
               )}
             </div>
           ))}

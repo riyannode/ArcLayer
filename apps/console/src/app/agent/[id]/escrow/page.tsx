@@ -18,7 +18,6 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { CONTRACTS, ERC8183_AGENTIC_COMMERCE_ABI } from '@arclayer/sdk';
 import { config } from '@/lib/wagmi';
-import { X402ActionGate } from '@/components/x402/X402ActionGate';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -1091,16 +1090,14 @@ export default function DirectHireEscrowPage() {
                   {/* Sign Create Job CTA — hidden until prepare succeeds */}
                   {!createdResult && (
                     <div className="mt-6">
-                      <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-                        <button
-                          type="button"
-                          disabled={signing}
-                          onClick={handleSignCreateJob}
-                          className="h-12 w-full rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A]/40 px-10 text-sm font-semibold text-black transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/55 disabled:cursor-not-allowed disabled:border-[#F0B84A]/25 disabled:bg-[#F0B84A]/15 disabled:text-black/40"
-                        >
-                          {signing ? 'Signing…' : 'Sign Create Job →'}
-                        </button>
-                      </X402ActionGate>
+                      <button
+                        type="button"
+                        disabled={signing}
+                        onClick={handleSignCreateJob}
+                        className="h-12 w-full rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A]/40 px-10 text-sm font-semibold text-black transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/55 disabled:cursor-not-allowed disabled:border-[#F0B84A]/25 disabled:bg-[#F0B84A]/15 disabled:text-black/40"
+                      >
+                        {signing ? 'Signing…' : 'Sign Create Job →'}
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1170,23 +1167,21 @@ export default function DirectHireEscrowPage() {
               >
                 Save Draft
               </button>
-              <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-                <button
-                  type="button"
-                  disabled={!canPrepare || preparing}
-                  onClick={handlePrepare}
-                  title={
-                    !session?.authenticated
-                      ? 'Sign in with your wallet first'
-                      : !form.buyerAgentId
-                        ? 'Select a buyer agent'
-                        : undefined
-                  }
-                  className="h-12 rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A]/40 px-10 text-sm font-semibold text-black transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/55 disabled:cursor-not-allowed disabled:border-[#F0B84A]/25 disabled:bg-[#F0B84A]/15 disabled:text-black/40"
-                >
-                  {preparing ? 'Preparing…' : 'Prepare Job →'}
-                </button>
-              </X402ActionGate>
+              <button
+                type="button"
+                disabled={!canPrepare || preparing}
+                onClick={handlePrepare}
+                title={
+                  !session?.authenticated
+                    ? 'Sign in with your wallet first'
+                    : !form.buyerAgentId
+                      ? 'Select a buyer agent'
+                      : undefined
+                }
+                className="h-12 rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A]/40 px-10 text-sm font-semibold text-black transition hover:border-[#F0B84A]/70 hover:bg-[#F0B84A]/55 disabled:cursor-not-allowed disabled:border-[#F0B84A]/25 disabled:bg-[#F0B84A]/15 disabled:text-black/40"
+              >
+                {preparing ? 'Preparing…' : 'Prepare Job →'}
+              </button>
             </div>
           </div>
         )}

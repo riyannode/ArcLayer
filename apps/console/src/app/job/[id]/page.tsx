@@ -18,7 +18,6 @@ import { CONTRACTS, formatUSDC, getExplorerAddressUrl, shortenAddress } from '@/
 import { config } from '@/lib/wagmi';
 import { fetchIndexerJson, INDEXER_BASE_URL, type JobDetail, waitForIndexer, loadJobDetail, type DataSource } from '@/lib/indexer';
 import { IndexerDegradedBanner } from '@/components/IndexerDegradedBanner';
-import { X402ActionGate } from '@/components/x402/X402ActionGate';
 import { safeJsonCatch } from '@/lib/safeFetch';
 import { safeBigInt } from '@/lib/safeNumber';
 import { asString, asNumber } from '@/lib/safeShape';
@@ -822,16 +821,14 @@ export default function JobDetailPage() {
                 )}
 
                 {safeJob?.status === 2 && isEvaluator && (
-                  <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-                    <button
-                      onClick={handleComplete}
-                      disabled={!isConnected || activeAction !== null}
-                      className="inline-flex h-11 items-center rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A] px-6 text-sm font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.18)] transition hover:bg-[#FFD084] disabled:opacity-50"
-                      title="ERC-8183 complete(jobId, reasonHash, 0x)"
-                    >
-                      {activeAction === 'complete' ? 'Completing…' : '✓ Complete Job'}
-                    </button>
-                  </X402ActionGate>
+                  <button
+                    onClick={handleComplete}
+                    disabled={!isConnected || activeAction !== null}
+                    className="inline-flex h-11 items-center rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A] px-6 text-sm font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.18)] transition hover:bg-[#FFD084] disabled:opacity-50"
+                    title="ERC-8183 complete(jobId, reasonHash, 0x)"
+                  >
+                    {activeAction === 'complete' ? 'Completing…' : '✓ Complete Job'}
+                  </button>
                 )}
 
                 {safeJob?.status === 2 && !isEvaluator && isConnected && (
@@ -858,30 +855,26 @@ export default function JobDetailPage() {
 
                 {/* Fund Job — client only, when budget set and not yet funded */}
                 {safeJob?.status === 0 && isClient && safeJob?.budget && BigInt(safeJob.budget) > 0n && (
-                  <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-                    <button
-                      onClick={handleFund}
-                      disabled={!isConnected || activeAction !== null}
-                      className="inline-flex h-11 items-center rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A] px-6 text-sm font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.18)] transition hover:bg-[#FFD084] disabled:opacity-50"
-                      title="ERC-8183 approve + fund(jobId, 0x)"
-                    >
-                      {activeAction === 'fund' ? 'Funding…' : 'Fund Job'}
-                    </button>
-                  </X402ActionGate>
+                  <button
+                    onClick={handleFund}
+                    disabled={!isConnected || activeAction !== null}
+                    className="inline-flex h-11 items-center rounded-lg border border-[#F0B84A]/55 bg-[#F0B84A] px-6 text-sm font-semibold text-black shadow-[0_0_34px_rgba(240,184,74,0.18)] transition hover:bg-[#FFD084] disabled:opacity-50"
+                    title="ERC-8183 approve + fund(jobId, 0x)"
+                  >
+                    {activeAction === 'fund' ? 'Funding…' : 'Fund Job'}
+                  </button>
                 )}
 
                 {/* Claim Refund — client only, when Funded/Submitted + expired */}
                 {safeJob && isRefundableByTimeout && (
-                  <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-                    <button
-                      onClick={handleClaimRefund}
-                      disabled={!isConnected || activeAction !== null}
-                      className="inline-flex h-11 items-center rounded-lg border border-[#F3C536]/35 bg-black/20 px-5 font-mono text-[12px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/60 hover:bg-[#F3C536]/8 disabled:opacity-50"
-                      title="ERC-8183 claimRefund(jobId)"
-                    >
-                      {activeAction === 'claimRefund' ? 'Claiming…' : 'Claim Refund'}
-                    </button>
-                  </X402ActionGate>
+                  <button
+                    onClick={handleClaimRefund}
+                    disabled={!isConnected || activeAction !== null}
+                    className="inline-flex h-11 items-center rounded-lg border border-[#F3C536]/35 bg-black/20 px-5 font-mono text-[12px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/60 hover:bg-[#F3C536]/8 disabled:opacity-50"
+                    title="ERC-8183 claimRefund(jobId)"
+                  >
+                    {activeAction === 'claimRefund' ? 'Claiming…' : 'Claim Refund'}
+                  </button>
                 )}
               </div>
 
@@ -903,15 +896,13 @@ export default function JobDetailPage() {
                       placeholder="ipfs://deliverable-hash-or-uri"
                       className="w-full rounded-lg border border-white/10 bg-black/30 px-4 py-2.5 font-mono text-[12px] text-[#F5F0E5] placeholder:text-[#EAE4D8]/25 focus:border-[#F3C536]/35 focus:outline-none"
                     />
-                    <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
-                      <button
-                        onClick={handleSubmitDeliverable}
-                        disabled={!isConnected || activeAction !== null}
-                        className="inline-flex h-11 items-center rounded-lg border border-[#F3C536]/35 bg-black/20 px-5 font-mono text-[12px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/60 hover:bg-[#F3C536]/8 disabled:opacity-50"
-                      >
-                        {activeAction === 'submit' ? 'Submitting…' : 'Submit Hash'}
-                      </button>
-                    </X402ActionGate>
+                    <button
+                      onClick={handleSubmitDeliverable}
+                      disabled={!isConnected || activeAction !== null}
+                      className="inline-flex h-11 items-center rounded-lg border border-[#F3C536]/35 bg-black/20 px-5 font-mono text-[12px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/60 hover:bg-[#F3C536]/8 disabled:opacity-50"
+                    >
+                      {activeAction === 'submit' ? 'Submitting…' : 'Submit Hash'}
+                    </button>
                   </div>
                 )}
               </div>
