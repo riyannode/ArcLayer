@@ -90,13 +90,14 @@ export async function POST(request: Request) {
     return json(request, 200, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    console.error('reputation feedback failed', error);
 
     return json(
       request,
       errorStatus(message),
       {
         ok: false,
-        error: message,
+        error: 'internal_error',
         source: 'erc8004_reputation_registry',
       },
     );
