@@ -19,53 +19,35 @@ interface RpcCheck {
   present: boolean;
 }
 
-/** Extract project ref from supabase URL */
-function extractProjectRef(url: string): string | null {
-  const match = url.match(/https?:\/\/([^.]+)\.supabase\.co/);
-  return match?.[1] ?? null;
-}
-
-/** Query RPC function existence via Management API raw SQL query */
 async function checkRpcFunctions(
-  projectRef: string,
-  serviceKey: string,
+  supabase: ReturnType<typeof getSupabaseAdmin>,
   expected: string[],
-): Promise<RpcCheck[]> {
-  const sql = `SELECT proname FROM pg_proc WHERE proname IN (${expected.map((n) => `'${n}'`).join(',')});`;
+): Promise<(RpcCheck & { error?: string })[]> {
+  const { data, error } = await supabase.rpc('arclayer_check_public_routines', {
+    names: expected,
+  });
 
-  const res = await fetch(
-    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${serviceKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query: sql }),
-    },
+  if (error) {
+    return expected.map((name) => ({
+      name,
+      present: false,
+      error: error.message,
+    }));
+  }
+
+  const present = new Set(
+    (data ?? []).map((row: { routine_name?: string }) => row.routine_name),
   );
 
-  if (!res.ok) {
-    // Management API not available — default to unknown
-    return expected.map((name) => ({ name, present: false, error: 'management_api_unavailable' })) as unknown as RpcCheck[];
-  }
-
-  const rows = await res.json();
-  if (!Array.isArray(rows)) {
-    return expected.map((name) => ({ name, present: false, error: 'unexpected_response' })) as unknown as RpcCheck[];
-  }
-
-  const present = new Set(rows.map((r: { proname?: string }) => r.proname));
-  return expected.map((name) => ({ name, present: present.has(name) }));
+  return expected.map((name) => ({
+    name,
+    present: present.has(name),
+  }));
 }
 
 export async function GET(req: NextRequest) {
   try {
     const supabase = getSupabaseAdmin();
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
-    const projectRef = extractProjectRef(supabaseUrl);
-
     // --- Expected tables/columns ---
     const expected: { table: string; columns: string[] }[] = [
       { table: 'agent_jobs', columns: ['settlement_mode', 'erc8183_job_id', 'erc8183_status'] },
@@ -110,21 +92,20 @@ export async function GET(req: NextRequest) {
     let rpcResults: (RpcCheck & { error?: string })[] = [];
     let rpcError: string | null = null;
 
-    if (projectRef && serviceKey) {
-      try {
-        rpcResults = await checkRpcFunctions(projectRef, serviceKey, expectedRpc);
-      } catch (err) {
-        rpcError = err instanceof Error ? err.message : 'rpc_check_failed';
-        console.warn(`[health/schema] RPC check error: ${rpcError}`);
-        rpcResults = expectedRpc.map((name) => ({ name, present: false, error: 'check_failed' }));
-      }
-    } else {
-      rpcError = 'project_ref_or_key_missing';
-      rpcResults = expectedRpc.map((name) => ({ name, present: false, error: rpcError! }));
+    try {
+      rpcResults = await checkRpcFunctions(supabase, expectedRpc);
+    } catch (err) {
+      rpcError = err instanceof Error ? err.message : 'rpc_check_failed';
+      console.warn(`[health/schema] RPC check error: ${rpcError}`);
+      rpcResults = expectedRpc.map((name) => ({
+        name,
+        present: false,
+        error: 'check_failed',
+      }));
     }
 
     const columnMissing = columnResults.filter((r) => !r.present);
-    const rpcMissing = rpcResults.filter((r) => !r.present && !r.error?.startsWith('check_'));
+    const rpcMissing = rpcResults.filter((r) => !r.present);
     const totalMissing = columnMissing.length + rpcMissing.length;
     const healthy = totalMissing === 0;
 
