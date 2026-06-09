@@ -69,6 +69,22 @@ describe('Gateway contract address config', () => {
     expect(isBatchPayment(requirements)).toBe(true);
   });
 
+
+  it('does not resolve Gateway contract when supported route has Gateway disabled', async () => {
+    clearGatewayEnv();
+    process.env.X402_GATEWAY_ENABLED = 'false';
+    process.env.X402_GATEWAY_CONTRACT_ADDRESS = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    process.env.NEXT_PUBLIC_X402_GATEWAY_CONTRACT_ADDRESS = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+    process.env.X402_RECEIVER_ADDRESS = '0xcccccccccccccccccccccccccccccccccccccccc';
+
+    const response = getSupported();
+    const body = await response.json();
+
+    expect(body.kinds.some((kind: { extra?: { name?: string } }) => kind.extra?.name === 'GatewayWalletBatched')).toBe(false);
+    expect(body.accepts.some((accept: { extra?: { transferMethod?: string } }) => accept.extra?.transferMethod === 'gateway-batched-eip3009')).toBe(false);
+    expect(body.networks.some((network: { contracts?: { gatewayWallet?: string } }) => network.contracts?.gatewayWallet)).toBe(false);
+  });
+
   it('returns supported Gateway rail metadata without a global Gateway accept by default', async () => {
     clearGatewayEnv();
     process.env.X402_GATEWAY_CONTRACT_ADDRESS = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
