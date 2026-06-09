@@ -1,3 +1,5 @@
+import { getAddress } from 'viem';
+
 export const ARC_TESTNET_CHAIN_ID = 5042002 as const;
 export const ARC_TESTNET_NETWORK = 'arc-testnet' as const;
 export const ARC_TESTNET_CAIP2_NETWORK = 'eip155:5042002' as const;
@@ -21,8 +23,23 @@ export const GATEWAY_FACILITATOR_URL_TESTNET = 'https://gateway-api-testnet.circ
 export const GATEWAY_FACILITATOR_URL_MAINNET = 'https://gateway-api.circle.com' as const;
 export const CIRCLE_BATCHING_NAME = 'GatewayWalletBatched' as const;
 export const CIRCLE_BATCHING_VERSION = '1' as const;
+/** GatewayWallet contract address fallback for deposits/verifyingContract; not a payer wallet. */
 export const GATEWAY_WALLET_ADDRESS = '0x0077777d7EBA4688BDeF3E311b846F25870A19B9' as const;
 export const DEFAULT_GATEWAY_DEPOSIT_USDC = '1.00' as const;
+
+/**
+ * Browser-safe GatewayWallet contract address resolver.
+ *
+ * This value is the Circle Gateway contract used as the deposit target and
+ * approval spender. It is not a payer wallet.
+ */
+export function getGatewayContractAddressClient(): `0x${string}` {
+  return getAddress(
+    process.env.NEXT_PUBLIC_X402_GATEWAY_CONTRACT_ADDRESS ||
+      process.env.NEXT_PUBLIC_X402_GATEWAY_WALLET_ADDRESS ||
+      GATEWAY_WALLET_ADDRESS,
+  ) as `0x${string}`;
+}
 
 /**
  * x402 payment amounts use ERC-20 USDC (6 decimals).

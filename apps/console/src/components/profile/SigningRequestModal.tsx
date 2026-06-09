@@ -10,7 +10,7 @@
 
 import { useCallback, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, X } from 'lucide-react';
-import { useWalletClient, useAccount, usePublicClient } from 'wagmi';
+import { useWalletClient, useAccount, usePublicClient, useSwitchChain } from 'wagmi';
 import { decodeEventLog, type Hex } from 'viem';
 import { ERC8183_AGENTIC_COMMERCE_ABI, CONTRACTS } from '@arclayer/sdk';
 import { selectorLabel } from '@/lib/mcp/signing-bridge/whitelist';
@@ -72,7 +72,8 @@ export function SigningRequestModal({
   onDone: () => void;
 }) {
   const { data: walletClient } = useWalletClient();
-  const { address: connectedAddress } = useAccount();
+  const { address: connectedAddress, chainId } = useAccount();
+  const { switchChainAsync } = useSwitchChain();
   const publicClient = usePublicClient();
 
   const [phase, setPhase] = useState<ModalPhase>('confirm');
@@ -89,6 +90,19 @@ export function SigningRequestModal({
       setError('Wallet not connected');
       setPhase('error');
       return;
+    }
+
+    if (chainId !== request.chainId) {
+      try {
+        const switchedChain = await switchChainAsync({ chainId: request.chainId });
+        if (switchedChain.id !== request.chainId) {
+          throw new Error('switchChain returned wrong chain');
+        }
+      } catch {
+        setError('Wrong network. Switch wallet to Arc Testnet before signing.');
+        setPhase('error');
+        return;
+      }
     }
 
     // 1. Atomic claim
@@ -214,7 +228,7 @@ export function SigningRequestModal({
     }
 
     setPhase('done');
-  }, [walletClient, connectedAddress, request]);
+  }, [walletClient, connectedAddress, chainId, switchChainAsync, request]);
 
   // ── Reject flow ───────────────────────────────────────────────────────
 

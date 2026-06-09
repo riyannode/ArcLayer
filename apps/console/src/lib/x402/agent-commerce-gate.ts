@@ -5,6 +5,7 @@ import { withX402 } from '@/lib/x402/middleware';
 import { sanitizeLlmReceipt } from '@/lib/x402/llm-receipt';
 import { resolveAgentCommerceGate, type AgentCommerceGateContext } from '@/lib/x402/agent-commerce-policy';
 import { resolveSellerCommerceProfile } from '@/lib/a2a/commerce-profile';
+import { resolveX402ServicePayoutAddress } from '@/lib/x402/service-payout';
 
 function errorJson(status: number, error: string, message: string, details?: Record<string, unknown>) {
   return NextResponse.json(
@@ -112,6 +113,21 @@ export function withPredictionMarketSellerCommerceGate(
       });
     }
 
+    let servicePayoutAddress: `0x${string}`;
+    try {
+      servicePayoutAddress = await resolveX402ServicePayoutAddress({
+        serviceAgentId: ctx.sellerAgentId,
+      });
+    } catch (err) {
+      const code = (err as { code?: string })?.code || 'service_payout_address_missing';
+      return errorJson(
+        code === 'service_payout_address_invalid' ? 500 : 403,
+        code,
+        code,
+        { serviceAgentId: ctx.sellerAgentId },
+      );
+    }
+
     const llmReceiptResult = sanitizeLlmReceipt(body.llmReceipt);
     if (!llmReceiptResult.ok) {
       return errorJson(400, llmReceiptResult.error, llmReceiptResult.message);
@@ -181,7 +197,8 @@ export function withPredictionMarketSellerCommerceGate(
         accessType: ctx.accessType,
         sessionId: ctx.sessionId,
         payloadHash: ctx.payloadHash,
-        sellerPayTo: sellerProfile.pay_to,
+        serviceAgentId: ctx.sellerAgentId,
+        servicePayoutAddress,
         llmReceipt: llmReceiptResult.receipt
           ? {
               summary: llmReceiptResult.receipt.summary,
@@ -207,10 +224,11 @@ export function withPredictionMarketSellerCommerceGate(
 
     return withX402(protectedHandler, {
       amount: sellerProfile.price_atomic,
-      payTo: sellerProfile.pay_to as `0x${string}`,
+      payTo: servicePayoutAddress,
       resource: ctx.resource,
       description: `Prediction-market commerce: ${ctx.buyerAgentId}/${ctx.buyerRole} pays ${ctx.sellerAgentId}/${ctx.sellerRole} for ${ctx.accessType}`,
       allowedRails: ['circle-gateway-passkey'],
+      requireExplicitPayTo: true,
       liveAgentId: ctx.buyerAgentId,
       liveAgentName: `${ctx.category}:${ctx.buyerRole}`,
       onSettled: async (settle) => {
@@ -249,7 +267,8 @@ export function withPredictionMarketSellerCommerceGate(
             buyerRole: ctx.buyerRole,
             sellerAgentId: ctx.sellerAgentId,
             sellerRole: ctx.sellerRole,
-            sellerPayTo: sellerProfile.pay_to,
+            serviceAgentId: ctx.sellerAgentId,
+            servicePayoutAddress,
             sellerProfileAgentId: sellerProfile.agent_id,
             payer: settle.payer,
             payTo: settle.payTo,

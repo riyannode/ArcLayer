@@ -24,10 +24,10 @@ import {
 } from './constants';
 import {
   getBatchFacilitatorClient,
-  getArcTestnetGatewayConfig,
   isBatchPayment,
   isGatewayEnabled,
 } from './gateway/batch-client';
+import { getGatewayContractAddressServer } from './gateway/config';
 import {
   deriveGatewayPaymentId,
   recordGatewayPayment,
@@ -74,8 +74,10 @@ import { recordAgentX402Ledger } from './agent-ledger';
 export interface X402MiddlewareOptions {
   /** Price in USDC atomic units (6 decimals). e.g. "1" = $0.000001 */
   amount: string;
-  /** Receiver address. Falls back to X402_RECEIVER_ADDRESS env. */
+  /** Receiver address. Falls back to X402_RECEIVER_ADDRESS env unless requireExplicitPayTo is true. */
   payTo?: `0x${string}`;
+  /** Require service-owned routes to pass a dynamic payout address; never use global receiver fallback. */
+  requireExplicitPayTo?: boolean;
   /** Endpoint path for logging/requirements. */
   resource: string;
   /** Max timeout in seconds. Default 300. */
@@ -227,18 +229,21 @@ function buildNativeRequirements(opts: X402MiddlewareOptions, railSessionId?: st
 }
 
 function buildGatewayRequirements(opts: X402MiddlewareOptions, railSessionId?: string) {
-  const gwConfig = getArcTestnetGatewayConfig();
+  if (opts.requireExplicitPayTo && !opts.payTo) {
+    throw Object.assign(new Error('service_payout_address_missing'), { code: 'service_payout_address_missing' });
+  }
+  const gatewayContractAddress = getGatewayContractAddressServer();
   return {
     scheme: 'exact' as const,
     network: GATEWAY_NETWORK_NAME,
     asset: getAddress(USDC_ADDRESS) as `0x${string}`,
     amount: opts.amount,
-    payTo: resolvePayTo(opts.payTo),
+    payTo: opts.payTo ? getAddress(opts.payTo) as `0x${string}` : resolvePayTo(opts.payTo),
     maxTimeoutSeconds: opts.maxTimeoutSeconds ?? 300,
     extra: {
       name: CIRCLE_BATCHING_NAME,
       version: CIRCLE_BATCHING_VERSION,
-      verifyingContract: process.env.X402_GATEWAY_WALLET_ADDRESS || gwConfig.gatewayWallet,
+      verifyingContract: gatewayContractAddress,
       supportedChain: GATEWAY_NETWORK_NAME,
       transferMethod: 'gateway-batched-eip3009',
       status: 'live',
@@ -246,6 +251,8 @@ function buildGatewayRequirements(opts: X402MiddlewareOptions, railSessionId?: s
     },
   };
 }
+
+export const testBuildGatewayRequirements = buildGatewayRequirements;
 
 // ─── Header helpers ──────────────────────────────────────────────────────────
 
