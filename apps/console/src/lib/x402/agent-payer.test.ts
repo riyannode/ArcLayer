@@ -32,6 +32,7 @@ import {
   validateAgentId,
   resolveRequiredAgentX402Payer,
   assertX402PayerMatches,
+  ensureA2aPayerBinding,
 } from './agent-payer';
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -469,5 +470,24 @@ describe('full binding flow: wrong payer rejects before settlement', () => {
       expect(matchResult.error).toBe('x402_payer_missing');
       expect(matchResult.status).toBe(400);
     }
+  });
+});
+
+
+describe('ensureA2aPayerBinding feature gate', () => {
+  it('does not query or mutate when Agent Account auto-binding is disabled', async () => {
+    const previous = process.env.AGENT_ACCOUNT_A2A_AUTO_BIND_ENABLED;
+    delete process.env.AGENT_ACCOUNT_A2A_AUTO_BIND_ENABLED;
+    mockFrom.mockClear();
+
+    await expect(ensureA2aPayerBinding({
+      agentId: AGENT_ID,
+      controllerAddress: CONTROLLER,
+      agentAccountAddress: PAYER_ADDR,
+    })).resolves.toBeNull();
+    expect(mockFrom).not.toHaveBeenCalled();
+
+    if (previous === undefined) delete process.env.AGENT_ACCOUNT_A2A_AUTO_BIND_ENABLED;
+    else process.env.AGENT_ACCOUNT_A2A_AUTO_BIND_ENABLED = previous;
   });
 });
