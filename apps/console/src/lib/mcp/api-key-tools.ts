@@ -157,6 +157,13 @@ export async function resolveAgentOwnership(
 
   // Check if controller matches Agent Account (new agents)
   if (agentAccountAddr && controller === agentAccountAddr) {
+    if (process.env.AGENT_ACCOUNT_BACKEND_ENABLED !== 'true') {
+      throw new McpError(
+        MCP_ERRORS.FORBIDDEN,
+        'agent_account_controller_disabled — Agent Account-controlled agents are disabled. Use an EOA-controlled agent.',
+      );
+    }
+
     // Validate Agent Account binding is still active
     const account = await getActiveAgentAccountForOwnerAndAddress(
       session.ownerAddress,

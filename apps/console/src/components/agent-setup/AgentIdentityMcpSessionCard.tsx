@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Clipboard, KeyRound, Loader2 } from 'lucide-react';
-import { isAddress } from 'viem';
 import { useSignMessage } from 'wagmi';
 
 type McpSessionCreateResponse = {
@@ -12,6 +11,9 @@ type McpSessionCreateResponse = {
     id: string;
     ownerAddress: string;
     agentAccountAddress: string;
+    controllerAddress?: string;
+    signerAddress?: string;
+    mode?: 'eoa' | 'agent-account';
     permissions: unknown;
     autoApprove: boolean;
     expiresAt: string;
@@ -45,7 +47,6 @@ export function AgentIdentityMcpSessionCard({
   const { signMessageAsync } = useSignMessage();
 
   const [expanded, setExpanded] = useState(false);
-  const [agentAccountAddress, setAgentAccountAddress] = useState('');
   const [result, setResult] = useState<McpSessionCreateResponse | null>(null);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -82,11 +83,6 @@ export function AgentIdentityMcpSessionCard({
       return;
     }
 
-    if (!isAddress(agentAccountAddress)) {
-      setError('Enter a valid Agent Account address.');
-      return;
-    }
-
     setLoading(true);
 
     try {
@@ -100,7 +96,7 @@ export function AgentIdentityMcpSessionCard({
       const res = await fetch('/api/mcp/sessions/create', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ agentAccountAddress }),
+        body: JSON.stringify({ mode: 'eoa' }),
       });
 
       const data = (await res.json()) as McpSessionCreateResponse;
@@ -116,7 +112,7 @@ export function AgentIdentityMcpSessionCard({
     } finally {
       setLoading(false);
     }
-  }, [agentAccountAddress, ensureSession, ownerAddress]);
+  }, [ensureSession, ownerAddress]);
 
   const handleCopy = useCallback(async () => {
     if (!configText) return;
@@ -138,7 +134,7 @@ export function AgentIdentityMcpSessionCard({
             MCP Identity Session
           </div>
           <div className="mt-1 text-[12px] text-[#EAE4D8]/45">
-            Create MCP token for Claude/Codex.
+            Create MCP token for Claude/Codex using the connected EOA.
           </div>
         </div>
 
@@ -170,19 +166,6 @@ export function AgentIdentityMcpSessionCard({
                 </button>
               )}
             </div>
-          </div>
-
-          <div className="mt-4">
-            <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/65">
-              Agent Wallet Address
-            </label>
-
-            <input
-              value={agentAccountAddress}
-              onChange={(event) => setAgentAccountAddress(event.target.value)}
-              placeholder="0x..."
-              className="mt-1.5 h-10 w-full rounded-md border border-white/10 bg-[#0A0D12] px-3 font-mono text-[13px] text-[#F5F0E5] outline-none placeholder:text-[#EAE4D8]/25 focus:border-[#F3C536]/40"
-            />
           </div>
 
           <button
