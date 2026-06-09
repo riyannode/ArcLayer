@@ -94,6 +94,15 @@ async function validateAgentAccountActive(session: McpSession): Promise<void> {
   }
 }
 
+function assertMcpAgentAccountIdentityEnabled(): void {
+  if (process.env.MCP_AGENT_ACCOUNT_IDENTITY_ENABLED !== 'true') {
+    throw new McpError(
+      MCP_ERRORS.FORBIDDEN,
+      'agent_account_mcp_disabled — Agent Account identity mode is temporarily disabled. Use EOA registration.',
+    );
+  }
+}
+
 // ── Metadata validation ───────────────────────────────────────────────────
 
 export interface ValidatedMetadata {
@@ -194,6 +203,7 @@ export async function handleGetAgentAccount(
   ctx: McpToolContext,
 ): Promise<unknown> {
   const session = await requireMcpSession(ctx);
+  assertMcpAgentAccountIdentityEnabled();
 
   // Validate binding is still active
   await validateAgentAccountActive(session);
@@ -218,6 +228,7 @@ export async function handlePrepareRegisterAgent(
   ctx: McpToolContext,
 ): Promise<unknown> {
   const session = await requireMcpSession(ctx);
+  assertMcpAgentAccountIdentityEnabled();
   await validateAgentAccountActive(session);
   const metadata = validateMetadata(args);
   const { uri: metadataURI, hash: metadataHash } = buildMetadataURI(metadata);
@@ -252,6 +263,7 @@ export async function handleRequestRegisterAgentApproval(
   ctx: McpToolContext,
 ): Promise<unknown> {
   const session = await requireMcpSession(ctx);
+  assertMcpAgentAccountIdentityEnabled();
   await validateAgentAccountActive(session);
   const metadata = validateMetadata(args);
   const { uri: metadataURI, hash: metadataHash } = buildMetadataURI(metadata);
@@ -314,6 +326,7 @@ export async function handleGetRegistrationStatus(
   ctx: McpToolContext,
 ): Promise<unknown> {
   const session = await requireMcpSession(ctx);
+  assertMcpAgentAccountIdentityEnabled();
 
   const approvalId = typeof args.approvalId === 'string' ? args.approvalId.trim() : '';
   if (!approvalId) {

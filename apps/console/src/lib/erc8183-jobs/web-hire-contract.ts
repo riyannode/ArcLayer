@@ -100,6 +100,7 @@ export type WebHireResult = WebHireResponse | WebHireError;
 
 /** Resolver: given agentId, return controller from DB or null if not found. */
 export type IdentityResolver = (agentId: string) => Promise<string | null>;
+export type AgentAccountControllerResolver = (controller: string) => Promise<unknown | null>;
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -291,6 +292,7 @@ export function validateWebHireInput(
 export async function resolveIdentityAndBuild(
   validated: ValidatedWebHireInput,
   resolve: IdentityResolver,
+  resolveAgentAccountController?: AgentAccountControllerResolver,
 ): Promise<WebHireResult> {
   // 1. Resolve buyer controller
   const buyerController = await resolve(validated.buyerAgentId);
@@ -349,6 +351,26 @@ export async function resolveIdentityAndBuild(
         ok: false,
         error: 'evaluator_controller_mismatch',
         detail: `evaluatorController assertion "${validated.evaluatorControllerAssertion}" does not match DB controller "${evaluatorController}"`,
+      };
+    }
+  }
+
+  if (process.env.AGENT_ACCOUNT_BACKEND_ENABLED !== 'true' && resolveAgentAccountController) {
+    const providerAgentAccount = await resolveAgentAccountController(providerController);
+    if (providerAgentAccount) {
+      return {
+        ok: false,
+        error: 'agent_account_controller_disabled',
+        detail: 'This agent is controlled by Agent Account. Select or register an EOA-controlled agent for ERC-8183 jobs.',
+      };
+    }
+
+    const evaluatorAgentAccount = await resolveAgentAccountController(evaluatorController);
+    if (evaluatorAgentAccount) {
+      return {
+        ok: false,
+        error: 'agent_account_controller_disabled',
+        detail: 'This agent is controlled by Agent Account. Select or register an EOA-controlled agent for ERC-8183 jobs.',
       };
     }
   }

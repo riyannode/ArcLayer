@@ -111,16 +111,7 @@ export async function POST(
 ) {
   const { id } = await params;
 
-  // 1. Auth via wallet cookie
-  const auth = await authenticateWalletRequest(req);
-  if (!auth.authenticated) {
-    return NextResponse.json(
-      { ok: false, error: auth.error },
-      { status: auth.status },
-    );
-  }
-
-  // 2. Parse body
+  // 1. Parse action first so disabled Agent Account approvals cannot execute.
   let body: Record<string, unknown>;
   try {
     body = await req.json();
@@ -136,6 +127,22 @@ export async function POST(
     return NextResponse.json(
       { ok: false, error: 'invalid_action', detail: 'action must be approve, cancel, submit, or confirm' },
       { status: 400 },
+    );
+  }
+
+  if (action !== 'cancel' && process.env.MCP_AGENT_ACCOUNT_IDENTITY_ENABLED !== 'true') {
+    return NextResponse.json(
+      { ok: false, error: 'agent_account_mcp_disabled', detail: 'Agent Account MCP identity mode is temporarily disabled. Use EOA registration.' },
+      { status: 403 },
+    );
+  }
+
+  // 2. Auth via wallet cookie
+  const auth = await authenticateWalletRequest(req);
+  if (!auth.authenticated) {
+    return NextResponse.json(
+      { ok: false, error: auth.error },
+      { status: auth.status },
     );
   }
 
