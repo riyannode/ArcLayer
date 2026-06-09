@@ -41,6 +41,19 @@ function errorStatus(message: string): number {
   return 500;
 }
 
+function publicErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (
+    raw === 'unauthorized' ||
+    raw === 'missing_REPUTATION_FEEDBACK_API_KEY' ||
+    raw === 'missing_or_invalid_REPUTATION_FEEDBACK_PRIVATE_KEY' ||
+    VALIDATION_ERRORS.has(raw)
+  ) {
+    return raw;
+  }
+  return 'internal_error';
+}
+
 function requireAdmin(request: Request) {
   const expected = process.env.REPUTATION_FEEDBACK_API_KEY;
 
@@ -89,7 +102,8 @@ export async function POST(request: Request) {
     const result = await writeReputationFeedback(body);
     return json(request, 200, result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    console.error('reputation feedback failed', error);
+    const message = publicErrorMessage(error);
 
     return json(
       request,

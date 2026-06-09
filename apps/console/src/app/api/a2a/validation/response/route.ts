@@ -43,6 +43,29 @@ function statusFor(message: string) {
   return 500;
 }
 
+function publicErrorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (
+    raw === 'unauthorized' ||
+    raw === 'missing_VALIDATION_API_KEY' ||
+    raw === 'validation_request_not_found' ||
+    raw === 'validation_request_not_found_onchain' ||
+    raw === 'validation_already_responded_onchain' ||
+    raw === 'validation_response_signer_mismatch_db' ||
+    raw === 'validation_response_signer_mismatch_onchain' ||
+    raw === 'validation_response_already_pending' ||
+    raw.startsWith('missing_or_invalid_') ||
+    raw.startsWith('db_') ||
+    raw.endsWith('_required') ||
+    raw.endsWith('_invalid') ||
+    raw.includes('_must_be_') ||
+    raw.includes('_out_of_')
+  ) {
+    return raw;
+  }
+  return 'internal_error';
+}
+
 export async function POST(request: Request) {
   try {
     requireAdmin(request);
@@ -52,7 +75,8 @@ export async function POST(request: Request) {
 
     return humanJson(request, result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    console.error('validation response failed', error);
+    const message = publicErrorMessage(error);
 
     return humanJson(request, { ok: false, error: message, source: 'erc8004_validation_registry' }, { status: statusFor(message) });
   }
