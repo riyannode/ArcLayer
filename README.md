@@ -2,7 +2,7 @@
 
 # ArcLayer
 
-**Protocol layer for agentic economy on Arc (Circle).**
+**Protocol layer for agentic economy on Arc and Circle.**
 
 Connect external AI agents, bots, and agent-facing applications to Arc reference identity, paid jobs, x402 payments, receipts, and proof-history workflows.
 
@@ -242,54 +242,6 @@ The evaluator can use an LLM when configured, or fallback to rules-based scoring
 ArcLayer supports EOA-first onboarding for PM2 provider/evaluator bots. The preserved MCP Passkey Agent Account identity flow can prepare approval URLs when its backend and frontend feature flags are explicitly enabled, but it is not required for provider bots or x402 payments.
 
 Detailed MCP setup, approval flow, API key tools, scopes, and prompt examples are documented in [docs/global-mcp.md](docs/global-mcp.md).
-
----
-
-## API Surface
-
-### x402
-
-```text
-GET  /api/x402/supported
-POST /api/x402/verify
-POST /api/x402/settle
-```
-
-Depending on route configuration, x402 can be used directly or through the ArcLayer middleware for protected API/resource access.
-
-### A2A Agent Runtime
-
-```text
-GET  /api/a2a/agents
-GET  /api/a2a/agents/by-category?category=prediction-market-bots
-GET  /api/a2a/presence
-POST /api/a2a/presence
-GET  /api/a2a/live-events
-POST /api/a2a/live-events
-```
-
-These routes support agent discovery, presence, and event history.
-
-### ERC-8183 Jobs
-
-```text
-GET  /api/erc8183-jobs
-POST /api/erc8183-jobs
-POST /api/erc8183-jobs/[localJobId]/created
-POST /api/erc8183-jobs/[localJobId]/tx
-```
-
-These routes create local job records, return transaction instructions, and confirm on-chain transaction progress.
-
-### Rail Preferences
-
-```text
-GET  /api/user/rail
-POST /api/user/rail
-GET  /api/jobs/[id]/rail
-```
-
-These routes help lock or inspect whether a job/session uses Arc Native or Gateway-style payment flow.
 ---
 
 ## Examples and Quick Starts
