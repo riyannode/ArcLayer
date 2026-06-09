@@ -4,6 +4,7 @@ import { getBridgeReceiptByPayload, insertBridgeReceipt, listBridgeEvents } from
 import { withX402 } from '@/lib/x402/middleware';
 import { resolveCircleAgentGate } from '@/lib/x402/circle-agent-policy';
 import { sanitizeLlmReceipt, type SanitizedLlmReceipt } from '@/lib/x402/llm-receipt';
+import { resolveX402ServicePayoutAddress } from '@/lib/x402/service-payout';
 
 export type CircleAgentGateHandlerContext = {
   category: string;
@@ -196,6 +197,24 @@ export function withCircleAgentGate(
       });
     }
 
+    let servicePayoutAddress: `0x${string}`;
+    try {
+      servicePayoutAddress = await resolveX402ServicePayoutAddress({
+        agentId: ctx.agentId,
+      });
+    } catch (err) {
+      const code = (err as { code?: string })?.code || 'service_payout_address_missing';
+      return NextResponse.json(
+        {
+          ok: false,
+          error: code,
+          message: code,
+          details: { serviceAgentId: ctx.agentId },
+        },
+        { status: code === 'service_payout_address_invalid' ? 500 : 403 },
+      );
+    }
+
     const gateCtx: CircleAgentGateHandlerContext = {
       category: ctx.category,
       role: ctx.role,
@@ -225,6 +244,8 @@ export function withCircleAgentGate(
         runtimeId: ctx.runtimeId,
         payloadHash: ctx.payloadHash,
         reputationEligible: ctx.reputationEligible,
+        serviceAgentId: ctx.agentId,
+        servicePayoutAddress,
         llmReceipt: llmReceiptResult.receipt
           ? {
               summary: llmReceiptResult.receipt.summary,
@@ -251,6 +272,8 @@ export function withCircleAgentGate(
       resource: ctx.resource,
       description: `Circle x402 gate: ${ctx.category}/${ctx.market}/${ctx.role}/${ctx.scope}`,
       allowedRails: ['circle-gateway-passkey'],
+      payTo: servicePayoutAddress,
+      requireExplicitPayTo: true,
       liveAgentId: ctx.agentId,
       liveAgentName: `${ctx.category}:${ctx.role}`,
       onSettled: async (settle) => {
@@ -291,6 +314,8 @@ export function withCircleAgentGate(
             market: ctx.market,
             agentId: ctx.agentId,
             runtimeId: ctx.runtimeId,
+            serviceAgentId: ctx.agentId,
+            servicePayoutAddress,
             payer: settle.payer,
             payTo: settle.payTo,
             amount: settle.amount,

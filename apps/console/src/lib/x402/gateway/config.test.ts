@@ -63,34 +63,40 @@ describe('Gateway contract address config', () => {
       payTo: '0xcccccccccccccccccccccccccccccccccccccccc',
     });
 
+    expect(requirements.payTo).toBe(getAddress('0xcccccccccccccccccccccccccccccccccccccccc'));
+    expect(requirements.payTo).not.toBe(getGatewayContractAddressServer());
     expect(requirements.extra.verifyingContract).toBe(getGatewayContractAddressServer());
     expect(isBatchPayment(requirements)).toBe(true);
   });
 
-  it('returns supported Gateway contract metadata from the same address as requirements', async () => {
+  it('returns supported Gateway rail metadata without a global Gateway accept by default', async () => {
     clearGatewayEnv();
     process.env.X402_GATEWAY_CONTRACT_ADDRESS = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     process.env.NEXT_PUBLIC_X402_GATEWAY_CONTRACT_ADDRESS = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     process.env.X402_GATEWAY_ENABLED = 'true';
     process.env.X402_RECEIVER_ADDRESS = '0xcccccccccccccccccccccccccccccccccccccccc';
-
-    const requirements = testBuildGatewayRequirements({
-      amount: '1',
-      resource: '/api/test',
-      payTo: '0xcccccccccccccccccccccccccccccccccccccccc',
-    });
     const response = getSupported();
     const body = await response.json();
     const gatewayAccept = body.accepts.find(
       (accept: { extra?: { transferMethod?: string } }) =>
         accept.extra?.transferMethod === 'gateway-batched-eip3009',
     );
+    const requirements = testBuildGatewayRequirements({
+      amount: '1',
+      resource: '/api/test',
+      payTo: '0xcccccccccccccccccccccccccccccccccccccccc',
+    });
+    const gatewayKind = body.kinds.find(
+      (kind: { network?: string; extra?: { name?: string } }) =>
+        kind.extra?.name === 'GatewayWalletBatched',
+    );
     const gatewayNetwork = body.networks.find(
       (network: { contracts?: { gatewayWallet?: string } }) =>
         network.contracts?.gatewayWallet,
     );
 
-    expect(gatewayAccept.extra.verifyingContract).toBe(requirements.extra.verifyingContract);
+    expect(gatewayKind).toBeDefined();
+    expect(gatewayAccept).toBeUndefined();
     expect(gatewayNetwork.contracts.gatewayWallet).toBe(requirements.extra.verifyingContract);
   });
 
