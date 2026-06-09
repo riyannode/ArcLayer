@@ -24,10 +24,10 @@ import {
 } from './constants';
 import {
   getBatchFacilitatorClient,
-  getArcTestnetGatewayConfig,
   isBatchPayment,
   isGatewayEnabled,
 } from './gateway/batch-client';
+import { getGatewayContractAddressServer } from './gateway/config';
 import {
   deriveGatewayPaymentId,
   recordGatewayPayment,
@@ -227,7 +227,7 @@ function buildNativeRequirements(opts: X402MiddlewareOptions, railSessionId?: st
 }
 
 function buildGatewayRequirements(opts: X402MiddlewareOptions, railSessionId?: string) {
-  const gwConfig = getArcTestnetGatewayConfig();
+  const gatewayContractAddress = getGatewayContractAddressServer();
   return {
     scheme: 'exact' as const,
     network: GATEWAY_NETWORK_NAME,
@@ -238,7 +238,7 @@ function buildGatewayRequirements(opts: X402MiddlewareOptions, railSessionId?: s
     extra: {
       name: CIRCLE_BATCHING_NAME,
       version: CIRCLE_BATCHING_VERSION,
-      verifyingContract: process.env.X402_GATEWAY_WALLET_ADDRESS || gwConfig.gatewayWallet,
+      verifyingContract: gatewayContractAddress,
       supportedChain: GATEWAY_NETWORK_NAME,
       transferMethod: 'gateway-batched-eip3009',
       status: 'live',
@@ -246,6 +246,8 @@ function buildGatewayRequirements(opts: X402MiddlewareOptions, railSessionId?: s
     },
   };
 }
+
+export const testBuildGatewayRequirements = buildGatewayRequirements;
 
 // ─── Header helpers ──────────────────────────────────────────────────────────
 

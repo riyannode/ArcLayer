@@ -5,26 +5,24 @@ import {
   CIRCLE_BATCHING_NAME,
   CIRCLE_BATCHING_VERSION,
   GATEWAY_NETWORK_NAME,
-  getArcTestnetGatewayConfig,
   isGatewayEnabled,
   PAYMENT_REQUIRED_HEADER,
   USDC_ADDRESS,
   X402_VERSION_V2,
 } from '@/lib/x402';
+import { getGatewayContractAddressServer } from '@/lib/x402/gateway/config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const DEFAULT_AMOUNT_ATOMIC = '1';
-function gatewayWalletAddress() {
-  return process.env.X402_GATEWAY_WALLET_ADDRESS || getArcTestnetGatewayConfig().gatewayWallet;
-}
 
 export function GET() {
   const maxTimeoutSeconds = Number(process.env.X402_REQUIREMENT_TTL_SECONDS || '300');
   const amount = process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC;
   const payTo = process.env.X402_RECEIVER_ADDRESS || process.env.X402_PAY_TO;
   if (!payTo) throw new Error('Missing X402_RECEIVER_ADDRESS or X402_PAY_TO');
+  const gatewayContractAddress = getGatewayContractAddressServer();
 
   const arcNativeExact = {
     x402Version: X402_VERSION_V2,
@@ -58,7 +56,7 @@ export function GET() {
     extra: {
       name: CIRCLE_BATCHING_NAME,
       version: CIRCLE_BATCHING_VERSION,
-      verifyingContract: gatewayWalletAddress(),
+      verifyingContract: gatewayContractAddress,
       supportedChain: GATEWAY_NETWORK_NAME,
       transferMethod: 'gateway-batched-eip3009',
       status: 'live',
@@ -92,7 +90,7 @@ export function GET() {
         decimals: 6,
         name: CIRCLE_BATCHING_NAME,
         version: CIRCLE_BATCHING_VERSION,
-        verifyingContract: gatewayWalletAddress(),
+        verifyingContract: gatewayContractAddress,
         maxTimeoutSeconds,
       },
     });
@@ -124,7 +122,7 @@ export function GET() {
           chainId: ARC_TESTNET_CHAIN_ID,
           schemes: ['exact'],
           assets: [{ symbol: 'USDC', address: USDC_ADDRESS, decimals: 6 }],
-          contracts: { gatewayWallet: gatewayWalletAddress() },
+          contracts: { gatewayWallet: gatewayContractAddress },
         },
       ]
       : [

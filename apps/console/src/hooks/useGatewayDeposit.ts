@@ -28,12 +28,12 @@ import { config } from '@/lib/wagmi';
 import { GATEWAY_WALLET_ABI, ERC20_ABI } from '@/lib/x402/gateway/abi';
 import {
   ARC_TESTNET_CHAIN_ID,
-  GATEWAY_WALLET_ADDRESS,
+  getGatewayContractAddressClient,
   USDC_ADDRESS,
 } from '@/lib/x402/constants';
 
 const ARC_RPC = process.env.NEXT_PUBLIC_ARC_RPC_URL || 'https://rpc.drpc.testnet.arc.network';
-const GATEWAY_WALLET = getAddress(GATEWAY_WALLET_ADDRESS);
+const GATEWAY_WALLET = getGatewayContractAddressClient();
 const USDC = getAddress(USDC_ADDRESS);
 
 export type DepositStep =
