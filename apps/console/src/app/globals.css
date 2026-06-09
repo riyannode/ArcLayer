@@ -471,23 +471,3 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .header-logo-anim { animation: none; }
 }
-
-/* ─── x402 global UI lock ──────────────────────────────────────────────── */
-/* Applied only while the homepage is locked. The actual unlock panel is the
-   existing homepage X402DemoPanel marked with data-x402-unlock-zone="true". */
-
-[data-x402-locked-home="true"] [data-x402-blur-zone="true"] {
-  filter: blur(12px) brightness(0.35);
-  pointer-events: none;
-  user-select: none;
-  transition:
-    filter 300ms ease,
-    opacity 300ms ease;
-}
-
-[data-x402-locked-home="true"] [data-x402-unlock-zone="true"] {
-  position: relative;
-  z-index: 950;
-  pointer-events: auto;
-  filter: none;
-}

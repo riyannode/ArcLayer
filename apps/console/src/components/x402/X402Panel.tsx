@@ -46,7 +46,7 @@ function parseUsdcToUnits(value?: string | null) {
   return BigInt(whole || '0') * BigInt(1_000_000) + BigInt((fraction + '000000').slice(0, 6));
 }
 
-interface X402DemoPanelProps {
+interface X402PanelProps {
   /** When true, render compact inline variant suitable for homepage embedding. */
   compact?: boolean;
   /** Homepage hero variant: render only the payment ticket, no market/log cards. */
@@ -54,14 +54,14 @@ interface X402DemoPanelProps {
 }
 
 /**
- * X402DemoPanel — single source of truth for the live x402 protected-resource ticket.
+ * X402Panel — single source of truth for the live x402 protected-resource ticket.
  *
  * Renders the full protected-resource flow (PROTECTED RESOURCE card, mode picker, execution log, payment
  * ticket sidebar) on the homepage. With `compact`, scales down the
  * same UI for inline use on the homepage. All payment logic — Arc Native EIP-3009 and
  * Circle Gateway batching — runs identically in both modes.
  */
-export default function X402DemoPanel({ compact = false, ticketOnly = false }: X402DemoPanelProps) {
+export default function X402Panel({ compact = false, ticketOnly = false }: X402PanelProps) {
   const { authenticated, address: circleAddress, smartAccount, login, logout: circleLogout } = useCircleWallet();
   const { address: eoaAddress, isConnected: eoaConnected } = useAccount();
   const { disconnect: eoaDisconnect } = useDisconnect();
@@ -611,7 +611,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
     }
   }, [step]);
   const payTo = requirement?.payTo || relayer?.relayerAddress || FALLBACK_PAY_TO;
-  const displayAmount = requirement?.amount ? formatUnits(BigInt(requirement.amount), 6) : '0.000001';
+  const displayAmount = requirement?.amount ? formatUnits(BigInt(requirement.amount), 6) : '0.1';
   // Rail lock: EOA → Arc Native only, Passkey → Circle Gateway only.
   const arcDisabledForPasskey = walletMode === 'passkey';
   const circleDisabledForEoa = walletMode === 'eoa';

@@ -2,6 +2,7 @@
 
 import { FormEvent, ReactNode, useState } from 'react';
 import { useX402PaidFetch } from '@/hooks/useX402PaidFetch';
+import { X402ActionGate } from '@/components/x402/X402ActionGate';
 
 type ActionState = {
   loading: boolean;
@@ -97,7 +98,11 @@ export default function X402JobsWorkbenchPage() {
                 <option value="high">high</option>
               </select>
             </div>
-            <button disabled={quoteState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{quoteState.loading ? 'Quoting…' : 'Quote job'}</button>
+            <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+
+              <button disabled={quoteState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{quoteState.loading ? 'Quoting…' : 'Quote job'}</button>
+
+            </X402ActionGate>
           </form>
         </ActionPanel>
 
@@ -113,7 +118,11 @@ export default function X402JobsWorkbenchPage() {
             <div><label className={labelClass}>description</label><input required value={createDescription} onChange={(e) => setCreateDescription(e.target.value)} className={fieldClass} /></div>
             <div><label className={labelClass}>budget</label><input value={createBudget} onChange={(e) => setCreateBudget(e.target.value)} className={fieldClass} /></div>
             <div><label className={labelClass}>requester</label><input value={createRequester} onChange={(e) => setCreateRequester(e.target.value)} className={fieldClass} /></div>
-            <button disabled={createState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{createState.loading ? 'Creating…' : 'Create job'}</button>
+            <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+
+              <button disabled={createState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{createState.loading ? 'Creating…' : 'Create job'}</button>
+
+            </X402ActionGate>
           </form>
         </ActionPanel>
 
@@ -130,7 +139,11 @@ export default function X402JobsWorkbenchPage() {
             <div><label className={labelClass}>role</label><input value={routeRole} onChange={(e) => setRouteRole(e.target.value)} className={fieldClass} /></div>
             <div><label className={labelClass}>category</label><input value={routeCategory} onChange={(e) => setRouteCategory(e.target.value)} className={fieldClass} /></div>
             <div><label className={labelClass}>capabilitiesCsv</label><input value={routeCapabilitiesCsv} onChange={(e) => setRouteCapabilitiesCsv(e.target.value)} className={fieldClass} /></div>
-            <button disabled={routeState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{routeState.loading ? 'Routing…' : 'Route job'}</button>
+            <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+
+              <button disabled={routeState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{routeState.loading ? 'Routing…' : 'Route job'}</button>
+
+            </X402ActionGate>
           </form>
         </ActionPanel>
 
@@ -149,7 +162,11 @@ export default function X402JobsWorkbenchPage() {
             <div><label className={labelClass}>proofType</label><input value={proofProofType} onChange={(e) => setProofProofType(e.target.value)} className={fieldClass} /></div>
             <div><label className={labelClass}>proofData</label><input required value={proofProofData} onChange={(e) => setProofProofData(e.target.value)} className={fieldClass} /></div>
             <div><label className={labelClass}>summary</label><input value={proofSummary} onChange={(e) => setProofSummary(e.target.value)} className={fieldClass} /></div>
-            <button disabled={proofState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{proofState.loading ? 'Submitting…' : 'Submit proof'}</button>
+            <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+
+              <button disabled={proofState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{proofState.loading ? 'Submitting…' : 'Submit proof'}</button>
+
+            </X402ActionGate>
           </form>
         </ActionPanel>
 
@@ -161,7 +178,11 @@ export default function X402JobsWorkbenchPage() {
             <div><label className={labelClass}>job id</label><input required value={verifyJobId} onChange={(e) => setVerifyJobId(e.target.value)} className={fieldClass} /></div>
             <div><label className={labelClass}>receiptId</label><input required value={verifyReceiptId} onChange={(e) => setVerifyReceiptId(e.target.value)} className={fieldClass} /></div>
             <div><label className={labelClass}>verifierAgent</label><input value={verifyVerifierAgent} onChange={(e) => setVerifyVerifierAgent(e.target.value)} className={fieldClass} /></div>
-            <button disabled={verifyState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{verifyState.loading ? 'Verifying…' : 'Verify proof'}</button>
+            <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+
+              <button disabled={verifyState.loading} className="rounded-sm border border-[#C5A67C]/40 bg-[#C5A67C]/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] disabled:opacity-50">{verifyState.loading ? 'Verifying…' : 'Verify proof'}</button>
+
+            </X402ActionGate>
           </form>
         </ActionPanel>
       </section>

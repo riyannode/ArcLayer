@@ -25,6 +25,7 @@ import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
 import { config } from '@/lib/wagmi';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest/types';
+import { X402ActionGate } from '@/components/x402/X402ActionGate';
 import {
   ERC8183_PUBLIC_ROLES,
   normalizePublicRole,
@@ -546,14 +547,16 @@ ARCLAYER_MODE=provider`;
       </p>
 
       {!rawKey && !error && (
-        <button
-          type="button"
-          onClick={handleCreate}
-          disabled={creating}
-          className="mt-4 h-12 rounded-md border border-[#F3C536]/35 bg-transparent px-8 text-[13px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/70 hover:bg-[#F3C536]/8 disabled:opacity-50"
-        >
-          {creating ? 'Signing...' : 'Create API Key'}
-        </button>
+        <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+          <button
+            type="button"
+            onClick={handleCreate}
+            disabled={creating}
+            className="mt-4 h-12 rounded-md border border-[#F3C536]/35 bg-transparent px-8 text-[13px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/70 hover:bg-[#F3C536]/8 disabled:opacity-50"
+          >
+            {creating ? 'Signing...' : 'Create API Key'}
+          </button>
+        </X402ActionGate>
       )}
 
       {error && (
@@ -1490,18 +1493,20 @@ export default function ERC8183EscrowRegisterPage() {
                 >
                   Save Draft
                 </button>
-                <button
-                  type="button"
-                  onClick={submitRegister}
-                  disabled={registerStatus === 'pending' || (!useLegacyController && !hasAgentAccount)}
-                  className="h-12 rounded-md border border-[#F3C536] bg-[#F3C536] px-9 text-[13px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {registerStatus === 'pending'
-                    ? 'Minting...'
-                    : useLegacyController
-                      ? 'Mint Identity (EOA)'
-                      : 'Mint Identity (Agent Wallet)'}
-                </button>
+                <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+                  <button
+                    type="button"
+                    onClick={submitRegister}
+                    disabled={registerStatus === 'pending' || (!useLegacyController && !hasAgentAccount)}
+                    className="h-12 rounded-md border border-[#F3C536] bg-[#F3C536] px-9 text-[13px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {registerStatus === 'pending'
+                      ? 'Minting...'
+                      : useLegacyController
+                        ? 'Mint Identity (EOA)'
+                        : 'Mint Identity (Agent Wallet)'}
+                  </button>
+                </X402ActionGate>
               </div>
             </div>
           </div>

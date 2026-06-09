@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
+import { X402ActionGate } from '@/components/x402/X402ActionGate';
 import { ChevronDown, ChevronUp, Clipboard, KeyRound, Loader2 } from 'lucide-react';
 import { isAddress } from 'viem';
 import { useSignMessage } from 'wagmi';
@@ -185,19 +186,21 @@ export function AgentIdentityMcpSessionCard({
             />
           </div>
 
-          <button
-            type="button"
-            onClick={handleCreate}
-            disabled={loading || !ownerAddress}
-            className="mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-black transition hover:bg-[#F3C536]/90 disabled:opacity-40"
-          >
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <KeyRound className="h-3.5 w-3.5" />
-            )}
-            Create MCP Session
-          </button>
+          <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={loading || !ownerAddress}
+              className="mt-4 inline-flex h-10 items-center gap-2 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-black transition hover:bg-[#F3C536]/90 disabled:opacity-40"
+            >
+              {loading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <KeyRound className="h-3.5 w-3.5" />
+              )}
+              Create MCP Session
+            </button>
+          </X402ActionGate>
 
           {error && (
             <div className="mt-4 rounded-md border border-rose-400/25 bg-rose-400/[0.055] px-4 py-3 text-[12px] text-rose-200">

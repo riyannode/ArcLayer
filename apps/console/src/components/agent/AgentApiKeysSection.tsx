@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { X402ActionGate } from '@/components/x402/X402ActionGate';
 
 type ApiKeyMeta = {
   id: string;
@@ -269,14 +270,16 @@ ARCLAYER_MODE=provider`;
               </select>
             </div>
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={handleCreate}
-                disabled={creating}
-                className="h-10 rounded-md border border-[#F3C536] bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-50"
-              >
-                {creating ? 'Creating...' : 'Create Key'}
-              </button>
+              <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+                <button
+                  type="button"
+                  onClick={handleCreate}
+                  disabled={creating}
+                  className="h-10 rounded-md border border-[#F3C536] bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-50"
+                >
+                  {creating ? 'Creating...' : 'Create Key'}
+                </button>
+              </X402ActionGate>
               <button
                 type="button"
                 onClick={() => setShowCreate(false)}
@@ -291,13 +294,15 @@ ARCLAYER_MODE=provider`;
 
       {/* Create button */}
       {!showCreate && (
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          className="h-10 rounded-md border border-[#F3C536]/35 bg-transparent px-5 text-[12px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/70 hover:bg-[#F3C536]/8"
-        >
-          + Create API Key
-        </button>
+        <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="h-10 rounded-md border border-[#F3C536]/35 bg-transparent px-5 text-[12px] font-semibold text-[#F3C536] transition hover:border-[#F3C536]/70 hover:bg-[#F3C536]/8"
+          >
+            + Create API Key
+          </button>
+        </X402ActionGate>
       )}
 
       {/* Key list */}
@@ -345,7 +350,8 @@ ARCLAYER_MODE=provider`;
               </div>
 
               {k.status === 'active' && (
-                <div className="flex shrink-0 gap-2">
+                <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+                  <div className="flex shrink-0 gap-2">
                   <button
                     type="button"
                     onClick={() => handleRotate(k.id)}
@@ -360,7 +366,8 @@ ARCLAYER_MODE=provider`;
                   >
                     Revoke Key
                   </button>
-                </div>
+                  </div>
+                </X402ActionGate>
               )}
             </div>
           ))}

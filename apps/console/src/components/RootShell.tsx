@@ -7,7 +7,6 @@ import Navbar from '@/components/Navbar';
 import WebGLBackground from '@/components/WebGLBackground';
 import { ProtectionNoticeProvider } from '@/components/protection';
 import ClientErrorBoundary from '@/components/ClientErrorBoundary';
-import X402GlobalAccessGuard from '@/components/x402/X402GlobalAccessGuard';
 
 export default function RootShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -28,22 +27,18 @@ export default function RootShell({ children }: { children: ReactNode }) {
         <Providers>
           <ClientErrorBoundary label="Protection notice">
             <ProtectionNoticeProvider>
-              <X402GlobalAccessGuard>
-                <div className="relative z-10 min-h-screen flex flex-col">
-                  <div data-x402-blur-zone="true">
-                    <ClientErrorBoundary label="Navigation" fallback={null}>
-                      <Navbar />
-                    </ClientErrorBoundary>
-                  </div>
+              <div className="relative z-10 min-h-screen flex flex-col">
+                <ClientErrorBoundary label="Navigation" fallback={null}>
+                  <Navbar />
+                </ClientErrorBoundary>
 
-                  <main
-                    key={pathname}
-                    className={`flex-1 page-transition ${shouldAddFormerFooterPadding ? 'pb-36' : ''}`}
-                  >
-                    {children}
-                  </main>
-                </div>
-              </X402GlobalAccessGuard>
+                <main
+                  key={pathname}
+                  className={`flex-1 page-transition ${shouldAddFormerFooterPadding ? 'pb-36' : ''}`}
+                >
+                  {children}
+                </main>
+              </div>
             </ProtectionNoticeProvider>
           </ClientErrorBoundary>
         </Providers>

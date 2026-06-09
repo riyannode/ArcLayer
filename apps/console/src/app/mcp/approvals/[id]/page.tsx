@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
+import { X402ActionGate } from '@/components/x402/X402ActionGate';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { ensureWalletSession } from '@/lib/auth/ensureWalletSession';
 
@@ -653,7 +654,8 @@ export default function McpApprovalPage() {
             )}
 
             {/* Actions */}
-            <div className="flex flex-col gap-3 pt-2">
+            <X402ActionGate lockedMessage="Pay 0.1 USDC via x402 on the homepage to unlock actions">
+              <div className="flex flex-col gap-3 pt-2">
               {/* Approve + Cancel */}
               {showApproveBtn && (
                 <div className="flex gap-3">
@@ -796,7 +798,8 @@ export default function McpApprovalPage() {
                   </p>
                 </div>
               )}
-            </div>
+              </div>
+            </X402ActionGate>
           </div>
         )}
       </div>
