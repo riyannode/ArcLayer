@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402';
 
@@ -16,7 +17,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   const jobId = segments[segments.indexOf('jobs') + 1];
 
   if (!jobId || jobId === '[id]') {
-    return NextResponse.json({ ok: false, error: 'missing_job_id' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'missing_job_id' }, { status: 400 });
   }
 
   try {
@@ -24,14 +25,14 @@ async function handler(req: NextRequest): Promise<NextResponse> {
     const { receiptId, verifierAgent } = body;
 
     if (!receiptId) {
-      return NextResponse.json({ ok: false, error: 'missing_receipt_id' }, { status: 400 });
+      return humanJson(req, { ok: false, error: 'missing_receipt_id' }, { status: 400 });
     }
 
     // Simulate autonomous verification
     const passed = Math.random() > 0.15; // 85% pass rate
     const confidence = passed ? (0.75 + Math.random() * 0.2) : (0.3 + Math.random() * 0.3);
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       paid: true,
       verification: {
@@ -48,7 +49,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ ok: false, error: err?.message || 'verification_failed' }, { status: 500 });
+    return humanJson(req, { ok: false, error: err?.message || 'verification_failed' }, { status: 500 });
   }
 }
 

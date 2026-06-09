@@ -1,10 +1,11 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * POST /api/auth/logout
  *
  * Revokes the wallet session in DB and clears the cookie.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import {
   destroySession,
   buildClearSessionCookie,
@@ -20,10 +21,7 @@ export async function POST(req: NextRequest) {
     await destroySession(cookieValue);
   }
 
-  const res = NextResponse.json(
-    { ok: true },
-    { headers: { 'Cache-Control': 'no-store' } },
-  );
+  const res = humanJson(req, { ok: true }, { headers: { 'Cache-Control': 'no-store' } });
 
   res.headers.set('Set-Cookie', buildClearSessionCookie());
 

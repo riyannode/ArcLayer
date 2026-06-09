@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { withX402 } from '@/lib/x402';
 import type { AgentX402Rail, AgentX402Scope } from '@/lib/x402/agent-payer';
 
@@ -26,10 +27,10 @@ function parseAgentId(req: NextRequest) {
 async function handler(req: NextRequest) {
   const agentId = parseAgentId(req);
   if (!agentId) {
-    return NextResponse.json({ ok: false, error: 'invalid_agent_id' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'invalid_agent_id' }, { status: 400 });
   }
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     agentId,
     run: {
@@ -44,7 +45,7 @@ async function handler(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const agentId = parseAgentId(req);
   if (!agentId) {
-    return NextResponse.json({ ok: false, error: 'invalid_agent_id' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'invalid_agent_id' }, { status: 400 });
   }
 
   return withX402(handler, {

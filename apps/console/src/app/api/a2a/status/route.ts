@@ -1,9 +1,10 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * A2A Status API — returns aggregate on-chain registry and mirror status.
  *
  * GET /api/a2a/status
  */
-import { NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createPublicClient, http, type Hex } from 'viem';
 import { CONTRACTS as SDK_CONTRACTS } from '@arclayer/sdk';
 
@@ -31,10 +32,10 @@ const MIRROR_ABI = [
   },
 ] as const;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     if (statusCache && statusCache.expiresAt > Date.now()) {
-      return NextResponse.json(statusCache.payload, {
+      return humanJson(req, statusCache.payload, {
         headers: { 'Cache-Control': STATUS_CACHE_CONTROL },
       });
     }
@@ -62,13 +63,10 @@ export async function GET() {
       timestamp: new Date().toISOString(),
     };
     statusCache = { expiresAt: Date.now() + STATUS_TTL_MS, payload };
-    return NextResponse.json(payload, {
+    return humanJson(req, payload, {
       headers: { 'Cache-Control': STATUS_CACHE_CONTROL },
     });
   } catch (err: any) {
-    return NextResponse.json(
-      { error: 'Failed to read on-chain state', detail: err?.message },
-      { status: 502, headers: { 'Cache-Control': STATUS_CACHE_CONTROL } }
-    );
+    return humanJson(req, { error: 'Failed to read on-chain state', detail: err?.message }, { status: 502, headers: { 'Cache-Control': STATUS_CACHE_CONTROL } });
   }
 }

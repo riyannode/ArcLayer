@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { withWalletAuth } from '@/lib/auth/wallet-auth';
 
@@ -21,10 +21,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const wallet = normalizeAddress(searchParams.get('wallet'));
   if (!wallet) {
-    return NextResponse.json(
-      { ok: false, error: 'invalid_wallet', message: 'wallet query is required.' },
-      { status: 400 },
-    );
+    return humanJson(req, { ok: false, error: 'invalid_wallet', message: 'wallet query is required.' }, { status: 400 });
   }
 
   const supabase = getSupabaseAdmin();
@@ -35,13 +32,10 @@ export async function GET(req: Request) {
     .maybeSingle();
 
   if (error) {
-    return NextResponse.json(
-      { ok: false, error: 'db_error', message: error.message },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, error: 'db_error', message: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     wallet,
     rail: data?.rail ?? null,
@@ -53,10 +47,7 @@ export async function GET(req: Request) {
 export const POST = withWalletAuth(async (req, { wallet }) => {
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== 'object') {
-    return NextResponse.json(
-      { ok: false, error: 'invalid_json', message: 'Body must be JSON.' },
-      { status: 400 },
-    );
+    return humanJson(req, { ok: false, error: 'invalid_json', message: 'Body must be JSON.' }, { status: 400 });
   }
 
   const bodyWallet = normalizeAddress((body as { wallet?: unknown }).wallet);
@@ -64,20 +55,14 @@ export const POST = withWalletAuth(async (req, { wallet }) => {
 
   // Body wallet must match authenticated wallet (prevents setting rail for others).
   if (bodyWallet && bodyWallet !== wallet) {
-    return NextResponse.json(
-      { ok: false, error: 'wallet_mismatch', message: 'Body wallet does not match authenticated wallet.' },
-      { status: 403 },
-    );
+    return humanJson(req, { ok: false, error: 'wallet_mismatch', message: 'Body wallet does not match authenticated wallet.' }, { status: 403 });
   }
 
   // Use authenticated wallet as the canonical address.
   const resolvedWallet = wallet;
 
   if (!isRail(rail)) {
-    return NextResponse.json(
-      { ok: false, error: 'invalid_rail', message: "rail must be 'native' or 'gateway'." },
-      { status: 400 },
-    );
+    return humanJson(req, { ok: false, error: 'invalid_rail', message: "rail must be 'native' or 'gateway'." }, { status: 400 });
   }
 
   const supabase = getSupabaseAdmin();
@@ -88,20 +73,14 @@ export const POST = withWalletAuth(async (req, { wallet }) => {
     .maybeSingle();
 
   if (readError) {
-    return NextResponse.json(
-      { ok: false, error: 'db_error', message: readError.message },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, error: 'db_error', message: readError.message }, { status: 500 });
   }
 
   if (existing) {
     if (existing.rail !== rail) {
-      return NextResponse.json(
-        { ok: false, error: 'rail_locked', message: 'Rail is already locked for this wallet session.', rail: existing.rail },
-        { status: 409 },
-      );
+      return humanJson(req, { ok: false, error: 'rail_locked', message: 'Rail is already locked for this wallet session.', rail: existing.rail }, { status: 409 });
     }
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       wallet: resolvedWallet,
       rail: existing.rail,
@@ -117,13 +96,10 @@ export const POST = withWalletAuth(async (req, { wallet }) => {
     .single();
 
   if (error) {
-    return NextResponse.json(
-      { ok: false, error: 'db_error', message: error.message },
-      { status: 500 },
-    );
+    return humanJson(req, { ok: false, error: 'db_error', message: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     wallet: resolvedWallet,
     rail: data.rail,

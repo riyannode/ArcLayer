@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { requireApiKey } from '@/lib/a2a/auth';
 import { deleteWebhook } from '@/lib/a2a/webhooks';
 
@@ -12,7 +13,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (auth.error) return auth.error;
 
   const ok = await deleteWebhook(id, auth.key.agentId);
-  if (!ok) return NextResponse.json({ ok: false, error: 'not_found_or_unauthorized' }, { status: 404 });
+  if (!ok) return humanJson(req, { ok: false, error: 'not_found_or_unauthorized' }, { status: 404 });
 
-  return NextResponse.json({ ok: true });
+  return humanJson(req, { ok: true });
 }

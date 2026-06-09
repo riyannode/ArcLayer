@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * GET /api/erc8004/identity/by-controller?controller=0x...
  *
@@ -5,7 +6,7 @@
  * Reads from erc8004_agents table.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getAddress, isAddress } from 'viem';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 
@@ -38,17 +39,11 @@ export async function GET(req: NextRequest) {
     const raw = req.nextUrl.searchParams.get('controller');
 
     if (!raw?.trim()) {
-      return NextResponse.json(
-        { ok: false, error: 'missing_controller', detail: 'controller query param required' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'missing_controller', detail: 'controller query param required' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     if (!isAddress(raw.trim())) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_controller', detail: 'controller must be a valid EVM address' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'invalid_controller', detail: 'controller must be a valid EVM address' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     const controller = getAddress(raw.trim()).toLowerCase();
@@ -62,23 +57,14 @@ export async function GET(req: NextRequest) {
       .limit(100);
 
     if (error) {
-      return NextResponse.json(
-        { ok: false, error: 'query_failed', detail: error.message },
-        { status: 502, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'query_failed', detail: error.message }, { status: 502, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     const agents = (data ?? []).map(toAgent);
 
-    return NextResponse.json(
-      { ok: true, controller, agents, count: agents.length },
-      { headers: { 'Cache-Control': CACHE } },
-    );
+    return humanJson(req, { ok: true, controller, agents, count: agents.length }, { headers: { 'Cache-Control': CACHE } });
   } catch (err) {
     const detail = err instanceof Error ? err.message : 'unknown_error';
-    return NextResponse.json(
-      { ok: false, error: 'by_controller_route_failed', detail },
-      { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'by_controller_route_failed', detail }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 }

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
 import { indexerUrl } from '@/lib/indexer';
 import { getErc8183AgentReputationMap, type Erc8183AgentReputation } from '@/lib/erc8183/agent-reputation';
 
@@ -13,8 +13,7 @@ export async function GET(
   const tokenId = decodeURIComponent(agentId || '').trim();
 
   if (!/^\d+$/.test(tokenId)) {
-    return NextResponse.json(
-      {
+    return humanJson(_request, {
         ok: false,
         agentId: tokenId,
         score: '0',
@@ -28,9 +27,7 @@ export async function GET(
           feedback: [],
           source: 'erc8004_reputation_indexer',
         },
-      },
-      { status: 200 }
-    );
+      }, { status: 200 });
   }
 
   // Check computed ERC-8183 reputation first
@@ -50,7 +47,7 @@ export async function GET(
     if (!res.ok) {
       // If indexer has no data but we have ERC-8183 reputation, return that
       if (erc8183Rep && erc8183Rep.totalJobs > 0) {
-        return NextResponse.json({
+        return humanJson(_request, {
           ok: true,
           agentId: tokenId,
           tokenId,
@@ -71,7 +68,7 @@ export async function GET(
       }
 
       const score = '0';
-      return NextResponse.json({
+      return humanJson(_request, {
         ok: true,
         agentId: tokenId,
         tokenId,
@@ -112,7 +109,7 @@ export async function GET(
     const feedback = data.events ?? [];
     const updatedAt = erc8183Rep?.updatedAt ?? data.updatedAt ?? null;
 
-    return NextResponse.json({
+    return humanJson(_request, {
       ok: true,
       agentId: tokenId,
       tokenId,
@@ -133,7 +130,7 @@ export async function GET(
   } catch (error) {
     // If indexer fails but we have ERC-8183 reputation, return that
     if (erc8183Rep && erc8183Rep.totalJobs > 0) {
-      return NextResponse.json({
+      return humanJson(_request, {
         ok: true,
         agentId: tokenId,
         tokenId,
@@ -156,7 +153,7 @@ export async function GET(
     const score = '0';
     const message = error instanceof Error ? error.message : 'reputation_indexer_unavailable';
 
-    return NextResponse.json({
+    return humanJson(_request, {
       ok: false,
       agentId: tokenId,
       tokenId,

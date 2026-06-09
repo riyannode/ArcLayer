@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * POST /api/erc8183-jobs/web-hire/prepare
  *
@@ -85,20 +86,14 @@ async function attemptAuth(
   const cookieValue = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   if (!cookieValue) {
     return {
-      error: NextResponse.json(
-        { ok: false, error: 'unauthorized', detail: 'API key or wallet session required' },
-        { status: 401, headers: { 'Cache-Control': ERROR_CACHE } },
-      ),
+      error: humanJson(req, { ok: false, error: 'unauthorized', detail: 'API key or wallet session required' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } }),
     };
   }
 
   const session = await resolveSessionFromCookie(cookieValue);
   if (!session) {
     return {
-      error: NextResponse.json(
-        { ok: false, error: 'invalid_session', detail: 'Wallet session is invalid or expired' },
-        { status: 401, headers: { 'Cache-Control': ERROR_CACHE } },
-      ),
+      error: humanJson(req, { ok: false, error: 'invalid_session', detail: 'Wallet session is invalid or expired' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } }),
     };
   }
 
@@ -136,31 +131,22 @@ export async function POST(req: NextRequest) {
 
     // Guard: body must be a non-null object (not null, not array, not primitive)
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_body', detail: 'Request body must be a JSON object' },
-        { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'invalid_body', detail: 'Request body must be a JSON object' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // If wallet session auth, enforce buyerAgentId ownership
     if (auth.type === 'wallet_session') {
       const buyerAgentId = body.buyerAgentId as string | undefined;
       if (!buyerAgentId || typeof buyerAgentId !== 'string') {
-        return NextResponse.json(
-          { ok: false, error: 'missing_buyerAgentId', detail: 'buyerAgentId is required' },
-          { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
-        );
+        return humanJson(req, { ok: false, error: 'missing_buyerAgentId', detail: 'buyerAgentId is required' }, { status: 400, headers: { 'Cache-Control': ERROR_CACHE } });
       }
 
       if (!validateBuyerOwnership(buyerAgentId, auth.linkedAgents)) {
-        return NextResponse.json(
-          {
+        return humanJson(req, {
             ok: false,
             error: 'buyer_not_linked',
             detail: `buyerAgentId "${buyerAgentId}" is not linked to session wallet ${auth.session.wallet}`,
-          },
-          { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
-        );
+          }, { status: 403, headers: { 'Cache-Control': ERROR_CACHE } });
       }
     }
 
@@ -176,10 +162,7 @@ export async function POST(req: NextRequest) {
         validated.error === 'description_too_long' ? 400 :
         400;
 
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: validated.error, detail: validated.detail },
-        { status, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: validated.error, detail: validated.detail }, { status, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // Phase 2: Resolve agentId → controller from erc8004_agents DB
@@ -190,10 +173,7 @@ export async function POST(req: NextRequest) {
     if (!result.ok) {
       const status = IDENTITY_ERRORS.has(result.error) ? 422 : 400;
 
-      return NextResponse.json(
-        { ok: false, ...escrowRail(), error: result.error, detail: result.detail },
-        { status, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, ...escrowRail(), error: result.error, detail: result.detail }, { status, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     // Phase 3: Persist preparation record
@@ -226,23 +206,14 @@ export async function POST(req: NextRequest) {
 
     if (prepError) {
       console.error('[prepare] failed to persist preparation:', prepError.message);
-      return NextResponse.json(
-        { ok: false, error: 'preparation_persist_failed', detail: prepError.message },
-        { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
+      return humanJson(req, { ok: false, error: 'preparation_persist_failed', detail: prepError.message }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
     }
 
     const prepareId = prepRow!.id;
 
-    return NextResponse.json(
-      { ...result, prepareId },
-      { headers: { 'Cache-Control': 'no-store' } },
-    );
+    return humanJson(req, { ...result, prepareId }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'unknown_error';
-    return NextResponse.json(
-      { ok: false, error: 'prepare_failed', detail: message },
-      { status: 500, headers: { 'Cache-Control': ERROR_CACHE } },
-    );
+    return humanJson(req, { ok: false, error: 'prepare_failed', detail: message }, { status: 500, headers: { 'Cache-Control': ERROR_CACHE } });
   }
 }
