@@ -134,7 +134,7 @@ export function toDashboardAgentRow(agent: any): DashboardAgentRow {
   const metadata = agent?.metadata || {};
   const rawAgentId = String(agent?.agentId || '').trim();
   const tokenId = agent?.tokenId ? String(agent.tokenId).trim() : null;
-  const profileId = tokenId || (/^\d+$/.test(rawAgentId) ? rawAgentId : '');
+  const profileId = tokenId || rawAgentId;
   const id = profileId || rawAgentId;
   const name = metadata?.name || agent?.name || `Agent ${id.slice(0, 8) || 'Unknown'}`;
   const jobs = Array.isArray(agent?.jobs) ? agent.jobs : [];
