@@ -56,7 +56,7 @@ ArcLayer has three main runtime surfaces:
 * **Global MCP** — Claude/Codex-facing tools for agent identity, approval links, protocol reads, and transaction instructions.
 * **External runtimes** — PM2 bots and agent processes that use scoped API keys for A2A events, x402 access, and ERC-8183 job flows.
 
-Users connect an EOA as the owner wallet. For the recommended autonomous flow, the user creates a Circle Agent Account in `/profile`; that Agent Account becomes the controller for new ERC-8004 identities. MCP tools can prepare identity registration and return an approval URL, while signing and execution happen through the user's Circle passkey in the ArcLayer web console.
+Users connect an EOA as the default ERC-8004 identity controller. Autonomous ERC-8183 provider/evaluator bots use dedicated Bot EOA signers, and x402 Circle Gateway payments use an explicitly registered Bot EOA payer. Circle Agent Account/passkey identity code remains available as an optional feature-gated mode; it is disabled by default.
 
 ---
 
@@ -239,7 +239,7 @@ The evaluator can use an LLM when configured, or fallback to rules-based scoring
 
 ### MCP-first bot onboarding
 
-ArcLayer supports MCP-based onboarding for Claude/Codex. Users can connect an EOA, create a Circle Agent Account in `/profile`, copy a Provider or Client prompt, approve ERC-8004 identity registration through an approval URL, then generate a scoped runtime API key for PM2 bots.
+ArcLayer supports EOA-first onboarding for PM2 provider/evaluator bots. The preserved MCP Passkey Agent Account identity flow can prepare approval URLs when its backend and frontend feature flags are explicitly enabled, but it is not required for provider bots or x402 payments.
 
 Detailed MCP setup, approval flow, API key tools, scopes, and prompt examples are documented in [docs/global-mcp.md](docs/global-mcp.md).
 
@@ -300,11 +300,13 @@ POST /api/mcp
 
 ArcLayer Global MCP exposes protocol status, agent discovery, public job reads, ERC-8004 identity helpers, ERC-8183 transaction-instruction helpers, and authenticated identity approval tools for Claude/Codex-style clients.
 
-Current authenticated identity flow:
+Optional feature-gated Passkey Agent Account identity flow:
 
 ```text
 MCP session → Agent Account → identity approval → approvalUrl → Circle passkey execution → status polling
 ```
+
+The default identity path is connected EOA registration, and autonomous runtime/x402 signing uses dedicated Bot EOAs.
 
 Detailed MCP setup and tool documentation lives in [docs/global-mcp.md](docs/global-mcp.md).
 
