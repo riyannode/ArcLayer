@@ -77,7 +77,7 @@ type ProfileAgent = {
   txHash?: string;
   metadata: AgentMetadata;
   updatedAt?: string;
-  /** Which wallet controls this agent: connected EOA or optional Circle Agent Account */
+  /** Which wallet controls this agent: EOA (legacy) or Agent Account (Circle) */
   source?: 'eoa' | 'agent_account';
 };
 
@@ -371,8 +371,6 @@ export default function AgentProfilePage() {
     agentGateway: { raw: '0', formatted: '0.00' },
   };
 
-  const agentAccountEnabled = process.env.NEXT_PUBLIC_AGENT_ACCOUNT_ENABLED === 'true';
-
   // Agent Account state
   const [agentAccount, setAgentAccount] = useState<AgentAccountInfo | null>(null);
   const [agentAccountLoading, setAgentAccountLoading] = useState(false);
@@ -574,9 +572,8 @@ export default function AgentProfilePage() {
   const effectiveAgentGateway = useMockData ? PREVIEW_MOCK.agentGateway : agentGateway;
 
   async function loadAgentAccount() {
-    if (agentAccountEnabled) {
-      setAgentAccountLoading(true);
-      try {
+    setAgentAccountLoading(true);
+    try {
       const res = await fetch('/api/profile/agent-account', { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
@@ -584,12 +581,11 @@ export default function AgentProfilePage() {
       }
     } catch {
       // silent
-      } finally {
-        setAgentAccountLoading(false);
-      }
+    } finally {
+      setAgentAccountLoading(false);
     }
 
-    // Load explicit A2A payer status
+    // Load A2A payer status
     setA2aPayerLoading(true);
     try {
       const res = await fetch('/api/profile/a2a-payer', { cache: 'no-store' });
@@ -853,7 +849,7 @@ export default function AgentProfilePage() {
                 </div>
               </div>
 
-              {agentAccountEnabled && (
+              {/* Agent Account */}
               <div className="grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-3">
                 <div className="text-[13px] text-[#EAE4D8]/60">Agent Wallet</div>
                 <div className="flex items-center gap-2">
@@ -874,7 +870,6 @@ export default function AgentProfilePage() {
                   )}
                 </div>
               </div>
-              )}
 
               {/* A2A x402 Payer */}
               <div className="grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-3">
@@ -882,17 +877,19 @@ export default function AgentProfilePage() {
                 <div className="flex items-center gap-2">
                   {a2aPayerLoading ? (
                     <span className="text-[13px] text-[#EAE4D8]/40">Loading...</span>
-                  ) : a2aPayerEnabled ? (
+                  ) : effectiveHasAgentAccount && a2aPayerEnabled ? (
                     <>
                       <span className="truncate font-mono text-[13px] text-[#F5F0E5]">
-                        Bot EOA
+                        Agent Account
                       </span>
                       <span className="ml-auto rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
                         Active
                       </span>
                     </>
+                  ) : effectiveHasAgentAccount ? (
+                    <span className="text-[13px] text-[#EAE4D8]/40">Binding pending</span>
                   ) : (
-                    <span className="text-[13px] text-[#EAE4D8]/40">No Bot EOA payer linked</span>
+                    <span className="text-[13px] text-[#EAE4D8]/40">Create Agent Account first</span>
                   )}
                 </div>
               </div>
@@ -906,12 +903,12 @@ export default function AgentProfilePage() {
               </div>
 
               <p className="mt-1 text-[11px] leading-5 text-[#EAE4D8]/35">
-                Recommended: Bot EOA for autonomous ERC-8183 and x402 Gateway payments. Optional: Circle Agent Account for passkey-based identity mode.
+                Optional. Used as ERC-8004 controller for provider bots and x402/agent operations.
               </p>
 
               {/* CTAs */}
               <div className="mt-4 flex flex-wrap gap-3">
-                {agentAccountEnabled && !effectiveHasAgentAccount && !showPasskeyRegister && isPreviewDomain && (
+                {!effectiveHasAgentAccount && !showPasskeyRegister && isPreviewDomain && (
                   <p className="text-[12px] leading-5 text-[#EAE4D8]/50">
                     Passkey creation is only supported on{' '}
                     <a href="https://arclayers.xyz/profile" target="_blank" rel="noreferrer" className="text-[#F3C536] underline decoration-[#F3C536]/30 hover:decoration-[#F3C536]">
@@ -920,7 +917,7 @@ export default function AgentProfilePage() {
                     . Preview deployments can display profile data, but Agent Account creation must be done on the production domain.
                   </p>
                 )}
-                {agentAccountEnabled && !effectiveHasAgentAccount && !showPasskeyRegister && !isPreviewDomain && (
+                {!effectiveHasAgentAccount && !showPasskeyRegister && !isPreviewDomain && (
                   <button
                     type="button"
                     onClick={handleCreateAgentAccount}
@@ -930,7 +927,7 @@ export default function AgentProfilePage() {
                     {creatingAgent ? 'Creating...' : 'Create Agent Account'}
                   </button>
                 )}
-                {agentAccountEnabled && showPasskeyRegister && (
+                {showPasskeyRegister && (
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
@@ -957,12 +954,12 @@ export default function AgentProfilePage() {
                     </button>
                   </div>
                 )}
-                {agents.length === 0 && (
+                {effectiveHasAgentAccount && agents.length === 0 && (
                   <Link href="/register/erc8004" className="inline-flex h-10 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-5 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10">
                     <Plus className="h-4 w-4" /> Register ERC-8004 Agent
                   </Link>
                 )}
-                {agents.length > 0 && (
+                {effectiveHasAgentAccount && agents.length > 0 && (
                   <Link href="/agent-setup" className="inline-flex h-10 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-5 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10">
                     <Bot className="h-4 w-4" /> Open Agent Setup
                   </Link>
@@ -971,7 +968,7 @@ export default function AgentProfilePage() {
               {createError && <p className="mt-2 text-[12px] text-red-400">{createError}</p>}
 
               {/* Advanced: manual link */}
-              {agentAccountEnabled && !effectiveHasAgentAccount && (
+              {!effectiveHasAgentAccount && (
                 <div className="mt-4">
                   <button
                     type="button"
@@ -1004,7 +1001,7 @@ export default function AgentProfilePage() {
               )}
             </div>
 
-            {agentAccountEnabled && (
+            {/* Wallet & Funding */}
             <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
               <div className="flex items-center gap-3">
                 <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
@@ -1188,7 +1185,6 @@ export default function AgentProfilePage() {
                 </>
               )}
             </div>
-            )}
           </div>
         )}
 
@@ -1222,7 +1218,7 @@ export default function AgentProfilePage() {
         )}
 
         {/* ── MCP Signing Session (Client Mode only, or no agents) ─────── */}
-        {agentAccountEnabled && isConnected && address && profileLoaded && (agents.length === 0 || profileView === 'client') && (
+        {isConnected && address && profileLoaded && (agents.length === 0 || profileView === 'client') && (
           <div className="mt-10">
             <McpSigningSessionCard address={address} />
           </div>

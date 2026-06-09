@@ -171,6 +171,14 @@ export async function POST(
   const rawRail = typeof body.rail === 'string' ? body.rail.trim() : 'circle-gateway';
   const rawScope = typeof body.scope === 'string' ? body.scope.trim() : 'homepage';
 
+  // A2A bindings are auto-managed by ensureA2aPayerBinding — reject manual mutation
+  if (rawScope === 'a2a') {
+    return NextResponse.json(
+      { ok: false, error: 'a2a_scope_immutable', detail: 'A2A payer bindings are auto-managed via Agent Account. Manual mutation is not allowed.' },
+      { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
+    );
+  }
+
   // Validate payer address
   if (!rawPayer || !isAddress(rawPayer)) {
     return NextResponse.json(
@@ -198,17 +206,6 @@ export async function POST(
   const payerAddress = getAddress(rawPayer);
   const rail = rawRail as AgentX402Rail;
   const scope = rawScope as AgentX402Scope;
-
-  if (scope === 'a2a' && process.env.AGENT_ACCOUNT_AS_RUNTIME_PAYER_ENABLED !== 'true') {
-    const agentAccount = await getActiveAgentAccountForOwner(auth.wallet);
-    if (agentAccount?.agentAccountAddress.toLowerCase() === payerAddress.toLowerCase()) {
-      return NextResponse.json(
-        { ok: false, error: 'agent_account_runtime_payer_disabled', detail: 'Register a dedicated Bot EOA as the A2A x402 payer.' },
-        { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
-      );
-    }
-  }
-
   const supabase = getSupabaseAdmin();
 
   // Soft-revoke existing active payer for same agent + rail + scope
@@ -310,6 +307,14 @@ export async function DELETE(
     return NextResponse.json(
       { ok: false, error: 'invalid_scope', detail: `Scope must be one of: ${[...VALID_SCOPES].join(', ')}` },
       { status: 400, headers: { 'Cache-Control': ERROR_CACHE } },
+    );
+  }
+
+  // A2A bindings are auto-managed by ensureA2aPayerBinding — reject manual deletion
+  if (scope === 'a2a') {
+    return NextResponse.json(
+      { ok: false, error: 'a2a_scope_immutable', detail: 'A2A payer bindings are auto-managed via Agent Account. Manual deletion is not allowed.' },
+      { status: 403, headers: { 'Cache-Control': ERROR_CACHE } },
     );
   }
 

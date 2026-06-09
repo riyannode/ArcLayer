@@ -1,7 +1,5 @@
 'use client';
 
-// Passkey Agent Account approval mode. Reachable only when the backend MCP feature flag is enabled.
-
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { type Address, parseGwei } from 'viem';

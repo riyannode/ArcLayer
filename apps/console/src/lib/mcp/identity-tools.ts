@@ -1,7 +1,5 @@
 /**
- * MCP Identity Tools — ERC-8004 identity registration via feature-gated Passkey Agent Account mode.
- *
- * This is an optional future identity path, not the default EOA registration flow.
+ * MCP Identity Tools — ERC-8004 identity registration via MCP.
  *
  * Product model:
  * - Owner wallet/passkey = user/admin

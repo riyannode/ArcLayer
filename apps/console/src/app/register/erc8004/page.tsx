@@ -618,8 +618,7 @@ export default function ERC8183EscrowRegisterPage() {
   });
   const [agentAccount, setAgentAccount] = useState<{ agentAccountAddress: string; status: string } | null>(null);
   const [agentAccountLoading, setAgentAccountLoading] = useState(true);
-  const agentAccountEnabled = process.env.NEXT_PUBLIC_AGENT_ACCOUNT_ENABLED === 'true';
-  const [controllerMode, setControllerMode] = useState<'eoa' | 'agent-account'>('eoa');
+  const [useLegacyController, setUseLegacyController] = useState(false);
   const { isConnected, address } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const { authenticated: circleAuthenticated, login: circleLogin, address: circleAddress, bundlerClient } = useCircleWallet();
@@ -659,28 +658,24 @@ export default function ERC8183EscrowRegisterPage() {
     };
   }, [signMessageAsync]);
 
-  // Fetch on mount only when optional Agent Account mode is enabled.
+  // Fetch on mount
   useEffect(() => {
-    if (!agentAccountEnabled) {
-      setAgentAccountLoading(false);
-      return;
-    }
     let cancelled = false;
     (async () => {
       await fetchAgentAccount();
       if (cancelled) return;
     })();
     return () => { cancelled = true; };
-  }, [agentAccountEnabled, fetchAgentAccount]);
+  }, [fetchAgentAccount]);
 
   // Re-fetch when wallet connects (session cookie becomes available)
   useEffect(() => {
-    if (!agentAccountEnabled || !address || !isConnected) return;
+    if (!address || !isConnected) return;
     // Only re-fetch if we haven't found an agent account yet
     if (agentAccount) return;
     setAgentAccountLoading(true);
     fetchAgentAccount(address);
-  }, [address, isConnected, agentAccount, agentAccountEnabled, fetchAgentAccount]);
+  }, [address, isConnected, agentAccount, fetchAgentAccount]);
 
   // Read ?role= from URL on mount (supports deep-link from onboarding page)
   useEffect(() => {
@@ -697,10 +692,10 @@ export default function ERC8183EscrowRegisterPage() {
   const isClientRole = form.role === 'autonomous-client';
   const requiresCategoryAndCapabilities = !isClientRole;
 
-  // Controller: connected EOA by default; passkey Agent Account is optional.
+  // Controller: Agent Account is default, legacy EOA only via opt-in
   const agentAccountAddress = agentAccount?.agentAccountAddress || '';
   const hasAgentAccount = Boolean(agentAccountAddress);
-  const controller = controllerMode === 'eoa'
+  const controller = useLegacyController
     ? (address || form.controllerWallet)
     : agentAccountAddress;
   const agentSlug = slugify(form.agentName) || 'erc8183-agent';
@@ -722,14 +717,14 @@ export default function ERC8183EscrowRegisterPage() {
       hasRequiredCategory &&
       hasRequiredCapabilities,
   );
-  const profileComplete = controllerMode === 'eoa' ? Boolean(controller) : hasAgentAccount;
+  const profileComplete = hasAgentAccount || useLegacyController;
   const reviewComplete = Boolean(metadataReady && form.confirm);
 
-  // Keep the direct EOA controller field aligned with the connected wallet.
+  // Legacy: set controllerWallet from EOA when using legacy mode
   useEffect(() => {
-    if (!address || controllerMode !== 'eoa') return;
+    if (!address || !useLegacyController) return;
     setForm((prev) => (prev.controllerWallet ? prev : { ...prev, controllerWallet: address }));
-  }, [address, controllerMode]);
+  }, [address, useLegacyController]);
 
   const agentManifest = useMemo(() => {
     const categorySlug = form.category
@@ -906,16 +901,16 @@ export default function ERC8183EscrowRegisterPage() {
     }
 
     // Agent Account path: require passkey auth
-    if (controllerMode === 'agent-account' && !hasAgentAccount) {
+    if (!useLegacyController && !hasAgentAccount) {
       setRegisterStatus('error');
-      setNotice('Circle Agent Account is unavailable. Use EOA controller mode or link an account in Profile.');
+      setNotice('Create an Agent Account first to register new agents.');
       return;
     }
 
     // Agent Account path: prompt passkey login if not authenticated
-    if (controllerMode === 'agent-account' && hasAgentAccount && !circleAuthenticated) {
+    if (!useLegacyController && hasAgentAccount && !circleAuthenticated) {
       try {
-        setNotice('Login with passkey to use Circle Agent Account...');
+        setNotice('Login with passkey to use Agent Wallet...');
         await circleLogin();
         // After login, React state (bundlerClient/circleAddress) is stale in this render.
         // Stop and ask user to click Mint again — by then state will be updated.
@@ -931,7 +926,7 @@ export default function ERC8183EscrowRegisterPage() {
           return;
         }
         setRegisterStatus('error');
-        setNotice('Passkey login failed. Try again or use EOA controller mode.');
+        setNotice('Passkey login failed. Try again or use legacy EOA mode.');
         return;
       }
     }
@@ -961,8 +956,8 @@ export default function ERC8183EscrowRegisterPage() {
       // Step 2: Mint ERC-8004 identity
       let hash: `0x${string}`;
 
-      if (controllerMode === 'eoa') {
-        // Default path: connected EOA signs directly
+      if (useLegacyController) {
+        // Legacy path: EOA signs directly
         setNotice('Submitting ERC-8004 identity mint (EOA)...');
         hash = await writeContractAsync(buildRegisterAgentConfig(effectiveMetadataURI));
       } else {
@@ -980,7 +975,7 @@ export default function ERC8183EscrowRegisterPage() {
           return;
         }
 
-        setNotice('Submitting ERC-8004 identity mint via Circle Agent Account...');
+        setNotice('Submitting ERC-8004 identity mint via Agent Wallet...');
 
         const calldata = encodeFunctionData({
           abi: ERC8004_IDENTITY_REGISTRY_ABI,
@@ -1014,7 +1009,7 @@ export default function ERC8183EscrowRegisterPage() {
       setNotice(`Waiting for ${hash.slice(0, 10)}...`);
 
       const receipt = await waitForTransactionReceipt(config, { hash });
-      const minted = extractERC8004MintedTokenIdFromReceipt(receipt, (controllerMode === 'eoa' ? address : agentAccountAddress) as Address | undefined);
+      const minted = extractERC8004MintedTokenIdFromReceipt(receipt, (useLegacyController ? address : agentAccountAddress) as Address | undefined);
       const mintedId = minted.toString();
 
       // Step 3: Patch draft with minted agentId
@@ -1116,9 +1111,9 @@ export default function ERC8183EscrowRegisterPage() {
               <div className="flex gap-5">
                 <Wallet className="mt-1 h-6 w-6 shrink-0 text-[#F3C536]" />
                 <div>
-                  <div className="font-semibold text-[#F5F0E5]">Bot EOA controls identity</div>
+                  <div className="font-semibold text-[#F5F0E5]">Agent Wallet controls identity</div>
                   <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
-                    The connected EOA is the default controller. Circle Agent Account is optional for passkey-based identity control.
+                    Your Circle Agent Account is the operational controller. EOA remains owner/funding wallet.
                   </p>
                 </div>
               </div>
@@ -1250,27 +1245,60 @@ export default function ERC8183EscrowRegisterPage() {
               open={openSections.profile}
               onToggle={() => toggleSection('profile')}
             >
-              <div className="mb-6 rounded-lg border border-white/10 bg-[#07090D]/88 p-5">
-                <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#F3C536]">Controller mode</div>
-                <div className="mt-3 flex flex-wrap gap-3">
-                  <button type="button" onClick={() => setControllerMode('eoa')} className={controllerMode === 'eoa' ? 'rounded-md border border-[#F3C536] bg-[#F3C536] px-4 py-2 text-[12px] font-semibold text-[#07090D]' : 'rounded-md border border-white/10 px-4 py-2 text-[12px] text-[#EAE4D8]/60'}>Bot EOA (default)</button>
-                  {agentAccountEnabled && (
-                    <button type="button" onClick={() => setControllerMode('agent-account')} disabled={agentAccountLoading || !hasAgentAccount} className={controllerMode === 'agent-account' ? 'rounded-md border border-[#F3C536] bg-[#F3C536] px-4 py-2 text-[12px] font-semibold text-[#07090D]' : 'rounded-md border border-white/10 px-4 py-2 text-[12px] text-[#EAE4D8]/60 disabled:cursor-not-allowed disabled:opacity-40'}>Circle Agent Account</button>
-                  )}
+              {/* Hard gate: no Agent Account */}
+              {!agentAccountLoading && !hasAgentAccount && !useLegacyController && (
+                <div className="mb-6 rounded-lg border border-[#F3C536]/20 bg-[#07090D]/88 p-6">
+                  <div className="flex items-center gap-3 text-[#F3C536]">
+                    <Shield className="h-5 w-5" />
+                    <div className="font-mono text-[13px] font-semibold">Agent Account Required</div>
+                  </div>
+                  <p className="mt-3 text-[13px] leading-6 text-[#EAE4D8]/62">
+                    New agents are controlled by your Circle Agent Wallet. Create an Agent Account to register new agents.
+                  </p>
+                  <Link
+                    href="/profile"
+                    className="mt-4 inline-flex h-10 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-5 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10"
+                  >
+                    Create Agent Account
+                  </Link>
                 </div>
-                <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/55">{controllerMode === 'eoa' ? 'Bot EOA controls this identity.' : 'Circle Agent Account is optional for passkey-based identity control.'}</p>
-              </div>
+              )}
 
               <div className="grid gap-7 lg:grid-cols-2">
-                <FieldShell label="Controller" required helper={controllerMode === 'eoa' ? 'Bot EOA controls this identity.' : 'Optional passkey-based identity controller'}>
-                  {controllerMode === 'agent-account' ? (
-                    <div className="flex h-12 items-center gap-2 rounded-md border border-[#F3C536]/20 bg-[#F3C536]/[0.04] px-4 text-[14px] text-[#F3C536]"><Shield className="h-4 w-4 shrink-0" /><span className="truncate font-mono text-[13px]">{agentAccountAddress}</span></div>
+                {/* Controller: Agent Wallet (default) or EOA (legacy) */}
+                <FieldShell
+                  label="Controller"
+                  required
+                  helper={hasAgentAccount && !useLegacyController ? 'Controlled by your Agent Wallet' : 'EOA controller (legacy)'}
+                >
+                  {hasAgentAccount && !useLegacyController ? (
+                    <div className="flex h-12 items-center gap-2 rounded-md border border-[#F3C536]/20 bg-[#F3C536]/[0.04] px-4 text-[14px] text-[#F3C536]">
+                      <Shield className="h-4 w-4 shrink-0" />
+                      <span className="truncate font-mono text-[13px]">{agentAccountAddress}</span>
+                    </div>
                   ) : isConnected && address ? (
-                    <div className="flex h-12 items-center gap-2 rounded-md border border-[#B8CD7E]/20 bg-[#B8CD7E]/[0.04] px-4 text-[14px] text-[#B8CD7E]"><Wallet className="h-4 w-4 shrink-0" /><span className="truncate font-mono text-[13px]">{address}</span></div>
+                    <div className="flex h-12 items-center gap-2 rounded-md border border-[#B8CD7E]/20 bg-[#B8CD7E]/[0.04] px-4 text-[14px] text-[#B8CD7E]">
+                      <Wallet className="h-4 w-4 shrink-0" />
+                      <span className="truncate font-mono text-[13px]">{address}</span>
+                    </div>
                   ) : (
-                    <TextInput value={form.controllerWallet} onChange={(value) => update('controllerWallet', value)} placeholder="0x..." />
+                    <TextInput
+                      value={form.controllerWallet}
+                      onChange={(value) => update('controllerWallet', value)}
+                      placeholder="0x..."
+                    />
                   )}
                 </FieldShell>
+
+                {/* EOA info when using Agent Account */}
+                {hasAgentAccount && !useLegacyController && isConnected && address && (
+                  <FieldShell label="Owner / Funding Wallet" helper="EOA — remains owner and funding source">
+                    <div className="flex h-12 items-center gap-2 rounded-md border border-white/10 bg-white/[0.025] px-4 text-[14px] text-[#EAE4D8]/55">
+                      <Wallet className="h-4 w-4 shrink-0 opacity-50" />
+                      <span className="truncate font-mono text-[13px] opacity-70">{address}</span>
+                    </div>
+                  </FieldShell>
+                )}
 
                 <FieldShell label="Avatar / Logo URL">
                   <TextInput
@@ -1321,6 +1349,36 @@ export default function ERC8183EscrowRegisterPage() {
                 </FieldShell>
               </div>
 
+              {/* Advanced: legacy controller override (collapsed by default) */}
+              {hasAgentAccount && (
+                <div className="mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setUseLegacyController(!useLegacyController)}
+                    className="flex items-center gap-2 text-[12px] text-[#EAE4D8]/35 transition hover:text-[#EAE4D8]/55"
+                  >
+                    {useLegacyController ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    <span>Advanced / legacy controller override</span>
+                  </button>
+
+                  {useLegacyController && (
+                    <div className="mt-4 rounded-md border border-rose-400/20 bg-rose-400/[0.035] p-4">
+                      <p className="text-[12px] leading-5 text-rose-200/70">
+                        Using EOA as controller is legacy mode. New agents should use Agent Wallet. This is for debugging or backward compatibility only.
+                      </p>
+                      <div className="mt-3">
+                        <FieldShell label="Legacy Controller Address" helper="Not recommended — use Agent Wallet instead">
+                          <TextInput
+                            value={form.controllerWallet}
+                            onChange={(value) => update('controllerWallet', value)}
+                            placeholder="0x..."
+                          />
+                        </FieldShell>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </Section>
 
             <Section
@@ -1343,7 +1401,7 @@ export default function ERC8183EscrowRegisterPage() {
                     </div>
 
                     <div className="space-y-3">
-                      <ReviewRow label="Controller" value={controller ? `${controllerMode === 'eoa' ? 'EOA' : 'Agent Account'} ${shortAddress(controller)}` : 'Not set'} />
+                      <ReviewRow label="Controller" value={controller ? `${useLegacyController ? 'EOA' : 'Agent Wallet'} ${shortAddress(controller)}` : 'Not set'} />
                       <ReviewRow label="Metadata URI" value={metadataURI || 'Auto-generated on register'} />
                       <ReviewRow label="Capabilities" value={customCaps.join(', ')} />
                       <ReviewRow label="Tx" value={txHash ? shortAddress(txHash) : '—'} />
@@ -1353,7 +1411,7 @@ export default function ERC8183EscrowRegisterPage() {
                   <div className="mt-6 grid gap-3 sm:grid-cols-4">
                     <StatusBox label="Identity" value={mintedAgentId ? `Agent ${mintedAgentId}` : 'Pending'} active={Boolean(mintedAgentId)} />
                     <StatusBox label="Metadata" value={metadataReady ? 'Ready' : 'Incomplete'} active={metadataReady} />
-                    <StatusBox label="Controller" value={controller ? `${controllerMode === 'eoa' ? 'EOA' : 'AA'}: ${shortAddress(controller)}` : 'Not set'} active={Boolean(controller)} />
+                    <StatusBox label="Controller" value={controller ? `${useLegacyController ? 'EOA' : 'AW'}: ${shortAddress(controller)}` : 'Not set'} active={Boolean(controller)} />
                     <StatusBox label="Next" value="Agent Setup" active={registerStatus === 'success'} />
                   </div>
 
@@ -1435,14 +1493,14 @@ export default function ERC8183EscrowRegisterPage() {
                 <button
                   type="button"
                   onClick={submitRegister}
-                  disabled={registerStatus === 'pending' || (controllerMode === 'agent-account' && !hasAgentAccount)}
+                  disabled={registerStatus === 'pending' || (!useLegacyController && !hasAgentAccount)}
                   className="h-12 rounded-md border border-[#F3C536] bg-[#F3C536] px-9 text-[13px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {registerStatus === 'pending'
                     ? 'Minting...'
-                    : controllerMode === 'eoa'
+                    : useLegacyController
                       ? 'Mint Identity (EOA)'
-                      : 'Mint Identity (Agent Account)'}
+                      : 'Mint Identity (Agent Wallet)'}
                 </button>
               </div>
             </div>
