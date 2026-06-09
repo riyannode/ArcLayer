@@ -310,16 +310,10 @@ export function normalizeAgentCommerceGateRequest(
   };
 }
 
-export function validateAgentCommerceFallbackPolicy(
-  ctx: AgentCommerceNormalizedGateContext,
-  input: Record<string, unknown>,
+export function validateAgentCommerceBuyerPolicy(
+  ctx: Pick<AgentCommerceNormalizedGateContext, "category" | "buyerRole">,
 ):
-  | {
-      ok: true;
-      amountAtomic: string;
-      reputationEligible: boolean;
-      llmReceiptRequired: boolean;
-    }
+  | { ok: true }
   | {
       ok: false;
       status: number;
@@ -353,6 +347,30 @@ export function validateAgentCommerceFallbackPolicy(
     };
   }
 
+  return { ok: true };
+}
+
+export function validateAgentCommerceFallbackPolicy(
+  ctx: AgentCommerceNormalizedGateContext,
+  input: Record<string, unknown>,
+):
+  | {
+      ok: true;
+      amountAtomic: string;
+      reputationEligible: boolean;
+      llmReceiptRequired: boolean;
+    }
+  | {
+      ok: false;
+      status: number;
+      error: string;
+      message: string;
+      details?: Record<string, unknown>;
+    } {
+  const buyerPolicy = validateAgentCommerceBuyerPolicy(ctx);
+  if (!buyerPolicy.ok) return buyerPolicy;
+
+  const categoryPolicy = AGENT_COMMERCE_POLICIES[ctx.category];
   const sellerPolicy = categoryPolicy.roles[ctx.sellerRole];
   if (!sellerPolicy) {
     return {
