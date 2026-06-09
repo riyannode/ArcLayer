@@ -134,7 +134,7 @@ export async function parseDualPaymentRequest(req: Request): Promise<Parsed> {
 
 export async function verifyDualPayment(req: Request) {
   const body = await readJsonBody(req);
-  const railError = await enforceRailHeader(req, body ?? undefined);
+  const railError = await enforceRailHeader(req, body);
   if (railError) {
     return { response: railError } as const;
   }
@@ -150,7 +150,7 @@ export async function verifyDualPayment(req: Request) {
 
 export async function settleDualPayment(req: Request) {
   const body = await readJsonBody(req);
-  const railError = await enforceRailHeader(req, body ?? undefined);
+  const railError = await enforceRailHeader(req, body);
   if (railError) {
     return { response: railError } as const;
   }

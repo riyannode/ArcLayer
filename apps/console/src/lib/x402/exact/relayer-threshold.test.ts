@@ -19,6 +19,16 @@ describe('parseRelayerNativeGasThreshold', () => {
     expect(parseRelayerNativeGasThreshold()).toBe(10_000_000_000_000_000n);
   });
 
+  it('falls back to 0.01 when env is negative', () => {
+    process.env.X402_MIN_RELAYER_NATIVE_GAS = '-1';
+    expect(parseRelayerNativeGasThreshold()).toBe(10_000_000_000_000_000n);
+  });
+
+  it('falls back to 0.01 when env is zero', () => {
+    process.env.X402_MIN_RELAYER_NATIVE_GAS = '0';
+    expect(parseRelayerNativeGasThreshold()).toBe(10_000_000_000_000_000n);
+  });
+
   it('uses a custom env threshold', () => {
     process.env.X402_MIN_RELAYER_NATIVE_GAS = '0.25';
     expect(parseRelayerNativeGasThreshold()).toBe(250_000_000_000_000_000n);

@@ -42,11 +42,18 @@ import { verifyExactSettlementProof } from './verify-settlement-proof';
 
 const DEFAULT_RELAYER_NATIVE_GAS = '0.01';
 
-export function parseRelayerNativeGasThreshold(value = process.env.X402_MIN_RELAYER_NATIVE_GAS): bigint {
+function defaultRelayerNativeGasThreshold(): bigint {
+  return parseUnits(DEFAULT_RELAYER_NATIVE_GAS, 18);
+}
+
+export function parseRelayerNativeGasThreshold(
+  value = process.env.X402_MIN_RELAYER_NATIVE_GAS,
+): bigint {
   try {
-    return parseUnits(value ?? DEFAULT_RELAYER_NATIVE_GAS, 18);
+    const parsed = parseUnits(value ?? DEFAULT_RELAYER_NATIVE_GAS, 18);
+    return parsed > 0n ? parsed : defaultRelayerNativeGasThreshold();
   } catch {
-    return parseUnits(DEFAULT_RELAYER_NATIVE_GAS, 18);
+    return defaultRelayerNativeGasThreshold();
   }
 }
 
