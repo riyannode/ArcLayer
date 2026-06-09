@@ -5,34 +5,22 @@
 create table if not exists public.a2a_agent_service_gates (
   id uuid primary key default gen_random_uuid(),
 
-  -- Agent/bot that owns and exposes this paid x402 service gate.
-  -- Do not call this provider_agent_id to avoid ERC-8183 provider-role collision.
   service_agent_id text not null,
-
-  -- Stable service key owned by the service agent.
-  -- Examples: market_data_basic, orderbook_depth, risk_check_v1.
   gate_key text not null,
 
   category text not null default 'prediction-market-bots',
 
-  -- x402 service/capability role, not ERC-8183 participant role.
-  -- Examples: oracle, analyzer, risk_evaluator, executor, solver, verifier.
   service_role text not null,
 
   scope text not null,
   access_type text not null,
   market text not null default '*',
 
-  -- USDC atomic amount, 6 decimals.
-  -- Example: 2000 = 0.002 USDC.
   price_atomic text not null,
   currency text not null default 'USDC',
 
-  -- Current production rail for A2A nanopayments.
   rail text not null default 'circle-gateway',
 
-  -- Optional payout override.
-  -- If null, code should fallback to a2a_agent_commerce_profiles.pay_to.
   pay_to text,
 
   reputation_eligible boolean not null default false,

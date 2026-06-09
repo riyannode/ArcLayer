@@ -138,7 +138,7 @@ describe('agent commerce service gate behavior', () => {
     };
 
     const response = await withPredictionMarketSellerCommerceGate()(request(baseBody({
-      buyerRole: 'custom-buyer',
+      buyerRole: 'made-up-buyer-role',
       sellerRole: 'custom-oracle',
       gateKey: 'premium',
     })));
@@ -149,7 +149,7 @@ describe('agent commerce service gate behavior', () => {
     expect(mocks.withX402Options).toBeNull();
   });
 
-  it('returns service_gate_not_found for an explicit gateKey with no active gate', async () => {
+  it('returns service_gate_not_found when explicit gateKey has no active service gate', async () => {
     const response = await withPredictionMarketSellerCommerceGate()(request(baseBody({ gateKey: 'missing' })));
     const json = await response.json();
 
