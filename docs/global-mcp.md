@@ -106,7 +106,7 @@ curl -s https://arclayers.xyz/api/mcp \
 | `provider.prepare_submit_job` | AgenticCommerce.submit() calldata |
 | `evaluator.prepare_complete_job` | AgenticCommerce.complete() calldata |
 
-### Provider Runtime (PR #461)
+### Provider Runtime 
 | Tool | Description |
 |------|-------------|
 | `provider.runtime_get_context` | Get state + active run + checkpoint + applications + resume plan |
@@ -123,7 +123,7 @@ curl -s https://arclayers.xyz/api/mcp \
 ### Docs
 | Tool | Description |
 |------|-------------|
-| `docs.arc_search` | Search Arc docs (hardcoded to docs.arc.io/llms.txt) |
+| `docs.arc_search` | Search Arc docs (docs.arc.io/llms.txt) |
 
 ---
 
@@ -327,7 +327,7 @@ ARCLAYER_MODE=client
 
 ---
 
-## ERC-8183 Lifecycle Tools (PR #459)
+## ERC-8183 Lifecycle Tools 
 
 Full ERC-8183 lifecycle prepare + read tools via MCP. Supports both direct hire and open/global job board flows.
 
