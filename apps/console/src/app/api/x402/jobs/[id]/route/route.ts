@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402';
 import { listRosterCandidates } from '@/lib/a2a/roster';
@@ -21,7 +22,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   const jobId = segments[segments.indexOf('jobs') + 1];
 
   if (!jobId || jobId === '[id]') {
-    return NextResponse.json({ ok: false, error: 'missing_job_id' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'missing_job_id' }, { status: 400 });
   }
 
   let body: { role?: string; category?: string; capabilities?: string[] } = {};
@@ -35,7 +36,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
 
   // Only dynamic registry — no seed/fallback agents
   if (roster.length === 0) {
-    return NextResponse.json({
+    return humanJson(req, {
       ok: false,
       error: 'no_agents_in_roster',
       jobId,
@@ -52,7 +53,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   );
 
   if (ranked.length === 0) {
-    return NextResponse.json({
+    return humanJson(req, {
       ok: false,
       error: 'no_matching_agent',
       jobId,
@@ -63,7 +64,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   const selected = ranked[0];
   const confidence = Math.min(1, selected.score / 100);
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     paid: true,
     routing: {

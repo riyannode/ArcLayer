@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * /api/profile/a2a-payer
  *
@@ -6,7 +7,7 @@
  * No private keys. No payment verification or settlement.
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { resolveSessionFromCookie, SESSION_COOKIE_NAME, getLinkedErc8004AgentsForController } from '@/lib/auth/wallet-session';
 import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
 import { getActiveA2aPayer, ensureA2aPayerBinding } from '@/lib/x402/agent-payer';
@@ -18,10 +19,10 @@ const ERROR_CACHE = 'no-store, no-cache, max-age=0';
 
 export async function GET(req: NextRequest) {
   const cookieValue = req.cookies.get(SESSION_COOKIE_NAME)?.value;
-  if (!cookieValue) return NextResponse.json({ ok: false, error: 'not_authenticated' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } });
+  if (!cookieValue) return humanJson(req, { ok: false, error: 'not_authenticated' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } });
 
   const session = await resolveSessionFromCookie(cookieValue);
-  if (!session) return NextResponse.json({ ok: false, error: 'invalid_session' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } });
+  if (!session) return humanJson(req, { ok: false, error: 'invalid_session' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } });
 
   const wallet = session.wallet;
   const agentAccount = await getActiveAgentAccountForOwner(wallet);
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
   }
 
   const a2aPayerEnabled = agentA2aPayers.length > 0;
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     hasAgentAccount: Boolean(agentAccountAddr),
     agentAccountAddress: agentAccountAddr,

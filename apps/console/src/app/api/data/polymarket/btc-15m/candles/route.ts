@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { fetchBtc15mMarket, fetchPriceHistory, payloadHash } from '@/lib/polymarket/btc15m';
 
 export const runtime = 'nodejs';
@@ -21,10 +22,10 @@ function toCandle(point: HistoryPoint, previous: HistoryPoint | null) {
   };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const market = await fetchBtc15mMarket();
   if (!market.ok) {
-    return NextResponse.json({
+    return humanJson(req, {
       ok: false,
       source: 'price-feed',
       asset: 'BTC',
@@ -55,5 +56,5 @@ export async function GET() {
     fetchedAt: new Date().toISOString(),
   };
 
-  return NextResponse.json({ ...payload, payloadHash: payloadHash(payload) });
+  return humanJson(req, { ...payload, payloadHash: payloadHash(payload) });
 }

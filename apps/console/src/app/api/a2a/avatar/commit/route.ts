@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { recoverMessageAddress } from 'viem';
@@ -61,10 +62,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    return humanJson(req, { error: 'Invalid JSON body' }, { status: 400 });
   }
   if (!body || typeof body !== 'object') {
-    return NextResponse.json({ error: 'Body must be an object' }, { status: 400 });
+    return humanJson(req, { error: 'Body must be an object' }, { status: 400 });
   }
 
   const { manifest: rawManifest, signature, ts, avatarCommitToken } = body as {
@@ -75,32 +76,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   };
 
   if (typeof avatarCommitToken !== 'string') {
-    return NextResponse.json({ error: 'invalid avatar commit token' }, { status: 401 });
+    return humanJson(req, { error: 'invalid avatar commit token' }, { status: 401 });
   }
   const verifiedToken = verifyAvatarCommitToken(avatarCommitToken);
   if (!verifiedToken.ok) {
-    return NextResponse.json({ error: 'invalid avatar commit token' }, { status: 403 });
+    return humanJson(req, { error: 'invalid avatar commit token' }, { status: 403 });
   }
 
   if (typeof signature !== 'string' || !/^0x[a-fA-F0-9]+$/.test(signature)) {
-    return NextResponse.json({ error: 'signature must be a 0x-prefixed hex string' }, { status: 400 });
+    return humanJson(req, { error: 'signature must be a 0x-prefixed hex string' }, { status: 400 });
   }
   if (typeof ts !== 'number' || !Number.isFinite(ts)) {
-    return NextResponse.json({ error: 'ts must be a unix-seconds number' }, { status: 400 });
+    return humanJson(req, { error: 'ts must be a unix-seconds number' }, { status: 400 });
   }
   const now = Math.floor(Date.now() / 1000);
   if (Math.abs(now - ts) > MAX_TIMESTAMP_SKEW_SEC) {
-    return NextResponse.json({ error: 'signature timestamp out of bounds' }, { status: 400 });
+    return humanJson(req, { error: 'signature timestamp out of bounds' }, { status: 400 });
   }
 
   const parsed = parseManifest(rawManifest);
   if (!parsed.ok) {
-    return NextResponse.json({ error: parsed.error }, { status: 400 });
+    return humanJson(req, { error: parsed.error }, { status: 400 });
   }
   const manifest = parsed.manifest;
 
   if (verifiedToken.payload.agentId !== manifest.agentId || manifest.avatar !== verifiedToken.payload.url) {
-    return NextResponse.json({ error: 'avatar commit token does not match manifest' }, { status: 403 });
+    return humanJson(req, { error: 'avatar commit token does not match manifest' }, { status: 403 });
   }
 
   const hash = manifestHash(manifest);
@@ -109,12 +110,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     signer = (await recoverMessageAddress({ message, signature: signature as `0x${string}` })).toLowerCase();
   } catch {
-    return NextResponse.json({ error: 'invalid signature' }, { status: 400 });
+    return humanJson(req, { error: 'invalid signature' }, { status: 400 });
   }
 
   const controller = await getOnchainController(manifest.agentId);
   if (!controller || signer !== controller) {
-    return NextResponse.json({ error: 'signer is not the on-chain controller for this agent' }, { status: 403 });
+    return humanJson(req, { error: 'signer is not the on-chain controller for this agent' }, { status: 403 });
   }
 
   const result = await upsertManifest({
@@ -127,8 +128,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 500 });
+    return humanJson(req, { error: result.error }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, agentId: manifest.agentId, manifestHash: hash, controller });
+  return humanJson(req, { ok: true, agentId: manifest.agentId, manifestHash: hash, controller });
 }

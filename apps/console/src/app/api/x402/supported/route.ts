@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import {
   ARC_TESTNET_CAIP2_NETWORK,
   ARC_TESTNET_CHAIN_ID,
@@ -17,7 +18,7 @@ export const dynamic = 'force-dynamic';
 
 const DEFAULT_AMOUNT_ATOMIC = '1';
 
-export function GET() {
+export function GET(req: NextRequest) {
   const maxTimeoutSeconds = Number(process.env.X402_REQUIREMENT_TTL_SECONDS || '300');
   const amount = process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC;
   const payTo = process.env.X402_RECEIVER_ADDRESS || process.env.X402_PAY_TO;
@@ -102,7 +103,7 @@ export function GET() {
   if (payTo) accepts.push(arcNativeExact);
   if (gatewayBatched && includeGatewayDemoAccept && payTo) accepts.push(gatewayBatched);
 
-  return NextResponse.json({
+  return humanJson(req, {
     kinds,
     accepts,
     facilitator: 'ArcLayer',

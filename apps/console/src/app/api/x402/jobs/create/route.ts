@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402';
 
@@ -16,13 +17,13 @@ async function handler(req: NextRequest): Promise<NextResponse> {
     const { title, description, budget, requester } = body;
 
     if (!title || !description) {
-      return NextResponse.json({ ok: false, error: 'missing_fields', message: 'title and description are required' }, { status: 400 });
+      return humanJson(req, { ok: false, error: 'missing_fields', message: 'title and description are required' }, { status: 400 });
     }
 
     const { createHash } = await import('crypto');
     const jobId = `job_${createHash('sha256').update(JSON.stringify({ title, description, budget, requester, ts: Date.now() })).digest('hex').slice(0, 16)}`;
 
-    return NextResponse.json({
+    return humanJson(req, {
       ok: true,
       paid: true,
       job: {
@@ -36,7 +37,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
       },
     });
   } catch (err: any) {
-    return NextResponse.json({ ok: false, error: err?.message || 'job_creation_failed' }, { status: 500 });
+    return humanJson(req, { ok: false, error: err?.message || 'job_creation_failed' }, { status: 500 });
   }
 }
 
