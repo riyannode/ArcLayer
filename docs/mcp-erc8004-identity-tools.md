@@ -2,9 +2,15 @@
 
 ## Overview
 
-PR 453 adds 4 authenticated MCP tools for ERC-8004 identity registration via Claude/Codex.
+These authenticated ERC-8004 tools preserve the optional **Passkey Agent Account mode** for future use. The mode is feature-gated by `MCP_AGENT_ACCOUNT_IDENTITY_ENABLED=true` and is not ArcLayer's default identity path. The default registration flow uses the connected EOA directly.
 
-## Product Model
+## Feature status
+
+- Disabled by default.
+- Enable only with `AGENT_ACCOUNT_BACKEND_ENABLED=true`, `MCP_AGENT_ACCOUNT_IDENTITY_ENABLED=true`, and `NEXT_PUBLIC_AGENT_ACCOUNT_ENABLED=true`.
+- PM2 provider/evaluator bots continue to use dedicated Bot EOAs.
+
+## Passkey Agent Account model
 
 - **Owner wallet/passkey** = user/admin
 - **Agent Account** = Circle Smart Account / controller
