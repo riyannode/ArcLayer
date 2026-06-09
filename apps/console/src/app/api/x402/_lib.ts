@@ -34,16 +34,53 @@ export type DualVerifyResult = {
 
 function isGatewayRail(paymentPayload: unknown, paymentRequirements: unknown): boolean {
   const req = paymentRequirements as { extra?: { transferMethod?: unknown } } | null;
-  return req?.extra?.transferMethod === 'gateway-batched-eip3009' || isBatchPayment(paymentPayload as Record<string, unknown>);
+  return req?.extra?.transferMethod === 'gateway-batched-eip3009' || isBatchPayment(paymentRequirements as Record<string, unknown>);
 }
 
-export async function parseDualPaymentRequest(req: Request): Promise<Parsed> {
+async function readJsonBody(req: Request): Promise<Record<string, unknown> | null> {
   const body = await req.json().catch(() => null);
-  if (!body || typeof body !== 'object') {
+  return isRecord(body) ? body : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getRecordPath(source: Record<string, unknown>, path: string[]): Record<string, unknown> | null {
+  let current: unknown = source;
+  for (const key of path) {
+    if (!isRecord(current)) return null;
+    current = current[key];
+  }
+  return isRecord(current) ? current : null;
+}
+
+function collectExplicitModeHints(raw: Record<string, unknown>): unknown[] {
+  const requirementsExtra = getRecordPath(raw, ['paymentRequirements', 'extra']);
+  return [raw.mode, raw.rail, requirementsExtra?.rail, requirementsExtra?.mode].filter((value) => value !== undefined && value !== null);
+}
+
+function explicitMode(raw: Record<string, unknown>): 'gateway' | 'native' | 'invalid' | null {
+  const hints = collectExplicitModeHints(raw);
+  if (hints.length === 0) return null;
+
+  const modes = new Set<'gateway' | 'native'>();
+  for (const hint of hints) {
+    if (typeof hint !== 'string') return 'invalid';
+    const normalized = hint.trim().toLowerCase();
+    if (normalized !== 'gateway' && normalized !== 'native') return 'invalid';
+    modes.add(normalized);
+  }
+
+  return modes.size === 1 ? [...modes][0] : 'invalid';
+}
+
+export function parseDualPaymentBody(body: Record<string, unknown> | null): Parsed {
+  if (!body) {
     return { ok: false, status: 400, body: { ok: false, error: 'invalid_json', message: 'Request body must be JSON.' } };
   }
 
-  const raw = body as Record<string, unknown>;
+  const raw = body;
   if (raw.x402Version !== X402_VERSION_V2) {
     return { ok: false, status: 400, body: { ok: false, error: 'unsupported_version', message: 'x402Version 2 is required.' } };
   }
@@ -54,7 +91,16 @@ export async function parseDualPaymentRequest(req: Request): Promise<Parsed> {
     return { ok: false, status: 400, body: { ok: false, error: 'missing_parameters', message: 'paymentPayload and paymentRequirements are required.' } };
   }
 
-  const mode = isGatewayRail(paymentPayload, paymentRequirements) ? 'gateway' : 'native';
+  const detectedMode = isGatewayRail(paymentPayload, paymentRequirements) ? 'gateway' : 'native';
+  const requestedMode = explicitMode(raw);
+  if (requestedMode === 'invalid') {
+    return { ok: false, status: 400, body: { ok: false, error: 'invalid_rail_mode', message: "Explicit x402 rail mode must be 'native' or 'gateway'." } };
+  }
+  if (requestedMode && requestedMode !== detectedMode) {
+    return { ok: false, status: 400, body: { ok: false, error: 'rail_payload_mismatch', message: `Explicit x402 rail mode '${requestedMode}' does not match the payment payload.` } };
+  }
+
+  const mode = requestedMode ?? detectedMode;
   if (mode === 'gateway') {
     return { ok: true, mode, paymentPayload: paymentPayload as Record<string, unknown>, paymentRequirements: paymentRequirements as Record<string, unknown> };
   }
@@ -82,13 +128,18 @@ async function verifyParsedPayment(parsed: ParsedOk): Promise<DualVerifyResult> 
   }) as Promise<DualVerifyResult>;
 }
 
+export async function parseDualPaymentRequest(req: Request): Promise<Parsed> {
+  return parseDualPaymentBody(await readJsonBody(req));
+}
+
 export async function verifyDualPayment(req: Request) {
-  const railError = await enforceRailHeader(req);
+  const body = await readJsonBody(req);
+  const railError = await enforceRailHeader(req, body);
   if (railError) {
     return { response: railError } as const;
   }
 
-  const parsed = await parseDualPaymentRequest(req);
+  const parsed = parseDualPaymentBody(body);
   if (!parsed.ok) {
     return { parsed, response: NextResponse.json(parsed.body, { status: parsed.status }) } as const;
   }
@@ -98,12 +149,13 @@ export async function verifyDualPayment(req: Request) {
 }
 
 export async function settleDualPayment(req: Request) {
-  const railError = await enforceRailHeader(req);
+  const body = await readJsonBody(req);
+  const railError = await enforceRailHeader(req, body);
   if (railError) {
     return { response: railError } as const;
   }
 
-  const parsed = await parseDualPaymentRequest(req);
+  const parsed = parseDualPaymentBody(body);
   if (!parsed.ok) {
     return { parsed, response: NextResponse.json(parsed.body, { status: parsed.status }) } as const;
   }

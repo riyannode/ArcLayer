@@ -12,8 +12,11 @@ export type Rail = 'native' | 'gateway';
  *   const railErr = await enforceRailHeader(req);
  *   if (railErr) return railErr;
  */
-export async function enforceRailHeader(req: Request): Promise<NextResponse | null> {
-  const headerRail = req.headers.get('x-arc-rail')?.toLowerCase();
+export async function enforceRailHeader(
+  req: Request,
+  body?: Record<string, unknown> | null,
+): Promise<NextResponse | null> {
+  const headerRail = req.headers.get('x-arc-rail')?.trim().toLowerCase();
   if (!headerRail) {
     // No header = no enforcement (backwards compat for non-rail-aware clients).
     return null;
@@ -26,11 +29,18 @@ export async function enforceRailHeader(req: Request): Promise<NextResponse | nu
     );
   }
 
-  // Extract wallet from body or query (best-effort — some routes pass it differently).
-  const wallet = extractWallet(req);
+  // Extract wallet from query/header/body. If clients opt into rail enforcement,
+  // require a wallet so the DB rail lock can actually be checked.
+  const wallet = await extractWallet(req, body);
   if (!wallet) {
-    // Can't verify against DB without wallet — allow through (header is syntactically valid).
-    return null;
+    return NextResponse.json(
+      {
+        ok: false,
+        error: 'missing_wallet_for_rail_enforcement',
+        message: 'X-ARC-RAIL was provided but no wallet could be resolved for rail enforcement.',
+      },
+      { status: 400 },
+    );
   }
 
   const supabase = getSupabaseAdmin();
@@ -125,15 +135,51 @@ export async function getJobRail(jobId: string): Promise<Rail | null> {
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
-function extractWallet(req: Request): string | null {
+async function extractWallet(req: Request, body?: Record<string, unknown> | null): Promise<string | null> {
   // Try query param first (GET requests).
   const url = new URL(req.url);
-  const qWallet = url.searchParams.get('wallet');
-  if (qWallet && /^0x[a-f0-9]{40}$/i.test(qWallet)) return qWallet.toLowerCase();
+  const qWallet = normalizeWallet(url.searchParams.get('wallet'));
+  if (qWallet) return qWallet;
 
   // Try X-ARC-WALLET header (set by RailProvider fetch wrapper).
-  const hWallet = req.headers.get('x-arc-wallet');
-  if (hWallet && /^0x[a-f0-9]{40}$/i.test(hWallet)) return hWallet.toLowerCase();
+  const hWallet = normalizeWallet(req.headers.get('x-arc-wallet'));
+  if (hWallet) return hWallet;
 
-  return null;
+  const parsedBody = body === undefined ? await readJsonBody(req) : body;
+  if (!parsedBody) return null;
+
+  return (
+    normalizeWallet(parsedBody.wallet)
+    ?? normalizeWallet(parsedBody.payer)
+    ?? normalizeWallet(getPath(parsedBody, ['paymentPayload', 'payload', 'authorization', 'from']))
+    ?? normalizeWallet(getPath(parsedBody, ['paymentPayload', 'payload', 'from']))
+    ?? normalizeWallet(getPath(parsedBody, ['paymentRequirements', 'payer']))
+  );
+}
+
+async function readJsonBody(req: Request): Promise<Record<string, unknown> | null> {
+  const contentType = req.headers.get('content-type') ?? '';
+  if (!contentType.toLowerCase().includes('application/json')) return null;
+
+  const body = await req.clone().json().catch(() => null);
+  return isRecord(body) ? body : null;
+}
+
+function getPath(source: Record<string, unknown>, path: string[]): unknown {
+  let current: unknown = source;
+  for (const key of path) {
+    if (!isRecord(current)) return undefined;
+    current = current[key];
+  }
+  return current;
+}
+
+function normalizeWallet(value: unknown): string | null {
+  return typeof value === 'string' && /^0x[a-f0-9]{40}$/i.test(value)
+    ? value.toLowerCase()
+    : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
