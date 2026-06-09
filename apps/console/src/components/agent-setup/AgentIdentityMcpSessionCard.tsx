@@ -134,7 +134,7 @@ export function AgentIdentityMcpSessionCard({
             MCP Identity Session
           </div>
           <div className="mt-1 text-[12px] text-[#EAE4D8]/45">
-            Create MCP token for Claude/Codex using the connected EOA.
+            Create MCP token using the connected EOA.
           </div>
         </div>
 
