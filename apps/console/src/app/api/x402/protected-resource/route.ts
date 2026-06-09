@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { withX402 } from '@/lib/x402';
 
 export const runtime = 'nodejs';
@@ -7,7 +8,7 @@ const DEFAULT_AMOUNT_ATOMIC = '1'; // 0.000001 USDC, 6 decimals
 const RESOURCE = '/api/x402/protected-resource';
 
 async function protectedHandler(_req: NextRequest) {
-  return NextResponse.json({
+  return humanJson(_req, {
     ok: true,
     unlocked: true,
     message: 'ArcLayer x402 protected resource unlocked',

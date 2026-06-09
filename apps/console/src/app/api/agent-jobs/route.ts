@@ -1,9 +1,10 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * GET  /api/agent-jobs — list agent jobs
  * POST /api/agent-jobs — create agent job
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createAgentJob, listAgentJobs, withAgentJobNamespace } from '@/lib/agent-jobs/store';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { offchainJobRail, escrowRail } from '@/lib/rails/responses';
@@ -43,11 +44,11 @@ export async function GET(req: NextRequest) {
     const jobs = await listAgentJobs(filter);
     const effectiveSettlementMode = filter.settlementMode ?? 'x402_offchain';
     const rail = effectiveSettlementMode === 'erc8183_escrow' ? escrowRail() : offchainJobRail();
-    return NextResponse.json({ ok: true, ...rail, jobs: jobs.map(withAgentJobNamespace) });
+    return humanJson(req, { ok: true, ...rail, jobs: jobs.map(withAgentJobNamespace) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown';
     console.error('[agent-jobs] GET failed:', msg);
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    return humanJson(req, { ok: false, error: msg }, { status: 500 });
   }
 }
 
@@ -60,17 +61,17 @@ export async function POST(req: NextRequest) {
     const { jobType, buyerAgentId, inputPayload, priceAtomic, marketId, deadlineAt, metadata } = body;
 
     if (!jobType || typeof jobType !== 'string') {
-      return NextResponse.json({ ok: false, error: 'jobType is required' }, { status: 400 });
+      return humanJson(req, { ok: false, error: 'jobType is required' }, { status: 400 });
     }
     if (!buyerAgentId || typeof buyerAgentId !== 'string') {
-      return NextResponse.json({ ok: false, error: 'buyerAgentId is required' }, { status: 400 });
+      return humanJson(req, { ok: false, error: 'buyerAgentId is required' }, { status: 400 });
     }
     if (!inputPayload || typeof inputPayload !== 'object') {
-      return NextResponse.json({ ok: false, error: 'inputPayload is required and must be an object' }, { status: 400 });
+      return humanJson(req, { ok: false, error: 'inputPayload is required and must be an object' }, { status: 400 });
     }
 
     if (buyerAgentId !== auth.key.agentId) {
-      return NextResponse.json({ ok: false, error: 'agent_id_mismatch', field: 'buyerAgentId' }, { status: 403 });
+      return humanJson(req, { ok: false, error: 'agent_id_mismatch', field: 'buyerAgentId' }, { status: 403 });
     }
 
     const job = await createAgentJob({
@@ -83,10 +84,10 @@ export async function POST(req: NextRequest) {
       metadata: metadata ?? undefined,
     });
 
-    return NextResponse.json({ ok: true, job: withAgentJobNamespace(job) }, { status: 201 });
+    return humanJson(req, { ok: true, job: withAgentJobNamespace(job) }, { status: 201 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown';
     console.error('[agent-jobs] POST failed:', msg);
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    return humanJson(req, { ok: false, error: msg }, { status: 500 });
   }
 }

@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+
 import {
   buildReputationFeedback,
   writeReputationFeedback,
@@ -13,8 +14,8 @@ type FeedbackBody = ReputationFeedbackInput & {
   dryRun?: boolean;
 };
 
-function json(status: number, payload: Record<string, unknown>) {
-  return NextResponse.json(payload, { status });
+function json(request: Request, status: number, payload: Record<string, unknown>) {
+  return humanJson(request, payload, { status });
 }
 
 const VALIDATION_ERRORS = new Set([
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
     if (body.dryRun) {
       const feedback = buildReputationFeedback(body);
 
-      return json(200, {
+      return json(request, 200, {
         ok: true,
         dryRun: true,
         source: 'erc8004_reputation_registry',
@@ -86,11 +87,12 @@ export async function POST(request: Request) {
     }
 
     const result = await writeReputationFeedback(body);
-    return json(200, result);
+    return json(request, 200, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
     return json(
+      request,
       errorStatus(message),
       {
         ok: false,

@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { listAgentPresenceByCategory, upsertAgentPresence } from '@/lib/a2a/live-events';
@@ -72,7 +73,7 @@ export async function GET(request: Request) {
   try {
     const presence = await listAgentPresenceByCategory(category);
 
-    return NextResponse.json({
+    return humanJson(request, {
       ok: true,
       source: process.env.A2A_AGENT_ROSTER_SOURCE || 'local-indexer',
       category,
@@ -81,7 +82,7 @@ export async function GET(request: Request) {
       timestamp: new Date().toISOString(),
     });
   } catch {
-    return NextResponse.json({
+    return humanJson(request, {
       ok: false,
       source: 'local-indexer',
       category,
@@ -97,12 +98,12 @@ export async function POST(request: NextRequest) {
   // Read body once
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object') {
-    return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
+    return humanJson(request, { ok: false, error: 'invalid_json' }, { status: 400 });
   }
 
   // Reject secret fields — recursive scan of all keys in body
   if (hasSecretFields(body)) {
-    return NextResponse.json({ ok: false, error: 'secret_fields_rejected' }, { status: 400 });
+    return humanJson(request, { ok: false, error: 'secret_fields_rejected' }, { status: 400 });
   }
 
   // Dual auth: global A2A_LIVE_EVENTS_TOKEN OR per-agent ARCLAYER_API_KEY
@@ -123,10 +124,10 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.ok) {
-      return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+      return humanJson(request, { ok: false, error: result.error }, { status: 400 });
     }
 
-    return NextResponse.json({ ok: true });
+    return humanJson(request, { ok: true });
   }
 
   // Determine required scope based on runtimeType
@@ -137,10 +138,7 @@ export async function POST(request: NextRequest) {
     requiredScopes = ['erc8183:presence'];
   } else if (runtimeType === 'x402-agent') {
     // Reserved for future x402 agent heartbeat — not yet implemented
-    return NextResponse.json(
-      { ok: false, error: 'unsupported_runtime_type', hint: 'x402:presence not yet implemented' },
-      { status: 501 },
-    );
+    return humanJson(request, { ok: false, error: 'unsupported_runtime_type', hint: 'x402:presence not yet implemented' }, { status: 501 });
   } else {
     // Legacy A2A bots: preserve existing presence:write behavior
     requiredScopes = ['presence:write'];
@@ -151,10 +149,7 @@ export async function POST(request: NextRequest) {
 
   // Enforce key.agentId === body.agentId
   if (auth.key.agentId !== body.agentId) {
-    return NextResponse.json(
-      { ok: false, error: 'agent_id_mismatch', key_agent: auth.key.agentId, body_agent: body.agentId },
-      { status: 403 },
-    );
+    return humanJson(request, { ok: false, error: 'agent_id_mismatch', key_agent: auth.key.agentId, body_agent: body.agentId }, { status: 403 });
   }
 
   const result = await upsertAgentPresence({
@@ -172,8 +167,8 @@ export async function POST(request: NextRequest) {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
+    return humanJson(request, { ok: false, error: result.error }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true });
+  return humanJson(request, { ok: true });
 }

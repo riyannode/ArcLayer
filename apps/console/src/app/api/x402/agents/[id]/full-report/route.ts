@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402';
 
@@ -16,7 +17,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   const agentId = segments[segments.indexOf('agents') + 1];
 
   if (!agentId || agentId === '[id]') {
-    return NextResponse.json({ ok: false, error: 'missing_agent_id' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'missing_agent_id' }, { status: 400 });
   }
 
   // Simulate full reputation report
@@ -24,7 +25,7 @@ async function handler(req: NextRequest): Promise<NextResponse> {
   const successful = Math.floor(completed * (0.85 + Math.random() * 0.13));
   const totalEarned = (completed * 0.05 + Math.random() * 2).toFixed(4);
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     paid: true,
     report: {

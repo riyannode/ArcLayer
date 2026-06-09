@@ -1,8 +1,9 @@
+import { humanJson } from '@/lib/api/human-json';
 /**
  * GET /api/agent-jobs/[jobId] — get job with events
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getAgentJob, withAgentJobNamespace } from '@/lib/agent-jobs/store';
 import { wrongRailEscrowError, offchainJobRail } from '@/lib/rails/responses';
 
@@ -15,17 +16,17 @@ export async function GET(
     const result = await getAgentJob(jobId);
 
     if (!result) {
-      return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
+      return humanJson(_req, { ok: false, error: 'not_found' }, { status: 404 });
     }
 
     if (result.settlement_mode === 'erc8183_escrow') {
-      return NextResponse.json(wrongRailEscrowError(), { status: 409 });
+      return humanJson(_req, wrongRailEscrowError(), { status: 409 });
     }
 
-    return NextResponse.json({ ok: true, ...offchainJobRail(), ...withAgentJobNamespace(result) });
+    return humanJson(_req, { ok: true, ...offchainJobRail(), ...withAgentJobNamespace(result) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'unknown';
     console.error('[agent-jobs] GET /[jobId] failed:', msg);
-    return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+    return humanJson(_req, { ok: false, error: msg }, { status: 500 });
   }
 }

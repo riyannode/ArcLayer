@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { createHash } from 'crypto';
 import { createPublicClient, fallback, getAddress, http, isHex, type Address, type Hex, type TransactionReceipt } from 'viem';
 import { ARC_RPC_URLS, arcTestnet } from '@arclayer/sdk';
@@ -37,8 +38,8 @@ function stableHash(value: unknown) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16);
 }
 
-function jsonError(error: string, status = 400, details?: Record<string, unknown>) {
-  return NextResponse.json({ ok: false, error, ...(details ?? {}) }, { status });
+function jsonError(req: NextRequest | Request, error: string, status = 400, details?: Record<string, unknown>) {
+  return humanJson(req, { ok: false, error, ...(details ?? {}) }, { status });
 }
 
 function missingRequiredOnchainFields(body: SubmitBody): string[] {
@@ -66,10 +67,10 @@ function receiptLogDiagnostics(receipt: Pick<TransactionReceipt, 'transactionHas
   };
 }
 
-async function handleOnchainSubmit(params: { jobId: string; agentId: string; body: SubmitBody; job: A2AJobRow }) {
-  const { jobId, agentId, body, job } = params;
+async function handleOnchainSubmit(params: { req: NextRequest; jobId: string; agentId: string; body: SubmitBody; job: A2AJobRow }) {
+  const { req, jobId, agentId, body, job } = params;
   const missing = missingRequiredOnchainFields(body);
-  if (missing.length > 0) return jsonError('missing_required_fields', 400, { fields: missing });
+  if (missing.length > 0) return jsonError(req, 'missing_required_fields', 400, { fields: missing });
 
   const output = body.output;
   const proof = body.proof;
@@ -79,7 +80,7 @@ async function handleOnchainSubmit(params: { jobId: string; agentId: string; bod
   const submitTx = normalizeHex(String(body.submit_tx), 'submit_tx');
   const onchainJobId = String(job.onchain_job_id);
 
-  if (job.claimed_by && job.claimed_by !== agentId) return jsonError('agent_did_not_claim_job', 403);
+  if (job.claimed_by && job.claimed_by !== agentId) return jsonError(req, 'agent_did_not_claim_job', 403);
 
   const client = makeArcPublicClient();
   let receipt: Awaited<ReturnType<typeof client.getTransactionReceipt>>;
@@ -91,10 +92,10 @@ async function handleOnchainSubmit(params: { jobId: string; agentId: string; bod
     receipt = await client.getTransactionReceipt({ hash: submitTx });
   } catch (error) {
     console.error('[submit] getTransactionReceipt error:', error);
-    return jsonError('submit_tx_receipt_not_found', 400);
+    return jsonError(req, 'submit_tx_receipt_not_found', 400);
   }
 
-  if (receipt.status !== 'success') return jsonError('submit_tx_failed', 400);
+  if (receipt.status !== 'success') return jsonError(req, 'submit_tx_failed', 400);
 
   try {
     submittedEvent = extractJobSubmittedFromReceipt(receipt);
@@ -103,18 +104,18 @@ async function handleOnchainSubmit(params: { jobId: string; agentId: string; bod
       error: error instanceof Error ? error.message : String(error),
       ...receiptLogDiagnostics(receipt),
     });
-    return jsonError('job_submitted_event_not_found', 400);
+    return jsonError(req, 'job_submitted_event_not_found', 400);
   }
 
   if (submittedEvent.jobId.toString() !== onchainJobId) {
-    return jsonError('job_submitted_event_job_id_mismatch', 400, {
+    return jsonError(req, 'job_submitted_event_job_id_mismatch', 400, {
       expected: onchainJobId,
       actual: submittedEvent.jobId.toString(),
     });
   }
 
   if (submittedEvent.deliverable.toLowerCase() !== deliverableHash) {
-    return jsonError('job_submitted_event_deliverable_mismatch', 400, {
+    return jsonError(req, 'job_submitted_event_deliverable_mismatch', 400, {
       expected: deliverableHash,
       actual: submittedEvent.deliverable.toLowerCase(),
     });
@@ -127,25 +128,25 @@ async function handleOnchainSubmit(params: { jobId: string; agentId: string; bod
     ]);
   } catch (error) {
     console.error('[submit] on-chain verification error:', error);
-    return jsonError('onchain_job_verification_failed', 400);
+    return jsonError(req, 'onchain_job_verification_failed', 400);
   }
 
   if (!sameAddress(tx.from, onchainJob.provider)) {
-    return jsonError('submit_tx_provider_mismatch', 403, {
+    return jsonError(req, 'submit_tx_provider_mismatch', 403, {
       expected: onchainJob.provider,
       actual: getAddress(tx.from),
     });
   }
 
   if (job.provider && !sameAddress(job.provider, onchainJob.provider)) {
-    return jsonError('db_provider_mismatch', 409, {
+    return jsonError(req, 'db_provider_mismatch', 409, {
       expected: getAddress(job.provider as Address),
       actual: onchainJob.provider,
     });
   }
 
   if (onchainJob.status !== ERC8183JobStatus.Submitted) {
-    return jsonError('onchain_job_not_submitted', 400, {
+    return jsonError(req, 'onchain_job_not_submitted', 400, {
       expected: ERC8183JobStatus.Submitted.toString(),
       actual: onchainJob.status.toString(),
     });
@@ -174,7 +175,7 @@ async function handleOnchainSubmit(params: { jobId: string; agentId: string; bod
   const { data, error } = await supabase.from('a2a_jobs').update(updatePayload).eq('id', jobId).select().single();
   if (error) {
     console.error('[submit] a2a_jobs update error:', error.message);
-    return jsonError('db_error', 500);
+    return jsonError(req, 'db_error', 500);
   }
 
   const receiptId = `receipt_${stableHash({ id: jobId, agentId, output, proof, submitTx })}`;
@@ -200,7 +201,7 @@ async function handleOnchainSubmit(params: { jobId: string; agentId: string; bod
     delivered: true,
   }).catch((e) => console.error('[submit] recordDelivery error:', e));
 
-  return NextResponse.json(result);
+  return humanJson(req, result);
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -217,11 +218,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (limited) return limited;
 
   const body = await req.json().catch(() => null);
-  if (!body || typeof body !== 'object') return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
+  if (!body || typeof body !== 'object') return humanJson(req, { ok: false, error: 'invalid_json' }, { status: 400 });
 
   if (!(await requireRegisteredExternalAgent(auth.key.agentId))) {
     console.warn(`[a2a] rejected unregistered external agent agentId=${auth.key.agentId}`);
-    return NextResponse.json({ ok: false, error: 'unregistered_external_agent' }, { status: 403 });
+    return humanJson(req, { ok: false, error: 'unregistered_external_agent' }, { status: 403 });
   }
 
   const supabase = getSupabaseAdmin();
@@ -233,18 +234,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (fetchErr) {
     console.error('[submit] a2a_jobs fetch error:', fetchErr.message);
-    return NextResponse.json({ ok: false, error: 'db_error' }, { status: 500 });
+    return humanJson(req, { ok: false, error: 'db_error' }, { status: 500 });
   }
-  if (!job) return NextResponse.json({ ok: false, error: 'job_not_found' }, { status: 404 });
+  if (!job) return humanJson(req, { ok: false, error: 'job_not_found' }, { status: 404 });
 
   if ((job as A2AJobRow).is_onchain && (job as A2AJobRow).onchain_job_id) {
     try {
-      return await handleOnchainSubmit({ jobId: id, agentId: auth.key.agentId, body: body as SubmitBody, job: job as A2AJobRow });
+      return await handleOnchainSubmit({ req, jobId: id, agentId: auth.key.agentId, body: body as SubmitBody, job: job as A2AJobRow });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'submit_failed';
-      if (message.endsWith('_invalid_hex')) return jsonError(message, 400);
+      if (message.endsWith('_invalid_hex')) return jsonError(req, message, 400);
       console.error('[submit] on-chain submit error:', error);
-      return jsonError('submit_failed', 500);
+      return jsonError(req, 'submit_failed', 500);
     }
   }
 
@@ -255,7 +256,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     proof,
     summary: typeof summary === 'string' ? summary : undefined,
   });
-  if (!result.ok) return NextResponse.json(result, { status: result.error === 'job_not_found' ? 404 : 403 });
+  if (!result.ok) return humanJson(req, result, { status: result.error === 'job_not_found' ? 404 : 403 });
 
   // Phase 13: fire-and-forget on-chain reputation recording
   recordDelivery({
@@ -265,5 +266,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     delivered: true,
   }).catch((e) => console.error('[submit] recordDelivery error:', e));
 
-  return NextResponse.json(result);
+  return humanJson(req, result);
 }

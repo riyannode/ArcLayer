@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { getLiveSnapshot } from '@/lib/markets/polymarket/snapshot';
 import type { Asset } from '@/lib/markets/polymarket/types';
 
@@ -14,21 +15,18 @@ export async function GET(request: NextRequest) {
     const asset: Asset = assetQuery === 'ETH' ? 'ETH' : 'BTC';
     const cached = liveCache.get(asset);
     if (cached && cached.expiresAt > Date.now()) {
-      return NextResponse.json(cached.payload, {
+      return humanJson(request, cached.payload, {
         headers: { 'Cache-Control': LIVE_CACHE_CONTROL },
       });
     }
     const snapshot = await getLiveSnapshot(asset);
-    if (!snapshot) return NextResponse.json({ ok: false, error: 'no_active_market' }, { status: 404 });
+    if (!snapshot) return humanJson(request, { ok: false, error: 'no_active_market' }, { status: 404 });
     const payload = { ok: true, data: snapshot };
     liveCache.set(asset, { expiresAt: Date.now() + LIVE_TTL_MS, payload });
-    return NextResponse.json(payload, {
+    return humanJson(request, payload, {
       headers: { 'Cache-Control': LIVE_CACHE_CONTROL },
     });
   } catch {
-    return NextResponse.json(
-      { ok: false, error: 'snapshot_fetch_failed' },
-      { headers: { 'Cache-Control': LIVE_CACHE_CONTROL } },
-    );
+    return humanJson(request, { ok: false, error: 'snapshot_fetch_failed' }, { headers: { 'Cache-Control': LIVE_CACHE_CONTROL } });
   }
 }

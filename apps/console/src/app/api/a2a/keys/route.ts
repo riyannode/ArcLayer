@@ -1,3 +1,4 @@
+import { humanJson } from '@/lib/api/human-json';
 import { NextRequest, NextResponse } from 'next/server';
 import { recoverMessageAddress } from 'viem';
 import { createApiKey, revokeApiKey } from '@/lib/a2a/auth';
@@ -21,7 +22,7 @@ function keyMessage(input: { agentId: string; action: 'create' | 'revoke'; ts: n
   ].filter(Boolean).join('\n');
 }
 
-async function verifyControllerSignature(input: {
+async function verifyControllerSignature(req: NextRequest, input: {
   agentId: string;
   action: 'create' | 'revoke';
   ts: unknown;
@@ -29,21 +30,21 @@ async function verifyControllerSignature(input: {
   keyId?: string;
 }): Promise<{ ok: true; signer: string } | { ok: false; response: NextResponse }> {
   if (typeof input.ts !== 'number' || !Number.isFinite(input.ts)) {
-    return { ok: false, response: NextResponse.json({ ok: false, error: 'ts must be unix seconds' }, { status: 400 }) };
+    return { ok: false, response: humanJson(req, { ok: false, error: 'ts must be unix seconds' }, { status: 400 }) };
   }
 
   const now = Math.floor(Date.now() / 1000);
   if (Math.abs(now - input.ts) > MAX_TIMESTAMP_SKEW_SEC) {
-    return { ok: false, response: NextResponse.json({ ok: false, error: 'signature timestamp out of bounds' }, { status: 400 }) };
+    return { ok: false, response: humanJson(req, { ok: false, error: 'signature timestamp out of bounds' }, { status: 400 }) };
   }
 
   if (typeof input.signature !== 'string' || !/^0x[a-fA-F0-9]+$/.test(input.signature)) {
-    return { ok: false, response: NextResponse.json({ ok: false, error: 'signature must be 0x hex' }, { status: 400 }) };
+    return { ok: false, response: humanJson(req, { ok: false, error: 'signature must be 0x hex' }, { status: 400 }) };
   }
 
   const stored = await getManifest(input.agentId);
   if (!stored?.controller) {
-    return { ok: false, response: NextResponse.json({ ok: false, error: 'agent_manifest_not_found' }, { status: 404 }) };
+    return { ok: false, response: humanJson(req, { ok: false, error: 'agent_manifest_not_found' }, { status: 404 }) };
   }
 
   const message = keyMessage({
@@ -57,11 +58,11 @@ async function verifyControllerSignature(input: {
   try {
     signer = (await recoverMessageAddress({ message, signature: input.signature as `0x${string}` })).toLowerCase();
   } catch {
-    return { ok: false, response: NextResponse.json({ ok: false, error: 'invalid_signature' }, { status: 400 }) };
+    return { ok: false, response: humanJson(req, { ok: false, error: 'invalid_signature' }, { status: 400 }) };
   }
 
   if (signer !== stored.controller.toLowerCase()) {
-    return { ok: false, response: NextResponse.json({ ok: false, error: 'signer_not_controller' }, { status: 403 }) };
+    return { ok: false, response: humanJson(req, { ok: false, error: 'signer_not_controller' }, { status: 403 }) };
   }
 
   return { ok: true, signer };
@@ -89,15 +90,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'invalid_json' }, { status: 400 });
   }
 
   if (typeof body.agentId !== 'string' || body.agentId.trim().length === 0) {
-    return NextResponse.json({ ok: false, error: 'agentId is required' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'agentId is required' }, { status: 400 });
   }
   const agentId = body.agentId.trim();
 
-  const auth = await verifyControllerSignature({
+  const auth = await verifyControllerSignature(req, {
     agentId,
     action: 'create',
     ts: body.ts,
@@ -117,10 +118,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ ok: false, error: result.error }, { status: 500 });
+    return humanJson(req, { ok: false, error: result.error }, { status: 500 });
   }
 
-  return NextResponse.json({
+  return humanJson(req, {
     ok: true,
     agentId,
     key: result.key, // shown once; DB stores hash only
@@ -144,16 +145,16 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ ok: false, error: 'invalid_json' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'invalid_json' }, { status: 400 });
   }
 
   if (typeof body.agentId !== 'string' || typeof body.keyId !== 'string') {
-    return NextResponse.json({ ok: false, error: 'agentId and keyId are required' }, { status: 400 });
+    return humanJson(req, { ok: false, error: 'agentId and keyId are required' }, { status: 400 });
   }
 
   const agentId = body.agentId.trim();
   const keyId = body.keyId.trim();
-  const auth = await verifyControllerSignature({
+  const auth = await verifyControllerSignature(req, {
     agentId,
     action: 'revoke',
     keyId,
@@ -163,7 +164,7 @@ export async function DELETE(req: NextRequest): Promise<NextResponse> {
   if (!auth.ok) return auth.response;
 
   const ok = await revokeApiKey(keyId, agentId);
-  if (!ok) return NextResponse.json({ ok: false, error: 'revoke_failed' }, { status: 500 });
+  if (!ok) return humanJson(req, { ok: false, error: 'revoke_failed' }, { status: 500 });
 
-  return NextResponse.json({ ok: true, agentId, keyId, revoked: true });
+  return humanJson(req, { ok: true, agentId, keyId, revoked: true });
 }

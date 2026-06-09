@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
 import { listLocalIndexerAgentsByCategory } from '@/lib/a2a/local-indexer-roster';
 import { listStoredManifests } from '@/lib/a2a/roster';
 
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
 
   // Merge: local-indexer agents + Supabase external agents (dedupe by agentId)
   if (source === 'global') {
-    return NextResponse.json({
+    return humanJson(request, {
       ok: true,
       source: 'supabase-roster',
       category,
@@ -79,7 +79,7 @@ export async function GET(request: Request) {
   );
   const merged = [...localAgents, ...externalOnly];
 
-  return NextResponse.json({
+  return humanJson(request, {
     ok: true,
     source: localError ? 'supabase-roster' : 'merged',
     metadataHost: process.env.A2A_AGENT_METADATA_HOST ?? 'agent.arclayers.xyz',

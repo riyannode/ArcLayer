@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { latestBridgeSession } from '@/lib/agent-bridge/store';
 
 export const runtime = 'nodejs';
@@ -7,23 +8,20 @@ const LATEST_SESSION_TTL_MS = 30_000;
 const LATEST_SESSION_CACHE_CONTROL = 'public, s-maxage=30, stale-while-revalidate=120';
 let latestSessionCache: { expiresAt: number; payload: unknown } | null = null;
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     if (latestSessionCache && latestSessionCache.expiresAt > Date.now()) {
-      return NextResponse.json(latestSessionCache.payload, {
+      return humanJson(req, latestSessionCache.payload, {
         headers: { 'Cache-Control': LATEST_SESSION_CACHE_CONTROL },
       });
     }
     const session = await latestBridgeSession();
     const payload = { ok: true, session };
     latestSessionCache = { expiresAt: Date.now() + LATEST_SESSION_TTL_MS, payload };
-    return NextResponse.json(payload, {
+    return humanJson(req, payload, {
       headers: { 'Cache-Control': LATEST_SESSION_CACHE_CONTROL },
     });
   } catch (err) {
-    return NextResponse.json(
-      { ok: false, error: 'query_failed', message: err instanceof Error ? err.message : 'unknown' },
-      { status: 500, headers: { 'Cache-Control': LATEST_SESSION_CACHE_CONTROL } },
-    );
+    return humanJson(req, { ok: false, error: 'query_failed', message: err instanceof Error ? err.message : 'unknown' }, { status: 500, headers: { 'Cache-Control': LATEST_SESSION_CACHE_CONTROL } });
   }
 }

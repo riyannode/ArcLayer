@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
 import { type Hex } from 'viem';
 import { getValidationStatus } from '@/lib/a2a/validation';
 
@@ -13,13 +13,10 @@ export async function GET(
     const { requestHash } = await params;
   try {
     const result = await getValidationStatus(requestHash as Hex);
-    return NextResponse.json(result);
+    return humanJson(_request, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
 
-    return NextResponse.json(
-      { ok: false, error: message, source: 'erc8004_validation_registry' },
-      { status: 400 },
-    );
+    return humanJson(_request, { ok: false, error: message, source: 'erc8004_validation_registry' }, { status: 400 });
   }
 }

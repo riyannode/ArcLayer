@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { insertBridgeEvent, listBridgeEvents, stablePayloadHash, type BridgeEventInput } from '@/lib/agent-bridge/store';
 import { requireRegisteredExternalAgent } from '@/lib/a2a/external-registry';
@@ -14,8 +15,8 @@ function isValidRole(role: string) {
   return /^[a-z][a-z0-9_-]{1,63}$/.test(role);
 }
 
-function bad(error: string, status = 400, extra?: Record<string, unknown>) {
-  return NextResponse.json({ ok: false, ...bridgeRail(), error, ...(extra ?? {}) }, { status });
+function bad(req: NextRequest, error: string, status = 400, extra?: Record<string, unknown>) {
+  return humanJson(req, { ok: false, ...bridgeRail(), error, ...(extra ?? {}) }, { status });
 }
 
 export async function POST(req: NextRequest) {
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return bad('invalid_json');
+    return bad(req, 'invalid_json');
   }
 
   const sessionId = String(body.sessionId ?? '').trim();
@@ -34,34 +35,31 @@ export async function POST(req: NextRequest) {
   const role = String(body.role ?? '');
   const type = String(body.type ?? '');
 
-  if (!sessionId) return bad('missing_sessionId');
-  if (!agentId) return bad('missing_agentId');
+  if (!sessionId) return bad(req, 'missing_sessionId');
+  if (!agentId) return bad(req, 'missing_agentId');
   if (!(await requireRegisteredExternalAgent(agentId))) {
     console.warn(`[a2a] rejected unregistered external agent agentId=${agentId}`);
-    return bad('unregistered_external_agent', 403);
+    return bad(req, 'unregistered_external_agent', 403);
   }
-  if (!isValidRole(role)) return bad('invalid_role');
-  if (!TYPES.has(type)) return bad('invalid_type');
-  if (body.payload === null || typeof body.payload !== 'object' || Array.isArray(body.payload)) return bad('invalid_payload');
+  if (!isValidRole(role)) return bad(req, 'invalid_role');
+  if (!TYPES.has(type)) return bad(req, 'invalid_type');
+  if (body.payload === null || typeof body.payload !== 'object' || Array.isArray(body.payload)) return bad(req, 'invalid_payload');
   // P0.7: Server-compute canonical hash and reject client-provided mismatch
   const serverHash = stablePayloadHash(body.payload);
   const clientHash = typeof body.payloadHash === 'string' ? body.payloadHash.trim() : '';
   if (clientHash && clientHash !== serverHash) {
-    return NextResponse.json(
-      {
+    return humanJson(req, {
         ok: false,
         rail: 'bridge',
         settlementMode: 'x402_offchain',
         error: 'payload_hash_mismatch',
         expectedPayloadHash: serverHash,
         receivedPayloadHash: clientHash,
-      },
-      { status: 400 },
-    );
+      }, { status: 400 });
   }
 
   const hasAdminScope = auth.key.scopes.some((scope) => ADMIN_SCOPES.has(scope));
-  if (agentId !== auth.key.agentId && !hasAdminScope) return bad('agent_id_mismatch', 403);
+  if (agentId !== auth.key.agentId && !hasAdminScope) return bad(req, 'agent_id_mismatch', 403);
 
   try {
     const event = await insertBridgeEvent({
@@ -78,9 +76,9 @@ export async function POST(req: NextRequest) {
       jobId: typeof body.jobId === 'string' ? body.jobId.trim() : null,
       category: typeof body.category === 'string' ? body.category.trim() : null,
     });
-    return NextResponse.json({ ok: true, ...bridgeRail(), eventId: event.id, deduped: event.deduped, payloadHash: serverHash });
+    return humanJson(req, { ok: true, ...bridgeRail(), eventId: event.id, deduped: event.deduped, payloadHash: serverHash });
   } catch (err) {
-    return bad('insert_failed', 500, { message: err instanceof Error ? err.message : 'unknown' });
+    return bad(req, 'insert_failed', 500, { message: err instanceof Error ? err.message : 'unknown' });
   }
 }
 
@@ -108,8 +106,8 @@ export async function GET(req: NextRequest) {
       category,
       limit,
     });
-    return NextResponse.json({ ok: true, ...bridgeRail(), events });
+    return humanJson(req, { ok: true, ...bridgeRail(), events });
   } catch (err) {
-    return bad('query_failed', 500, { message: err instanceof Error ? err.message : 'unknown' });
+    return bad(req, 'query_failed', 500, { message: err instanceof Error ? err.message : 'unknown' });
   }
 }

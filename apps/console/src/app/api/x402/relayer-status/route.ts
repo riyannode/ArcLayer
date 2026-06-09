@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { humanJson } from '@/lib/api/human-json';
+import { NextRequest } from 'next/server';
 import { createPublicClient, formatUnits, getAddress, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { ARC_TESTNET_CHAIN_ID, USDC_ADDRESS } from '@/lib/x402';
@@ -24,12 +25,12 @@ function getRelayerAddress() {
   return privateKeyToAccount(pk as `0x${string}`).address;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const relayerAddress = getRelayerAddress();
   const configured = Boolean(relayerAddress);
 
   if (!relayerAddress) {
-    return NextResponse.json({
+    return humanJson(req, {
       configured: false,
       ready: false,
       relayerAddress: null,
@@ -50,7 +51,7 @@ export async function GET() {
       args: [relayerAddress],
     });
 
-    return NextResponse.json({
+    return humanJson(req, {
       configured,
       ready: balance > BigInt(0),
       relayerAddress,
@@ -61,7 +62,7 @@ export async function GET() {
       settleMode: process.env.X402_SETTLE_MODE || 'self-hosted',
     });
   } catch (error) {
-    return NextResponse.json({
+    return humanJson(req, {
       configured,
       ready: false,
       relayerAddress,
