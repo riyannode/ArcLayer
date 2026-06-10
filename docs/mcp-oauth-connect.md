@@ -1,7 +1,6 @@
 # ArcLayer MCP OAuth Connect
 
-### Recommended: OAuth Codex installer
-This installs ArcLayer MCP configuration and the Agent Bundle Skill for Codex. The connector uses OAuth. It can request wallet actions, but signing remains browser-mediated.
+ArcLayer's recommended MCP path is a one-command Codex install followed by browser OAuth approval:
 
 ```bash
 
@@ -11,7 +10,7 @@ For local development from this repository:
 git clone https://github.com/riyannode/ArcLayer
 cd ArcLayer
 pnpm install
-
+pnpm --filter arclayer-codex build
 node packages/mcp-connect/dist/index.js codex-plugin
 ```
 
@@ -54,9 +53,9 @@ supabase migration up --linked
 
 OAuth lets a client call approved ArcLayer MCP tools. It never grants private-key access and cannot directly sign or broadcast an onchain transaction. Transaction tools create signing requests bound to the OAuth owner wallet and connection metadata. The user must open ArcLayer web and approve or reject each request with the wallet; the client only polls request status.
 
-### Advanced: legacy token fallback
+## Legacy fallback
 
-Legacy token/session setup remains available for older MCP clients or debugging, but it is no longer the recommended setup path. Use `/agent-setup` to create a 30-day legacy token.
+If a client does not support OAuth, use `/agent-setup` to create a legacy MCP token. The generated setup command contains the raw token once, legacy sessions last at most 30 days, and active sessions can be revoked in Profile.
 
 ## Troubleshooting
 
