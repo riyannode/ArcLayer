@@ -61,6 +61,10 @@ import {
   handleRevokeApiKey,
 } from './api-key-tools';
 import {
+  handleCreateRegistrationDraft,
+  handleListOnboardingRolePresets,
+} from './onboarding-tools';
+import {
   handleProviderRuntimeGetContext,
   handleProviderRuntimeHeartbeat,
   handleProviderRuntimeStartJob,
@@ -1070,6 +1074,43 @@ export function registerAllTools(): void {
     legacyAliases: [],
     kind: 'read',
     handler: handleGetRegistrationStatus,
+  });
+
+
+  // ── ONBOARDING: MCP registration fallback ───────────────────────────────
+
+  registerTool({
+    name: 'onboarding.list_role_presets',
+    domain: 'onboarding',
+    description: 'List ArcLayer-approved ERC-8183 onboarding role presets. Enabled presets are returned by default.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'includeDisabled', type: 'boolean', description: 'Include disabled/staged presets when true.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleListOnboardingRolePresets,
+  });
+
+  registerTool({
+    name: 'onboarding.create_registration_draft',
+    domain: 'onboarding',
+    description: 'Create an approved MCP onboarding registration draft and return a browser mint URL for /register/erc8004.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'rolePresetId', type: 'string', required: true, description: 'Approved role preset id from onboarding.list_role_presets.' },
+      { name: 'name', type: 'string', required: true, description: 'Agent name.' },
+      { name: 'description', type: 'string', description: 'Agent description.' },
+      { name: 'endpoint', type: 'string', description: 'Optional agent endpoint URL.' },
+      { name: 'customCapabilities', type: 'array', description: 'Optional string array of extra capabilities.' },
+      { name: 'avatar', type: 'string', description: 'Optional avatar URL.' },
+      { name: 'links', type: 'object', description: 'Optional homepage/docs/repo/x links.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleCreateRegistrationDraft,
   });
 
   // ── AUTH: API key management ─────────────────────────────────────────────

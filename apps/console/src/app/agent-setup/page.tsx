@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Code2, Terminal, ArrowLeft, Copy, Check } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import { AgentIdentityMcpSessionCard } from '@/components/agent-setup/AgentIdentityMcpSessionCard';
+import { getOnboardingRolePreset, getOnboardingRolePresets } from '@/lib/agent-onboarding/role-presets';
 
 function Badge({ children }: { children: React.ReactNode }) {
   return <span className="rounded-md border border-[#F3C536]/20 bg-[#F3C536]/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#F3C536]">{children}</span>;
@@ -12,23 +13,38 @@ function Badge({ children }: { children: React.ReactNode }) {
 
 type ProviderAgentType = { key: string; label: string; name: string; capabilities: string; description: string };
 
-const PROVIDER_AGENT_TYPES: ProviderAgentType[] = [
-  { key: 'smart-contract', label: 'Smart Contract Agent', name: 'Solidity Audit Bot', capabilities: 'smart-contract, solidity-audit', description: 'I can review Solidity contracts and submit ERC-8183 job deliverables.' },
-  { key: 'frontend', label: 'Frontend Agent', name: 'Frontend Implementation Bot', capabilities: 'frontend, react, ui-implementation', description: 'I can implement frontend tasks, build UI components, and submit ERC-8183 job deliverables.' },
-  { key: 'backend', label: 'Backend Agent', name: 'Backend API Bot', capabilities: 'backend, api, database', description: 'I can build backend services, API routes, and database integrations for ERC-8183 job deliverables.' },
-  { key: 'devops', label: 'DevOps Agent', name: 'DevOps Automation Bot', capabilities: 'devops, deployment, monitoring', description: 'I can handle deployment, monitoring, environment setup, and infrastructure tasks.' },
-  { key: 'design', label: 'Design Agent', name: 'Product Design Bot', capabilities: 'design, ui-ux, product-design', description: 'I can create design reviews, UI structure, and product experience recommendations.' },
-  { key: 'data-research', label: 'Data Research Agent', name: 'Data Research Bot', capabilities: 'research, data-analysis, market-data', description: 'I can research data, summarize findings, and submit structured deliverables.' },
-  { key: 'documentation', label: 'Documentation Agent', name: 'Documentation Bot', capabilities: 'documentation, technical-writing', description: 'I can write docs, README updates, integration guides, and technical explanations.' },
-  { key: 'analysis', label: 'Analysis Agent', name: 'Analysis Bot', capabilities: 'analysis, evaluation, reasoning', description: 'I can analyze requirements, review outputs, and produce structured reports.' },
-  { key: 'payment', label: 'Payment Agent', name: 'Payment Integration Bot', capabilities: 'x402, payments, usdc', description: 'I can help with payment flows, x402 access, USDC settlement, and receipt workflows.' },
-];
+const PROVIDER_AGENT_TYPES: ProviderAgentType[] = getOnboardingRolePresets()
+  .filter((preset) => preset.identityRole === 'provider' && !['provider'].includes(preset.id))
+  .map((preset) => ({
+    key: preset.id,
+    label: preset.label,
+    name: `${preset.title.replace(/ Agent$/, '')} Bot`,
+    capabilities: preset.capabilities.join(', '),
+    description: preset.description,
+  }));
 
-function buildProviderPrompt(agentType: ProviderAgentType): string {
-  return [`Register me on ArcLayer as a provider.`, `Name: ${agentType.name}`, `Role: provider`, `Capabilities: ${agentType.capabilities}`, `Description: ${agentType.description}`, ``, `After the agent identity is minted, create a provider API key for this agent and return the .env snippet for my PM2 bot.`].join('\n');
+function buildMcpPrompt(agentType: ProviderAgentType, mode: 'provider' | 'client'): string {
+  const preset = mode === 'provider'
+    ? getOnboardingRolePreset(agentType.key)
+    : getOnboardingRolePreset('client');
+  const name = mode === 'provider' ? agentType.name : 'Job Creator Agent';
+  const description = mode === 'provider'
+    ? agentType.description
+    : 'I can create ERC-8183 jobs, fund work, and coordinate providers.';
+
+  return [
+    'Use ArcLayer MCP production onboarding. Do not invent metadata or use arclayer://mcp/identity links.',
+    '',
+    '1. Call onboarding.list_role_presets.',
+    '2. Ask me to choose a role inside this MCP client from the returned enabled presets.',
+    `3. If I confirm this suggestion, call onboarding.create_registration_draft with rolePresetId: ${preset?.id || 'provider'}, name: ${name}, description: ${description}.`,
+    '4. Return the registrationUrl from the tool response.',
+    '5. Tell me to open the URL and mint in /register/erc8004 with my wallet.',
+    '6. After mint/finalize, call provider.create_api_key for the new agentId.',
+    '7. Return the PM2 .env snippet.',
+    '8. Confirm dashboard visibility: the finalized manifest must be upserted into agent_manifests and appear in /api/dashboard/erc8183-agents.',
+  ].join('\n');
 }
-
-const CLIENT_PROMPT = [`Register me on ArcLayer as a client.`, `Name: Job Creator Agent`, `Role: client`, `Capabilities: job-creation, escrow-funding`, `Description: I can create ERC-8183 jobs, fund work, and coordinate providers.`, ``, `After the agent identity is minted, prepare this agent for client-side job creation flows.`].join('\n');
 
 const INSTALL_CMD = 'curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role provider';
 
@@ -58,7 +74,7 @@ export default function AgentSetupPage() {
 
   const handleCopyPrompt = async () => {
     const agentType = PROVIDER_AGENT_TYPES.find((t) => t.key === mcpSelectedType) || PROVIDER_AGENT_TYPES[0];
-    const prompt = mcpMode === 'provider' ? buildProviderPrompt(agentType) : CLIENT_PROMPT;
+    const prompt = buildMcpPrompt(agentType, mcpMode);
     await navigator.clipboard.writeText(prompt);
     setMcpCopied(true);
     setTimeout(() => setMcpCopied(false), 2000);

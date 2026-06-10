@@ -25,11 +25,9 @@ import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
 import { config } from '@/lib/wagmi';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest/types';
-import {
-  ERC8183_PUBLIC_ROLES,
-  normalizePublicRole,
-  type Erc8183PublicRole,
-} from '@/lib/erc8183/role-config';
+import { buildAgentManifest } from '@/lib/agent-onboarding/manifest-builder';
+import { getOnboardingRolePreset } from '@/lib/agent-onboarding/role-presets';
+import { normalizePublicRole } from '@/lib/erc8183/role-config';
 
 // Keep union broad for ROLE_CONFIG keys, but public UI only allows provider.
 type AgentRole = 'provider' | 'evaluator' | 'autonomous-client';
@@ -611,6 +609,7 @@ export default function ERC8183EscrowRegisterPage() {
   const [txHash, setTxHash] = useState<string>('');
   const [metadataDraftId, setMetadataDraftId] = useState('');
   const [metadataWriteToken, setMetadataWriteToken] = useState('');
+  const [mcpIntentId, setMcpIntentId] = useState('');
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     identity: true,
     profile: false,
@@ -692,6 +691,61 @@ export default function ERC8183EscrowRegisterPage() {
     }
   }, []);
 
+
+  // Hydrate the existing form from an MCP registration intent when present.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const intent = params.get('intent');
+    const isMcp = params.get('mcp') === '1';
+    if (!intent || !isMcp || !address) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
+        const sessionResult = await ensureWalletSession(address, signMessageAsync);
+        if (!sessionResult.ok) {
+          setNotice(sessionResult.error);
+          return;
+        }
+        const res = await fetch(`/api/agent-onboarding/intents/${encodeURIComponent(intent)}`, { cache: 'no-store' });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load MCP registration intent');
+        if (cancelled) return;
+
+        const metadata = json.draft?.metadata || {};
+        const roleId = String(metadata.roles?.[0]?.id || json.intent?.rolePresetId || metadata.role || 'provider');
+        const preset = getOnboardingRolePreset(roleId, { includeDisabled: true });
+        const effectiveRole: AgentRole = preset?.identityRole === 'client' ? 'autonomous-client' : preset?.identityRole === 'evaluator' ? 'evaluator' : 'provider';
+        const category = CATEGORIES.find((item) => slugify(item) === preset?.category) || '';
+
+        setMcpIntentId(intent);
+        setMetadataDraftId(String(json.draft.draftId || ''));
+        setMetadataWriteToken('');
+        setForm((prev) => ({
+          ...prev,
+          agentName: typeof metadata.name === 'string' ? metadata.name : prev.agentName,
+          description: typeof metadata.description === 'string' ? metadata.description : prev.description,
+          avatarUrl: typeof metadata.avatar === 'string' ? metadata.avatar : prev.avatarUrl,
+          role: effectiveRole,
+          category,
+          capabilities: Array.isArray(metadata.capabilities) ? metadata.capabilities.filter((cap: unknown) => typeof cap === 'string').join(', ') : prev.capabilities,
+          controllerWallet: address,
+          metadataUri: String(json.draft.metadataURI || ''),
+          websiteUrl: typeof metadata.links?.homepage === 'string' ? metadata.links.homepage : prev.websiteUrl,
+          docsUrl: typeof metadata.links?.docs === 'string' ? metadata.links.docs : prev.docsUrl,
+          repoUrl: typeof metadata.links?.repo === 'string' ? metadata.links.repo : prev.repoUrl,
+          xUrl: typeof metadata.links?.x === 'string' ? metadata.links.x : prev.xUrl,
+        }));
+        setNotice('MCP registration draft loaded. Review and mint with your wallet.');
+      } catch (error) {
+        if (!cancelled) setNotice(error instanceof Error ? error.message : 'Failed to load MCP registration intent.');
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [address, signMessageAsync]);
+
   const role = ROLE_CONFIG[form.role];
   const customCaps = useMemo(() => capabilityList(form.capabilities), [form.capabilities]);
   const isClientRole = form.role === 'autonomous-client';
@@ -736,60 +790,26 @@ export default function ERC8183EscrowRegisterPage() {
       ? slugify(form.category)
       : isClientRole
         ? 'client'
-        : 'general';
-    const allCaps = Array.from(new Set([...role.defaultCapabilities, ...customCaps, categorySlug]));
-    const now = new Date().toISOString();
+        : 'provider';
+    const rolePresetId = isClientRole ? 'client' : form.role === 'evaluator' ? 'evaluator' : categorySlug;
 
-    return {
-      schema: 'arclayer.agent/v1',
-      version: 1,
+    return buildAgentManifest({
       agentId: mintedAgentId || `pending-${agentSlug}`,
       name: form.agentName || 'ArcLayer Agent',
-      role: role.identityRole,
+      rolePresetId,
       description: form.description || `${role.title} for ERC-8183 escrow work orders.`,
       controller: controller || undefined,
-      mode: role.manifestMode,
       avatar: form.avatarUrl || undefined,
-      capability: allCaps,
-      capabilities: allCaps,
-      categories: ['erc8183-commerce', categorySlug],
-      roles: [
-        {
-          id: role.id,
-          name: role.title,
-          category: 'erc8183-commerce',
-          capabilities: allCaps,
-          enabled: true,
-        },
-      ],
-      tags: ['erc8183', 'agentic-commerce', role.id, categorySlug],
+      customCapabilities: customCaps,
       links: {
         homepage: form.websiteUrl || undefined,
         docs: form.docsUrl || undefined,
         repo: form.repoUrl || undefined,
         x: form.xUrl || undefined,
       },
-      x402: {
-        enabled: false,
-        network: 'arc-testnet',
-        currency: 'USDC',
-        receiver: controller || undefined,
-        payTo: controller || undefined,
-      },
-      jobs: {
-        accepts: role.jobAccepts,
-        inputFormats: ['text', 'json'],
-        outputFormats: ['json', 'proof'],
-      },
-      proof: {
-        types: ['signed_result', 'url'],
-        signing: 'eip191',
-      },
-      host: 'erc8183-identity',
-      metadataURI: metadataURI || undefined,
       createdAt,
-      updatedAt: now,
-    };
+      metadataURI: metadataURI || undefined,
+    });
   }, [agentSlug, controller, createdAt, customCaps, form, isClientRole, metadataURI, mintedAgentId, role]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
@@ -1018,14 +1038,38 @@ export default function ERC8183EscrowRegisterPage() {
       const mintedId = minted.toString();
 
       // Step 3: Patch draft with minted agentId
-      const finalManifest = {
-        ...(agentManifest as AgentManifestV1),
+      const finalRolePresetId = isClientRole ? 'client' : form.role === 'evaluator' ? 'evaluator' : (form.category ? slugify(form.category) : 'provider');
+      const finalManifest = buildAgentManifest({
         agentId: mintedId,
+        name: form.agentName || agentManifest.name,
+        rolePresetId: finalRolePresetId,
+        description: form.description || agentManifest.description,
+        controller: controller || undefined,
+        avatar: form.avatarUrl || undefined,
+        customCapabilities: customCaps,
+        links: {
+          homepage: form.websiteUrl || undefined,
+          docs: form.docsUrl || undefined,
+          repo: form.repoUrl || undefined,
+          x: form.xUrl || undefined,
+        },
+        createdAt,
         metadataURI: effectiveMetadataURI,
         updatedAt: new Date().toISOString(),
-      };
+      });
 
-      if (draftId && writeToken) {
+      if (mcpIntentId) {
+        setNotice('Finalizing MCP registration intent...');
+        const finalize = await fetch('/api/agent-onboarding/finalize', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ intentId: mcpIntentId, agentId: mintedId, txHash: hash, manifest: finalManifest }),
+        });
+        const finalizeJson = await finalize.json();
+        if (!finalize.ok || !finalizeJson.ok) {
+          throw new Error(finalizeJson.error || 'Failed to finalize MCP registration intent');
+        }
+      } else if (draftId && writeToken) {
         setNotice('Updating metadata draft...');
         await patchDraft({
           draftId,
