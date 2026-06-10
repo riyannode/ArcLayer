@@ -23,6 +23,7 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
+import { isAgentAccountClientRailEnabled } from '@/lib/agent-accounts/feature-flags';
 import { config } from '@/lib/wagmi';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest/types';
 import { buildAgentManifest } from '@/lib/agent-onboarding/manifest-builder';
@@ -618,46 +619,91 @@ export default function ERC8183EscrowRegisterPage() {
   });
   const [agentAccount, setAgentAccount] = useState<{ agentAccountAddress: string; status: string } | null>(null);
   const [agentAccountLoading, setAgentAccountLoading] = useState(true);
-  const agentAccountEnabled = process.env.NEXT_PUBLIC_AGENT_ACCOUNT_ENABLED === 'true';
+  const agentAccountEnabled = isAgentAccountClientRailEnabled();
   const [controllerMode, setControllerMode] = useState<'eoa' | 'agent-account'>('eoa');
   const { isConnected, address } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const { authenticated: circleAuthenticated, login: circleLogin, address: circleAddress, bundlerClient } = useCircleWallet();
   const { signMessageAsync } = useSignMessage();
 
+  useEffect(() => {
+    if (!agentAccountEnabled && controllerMode !== 'eoa') {
+      setControllerMode('eoa');
+    }
+  }, [agentAccountEnabled, controllerMode]);
+
   // Fetch Agent Account — re-fetches when wallet connects (needs session cookie)
   const fetchAgentAccount = useMemo(() => {
-    return async function loadAgentAccount(addr?: string) {
+    return async function loadAgentAccount(options?: {
+      address?: string;
+      ensureSession?: boolean;
+    }) {
+      const addr = options?.address;
+      const shouldEnsureSession = options?.ensureSession === true;
+
+      if (!agentAccountEnabled) {
+        setAgentAccount(null);
+        setAgentAccountLoading(false);
+        return;
+      }
+
       try {
         const res = await fetch('/api/profile/agent-account', { cache: 'no-store' });
+
         if (res.ok) {
           const json = await res.json();
+
           if (json.agentAccountAddress && json.status === 'active') {
-            setAgentAccount({ agentAccountAddress: json.agentAccountAddress, status: json.status });
+            setAgentAccount({
+              agentAccountAddress: json.agentAccountAddress,
+              status: json.status,
+            });
           } else {
             setAgentAccount(null);
           }
-        } else if (res.status === 401 && addr) {
-          // 401 = no session cookie. Ensure wallet session then retry.
+
+          return;
+        }
+
+        if (res.status === 401) {
+          // Passive page load must not open MetaMask.
+          // Wallet-session creation opens a signature modal, so only do it after
+          // explicit user action or MCP intent hydration.
+          if (!shouldEnsureSession || !addr) {
+            setAgentAccount(null);
+            return;
+          }
+
           const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
           const sessionOk = await ensureWalletSession(addr, signMessageAsync);
+
           if (sessionOk.ok) {
             const retry = await fetch('/api/profile/agent-account', { cache: 'no-store' });
             if (retry.ok) {
               const json = await retry.json();
+
               if (json.agentAccountAddress && json.status === 'active') {
-                setAgentAccount({ agentAccountAddress: json.agentAccountAddress, status: json.status });
+                setAgentAccount({
+                  agentAccountAddress: json.agentAccountAddress,
+                  status: json.status,
+                });
+              } else {
+                setAgentAccount(null);
               }
             }
           }
+
+          return;
         }
+
+        setAgentAccount(null);
       } catch {
         // silent
       } finally {
         setAgentAccountLoading(false);
       }
     };
-  }, [signMessageAsync]);
+  }, [agentAccountEnabled, signMessageAsync]);
 
   // Fetch on mount only when optional Agent Account mode is enabled.
   useEffect(() => {
@@ -667,7 +713,7 @@ export default function ERC8183EscrowRegisterPage() {
     }
     let cancelled = false;
     (async () => {
-      await fetchAgentAccount();
+      await fetchAgentAccount({ ensureSession: false });
       if (cancelled) return;
     })();
     return () => { cancelled = true; };
@@ -679,7 +725,7 @@ export default function ERC8183EscrowRegisterPage() {
     // Only re-fetch if we haven't found an agent account yet
     if (agentAccount) return;
     setAgentAccountLoading(true);
-    fetchAgentAccount(address);
+    fetchAgentAccount({ address, ensureSession: false });
   }, [address, isConnected, agentAccount, agentAccountEnabled, fetchAgentAccount]);
 
   // Read ?role= from URL on mount (supports deep-link from onboarding page)
@@ -757,7 +803,8 @@ export default function ERC8183EscrowRegisterPage() {
   // Controller: connected EOA by default; passkey Agent Account is optional.
   const agentAccountAddress = agentAccount?.agentAccountAddress || '';
   const hasAgentAccount = Boolean(agentAccountAddress);
-  const controller = controllerMode === 'eoa'
+  const effectiveControllerMode = agentAccountEnabled ? controllerMode : 'eoa';
+  const controller = effectiveControllerMode === 'eoa'
     ? (address || form.controllerWallet)
     : agentAccountAddress;
   const agentSlug = slugify(form.agentName) || 'erc8183-agent';
@@ -780,7 +827,7 @@ export default function ERC8183EscrowRegisterPage() {
       hasRequiredCategory &&
       hasRequiredCapabilities,
   );
-  const profileComplete = controllerMode === 'eoa' ? Boolean(controller) : hasAgentAccount;
+  const profileComplete = effectiveControllerMode === 'eoa' ? Boolean(controller) : hasAgentAccount;
   const reviewComplete = Boolean(metadataReady && form.confirm);
 
   // Keep the direct EOA controller field aligned with the connected wallet.
@@ -932,15 +979,21 @@ export default function ERC8183EscrowRegisterPage() {
       return;
     }
 
+    if (controllerMode === 'agent-account' && !agentAccountEnabled) {
+      setRegisterStatus('error');
+      setNotice('Agent Account mode is disabled. Use EOA controller mode.');
+      return;
+    }
+
     // Agent Account path: require passkey auth
-    if (controllerMode === 'agent-account' && !hasAgentAccount) {
+    if (effectiveControllerMode === 'agent-account' && !hasAgentAccount) {
       setRegisterStatus('error');
       setNotice('Circle Agent Account is unavailable. Use EOA controller mode or link an account in Profile.');
       return;
     }
 
     // Agent Account path: prompt passkey login if not authenticated
-    if (controllerMode === 'agent-account' && hasAgentAccount && !circleAuthenticated) {
+    if (effectiveControllerMode === 'agent-account' && hasAgentAccount && !circleAuthenticated) {
       try {
         setNotice('Login with passkey to use Circle Agent Account...');
         await circleLogin();
@@ -988,7 +1041,7 @@ export default function ERC8183EscrowRegisterPage() {
       // Step 2: Mint ERC-8004 identity
       let hash: `0x${string}`;
 
-      if (controllerMode === 'eoa') {
+      if (effectiveControllerMode === 'eoa') {
         // Default path: connected EOA signs directly
         setNotice('Submitting ERC-8004 identity mint (EOA)...');
         hash = await writeContractAsync(buildRegisterAgentConfig(effectiveMetadataURI));
@@ -1041,7 +1094,7 @@ export default function ERC8183EscrowRegisterPage() {
       setNotice(`Waiting for ${hash.slice(0, 10)}...`);
 
       const receipt = await waitForTransactionReceipt(config, { hash });
-      const minted = extractERC8004MintedTokenIdFromReceipt(receipt, (controllerMode === 'eoa' ? address : agentAccountAddress) as Address | undefined);
+      const minted = extractERC8004MintedTokenIdFromReceipt(receipt, (effectiveControllerMode === 'eoa' ? address : agentAccountAddress) as Address | undefined);
       const mintedId = minted.toString();
 
       // Step 3: Patch draft with minted agentId

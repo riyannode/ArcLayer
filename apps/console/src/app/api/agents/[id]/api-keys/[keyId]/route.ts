@@ -11,6 +11,7 @@ import { NextRequest } from 'next/server';
 import { getAddress } from 'viem';
 import { revokeApiKey } from '@/lib/a2a/auth';
 import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
+import { isAgentAccountServerRailEnabled } from '@/lib/agent-accounts/feature-flags';
 import {
   resolveSessionFromCookie,
   getLinkedErc8004AgentsForController,
@@ -50,7 +51,7 @@ export async function DELETE(
     let hasOwnership = ownsEoaAgent;
 
     // Also check Agent Account-minted agents
-    if (!hasOwnership) {
+    if (!hasOwnership && isAgentAccountServerRailEnabled()) {
       try {
         const agentAccount = await getActiveAgentAccountForOwner(session.wallet);
         if (agentAccount?.agentAccountAddress) {
@@ -72,7 +73,7 @@ export async function DELETE(
 
         if (session.wallet.toLowerCase() === onchainOwner) {
           hasOwnership = true;
-        } else {
+        } else if (isAgentAccountServerRailEnabled()) {
           const activeBinding = await getActiveAgentAccountForOwnerAndAddress(
             session.wallet,
             onchainOwner,

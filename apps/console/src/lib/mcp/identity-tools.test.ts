@@ -127,6 +127,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.MCP_AGENT_ACCOUNT_IDENTITY_ENABLED;
   delete process.env.AGENT_ACCOUNT_BACKEND_ENABLED;
+  delete process.env.AGENT_ACCOUNT_RAILS_ENABLED;
 
   mocks.authenticateWalletRequest.mockResolvedValue({ authenticated: true, wallet: OWNER });
   mocks.resolveMcpSessionByToken.mockResolvedValue(SESSION);
@@ -150,6 +151,7 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.MCP_AGENT_ACCOUNT_IDENTITY_ENABLED;
   delete process.env.AGENT_ACCOUNT_BACKEND_ENABLED;
+  delete process.env.AGENT_ACCOUNT_RAILS_ENABLED;
 });
 
 describe('MCP EOA-first session creation', () => {
@@ -264,6 +266,16 @@ describe('MCP API key ownership in EOA mode', () => {
     expect(mocks.createApiKey).toHaveBeenCalledWith(expect.objectContaining({ agentId: '123' }));
   });
 
+
+  it('rejects ownerOf Agent Account fallback while Agent Account rails are disabled', async () => {
+    mocks.getSupabaseAdmin.mockReturnValue(mockAgentQuery(null));
+    mocks.getERC8004OwnerOf.mockResolvedValue(AGENT_ACCOUNT);
+    mocks.getActiveAgentAccountForOwnerAndAddress.mockResolvedValue({ id: 'acct-1' });
+
+    await expect(resolveAgentOwnership(SESSION, '123')).rejects.toThrow(`Session does not control agent 123. Controller: ${AGENT_ACCOUNT.toLowerCase()}`);
+    expect(mocks.getActiveAgentAccountForOwnerAndAddress).not.toHaveBeenCalled();
+  });
+
   it('rejects ownerOf fallback when the MCP session does not control the on-chain owner', async () => {
     mocks.getSupabaseAdmin.mockReturnValue(mockAgentQuery(null));
     mocks.getERC8004OwnerOf.mockResolvedValue(PROVIDER_CTRL);
@@ -274,7 +286,7 @@ describe('MCP API key ownership in EOA mode', () => {
   it('rejects an Agent Account-controlled agent when Agent Account backend is disabled', async () => {
     mocks.getSupabaseAdmin.mockReturnValue(mockAgentQuery({ agent_id: 'agent-1', token_id: '1', controller: AGENT_ACCOUNT }));
 
-    await expect(resolveAgentOwnership(SESSION, 'agent-1')).rejects.toThrow('agent_account_controller_disabled');
+    await expect(resolveAgentOwnership(SESSION, 'agent-1')).rejects.toThrow('Session does not control agent agent-1');
     expect(mocks.getActiveAgentAccountForOwnerAndAddress).not.toHaveBeenCalled();
   });
 });

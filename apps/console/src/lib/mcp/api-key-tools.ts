@@ -18,6 +18,7 @@ import {
   revokeApiKey,
 } from '@/lib/a2a/auth';
 import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
+import { isAgentAccountServerRailEnabled } from '@/lib/agent-accounts/feature-flags';
 import { API_KEY_PRESETS, buildApiKeyEnvSnippet } from '@/lib/agent-onboarding/api-key-presets';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import {
@@ -91,7 +92,7 @@ async function sessionControlsController(
 
   if (controller === ownerAddr) return true;
 
-  if (agentAccountAddr && controller === agentAccountAddr) {
+  if (isAgentAccountServerRailEnabled() && agentAccountAddr && controller === agentAccountAddr) {
     if (process.env.AGENT_ACCOUNT_BACKEND_ENABLED !== 'true') {
       throw new McpError(
         MCP_ERRORS.FORBIDDEN,

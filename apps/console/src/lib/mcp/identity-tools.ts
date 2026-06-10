@@ -22,6 +22,7 @@ import {
   CONTRACTS,
 } from '@arclayer/sdk';
 import { resolveMcpSessionByToken, getActiveAgentAccountForOwnerAndAddress } from '@/lib/agent-accounts/store';
+import { isMcpAgentAccountIdentityEnabled } from '@/lib/agent-accounts/feature-flags';
 import { getApproval, getEffectiveStatus, createApproval } from '@/lib/mcp/approvals';
 import type { McpSession } from '@/lib/agent-accounts/types';
 import type { McpToolContext } from './registry';
@@ -95,7 +96,7 @@ async function validateAgentAccountActive(session: McpSession): Promise<void> {
 }
 
 function assertMcpAgentAccountIdentityEnabled(): void {
-  if (process.env.MCP_AGENT_ACCOUNT_IDENTITY_ENABLED !== 'true') {
+  if (!isMcpAgentAccountIdentityEnabled()) {
     throw new McpError(
       MCP_ERRORS.FORBIDDEN,
       'agent_account_mcp_disabled — Agent Account identity mode is temporarily disabled. Use EOA registration.',

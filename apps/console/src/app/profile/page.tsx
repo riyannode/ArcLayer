@@ -27,6 +27,7 @@ import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
 import { createPublicClient, formatUnits, getAddress, http } from 'viem';
 import { McpSigningSessionCard } from '@/components/profile/McpSigningSessionCard';
 import { USDC_ADDRESS } from '@/lib/x402/constants';
+import { isAgentAccountClientRailEnabled } from '@/lib/agent-accounts/feature-flags';
 
 // ── Agent Account types ───────────────────────────────────────────────────
 
@@ -326,7 +327,7 @@ export default function AgentProfilePage() {
   // Gate: only show toggle/MCP card after profile data has loaded
   const profileLoaded = ready && !loading;
 
-  const agentAccountEnabled = process.env.NEXT_PUBLIC_AGENT_ACCOUNT_ENABLED === 'true';
+  const agentAccountEnabled = isAgentAccountClientRailEnabled();
 
   // Agent Account data is still loaded for profile discovery, but Profile no longer renders Agent Account controls.
   const [agentAccount, setAgentAccount] = useState<AgentAccountInfo | null>(null);
