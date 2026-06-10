@@ -8,7 +8,8 @@ export type RegistrationIntentStatus = 'draft' | 'completed' | 'expired';
 
 export type RegistrationIntentRecord = {
   id: string;
-  mcpSessionId: string;
+  mcpSessionId: string | null;
+  oauthConnectionId?: string | null;
   ownerAddress: string;
   draftId: string;
   rolePresetId: string;
@@ -23,7 +24,8 @@ export type RegistrationIntentRecord = {
 function mapRow(row: Record<string, unknown>): RegistrationIntentRecord {
   return {
     id: String(row.id),
-    mcpSessionId: String(row.mcp_session_id),
+    mcpSessionId: row.mcp_session_id ? String(row.mcp_session_id) : null,
+    oauthConnectionId: row.oauth_connection_id ? String(row.oauth_connection_id) : null,
     ownerAddress: String(row.owner_address),
     draftId: String(row.draft_id),
     rolePresetId: String(row.role_preset_id),
@@ -37,11 +39,15 @@ function mapRow(row: Record<string, unknown>): RegistrationIntentRecord {
 }
 
 export async function createRegistrationIntent(input: {
-  mcpSessionId: string;
+  mcpSessionId?: string;
+  oauthConnectionId?: string;
   ownerAddress: string;
   draftId: string;
   rolePresetId: string;
 }) {
+  if (Boolean(input.mcpSessionId) === Boolean(input.oauthConnectionId)) {
+    return { ok: false as const, error: 'exactly_one_auth_source_required' };
+  }
   const supabase = getSupabaseAdmin();
   const id = randomUUID();
   const expiresAt = new Date(Date.now() + INTENT_TTL_MS).toISOString();
@@ -49,7 +55,8 @@ export async function createRegistrationIntent(input: {
     .from(TABLE)
     .insert({
       id,
-      mcp_session_id: input.mcpSessionId,
+      mcp_session_id: input.mcpSessionId ?? null,
+      oauth_connection_id: input.oauthConnectionId ?? null,
       owner_address: input.ownerAddress.toLowerCase(),
       draft_id: input.draftId,
       role_preset_id: input.rolePresetId,

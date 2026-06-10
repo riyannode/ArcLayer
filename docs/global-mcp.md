@@ -395,11 +395,11 @@ Agent Bundle onboarding stops at readiness. It does not configure Runner, PM2 bo
 | `onboarding.get_agent_bundle_status` | required | Poll intent status after browser mint. Returns draft, expired, or completed state. |
 | `onboarding.create_agent_runtime_key` | required | Create ArcLayer API key after completed mint/finalize. Returns raw key once and env snippet. |
 
-### Connect Codex from Agent Setup
+### Legacy token fallback from Agent Setup
 
-Open `/agent-setup`, connect your wallet, then click **Connect Codex**.
+For clients without OAuth support, open `/agent-setup`, connect your wallet, then click **Create Legacy Token**.
 
-ArcLayer creates an EOA-backed MCP session that is valid for 30 days and returns a one-time Codex setup command. Run that command on the machine where Codex is installed. The command writes the ArcLayer MCP server entry to `~/.codex/config.toml` and stores `ARCLAYER_MCP_TOKEN` for Codex.
+ArcLayer creates an EOA-backed legacy MCP session that is valid for 30 days and returns a one-time fallback setup command. Run that command on the machine where Codex is installed. The command writes the ArcLayer MCP server entry to `~/.codex/config.toml` and stores `ARCLAYER_MCP_TOKEN` for Codex.
 
 After setup, open Codex and ask:
 
@@ -411,9 +411,9 @@ Codex will call `onboarding.start_agent_bundle`, return a browser mint URL, wait
 
 This setup command does not give Codex wallet private keys and does not allow Codex to mint. Wallet signing remains in ArcLayer web.
 
-The newly created Codex session can be disconnected from `/agent-setup`. To review or revoke any MCP session connected to the wallet, use the **MCP Sessions** section in `/profile`. If the browser wallet session has expired, select **Sign to load sessions** first. Revoked sessions fail MCP authentication immediately.
+The newly created legacy token can be revoked from `/agent-setup`. To review or revoke any MCP session connected to the wallet, use the **MCP Sessions** section in `/profile`. If the browser wallet session has expired, select **Sign to load sessions** first. Revoked sessions fail MCP authentication immediately.
 
-Future: replace the one-time setup command with MCP OAuth (`codex mcp login arclayer`) once ArcLayer MCP exposes OAuth metadata and callback flow.
+The recommended installer config uses the OAuth metadata and PKCE flow documented in `docs/mcp-oauth-connect.md`.
 
 ### Codex plugin bundle
 
@@ -426,7 +426,7 @@ plugins/codex-arclayer/
   skills/arclayer-agent-bundle/SKILL.md
 ```
 
-Use `/agent-setup` to create a 30-day Codex session and generate the one-time setup command. Manual `.env` editing is not required.
+Use `npx @arclayer/mcp-connect@latest codex-plugin` for the recommended OAuth-native install. `/agent-setup` creates a 30-day legacy token only for clients without OAuth support.
 
 #### Add the ArcLayer plugin marketplace
 
@@ -545,3 +545,29 @@ POST /api/mcp
       → errors.ts (structured error responses)
       → redact.ts (secret redaction on errors)
 ```
+
+## Recommended Codex connection (OAuth)
+
+Install the ArcLayer MCP endpoint and Agent Bundle Skill without manual config editing:
+
+```bash
+npx @arclayer/mcp-connect@latest codex-plugin
+```
+
+The installer updates `~/.codex/config.toml`, enables keyring-backed OAuth credentials, installs the skill under `~/.arclayer/codex-plugin`, preserves unrelated Codex settings, and creates a timestamped backup before changes. Restart Codex and approve ArcLayer OAuth in the browser when prompted.
+
+Useful commands:
+
+```bash
+npx @arclayer/mcp-connect@latest codex
+npx @arclayer/mcp-connect@latest status
+npx @arclayer/mcp-connect@latest uninstall codex
+```
+
+OAuth grants scoped MCP access only. It does not expose a private key, sign, or broadcast transactions. Transaction-request tools create a wallet-scoped browser signing request; every onchain transaction still requires approval in ArcLayer web.
+
+### Legacy token fallback
+
+MCP clients without OAuth support can open `/agent-setup` and create a **Legacy Codex Token Session**. The one-time setup command contains `ARCLAYER_MCP_TOKEN`; do not share it. Legacy sessions remain valid for at most 30 days and can be revoked from Profile.
+
+The OAuth schema is provided at `supabase/migrations/20250305000000_mcp_oauth.sql`. It is not applied automatically. An operator applies it manually with `supabase migration up --linked` after reviewing the migration.

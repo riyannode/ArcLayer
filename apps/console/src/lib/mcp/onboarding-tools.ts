@@ -7,17 +7,17 @@ import type { McpSession } from '@/lib/agent-accounts/types';
 import { handleCreateApiKey } from './api-key-tools';
 import type { McpToolContext } from './registry';
 import { MCP_ERRORS, McpError } from './errors';
+import { authAsLegacySession } from './auth-session';
 
 function baseUrlFromContext(ctx: McpToolContext) {
   return process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, '') || ctx.request.origin?.replace(/\/+$/, '') || 'https://arclayers.xyz';
 }
 
 async function requireMcpSession(ctx: McpToolContext): Promise<McpSession> {
+  if (ctx.auth) return authAsLegacySession(ctx.auth);
   const auth = ctx.request.authorization;
   const match = auth?.match(/^Bearer\s+(.+)$/i);
-  if (!match || !match[1].startsWith('arc_mcp_sess_')) {
-    throw new McpError(MCP_ERRORS.UNAUTHORIZED, 'MCP Bearer token required');
-  }
+  if (!match || !match[1].startsWith('arc_mcp_sess_')) throw new McpError(MCP_ERRORS.UNAUTHORIZED, 'MCP Bearer token required');
   const session = await resolveMcpSessionByToken(match[1].trim());
   if (!session) throw new McpError(MCP_ERRORS.UNAUTHORIZED, 'Invalid or expired MCP session');
   return session;
@@ -127,7 +127,7 @@ async function createBundleDraft(args: Record<string, unknown>, ctx: McpToolCont
   if (!draft.ok) throw new McpError(MCP_ERRORS.INTERNAL_ERROR, `metadata_draft_failed: ${draft.error}`);
 
   const intent = await createRegistrationIntent({
-    mcpSessionId: session.id,
+    ...(ctx.auth?.kind === 'oauth' ? { oauthConnectionId: ctx.auth.connectionId } : { mcpSessionId: session.id }),
     ownerAddress: session.ownerAddress,
     draftId: draft.draftId,
     rolePresetId: preset.id,
@@ -140,11 +140,17 @@ async function createBundleDraft(args: Record<string, unknown>, ctx: McpToolCont
   return { session, preset, manifest, draft, intent: intent.intent, metadataURI, registrationUrl, baseUrl };
 }
 
-function assertIntentBelongsToSession(intent: { mcpSessionId: string; ownerAddress: string }, session: McpSession) {
-  const sameSession = intent.mcpSessionId === session.id;
+function assertIntentBelongsToSession(
+  intent: { mcpSessionId: string | null; oauthConnectionId?: string | null; ownerAddress: string },
+  session: McpSession,
+  ctx?: McpToolContext,
+) {
   const sameOwner = intent.ownerAddress.toLowerCase() === session.ownerAddress.toLowerCase();
-  if (!sameSession && !sameOwner) {
-    throw new McpError(MCP_ERRORS.FORBIDDEN, 'registration intent does not belong to this MCP session');
+  const sameAuthSource = ctx?.auth?.kind === 'oauth'
+    ? intent.oauthConnectionId === ctx.auth.connectionId
+    : intent.mcpSessionId === session.id || sameOwner;
+  if (!sameOwner || !sameAuthSource) {
+    throw new McpError(MCP_ERRORS.FORBIDDEN, 'registration intent does not belong to this MCP connection');
   }
 }
 
@@ -216,7 +222,7 @@ export async function handleGetAgentBundleStatus(args: Record<string, unknown>, 
 
   const intent = await getRegistrationIntent(intentId);
   if (!intent) throw new McpError(MCP_ERRORS.NOT_FOUND, 'registration intent not found');
-  assertIntentBelongsToSession(intent, session);
+  assertIntentBelongsToSession(intent, session, ctx);
 
   const baseUrl = baseUrlFromContext(ctx);
   const draft = await getMetadataDraft(intent.draftId);
@@ -287,7 +293,7 @@ export async function handleCreateAgentRuntimeKey(args: Record<string, unknown>,
   if (intentId) {
     const intent = await getRegistrationIntent(intentId);
     if (!intent) throw new McpError(MCP_ERRORS.NOT_FOUND, 'registration intent not found');
-    assertIntentBelongsToSession(intent, session);
+    assertIntentBelongsToSession(intent, session, ctx);
     if (intent.status !== 'completed' || !intent.agentId) {
       throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'Agent Bundle registration is not completed yet. Mint in ArcLayer web, then retry.');
     }
