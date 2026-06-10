@@ -28,7 +28,9 @@ export async function POST(
     if (auth.error) return auth.error;
     const job = await getErc8183JobByLocalId(localJobId);
     if (!job) {
-      return humanJson(req, { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' }, { status: 404 });
+      const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' }, { status: 404 });
     }
 
     // Guard: only the buyer (client) can approve+fund the escrow
@@ -36,14 +38,18 @@ export async function POST(
     if (fundAuthError) return fundAuthError;
 
     if (!job.erc8183JobId) {
-      return humanJson(req, { ok: false, ...escrowRail(), error: 'create_job_pending', message: 'createJob tx must be confirmed first.' }, { status: 400 });
+      const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, { ok: false, ...escrowRail(), error: 'create_job_pending', message: 'createJob tx must be confirmed first.' }, { status: 400 });
     }
 
     // ── Local guards ──────────────────────────────────────────────────────
 
     // 1. setBudget must be confirmed before fund is allowed
     if (!job.setBudgetTxHash) {
-      return humanJson(req, {
+      const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'budget_not_set',
@@ -54,7 +60,9 @@ export async function POST(
     // 2. priceAtomic must be present and positive
     const priceAtomic = Number(job.priceAtomic);
     if (!job.priceAtomic || Number.isNaN(priceAtomic) || priceAtomic <= 0) {
-      return humanJson(req, {
+      const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'budget_zero',
@@ -64,7 +72,9 @@ export async function POST(
 
     // 3. Already funded — idempotency guard
     if (job.fundTxHash) {
-      return humanJson(req, {
+      const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'already_funded',
@@ -74,7 +84,9 @@ export async function POST(
 
     // 4. Lifecycle status must be fundable
     if (job.status && UNFUNDABLE_LOCAL_STATUSES.has(job.status)) {
-      return humanJson(req, {
+      const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'job_not_fundable_status',
@@ -86,7 +98,9 @@ export async function POST(
     if (job.expiredAtUnix && Number(job.expiredAtUnix) > 0) {
       const expiredAtMs = Number(job.expiredAtUnix) * 1000;
       if (Date.now() > expiredAtMs) {
-        return humanJson(req, {
+        const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, {
             ok: false,
             ...escrowRail(),
             error: 'job_expired',
@@ -100,7 +114,9 @@ export async function POST(
     const onchainJob = await readOnchainJob(BigInt(job.erc8183JobId));
 
     if (!onchainJob) {
-      return humanJson(req, {
+      const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'rpc_unavailable',
@@ -110,7 +126,9 @@ export async function POST(
 
     // 6. On-chain budget must be set (> 0)
     if (onchainJob.budget === 0n) {
-      return humanJson(req, {
+      const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'budget_not_set',
@@ -120,7 +138,9 @@ export async function POST(
 
     // 7. On-chain status must be Open (0) for funding
     if (onchainJob.status !== ERC8183JobStatus.Open) {
-      return humanJson(req, {
+      const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, {
           ok: false,
           ...escrowRail(),
           error: 'job_not_fundable_status',
@@ -151,7 +171,9 @@ export async function POST(
       args: [job.erc8183JobId, '0x'],
     };
 
-    return humanJson(req, {
+    const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, {
       ok: true,
       ...escrowRail(),
       nextAction: 'approveAndFund',
@@ -162,6 +184,8 @@ export async function POST(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return humanJson(req, { ok: false, ...escrowRail(), error: 'fund_failed', message }, { status: 500 });
+    const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, { ok: false, ...escrowRail(), error: 'fund_failed', message }, { status: 500 });
   }
 }

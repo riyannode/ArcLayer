@@ -185,7 +185,7 @@ export async function POST(
   if (scope === 'a2a' && !isAgentAccountRuntimePayerEnabled()) {
     const agentAccount = await getActiveAgentAccountForOwner(auth.wallet);
     if (agentAccount?.agentAccountAddress.toLowerCase() === payerAddress.toLowerCase()) {
-      return humanJson(req, { ok: false, error: 'agent_account_runtime_payer_disabled', detail: 'Register a dedicated Bot EOA as the A2A x402 payer.' }, { status: 403, headers: { 'Cache-Control': ERROR_CACHE } });
+      return humanJson(req, { ok: false, error: 'agent_account_runtime_payer_disabled', detail: 'Register a dedicated Agent Wallet as the A2A x402 payer.' }, { status: 403, headers: { 'Cache-Control': ERROR_CACHE } });
     }
   }
 

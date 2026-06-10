@@ -23,12 +23,13 @@ import {
   X,
 } from 'lucide-react';
 import { useArcWallet } from '@/hooks/useArcWallet';
-import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
+
 import { createPublicClient, formatUnits, getAddress, http } from 'viem';
 import { McpSigningSessionCard } from '@/components/profile/McpSigningSessionCard';
 import { McpSessionsCard } from '@/components/profile/McpSessionsCard';
 import { USDC_ADDRESS } from '@/lib/x402/constants';
 import { isAgentAccountClientRailEnabled } from '@/lib/agent-accounts/feature-flags';
+import { AgentWalletFundingRailCard } from '@/components/profile/AgentWalletFundingRailCard';
 
 // ── Agent Account types ───────────────────────────────────────────────────
 
@@ -334,20 +335,17 @@ export default function AgentProfilePage() {
   const [agentAccount, setAgentAccount] = useState<AgentAccountInfo | null>(null);
 
   // EOA Gateway balance state
-  const [eoaUsdcBalance, setEoaUsdcBalance] = useState<BalanceInfo | null>(null);
-  const [eoaGatewayBalance, setEoaGatewayBalance] = useState<BalanceInfo | null>(null);
-  const [eoaBalanceLoading, setEoaBalanceLoading] = useState(false);
-  const [eoaBalanceError, setEoaBalanceError] = useState<string | null>(null);
-  const [eoaGatewayAmount, setEoaGatewayAmount] = useState('');
+  
+  
+  
+  
+  
 
   // A2A x402 payer state
   const [a2aPayerEnabled, setA2aPayerEnabled] = useState(false);
   const [a2aPayerLoading, setA2aPayerLoading] = useState(false);
 
-  const eoaGatewayDeposit = useGatewayDeposit(() => {
-    if (address) void refreshEoaFundingBalances(address);
-    setEoaGatewayAmount('');
-  });
+  
 
   async function loadAgents(ownerAddr: string, agentAccountAddr?: string | null, signal?: AbortSignal) {
     setLoading(true);
@@ -524,15 +522,7 @@ export default function AgentProfilePage() {
     }
   }
 
-  async function refreshEoaFundingBalances(owner: string) {
-    if (!owner) return;
-
-    setEoaBalanceLoading(true);
-    setEoaBalanceError(null);
-
-    try {
-      const [gatewayRes, usdcBalance] = await Promise.all([
-        fetch(`/api/x402/gateway-balance?address=${encodeURIComponent(owner)}`, { cache: 'no-store' })
+  `, { cache: 'no-store' })
           .then((res) => res.json() as Promise<GatewayBalanceResponse>),
         createPublicClient({ transport: http(ARC_RPC) }).readContract({
           address: USDC,
@@ -567,15 +557,7 @@ export default function AgentProfilePage() {
     void loadAgentAccount();
   }, [ready, isConnected, address]);
 
-  useEffect(() => {
-    if (!address) {
-      setEoaUsdcBalance(null);
-      setEoaGatewayBalance(null);
-      setEoaBalanceError(null);
-      return;
-    }
-    void refreshEoaFundingBalances(address);
-  }, [address]);
+  
 
   return (
     <main className="min-h-screen bg-[#05070A] text-[#F5F0E5]">
@@ -626,169 +608,8 @@ export default function AgentProfilePage() {
           </div>
         </div>
 
-        {/* ── Account Overview + EOA Gateway Funding ───────────────────── */}
-        {isConnected && (
-          <div className="mt-8 grid gap-5 lg:grid-cols-2">
-            {/* Account Overview */}
-            <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-5 py-4 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
-              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
-                Account Overview
-              </div>
-
-              {/* Owner Wallet */}
-              <div className="mt-3 grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-2.5">
-                <div className="text-[13px] text-[#EAE4D8]/60">Owner Wallet</div>
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-mono text-[13px] text-[#F5F0E5]">
-                    {shortAddress(address)}
-                  </span>
-                  {address && (
-                    <button type="button" onClick={() => copyToClipboard(address)} className="text-[#EAE4D8]/45 transition hover:text-[#F3C536]">
-                      <Clipboard className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                  <span className="ml-auto rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
-                    Connected
-                  </span>
-                </div>
-              </div>
-
-              {/* A2A x402 Payer */}
-              <div className="grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-2.5">
-                <div className="text-[13px] text-[#EAE4D8]/60">A2A x402 Payer</div>
-                <div className="flex items-center gap-2">
-                  {a2aPayerLoading ? (
-                    <span className="text-[13px] text-[#EAE4D8]/40">Loading...</span>
-                  ) : a2aPayerEnabled ? (
-                    <>
-                      <span className="truncate font-mono text-[13px] text-[#F5F0E5]">
-                        Bot EOA
-                      </span>
-                      <span className="ml-auto rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
-                        Active
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-[13px] text-[#EAE4D8]/40">No Bot EOA payer linked</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Agent Identity */}
-              <div className="grid grid-cols-[1fr_1fr] items-center gap-3 py-2.5">
-                <div className="text-[13px] text-[#EAE4D8]/60">Agent Identity</div>
-                <div className="text-[13px] text-[#F5F0E5]">
-                  {agents.length > 0 ? `Agent ${agents[0].agentId}` : 'No Agent ID yet'}
-                </div>
-              </div>
-
-              <p className="mt-1 text-[11px] leading-5 text-[#EAE4D8]/35">
-                EOA wallet is the default controller and payer for ArcLayer agents. Use a Bot EOA for autonomous ERC-8183 and x402 Gateway payments.
-              </p>
-
-              {/* CTAs */}
-              <div className="mt-3 flex flex-wrap gap-3">
-                <Link href="/register/erc8004" className="inline-flex h-9 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-4 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10">
-                  <Plus className="h-4 w-4" /> Register ERC-8004 Agent
-                </Link>
-                <Link href="/agent-setup" className="inline-flex h-9 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-4 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10">
-                  <Bot className="h-4 w-4" /> Open Agent Setup
-                </Link>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-5 py-4 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
-              <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
-                EOA Gateway Funding
-              </div>
-              <p className="mt-2 rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-1.5 text-[11px] leading-5 text-amber-200/80">
-                Gateway deposits are address-specific. Connect the payer EOA before depositing.
-              </p>
-
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <div className="rounded-md border border-white/10 bg-white/[0.025] p-3">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                    Connected EOA address
-                  </div>
-                  <div className="mt-2 truncate font-mono text-[13px] text-[#F5F0E5]">
-                    {shortAddress(address)}
-                  </div>
-                </div>
-                <div className="rounded-md border border-white/10 bg-white/[0.025] p-3">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                    EOA USDC balance
-                  </div>
-                  <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
-                    {eoaBalanceLoading ? '...' : eoaUsdcBalance?.formatted ?? '0.000000'}
-                  </div>
-                </div>
-                <div className="rounded-md border border-white/10 bg-white/[0.025] p-3">
-                  <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-                    EOA Gateway balance
-                  </div>
-                  <div className="mt-2 text-[18px] font-semibold text-[#F3C536]">
-                    {eoaBalanceLoading ? '...' : eoaGatewayBalance?.formatted ?? '0.000000'}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/38">
-                  Amount (USDC)
-                </label>
-                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="1.00"
-                    value={eoaGatewayAmount}
-                    onChange={(e) => { setEoaGatewayAmount(e.target.value); eoaGatewayDeposit.reset(); }}
-                    className="h-10 w-full rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[13px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40 sm:w-[160px]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void eoaGatewayDeposit.deposit(eoaGatewayAmount)}
-                    disabled={!eoaGatewayAmount || (eoaGatewayDeposit.step !== 'idle' && eoaGatewayDeposit.step !== 'error')}
-                    className="h-10 w-full rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40 sm:w-auto"
-                  >
-                    {eoaGatewayDeposit.step === 'checking' || eoaGatewayDeposit.step === 'approving' || eoaGatewayDeposit.step === 'depositing' || eoaGatewayDeposit.step === 'confirming'
-                      ? 'Depositing...'
-                      : 'Deposit EOA → Gateway'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="mt-3 text-[11px] leading-5 text-[#EAE4D8]/40">
-                Deposit status: <span className="font-mono text-[#EAE4D8]/70">{eoaGatewayDeposit.step}</span>
-              </div>
-              {eoaGatewayDeposit.approveTxHash && (
-                <p className="mt-2 text-[11px] text-emerald-400">
-                  Approval tx ✓{' '}
-                  <a href={getArcTxUrl(eoaGatewayDeposit.approveTxHash)} target="_blank" rel="noreferrer" className="underline decoration-emerald-400/40 hover:text-emerald-300">
-                    {shortAddress(eoaGatewayDeposit.approveTxHash)}
-                  </a>
-                </p>
-              )}
-              {eoaGatewayDeposit.txHash && (
-                <p className="mt-2 text-[11px] text-emerald-400">
-                  Gateway deposit tx ✓{' '}
-                  <a href={getArcTxUrl(eoaGatewayDeposit.txHash)} target="_blank" rel="noreferrer" className="underline decoration-emerald-400/40 hover:text-emerald-300">
-                    {shortAddress(eoaGatewayDeposit.txHash)}
-                  </a>
-                </p>
-              )}
-              {eoaBalanceError && (
-                <p className="mt-2 text-[11px] text-red-400">{eoaBalanceError}</p>
-              )}
-              {eoaGatewayDeposit.error && (
-                <p className="mt-2 text-[11px] text-red-400">{eoaGatewayDeposit.error}</p>
-              )}
-            </div>
-
-          </div>
-        )}
-
+{/* ── Account Overview + Circle Agent Wallet Funding ───────────── */}
+{isConnected && <AgentWalletFundingRailCard />}
         {isConnected && address && profileLoaded && (
           <div className="mt-10">
             <McpSigningSessionCard address={address} />

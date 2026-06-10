@@ -65,6 +65,6 @@ export async function GET(req: NextRequest) {
     agentAccountAddress: isAgentAccountServerRailEnabled() ? agentAccountAddr : null,
     a2aPayerEnabled,
     agents: agentA2aPayers,
-    message: a2aPayerEnabled ? 'Bot EOA payer linked.' : 'No Bot EOA payer linked.',
+    message: a2aPayerEnabled ? 'Agent Wallet payer linked.' : 'No Agent Wallet payer linked.',
   }, { status: 200, headers: { 'Cache-Control': ERROR_CACHE } });
 }

@@ -71,6 +71,10 @@ export type VerifiedKey = {
   id: string;
   agentId: string;
   scopes: string[];
+  createdBy?: string;
+  id: string;
+  agentId: string;
+  scopes: string[];
 };
 
 /**
@@ -86,7 +90,7 @@ export async function verifyApiKey(rawKey: string): Promise<VerifiedKey | null> 
 
   const { data, error } = await supabase
     .from(TABLE)
-    .select('id, agent_id, scopes, revoked_at, key_hash')
+    .select('id, agent_id, scopes, revoked_at, key_hash, created_by')
     .eq('key_prefix', keyPrefix)
     .is('revoked_at', null);
 

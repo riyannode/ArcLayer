@@ -17,7 +17,9 @@ export async function POST(
     if (auth.error) return auth.error;
     const job = await getErc8183JobByLocalId(localJobId);
     if (!job) {
-      return humanJson(req, { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' }, { status: 404 });
+      const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, { ok: false, ...escrowRail(), error: 'job_not_found', message: 'ERC-8183 job not found.' }, { status: 404 });
     }
 
     // Guard: only the provider can set the budget on-chain
@@ -26,7 +28,9 @@ export async function POST(
 
     // Guard: erc8183_job_id must exist (createJob tx confirmed)
     if (!job.erc8183JobId) {
-      return humanJson(req, { ok: false, ...escrowRail(), error: 'create_job_pending', message: 'createJob tx must be confirmed first. POST /api/erc8183-jobs/[localJobId]/created.' }, { status: 400 });
+      const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, { ok: false, ...escrowRail(), error: 'create_job_pending', message: 'createJob tx must be confirmed first. POST /api/erc8183-jobs/[localJobId]/created.' }, { status: 400 });
     }
 
     const tx: TxInstruction = {
@@ -35,7 +39,9 @@ export async function POST(
       args: [job.erc8183JobId, job.priceAtomic, '0x'],
     };
 
-    return humanJson(req, {
+    const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, {
       ok: true,
       ...escrowRail(),
       nextAction: 'setBudget',
@@ -46,6 +52,8 @@ export async function POST(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
-    return humanJson(req, { ok: false, ...escrowRail(), error: 'set_budget_failed', message }, { status: 500 });
+    const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
+  return humanJson(req, { ok: false, ...escrowRail(), error: 'set_budget_failed', message }, { status: 500 });
   }
 }
