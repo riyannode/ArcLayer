@@ -23,13 +23,12 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { useArcWrite } from '@/hooks/useArcWrite';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
+import { isAgentAccountClientRailEnabled } from '@/lib/agent-accounts/feature-flags';
 import { config } from '@/lib/wagmi';
 import type { AgentManifestV1 } from '@/lib/a2a/manifest/types';
-import {
-  ERC8183_PUBLIC_ROLES,
-  normalizePublicRole,
-  type Erc8183PublicRole,
-} from '@/lib/erc8183/role-config';
+import { buildAgentManifest } from '@/lib/agent-onboarding/manifest-builder';
+import { getOnboardingRolePreset } from '@/lib/agent-onboarding/role-presets';
+import { normalizePublicRole } from '@/lib/erc8183/role-config';
 
 // Keep union broad for ROLE_CONFIG keys, but public UI only allows provider.
 type AgentRole = 'provider' | 'evaluator' | 'autonomous-client';
@@ -611,6 +610,8 @@ export default function ERC8183EscrowRegisterPage() {
   const [txHash, setTxHash] = useState<string>('');
   const [metadataDraftId, setMetadataDraftId] = useState('');
   const [metadataWriteToken, setMetadataWriteToken] = useState('');
+  const [mcpIntentId, setMcpIntentId] = useState('');
+  const [mcpRolePresetId, setMcpRolePresetId] = useState('');
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     identity: true,
     profile: false,
@@ -618,46 +619,91 @@ export default function ERC8183EscrowRegisterPage() {
   });
   const [agentAccount, setAgentAccount] = useState<{ agentAccountAddress: string; status: string } | null>(null);
   const [agentAccountLoading, setAgentAccountLoading] = useState(true);
-  const agentAccountEnabled = process.env.NEXT_PUBLIC_AGENT_ACCOUNT_ENABLED === 'true';
+  const agentAccountEnabled = isAgentAccountClientRailEnabled();
   const [controllerMode, setControllerMode] = useState<'eoa' | 'agent-account'>('eoa');
   const { isConnected, address } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const { authenticated: circleAuthenticated, login: circleLogin, address: circleAddress, bundlerClient } = useCircleWallet();
   const { signMessageAsync } = useSignMessage();
 
+  useEffect(() => {
+    if (!agentAccountEnabled && controllerMode !== 'eoa') {
+      setControllerMode('eoa');
+    }
+  }, [agentAccountEnabled, controllerMode]);
+
   // Fetch Agent Account — re-fetches when wallet connects (needs session cookie)
   const fetchAgentAccount = useMemo(() => {
-    return async function loadAgentAccount(addr?: string) {
+    return async function loadAgentAccount(options?: {
+      address?: string;
+      ensureSession?: boolean;
+    }) {
+      const addr = options?.address;
+      const shouldEnsureSession = options?.ensureSession === true;
+
+      if (!agentAccountEnabled) {
+        setAgentAccount(null);
+        setAgentAccountLoading(false);
+        return;
+      }
+
       try {
         const res = await fetch('/api/profile/agent-account', { cache: 'no-store' });
+
         if (res.ok) {
           const json = await res.json();
+
           if (json.agentAccountAddress && json.status === 'active') {
-            setAgentAccount({ agentAccountAddress: json.agentAccountAddress, status: json.status });
+            setAgentAccount({
+              agentAccountAddress: json.agentAccountAddress,
+              status: json.status,
+            });
           } else {
             setAgentAccount(null);
           }
-        } else if (res.status === 401 && addr) {
-          // 401 = no session cookie. Ensure wallet session then retry.
+
+          return;
+        }
+
+        if (res.status === 401) {
+          // Passive page load must not open MetaMask.
+          // Wallet-session creation opens a signature modal, so only do it after
+          // explicit user action or MCP intent hydration.
+          if (!shouldEnsureSession || !addr) {
+            setAgentAccount(null);
+            return;
+          }
+
           const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
           const sessionOk = await ensureWalletSession(addr, signMessageAsync);
+
           if (sessionOk.ok) {
             const retry = await fetch('/api/profile/agent-account', { cache: 'no-store' });
             if (retry.ok) {
               const json = await retry.json();
+
               if (json.agentAccountAddress && json.status === 'active') {
-                setAgentAccount({ agentAccountAddress: json.agentAccountAddress, status: json.status });
+                setAgentAccount({
+                  agentAccountAddress: json.agentAccountAddress,
+                  status: json.status,
+                });
+              } else {
+                setAgentAccount(null);
               }
             }
           }
+
+          return;
         }
+
+        setAgentAccount(null);
       } catch {
         // silent
       } finally {
         setAgentAccountLoading(false);
       }
     };
-  }, [signMessageAsync]);
+  }, [agentAccountEnabled, signMessageAsync]);
 
   // Fetch on mount only when optional Agent Account mode is enabled.
   useEffect(() => {
@@ -667,7 +713,7 @@ export default function ERC8183EscrowRegisterPage() {
     }
     let cancelled = false;
     (async () => {
-      await fetchAgentAccount();
+      await fetchAgentAccount({ ensureSession: false });
       if (cancelled) return;
     })();
     return () => { cancelled = true; };
@@ -679,7 +725,7 @@ export default function ERC8183EscrowRegisterPage() {
     // Only re-fetch if we haven't found an agent account yet
     if (agentAccount) return;
     setAgentAccountLoading(true);
-    fetchAgentAccount(address);
+    fetchAgentAccount({ address, ensureSession: false });
   }, [address, isConnected, agentAccount, agentAccountEnabled, fetchAgentAccount]);
 
   // Read ?role= from URL on mount (supports deep-link from onboarding page)
@@ -692,6 +738,63 @@ export default function ERC8183EscrowRegisterPage() {
     }
   }, []);
 
+
+  // Hydrate the existing form from an MCP registration intent when present.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const intent = params.get('intent');
+    const isMcp = params.get('mcp') === '1';
+    if (!intent || !isMcp || !address) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
+        const sessionResult = await ensureWalletSession(address, signMessageAsync);
+        if (!sessionResult.ok) {
+          setNotice(sessionResult.error);
+          return;
+        }
+        const res = await fetch(`/api/agent-onboarding/intents/${encodeURIComponent(intent)}`, { cache: 'no-store' });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load MCP registration intent');
+        if (cancelled) return;
+
+        const metadata = json.draft?.metadata || {};
+        const roleId = String(metadata.roles?.[0]?.id || json.intent?.rolePresetId || metadata.role || 'provider');
+        const preset = getOnboardingRolePreset(roleId, { includeDisabled: true });
+        const resolvedPresetId = preset?.id || 'provider';
+        const effectiveRole: AgentRole = preset?.identityRole === 'client' ? 'autonomous-client' : preset?.identityRole === 'evaluator' ? 'evaluator' : 'provider';
+        const category = CATEGORIES.find((item) => slugify(item) === preset?.category) || '';
+
+        setMcpIntentId(intent);
+        setMcpRolePresetId(resolvedPresetId);
+        setMetadataDraftId(String(json.draft.draftId || ''));
+        setMetadataWriteToken('');
+        setForm((prev) => ({
+          ...prev,
+          agentName: typeof metadata.name === 'string' ? metadata.name : prev.agentName,
+          description: typeof metadata.description === 'string' ? metadata.description : prev.description,
+          avatarUrl: typeof metadata.avatar === 'string' ? metadata.avatar : prev.avatarUrl,
+          role: effectiveRole,
+          category,
+          capabilities: Array.isArray(metadata.capabilities) ? metadata.capabilities.filter((cap: unknown) => typeof cap === 'string').join(', ') : prev.capabilities,
+          controllerWallet: address,
+          metadataUri: String(json.draft.metadataURI || ''),
+          websiteUrl: typeof metadata.links?.homepage === 'string' ? metadata.links.homepage : prev.websiteUrl,
+          docsUrl: typeof metadata.links?.docs === 'string' ? metadata.links.docs : prev.docsUrl,
+          repoUrl: typeof metadata.links?.repo === 'string' ? metadata.links.repo : prev.repoUrl,
+          xUrl: typeof metadata.links?.x === 'string' ? metadata.links.x : prev.xUrl,
+        }));
+        setNotice('MCP registration draft loaded. Review and mint with your wallet.');
+      } catch (error) {
+        if (!cancelled) setNotice(error instanceof Error ? error.message : 'Failed to load MCP registration intent.');
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [address, signMessageAsync]);
+
   const role = ROLE_CONFIG[form.role];
   const customCaps = useMemo(() => capabilityList(form.capabilities), [form.capabilities]);
   const isClientRole = form.role === 'autonomous-client';
@@ -700,13 +803,15 @@ export default function ERC8183EscrowRegisterPage() {
   // Controller: connected EOA by default; passkey Agent Account is optional.
   const agentAccountAddress = agentAccount?.agentAccountAddress || '';
   const hasAgentAccount = Boolean(agentAccountAddress);
-  const controller = controllerMode === 'eoa'
+  const effectiveControllerMode = agentAccountEnabled ? controllerMode : 'eoa';
+  const controller = effectiveControllerMode === 'eoa'
     ? (address || form.controllerWallet)
     : agentAccountAddress;
   const agentSlug = slugify(form.agentName) || 'erc8183-agent';
   const metadataURI = form.metadataUri.trim();
-  const hasRequiredCategory = !requiresCategoryAndCapabilities || Boolean(form.category);
-  const hasRequiredCapabilities = !requiresCategoryAndCapabilities || customCaps.length > 0;
+  const hasMcpIntent = Boolean(mcpIntentId);
+  const hasRequiredCategory = hasMcpIntent || !requiresCategoryAndCapabilities || Boolean(form.category);
+  const hasRequiredCapabilities = hasMcpIntent || !requiresCategoryAndCapabilities || customCaps.length > 0;
 
   const metadataReady = Boolean(
     form.agentName.trim() &&
@@ -722,7 +827,7 @@ export default function ERC8183EscrowRegisterPage() {
       hasRequiredCategory &&
       hasRequiredCapabilities,
   );
-  const profileComplete = controllerMode === 'eoa' ? Boolean(controller) : hasAgentAccount;
+  const profileComplete = effectiveControllerMode === 'eoa' ? Boolean(controller) : hasAgentAccount;
   const reviewComplete = Boolean(metadataReady && form.confirm);
 
   // Keep the direct EOA controller field aligned with the connected wallet.
@@ -736,61 +841,27 @@ export default function ERC8183EscrowRegisterPage() {
       ? slugify(form.category)
       : isClientRole
         ? 'client'
-        : 'general';
-    const allCaps = Array.from(new Set([...role.defaultCapabilities, ...customCaps, categorySlug]));
-    const now = new Date().toISOString();
+        : 'provider';
+    const rolePresetId = mcpRolePresetId || (isClientRole ? 'client' : form.role === 'evaluator' ? 'evaluator' : categorySlug);
 
-    return {
-      schema: 'arclayer.agent/v1',
-      version: 1,
+    return buildAgentManifest({
       agentId: mintedAgentId || `pending-${agentSlug}`,
       name: form.agentName || 'ArcLayer Agent',
-      role: role.identityRole,
+      rolePresetId,
       description: form.description || `${role.title} for ERC-8183 escrow work orders.`,
       controller: controller || undefined,
-      mode: role.manifestMode,
       avatar: form.avatarUrl || undefined,
-      capability: allCaps,
-      capabilities: allCaps,
-      categories: ['erc8183-commerce', categorySlug],
-      roles: [
-        {
-          id: role.id,
-          name: role.title,
-          category: 'erc8183-commerce',
-          capabilities: allCaps,
-          enabled: true,
-        },
-      ],
-      tags: ['erc8183', 'agentic-commerce', role.id, categorySlug],
+      customCapabilities: customCaps,
       links: {
         homepage: form.websiteUrl || undefined,
         docs: form.docsUrl || undefined,
         repo: form.repoUrl || undefined,
         x: form.xUrl || undefined,
       },
-      x402: {
-        enabled: false,
-        network: 'arc-testnet',
-        currency: 'USDC',
-        receiver: controller || undefined,
-        payTo: controller || undefined,
-      },
-      jobs: {
-        accepts: role.jobAccepts,
-        inputFormats: ['text', 'json'],
-        outputFormats: ['json', 'proof'],
-      },
-      proof: {
-        types: ['signed_result', 'url'],
-        signing: 'eip191',
-      },
-      host: 'erc8183-identity',
-      metadataURI: metadataURI || undefined,
       createdAt,
-      updatedAt: now,
-    };
-  }, [agentSlug, controller, createdAt, customCaps, form, isClientRole, metadataURI, mintedAgentId, role]);
+      metadataURI: metadataURI || undefined,
+    });
+  }, [agentSlug, controller, createdAt, customCaps, form, isClientRole, metadataURI, mintedAgentId, role, mcpRolePresetId]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -828,6 +899,9 @@ export default function ERC8183EscrowRegisterPage() {
   function saveDraft() {
     const payload = {
       type: 'erc8183-agent-identity-draft',
+      source: mcpIntentId ? 'mcp-onboarding' : 'web-register',
+      mcpIntentId: mcpIntentId || undefined,
+      mcpRolePresetId: mcpRolePresetId || undefined,
       form,
       metadataURI,
       agentManifest,
@@ -905,15 +979,21 @@ export default function ERC8183EscrowRegisterPage() {
       return;
     }
 
+    if (controllerMode === 'agent-account' && !agentAccountEnabled) {
+      setRegisterStatus('error');
+      setNotice('Agent Account mode is disabled. Use EOA controller mode.');
+      return;
+    }
+
     // Agent Account path: require passkey auth
-    if (controllerMode === 'agent-account' && !hasAgentAccount) {
+    if (effectiveControllerMode === 'agent-account' && !hasAgentAccount) {
       setRegisterStatus('error');
       setNotice('Circle Agent Account is unavailable. Use EOA controller mode or link an account in Profile.');
       return;
     }
 
     // Agent Account path: prompt passkey login if not authenticated
-    if (controllerMode === 'agent-account' && hasAgentAccount && !circleAuthenticated) {
+    if (effectiveControllerMode === 'agent-account' && hasAgentAccount && !circleAuthenticated) {
       try {
         setNotice('Login with passkey to use Circle Agent Account...');
         await circleLogin();
@@ -961,7 +1041,7 @@ export default function ERC8183EscrowRegisterPage() {
       // Step 2: Mint ERC-8004 identity
       let hash: `0x${string}`;
 
-      if (controllerMode === 'eoa') {
+      if (effectiveControllerMode === 'eoa') {
         // Default path: connected EOA signs directly
         setNotice('Submitting ERC-8004 identity mint (EOA)...');
         hash = await writeContractAsync(buildRegisterAgentConfig(effectiveMetadataURI));
@@ -1014,18 +1094,42 @@ export default function ERC8183EscrowRegisterPage() {
       setNotice(`Waiting for ${hash.slice(0, 10)}...`);
 
       const receipt = await waitForTransactionReceipt(config, { hash });
-      const minted = extractERC8004MintedTokenIdFromReceipt(receipt, (controllerMode === 'eoa' ? address : agentAccountAddress) as Address | undefined);
+      const minted = extractERC8004MintedTokenIdFromReceipt(receipt, (effectiveControllerMode === 'eoa' ? address : agentAccountAddress) as Address | undefined);
       const mintedId = minted.toString();
 
       // Step 3: Patch draft with minted agentId
-      const finalManifest = {
-        ...(agentManifest as AgentManifestV1),
+      const finalRolePresetId = mcpRolePresetId || (isClientRole ? 'client' : form.role === 'evaluator' ? 'evaluator' : (form.category ? slugify(form.category) : 'provider'));
+      const finalManifest = buildAgentManifest({
         agentId: mintedId,
+        name: form.agentName || agentManifest.name,
+        rolePresetId: finalRolePresetId,
+        description: form.description || agentManifest.description,
+        controller: controller || undefined,
+        avatar: form.avatarUrl || undefined,
+        customCapabilities: customCaps,
+        links: {
+          homepage: form.websiteUrl || undefined,
+          docs: form.docsUrl || undefined,
+          repo: form.repoUrl || undefined,
+          x: form.xUrl || undefined,
+        },
+        createdAt,
         metadataURI: effectiveMetadataURI,
         updatedAt: new Date().toISOString(),
-      };
+      });
 
-      if (draftId && writeToken) {
+      if (mcpIntentId) {
+        setNotice('Finalizing MCP registration intent...');
+        const finalize = await fetch('/api/agent-onboarding/finalize', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ intentId: mcpIntentId, agentId: mintedId, txHash: hash, manifest: finalManifest }),
+        });
+        const finalizeJson = await finalize.json();
+        if (!finalize.ok || !finalizeJson.ok) {
+          throw new Error(finalizeJson.error || 'Failed to finalize MCP registration intent');
+        }
+      } else if (draftId && writeToken) {
         setNotice('Updating metadata draft...');
         await patchDraft({
           draftId,
@@ -1045,6 +1149,9 @@ export default function ERC8183EscrowRegisterPage() {
           {
             agentId: mintedId,
             txHash: hash,
+            source: mcpIntentId ? 'mcp-onboarding' : 'web-register',
+            mcpIntentId: mcpIntentId || undefined,
+            mcpRolePresetId: mcpRolePresetId || undefined,
             metadataURI: effectiveMetadataURI,
             form,
             agentManifest: finalManifest,

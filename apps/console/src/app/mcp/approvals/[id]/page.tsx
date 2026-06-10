@@ -20,6 +20,7 @@ import Link from 'next/link';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { ensureWalletSession } from '@/lib/auth/ensureWalletSession';
+import { isAgentAccountClientRailEnabled } from '@/lib/agent-accounts/feature-flags';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -145,6 +146,28 @@ function Field({ label, value, mono }: { label: string; value: React.ReactNode; 
 // ── Main Page ─────────────────────────────────────────────────────────────
 
 export default function McpApprovalPage() {
+  const agentAccountRailEnabled = isAgentAccountClientRailEnabled();
+
+  if (!agentAccountRailEnabled) {
+    return (
+      <main className="min-h-screen bg-[#05070A] text-[#F5F0E5]">
+        <div className="mx-auto max-w-2xl px-6 py-20">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+            <div className="font-mono text-xs uppercase tracking-[0.2em] text-[#F3C536]">
+              Agent Account rail disabled
+            </div>
+            <h1 className="mt-4 text-2xl font-semibold">
+              MCP approval mode is disabled
+            </h1>
+            <p className="mt-3 text-sm text-white/60">
+              Use the EOA MCP onboarding flow from Agent Setup.
+            </p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   const params = useParams();
   const approvalId = params.id as string;
 

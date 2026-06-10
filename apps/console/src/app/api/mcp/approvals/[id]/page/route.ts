@@ -24,6 +24,7 @@ import {
   confirmApprovalByWallet,
   type McpActionApproval,
 } from '@/lib/mcp/approvals';
+import { isMcpAgentAccountIdentityEnabled } from '@/lib/agent-accounts/feature-flags';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -130,7 +131,7 @@ export async function POST(
     );
   }
 
-  if (action !== 'cancel' && process.env.MCP_AGENT_ACCOUNT_IDENTITY_ENABLED !== 'true') {
+  if (action !== 'cancel' && !isMcpAgentAccountIdentityEnabled()) {
     return NextResponse.json(
       { ok: false, error: 'agent_account_mcp_disabled', detail: 'Agent Account MCP identity mode is temporarily disabled. Use EOA registration.' },
       { status: 403 },

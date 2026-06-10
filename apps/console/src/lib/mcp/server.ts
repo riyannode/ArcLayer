@@ -61,6 +61,13 @@ import {
   handleRevokeApiKey,
 } from './api-key-tools';
 import {
+  handleCreateRegistrationDraft,
+  handleListOnboardingRolePresets,
+  handleStartAgentBundle,
+  handleGetAgentBundleStatus,
+  handleCreateAgentRuntimeKey,
+} from './onboarding-tools';
+import {
   handleProviderRuntimeGetContext,
   handleProviderRuntimeHeartbeat,
   handleProviderRuntimeStartJob,
@@ -1070,6 +1077,95 @@ export function registerAllTools(): void {
     legacyAliases: [],
     kind: 'read',
     handler: handleGetRegistrationStatus,
+  });
+
+
+  // ── ONBOARDING: MCP registration fallback ───────────────────────────────
+
+  registerTool({
+    name: 'onboarding.list_role_presets',
+    domain: 'onboarding',
+    description: 'List ArcLayer-approved ERC-8183 onboarding role presets. Enabled presets are returned by default.',
+    authRequired: false,
+    roles: [],
+    inputSchema: [
+      { name: 'includeDisabled', type: 'boolean', description: 'Include disabled/staged presets when true.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleListOnboardingRolePresets,
+  });
+
+  registerTool({
+    name: 'onboarding.create_registration_draft',
+    domain: 'onboarding',
+    description: 'Create an approved MCP onboarding registration draft and return a browser mint URL for /register/erc8004.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'rolePresetId', type: 'string', required: true, description: 'Approved role preset id from onboarding.list_role_presets.' },
+      { name: 'name', type: 'string', required: true, description: 'Agent name.' },
+      { name: 'description', type: 'string', description: 'Agent description.' },
+      { name: 'endpoint', type: 'string', description: 'Optional agent endpoint URL.' },
+      { name: 'customCapabilities', type: 'array', description: 'Optional string array of extra capabilities.' },
+      { name: 'avatar', type: 'string', description: 'Optional avatar URL.' },
+      { name: 'links', type: 'object', description: 'Optional homepage/docs/repo/x links.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleCreateRegistrationDraft,
+  });
+
+
+  registerTool({
+    name: 'onboarding.start_agent_bundle',
+    domain: 'onboarding',
+    description: 'Create a full ArcLayer Agent Bundle draft: role preset, manifest, metadata URI, registration intent, and browser ERC-8004 mint URL.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'rolePresetId', type: 'string', description: 'Approved role preset id. Defaults to provider.' },
+      { name: 'name', type: 'string', description: 'Agent name.' },
+      { name: 'description', type: 'string', description: 'Agent description.' },
+      { name: 'endpoint', type: 'string', description: 'Optional agent endpoint URL.' },
+      { name: 'customCapabilities', type: 'array', description: 'Optional string array of extra capabilities.' },
+      { name: 'avatar', type: 'string', description: 'Optional avatar URL.' },
+      { name: 'links', type: 'object', description: 'Optional homepage/docs/repo/x links.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleStartAgentBundle,
+  });
+
+  registerTool({
+    name: 'onboarding.get_agent_bundle_status',
+    domain: 'onboarding',
+    description: 'Poll an ArcLayer Agent Bundle registration intent after browser mint. Returns draft, expired, or completed status.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'intentId', type: 'string', required: true, description: 'Registration intent id from onboarding.start_agent_bundle.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleGetAgentBundleStatus,
+  });
+
+  registerTool({
+    name: 'onboarding.create_agent_runtime_key',
+    domain: 'onboarding',
+    description: 'Create an ArcLayer API key for a completed Agent Bundle. Returns raw key once and env snippet.',
+    authRequired: true,
+    roles: [],
+    inputSchema: [
+      { name: 'intentId', type: 'string', description: 'Completed registration intent id.' },
+      { name: 'agentId', type: 'string', description: 'Optional agent id. If intentId is present, intent agentId is used.' },
+      { name: 'preset', type: 'string', description: 'Optional role/API-key preset. Defaults to intent rolePresetId or provider.' },
+      { name: 'label', type: 'string', description: 'Optional key label.' },
+    ],
+    legacyAliases: [],
+    kind: 'read',
+    handler: handleCreateAgentRuntimeKey,
   });
 
   // ── AUTH: API key management ─────────────────────────────────────────────

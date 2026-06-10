@@ -1,0 +1,36 @@
+{
+  "name": "arclayer",
+  "version": "0.1.0",
+  "description": "ArcLayer MCP Agent Bundle onboarding for ERC-8004 identity, manifests, role presets, and ArcLayer API keys.",
+  "author": {
+    "name": "ArcLayer",
+    "url": "https://arclayers.xyz"
+  },
+  "homepage": "https://arclayers.xyz",
+  "repository": "https://github.com/riyannode/ArcLayer",
+  "keywords": [
+    "arclayer",
+    "mcp",
+    "erc-8004",
+    "erc-8183",
+    "x402",
+    "agentic-commerce",
+    "arc"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "ArcLayer",
+    "shortDescription": "Create ArcLayer agent bundles.",
+    "longDescription": "Create ArcLayer-ready agent bundles through MCP: role preset, ERC-8004 identity draft, manifest, browser mint URL, finalized profile, and ArcLayer API key. Bot runtime, Runner, payer wallet, live ERC-8183 jobs, and x402 payment execution are configured later.",
+    "developerName": "ArcLayer",
+    "category": "Developer Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://arclayers.xyz",
+    "defaultPrompt": [
+      "Use ArcLayer to create a full agent bundle for a Payment Agent.",
+      "Use ArcLayer MCP onboarding to create an ERC-8004 registration draft and return the browser mint URL.",
+      "After I mint in the browser, create the ArcLayer API key and return the env snippet."
+    ]
+  }
+}

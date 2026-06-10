@@ -12,11 +12,14 @@
  * - We do NOT trust user-provided controller addresses.
  */
 
+import { getAddress } from 'viem';
 import {
   createApiKey,
   revokeApiKey,
-  API_KEY_SCOPES,
 } from '@/lib/a2a/auth';
+import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
+import { isAgentAccountServerRailEnabled } from '@/lib/agent-accounts/feature-flags';
+import { API_KEY_PRESETS, buildApiKeyEnvSnippet } from '@/lib/agent-onboarding/api-key-presets';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import {
   resolveMcpSessionByToken,
@@ -28,29 +31,35 @@ import { MCP_ERRORS, McpError } from './errors';
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const SCOPE_PRESETS: Record<string, string[]> = {
-  provider: [
-    API_KEY_SCOPES.ERC8183_CLAIM,
-    API_KEY_SCOPES.ERC8183_RUNNING,
-    API_KEY_SCOPES.ERC8183_SUBMIT,
-    API_KEY_SCOPES.ERC8183_TX,
-    API_KEY_SCOPES.ERC8183_PRESENCE,
-  ],
-  client: [
-    API_KEY_SCOPES.ERC8183_CREATE,
-    API_KEY_SCOPES.ERC8183_CONFIRM,
-    API_KEY_SCOPES.ERC8183_TX,
-    API_KEY_SCOPES.ERC8183_PRESENCE,
-  ],
-};
+const SCOPE_PRESETS = Object.fromEntries(
+  Object.entries(API_KEY_PRESETS)
+    .filter(([id]) => id === 'provider' || id === 'client')
+    .map(([id, preset]) => [id, preset.scopes]),
+) as Record<string, string[]>;
 
-const ALLOWED_PRESETS = new Set(Object.keys(SCOPE_PRESETS));
+const PROVIDER_LIKE_ROLE_PRESETS = new Set([
+  'provider',
+  'smart-contract',
+  'frontend',
+  'backend',
+  'devops',
+  'design',
+  'data-research',
+  'documentation',
+  'analysis',
+  'payment',
+]);
+const CLIENT_ROLE_PRESETS = new Set(['client']);
+const EVALUATOR_ROLE_PRESETS = new Set(['evaluator']);
+const ACCEPTED_ROLE_PRESETS = new Set([
+  ...PROVIDER_LIKE_ROLE_PRESETS,
+  ...CLIENT_ROLE_PRESETS,
+  ...EVALUATOR_ROLE_PRESETS,
+]);
 
-const INSTALL_COMMANDS: Record<string, string> = {
-  provider: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
-  // client install script not yet available — falls back to provider command
-  client: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
-};
+const INSTALL_COMMANDS = Object.fromEntries(
+  Object.entries(API_KEY_PRESETS).map(([id, preset]) => [id, preset.installCommand]),
+) as Record<string, string>;
 
 // ── Input validation ──────────────────────────────────────────────────────
 
@@ -88,6 +97,29 @@ async function requireMcpSession(ctx: McpToolContext): Promise<McpSession> {
   }
 
   return session;
+}
+
+
+async function sessionControlsController(
+  session: McpSession,
+  controllerAddress: string,
+): Promise<boolean> {
+  const controller = controllerAddress.toLowerCase();
+  const ownerAddr = session.ownerAddress.toLowerCase();
+  const agentAccountAddr = session.agentAccountAddress?.toLowerCase();
+
+  if (controller === ownerAddr) return true;
+
+  if (isAgentAccountServerRailEnabled() && agentAccountAddr && controller === agentAccountAddr) {
+    const account = await getActiveAgentAccountForOwnerAndAddress(
+      session.ownerAddress,
+      session.agentAccountAddress,
+    );
+
+    return Boolean(account);
+  }
+
+  return false;
 }
 
 // ── Shared ownership helper ───────────────────────────────────────────────
@@ -143,44 +175,57 @@ export async function resolveAgentOwnership(
 
   const agent = byAgentId.data ?? byTokenId.data;
   if (!agent) {
-    throw new McpError(MCP_ERRORS.NOT_FOUND, `Agent not found: ${agentId}`);
+    if (!/^\d+$/.test(agentId)) {
+      throw new McpError(MCP_ERRORS.NOT_FOUND, `Agent not found: ${agentId}`);
+    }
+
+    let onchainOwner: string;
+    try {
+      onchainOwner = getAddress(await getERC8004OwnerOf(agentId)).toLowerCase();
+    } catch {
+      throw new McpError(MCP_ERRORS.NOT_FOUND, `Agent not found: ${agentId}`);
+    }
+
+    const controls = await sessionControlsController(session, onchainOwner);
+    if (!controls) {
+      throw new McpError(
+        MCP_ERRORS.FORBIDDEN,
+        `Session does not control agent ${agentId}. Controller: ${onchainOwner}`,
+      );
+    }
+
+    return {
+      agent_id: agentId,
+      token_id: agentId,
+      controller: onchainOwner,
+      source: 'onchain_owner_fallback',
+    };
   }
 
   const controller = String(agent.controller || '').toLowerCase();
-  const ownerAddr = session.ownerAddress.toLowerCase();
-  const agentAccountAddr = session.agentAccountAddress?.toLowerCase();
-
-  // Check if controller matches owner EOA (legacy agents)
-  if (controller === ownerAddr) {
-    return agent;
-  }
-
-  // Check if controller matches Agent Account (new agents)
-  if (agentAccountAddr && controller === agentAccountAddr) {
-    if (process.env.AGENT_ACCOUNT_BACKEND_ENABLED !== 'true') {
-      throw new McpError(
-        MCP_ERRORS.FORBIDDEN,
-        'agent_account_controller_disabled — Agent Account-controlled agents are disabled. Use an EOA-controlled agent.',
-      );
-    }
-
-    // Validate Agent Account binding is still active
-    const account = await getActiveAgentAccountForOwnerAndAddress(
-      session.ownerAddress,
-      session.agentAccountAddress,
-    );
-    if (!account) {
-      throw new McpError(
-        MCP_ERRORS.FORBIDDEN,
-        'agent_account_inactive — Agent Account binding is no longer active',
-      );
-    }
-    return agent;
-  }
+  const controls = await sessionControlsController(session, controller);
+  if (controls) return agent;
 
   throw new McpError(
     MCP_ERRORS.FORBIDDEN,
     `Session does not control agent ${agentId}. Controller: ${controller}`,
+  );
+}
+
+
+function resolveApiKeyPresetForMcp(rawPreset: string): { requestedPreset: string; apiKeyPreset: 'provider' | 'client' } {
+  const preset = rawPreset.trim().toLowerCase() || 'provider';
+  if (PROVIDER_LIKE_ROLE_PRESETS.has(preset)) return { requestedPreset: preset, apiKeyPreset: 'provider' };
+  if (CLIENT_ROLE_PRESETS.has(preset)) return { requestedPreset: preset, apiKeyPreset: 'client' };
+  if (EVALUATOR_ROLE_PRESETS.has(preset)) {
+    throw new McpError(
+      MCP_ERRORS.VALIDATION_ERROR,
+      'Evaluator API-key preset is not supported yet. Use provider/client role presets until evaluator API-key scope is implemented.',
+    );
+  }
+  throw new McpError(
+    MCP_ERRORS.VALIDATION_ERROR,
+    `Invalid preset: "${preset}". Accepted role presets: ${[...ACCEPTED_ROLE_PRESETS].join(', ')}. Evaluator is listed but currently unsupported for API keys.`,
   );
 }
 
@@ -207,15 +252,8 @@ export async function handleCreateApiKey(
     throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'agentId is required');
   }
 
-  const preset = typeof args.preset === 'string' ? args.preset.trim().toLowerCase() : 'provider';
-
-  // Reject evaluator/worker/unknown presets
-  if (!ALLOWED_PRESETS.has(preset)) {
-    throw new McpError(
-      MCP_ERRORS.VALIDATION_ERROR,
-      `Invalid preset: "${preset}". Allowed: ${[...ALLOWED_PRESETS].join(', ')}. Evaluator will be added later.`,
-    );
-  }
+  const requestedPreset = typeof args.preset === 'string' ? args.preset.trim().toLowerCase() : 'provider';
+  const { apiKeyPreset } = resolveApiKeyPresetForMcp(requestedPreset);
 
   let label: string | undefined;
   if (args.label !== undefined && args.label !== null) {
@@ -237,7 +275,7 @@ export async function handleCreateApiKey(
   const result = await createApiKey({
     agentId: resolvedAgentId,
     label,
-    scopes: SCOPE_PRESETS[preset],
+    scopes: SCOPE_PRESETS[apiKeyPreset],
     createdBy: session.ownerAddress,
   });
 
@@ -245,15 +283,7 @@ export async function handleCreateApiKey(
     throw new McpError(MCP_ERRORS.INTERNAL_ERROR, `Failed to create API key: ${result.error}`);
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, '') || 'https://arclayers.xyz';
-
-  // Build envSnippet dynamically with actual key and agent ID
-  const envSnippet = [
-    `ARCLAYER_API_KEY=${result.key}`,
-    `ARCLAYER_AGENT_ID=${resolvedAgentId}`,
-    `ARCLAYER_BASE_URL=${baseUrl}`,
-    `ARCLAYER_MODE=${preset}`,
-  ].join('\n');
+  const envSnippet = buildApiKeyEnvSnippet({ key: result.key, agentId: resolvedAgentId, preset: apiKeyPreset });
 
   return {
     ok: true,
@@ -261,10 +291,11 @@ export async function handleCreateApiKey(
     id: result.id,
     keyPrefix: result.keyPrefix,
     key: result.key, // raw key — shown once only
-    scopes: SCOPE_PRESETS[preset],
-    preset,
+    scopes: SCOPE_PRESETS[apiKeyPreset],
+    preset: apiKeyPreset,
+    requestedPreset: requestedPreset || 'provider',
     envSnippet,
-    installCommand: INSTALL_COMMANDS[preset],
+    installCommand: INSTALL_COMMANDS[apiKeyPreset],
     warning: 'Store the key now — it will NOT be shown again. Use envSnippet to configure your PM2 bot.',
   };
 }
