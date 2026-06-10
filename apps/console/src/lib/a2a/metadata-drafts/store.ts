@@ -138,3 +138,35 @@ export async function updateMetadataDraft(input: {
 
   return { ok: true as const };
 }
+
+export async function updateMetadataDraftServer(input: {
+  draftId: string;
+  metadata: unknown;
+  agentId?: string;
+  txHash?: string;
+}) {
+  const supabase = getSupabaseAdmin();
+  const updateFields: Record<string, unknown> = {
+    metadata: input.metadata,
+  };
+
+  if (input.agentId) {
+    updateFields.agent_id = input.agentId;
+    updateFields.status = 'minted';
+  }
+
+  if (input.txHash) {
+    updateFields.tx_hash = input.txHash;
+  }
+
+  const { error } = await supabase
+    .from(TABLE)
+    .update(updateFields)
+    .eq('draft_id', input.draftId);
+
+  if (error) {
+    return { ok: false as const, error: error.message };
+  }
+
+  return { ok: true as const };
+}

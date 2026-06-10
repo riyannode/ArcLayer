@@ -192,6 +192,36 @@ Stack traces are **never** exposed in API responses. Error messages are redacted
 
 ---
 
+## MCP Production Onboarding Fallback
+
+The production MCP onboarding path creates a server-side registration intent and sends the user back to the canonical browser mint page. It does **not** use `arclayer://mcp/identity/<hash>` links and does not pass metadata draft write tokens in URLs.
+
+```text
+1. MCP client calls onboarding.list_role_presets
+2. User chooses an ArcLayer-approved enabled role preset in the MCP client
+3. MCP client calls onboarding.create_registration_draft
+4. Tool returns /register/erc8004?intent=<id>&mcp=1
+5. User opens the URL and mints in the existing /register/erc8004 UI
+6. Finalize upserts the patched manifest into agent_manifests for dashboard visibility
+7. MCP client calls provider.create_api_key and returns the PM2 .env snippet
+```
+
+### Onboarding Tools
+
+| Tool | Kind | Auth | Description |
+|------|------|------|-------------|
+| `onboarding.list_role_presets` | read | optional | List enabled ArcLayer-approved ERC-8183 role presets by default. |
+| `onboarding.create_registration_draft` | read | required | Build an approved manifest draft, create an intent, and return the browser registration URL. |
+
+**onboarding.create_registration_draft args:**
+- `rolePresetId` (required) — preset ID from `onboarding.list_role_presets`
+- `name` (required) — agent display name
+- `description` (optional) — agent description
+- `endpoint` (optional) — public endpoint URL
+- `customCapabilities` (optional) — extra string capabilities, merged with the preset
+- `avatar` (optional) — avatar URL
+- `links` (optional) — homepage/docs/repo/x links
+
 ## MCP ApprovalUrl Flow (Identity Registration)
 
 MCP preserves an optional ERC-8004 Passkey Agent Account approval flow. It is feature-gated and disabled by default; connected EOA registration is the default identity path. No private keys are held by the server.
@@ -237,7 +267,7 @@ All require `Authorization: Bearer <arc_mcp_sess_***>` header.
 
 **provider.create_api_key:**
 - `agentId` (required) — Agent ID or token ID
-- `preset` (optional, default "provider") — "provider" or "client"
+- `preset` (optional, default "provider") — accepts onboarding role preset IDs. Provider-like presets (`provider`, `smart-contract`, `frontend`, `backend`, `devops`, `design`, `data-research`, `documentation`, `analysis`, `payment`) map to provider API-key scopes. `client` maps to client scopes. `evaluator` returns a clear unsupported error until evaluator API-key scope is implemented.
 - `label` (optional) — Human-readable label
 
 **provider.list_api_keys:**
@@ -262,7 +292,7 @@ All require `Authorization: Bearer <arc_mcp_sess_***>` header.
 - `erc8183:tx` — Execute transactions
 - `erc8183:presence` — Heartbeat/presence
 
-Evaluator preset will be added later.
+Evaluator API-key preset is intentionally unsupported for now and returns a clear error. Use provider-like or client presets until evaluator API-key scope is implemented.
 
 ### Security
 
@@ -324,6 +354,58 @@ ARCLAYER_MODE=client
 > **MCP session token** is for Claude/Codex to authenticate MCP tool calls.
 > **Provider/Client API key** is for your PM2/runtime bot to authenticate API calls.
 > Neither is a wallet private key. ArcLayer never holds or signs with private keys.
+
+---
+
+## MCP Agent Bundle Onboarding
+
+ArcLayer Agent Bundle onboarding creates a complete pre-runtime agent bundle through MCP.
+
+It creates:
+- an ERC-8004 identity registration draft
+- an agent manifest draft
+- role/category/capability/tag metadata
+- a metadataURI
+- an MCP registration intent
+- a browser registration URL for `/register/erc8004?intent=<id>&mcp=1`
+- an ArcLayer API key after the user signs/mints in the browser
+
+The user still signs/mints ERC-8004 identity in ArcLayer web. MCP and Codex do not hold private keys and do not sign on behalf of the user.
+
+Agent Bundle onboarding stops at readiness. It does not configure Runner, PM2 bot runtime, payer wallet, Circle CLI, Gateway balance, live ERC-8183 job execution, or live x402 payment execution. Those are later setup steps.
+
+### Tools
+
+| Tool | Auth | Description |
+|---|---:|---|
+| `onboarding.start_agent_bundle` | required | Create role preset, manifest draft, metadataURI, registration intent, and browser mint URL. |
+| `onboarding.get_agent_bundle_status` | required | Poll intent status after browser mint. Returns draft, expired, or completed state. |
+| `onboarding.create_agent_runtime_key` | required | Create ArcLayer API key after completed mint/finalize. Returns raw key once and env snippet. |
+
+### Codex plugin bundle
+
+The Codex plugin bundle lives at:
+
+```text
+plugins/codex-arclayer/
+  .codex-plugin/plugin.json
+  .mcp.json
+  skills/arclayer-agent-bundle/SKILL.md
+```
+
+Use this with Codex Desktop/CLI after setting `ARCLAYER_MCP_TOKEN`.
+
+Example prompt:
+
+```text
+Use ArcLayer.
+
+Create a full agent bundle for a Payment Agent.
+Name: Payment Integration Bot.
+Description: Handles x402 access, USDC settlement, payment receipts, Gateway balance workflows, and ERC-8183 commerce.
+
+Give me the browser URL to sign/mint, then continue after mint and return the ArcLayer API key env snippet.
+```
 
 ---
 

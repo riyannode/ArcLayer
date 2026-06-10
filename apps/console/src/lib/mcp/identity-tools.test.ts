@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   submitApprovalByWallet: vi.fn(),
   confirmApprovalByWallet: vi.fn(),
   getSupabaseAdmin: vi.fn(),
+  getERC8004OwnerOf: vi.fn(),
+  createApiKey: vi.fn(),
+  revokeApiKey: vi.fn(),
 }));
 
 vi.mock('@/lib/mcp/session-auth', () => ({
@@ -41,10 +44,19 @@ vi.mock('@/lib/x402/supabaseClient', () => ({
   getSupabaseAdmin: mocks.getSupabaseAdmin,
 }));
 
+vi.mock('@/lib/contracts/erc8004', () => ({
+  getERC8004OwnerOf: mocks.getERC8004OwnerOf,
+}));
+
+vi.mock('@/lib/a2a/auth', () => ({
+  createApiKey: mocks.createApiKey,
+  revokeApiKey: mocks.revokeApiKey,
+}));
+
 import { POST as createMcpSessionPost } from '@/app/api/mcp/sessions/create/route';
 import { POST as approvalPost } from '@/app/api/mcp/approvals/[id]/page/route';
 import { resolveIdentityAndBuild, validateWebHireInput } from '@/lib/erc8183-jobs/web-hire-contract';
-import { resolveAgentOwnership } from './api-key-tools';
+import { handleCreateApiKey, resolveAgentOwnership } from './api-key-tools';
 import { handleGetAgentAccount, handlePrepareRegisterAgent } from './identity-tools';
 
 const OWNER = '0xF5f11E68fbcbfa20De9208709aB60fF81509Cb20';
@@ -115,6 +127,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   delete process.env.MCP_AGENT_ACCOUNT_IDENTITY_ENABLED;
   delete process.env.AGENT_ACCOUNT_BACKEND_ENABLED;
+  delete process.env.AGENT_ACCOUNT_RAILS_ENABLED;
 
   mocks.authenticateWalletRequest.mockResolvedValue({ authenticated: true, wallet: OWNER });
   mocks.resolveMcpSessionByToken.mockResolvedValue(SESSION);
@@ -127,6 +140,9 @@ beforeEach(() => {
       permissions: { allowedContracts: ['ERC8004_IDENTITY_REGISTRY'], allowedActions: ['identity.register'] },
     },
   });
+  mocks.getERC8004OwnerOf.mockResolvedValue(OWNER);
+  mocks.createApiKey.mockResolvedValue({ ok: true, key: 'ak_test', keyPrefix: 'ak_test', id: 'key-1' });
+  mocks.revokeApiKey.mockResolvedValue(true);
   mocks.getApprovalById.mockResolvedValue(approval());
   mocks.getEffectiveStatus.mockReturnValue('pending');
   mocks.cancelApprovalByWallet.mockImplementation(async (row) => ({ ok: true, approval: row }));
@@ -135,6 +151,7 @@ beforeEach(() => {
 afterEach(() => {
   delete process.env.MCP_AGENT_ACCOUNT_IDENTITY_ENABLED;
   delete process.env.AGENT_ACCOUNT_BACKEND_ENABLED;
+  delete process.env.AGENT_ACCOUNT_RAILS_ENABLED;
 });
 
 describe('MCP EOA-first session creation', () => {
@@ -220,10 +237,83 @@ describe('MCP API key ownership in EOA mode', () => {
     expect(mocks.getActiveAgentAccountForOwnerAndAddress).not.toHaveBeenCalled();
   });
 
+
+
+  it('falls back to ERC-8004 ownerOf for a just-minted numeric agent before indexer sync', async () => {
+    mocks.getSupabaseAdmin.mockReturnValue(mockAgentQuery(null));
+    mocks.getERC8004OwnerOf.mockResolvedValue(OWNER);
+
+    await expect(resolveAgentOwnership(SESSION, '123')).resolves.toMatchObject({
+      agent_id: '123',
+      token_id: '123',
+      controller: OWNER.toLowerCase(),
+      source: 'onchain_owner_fallback',
+    });
+  });
+
+
+  it('provider.create_api_key succeeds via ownerOf fallback before indexer sync', async () => {
+    mocks.getSupabaseAdmin.mockReturnValue(mockAgentQuery(null));
+    mocks.getERC8004OwnerOf.mockResolvedValue(OWNER);
+
+    const result = await handleCreateApiKey(
+      { agentId: '123', preset: 'provider' },
+      { request: { authorization: 'Bearer arc_mcp_sess_test', origin: 'http://localhost', method: 'POST' } },
+    ) as Record<string, unknown>;
+
+    expect(result.ok).toBe(true);
+    expect(result.agentId).toBe('123');
+    expect(mocks.createApiKey).toHaveBeenCalledWith(expect.objectContaining({ agentId: '123' }));
+  });
+
+
+
+  it('provider.create_api_key maps payment role preset to provider API-key scopes', async () => {
+    mocks.getSupabaseAdmin.mockReturnValue(mockAgentQuery(null));
+    mocks.getERC8004OwnerOf.mockResolvedValue(OWNER);
+
+    const result = await handleCreateApiKey(
+      { agentId: '123', preset: 'payment' },
+      { request: { authorization: 'Bearer arc_mcp_sess_test', origin: 'http://localhost', method: 'POST' } },
+    ) as Record<string, unknown>;
+
+    expect(result.ok).toBe(true);
+    expect(result.preset).toBe('provider');
+    expect(result.requestedPreset).toBe('payment');
+    expect(mocks.createApiKey).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: '123',
+      scopes: ['erc8183:claim', 'erc8183:running', 'erc8183:submit', 'erc8183:tx', 'erc8183:presence'],
+    }));
+  });
+
+  it('provider.create_api_key returns a clear unsupported message for evaluator preset', async () => {
+    await expect(handleCreateApiKey(
+      { agentId: '123', preset: 'evaluator' },
+      { request: { authorization: 'Bearer arc_mcp_sess_test', origin: 'http://localhost', method: 'POST' } },
+    )).rejects.toThrow('Evaluator API-key preset is not supported yet');
+    expect(mocks.createApiKey).not.toHaveBeenCalled();
+  });
+
+  it('rejects ownerOf Agent Account fallback while Agent Account rails are disabled', async () => {
+    mocks.getSupabaseAdmin.mockReturnValue(mockAgentQuery(null));
+    mocks.getERC8004OwnerOf.mockResolvedValue(AGENT_ACCOUNT);
+    mocks.getActiveAgentAccountForOwnerAndAddress.mockResolvedValue({ id: 'acct-1' });
+
+    await expect(resolveAgentOwnership(SESSION, '123')).rejects.toThrow(`Session does not control agent 123. Controller: ${AGENT_ACCOUNT.toLowerCase()}`);
+    expect(mocks.getActiveAgentAccountForOwnerAndAddress).not.toHaveBeenCalled();
+  });
+
+  it('rejects ownerOf fallback when the MCP session does not control the on-chain owner', async () => {
+    mocks.getSupabaseAdmin.mockReturnValue(mockAgentQuery(null));
+    mocks.getERC8004OwnerOf.mockResolvedValue(PROVIDER_CTRL);
+
+    await expect(resolveAgentOwnership(SESSION, '123')).rejects.toThrow(`Session does not control agent 123. Controller: ${PROVIDER_CTRL.toLowerCase()}`);
+  });
+
   it('rejects an Agent Account-controlled agent when Agent Account backend is disabled', async () => {
     mocks.getSupabaseAdmin.mockReturnValue(mockAgentQuery({ agent_id: 'agent-1', token_id: '1', controller: AGENT_ACCOUNT }));
 
-    await expect(resolveAgentOwnership(SESSION, 'agent-1')).rejects.toThrow('agent_account_controller_disabled');
+    await expect(resolveAgentOwnership(SESSION, 'agent-1')).rejects.toThrow('Session does not control agent agent-1');
     expect(mocks.getActiveAgentAccountForOwnerAndAddress).not.toHaveBeenCalled();
   });
 });

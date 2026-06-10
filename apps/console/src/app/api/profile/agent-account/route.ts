@@ -16,6 +16,10 @@ import {
   upsertAgentAccountForOwner,
 } from '@/lib/agent-accounts/store';
 import { ensureA2aPayerBinding } from '@/lib/x402/agent-payer';
+import {
+  isAgentAccountA2aAutoBindEnabled,
+  isAgentAccountServerRailEnabled,
+} from '@/lib/agent-accounts/feature-flags';
 import { isAddress, getAddress } from 'viem';
 
 export const runtime = 'nodejs';
@@ -29,6 +33,17 @@ async function getWallet(req: NextRequest): Promise<string | null> {
 }
 
 export async function GET(req: NextRequest) {
+  if (!isAgentAccountServerRailEnabled()) {
+    return humanJson(req, {
+      ok: true,
+      disabled: true,
+      ownerAddress: null,
+      agentAccountAddress: null,
+      status: 'disabled',
+      chainId: 5042002,
+    }, { headers: { 'Cache-Control': 'no-store' } });
+  }
+
   const wallet = await getWallet(req);
   if (!wallet) {
     return humanJson(req, { ok: false, error: 'not_authenticated' }, { status: 401 });
@@ -58,8 +73,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (process.env.AGENT_ACCOUNT_BACKEND_ENABLED !== 'true') {
-    return humanJson(req, { ok: false, error: 'agent_account_disabled', detail: 'Agent Account mode is temporarily disabled. Use EOA bot mode.' }, { status: 403 });
+  if (!isAgentAccountServerRailEnabled()) {
+    return humanJson(
+      req,
+      {
+        ok: false,
+        error: 'agent_account_disabled',
+        detail: 'Agent Account rail is disabled. Use EOA controller mode.',
+      },
+      { status: 403 },
+    );
   }
 
   const wallet = await getWallet(req);
@@ -87,7 +110,7 @@ export async function POST(req: NextRequest) {
     agentAccountAddress,
   });
 
-  if (process.env.AGENT_ACCOUNT_A2A_AUTO_BIND_ENABLED === 'true') {
+  if (isAgentAccountA2aAutoBindEnabled()) {
     // Optional passkey mode: bind the Agent Account as A2A payer for owned agents.
     try {
       const linkedAgents = await getLinkedErc8004AgentsForController(ownerAddress);

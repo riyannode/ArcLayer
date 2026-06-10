@@ -15,6 +15,7 @@
 
 import { createHash } from 'node:crypto';
 import { isAddress, getAddress } from 'viem';
+import { isAgentAccountServerRailEnabled } from '@/lib/agent-accounts/feature-flags';
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -355,7 +356,7 @@ export async function resolveIdentityAndBuild(
     }
   }
 
-  if (process.env.AGENT_ACCOUNT_BACKEND_ENABLED !== 'true' && resolveAgentAccountController) {
+  if (!isAgentAccountServerRailEnabled() && resolveAgentAccountController) {
     const providerAgentAccount = await resolveAgentAccountController(providerController);
     if (providerAgentAccount) {
       return {

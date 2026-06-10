@@ -12,6 +12,7 @@
 
 import { getAddress, isAddress } from 'viem';
 import { getSupabaseAdmin } from './supabaseClient';
+import { isAgentAccountA2aAutoBindEnabled } from '@/lib/agent-accounts/feature-flags';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -249,7 +250,7 @@ export async function ensureA2aPayerBinding(input: {
   controllerAddress: string;
   agentAccountAddress: string;
 }): Promise<{ payerAddress: string; rail: AgentX402Rail; scope: AgentX402Scope } | null> {
-  if (process.env.AGENT_ACCOUNT_A2A_AUTO_BIND_ENABLED !== 'true') return null;
+  if (!isAgentAccountA2aAutoBindEnabled()) return null;
 
   const { agentId, controllerAddress, agentAccountAddress } = input;
 
