@@ -267,6 +267,33 @@ describe('MCP API key ownership in EOA mode', () => {
   });
 
 
+
+  it('provider.create_api_key maps payment role preset to provider API-key scopes', async () => {
+    mocks.getSupabaseAdmin.mockReturnValue(mockAgentQuery(null));
+    mocks.getERC8004OwnerOf.mockResolvedValue(OWNER);
+
+    const result = await handleCreateApiKey(
+      { agentId: '123', preset: 'payment' },
+      { request: { authorization: 'Bearer arc_mcp_sess_test', origin: 'http://localhost', method: 'POST' } },
+    ) as Record<string, unknown>;
+
+    expect(result.ok).toBe(true);
+    expect(result.preset).toBe('provider');
+    expect(result.requestedPreset).toBe('payment');
+    expect(mocks.createApiKey).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: '123',
+      scopes: ['erc8183:claim', 'erc8183:running', 'erc8183:submit', 'erc8183:tx', 'erc8183:presence'],
+    }));
+  });
+
+  it('provider.create_api_key returns a clear unsupported message for evaluator preset', async () => {
+    await expect(handleCreateApiKey(
+      { agentId: '123', preset: 'evaluator' },
+      { request: { authorization: 'Bearer arc_mcp_sess_test', origin: 'http://localhost', method: 'POST' } },
+    )).rejects.toThrow('Evaluator API-key preset is not supported yet');
+    expect(mocks.createApiKey).not.toHaveBeenCalled();
+  });
+
   it('rejects ownerOf Agent Account fallback while Agent Account rails are disabled', async () => {
     mocks.getSupabaseAdmin.mockReturnValue(mockAgentQuery(null));
     mocks.getERC8004OwnerOf.mockResolvedValue(AGENT_ACCOUNT);

@@ -6,7 +6,7 @@ import { isAgentAccountServerRailEnabled } from '@/lib/agent-accounts/feature-fl
 import { getRegistrationIntent, completeRegistrationIntent } from '@/lib/agent-onboarding/registration-intents';
 import { parseManifest, upsertManifest, manifestHash, type AgentManifestV1 } from '@/lib/a2a/manifest';
 import { updateMetadataDraftServer } from '@/lib/a2a/metadata-drafts/store';
-import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
+import { getERC8004MintedTokenIdFromTxHash, getERC8004OwnerOf } from '@/lib/contracts/erc8004';
 import { authenticateWalletRequest } from '@/lib/mcp/session-auth';
 
 export const dynamic = 'force-dynamic';
@@ -47,11 +47,35 @@ export async function POST(req: NextRequest) {
   const intent = await getRegistrationIntent(intentId);
   if (!intent) return humanJson(req, { ok: false, error: 'intent_not_found' }, { status: 404 });
   if (intent.ownerAddress.toLowerCase() !== auth.wallet.toLowerCase()) return humanJson(req, { ok: false, error: 'forbidden' }, { status: 403 });
+  if (intent.status === 'completed') {
+    const sameAgent = intent.agentId === agentId;
+    const sameTx = intent.txHash?.toLowerCase() === (txHash as string).toLowerCase();
+    if (sameAgent && sameTx) {
+      return humanJson(req, {
+        ok: true,
+        idempotent: true,
+        agentId,
+        txHash,
+        manifestURI: `arclayer://manifest/${agentId}`,
+      }, { headers: { 'Cache-Control': 'no-store' } });
+    }
+    return humanJson(req, { ok: false, error: 'intent_complete_conflict' }, { status: 409 });
+  }
   if (new Date(intent.expiresAt).getTime() < Date.now() || intent.status !== 'draft') return humanJson(req, { ok: false, error: 'intent_not_active', status: intent.status }, { status: 410 });
 
   const parsed = parseManifest(rawManifest);
   if (!parsed.ok) return humanJson(req, { ok: false, error: parsed.error }, { status: 400 });
   if (parsed.manifest.agentId !== agentId) return humanJson(req, { ok: false, error: 'manifest_agentId_mismatch' }, { status: 400 });
+
+  let mintedTokenId: bigint;
+  try {
+    mintedTokenId = await getERC8004MintedTokenIdFromTxHash(txHash as `0x${string}`);
+  } catch {
+    return humanJson(req, { ok: false, error: 'tx_receipt_invalid' }, { status: 400 });
+  }
+  if (mintedTokenId.toString() !== agentId) {
+    return humanJson(req, { ok: false, error: 'tx_agentId_mismatch' }, { status: 400 });
+  }
 
   let onchainOwner: string;
   try {
@@ -97,10 +121,16 @@ export async function POST(req: NextRequest) {
   if (!upsert.ok) return humanJson(req, { ok: false, error: 'manifest_upsert_failed', detail: upsert.error }, { status: 500 });
 
   const completed = await completeRegistrationIntent({ id: intent.id, agentId, txHash: txHash as string });
-  if (!completed.ok) return humanJson(req, { ok: false, error: 'intent_complete_failed', detail: completed.error }, { status: 500 });
+  if (!completed.ok) {
+    if ('conflict' in completed && completed.conflict) {
+      return humanJson(req, { ok: false, error: completed.error }, { status: 409 });
+    }
+    return humanJson(req, { ok: false, error: 'intent_complete_failed', detail: completed.error }, { status: 500 });
+  }
 
   return humanJson(req, {
     ok: true,
+    ...('idempotent' in completed && completed.idempotent ? { idempotent: true } : {}),
     agentId,
     txHash,
     manifestURI: `arclayer://manifest/${agentId}`,
