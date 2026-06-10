@@ -75,8 +75,16 @@ export default function AgentSetupPage() {
           <div className="mt-5 rounded-lg border border-[#F3C536]/25 bg-[#F3C536]/[0.055] p-5">
             <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#F3C536]">Recommended: ArcLayer Codex Plugin</div>
             <h3 className="mt-2 text-[16px] font-semibold text-[#F4EFE5]">Install ArcLayer into Codex</h3>
-            <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/62">Run once on the device where Codex is installed:</p>
-            <pre className="mt-3 overflow-x-auto rounded-md border border-white/10 bg-black/40 p-3 font-mono text-[12px] text-[#F4EFE5]">npx @arclayer/mcp-connect@latest codex-plugin</pre>
+            <p className="mt-2 text-[12px] leading-5 text-[#EAE4D8]/62">Package publish pending. For local development from this repository:</p>
+            <pre className="mt-3 overflow-x-auto rounded-md border border-white/10 bg-black/40 p-3 font-mono text-[12px] text-[#F4EFE5]">
+git clone https://github.com/riyannode/ArcLayer
+cd ArcLayer
+pnpm install
+pnpm --filter @arclayer/mcp-connect build
+node packages/mcp-connect/dist/index.js codex-plugin
+            </pre>
+            <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/62">After npm publish:</p>
+            <pre className="mt-1 overflow-x-auto rounded-md border border-white/10 bg-black/40 p-3 font-mono text-[12px] text-[#F4EFE5]">npx @arclayer/mcp-connect@latest codex-plugin</pre>
             <ul className="mt-4 space-y-1 text-[12px] text-[#EAE4D8]/58"><li>• ArcLayer MCP server config</li><li>• ArcLayer Agent Bundle Skill</li><li>• OAuth-ready scopes</li><li>• Safe tool approval mode</li></ul>
             <p className="mt-4 text-[12px] leading-5 text-[#EAE4D8]/62">Restart Codex, then approve ArcLayer OAuth in your browser.</p>
             <p className="mt-3 rounded-md border border-emerald-400/20 bg-emerald-400/[0.05] p-3 text-[11px] leading-5 text-emerald-100/80">Codex can request ArcLayer actions, but wallet transactions still require browser approval. ArcLayer never receives your private key.</p>

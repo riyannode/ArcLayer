@@ -426,7 +426,21 @@ plugins/codex-arclayer/
   skills/arclayer-agent-bundle/SKILL.md
 ```
 
-Use `npx @arclayer/mcp-connect@latest codex-plugin` for the recommended OAuth-native install. `/agent-setup` creates a 30-day legacy token only for clients without OAuth support.
+Use `Package publish pending.
+
+For local development from this repository:
+```bash
+git clone https://github.com/riyannode/ArcLayer
+cd ArcLayer
+pnpm install
+pnpm --filter @arclayer/mcp-connect build
+node packages/mcp-connect/dist/index.js codex-plugin
+```
+
+After npm publish:
+```bash
+npx @arclayer/mcp-connect@latest codex-plugin
+```` for the recommended OAuth-native install. `/agent-setup` creates a 30-day legacy token only for clients without OAuth support.
 
 #### Add the ArcLayer plugin marketplace
 
@@ -551,7 +565,21 @@ POST /api/mcp
 Install the ArcLayer MCP endpoint and Agent Bundle Skill without manual config editing:
 
 ```bash
+Package publish pending.
+
+For local development from this repository:
+```bash
+git clone https://github.com/riyannode/ArcLayer
+cd ArcLayer
+pnpm install
+pnpm --filter @arclayer/mcp-connect build
+node packages/mcp-connect/dist/index.js codex-plugin
+```
+
+After npm publish:
+```bash
 npx @arclayer/mcp-connect@latest codex-plugin
+```
 ```
 
 The installer updates `~/.codex/config.toml`, enables keyring-backed OAuth credentials, installs the skill under `~/.arclayer/codex-plugin`, preserves unrelated Codex settings, and creates a timestamped backup before changes. Restart Codex and approve ArcLayer OAuth in the browser when prompted.
