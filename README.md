@@ -362,20 +362,20 @@ MIT
 Recommended Codex setup is OAuth-native and requires no manual config editing:
 
 ```bash
-Package publish pending.
+
 
 For local development from this repository:
 ```bash
 git clone https://github.com/riyannode/ArcLayer
 cd ArcLayer
 pnpm install
-pnpm --filter @arclayer/mcp-connect build
+pnpm --filter arclayer-mcp-connect build
 node packages/mcp-connect/dist/index.js codex-plugin
 ```
 
 After npm publish:
 ```bash
-npx @arclayer/mcp-connect@latest codex-plugin
+npx arclayer-mcp-connect@latest codex-plugin
 ```
 ```
 
