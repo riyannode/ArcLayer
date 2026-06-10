@@ -12,6 +12,7 @@ ArcLayer Global MCP is a hosted MCP (Model Context Protocol) server that exposes
 - Returns unsigned transaction instructions — **never signs or broadcasts**
 - Supports both MCP-native JSON-RPC and legacy simple tool invocation
 - Provides protocol status, agent discovery, job listing, and calldata builders
+- Provides Agent Bundle readiness onboarding through MCP and the Codex plugin bundle at `plugins/codex-arclayer/`
 
 ## Security Model
 
@@ -106,6 +107,15 @@ curl -s https://arclayers.xyz/api/mcp \
 | `provider.prepare_submit_job` | AgenticCommerce.submit() calldata |
 | `evaluator.prepare_complete_job` | AgenticCommerce.complete() calldata |
 
+### Agent Bundle Onboarding
+| Tool | Description |
+|------|-------------|
+| `onboarding.start_agent_bundle` | Start the recommended Agent Bundle readiness flow and return the browser mint URL. |
+| `onboarding.get_agent_bundle_status` | Check whether the browser registration intent is draft, expired, or completed. |
+| `onboarding.create_agent_runtime_key` | Create the ArcLayer runtime API key after mint/finalize completes. |
+
+The matching Codex plugin bundle is under `plugins/codex-arclayer/`. This flow stops at Agent Bundle readiness; Runner, bot runtime, wallet setup, live ERC-8183 automation, and live x402 payment execution remain later work.
+
 ### Provider Runtime 
 | Tool | Description |
 |------|-------------|
@@ -192,26 +202,29 @@ Stack traces are **never** exposed in API responses. Error messages are redacted
 
 ---
 
-## MCP Production Onboarding Fallback
+## Legacy MCP Registration Draft Flow
 
-The production MCP onboarding path creates a server-side registration intent and sends the user back to the canonical browser mint page. It does **not** use `arclayer://mcp/identity/<hash>` links and does not pass metadata draft write tokens in URLs.
+`onboarding.create_registration_draft` remains available as a compatibility fallback. New users should prefer the merged Agent Bundle flow:
 
 ```text
-1. MCP client calls onboarding.list_role_presets
-2. User chooses an ArcLayer-approved enabled role preset in the MCP client
-3. MCP client calls onboarding.create_registration_draft
-4. Tool returns /register/erc8004?intent=<id>&mcp=1
-5. User opens the URL and mints in the existing /register/erc8004 UI
-6. Finalize upserts the patched manifest into agent_manifests for dashboard visibility
-7. MCP client calls provider.create_api_key and returns the PM2 .env snippet
+1. MCP client calls onboarding.start_agent_bundle
+2. Tool returns /register/erc8004?intent=<id>&mcp=1
+3. User opens the URL and signs/mints in the existing /register/erc8004 UI
+4. MCP client calls onboarding.get_agent_bundle_status until registration is completed
+5. MCP client calls onboarding.create_agent_runtime_key
 ```
+
+Both flows create a server-side registration intent and return the canonical browser mint page. They do **not** use `arclayer://mcp/identity/<hash>` links or pass metadata draft write tokens in URLs.
 
 ### Onboarding Tools
 
 | Tool | Kind | Auth | Description |
 |------|------|------|-------------|
 | `onboarding.list_role_presets` | read | optional | List enabled ArcLayer-approved ERC-8183 role presets by default. |
-| `onboarding.create_registration_draft` | read | required | Build an approved manifest draft, create an intent, and return the browser registration URL. |
+| `onboarding.start_agent_bundle` | read | required | Start the recommended Agent Bundle readiness flow and return the browser registration URL. |
+| `onboarding.get_agent_bundle_status` | read | required | Poll the registration intent after browser mint/finalize. |
+| `onboarding.create_agent_runtime_key` | read | required | Create the ArcLayer API key after the bundle reaches completed status. |
+| `onboarding.create_registration_draft` | read | required | Legacy fallback that builds an approved manifest draft, creates an intent, and returns the browser registration URL. |
 
 **onboarding.create_registration_draft args:**
 - `rolePresetId` (required) — preset ID from `onboarding.list_role_presets`
