@@ -239,9 +239,9 @@ The evaluator can use an LLM when configured, or fallback to rules-based scoring
 
 ### MCP Agent Bundle onboarding
 
-New users should start with `onboarding.start_agent_bundle`, check completion with `onboarding.get_agent_bundle_status`, and create the ArcLayer API key with `onboarding.create_agent_runtime_key`. The matching Codex plugin bundle is under `plugins/codex-arclayer/`.
+Open `/agent-setup`, connect wallet, click **Connect Codex**, run the one-time Codex setup command, then create Agent Bundles from Codex chat. Codex sessions last 30 days; users can reconnect anytime and manage or revoke sessions from `/profile`. The matching Codex plugin bundle is under `plugins/codex-arclayer/`.
 
-This onboarding flow stops at Agent Bundle readiness. Runner, bot runtime, wallet setup, live ERC-8183 automation, and live x402 payment execution are later steps. Detailed MCP setup, legacy fallback behavior, approval flow, API key tools, scopes, and prompt examples are documented in [docs/global-mcp.md](docs/global-mcp.md).
+Codex uses `onboarding.start_agent_bundle`, checks completion with `onboarding.get_agent_bundle_status`, and creates the ArcLayer API key with `onboarding.create_agent_runtime_key`. This onboarding flow stops at Agent Bundle readiness. Runner, bot runtime, wallet setup, live ERC-8183 automation, and live x402 payment execution are later steps. Detailed MCP setup, legacy fallback behavior, approval flow, API key tools, scopes, and prompt examples are documented in [docs/global-mcp.md](docs/global-mcp.md).
 
 ---
 
@@ -356,3 +356,27 @@ Use only on Arc Testnet.
 ## License
 
 MIT
+
+## ArcLayer MCP Connect
+
+Recommended Codex setup is OAuth-native and requires no manual config editing:
+
+```bash
+
+
+For local development from this repository:
+```bash
+git clone https://github.com/riyannode/ArcLayer
+cd ArcLayer
+pnpm install
+pnpm --filter arclayer-codex build
+node packages/mcp-connect/dist/index.js codex-plugin
+```
+
+After npm publish:
+```bash
+npx arclayer-codex@latest
+```
+```
+
+Restart Codex and approve ArcLayer OAuth in the browser. OAuth never grants private-key access; onchain transactions still require ArcLayer browser wallet approval. Legacy 30-day MCP tokens remain available from `/agent-setup` only as a fallback for clients without OAuth support.

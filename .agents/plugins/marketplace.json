@@ -1,0 +1,20 @@
+{
+  "name": "arclayer-plugins",
+  "interface": {
+    "displayName": "ArcLayer Plugins"
+  },
+  "plugins": [
+    {
+      "name": "arclayer",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex-arclayer"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

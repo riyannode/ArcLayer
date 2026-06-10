@@ -4,6 +4,7 @@ packages:
   - "agents"
   - "agents/examples/*"
   - "apps/*"
+  - "packages/*"
 allowBuilds:
   '@reown/appkit': true
   bufferutil: true

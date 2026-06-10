@@ -26,6 +26,7 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
 import { createPublicClient, formatUnits, getAddress, http } from 'viem';
 import { McpSigningSessionCard } from '@/components/profile/McpSigningSessionCard';
+import { McpSessionsCard } from '@/components/profile/McpSessionsCard';
 import { USDC_ADDRESS } from '@/lib/x402/constants';
 import { isAgentAccountClientRailEnabled } from '@/lib/agent-accounts/feature-flags';
 
@@ -788,6 +789,12 @@ export default function AgentProfilePage() {
           </div>
         )}
 
+        {isConnected && address && profileLoaded && (
+          <div className="mt-10">
+            <McpSigningSessionCard address={address} />
+          </div>
+        )}
+
         {/* ── Profile View Toggle ───────────────────────────────────────── */}
         {isConnected && address && profileLoaded && agents.length > 0 && (
           <div className="mt-10 flex gap-2">
@@ -813,13 +820,6 @@ export default function AgentProfilePage() {
             >
               Client Mode
             </button>
-          </div>
-        )}
-
-        {/* ── MCP Signing Session (Client Mode only, or no agents) ─────── */}
-        {isConnected && address && profileLoaded && (agents.length === 0 || profileView === 'client') && (
-          <div className="mt-10">
-            <McpSigningSessionCard address={address} />
           </div>
         )}
 

@@ -395,6 +395,26 @@ Agent Bundle onboarding stops at readiness. It does not configure Runner, PM2 bo
 | `onboarding.get_agent_bundle_status` | required | Poll intent status after browser mint. Returns draft, expired, or completed state. |
 | `onboarding.create_agent_runtime_key` | required | Create ArcLayer API key after completed mint/finalize. Returns raw key once and env snippet. |
 
+### Legacy token fallback from Agent Setup
+
+For clients without OAuth support, open `/agent-setup`, connect your wallet, then click **Create Legacy Token**.
+
+ArcLayer creates an EOA-backed legacy MCP session that is valid for 30 days and returns a one-time fallback setup command. Run that command on the machine where Codex is installed. The command writes the ArcLayer MCP server entry to `~/.codex/config.toml` and stores `ARCLAYER_MCP_TOKEN` for Codex.
+
+After setup, open Codex and ask:
+
+```text
+Use ArcLayer. Create a Payment Agent bundle with capabilities x402, USDC settlement, receipts, and ERC-8183 commerce.
+```
+
+Codex will call `onboarding.start_agent_bundle`, return a browser mint URL, wait for the user to mint ERC-8004 identity in ArcLayer web, then call `onboarding.get_agent_bundle_status` and `onboarding.create_agent_runtime_key`.
+
+This setup command does not give Codex wallet private keys and does not allow Codex to mint. Wallet signing remains in ArcLayer web.
+
+The newly created legacy token can be revoked from `/agent-setup`. To review or revoke any MCP session connected to the wallet, use the **MCP Sessions** section in `/profile`. If the browser wallet session has expired, select **Sign to load sessions** first. Revoked sessions fail MCP authentication immediately.
+
+The recommended installer config uses the OAuth metadata and PKCE flow documented in `docs/mcp-oauth-connect.md`.
+
 ### Codex plugin bundle
 
 The Codex plugin bundle lives at:
@@ -406,7 +426,41 @@ plugins/codex-arclayer/
   skills/arclayer-agent-bundle/SKILL.md
 ```
 
-Use this with Codex Desktop/CLI after setting `ARCLAYER_MCP_TOKEN`.
+Use `
+
+For local development from this repository:
+```bash
+git clone https://github.com/riyannode/ArcLayer
+cd ArcLayer
+pnpm install
+pnpm --filter arclayer-codex build
+node packages/mcp-connect/dist/index.js codex-plugin
+```
+
+After npm publish:
+```bash
+npx arclayer-codex@latest
+```` for the recommended OAuth-native install. `/agent-setup` creates a 30-day legacy token only for clients without OAuth support.
+
+#### Add the ArcLayer plugin marketplace
+
+To test the plugin marketplace from the PR branch, add a marketplace in Codex with:
+
+- Source: `riyannode/ArcLayer`
+- Git ref: `codex/implement-codex-plugin-pairing-ux`
+- Sparse paths:
+  - `.agents/plugins`
+  - `plugins/codex-arclayer`
+
+After the PR is merged, use:
+
+- Source: `riyannode/ArcLayer`
+- Git ref: `main`
+- Sparse paths:
+  - `.agents/plugins`
+  - `plugins/codex-arclayer`
+
+The marketplace manifest is `.agents/plugins/marketplace.json`, and its ArcLayer entry points to `./plugins/codex-arclayer`.
 
 Example prompt:
 
@@ -505,3 +559,43 @@ POST /api/mcp
       → errors.ts (structured error responses)
       → redact.ts (secret redaction on errors)
 ```
+
+## Recommended Codex connection (OAuth)
+
+Install the ArcLayer MCP endpoint and Agent Bundle Skill without manual config editing:
+
+```bash
+
+
+For local development from this repository:
+```bash
+git clone https://github.com/riyannode/ArcLayer
+cd ArcLayer
+pnpm install
+pnpm --filter arclayer-codex build
+node packages/mcp-connect/dist/index.js codex-plugin
+```
+
+After npm publish:
+```bash
+npx arclayer-codex@latest
+```
+```
+
+The installer updates `~/.codex/config.toml`, enables keyring-backed OAuth credentials, installs the skill under `~/.arclayer/codex-plugin`, preserves unrelated Codex settings, and creates a timestamped backup before changes. Restart Codex and approve ArcLayer OAuth in the browser when prompted.
+
+Useful commands:
+
+```bash
+npx arclayer-codex@latest codex
+npx arclayer-codex@latest status
+npx arclayer-codex@latest uninstall codex
+```
+
+OAuth grants scoped MCP access only. It does not expose a private key, sign, or broadcast transactions. Transaction-request tools create a wallet-scoped browser signing request; every onchain transaction still requires approval in ArcLayer web.
+
+### Legacy token fallback
+
+MCP clients without OAuth support can open `/agent-setup` and create a **Legacy Codex Token Session**. The one-time setup command contains `ARCLAYER_MCP_TOKEN`; do not share it. Legacy sessions remain valid for at most 30 days and can be revoked from Profile.
+
+The OAuth schema is provided at `supabase/migrations/20250305000000_mcp_oauth.sql`. It is not applied automatically. An operator applies it manually with `supabase migration up --linked` after reviewing the migration.

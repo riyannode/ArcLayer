@@ -49,6 +49,8 @@ import {
   thrownToMcpError,
 } from './errors';
 import { redactString } from './redact';
+import { resolveMcpBearerAuth } from './auth';
+import { hasMcpScope, PUBLIC_MCP_TOOLS, TOOL_SCOPES } from './tool-scopes';
 import {
   handleGetAgentAccount,
   handlePrepareRegisterAgent,
@@ -96,7 +98,7 @@ const ARC_CHAIN_ID = 5042002;
 const ARC_RPC = 'https://rpc.drpc.testnet.arc.network';
 const MCP_VERSION = '0.1.0';
 const MCP_SERVER_NAME = 'arclayer-global-mcp';
-const PROTOCOL_VERSION = '2024-11-05';
+const PROTOCOL_VERSION = '2025-06-18';
 
 // ─── TOOL REGISTRATION ───────────────────────────────────────────────────────
 
@@ -1434,7 +1436,7 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Create an ERC-8183 job via web-session signing. Sends signing request to open ArcLayer Profile. Requires ARCLAYER_SIGNING_SESSION_ID.',
-    authRequired: false,
+    authRequired: true,
     roles: [],
     inputSchema: [
       { name: 'provider', type: 'string', required: true, description: 'Provider/worker wallet address.' },
@@ -1453,7 +1455,7 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Fund a job that already has budget set (provider must set budget first). Builds USDC approve + fund bundle. This tool does not set budget.',
-    authRequired: false,
+    authRequired: true,
     roles: [],
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
@@ -1469,7 +1471,7 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Complete an ERC-8183 job via web-session signing. Releases escrow to provider.',
-    authRequired: false,
+    authRequired: true,
     roles: [],
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
@@ -1485,7 +1487,7 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Reject an ERC-8183 job via web-session signing.',
-    authRequired: false,
+    authRequired: true,
     roles: [],
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
@@ -1501,7 +1503,7 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Claim refund for an expired ERC-8183 job via web-session signing.',
-    authRequired: false,
+    authRequired: true,
     roles: [],
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
@@ -1516,7 +1518,7 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Poll the status of a web-session signing request. Returns txHash, jobId (for createJob), and result.',
-    authRequired: false,
+    authRequired: true,
     roles: [],
     inputSchema: [
       { name: 'requestId', type: 'string', required: true, description: 'Signing request ID.' },
@@ -1576,6 +1578,14 @@ async function invokeTool(
   const tool = getTool(name);
   if (!tool) {
     throw new McpError(MCP_ERRORS.UNKNOWN_TOOL, `Unknown tool: ${name}`);
+  }
+  const protectedTool = tool.authRequired && !PUBLIC_MCP_TOOLS.has(tool.name);
+  if (protectedTool) {
+    const auth = context.auth ?? await resolveMcpBearerAuth(context.request.authorization);
+    if (!auth) throw new McpError(MCP_ERRORS.UNAUTHORIZED, 'Valid OAuth bearer token or legacy MCP session token required', 401);
+    const requiredScope = TOOL_SCOPES[tool.name] ?? (tool.domain === 'provider' ? 'provider:runtime' : tool.kind === 'tx_instruction' ? 'jobs:prepare' : 'arclayer:read');
+    if (!hasMcpScope(auth.scopes, requiredScope)) throw new McpError(MCP_ERRORS.FORBIDDEN, `Missing required OAuth scope: ${requiredScope}`, 403);
+    context.auth = auth;
   }
   return tool.handler(args, context);
 }

@@ -154,6 +154,22 @@ export async function getActiveSession(sessionId: string): Promise<McpSigningSes
   return session;
 }
 
+
+/** Find the active browser signing session for an owner wallet. */
+export async function getActiveSessionForWallet(ownerWallet: string): Promise<McpSigningSession | null> {
+  const now = new Date().toISOString();
+  const { data } = await supabase()
+    .from('mcp_signing_sessions')
+    .select('*')
+    .eq('owner_wallet', ownerWallet.toLowerCase())
+    .eq('status', 'active')
+    .gt('expires_at', now)
+    .order('last_seen_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as McpSigningSession) ?? null;
+}
+
 /**
  * Heartbeat: update last_seen_at and extend expires_at.
  * Only works on active sessions.

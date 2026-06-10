@@ -11,6 +11,7 @@
 
 import type { McpToolContext } from './registry';
 import { MCP_ERRORS, McpError } from './errors';
+import { authAsLegacySession } from './auth-session';
 import { resolveMcpSessionByToken } from '@/lib/agent-accounts/store';
 import { resolveAgentOwnership } from './api-key-tools';
 import type { McpSession } from '@/lib/agent-accounts/types';
@@ -41,21 +42,12 @@ import {
  * Throws McpError if not authenticated.
  */
 async function requireMcpSession(ctx: McpToolContext): Promise<McpSession> {
+  if (ctx.auth) return authAsLegacySession(ctx.auth);
   const auth = ctx.request.authorization;
-  if (!auth) {
-    throw new McpError(MCP_ERRORS.UNAUTHORIZED, 'MCP Bearer token required');
-  }
-
-  const match = auth.match(/^Bearer\s+(.+)$/i);
-  if (!match || !match[1].startsWith('arc_mcp_sess_')) {
-    throw new McpError(MCP_ERRORS.UNAUTHORIZED, 'Invalid MCP token format');
-  }
-
+  const match = auth?.match(/^Bearer\s+(.+)$/i);
+  if (!match || !match[1].startsWith('arc_mcp_sess_')) throw new McpError(MCP_ERRORS.UNAUTHORIZED, 'MCP Bearer token required');
   const session = await resolveMcpSessionByToken(match[1].trim());
-  if (!session) {
-    throw new McpError(MCP_ERRORS.UNAUTHORIZED, 'Invalid or expired MCP session');
-  }
-
+  if (!session) throw new McpError(MCP_ERRORS.UNAUTHORIZED, 'Invalid or expired MCP session');
   return session;
 }
 

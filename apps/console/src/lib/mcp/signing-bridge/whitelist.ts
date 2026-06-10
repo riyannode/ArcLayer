@@ -85,6 +85,14 @@ export type SigningRequestSummary = {
   jobId?: string;
   amountAtomic?: string;
   deadline?: string;
+
+  /**
+   * Optional MCP/OAuth metadata attached by server-side MCP tools.
+   * These fields are metadata only; they do not authorize signing by themselves.
+   */
+  mcpConnectionId?: string;
+  requestedByOwnerWallet?: string;
+  requestedByTool?: string;
 };
 
 // ── Validation ────────────────────────────────────────────────────────────
