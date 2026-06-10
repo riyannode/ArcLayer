@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const pluginRoot = resolve(process.cwd(), '../../plugins/codex-arclayer');
+const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../plugins/codex-arclayer');
 
 describe('ArcLayer Codex plugin bundle', () => {
   it('ships the plugin manifest, MCP config, and Agent Bundle skill', () => {
@@ -21,6 +22,7 @@ describe('ArcLayer Codex plugin bundle', () => {
     expect(plugin.name).toBe('arclayer');
     expect(plugin.interface.defaultPrompt.join('\n')).toContain('After I mint in the browser');
     expect(mcp.mcp_servers.arclayer.enabled_tools).toContain('onboarding.start_agent_bundle');
+    expect(mcp.mcp_servers.arclayer.enabled_tools).toContain('onboarding.get_agent_bundle_status');
     expect(mcp.mcp_servers.arclayer.enabled_tools).toContain('onboarding.create_agent_runtime_key');
     expect(skill).toContain('Never ask for private keys.');
     expect(skill).toContain('Runner, bot runtime, wallet payer, Gateway balance, ERC-8183 execution, and x402 execution are configured later.');

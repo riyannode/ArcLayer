@@ -178,10 +178,10 @@ export async function handleCreateRegistrationDraft(args: Record<string, unknown
     registrationUrl: bundle.registrationUrl,
     manifestPreview: bundle.manifest,
     next: [
-      'Open registrationUrl in the browser with the same owner wallet session.',
-      'Mint the ERC-8004 identity in /register/erc8004.',
-      'After mint/finalize succeeds, call provider.create_api_key for the new agentId.',
-      'Return the PM2 .env snippet to the user. The finalized manifest is upserted for dashboard visibility.',
+      'This is the legacy registration-draft flow. New users should prefer onboarding.start_agent_bundle.',
+      'Open registrationUrl in the browser with the same owner wallet session and mint the ERC-8004 identity.',
+      'After mint/finalize succeeds, call onboarding.get_agent_bundle_status.',
+      'Then call onboarding.create_agent_runtime_key for the completed agent bundle.',
     ],
   };
 }
