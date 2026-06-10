@@ -89,10 +89,17 @@ node packages/mcp-connect/dist/index.js codex-plugin
             <p className="mt-4 text-[12px] leading-5 text-[#EAE4D8]/62">Restart Codex, then approve ArcLayer OAuth in your browser.</p>
             <p className="mt-3 rounded-md border border-emerald-400/20 bg-emerald-400/[0.05] p-3 text-[11px] leading-5 text-emerald-100/80">Codex can request ArcLayer actions, but wallet transactions still require browser approval. ArcLayer never receives your private key.</p>
           </div>
-          <div className="mt-5">
-            <div className="mb-3"><div className="text-[13px] font-semibold text-[#F4EFE5]">Fallback: Legacy token setup</div><p className="mt-1 text-[11px] leading-5 text-[#EAE4D8]/45">Use this only if your MCP client does not support OAuth yet. The generated command contains a one-time MCP token. Do not share it.</p></div>
-            {isConnected && address ? <AgentIdentityMcpSessionCard ownerAddress={address} /> : <div className="rounded-md border border-white/10 bg-black/20 px-5 py-4 text-[13px] text-[#EAE4D8]/55">Connect your wallet to create a legacy MCP token.</div>}
-          </div>
+
+          <details className="group mt-6">
+            <summary className="cursor-pointer text-[12px] font-medium text-[#EAE4D8]/45 hover:text-[#EAE4D8]/70">Advanced: Legacy token fallback</summary>
+            <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-5">
+              <div className="mx-auto max-w-xl text-left">
+                <div className="mb-3"><div className="text-[12px] font-medium text-[#EAE4D8]/70">Legacy token setup</div><p className="mt-1 text-[11px] leading-5 text-[#EAE4D8]/45">Use this only if OAuth is unavailable or you are debugging an older MCP client. New Codex installs should use the OAuth installer above.</p></div>
+                {isConnected && address ? <AgentIdentityMcpSessionCard ownerAddress={address} /> : <div className="rounded-md border border-white/10 bg-black/20 px-5 py-4 text-[13px] text-[#EAE4D8]/55">Connect your wallet to create a legacy MCP token.</div>}
+              </div>
+            </div>
+          </details>
+
           <p className="mt-4 text-[12px] leading-5 text-[#EAE4D8]/42">After authorization, ask Codex to create an Agent Bundle. Codex returns a browser mint URL; wallet signing remains in ArcLayer web. Bot runtime, Runner, payer wallet, Gateway balance, live ERC-8183 execution, and x402 execution happen later.</p>
         </div>
 
