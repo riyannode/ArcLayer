@@ -200,8 +200,46 @@ export async function pingIndexer(timeoutMs = 4000): Promise<boolean> {
 }
 
 export async function loadAgentDetail(agentId: string): Promise<Sourced<AgentDetail>> {
-  const data = await fetchIndexerJson<AgentDetail>(`/agents/${agentId}`);
-  return { data, source: 'indexer' };
+  // Try indexer first (on-chain agents)
+  try {
+    const data = await fetchIndexerJson<AgentDetail>(`/agents/${agentId}`);
+    return { data, source: 'indexer' };
+  } catch {
+    // Indexer doesn't have this agent — try A2A API (web_manifest agents)
+    try {
+      const base = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL || '';
+      const apiUrl = base ? `${base}/api/a2a/agents` : '/api/a2a/agents';
+      const res = await fetch(apiUrl, { cache: 'no-store' });
+      if (!res.ok) throw new Error('a2a_agents_fetch_failed');
+      const data = await res.json();
+      const agents = Array.isArray(data?.agents) ? data.agents : [];
+      const match = agents.find((a: any) => {
+        const aid = String(a.agentId || '').trim();
+        const tid = a.tokenId ? String(a.tokenId).trim() : '';
+        return aid === agentId || tid === agentId;
+      });
+      if (!match) throw new Error('Agent not found.');
+      const agent: IndexedAgent = {
+        agentId: String(match.agentId || match.tokenId || agentId),
+        controller: String(match.controller || match.owner || ''),
+        skillHash: '',
+        metadataURI: String(match.metadataURI || ''),
+        registeredAt: String(match.registeredAtBlock || ''),
+        reputationScore: String(match.reputationScore || match.score || '0'),
+        score: String(match.score || match.reputationScore || '0'),
+        jobs: Array.isArray(match.jobs) ? match.jobs : [],
+        proofTokenIds: Array.isArray(match.proofTokenIds) ? match.proofTokenIds : [],
+        tokenId: match.tokenId ? String(match.tokenId) : undefined,
+        source: 'web_manifest',
+      };
+      return {
+        data: { agent, jobs: [], proofs: [] },
+        source: 'indexer',
+      };
+    } catch {
+      throw new Error('Agent not found.');
+    }
+  }
 }
 
 export async function loadJobDetail(jobId: string): Promise<Sourced<JobDetail>> {
