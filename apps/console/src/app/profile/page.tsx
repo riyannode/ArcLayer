@@ -26,6 +26,7 @@ import { useArcWallet } from '@/hooks/useArcWallet';
 import { useGatewayDeposit } from '@/hooks/useGatewayDeposit';
 import { createPublicClient, formatUnits, getAddress, http } from 'viem';
 import { McpSigningSessionCard } from '@/components/profile/McpSigningSessionCard';
+import { McpSessionsCard } from '@/components/profile/McpSessionsCard';
 import { USDC_ADDRESS } from '@/lib/x402/constants';
 import { isAgentAccountClientRailEnabled } from '@/lib/agent-accounts/feature-flags';
 
@@ -785,6 +786,12 @@ export default function AgentProfilePage() {
               )}
             </div>
 
+          </div>
+        )}
+
+        {isConnected && address && profileLoaded && (
+          <div className="mt-10">
+            <McpSessionsCard address={address} />
           </div>
         )}
 

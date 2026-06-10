@@ -411,7 +411,7 @@ Codex will call `onboarding.start_agent_bundle`, return a browser mint URL, wait
 
 This setup command does not give Codex wallet private keys and does not allow Codex to mint. Wallet signing remains in ArcLayer web.
 
-To disconnect Codex, return to `/agent-setup` and revoke the active Codex session. Revoked sessions fail MCP authentication immediately.
+The newly created Codex session can be disconnected from `/agent-setup`. To review or revoke any MCP session connected to the wallet, use the **MCP Sessions** section in `/profile`. If the browser wallet session has expired, select **Sign to load sessions** first. Revoked sessions fail MCP authentication immediately.
 
 Future: replace the one-time setup command with MCP OAuth (`codex mcp login arclayer`) once ArcLayer MCP exposes OAuth metadata and callback flow.
 
