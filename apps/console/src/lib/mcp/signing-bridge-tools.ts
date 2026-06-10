@@ -58,7 +58,17 @@ async function createSigningRequest(
   summary?: SigningRequestSummary,
   ctx?: McpToolContext,
 ): Promise<{ requestId: string; status: string }> {
-  const securedSummary = { ...summary, ...(ctx?.auth ? { mcpConnectionId: ctx.auth.connectionId, requestedByOwnerWallet: ctx.auth.ownerWallet, requestedByTool: `client.request_${actionType}_web_sign` } : {}) };
+  const securedSummary: SigningRequestSummary = {
+  ...(summary ?? {}),
+  actionType: summary?.actionType ?? actionType,
+  ...(ctx?.auth
+    ? {
+        mcpConnectionId: ctx.auth.connectionId,
+        requestedByOwnerWallet: ctx.auth.ownerWallet,
+        requestedByTool: `client.request_${actionType}_web_sign`,
+      }
+    : {}),
+};
   if (ctx?.auth?.kind === 'oauth') {
     const session = await getActiveSessionForWallet(ctx.auth.ownerWallet);
     if (!session) throw new McpError(MCP_ERRORS.CONFLICT, 'No active ArcLayer browser signing session for this wallet. Open Profile and start signing session first.');
