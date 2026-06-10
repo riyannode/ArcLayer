@@ -50,18 +50,12 @@ export async function POST(req: NextRequest) {
   if (intent.status === 'completed') {
     const sameAgent = intent.agentId === agentId;
     const sameTx = intent.txHash?.toLowerCase() === (txHash as string).toLowerCase();
-    if (sameAgent && sameTx) {
-      return humanJson(req, {
-        ok: true,
-        idempotent: true,
-        agentId,
-        txHash,
-        manifestURI: `arclayer://manifest/${agentId}`,
-      }, { headers: { 'Cache-Control': 'no-store' } });
+    if (!sameAgent || !sameTx) {
+      return humanJson(req, { ok: false, error: 'intent_complete_conflict' }, { status: 409 });
     }
-    return humanJson(req, { ok: false, error: 'intent_complete_conflict' }, { status: 409 });
+  } else if (new Date(intent.expiresAt).getTime() < Date.now() || intent.status !== 'draft') {
+    return humanJson(req, { ok: false, error: 'intent_not_active', status: intent.status }, { status: 410 });
   }
-  if (new Date(intent.expiresAt).getTime() < Date.now() || intent.status !== 'draft') return humanJson(req, { ok: false, error: 'intent_not_active', status: intent.status }, { status: 410 });
 
   const parsed = parseManifest(rawManifest);
   if (!parsed.ok) return humanJson(req, { ok: false, error: parsed.error }, { status: 400 });
@@ -107,6 +101,14 @@ export async function POST(req: NextRequest) {
   };
 
   const hash = manifestHash(finalManifest);
+  const completed = await completeRegistrationIntent({ id: intent.id, agentId, txHash: txHash as string });
+  if (!completed.ok) {
+    if ('conflict' in completed && completed.conflict) {
+      return humanJson(req, { ok: false, error: completed.error }, { status: 409 });
+    }
+    return humanJson(req, { ok: false, error: 'intent_complete_failed', detail: completed.error }, { status: 500 });
+  }
+
   const patch = await updateMetadataDraftServer({ draftId: intent.draftId, metadata: finalManifest, agentId, txHash: txHash as string });
   if (!patch.ok) return humanJson(req, { ok: false, error: 'draft_update_failed', detail: patch.error }, { status: 500 });
 
@@ -119,14 +121,6 @@ export async function POST(req: NextRequest) {
     signer: onchainOwner,
   });
   if (!upsert.ok) return humanJson(req, { ok: false, error: 'manifest_upsert_failed', detail: upsert.error }, { status: 500 });
-
-  const completed = await completeRegistrationIntent({ id: intent.id, agentId, txHash: txHash as string });
-  if (!completed.ok) {
-    if ('conflict' in completed && completed.conflict) {
-      return humanJson(req, { ok: false, error: completed.error }, { status: 409 });
-    }
-    return humanJson(req, { ok: false, error: 'intent_complete_failed', detail: completed.error }, { status: 500 });
-  }
 
   return humanJson(req, {
     ok: true,

@@ -4,6 +4,7 @@ import {
   ERC8004_ABI,
   ERC8004_IDENTITY_REGISTRY_ADDRESS,
   extractERC8004MintedTokenIdFromReceipt,
+  extractERC8004MintedTokenIdFromVerifiedReceipt,
   parseERC8004TransferMint,
 } from './erc8004';
 
@@ -68,6 +69,27 @@ describe('ERC-8004 mint receipt helpers', () => {
     const log = transferLog({ to: controller });
 
     expect(parseERC8004TransferMint(log, other)).toBeNull();
+  });
+
+
+  it('rejects verified receipts with a missing target', () => {
+    const log = transferLog({ tokenId: 123n });
+
+    expect(() => extractERC8004MintedTokenIdFromVerifiedReceipt({
+      status: 'success',
+      to: null,
+      logs: [log],
+    })).toThrow(/missing_target/);
+  });
+
+  it('rejects verified receipts targeting the wrong contract', () => {
+    const log = transferLog({ tokenId: 123n });
+
+    expect(() => extractERC8004MintedTokenIdFromVerifiedReceipt({
+      status: 'success',
+      to: wrongContract,
+      logs: [log],
+    })).toThrow(/wrong_target/);
   });
 
   it('throws a clear error when no mint event is found', () => {

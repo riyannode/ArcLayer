@@ -55,21 +55,31 @@ export function extractERC8004MintedTokenIdFromReceipt(
 }
 
 
+export function extractERC8004MintedTokenIdFromVerifiedReceipt(
+  receipt: Pick<TransactionReceipt, 'status' | 'to' | 'logs'>,
+): bigint {
+  if (receipt.status !== 'success') {
+    throw new Error('erc8004_register_tx_failed');
+  }
+
+  if (!receipt.to) {
+    throw new Error('erc8004_register_tx_missing_target');
+  }
+
+  if (!sameAddress(receipt.to, ERC8004_IDENTITY_REGISTRY_ADDRESS)) {
+    throw new Error('erc8004_register_tx_wrong_target');
+  }
+
+  return extractERC8004MintedTokenIdFromReceipt(receipt);
+}
+
 export async function getERC8004MintedTokenIdFromTxHash(txHash: `0x${string}`): Promise<bigint> {
   const client = createPublicClient({
     transport: http(process.env.ARC_RPC_URL || ARC_RPC_URLS[0]),
   });
 
   const receipt = await client.getTransactionReceipt({ hash: txHash });
-  if (receipt.status !== 'success') {
-    throw new Error('erc8004_register_tx_failed');
-  }
-
-  if (receipt.to && !sameAddress(receipt.to, ERC8004_IDENTITY_REGISTRY_ADDRESS)) {
-    throw new Error('erc8004_register_tx_wrong_target');
-  }
-
-  return extractERC8004MintedTokenIdFromReceipt(receipt);
+  return extractERC8004MintedTokenIdFromVerifiedReceipt(receipt);
 }
 
 export async function getERC8004OwnerOf(agentId: bigint | string): Promise<Address> {

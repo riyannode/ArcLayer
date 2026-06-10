@@ -93,6 +93,8 @@ describe('agent onboarding finalize route', () => {
     expect(savedManifest.controller).toBe(OWNER);
     expect(updateMetadataDraftServer).toHaveBeenCalledWith(expect.objectContaining({ draftId: 'draft-1', agentId: '123', metadata: savedManifest }));
     expect(upsertManifest).toHaveBeenCalledWith(expect.objectContaining({ agentId: '123', manifest: savedManifest }));
+    expect(completeRegistrationIntent.mock.invocationCallOrder[0]).toBeLessThan(updateMetadataDraftServer.mock.invocationCallOrder[0]);
+    expect(completeRegistrationIntent.mock.invocationCallOrder[0]).toBeLessThan(upsertManifest.mock.invocationCallOrder[0]);
   });
 
   it('rejects a manifest controller that differs from ERC-8004 ownerOf(agentId)', async () => {
@@ -152,7 +154,7 @@ describe('agent onboarding finalize route', () => {
     expect(upsertManifest).not.toHaveBeenCalled();
   });
 
-  it('returns ok idempotent for a double-finalize with the same agentId and txHash', async () => {
+  it('repairs side effects for a double-finalize with the same agentId and txHash', async () => {
     const registrationIntents = await import('@/lib/agent-onboarding/registration-intents');
     vi.mocked(registrationIntents.getRegistrationIntent).mockResolvedValueOnce({
       id: 'intent-1',
@@ -167,6 +169,7 @@ describe('agent onboarding finalize route', () => {
       agentId: '123',
       txHash: '0x' + '1'.repeat(64),
     });
+    completeRegistrationIntent.mockResolvedValueOnce({ ok: true, idempotent: true });
     const { POST } = await import('./route');
     const manifest = buildAgentManifest({
       agentId: '123',
@@ -181,8 +184,9 @@ describe('agent onboarding finalize route', () => {
 
     expect(res.status).toBe(200);
     expect(json).toMatchObject({ ok: true, idempotent: true, agentId: '123' });
-    expect(getERC8004MintedTokenIdFromTxHash).not.toHaveBeenCalled();
-    expect(upsertManifest).not.toHaveBeenCalled();
+    expect(getERC8004MintedTokenIdFromTxHash).toHaveBeenCalled();
+    expect(updateMetadataDraftServer).toHaveBeenCalled();
+    expect(upsertManifest).toHaveBeenCalled();
   });
 
   it('returns conflict for a completed intent with different finalize values', async () => {
@@ -214,6 +218,27 @@ describe('agent onboarding finalize route', () => {
 
     expect(res.status).toBe(409);
     expect(json.error).toBe('intent_complete_conflict');
+    expect(upsertManifest).not.toHaveBeenCalled();
+  });
+
+
+  it('returns conflict before draft or manifest side effects when atomic intent completion loses a race', async () => {
+    const { POST } = await import('./route');
+    completeRegistrationIntent.mockResolvedValueOnce({ ok: false, conflict: true, error: 'intent_complete_conflict' });
+    const manifest = buildAgentManifest({
+      agentId: '123',
+      name: 'Provider Agent',
+      rolePresetId: 'provider',
+      description: 'Performs ERC-8183 work and submits deliverables.',
+      controller: OWNER,
+    });
+
+    const res = await POST(finalizeRequest(manifest));
+    const json = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(json.error).toBe('intent_complete_conflict');
+    expect(updateMetadataDraftServer).not.toHaveBeenCalled();
     expect(upsertManifest).not.toHaveBeenCalled();
   });
 
