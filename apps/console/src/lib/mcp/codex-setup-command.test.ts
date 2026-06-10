@@ -55,7 +55,14 @@ describe('Codex setup commands', () => {
     expectRequiredConfig(command);
     expect(command).toContain("$skipping = $true");
     expect(command).toContain("$line -match '^\\[mcp_servers\\.arclayer\\]\\s*$'");
+    expect(command).toContain('$nl = [Environment]::NewLine');
+    expect(command).toContain('$output -join $nl');
+    expect(command).toContain('$existing + $nl + $nl + $block + $nl');
+    expect(command).toContain('$block + $nl');
     expect(command).toContain('Set-Content -Path $cfg -Value $content -NoNewline');
+    expect(command).not.toContain('-join "n"');
+    expect(command).not.toContain('+ "nn"');
+    expect(command).not.toContain('+ "n"');
     expect(command).not.toContain('$existing -notmatch');
     expect(command).toContain('SetEnvironmentVariable("ARCLAYER_MCP_TOKEN"');
   });
