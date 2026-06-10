@@ -369,7 +369,7 @@ For local development from this repository:
 git clone https://github.com/riyannode/ArcLayer
 cd ArcLayer
 pnpm install
-
+pnpm --filter arclayer-codex build
 node packages/mcp-connect/dist/index.js codex-plugin
 ```
 
@@ -379,7 +379,4 @@ npx arclayer-codex@latest
 ```
 ```
 
-Restart Codex and approve ArcLayer OAuth in the browser. OAuth never grants private-key access; onchain transactions still require ArcLayer browser wallet approval.
-
-#### Advanced: legacy token fallback
-Legacy token/session setup remains available for older MCP clients or debugging, but it is no longer the recommended setup path. Use `/agent-setup` to create a 30-day legacy token.
+Restart Codex and approve ArcLayer OAuth in the browser. OAuth never grants private-key access; onchain transactions still require ArcLayer browser wallet approval. Legacy 30-day MCP tokens remain available from `/agent-setup` only as a fallback for clients without OAuth support.
