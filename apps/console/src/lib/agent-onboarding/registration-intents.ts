@@ -71,7 +71,7 @@ export async function getRegistrationIntent(id: string): Promise<RegistrationInt
 
 export async function completeRegistrationIntent(input: { id: string; agentId: string; txHash: string }) {
   const supabase = getSupabaseAdmin();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from(TABLE)
     .update({
       status: 'completed',
@@ -79,8 +79,25 @@ export async function completeRegistrationIntent(input: { id: string; agentId: s
       agent_id: input.agentId,
       tx_hash: input.txHash,
     })
-    .eq('id', input.id);
+    .eq('id', input.id)
+    .eq('status', 'draft')
+    .select('*')
+    .maybeSingle();
 
   if (error) return { ok: false as const, error: error.message };
-  return { ok: true as const };
+  if (data) return { ok: true as const, intent: mapRow(data as Record<string, unknown>) };
+
+  const current = await getRegistrationIntent(input.id);
+  if (!current) return { ok: false as const, error: 'intent_not_found' };
+
+  if (current.status === 'completed') {
+    const sameAgent = current.agentId === input.agentId;
+    const sameTx = current.txHash?.toLowerCase() === input.txHash.toLowerCase();
+    if (sameAgent && sameTx) {
+      return { ok: true as const, idempotent: true as const, intent: current };
+    }
+    return { ok: false as const, conflict: true as const, error: 'intent_complete_conflict' };
+  }
+
+  return { ok: false as const, error: `intent_not_draft:${current.status}` };
 }

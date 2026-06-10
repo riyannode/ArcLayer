@@ -40,7 +40,7 @@ function buildMcpPrompt(agentType: ProviderAgentType, mode: 'provider' | 'client
     `3. If I confirm this suggestion, call onboarding.create_registration_draft with rolePresetId: ${preset?.id || 'provider'}, name: ${name}, description: ${description}.`,
     '4. Return the registrationUrl from the tool response.',
     '5. Tell me to open the URL and mint in /register/erc8004 with my wallet.',
-    '6. After mint/finalize, call provider.create_api_key for the new agentId.',
+    '6. After mint/finalize, call provider.create_api_key for the new agentId using the chosen role preset. Provider-like role presets map to provider API-key scopes; client maps to client; evaluator is unsupported until evaluator API-key scope is implemented.',
     '7. Return the PM2 .env snippet.',
     '8. Confirm dashboard visibility: the finalized manifest must be upserted into agent_manifests and appear in /api/dashboard/erc8183-agents.',
   ].join('\n');

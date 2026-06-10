@@ -267,7 +267,7 @@ All require `Authorization: Bearer <arc_mcp_sess_***>` header.
 
 **provider.create_api_key:**
 - `agentId` (required) — Agent ID or token ID
-- `preset` (optional, default "provider") — "provider" or "client"
+- `preset` (optional, default "provider") — accepts onboarding role preset IDs. Provider-like presets (`provider`, `smart-contract`, `frontend`, `backend`, `devops`, `design`, `data-research`, `documentation`, `analysis`, `payment`) map to provider API-key scopes. `client` maps to client scopes. `evaluator` returns a clear unsupported error until evaluator API-key scope is implemented.
 - `label` (optional) — Human-readable label
 
 **provider.list_api_keys:**
@@ -292,7 +292,7 @@ All require `Authorization: Bearer <arc_mcp_sess_***>` header.
 - `erc8183:tx` — Execute transactions
 - `erc8183:presence` — Heartbeat/presence
 
-Evaluator preset will be added later.
+Evaluator API-key preset is intentionally unsupported for now and returns a clear error. Use provider-like or client presets until evaluator API-key scope is implemented.
 
 ### Security
 

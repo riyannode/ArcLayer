@@ -37,7 +37,25 @@ const SCOPE_PRESETS = Object.fromEntries(
     .map(([id, preset]) => [id, preset.scopes]),
 ) as Record<string, string[]>;
 
-const ALLOWED_PRESETS = new Set(['provider', 'client']);
+const PROVIDER_LIKE_ROLE_PRESETS = new Set([
+  'provider',
+  'smart-contract',
+  'frontend',
+  'backend',
+  'devops',
+  'design',
+  'data-research',
+  'documentation',
+  'analysis',
+  'payment',
+]);
+const CLIENT_ROLE_PRESETS = new Set(['client']);
+const EVALUATOR_ROLE_PRESETS = new Set(['evaluator']);
+const ACCEPTED_ROLE_PRESETS = new Set([
+  ...PROVIDER_LIKE_ROLE_PRESETS,
+  ...CLIENT_ROLE_PRESETS,
+  ...EVALUATOR_ROLE_PRESETS,
+]);
 
 const INSTALL_COMMANDS = Object.fromEntries(
   Object.entries(API_KEY_PRESETS).map(([id, preset]) => [id, preset.installCommand]),
@@ -93,13 +111,6 @@ async function sessionControlsController(
   if (controller === ownerAddr) return true;
 
   if (isAgentAccountServerRailEnabled() && agentAccountAddr && controller === agentAccountAddr) {
-    if (process.env.AGENT_ACCOUNT_BACKEND_ENABLED !== 'true') {
-      throw new McpError(
-        MCP_ERRORS.FORBIDDEN,
-        'agent_account_controller_disabled — Agent Account-controlled agents are disabled. Use an EOA-controlled agent.',
-      );
-    }
-
     const account = await getActiveAgentAccountForOwnerAndAddress(
       session.ownerAddress,
       session.agentAccountAddress,
@@ -201,6 +212,23 @@ export async function resolveAgentOwnership(
   );
 }
 
+
+function resolveApiKeyPresetForMcp(rawPreset: string): { requestedPreset: string; apiKeyPreset: 'provider' | 'client' } {
+  const preset = rawPreset.trim().toLowerCase() || 'provider';
+  if (PROVIDER_LIKE_ROLE_PRESETS.has(preset)) return { requestedPreset: preset, apiKeyPreset: 'provider' };
+  if (CLIENT_ROLE_PRESETS.has(preset)) return { requestedPreset: preset, apiKeyPreset: 'client' };
+  if (EVALUATOR_ROLE_PRESETS.has(preset)) {
+    throw new McpError(
+      MCP_ERRORS.VALIDATION_ERROR,
+      'Evaluator API-key preset is not supported yet. Use provider/client role presets until evaluator API-key scope is implemented.',
+    );
+  }
+  throw new McpError(
+    MCP_ERRORS.VALIDATION_ERROR,
+    `Invalid preset: "${preset}". Accepted role presets: ${[...ACCEPTED_ROLE_PRESETS].join(', ')}. Evaluator is listed but currently unsupported for API keys.`,
+  );
+}
+
 // ── Tool implementations ──────────────────────────────────────────────────
 
 /**
@@ -224,15 +252,8 @@ export async function handleCreateApiKey(
     throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'agentId is required');
   }
 
-  const preset = typeof args.preset === 'string' ? args.preset.trim().toLowerCase() : 'provider';
-
-  // Reject evaluator/worker/unknown presets
-  if (!ALLOWED_PRESETS.has(preset)) {
-    throw new McpError(
-      MCP_ERRORS.VALIDATION_ERROR,
-      `Invalid preset: "${preset}". Allowed: ${[...ALLOWED_PRESETS].join(', ')}. Evaluator will be added later.`,
-    );
-  }
+  const requestedPreset = typeof args.preset === 'string' ? args.preset.trim().toLowerCase() : 'provider';
+  const { apiKeyPreset } = resolveApiKeyPresetForMcp(requestedPreset);
 
   let label: string | undefined;
   if (args.label !== undefined && args.label !== null) {
@@ -254,7 +275,7 @@ export async function handleCreateApiKey(
   const result = await createApiKey({
     agentId: resolvedAgentId,
     label,
-    scopes: SCOPE_PRESETS[preset],
+    scopes: SCOPE_PRESETS[apiKeyPreset],
     createdBy: session.ownerAddress,
   });
 
@@ -262,7 +283,7 @@ export async function handleCreateApiKey(
     throw new McpError(MCP_ERRORS.INTERNAL_ERROR, `Failed to create API key: ${result.error}`);
   }
 
-  const envSnippet = buildApiKeyEnvSnippet({ key: result.key, agentId: resolvedAgentId, preset });
+  const envSnippet = buildApiKeyEnvSnippet({ key: result.key, agentId: resolvedAgentId, preset: apiKeyPreset });
 
   return {
     ok: true,
@@ -270,10 +291,11 @@ export async function handleCreateApiKey(
     id: result.id,
     keyPrefix: result.keyPrefix,
     key: result.key, // raw key — shown once only
-    scopes: SCOPE_PRESETS[preset],
-    preset,
+    scopes: SCOPE_PRESETS[apiKeyPreset],
+    preset: apiKeyPreset,
+    requestedPreset: requestedPreset || 'provider',
     envSnippet,
-    installCommand: INSTALL_COMMANDS[preset],
+    installCommand: INSTALL_COMMANDS[apiKeyPreset],
     warning: 'Store the key now — it will NOT be shown again. Use envSnippet to configure your PM2 bot.',
   };
 }
