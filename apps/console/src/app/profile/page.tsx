@@ -791,7 +791,7 @@ export default function AgentProfilePage() {
 
         {isConnected && address && profileLoaded && (
           <div className="mt-10">
-            <McpSessionsCard address={address} />
+            <McpSigningSessionCard address={address} />
           </div>
         )}
 
@@ -820,13 +820,6 @@ export default function AgentProfilePage() {
             >
               Client Mode
             </button>
-          </div>
-        )}
-
-        {/* ── MCP Signing Session (Client Mode only, or no agents) ─────── */}
-        {isConnected && address && profileLoaded && (agents.length === 0 || profileView === 'client') && (
-          <div className="mt-10">
-            <McpSigningSessionCard address={address} />
           </div>
         )}
 
