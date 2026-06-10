@@ -18,8 +18,11 @@ export interface RequestContext {
 }
 
 /** Context available to every tool handler at invocation time. */
+import type { McpAuthContext } from './auth';
+
 export interface McpToolContext {
   request: RequestContext;
+  auth?: McpAuthContext | null;
 }
 
 /** Tool handler signature. */

@@ -1,0 +1,29 @@
+{
+  "name": "@arclayer/mcp-connect",
+  "version": "0.1.0",
+  "description": "Install ArcLayer MCP and Skill bundles into local AI clients.",
+  "type": "module",
+  "bin": {
+    "arclayer-mcp-connect": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "commander": "14.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.19",
+    "tsup": "8.5.1",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.6"
+  },
+  "license": "MIT"
+}

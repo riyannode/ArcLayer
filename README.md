@@ -356,3 +356,13 @@ Use only on Arc Testnet.
 ## License
 
 MIT
+
+## ArcLayer MCP Connect
+
+Recommended Codex setup is OAuth-native and requires no manual config editing:
+
+```bash
+npx @arclayer/mcp-connect@latest codex-plugin
+```
+
+Restart Codex and approve ArcLayer OAuth in the browser. OAuth never grants private-key access; onchain transactions still require ArcLayer browser wallet approval. Legacy 30-day MCP tokens remain available from `/agent-setup` only as a fallback for clients without OAuth support.

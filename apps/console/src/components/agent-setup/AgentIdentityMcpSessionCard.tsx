@@ -93,7 +93,7 @@ export function AgentIdentityMcpSessionCard({ ownerAddress }: { ownerAddress?: s
       const data = (await res.json()) as McpSessionCreateResponse;
 
       if (!res.ok || !data.ok) {
-        setError(data.detail || data.error || 'Failed to connect Codex.');
+        setError(data.detail || data.error || 'Failed to create legacy token.');
         return;
       }
 
@@ -126,14 +126,14 @@ export function AgentIdentityMcpSessionCard({ ownerAddress }: { ownerAddress?: s
       const data = (await res.json()) as { ok?: boolean; error?: string; detail?: string };
 
       if (!res.ok || !data.ok) {
-        setError(data.detail || data.error || 'Failed to disconnect Codex.');
+        setError(data.detail || data.error || 'Failed to revoke legacy token.');
         return;
       }
 
       setResult(null);
       setCopied(false);
     } catch {
-      setError('Network error while disconnecting Codex.');
+      setError('Network error while revoking legacy token.');
     } finally {
       setDisconnecting(false);
     }
@@ -154,8 +154,8 @@ export function AgentIdentityMcpSessionCard({ ownerAddress }: { ownerAddress?: s
         className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-white/[0.025]"
       >
         <div>
-          <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Codex Auth Session</div>
-          <div className="mt-1 text-[12px] text-[#EAE4D8]/45">Connect Codex to ArcLayer using the connected wallet.</div>
+          <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Legacy Codex Token Session</div>
+          <div className="mt-1 text-[12px] text-[#EAE4D8]/45">Fallback: create a wallet-scoped MCP token for clients that do not support OAuth.</div>
         </div>
         <div className="text-[#F3C536]">
           {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -179,7 +179,7 @@ export function AgentIdentityMcpSessionCard({ ownerAddress }: { ownerAddress?: s
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button type="button" onClick={handleCreate} disabled={loading || !ownerAddress} className="inline-flex h-10 items-center gap-2 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-black transition hover:bg-[#F3C536]/90 disabled:opacity-40">
               {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
-              Connect Codex
+              Create Legacy Token
             </button>
             <span className="text-[11px] text-[#EAE4D8]/40">Valid for 30 days. Reconnect anytime after expiry.</span>
           </div>
@@ -194,14 +194,14 @@ export function AgentIdentityMcpSessionCard({ ownerAddress }: { ownerAddress?: s
               </div>
               <button type="button" onClick={handleDisconnect} disabled={disconnecting} className="inline-flex h-8 items-center gap-2 rounded-md border border-rose-400/25 px-3 text-[11px] font-semibold text-rose-200 transition hover:bg-rose-400/10 disabled:opacity-40">
                 {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unplug className="h-3.5 w-3.5" />}
-                Disconnect Codex
+                Revoke Token
               </button>
             </div>
           )}
 
           {result?.claudeConfig && (
             <div className="mt-5 rounded-md border border-[#F3C536]/20 bg-black/35 p-4">
-              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#F3C536]">Codex Connection</div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#F3C536]">Legacy MCP Token Config</div>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button type="button" onClick={() => setSetupShell('powershell')} className={setupShell === 'powershell' ? 'rounded-md bg-[#F3C536] px-3 py-2 text-[11px] font-semibold text-black' : 'rounded-md border border-white/10 px-3 py-2 text-[11px] text-[#EAE4D8]/60 hover:border-[#F3C536]/30'}>Windows PowerShell</button>
                 <button type="button" onClick={() => setSetupShell('bash')} className={setupShell === 'bash' ? 'rounded-md bg-[#F3C536] px-3 py-2 text-[11px] font-semibold text-black' : 'rounded-md border border-white/10 px-3 py-2 text-[11px] text-[#EAE4D8]/60 hover:border-[#F3C536]/30'}>macOS/Linux Bash</button>
@@ -210,9 +210,9 @@ export function AgentIdentityMcpSessionCard({ ownerAddress }: { ownerAddress?: s
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <button type="button" onClick={handleCopy} className="inline-flex h-9 items-center gap-2 rounded-md border border-[#F3C536]/30 bg-[#F3C536]/10 px-4 text-[12px] font-semibold text-[#F3C536] transition hover:bg-[#F3C536]/15">
                   <Clipboard className="h-3.5 w-3.5" />
-                  {copied ? 'Copied' : 'Copy Codex Setup'}
+                  {copied ? 'Copied' : 'Copy Legacy Setup'}
                 </button>
-                <span className="text-[11px] text-[#EAE4D8]/40">Use this setup once, then continue from Codex.</span>
+                <span className="text-[11px] text-[#EAE4D8]/40">The command contains a one-time MCP token. Do not share it.</span>
               </div>
               <p className="mt-3 text-[11px] leading-5 text-amber-200/70">Run this only on your own machine where Codex is installed. Do not share the command.</p>
             </div>
