@@ -358,6 +358,24 @@ describe('POST /api/agents/[id]/api-keys', () => {
     expect(mocks.createApiKey).toHaveBeenCalledWith(expect.objectContaining({ agentId: AGENT_ID }));
   });
 
+
+  it('rejects Agent Account ownerOf fallback while Agent Account rails are disabled', async () => {
+    const agentAccountOwner = '0xb03141849F755b0a337b3352C2290fce66e0C6dD';
+    mocks.getLinkedErc8004AgentsForController.mockResolvedValue([]);
+    mocks.getERC8004OwnerOf.mockResolvedValue(agentAccountOwner);
+    mocks.getActiveAgentAccountForOwnerAndAddress.mockResolvedValue({ id: 'acct-1' });
+
+    const res = await POST(makePostRequest({ preset: 'provider' }, 'valid-token'), {
+      params: Promise.resolve({ id: AGENT_ID }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(data.error).toBe('forbidden');
+    expect(mocks.getActiveAgentAccountForOwnerAndAddress).not.toHaveBeenCalled();
+    expect(mocks.createApiKey).not.toHaveBeenCalled();
+  });
+
   it('rejects ownerOf fallback when session wallet does not control the on-chain owner', async () => {
     mocks.getLinkedErc8004AgentsForController.mockResolvedValue([]);
     mocks.getERC8004OwnerOf.mockResolvedValue('0x0000000000000000000000000000000000000002');
@@ -557,6 +575,24 @@ describe('DELETE /api/agents/[id]/api-keys/[keyId]', () => {
     expect(res.status).toBe(200);
     expect(data.ok).toBe(true);
     expect(mocks.revokeApiKey).toHaveBeenCalledWith('key-001', AGENT_ID);
+  });
+
+
+  it('rejects Agent Account revoke fallback while Agent Account rails are disabled', async () => {
+    const agentAccountOwner = '0xb03141849F755b0a337b3352C2290fce66e0C6dD';
+    mocks.getLinkedErc8004AgentsForController.mockResolvedValue([]);
+    mocks.getERC8004OwnerOf.mockResolvedValue(agentAccountOwner);
+    mocks.getActiveAgentAccountForOwnerAndAddress.mockResolvedValue({ id: 'acct-1' });
+
+    const res = await DELETE(makeDeleteRequest('key-001', 'valid-token'), {
+      params: Promise.resolve({ id: AGENT_ID, keyId: 'key-001' }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(data.error).toBe('forbidden');
+    expect(mocks.getActiveAgentAccountForOwnerAndAddress).not.toHaveBeenCalled();
+    expect(mocks.revokeApiKey).not.toHaveBeenCalled();
   });
 
   it('non-owner returns 403', async () => {

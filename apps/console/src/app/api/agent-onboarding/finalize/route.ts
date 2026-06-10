@@ -2,6 +2,7 @@ import { humanJson } from '@/lib/api/human-json';
 import { NextRequest } from 'next/server';
 import { getAddress } from 'viem';
 import { getActiveAgentAccountForOwnerAndAddress } from '@/lib/agent-accounts/store';
+import { isAgentAccountServerRailEnabled } from '@/lib/agent-accounts/feature-flags';
 import { getRegistrationIntent, completeRegistrationIntent } from '@/lib/agent-onboarding/registration-intents';
 import { parseManifest, upsertManifest, manifestHash, type AgentManifestV1 } from '@/lib/a2a/manifest';
 import { updateMetadataDraftServer } from '@/lib/a2a/metadata-drafts/store';
@@ -17,6 +18,7 @@ function isHexHash(value: unknown) {
 
 async function walletControlsOnchainOwner(wallet: string, onchainOwner: string) {
   if (wallet.toLowerCase() === onchainOwner.toLowerCase()) return true;
+  if (!isAgentAccountServerRailEnabled()) return false;
   const account = await getActiveAgentAccountForOwnerAndAddress(wallet, onchainOwner);
   return Boolean(account);
 }

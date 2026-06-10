@@ -20,6 +20,7 @@ import { authenticateWalletRequest } from '@/lib/mcp/session-auth';
 import { upsertAgentAccountForOwner } from '@/lib/agent-accounts/store';
 import { createMcpSession } from '@/lib/agent-accounts/store';
 import type { McpSessionPermissions } from '@/lib/agent-accounts/types';
+import { isMcpAgentAccountIdentityEnabled } from '@/lib/agent-accounts/feature-flags';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (mode === 'agent-account' && process.env.MCP_AGENT_ACCOUNT_IDENTITY_ENABLED !== 'true') {
+  if (mode === 'agent-account' && !isMcpAgentAccountIdentityEnabled()) {
     return NextResponse.json(
       { ok: false, error: 'agent_account_mcp_disabled', detail: 'Agent Account MCP identity mode is temporarily disabled. Use EOA registration.' },
       { status: 403 },
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
   // 7. Upsert agent account binding + create session
   try {
     // Upsert only in Agent Account mode; EOA mode binds the session to ownerAddress.
-    if (mode === 'agent-account') {
+    if (mode === 'agent-account' && isMcpAgentAccountIdentityEnabled()) {
       await upsertAgentAccountForOwner({
         ownerAddress,
         agentAccountAddress,

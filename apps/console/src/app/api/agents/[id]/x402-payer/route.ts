@@ -21,6 +21,10 @@ import {
   SESSION_COOKIE_NAME,
 } from '@/lib/auth/wallet-session';
 import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
+import {
+  isAgentAccountRuntimePayerEnabled,
+  isAgentAccountServerRailEnabled,
+} from '@/lib/agent-accounts/feature-flags';
 import type { AgentX402Rail, AgentX402Scope } from '@/lib/x402/agent-payer';
 
 const ERROR_CACHE = 'no-store, no-cache, max-age=0';
@@ -66,21 +70,23 @@ async function verifyOwnership(
   }
 
   // Check Agent Account-minted agents (controller = linked Circle Agent Account)
-  const agentAccount = await getActiveAgentAccountForOwner(session.wallet);
-  if (agentAccount?.agentAccountAddress) {
-    const agentAccountLinked = await getLinkedErc8004AgentsForController(
-      agentAccount.agentAccountAddress,
-    );
-    const ownsAccountAgent = agentAccountLinked.find(
-      (a) => a.tokenId === agentId || a.agentId === agentId,
-    );
-    if (ownsAccountAgent) {
-      return {
-        ok: true,
-        wallet: session.wallet,
-        canonicalAgentId: ownsAccountAgent.agentId,
-        controller: agentAccount.agentAccountAddress,
-      };
+  if (isAgentAccountServerRailEnabled()) {
+    const agentAccount = await getActiveAgentAccountForOwner(session.wallet);
+    if (agentAccount?.agentAccountAddress) {
+      const agentAccountLinked = await getLinkedErc8004AgentsForController(
+        agentAccount.agentAccountAddress,
+      );
+      const ownsAccountAgent = agentAccountLinked.find(
+        (a) => a.tokenId === agentId || a.agentId === agentId,
+      );
+      if (ownsAccountAgent) {
+        return {
+          ok: true,
+          wallet: session.wallet,
+          canonicalAgentId: ownsAccountAgent.agentId,
+          controller: agentAccount.agentAccountAddress,
+        };
+      }
     }
   }
 
@@ -176,7 +182,7 @@ export async function POST(
   const rail = rawRail as AgentX402Rail;
   const scope = rawScope as AgentX402Scope;
 
-  if (scope === 'a2a' && process.env.AGENT_ACCOUNT_AS_RUNTIME_PAYER_ENABLED !== 'true') {
+  if (scope === 'a2a' && !isAgentAccountRuntimePayerEnabled()) {
     const agentAccount = await getActiveAgentAccountForOwner(auth.wallet);
     if (agentAccount?.agentAccountAddress.toLowerCase() === payerAddress.toLowerCase()) {
       return humanJson(req, { ok: false, error: 'agent_account_runtime_payer_disabled', detail: 'Register a dedicated Bot EOA as the A2A x402 payer.' }, { status: 403, headers: { 'Cache-Control': ERROR_CACHE } });

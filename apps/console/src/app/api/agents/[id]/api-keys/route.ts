@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAddress } from 'viem';
 import { createApiKey, API_KEY_SCOPES } from '@/lib/a2a/auth';
 import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
+import { isAgentAccountServerRailEnabled } from '@/lib/agent-accounts/feature-flags';
 import { API_KEY_PRESETS, API_KEY_PRESET_ID_SET } from '@/lib/agent-onboarding/api-key-presets';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import {
@@ -74,21 +75,23 @@ async function verifyOwnership(
   }
 
   // Check Agent Account-minted agents (controller = linked Circle Agent Account)
-  try {
-    const agentAccount = await getActiveAgentAccountForOwner(session.wallet);
-    if (agentAccount?.agentAccountAddress) {
-      const agentAccountLinked = await getLinkedErc8004AgentsForController(
-        agentAccount.agentAccountAddress,
-      );
-      const ownsAccountAgent = agentAccountLinked.some(
-        (a) => a.tokenId === agentId || a.agentId === agentId,
-      );
-      if (ownsAccountAgent) {
-        return { ok: true, wallet: session.wallet };
+  if (isAgentAccountServerRailEnabled()) {
+    try {
+      const agentAccount = await getActiveAgentAccountForOwner(session.wallet);
+      if (agentAccount?.agentAccountAddress) {
+        const agentAccountLinked = await getLinkedErc8004AgentsForController(
+          agentAccount.agentAccountAddress,
+        );
+        const ownsAccountAgent = agentAccountLinked.some(
+          (a) => a.tokenId === agentId || a.agentId === agentId,
+        );
+        if (ownsAccountAgent) {
+          return { ok: true, wallet: session.wallet };
+        }
       }
+    } catch {
+      // Treat Agent Account lookup failures as non-ownership, not as a leaked server error.
     }
-  } catch {
-    // Treat Agent Account lookup failures as non-ownership, not as a leaked server error.
   }
 
   // Fallback: just-minted ERC-8004 identity may not be indexed in erc8004_agents yet.
@@ -100,13 +103,15 @@ async function verifyOwnership(
         return { ok: true, wallet: session.wallet };
       }
 
-      const activeBinding = await getActiveAgentAccountForOwnerAndAddress(
-        session.wallet,
-        onchainOwner,
-      );
+      if (isAgentAccountServerRailEnabled()) {
+        const activeBinding = await getActiveAgentAccountForOwnerAndAddress(
+          session.wallet,
+          onchainOwner,
+        );
 
-      if (activeBinding) {
-        return { ok: true, wallet: session.wallet };
+        if (activeBinding) {
+          return { ok: true, wallet: session.wallet };
+        }
       }
     } catch {
       // Ignore ownerOf failures and fall through to forbidden.

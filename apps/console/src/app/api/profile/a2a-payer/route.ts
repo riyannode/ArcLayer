@@ -11,6 +11,10 @@ import { NextRequest } from 'next/server';
 import { resolveSessionFromCookie, SESSION_COOKIE_NAME, getLinkedErc8004AgentsForController } from '@/lib/auth/wallet-session';
 import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
 import { getActiveA2aPayer, ensureA2aPayerBinding } from '@/lib/x402/agent-payer';
+import {
+  isAgentAccountA2aAutoBindEnabled,
+  isAgentAccountServerRailEnabled,
+} from '@/lib/agent-accounts/feature-flags';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,12 +29,17 @@ export async function GET(req: NextRequest) {
   if (!session) return humanJson(req, { ok: false, error: 'invalid_session' }, { status: 401, headers: { 'Cache-Control': ERROR_CACHE } });
 
   const wallet = session.wallet;
-  const agentAccount = await getActiveAgentAccountForOwner(wallet);
+  const agentAccount = isAgentAccountServerRailEnabled()
+    ? await getActiveAgentAccountForOwner(wallet)
+    : null;
   const agentAccountAddr = agentAccount?.agentAccountAddress ?? null;
   const ownerAgents = await getLinkedErc8004AgentsForController(wallet);
-  const accountAgents = agentAccountAddr && agentAccountAddr.toLowerCase() !== wallet.toLowerCase()
-    ? await getLinkedErc8004AgentsForController(agentAccountAddr)
-    : [];
+  const accountAgents =
+    isAgentAccountServerRailEnabled() &&
+    agentAccountAddr &&
+    agentAccountAddr.toLowerCase() !== wallet.toLowerCase()
+      ? await getLinkedErc8004AgentsForController(agentAccountAddr)
+      : [];
 
   const agentMap = new Map<string, { agentId: string; controller: string }>();
   for (const agent of ownerAgents) agentMap.set(agent.agentId, { agentId: agent.agentId, controller: wallet });
@@ -39,7 +48,7 @@ export async function GET(req: NextRequest) {
   const agentA2aPayers: Array<{ agentId: string; payerAddress: string; repaired?: boolean }> = [];
   for (const agent of agentMap.values()) {
     let binding = await getActiveA2aPayer(agent.agentId);
-    if (!binding && agentAccountAddr && process.env.AGENT_ACCOUNT_A2A_AUTO_BIND_ENABLED === 'true') {
+    if (!binding && agentAccountAddr && isAgentAccountA2aAutoBindEnabled()) {
       binding = await ensureA2aPayerBinding({ agentId: agent.agentId, controllerAddress: agent.controller, agentAccountAddress: agentAccountAddr }).catch(() => null);
       if (binding) {
         agentA2aPayers.push({ agentId: agent.agentId, payerAddress: binding.payerAddress, repaired: true });
@@ -52,8 +61,8 @@ export async function GET(req: NextRequest) {
   const a2aPayerEnabled = agentA2aPayers.length > 0;
   return humanJson(req, {
     ok: true,
-    hasAgentAccount: Boolean(agentAccountAddr),
-    agentAccountAddress: agentAccountAddr,
+    hasAgentAccount: isAgentAccountServerRailEnabled() && Boolean(agentAccountAddr),
+    agentAccountAddress: isAgentAccountServerRailEnabled() ? agentAccountAddr : null,
     a2aPayerEnabled,
     agents: agentA2aPayers,
     message: a2aPayerEnabled ? 'Bot EOA payer linked.' : 'No Bot EOA payer linked.',
