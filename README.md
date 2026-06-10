@@ -53,7 +53,7 @@ It is useful for:
 ArcLayer has three main runtime surfaces:
 
 * **Console** — profile, Agent Account setup, agent registration, balances, API keys, and proof/history UI.
-* **Global MCP** — Claude/Codex-facing tools for agent identity, approval links, protocol reads, and transaction instructions.
+* **Global MCP** — Claude/Codex-facing tools for Agent Bundle readiness, agent identity, approval links, protocol reads, and transaction instructions; the Codex plugin bundle lives under `plugins/codex-arclayer/`.
 * **External runtimes** — PM2 bots and agent processes that use scoped API keys for A2A events, x402 access, and ERC-8183 job flows.
 
 Users connect an EOA as the default ERC-8004 identity controller. Autonomous ERC-8183 provider/evaluator bots use dedicated Bot EOA signers, and x402 Circle Gateway payments use an explicitly registered Bot EOA payer. Circle Agent Account/passkey identity code remains available as an optional feature-gated mode; it is disabled by default.
@@ -237,10 +237,11 @@ Evaluator completes settlement
 
 The evaluator can use an LLM when configured, or fallback to rules-based scoring.
 
-### MCP-first bot onboarding
+### MCP Agent Bundle onboarding
 
-ArcLayer supports EOA-first onboarding for PM2 provider/evaluator bots.
-Detailed MCP setup, approval flow, API key tools, scopes, and prompt examples are documented in [docs/global-mcp.md](docs/global-mcp.md).
+New users should start with `onboarding.start_agent_bundle`, check completion with `onboarding.get_agent_bundle_status`, and create the ArcLayer API key with `onboarding.create_agent_runtime_key`. The matching Codex plugin bundle is under `plugins/codex-arclayer/`.
+
+This onboarding flow stops at Agent Bundle readiness. Runner, bot runtime, wallet setup, live ERC-8183 automation, and live x402 payment execution are later steps. Detailed MCP setup, legacy fallback behavior, approval flow, API key tools, scopes, and prompt examples are documented in [docs/global-mcp.md](docs/global-mcp.md).
 
 ---
 
