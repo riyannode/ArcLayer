@@ -1,5 +1,5 @@
 {
-  "name": "@arclayer/mcp-connect",
+  "name": "arclayer-mcp-connect",
   "version": "0.1.0",
   "description": "Install ArcLayer MCP and Skill bundles into local AI clients.",
   "type": "module",
