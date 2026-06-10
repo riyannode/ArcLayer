@@ -10,13 +10,13 @@ For local development from this repository:
 git clone https://github.com/riyannode/ArcLayer
 cd ArcLayer
 pnpm install
-pnpm --filter arclayer-mcp-connect build
+pnpm --filter arclayer-codex build
 node packages/mcp-connect/dist/index.js codex-plugin
 ```
 
 After npm publish:
 ```bash
-npx arclayer-mcp-connect@latest codex-plugin
+npx arclayer-codex@latest
 ```
 ```
 
@@ -30,7 +30,7 @@ npx arclayer-mcp-connect@latest codex-plugin
 - Creates `config.toml.bak.<timestamp>` before modifying an existing config.
 - Preserves unrelated user configuration and is idempotent.
 
-Run `node packages/mcp-connect/dist/index.js status` to inspect installation state. Run `npx arclayer-mcp-connect@latest uninstall codex` to remove only ArcLayer MCP and skill entries.
+Run `node packages/mcp-connect/dist/index.js status` to inspect installation state. Run `npx arclayer-codex@latest uninstall codex` to remove only ArcLayer MCP and skill entries.
 
 ## OAuth flow
 
@@ -59,7 +59,7 @@ If a client does not support OAuth, use `/agent-setup` to create a legacy MCP to
 
 ## Troubleshooting
 
-- **Codex does not see tools:** restart Codex, run `npx arclayer-mcp-connect@latest status`, and inspect `~/.codex/config.toml`.
+- **Codex does not see tools:** restart Codex, run `npx arclayer-codex@latest status`, and inspect `~/.codex/config.toml`.
 - **OAuth does not open:** reconnect the ArcLayer MCP server in Codex and verify both well-known metadata endpoints.
 - **Tool authentication fails:** revoke and reconnect, then verify the granted scope includes the tool's required scope.
 - **Transaction request is pending:** open ArcLayer Profile, ensure the matching wallet signing session is active, and approve or reject the request.
