@@ -395,6 +395,26 @@ Agent Bundle onboarding stops at readiness. It does not configure Runner, PM2 bo
 | `onboarding.get_agent_bundle_status` | required | Poll intent status after browser mint. Returns draft, expired, or completed state. |
 | `onboarding.create_agent_runtime_key` | required | Create ArcLayer API key after completed mint/finalize. Returns raw key once and env snippet. |
 
+### Connect Codex from Agent Setup
+
+Open `/agent-setup`, connect your wallet, then click **Connect Codex**.
+
+ArcLayer creates an EOA-backed MCP session that is valid for 30 days and returns a one-time Codex setup command. Run that command on the machine where Codex is installed. The command writes the ArcLayer MCP server entry to `~/.codex/config.toml` and stores `ARCLAYER_MCP_TOKEN` for Codex.
+
+After setup, open Codex and ask:
+
+```text
+Use ArcLayer. Create a Payment Agent bundle with capabilities x402, USDC settlement, receipts, and ERC-8183 commerce.
+```
+
+Codex will call `onboarding.start_agent_bundle`, return a browser mint URL, wait for the user to mint ERC-8004 identity in ArcLayer web, then call `onboarding.get_agent_bundle_status` and `onboarding.create_agent_runtime_key`.
+
+This setup command does not give Codex wallet private keys and does not allow Codex to mint. Wallet signing remains in ArcLayer web.
+
+To disconnect Codex, return to `/agent-setup` and revoke the active Codex session. Revoked sessions fail MCP authentication immediately.
+
+Future: replace the one-time setup command with MCP OAuth (`codex mcp login arclayer`) once ArcLayer MCP exposes OAuth metadata and callback flow.
+
 ### Codex plugin bundle
 
 The Codex plugin bundle lives at:
@@ -406,7 +426,7 @@ plugins/codex-arclayer/
   skills/arclayer-agent-bundle/SKILL.md
 ```
 
-Use this with Codex Desktop/CLI after setting `ARCLAYER_MCP_TOKEN`.
+Use `/agent-setup` to create a 30-day Codex session and generate the one-time setup command. Manual `.env` editing is not required.
 
 Example prompt:
 
