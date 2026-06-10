@@ -3,7 +3,21 @@
 ArcLayer's recommended MCP path is a one-command Codex install followed by browser OAuth approval:
 
 ```bash
+Package publish pending.
+
+For local development from this repository:
+```bash
+git clone https://github.com/riyannode/ArcLayer
+cd ArcLayer
+pnpm install
+pnpm --filter @arclayer/mcp-connect build
+node packages/mcp-connect/dist/index.js codex-plugin
+```
+
+After npm publish:
+```bash
 npx @arclayer/mcp-connect@latest codex-plugin
+```
 ```
 
 ## Installer changes
@@ -16,7 +30,7 @@ npx @arclayer/mcp-connect@latest codex-plugin
 - Creates `config.toml.bak.<timestamp>` before modifying an existing config.
 - Preserves unrelated user configuration and is idempotent.
 
-Run `npx @arclayer/mcp-connect@latest status` to inspect installation state. Run `npx @arclayer/mcp-connect@latest uninstall codex` to remove only ArcLayer MCP and skill entries.
+Run `node packages/mcp-connect/dist/index.js status` to inspect installation state. Run `npx @arclayer/mcp-connect@latest uninstall codex` to remove only ArcLayer MCP and skill entries.
 
 ## OAuth flow
 

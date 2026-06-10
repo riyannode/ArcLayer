@@ -362,7 +362,21 @@ MIT
 Recommended Codex setup is OAuth-native and requires no manual config editing:
 
 ```bash
+Package publish pending.
+
+For local development from this repository:
+```bash
+git clone https://github.com/riyannode/ArcLayer
+cd ArcLayer
+pnpm install
+pnpm --filter @arclayer/mcp-connect build
+node packages/mcp-connect/dist/index.js codex-plugin
+```
+
+After npm publish:
+```bash
 npx @arclayer/mcp-connect@latest codex-plugin
+```
 ```
 
 Restart Codex and approve ArcLayer OAuth in the browser. OAuth never grants private-key access; onchain transactions still require ArcLayer browser wallet approval. Legacy 30-day MCP tokens remain available from `/agent-setup` only as a fallback for clients without OAuth support.
