@@ -40,4 +40,21 @@ describe('agent onboarding role presets', () => {
       expect(isErc8183CommerceAgent({ metadata: manifest })).toBe(true);
     }
   });
+
+  it('preserves the MCP payment preset without relying on manual category dropdown values', () => {
+    const manifest = buildAgentManifest({
+      agentId: '123',
+      name: 'Payment Agent',
+      rolePresetId: 'payment',
+      description: 'Payment integration agent.',
+      controller: '0x0000000000000000000000000000000000000001',
+    });
+
+    expect(manifest.roles?.[0]?.id).toBe('payment');
+    expect(manifest.capabilities).toEqual(expect.arrayContaining(['claim_job', 'submit_work', 'x402', 'payments', 'usdc']));
+    expect(manifest.capability).toEqual(expect.arrayContaining(['claim_job', 'submit_work', 'x402', 'payments', 'usdc']));
+    expect(parseManifest(manifest).ok).toBe(true);
+    expect(isErc8183CommerceAgent({ metadata: manifest })).toBe(true);
+  });
+
 });

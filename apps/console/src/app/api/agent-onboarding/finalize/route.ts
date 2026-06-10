@@ -49,7 +49,6 @@ export async function POST(req: NextRequest) {
 
   const parsed = parseManifest(rawManifest);
   if (!parsed.ok) return humanJson(req, { ok: false, error: parsed.error }, { status: 400 });
-  const manifest = rawManifest as AgentManifestV1;
   if (parsed.manifest.agentId !== agentId) return humanJson(req, { ok: false, error: 'manifest_agentId_mismatch' }, { status: 400 });
 
   let onchainOwner: string;
@@ -59,17 +58,36 @@ export async function POST(req: NextRequest) {
     return humanJson(req, { ok: false, error: 'onchain_owner_lookup_failed' }, { status: 400 });
   }
 
+  const manifestController = parsed.manifest.controller?.toLowerCase();
+  if (manifestController && manifestController !== onchainOwner) {
+    return humanJson(
+      req,
+      {
+        ok: false,
+        error: 'manifest_controller_mismatch',
+        detail: 'Manifest controller must match ERC-8004 ownerOf(agentId).',
+      },
+      { status: 400 },
+    );
+  }
+
   const controls = await walletControlsOnchainOwner(auth.wallet, onchainOwner);
   if (!controls) return humanJson(req, { ok: false, error: 'wallet_does_not_control_agent' }, { status: 403 });
 
-  const hash = manifestHash(manifest);
-  const patch = await updateMetadataDraftServer({ draftId: intent.draftId, metadata: manifest, agentId, txHash: txHash as string });
+  const finalManifest: AgentManifestV1 = {
+    ...parsed.manifest,
+    controller: onchainOwner,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const hash = manifestHash(finalManifest);
+  const patch = await updateMetadataDraftServer({ draftId: intent.draftId, metadata: finalManifest, agentId, txHash: txHash as string });
   if (!patch.ok) return humanJson(req, { ok: false, error: 'draft_update_failed', detail: patch.error }, { status: 500 });
 
   const upsert = await upsertManifest({
     agentId,
     controller: onchainOwner,
-    manifest,
+    manifest: finalManifest,
     manifestHash: hash,
     signature: txHash as string,
     signer: onchainOwner,

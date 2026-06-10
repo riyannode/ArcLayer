@@ -8,13 +8,18 @@ import { humanJson } from '@/lib/api/human-json';
  */
 
 import { NextRequest } from 'next/server';
+import { getAddress } from 'viem';
 import { revokeApiKey } from '@/lib/a2a/auth';
+import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
 import {
   resolveSessionFromCookie,
   getLinkedErc8004AgentsForController,
   SESSION_COOKIE_NAME,
 } from '@/lib/auth/wallet-session';
-import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
+import {
+  getActiveAgentAccountForOwner,
+  getActiveAgentAccountForOwnerAndAddress,
+} from '@/lib/agent-accounts/store';
 
 const ERROR_CACHE = 'no-store, no-cache, max-age=0';
 
@@ -55,6 +60,24 @@ export async function DELETE(
           hasOwnership = agentAccountLinked.some(
             (a) => a.tokenId === agentId || a.agentId === agentId,
           );
+        }
+      } catch {
+        hasOwnership = false;
+      }
+    }
+
+    if (!hasOwnership && /^\d+$/.test(agentId)) {
+      try {
+        const onchainOwner = getAddress(await getERC8004OwnerOf(agentId)).toLowerCase();
+
+        if (session.wallet.toLowerCase() === onchainOwner) {
+          hasOwnership = true;
+        } else {
+          const activeBinding = await getActiveAgentAccountForOwnerAndAddress(
+            session.wallet,
+            onchainOwner,
+          );
+          hasOwnership = Boolean(activeBinding);
         }
       } catch {
         hasOwnership = false;

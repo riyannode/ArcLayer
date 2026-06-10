@@ -610,6 +610,7 @@ export default function ERC8183EscrowRegisterPage() {
   const [metadataDraftId, setMetadataDraftId] = useState('');
   const [metadataWriteToken, setMetadataWriteToken] = useState('');
   const [mcpIntentId, setMcpIntentId] = useState('');
+  const [mcpRolePresetId, setMcpRolePresetId] = useState('');
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
     identity: true,
     profile: false,
@@ -716,10 +717,12 @@ export default function ERC8183EscrowRegisterPage() {
         const metadata = json.draft?.metadata || {};
         const roleId = String(metadata.roles?.[0]?.id || json.intent?.rolePresetId || metadata.role || 'provider');
         const preset = getOnboardingRolePreset(roleId, { includeDisabled: true });
+        const resolvedPresetId = preset?.id || 'provider';
         const effectiveRole: AgentRole = preset?.identityRole === 'client' ? 'autonomous-client' : preset?.identityRole === 'evaluator' ? 'evaluator' : 'provider';
         const category = CATEGORIES.find((item) => slugify(item) === preset?.category) || '';
 
         setMcpIntentId(intent);
+        setMcpRolePresetId(resolvedPresetId);
         setMetadataDraftId(String(json.draft.draftId || ''));
         setMetadataWriteToken('');
         setForm((prev) => ({
@@ -759,8 +762,9 @@ export default function ERC8183EscrowRegisterPage() {
     : agentAccountAddress;
   const agentSlug = slugify(form.agentName) || 'erc8183-agent';
   const metadataURI = form.metadataUri.trim();
-  const hasRequiredCategory = !requiresCategoryAndCapabilities || Boolean(form.category);
-  const hasRequiredCapabilities = !requiresCategoryAndCapabilities || customCaps.length > 0;
+  const hasMcpIntent = Boolean(mcpIntentId);
+  const hasRequiredCategory = hasMcpIntent || !requiresCategoryAndCapabilities || Boolean(form.category);
+  const hasRequiredCapabilities = hasMcpIntent || !requiresCategoryAndCapabilities || customCaps.length > 0;
 
   const metadataReady = Boolean(
     form.agentName.trim() &&
@@ -791,7 +795,7 @@ export default function ERC8183EscrowRegisterPage() {
       : isClientRole
         ? 'client'
         : 'provider';
-    const rolePresetId = isClientRole ? 'client' : form.role === 'evaluator' ? 'evaluator' : categorySlug;
+    const rolePresetId = mcpRolePresetId || (isClientRole ? 'client' : form.role === 'evaluator' ? 'evaluator' : categorySlug);
 
     return buildAgentManifest({
       agentId: mintedAgentId || `pending-${agentSlug}`,
@@ -810,7 +814,7 @@ export default function ERC8183EscrowRegisterPage() {
       createdAt,
       metadataURI: metadataURI || undefined,
     });
-  }, [agentSlug, controller, createdAt, customCaps, form, isClientRole, metadataURI, mintedAgentId, role]);
+  }, [agentSlug, controller, createdAt, customCaps, form, isClientRole, metadataURI, mintedAgentId, role, mcpRolePresetId]);
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -848,6 +852,9 @@ export default function ERC8183EscrowRegisterPage() {
   function saveDraft() {
     const payload = {
       type: 'erc8183-agent-identity-draft',
+      source: mcpIntentId ? 'mcp-onboarding' : 'web-register',
+      mcpIntentId: mcpIntentId || undefined,
+      mcpRolePresetId: mcpRolePresetId || undefined,
       form,
       metadataURI,
       agentManifest,
@@ -1038,7 +1045,7 @@ export default function ERC8183EscrowRegisterPage() {
       const mintedId = minted.toString();
 
       // Step 3: Patch draft with minted agentId
-      const finalRolePresetId = isClientRole ? 'client' : form.role === 'evaluator' ? 'evaluator' : (form.category ? slugify(form.category) : 'provider');
+      const finalRolePresetId = mcpRolePresetId || (isClientRole ? 'client' : form.role === 'evaluator' ? 'evaluator' : (form.category ? slugify(form.category) : 'provider'));
       const finalManifest = buildAgentManifest({
         agentId: mintedId,
         name: form.agentName || agentManifest.name,
@@ -1089,6 +1096,9 @@ export default function ERC8183EscrowRegisterPage() {
           {
             agentId: mintedId,
             txHash: hash,
+            source: mcpIntentId ? 'mcp-onboarding' : 'web-register',
+            mcpIntentId: mcpIntentId || undefined,
+            mcpRolePresetId: mcpRolePresetId || undefined,
             metadataURI: effectiveMetadataURI,
             form,
             agentManifest: finalManifest,
