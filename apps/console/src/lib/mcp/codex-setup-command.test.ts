@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   buildBashCodexSetup,
@@ -15,23 +19,69 @@ const requiredTools = [
   'onboarding.create_agent_runtime_key',
 ];
 
+function expectRequiredConfig(command: string) {
+  expect(command).toContain('[mcp_servers.arclayer]');
+  expect(command).toContain('bearer_token_env_var = "ARCLAYER_MCP_TOKEN"');
+  requiredTools.forEach((tool) => expect(command).toContain(tool));
+}
+
+function runBashSetup(shell: '/bin/bash' | '/bin/zsh') {
+  const home = mkdtempSync(join(tmpdir(), 'arclayer-codex-'));
+  const codexDir = join(home, '.codex');
+  execFileSync('mkdir', ['-p', codexDir]);
+  writeFileSync(join(codexDir, 'config.toml'), [
+    '[model]',
+    'name = "keep-me"',
+    '',
+    '[mcp_servers.arclayer]',
+    'url = "https://stale.example/mcp"',
+    'enabled = false',
+    '',
+    '[mcp_servers.other]',
+    'url = "https://other.example/mcp"',
+  ].join('\n'));
+
+  const script = join(home, 'setup.sh');
+  writeFileSync(script, buildBashCodexSetup(config));
+  execFileSync('bash', ['-n', script]);
+  execFileSync('bash', [script], { env: { ...process.env, HOME: home, SHELL: shell } });
+  return home;
+}
+
 describe('Codex setup commands', () => {
-  it('builds the PowerShell setup command', () => {
+  it('builds a PowerShell command that replaces the existing ArcLayer section', () => {
     const command = buildPowerShellCodexSetup(config);
 
-    expect(command).toContain('[mcp_servers.arclayer]');
-    expect(command).toContain('bearer_token_env_var = "ARCLAYER_MCP_TOKEN"');
-    requiredTools.forEach((tool) => expect(command).toContain(tool));
+    expectRequiredConfig(command);
+    expect(command).toContain("$skipping = $true");
+    expect(command).toContain("$line -match '^\\[mcp_servers\\.arclayer\\]\\s*$'");
+    expect(command).toContain('Set-Content -Path $cfg -Value $content -NoNewline');
+    expect(command).not.toContain('$existing -notmatch');
     expect(command).toContain('SetEnvironmentVariable("ARCLAYER_MCP_TOKEN"');
   });
 
-  it('builds an idempotent Bash setup command', () => {
+  it('builds valid Bash that replaces the stale ArcLayer section', () => {
     const command = buildBashCodexSetup(config);
+    expectRequiredConfig(command);
+    expect(command).toContain('/^\\[mcp_servers\\.arclayer\\][[:space:]]*$/');
 
-    expect(command).toContain('[mcp_servers.arclayer]');
-    expect(command).toContain('bearer_token_env_var = "ARCLAYER_MCP_TOKEN"');
-    requiredTools.forEach((tool) => expect(command).toContain(tool));
-    expect(command).toContain('export ARCLAYER_MCP_TOKEN=');
-    expect(command).toContain("if ! grep -q '^\\[mcp_servers\\.arclayer\\]'");
+    const home = runBashSetup('/bin/bash');
+    const codexConfig = readFileSync(join(home, '.codex/config.toml'), 'utf8');
+    expect(codexConfig).toContain('[model]');
+    expect(codexConfig).toContain('[mcp_servers.other]');
+    expect(codexConfig).not.toContain('https://stale.example/mcp');
+    expect(codexConfig.match(/\[mcp_servers\.arclayer\]/g)).toHaveLength(1);
+  });
+
+  it('persists the token to zsh startup files', () => {
+    const home = runBashSetup('/bin/zsh');
+    expect(readFileSync(join(home, '.zshrc'), 'utf8')).toContain('export ARCLAYER_MCP_TOKEN=mcp_test_token');
+    expect(readFileSync(join(home, '.zprofile'), 'utf8')).toContain('export ARCLAYER_MCP_TOKEN=mcp_test_token');
+  });
+
+  it('persists the token to bash startup files', () => {
+    const home = runBashSetup('/bin/bash');
+    expect(readFileSync(join(home, '.bashrc'), 'utf8')).toContain('export ARCLAYER_MCP_TOKEN=mcp_test_token');
+    expect(readFileSync(join(home, '.profile'), 'utf8')).toContain('export ARCLAYER_MCP_TOKEN=mcp_test_token');
   });
 });
