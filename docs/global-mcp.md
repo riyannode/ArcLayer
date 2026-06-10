@@ -428,6 +428,26 @@ plugins/codex-arclayer/
 
 Use `/agent-setup` to create a 30-day Codex session and generate the one-time setup command. Manual `.env` editing is not required.
 
+#### Add the ArcLayer plugin marketplace
+
+To test the plugin marketplace from the PR branch, add a marketplace in Codex with:
+
+- Source: `riyannode/ArcLayer`
+- Git ref: `codex/implement-codex-plugin-pairing-ux`
+- Sparse paths:
+  - `.agents/plugins`
+  - `plugins/codex-arclayer`
+
+After the PR is merged, use:
+
+- Source: `riyannode/ArcLayer`
+- Git ref: `main`
+- Sparse paths:
+  - `.agents/plugins`
+  - `plugins/codex-arclayer`
+
+The marketplace manifest is `.agents/plugins/marketplace.json`, and its ArcLayer entry points to `./plugins/codex-arclayer`.
+
 Example prompt:
 
 ```text
