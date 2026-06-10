@@ -78,7 +78,7 @@ export default function AgentSetupPage() {
           <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">Run this once on the device where Codex is installed:</p>
           <div className="mt-4 rounded-md border border-white/10 bg-black/35 px-4 py-3 font-mono text-[14px] text-[#EAE4D8] break-all">{CODEX_CMD}</div>
           <div className="mt-4"><button type="button" onClick={handleCodexCopy} className={`inline-flex h-10 items-center gap-3 rounded-lg border px-5 text-[12px] font-semibold transition ${codexCopied ? 'border-[#B8CD7E]/40 bg-[#B8CD7E]/10 text-[#B8CD7E]' : 'border-[#F0B84A]/40 bg-[#F0B84A] text-black shadow-[0_0_34px_rgba(240,184,74,0.22)] hover:scale-[1.01] hover:bg-[#FFD084]'}`}>{codexCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{codexCopied ? 'Copied' : 'Copy install command'}</button></div>
-          <div className="mt-6 rounded-lg border border-[#F3C536]/25 bg-[#F3C536]/[0.055] p-5 text-[13px] text-[#EAE4D8]/80">The connector uses OAuth. Codex can request wallet actions, but signing remains browser-mediated.</div>
+          <div className="mt-6 rounded-lg border border-[#F3C536]/25 bg-[#F3C536]/[0.055] p-5 text-[13px] text-[#EAE4D8]/80">The connector uses OAuth. Codex can request actions, but you always approve wallet signing in the browser.</div>
         </div>
 
         <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-6 py-4 text-center"><p className="text-[12px] text-[#EAE4D8]/42">Need runtime details? <Link href="/profile" className="text-[#F3C536] transition hover:text-[#FFE070]">Go to Profile</Link></p></div>
