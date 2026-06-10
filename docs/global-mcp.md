@@ -433,13 +433,13 @@ For local development from this repository:
 git clone https://github.com/riyannode/ArcLayer
 cd ArcLayer
 pnpm install
-pnpm --filter arclayer-mcp-connect build
+pnpm --filter arclayer-codex build
 node packages/mcp-connect/dist/index.js codex-plugin
 ```
 
 After npm publish:
 ```bash
-npx arclayer-mcp-connect@latest codex-plugin
+npx arclayer-codex@latest
 ```` for the recommended OAuth-native install. `/agent-setup` creates a 30-day legacy token only for clients without OAuth support.
 
 #### Add the ArcLayer plugin marketplace
@@ -572,13 +572,13 @@ For local development from this repository:
 git clone https://github.com/riyannode/ArcLayer
 cd ArcLayer
 pnpm install
-pnpm --filter arclayer-mcp-connect build
+pnpm --filter arclayer-codex build
 node packages/mcp-connect/dist/index.js codex-plugin
 ```
 
 After npm publish:
 ```bash
-npx arclayer-mcp-connect@latest codex-plugin
+npx arclayer-codex@latest
 ```
 ```
 
@@ -587,9 +587,9 @@ The installer updates `~/.codex/config.toml`, enables keyring-backed OAuth crede
 Useful commands:
 
 ```bash
-npx arclayer-mcp-connect@latest codex
-npx arclayer-mcp-connect@latest status
-npx arclayer-mcp-connect@latest uninstall codex
+npx arclayer-codex@latest codex
+npx arclayer-codex@latest status
+npx arclayer-codex@latest uninstall codex
 ```
 
 OAuth grants scoped MCP access only. It does not expose a private key, sign, or broadcast transactions. Transaction-request tools create a wallet-scoped browser signing request; every onchain transaction still requires approval in ArcLayer web.

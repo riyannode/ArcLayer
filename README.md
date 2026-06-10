@@ -369,13 +369,13 @@ For local development from this repository:
 git clone https://github.com/riyannode/ArcLayer
 cd ArcLayer
 pnpm install
-pnpm --filter arclayer-mcp-connect build
+pnpm --filter arclayer-codex build
 node packages/mcp-connect/dist/index.js codex-plugin
 ```
 
 After npm publish:
 ```bash
-npx arclayer-mcp-connect@latest codex-plugin
+npx arclayer-codex@latest
 ```
 ```
 
