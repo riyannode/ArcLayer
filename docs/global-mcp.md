@@ -357,6 +357,58 @@ ARCLAYER_MODE=client
 
 ---
 
+## MCP Agent Bundle Onboarding
+
+ArcLayer Agent Bundle onboarding creates a complete pre-runtime agent bundle through MCP.
+
+It creates:
+- an ERC-8004 identity registration draft
+- an agent manifest draft
+- role/category/capability/tag metadata
+- a metadataURI
+- an MCP registration intent
+- a browser registration URL for `/register/erc8004?intent=<id>&mcp=1`
+- an ArcLayer API key after the user signs/mints in the browser
+
+The user still signs/mints ERC-8004 identity in ArcLayer web. MCP and Codex do not hold private keys and do not sign on behalf of the user.
+
+Agent Bundle onboarding stops at readiness. It does not configure Runner, PM2 bot runtime, payer wallet, Circle CLI, Gateway balance, live ERC-8183 job execution, or live x402 payment execution. Those are later setup steps.
+
+### Tools
+
+| Tool | Auth | Description |
+|---|---:|---|
+| `onboarding.start_agent_bundle` | required | Create role preset, manifest draft, metadataURI, registration intent, and browser mint URL. |
+| `onboarding.get_agent_bundle_status` | required | Poll intent status after browser mint. Returns draft, expired, or completed state. |
+| `onboarding.create_agent_runtime_key` | required | Create ArcLayer API key after completed mint/finalize. Returns raw key once and env snippet. |
+
+### Codex plugin bundle
+
+The Codex plugin bundle lives at:
+
+```text
+plugins/codex-arclayer/
+  .codex-plugin/plugin.json
+  .mcp.json
+  skills/arclayer-agent-bundle/SKILL.md
+```
+
+Use this with Codex Desktop/CLI after setting `ARCLAYER_MCP_TOKEN`.
+
+Example prompt:
+
+```text
+Use ArcLayer.
+
+Create a full agent bundle for a Payment Agent.
+Name: Payment Integration Bot.
+Description: Handles x402 access, USDC settlement, payment receipts, Gateway balance workflows, and ERC-8183 commerce.
+
+Give me the browser URL to sign/mint, then continue after mint and return the ArcLayer API key env snippet.
+```
+
+---
+
 ## ERC-8183 Lifecycle Tools 
 
 Full ERC-8183 lifecycle prepare + read tools via MCP. Supports both direct hire and open/global job board flows.

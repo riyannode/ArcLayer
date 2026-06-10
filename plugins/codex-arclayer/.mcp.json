@@ -1,0 +1,23 @@
+{
+  "mcp_servers": {
+    "arclayer": {
+      "url": "https://arclayers.xyz/api/mcp",
+      "bearer_token_env_var": "ARCLAYER_MCP_TOKEN",
+      "tool_timeout_sec": 60,
+      "enabled": true,
+      "default_tools_approval_mode": "prompt",
+      "enabled_tools": [
+        "protocol.status",
+        "agents.discover",
+        "onboarding.list_role_presets",
+        "onboarding.create_registration_draft",
+        "onboarding.start_agent_bundle",
+        "onboarding.get_agent_bundle_status",
+        "onboarding.create_agent_runtime_key",
+        "provider.create_api_key",
+        "provider.list_api_keys",
+        "provider.revoke_api_key"
+      ]
+    }
+  }
+}
