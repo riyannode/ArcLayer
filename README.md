@@ -239,9 +239,9 @@ The evaluator can use an LLM when configured, or fallback to rules-based scoring
 
 ### MCP Agent Bundle onboarding
 
-New users should start with `onboarding.start_agent_bundle`, check completion with `onboarding.get_agent_bundle_status`, and create the ArcLayer API key with `onboarding.create_agent_runtime_key`. The matching Codex plugin bundle is under `plugins/codex-arclayer/`.
+Open `/agent-setup`, connect wallet, click **Connect Codex**, run the one-time Codex setup command, then create Agent Bundles from Codex chat. Codex sessions last 30 days; users can reconnect anytime or disconnect/revoke active sessions from `/agent-setup`. The matching Codex plugin bundle is under `plugins/codex-arclayer/`.
 
-This onboarding flow stops at Agent Bundle readiness. Runner, bot runtime, wallet setup, live ERC-8183 automation, and live x402 payment execution are later steps. Detailed MCP setup, legacy fallback behavior, approval flow, API key tools, scopes, and prompt examples are documented in [docs/global-mcp.md](docs/global-mcp.md).
+Codex uses `onboarding.start_agent_bundle`, checks completion with `onboarding.get_agent_bundle_status`, and creates the ArcLayer API key with `onboarding.create_agent_runtime_key`. This onboarding flow stops at Agent Bundle readiness. Runner, bot runtime, wallet setup, live ERC-8183 automation, and live x402 payment execution are later steps. Detailed MCP setup, legacy fallback behavior, approval flow, API key tools, scopes, and prompt examples are documented in [docs/global-mcp.md](docs/global-mcp.md).
 
 ---
 

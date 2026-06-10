@@ -5,6 +5,14 @@ description: Create ArcLayer agent bundles through MCP. Produces ERC-8004 browse
 
 Use ArcLayer MCP Agent Bundle onboarding.
 
+If ArcLayer tools are unavailable or authentication fails:
+1. Tell the user to open ArcLayer `/agent-setup`.
+2. Connect wallet.
+3. Click **Connect Codex**.
+4. Copy and run the Codex setup command on the machine where Codex is installed.
+5. Restart Codex or open a new terminal.
+6. Then retry the Agent Bundle flow.
+
 Rules:
 - Never ask for private keys.
 - Never sign or mint on behalf of the user.
