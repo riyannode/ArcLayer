@@ -12,10 +12,12 @@
  * - We do NOT trust user-provided controller addresses.
  */
 
+import { getAddress } from 'viem';
 import {
   createApiKey,
   revokeApiKey,
 } from '@/lib/a2a/auth';
+import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
 import { API_KEY_PRESETS, buildApiKeyEnvSnippet } from '@/lib/agent-onboarding/api-key-presets';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import {
@@ -78,6 +80,36 @@ async function requireMcpSession(ctx: McpToolContext): Promise<McpSession> {
   return session;
 }
 
+
+async function sessionControlsController(
+  session: McpSession,
+  controllerAddress: string,
+): Promise<boolean> {
+  const controller = controllerAddress.toLowerCase();
+  const ownerAddr = session.ownerAddress.toLowerCase();
+  const agentAccountAddr = session.agentAccountAddress?.toLowerCase();
+
+  if (controller === ownerAddr) return true;
+
+  if (agentAccountAddr && controller === agentAccountAddr) {
+    if (process.env.AGENT_ACCOUNT_BACKEND_ENABLED !== 'true') {
+      throw new McpError(
+        MCP_ERRORS.FORBIDDEN,
+        'agent_account_controller_disabled — Agent Account-controlled agents are disabled. Use an EOA-controlled agent.',
+      );
+    }
+
+    const account = await getActiveAgentAccountForOwnerAndAddress(
+      session.ownerAddress,
+      session.agentAccountAddress,
+    );
+
+    return Boolean(account);
+  }
+
+  return false;
+}
+
 // ── Shared ownership helper ───────────────────────────────────────────────
 
 /**
@@ -131,40 +163,36 @@ export async function resolveAgentOwnership(
 
   const agent = byAgentId.data ?? byTokenId.data;
   if (!agent) {
-    throw new McpError(MCP_ERRORS.NOT_FOUND, `Agent not found: ${agentId}`);
+    if (!/^\d+$/.test(agentId)) {
+      throw new McpError(MCP_ERRORS.NOT_FOUND, `Agent not found: ${agentId}`);
+    }
+
+    let onchainOwner: string;
+    try {
+      onchainOwner = getAddress(await getERC8004OwnerOf(agentId)).toLowerCase();
+    } catch {
+      throw new McpError(MCP_ERRORS.NOT_FOUND, `Agent not found: ${agentId}`);
+    }
+
+    const controls = await sessionControlsController(session, onchainOwner);
+    if (!controls) {
+      throw new McpError(
+        MCP_ERRORS.FORBIDDEN,
+        `Session does not control agent ${agentId}. Controller: ${onchainOwner}`,
+      );
+    }
+
+    return {
+      agent_id: agentId,
+      token_id: agentId,
+      controller: onchainOwner,
+      source: 'onchain_owner_fallback',
+    };
   }
 
   const controller = String(agent.controller || '').toLowerCase();
-  const ownerAddr = session.ownerAddress.toLowerCase();
-  const agentAccountAddr = session.agentAccountAddress?.toLowerCase();
-
-  // Check if controller matches owner EOA (legacy agents)
-  if (controller === ownerAddr) {
-    return agent;
-  }
-
-  // Check if controller matches Agent Account (new agents)
-  if (agentAccountAddr && controller === agentAccountAddr) {
-    if (process.env.AGENT_ACCOUNT_BACKEND_ENABLED !== 'true') {
-      throw new McpError(
-        MCP_ERRORS.FORBIDDEN,
-        'agent_account_controller_disabled — Agent Account-controlled agents are disabled. Use an EOA-controlled agent.',
-      );
-    }
-
-    // Validate Agent Account binding is still active
-    const account = await getActiveAgentAccountForOwnerAndAddress(
-      session.ownerAddress,
-      session.agentAccountAddress,
-    );
-    if (!account) {
-      throw new McpError(
-        MCP_ERRORS.FORBIDDEN,
-        'agent_account_inactive — Agent Account binding is no longer active',
-      );
-    }
-    return agent;
-  }
+  const controls = await sessionControlsController(session, controller);
+  if (controls) return agent;
 
   throw new McpError(
     MCP_ERRORS.FORBIDDEN,

@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   createApiKey: vi.fn(),
   revokeApiKey: vi.fn(),
   supabaseSelect: vi.fn(),
+  getActiveAgentAccountForOwner: vi.fn(),
+  getActiveAgentAccountForOwnerAndAddress: vi.fn(),
+  getERC8004OwnerOf: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/wallet-session', () => ({
@@ -46,6 +49,15 @@ vi.mock('@/lib/x402/supabaseClient', () => ({
       select: mocks.supabaseSelect,
     }),
   }),
+}));
+
+vi.mock('@/lib/agent-accounts/store', () => ({
+  getActiveAgentAccountForOwner: mocks.getActiveAgentAccountForOwner,
+  getActiveAgentAccountForOwnerAndAddress: mocks.getActiveAgentAccountForOwnerAndAddress,
+}));
+
+vi.mock('@/lib/contracts/erc8004', () => ({
+  getERC8004OwnerOf: mocks.getERC8004OwnerOf,
 }));
 
 // ── Import after mocks ────────────────────────────────────────────────────
@@ -105,6 +117,9 @@ describe('POST /api/agents/[id]/api-keys', () => {
     vi.clearAllMocks();
     mocks.resolveSessionFromCookie.mockResolvedValue(MOCK_SESSION);
     mocks.getLinkedErc8004AgentsForController.mockResolvedValue(LINKED_AGENTS);
+    mocks.getActiveAgentAccountForOwner.mockResolvedValue(null);
+    mocks.getActiveAgentAccountForOwnerAndAddress.mockResolvedValue(null);
+    mocks.getERC8004OwnerOf.mockResolvedValue(WALLET);
     mocks.createApiKey.mockResolvedValue({
       ok: true,
       key: 'ak_test123456789',
@@ -318,6 +333,7 @@ describe('POST /api/agents/[id]/api-keys', () => {
     mocks.getLinkedErc8004AgentsForController.mockResolvedValue([
       { agentId: 'other-agent', tokenId: '999', controller: WALLET.toLowerCase() },
     ]);
+    mocks.getERC8004OwnerOf.mockResolvedValue('0x0000000000000000000000000000000000000002');
     const res = await POST(makePostRequest({ preset: 'provider' }, 'valid-token'), {
       params: Promise.resolve({ id: AGENT_ID }),
     });
@@ -325,6 +341,35 @@ describe('POST /api/agents/[id]/api-keys', () => {
 
     expect(res.status).toBe(403);
     expect(data.error).toBe('forbidden');
+  });
+
+
+  it('creates key via ownerOf fallback before erc8004_agents sync', async () => {
+    mocks.getLinkedErc8004AgentsForController.mockResolvedValue([]);
+    mocks.getERC8004OwnerOf.mockResolvedValue(WALLET);
+
+    const res = await POST(makePostRequest({ preset: 'provider' }, 'valid-token'), {
+      params: Promise.resolve({ id: AGENT_ID }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(data.ok).toBe(true);
+    expect(mocks.createApiKey).toHaveBeenCalledWith(expect.objectContaining({ agentId: AGENT_ID }));
+  });
+
+  it('rejects ownerOf fallback when session wallet does not control the on-chain owner', async () => {
+    mocks.getLinkedErc8004AgentsForController.mockResolvedValue([]);
+    mocks.getERC8004OwnerOf.mockResolvedValue('0x0000000000000000000000000000000000000002');
+
+    const res = await POST(makePostRequest({ preset: 'provider' }, 'valid-token'), {
+      params: Promise.resolve({ id: AGENT_ID }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(data.error).toBe('forbidden');
+    expect(mocks.createApiKey).not.toHaveBeenCalled();
   });
 
   it('null body returns 400', async () => {
@@ -385,6 +430,9 @@ describe('GET /api/agents/[id]/api-keys', () => {
     vi.clearAllMocks();
     mocks.resolveSessionFromCookie.mockResolvedValue(MOCK_SESSION);
     mocks.getLinkedErc8004AgentsForController.mockResolvedValue(LINKED_AGENTS);
+    mocks.getActiveAgentAccountForOwner.mockResolvedValue(null);
+    mocks.getActiveAgentAccountForOwnerAndAddress.mockResolvedValue(null);
+    mocks.getERC8004OwnerOf.mockResolvedValue(WALLET);
     mocks.supabaseSelect.mockReturnValue({
       eq: vi.fn().mockReturnValue({
         order: vi.fn().mockResolvedValue({ data: MOCK_ROWS, error: null }),
@@ -440,6 +488,7 @@ describe('GET /api/agents/[id]/api-keys', () => {
     mocks.getLinkedErc8004AgentsForController.mockResolvedValue([
       { agentId: 'other', tokenId: '999', controller: WALLET.toLowerCase() },
     ]);
+    mocks.getERC8004OwnerOf.mockResolvedValue('0x0000000000000000000000000000000000000002');
     const res = await GET(makeGetRequest('valid-token'), {
       params: Promise.resolve({ id: AGENT_ID }),
     });
@@ -478,6 +527,9 @@ describe('DELETE /api/agents/[id]/api-keys/[keyId]', () => {
     vi.clearAllMocks();
     mocks.resolveSessionFromCookie.mockResolvedValue(MOCK_SESSION);
     mocks.getLinkedErc8004AgentsForController.mockResolvedValue(LINKED_AGENTS);
+    mocks.getActiveAgentAccountForOwner.mockResolvedValue(null);
+    mocks.getActiveAgentAccountForOwnerAndAddress.mockResolvedValue(null);
+    mocks.getERC8004OwnerOf.mockResolvedValue(WALLET);
     mocks.revokeApiKey.mockResolvedValue(true);
   });
 
@@ -492,10 +544,26 @@ describe('DELETE /api/agents/[id]/api-keys/[keyId]', () => {
     expect(mocks.revokeApiKey).toHaveBeenCalledWith('key-001', AGENT_ID);
   });
 
+
+  it('revokes key via ownerOf fallback before erc8004_agents sync', async () => {
+    mocks.getLinkedErc8004AgentsForController.mockResolvedValue([]);
+    mocks.getERC8004OwnerOf.mockResolvedValue(WALLET);
+
+    const res = await DELETE(makeDeleteRequest('key-001', 'valid-token'), {
+      params: Promise.resolve({ id: AGENT_ID, keyId: 'key-001' }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.ok).toBe(true);
+    expect(mocks.revokeApiKey).toHaveBeenCalledWith('key-001', AGENT_ID);
+  });
+
   it('non-owner returns 403', async () => {
     mocks.getLinkedErc8004AgentsForController.mockResolvedValue([
       { agentId: 'other', tokenId: '999', controller: WALLET.toLowerCase() },
     ]);
+    mocks.getERC8004OwnerOf.mockResolvedValue('0x0000000000000000000000000000000000000002');
     const res = await DELETE(makeDeleteRequest('key-001', 'valid-token'), {
       params: Promise.resolve({ id: AGENT_ID, keyId: 'key-001' }),
     });

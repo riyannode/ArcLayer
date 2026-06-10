@@ -8,7 +8,9 @@ import { humanJson } from '@/lib/api/human-json';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getAddress } from 'viem';
 import { createApiKey, API_KEY_SCOPES } from '@/lib/a2a/auth';
+import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
 import { API_KEY_PRESETS, API_KEY_PRESET_ID_SET } from '@/lib/agent-onboarding/api-key-presets';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import {
@@ -16,7 +18,10 @@ import {
   getLinkedErc8004AgentsForController,
   SESSION_COOKIE_NAME,
 } from '@/lib/auth/wallet-session';
-import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
+import {
+  getActiveAgentAccountForOwner,
+  getActiveAgentAccountForOwnerAndAddress,
+} from '@/lib/agent-accounts/store';
 
 const ERROR_CACHE = 'no-store, no-cache, max-age=0';
 
@@ -84,6 +89,28 @@ async function verifyOwnership(
     }
   } catch {
     // Treat Agent Account lookup failures as non-ownership, not as a leaked server error.
+  }
+
+  // Fallback: just-minted ERC-8004 identity may not be indexed in erc8004_agents yet.
+  if (/^\d+$/.test(agentId)) {
+    try {
+      const onchainOwner = getAddress(await getERC8004OwnerOf(agentId)).toLowerCase();
+
+      if (session.wallet.toLowerCase() === onchainOwner) {
+        return { ok: true, wallet: session.wallet };
+      }
+
+      const activeBinding = await getActiveAgentAccountForOwnerAndAddress(
+        session.wallet,
+        onchainOwner,
+      );
+
+      if (activeBinding) {
+        return { ok: true, wallet: session.wallet };
+      }
+    } catch {
+      // Ignore ownerOf failures and fall through to forbidden.
+    }
   }
 
   return {
