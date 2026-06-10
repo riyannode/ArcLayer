@@ -21,6 +21,7 @@ import { readOnchainJob } from '@/lib/erc8183-jobs/receipt';
 import type { McpToolContext } from './registry';
 import { MCP_ERRORS, McpError } from './errors';
 import type { SigningTransaction, SigningRequestSummary } from './signing-bridge/whitelist';
+import { createRequest, getActiveSessionForWallet } from './signing-bridge/store';
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -55,10 +56,27 @@ async function createSigningRequest(
   actionType: string,
   transactions: SigningTransaction[],
   summary?: SigningRequestSummary,
-  expectedClientWallet?: string,
+  ctx?: McpToolContext,
 ): Promise<{ requestId: string; status: string }> {
-  const sessionId = requireSigningSession();
+  const securedSummary: SigningRequestSummary = {
+  ...(summary ?? {}),
+  actionType: summary?.actionType ?? actionType,
+  ...(ctx?.auth
+    ? {
+        mcpConnectionId: ctx.auth.connectionId,
+        requestedByOwnerWallet: ctx.auth.ownerWallet,
+        requestedByTool: `client.request_${actionType}_web_sign`,
+      }
+    : {}),
+};
+  if (ctx?.auth?.kind === 'oauth') {
+    const session = await getActiveSessionForWallet(ctx.auth.ownerWallet);
+    if (!session) throw new McpError(MCP_ERRORS.CONFLICT, 'No active ArcLayer browser signing session for this wallet. Open Profile and start signing session first.');
+    const request = await createRequest(session.id, actionType, ARC_CHAIN_ID, ctx.auth.ownerWallet, transactions, securedSummary);
+    return { requestId: request.id, status: request.status };
+  }
 
+  const sessionId = requireSigningSession();
   const res = await fetch(`${ARC_BASE_URL}/api/mcp/signing-requests`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -66,9 +84,9 @@ async function createSigningRequest(
       sessionId,
       actionType,
       chainId: ARC_CHAIN_ID,
-      expectedClientWallet: process.env.ARCLAYER_CLIENT_WALLET || '',
+      expectedClientWallet: ctx?.auth?.ownerWallet || process.env.ARCLAYER_CLIENT_WALLET || '',
       transactions,
-      summary,
+      summary: securedSummary,
     }),
   });
 
@@ -98,7 +116,7 @@ async function pollRequestStatus(requestId: string): Promise<Record<string, unkn
 
 export async function handleRequestCreateJobWebSign(
   args: Record<string, unknown>,
-  _ctx: McpToolContext,
+  ctx: McpToolContext,
 ): Promise<unknown> {
   const provider = String(args.provider || '').trim();
   const evaluator = String(args.evaluator || '').trim();
@@ -143,6 +161,7 @@ export async function handleRequestCreateJobWebSign(
       description,
       deadline: new Date(Number(expiredAt) * 1000).toISOString(),
     },
+    ctx,
   );
 
   return {
@@ -158,7 +177,7 @@ export async function handleRequestCreateJobWebSign(
 
 export async function handleRequestFundJobWebSign(
   args: Record<string, unknown>,
-  _ctx: McpToolContext,
+  ctx: McpToolContext,
 ): Promise<unknown> {
   const jobId = String(args.jobId || '').trim();
   const amount = String(args.amount || '').trim();
@@ -242,6 +261,7 @@ export async function handleRequestFundJobWebSign(
     'fund_job',
     transactions,
     { actionType: 'fund_job', jobId, amountAtomic: fundAmount },
+    ctx,
   );
 
   return {
@@ -257,7 +277,7 @@ export async function handleRequestFundJobWebSign(
 
 export async function handleRequestCompleteJobWebSign(
   args: Record<string, unknown>,
-  _ctx: McpToolContext,
+  ctx: McpToolContext,
 ): Promise<unknown> {
   const jobId = String(args.jobId || '').trim();
   const reasonHash = String(args.reasonHash || '0x0000000000000000000000000000000000000000000000000000000000000000').trim();
@@ -284,6 +304,7 @@ export async function handleRequestCompleteJobWebSign(
     'complete_job',
     transactions,
     { actionType: 'complete_job', jobId },
+    ctx,
   );
 
   return {
@@ -299,7 +320,7 @@ export async function handleRequestCompleteJobWebSign(
 
 export async function handleRequestRejectJobWebSign(
   args: Record<string, unknown>,
-  _ctx: McpToolContext,
+  ctx: McpToolContext,
 ): Promise<unknown> {
   const jobId = String(args.jobId || '').trim();
   const reasonHash = String(args.reasonHash || '0x0000000000000000000000000000000000000000000000000000000000000000').trim();
@@ -326,6 +347,7 @@ export async function handleRequestRejectJobWebSign(
     'reject_job',
     transactions,
     { actionType: 'reject_job', jobId },
+    ctx,
   );
 
   return {
@@ -341,7 +363,7 @@ export async function handleRequestRejectJobWebSign(
 
 export async function handleRequestClaimRefundWebSign(
   args: Record<string, unknown>,
-  _ctx: McpToolContext,
+  ctx: McpToolContext,
 ): Promise<unknown> {
   const jobId = String(args.jobId || '').trim();
 
@@ -367,6 +389,7 @@ export async function handleRequestClaimRefundWebSign(
     'claim_refund',
     transactions,
     { actionType: 'claim_refund', jobId },
+    ctx,
   );
 
   return {
@@ -382,12 +405,18 @@ export async function handleRequestClaimRefundWebSign(
 
 export async function handleGetSigningRequestStatus(
   args: Record<string, unknown>,
-  _ctx: McpToolContext,
+  ctx: McpToolContext,
 ): Promise<unknown> {
   const requestId = String(args.requestId || '').trim();
   if (!requestId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'requestId required');
 
   const request = await pollRequestStatus(requestId);
+  if (ctx.auth) {
+    const expectedWallet = String(request.expectedClientWallet ?? '').toLowerCase();
+    const summary = (request.summary && typeof request.summary === 'object' ? request.summary : {}) as Record<string, unknown>;
+    if (expectedWallet !== ctx.auth.ownerWallet.toLowerCase()) throw new McpError(MCP_ERRORS.FORBIDDEN, 'Signing request is not owned by this wallet');
+    if (ctx.auth.kind === 'oauth' && summary.mcpConnectionId !== ctx.auth.connectionId) throw new McpError(MCP_ERRORS.FORBIDDEN, 'Signing request is not owned by this OAuth connection');
+  }
 
   const status = request.status as string;
   const result = request.result as Record<string, unknown> | null;

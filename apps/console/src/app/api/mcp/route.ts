@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { RequestContext } from '@/lib/mcp/registry';
 import { handleMcpPost, handleMcpGet } from '@/lib/mcp/server';
+import { MCP_OAUTH_CHALLENGE } from '@/lib/mcp/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -296,5 +297,5 @@ export async function POST(req: NextRequest) {
   }
 
   const { json, status } = await handleMcpPost(body, ctx);
-  return NextResponse.json(json, { status });
+  return NextResponse.json(json, { status, headers: status === 401 ? { 'WWW-Authenticate': MCP_OAUTH_CHALLENGE } : undefined });
 }
