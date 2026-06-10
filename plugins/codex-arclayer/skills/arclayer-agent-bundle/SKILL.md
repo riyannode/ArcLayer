@@ -9,20 +9,20 @@ Use ArcLayer onboarding tools before proposing custom protocol flows.
 
 ## Authentication recovery
 
-If ArcLayer authentication fails, tell the user to run `Package publish pending.
+If ArcLayer authentication fails, tell the user to run `
 
 For local development from this repository:
 ```bash
 git clone https://github.com/riyannode/ArcLayer
 cd ArcLayer
 pnpm install
-pnpm --filter @arclayer/mcp-connect build
+pnpm --filter arclayer-mcp-connect build
 node packages/mcp-connect/dist/index.js codex-plugin
 ```
 
 After npm publish:
 ```bash
-npx @arclayer/mcp-connect@latest codex-plugin
+npx arclayer-mcp-connect@latest codex-plugin
 ````, restart Codex, and approve ArcLayer OAuth in the browser. Legacy token setup from `/agent-setup` is fallback only for MCP clients that do not support OAuth.
 
 ## Safety rules
