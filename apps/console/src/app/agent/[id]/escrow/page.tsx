@@ -166,7 +166,11 @@ function SectionCard({
 /* ------------------------------------------------------------------ */
 
 function parseAgentId(value: string | undefined) {
-  return value && /^\d+$/.test(value) ? value : null;
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  if (/^[a-zA-Z0-9_-]+$/.test(trimmed) && trimmed.length >= 2 && trimmed.length <= 128) return trimmed;
+  return null;
 }
 
 function timelineToSeconds(timeline: string): number {

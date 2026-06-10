@@ -118,7 +118,12 @@ const AGENT_TABS: readonly [
 // ─── Helpers ────────────────────────────────────────────────────────
 
 function parseAgentId(value: string | undefined) {
-  return value && /^\d+$/.test(value) ? value : null;
+  if (!value) return null;
+  const trimmed = value.trim();
+  // Accept numeric token IDs (e.g. "36191") and string agent IDs (e.g. "llm-market-executor")
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  if (/^[a-zA-Z0-9_-]+$/.test(trimmed) && trimmed.length >= 2 && trimmed.length <= 128) return trimmed;
+  return null;
 }
 
 function buildReputationSeries(
