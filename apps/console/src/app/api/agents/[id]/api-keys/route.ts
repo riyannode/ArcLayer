@@ -9,6 +9,7 @@ import { humanJson } from '@/lib/api/human-json';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createApiKey, API_KEY_SCOPES } from '@/lib/a2a/auth';
+import { API_KEY_PRESETS, API_KEY_PRESET_ID_SET } from '@/lib/agent-onboarding/api-key-presets';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import {
   resolveSessionFromCookie,
@@ -19,29 +20,10 @@ import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
 
 const ERROR_CACHE = 'no-store, no-cache, max-age=0';
 
-const SCOPE_PRESETS: Record<string, string[]> = {
-  provider: [
-    API_KEY_SCOPES.ERC8183_CLAIM,
-    API_KEY_SCOPES.ERC8183_RUNNING,
-    API_KEY_SCOPES.ERC8183_SUBMIT,
-    API_KEY_SCOPES.ERC8183_TX,
-    API_KEY_SCOPES.ERC8183_PRESENCE,
-  ],
-  client: [
-    API_KEY_SCOPES.ERC8183_CREATE,
-    API_KEY_SCOPES.ERC8183_CONFIRM,
-    API_KEY_SCOPES.ERC8183_TX,
-    API_KEY_SCOPES.ERC8183_PRESENCE,
-  ],
-  evaluator: [
-    API_KEY_SCOPES.ERC8183_COMPLETE,
-    API_KEY_SCOPES.ERC8183_REJECT,
-    API_KEY_SCOPES.ERC8183_TX,
-    API_KEY_SCOPES.ERC8183_PRESENCE,
-  ],
-};
-
-const VALID_PRESETS = new Set(Object.keys(SCOPE_PRESETS));
+const SCOPE_PRESETS = Object.fromEntries(
+  Object.entries(API_KEY_PRESETS).map(([id, preset]) => [id, preset.scopes]),
+) as Record<string, string[]>;
+const VALID_PRESETS = API_KEY_PRESET_ID_SET;
 const ALL_SCOPES = Object.values(API_KEY_SCOPES) as string[];
 const VALID_SCOPE_SET = new Set(ALL_SCOPES);
 const LABEL_MAX_LENGTH = 80;
@@ -87,17 +69,21 @@ async function verifyOwnership(
   }
 
   // Check Agent Account-minted agents (controller = linked Circle Agent Account)
-  const agentAccount = await getActiveAgentAccountForOwner(session.wallet);
-  if (agentAccount?.agentAccountAddress) {
-    const agentAccountLinked = await getLinkedErc8004AgentsForController(
-      agentAccount.agentAccountAddress,
-    );
-    const ownsAccountAgent = agentAccountLinked.some(
-      (a) => a.tokenId === agentId || a.agentId === agentId,
-    );
-    if (ownsAccountAgent) {
-      return { ok: true, wallet: session.wallet };
+  try {
+    const agentAccount = await getActiveAgentAccountForOwner(session.wallet);
+    if (agentAccount?.agentAccountAddress) {
+      const agentAccountLinked = await getLinkedErc8004AgentsForController(
+        agentAccount.agentAccountAddress,
+      );
+      const ownsAccountAgent = agentAccountLinked.some(
+        (a) => a.tokenId === agentId || a.agentId === agentId,
+      );
+      if (ownsAccountAgent) {
+        return { ok: true, wallet: session.wallet };
+      }
     }
+  } catch {
+    // Treat Agent Account lookup failures as non-ownership, not as a leaked server error.
   }
 
   return {

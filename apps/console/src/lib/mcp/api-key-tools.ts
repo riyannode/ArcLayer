@@ -15,8 +15,8 @@
 import {
   createApiKey,
   revokeApiKey,
-  API_KEY_SCOPES,
 } from '@/lib/a2a/auth';
+import { API_KEY_PRESETS, buildApiKeyEnvSnippet } from '@/lib/agent-onboarding/api-key-presets';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import {
   resolveMcpSessionByToken,
@@ -28,29 +28,17 @@ import { MCP_ERRORS, McpError } from './errors';
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
-const SCOPE_PRESETS: Record<string, string[]> = {
-  provider: [
-    API_KEY_SCOPES.ERC8183_CLAIM,
-    API_KEY_SCOPES.ERC8183_RUNNING,
-    API_KEY_SCOPES.ERC8183_SUBMIT,
-    API_KEY_SCOPES.ERC8183_TX,
-    API_KEY_SCOPES.ERC8183_PRESENCE,
-  ],
-  client: [
-    API_KEY_SCOPES.ERC8183_CREATE,
-    API_KEY_SCOPES.ERC8183_CONFIRM,
-    API_KEY_SCOPES.ERC8183_TX,
-    API_KEY_SCOPES.ERC8183_PRESENCE,
-  ],
-};
+const SCOPE_PRESETS = Object.fromEntries(
+  Object.entries(API_KEY_PRESETS)
+    .filter(([id]) => id === 'provider' || id === 'client')
+    .map(([id, preset]) => [id, preset.scopes]),
+) as Record<string, string[]>;
 
-const ALLOWED_PRESETS = new Set(Object.keys(SCOPE_PRESETS));
+const ALLOWED_PRESETS = new Set(['provider', 'client']);
 
-const INSTALL_COMMANDS: Record<string, string> = {
-  provider: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
-  // client install script not yet available — falls back to provider command
-  client: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
-};
+const INSTALL_COMMANDS = Object.fromEntries(
+  Object.entries(API_KEY_PRESETS).map(([id, preset]) => [id, preset.installCommand]),
+) as Record<string, string>;
 
 // ── Input validation ──────────────────────────────────────────────────────
 
@@ -245,15 +233,7 @@ export async function handleCreateApiKey(
     throw new McpError(MCP_ERRORS.INTERNAL_ERROR, `Failed to create API key: ${result.error}`);
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, '') || 'https://arclayers.xyz';
-
-  // Build envSnippet dynamically with actual key and agent ID
-  const envSnippet = [
-    `ARCLAYER_API_KEY=${result.key}`,
-    `ARCLAYER_AGENT_ID=${resolvedAgentId}`,
-    `ARCLAYER_BASE_URL=${baseUrl}`,
-    `ARCLAYER_MODE=${preset}`,
-  ].join('\n');
+  const envSnippet = buildApiKeyEnvSnippet({ key: result.key, agentId: resolvedAgentId, preset });
 
   return {
     ok: true,

@@ -46,14 +46,18 @@ export async function DELETE(
 
     // Also check Agent Account-minted agents
     if (!hasOwnership) {
-      const agentAccount = await getActiveAgentAccountForOwner(session.wallet);
-      if (agentAccount?.agentAccountAddress) {
-        const agentAccountLinked = await getLinkedErc8004AgentsForController(
-          agentAccount.agentAccountAddress,
-        );
-        hasOwnership = agentAccountLinked.some(
-          (a) => a.tokenId === agentId || a.agentId === agentId,
-        );
+      try {
+        const agentAccount = await getActiveAgentAccountForOwner(session.wallet);
+        if (agentAccount?.agentAccountAddress) {
+          const agentAccountLinked = await getLinkedErc8004AgentsForController(
+            agentAccount.agentAccountAddress,
+          );
+          hasOwnership = agentAccountLinked.some(
+            (a) => a.tokenId === agentId || a.agentId === agentId,
+          );
+        }
+      } catch {
+        hasOwnership = false;
       }
     }
 

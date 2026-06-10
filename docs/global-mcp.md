@@ -192,6 +192,36 @@ Stack traces are **never** exposed in API responses. Error messages are redacted
 
 ---
 
+## MCP Production Onboarding Fallback
+
+The production MCP onboarding path creates a server-side registration intent and sends the user back to the canonical browser mint page. It does **not** use `arclayer://mcp/identity/<hash>` links and does not pass metadata draft write tokens in URLs.
+
+```text
+1. MCP client calls onboarding.list_role_presets
+2. User chooses an ArcLayer-approved enabled role preset in the MCP client
+3. MCP client calls onboarding.create_registration_draft
+4. Tool returns /register/erc8004?intent=<id>&mcp=1
+5. User opens the URL and mints in the existing /register/erc8004 UI
+6. Finalize upserts the patched manifest into agent_manifests for dashboard visibility
+7. MCP client calls provider.create_api_key and returns the PM2 .env snippet
+```
+
+### Onboarding Tools
+
+| Tool | Kind | Auth | Description |
+|------|------|------|-------------|
+| `onboarding.list_role_presets` | read | optional | List enabled ArcLayer-approved ERC-8183 role presets by default. |
+| `onboarding.create_registration_draft` | read | required | Build an approved manifest draft, create an intent, and return the browser registration URL. |
+
+**onboarding.create_registration_draft args:**
+- `rolePresetId` (required) — preset ID from `onboarding.list_role_presets`
+- `name` (required) — agent display name
+- `description` (optional) — agent description
+- `endpoint` (optional) — public endpoint URL
+- `customCapabilities` (optional) — extra string capabilities, merged with the preset
+- `avatar` (optional) — avatar URL
+- `links` (optional) — homepage/docs/repo/x links
+
 ## MCP ApprovalUrl Flow (Identity Registration)
 
 MCP preserves an optional ERC-8004 Passkey Agent Account approval flow. It is feature-gated and disabled by default; connected EOA registration is the default identity path. No private keys are held by the server.
