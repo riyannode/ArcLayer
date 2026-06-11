@@ -1,3 +1,0 @@
-{"id":"9ca300ce-9573-4689-96da-011ba55db723","createdAt":"2026-06-11T18:49:05.035Z","idempotencyKey":"concurrent-key-1","status":"attempt","amountUsdc":"0.005","amountMicros":"5000","dayBucket":"2026-06-11","monthBucket":"2026-06"}
-{"id":"df55e78b-3874-4459-ba30-966c65195886","createdAt":"2026-06-11T18:49:05.037Z","idempotencyKey":"success-key-1","status":"attempt","amountUsdc":"0.005","amountMicros":"5000","dayBucket":"2026-06-11","monthBucket":"2026-06"}
-{"id":"fb7535b8-8e67-4c27-affb-c5a6246ebf1a","createdAt":"2026-06-11T18:49:05.038Z","idempotencyKey":"success-key-1","status":"success","amountUsdc":"0","amountMicros":"0","dayBucket":"2026-06-11","monthBucket":"2026-06","receiptId":"receipt-xyz"}
