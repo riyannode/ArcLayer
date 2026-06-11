@@ -23,8 +23,6 @@ import {
   X,
 } from 'lucide-react';
 import { useArcWallet } from '@/hooks/useArcWallet';
-import { McpSigningSessionCard } from '@/components/profile/McpSigningSessionCard';
-import { McpSessionsCard } from '@/components/profile/McpSessionsCard';
 import { isAgentAccountClientRailEnabled } from '@/lib/agent-accounts/feature-flags';
 import { AgentWalletFundingRailCard } from '@/components/profile/AgentWalletFundingRailCard';
 
@@ -300,11 +298,6 @@ export default function AgentProfilePage() {
   const [notice, setNotice] = useState('');
   const [reputation, setReputation] = useState<ReputationResponse | null>(null);
   const [reputationLoading, setReputationLoading] = useState(false);
-  const [profileView, setProfileView] = useState<'agent' | 'client'>('agent');
-
-  // Gate: only show toggle/MCP card after profile data has loaded
-  const profileLoaded = ready && !loading;
-
   const agentAccountEnabled = isAgentAccountClientRailEnabled();
 
   // Agent Account data is still loaded for profile discovery, but Profile no longer renders Agent Account controls.
@@ -531,40 +524,6 @@ export default function AgentProfilePage() {
         {/* ── Account Overview + Circle Agent Wallet Funding ───────────── */}
         {isConnected && <AgentWalletFundingRailCard />}
 
-        {isConnected && address && profileLoaded && (
-          <div className="mt-10">
-            <McpSigningSessionCard address={address} />
-          </div>
-        )}
-
-        {/* ── Profile View Toggle ───────────────────────────────────────── */}
-        {isConnected && address && profileLoaded && agents.length > 0 && (
-          <div className="mt-10 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setProfileView('agent')}
-              className={
-                profileView === 'agent'
-                  ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
-                  : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
-              }
-            >
-              Agent Profile
-            </button>
-            <button
-              type="button"
-              onClick={() => setProfileView('client')}
-              className={
-                profileView === 'client'
-                  ? 'h-9 rounded-md border border-[#F3C536] bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition'
-                  : 'h-9 rounded-md border border-white/10 bg-transparent px-4 text-[12px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536]'
-              }
-            >
-              Client Mode
-            </button>
-          </div>
-        )}
-
         {!ready || loading ? (
           <div className="mt-10 flex min-h-[420px] items-center justify-center rounded-xl border border-white/10 bg-[#080D13]/70">
             <div className="flex items-center gap-3 text-[#EAE4D8]/60">
@@ -603,7 +562,7 @@ export default function AgentProfilePage() {
               </Link>
             </div>
           </div>
-        ) : profileView === 'client' ? null : (
+        ) : (
           <>
             <div className="mt-10 overflow-hidden rounded-xl border border-[#1A2228] bg-[#080D13]/78 shadow-[0_0_0_1px_rgba(0,0,0,0.35)]">
               <div className="relative grid min-h-[300px] gap-8 p-8 md:grid-cols-[230px_1fr]">
