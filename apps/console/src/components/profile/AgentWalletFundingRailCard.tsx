@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
-import { Bot, Clipboard, Loader2, Plus, RefreshCcw } from 'lucide-react';
+import { Clipboard, Loader2, RefreshCcw } from 'lucide-react';
+import { isAddress } from 'viem';
 import { useSignMessage } from 'wagmi';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
@@ -32,15 +32,12 @@ type ProfileBalancesResponse = {
   owner: {
     address: string;
     usdc: BalanceInfo;
-    gateway?: BalanceInfo | null;
   };
   agentAccount: {
     address: string;
     usdc: BalanceInfo | null;
     gateway: BalanceInfo | null;
   } | null;
-  network: string;
-  chainId: number;
   error?: string;
 };
 
@@ -55,12 +52,22 @@ async function copyToClipboard(value?: string | null) {
   await navigator.clipboard.writeText(value);
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  if (!(error instanceof Error)) return fallback;
+  const message = error.message.toLowerCase();
+  if (message.includes('cancel') || message.includes('abort') || message.includes('notallowed')) {
+    return 'Passkey request was cancelled.';
+  }
+  return error.message || fallback;
+}
+
 export function AgentWalletFundingRailCard() {
   const { isConnected, address, ready } = useArcWallet();
   const { signMessageAsync } = useSignMessage();
   const {
     authenticated: circleAuthenticated,
     login: circleLogin,
+    register: circleRegister,
     address: circleAddress,
     bundlerClient,
   } = useCircleWallet();
@@ -68,6 +75,13 @@ export function AgentWalletFundingRailCard() {
   const [agentAccount, setAgentAccount] = useState<AgentAccountInfo | null>(null);
   const [agentAccountLoading, setAgentAccountLoading] = useState(false);
   const [agentAccountError, setAgentAccountError] = useState<string | null>(null);
+  const [creatingAgentWallet, setCreatingAgentWallet] = useState(false);
+  const [showPasskeyRegistration, setShowPasskeyRegistration] = useState(false);
+  const [passkeyUsername, setPasskeyUsername] = useState('');
+  const [showManualLink, setShowManualLink] = useState(false);
+  const [manualLinkAddress, setManualLinkAddress] = useState('');
+  const [manualLinking, setManualLinking] = useState(false);
+  const [manualLinkError, setManualLinkError] = useState<string | null>(null);
 
   const [ownerUsdcBalance, setOwnerUsdcBalance] = useState<BalanceInfo | null>(null);
   const [agentUsdcBalance, setAgentUsdcBalance] = useState<BalanceInfo | null>(null);
@@ -83,36 +97,27 @@ export function AgentWalletFundingRailCard() {
 
   const refreshProfileBalances = useCallback(
     async (ownerAddress: string, agentWalletAddress?: string | null) => {
-      if (!ownerAddress) return;
-
       setBalancesLoading(true);
       setBalancesError(null);
 
       try {
-        const params = new URLSearchParams();
-        params.set('owner', ownerAddress);
-        if (agentWalletAddress) {
-          params.set('agentAccount', agentWalletAddress);
-        }
+        const params = new URLSearchParams({ owner: ownerAddress });
+        if (agentWalletAddress) params.set('agentAccount', agentWalletAddress);
 
-        const res = await fetch(`/api/profile/balances?${params.toString()}`, {
+        const response = await fetch(`/api/profile/balances?${params.toString()}`, {
           cache: 'no-store',
         });
+        const json = (await response.json()) as ProfileBalancesResponse;
 
-        const json = (await res.json()) as ProfileBalancesResponse;
-
-        if (!res.ok || !json.ok) {
+        if (!response.ok || !json.ok) {
           throw new Error(json.error || 'Failed to load Agent Wallet balances.');
         }
 
-        setOwnerUsdcBalance(json.owner?.usdc ?? null);
+        setOwnerUsdcBalance(json.owner.usdc);
         setAgentUsdcBalance(json.agentAccount?.usdc ?? null);
         setAgentGatewayBalance(json.agentAccount?.gateway ?? null);
       } catch (error) {
-        setBalancesError(error instanceof Error ? error.message : String(error));
-        setOwnerUsdcBalance((previous) => previous ?? { raw: '0', formatted: '0.000000' });
-        setAgentUsdcBalance((previous) => previous ?? { raw: '0', formatted: '0.000000' });
-        setAgentGatewayBalance((previous) => previous ?? { raw: '0', formatted: '0.000000' });
+        setBalancesError(errorMessage(error, 'Failed to load Agent Wallet balances.'));
       } finally {
         setBalancesLoading(false);
       }
@@ -128,28 +133,24 @@ export function AgentWalletFundingRailCard() {
       setAgentAccountError(null);
 
       try {
-        let res = await fetch('/api/profile/agent-account', { cache: 'no-store' });
+        let response = await fetch('/api/profile/agent-account', { cache: 'no-store' });
 
-        if (res.status === 401 && ensureSession) {
+        if (response.status === 401 && ensureSession) {
           const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
-          const sessionResult = await ensureWalletSession(address, signMessageAsync);
-
-          if (!sessionResult.ok) {
-            throw new Error(sessionResult.error);
-          }
-
-          res = await fetch('/api/profile/agent-account', { cache: 'no-store' });
+          const session = await ensureWalletSession(address, signMessageAsync);
+          if (!session.ok) throw new Error(session.error);
+          response = await fetch('/api/profile/agent-account', { cache: 'no-store' });
         }
 
-        if (res.status === 401) {
+        if (response.status === 401) {
           setAgentAccount(null);
-          setAgentAccountError('Sign once to load your Agent Wallet.');
+          setAgentAccountError('Sign once to load or create your Agent Wallet.');
+          await refreshProfileBalances(address, null);
           return;
         }
 
-        const json = (await res.json()) as AgentAccountInfo;
-
-        if (!res.ok || json.ok === false) {
+        const json = (await response.json()) as AgentAccountInfo;
+        if (!response.ok || json.ok === false) {
           throw new Error(json.error || 'Failed to load Agent Wallet.');
         }
 
@@ -157,10 +158,37 @@ export function AgentWalletFundingRailCard() {
         await refreshProfileBalances(address, json.agentAccountAddress);
       } catch (error) {
         setAgentAccount(null);
-        setAgentAccountError(error instanceof Error ? error.message : String(error));
+        setAgentAccountError(errorMessage(error, 'Failed to load Agent Wallet.'));
       } finally {
         setAgentAccountLoading(false);
       }
+    },
+    [address, refreshProfileBalances, signMessageAsync],
+  );
+
+  const linkAgentWallet = useCallback(
+    async (agentWalletAddress: string): Promise<AgentAccountInfo> => {
+      if (!address) throw new Error('Connect your owner wallet first.');
+
+      const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
+      const session = await ensureWalletSession(address, signMessageAsync);
+      if (!session.ok) throw new Error(session.error);
+
+      const response = await fetch('/api/profile/agent-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentAccountAddress: agentWalletAddress }),
+      });
+      const json = (await response.json()) as AgentAccountInfo;
+
+      if (!response.ok || json.ok === false) {
+        throw new Error(json.error || 'Failed to link Agent Wallet.');
+      }
+
+      setAgentAccount(json);
+      setAgentAccountError(null);
+      await refreshProfileBalances(address, json.agentAccountAddress);
+      return json;
     },
     [address, refreshProfileBalances, signMessageAsync],
   );
@@ -191,24 +219,91 @@ export function AgentWalletFundingRailCard() {
     void loadAgentAccount(false);
   }, [ready, isConnected, address, loadAgentAccount]);
 
-  async function handleAgentGatewayDeposit() {
+  async function handleCreateAgentWallet() {
+    setCreatingAgentWallet(true);
+    setAgentAccountError(null);
+
+    try {
+      let agentWalletAddress = circleAuthenticated && circleAddress ? circleAddress : '';
+
+      if (!agentWalletAddress) {
+        try {
+          agentWalletAddress = await circleLogin();
+        } catch {
+          setShowPasskeyRegistration(true);
+          setAgentAccountError('No existing Circle passkey was linked. Create one below.');
+          return;
+        }
+      }
+
+      await linkAgentWallet(agentWalletAddress);
+    } catch (error) {
+      setAgentAccountError(errorMessage(error, 'Failed to create or link Agent Wallet.'));
+    } finally {
+      setCreatingAgentWallet(false);
+    }
+  }
+
+  async function handlePasskeyRegistration() {
+    const username = passkeyUsername.trim();
+    if (!username) return;
+
+    setCreatingAgentWallet(true);
+    setAgentAccountError(null);
+
+    try {
+      const agentWalletAddress = await circleRegister(username);
+      await linkAgentWallet(agentWalletAddress);
+      setPasskeyUsername('');
+      setShowPasskeyRegistration(false);
+    } catch (error) {
+      setAgentAccountError(errorMessage(error, 'Passkey registration failed.'));
+    } finally {
+      setCreatingAgentWallet(false);
+    }
+  }
+
+  async function handleManualLink() {
+    const linkedAddress = manualLinkAddress.trim();
+    if (!isAddress(linkedAddress)) {
+      setManualLinkError('Enter a valid Agent Wallet address.');
+      return;
+    }
+
+    setManualLinking(true);
+    setManualLinkError(null);
+
+    try {
+      await linkAgentWallet(linkedAddress);
+      setManualLinkAddress('');
+      setShowManualLink(false);
+    } catch (error) {
+      setManualLinkError(errorMessage(error, 'Failed to link Agent Wallet.'));
+    } finally {
+      setManualLinking(false);
+    }
+  }
+
+  async function handleGatewayAction() {
     if (!agentAccountAddress) return;
 
     if (!circleAuthenticated) {
-      await circleLogin();
+      try {
+        await circleLogin();
+      } catch (error) {
+        setAgentAccountError(errorMessage(error, 'Circle login failed.'));
+      }
       return;
     }
 
     await agentGatewayDeposit.deposit(gatewayAmount, agentAccountAddress);
   }
 
-  if (!ready || !isConnected || !address) {
-    return null;
-  }
+  if (!ready || !isConnected || !address) return null;
 
   return (
-    <div className="mt-8 grid gap-5 lg:grid-cols-2">
-      <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-5 py-4 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
+    <div className="mt-10 grid gap-6 lg:grid-cols-2">
+      <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
         <div className="flex items-center justify-between gap-3">
           <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
             Account Overview
@@ -224,18 +319,11 @@ export function AgentWalletFundingRailCard() {
           </button>
         </div>
 
-        <div className="mt-3 grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-2.5">
-          <div className="text-[13px] text-[#EAE4D8]/60">Owner / Funding EOA</div>
+        <div className="mt-4 grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-3">
+          <div className="text-[13px] text-[#EAE4D8]/60">Owner Wallet</div>
           <div className="flex min-w-0 items-center gap-2">
-            <span className="truncate font-mono text-[13px] text-[#F5F0E5]">
-              {shortAddress(address)}
-            </span>
-            <button
-              type="button"
-              onClick={() => copyToClipboard(address)}
-              className="text-[#EAE4D8]/45 transition hover:text-[#F3C536]"
-              aria-label="Copy owner EOA address"
-            >
+            <span className="truncate font-mono text-[13px] text-[#F5F0E5]">{shortAddress(address)}</span>
+            <button type="button" onClick={() => copyToClipboard(address)} className="text-[#EAE4D8]/45 transition hover:text-[#F3C536]" aria-label="Copy owner wallet address">
               <Clipboard className="h-3.5 w-3.5" />
             </button>
             <span className="ml-auto rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
@@ -244,242 +332,245 @@ export function AgentWalletFundingRailCard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-2.5">
-          <div className="text-[13px] text-[#EAE4D8]/60">Circle Agent Wallet</div>
+        <div className="grid grid-cols-[1fr_1fr] items-center gap-3 border-b border-white/[0.06] py-3">
+          <div className="text-[13px] text-[#EAE4D8]/60">Agent Wallet</div>
           <div className="flex min-w-0 items-center gap-2">
             {hasAgentAccount ? (
               <>
-                <span className="truncate font-mono text-[13px] text-[#F5F0E5]">
-                  {shortAddress(agentAccountAddress)}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => copyToClipboard(agentAccountAddress)}
-                  className="text-[#EAE4D8]/45 transition hover:text-[#F3C536]"
-                  aria-label="Copy Agent Wallet address"
-                >
+                <span className="truncate font-mono text-[13px] text-[#F5F0E5]">{shortAddress(agentAccountAddress)}</span>
+                <button type="button" onClick={() => copyToClipboard(agentAccountAddress)} className="text-[#EAE4D8]/45 transition hover:text-[#F3C536]" aria-label="Copy Agent Wallet address">
                   <Clipboard className="h-3.5 w-3.5" />
                 </button>
-                <span className="ml-auto rounded-md border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 font-mono text-[10px] text-emerald-300">
+                <span className="ml-auto rounded-md border border-[#F3C536]/20 bg-[#F3C536]/10 px-2 py-0.5 font-mono text-[10px] text-[#F3C536]">
                   Active
                 </span>
               </>
             ) : (
-              <span className="text-[13px] text-[#EAE4D8]/40">
-                No Agent Wallet linked
-              </span>
+              <span className="text-[13px] text-[#EAE4D8]/40">Not created</span>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-[1fr_1fr] items-center gap-3 py-2.5">
+        <div className="grid grid-cols-[1fr_1fr] items-center gap-3 py-3">
           <div className="text-[13px] text-[#EAE4D8]/60">Wallet Role</div>
-          <div className="text-[13px] text-[#F5F0E5]">
-            EOA funds · Agent Wallet operates
-          </div>
+          <div className="text-[13px] text-[#F5F0E5]">EOA funds · Agent Wallet operates</div>
         </div>
 
         <p className="mt-1 text-[11px] leading-5 text-[#EAE4D8]/35">
-          EOA is used for ownership and funding. Circle Agent Wallet is the agent funding and future runtime wallet.
+          Owner EOA is used for ownership and funding. Circle Agent Wallet is the funding and runtime wallet for agent operations.
         </p>
+
+        {!hasAgentAccount && (
+          <div className="mt-4">
+            {!showPasskeyRegistration ? (
+              <button
+                type="button"
+                onClick={() => void handleCreateAgentWallet()}
+                disabled={creatingAgentWallet}
+                className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
+              >
+                {creatingAgentWallet ? 'Connecting...' : 'Create Agent Wallet'}
+              </button>
+            ) : (
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  type="text"
+                  value={passkeyUsername}
+                  onChange={(event) => {
+                    setPasskeyUsername(event.target.value);
+                    setAgentAccountError(null);
+                  }}
+                  placeholder="Choose a passkey username"
+                  className="h-10 min-w-0 flex-1 rounded-md border border-white/10 bg-[#0A0D12] px-3 font-mono text-[12px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={() => void handlePasskeyRegistration()}
+                  disabled={creatingAgentWallet || !passkeyUsername.trim()}
+                  className="h-10 rounded-md bg-[#F3C536] px-4 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
+                >
+                  {creatingAgentWallet ? 'Creating...' : 'Create Passkey'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasskeyRegistration(false);
+                    setAgentAccountError(null);
+                  }}
+                  className="h-10 rounded-md border border-white/10 px-3 text-[12px] text-[#EAE4D8]/60 transition hover:text-[#F5F0E5]"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowManualLink((current) => !current)}
+                className="text-[11px] text-[#EAE4D8]/35 transition hover:text-[#EAE4D8]/60"
+              >
+                {showManualLink ? '▾ Hide manual link' : '▸ Advanced: link existing Agent Wallet'}
+              </button>
+              {showManualLink && (
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="text"
+                    placeholder="0x... Agent Wallet address"
+                    value={manualLinkAddress}
+                    onChange={(event) => {
+                      setManualLinkAddress(event.target.value);
+                      setManualLinkError(null);
+                    }}
+                    className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-[#0A0D12] px-3 font-mono text-[11px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleManualLink()}
+                    disabled={manualLinking || !manualLinkAddress.trim()}
+                    className="h-9 rounded-md border border-white/10 px-3 text-[11px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
+                  >
+                    {manualLinking ? 'Linking...' : 'Link'}
+                  </button>
+                </div>
+              )}
+              {manualLinkError && <p className="mt-2 text-[11px] text-red-400">{manualLinkError}</p>}
+            </div>
+          </div>
+        )}
 
         {agentAccountError && (
           <p className="mt-3 rounded-md border border-amber-400/20 bg-amber-400/10 px-3 py-2 text-[11px] leading-5 text-amber-200/80">
             {agentAccountError}
           </p>
         )}
-
-        <div className="mt-3 flex flex-wrap gap-3">
-          <Link
-            href="/register/erc8004"
-            className="inline-flex h-9 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-4 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10"
-          >
-            <Plus className="h-4 w-4" /> Register ERC-8004 Agent
-          </Link>
-          <Link
-            href="/agent-setup"
-            className="inline-flex h-9 items-center gap-2 rounded-md border border-[#F3C536]/40 bg-transparent px-4 text-[12px] font-medium text-[#F3C536] transition hover:bg-[#F3C536]/10"
-          >
-            <Bot className="h-4 w-4" /> Open Agent Setup
-          </Link>
-        </div>
       </div>
 
-      <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-5 py-4 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
+      <div className="rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
         <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">
-          Circle Agent Wallet Funding
+          Wallet & Funding
         </div>
 
-        <p className="mt-2 rounded-md border border-[#F3C536]/20 bg-[#F3C536]/10 px-3 py-1.5 text-[11px] leading-5 text-[#F3C536]/80">
-          Fund the Agent Wallet from your EOA, then deposit from Agent Wallet into Gateway.
+        <p className="mt-2 text-[11px] leading-5 text-[#EAE4D8]/40">
+          Fund the Agent Wallet from the owner EOA, then deposit Agent Wallet USDC into Gateway x402.
         </p>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          <div className="rounded-md border border-white/10 bg-white/[0.025] p-3">
-            <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-              Owner EOA USDC
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {[
+            ['Owner EOA USDC', ownerUsdcBalance?.formatted ?? '0.000000'],
+            ['Agent Wallet USDC', agentUsdcBalance?.formatted ?? '0.000000'],
+            ['Agent Gateway x402', agentGatewayBalance?.formatted ?? '0.000000'],
+          ].map(([label, balance]) => (
+            <div key={label} className="rounded-md border border-white/10 bg-white/[0.025] p-4">
+              <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#EAE4D8]/38">{label}</div>
+              <div className={`mt-2 text-[18px] font-semibold ${label === 'Owner EOA USDC' ? 'text-[#F5F0E5]' : 'text-[#F3C536]'}`}>
+                {balancesLoading ? '...' : balance}
+              </div>
             </div>
-            <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
-              {balancesLoading ? '...' : ownerUsdcBalance?.formatted ?? '0.000000'}
-            </div>
-          </div>
-
-          <div className="rounded-md border border-white/10 bg-white/[0.025] p-3">
-            <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-              Agent Wallet USDC
-            </div>
-            <div className="mt-2 text-[18px] font-semibold text-[#F5F0E5]">
-              {balancesLoading ? '...' : agentUsdcBalance?.formatted ?? '0.000000'}
-            </div>
-          </div>
-
-          <div className="rounded-md border border-white/10 bg-white/[0.025] p-3">
-            <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[#EAE4D8]/38">
-              Agent Gateway
-            </div>
-            <div className="mt-2 text-[18px] font-semibold text-[#F3C536]">
-              {balancesLoading ? '...' : agentGatewayBalance?.formatted ?? '0.000000'}
-            </div>
-          </div>
+          ))}
         </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <div>
-            <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/38">
-              Fund Agent Wallet (USDC)
-            </label>
-            <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-              <input
-                type="text"
-                inputMode="decimal"
-                placeholder="1.00"
-                value={fundAmount}
-                onChange={(event) => {
-                  setFundAmount(event.target.value);
-                  fundAgentAccount.reset();
-                }}
-                className="h-10 w-full rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[13px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  if (agentAccountAddress) {
-                    void fundAgentAccount.fund(fundAmount, agentAccountAddress);
-                  }
-                }}
-                disabled={
-                  !fundAmount ||
-                  !agentAccountAddress ||
-                  (fundAgentAccount.step !== 'idle' && fundAgentAccount.step !== 'error')
-                }
-                className="h-10 shrink-0 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
-              >
-                {fundAgentAccount.step === 'checking' ||
-                fundAgentAccount.step === 'transferring' ||
-                fundAgentAccount.step === 'confirming'
-                  ? 'Funding...'
-                  : 'Fund Wallet'}
-              </button>
-            </div>
-
-            <div className="mt-2 text-[11px] leading-5 text-[#EAE4D8]/40">
-              Status: <span className="font-mono text-[#EAE4D8]/70">{fundAgentAccount.step}</span>
-            </div>
-
-            {fundAgentAccount.txHash && (
-              <p className="mt-2 text-[11px] text-emerald-400">
-                Fund tx ✓{' '}
-                <a
-                  href={getExplorerTxUrl(fundAgentAccount.txHash)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline decoration-emerald-400/40 hover:text-emerald-300"
+        {!hasAgentAccount ? (
+          <p className="mt-5 rounded-md border border-white/10 bg-white/[0.025] px-4 py-3 text-[12px] leading-5 text-[#EAE4D8]/45">
+            Create or link an Agent Wallet in Account Overview to enable funding and Gateway x402 deposits.
+          </p>
+        ) : (
+          <div className="mt-5 grid gap-5">
+            <div>
+              <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/70">Fund Agent Wallet (USDC)</label>
+              <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="1.00"
+                  value={fundAmount}
+                  onChange={(event) => {
+                    setFundAmount(event.target.value);
+                    fundAgentAccount.reset();
+                  }}
+                  className="h-10 min-w-0 flex-1 rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[13px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                />
+                <button
+                  type="button"
+                  onClick={() => void fundAgentAccount.fund(fundAmount, agentAccountAddress!)}
+                  disabled={!fundAmount || (fundAgentAccount.step !== 'idle' && fundAgentAccount.step !== 'error')}
+                  className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
                 >
-                  {shortAddress(fundAgentAccount.txHash)}
-                </a>
-              </p>
-            )}
-
-            {fundAgentAccount.error && (
-              <p className="mt-2 text-[11px] text-red-400">{fundAgentAccount.error}</p>
-            )}
-          </div>
-
-          <div>
-            <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/38">
-              Deposit Agent Wallet → Gateway (USDC)
-            </label>
-            <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-              <input
-                type="text"
-                inputMode="decimal"
-                placeholder="1.00"
-                value={gatewayAmount}
-                onChange={(event) => {
-                  setGatewayAmount(event.target.value);
-                  agentGatewayDeposit.reset();
-                }}
-                className="h-10 w-full rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[13px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
-              />
-              <button
-                type="button"
-                onClick={() => void handleAgentGatewayDeposit()}
-                disabled={
-                  !gatewayAmount ||
-                  !agentAccountAddress ||
-                  (agentGatewayDeposit.step !== 'idle' && agentGatewayDeposit.step !== 'error')
-                }
-                className="h-10 shrink-0 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
-              >
-                {!circleAuthenticated
-                  ? 'Login & Deposit'
-                  : agentGatewayDeposit.step === 'checking' ||
-                      agentGatewayDeposit.step === 'depositing' ||
-                      agentGatewayDeposit.step === 'confirming'
-                    ? 'Depositing...'
-                    : 'Deposit Gateway'}
-              </button>
+                  {fundAgentAccount.step === 'checking' || fundAgentAccount.step === 'transferring' || fundAgentAccount.step === 'confirming'
+                    ? 'Funding...'
+                    : 'Fund Agent Wallet'}
+                </button>
+              </div>
+              {fundAgentAccount.error && <p className="mt-2 text-[11px] text-red-400">{fundAgentAccount.error}</p>}
+              {fundAgentAccount.txHash && (
+                <p className="mt-2 text-[11px] text-emerald-400">
+                  Fund sent ✓{' '}
+                  <a href={getExplorerTxUrl(fundAgentAccount.txHash)} target="_blank" rel="noreferrer" className="underline decoration-emerald-400/40 hover:text-emerald-300">
+                    {shortAddress(fundAgentAccount.txHash)}
+                  </a>
+                </p>
+              )}
             </div>
 
-            <div className="mt-2 text-[11px] leading-5 text-[#EAE4D8]/40">
-              Status: <span className="font-mono text-[#EAE4D8]/70">{agentGatewayDeposit.step}</span>
-            </div>
-
-            {circleAddress && agentAccountAddress && (
-              <p className="mt-1 text-[10px] text-[#EAE4D8]/30">
-                Circle: {shortAddress(circleAddress)} · Agent Wallet: {shortAddress(agentAccountAddress)}
-              </p>
-            )}
-
-            {agentGatewayDeposit.userOpHash && (
-              <p className="mt-2 text-[11px] text-[#EAE4D8]/50">
-                UserOp: <span className="font-mono">{shortAddress(agentGatewayDeposit.userOpHash)}</span>
-              </p>
-            )}
-
-            {agentGatewayDeposit.txHash && (
-              <p className="mt-2 text-[11px] text-emerald-400">
-                Gateway deposit tx ✓{' '}
-                <a
-                  href={getExplorerTxUrl(agentGatewayDeposit.txHash)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline decoration-emerald-400/40 hover:text-emerald-300"
+            <div>
+              <label className="text-[11px] uppercase tracking-[0.14em] text-[#EAE4D8]/70">Deposit to Gateway x402 (USDC)</label>
+              <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="1.00"
+                  value={gatewayAmount}
+                  onChange={(event) => {
+                    setGatewayAmount(event.target.value);
+                    agentGatewayDeposit.reset();
+                  }}
+                  className="h-10 min-w-0 flex-1 rounded-md border border-white/10 bg-[#05070A] px-3 font-mono text-[13px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleGatewayAction()}
+                  disabled={!gatewayAmount || (agentGatewayDeposit.step !== 'idle' && agentGatewayDeposit.step !== 'error')}
+                  className="h-10 rounded-md bg-[#F3C536] px-5 text-[12px] font-semibold text-[#07090D] transition hover:bg-[#FFE070] disabled:opacity-40"
                 >
-                  {shortAddress(agentGatewayDeposit.txHash)}
-                </a>
-              </p>
-            )}
-
-            {agentGatewayDeposit.error && (
-              <p className="mt-2 text-[11px] text-red-400">{agentGatewayDeposit.error}</p>
-            )}
+                  {!circleAuthenticated
+                    ? 'Login Circle'
+                    : agentGatewayDeposit.step === 'checking' || agentGatewayDeposit.step === 'depositing' || agentGatewayDeposit.step === 'confirming'
+                      ? 'Depositing...'
+                      : 'Deposit Agent Wallet → Gateway x402'}
+                </button>
+              </div>
+              {circleAuthenticated && circleAddress && (
+                <p className="mt-2 text-[10px] text-[#EAE4D8]/30">Circle wallet: {shortAddress(circleAddress)}</p>
+              )}
+              {agentGatewayDeposit.error && <p className="mt-2 text-[11px] text-red-400">{agentGatewayDeposit.error}</p>}
+              {agentGatewayDeposit.userOpHash && (
+                <p className="mt-2 text-[11px] text-[#EAE4D8]/45">UserOp: <span className="font-mono">{shortAddress(agentGatewayDeposit.userOpHash)}</span></p>
+              )}
+              {agentGatewayDeposit.txHash && (
+                <p className="mt-2 text-[11px] text-emerald-400">
+                  Gateway deposit ✓{' '}
+                  <a href={getExplorerTxUrl(agentGatewayDeposit.txHash)} target="_blank" rel="noreferrer" className="underline decoration-emerald-400/40 hover:text-emerald-300">
+                    {shortAddress(agentGatewayDeposit.txHash)}
+                  </a>
+                </p>
+              )}
+            </div>
           </div>
-        </div>
-
-        {balancesError && (
-          <p className="mt-3 text-[11px] text-red-400">{balancesError}</p>
         )}
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void refreshProfileBalances(address, agentAccountAddress)}
+            disabled={balancesLoading}
+            className="inline-flex h-9 items-center gap-2 rounded-md border border-white/10 px-4 text-[11px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
+          >
+            <RefreshCcw className={`h-3 w-3 ${balancesLoading ? 'animate-spin' : ''}`} />
+            Refresh Balances
+          </button>
+          {balancesError && <p className="text-[11px] text-red-400">{balancesError}</p>}
+        </div>
       </div>
     </div>
   );

@@ -21,10 +21,7 @@ import {
   SESSION_COOKIE_NAME,
 } from '@/lib/auth/wallet-session';
 import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
-import {
-  isAgentAccountRuntimePayerEnabled,
-  isAgentAccountServerRailEnabled,
-} from '@/lib/agent-accounts/feature-flags';
+import { isAgentAccountServerRailEnabled } from '@/lib/agent-accounts/feature-flags';
 import type { AgentX402Rail, AgentX402Scope } from '@/lib/x402/agent-payer';
 
 const ERROR_CACHE = 'no-store, no-cache, max-age=0';
@@ -182,10 +179,37 @@ export async function POST(
   const rail = rawRail as AgentX402Rail;
   const scope = rawScope as AgentX402Scope;
 
-  if (scope === 'a2a' && !isAgentAccountRuntimePayerEnabled()) {
+  /**
+   * Agent Wallet runtime payer is owner-level in this PR.
+   *
+   * Do not bind the linked Circle Agent Wallet into `agent_x402_payers`.
+   * ERC-8183 callers should use the owner-derived payment hints returned by
+   * set-budget/fund:
+   *
+   * - payerRail
+   * - payerAddress
+   * - legacyEoaFallback
+   *
+   * Per-agent x402 payer binding is intentionally not implemented here.
+   */
+  if (scope === 'a2a') {
     const agentAccount = await getActiveAgentAccountForOwner(auth.wallet);
-    if (agentAccount?.agentAccountAddress.toLowerCase() === payerAddress.toLowerCase()) {
-      return humanJson(req, { ok: false, error: 'agent_account_runtime_payer_disabled', detail: 'No Agent Wallet runtime payer configured yet.' }, { status: 403, headers: { 'Cache-Control': ERROR_CACHE } });
+    const linkedAgentWallet = agentAccount?.agentAccountAddress?.toLowerCase();
+
+    if (linkedAgentWallet && linkedAgentWallet === payerAddress.toLowerCase()) {
+      return humanJson(
+        req,
+        {
+          ok: false,
+          error: 'agent_wallet_payer_binding_disabled',
+          detail:
+            'Circle Agent Wallet uses owner-level runtime payer hints in this PR. Per-agent x402 payer binding is disabled.',
+        },
+        {
+          status: 403,
+          headers: { 'Cache-Control': ERROR_CACHE },
+        },
+      );
     }
   }
 
