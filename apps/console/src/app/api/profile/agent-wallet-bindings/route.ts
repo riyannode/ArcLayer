@@ -2,8 +2,17 @@
  * POST /api/profile/agent-wallet-bindings
  *
  * Persists agent_id → agent_account_address binding after ERC-8004 mint.
- * Auth: wallet session cookie (owner address derived server-side).
- * Does NOT write agent_x402_payers.
+ *
+ * Semantics:
+ * - ownerAddress = user/admin/funding wallet from wallet session
+ * - agentAccountAddress = Circle Agent Wallet / SCA
+ * - when minting in Agent Wallet mode, agentAccountAddress must be the ERC-8004 onchain owner/controller
+ *
+ * This PR does NOT implement:
+ * - transfer rebind
+ * - unbind
+ * - x402 payer binding
+ * - ERC-1271 / isValidSignature proof
  */
 
 import { NextRequest } from 'next/server';
@@ -14,7 +23,7 @@ import {
   SESSION_COOKIE_NAME,
   resolveSessionFromCookie,
 } from '@/lib/auth/wallet-session';
-import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
+import { getActiveAgentAccountForOwnerAndAddress } from '@/lib/agent-accounts/store';
 import { isAgentAccountServerRailEnabled } from '@/lib/agent-accounts/feature-flags';
 import {
   getActiveAgentWalletBindingsForOwner,
@@ -267,30 +276,19 @@ export async function POST(req: NextRequest) {
   const ownerAddress = getAddress(wallet);
   const submittedAgentAccount = getAddress(agentAccountRaw);
 
-  const activeAgentAccount = await getActiveAgentAccountForOwner(ownerAddress);
+  const activeAgentAccount = await getActiveAgentAccountForOwnerAndAddress(
+    ownerAddress,
+    submittedAgentAccount,
+  );
+
   if (!activeAgentAccount?.agentAccountAddress) {
     return humanJson(
       req,
       {
         ok: false,
-        error: 'agent_wallet_not_found',
-        detail: 'Create or link an active Circle Agent Wallet first.',
-      },
-      { status: 409 },
-    );
-  }
-
-  if (
-    activeAgentAccount.agentAccountAddress.toLowerCase() !==
-    submittedAgentAccount.toLowerCase()
-  ) {
-    return humanJson(
-      req,
-      {
-        ok: false,
-        error: 'agent_wallet_mismatch',
+        error: 'agent_wallet_not_active',
         detail:
-          'Submitted Agent Wallet does not match the active Agent Wallet for this owner.',
+          'Submitted Agent Wallet is not the active Circle Agent Wallet for this admin wallet.',
       },
       { status: 409 },
     );
