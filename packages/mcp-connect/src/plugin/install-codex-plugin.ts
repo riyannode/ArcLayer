@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { copyFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,7 +8,24 @@ import { resolvePaths } from '../fs/paths.js';
 import { readText, safeWrite } from '../fs/safe-write.js';
 
 export type InstallOptions = { home?: string; withSkill?: boolean; templateFile?: string };
-function bundledTemplate(): string { return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'templates', 'codex', 'skills', 'arclayer-agent-bundle', 'SKILL.md'); }
+function bundledTemplate(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const rel = ['skills', 'arclayer-agent-bundle', 'SKILL.md'];
+
+  const candidates = [
+    path.resolve(here, '..', 'plugin', ...rel),
+    path.resolve(here, '..', '..', 'plugin', ...rel),
+    path.resolve(process.cwd(), 'plugin', ...rel),
+  ];
+
+  const found = candidates.find((candidate) => existsSync(candidate));
+
+  if (!found) {
+    throw new Error(`ArcLayer Codex skill template not found. Checked: ${candidates.join(', ')}`);
+  }
+
+  return found;
+}
 export async function installCodex(options: InstallOptions = {}) {
   const paths = resolvePaths(options.home);
   if (options.withSkill) {
