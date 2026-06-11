@@ -34,7 +34,46 @@ Hermes / OpenClaw / Any LLM Runtime
 
 Both interfaces call the same Runner guard/policy/execution services.
 
-## Quick Start
+## Quick Start (One-Command Setup)
+
+```bash
+npx @arclayer/setup
+```
+
+This runs the ArcLayer Runner setup wizard:
+
+1. **Creates config files** in `~/.arclayer/runner/`:
+   - `config.json` — agent ID, role, runtime target, Circle wallet
+   - `policy.json` — spending limits, allowed hosts
+   - `receipts.jsonl` / `ledger.jsonl` — receipt and spending data
+
+2. **Configures MCP STDIO sidecar** for Hermes/OpenClaw
+
+3. **Prints Circle Wallet Policy instructions** (manual setup required)
+
+**What it does NOT do:**
+- ❌ Configure Telegram/Discord (that's Hermes/OpenClaw's job)
+- ❌ Run `circle wallet login`
+- ❌ Run `circle wallet limit set`
+- ❌ Ask for OTP or store private keys
+
+**After setup:**
+```bash
+# Verify configuration
+arclayer-runner doctor
+
+# Set Circle wallet policy manually (if needed)
+circle wallet login
+circle wallet limit set ...
+
+# Start MCP STDIO server
+arclayer-runner mcp
+
+# Or start HTTP server
+arclayer-runner start
+```
+
+## Quick Start (Manual)
 
 ```bash
 # 1. Build dependencies (order matters)
