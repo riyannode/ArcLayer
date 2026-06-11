@@ -8,7 +8,7 @@
       "name": "arclayer",
       "source": {
         "source": "local",
-        "path": "./plugins/codex-arclayer"
+        "path": "./packages/mcp-connect/plugin"
       },
       "policy": {
         "installation": "AVAILABLE",
