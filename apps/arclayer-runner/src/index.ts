@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { loadRunnerConfig } from "./config";
+import { loadRunnerConfig, loadRunnerConfigForStdio } from "./config";
 import { loadGlobalSkill } from "./skill";
 import { createRuntimeConnector } from "./runtime";
 import { ArcLayerMcpConnector } from "./mcp-connector";
 import { createRouter } from "./http";
 import { RunnerServices } from "./services";
 import { handleMcpRequest } from "./mcp-server";
+import { runMcpStdio } from "./mcp-stdio";
 import { runDoctor } from "./doctor";
 
 async function main() {
@@ -188,6 +189,34 @@ async function main() {
       skillHash: skill.sha256
     }, null, 2));
   });
+
+  // ── mcp (STDIO) ──────────────────────────────────────────────────────
+  program
+    .command("mcp")
+    .description("Start MCP server over STDIO (JSON-RPC 2.0 for Hermes/OpenClaw)")
+    .action(async () => {
+      // STDIO mode: no HTTP, no Bearer auth, process isolation is the boundary
+      const config = loadRunnerConfigForStdio();
+      const skill = loadGlobalSkill(config.skillPath);
+
+      const runtime = createRuntimeConnector(
+        config.runtimeKind,
+        config.runtimeEndpoint,
+        config.runtimeRunPath,
+        process.env.HERMES_API_SERVER_KEY || process.env.OPENCLAW_API_SERVER_KEY
+      );
+
+      const mcp = new ArcLayerMcpConnector({
+        baseUrl: process.env.ARCLAYER_MCP_BASE_URL || config.runtimeEndpoint,
+        token: process.env.ARCLAYER_MCP_TOKEN,
+        agentId: config.agentId
+      });
+
+      const services = new RunnerServices(config, runtime, mcp, skill);
+      const mcpToolCtx = { services, mcp, config, skill };
+
+      await runMcpStdio(mcpToolCtx);
+    });
 
   program.parse(process.argv);
 }
