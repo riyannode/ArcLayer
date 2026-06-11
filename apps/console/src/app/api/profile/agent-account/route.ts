@@ -1,12 +1,17 @@
 import { humanJson } from '@/lib/api/human-json';
 /**
- * Profile — Agent Account link/read.
+ * Profile — Circle Agent Wallet link/read.
  *
- * GET  /api/profile/agent-account — returns linked agent account for owner
- * POST /api/profile/agent-account/link — links an agent account to owner
+ * GET  /api/profile/agent-account — returns linked Circle Agent Wallet for admin wallet
+ * POST /api/profile/agent-account — links the current Circle Agent Wallet address returned by Circle passkey login/register
  *
  * Auth: wallet session cookie.
- * No tx execution. No private keys.
+ *
+ * Security note:
+ * This endpoint does not provide final cryptographic Agent Wallet control proof.
+ * Manual arbitrary address linking is disabled in the default UI.
+ * Final proof via ERC-1271 / isValidSignature is a future hardening step after Circle
+ * smart-account message signing is confirmed in the app flow.
  */
 
 import { NextRequest } from 'next/server';
