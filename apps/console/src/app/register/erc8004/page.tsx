@@ -38,6 +38,13 @@ type SectionStatus = 'Complete' | 'Pending';
 type ControllerMode = 'eoa' | 'agent-account';
 type BindingStatus = 'not_applicable' | 'created' | 'failed';
 
+type PendingAgentWalletBinding = {
+  agentId: string;
+  agentAccountAddress: string;
+  txHash: `0x${string}`;
+  metadataURI: string;
+};
+
 type RegisteredIdentityRecord = {
   agentId: string;
   txHash: `0x${string}`;
@@ -630,6 +637,8 @@ export default function ERC8183EscrowRegisterPage() {
   const [txHash, setTxHash] = useState<string>('');
   const [metadataDraftId, setMetadataDraftId] = useState('');
   const [metadataWriteToken, setMetadataWriteToken] = useState('');
+  const [pendingBinding, setPendingBinding] = useState<PendingAgentWalletBinding | null>(null);
+  const [bindingRetrying, setBindingRetrying] = useState(false);
   const [mcpIntentId, setMcpIntentId] = useState('');
   const [mcpRolePresetId, setMcpRolePresetId] = useState('');
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
@@ -1041,6 +1050,62 @@ export default function ERC8183EscrowRegisterPage() {
     }
   }
 
+  function updateRegisteredIdentityBindingState(input: {
+    bindingStatus: BindingStatus;
+    bindingError?: string;
+  }) {
+    const raw = localStorage.getItem('arclayer-erc8183-agent-identity-registered');
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as RegisteredIdentityRecord;
+      localStorage.setItem(
+        'arclayer-erc8183-agent-identity-registered',
+        JSON.stringify(
+          {
+            ...parsed,
+            bindingStatus: input.bindingStatus,
+            bindingError: input.bindingError,
+            nextStep:
+              input.bindingStatus === 'created'
+                ? 'Identity minted and bound to Agent Wallet. Next, configure agent operation.'
+                : 'Identity minted, but Agent Wallet binding needs retry.',
+          },
+          null,
+          2,
+        ),
+      );
+    } catch {
+      // ignore malformed localStorage
+    }
+  }
+
+  async function retryAgentWalletBinding() {
+    if (!pendingBinding) return;
+
+    setBindingRetrying(true);
+    setNotice('Retrying Agent Wallet binding...');
+
+    try {
+      const binding = await saveAgentWalletBinding(pendingBinding);
+
+      if (binding.ok) {
+        setPendingBinding(null);
+        updateRegisteredIdentityBindingState({ bindingStatus: 'created' });
+        setNotice(`Agent Wallet binding saved for Agent ID ${pendingBinding.agentId}.`);
+        return;
+      }
+
+      updateRegisteredIdentityBindingState({
+        bindingStatus: 'failed',
+        bindingError: binding.error,
+      });
+      setNotice(`Agent Wallet binding still failed: ${binding.error}`);
+    } finally {
+      setBindingRetrying(false);
+    }
+  }
+
   async function submitRegister() {
     if (!isConnected || !address) {
       setRegisterStatus('error');
@@ -1239,10 +1304,20 @@ export default function ERC8183EscrowRegisterPage() {
 
         if (binding.ok) {
           bindingStatus = 'created';
+          setPendingBinding(null);
         } else {
           bindingStatus = 'failed';
           bindingError = binding.error;
+          setPendingBinding({
+            agentId: mintedId,
+            agentAccountAddress,
+            txHash: hash,
+            metadataURI: effectiveMetadataURI,
+          });
         }
+      } else {
+        // EOA fallback — no binding needed
+        setPendingBinding(null);
       }
 
       const ownerWallet = address || null;
@@ -1626,6 +1701,25 @@ export default function ERC8183EscrowRegisterPage() {
 
             {registerStatus === 'success' && mintedAgentId && (
               <RegisterApiKeyCard agentId={mintedAgentId} address={address} signMessageAsync={signMessageAsync} />
+            )}
+
+            {registerStatus === 'success' && pendingBinding && (
+              <div className="rounded-md border border-amber-400/25 bg-amber-400/[0.06] px-5 py-4 text-[13px] leading-6 text-amber-100">
+                <div className="font-semibold text-amber-200">
+                  Agent Wallet binding needs retry
+                </div>
+                <p className="mt-1 text-amber-100/75">
+                  The ERC-8004 identity was minted, but the Agent Wallet binding was not saved. Retry binding only; do not mint another identity.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void retryAgentWalletBinding()}
+                  disabled={bindingRetrying}
+                  className="mt-3 h-10 rounded-md border border-amber-300/40 px-4 text-[12px] font-semibold text-amber-100 transition hover:bg-amber-300/10 disabled:opacity-50"
+                >
+                  {bindingRetrying ? 'Retrying...' : 'Retry Agent Wallet Binding'}
+                </button>
+              </div>
             )}
 
             {registerStatus === 'success' && (

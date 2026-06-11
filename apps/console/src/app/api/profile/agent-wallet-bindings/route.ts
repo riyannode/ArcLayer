@@ -7,7 +7,8 @@
  */
 
 import { NextRequest } from 'next/server';
-import { getAddress, isAddress } from 'viem';
+import { createPublicClient, getAddress, http, isAddress, type Address } from 'viem';
+import { CONTRACTS } from '@arclayer/sdk';
 import { humanJson } from '@/lib/api/human-json';
 import {
   SESSION_COOKIE_NAME,
@@ -19,9 +20,32 @@ import {
   getActiveAgentWalletBindingsForOwner,
   upsertActiveAgentWalletBinding,
 } from '@/lib/agent-wallet-bindings/store';
+import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+// ── Constants ────────────────────────────────────────────────────────
+
+const ARC_CHAIN_ID = 5042002;
+const ARC_RPC_URL =
+  process.env.ARC_RPC_URL ||
+  process.env.NEXT_PUBLIC_ARC_RPC_URL ||
+  'https://rpc.drpc.testnet.arc.network';
+
+const OWNER_OF_ABI = [
+  {
+    name: 'ownerOf',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'tokenId', type: 'uint256' }],
+    outputs: [{ type: 'address' }],
+  },
+] as const;
+
+const publicClient = createPublicClient({
+  transport: http(ARC_RPC_URL),
+});
 
 // ── Auth helper ────────────────────────────────────────────────────────
 
@@ -36,6 +60,68 @@ async function getWallet(req: NextRequest): Promise<string | null> {
 
 function isTxHash(value: string): boolean {
   return /^0x[a-fA-F0-9]{64}$/.test(value);
+}
+
+function isDecimalTokenId(value: string): boolean {
+  return /^[0-9]+$/.test(value);
+}
+
+// ── On-chain mint proof verification ──────────────────────────────────
+
+async function verifyAgentWalletMintProof(input: {
+  agentId: string;
+  registrationTxHash: `0x${string}`;
+  expectedOwner: Address;
+}) {
+  if (!isDecimalTokenId(input.agentId)) {
+    return {
+      ok: false as const,
+      error: 'invalid_agent_id',
+      detail: 'Agent ID must be a decimal ERC-8004 token ID.',
+    };
+  }
+
+  const receipt = await publicClient.getTransactionReceipt({
+    hash: input.registrationTxHash,
+  });
+
+  if (receipt.status !== 'success') {
+    return {
+      ok: false as const,
+      error: 'registration_tx_failed',
+      detail: 'Registration transaction was not successful.',
+    };
+  }
+
+  const minted = extractERC8004MintedTokenIdFromReceipt(
+    receipt,
+    input.expectedOwner,
+  );
+
+  if (minted.toString() !== input.agentId) {
+    return {
+      ok: false as const,
+      error: 'agent_id_not_minted_by_tx',
+      detail: 'Registration transaction does not mint the submitted Agent ID to this Agent Wallet.',
+    };
+  }
+
+  const owner = await publicClient.readContract({
+    address: CONTRACTS.ERC8004_IDENTITY_REGISTRY as Address,
+    abi: OWNER_OF_ABI,
+    functionName: 'ownerOf',
+    args: [BigInt(input.agentId)],
+  });
+
+  if (getAddress(owner) !== getAddress(input.expectedOwner)) {
+    return {
+      ok: false as const,
+      error: 'agent_owner_mismatch',
+      detail: 'On-chain ERC-8004 owner does not match the submitted Agent Wallet.',
+    };
+  }
+
+  return { ok: true as const };
 }
 
 // ── GET ────────────────────────────────────────────────────────────────
@@ -116,7 +202,7 @@ export async function POST(req: NextRequest) {
   const chainId =
     typeof body.chainId === 'number' && Number.isFinite(body.chainId)
       ? body.chainId
-      : 5042002;
+      : ARC_CHAIN_ID;
 
   // ── Validate ───────────────────────────────────────────────────────
 
@@ -144,10 +230,34 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (registrationTxHash && !isTxHash(registrationTxHash)) {
+  if (!registrationTxHash) {
+    return humanJson(
+      req,
+      {
+        ok: false,
+        error: 'registration_tx_hash_required',
+        detail: 'registrationTxHash is required to prove the ERC-8004 mint.',
+      },
+      { status: 400 },
+    );
+  }
+
+  if (!isTxHash(registrationTxHash)) {
     return humanJson(
       req,
       { ok: false, error: 'invalid_registration_tx_hash' },
+      { status: 400 },
+    );
+  }
+
+  if (chainId !== ARC_CHAIN_ID) {
+    return humanJson(
+      req,
+      {
+        ok: false,
+        error: 'unsupported_chain_id',
+        detail: 'Only Arc Testnet chainId 5042002 is supported for Agent Wallet bindings.',
+      },
       { status: 400 },
     );
   }
@@ -186,6 +296,45 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // ── Verify on-chain mint proof ─────────────────────────────────────
+
+  try {
+    const proof = await verifyAgentWalletMintProof({
+      agentId,
+      registrationTxHash: registrationTxHash as `0x${string}`,
+      expectedOwner: submittedAgentAccount as Address,
+    });
+
+    if (!proof.ok) {
+      return humanJson(
+        req,
+        {
+          ok: false,
+          error: proof.error,
+          detail: proof.detail,
+        },
+        { status: 400 },
+      );
+    }
+  } catch (error) {
+    console.error('[agent-wallet-bindings] mint proof verification failed', {
+      error,
+      ownerAddress,
+      agentId,
+      registrationTxHash,
+    });
+
+    return humanJson(
+      req,
+      {
+        ok: false,
+        error: 'invalid_registration_proof',
+        detail: 'Could not verify ERC-8004 mint proof for this Agent Wallet.',
+      },
+      { status: 400 },
+    );
+  }
+
   // ── Upsert binding ─────────────────────────────────────────────────
 
   try {
@@ -220,12 +369,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    console.error('[agent-wallet-bindings] upsert failed', {
+      error,
+      ownerAddress,
+      agentId,
+    });
+
     return humanJson(
       req,
       {
         ok: false,
         error: 'binding_failed',
-        detail: message,
+        detail: 'Agent Wallet binding could not be saved.',
       },
       { status: 500 },
     );
