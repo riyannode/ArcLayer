@@ -174,16 +174,34 @@ log "Step 5: Publishing to npm with tag '$TAG'..."
 if [[ "$DRY_RUN" == "true" ]]; then
   warn "DRY RUN — skipping actual publish"
 else
-  # Create temporary .npmrc outside repo (never write to repo)
-  TEMP_NPMRC="$(mktemp)"
-  printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > "$TEMP_NPMRC"
+  # Save existing .npmrc, add auth token temporarily, restore after
+  HOME_NPMRC="$HOME/.npmrc"
+  NPMRC_BACKUP=""
+  if [[ -f "$HOME_NPMRC" ]]; then
+    NPMRC_BACKUP="$(cat "$HOME_NPMRC")"
+  fi
+
+  # Append auth token (preserve existing content)
+  if ! grep -q "_authToken" "$HOME_NPMRC" 2>/dev/null; then
+    printf "\n//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" >> "$HOME_NPMRC"
+  fi
+
+  # Restore .npmrc on exit
+  restore_npmrc() {
+    if [[ -n "$NPMRC_BACKUP" ]]; then
+      printf "%s\n" "$NPMRC_BACKUP" > "$HOME_NPMRC"
+    else
+      rm -f "$HOME_NPMRC"
+    fi
+  }
+  trap restore_npmrc EXIT
 
   for pkg_dir in "${PACKAGES[@]}"; do
     pkg_name="$(node -e "console.log(require('./$pkg_dir/package.json').name)")"
     pkg_version="$(node -e "console.log(require('./$pkg_dir/package.json').version)")"
     log "  Publishing $pkg_name@$pkg_version (tag: $TAG)..."
 
-    PUBLISH_RC="$TEMP_NPMRC" pnpm publish \
+    pnpm publish \
       --access public \
       --tag "$TAG" \
       --no-git-checks \
@@ -192,8 +210,9 @@ else
     ok "  Published $pkg_name@$pkg_version"
   done
 
-  # Clean up temp .npmrc
-  rm -f "$TEMP_NPMRC"
+  # Restore .npmrc
+  restore_npmrc
+  trap - EXIT
 fi
 
 # ── Step 6: Verify ──────────────────────────────────────────────────────────
