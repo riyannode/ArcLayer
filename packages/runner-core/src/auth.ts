@@ -8,8 +8,12 @@ import { RunnerError } from "./errors";
 export function extractBearerToken(req: IncomingMessage): string | undefined {
   const auth = req.headers.authorization;
   if (!auth) return undefined;
-  const match = auth.match(/^Bearer\s+(.+)$/i);
-  return match?.[1];
+  // Avoid regex to prevent CodeQL polynomial backtracking alert.
+  // Case-insensitive prefix check + slice.
+  const lower = auth.toLowerCase();
+  if (!lower.startsWith("bearer ")) return undefined;
+  const token = auth.slice(7).trim();
+  return token || undefined;
 }
 
 /**
