@@ -9,6 +9,8 @@ import { RunnerServices } from "./services";
 import { handleMcpRequest } from "./mcp-server";
 import { runMcpStdio } from "./mcp-stdio";
 import { runDoctor } from "./doctor";
+import { registerInitCommand } from "./init";
+import { registerSetupCommand } from "./setup";
 
 async function main() {
   const program = new Command();
@@ -217,6 +219,12 @@ async function main() {
 
       await runMcpStdio(mcpToolCtx);
     });
+
+  // ── init (non-interactive) ──────────────────────────────────────────────
+  registerInitCommand(program);
+
+  // ── setup (interactive wizard) ─────────────────────────────────────────
+  registerSetupCommand(program);
 
   program.parse(process.argv);
 }
