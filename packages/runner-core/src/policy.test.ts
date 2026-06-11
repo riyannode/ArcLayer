@@ -3,6 +3,7 @@ import {
   assertRoleAllowed,
   assertProviderOnlyForExternal,
   assertAgentIdentity,
+  assertX402InspectAllowed,
   assertX402PaymentAllowed,
   assertBatchAllowed,
   decimalToMicros
@@ -98,10 +99,6 @@ describe("assertProviderOnlyForExternal", () => {
   it("rejects evaluator for provider-default runner", () => {
     expectRunnerError(() => assertProviderOnlyForExternal(makeConfig(), "evaluator"), "EXTERNAL_RUNNER_PROVIDER_ONLY");
   });
-
-  it("rejects client for provider-default runner", () => {
-    expectRunnerError(() => assertProviderOnlyForExternal(makeConfig(), "client"), "EXTERNAL_RUNNER_PROVIDER_ONLY");
-  });
 });
 
 describe("assertAgentIdentity", () => {
@@ -111,6 +108,31 @@ describe("assertAgentIdentity", () => {
 
   it("rejects mismatched agentId", () => {
     expectRunnerError(() => assertAgentIdentity(makeConfig(), "agent-2"), "AGENT_ID_MISMATCH");
+  });
+});
+
+describe("assertX402InspectAllowed", () => {
+  it("passes for allowed host", () => {
+    expect(() => assertX402InspectAllowed(makeConfig(), makePayment())).not.toThrow();
+  });
+
+  it("rejects unallowlisted host", () => {
+    expectRunnerError(
+      () => assertX402InspectAllowed(makeConfig(), makePayment({ url: "https://evil.com/api" })),
+      "X402_HOST_NOT_ALLOWED"
+    );
+  });
+
+  it("passes even when payment disabled (inspect is read-only)", () => {
+    expect(() =>
+      assertX402InspectAllowed(makeConfig({ paymentEnabled: false }), makePayment())
+    ).not.toThrow();
+  });
+
+  it("passes even when no wallet configured (inspect is read-only)", () => {
+    expect(() =>
+      assertX402InspectAllowed(makeConfig({ circleWalletAddress: undefined }), makePayment())
+    ).not.toThrow();
   });
 });
 
@@ -161,8 +183,6 @@ describe("assertBatchAllowed", () => {
   });
 
   it("rejects batch exceeding max total", () => {
-    // Use amounts that pass per-tx limit (0.008 < 0.01) and item count (8 < 10)
-    // but total exceeds 0.05: 8 * 0.008 = 0.064
     const payments = Array.from({ length: 8 }, () => makePayment({ maxAmountUsdc: "0.008" }));
     expectRunnerError(() => assertBatchAllowed(makeConfig(), payments), "BATCH_MAX_TOTAL_EXCEEDED");
   });

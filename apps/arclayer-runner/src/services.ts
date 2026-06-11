@@ -11,10 +11,12 @@ import {
   assertMonthlyLimit,
   assertProviderOnlyForExternal,
   assertRoleAllowed,
+  assertX402InspectAllowed,
   assertX402PaymentAllowed,
   decimalToMicros,
   erc8183Hash,
   sha256Json,
+  sha256Text,
   RunnerError,
   type RunnerConfig
 } from "@arclayer/runner-core";
@@ -23,6 +25,54 @@ import { buildSubmitDeliverableConfig } from "@arclayer/sdk";
 import type { RuntimeConnector } from "./runtime";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
 import { randomUUID } from "node:crypto";
+
+/**
+ * In-memory lock per idempotencyKey.
+ * Prevents concurrent requests with the same key from double-paying.
+ * Only effective within a single process — multi-process needs external lock.
+ */
+const pendingLocks = new Map<string, Promise<void>>();
+
+function acquireKeyLock(key: string): Promise<void> {
+  const prev = pendingLocks.get(key) ?? Promise.resolve();
+  let release: () => void;
+  const next = new Promise<void>((resolve) => { release = resolve; });
+  pendingLocks.set(key, prev.then(() => next));
+  return prev.then(() => {});
+}
+
+function releaseKeyLock(key: string): void {
+  // The lock resolves when the next() promise resolves.
+  // We trigger it by resolving the stored promise.
+  // Actually we need to resolve the 'next' promise. Let's use a different approach.
+}
+
+// Simpler approach: per-key mutex using a queue
+const keyQueues = new Map<string, { busy: boolean; queue: Array<() => void> }>();
+
+async function withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  if (!keyQueues.has(key)) {
+    keyQueues.set(key, { busy: false, queue: [] });
+  }
+  const entry = keyQueues.get(key)!;
+
+  if (entry.busy) {
+    // Wait for current holder to finish
+    await new Promise<void>((resolve) => entry.queue.push(resolve));
+  }
+
+  entry.busy = true;
+  try {
+    return await fn();
+  } finally {
+    entry.busy = false;
+    const next = entry.queue.shift();
+    if (next) next();
+    if (!entry.busy && entry.queue.length === 0) {
+      keyQueues.delete(key);
+    }
+  }
+}
 
 export class RunnerServices {
   readonly receipts: JsonlReceiptStore;
@@ -68,10 +118,6 @@ export class RunnerServices {
     };
   }
 
-  /**
-   * Generic task dispatch to LLM runtime.
-   * Validates identity, role, and policy before forwarding.
-   */
   async runGeneric(body: unknown) {
     const task = AgentTaskSchema.parse(body);
     assertAgentIdentity(this.config, task.agentId);
@@ -112,11 +158,10 @@ export class RunnerServices {
       throw new RunnerError("MISSING_FIELD", "metadataURI is required", 400);
     }
 
-    // Delegate to existing MCP server
     const mcpResult = await this.mcp.prepareRegisterAgent(input.metadataURI);
 
     const receipt = await this.receipts.append({
-      type: "erc8183_submit",
+      type: "erc8004_prepare_register",
       taskId: parsed.taskId,
       agentId: this.config.agentId,
       request: { metadataURI: input.metadataURI },
@@ -133,32 +178,16 @@ export class RunnerServices {
     };
   }
 
-  /**
-   * Run ERC-8183 provider job lifecycle.
-   *
-   * Flow:
-   * 1. Validate identity + role
-   * 2. Notify MCP: start job run
-   * 3. Dispatch to LLM runtime for execution
-   * 4. Compute deliverable hash
-   * 5. Prepare submit calldata via MCP
-   * 6. Execute on-chain submit via Circle CLI (allowlisted method only)
-   * 7. Notify MCP: complete job run
-   * 8. Store receipt with proof
-   */
   async runErc8183ProviderJob(body: unknown) {
     const job = Erc8183ProviderJobSchema.parse(body);
     assertAgentIdentity(this.config, job.agentId);
     assertRoleAllowed(this.config, "provider");
     assertProviderOnlyForExternal(this.config, "provider");
 
-    // ── Step 1: Notify MCP — start job run ──────────────────────────────
     await this.mcp.startJobRun(job.jobId).catch((err) => {
-      // Non-fatal: MCP state tracking is advisory for external runners
       console.warn(`[runner] MCP startJobRun failed: ${err.message}`);
     });
 
-    // ── Step 2: Dispatch to LLM runtime ─────────────────────────────────
     const runtimeTask = {
       taskId: job.taskId,
       protocol: "erc8183" as const,
@@ -177,7 +206,6 @@ export class RunnerServices {
     const result = await this.runtime.run(runtimeTask);
     const deliverableHash = erc8183Hash(result.output ?? result);
 
-    // ── Step 3: Prepare submit calldata via MCP ─────────────────────────
     const preparedTx = await this.mcp.prepareSubmitDeliverable(
       job.jobId,
       deliverableHash
@@ -186,22 +214,18 @@ export class RunnerServices {
       return null;
     });
 
-    // Also build local tx config (SDK)
     const tx = buildSubmitDeliverableConfig(BigInt(job.jobId), deliverableHash);
 
-    // ── Step 4: Execute on-chain submit via Circle CLI ──────────────────
     const submitReceipt = await this.submitDeliverableViaCircleCli({
       jobId: job.jobId,
       deliverableHash,
       optParams: "0x"
     });
 
-    // ── Step 5: Notify MCP — complete job run ───────────────────────────
     await this.mcp.completeJobRun(job.jobId, result.output).catch((err) => {
       console.warn(`[runner] MCP completeJobRun failed: ${err.message}`);
     });
 
-    // ── Step 6: Store receipt ───────────────────────────────────────────
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
       taskId: job.taskId,
@@ -227,10 +251,6 @@ export class RunnerServices {
     };
   }
 
-  /**
-   * Submit deliverable on-chain via Circle CLI.
-   * Only allowlisted method: submit(uint256,bytes32,bytes).
-   */
   async submitDeliverableViaCircleCli(input: {
     jobId: string;
     deliverableHash: `0x${string}`;
@@ -265,10 +285,12 @@ export class RunnerServices {
 
   /**
    * Inspect an x402 service (read-only, no payment).
+   * Only requires URL validation and host allowlist.
+   * Does NOT require paymentEnabled or wallet.
    */
   async inspectX402(body: unknown) {
     const payment = PaymentRequestSchema.parse(body);
-    assertX402PaymentAllowed(this.config, payment);
+    assertX402InspectAllowed(this.config, payment);
 
     const result = await this.circle.inspectService({
       url: payment.url,
@@ -281,94 +303,128 @@ export class RunnerServices {
 
   /**
    * Pay an x402 service with idempotency and persistent spending limits.
+   *
+   * Concurrency safety:
+   * 1. Per-key in-memory lock prevents same-key double-pay within process.
+   * 2. If key already succeeded → return existing receipt.
+   * 3. If key has pending attempt → return 409 PAYMENT_IN_PROGRESS.
+   * 4. If key failed → allow retry.
    */
   async payX402(body: unknown) {
     const payment = PaymentRequestSchema.parse(body);
     assertX402PaymentAllowed(this.config, payment);
 
-    // ── Idempotency ─────────────────────────────────────────────────────
     const idempotencyKey = payment.idempotencyKey ?? randomUUID();
 
-    const existing = await this.ledger.hasSucceeded(idempotencyKey);
-    if (existing) {
-      const existingReceipt = existing.receiptId
-        ? await this.receipts.findByIdempotencyKey(idempotencyKey)
-        : undefined;
-      return {
-        ok: true,
-        idempotent: true,
-        message: "Payment already completed with this idempotencyKey",
-        ledger: existing,
-        receipt: existingReceipt
-      };
-    }
+    return withKeyLock(idempotencyKey, async () => {
+      // ── Check if already succeeded ──────────────────────────────────
+      const existing = await this.ledger.hasSucceeded(idempotencyKey);
+      if (existing) {
+        const existingReceipt = existing.receiptId
+          ? await this.receipts.findByIdempotencyKey(idempotencyKey)
+          : undefined;
+        return {
+          ok: true,
+          idempotent: true,
+          message: "Payment already completed with this idempotencyKey",
+          ledger: existing,
+          receipt: existingReceipt
+        };
+      }
 
-    // ── Persistent spending limits ──────────────────────────────────────
-    await assertDailyLimit(this.config, this.ledger, payment.maxAmountUsdc);
-    await assertMonthlyLimit(this.config, this.ledger, payment.maxAmountUsdc);
+      // ── Check if payment is already in progress ─────────────────────
+      const pending = await this.ledger.hasPendingAttempt(idempotencyKey);
+      if (pending) {
+        throw new RunnerError(
+          "PAYMENT_IN_PROGRESS",
+          `Payment with idempotencyKey ${idempotencyKey} is already in progress`,
+          409
+        );
+      }
 
-    const amountMicros = decimalToMicros(payment.maxAmountUsdc).toString();
+      // ── Persistent spending limits ──────────────────────────────────
+      await assertDailyLimit(this.config, this.ledger, payment.maxAmountUsdc);
+      await assertMonthlyLimit(this.config, this.ledger, payment.maxAmountUsdc);
 
-    await this.ledger.recordAttempt({
-      idempotencyKey,
-      amountUsdc: payment.maxAmountUsdc,
-      amountMicros,
-      url: payment.url,
-      reason: payment.reason
-    });
+      const amountMicros = decimalToMicros(payment.maxAmountUsdc).toString();
 
-    try {
-      const result = await this.circle.payService({
+      await this.ledger.recordAttempt({
+        idempotencyKey,
+        amountUsdc: payment.maxAmountUsdc,
+        amountMicros,
         url: payment.url,
-        method: payment.method,
-        body: payment.body,
-        maxAmountUsdc: payment.maxAmountUsdc,
-        address: this.config.circleWalletAddress!,
-        chain: this.config.chain
+        reason: payment.reason
       });
 
-      const receipt = await this.receipts.append({
-        type: "x402_payment",
-        agentId: this.config.agentId,
-        idempotencyKey,
-        request: payment,
-        response: result,
-        proof: {
-          circleCommand: [result.command, ...result.args].join(" "),
-          sha256: sha256Json(result)
-        }
-      });
+      try {
+        const result = await this.circle.payService({
+          url: payment.url,
+          method: payment.method,
+          body: payment.body,
+          maxAmountUsdc: payment.maxAmountUsdc,
+          address: this.config.circleWalletAddress!,
+          chain: this.config.chain
+        });
 
-      await this.ledger.recordSuccess(idempotencyKey, receipt.id);
-      return { ok: true, result, receipt, idempotencyKey };
-    } catch (error) {
-      await this.ledger.recordFailure(
-        idempotencyKey,
-        error instanceof Error ? error.message : String(error)
-      );
+        const receipt = await this.receipts.append({
+          type: "x402_payment",
+          agentId: this.config.agentId,
+          idempotencyKey,
+          request: payment,
+          response: result,
+          proof: {
+            circleCommand: [result.command, ...result.args].join(" "),
+            sha256: sha256Json(result)
+          }
+        });
 
-      await this.receipts.append({
-        type: "x402_payment",
-        agentId: this.config.agentId,
-        idempotencyKey,
-        request: payment,
-        error: error instanceof Error ? error.message : String(error)
-      });
+        await this.ledger.recordSuccess(idempotencyKey, receipt.id);
+        return { ok: true, result, receipt, idempotencyKey };
+      } catch (error) {
+        await this.ledger.recordFailure(
+          idempotencyKey,
+          error instanceof Error ? error.message : String(error)
+        );
 
-      throw error;
-    }
+        await this.receipts.append({
+          type: "x402_payment",
+          agentId: this.config.agentId,
+          idempotencyKey,
+          request: payment,
+          error: error instanceof Error ? error.message : String(error)
+        });
+
+        throw error;
+      }
+    });
   }
 
   /**
-   * Batch pay x402 services with per-item idempotency.
+   * Batch pay x402 services with deterministic idempotency keys.
+   *
+   * BatchPaymentRequest requires batchId for retry safety.
+   * Items without idempotencyKey get deterministic key:
+   *   batch:<batchId>:item:<index>:<sha256(url+method+body+maxAmountUsdc)>
    */
   async batchPayX402(body: unknown) {
     const batch = BatchPaymentRequestSchema.parse(body);
-    assertBatchAllowed(this.config, batch.payments);
+
+    // Derive deterministic keys for items without idempotencyKey
+    const payments = batch.payments.map((p, i) => {
+      if (p.idempotencyKey) return p;
+      const keyMaterial = `${p.url}|${p.method}|${JSON.stringify(p.body ?? "")}|${p.maxAmountUsdc}`;
+      const hash = sha256Text(keyMaterial).slice(0, 16);
+      return {
+        ...p,
+        idempotencyKey: `batch:${batch.batchId}:item:${i}:${hash}`
+      };
+    });
+
+    assertBatchAllowed(this.config, payments);
 
     const results = [];
 
-    for (const payment of batch.payments) {
+    for (const payment of payments) {
       try {
         const result = await this.payX402(payment);
         results.push({ ok: true, payment, result });
@@ -386,7 +442,7 @@ export class RunnerServices {
       type: "x402_payment",
       taskId: batch.taskId,
       agentId: this.config.agentId,
-      request: batch,
+      request: { ...batch, payments },
       response: results,
       proof: { sha256: sha256Json(results) }
     });
