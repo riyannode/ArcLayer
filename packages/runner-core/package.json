@@ -1,7 +1,18 @@
 {
   "name": "@arclayer/runner-core",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.0",
   "type": "module",
+  "description": "ArcLayer Runner Core — types, Zod schemas, policy engine, receipt store, and ledger for the external agent runtime",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/riyannode/ArcLayer.git",
+    "directory": "packages/runner-core"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -12,6 +23,10 @@
       "require": "./dist/index.cjs"
     }
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
     "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
@@ -26,6 +41,5 @@
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.6"
-  },
-  "license": "MIT"
+  }
 }

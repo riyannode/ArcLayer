@@ -1,7 +1,18 @@
 {
   "name": "@arclayer/circle-cli-adapter",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.0",
   "type": "module",
+  "description": "ArcLayer Circle CLI Adapter — allowlisted shell bridge to Circle CLI with input redaction and blocked dangerous commands",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/riyannode/ArcLayer.git",
+    "directory": "packages/circle-cli-adapter"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -12,19 +23,22 @@
       "require": "./dist/index.cjs"
     }
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
     "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
     "test": "vitest run"
   },
   "dependencies": {
-    "@arclayer/runner-core": "workspace:*"
+    "@arclayer/runner-core": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^22.19.19",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",
     "vitest": "^4.1.6"
-  },
-  "license": "MIT"
+  }
 }
