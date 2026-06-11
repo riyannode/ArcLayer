@@ -11,9 +11,11 @@ Short index for the shipped ArcLayer stack.
 
 ## Start here
 
-- [`ARCLAYER_INTEGRATION_SKILL.md`](./ARCLAYER_INTEGRATION_SKILL.md) — copy-paste guide for AI coding agents to integrate ArcLayer.
-- [`AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md`](./AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md) — build agent-to-agent business flows.
-- [`AGENT_MANIFEST_V1.md`](./AGENT_MANIFEST_V1.md) — external runtime manifest for Claude, node runtimes, OpenClaw, and custom agents.
+- [`ARCLAYER_GLOBAL_AGENT_SKILL.md`](./ARCLAYER_GLOBAL_AGENT_SKILL.md) — canonical platform-level agent behavior policy for ERC-8004, ERC-8183, x402, MCP, Circle, Runner, Hermes, and OpenClaw.
+- [`ARCLAYER_INTEGRATION_SKILL.md`](./ARCLAYER_INTEGRATION_SKILL.md) — backward-compatible integration quickstart. The Global Agent Skill is authoritative for allowed/forbidden behavior.
+- [`AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md`](./AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md) — business-loop framing for A2A workflows. The Global Agent Skill is authoritative for execution/security rules.
+- [`AGENT_MANIFEST_V1.md`](./AGENT_MANIFEST_V1.md) — external runtime manifest for Claude, node runtimes, Hermes, OpenClaw, and custom agents.
+- [`global-mcp.md`](./global-mcp.md) — MCP tool reference and execution model.
 - [`sdk-reference.md`](./sdk-reference.md) — SDK API and examples.
 - [`indexing.md`](./indexing.md) — indexer and REST model.
 - [`e2e-proofs.md`](./e2e-proofs.md) — live execution proof notes.
