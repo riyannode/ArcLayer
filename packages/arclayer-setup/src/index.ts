@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * @arclayer/setup — One-command ArcLayer Runner setup.
  *
