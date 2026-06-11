@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractBearerToken, assertAuthenticated, isProtectedRoute } from "./auth";
+import { extractBearerToken, assertAuthenticated, isPublicRoute } from "./auth";
 import { RunnerError } from "./errors";
 import type { IncomingMessage } from "node:http";
 
@@ -35,6 +35,11 @@ describe("extractBearerToken", () => {
   it("handles case-insensitive Bearer", () => {
     expect(extractBearerToken(makeReq("bearer my-token"))).toBe("my-token");
   });
+
+  it("returns undefined for empty token", () => {
+    expect(extractBearerToken(makeReq("Bearer "))).toBeUndefined();
+    expect(extractBearerToken(makeReq("Bearer   "))).toBeUndefined();
+  });
 });
 
 describe("assertAuthenticated", () => {
@@ -53,28 +58,30 @@ describe("assertAuthenticated", () => {
   });
 });
 
-describe("isProtectedRoute", () => {
-  it("marks /x402/pay as protected", () => {
-    expect(isProtectedRoute("/x402/pay")).toBe(true);
+describe("isPublicRoute (default-deny)", () => {
+  it("marks /health as public", () => {
+    expect(isPublicRoute("/health")).toBe(true);
   });
 
-  it("marks /runtime/run as protected", () => {
-    expect(isProtectedRoute("/runtime/run")).toBe(true);
+  it("marks /.well-known/arclayer-agent.json as public", () => {
+    expect(isPublicRoute("/.well-known/arclayer-agent.json")).toBe(true);
   });
 
-  it("marks /health as NOT protected", () => {
-    expect(isProtectedRoute("/health")).toBe(false);
+  it("marks /skills/arclayer-global as public", () => {
+    expect(isPublicRoute("/skills/arclayer-global")).toBe(true);
   });
 
-  it("marks /.well-known/arclayer-agent.json as NOT protected", () => {
-    expect(isProtectedRoute("/.well-known/arclayer-agent.json")).toBe(false);
+  it("marks /x402/pay as NOT public (default-deny)", () => {
+    expect(isPublicRoute("/x402/pay")).toBe(false);
   });
 
-  it("marks /skills/arclayer-global as NOT protected", () => {
-    expect(isProtectedRoute("/skills/arclayer-global")).toBe(false);
+  it("marks /runtime/run as NOT public (default-deny)", () => {
+    expect(isPublicRoute("/runtime/run")).toBe(false);
   });
 
-  it("marks unknown routes as NOT protected (fail-open for discovery)", () => {
-    expect(isProtectedRoute("/unknown")).toBe(false);
+  it("marks unknown routes as NOT public (default-deny)", () => {
+    expect(isPublicRoute("/unknown")).toBe(false);
+    expect(isPublicRoute("/new-future-route")).toBe(false);
+    expect(isPublicRoute("/")).toBe(false);
   });
 });

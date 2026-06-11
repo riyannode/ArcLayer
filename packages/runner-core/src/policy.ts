@@ -38,6 +38,18 @@ export function assertAgentIdentity(config: RunnerConfig, agentId: string): void
   }
 }
 
+/**
+ * Assert that an x402 inspect request is allowed.
+ * Inspect is read-only — does NOT require paymentEnabled or wallet.
+ * Only validates URL and host allowlist.
+ */
+export function assertX402InspectAllowed(config: RunnerConfig, payment: PaymentRequest): void {
+  const host = new URL(payment.url).host;
+  if (config.allowedX402Hosts.length > 0 && !config.allowedX402Hosts.includes(host)) {
+    throw new RunnerError("X402_HOST_NOT_ALLOWED", `Host ${host} is not allowed`, 403);
+  }
+}
+
 export function assertX402PaymentAllowed(config: RunnerConfig, payment: PaymentRequest): void {
   if (!config.paymentEnabled) {
     throw new RunnerError("PAYMENT_DISABLED", "Payments are disabled for this runner", 403);

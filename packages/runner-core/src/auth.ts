@@ -8,8 +8,7 @@ import { RunnerError } from "./errors";
 export function extractBearerToken(req: IncomingMessage): string | undefined {
   const auth = req.headers.authorization;
   if (!auth) return undefined;
-  // Avoid regex to prevent CodeQL polynomial backtracking alert.
-  // Case-insensitive prefix check + slice.
+  // Case-insensitive prefix check + slice. No regex.
   const lower = auth.toLowerCase();
   if (!lower.startsWith("bearer ")) return undefined;
   const token = auth.slice(7).trim();
@@ -39,22 +38,8 @@ export function assertAuthenticated(req: IncomingMessage, secret: string): void 
 }
 
 /**
- * Route path sets that require authentication.
- */
-export const PROTECTED_ROUTES = new Set([
-  "/runtime/run",
-  "/erc8004/prepare-register",
-  "/erc8183/provider/run",
-  "/x402/inspect",
-  "/x402/pay",
-  "/x402/batch-pay",
-  "/circle/status",
-  "/receipts",
-  "/ledger"
-]);
-
-/**
- * Route path sets that are public (no auth required).
+ * Public routes that do NOT require auth.
+ * DEFAULT-DENY: every route not in this set requires authentication.
  */
 export const PUBLIC_ROUTES = new Set([
   "/health",
@@ -63,8 +48,9 @@ export const PUBLIC_ROUTES = new Set([
 ]);
 
 /**
- * Check if a route path requires authentication.
+ * Check if a route path is public (no auth required).
+ * Default-deny: unknown routes require auth.
  */
-export function isProtectedRoute(pathname: string): boolean {
-  return PROTECTED_ROUTES.has(pathname);
+export function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTES.has(pathname);
 }

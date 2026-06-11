@@ -4,7 +4,7 @@ import {
   asRunnerError,
   RunnerError,
   assertAuthenticated,
-  isProtectedRoute
+  isPublicRoute
 } from "@arclayer/runner-core";
 
 export type HandlerContext = {
@@ -56,10 +56,10 @@ export function createRouter(routes: Route[], runnerSecret: string) {
         return;
       }
 
-      // ── Auth middleware ─────────────────────────────────────────────────
-      // Protected routes require valid Bearer token.
-      // Public routes (/health, /.well-known/*, /skills/*) skip auth.
-      if (isProtectedRoute(url.pathname)) {
+      // ── Auth middleware (DEFAULT-DENY) ──────────────────────────────────
+      // Only explicitly public routes skip auth.
+      // Every other route — including unknown/new routes — requires auth.
+      if (!isPublicRoute(url.pathname)) {
         assertAuthenticated(req, runnerSecret);
       }
 

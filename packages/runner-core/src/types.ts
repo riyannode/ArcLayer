@@ -124,6 +124,7 @@ export type PaymentRequest = z.infer<typeof PaymentRequestSchema>;
 // ── Batch Payment Request ───────────────────────────────────────────────────
 
 export const BatchPaymentRequestSchema = z.object({
+  batchId: z.string().min(1),
   taskId: z.string().min(1),
   payments: z.array(PaymentRequestSchema).min(1)
 });
@@ -135,7 +136,7 @@ export type BatchPaymentRequest = z.infer<typeof BatchPaymentRequestSchema>;
 export type ReceiptRecord = {
   id: string;
   createdAt: string;
-  type: "x402_payment" | "erc8183_submit" | "runtime_result" | "policy_reject" | "circle_status";
+  type: "x402_payment" | "erc8183_submit" | "erc8004_prepare_register" | "runtime_result" | "policy_reject" | "circle_status";
   taskId?: string;
   jobId?: string;
   agentId?: string;

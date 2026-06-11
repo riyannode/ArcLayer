@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RunnerServices } from "./services";
 import { RunnerError } from "@arclayer/runner-core";
-import type { RunnerConfig, RuntimeResult } from "@arclayer/runner-core";
+import type { RunnerConfig } from "@arclayer/runner-core";
 import type { RuntimeConnector } from "./runtime";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
 
@@ -26,7 +26,7 @@ function makeConfig(overrides: Partial<RunnerConfig> = {}): RunnerConfig {
     batchMaxTotalUsdc: "0.05",
     allowedX402Hosts: ["api.example.com"],
     erc8183ContractAddress: "0x0747EEf0706327138c69792bF28Cd525089e4583",
-    dataDir: ".test-runner",
+    dataDir: ".test-runner-services",
     port: 8787,
     runnerSecret: "test-secret-at-least-16-chars",
     ...overrides
@@ -128,7 +128,7 @@ describe("RunnerServices", () => {
       );
     });
 
-    it("rejects evaluator for provider-only runner (ROLE_NOT_ALLOWED fires first)", async () => {
+    it("rejects evaluator for provider-only runner", async () => {
       await expectRunnerError(
         services.runGeneric({
           taskId: "t1",
@@ -158,13 +158,10 @@ describe("RunnerServices", () => {
 
   describe("prepareRegister", () => {
     it("rejects missing metadataURI", async () => {
-      await expectRunnerError(
-        services.prepareRegister({}),
-        "MISSING_FIELD"
-      );
+      await expectRunnerError(services.prepareRegister({}), "MISSING_FIELD");
     });
 
-    it("delegates to MCP and returns prepare-only result", async () => {
+    it("delegates to MCP and returns prepare-only result with correct receipt type", async () => {
       const result = await services.prepareRegister({
         metadataURI: "https://example.com/agent.json"
       });
@@ -173,10 +170,46 @@ describe("RunnerServices", () => {
       expect(result.mode).toBe("prepare-only");
       expect(result.mcpResult).toBeDefined();
       expect(result.receipt).toBeDefined();
+      expect(result.receipt.type).toBe("erc8004_prepare_register");
     });
   });
 
-  describe("x402 policy", () => {
+  describe("x402 inspect policy (separate from payment)", () => {
+    it("works when payment disabled (inspect is read-only)", async () => {
+      const disabledServices = new RunnerServices(
+        makeConfig({ paymentEnabled: false }),
+        runtime, mcp, skill
+      );
+
+      // inspectX402 should NOT throw PAYMENT_DISABLED
+      // It will fail at Circle CLI (not installed), but policy check passes
+      try {
+        await disabledServices.inspectX402({
+          type: "x402_service_pay",
+          url: "https://api.example.com/test",
+          maxAmountUsdc: "0.005",
+          reason: "test"
+        });
+      } catch (error) {
+        expect(error).not.toBeInstanceOf(RunnerError);
+        // Expected: circle CLI not installed
+      }
+    });
+
+    it("rejects unallowlisted host for inspect", async () => {
+      await expectRunnerError(
+        services.inspectX402({
+          type: "x402_service_pay",
+          url: "https://evil.com/test",
+          maxAmountUsdc: "0.005",
+          reason: "test"
+        }),
+        "X402_HOST_NOT_ALLOWED"
+      );
+    });
+  });
+
+  describe("x402 payment policy", () => {
     it("rejects payment when disabled", async () => {
       const disabledServices = new RunnerServices(
         makeConfig({ paymentEnabled: false }),
@@ -219,11 +252,55 @@ describe("RunnerServices", () => {
     });
   });
 
+  describe("x402 idempotency concurrency", () => {
+    it("returns 409 when same idempotencyKey is already in progress", async () => {
+      // Simulate: record a pending attempt, then try to pay with same key
+      await services.ledger.recordAttempt({
+        idempotencyKey: "concurrent-key-1",
+        amountUsdc: "0.005",
+        amountMicros: "5000"
+      });
+
+      // Second request with same key should get 409
+      await expectRunnerError(
+        services.payX402({
+          type: "x402_service_pay",
+          url: "https://api.example.com/test",
+          maxAmountUsdc: "0.005",
+          reason: "test",
+          idempotencyKey: "concurrent-key-1"
+        }),
+        "PAYMENT_IN_PROGRESS"
+      );
+    });
+
+    it("returns existing receipt for already-succeeded key", async () => {
+      // Record a successful payment
+      await services.ledger.recordAttempt({
+        idempotencyKey: "success-key-1",
+        amountUsdc: "0.005",
+        amountMicros: "5000"
+      });
+      await services.ledger.recordSuccess("success-key-1", "receipt-xyz");
+
+      const result = await services.payX402({
+        type: "x402_service_pay",
+        url: "https://api.example.com/test",
+        maxAmountUsdc: "0.005",
+        reason: "test",
+        idempotencyKey: "success-key-1"
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.idempotent).toBe(true);
+      expect(result.message).toContain("already completed");
+    });
+  });
+
   describe("MCP integration", () => {
     it("calls MCP startJobRun before runtime dispatch", async () => {
       const startSpy = vi.spyOn(mcp, "startJobRun");
 
-      // Will fail at Circle CLI (not installed), but MCP calls should happen
       try {
         await services.runErc8183ProviderJob({
           taskId: "t1",
