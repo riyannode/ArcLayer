@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Clipboard, Loader2, RefreshCcw } from 'lucide-react';
-import { isAddress } from 'viem';
 import { useSignMessage } from 'wagmi';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
@@ -78,10 +77,6 @@ export function AgentWalletFundingRailCard() {
   const [creatingAgentWallet, setCreatingAgentWallet] = useState(false);
   const [showPasskeyRegistration, setShowPasskeyRegistration] = useState(false);
   const [passkeyUsername, setPasskeyUsername] = useState('');
-  const [showManualLink, setShowManualLink] = useState(false);
-  const [manualLinkAddress, setManualLinkAddress] = useState('');
-  const [manualLinking, setManualLinking] = useState(false);
-  const [manualLinkError, setManualLinkError] = useState<string | null>(null);
 
   const [ownerUsdcBalance, setOwnerUsdcBalance] = useState<BalanceInfo | null>(null);
   const [agentUsdcBalance, setAgentUsdcBalance] = useState<BalanceInfo | null>(null);
@@ -224,24 +219,36 @@ export function AgentWalletFundingRailCard() {
     setAgentAccountError(null);
 
     try {
-      let agentWalletAddress = circleAuthenticated && circleAddress ? circleAddress : '';
-
-      if (!agentWalletAddress) {
-        try {
-          agentWalletAddress = await circleLogin();
-        } catch {
-          setShowPasskeyRegistration(true);
-          setAgentAccountError('No existing Circle passkey was linked. Create one below.');
-          return;
-        }
-      }
-
-      await linkAgentWallet(agentWalletAddress);
+      await linkCurrentCircleWallet();
     } catch (error) {
       setAgentAccountError(errorMessage(error, 'Failed to create or link Agent Wallet.'));
     } finally {
       setCreatingAgentWallet(false);
     }
+  }
+
+  async function linkCurrentCircleWallet(): Promise<AgentAccountInfo> {
+    if (!address) {
+      throw new Error('Connect your admin wallet first.');
+    }
+
+    let agentWalletAddress = circleAuthenticated && circleAddress ? circleAddress : '';
+
+    if (!agentWalletAddress) {
+      try {
+        agentWalletAddress = await circleLogin();
+      } catch {
+        setShowPasskeyRegistration(true);
+        throw new Error('No existing Circle passkey was linked. Create one below.');
+      }
+    }
+
+    if (!agentWalletAddress) {
+      setShowPasskeyRegistration(true);
+      throw new Error('No existing Circle passkey was linked. Create one below.');
+    }
+
+    return await linkAgentWallet(agentWalletAddress);
   }
 
   async function handlePasskeyRegistration() {
@@ -260,27 +267,6 @@ export function AgentWalletFundingRailCard() {
       setAgentAccountError(errorMessage(error, 'Passkey registration failed.'));
     } finally {
       setCreatingAgentWallet(false);
-    }
-  }
-
-  async function handleManualLink() {
-    const linkedAddress = manualLinkAddress.trim();
-    if (!isAddress(linkedAddress)) {
-      setManualLinkError('Enter a valid Agent Wallet address.');
-      return;
-    }
-
-    setManualLinking(true);
-    setManualLinkError(null);
-
-    try {
-      await linkAgentWallet(linkedAddress);
-      setManualLinkAddress('');
-      setShowManualLink(false);
-    } catch (error) {
-      setManualLinkError(errorMessage(error, 'Failed to link Agent Wallet.'));
-    } finally {
-      setManualLinking(false);
     }
   }
 
@@ -353,11 +339,11 @@ export function AgentWalletFundingRailCard() {
 
         <div className="grid grid-cols-[1fr_1fr] items-center gap-3 py-3">
           <div className="text-[13px] text-[#EAE4D8]/60">Wallet Role</div>
-          <div className="text-[13px] text-[#F5F0E5]">EOA funds · Agent Wallet operates</div>
+          <div className="text-[13px] text-[#F5F0E5]">Admin funds · Agent Wallet owns/operates</div>
         </div>
 
         <p className="mt-1 text-[11px] leading-5 text-[#EAE4D8]/35">
-          Owner EOA is used for ownership and funding. Circle Agent Wallet is the funding and runtime wallet for agent operations.
+          Admin Wallet is used for session and funding. Circle Agent Wallet is the ERC-8004 onchain owner/controller and runtime wallet for agent operations.
         </p>
 
         {!hasAgentAccount && (
@@ -405,38 +391,6 @@ export function AgentWalletFundingRailCard() {
               </div>
             )}
 
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={() => setShowManualLink((current) => !current)}
-                className="text-[11px] text-[#EAE4D8]/35 transition hover:text-[#EAE4D8]/60"
-              >
-                {showManualLink ? '▾ Hide manual link' : '▸ Advanced: link existing Agent Wallet'}
-              </button>
-              {showManualLink && (
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                  <input
-                    type="text"
-                    placeholder="0x... Agent Wallet address"
-                    value={manualLinkAddress}
-                    onChange={(event) => {
-                      setManualLinkAddress(event.target.value);
-                      setManualLinkError(null);
-                    }}
-                    className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-[#0A0D12] px-3 font-mono text-[11px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleManualLink()}
-                    disabled={manualLinking || !manualLinkAddress.trim()}
-                    className="h-9 rounded-md border border-white/10 px-3 text-[11px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
-                  >
-                    {manualLinking ? 'Linking...' : 'Link'}
-                  </button>
-                </div>
-              )}
-              {manualLinkError && <p className="mt-2 text-[11px] text-red-400">{manualLinkError}</p>}
-            </div>
           </div>
         )}
 
@@ -453,18 +407,18 @@ export function AgentWalletFundingRailCard() {
         </div>
 
         <p className="mt-2 text-[11px] leading-5 text-[#EAE4D8]/40">
-          Fund the Agent Wallet from the owner EOA, then deposit Agent Wallet USDC into Gateway x402.
+          Fund the Agent Wallet from the Admin Wallet, then deposit Agent Wallet USDC into Gateway x402.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {[
-            ['Owner EOA USDC', ownerUsdcBalance?.formatted ?? '0.000000'],
+            ['Admin Wallet USDC', ownerUsdcBalance?.formatted ?? '0.000000'],
             ['Agent Wallet USDC', agentUsdcBalance?.formatted ?? '0.000000'],
             ['Agent Gateway x402', agentGatewayBalance?.formatted ?? '0.000000'],
           ].map(([label, balance]) => (
             <div key={label} className="rounded-md border border-white/10 bg-white/[0.025] p-4">
               <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#EAE4D8]/38">{label}</div>
-              <div className={`mt-2 text-[18px] font-semibold ${label === 'Owner EOA USDC' ? 'text-[#F5F0E5]' : 'text-[#F3C536]'}`}>
+              <div className={`mt-2 text-[18px] font-semibold ${label === 'Admin Wallet USDC' ? 'text-[#F5F0E5]' : 'text-[#F3C536]'}`}>
                 {balancesLoading ? '...' : balance}
               </div>
             </div>
@@ -473,7 +427,7 @@ export function AgentWalletFundingRailCard() {
 
         {!hasAgentAccount ? (
           <p className="mt-5 rounded-md border border-white/10 bg-white/[0.025] px-4 py-3 text-[12px] leading-5 text-[#EAE4D8]/45">
-            Create or link an Agent Wallet in Account Overview to enable funding and Gateway x402 deposits.
+            Create or connect a Circle Agent Wallet in Account Overview to enable funding and Gateway x402 deposits.
           </p>
         ) : (
           <div className="mt-5 grid gap-5">

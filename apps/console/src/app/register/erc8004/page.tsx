@@ -649,7 +649,7 @@ export default function ERC8183EscrowRegisterPage() {
   const [agentAccount, setAgentAccount] = useState<{ agentAccountAddress: string; status: string } | null>(null);
   const [agentAccountLoading, setAgentAccountLoading] = useState(true);
   const agentAccountEnabled = isAgentAccountClientRailEnabled();
-  const [controllerMode, setControllerMode] = useState<'eoa' | 'agent-account'>('eoa');
+  const [controllerMode, setControllerMode] = useState<'eoa' | 'agent-account'>('agent-account');
   const { isConnected, address } = useArcWallet();
   const { writeContractAsync } = useArcWrite();
   const { authenticated: circleAuthenticated, login: circleLogin, address: circleAddress, bundlerClient } = useCircleWallet();
@@ -1556,16 +1556,16 @@ export default function ERC8183EscrowRegisterPage() {
               <div className="mb-6 rounded-lg border border-white/10 bg-[#07090D]/88 p-5">
                 <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#F3C536]">Controller mode</div>
                 <div className="mt-3 flex flex-wrap gap-3">
-                  <button type="button" onClick={() => setControllerMode('eoa')} className={controllerMode === 'eoa' ? 'rounded-md border border-[#F3C536] bg-[#F3C536] px-4 py-2 text-[12px] font-semibold text-[#07090D]' : 'rounded-md border border-white/10 px-4 py-2 text-[12px] text-[#EAE4D8]/60'}>Owner EOA (fallback)</button>
+                  <button type="button" onClick={() => setControllerMode('eoa')} className={controllerMode === 'eoa' ? 'rounded-md border border-[#F3C536] bg-[#F3C536] px-4 py-2 text-[12px] font-semibold text-[#07090D]' : 'rounded-md border border-white/10 px-4 py-2 text-[12px] text-[#EAE4D8]/60'}>EOA mode (advanced fallback)</button>
                   {agentAccountEnabled && (
                     <button type="button" onClick={() => setControllerMode('agent-account')} disabled={agentAccountLoading || !hasAgentAccount} className={controllerMode === 'agent-account' ? 'rounded-md border border-[#F3C536] bg-[#F3C536] px-4 py-2 text-[12px] font-semibold text-[#07090D]' : 'rounded-md border border-white/10 px-4 py-2 text-[12px] text-[#EAE4D8]/60 disabled:cursor-not-allowed disabled:opacity-40'}>Circle Agent Wallet</button>
                   )}
                 </div>
-                <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/55">{controllerMode === 'eoa' ? 'EOA is used for ownership and funding.' : 'Circle Agent Wallet is the agent controller and future runtime wallet.'}</p>
+                <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/55">{controllerMode === 'eoa' ? 'Admin Wallet = user/session/funding wallet. EOA mode = advanced fallback.' : 'Circle Agent Wallet = ERC-8004 onchain owner/controller.'}</p>
               </div>
 
               <div className="grid gap-7 lg:grid-cols-2">
-                <FieldShell label="Controller" required helper={controllerMode === 'eoa' ? 'EOA ownership and funding fallback.' : 'Circle Agent Wallet controller'}>
+                <FieldShell label="Controller" required helper={controllerMode === 'eoa' ? 'Admin Wallet = user/session/funding wallet. EOA mode = advanced fallback.' : 'Circle Agent Wallet = ERC-8004 onchain owner/controller.'}>
                   {controllerMode === 'agent-account' ? (
                     <div className="flex h-12 items-center gap-2 rounded-md border border-[#F3C536]/20 bg-[#F3C536]/[0.04] px-4 text-[14px] text-[#F3C536]"><Shield className="h-4 w-4 shrink-0" /><span className="truncate font-mono text-[13px]">{agentAccountAddress}</span></div>
                   ) : isConnected && address ? (
