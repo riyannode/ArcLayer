@@ -13,6 +13,26 @@ export type RunnerRole = z.infer<typeof RunnerRoleSchema>;
 export const HexAddressSchema = z.string().regex(/^0x[a-fA-F0-9]{40}$/);
 export const HexBytes32Schema = z.string().regex(/^0x[a-fA-F0-9]{64}$/);
 
+// ── Policy Config (standalone file: ~/.arclayer/runner/policy.json) ──────────
+
+export const PolicyConfigSchema = z.object({
+  paymentEnabled: z.preprocess(
+    (v) => {
+      if (typeof v === "string") return v === "true" || v === "1";
+      return v;
+    },
+    z.boolean().default(false)
+  ),
+  perTxLimitUsdc: z.string().default("0.01"),
+  dailyLimitUsdc: z.string().default("1"),
+  monthlyLimitUsdc: z.string().default("20"),
+  batchMaxItems: z.coerce.number().int().min(1).max(100).default(10),
+  batchMaxTotalUsdc: z.string().default("0.05"),
+  allowedX402Hosts: z.array(z.string()).default([])
+});
+
+export type PolicyConfig = z.infer<typeof PolicyConfigSchema>;
+
 // ── Runner Config ───────────────────────────────────────────────────────────
 
 export const RunnerConfigSchema = z.object({
