@@ -8,6 +8,7 @@ export const TOOLS = [
 ] as const;
 
 function list(values: readonly string[]) { return ['[', ...values.map((v) => `  ${JSON.stringify(v)},`), ']'].join('\n'); }
+
 export function arclayerMcpToml(): string {
   return [
     '[mcp_servers.arclayer]',
@@ -20,6 +21,11 @@ export function arclayerMcpToml(): string {
     `enabled_tools = ${list(TOOLS)}`,
   ].join('\n');
 }
+
 export function arclayerSkillToml(skillPath: string): string {
   return ['[[skills.config]]', `path = ${JSON.stringify(skillPath)}`, 'enabled = true'].join('\n');
+}
+
+export function arclayerSkillsToml(skillPaths: readonly string[]): string {
+  return skillPaths.map(arclayerSkillToml).join('\n\n');
 }

@@ -36,8 +36,9 @@ export async function run(argv = process.argv) {
         configPath: s.paths.codexConfig,
         configExists: s.configExists,
         arclayerMcp: s.mcpConfigured,
-        skillPath: s.paths.skillDir,
-        skillExists: s.skillExists,
+        skillsRoot: s.paths.skillsRoot,
+        skills: s.skills,
+        allSkillsInstalled: s.allSkillsInstalled,
       }, null, 2));
     });
 

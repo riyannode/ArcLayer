@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arclayers.xyz/schemas/agent-task.schema.json",
+  "title": "ArcLayer Agent Task",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "taskId",
+    "agentId",
+    "kind",
+    "input"
+  ],
+  "properties": {
+    "taskId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "agentId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "text-task",
+        "erc8183-job",
+        "x402-service-task"
+      ]
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "prompt"
+      ],
+      "properties": {
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    }
+  }
+}

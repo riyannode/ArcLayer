@@ -52,6 +52,18 @@ sdk/src/writes.ts
 
 If a script references a folder that is not present in the current tree, do not recreate that folder blindly. First align the script, docs, and actual runtime surface.
 
+## Platform-level Agent Behavior
+
+The canonical platform-level behavior policy for agents lives at:
+
+`docs/ARCLAYER_GLOBAL_AGENT_SKILL.md`
+
+Packaged plugin mirror:
+
+`packages/mcp-connect/plugin/skills/arclayer-global-agent-commerce/SKILL.md`
+
+Use this policy for ERC-8004, ERC-8183, x402, MCP, Circle Gateway, Circle Agent Wallet/CLI, Runner, Hermes, OpenClaw, receipts, and proof history.
+
 ## Runtime surfaces
 
 ArcLayer has five main runtime surfaces:
