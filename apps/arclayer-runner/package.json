@@ -17,6 +17,7 @@
     "@arclayer/runner-core": "workspace:*",
     "@arclayer/sdk": "workspace:*",
     "commander": "^14.0.2",
+    "yaml": "^2.7.0",
     "zod": "^3.23.0",
     "viem": "^2.17.0"
   },
