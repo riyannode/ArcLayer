@@ -33,6 +33,78 @@ export const PolicyConfigSchema = z.object({
 
 export type PolicyConfig = z.infer<typeof PolicyConfigSchema>;
 
+// ── Wallet address validation ───────────────────────────────────────────────
+
+/**
+ * Validate a wallet address. Rejects private keys and invalid formats.
+ * Only accepts 0x-prefixed 40-hex-char Ethereum addresses.
+ */
+export function validateWalletAddress(input: string): { valid: boolean; error?: string } {
+  if (!input || typeof input !== "string") {
+    return { valid: false, error: "Wallet address is required" };
+  }
+  const trimmed = input.trim();
+
+  // Reject private keys (64 hex chars without 0x, or 66 with 0x)
+  if (/^[a-fA-F0-9]{64}$/.test(trimmed)) {
+    return { valid: false, error: "This looks like a private key, not a wallet address. Never enter private keys here." };
+  }
+  if (/^0x[a-fA-F0-9]{64}$/.test(trimmed)) {
+    return { valid: false, error: "This looks like a private key (66 chars), not a wallet address. Never enter private keys here." };
+  }
+
+  // Valid address: 0x + 40 hex chars
+  if (!/^0x[a-fA-F0-9]{40}$/.test(trimmed)) {
+    return { valid: false, error: "Invalid wallet address. Expected 0x followed by 40 hex characters." };
+  }
+
+  return { valid: true };
+}
+
+// ── Init/Setup file config (nested shape for config.json) ───────────────────
+
+export const InitFileConfigSchema = z.object({
+  agentId: z.string().min(1),
+  role: RunnerRoleSchema.default("provider"),
+  circle: z.object({
+    cliBin: z.string().default("circle"),
+    walletAddress: z.string().optional(),
+    chain: z.string().default("BASE")
+  }).default({}),
+  runtime: z.object({
+    target: RuntimeKindSchema.default("openclaw")
+  }).default({}),
+  mcp: z.object({
+    mode: z.enum(["stdio", "http"]).default("stdio")
+  }).default({})
+});
+
+export type InitFileConfig = z.infer<typeof InitFileConfigSchema>;
+
+/**
+ * Transform nested file config + policy config → flat RunnerConfig shape.
+ * This produces a partial RunnerConfig (no runnerSecret, no agentAddress, etc.)
+ * that gets merged with env vars and validated by RunnerConfigSchema.
+ */
+export function transformFileConfig(
+  file: InitFileConfig,
+  policy: PolicyConfig
+): Record<string, unknown> {
+  return {
+    agentId: file.agentId,
+    defaultRole: file.role,
+    allowedRoles: [file.role],
+    circleCliBin: file.circle?.cliBin ?? "circle",
+    circleWalletAddress: file.circle?.walletAddress || undefined,
+    chain: file.circle?.chain ?? "BASE",
+    runtimeKind: file.runtime?.target ?? "openclaw",
+    runtimeEndpoint: "http://127.0.0.1:8787", // default, overridable via env
+    runtimeRunPath: "/run",
+    // Policy fields from policy.json
+    ...policy
+  };
+}
+
 // ── Runner Config ───────────────────────────────────────────────────────────
 
 export const RunnerConfigSchema = z.object({
