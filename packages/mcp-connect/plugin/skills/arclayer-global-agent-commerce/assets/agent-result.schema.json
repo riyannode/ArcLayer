@@ -10,6 +10,60 @@
     "agentId",
     "status"
   ],
+  "$defs": {
+    "paymentAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "url",
+        "method",
+        "maxAmountUsdc",
+        "reason"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "x402_service_pay"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "body": {
+          "type": [
+            "object",
+            "array",
+            "string",
+            "number",
+            "boolean",
+            "null"
+          ]
+        },
+        "maxAmountUsdc": {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?$"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idempotencyKey": {
+          "type": "string"
+        }
+      }
+    }
+  },
   "properties": {
     "ok": {
       "type": "boolean"
@@ -57,7 +111,7 @@
     "paymentRequests": {
       "type": "array",
       "items": {
-        "$ref": "payment-action.schema.json"
+        "$ref": "#/$defs/paymentAction"
       }
     },
     "proof": {
