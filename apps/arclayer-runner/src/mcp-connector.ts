@@ -140,8 +140,8 @@ export class ArcLayerMcpConnector {
     return this.callTool("provider.runtime_write_checkpoint", { jobId, checkpoint });
   }
 
-  async completeJobRun(jobId: string, result: unknown): Promise<unknown> {
-    return this.callTool("provider.runtime_complete_job", { jobId, result });
+  async completeJobRun(jobId: string, result: unknown, runId?: string): Promise<unknown> {
+    return this.callTool("provider.runtime_complete_run", { jobId, result, runId });
   }
 
   async failJobRun(jobId: string, error: string): Promise<unknown> {
@@ -163,7 +163,7 @@ export class ArcLayerMcpConnector {
   // ── ERC-8183 Lifecycle (calldata preparation) ─────────────────────────
 
   async prepareSubmitDeliverable(jobId: string, deliverableHash: string): Promise<unknown> {
-    return this.callTool("erc8183.prepare_submit", { jobId, deliverableHash });
+    return this.callTool("provider.prepare_submit_job", { jobId, deliverableHash });
   }
 
   async prepareCompleteJob(jobId: string, reason?: string): Promise<unknown> {

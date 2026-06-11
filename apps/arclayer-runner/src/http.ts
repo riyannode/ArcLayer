@@ -22,11 +22,22 @@ type Route = {
   handler: RouteHandler;
 };
 
-async function readBody(req: IncomingMessage): Promise<unknown> {
+const MAX_BODY_BYTES = 1024 * 1024; // 1 MB
+
+async function readBody(req: IncomingMessage, method: string): Promise<unknown> {
+  // Skip body for GET/HEAD (no body expected)
+  if (method === "GET" || method === "HEAD") return undefined;
+
   const chunks: Buffer[] = [];
+  let totalBytes = 0;
 
   for await (const chunk of req) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buf.length;
+    if (totalBytes > MAX_BODY_BYTES) {
+      throw new RunnerError("BODY_TOO_LARGE", "Request body exceeds 1 MB limit", 413);
+    }
+    chunks.push(buf);
   }
 
   const raw = Buffer.concat(chunks).toString("utf8");
@@ -57,13 +68,11 @@ export function createRouter(routes: Route[], runnerSecret: string) {
       }
 
       // ── Auth middleware (DEFAULT-DENY) ──────────────────────────────────
-      // Only explicitly public routes skip auth.
-      // Every other route — including unknown/new routes — requires auth.
       if (!isPublicRoute(url.pathname)) {
         assertAuthenticated(req, runnerSecret);
       }
 
-      const body = await readBody(req);
+      const body = await readBody(req, req.method ?? "GET");
       const result = await route.handler({ req, res, url, body });
       send(res, 200, result ?? { ok: true });
     } catch (error) {
