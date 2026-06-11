@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arclayers.xyz/schemas/erc8183-action.schema.json",
+  "title": "ArcLayer ERC-8183 Action Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "role",
+    "reason"
+  ],
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "erc8183_create_job",
+        "erc8183_set_budget",
+        "erc8183_fund",
+        "erc8183_submit_deliverable",
+        "erc8183_complete",
+        "erc8183_reject"
+      ]
+    },
+    "jobId": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "client",
+        "provider",
+        "evaluator"
+      ]
+    },
+    "provider": {
+      "type": "string",
+      "description": "Provider wallet address (0x...)"
+    },
+    "evaluator": {
+      "type": "string",
+      "description": "Evaluator wallet address (0x...)"
+    },
+    "expiredAt": {
+      "type": "integer",
+      "description": "Job expiration as Unix timestamp (seconds)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Job description or requirement"
+    },
+    "hook": {
+      "type": "string",
+      "description": "Optional callback hook address or URL"
+    },
+    "deliverableHash": {
+      "type": "string"
+    },
+    "reasonHash": {
+      "type": "string"
+    },
+    "amountUsdc": {
+      "type": "string",
+      "pattern": "^[0-9]+(\\.[0-9]+)?$"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "erc8183_create_job"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "role": {
+            "const": "client"
+          }
+        },
+        "required": [
+          "provider",
+          "evaluator",
+          "expiredAt",
+          "description"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "erc8183_set_budget"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "role": {
+            "const": "client"
+          }
+        },
+        "required": [
+          "jobId",
+          "amountUsdc"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "erc8183_fund"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "role": {
+            "const": "client"
+          }
+        },
+        "required": [
+          "jobId"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "erc8183_submit_deliverable"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "role": {
+            "const": "provider"
+          }
+        },
+        "required": [
+          "jobId",
+          "deliverableHash"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "erc8183_complete",
+              "erc8183_reject"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "role": {
+            "const": "evaluator"
+          }
+        },
+        "required": [
+          "jobId",
+          "reasonHash"
+        ]
+      }
+    }
+  ]
+}
