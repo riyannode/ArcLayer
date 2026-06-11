@@ -8,7 +8,7 @@ These authenticated ERC-8004 tools preserve the optional **Passkey Agent Account
 
 - Disabled by default.
 - Enable only with `AGENT_ACCOUNT_BACKEND_ENABLED=true`, `MCP_AGENT_ACCOUNT_IDENTITY_ENABLED=true`, and `NEXT_PUBLIC_AGENT_ACCOUNT_ENABLED=true`.
-- PM2 provider/evaluator bots continue to use dedicated Bot EOAs.
+- PM2 provider/evaluator runtimes continue to use their configured runtime signers until Circle Agent Wallet execution is implemented.
 
 ## Passkey Agent Account model
 

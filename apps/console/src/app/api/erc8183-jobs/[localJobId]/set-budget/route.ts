@@ -6,6 +6,7 @@ import { getErc8183JobByLocalId } from '@/lib/erc8183-jobs/store';
 import { assertErc8183Participant } from '@/lib/erc8183-jobs/authz';
 import { escrowRail } from '@/lib/rails/responses';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
+import { getAgentWalletPaymentHint } from '@/lib/agent-accounts/payment-hint';
 
 export async function POST(
   req: NextRequest,
@@ -35,14 +36,22 @@ export async function POST(
       args: [job.erc8183JobId, job.priceAtomic, '0x'],
     };
 
+    const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
     return humanJson(req, {
       ok: true,
       ...escrowRail(),
       nextAction: 'setBudget',
       localJobId: localJobId,
       erc8183JobId: job.erc8183JobId,
+      payerRail: paymentHint.payerRail,
+      payerAddress: paymentHint.payerAddress,
+      legacyEoaFallback: paymentHint.legacyEoaFallback,
       tx,
-      message: 'Sign and broadcast setBudget tx, then POST /api/erc8183-jobs/[localJobId]/tx with tx_hash=set_budget.',
+      message:
+        paymentHint.payerRail === 'circle-agent-wallet'
+          ? 'Use the Circle Agent Wallet rail to set the budget. After confirmed, POST /api/erc8183-jobs/[localJobId]/tx with tx_hash=set_budget.'
+          : 'Legacy fallback: sign and broadcast setBudget tx, then POST /api/erc8183-jobs/[localJobId]/tx with tx_hash=set_budget.',
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';

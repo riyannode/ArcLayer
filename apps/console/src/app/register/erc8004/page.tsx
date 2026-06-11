@@ -728,6 +728,16 @@ export default function ERC8183EscrowRegisterPage() {
     fetchAgentAccount({ address, ensureSession: false });
   }, [address, isConnected, agentAccount, agentAccountEnabled, fetchAgentAccount]);
 
+  useEffect(() => {
+    if (!agentAccountEnabled) return;
+    if (!agentAccount?.agentAccountAddress) return;
+
+    setControllerMode((current) => {
+      if (current === 'agent-account') return current;
+      return 'agent-account';
+    });
+  }, [agentAccountEnabled, agentAccount?.agentAccountAddress]);
+
   // Read ?role= from URL on mount (supports deep-link from onboarding page)
   useEffect(() => {
     const param = new URLSearchParams(window.location.search).get('role');
@@ -1223,9 +1233,9 @@ export default function ERC8183EscrowRegisterPage() {
               <div className="flex gap-5">
                 <Wallet className="mt-1 h-6 w-6 shrink-0 text-[#F3C536]" />
                 <div>
-                  <div className="font-semibold text-[#F5F0E5]">Bot EOA controls identity</div>
+                  <div className="font-semibold text-[#F5F0E5]">EOA owns and funds</div>
                   <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
-                    The connected EOA is the default controller. Circle Agent Account is optional for passkey-based identity control.
+                    The connected EOA owns the setup and funds the Circle Agent Wallet.
                   </p>
                 </div>
               </div>
@@ -1233,9 +1243,9 @@ export default function ERC8183EscrowRegisterPage() {
               <div className="flex gap-5">
                 <Shield className="mt-1 h-6 w-6 shrink-0 text-[#F3C536]" />
                 <div>
-                  <div className="font-semibold text-[#F5F0E5]">Next step</div>
+                  <div className="font-semibold text-[#F5F0E5]">Circle Agent Wallet operates</div>
                   <p className="mt-1 text-[13px] leading-6 text-[#EAE4D8]/62">
-                    Identity minted. Next, set up how this agent will operate.
+                    When available, Circle Agent Wallet is used as the agent controller and future runtime wallet.
                   </p>
                 </div>
               </div>
@@ -1360,16 +1370,16 @@ export default function ERC8183EscrowRegisterPage() {
               <div className="mb-6 rounded-lg border border-white/10 bg-[#07090D]/88 p-5">
                 <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#F3C536]">Controller mode</div>
                 <div className="mt-3 flex flex-wrap gap-3">
-                  <button type="button" onClick={() => setControllerMode('eoa')} className={controllerMode === 'eoa' ? 'rounded-md border border-[#F3C536] bg-[#F3C536] px-4 py-2 text-[12px] font-semibold text-[#07090D]' : 'rounded-md border border-white/10 px-4 py-2 text-[12px] text-[#EAE4D8]/60'}>Bot EOA (default)</button>
+                  <button type="button" onClick={() => setControllerMode('eoa')} className={controllerMode === 'eoa' ? 'rounded-md border border-[#F3C536] bg-[#F3C536] px-4 py-2 text-[12px] font-semibold text-[#07090D]' : 'rounded-md border border-white/10 px-4 py-2 text-[12px] text-[#EAE4D8]/60'}>Owner EOA (fallback)</button>
                   {agentAccountEnabled && (
-                    <button type="button" onClick={() => setControllerMode('agent-account')} disabled={agentAccountLoading || !hasAgentAccount} className={controllerMode === 'agent-account' ? 'rounded-md border border-[#F3C536] bg-[#F3C536] px-4 py-2 text-[12px] font-semibold text-[#07090D]' : 'rounded-md border border-white/10 px-4 py-2 text-[12px] text-[#EAE4D8]/60 disabled:cursor-not-allowed disabled:opacity-40'}>Circle Agent Account</button>
+                    <button type="button" onClick={() => setControllerMode('agent-account')} disabled={agentAccountLoading || !hasAgentAccount} className={controllerMode === 'agent-account' ? 'rounded-md border border-[#F3C536] bg-[#F3C536] px-4 py-2 text-[12px] font-semibold text-[#07090D]' : 'rounded-md border border-white/10 px-4 py-2 text-[12px] text-[#EAE4D8]/60 disabled:cursor-not-allowed disabled:opacity-40'}>Circle Agent Wallet</button>
                   )}
                 </div>
-                <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/55">{controllerMode === 'eoa' ? 'Bot EOA controls this identity.' : 'Circle Agent Account is optional for passkey-based identity control.'}</p>
+                <p className="mt-3 text-[12px] leading-5 text-[#EAE4D8]/55">{controllerMode === 'eoa' ? 'EOA is used for ownership and funding.' : 'Circle Agent Wallet is the agent controller and future runtime wallet.'}</p>
               </div>
 
               <div className="grid gap-7 lg:grid-cols-2">
-                <FieldShell label="Controller" required helper={controllerMode === 'eoa' ? 'Bot EOA controls this identity.' : 'Optional passkey-based identity controller'}>
+                <FieldShell label="Controller" required helper={controllerMode === 'eoa' ? 'EOA ownership and funding fallback.' : 'Circle Agent Wallet controller'}>
                   {controllerMode === 'agent-account' ? (
                     <div className="flex h-12 items-center gap-2 rounded-md border border-[#F3C536]/20 bg-[#F3C536]/[0.04] px-4 text-[14px] text-[#F3C536]"><Shield className="h-4 w-4 shrink-0" /><span className="truncate font-mono text-[13px]">{agentAccountAddress}</span></div>
                   ) : isConnected && address ? (
