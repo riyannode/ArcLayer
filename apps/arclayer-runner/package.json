@@ -1,0 +1,31 @@
+{
+  "name": "@arclayer/runner",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "arclayer-runner": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@arclayer/circle-cli-adapter": "workspace:*",
+    "@arclayer/runner-core": "workspace:*",
+    "@arclayer/sdk": "workspace:*",
+    "commander": "^14.0.2",
+    "zod": "^3.23.0",
+    "viem": "^2.17.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6"
+  },
+  "license": "MIT"
+}
