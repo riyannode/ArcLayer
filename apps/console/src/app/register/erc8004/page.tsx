@@ -43,6 +43,9 @@ type PendingAgentWalletBinding = {
   agentAccountAddress: string;
   txHash: `0x${string}`;
   metadataURI: string;
+  agentWalletSignature?: `0x${string}`;
+  bindingNonce?: string;
+  bindingExpiresAt?: string;
 };
 
 type RegisteredIdentityRecord = {
@@ -661,6 +664,48 @@ export default function ERC8183EscrowRegisterPage() {
     }
   }, [agentAccountEnabled, controllerMode]);
 
+  // Restore pendingBinding from localStorage after page reload.
+  // The retry button only shows when pendingBinding is set, but it
+  // gets lost on reload. RegisteredIdentityRecord has enough data to
+  // reconstruct it.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('arclayer-erc8183-agent-identity-registered');
+      if (!raw) return;
+
+      const record = JSON.parse(raw) as RegisteredIdentityRecord;
+
+      if (
+        record.bindingStatus !== 'failed' ||
+        record.controllerMode !== 'agent-account' ||
+        !record.agentId ||
+        !record.agentAccountAddress ||
+        !record.txHash ||
+        !record.metadataURI
+      ) {
+        return;
+      }
+
+      setMintedAgentId(record.agentId);
+      setTxHash(record.txHash);
+      setRegisterStatus('success');
+      setPendingBinding({
+        agentId: record.agentId,
+        agentAccountAddress: record.agentAccountAddress,
+        txHash: record.txHash as `0x${string}`,
+        metadataURI: record.metadataURI,
+      });
+
+      setNotice(
+        record.bindingError
+          ? `Identity minted, but Agent Wallet binding failed: ${record.bindingError}`
+          : 'Identity minted, but Agent Wallet binding needs retry.',
+      );
+    } catch {
+      // ignore malformed localStorage
+    }
+  }, []);
+
   // Fetch Agent Account — re-fetches when wallet connects (needs session cookie)
   const fetchAgentAccount = useMemo(() => {
     return async function loadAgentAccount(options?: {
@@ -1006,6 +1051,9 @@ export default function ERC8183EscrowRegisterPage() {
     agentAccountAddress: string;
     txHash: `0x${string}`;
     metadataURI: string;
+    agentWalletSignature?: `0x${string}`;
+    bindingNonce?: string;
+    bindingExpiresAt?: string;
   }): Promise<{ ok: true } | { ok: false; error: string }> {
     if (!address) {
       return { ok: false, error: 'Owner wallet is not connected.' };
@@ -1029,6 +1077,9 @@ export default function ERC8183EscrowRegisterPage() {
           registrationTxHash: input.txHash,
           metadataURI: input.metadataURI,
           chainId: 5042002,
+          agentWalletSignature: input.agentWalletSignature || '',
+          bindingNonce: input.bindingNonce || '',
+          bindingExpiresAt: input.bindingExpiresAt || '',
         }),
       });
 
@@ -1087,7 +1138,11 @@ export default function ERC8183EscrowRegisterPage() {
     setNotice('Retrying Agent Wallet binding...');
 
     try {
-      const binding = await saveAgentWalletBinding(pendingBinding);
+      const binding = await saveAgentWalletBinding({
+        ...pendingBinding,
+        bindingNonce: crypto.randomUUID(),
+        bindingExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      });
 
       if (binding.ok) {
         setPendingBinding(null);
@@ -1300,6 +1355,8 @@ export default function ERC8183EscrowRegisterPage() {
           agentAccountAddress,
           txHash: hash,
           metadataURI: effectiveMetadataURI,
+          bindingNonce: crypto.randomUUID(),
+          bindingExpiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
         });
 
         if (binding.ok) {

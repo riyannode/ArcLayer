@@ -4,6 +4,12 @@
  * Persists agent_id → agent_account_address binding after ERC-8004 mint.
  * Auth: wallet session cookie (owner address derived server-side).
  * Does NOT write agent_x402_payers.
+ *
+ * Verification chain:
+ * 1. Mint proof (receipt + ownerOf)
+ * 2. Active Agent Account check (arclayer_agent_accounts)
+ * 3. EIP-1271 Agent Wallet control signature
+ * 4. Current ERC-8004 ownerOf check (supports rebind after transfer)
  */
 
 import { NextRequest } from 'next/server';
@@ -14,12 +20,17 @@ import {
   SESSION_COOKIE_NAME,
   resolveSessionFromCookie,
 } from '@/lib/auth/wallet-session';
-import { getActiveAgentAccountForOwner } from '@/lib/agent-accounts/store';
+import { getActiveAgentAccountForOwnerAndAddress } from '@/lib/agent-accounts/store';
 import { isAgentAccountServerRailEnabled } from '@/lib/agent-accounts/feature-flags';
 import {
   getActiveAgentWalletBindingsForOwner,
   upsertActiveAgentWalletBinding,
 } from '@/lib/agent-wallet-bindings/store';
+import {
+  buildAgentWalletBindingMessage,
+  isFreshBindingChallenge,
+  verifyAgentWalletControlSignature,
+} from '@/lib/agent-wallet-bindings/control-proof';
 import { extractERC8004MintedTokenIdFromReceipt } from '@/lib/contracts/erc8004';
 
 export const runtime = 'nodejs';
@@ -124,6 +135,38 @@ async function verifyAgentWalletMintProof(input: {
   return { ok: true as const };
 }
 
+// ── Current owner check (supports rebind after transfer) ──────────────
+
+async function verifyCurrentERC8004Owner(input: {
+  agentId: string;
+  expectedOwner: Address;
+}) {
+  if (!isDecimalTokenId(input.agentId)) {
+    return {
+      ok: false as const,
+      error: 'invalid_agent_id',
+      detail: 'Agent ID must be a decimal ERC-8004 token ID.',
+    };
+  }
+
+  const owner = await publicClient.readContract({
+    address: CONTRACTS.ERC8004_IDENTITY_REGISTRY as Address,
+    abi: OWNER_OF_ABI,
+    functionName: 'ownerOf',
+    args: [BigInt(input.agentId)],
+  });
+
+  if (getAddress(owner) !== getAddress(input.expectedOwner)) {
+    return {
+      ok: false as const,
+      error: 'agent_owner_mismatch',
+      detail: 'Current on-chain ERC-8004 owner does not match the Agent Wallet.',
+    };
+  }
+
+  return { ok: true as const };
+}
+
 // ── GET ────────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -204,6 +247,17 @@ export async function POST(req: NextRequest) {
       ? body.chainId
       : ARC_CHAIN_ID;
 
+  // ── Proof fields (Agent Wallet control signature) ──────────────────
+
+  const agentWalletSignature =
+    typeof body.agentWalletSignature === 'string' ? body.agentWalletSignature.trim() : '';
+
+  const bindingNonce =
+    typeof body.bindingNonce === 'string' ? body.bindingNonce.trim() : '';
+
+  const bindingExpiresAt =
+    typeof body.bindingExpiresAt === 'string' ? body.bindingExpiresAt.trim() : '';
+
   // ── Validate ───────────────────────────────────────────────────────
 
   if (!agentId) {
@@ -262,41 +316,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── Resolve owner + verify active Agent Wallet ─────────────────────
+  // ── Step 1: Verify on-chain mint proof ─────────────────────────────
 
   const ownerAddress = getAddress(wallet);
   const submittedAgentAccount = getAddress(agentAccountRaw);
-
-  const activeAgentAccount = await getActiveAgentAccountForOwner(ownerAddress);
-  if (!activeAgentAccount?.agentAccountAddress) {
-    return humanJson(
-      req,
-      {
-        ok: false,
-        error: 'agent_wallet_not_found',
-        detail: 'Create or link an active Circle Agent Wallet first.',
-      },
-      { status: 409 },
-    );
-  }
-
-  if (
-    activeAgentAccount.agentAccountAddress.toLowerCase() !==
-    submittedAgentAccount.toLowerCase()
-  ) {
-    return humanJson(
-      req,
-      {
-        ok: false,
-        error: 'agent_wallet_mismatch',
-        detail:
-          'Submitted Agent Wallet does not match the active Agent Wallet for this owner.',
-      },
-      { status: 409 },
-    );
-  }
-
-  // ── Verify on-chain mint proof ─────────────────────────────────────
 
   try {
     const proof = await verifyAgentWalletMintProof({
@@ -335,6 +358,105 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // ── Step 2: Verify active Agent Account ────────────────────────────
+  // Rejects disabled accounts (replacement flow deactivates old accounts
+  // but the binding table is not automatically updated).
+
+  const activeAgentAccount = await getActiveAgentAccountForOwnerAndAddress(
+    ownerAddress,
+    submittedAgentAccount,
+  );
+
+  if (!activeAgentAccount?.agentAccountAddress) {
+    return humanJson(
+      req,
+      {
+        ok: false,
+        error: 'agent_wallet_not_active',
+        detail:
+          'Submitted Agent Wallet is not an active verified Agent Account for this owner.',
+      },
+      { status: 409 },
+    );
+  }
+
+  // ── Step 3: Agent Wallet control signature (EIP-1271) ──────────────
+
+  if (!isFreshBindingChallenge({ nonce: bindingNonce, expiresAt: bindingExpiresAt })) {
+    return humanJson(
+      req,
+      {
+        ok: false,
+        error: 'agent_wallet_binding_challenge_invalid',
+        detail: 'Agent Wallet binding challenge is missing, expired, or invalid.',
+      },
+      { status: 400 },
+    );
+  }
+
+  if (!agentWalletSignature) {
+    return humanJson(
+      req,
+      {
+        ok: false,
+        error: 'agent_wallet_signature_required',
+        detail:
+          'Agent Wallet must sign the binding challenge before this ERC-8004 identity can be bound.',
+      },
+      { status: 400 },
+    );
+  }
+
+  const bindingMessage = buildAgentWalletBindingMessage({
+    ownerAddress,
+    agentAccountAddress: submittedAgentAccount,
+    agentId,
+    registrationTxHash,
+    chainId,
+    nonce: bindingNonce,
+    expiresAt: bindingExpiresAt,
+  });
+
+  const controlProof = await verifyAgentWalletControlSignature({
+    publicClient,
+    agentAccountAddress: submittedAgentAccount,
+    message: bindingMessage,
+    signature: agentWalletSignature,
+  });
+
+  if (!controlProof.ok) {
+    return humanJson(
+      req,
+      {
+        ok: false,
+        error: controlProof.error,
+        detail: controlProof.detail,
+      },
+      { status: 403 },
+    );
+  }
+
+  // ── Step 4: Current ERC-8004 ownerOf check ─────────────────────────
+  // Supports rebind after identity transfer. The mint proof checks the
+  // original tx, but this checks the CURRENT on-chain state.
+
+  const currentOwnerProof = await verifyCurrentERC8004Owner({
+    agentId,
+    expectedOwner: submittedAgentAccount as Address,
+  });
+
+  if (!currentOwnerProof.ok) {
+    return humanJson(
+      req,
+      {
+        ok: false,
+        error: currentOwnerProof.error,
+        detail: currentOwnerProof.detail,
+      },
+      { status: 400 },
+    );
+  }
+
   // ── Upsert binding ─────────────────────────────────────────────────
 
   try {
@@ -346,6 +468,7 @@ export async function POST(req: NextRequest) {
       chainId,
       registrationTxHash,
       metadataUri,
+      allowOwnerTransferAfterOnchainProof: true,
     });
 
     return humanJson(

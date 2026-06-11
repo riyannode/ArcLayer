@@ -38,6 +38,13 @@ export type UpsertAgentWalletBindingInput = {
   chainId?: number;
   registrationTxHash?: string | null;
   metadataUri?: string | null;
+
+  /**
+   * Only set true after route has verified:
+   * - current ERC-8004 ownerOf(agentId) === agentAccountAddress
+   * - Agent Wallet control proof passed
+   */
+  allowOwnerTransferAfterOnchainProof?: boolean;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -124,9 +131,30 @@ export async function upsertActiveAgentWalletBinding(
 
   // Check if active binding already exists for this agent_id
   const existing = await getActiveAgentWalletBindingByAgentId(agentId);
+  const now = new Date().toISOString();
 
   if (existing && existing.ownerAddress.toLowerCase() !== ownerAddress.toLowerCase()) {
-    throw new Error('agent_already_bound_to_different_owner');
+    if (!input.allowOwnerTransferAfterOnchainProof) {
+      throw new Error('agent_already_bound_to_different_owner');
+    }
+
+    // Deactivate stale binding — route has already verified:
+    // - current ownerOf(agentId) === agentAccountAddress
+    // - Agent Wallet control signature passed
+    const { error: deactivateError } = await supabase
+      .from(TABLE)
+      .update({
+        status: 'inactive',
+        updated_at: now,
+      })
+      .eq('id', existing.id)
+      .eq('status', 'active');
+
+    if (deactivateError) {
+      throw new Error(
+        `Failed to deactivate stale Agent Wallet binding: ${deactivateError.message}`,
+      );
+    }
   }
 
   const payload = {
@@ -138,15 +166,20 @@ export async function upsertActiveAgentWalletBinding(
     registration_tx_hash: input.registrationTxHash || null,
     metadata_uri: input.metadataUri || null,
     status: 'active',
-    updated_at: new Date().toISOString(),
+    updated_at: now,
   };
 
-  // Update existing binding
-  if (existing) {
+  // Update existing binding (same owner only — different owner was handled above)
+  const sameOwnerExisting =
+    existing && existing.ownerAddress.toLowerCase() === ownerAddress.toLowerCase()
+      ? existing
+      : null;
+
+  if (sameOwnerExisting) {
     const { data, error } = await supabase
       .from(TABLE)
       .update(payload)
-      .eq('id', existing.id)
+      .eq('id', sameOwnerExisting.id)
       .select('*')
       .single();
 
