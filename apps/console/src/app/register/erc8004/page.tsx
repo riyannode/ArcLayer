@@ -35,6 +35,33 @@ type AgentRole = 'provider' | 'evaluator' | 'autonomous-client';
 type RegisterStatus = 'idle' | 'pending' | 'success' | 'error';
 type SectionKey = 'identity' | 'profile' | 'review';
 type SectionStatus = 'Complete' | 'Pending';
+type ControllerMode = 'eoa' | 'agent-account';
+type BindingStatus = 'not_applicable' | 'created' | 'failed';
+
+type PendingAgentWalletBinding = {
+  agentId: string;
+  agentAccountAddress: string;
+  txHash: `0x${string}`;
+  metadataURI: string;
+};
+
+type RegisteredIdentityRecord = {
+  agentId: string;
+  txHash: `0x${string}`;
+  source: 'mcp-onboarding' | 'web-register';
+  ownerWallet: string | null;
+  controllerWallet: string | null;
+  controllerMode: ControllerMode;
+  agentAccountAddress: string | null;
+  metadataURI: string;
+  form: FormState;
+  agentManifest: AgentManifestV1;
+  bindingStatus: BindingStatus;
+  bindingError?: string;
+  mcpIntentId?: string;
+  mcpRolePresetId?: string;
+  nextStep: string;
+};
 
 const CATEGORIES = [
   'Smart Contract',
@@ -610,6 +637,8 @@ export default function ERC8183EscrowRegisterPage() {
   const [txHash, setTxHash] = useState<string>('');
   const [metadataDraftId, setMetadataDraftId] = useState('');
   const [metadataWriteToken, setMetadataWriteToken] = useState('');
+  const [pendingBinding, setPendingBinding] = useState<PendingAgentWalletBinding | null>(null);
+  const [bindingRetrying, setBindingRetrying] = useState(false);
   const [mcpIntentId, setMcpIntentId] = useState('');
   const [mcpRolePresetId, setMcpRolePresetId] = useState('');
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
@@ -972,6 +1001,111 @@ export default function ERC8183EscrowRegisterPage() {
     }
   }
 
+  async function saveAgentWalletBinding(input: {
+    agentId: string;
+    agentAccountAddress: string;
+    txHash: `0x${string}`;
+    metadataURI: string;
+  }): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!address) {
+      return { ok: false, error: 'Owner wallet is not connected.' };
+    }
+
+    try {
+      const { ensureWalletSession } = await import('@/lib/auth/ensureWalletSession');
+      const session = await ensureWalletSession(address, signMessageAsync);
+
+      if (!session.ok) {
+        return { ok: false, error: session.error };
+      }
+
+      const res = await fetch('/api/profile/agent-wallet-bindings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: input.agentId,
+          agentAccountAddress: input.agentAccountAddress,
+          controllerMode: 'agent-account',
+          registrationTxHash: input.txHash,
+          metadataURI: input.metadataURI,
+          chainId: 5042002,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok || !json.ok) {
+        return {
+          ok: false,
+          error: json.detail || json.error || 'Failed to save Agent Wallet binding.',
+        };
+      }
+
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Failed to save Agent Wallet binding.',
+      };
+    }
+  }
+
+  function updateRegisteredIdentityBindingState(input: {
+    bindingStatus: BindingStatus;
+    bindingError?: string;
+  }) {
+    const raw = localStorage.getItem('arclayer-erc8183-agent-identity-registered');
+    if (!raw) return;
+
+    try {
+      const parsed = JSON.parse(raw) as RegisteredIdentityRecord;
+      localStorage.setItem(
+        'arclayer-erc8183-agent-identity-registered',
+        JSON.stringify(
+          {
+            ...parsed,
+            bindingStatus: input.bindingStatus,
+            bindingError: input.bindingError,
+            nextStep:
+              input.bindingStatus === 'created'
+                ? 'Identity minted and bound to Agent Wallet. Next, configure agent operation.'
+                : 'Identity minted, but Agent Wallet binding needs retry.',
+          },
+          null,
+          2,
+        ),
+      );
+    } catch {
+      // ignore malformed localStorage
+    }
+  }
+
+  async function retryAgentWalletBinding() {
+    if (!pendingBinding) return;
+
+    setBindingRetrying(true);
+    setNotice('Retrying Agent Wallet binding...');
+
+    try {
+      const binding = await saveAgentWalletBinding(pendingBinding);
+
+      if (binding.ok) {
+        setPendingBinding(null);
+        updateRegisteredIdentityBindingState({ bindingStatus: 'created' });
+        setNotice(`Agent Wallet binding saved for Agent ID ${pendingBinding.agentId}.`);
+        return;
+      }
+
+      updateRegisteredIdentityBindingState({
+        bindingStatus: 'failed',
+        bindingError: binding.error,
+      });
+      setNotice(`Agent Wallet binding still failed: ${binding.error}`);
+    } finally {
+      setBindingRetrying(false);
+    }
+  }
+
   async function submitRegister() {
     if (!isConnected || !address) {
       setRegisterStatus('error');
@@ -991,21 +1125,21 @@ export default function ERC8183EscrowRegisterPage() {
 
     if (controllerMode === 'agent-account' && !agentAccountEnabled) {
       setRegisterStatus('error');
-      setNotice('Agent Account mode is disabled. Use EOA controller mode.');
+      setNotice('Agent Wallet mode is disabled. Use EOA controller mode.');
       return;
     }
 
     // Agent Account path: require passkey auth
     if (effectiveControllerMode === 'agent-account' && !hasAgentAccount) {
       setRegisterStatus('error');
-      setNotice('Circle Agent Account is unavailable. Use EOA controller mode or link an account in Profile.');
+      setNotice('Circle Agent Wallet is unavailable. Use EOA controller mode or link an Agent Wallet in Profile.');
       return;
     }
 
     // Agent Account path: prompt passkey login if not authenticated
     if (effectiveControllerMode === 'agent-account' && hasAgentAccount && !circleAuthenticated) {
       try {
-        setNotice('Login with passkey to use Circle Agent Account...');
+        setNotice('Login with passkey to use Circle Agent Wallet...');
         await circleLogin();
         // After login, React state (bundlerClient/circleAddress) is stale in this render.
         // Stop and ask user to click Mint again — by then state will be updated.
@@ -1059,18 +1193,18 @@ export default function ERC8183EscrowRegisterPage() {
         // Agent Account path: sign via Circle Smart Account (passkey)
         if (!bundlerClient) {
           setRegisterStatus('error');
-          setNotice('Circle Agent Account not connected. Login with passkey first.');
+          setNotice('Circle Agent Wallet not connected. Login with passkey first.');
           return;
         }
 
         // Verify Circle address matches expected Agent Account
         if (!circleAddress || circleAddress.toLowerCase() !== agentAccountAddress.toLowerCase()) {
           setRegisterStatus('error');
-          setNotice('Agent Account mismatch. Re-login with passkey.');
+          setNotice('Agent Wallet mismatch. Re-login with passkey.');
           return;
         }
 
-        setNotice('Submitting ERC-8004 identity mint via Circle Agent Account...');
+        setNotice('Submitting ERC-8004 identity mint via Circle Agent Wallet...');
 
         const calldata = encodeFunctionData({
           abi: ERC8004_IDENTITY_REGISTRY_ABI,
@@ -1153,26 +1287,78 @@ export default function ERC8183EscrowRegisterPage() {
       setMintedAgentId(mintedId);
       setRegisterStatus('success');
 
+      // Agent Wallet binding: persist agent_id → agent_account_address
+      let bindingStatus: BindingStatus =
+        effectiveControllerMode === 'agent-account' ? 'failed' : 'not_applicable';
+      let bindingError: string | undefined;
+
+      if (effectiveControllerMode === 'agent-account' && agentAccountAddress) {
+        setNotice('Saving Agent Wallet identity binding...');
+
+        const binding = await saveAgentWalletBinding({
+          agentId: mintedId,
+          agentAccountAddress,
+          txHash: hash,
+          metadataURI: effectiveMetadataURI,
+        });
+
+        if (binding.ok) {
+          bindingStatus = 'created';
+          setPendingBinding(null);
+        } else {
+          bindingStatus = 'failed';
+          bindingError = binding.error;
+          setPendingBinding({
+            agentId: mintedId,
+            agentAccountAddress,
+            txHash: hash,
+            metadataURI: effectiveMetadataURI,
+          });
+        }
+      } else {
+        // EOA fallback — no binding needed
+        setPendingBinding(null);
+      }
+
+      const ownerWallet = address || null;
+      const controllerWallet = controller || null;
+      const activeAgentAccountAddress = agentAccountAddress || null;
+
+      const registeredRecord: RegisteredIdentityRecord = {
+        agentId: mintedId,
+        txHash: hash,
+        source: mcpIntentId ? 'mcp-onboarding' : 'web-register',
+        ownerWallet,
+        controllerWallet,
+        controllerMode: effectiveControllerMode,
+        agentAccountAddress: activeAgentAccountAddress,
+        metadataURI: effectiveMetadataURI,
+        form,
+        agentManifest: finalManifest,
+        bindingStatus,
+        bindingError,
+        mcpIntentId: mcpIntentId || undefined,
+        mcpRolePresetId: mcpRolePresetId || undefined,
+        nextStep:
+          bindingStatus === 'created'
+            ? 'Identity minted and bound to Agent Wallet. Next, configure agent operation.'
+            : effectiveControllerMode === 'agent-account'
+              ? 'Identity minted, but Agent Wallet binding needs retry.'
+              : 'Identity minted with EOA fallback controller. Next, configure agent operation.',
+      };
+
       localStorage.setItem(
         'arclayer-erc8183-agent-identity-registered',
-        JSON.stringify(
-          {
-            agentId: mintedId,
-            txHash: hash,
-            source: mcpIntentId ? 'mcp-onboarding' : 'web-register',
-            mcpIntentId: mcpIntentId || undefined,
-            mcpRolePresetId: mcpRolePresetId || undefined,
-            metadataURI: effectiveMetadataURI,
-            form,
-            agentManifest: finalManifest,
-            nextStep: 'Identity minted. Set up agent operation in Agent Setup.',
-          },
-          null,
-          2,
-        ),
+        JSON.stringify(registeredRecord, null, 2),
       );
 
-      setNotice(`Identity minted. Agent ID ${mintedId}. Manifest draft updated.`);
+      if (bindingStatus === 'created') {
+        setNotice(`Identity minted and bound to Agent Wallet. Agent ID ${mintedId}.`);
+      } else if (bindingStatus === 'failed') {
+        setNotice(`Identity minted, but Agent Wallet binding failed: ${bindingError}`);
+      } else {
+        setNotice(`Identity minted with EOA fallback controller. Agent ID ${mintedId}.`);
+      }
     } catch (error) {
       setRegisterStatus('error');
       setNotice(error instanceof Error ? error.message : 'Identity mint failed.');
@@ -1460,7 +1646,7 @@ export default function ERC8183EscrowRegisterPage() {
                     </div>
 
                     <div className="space-y-3">
-                      <ReviewRow label="Controller" value={controller ? `${controllerMode === 'eoa' ? 'EOA' : 'Agent Account'} ${shortAddress(controller)}` : 'Not set'} />
+                      <ReviewRow label="Controller" value={controller ? `${controllerMode === 'eoa' ? 'EOA fallback' : 'Agent Wallet'} ${shortAddress(controller)}` : 'Not set'} />
                       <ReviewRow label="Metadata URI" value={metadataURI || 'Auto-generated on register'} />
                       <ReviewRow label="Capabilities" value={customCaps.join(', ')} />
                       <ReviewRow label="Tx" value={txHash ? shortAddress(txHash) : '—'} />
@@ -1470,7 +1656,7 @@ export default function ERC8183EscrowRegisterPage() {
                   <div className="mt-6 grid gap-3 sm:grid-cols-4">
                     <StatusBox label="Identity" value={mintedAgentId ? `Agent ${mintedAgentId}` : 'Pending'} active={Boolean(mintedAgentId)} />
                     <StatusBox label="Metadata" value={metadataReady ? 'Ready' : 'Incomplete'} active={metadataReady} />
-                    <StatusBox label="Controller" value={controller ? `${controllerMode === 'eoa' ? 'EOA' : 'AA'}: ${shortAddress(controller)}` : 'Not set'} active={Boolean(controller)} />
+                    <StatusBox label="Controller" value={controller ? `${controllerMode === 'eoa' ? 'EOA' : 'Agent Wallet'}: ${shortAddress(controller)}` : 'Not set'} active={Boolean(controller)} />
                     <StatusBox label="Next" value="Agent Setup" active={registerStatus === 'success'} />
                   </div>
 
@@ -1517,6 +1703,25 @@ export default function ERC8183EscrowRegisterPage() {
               <RegisterApiKeyCard agentId={mintedAgentId} address={address} signMessageAsync={signMessageAsync} />
             )}
 
+            {registerStatus === 'success' && pendingBinding && (
+              <div className="rounded-md border border-amber-400/25 bg-amber-400/[0.06] px-5 py-4 text-[13px] leading-6 text-amber-100">
+                <div className="font-semibold text-amber-200">
+                  Agent Wallet binding needs retry
+                </div>
+                <p className="mt-1 text-amber-100/75">
+                  The ERC-8004 identity was minted, but the Agent Wallet binding was not saved. Retry binding only; do not mint another identity.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void retryAgentWalletBinding()}
+                  disabled={bindingRetrying}
+                  className="mt-3 h-10 rounded-md border border-amber-300/40 px-4 text-[12px] font-semibold text-amber-100 transition hover:bg-amber-300/10 disabled:opacity-50"
+                >
+                  {bindingRetrying ? 'Retrying...' : 'Retry Agent Wallet Binding'}
+                </button>
+              </div>
+            )}
+
             {registerStatus === 'success' && (
               <div className="flex flex-wrap gap-3">
                 <a
@@ -1558,8 +1763,8 @@ export default function ERC8183EscrowRegisterPage() {
                   {registerStatus === 'pending'
                     ? 'Minting...'
                     : controllerMode === 'eoa'
-                      ? 'Mint Identity (EOA)'
-                      : 'Mint Identity (Agent Account)'}
+                      ? 'Mint Identity (EOA fallback)'
+                      : 'Mint Identity (Agent Wallet)'}
                 </button>
               </div>
             </div>
