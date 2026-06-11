@@ -55,20 +55,20 @@ function makeMockMcp(): ArcLayerMcpConnector {
       return { ok: true, calldata: "0x..." };
     },
     async startJobRun(_jobId: string) {
-      return { ok: true };
+      return { ok: true, runId: "run-123" };
     },
     async prepareSubmitDeliverable(_jobId: string, _hash: string) {
       return { ok: true, calldata: "0x..." };
     },
-    async completeJobRun(_jobId: string, _result: unknown) {
+    async completeJobRun(_jobId: string, _result: unknown, _runId?: string) {
       return { ok: true };
     },
+    async retryJobRun(_jobId: string) { return { ok: true }; },
     async heartbeat() { return { ok: true }; },
     async getRuntimeContext() { return {}; },
     async getResumePlan() { return {}; },
     async writeCheckpoint() { return { ok: true }; },
-    async failJobRun() { return { ok: true }; },
-    async listOpenGlobalJobs() { return []; },
+    async listOpenJobs() { return []; },
     async listAssignedJobs() { return []; },
     async applyToOpenJob() { return { ok: true }; },
     async listPublicJobs() { return []; },

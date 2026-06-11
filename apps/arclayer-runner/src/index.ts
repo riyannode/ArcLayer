@@ -6,6 +6,7 @@ import { createRuntimeConnector } from "./runtime";
 import { ArcLayerMcpConnector } from "./mcp-connector";
 import { createRouter } from "./http";
 import { RunnerServices } from "./services";
+import { handleMcpRequest } from "./mcp-server";
 import { runDoctor } from "./doctor";
 
 async function main() {
@@ -21,7 +22,6 @@ async function main() {
     const config = loadRunnerConfig();
     const skill = loadGlobalSkill(config.skillPath);
 
-    // Runtime connector (Hermes / OpenClaw / custom)
     const runtime = createRuntimeConnector(
       config.runtimeKind,
       config.runtimeEndpoint,
@@ -29,7 +29,6 @@ async function main() {
       process.env.HERMES_API_SERVER_KEY || process.env.OPENCLAW_API_SERVER_KEY
     );
 
-    // MCP connector — bridges to existing ArcLayer MCP server
     const mcp = new ArcLayerMcpConnector({
       baseUrl: process.env.ARCLAYER_MCP_BASE_URL || config.runtimeEndpoint,
       token: process.env.ARCLAYER_MCP_TOKEN,
@@ -37,6 +36,7 @@ async function main() {
     });
 
     const services = new RunnerServices(config, runtime, mcp, skill);
+    const mcpToolCtx = { services, mcp, config, skill };
 
     const server = createRouter(
       [
@@ -69,7 +69,16 @@ async function main() {
           })
         },
 
-        // ── Protected routes (auth required) ────────────────────────────
+        // ── Protected: Runner MCP (JSON-RPC) ────────────────────────────
+        {
+          method: "POST",
+          path: "/mcp",
+          rawHandler: async (req, res) => {
+            await handleMcpRequest(req, res, config.runnerSecret, mcpToolCtx);
+          }
+        },
+
+        // ── Protected: HTTP API routes ──────────────────────────────────
         {
           method: "POST",
           path: "/runtime/run",
@@ -110,10 +119,7 @@ async function main() {
           path: "/receipts",
           handler: async ({ url }) => {
             const limit = Number(url.searchParams.get("limit") ?? "100");
-            return {
-              ok: true,
-              receipts: await services.receipts.list(limit)
-            };
+            return { ok: true, receipts: await services.receipts.list(limit) };
           }
         },
         {
@@ -132,9 +138,10 @@ async function main() {
       console.log(`ArcLayer Runner listening on http://127.0.0.1:${config.port}`);
       console.log(`Agent ${config.agentId} (${config.defaultRole}) -> ${config.runtimeKind} ${config.runtimeEndpoint}`);
       console.log(`Runtime run path: ${config.runtimeRunPath}`);
-      console.log(`MCP bridge: ${process.env.ARCLAYER_MCP_BASE_URL || config.runtimeEndpoint}/api/mcp`);
+      console.log(`Runner MCP: POST /mcp (Bearer auth)`);
+      console.log(`Console MCP bridge: ${process.env.ARCLAYER_MCP_BASE_URL || config.runtimeEndpoint}/api/mcp`);
       console.log(`Payment: ${config.paymentEnabled ? "enabled" : "disabled"}`);
-      console.log(`Auth: required for protected routes`);
+      console.log(`Auth: required for all routes except /health, /.well-known/*, /skills/*`);
     });
   });
 
