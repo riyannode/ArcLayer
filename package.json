@@ -23,6 +23,9 @@
     "dev:console": "corepack pnpm --dir apps/console dev",
     "dev:indexer": "corepack pnpm --dir indexer start",
     "build:sdk": "corepack pnpm --dir sdk build",
+    "dev:runner": "corepack pnpm --dir apps/arclayer-runner dev",
+    "build:runner": "corepack pnpm --dir apps/arclayer-runner build",
+    "start:runner": "corepack pnpm --dir apps/arclayer-runner start",
     "check:schema": "bash scripts/check-schema.sh"
   },
   "keywords": [],
