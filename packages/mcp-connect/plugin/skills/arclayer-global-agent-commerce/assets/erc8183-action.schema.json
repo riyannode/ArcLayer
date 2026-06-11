@@ -32,6 +32,26 @@
         "evaluator"
       ]
     },
+    "provider": {
+      "type": "string",
+      "description": "Provider wallet address (0x...)"
+    },
+    "evaluator": {
+      "type": "string",
+      "description": "Evaluator wallet address (0x...)"
+    },
+    "expiredAt": {
+      "type": "integer",
+      "description": "Job expiration as Unix timestamp (seconds)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Job description or requirement"
+    },
+    "hook": {
+      "type": "string",
+      "description": "Optional callback hook address or URL"
+    },
     "deliverableHash": {
       "type": "string"
     },
@@ -48,6 +68,67 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "erc8183_create_job"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "role": {
+            "const": "client"
+          }
+        },
+        "required": [
+          "provider",
+          "evaluator",
+          "expiredAt",
+          "description"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "erc8183_set_budget"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "role": {
+            "const": "client"
+          }
+        },
+        "required": [
+          "jobId",
+          "amountUsdc"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "erc8183_fund"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "role": {
+            "const": "client"
+          }
+        },
+        "required": [
+          "jobId"
+        ]
+      }
+    },
     {
       "if": {
         "properties": {

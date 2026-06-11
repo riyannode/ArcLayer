@@ -61,23 +61,23 @@ async function copyBundledSkills(sourceRoot: string, targetRoot: string): Promis
 export async function installCodex(options: InstallOptions = {}) {
   const paths = resolvePaths(options.home);
   let skillBlock: string | undefined;
-  let skillRemovalPath: string | undefined;
+  let skillRemovalPaths: string | string[] | undefined;
 
   if (options.withSkill) {
     if (options.templateFile) {
       await mkdir(paths.skillDir, { recursive: true });
       await copyFile(options.templateFile ?? bundledTemplate(), paths.skillFile);
       skillBlock = arclayerSkillToml(paths.skillDir);
-      skillRemovalPath = paths.skillDir;
+      skillRemovalPaths = paths.skillDir;
     } else {
       const installedSkillPaths = await copyBundledSkills(bundledSkillsRoot(), paths.skillsRoot);
       skillBlock = arclayerSkillsToml(installedSkillPaths);
-      skillRemovalPath = paths.skillsRoot;
+      skillRemovalPaths = installedSkillPaths;
     }
   }
 
   const current = await readText(paths.codexConfig);
-  const content = reconcileCodexConfig(current, arclayerMcpToml(), skillBlock, skillRemovalPath);
+  const content = reconcileCodexConfig(current, arclayerMcpToml(), skillBlock, skillRemovalPaths);
   const backup = await safeWrite(paths.codexConfig, content);
 
   return { paths, backup, changed: current !== content };
@@ -86,7 +86,8 @@ export async function installCodex(options: InstallOptions = {}) {
 export async function uninstallCodex(home?: string) {
   const paths = resolvePaths(home);
   const current = await readText(paths.codexConfig);
-  const content = uninstallArcLayerConfig(current, paths.skillsRoot);
+  const allSkillPaths = Object.values(paths.skillDirs);
+  const content = uninstallArcLayerConfig(current, allSkillPaths);
   const backup = await safeWrite(paths.codexConfig, content);
 
   return { paths, backup, changed: current !== content };

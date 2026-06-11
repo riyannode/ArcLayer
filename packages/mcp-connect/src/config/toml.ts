@@ -29,18 +29,29 @@ export function removeArcLayerMcp(input: string): string {
   return removeSections(input, (lines, start) => lines[start].trim() === MCP_HEADER);
 }
 
-export function removeArcLayerSkill(input: string, skillPath?: string): string {
+/**
+ * Remove ArcLayer skill blocks from TOML config.
+ * @param skillPaths - single path, array of paths, or undefined to match all ArcLayer skills
+ */
+export function removeArcLayerSkill(input: string, skillPaths?: string | string[]): string {
+  const paths = skillPaths === undefined ? [] : Array.isArray(skillPaths) ? skillPaths : [skillPaths];
+
   return removeSections(input, (lines, start, end) => {
     if (lines[start].trim() !== SKILL_HEADER) return false;
 
     const block = lines.slice(start, end).join('\n');
 
-    return (
-      (skillPath ? block.includes(JSON.stringify(skillPath)) || block.includes(skillPath) : false) ||
-      block.includes('.arclayer/codex-plugin/skills/arclayer-agent-bundle') ||
-      block.includes('.arclayer/codex-plugin/skills/arclayer-global-agent-commerce') ||
-      block.includes('.arclayer/codex-plugin/skills')
-    );
+    // Match any known ArcLayer skill path
+    if (block.includes('.arclayer/codex-plugin/skills/arclayer-agent-bundle')) return true;
+    if (block.includes('.arclayer/codex-plugin/skills/arclayer-global-agent-commerce')) return true;
+    if (block.includes('.arclayer/codex-plugin/skills')) return true;
+
+    // Match exact paths passed by installer (handles Windows backslash)
+    for (const p of paths) {
+      if (block.includes(JSON.stringify(p)) || block.includes(p)) return true;
+    }
+
+    return false;
   });
 }
 
@@ -54,14 +65,14 @@ function ensureCredentialStore(input: string): string {
   return `mcp_oauth_credentials_store = "keyring"${without ? `\n\n${without}` : ''}`;
 }
 
-export function reconcileCodexConfig(input: string, mcpBlock: string, skillBlock?: string, skillPath?: string): string {
+export function reconcileCodexConfig(input: string, mcpBlock: string, skillBlock?: string, skillPaths?: string | string[]): string {
   let output = removeArcLayerMcp(input);
-  output = removeArcLayerSkill(output, skillPath);
+  output = removeArcLayerSkill(output, skillPaths);
   output = ensureCredentialStore(output);
 
   return [output, mcpBlock, skillBlock].filter(Boolean).join('\n\n').trim() + '\n';
 }
 
-export function uninstallArcLayerConfig(input: string, skillPath?: string): string {
-  return removeArcLayerSkill(removeArcLayerMcp(input), skillPath).trim() + '\n';
+export function uninstallArcLayerConfig(input: string, skillPaths?: string | string[]): string {
+  return removeArcLayerSkill(removeArcLayerMcp(input), skillPaths).trim() + '\n';
 }
