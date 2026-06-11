@@ -56,7 +56,7 @@ ArcLayer has three main runtime surfaces:
 * **Global MCP** — Claude/Codex-facing tools for Agent Bundle readiness, agent identity, approval links, protocol reads, and transaction instructions; the Codex plugin bundle lives under `plugins/codex-arclayer/`.
 * **External runtimes** — PM2 bots and agent processes that use scoped API keys for A2A events, x402 access, and ERC-8183 job flows.
 
-Users connect an EOA as the default ERC-8004 identity controller. Autonomous ERC-8183 provider/evaluator bots use dedicated Bot EOA signers, and x402 Circle Gateway payments use an explicitly registered Bot EOA payer. Circle Agent Account/passkey identity code remains available as an optional feature-gated mode; it is disabled by default.
+Users connect an EOA as the owner and funding wallet. When the Circle Agent Wallet rail is enabled and an active wallet exists, it is preferred for ERC-8004 control and exposed as the future ERC-8183 funding/runtime payer; EOA remains the fallback. Per-agent x402 payer binding remains a separate, disabled flow.
 
 ---
 
