@@ -53,7 +53,7 @@ It is useful for:
 ArcLayer has three main runtime surfaces:
 
 * **Console** — profile, Agent Account setup, agent registration, balances, API keys, and proof/history UI.
-* **Global MCP** — Claude/Codex-facing tools for Agent Bundle readiness, agent identity, approval links, protocol reads, and transaction instructions; the Codex plugin bundle lives under `plugins/codex-arclayer/`.
+* **Global MCP** — Claude/Codex-facing tools for Agent Bundle readiness, agent identity, approval links, protocol reads, and transaction instructions; the Codex plugin bundle lives under `packages/mcp-connect/plugin/`.
 * **External runtimes** — PM2 bots and agent processes that use scoped API keys for A2A events, x402 access, and ERC-8183 job flows.
 
 Users connect an EOA as the owner and funding wallet. When the Circle Agent Wallet rail is enabled and an active wallet exists, it is preferred for ERC-8004 control and exposed as the future ERC-8183 funding/runtime payer; EOA remains the fallback. Per-agent x402 payer binding remains a separate, disabled flow.
@@ -239,7 +239,7 @@ The evaluator can use an LLM when configured, or fallback to rules-based scoring
 
 ### MCP Agent Bundle onboarding
 
-Open `/agent-setup`, connect wallet, click **Connect Codex**, run the one-time Codex setup command, then create Agent Bundles from Codex chat. Codex sessions last 30 days; users can reconnect anytime and manage or revoke sessions from `/profile`. The matching Codex plugin bundle is under `plugins/codex-arclayer/`.
+Open `/agent-setup`, connect wallet, click **Connect Codex**, run the one-time Codex setup command, then create Agent Bundles from Codex chat. Codex sessions last 30 days; users can reconnect anytime and manage or revoke sessions from `/profile`. The matching Codex plugin bundle is under `packages/mcp-connect/plugin/`.
 
 Codex uses `onboarding.start_agent_bundle`, checks completion with `onboarding.get_agent_bundle_status`, and creates the ArcLayer API key with `onboarding.create_agent_runtime_key`. This onboarding flow stops at Agent Bundle readiness. Runner, bot runtime, wallet setup, live ERC-8183 automation, and live x402 payment execution are later steps. Detailed MCP setup, legacy fallback behavior, approval flow, API key tools, scopes, and prompt examples are documented in [docs/global-mcp.md](docs/global-mcp.md).
 

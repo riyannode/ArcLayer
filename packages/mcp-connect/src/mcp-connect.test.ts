@@ -7,7 +7,7 @@ import { backupPath } from './fs/backup.js';
 import { resolvePaths } from './fs/paths.js';
 import { installCodex, uninstallCodex } from './plugin/install-codex-plugin.js';
 
-const template = path.resolve(process.cwd(), 'templates/codex/skills/arclayer-agent-bundle/SKILL.md');
+const template = path.resolve(process.cwd(), 'plugin/skills/arclayer-agent-bundle/SKILL.md');
 describe('ArcLayer MCP Connect', () => {
   it('generates OAuth-ready config without legacy bearer env configuration', () => {
     const toml = arclayerMcpToml();

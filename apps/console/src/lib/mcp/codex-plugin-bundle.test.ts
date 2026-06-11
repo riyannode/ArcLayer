@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../plugins/codex-arclayer');
+const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../../packages/mcp-connect/plugin');
 
 describe('ArcLayer Codex plugin bundle', () => {
   it('ships the plugin manifest, MCP config, and Agent Bundle skill', () => {
