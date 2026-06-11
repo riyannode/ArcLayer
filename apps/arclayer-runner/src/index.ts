@@ -11,6 +11,7 @@ import { runMcpStdio } from "./mcp-stdio";
 import { runDoctor } from "./doctor";
 import { registerInitCommand } from "./init";
 import { registerSetupCommand } from "./setup";
+import { registerInstallCommand } from "./install";
 
 async function main() {
   const program = new Command();
@@ -225,6 +226,9 @@ async function main() {
 
   // ── setup (interactive wizard) ─────────────────────────────────────────
   registerSetupCommand(program);
+
+  // ── install (MCP sidecar installer) ───────────────────────────────────
+  registerInstallCommand(program);
 
   program.parse(process.argv);
 }
