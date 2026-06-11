@@ -407,18 +407,18 @@ export function AgentWalletFundingRailCard() {
         </div>
 
         <p className="mt-2 text-[11px] leading-5 text-[#EAE4D8]/40">
-          Fund the Agent Wallet from the owner EOA, then deposit Agent Wallet USDC into Gateway x402.
+          Fund the Agent Wallet from the Admin Wallet, then deposit Agent Wallet USDC into Gateway x402.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           {[
-            ['Owner EOA USDC', ownerUsdcBalance?.formatted ?? '0.000000'],
+            ['Admin Wallet USDC', ownerUsdcBalance?.formatted ?? '0.000000'],
             ['Agent Wallet USDC', agentUsdcBalance?.formatted ?? '0.000000'],
             ['Agent Gateway x402', agentGatewayBalance?.formatted ?? '0.000000'],
           ].map(([label, balance]) => (
             <div key={label} className="rounded-md border border-white/10 bg-white/[0.025] p-4">
               <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[#EAE4D8]/38">{label}</div>
-              <div className={`mt-2 text-[18px] font-semibold ${label === 'Owner EOA USDC' ? 'text-[#F5F0E5]' : 'text-[#F3C536]'}`}>
+              <div className={`mt-2 text-[18px] font-semibold ${label === 'Admin Wallet USDC' ? 'text-[#F5F0E5]' : 'text-[#F3C536]'}`}>
                 {balancesLoading ? '...' : balance}
               </div>
             </div>
