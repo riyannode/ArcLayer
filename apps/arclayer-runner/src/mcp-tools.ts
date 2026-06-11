@@ -7,6 +7,7 @@
 import type { RunnerServices } from "./services";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
 import type { RunnerConfig } from "@arclayer/runner-core";
+import { getCirclePolicyStatus } from "./doctor";
 
 export type McpToolContext = {
   services: RunnerServices;
@@ -96,6 +97,9 @@ export async function handleMcpTool(
       const budget = await services.circle.walletBudget(config.circleWalletAddress);
       return { ok: true, result: budget };
     }
+
+    case "circle.wallet_policy_status":
+      return getCirclePolicyStatus(config);
 
     // ── x402 ──────────────────────────────────────────────────────────
     case "x402.inspect":

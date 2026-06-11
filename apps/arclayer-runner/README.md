@@ -206,6 +206,20 @@ Blocked:
 - Unrestricted `wallet execute` (no `--contract`)
 - Any non-allowlisted contract method
 
+## Circle Wallet Policy vs Runner Policy
+
+Circle wallet policy is set once by user/admin. Runner must never auto-run `circle wallet limit set`. OTP must never be routed through Hermes/OpenClaw/LLM.
+
+- `circle wallet limit` — configured policy caps (per-tx, daily, monthly, weekly)
+- `circle wallet limit budget` — remaining rolling-window budgets
+- Weekly limit means rolling 7-day window, not policy expiry
+- Runtime payments are checked by Runner policy first, then Circle wallet hard policy
+- Recommended: Runner limits <= Circle wallet policy limits
+
+**Important**: Runner must never auto-set Circle wallet limits. Use the Circle CLI directly with proper authentication.
+
+Use `circle.wallet_policy_status` MCP tool or `arclayer-runner doctor` to compare Runner policy against Circle policy.
+
 ## Known Limitations
 
 - v1 is provider-only (evaluator/client roles rejected)
