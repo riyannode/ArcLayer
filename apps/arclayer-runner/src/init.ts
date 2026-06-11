@@ -48,7 +48,9 @@ export function registerInitCommand(program: Command): void {
           monthlyLimitUsdc: opts.monthly,
           batchMaxItems: parseInt(opts.batchMaxItems, 10),
           batchMaxTotalUsdc: opts.batchMaxTotal,
-          allowedX402Hosts: opts.allowedX402Host
+          allowedX402Hosts: opts.allowedX402Host,
+          runnerId: `runner-${opts.agentId}`,
+          agentAddress: opts.wallet || "0x0000000000000000000000000000000000000000"
         };
 
         const result = await writeRunnerConfig(input, { force: opts.force });

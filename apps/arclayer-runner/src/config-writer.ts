@@ -32,6 +32,8 @@ export type WriteConfigInput = {
   batchMaxTotalUsdc?: string;
   allowedX402Hosts?: string[];
   cliBin?: string;
+  runnerId?: string;
+  agentAddress?: string;
 };
 
 export type WriteConfigResult = {
@@ -81,6 +83,8 @@ export async function writeRunnerConfig(
   const config: InitFileConfig = {
     agentId: input.agentId,
     role: (input.role as any) ?? "provider",
+    runnerId: input.runnerId,
+    agentAddress: input.agentAddress,
     circle: {
       cliBin: input.cliBin ?? "circle",
       walletAddress: input.walletAddress ?? undefined,

@@ -66,6 +66,8 @@ export function validateWalletAddress(input: string): { valid: boolean; error?: 
 export const InitFileConfigSchema = z.object({
   agentId: z.string().min(1),
   role: RunnerRoleSchema.default("provider"),
+  runnerId: z.string().optional(),
+  agentAddress: z.string().optional(),
   circle: z.object({
     cliBin: z.string().default("circle"),
     walletAddress: z.string().optional(),
@@ -94,6 +96,8 @@ export function transformFileConfig(
     agentId: file.agentId,
     defaultRole: file.role,
     allowedRoles: [file.role],
+    runnerId: file.runnerId ?? `runner-${file.agentId}`,
+    agentAddress: file.agentAddress ?? "0x0000000000000000000000000000000000000000",
     circleCliBin: file.circle?.cliBin ?? "circle",
     circleWalletAddress: file.circle?.walletAddress || undefined,
     chain: file.circle?.chain ?? "BASE",

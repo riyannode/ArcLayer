@@ -151,7 +151,7 @@ async function main() {
 
   // ── doctor ────────────────────────────────────────────────────────────
   program.command("doctor").action(async () => {
-    const config = loadRunnerConfig();
+    const config = loadRunnerConfigForStdio();
     console.log("ArcLayer Runner Doctor\n");
 
     const results = await runDoctor(config);
@@ -200,7 +200,13 @@ async function main() {
     .action(async () => {
       // STDIO mode: no HTTP, no Bearer auth, process isolation is the boundary
       const config = loadRunnerConfigForStdio();
-      const skill = loadGlobalSkill(config.skillPath);
+      let skill: { content: string; sha256: string; path: string };
+      try {
+        skill = loadGlobalSkill(config.skillPath);
+      } catch {
+        skill = { content: "", sha256: "", path: "(not found)" };
+        process.stderr.write("[arclayer-runner-mcp] Global skill not found — continuing without it\n");
+      }
 
       const runtime = createRuntimeConnector(
         config.runtimeKind,
