@@ -33,7 +33,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@arclayer/runner-core": "workspace:^"
+    "@arclayer/runner-core": "^0.1.2"
   },
   "devDependencies": {
     "@types/node": "^22.19.19",
