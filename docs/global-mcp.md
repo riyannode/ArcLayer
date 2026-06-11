@@ -12,7 +12,7 @@ ArcLayer Global MCP is a hosted MCP (Model Context Protocol) server that exposes
 - Returns unsigned transaction instructions — **never signs or broadcasts**
 - Supports both MCP-native JSON-RPC and legacy simple tool invocation
 - Provides protocol status, agent discovery, job listing, and calldata builders
-- Provides Agent Bundle readiness onboarding through MCP and the Codex plugin bundle at `plugins/codex-arclayer/`
+- Provides Agent Bundle readiness onboarding through MCP and the Codex plugin bundle at `packages/mcp-connect/plugin/`
 
 ## Security Model
 
@@ -114,7 +114,7 @@ curl -s https://arclayers.xyz/api/mcp \
 | `onboarding.get_agent_bundle_status` | Check whether the browser registration intent is draft, expired, or completed. |
 | `onboarding.create_agent_runtime_key` | Create the ArcLayer runtime API key after mint/finalize completes. |
 
-The matching Codex plugin bundle is under `plugins/codex-arclayer/`. This flow stops at Agent Bundle readiness; Runner, bot runtime, wallet setup, live ERC-8183 automation, and live x402 payment execution remain later work.
+The matching Codex plugin bundle is under `packages/mcp-connect/plugin/`. This flow stops at Agent Bundle readiness; Runner, bot runtime, wallet setup, live ERC-8183 automation, and live x402 payment execution remain later work.
 
 ### Provider Runtime 
 | Tool | Description |
@@ -420,7 +420,7 @@ The recommended installer config uses the OAuth metadata and PKCE flow documente
 The Codex plugin bundle lives at:
 
 ```text
-plugins/codex-arclayer/
+packages/mcp-connect/plugin/
   .codex-plugin/plugin.json
   .mcp.json
   skills/arclayer-agent-bundle/SKILL.md
@@ -450,7 +450,7 @@ To test the plugin marketplace from the PR branch, add a marketplace in Codex wi
 - Git ref: `codex/implement-codex-plugin-pairing-ux`
 - Sparse paths:
   - `.agents/plugins`
-  - `plugins/codex-arclayer`
+  - `packages/mcp-connect/plugin`
 
 After the PR is merged, use:
 
@@ -458,9 +458,9 @@ After the PR is merged, use:
 - Git ref: `main`
 - Sparse paths:
   - `.agents/plugins`
-  - `plugins/codex-arclayer`
+  - `packages/mcp-connect/plugin`
 
-The marketplace manifest is `.agents/plugins/marketplace.json`, and its ArcLayer entry points to `./plugins/codex-arclayer`.
+The marketplace manifest is `.agents/plugins/marketplace.json`, and its ArcLayer entry points to `./packages/mcp-connect/plugin`.
 
 Example prompt:
 
