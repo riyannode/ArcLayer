@@ -25,6 +25,29 @@ function redact(value: string): string {
     .replace(/Bearer\s+[A-Za-z0-9._-]+/g, "Bearer [REDACTED]");
 }
 
+/**
+ * Redact -d (body) arguments from CLI args array.
+ * Prevents sensitive payment bodies from being persisted in receipts.
+ */
+function redactArgs(args: string[]): string[] {
+  const result: string[] = [];
+  let skipNext = false;
+  for (const arg of args) {
+    if (skipNext) {
+      result.push("[REDACTED_BODY]");
+      skipNext = false;
+      continue;
+    }
+    if (arg === "-d" || arg === "--data") {
+      result.push(arg);
+      skipNext = true;
+      continue;
+    }
+    result.push(arg);
+  }
+  return result;
+}
+
 function tryParseJson(stdout: string): unknown | undefined {
   try {
     return JSON.parse(stdout);
@@ -78,7 +101,7 @@ export class CircleCliAdapter {
 
     const result: CircleCliResult = {
       command: this.bin,
-      args,
+      args: redactArgs(args),
       stdout: redact(stdout),
       stderr: redact(stderr),
       json: tryParseJson(stdout)

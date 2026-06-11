@@ -31,7 +31,13 @@ export const RunnerConfigSchema = z.object({
   circleCliBin: z.string().default("circle"),
   circleWalletAddress: HexAddressSchema.optional(),
 
-  paymentEnabled: z.coerce.boolean().default(false),
+  paymentEnabled: z.preprocess(
+    (v) => {
+      if (typeof v === "string") return v === "true" || v === "1";
+      return v;
+    },
+    z.boolean().default(false)
+  ),
   perTxLimitUsdc: z.string().default("0.01"),
   dailyLimitUsdc: z.string().default("1"),
   monthlyLimitUsdc: z.string().default("20"),
