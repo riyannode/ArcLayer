@@ -26,7 +26,9 @@
     "dev:runner": "corepack pnpm --dir apps/arclayer-runner dev",
     "build:runner": "corepack pnpm --dir apps/arclayer-runner build",
     "start:runner": "corepack pnpm --dir apps/arclayer-runner start",
-    "check:schema": "bash scripts/check-schema.sh"
+    "check:schema": "bash scripts/check-schema.sh",
+    "build:publish": "corepack pnpm --filter @arclayer/sdk build && corepack pnpm --filter @arclayer/runner-core build && corepack pnpm --filter @arclayer/circle-cli-adapter build && corepack pnpm --filter @arclayer/runner build && corepack pnpm --filter @arclayer/setup build",
+    "test:publish": "corepack pnpm --filter @arclayer/runner-core test && corepack pnpm --filter @arclayer/circle-cli-adapter test && corepack pnpm --filter @arclayer/runner test && corepack pnpm --filter @arclayer/setup test"
   },
   "keywords": [],
   "author": "",

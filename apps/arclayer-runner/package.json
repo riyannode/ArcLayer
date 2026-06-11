@@ -1,11 +1,26 @@
 {
   "name": "@arclayer/runner",
-  "version": "0.1.0",
+  "version": "0.1.0-beta.0",
   "private": false,
   "type": "module",
+  "description": "ArcLayer Runner — policy boundary for external LLM runtimes with MCP bridge, Circle CLI, ERC-8004, ERC-8183, and x402",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/riyannode/ArcLayer.git",
+    "directory": "apps/arclayer-runner"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "bin": {
     "arclayer-runner": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",
     "dev": "tsx src/index.ts",
@@ -13,9 +28,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@arclayer/circle-cli-adapter": "workspace:*",
-    "@arclayer/runner-core": "workspace:*",
-    "@arclayer/sdk": "workspace:*",
+    "@arclayer/circle-cli-adapter": "workspace:^",
+    "@arclayer/runner-core": "workspace:^",
+    "@arclayer/sdk": "workspace:^",
     "commander": "^14.0.2",
     "yaml": "^2.7.0",
     "zod": "^3.23.0",
@@ -27,6 +42,5 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.6"
-  },
-  "license": "MIT"
+  }
 }
