@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   assertErc8183Participant: vi.fn(),
   readOnchainJob: vi.fn(),
   escrowRail: vi.fn(),
+  getAgentWalletPaymentHint: vi.fn(),
 }));
 
 // ── Module mocks ──────────────────────────────────────────────────────────
@@ -49,6 +50,10 @@ vi.mock('@/lib/erc8183-jobs/receipt', () => ({
 
 vi.mock('@/lib/rails/responses', () => ({
   escrowRail: mocks.escrowRail,
+}));
+
+vi.mock('@/lib/agent-accounts/payment-hint', () => ({
+  getAgentWalletPaymentHint: mocks.getAgentWalletPaymentHint,
 }));
 
 vi.mock('@arclayer/sdk', () => ({
@@ -140,9 +145,17 @@ describe('POST /api/erc8183-jobs/[localJobId]/fund — setBudget guard', () => {
     vi.clearAllMocks();
 
     // Default: auth passes
-    mocks.requireApiKey.mockResolvedValue({ agentId: BUYER_AGENT, error: null });
+    mocks.requireApiKey.mockResolvedValue({
+      key: { agentId: BUYER_AGENT, createdBy: '0xowner' },
+      error: null,
+    });
     mocks.assertErc8183Participant.mockReturnValue(null); // no error = authorized
     mocks.escrowRail.mockReturnValue({ rail: 'escrow', settlementMode: 'erc8183_escrow' });
+    mocks.getAgentWalletPaymentHint.mockResolvedValue({
+      payerRail: 'circle-agent-wallet',
+      payerAddress: '0xagentwallet',
+      legacyEoaFallback: false,
+    });
 
     // Default: valid job with setBudget confirmed
     mocks.getErc8183JobByLocalId.mockResolvedValue(makeJob());
@@ -358,6 +371,10 @@ describe('POST /api/erc8183-jobs/[localJobId]/fund — setBudget guard', () => {
     expect(res.status).toBe(200);
     expect(body.ok).toBe(true);
     expect(body.nextAction).toBe('approveAndFund');
+    expect(body.payerRail).toBe('circle-agent-wallet');
+    expect(body.payerAddress).toBe('0xagentwallet');
+    expect(body.legacyEoaFallback).toBe(false);
+    expect(mocks.getAgentWalletPaymentHint).toHaveBeenCalledWith('0xowner');
     expect(body.localJobId).toBe(LOCAL_JOB_ID);
     expect(body.erc8183JobId).toBe('42');
     expect(body.txs).toHaveLength(2);

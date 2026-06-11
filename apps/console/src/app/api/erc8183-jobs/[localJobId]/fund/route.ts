@@ -8,6 +8,7 @@ import { escrowRail } from '@/lib/rails/responses';
 import { readOnchainJob } from '@/lib/erc8183-jobs/receipt';
 import { ERC8183JobStatus } from '@/lib/contracts/erc8183';
 import type { TxInstruction } from '@/lib/erc8183-jobs/types';
+import { getAgentWalletPaymentHint } from '@/lib/agent-accounts/payment-hint';
 
 /** Local DB statuses that are past the fundable window. */
 const UNFUNDABLE_LOCAL_STATUSES = new Set([
@@ -151,14 +152,22 @@ export async function POST(
       args: [job.erc8183JobId, '0x'],
     };
 
+    const paymentHint = await getAgentWalletPaymentHint(auth.key.createdBy);
+
     return humanJson(req, {
       ok: true,
       ...escrowRail(),
       nextAction: 'approveAndFund',
       localJobId: localJobId,
       erc8183JobId: job.erc8183JobId,
+      payerRail: paymentHint.payerRail,
+      payerAddress: paymentHint.payerAddress,
+      legacyEoaFallback: paymentHint.legacyEoaFallback,
       txs: [approveTx, fundTx],
-      message: 'Sign and broadcast approve tx first, then fund tx. After both confirmed, POST /api/erc8183-jobs/[localJobId]/tx with tx_hash=fund.',
+      message:
+        paymentHint.payerRail === 'circle-agent-wallet'
+          ? 'Use the Circle Agent Wallet rail to approve and fund this job. After confirmed, POST /api/erc8183-jobs/[localJobId]/tx with tx_hash=fund.'
+          : 'Legacy fallback: sign and broadcast approve tx first, then fund tx. After both confirmed, POST /api/erc8183-jobs/[localJobId]/tx with tx_hash=fund.',
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown error';
