@@ -89,6 +89,16 @@ const fakeSupabase = {
           filters.push({ op: 'eq', col, val });
           return query;
         },
+        is: (col: string, val: unknown) => {
+          filters.push({ op: 'is', col, val });
+          return query;
+        },
+        select: () => query,
+        maybeSingle: () => {
+          const found = applyFilters(rows, filters)[0] ?? null;
+          if (found) applyUpdate();
+          return Promise.resolve({ data: found, error: null });
+        },
         then: (resolve: (value: { data: null; error: null }) => void) => {
           applyUpdate();
           resolve({ data: null, error: null });
@@ -145,6 +155,7 @@ describe('a2a/auth PBKDF2 API keys', () => {
     expect(verified).not.toBeNull();
     expect(verified?.agentId).toBe('agent-1');
     expect(verified?.scopes).toEqual(['jobs:claim', 'jobs:submit']);
+    expect(verified?.createdBy).toBe('0xabc');
   });
 
   it('verifyApiKey updates last_used_at on success', async () => {

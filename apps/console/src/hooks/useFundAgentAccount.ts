@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * useFundAgentAccount — EOA → Agent Account USDC transfer.
+ * useFundAgentAccount — Owner EOA → Agent Wallet USDC transfer.
  *
- * Transfers ERC-20 USDC from connected EOA to Circle Agent Account address.
+ * Transfers ERC-20 USDC from the connected Owner EOA to the Circle Agent Wallet address.
  * Uses wagmi writeContractAsync (EOA signer, user pays gas).
  *
  * Safety:
@@ -76,7 +76,7 @@ export function useFundAgentAccount(
       }
 
       if (!toAddress || !isAddress(toAddress)) {
-        setError('Invalid Agent Account address');
+        setError('Invalid Agent Wallet address');
         setStep('error');
         return;
       }
@@ -122,7 +122,7 @@ export function useFundAgentAccount(
           return;
         }
 
-        // Transfer USDC from EOA to Agent Account
+        // Transfer USDC from Owner EOA to Agent Wallet
         setStep('transferring');
         const transferHash = await wagmiWrite({
           address: USDC,

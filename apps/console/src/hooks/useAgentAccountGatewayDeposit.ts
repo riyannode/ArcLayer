@@ -1,11 +1,11 @@
 'use client';
 
 /**
- * useAgentAccountGatewayDeposit — Agent Account → Circle GatewayWallet deposit.
+ * useAgentAccountGatewayDeposit — Agent Wallet → Circle GatewayWallet deposit.
  *
- * Routes through Circle Smart Account (ERC-4337 bundler):
+ * Routes through Circle Agent Wallet (ERC-4337 bundler):
  *   USDC.approve(GatewayWallet, amount) + GatewayWallet.deposit(USDC, amount)
- *   as a single batched userOperation. msg.sender = Agent Account address.
+ *   as a single batched userOperation. msg.sender = Agent Wallet address.
  *
  * GatewayWallet.deposits(agentAccountAddress, USDC) increases after deposit.
  *
@@ -75,22 +75,22 @@ export function useAgentAccountGatewayDeposit(
   const deposit = useCallback(
     async (amount: string, agentAccountAddress: string) => {
       if (!bundlerClient) {
-        setError('Circle Agent Account not connected. Login with passkey first.');
+        setError('Circle Agent Wallet not connected. Login with passkey first.');
         setStep('error');
         return;
       }
 
       if (!agentAccountAddress || !isAddress(agentAccountAddress)) {
-        setError('Invalid Agent Account address');
+        setError('Invalid Agent Wallet address');
         setStep('error');
         return;
       }
 
-      // Defense-in-depth: verify bundler account matches the linked Agent Account.
+      // Defense-in-depth: verify bundler account matches the linked Agent Wallet.
       // UI should disable before this, but guard anyway to prevent wrong-SCA execution.
       const bundlerAddr = (bundlerClient.account?.address ?? '').toLowerCase();
       if (bundlerAddr && bundlerAddr !== agentAccountAddress.toLowerCase()) {
-        setError('Circle account mismatch. Login with the passkey linked to this Agent Account.');
+        setError('Circle account mismatch. Login with the passkey linked to this Agent Wallet.');
         setStep('error');
         return;
       }
@@ -123,7 +123,7 @@ export function useAgentAccountGatewayDeposit(
           transport: http(ARC_RPC),
         });
 
-        // ── Pre-flight: check Agent Account USDC balance ──────────────
+        // ── Pre-flight: check Agent Wallet USDC balance ──────────────
         const balance = await publicClient.readContract({
           address: USDC,
           abi: ERC20_ABI,
@@ -133,7 +133,7 @@ export function useAgentAccountGatewayDeposit(
 
         if (balance < amountUnits) {
           setError(
-            `Insufficient USDC on Agent Account. Have ${formatUnits(balance, 6)}, need ${trimmed}.`,
+            `Insufficient USDC on Agent Wallet. Have ${formatUnits(balance, 6)}, need ${trimmed}.`,
           );
           setStep('error');
           return;

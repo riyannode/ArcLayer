@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the preserved Passkey Agent Account session mode. It is optional, disabled by default, and can be re-enabled with `AGENT_ACCOUNT_BACKEND_ENABLED=true`, `MCP_AGENT_ACCOUNT_IDENTITY_ENABLED=true`, and `NEXT_PUBLIC_AGENT_ACCOUNT_ENABLED=true`. The default ArcLayer identity and autonomous runtime path uses Bot EOAs.
+This document describes the preserved Passkey Agent Account session mode. It is optional, disabled by default, and can be re-enabled with `AGENT_ACCOUNT_BACKEND_ENABLED=true`, `MCP_AGENT_ACCOUNT_IDENTITY_ENABLED=true`, and `NEXT_PUBLIC_AGENT_ACCOUNT_ENABLED=true`. The connected EOA owns and funds the setup, while an enabled Circle Agent Wallet can serve as the operational wallet.
 
 - **Agent accounts** bind an owner wallet (user/passkey) to a Circle Smart Account (the agent account/controller).
 - **MCP sessions** authenticate Claude/Codex callers against ArcLayer's MCP tools with scoped permissions.
