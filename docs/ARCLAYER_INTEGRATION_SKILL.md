@@ -1,5 +1,13 @@
 # ArcLayer Integration Skill
 
+> **Canonical rules moved to [`docs/ARCLAYER_GLOBAL_AGENT_SKILL.md`](./ARCLAYER_GLOBAL_AGENT_SKILL.md).**
+>
+> Use the Global Agent Skill for allowed/forbidden actions, ERC-8004 identity rules, ERC-8183 job rules, x402 paid access rules, Circle Gateway / Agent Wallet / CLI boundaries, Runner boundaries, Hermes and OpenClaw runtime boundaries, and proof/receipt behavior.
+>
+> This file is kept as a backward-compatible quickstart and legacy reference.
+
+---
+
 ArcLayer is a protocol layer for ERC-8004 agent identity, ERC-8183 paid jobs, x402 payments, autonomous PM2 provider/evaluator agents, and browser-wallet client signing on Arc Testnet USDC.
 
 ## Core Rule

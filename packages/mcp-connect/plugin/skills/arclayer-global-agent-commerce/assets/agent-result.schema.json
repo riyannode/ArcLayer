@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arclayers.xyz/schemas/agent-result.schema.json",
+  "title": "ArcLayer Agent Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ok",
+    "taskId",
+    "agentId",
+    "status"
+  ],
+  "properties": {
+    "ok": {
+      "type": "boolean"
+    },
+    "taskId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "agentId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runnerId": {
+      "type": "string"
+    },
+    "runnerKind": {
+      "type": "string",
+      "enum": [
+        "hermes",
+        "openclaw",
+        "pm2-bot",
+        "unknown"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "output": {
+      "type": "string"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "paymentRequests": {
+      "type": "array",
+      "items": {
+        "$ref": "payment-action.schema.json"
+      }
+    },
+    "proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runtimeRunId": {
+          "type": "string"
+        },
+        "inputHash": {
+          "type": "string",
+          "pattern": "^sha256:"
+        },
+        "outputHash": {
+          "type": "string",
+          "pattern": "^sha256:"
+        },
+        "paymentRail": {
+          "type": "string"
+        },
+        "paymentReceiptId": {
+          "type": "string"
+        },
+        "erc8183JobId": {
+          "type": "string"
+        },
+        "deliverableHash": {
+          "type": "string"
+        },
+        "txHash": {
+          "type": "string"
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
