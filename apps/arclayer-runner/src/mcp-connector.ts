@@ -1,14 +1,11 @@
 /**
  * ArcLayer MCP Connector — JSON-RPC 2.0 client for existing ArcLayer MCP server.
  *
- * Wraps the existing MCP endpoint (/api/mcp) that already exposes:
- * - identity.prepare_register_agent
- * - jobs.list_public, jobs.get_public
- * - erc8183.* (prepare calldata, read jobs)
- * - provider.runtime_* (heartbeat, context, resume, start, checkpoint, complete, fail)
+ * Wraps the existing hosted Console MCP endpoint (/api/mcp).
+ * Tool names match the Console MCP registry exactly.
  *
- * Runner does NOT reimplement MCP tools. It delegates to the existing MCP server
- * and adds policy enforcement, auth, spending limits, and receipt/audit layer.
+ * Runner does NOT reimplement Console MCP tools. It delegates to the existing
+ * MCP server and adds policy enforcement, auth, spending limits, and receipt/audit layer.
  */
 
 import { RunnerError } from "@arclayer/runner-core";
@@ -37,8 +34,7 @@ export class ArcLayerMcpConnector {
   }
 
   /**
-   * Call an MCP tool via JSON-RPC 2.0.
-   * Same protocol as the existing ArclayerMcpClient used by PM2 bots.
+   * Call a Console MCP tool via JSON-RPC 2.0.
    */
   async callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
     const body = {
@@ -99,13 +95,13 @@ export class ArcLayerMcpConnector {
     return json.result;
   }
 
-  // ── Identity ──────────────────────────────────────────────────────────
+  // ── Identity (Console MCP) ────────────────────────────────────────────
 
   async prepareRegisterAgent(metadataURI: string): Promise<unknown> {
     return this.callTool("identity.prepare_register_agent", { metadataURI });
   }
 
-  // ── Jobs (public) ────────────────────────────────────────────────────
+  // ── Jobs public (Console MCP) ─────────────────────────────────────────
 
   async listPublicJobs(filters?: { status?: string; limit?: number }): Promise<unknown> {
     return this.callTool("jobs.list_public", filters ?? {});
@@ -115,7 +111,7 @@ export class ArcLayerMcpConnector {
     return this.callTool("jobs.get_public", { jobId });
   }
 
-  // ── Provider Runtime ─────────────────────────────────────────────────
+  // ── Provider Runtime (Console MCP) ────────────────────────────────────
 
   async heartbeat(): Promise<unknown> {
     return this.callTool("provider.runtime_heartbeat");
@@ -140,37 +136,52 @@ export class ArcLayerMcpConnector {
     return this.callTool("provider.runtime_write_checkpoint", { jobId, checkpoint });
   }
 
-  async completeJobRun(jobId: string, result: unknown, runId?: string): Promise<unknown> {
+  /**
+   * Complete a hosted MCP run.
+   * Only calls Console MCP if runId exists (returned by startJobRun).
+   * If runId is missing, skips hosted completion — caller stores local receipt.
+   */
+  async completeJobRun(jobId: string, result: unknown, runId?: string): Promise<unknown | null> {
+    if (!runId) {
+      // No runId — hosted MCP run was never started or start failed.
+      // Do not call complete_run without a real runId.
+      return null;
+    }
     return this.callTool("provider.runtime_complete_run", { jobId, result, runId });
   }
 
-  async failJobRun(jobId: string, error: string): Promise<unknown> {
-    return this.callTool("provider.runtime_fail_job", { jobId, error });
+  /**
+   * Retry a hosted MCP run.
+   */
+  async retryJobRun(jobId: string): Promise<unknown> {
+    return this.callTool("provider.runtime_retry_job", { jobId });
   }
 
-  async listOpenGlobalJobs(filters?: { limit?: number }): Promise<unknown> {
-    return this.callTool("provider.runtime_list_open_jobs", filters ?? {});
+  // ── Provider Job Discovery (Console MCP — valid names) ────────────────
+
+  async listOpenJobs(filters?: { limit?: number }): Promise<unknown> {
+    return this.callTool("provider.list_open_jobs", filters ?? {});
   }
 
   async listAssignedJobs(): Promise<unknown> {
-    return this.callTool("provider.runtime_list_assigned_jobs");
+    return this.callTool("provider.list_assigned_jobs");
   }
 
   async applyToOpenJob(jobId: string, capabilities?: string[]): Promise<unknown> {
-    return this.callTool("provider.runtime_apply_job", { jobId, capabilities });
+    return this.callTool("provider.apply_open_job", { jobId, capabilities });
   }
 
-  // ── ERC-8183 Lifecycle (calldata preparation) ─────────────────────────
+  // ── ERC-8183 Lifecycle (Console MCP — calldata preparation) ───────────
 
   async prepareSubmitDeliverable(jobId: string, deliverableHash: string): Promise<unknown> {
     return this.callTool("provider.prepare_submit_job", { jobId, deliverableHash });
   }
 
   async prepareCompleteJob(jobId: string, reason?: string): Promise<unknown> {
-    return this.callTool("erc8183.prepare_complete", { jobId, reason });
+    return this.callTool("evaluator.prepare_complete_job", { jobId, reason });
   }
 
-  // ── Reputation ───────────────────────────────────────────────────────
+  // ── Reputation (Console MCP) ──────────────────────────────────────────
 
   async giveFeedback(input: {
     agentTokenId: string;

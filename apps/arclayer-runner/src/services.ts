@@ -188,7 +188,12 @@ export class RunnerServices {
     // Step 3: Check runtime result before proceeding with settlement
     if (!result.ok || result.status === "failed") {
       // Runtime reported failure — do NOT submit on-chain
-      await this.mcp.failJobRun(job.jobId, result.error ?? "Runtime returned failure").catch(() => {});
+      // Record failure via local receipt only (no hosted MCP fail_job tool exists)
+      // Optionally write checkpoint if MCP is available
+      await this.mcp.writeCheckpoint(job.jobId, {
+        status: "failed",
+        error: result.error ?? "Runtime returned failure"
+      }).catch(() => {});
 
       const receipt = await this.receipts.append({
         type: "erc8183_submit",

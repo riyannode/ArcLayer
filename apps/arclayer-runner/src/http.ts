@@ -16,16 +16,22 @@ export type HandlerContext = {
 
 export type RouteHandler = (ctx: HandlerContext) => Promise<unknown>;
 
+/**
+ * Raw handler for routes that need direct req/res access (e.g. JSON-RPC MCP).
+ * If rawHandler is set, the standard body reading and JSON response are skipped.
+ */
+export type RawRouteHandler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
+
 type Route = {
   method: string;
   path: string;
-  handler: RouteHandler;
+  handler?: RouteHandler;
+  rawHandler?: RawRouteHandler;
 };
 
 const MAX_BODY_BYTES = 1024 * 1024; // 1 MB
 
 async function readBody(req: IncomingMessage, method: string): Promise<unknown> {
-  // Skip body for GET/HEAD (no body expected)
   if (method === "GET" || method === "HEAD") return undefined;
 
   const chunks: Buffer[] = [];
@@ -72,8 +78,14 @@ export function createRouter(routes: Route[], runnerSecret: string) {
         assertAuthenticated(req, runnerSecret);
       }
 
+      // Raw handler (for MCP JSON-RPC, etc.)
+      if (route.rawHandler) {
+        await route.rawHandler(req, res, url);
+        return;
+      }
+
       const body = await readBody(req, req.method ?? "GET");
-      const result = await route.handler({ req, res, url, body });
+      const result = await route.handler!({ req, res, url, body });
       send(res, 200, result ?? { ok: true });
     } catch (error) {
       const err = asRunnerError(error);
