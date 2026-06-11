@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────────────────────
+# ⚠️  LEGACY — This PM2 installer is no longer the recommended path.
+#
+# Recommended (beta):
+#   npx -y @arclayer/setup@next
+#
+# This script is kept for advanced/legacy users who need PM2-based deployment.
+# ─────────────────────────────────────────────────────────────────────────────
 # ArcLayer ERC-8183 Bot One-Click Installer
 #
 # Usage:

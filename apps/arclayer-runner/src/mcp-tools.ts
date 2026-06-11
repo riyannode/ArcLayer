@@ -8,6 +8,10 @@ import type { RunnerServices } from "./services";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
 import type { RunnerConfig } from "@arclayer/runner-core";
 import { getCirclePolicyStatus } from "./doctor";
+import { resolveAllSkills, resolveSkill, getSkillsForRole, getSkillsByIds, bundleSkillsForRole, SKILL_MANIFEST, type RunnerRole } from "./skill-manifest";
+import { getToolsForRole, getToolByName, CONSOLE_MCP_PROXY_TOOLS, ALL_TOOLS } from "./tool-registry";
+import { getRolePreset, listRolePresets } from "./role-presets";
+import { proxyToConsoleMcp } from "./console-tool-proxy";
 
 export type McpToolContext = {
   services: RunnerServices;
@@ -190,7 +194,108 @@ export async function handleMcpTool(
     case "erc8183.provider_runtime_status":
       return mcp.getRuntimeContext();
 
+    // ── Skill Context Tools ───────────────────────────────────────────
+    case "runner.skills_list": {
+      const skills = resolveAllSkills();
+      return {
+        ok: true,
+        skills: skills.map((s) => ({
+          id: s.id,
+          title: s.title,
+          path: s.path,
+          exists: s.exists,
+          sha256: s.sha256,
+          roles: s.roles,
+          capabilities: s.capabilities,
+          status: s.status,
+          exposeAsContext: s.exposeAsContext,
+        })),
+      };
+    }
+
+    case "runner.skill_get": {
+      const skillId = args.skillId as string;
+      if (!skillId) return { ok: false, error: "skillId is required" };
+      const item = SKILL_MANIFEST.find((s) => s.id === skillId);
+      if (!item) return { ok: false, error: `Skill not found: ${skillId}` };
+      const resolved = resolveSkill(item);
+      return {
+        ok: true,
+        id: resolved.id,
+        title: resolved.title,
+        path: resolved.path,
+        exists: resolved.exists,
+        sha256: resolved.sha256,
+        content: resolved.content,
+        roles: resolved.roles,
+        capabilities: resolved.capabilities,
+        status: resolved.status,
+      };
+    }
+
+    case "runner.skills_bundle": {
+      const role = args.role as string | undefined;
+      const skillIds = args.skillIds as string[] | undefined;
+      if (role) {
+        return bundleSkillsForRole(role as RunnerRole);
+      }
+      if (skillIds && skillIds.length > 0) {
+        const skills = getSkillsByIds(skillIds).filter((s) => s.exists && s.exposeAsContext);
+        const parts = skills.map((s) => `# ── ${s.title} ──\n# Source: ${s.path}\n# SHA256: ${s.sha256}\n\n${s.content}`);
+        return {
+          role: "custom",
+          skillCount: skills.length,
+          bundle: parts.join("\n\n---\n\n"),
+          skills: skills.map((s) => ({ id: s.id, sha256: s.sha256 ?? "", exists: true })),
+        };
+      }
+      return { ok: false, error: "Provide role or skillIds" };
+    }
+
+    case "runner.role_profile": {
+      const role = args.role as string;
+      if (!role) return { ok: false, error: "role is required" };
+      const preset = getRolePreset(role);
+      if (!preset) return { ok: false, error: `Unknown role: ${role}. Available: ${listRolePresets().map((p) => p.id).join(", ")}` };
+      return {
+        ok: true,
+        ...preset,
+        availableRoles: listRolePresets(),
+      };
+    }
+
+    case "runner.role_tools": {
+      const role = args.role as string;
+      if (!role) return { ok: false, error: "role is required" };
+      const tools = getToolsForRole(role);
+      return {
+        ok: true,
+        role,
+        toolCount: tools.length,
+        tools: tools.map((t) => ({
+          name: t.name,
+          source: t.source,
+          status: t.status,
+          risk: t.risk,
+          capabilities: t.capabilities,
+          description: t.description,
+          requiresPolicy: t.requiresPolicy,
+          requiresCircle: t.requiresCircle,
+          requiresRuntime: t.requiresRuntime,
+        })),
+      };
+    }
+
     default:
+      // Try Console MCP proxy for unknown tools
+      if (name.includes(".")) {
+        const proxyResult = await proxyToConsoleMcp(name, args, mcp);
+        if (proxyResult.proxied) {
+          return proxyResult.ok
+            ? proxyResult.result
+            : { ok: false, error: proxyResult.error };
+        }
+      }
       return { ok: false, error: `Unknown tool: ${name}` };
   }
 }

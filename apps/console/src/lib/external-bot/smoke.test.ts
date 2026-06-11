@@ -318,8 +318,8 @@ describe('buildInstallCommand', () => {
       roleNames: ['client', 'provider', 'evaluator'],
     });
 
-    expect(cmd.title).toBe('One-Click ERC-8183 Bot Installer');
-    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash');
+    expect(cmd.title).toBe('ArcLayer Setup');
+    expect(cmd.command).toBe('npx -y @arclayer/setup@next');
     // Security: no inline secrets
     expect(cmd.command).not.toContain('ak_');
     expect(cmd.command).not.toContain('PRIVATE_KEY');
@@ -345,8 +345,8 @@ describe('buildInstallCommand', () => {
       roleNames: ['provider'],
     });
 
-    expect(cmd.title).toBe('One-Click ERC-8183 Provider Installer');
-    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash');
+    expect(cmd.title).toBe('ArcLayer Setup — Provider');
+    expect(cmd.command).toBe('npx -y @arclayer/setup@next');
   });
 
   it('erc8183-escrow-bots with client-only returns generic with --role client', () => {
@@ -368,8 +368,8 @@ describe('buildInstallCommand', () => {
       roleNames: ['client'],
     });
 
-    expect(cmd.title).toBe('One-Click ERC-8183 Client Installer');
-    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role client');
+    expect(cmd.title).toBe('ArcLayer Setup — Client');
+    expect(cmd.command).toBe('npx -y @arclayer/setup@next');
   });
 
   it('erc8183-escrow-bots with evaluator-only returns generic with --role evaluator', () => {
@@ -391,8 +391,8 @@ describe('buildInstallCommand', () => {
       roleNames: ['evaluator'],
     });
 
-    expect(cmd.title).toBe('One-Click ERC-8183 Evaluator Installer');
-    expect(cmd.command).toBe('curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role evaluator');
+    expect(cmd.title).toBe('ArcLayer Setup — Evaluator');
+    expect(cmd.command).toBe('npx -y @arclayer/setup@next');
   });
 });
 

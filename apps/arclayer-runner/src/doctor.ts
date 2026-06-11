@@ -331,10 +331,29 @@ export async function runDoctor(config: RunnerConfig): Promise<CheckResult[]> {
   }
 
   // ══════════════════════════════════════════════════════════════════════
+  // DEPRECATED FIELD CHECKS
+  // ══════════════════════════════════════════════════════════════════════
+
+  // 13. Deprecated contract address fields
+  if (config.erc8183ContractAddress || config.erc8004IdentityRegistryAddress) {
+    results.push({
+      name: "Deprecated contract fields",
+      ok: false,
+      message: "erc8183ContractAddress/erc8004IdentityRegistryAddress are deprecated. Arc contract targets come from SDK constants (CONTRACTS.*). Remove these fields from config.json — they are ignored."
+    });
+  } else {
+    results.push({
+      name: "Deprecated contract fields",
+      ok: true,
+      message: "No deprecated contract fields found"
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
   // CIRCLE CLI CHECKS (advisory — warn but don't crash)
   // ══════════════════════════════════════════════════════════════════════
 
-  // 13. Circle CLI binary exists
+  // 14. Circle CLI binary exists
   const binCheck = await tryExec("which", [config.circleCliBin]);
   results.push({
     name: "Circle CLI binary",

@@ -1,6 +1,6 @@
 {
   "name": "@arclayer/runner",
-  "version": "0.1.2-beta.0",
+  "version": "0.1.2",
   "private": false,
   "type": "module",
   "description": "ArcLayer Runner — policy boundary for external LLM runtimes with MCP bridge, Circle CLI, ERC-8004, ERC-8183, and x402",

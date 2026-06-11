@@ -25,7 +25,6 @@ function makeConfig(overrides: Partial<RunnerConfig> = {}): RunnerConfig {
     batchMaxItems: 10,
     batchMaxTotalUsdc: "0.05",
     allowedX402Hosts: ["api.example.com"],
-    erc8183ContractAddress: "0x0747EEf0706327138c69792bF28Cd525089e4583",
     dataDir: ".test-runner-services",
     port: 8787,
     runnerSecret: "test-secret-at-least-16-chars",

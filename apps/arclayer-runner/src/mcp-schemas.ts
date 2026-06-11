@@ -159,5 +159,40 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
   {
     name: "erc8183.provider_runtime_status",
     description: "Provider runtime context from hosted MCP"
+  },
+
+  // ── Skill Context Tools (Phase 3) ────────────────────────────────────
+  {
+    name: "runner.skills_list",
+    description: "List all manifest skills with id, title, path, exists, sha256, roles, status"
+  },
+  {
+    name: "runner.skill_get",
+    description: "Get skill content by ID (content, sha256, path, roles, capabilities)",
+    inputSchema: {
+      skillId: { type: "string", required: true, description: "Skill ID from manifest" }
+    }
+  },
+  {
+    name: "runner.skills_bundle",
+    description: "Bundle skills for a role or list of skill IDs (context only)",
+    inputSchema: {
+      role: { type: "string", description: "Role name (e.g. provider, client, evaluator)" },
+      skillIds: { type: "array", items: { type: "string" }, description: "Specific skill IDs to bundle" }
+    }
+  },
+  {
+    name: "runner.role_profile",
+    description: "Role description, capabilities, tool groups, recommended setup",
+    inputSchema: {
+      role: { type: "string", required: true, description: "Role name" }
+    }
+  },
+  {
+    name: "runner.role_tools",
+    description: "Callable tools enabled for a role",
+    inputSchema: {
+      role: { type: "string", required: true, description: "Role name" }
+    }
   }
 ];

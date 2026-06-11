@@ -37,7 +37,7 @@ Both interfaces call the same Runner guard/policy/execution services.
 ## Quick Start (One-Command Setup)
 
 ```bash
-npx @arclayer/setup
+npx -y @arclayer/setup@next
 ```
 
 This runs the ArcLayer Runner setup wizard:

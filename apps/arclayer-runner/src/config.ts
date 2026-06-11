@@ -218,8 +218,9 @@ function buildEnvConfig(): Record<string, unknown> {
   if (process.env.ARCLAYER_BATCH_MAX_TOTAL_USDC) set("batchMaxTotalUsdc", process.env.ARCLAYER_BATCH_MAX_TOTAL_USDC);
   if (process.env.ARCLAYER_ALLOWED_X402_HOSTS) set("allowedX402Hosts", splitCsv(process.env.ARCLAYER_ALLOWED_X402_HOSTS));
 
-  set("erc8183ContractAddress", process.env.ARCLAYER_ERC8183_CONTRACT);
-  set("erc8004IdentityRegistryAddress", process.env.ARCLAYER_ERC8004_IDENTITY_REGISTRY);
+  // erc8183ContractAddress / erc8004IdentityRegistryAddress are NOT loaded from env.
+  // Arc contract targets come from SDK constants only (CONTRACTS.*).
+  // These fields are deprecated — see runner-core/src/types.ts for details.
 
   if (process.env.ARCLAYER_RUNNER_DATA_DIR) set("dataDir", process.env.ARCLAYER_RUNNER_DATA_DIR);
   if (process.env.ARCLAYER_RUNNER_PORT) set("port", process.env.ARCLAYER_RUNNER_PORT);

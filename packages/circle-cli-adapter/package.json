@@ -1,6 +1,6 @@
 {
   "name": "@arclayer/circle-cli-adapter",
-  "version": "0.1.1-beta.0",
+  "version": "0.1.2",
   "type": "module",
   "description": "ArcLayer Circle CLI Adapter — allowlisted shell bridge to Circle CLI with input redaction and blocked dangerous commands",
   "license": "MIT",
