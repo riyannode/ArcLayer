@@ -295,15 +295,6 @@ export class RunnerServices {
     deliverableHash: `0x${string}`;
     optParams?: `0x${string}`;
   }) {
-    if (!this.config.erc8183ContractAddress) {
-      return {
-        ok: false,
-        mode: "prepared-only",
-        reason: "ARCLAYER_ERC8183_CONTRACT not configured",
-        prepared: input
-      };
-    }
-
     if (!this.config.circleWalletAddress) {
       return {
         ok: false,
@@ -313,7 +304,8 @@ export class RunnerServices {
       };
     }
 
-    // Use canonical SDK contract target, not env override
+    // Always use canonical SDK contract target (Arc Testnet).
+    // circle.chain is for Circle CLI wallet ops only — contract target is hardcoded.
     const contractAddress = CONTRACTS.ERC8183_AGENTIC_COMMERCE;
 
     return this.circle.executeAllowedArcWrite({
