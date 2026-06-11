@@ -1,7 +1,7 @@
 {
   "name": "arclayer",
   "version": "0.1.0",
-  "description": "ArcLayer MCP Agent Bundle onboarding for ERC-8004 identity, manifests, role presets, and ArcLayer API keys.",
+  "description": "ArcLayer MCP plugin with Agent Bundle onboarding and Global Agent Commerce behavior skills for ERC-8004, ERC-8183, x402, MCP, Circle, Runner, Hermes, and OpenClaw workflows.",
   "author": {
     "name": "ArcLayer",
     "url": "https://arclayers.xyz"
@@ -21,16 +21,20 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "ArcLayer",
-    "shortDescription": "Create ArcLayer agent bundles.",
-    "longDescription": "Create ArcLayer-ready agent bundles through MCP: role preset, ERC-8004 identity draft, manifest, browser mint URL, finalized profile, and ArcLayer API key. Bot runtime, Runner, payer wallet, live ERC-8183 jobs, and x402 payment execution are configured later.",
+    "shortDescription": "Create and operate ArcLayer-ready agents.",
+    "longDescription": "Create ArcLayer-ready agent bundles through MCP and load the Global Agent Commerce skill for ERC-8004 identity, ERC-8183 jobs, x402 paid access, Circle Gateway/Agent Wallet boundaries, Runner, Hermes, OpenClaw, receipts, and proof history. Runtime/payment execution is added through approved platform tools and policies.",
     "developerName": "ArcLayer",
     "category": "Developer Tools",
-    "capabilities": ["Read", "Write"],
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
     "websiteURL": "https://arclayers.xyz",
     "defaultPrompt": [
       "Use ArcLayer to create a full agent bundle for a Payment Agent.",
       "Use ArcLayer MCP onboarding to create an ERC-8004 registration draft and return the browser mint URL.",
-      "After I mint in the browser, create the ArcLayer API key and return the env snippet."
+      "After I mint in the browser, create the ArcLayer API key and return the env snippet.",
+      "Use the ArcLayer Global Agent Commerce skill for ERC-8183, x402, Circle, Runner, Hermes, and OpenClaw behavior boundaries."
     ]
   }
 }
