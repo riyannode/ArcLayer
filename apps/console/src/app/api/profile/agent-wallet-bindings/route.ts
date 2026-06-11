@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
         detail:
           'Submitted Agent Wallet does not match the active Agent Wallet for this owner.',
       },
-      { status: 403 },
+      { status: 409 },
     );
   }
 
