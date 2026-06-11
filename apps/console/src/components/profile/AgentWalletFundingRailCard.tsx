@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Clipboard, Loader2, RefreshCcw } from 'lucide-react';
-import { isAddress } from 'viem';
 import { useSignMessage } from 'wagmi';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useCircleWallet } from '@/hooks/useCircleWallet';
@@ -78,10 +77,6 @@ export function AgentWalletFundingRailCard() {
   const [creatingAgentWallet, setCreatingAgentWallet] = useState(false);
   const [showPasskeyRegistration, setShowPasskeyRegistration] = useState(false);
   const [passkeyUsername, setPasskeyUsername] = useState('');
-  const [showManualLink, setShowManualLink] = useState(false);
-  const [manualLinkAddress, setManualLinkAddress] = useState('');
-  const [manualLinking, setManualLinking] = useState(false);
-  const [manualLinkError, setManualLinkError] = useState<string | null>(null);
 
   const [ownerUsdcBalance, setOwnerUsdcBalance] = useState<BalanceInfo | null>(null);
   const [agentUsdcBalance, setAgentUsdcBalance] = useState<BalanceInfo | null>(null);
@@ -224,24 +219,30 @@ export function AgentWalletFundingRailCard() {
     setAgentAccountError(null);
 
     try {
-      let agentWalletAddress = circleAuthenticated && circleAddress ? circleAddress : '';
-
-      if (!agentWalletAddress) {
-        try {
-          agentWalletAddress = await circleLogin();
-        } catch {
-          setShowPasskeyRegistration(true);
-          setAgentAccountError('No existing Circle passkey was linked. Create one below.');
-          return;
-        }
-      }
-
-      await linkAgentWallet(agentWalletAddress);
+      await linkCurrentCircleWallet();
     } catch (error) {
       setAgentAccountError(errorMessage(error, 'Failed to create or link Agent Wallet.'));
     } finally {
       setCreatingAgentWallet(false);
     }
+  }
+
+  async function linkCurrentCircleWallet(): Promise<AgentAccountInfo> {
+    if (!address) {
+      throw new Error('Connect your admin wallet first.');
+    }
+
+    let agentWalletAddress = circleAuthenticated && circleAddress ? circleAddress : '';
+
+    if (!agentWalletAddress) {
+      agentWalletAddress = await circleLogin();
+    }
+
+    if (!agentWalletAddress) {
+      throw new Error('Circle Agent Wallet login failed.');
+    }
+
+    return await linkAgentWallet(agentWalletAddress);
   }
 
   async function handlePasskeyRegistration() {
@@ -260,27 +261,6 @@ export function AgentWalletFundingRailCard() {
       setAgentAccountError(errorMessage(error, 'Passkey registration failed.'));
     } finally {
       setCreatingAgentWallet(false);
-    }
-  }
-
-  async function handleManualLink() {
-    const linkedAddress = manualLinkAddress.trim();
-    if (!isAddress(linkedAddress)) {
-      setManualLinkError('Enter a valid Agent Wallet address.');
-      return;
-    }
-
-    setManualLinking(true);
-    setManualLinkError(null);
-
-    try {
-      await linkAgentWallet(linkedAddress);
-      setManualLinkAddress('');
-      setShowManualLink(false);
-    } catch (error) {
-      setManualLinkError(errorMessage(error, 'Failed to link Agent Wallet.'));
-    } finally {
-      setManualLinking(false);
     }
   }
 
@@ -405,38 +385,6 @@ export function AgentWalletFundingRailCard() {
               </div>
             )}
 
-            <div className="mt-4">
-              <button
-                type="button"
-                onClick={() => setShowManualLink((current) => !current)}
-                className="text-[11px] text-[#EAE4D8]/35 transition hover:text-[#EAE4D8]/60"
-              >
-                {showManualLink ? '▾ Hide manual link' : '▸ Advanced: link existing Agent Wallet'}
-              </button>
-              {showManualLink && (
-                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                  <input
-                    type="text"
-                    placeholder="0x... Agent Wallet address"
-                    value={manualLinkAddress}
-                    onChange={(event) => {
-                      setManualLinkAddress(event.target.value);
-                      setManualLinkError(null);
-                    }}
-                    className="h-9 min-w-0 flex-1 rounded-md border border-white/10 bg-[#0A0D12] px-3 font-mono text-[11px] text-[#F5F0E5] placeholder-[#EAE4D8]/30 outline-none focus:border-[#F3C536]/40"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void handleManualLink()}
-                    disabled={manualLinking || !manualLinkAddress.trim()}
-                    className="h-9 rounded-md border border-white/10 px-3 text-[11px] text-[#EAE4D8]/60 transition hover:border-[#F3C536]/40 hover:text-[#F3C536] disabled:opacity-40"
-                  >
-                    {manualLinking ? 'Linking...' : 'Link'}
-                  </button>
-                </div>
-              )}
-              {manualLinkError && <p className="mt-2 text-[11px] text-red-400">{manualLinkError}</p>}
-            </div>
           </div>
         )}
 
