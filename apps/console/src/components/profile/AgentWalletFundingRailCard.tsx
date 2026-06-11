@@ -235,11 +235,17 @@ export function AgentWalletFundingRailCard() {
     let agentWalletAddress = circleAuthenticated && circleAddress ? circleAddress : '';
 
     if (!agentWalletAddress) {
-      agentWalletAddress = await circleLogin();
+      try {
+        agentWalletAddress = await circleLogin();
+      } catch {
+        setShowPasskeyRegistration(true);
+        throw new Error('No existing Circle passkey was linked. Create one below.');
+      }
     }
 
     if (!agentWalletAddress) {
-      throw new Error('Circle Agent Wallet login failed.');
+      setShowPasskeyRegistration(true);
+      throw new Error('No existing Circle passkey was linked. Create one below.');
     }
 
     return await linkAgentWallet(agentWalletAddress);
@@ -333,11 +339,11 @@ export function AgentWalletFundingRailCard() {
 
         <div className="grid grid-cols-[1fr_1fr] items-center gap-3 py-3">
           <div className="text-[13px] text-[#EAE4D8]/60">Wallet Role</div>
-          <div className="text-[13px] text-[#F5F0E5]">EOA funds · Agent Wallet operates</div>
+          <div className="text-[13px] text-[#F5F0E5]">Admin funds · Agent Wallet owns/operates</div>
         </div>
 
         <p className="mt-1 text-[11px] leading-5 text-[#EAE4D8]/35">
-          Owner EOA is used for ownership and funding. Circle Agent Wallet is the funding and runtime wallet for agent operations.
+          Admin Wallet is used for session and funding. Circle Agent Wallet is the ERC-8004 onchain owner/controller and runtime wallet for agent operations.
         </p>
 
         {!hasAgentAccount && (
@@ -421,7 +427,7 @@ export function AgentWalletFundingRailCard() {
 
         {!hasAgentAccount ? (
           <p className="mt-5 rounded-md border border-white/10 bg-white/[0.025] px-4 py-3 text-[12px] leading-5 text-[#EAE4D8]/45">
-            Create or link an Agent Wallet in Account Overview to enable funding and Gateway x402 deposits.
+            Create or connect a Circle Agent Wallet in Account Overview to enable funding and Gateway x402 deposits.
           </p>
         ) : (
           <div className="mt-5 grid gap-5">
