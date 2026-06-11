@@ -55,6 +55,10 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
     name: "circle.wallet_budget",
     description: "Wallet budget/limit for configured wallet"
   },
+  {
+    name: "circle.wallet_policy_status",
+    description: "Compare Runner policy vs Circle wallet policy caps + remaining budget"
+  },
 
   // ── x402 ──────────────────────────────────────────────────────────────
   {

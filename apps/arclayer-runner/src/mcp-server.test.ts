@@ -179,6 +179,24 @@ describe("Runner MCP Server", () => {
     expect(result.result.perTxLimitUsdc).toBe("0.01");
   });
 
+  it("tools/call circle.wallet_policy_status returns runnerPolicy", async () => {
+    const result = await callMcp("tools/call", { name: "circle.wallet_policy_status", arguments: {} });
+    expect(result.result.runnerPolicy).toBeDefined();
+    expect(result.result.runnerPolicy.perTxLimitUsdc).toBe("0.01");
+    expect(result.result.walletAddress).toBe("0x0000000000000000000000000000000000000002");
+    // Circle CLI not installed — should have warnings
+    expect(result.result.warnings.length).toBeGreaterThan(0);
+  });
+
+  it("circle.wallet_policy_status handles missing wallet gracefully", async () => {
+    config.circleWalletAddress = undefined;
+    ctx.config = config;
+    const result = await callMcp("tools/call", { name: "circle.wallet_policy_status", arguments: {} });
+    expect(result.result.ok).toBe(false);
+    expect(result.result.runnerPolicy).toBeDefined();
+    expect(result.result.warnings).toContain("CIRCLE_WALLET_ADDRESS not configured");
+  });
+
   it("returns error for unknown tool", async () => {
     const result = await callMcp("tools/call", { name: "nonexistent.tool", arguments: {} });
     expect(result.result.error).toContain("Unknown tool");
@@ -217,6 +235,7 @@ describe("Runner MCP tool catalog", () => {
     expect(names).toContain("circle.gateway_balance");
     expect(names).toContain("circle.wallet_balance");
     expect(names).toContain("circle.wallet_budget");
+    expect(names).toContain("circle.wallet_policy_status");
 
     // x402
     expect(names).toContain("x402.inspect");
