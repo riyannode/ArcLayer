@@ -73,6 +73,20 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
   { name: "erc8183.provider_submit_deliverable", source: "runner-local", status: "active", risk: ["runtime", "external-process"], capabilities: ["erc8183", "submit"], roles: ["provider"], requiresCircle: true, description: "Submit deliverable on-chain via Circle CLI" },
   { name: "erc8183.provider_run_and_submit", source: "runner-local", status: "active", risk: ["runtime", "external-process"], capabilities: ["erc8183", "runtime", "submit"], roles: ["provider"], requiresRuntime: true, requiresCircle: true, description: "Run job + submit deliverable (full lifecycle)" },
   { name: "erc8183.provider_runtime_status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8183", "runtime"], roles: ["provider"], description: "Provider runtime context from hosted MCP" },
+
+  // ERC-8183 Full Lifecycle (runner-local)
+  { name: "erc8183.create_job", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["client", "devops-admin"], requiresCircle: true, description: "Create ERC-8183 job on-chain (hook is address, not bytes)" },
+  { name: "erc8183.set_budget", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["provider", "devops-admin"], requiresCircle: true, description: "Set budget for an ERC-8183 job" },
+  { name: "erc8183.approve_usdc", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "usdc"], roles: ["client", "devops-admin"], requiresCircle: true, description: "Approve USDC for ERC-8183 AgenticCommerce contract" },
+  { name: "erc8183.fund_job", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["client", "devops-admin"], requiresCircle: true, description: "Fund an ERC-8183 job (requires prior approve_usdc)" },
+  { name: "erc8183.complete_job", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["evaluator", "devops-admin"], requiresCircle: true, description: "Complete an ERC-8183 job (evaluator action)" },
+  { name: "erc8183.reject_job", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["evaluator", "devops-admin"], requiresCircle: true, description: "Reject an ERC-8183 job (evaluator action)" },
+
+  // ERC-8004 Register via Circle CLI (guarded)
+  { name: "erc8004.register_via_circle_cli", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity"], roles: ["identity-agent", "devops-admin"], requiresCircle: true, description: "Register ERC-8004 identity on-chain. Gated behind allowIdentityRegister." },
+
+  // Gateway Deposit (guarded, devops-admin only)
+  { name: "circle.gateway_deposit", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["circle", "gateway"], roles: ["devops-admin"], requiresCircle: true, description: "Deposit USDC into Gateway. Gated behind allowGatewayDeposit." },
 ];
 
 // ── Skill Context Tools (Phase 3) ─────────────────────────────────────────

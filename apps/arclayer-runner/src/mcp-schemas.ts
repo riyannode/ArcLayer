@@ -161,6 +161,80 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
     description: "Provider runtime context from hosted MCP"
   },
 
+  // ── ERC-8183 Full Lifecycle (runner-local) ──────────────────────────────
+  {
+    name: "erc8183.create_job",
+    description: "Create ERC-8183 job on-chain via Circle CLI. hook is an address (not bytes).",
+    inputSchema: {
+      provider: { type: "string", required: true, description: "Provider wallet address" },
+      evaluator: { type: "string", required: true, description: "Evaluator wallet address" },
+      expiredAt: { type: "string", required: true, description: "Job expiry as unix timestamp" },
+      description: { type: "string", required: true, description: "Job description" },
+      hook: { type: "string", description: "Callback contract address (default: zero address)" }
+    }
+  },
+  {
+    name: "erc8183.set_budget",
+    description: "Set budget for an ERC-8183 job",
+    inputSchema: {
+      jobId: { type: "string", required: true },
+      amount: { type: "string", required: true, description: "Budget amount in USDC (6 decimals)" },
+      optParams: { type: "string", description: "Optional params bytes (default: 0x)" }
+    }
+  },
+  {
+    name: "erc8183.approve_usdc",
+    description: "Approve USDC for ERC-8183 AgenticCommerce contract. Must be called before fund_job.",
+    inputSchema: {
+      amount: { type: "string", required: true, description: "Amount to approve in USDC (6 decimals)" }
+    }
+  },
+  {
+    name: "erc8183.fund_job",
+    description: "Fund an ERC-8183 job. Requires prior approve_usdc.",
+    inputSchema: {
+      jobId: { type: "string", required: true },
+      optParams: { type: "string", description: "Optional params bytes (default: 0x)" }
+    }
+  },
+  {
+    name: "erc8183.complete_job",
+    description: "Complete an ERC-8183 job (evaluator action). reason is bytes32 or string (auto-hashed).",
+    inputSchema: {
+      jobId: { type: "string", required: true },
+      reason: { type: "string", required: true, description: "bytes32 hash or plaintext string" },
+      optParams: { type: "string", description: "Optional params bytes (default: 0x)" }
+    }
+  },
+  {
+    name: "erc8183.reject_job",
+    description: "Reject an ERC-8183 job (evaluator action). reason is bytes32 or string (auto-hashed).",
+    inputSchema: {
+      jobId: { type: "string", required: true },
+      reason: { type: "string", required: true, description: "bytes32 hash or plaintext string" },
+      optParams: { type: "string", description: "Optional params bytes (default: 0x)" }
+    }
+  },
+
+  // ── ERC-8004 Register via Circle CLI ────────────────────────────────────
+  {
+    name: "erc8004.register_via_circle_cli",
+    description: "Register ERC-8004 identity on-chain via Circle CLI. Gated behind allowIdentityRegister.",
+    inputSchema: {
+      metadataURI: { type: "string", required: true, description: "Agent manifest URL" }
+    }
+  },
+
+  // ── Gateway Deposit ─────────────────────────────────────────────────────
+  {
+    name: "circle.gateway_deposit",
+    description: "Deposit USDC into Circle Gateway. Gated behind allowGatewayDeposit. devops-admin only.",
+    inputSchema: {
+      amount: { type: "string", required: true, description: "Amount in USDC" },
+      method: { type: "string", description: "Deposit method: eco (fast, no gas) or direct (on-chain)" }
+    }
+  },
+
   // ── Skill Context Tools (Phase 3) ────────────────────────────────────
   {
     name: "runner.skills_list",

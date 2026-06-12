@@ -157,6 +157,22 @@ export const RunnerConfigSchema = z.object({
   erc8183ContractAddress: HexAddressSchema.optional(),
   erc8004IdentityRegistryAddress: HexAddressSchema.optional(),
 
+  // ── Explicit opt-in flags for privileged operations ─────────────────────
+  allowGatewayDeposit: z.preprocess(
+    (v) => {
+      if (typeof v === "string") return v === "true" || v === "1";
+      return v;
+    },
+    z.boolean().default(false)
+  ),
+  allowIdentityRegister: z.preprocess(
+    (v) => {
+      if (typeof v === "string") return v === "true" || v === "1";
+      return v;
+    },
+    z.boolean().default(false)
+  ),
+
   dataDir: z.string().default(".arclayer-runner"),
   port: z.coerce.number().int().min(1).max(65535).default(8787),
   runnerSecret: z.string().min(16)
