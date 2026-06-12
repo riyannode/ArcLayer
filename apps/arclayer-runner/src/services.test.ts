@@ -338,6 +338,32 @@ describe("RunnerServices", () => {
     });
   });
 
+  describe("createJob evaluator guard", () => {
+    it("rejects zero evaluator address", async () => {
+      await expectRunnerError(
+        services.createJob({
+          provider: "0x0000000000000000000000000000000000000001",
+          evaluator: "0x0000000000000000000000000000000000000000",
+          expiredAt: Math.floor(Date.now() / 1000) + 3600,
+          description: "test job"
+        }),
+        "INVALID_EVALUATOR"
+      );
+    });
+
+    it("rejects empty evaluator", async () => {
+      await expectRunnerError(
+        services.createJob({
+          provider: "0x0000000000000000000000000000000000000001",
+          evaluator: "",
+          expiredAt: Math.floor(Date.now() / 1000) + 3600,
+          description: "test job"
+        }),
+        "INVALID_EVALUATOR"
+      );
+    });
+  });
+
   describe("MCP integration", () => {
     it("calls MCP startJobRun before runtime dispatch", async () => {
       const startSpy = vi.spyOn(mcp, "startJobRun");
