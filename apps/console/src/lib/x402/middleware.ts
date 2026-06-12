@@ -407,14 +407,20 @@ function paymentRequiredResponse(opts: X402MiddlewareOptions, req: NextRequest) 
     accepts,
   };
 
+  const body = {
+    ok: false,
+    error: 'payment_required',
+    message: 'x402 payment required',
+    x402Version: X402_VERSION_V2,
+    accepts: paymentRequired.accepts,
+  };
+
+  const wantsPretty = (req.nextUrl?.searchParams?.get('pretty') === '1')
+    || (req.nextUrl?.searchParams?.get('pretty') === 'true')
+    || ((req.headers.get('accept') || '').includes('text/html'));
+
   return new NextResponse(
-    JSON.stringify({
-      ok: false,
-      error: 'payment_required',
-      message: 'x402 payment required',
-      x402Version: X402_VERSION_V2,
-      accepts: paymentRequired.accepts,
-    }),
+    wantsPretty ? JSON.stringify(body, null, 2) : JSON.stringify(body),
     {
       status: 402,
       headers: {
