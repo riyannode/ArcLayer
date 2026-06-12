@@ -15,13 +15,29 @@ import { safeJson } from '@/lib/safeFetch';
 /**
  * Indexer provider adapter boundary.
  * - "custom" (default): current self-hosted indexer at INDEXER_BASE_URL
- * - "goldsky": reserved for future Goldsky migration (not implemented)
+ * - "goldsky": Goldsky/Postgres backed reader (gated)
  *
  * Set NEXT_PUBLIC_INDEXER_PROVIDER=custom|goldsky to switch.
  */
 export type IndexerProvider = 'custom' | 'goldsky';
 export const INDEXER_PROVIDER: IndexerProvider =
   (process.env.NEXT_PUBLIC_INDEXER_PROVIDER as IndexerProvider) || 'custom';
+
+/**
+ * Indexer scope — DISPLAY/DEBUG ONLY. Not gate authority.
+ * The actual gate is enforced server-side by the indexer/projections layer
+ * using INDEXER_SCOPE from indexer/src/config.ts.
+ *
+ * Set NEXT_PUBLIC_INDEXER_SCOPE=arclayer|arcnetwork for UI display hints.
+ */
+export type IndexerScope = 'arclayer' | 'arcnetwork';
+export const INDEXER_SCOPE: IndexerScope =
+  parseIndexerScope(process.env.NEXT_PUBLIC_INDEXER_SCOPE);
+
+function parseIndexerScope(raw: string | undefined): IndexerScope {
+  if (raw === 'arcnetwork') return 'arcnetwork';
+  return 'arclayer';
+}
 
 export const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || 'https://indexer.arclayers.xyz';
 
