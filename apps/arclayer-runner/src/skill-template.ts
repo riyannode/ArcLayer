@@ -79,7 +79,7 @@ Your runtime calls these tools via \`arclayer-runner mcp\` (STDIO):
   "name": "x402.batch_pay",
   "arguments": {
     "batchId": "batch-001",
-    "taskId": "task-001",
+    "taskId": "t-001",
     "payments": [
       {
         "type": "x402_service_pay",
