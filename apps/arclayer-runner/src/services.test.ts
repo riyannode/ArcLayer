@@ -296,6 +296,48 @@ describe("RunnerServices", () => {
     });
   });
 
+  describe("x402 server-side 409 idempotent-safe", () => {
+    it("treats Circle CLI 409 error as idempotent success", async () => {
+      // Mock payService to throw like Circle CLI does on server 409
+      const paySpy = vi.spyOn(services.circle, "payService").mockRejectedValue(
+        new Error("Payment submitted but request failed with HTTP 409.\nServer response: You already have an active access session for this resource.")
+      );
+
+      const result = await services.payX402({
+        type: "x402_service_pay",
+        url: "https://api.example.com/test",
+        maxAmountUsdc: "0.005",
+        reason: "test-409-idempotent"
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.idempotent).toBe(true);
+      expect(result.alreadyPaid).toBe(true);
+      expect(result.message).toContain("409");
+      expect(result.message).toContain("idempotent-safe");
+      expect(result.receipt).toBeDefined();
+
+      paySpy.mockRestore();
+    });
+
+    it("still throws for non-409 Circle CLI errors", async () => {
+      const paySpy = vi.spyOn(services.circle, "payService").mockRejectedValue(
+        new Error("Insufficient funds in wallet")
+      );
+
+      await expect(
+        services.payX402({
+          type: "x402_service_pay",
+          url: "https://api.example.com/test",
+          maxAmountUsdc: "0.005",
+          reason: "test-real-error"
+        })
+      ).rejects.toThrow("Insufficient funds");
+
+      paySpy.mockRestore();
+    });
+  });
+
   describe("MCP integration", () => {
     it("calls MCP startJobRun before runtime dispatch", async () => {
       const startSpy = vi.spyOn(mcp, "startJobRun");

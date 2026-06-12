@@ -755,17 +755,47 @@ export class RunnerServices {
         await this.ledger.recordSuccess(idempotencyKey, receipt.id);
         return { ok: true, result, receipt, idempotencyKey };
       } catch (error) {
-        await this.ledger.recordFailure(
-          idempotencyKey,
-          error instanceof Error ? error.message : String(error)
-        );
+        const msg = error instanceof Error ? error.message : String(error);
+
+        // ── 409 already-paid/idempotent-safe ────────────────────────────
+        // Circle CLI exits non-zero when server returns HTTP 409 (already paid
+        // or active session). The payment WAS submitted — treat as idempotent
+        // success if the server indicates the resource is already unlocked.
+        const isAlreadyPaid =
+          msg.includes("409") &&
+          (msg.includes("already") ||
+            msg.includes("active access session") ||
+            msg.includes("Payment submitted"));
+
+        if (isAlreadyPaid) {
+          const receipt = await this.receipts.append({
+            type: "x402_payment",
+            agentId: this.config.agentId,
+            idempotencyKey,
+            request: payment,
+            response: { ok: true, idempotent: true, alreadyPaid: true },
+            proof: { circleError: msg, sha256: sha256Text(msg) }
+          });
+
+          await this.ledger.recordSuccess(idempotencyKey, receipt.id);
+          return {
+            ok: true,
+            idempotent: true,
+            alreadyPaid: true,
+            message: "Server returned 409 — resource already unlocked (idempotent-safe)",
+            receipt,
+            idempotencyKey
+          };
+        }
+
+        await this.ledger.recordFailure(idempotencyKey, msg);
 
         await this.receipts.append({
           type: "x402_payment",
           agentId: this.config.agentId,
           idempotencyKey,
           request: payment,
-          error: error instanceof Error ? error.message : String(error)
+          error: msg
         });
 
         throw error;
