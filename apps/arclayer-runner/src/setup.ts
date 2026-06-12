@@ -122,7 +122,7 @@ export function registerSetupCommand(program: Command): void {
         }
 
         // ── 5. Chain ───────────────────────────────────────────────────
-        const chain = await askOptional(rl, "\n  Circle chain", "BASE");
+        const chain = await askOptional(rl, "\n  Circle chain", "ARC-TESTNET");
 
         // ── 6. Payment policy ──────────────────────────────────────────
         console.log("\n▸ Spending Policy\n");
