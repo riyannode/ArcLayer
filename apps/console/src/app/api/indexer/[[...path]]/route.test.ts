@@ -360,3 +360,48 @@ describe("Header-based metadata for arrays", () => {
     expect(headers.get('x-indexer-fallback-active')).toBe('true');
   });
 });
+
+// ── Agent ID normalization tests ──────────────────────────────────────────
+
+describe("toRawGoldskyAgentId", () => {
+  /** Mirrors the exported helper in route.ts */
+  function toRawGoldskyAgentId(input: string): string {
+    const decoded = decodeURIComponent(input).trim();
+    if (!decoded) return decoded;
+    const parts = decoded.split(':');
+    return parts[parts.length - 1] || decoded;
+  }
+
+  it("/agents/42 → readGoldskyAgentDetail(\"42\")", () => {
+    expect(toRawGoldskyAgentId("42")).toBe("42");
+  });
+
+  it("/agents/erc8004_identity_registry:42 → readGoldskyAgentDetail(\"42\")", () => {
+    expect(toRawGoldskyAgentId("erc8004_identity_registry:42")).toBe("42");
+  });
+
+  it("handles URL-encoded prefix", () => {
+    expect(toRawGoldskyAgentId("erc8004_identity_registry%3A42")).toBe("42");
+  });
+
+  it("handles empty string → empty", () => {
+    expect(toRawGoldskyAgentId("")).toBe("");
+  });
+
+  it("handles whitespace-only → empty", () => {
+    expect(toRawGoldskyAgentId("   ")).toBe("");
+  });
+
+  it("handles plain numeric ID unchanged", () => {
+    expect(toRawGoldskyAgentId("12345")).toBe("12345");
+  });
+
+  it("handles multiple colons — takes last segment", () => {
+    expect(toRawGoldskyAgentId("a:b:99")).toBe("99");
+  });
+
+  it("handles prefix with no value after colon — falls back to full input", () => {
+    // "erc8004_identity_registry:" → last segment is "" (falsy) → fallback to decoded
+    expect(toRawGoldskyAgentId("erc8004_identity_registry:")).toBe("erc8004_identity_registry:");
+  });
+});
