@@ -1,6 +1,6 @@
 import { ARC_ERC20_USDC_DECIMALS, type IndexedAgentEvent, type IndexedJobEvent } from "@arclayer/sdk";
 import { formatUnits } from "viem";
-import { ARC_REFERENCE_METADATA_PREFIX_FILTER } from "./config";
+import { ARC_REFERENCE_METADATA_PREFIX_FILTER, INDEXER_SCOPE } from "./config";
 import {
   matchesReferenceAgentId,
   matchesReferenceWallet,
@@ -27,7 +27,7 @@ export function arcWalletFilterActive(): boolean {
 }
 
 function matchesArcWallet(addr: unknown): boolean {
-  return matchesReferenceWallet(addr, "arclayer");
+  return matchesReferenceWallet(addr, INDEXER_SCOPE);
 }
 
 export function buildJobProjection(events: IndexedJobEvent[]) {
@@ -134,7 +134,7 @@ function getAgentFilterReason(event: IndexedAgentEvent, arcJobWallets?: Set<stri
   const rawAgentId = String(event.agentId);
   const sourceAgentId = `${source}:${rawAgentId}`;
   const agentIdMatch = referenceAgentIdFilterActive()
-    ? matchesReferenceAgentId(rawAgentId, "arclayer") || matchesReferenceAgentId(sourceAgentId, "arclayer")
+    ? matchesReferenceAgentId(rawAgentId, INDEXER_SCOPE) || matchesReferenceAgentId(sourceAgentId, INDEXER_SCOPE)
     : false;
   const metadataMatch = ARC_REFERENCE_METADATA_PREFIX_FILTER.length > 0 && uri
     ? ARC_REFERENCE_METADATA_PREFIX_FILTER.some((prefix) => uri.startsWith(prefix))
