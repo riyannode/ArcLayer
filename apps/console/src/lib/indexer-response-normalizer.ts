@@ -23,14 +23,25 @@ export type NormalizedJob = {
   client: string;
   provider: string;
   evaluator: string;
+  hook: string;
+  expiredAt: string;
   description: string;
   budget: string;
   fundedAmount: string;
+  createdAtBlock: string;
+  updatedAtBlock: string;
   deliverable: string;
   completionReason: string;
   status: number;
   statusLabel: string;
   createdAt: string;
+  // Top-level legacy aliases (UI reads these directly)
+  worker: string;
+  agentId: string;
+  jobSpecHash: string;
+  deliverableURI: string;
+  proofMetadataURI: string;
+  approved: boolean;
   legacyAliases: {
     worker: string;
     jobSpecHash: string;
@@ -135,45 +146,38 @@ export function normalizeJob(job: Record<string, unknown>): NormalizedJob {
   const client = String(job.client ?? ZERO_ADDRESS);
   const provider = String(job.provider ?? ZERO_ADDRESS);
   const evaluator = String(job.evaluator ?? ZERO_ADDRESS);
+  const hook = String(job.hook ?? ZERO_ADDRESS);
+  const expiredAt = String(job.expiredAt ?? "0");
   const description = String(job.description ?? "");
   const budget = String(job.budget ?? "0");
   const fundedAmount = String(job.fundedAmount ?? "0");
+  const createdAtBlock = String(job.createdAtBlock ?? job.createdAt ?? "0");
+  const updatedAtBlock = String(job.updatedAtBlock ?? createdAtBlock);
   const deliverable = String(job.deliverable ?? ZERO_BYTES32);
   const completionReason = String(job.completionReason ?? ZERO_BYTES32);
   const status = Number(job.status ?? 0);
   const statusLabel = String(job.statusLabel ?? "Open");
-  const createdAt = String(job.createdAt ?? job.createdAtBlock ?? "0");
+  const createdAt = String(job.createdAt ?? createdAtBlock);
 
-  // If PM2 format (already has legacyAliases), pass through
-  if (job.legacyAliases && typeof job.legacyAliases === "object") {
-    return {
-      id, client, provider, evaluator, description, budget, fundedAmount,
-      deliverable, completionReason, status, statusLabel, createdAt,
-      legacyAliases: job.legacyAliases as NormalizedJob["legacyAliases"],
-    };
-  }
+  // Top-level legacy aliases — UI reads these directly
+  const worker = String(job.worker ?? provider);
+  const agentId = String(job.agentId ?? provider);
+  const jobSpecHash = String(job.jobSpecHash ?? description);
+  const deliverableURI = String(job.deliverableURI ?? deliverable);
+  const proofMetadataURI = String(job.proofMetadataURI ?? "");
+  const approved = job.approved !== undefined ? Boolean(job.approved) : status === 3;
 
-  // Goldsky/SDK format → synthesize legacy aliases
+  // Legacy aliases object (backward compat)
+  const legacyAliases = (job.legacyAliases && typeof job.legacyAliases === "object")
+    ? job.legacyAliases as NormalizedJob["legacyAliases"]
+    : { worker, jobSpecHash, deliverableURI, proofMetadataURI, approved };
+
   return {
-    id,
-    client,
-    provider,
-    evaluator,
-    description,
-    budget,
-    fundedAmount,
-    deliverable,
-    completionReason,
-    status,
-    statusLabel,
-    createdAt,
-    legacyAliases: {
-      worker: provider,
-      jobSpecHash: description,
-      deliverableURI: deliverable,
-      proofMetadataURI: completionReason,
-      approved: status === 3,
-    },
+    id, client, provider, evaluator, hook, expiredAt, description, budget,
+    fundedAmount, createdAtBlock, updatedAtBlock, deliverable, completionReason,
+    status, statusLabel, createdAt,
+    worker, agentId, jobSpecHash, deliverableURI, proofMetadataURI, approved,
+    legacyAliases,
   };
 }
 
