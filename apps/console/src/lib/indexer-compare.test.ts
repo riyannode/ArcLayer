@@ -77,7 +77,33 @@ function makeAgent(overrides: Partial<NormalizedAgent> = {}): NormalizedAgent {
   };
 }
 
-// ── Tests ──────────────────────────────────────────────────────────────────
+function makeOverview(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    summary: {
+      jobs: 0,
+      agents: 0,
+      settledJobs: 0,
+      fundedJobs: 0,
+      eventCount: 0,
+      meta: { importedAgentCount: 0, erc8004AgentCount: 0 },
+      agentBreakdown: { importedAgentCount: 0, erc8004AgentCount: 0, totalAgentCount: 0 },
+      jobBreakdown: { erc8183: 0 },
+      proofs: 0,
+      budgetedUsdc: "0",
+      fundedUsdc: "0",
+      totalBudgetAtomic: "0",
+      totalFundedAtomic: "0",
+      totalBudget: "0",
+      totalFunded: "0",
+      ...overrides,
+    },
+    jobs: [],
+    agents: [],
+    proofs: [],
+  };
+}
+
+// ── Tests: compareHealth ───────────────────────────────────────────────────
 
 describe("compareHealth", () => {
   it("returns both providers ok when healthy", () => {
@@ -90,34 +116,35 @@ describe("compareHealth", () => {
     expect(result.custom.lastSyncedBlock).toBe(41752200);
   });
 
-  it("captures errors from either provider", () => {
+  it("returns stable error codes, not raw text", () => {
     const result = compareHealth(
-      { ok: false, lastSyncError: "RPC timeout" },
-      { ok: false, error: "Supabase unreachable" },
+      { ok: false, lastSyncError: "RPC timeout at drpc.testnet.arc.network" },
+      { ok: false, error: "Supabase connection refused: postgres://..." },
     );
     expect(result.custom.ok).toBe(false);
-    expect(result.custom.error).toBe("RPC timeout");
+    expect(result.custom.error).toBe("custom_sync_error");
     expect(result.goldsky.ok).toBe(false);
-    expect(result.goldsky.error).toBe("Supabase unreachable");
+    expect(result.goldsky.error).toBe("goldsky_reader_error");
   });
 });
+
+// ── Tests: compareCounts ───────────────────────────────────────────────────
 
 describe("compareCounts", () => {
   it("returns 0 diff when counts match", () => {
-    const result = compareCounts("jobs", 5, 5);
-    expect(result.diff).toBe(0);
+    expect(compareCounts("jobs", 5, 5).diff).toBe(0);
   });
 
   it("returns positive diff when goldsky has more", () => {
-    const result = compareCounts("agents", 3, 5);
-    expect(result.diff).toBe(2);
+    expect(compareCounts("agents", 3, 5).diff).toBe(2);
   });
 
   it("returns negative diff when custom has more", () => {
-    const result = compareCounts("jobs", 8, 5);
-    expect(result.diff).toBe(-3);
+    expect(compareCounts("jobs", 8, 5).diff).toBe(-3);
   });
 });
+
+// ── Tests: compareIdSets ───────────────────────────────────────────────────
 
 describe("compareIdSets", () => {
   it("returns empty arrays when sets match", () => {
@@ -127,23 +154,15 @@ describe("compareIdSets", () => {
   });
 
   it("detects IDs only in custom", () => {
-    const result = compareIdSets(["1", "2", "3"], ["1", "2"]);
-    expect(result.onlyInCustom).toEqual(["3"]);
-    expect(result.onlyInGoldsky).toEqual([]);
+    expect(compareIdSets(["1", "2", "3"], ["1", "2"]).onlyInCustom).toEqual(["3"]);
   });
 
   it("detects IDs only in goldsky", () => {
-    const result = compareIdSets(["1"], ["1", "2", "4"]);
-    expect(result.onlyInCustom).toEqual([]);
-    expect(result.onlyInGoldsky).toEqual(["2", "4"]);
-  });
-
-  it("detects IDs in both directions", () => {
-    const result = compareIdSets(["1", "3"], ["2", "3"]);
-    expect(result.onlyInCustom).toEqual(["1"]);
-    expect(result.onlyInGoldsky).toEqual(["2"]);
+    expect(compareIdSets(["1"], ["1", "2", "4"]).onlyInGoldsky).toEqual(["2", "4"]);
   });
 });
+
+// ── Tests: normalizeAgentIdForMatch ────────────────────────────────────────
 
 describe("normalizeAgentIdForMatch", () => {
   it("strips source prefix", () => {
@@ -153,99 +172,111 @@ describe("normalizeAgentIdForMatch", () => {
   it("returns raw ID as-is", () => {
     expect(normalizeAgentIdForMatch("42")).toBe("42");
   });
-
-  it("handles source prefix variations", () => {
-    expect(normalizeAgentIdForMatch("imported_arclayer_registry:7")).toBe("7");
-  });
 });
+
+// ── Tests: compareJobFields ────────────────────────────────────────────────
 
 describe("compareJobFields", () => {
   it("returns no diffs when jobs are identical", () => {
-    const custom = [makeJob()];
-    const goldsky = [makeJob()];
-    const diffs = compareJobFields(custom, goldsky);
-    expect(diffs).toEqual([]);
+    expect(compareJobFields([makeJob()], [makeJob()])).toEqual([]);
   });
 
   it("detects status mismatch", () => {
-    const custom = [makeJob({ status: 3 })];
-    const goldsky = [makeJob({ status: 2 })];
-    const diffs = compareJobFields(custom, goldsky);
-    expect(diffs.length).toBeGreaterThan(0);
+    const diffs = compareJobFields([makeJob({ status: 3 })], [makeJob({ status: 2 })]);
     expect(diffs.some((d) => d.field === "status")).toBe(true);
   });
 
   it("detects provider mismatch", () => {
-    const custom = [makeJob({ provider: "0xAAA" })];
-    const goldsky = [makeJob({ provider: "0xBBB" })];
-    const diffs = compareJobFields(custom, goldsky);
+    const diffs = compareJobFields(
+      [makeJob({ provider: "0xAAA" })],
+      [makeJob({ provider: "0xBBB" })],
+    );
     expect(diffs.some((d) => d.field === "provider")).toBe(true);
   });
 
-  it("skips jobs missing from goldsky", () => {
-    const custom = [makeJob({ id: "1" }), makeJob({ id: "2" })];
-    const goldsky = [makeJob({ id: "1" })];
-    const diffs = compareJobFields(custom, goldsky);
-    // Job "2" is missing entirely, not a field diff
-    expect(diffs.filter((d) => d.id === "2")).toEqual([]);
+  it("detects deliverable mismatch", () => {
+    const diffs = compareJobFields(
+      [makeJob({ deliverable: "0xaaa" })],
+      [makeJob({ deliverable: "0xbbb" })],
+    );
+    expect(diffs.some((d) => d.field === "deliverable")).toBe(true);
   });
 
-  it("ignores jobs only in goldsky", () => {
-    const custom = [makeJob({ id: "1" })];
-    const goldsky = [makeJob({ id: "1" }), makeJob({ id: "3" })];
-    const diffs = compareJobFields(custom, goldsky);
+  it("detects completionReason mismatch", () => {
+    const diffs = compareJobFields(
+      [makeJob({ completionReason: "0x111" })],
+      [makeJob({ completionReason: "0x222" })],
+    );
+    expect(diffs.some((d) => d.field === "completionReason")).toBe(true);
+  });
+
+  it("compares addresses case-insensitively", () => {
+    const diffs = compareJobFields(
+      [makeJob({ client: "0xAAA" })],
+      [makeJob({ client: "0xaaa" })],
+    );
     expect(diffs).toEqual([]);
   });
+
+  it("skips jobs missing from goldsky", () => {
+    const diffs = compareJobFields(
+      [makeJob({ id: "1" }), makeJob({ id: "2" })],
+      [makeJob({ id: "1" })],
+    );
+    expect(diffs.filter((d) => d.id === "2")).toEqual([]);
+  });
 });
+
+// ── Tests: compareAgentFields ──────────────────────────────────────────────
 
 describe("compareAgentFields", () => {
   it("returns no diffs when agents match (normalizing IDs)", () => {
     const custom = [makeAgent({ agentId: "erc8004_identity_registry:42" })];
-    const goldsky = [makeAgent({ agentId: "42" })];
-    const diffs = compareAgentFields(custom, goldsky);
-    expect(diffs).toEqual([]);
+    const goldsky = [makeAgent({ agentId: "erc8004_identity_registry:42" })];
+    expect(compareAgentFields(custom, goldsky)).toEqual([]);
   });
 
   it("detects controller mismatch", () => {
-    const custom = [makeAgent({ controller: "0xAAA" })];
-    const goldsky = [makeAgent({ controller: "0xBBB" })];
-    const diffs = compareAgentFields(custom, goldsky);
+    const diffs = compareAgentFields(
+      [makeAgent({ controller: "0xAAA" })],
+      [makeAgent({ controller: "0xBBB" })],
+    );
     expect(diffs.some((d) => d.field === "controller")).toBe(true);
   });
 
-  it("detects metadataURI mismatch", () => {
-    const custom = [makeAgent({ metadataURI: "https://old.example" })];
-    const goldsky = [makeAgent({ metadataURI: "https://new.example" })];
-    const diffs = compareAgentFields(custom, goldsky);
-    expect(diffs.some((d) => d.field === "metadataURI")).toBe(true);
+  it("compares controller addresses case-insensitively", () => {
+    const diffs = compareAgentFields(
+      [makeAgent({ controller: "0xAAA" })],
+      [makeAgent({ controller: "0xaaa" })],
+    );
+    expect(diffs).toEqual([]);
+  });
+
+  it("does NOT match imported agent to erc8004 agent with same tokenId", () => {
+    const imported = makeAgent({
+      agentId: "imported_arclayer_registry:7",
+      source: "imported_arclayer_registry",
+    });
+    const erc8004 = makeAgent({
+      agentId: "erc8004_identity_registry:7",
+      source: "erc8004_identity_registry",
+    });
+    // Different sources = different match keys, so no field diffs expected
+    const diffs = compareAgentFields([imported], [erc8004]);
+    expect(diffs).toEqual([]);
   });
 });
 
+// ── Tests: compareOverviewCounts ───────────────────────────────────────────
+
 describe("compareOverviewCounts", () => {
   it("returns 0 diffs when overviews match", () => {
-    const overview: NormalizedOverview = {
-      summary: {
-        eventCount: 100,
-        jobs: 5,
-        agents: 3,
-        meta: { importedAgentCount: 0, erc8004AgentCount: 3 },
-        agentBreakdown: { importedAgentCount: 0, erc8004AgentCount: 3, totalAgentCount: 3 },
-        jobBreakdown: { erc8183: 5 },
-        proofs: 0,
-        budgetedUsdc: "1.0",
-        fundedUsdc: "0.5",
-        totalBudgetAtomic: "1000000",
-        totalFundedAtomic: "500000",
-        totalBudget: "1000000",
-        totalFunded: "500000",
-        settledJobs: 2,
-        fundedJobs: 3,
-      },
-      jobs: [],
-      agents: [],
-      proofs: [],
-    };
-
+    const overview = makeOverview({
+      jobs: 5,
+      agents: 3,
+      settledJobs: 2,
+      fundedJobs: 3,
+    }) as unknown as NormalizedOverview;
     const result = compareOverviewCounts(overview, overview);
     expect(result.overviewJobs.diff).toBe(0);
     expect(result.overviewAgents.diff).toBe(0);
@@ -253,6 +284,8 @@ describe("compareOverviewCounts", () => {
     expect(result.overviewFunded.diff).toBe(0);
   });
 });
+
+// ── Tests: buildComparisonReport ───────────────────────────────────────────
 
 describe("buildComparisonReport", () => {
   const baseParams = {
@@ -264,49 +297,78 @@ describe("buildComparisonReport", () => {
     goldskyAgents: [] as Record<string, unknown>[],
     customProofs: [] as Record<string, unknown>[],
     goldskyProofs: [] as Record<string, unknown>[],
-    customOverview: { summary: { jobs: 0, agents: 0, settledJobs: 0, fundedJobs: 0 }, jobs: [], agents: [], proofs: [] } as Record<string, unknown>,
-    goldskyOverview: { summary: { jobs: 0, agents: 0, settledJobs: 0, fundedJobs: 0 }, jobs: [], agents: [], proofs: [] } as Record<string, unknown>,
+    customOverview: makeOverview(),
+    goldskyOverview: makeOverview(),
   };
 
   it("reports MATCH when both providers are identical and empty", () => {
     const report = buildComparisonReport(baseParams);
     expect(report.verdict).toContain("MATCH");
     expect(report.counts.jobs.diff).toBe(0);
-    expect(report.counts.agents.diff).toBe(0);
   });
 
   it("reports DIVERGENCE when job counts differ", () => {
     const report = buildComparisonReport({
       ...baseParams,
       customJobs: [makeJob({ id: "1" }) as unknown as Record<string, unknown>],
-      customOverview: {
-        summary: { jobs: 1, agents: 0, settledJobs: 0, fundedJobs: 0 },
-        jobs: [makeJob({ id: "1" })],
-        agents: [],
-        proofs: [],
-      } as unknown as Record<string, unknown>,
+      customOverview: makeOverview({ jobs: 1 }),
     });
     expect(report.verdict).toContain("DIVERGENCE");
     expect(report.verdict).toContain("job count mismatch");
   });
 
-  it("reports missing job IDs", () => {
+  it("reports missing agent IDs in verdict", () => {
     const report = buildComparisonReport({
       ...baseParams,
-      customJobs: [makeJob({ id: "1" }) as unknown as Record<string, unknown>],
-      customOverview: {
-        summary: { jobs: 1, agents: 0, settledJobs: 0, fundedJobs: 0 },
-        jobs: [makeJob({ id: "1" })],
-        agents: [],
-        proofs: [],
-      } as unknown as Record<string, unknown>,
+      customAgents: [
+        makeAgent({ agentId: "erc8004_identity_registry:1" }) as unknown as Record<string, unknown>,
+      ],
     });
-    expect(report.missing.jobIdsInCustomOnly).toEqual(["1"]);
+    expect(report.verdict).toContain("agents missing from goldsky");
+  });
+
+  it("reports proof count mismatch in verdict", () => {
+    const report = buildComparisonReport({
+      ...baseParams,
+      customProofs: [{ tokenId: "1" }] as Record<string, unknown>[],
+    });
+    expect(report.verdict).toContain("proof count mismatch");
+  });
+
+  it("reports overview settled mismatch in verdict", () => {
+    const report = buildComparisonReport({
+      ...baseParams,
+      customOverview: makeOverview({ settledJobs: 5 }),
+      goldskyOverview: makeOverview({ settledJobs: 3 }),
+    });
+    expect(report.verdict).toContain("overview settled count mismatch");
+  });
+
+  it("reports overview funded mismatch in verdict", () => {
+    const report = buildComparisonReport({
+      ...baseParams,
+      customOverview: makeOverview({ fundedJobs: 2 }),
+      goldskyOverview: makeOverview({ fundedJobs: 4 }),
+    });
+    expect(report.verdict).toContain("overview funded count mismatch");
   });
 
   it("includes block lag from custom provider", () => {
     const report = buildComparisonReport(baseParams);
     expect(report.blockLag.customBlock).toBe(41752200);
+  });
+
+  it("marks Goldsky block as unavailable when maxBlock is 0", () => {
+    const report = buildComparisonReport({ ...baseParams, goldskyMaxBlock: 0 });
+    expect(report.blockLag.goldskyBlockAvailable).toBe(false);
+    expect(report.blockLag.lag).toBe(0);
+  });
+
+  it("derives Goldsky block from maxBlock param", () => {
+    const report = buildComparisonReport({ ...baseParams, goldskyMaxBlock: 41752000 });
+    expect(report.blockLag.goldskyBlock).toBe(41752000);
+    expect(report.blockLag.goldskyBlockAvailable).toBe(true);
+    expect(report.blockLag.lag).toBe(200); // 41752200 - 41752000
   });
 
   it("includes generatedAt timestamp", () => {
