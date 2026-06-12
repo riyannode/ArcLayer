@@ -185,6 +185,122 @@ export class CircleCliAdapter {
 
   // ── Allowlisted Arc Contract Writes ─────────────────────────────────────
 
+  /**
+   * ERC-8183 lifecycle allowlist.
+   * Each signature maps to a specific AgenticCommerce contract method.
+   * No open-ended execute — only these exact signatures are accepted.
+   */
+  static readonly ERC8183_SIGNATURES = new Set([
+    "submit(uint256,bytes32,bytes)",
+    "createJob(address,address,uint256,string,address)",
+    "setBudget(uint256,uint256,bytes)",
+    "fund(uint256,bytes)",
+    "complete(uint256,bytes32,bytes)",
+    "reject(uint256,bytes32,bytes)",
+    "claimRefund(uint256,bytes)",
+  ]);
+
+  /**
+   * Execute an allowlisted ERC-8183 lifecycle write on the AgenticCommerce contract.
+   * Only signatures in ERC8183_SIGNATURES are accepted.
+   */
+  async executeErc8183Write(input: {
+    signature: string;
+    params: string[];
+    contract: string;
+    address: string;
+    chain: string;
+  }): Promise<CircleCliResult> {
+    if (!CircleCliAdapter.ERC8183_SIGNATURES.has(input.signature)) {
+      throw new RunnerError(
+        "ERC8183_SIGNATURE_BLOCKED",
+        `Signature "${input.signature}" is not in the ERC-8183 lifecycle allowlist`,
+        403
+      );
+    }
+
+    const args = [
+      "wallet",
+      "execute",
+      input.signature,
+      ...input.params,
+      "--contract",
+      input.contract,
+      "--address",
+      input.address,
+      "--chain",
+      input.chain,
+      "--output",
+      "json"
+    ];
+
+    return this.run(args);
+  }
+
+  /**
+   * Execute USDC approve for ERC-8183 contract.
+   * Approves AgenticCommerce to spend USDC.
+   */
+  async approveUsdc(input: {
+    amount: string;
+    usdcAddress: string;
+    spenderAddress: string;
+    walletAddress: string;
+    chain: string;
+  }): Promise<CircleCliResult> {
+    const args = [
+      "wallet",
+      "execute",
+      "approve(address,uint256)",
+      input.spenderAddress,
+      input.amount,
+      "--contract",
+      input.usdcAddress,
+      "--address",
+      input.walletAddress,
+      "--chain",
+      input.chain,
+      "--output",
+      "json"
+    ];
+
+    return this.run(args);
+  }
+
+  /**
+   * Deposit USDC into Circle Gateway for nanopayments.
+   * Gated behind explicit allowGatewayDeposit flag.
+   */
+  async gatewayDeposit(input: {
+    amount: string;
+    address: string;
+    chain: string;
+    method?: string;
+  }): Promise<CircleCliResult> {
+    const args = [
+      "gateway",
+      "deposit",
+      "--amount",
+      input.amount,
+      "--address",
+      input.address,
+      "--chain",
+      input.chain,
+      "--output",
+      "json"
+    ];
+
+    if (input.method) {
+      args.push("--method", input.method);
+    }
+
+    return this.run(args);
+  }
+
+  /**
+   * Legacy method: execute an allowlisted Arc write.
+   * Kept for backward compatibility with existing submit flow.
+   */
   async executeAllowedArcWrite(input: {
     signature: "submit(uint256,bytes32,bytes)" | "register(string)";
     params: string[];
@@ -214,6 +330,32 @@ export class CircleCliAdapter {
       input.contract,
       "--address",
       input.address,
+      "--chain",
+      input.chain,
+      "--output",
+      "json"
+    ];
+
+    return this.run(args);
+  }
+
+  /**
+   * Query a smart contract (read-only).
+   * Used for ownerOf, getJob, balanceOf, etc.
+   */
+  async queryContract(input: {
+    signature: string;
+    params: string[];
+    contract: string;
+    chain: string;
+  }): Promise<CircleCliResult> {
+    const args = [
+      "contract",
+      "query",
+      input.signature,
+      ...input.params,
+      "--contract",
+      input.contract,
       "--chain",
       input.chain,
       "--output",

@@ -308,13 +308,363 @@ export class RunnerServices {
     // circle.chain is for Circle CLI wallet ops only — contract target is hardcoded.
     const contractAddress = CONTRACTS.ERC8183_AGENTIC_COMMERCE;
 
-    return this.circle.executeAllowedArcWrite({
+    return this.circle.executeErc8183Write({
       signature: "submit(uint256,bytes32,bytes)",
       params: [input.jobId, input.deliverableHash, input.optParams ?? "0x"],
       contract: contractAddress,
       address: this.config.circleWalletAddress,
       chain: this.config.chain
     });
+  }
+
+  // ── ERC-8183 Full Lifecycle ──────────────────────────────────────────────
+
+  /**
+   * Create a new ERC-8183 job on-chain.
+   * Signature: createJob(provider, evaluator, expiredAt, description, hook)
+   * hook is an address (not bytes) — the callback contract.
+   */
+  async createJob(body: unknown) {
+    const input = body as {
+      provider: string;
+      evaluator: string;
+      expiredAt: string | number;
+      description: string;
+      hook?: string;
+    };
+
+    if (!this.config.circleWalletAddress) {
+      return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
+    }
+
+    const result = await this.circle.executeErc8183Write({
+      signature: "createJob(address,address,uint256,string,address)",
+      params: [
+        input.provider,
+        input.evaluator,
+        String(input.expiredAt),
+        input.description,
+        input.hook ?? "0x0000000000000000000000000000000000000000"
+      ],
+      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      address: this.config.circleWalletAddress,
+      chain: this.config.chain
+    });
+
+    const receipt = await this.receipts.append({
+      type: "erc8183_submit",
+      taskId: `createJob-${Date.now()}`,
+      agentId: this.config.agentId,
+      request: body,
+      response: result,
+      proof: {
+        circleCommand: [result.command, ...result.args].join(" "),
+        sha256: sha256Json(result),
+        txHash: extractPossibleTxHash(result)
+      }
+    });
+
+    return { ok: true, result, receipt };
+  }
+
+  /**
+   * Set budget for an ERC-8183 job.
+   * Signature: setBudget(jobId, amount, optParams)
+   */
+  async setBudget(body: unknown) {
+    const input = body as { jobId: string; amount: string; optParams?: string };
+
+    if (!this.config.circleWalletAddress) {
+      return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
+    }
+
+    const result = await this.circle.executeErc8183Write({
+      signature: "setBudget(uint256,uint256,bytes)",
+      params: [input.jobId, input.amount, input.optParams ?? "0x"],
+      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      address: this.config.circleWalletAddress,
+      chain: this.config.chain
+    });
+
+    const receipt = await this.receipts.append({
+      type: "erc8183_submit",
+      taskId: `setBudget-${input.jobId}`,
+      jobId: input.jobId,
+      agentId: this.config.agentId,
+      request: body,
+      response: result,
+      proof: {
+        sha256: sha256Json(result),
+        txHash: extractPossibleTxHash(result)
+      }
+    });
+
+    return { ok: true, result, receipt };
+  }
+
+  /**
+   * Approve USDC for the ERC-8183 AgenticCommerce contract.
+   * Must be called before fund().
+   */
+  async approveUsdcForErc8183(body: unknown) {
+    const input = body as { amount: string };
+
+    if (!this.config.circleWalletAddress) {
+      return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
+    }
+
+    const result = await this.circle.approveUsdc({
+      amount: input.amount,
+      usdcAddress: CONTRACTS.USDC,
+      spenderAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      walletAddress: this.config.circleWalletAddress,
+      chain: this.config.chain
+    });
+
+    const receipt = await this.receipts.append({
+      type: "erc8183_submit",
+      taskId: `approve-${Date.now()}`,
+      agentId: this.config.agentId,
+      request: body,
+      response: result,
+      proof: {
+        sha256: sha256Json(result),
+        txHash: extractPossibleTxHash(result)
+      }
+    });
+
+    return { ok: true, result, receipt };
+  }
+
+  /**
+   * Fund an ERC-8183 job.
+   * Signature: fund(jobId, optParams)
+   * Requires prior USDC approve.
+   */
+  async fundJob(body: unknown) {
+    const input = body as { jobId: string; optParams?: string };
+
+    if (!this.config.circleWalletAddress) {
+      return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
+    }
+
+    const result = await this.circle.executeErc8183Write({
+      signature: "fund(uint256,bytes)",
+      params: [input.jobId, input.optParams ?? "0x"],
+      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      address: this.config.circleWalletAddress,
+      chain: this.config.chain
+    });
+
+    const receipt = await this.receipts.append({
+      type: "erc8183_submit",
+      taskId: `fund-${input.jobId}`,
+      jobId: input.jobId,
+      agentId: this.config.agentId,
+      request: body,
+      response: result,
+      proof: {
+        sha256: sha256Json(result),
+        txHash: extractPossibleTxHash(result)
+      }
+    });
+
+    return { ok: true, result, receipt };
+  }
+
+  /**
+   * Complete an ERC-8183 job (evaluator action).
+   * Signature: complete(jobId, reason, optParams)
+   * reason is bytes32 — strings are keccak256-hashed.
+   */
+  async completeJob(body: unknown) {
+    const input = body as { jobId: string; reason: string; optParams?: string };
+
+    if (!this.config.circleWalletAddress) {
+      return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
+    }
+
+    const reasonHash = input.reason.startsWith("0x") && input.reason.length === 66
+      ? input.reason
+      : erc8183Hash(input.reason);
+
+    const result = await this.circle.executeErc8183Write({
+      signature: "complete(uint256,bytes32,bytes)",
+      params: [input.jobId, reasonHash, input.optParams ?? "0x"],
+      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      address: this.config.circleWalletAddress,
+      chain: this.config.chain
+    });
+
+    const receipt = await this.receipts.append({
+      type: "erc8183_submit",
+      taskId: `complete-${input.jobId}`,
+      jobId: input.jobId,
+      agentId: this.config.agentId,
+      request: body,
+      response: result,
+      proof: {
+        sha256: sha256Json(result),
+        txHash: extractPossibleTxHash(result)
+      }
+    });
+
+    return { ok: true, result, receipt };
+  }
+
+  /**
+   * Reject an ERC-8183 job (evaluator action).
+   * Signature: reject(jobId, reason, optParams)
+   * reason is bytes32 — strings are keccak256-hashed.
+   */
+  async rejectJob(body: unknown) {
+    const input = body as { jobId: string; reason: string; optParams?: string };
+
+    if (!this.config.circleWalletAddress) {
+      return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
+    }
+
+    const reasonHash = input.reason.startsWith("0x") && input.reason.length === 66
+      ? input.reason
+      : erc8183Hash(input.reason);
+
+    const result = await this.circle.executeErc8183Write({
+      signature: "reject(uint256,bytes32,bytes)",
+      params: [input.jobId, reasonHash, input.optParams ?? "0x"],
+      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      address: this.config.circleWalletAddress,
+      chain: this.config.chain
+    });
+
+    const receipt = await this.receipts.append({
+      type: "erc8183_submit",
+      taskId: `reject-${input.jobId}`,
+      jobId: input.jobId,
+      agentId: this.config.agentId,
+      request: body,
+      response: result,
+      proof: {
+        sha256: sha256Json(result),
+        txHash: extractPossibleTxHash(result)
+      }
+    });
+
+    return { ok: true, result, receipt };
+  }
+
+  /**
+   * Gateway deposit — gated behind allowGatewayDeposit config flag.
+   * Disabled by default. Only for devops-admin role.
+   */
+  async gatewayDeposit(body: unknown) {
+    if (!this.config.allowGatewayDeposit) {
+      throw new RunnerError(
+        "GATEWAY_DEPOSIT_DISABLED",
+        "Gateway deposit is disabled. Set allowGatewayDeposit=true to enable.",
+        403
+      );
+    }
+
+    if (!this.config.circleWalletAddress) {
+      return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
+    }
+
+    const input = body as { amount: string; method?: string };
+
+    const result = await this.circle.gatewayDeposit({
+      amount: input.amount,
+      address: this.config.circleWalletAddress,
+      chain: this.config.chain,
+      method: input.method
+    });
+
+    const receipt = await this.receipts.append({
+      type: "circle_status",
+      agentId: this.config.agentId,
+      request: body,
+      response: result,
+      proof: {
+        sha256: sha256Json(result),
+        txHash: extractPossibleTxHash(result)
+      }
+    });
+
+    return { ok: true, result, receipt };
+  }
+
+  /**
+   * Register ERC-8004 identity via Circle CLI.
+   * Gated behind allowIdentityRegister config flag.
+   * Verifies tx receipt + ownerOf(tokenId) == configured wallet.
+   */
+  async registerIdentityViaCircleCli(body: unknown) {
+    if (!this.config.allowIdentityRegister) {
+      throw new RunnerError(
+        "IDENTITY_REGISTER_DISABLED",
+        "Identity register via Circle CLI is disabled. Set allowIdentityRegister=true to enable.",
+        403
+      );
+    }
+
+    if (!this.config.circleWalletAddress) {
+      return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
+    }
+
+    const input = body as { metadataURI: string };
+    if (!input.metadataURI) {
+      throw new RunnerError("MISSING_FIELD", "metadataURI is required", 400);
+    }
+
+    // Execute register(string) on IdentityRegistry
+    const result = await this.circle.executeAllowedArcWrite({
+      signature: "register(string)",
+      params: [input.metadataURI],
+      contract: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+      address: this.config.circleWalletAddress,
+      chain: this.config.chain,
+      allowRegister: true
+    });
+
+    // Extract txHash from result
+    const txHash = extractPossibleTxHash(result);
+
+    // Verify ownership if txHash exists
+    let ownershipVerified = false;
+    if (txHash) {
+      try {
+        // Query ownerOf(tokenId) — but we don't know tokenId from register output
+        // The CLI result should contain the tokenId
+        const json = result.json as any;
+        const tokenId = json?.tokenId ?? json?.outputs?.[0];
+        if (tokenId) {
+          const ownerResult = await this.circle.queryContract({
+            signature: "ownerOf(uint256)",
+            params: [String(tokenId)],
+            contract: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+            chain: this.config.chain
+          });
+          const ownerJson = ownerResult.json as any;
+          const owner = (ownerJson?.outputs?.[0] ?? ownerJson?.result ?? "").toString().toLowerCase();
+          ownershipVerified = owner === this.config.circleWalletAddress.toLowerCase();
+        }
+      } catch {
+        // Ownership check failed — not blocking, just flag
+      }
+    }
+
+    const receipt = await this.receipts.append({
+      type: "erc8004_prepare_register",
+      taskId: `register-${Date.now()}`,
+      agentId: this.config.agentId,
+      request: body,
+      response: { ...result, ownershipVerified },
+      proof: {
+        sha256: sha256Json(result),
+        txHash
+      }
+    });
+
+    return { ok: true, result, txHash, ownershipVerified, receipt };
   }
 
   /**

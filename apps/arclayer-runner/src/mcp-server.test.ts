@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { handleMcpRequest } from "./mcp-server";
 import { RUNNER_MCP_TOOLS } from "./mcp-schemas";
+import { getToolsForRole } from "./tool-registry";
 import type { RunnerConfig } from "@arclayer/runner-core";
 import type { RunnerServices } from "./services";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
@@ -143,12 +144,22 @@ describe("Runner MCP Server", () => {
     const result = await callMcp("tools/list");
     expect(result.result.tools).toBeDefined();
     const names = result.result.tools.map((t: any) => t.name);
+    // Old tools still present
     expect(names).toContain("runner.health");
     expect(names).toContain("runner.manifest");
     expect(names).toContain("x402.pay");
     expect(names).toContain("erc8183.provider_run_and_submit");
     expect(names).toContain("circle.status");
     expect(names).toContain("erc8004.prepare_register");
+    // New lifecycle tools
+    expect(names).toContain("erc8183.create_job");
+    expect(names).toContain("erc8183.set_budget");
+    expect(names).toContain("erc8183.approve_usdc");
+    expect(names).toContain("erc8183.fund_job");
+    expect(names).toContain("erc8183.complete_job");
+    expect(names).toContain("erc8183.reject_job");
+    expect(names).toContain("erc8004.register_via_circle_cli");
+    expect(names).toContain("circle.gateway_deposit");
   });
 
   it("tools/call runner.health works", async () => {
@@ -235,6 +246,7 @@ describe("Runner MCP tool catalog", () => {
     expect(names).toContain("circle.wallet_balance");
     expect(names).toContain("circle.wallet_budget");
     expect(names).toContain("circle.wallet_policy_status");
+    expect(names).toContain("circle.gateway_deposit");
 
     // x402
     expect(names).toContain("x402.inspect");
@@ -245,11 +257,85 @@ describe("Runner MCP tool catalog", () => {
 
     // ERC-8004
     expect(names).toContain("erc8004.prepare_register");
+    expect(names).toContain("erc8004.register_via_circle_cli");
 
-    // ERC-8183
+    // ERC-8183 — old tools still present
     expect(names).toContain("erc8183.provider_run_job");
     expect(names).toContain("erc8183.provider_submit_deliverable");
     expect(names).toContain("erc8183.provider_run_and_submit");
     expect(names).toContain("erc8183.provider_runtime_status");
+
+    // ERC-8183 — new lifecycle tools
+    expect(names).toContain("erc8183.create_job");
+    expect(names).toContain("erc8183.set_budget");
+    expect(names).toContain("erc8183.approve_usdc");
+    expect(names).toContain("erc8183.fund_job");
+    expect(names).toContain("erc8183.complete_job");
+    expect(names).toContain("erc8183.reject_job");
+  });
+});
+
+describe("Role-based tool filtering", () => {
+  it("client role gets create_job, approve_usdc, fund_job", () => {
+    const tools = getToolsForRole("client");
+    const names = tools.map((t) => t.name);
+    expect(names).toContain("erc8183.create_job");
+    expect(names).toContain("erc8183.approve_usdc");
+    expect(names).toContain("erc8183.fund_job");
+  });
+
+  it("provider role gets set_budget plus old provider tools", () => {
+    const tools = getToolsForRole("provider");
+    const names = tools.map((t) => t.name);
+    expect(names).toContain("erc8183.set_budget");
+    expect(names).toContain("erc8183.provider_run_job");
+    expect(names).toContain("erc8183.provider_submit_deliverable");
+    expect(names).toContain("erc8183.provider_run_and_submit");
+  });
+
+  it("evaluator role gets complete_job and reject_job", () => {
+    const tools = getToolsForRole("evaluator");
+    const names = tools.map((t) => t.name);
+    expect(names).toContain("erc8183.complete_job");
+    expect(names).toContain("erc8183.reject_job");
+  });
+
+  it("identity-agent gets register_via_circle_cli", () => {
+    const tools = getToolsForRole("identity-agent");
+    const names = tools.map((t) => t.name);
+    expect(names).toContain("erc8004.register_via_circle_cli");
+    expect(names).toContain("erc8004.prepare_register");
+  });
+
+  it("devops-admin gets gateway_deposit and all lifecycle tools", () => {
+    const tools = getToolsForRole("devops-admin");
+    const names = tools.map((t) => t.name);
+    expect(names).toContain("circle.gateway_deposit");
+    expect(names).toContain("erc8183.create_job");
+    expect(names).toContain("erc8183.set_budget");
+    expect(names).toContain("erc8183.approve_usdc");
+    expect(names).toContain("erc8183.fund_job");
+    expect(names).toContain("erc8183.complete_job");
+    expect(names).toContain("erc8183.reject_job");
+    expect(names).toContain("erc8004.register_via_circle_cli");
+  });
+
+  it("x402-agent does NOT get gateway_deposit", () => {
+    const tools = getToolsForRole("x402-agent");
+    const names = tools.map((t) => t.name);
+    expect(names).not.toContain("circle.gateway_deposit");
+    expect(names).not.toContain("erc8183.create_job");
+    expect(names).not.toContain("erc8004.register_via_circle_cli");
+  });
+
+  it("x402-agent does NOT get any lifecycle write tools", () => {
+    const tools = getToolsForRole("x402-agent");
+    const names = tools.map((t) => t.name);
+    expect(names).not.toContain("erc8183.create_job");
+    expect(names).not.toContain("erc8183.set_budget");
+    expect(names).not.toContain("erc8183.approve_usdc");
+    expect(names).not.toContain("erc8183.fund_job");
+    expect(names).not.toContain("erc8183.complete_job");
+    expect(names).not.toContain("erc8183.reject_job");
   });
 });

@@ -222,6 +222,10 @@ function buildEnvConfig(): Record<string, unknown> {
   // Arc contract targets come from SDK constants only (CONTRACTS.*).
   // These fields are deprecated — see runner-core/src/types.ts for details.
 
+  // ── Explicit opt-in flags for privileged operations ───────────────────
+  if (process.env.ARCLAYER_ALLOW_GATEWAY_DEPOSIT) set("allowGatewayDeposit", process.env.ARCLAYER_ALLOW_GATEWAY_DEPOSIT);
+  if (process.env.ARCLAYER_ALLOW_IDENTITY_REGISTER) set("allowIdentityRegister", process.env.ARCLAYER_ALLOW_IDENTITY_REGISTER);
+
   if (process.env.ARCLAYER_RUNNER_DATA_DIR) set("dataDir", process.env.ARCLAYER_RUNNER_DATA_DIR);
   if (process.env.ARCLAYER_RUNNER_PORT) set("port", process.env.ARCLAYER_RUNNER_PORT);
   set("runnerSecret", process.env.ARCLAYER_RUNNER_SECRET);

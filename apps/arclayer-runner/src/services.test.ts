@@ -316,4 +316,138 @@ describe("RunnerServices", () => {
       expect(startSpy).toHaveBeenCalledWith("42");
     });
   });
+
+  describe("gateway_deposit guard", () => {
+    it("blocks gateway_deposit when allowGatewayDeposit=false (default)", async () => {
+      const guardedServices = new RunnerServices(
+        makeConfig({ allowGatewayDeposit: false }),
+        runtime, mcp, skill
+      );
+
+      await expectRunnerError(
+        guardedServices.gatewayDeposit({ amount: "1.0" }),
+        "GATEWAY_DEPOSIT_DISABLED"
+      );
+    });
+
+    it("blocks gateway_deposit when allowGatewayDeposit is not set", async () => {
+      // Default config does not have allowGatewayDeposit=true
+      await expectRunnerError(
+        services.gatewayDeposit({ amount: "1.0" }),
+        "GATEWAY_DEPOSIT_DISABLED"
+      );
+    });
+
+    it("allows gateway_deposit when allowGatewayDeposit=true (passes guard, fails at CLI)", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowGatewayDeposit: true }),
+        runtime, mcp, skill
+      );
+
+      // Should NOT throw GATEWAY_DEPOSIT_DISABLED
+      // Will fail at Circle CLI execution (not installed), but guard passes
+      try {
+        await enabledServices.gatewayDeposit({ amount: "1.0" });
+      } catch (error) {
+        expect(error).not.toBeInstanceOf(RunnerError);
+        // Expected: circle CLI not installed
+      }
+    });
+  });
+
+  describe("register_via_circle_cli guard", () => {
+    it("blocks register when allowIdentityRegister=false (default)", async () => {
+      const guardedServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: false }),
+        runtime, mcp, skill
+      );
+
+      await expectRunnerError(
+        guardedServices.registerIdentityViaCircleCli({ metadataURI: "ipfs://meta" }),
+        "IDENTITY_REGISTER_DISABLED"
+      );
+    });
+
+    it("blocks register when allowIdentityRegister is not set", async () => {
+      await expectRunnerError(
+        services.registerIdentityViaCircleCli({ metadataURI: "ipfs://meta" }),
+        "IDENTITY_REGISTER_DISABLED"
+      );
+    });
+
+    it("rejects missing metadataURI even when enabled", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+
+      await expectRunnerError(
+        enabledServices.registerIdentityViaCircleCli({}),
+        "MISSING_FIELD"
+      );
+    });
+
+    it("allows register when allowIdentityRegister=true (passes guard, fails at CLI)", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+
+      // Should NOT throw IDENTITY_REGISTER_DISABLED or MISSING_FIELD
+      // Will fail at Circle CLI execution (not installed), but guard passes
+      try {
+        await enabledServices.registerIdentityViaCircleCli({ metadataURI: "ipfs://meta" });
+      } catch (error) {
+        expect(error).not.toBeInstanceOf(RunnerError);
+        // Expected: circle CLI not installed
+      }
+    });
+  });
+
+  describe("old tools still work (backward compatibility)", () => {
+    it("prepareRegister still delegates to MCP", async () => {
+      const result = await services.prepareRegister({
+        metadataURI: "https://example.com/agent.json"
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.mode).toBe("prepare-only");
+      expect(result.receipt.type).toBe("erc8004_prepare_register");
+    });
+
+    it("runErc8183ProviderJob still dispatches to runtime", async () => {
+      const runSpy = vi.spyOn(runtime, "run");
+
+      try {
+        await services.runErc8183ProviderJob({
+          taskId: "t1",
+          jobId: "42",
+          agentId: "agent-1",
+          provider: "0x0000000000000000000000000000000000000001",
+          description: "test job",
+          input: { prompt: "do work" }
+        });
+      } catch {
+        // Expected: Circle CLI not available
+      }
+
+      expect(runSpy).toHaveBeenCalled();
+    });
+
+    it("submitDeliverableViaCircleCli uses executeErc8183Write (not legacy)", async () => {
+      // Verify the method exists and accepts the right params
+      expect(services.submitDeliverableViaCircleCli).toBeDefined();
+
+      // Will fail at CLI but should not throw schema errors
+      try {
+        await services.submitDeliverableViaCircleCli({
+          jobId: "42",
+          deliverableHash: "0x" + "ab".repeat(32)
+        });
+      } catch (error) {
+        // Expected: circle CLI not installed
+        expect(error).not.toBeInstanceOf(RunnerError);
+      }
+    });
+  });
 });

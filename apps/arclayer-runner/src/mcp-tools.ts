@@ -194,6 +194,61 @@ export async function handleMcpTool(
     case "erc8183.provider_runtime_status":
       return mcp.getRuntimeContext();
 
+    // ── ERC-8183 Full Lifecycle ────────────────────────────────────────
+    case "erc8183.create_job":
+      return services.createJob({
+        provider: args.provider as string,
+        evaluator: args.evaluator as string,
+        expiredAt: args.expiredAt as string | number,
+        description: args.description as string,
+        hook: args.hook as string | undefined,
+      });
+
+    case "erc8183.set_budget":
+      return services.setBudget({
+        jobId: args.jobId as string,
+        amount: args.amount as string,
+        optParams: args.optParams as string | undefined,
+      });
+
+    case "erc8183.approve_usdc":
+      return services.approveUsdcForErc8183({
+        amount: args.amount as string,
+      });
+
+    case "erc8183.fund_job":
+      return services.fundJob({
+        jobId: args.jobId as string,
+        optParams: args.optParams as string | undefined,
+      });
+
+    case "erc8183.complete_job":
+      return services.completeJob({
+        jobId: args.jobId as string,
+        reason: args.reason as string,
+        optParams: args.optParams as string | undefined,
+      });
+
+    case "erc8183.reject_job":
+      return services.rejectJob({
+        jobId: args.jobId as string,
+        reason: args.reason as string,
+        optParams: args.optParams as string | undefined,
+      });
+
+    // ── ERC-8004 Register via Circle CLI ───────────────────────────────
+    case "erc8004.register_via_circle_cli":
+      return services.registerIdentityViaCircleCli({
+        metadataURI: args.metadataURI as string,
+      });
+
+    // ── Gateway Deposit ────────────────────────────────────────────────
+    case "circle.gateway_deposit":
+      return services.gatewayDeposit({
+        amount: args.amount as string,
+        method: args.method as string | undefined,
+      });
+
     // ── Skill Context Tools ───────────────────────────────────────────
     case "runner.skills_list": {
       const skills = resolveAllSkills();
