@@ -283,7 +283,7 @@ export async function runDoctor(config: RunnerConfig): Promise<CheckResult[]> {
   }
 
   // 10. Role is valid
-  const validRoles = ["provider", "client", "evaluator"];
+  const validRoles = ["provider", "client", "evaluator", "x402-agent", "identity-agent", "validation-agent", "devops-admin", "full-stack-agent"];
   const roleValid = validRoles.includes(config.defaultRole);
   results.push({
     name: "Role valid",
