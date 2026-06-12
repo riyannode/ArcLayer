@@ -91,7 +91,7 @@ function jsonResponse(
 // ── Path parsing ───────────────────────────────────────────────────────────
 
 /** Strip ERC-8004 source prefix from agent ID. "erc8004_identity_registry:42" → "42". */
-export function toRawGoldskyAgentId(input: string): string {
+function toRawGoldskyAgentId(input: string): string {
   const decoded = decodeURIComponent(input).trim();
   if (!decoded) return decoded;
   const parts = decoded.split(':');
