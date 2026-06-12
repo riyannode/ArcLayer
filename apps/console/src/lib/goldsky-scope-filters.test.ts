@@ -119,3 +119,42 @@ test("arclayer scope: multiple conditions are OR'd", () => {
   // no match
   assert.equal(filter(mkAgent({ agentId: 101n, controller: "0xdead", metadataURI: "https://example.com" })), false);
 });
+
+test("raw Transfer-only rows (no enriched columns) normalize without errors", () => {
+  // Simulates what normalizeAgentEvent produces from a Goldsky raw Transfer row
+  // with only guaranteed columns: event_name, block_number, transaction_hash,
+  // log_index, token_id, from_address, to_address.
+  // No metadataURI, no source, no skillHash, no chainId, etc.
+  const rawTransferAgent: IndexedAgentEvent = {
+    eventName: "Transfer",
+    blockNumber: 41752100n,
+    transactionHash: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890" as any,
+    logIndex: 0,
+    agentId: 42n,
+    controller: external,
+    // All enriched fields are undefined (as they come from raw Transfer rows)
+    metadataURI: undefined,
+    skillHash: undefined,
+    source: undefined,
+    chainId: undefined,
+    registryAddress: undefined,
+    contractAddress: undefined,
+  } as IndexedAgentEvent;
+
+  // Controller wallet match should still work
+  const walletFilter = buildAgentFilter(new Set([external.toLowerCase()]), new Set(), new Set());
+  assert.equal(walletFilter(rawTransferAgent), true);
+
+  // AgentId match should still work
+  const idFilter = buildAgentFilter(new Set(), new Set(["42"]), new Set());
+  assert.equal(idFilter(rawTransferAgent), true);
+
+  // No match when no allowlists and no metadata
+  const emptyFilter = buildAgentFilter(new Set(), new Set(), new Set());
+  assert.equal(emptyFilter(rawTransferAgent), false);
+
+  // source defaults to erc8004_identity_registry (not imported)
+  // so isImportedArcLayerAgent returns false
+  const importOnly = buildAgentFilter(new Set(), new Set(), new Set());
+  assert.equal(importOnly(rawTransferAgent), false);
+});
