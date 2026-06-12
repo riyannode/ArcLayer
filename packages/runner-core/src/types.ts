@@ -87,7 +87,22 @@ export const InitFileConfigSchema = z.object({
   }).default({}),
   mcp: z.object({
     mode: z.enum(["stdio", "http"]).default("stdio")
-  }).default({})
+  }).default({}),
+  // ── Privileged opt-in flags (default: false) ────────────────────────
+  allowIdentityRegister: z.preprocess(
+    (v) => {
+      if (typeof v === "string") return v === "true" || v === "1";
+      return v;
+    },
+    z.boolean().default(false)
+  ),
+  allowGatewayDeposit: z.preprocess(
+    (v) => {
+      if (typeof v === "string") return v === "true" || v === "1";
+      return v;
+    },
+    z.boolean().default(false)
+  ),
 });
 
 export type InitFileConfig = z.infer<typeof InitFileConfigSchema>;
@@ -113,6 +128,9 @@ export function transformFileConfig(
     runtimeKind: file.runtime?.target ?? "openclaw",
     runtimeEndpoint: "http://127.0.0.1:8787", // default, overridable via env
     runtimeRunPath: "/run",
+    // Privileged opt-in flags
+    allowIdentityRegister: file.allowIdentityRegister ?? false,
+    allowGatewayDeposit: file.allowGatewayDeposit ?? false,
     // Policy fields from policy.json
     ...policy
   };

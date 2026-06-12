@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { createRequire } from "node:module";
 import { loadRunnerConfig, loadRunnerConfigForStdio } from "./config";
 import { loadGlobalSkill } from "./skill";
 import { createRuntimeConnector } from "./runtime";
@@ -13,13 +14,22 @@ import { registerInitCommand } from "./init";
 import { registerSetupCommand } from "./setup";
 import { registerInstallCommand } from "./install";
 
+// Read version from package.json
+let PKG_VERSION = "0.1.3";
+try {
+  const require = createRequire(import.meta.url);
+  PKG_VERSION = require("../package.json").version;
+} catch {
+  // fallback
+}
+
 async function main() {
   const program = new Command();
 
   program
     .name("arclayer-runner")
     .description("ArcLayer Runner — policy boundary for external LLM runtimes with MCP bridge, Circle CLI, ERC-8004, ERC-8183, and x402")
-    .version("0.1.0");
+    .version(PKG_VERSION);
 
   // ── start ─────────────────────────────────────────────────────────────
   program.command("start").action(async () => {

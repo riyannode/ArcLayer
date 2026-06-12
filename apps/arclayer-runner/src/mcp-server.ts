@@ -10,6 +10,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { assertAuthenticated, RunnerError } from "@arclayer/runner-core";
 import { RUNNER_MCP_TOOLS } from "./mcp-schemas";
 import { handleMcpTool, type McpToolContext } from "./mcp-tools";
+import { getToolNamesForRole } from "./tool-registry";
 
 type JsonRpcRequest = {
   jsonrpc: "2.0";
@@ -102,6 +103,31 @@ export async function handleMcpRequest(
           sendJson(res, jsonRpcError(rpc.id, -32602, "Missing tool name"));
           return;
         }
+
+        // ── Role authorization gate (HTTP) ────────────────────────────
+        const allowedRoles = ctx.config.allowedRoles ?? [ctx.config.defaultRole];
+        const allowedTools = new Set<string>();
+        for (const role of allowedRoles) {
+          for (const name of getToolNamesForRole(role)) {
+            allowedTools.add(name);
+          }
+        }
+        if (!allowedTools.has(toolName)) {
+          sendJson(res, jsonRpcOk(rpc.id, {
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                ok: false,
+                error: "ROLE_TOOL_NOT_ALLOWED",
+                message: `Tool '${toolName}' is not allowed for role '${ctx.config.defaultRole}'`,
+                allowedRoles
+              })
+            }],
+            isError: true
+          }));
+          return;
+        }
+
         const result = await handleMcpTool(toolName, toolArgs, ctx);
         sendJson(res, jsonRpcOk(rpc.id, result));
         break;
