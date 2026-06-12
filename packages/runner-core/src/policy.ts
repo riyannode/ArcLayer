@@ -2,6 +2,14 @@ import { RunnerError } from "./errors";
 import type { PaymentRequest, RunnerConfig, RunnerRole } from "./types";
 import type { SpendingLedger } from "./ledger";
 
+function isHostAllowed(allowedHosts: string[], host: string): boolean {
+  if (allowedHosts.length === 0) return true;
+  if (allowedHosts.includes("*")) return true;
+  return allowedHosts.includes(host);
+}
+
+
+
 export function decimalToMicros(amount: string): bigint {
   const [whole, frac = ""] = amount.split(".");
   const fracPadded = (frac + "000000").slice(0, 6);
@@ -45,7 +53,7 @@ export function assertAgentIdentity(config: RunnerConfig, agentId: string): void
  */
 export function assertX402InspectAllowed(config: RunnerConfig, payment: PaymentRequest): void {
   const host = new URL(payment.url).host;
-  if (config.allowedX402Hosts.length > 0 && !config.allowedX402Hosts.includes(host)) {
+  if (!isHostAllowed(config.allowedX402Hosts, host)) {
     throw new RunnerError("X402_HOST_NOT_ALLOWED", `Host ${host} is not allowed`, 403);
   }
 }
@@ -60,7 +68,7 @@ export function assertX402PaymentAllowed(config: RunnerConfig, payment: PaymentR
   }
 
   const host = new URL(payment.url).host;
-  if (config.allowedX402Hosts.length > 0 && !config.allowedX402Hosts.includes(host)) {
+  if (!isHostAllowed(config.allowedX402Hosts, host)) {
     throw new RunnerError("X402_HOST_NOT_ALLOWED", `Host ${host} is not allowed`, 403);
   }
 
