@@ -215,6 +215,21 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
       optParams: { type: "string", description: "Optional params bytes (default: 0x)" }
     }
   },
+  {
+    name: "erc8183.claim_refund",
+    description: "Claim refund for an expired ERC-8183 job (client action). Single arg — no optParams.",
+    inputSchema: {
+      jobId: { type: "string", required: true }
+    }
+  },
+  {
+    name: "erc8183.set_provider",
+    description: "Assign provider to an open ERC-8183 job (client action). Job must be Open, provider must be 0x0.",
+    inputSchema: {
+      jobId: { type: "string", required: true },
+      provider: { type: "string", required: true, description: "Provider wallet address (0x...)" }
+    }
+  },
 
   // ── ERC-8004 Register via Circle CLI ────────────────────────────────────
   {

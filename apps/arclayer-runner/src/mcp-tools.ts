@@ -236,6 +236,17 @@ export async function handleMcpTool(
         optParams: args.optParams as string | undefined,
       });
 
+    case "erc8183.claim_refund":
+      return services.claimRefund({
+        jobId: args.jobId as string,
+      });
+
+    case "erc8183.set_provider":
+      return services.setProvider({
+        jobId: args.jobId as string,
+        provider: args.provider as string,
+      });
+
     // ── ERC-8004 Register via Circle CLI ───────────────────────────────
     case "erc8004.register_via_circle_cli":
       return services.registerIdentityViaCircleCli({

@@ -199,6 +199,7 @@ export class CircleCliAdapter {
     "complete(uint256,bytes32,bytes)",
     "reject(uint256,bytes32,bytes)",
     "claimRefund(uint256)",
+    "setProvider(uint256,address)",
   ]);
 
   /**

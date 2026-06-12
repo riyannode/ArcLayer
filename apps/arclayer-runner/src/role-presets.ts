@@ -88,6 +88,8 @@ export const ROLE_PRESETS: RunnerRolePreset[] = [
       "erc8183.create_job",
       "erc8183.approve_usdc",
       "erc8183.fund_job",
+      "erc8183.claim_refund",
+      "erc8183.set_provider",
       "runner.skills_list",
       "runner.skill_get",
       "runner.skills_bundle",
@@ -242,6 +244,8 @@ export const ROLE_PRESETS: RunnerRolePreset[] = [
       "erc8183.fund_job",
       "erc8183.complete_job",
       "erc8183.reject_job",
+      "erc8183.claim_refund",
+      "erc8183.set_provider",
       "erc8004.register_via_circle_cli",
     ],
     defaultPolicy: {
