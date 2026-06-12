@@ -40,6 +40,24 @@ export const ARC_REFERENCE_AGENT_ID_FILTER = (process.env.ARC_REFERENCE_AGENT_ID
 export const ARC_REFERENCE_METADATA_PREFIX_FILTER = (process.env.ARC_REFERENCE_METADATA_PREFIX_FILTER || 'arclayer://,https://arclayers.xyz')
   .split(',').map((s) => s.trim()).filter(Boolean);
 
+// ── Indexer provider / scope ─────────────────────────────────────────────────
+export type IndexerProvider = 'custom' | 'goldsky';
+export type IndexerScope = 'arclayer' | 'arcnetwork';
+
+export const INDEXER_PROVIDER: IndexerProvider =
+  (process.env.INDEXER_PROVIDER as IndexerProvider) || 'custom';
+
+/** Default scope is arclayer — only show agents/jobs registered through ArcLayer. */
+export const INDEXER_SCOPE: IndexerScope =
+  (process.env.INDEXER_SCOPE as IndexerScope) || 'arclayer';
+
+/** Fallback URL when Goldsky reader fails (typically the PM2 indexer). */
+export const INDEXER_FALLBACK_URL = process.env.INDEXER_FALLBACK_URL || '';
+
+// ── Goldsky / Postgres reader ────────────────────────────────────────────────
+export const GOLDSKY_POSTGRES_URL = process.env.GOLDSKY_POSTGRES_URL || '';
+export const GOLDSKY_POSTGRES_SCHEMA = process.env.GOLDSKY_POSTGRES_SCHEMA || 'public';
+
 console.log(
-  `[indexer] startup config fromBlock=${DEFAULT_FROM_BLOCK.toString()} identityFromBlock=${IDENTITY_FROM_BLOCK.toString()} reputationFromBlock=${REPUTATION_FROM_BLOCK.toString()} maxBlockRange=${MAX_BLOCK_RANGE.toString()} pollIntervalMs=${POLL_INTERVAL_MS} indexErc8183=${INDEX_ARC_REFERENCE_ERC8183} indexErc8004=${INDEX_ARC_REFERENCE_ERC8004} indexReputation=${INDEX_ARC_REFERENCE_ERC8004_REPUTATION} indexerDbPath=${INDEXER_DB_PATH || '(default)'}`,
+  `[indexer] startup config fromBlock=${DEFAULT_FROM_BLOCK.toString()} identityFromBlock=${IDENTITY_FROM_BLOCK.toString()} reputationFromBlock=${REPUTATION_FROM_BLOCK.toString()} maxBlockRange=${MAX_BLOCK_RANGE.toString()} pollIntervalMs=${POLL_INTERVAL_MS} indexErc8183=${INDEX_ARC_REFERENCE_ERC8183} indexErc8004=${INDEX_ARC_REFERENCE_ERC8004} indexReputation=${INDEX_ARC_REFERENCE_ERC8004_REPUTATION} indexerDbPath=${INDEXER_DB_PATH || '(default)'} provider=${INDEXER_PROVIDER} scope=${INDEXER_SCOPE}`,
 );
