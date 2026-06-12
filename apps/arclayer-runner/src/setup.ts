@@ -135,11 +135,18 @@ export function registerSetupCommand(program: Command): void {
         const batchMaxTotalUsdc = await askOptional(rl, "  Batch max total (USDC)", "0.05");
 
         // ── 7. Allowed x402 hosts ──────────────────────────────────────
-        console.log("\n  Allowed x402 hosts (comma-separated, or empty for any): ");
+        console.log("\n  Allowed x402 hosts (comma-separated domain only, default: arclayers.xyz; type * to allow any host):");
         const hostsInput = await ask(rl, "  ");
-        const allowedX402Hosts = hostsInput
-          ? hostsInput.split(",").map((h) => h.trim()).filter(Boolean)
-          : [];
+        let allowedX402Hosts: string[];
+        if (hostsInput === "*") {
+          allowedX402Hosts = [];
+          console.log("  → Empty allowedX402Hosts means any host is allowed.");
+        } else if (hostsInput.trim()) {
+          allowedX402Hosts = hostsInput.split(",").map((h) => h.trim()).filter(Boolean);
+        } else {
+          allowedX402Hosts = ["arclayers.xyz"];
+          console.log("  → Default: arclayers.xyz");
+        }
 
         rl.close();
 
