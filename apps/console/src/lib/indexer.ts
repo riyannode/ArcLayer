@@ -24,15 +24,20 @@ export const INDEXER_PROVIDER: IndexerProvider =
   (process.env.NEXT_PUBLIC_INDEXER_PROVIDER as IndexerProvider) || 'custom';
 
 /**
- * Indexer scope — controls ArcLayer-only gate.
- * - "arclayer" (default): only show agents/jobs registered through ArcLayer
- * - "arcnetwork": expose all indexed Arc reference activity
+ * Indexer scope — DISPLAY/DEBUG ONLY. Not gate authority.
+ * The actual gate is enforced server-side by the indexer/projections layer
+ * using INDEXER_SCOPE from indexer/src/config.ts.
  *
- * Set NEXT_PUBLIC_INDEXER_SCOPE=arclayer|arcnetwork to switch.
+ * Set NEXT_PUBLIC_INDEXER_SCOPE=arclayer|arcnetwork for UI display hints.
  */
 export type IndexerScope = 'arclayer' | 'arcnetwork';
 export const INDEXER_SCOPE: IndexerScope =
-  (process.env.NEXT_PUBLIC_INDEXER_SCOPE as IndexerScope) || 'arclayer';
+  parseIndexerScope(process.env.NEXT_PUBLIC_INDEXER_SCOPE);
+
+function parseIndexerScope(raw: string | undefined): IndexerScope {
+  if (raw === 'arcnetwork') return 'arcnetwork';
+  return 'arclayer';
+}
 
 export const INDEXER_BASE_URL = process.env.NEXT_PUBLIC_INDEXER_URL || 'https://indexer.arclayers.xyz';
 
