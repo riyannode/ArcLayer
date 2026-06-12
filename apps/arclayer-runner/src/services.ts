@@ -337,6 +337,16 @@ export class RunnerServices {
       return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
     }
 
+    // Arc/Circle spec: createJob reverts if evaluator is zero address
+    const ZERO = "0x0000000000000000000000000000000000000000";
+    if (!input.evaluator || input.evaluator.toLowerCase() === ZERO) {
+      throw new RunnerError(
+        "INVALID_EVALUATOR",
+        "evaluator must be non-zero (Arc spec: createJob reverts with zero evaluator)",
+        400
+      );
+    }
+
     const result = await this.circle.executeErc8183Write({
       signature: "createJob(address,address,uint256,string,address)",
       params: [

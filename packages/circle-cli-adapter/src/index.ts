@@ -96,7 +96,8 @@ export class CircleCliAdapter {
 
     const { stdout, stderr } = await execFileAsync(this.bin, args, {
       timeout: this.timeoutMs,
-      maxBuffer: 10 * 1024 * 1024
+      maxBuffer: 10 * 1024 * 1024,
+      env: { ...process.env, CIRCLE_ACCEPT_TERMS: "1" }
     });
 
     const result: CircleCliResult = {
@@ -197,7 +198,7 @@ export class CircleCliAdapter {
     "fund(uint256,bytes)",
     "complete(uint256,bytes32,bytes)",
     "reject(uint256,bytes32,bytes)",
-    "claimRefund(uint256,bytes)",
+    "claimRefund(uint256)",
   ]);
 
   /**
