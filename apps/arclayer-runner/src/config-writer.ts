@@ -88,7 +88,7 @@ export async function writeRunnerConfig(
     circle: {
       cliBin: input.cliBin ?? "circle",
       walletAddress: input.walletAddress ?? undefined,
-      chain: input.chain ?? "BASE"
+      chain: input.chain ?? "ARC-TESTNET"
     },
     runtime: {
       target: (input.runtimeTarget as any) ?? "openclaw"

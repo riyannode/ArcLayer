@@ -18,7 +18,7 @@ export function registerInitCommand(program: Command): void {
     .option("--target <runtime>", "Runtime target: hermes, openclaw, custom", "openclaw")
     .option("--role <role>", "Runner role: provider, client, evaluator, x402-agent, identity-agent, validation-agent, devops-admin, full-stack-agent", "provider")
     .option("--wallet <address>", "Circle wallet address (0x...)")
-    .option("--chain <chain>", "Circle chain", "BASE")
+    .option("--chain <chain>", "Circle chain", "ARC-TESTNET")
     .option("--cli-bin <path>", "Circle CLI binary path", "circle")
     .option("--per-tx <usdc>", "Per-transaction limit (USDC)", "0.01")
     .option("--daily <usdc>", "Daily spending limit (USDC)", "1")

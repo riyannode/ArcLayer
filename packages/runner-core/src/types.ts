@@ -80,7 +80,7 @@ export const InitFileConfigSchema = z.object({
   circle: z.object({
     cliBin: z.string().default("circle"),
     walletAddress: z.string().optional(),
-    chain: z.string().default("BASE")
+    chain: z.string().default("ARC-TESTNET")
   }).default({}),
   runtime: z.object({
     target: RuntimeKindSchema.default("openclaw")
@@ -109,7 +109,7 @@ export function transformFileConfig(
     agentAddress: file.agentAddress ?? "0x0000000000000000000000000000000000000000",
     circleCliBin: file.circle?.cliBin ?? "circle",
     circleWalletAddress: file.circle?.walletAddress || undefined,
-    chain: file.circle?.chain ?? "BASE",
+    chain: file.circle?.chain ?? "ARC-TESTNET",
     runtimeKind: file.runtime?.target ?? "openclaw",
     runtimeEndpoint: "http://127.0.0.1:8787", // default, overridable via env
     runtimeRunPath: "/run",

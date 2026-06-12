@@ -149,7 +149,7 @@ describe("writeRunnerConfig", () => {
   it("uses default values when optional fields not provided", async () => {
     const result = await writeRunnerConfig({ agentId: "test-agent-9" });
 
-    expect(result.config.circle.chain).toBe("BASE");
+    expect(result.config.circle.chain).toBe("ARC-TESTNET");
     expect(result.config.circle.cliBin).toBe("circle");
     expect(result.config.runtime.target).toBe("openclaw");
     expect(result.config.mcp.mode).toBe("stdio");
@@ -221,7 +221,7 @@ describe("InitFileConfigSchema", () => {
 
     expect(config.role).toBe("provider");
     expect(config.circle.cliBin).toBe("circle");
-    expect(config.circle.chain).toBe("BASE");
+    expect(config.circle.chain).toBe("ARC-TESTNET");
     expect(config.runtime.target).toBe("openclaw");
     expect(config.mcp.mode).toBe("stdio");
   });
