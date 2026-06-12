@@ -31,7 +31,7 @@ const ALLOWED_CONTRACTS = new Set<string>([
  * Extracted from SDK ABI via: encodeFunctionData({ abi, functionName, args: [...] }).slice(0, 10)
  *
  * ERC-8183 AgenticCommerce:
- *   createJob(address,address,uint256,string,bytes)  → 0x41528812
+ *   createJob(address,address,uint256,string,address) → 0x41528812
  *   fund(uint256,bytes)                              → 0xe25ba707
  *   complete(uint256,bytes32,bytes)                   → 0xd75bbdf3
  *   reject(uint256,bytes32,bytes)                     → 0x41dd26f5
