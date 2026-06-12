@@ -27,7 +27,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@arclayer/runner": "^0.1.2"
+    "@arclayer/runner": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^22.19.19",
