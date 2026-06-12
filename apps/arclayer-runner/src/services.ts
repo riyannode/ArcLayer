@@ -563,6 +563,88 @@ export class RunnerServices {
   }
 
   /**
+   * Claim refund for an expired ERC-8183 job.
+   * Signature: claimRefund(uint256 jobId) — single arg, NO optParams.
+   * Caller: client (job creator). Job must be expired.
+   */
+  async claimRefund(body: unknown) {
+    const input = body as { jobId: string };
+
+    if (!this.config.circleWalletAddress) {
+      return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
+    }
+
+    const result = await this.circle.executeErc8183Write({
+      signature: "claimRefund(uint256)",
+      params: [input.jobId],
+      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      address: this.config.circleWalletAddress,
+      chain: this.config.chain
+    });
+
+    const receipt = await this.receipts.append({
+      type: "erc8183_submit",
+      taskId: `claimRefund-${input.jobId}`,
+      jobId: input.jobId,
+      agentId: this.config.agentId,
+      request: body,
+      response: result,
+      proof: {
+        sha256: sha256Json(result),
+        txHash: extractPossibleTxHash(result)
+      }
+    });
+
+    return { ok: true, result, receipt };
+  }
+
+  /**
+   * Set provider on an open ERC-8183 job.
+   * Signature: setProvider(uint256 jobId, address provider_)
+   * Caller: client (job creator). Job must be Open, current provider must be 0x0.
+   */
+  async setProvider(body: unknown) {
+    const input = body as { jobId: string; provider: string };
+
+    if (!this.config.circleWalletAddress) {
+      return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
+    }
+
+    // Validate provider is non-zero (assigning zero provider doesn't make sense)
+    const ZERO = "0x0000000000000000000000000000000000000000";
+    if (!input.provider || input.provider.toLowerCase() === ZERO) {
+      throw new RunnerError(
+        "INVALID_PROVIDER",
+        "provider must be non-zero address",
+        400
+      );
+    }
+
+    const result = await this.circle.executeErc8183Write({
+      signature: "setProvider(uint256,address)",
+      params: [input.jobId, input.provider],
+      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      address: this.config.circleWalletAddress,
+      chain: this.config.chain
+    });
+
+    const receipt = await this.receipts.append({
+      type: "erc8183_submit",
+      taskId: `setProvider-${input.jobId}`,
+      jobId: input.jobId,
+      agentId: this.config.agentId,
+      request: body,
+      response: result,
+      proof: {
+        sha256: sha256Json(result),
+        txHash: extractPossibleTxHash(result)
+      }
+    });
+
+    return { ok: true, result, receipt };
+  }
+
+  /**
    * Gateway deposit — gated behind allowGatewayDeposit config flag.
    * Disabled by default. Only for devops-admin role.
    */

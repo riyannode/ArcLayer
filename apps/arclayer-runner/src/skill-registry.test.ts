@@ -101,8 +101,8 @@ describe("skill manifest", () => {
 // ── Tool Registry Tests ───────────────────────────────────────────────────
 
 describe("tool registry", () => {
-  it("RUNNER_LOCAL_TOOLS has 29 entries", () => {
-    expect(RUNNER_LOCAL_TOOLS.length).toBe(29);
+  it("RUNNER_LOCAL_TOOLS has 31 entries", () => {
+    expect(RUNNER_LOCAL_TOOLS.length).toBe(31);
   });
 
   it("SKILL_CONTEXT_TOOLS has 5 entries", () => {

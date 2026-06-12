@@ -101,7 +101,8 @@ describe("CircleCliAdapter", () => {
       expect(sigs.has("complete(uint256,bytes32,bytes)")).toBe(true);
       expect(sigs.has("reject(uint256,bytes32,bytes)")).toBe(true);
       expect(sigs.has("claimRefund(uint256)")).toBe(true);
-      expect(sigs.size).toBe(7);
+      expect(sigs.has("setProvider(uint256,address)")).toBe(true);
+      expect(sigs.size).toBe(8);
     });
   });
 
