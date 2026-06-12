@@ -176,7 +176,7 @@ async function fetchAllPages<T extends { block_number: string | number; log_inde
       throw new Error(`[goldsky-reader] fetchAllPages(${table}): ${error.message}`);
     }
 
-    const rows = (data ?? []) as T[];
+    const rows = (data ?? []) as unknown as T[];
     allRows.push(...rows);
 
     if (rows.length < PAGE_SIZE) break; // last page
@@ -355,7 +355,7 @@ async function fetchRawAgentEvents(): Promise<RawAgentEventRow[]> {
       throw new Error(`[goldsky-reader] fetchRawAgentEvents: ${error.message}`);
     }
 
-    const rows = (data ?? []) as RawAgentEventRow[];
+    const rows = (data ?? []) as unknown as RawAgentEventRow[];
     allRows.push(...rows);
 
     if (rows.length < PAGE_SIZE) break;
