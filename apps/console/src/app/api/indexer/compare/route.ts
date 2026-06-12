@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { buildComparisonReport } from "@/lib/indexer-compare";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,15 @@ const INDEXER_INTERNAL_URL =
 
 // ── PM2 fetcher with safe defaults ─────────────────────────────────────────
 
-type Pm2Result<T> = { ok: boolean; data: T; error?: string };
+type Pm2Result<T> = { ok: boolean; data: T; warningCode?: string };
+
+const PM2_WARNING_CODES: Record<string, string> = {
+  "/health": "custom_health_unreachable",
+  "/jobs?limit=500&includeExpired=true": "custom_jobs_unreachable",
+  "/agents": "custom_agents_unreachable",
+  "/proofs": "custom_proofs_unreachable",
+  "/overview": "custom_overview_unreachable",
+};
 
 /** Fetch a PM2 endpoint. Returns safe defaults on failure — never returns non-array for array endpoints. */
 async function fetchPm2Json<T>(
@@ -37,38 +46,37 @@ async function fetchPm2Json<T>(
   fallback: T,
 ): Promise<Pm2Result<T>> {
   const url = `${INDEXER_INTERNAL_URL}${path}`;
+  const warningCode = PM2_WARNING_CODES[path];
   try {
     const res = await fetch(url, {
       cache: "no-store",
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) {
-      return {
-        ok: false,
-        data: fallback,
-        error: `${path}: HTTP ${res.status}`,
-      };
+      console.error(`[indexer-compare] PM2 ${path} returned HTTP ${res.status}`);
+      return { ok: false, data: fallback, warningCode };
     }
     const data = (await res.json()) as T;
     return { ok: true, data };
   } catch (err) {
-    return {
-      ok: false,
-      data: fallback,
-      error: `${path}: unreachable`,
-    };
+    console.error(`[indexer-compare] PM2 ${path} unreachable:`, err instanceof Error ? err.message : String(err));
+    return { ok: false, data: fallback, warningCode };
   }
 }
 
 // ── Auth check ─────────────────────────────────────────────────────────────
 
+function sha256hex(input: string): Buffer {
+  return createHash("sha256").update(input, "utf8").digest();
+}
+
 function checkAuth(request: NextRequest, requireToken: boolean): {
   ok: boolean;
   status: number;
-  error?: string;
+  errorCode?: string;
 } {
   if (!INDEXER_COMPARE_ENABLED) {
-    return { ok: false, status: 403, error: "Compare endpoint is disabled. Set INDEXER_COMPARE_ENABLED=true to enable." };
+    return { ok: false, status: 403, errorCode: "compare_disabled" };
   }
 
   if (!requireToken && !INDEXER_COMPARE_TOKEN) {
@@ -82,20 +90,16 @@ function checkAuth(request: NextRequest, requireToken: boolean): {
     : "";
 
   if (!bearerToken) {
-    return { ok: false, status: 401, error: "Missing or invalid Authorization header. Expected: Bearer <token>" };
+    return { ok: false, status: 401, errorCode: "auth_required" };
   }
 
-  // Constant-time comparison to prevent timing attacks
-  if (bearerToken.length !== INDEXER_COMPARE_TOKEN.length) {
-    return { ok: false, status: 403, error: "Invalid token." };
-  }
+  // Hash-based constant-time compare: hash both, compare fixed-length hashes
+  const providedHash = sha256hex(bearerToken);
+  const expectedHash = sha256hex(INDEXER_COMPARE_TOKEN);
+  const match = timingSafeEqual(providedHash, expectedHash);
 
-  let mismatch = 0;
-  for (let i = 0; i < bearerToken.length; i++) {
-    mismatch |= bearerToken.charCodeAt(i) ^ INDEXER_COMPARE_TOKEN.charCodeAt(i);
-  }
-  if (mismatch !== 0) {
-    return { ok: false, status: 403, error: "Invalid token." };
+  if (!match) {
+    return { ok: false, status: 403, errorCode: "invalid_token" };
   }
 
   return { ok: true, status: 200 };
@@ -110,7 +114,7 @@ export async function GET(request: NextRequest) {
   const auth = checkAuth(request, verbose || !!INDEXER_COMPARE_TOKEN);
   if (!auth.ok) {
     return NextResponse.json(
-      { error: auth.error },
+      { error: auth.errorCode },
       { status: auth.status },
     );
   }
@@ -186,13 +190,13 @@ export async function GET(request: NextRequest) {
     goldskyMaxBlock,
   });
 
-  // ── Warnings (redacted — no raw URLs, secrets, or exception text) ──
+  // ── Warnings (stable codes only — no raw URLs, secrets, or exception text) ──
   const warnings: string[] = [];
-  if (customHealthRes.error) warnings.push(customHealthRes.error);
-  if (customJobsRes.error) warnings.push(customJobsRes.error);
-  if (customAgentsRes.error) warnings.push(customAgentsRes.error);
-  if (customProofsRes.error) warnings.push(customProofsRes.error);
-  if (customOverviewRes.error) warnings.push(customOverviewRes.error);
+  if (customHealthRes.warningCode) warnings.push(customHealthRes.warningCode);
+  if (customJobsRes.warningCode) warnings.push(customJobsRes.warningCode);
+  if (customAgentsRes.warningCode) warnings.push(customAgentsRes.warningCode);
+  if (customProofsRes.warningCode) warnings.push(customProofsRes.warningCode);
+  if (customOverviewRes.warningCode) warnings.push(customOverviewRes.warningCode);
   if (goldskyError) warnings.push(goldskyError);
 
   const response: Record<string, unknown> = {
