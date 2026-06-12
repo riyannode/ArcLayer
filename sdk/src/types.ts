@@ -14,6 +14,14 @@ export type IndexedAgentEvent = {
   metadataURI?: string;
   /** @deprecated kept for legacy ABI parity. */
   skillHash?: `0x${string}`;
+  /** Source registry — "erc8004_identity_registry" (default) or "imported_arclayer_registry". */
+  source?: string;
+  /** Chain ID — defaults to ARC_CHAIN_ID (5042002) when absent. */
+  chainId?: number;
+  /** Registry contract address that emitted this event. */
+  registryAddress?: Address;
+  /** Underlying contract address (for imported agents). */
+  contractAddress?: Address;
 };
 
 /** ERC-8183 AgenticCommerce — JobCreated/BudgetSet/JobFunded/JobSubmitted/JobCompleted/JobRejected/JobExpired. */
