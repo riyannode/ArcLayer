@@ -28,12 +28,15 @@ const STATUS_LABELS = ["Open", "Funded", "Submitted", "Completed", "Rejected", "
 
 // ── Grouping helpers ───────────────────────────────────────────────────────
 
-/** Group job events by jobId. Keys are decimal jobId strings; "unassigned" for events without jobId. */
+/** Group job events by jobId. Events without a jobId are silently dropped to avoid
+ *  fabricating a shared "unassigned" job that could corrupt overview totals. */
 export function groupByJobId(events: IndexedJobEvent[]): Record<string, IndexedJobEvent[]> {
   return events.reduce<Record<string, IndexedJobEvent[]>>((acc, event) => {
-    const key = String(event.jobId ?? "unassigned");
-    acc[key] ??= [];
-    acc[key].push(event);
+    if (event.jobId != null) {
+      const key = String(event.jobId);
+      acc[key] ??= [];
+      acc[key].push(event);
+    }
     return acc;
   }, {});
 }
@@ -52,7 +55,7 @@ export function groupByAgentKey(events: IndexedJobEvent[]): Record<string, Index
 
 /** Extract the source tag from an agent event. Defaults to "erc8004_identity_registry". */
 export function sourceForAgentEvent(event: IndexedAgentEvent): string {
-  return ((event as any).source as string | undefined) ?? "erc8004_identity_registry";
+  return event.source ?? "erc8004_identity_registry";
 }
 
 /** Deduplicate agent events by `${source}:${agentId}` — last event wins. */
@@ -100,12 +103,19 @@ export function projectJobFromEvents(
     return null;
   }
 
-  const latestBudget = [...jobEvents].reverse().find((e) => e.eventName === "BudgetSet");
+  // Sort ascending by blockNumber + logIndex so reverse-find selects the true latest event.
+  const sorted = [...jobEvents].sort((a, b) =>
+    a.blockNumber === b.blockNumber
+      ? a.logIndex - b.logIndex
+      : Number(a.blockNumber - b.blockNumber)
+  );
+
+  const latestBudget = [...sorted].reverse().find((e) => e.eventName === "BudgetSet");
   const fundedEvents = jobEvents.filter((e) => e.eventName === "JobFunded");
-  const submitted = [...jobEvents].reverse().find((e) => e.eventName === "JobSubmitted");
-  const completed = [...jobEvents].reverse().find((e) => e.eventName === "JobCompleted");
-  const rejected = [...jobEvents].reverse().find((e) => e.eventName === "JobRejected");
-  const expired = [...jobEvents].reverse().find((e) => e.eventName === "JobExpired");
+  const submitted = [...sorted].reverse().find((e) => e.eventName === "JobSubmitted");
+  const completed = [...sorted].reverse().find((e) => e.eventName === "JobCompleted");
+  const rejected = [...sorted].reverse().find((e) => e.eventName === "JobRejected");
+  const expired = [...sorted].reverse().find((e) => e.eventName === "JobExpired");
   const totalFunded = fundedEvents.reduce((sum, e) => sum + BigInt(e.amount ?? 0), BigInt(0));
   const budget = BigInt(latestBudget?.amount ?? 0);
 
@@ -123,14 +133,14 @@ export function projectJobFromEvents(
     description: String(created?.description ?? ""),
     budget: budget.toString(),
     fundedAmount: totalFunded.toString(),
-    createdAtBlock: String(created?.blockNumber ?? jobEvents[0]?.blockNumber ?? 0),
-    updatedAtBlock: String(jobEvents[jobEvents.length - 1]?.blockNumber ?? 0),
+    createdAtBlock: String(created?.blockNumber ?? sorted[0]?.blockNumber ?? 0),
+    updatedAtBlock: String(sorted[sorted.length - 1]?.blockNumber ?? 0),
     deliverable: (submitted?.deliverable ?? ZERO_BYTES32) as any,
     completionReason: ((completed as any)?.reason ?? (rejected as any)?.reason ?? ZERO_BYTES32) as any,
     rejector: (rejected as any)?.rejector ?? undefined,
     status,
     statusLabel,
-    createdAt: String(created?.blockNumber ?? jobEvents[0]?.blockNumber ?? 0),
+    createdAt: String(created?.blockNumber ?? sorted[0]?.blockNumber ?? 0),
     events: jobEvents,
   };
 }
@@ -176,9 +186,9 @@ export function projectAgentsFromEvents(
       transactionHash: event.transactionHash,
       skillHash: event.skillHash,
       source: sourceForAgentEvent(event),
-      chainId: (event as any).chainId ?? 5042002,
-      registryAddress: (event as any).registryAddress,
-      contractAddress: (event as any).contractAddress,
+      chainId: event.chainId ?? 5042002,
+      registryAddress: event.registryAddress,
+      contractAddress: event.contractAddress,
     }));
 }
 

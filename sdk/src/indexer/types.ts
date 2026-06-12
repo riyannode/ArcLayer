@@ -5,8 +5,15 @@ import type { IndexedJobEvent, IndexedAgentEvent } from "../types";
 
 export type JobStatus = "Open" | "Funded" | "Submitted" | "Completed" | "Rejected" | "Expired";
 
-/** Numeric status — preserves the priority order: Completed(3) > Rejected(4) > Expired(5) > Submitted(2) > Funded(1) > Open(0). */
-export const JOB_STATUS_PRIORITY: Record<JobStatus, number> = {
+/**
+ * Numeric status codes for ERC-8183 job lifecycle.
+ * These are status identifiers, NOT priority/sort ranks.
+ *
+ * Status code assignment follows the ERC-8183 terminal state precedence:
+ * if a job has both Completed and Rejected events, the code is 3 (Completed).
+ * The precedence is enforced in projection logic, not by numeric ordering.
+ */
+export const JOB_STATUS_CODE: Record<JobStatus, number> = {
   Open: 0,
   Funded: 1,
   Submitted: 2,
@@ -14,6 +21,9 @@ export const JOB_STATUS_PRIORITY: Record<JobStatus, number> = {
   Rejected: 4,
   Expired: 5,
 };
+
+/** @deprecated Use JOB_STATUS_CODE. Kept for migration compat. */
+export const JOB_STATUS_PRIORITY = JOB_STATUS_CODE;
 
 export type ProjectedJob = {
   id: string;
