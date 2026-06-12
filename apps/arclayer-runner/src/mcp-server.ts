@@ -8,7 +8,7 @@
 
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { assertAuthenticated, RunnerError } from "@arclayer/runner-core";
-import { RUNNER_MCP_TOOLS } from "./mcp-schemas";
+import { parseMcpToolArgs, RUNNER_MCP_TOOLS } from "./mcp-schemas";
 import { handleMcpTool, type McpToolContext } from "./mcp-tools";
 import { getToolNamesForRole } from "./tool-registry";
 
@@ -128,7 +128,8 @@ export async function handleMcpRequest(
           return;
         }
 
-        const result = await handleMcpTool(toolName, toolArgs, ctx);
+        const validatedArgs = parseMcpToolArgs(toolName, toolArgs);
+        const result = await handleMcpTool(toolName, validatedArgs, ctx);
         sendJson(res, jsonRpcOk(rpc.id, result));
         break;
       }
@@ -139,7 +140,11 @@ export async function handleMcpRequest(
     }
   } catch (error: any) {
     const message = error?.message ?? "Internal error";
-    const code = error instanceof RunnerError && error.status === 401 ? -32001 : -32603;
+    const code = error instanceof RunnerError && error.status === 401
+      ? -32001
+      : error?.name === "ZodError"
+        ? -32602
+        : -32603;
     sendJson(res, jsonRpcError(rpcId, code, message));
   }
 }

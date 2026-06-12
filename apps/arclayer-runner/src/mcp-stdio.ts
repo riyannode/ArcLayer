@@ -15,7 +15,7 @@
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
 import { createRequire } from "node:module";
-import { RUNNER_MCP_TOOLS } from "./mcp-schemas";
+import { parseMcpToolArgs, RUNNER_MCP_TOOLS } from "./mcp-schemas";
 import { handleMcpTool, type McpToolContext } from "./mcp-tools";
 import { getToolNamesForRole } from "./tool-registry";
 
@@ -147,7 +147,8 @@ export async function handleStdioRequest(
       stderrLog(`tools/call: ${toolName}`);
 
       try {
-        const result = await handleMcpTool(toolName, toolArgs, ctx);
+        const validatedArgs = parseMcpToolArgs(toolName, toolArgs);
+        const result = await handleMcpTool(toolName, validatedArgs, ctx);
         // MCP tools/call wraps result in content array
         return rpcOk(id, {
           content: [
