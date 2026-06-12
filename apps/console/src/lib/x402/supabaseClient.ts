@@ -3,6 +3,7 @@
  * Uses service_role key which bypasses RLS.
  * NEVER import this from client components or pages with 'use client'.
  */
+import "server-only";
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 let cached: SupabaseClient | null = null;

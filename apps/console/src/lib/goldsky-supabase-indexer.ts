@@ -7,42 +7,53 @@
  * SERVER-ONLY — uses Supabase service_role key. NEVER import from client
  * components or pages with 'use client'.
  *
- * Raw table schema assumptions (documented below). If Goldsky writes with
- * different column names, add narrow normalization adapters.
+ * Raw table schema: see goldsky/arclayer-events.draft.yaml
+ *   - goldsky_erc8183_events_raw: block_number, block_timestamp, transaction_hash,
+ *     log_index, event_name, client, provider, evaluator, job_id, amount,
+ *     expired_at, description, hook, deliverable, reason, rejector
+ *   - goldsky_erc8004_identity_events_raw: block_number, block_timestamp,
+ *     transaction_hash, log_index, event_name, from_address, to_address, token_id
+ *   - goldsky_erc8004_reputation_events_raw: block_number, block_timestamp,
+ *     transaction_hash, log_index, event_name, agent_id, client_address,
+ *     feedback_index, value, value_decimals, tag1, tag2, endpoint,
+ *     feedback_uri, feedback_hash
  *
  * @module apps/console/src/lib/goldsky-supabase-indexer
  */
 
+import "server-only";
+
 import {
   type IndexedJobEvent,
   type IndexedAgentEvent,
+  type ProjectedJob,
+  type ProjectedAgent,
+  type OverviewProjection,
   // SDK pure projection helpers:
   projectJobsFromEvents as sdkProjectJobs,
   projectAgentsFromEvents as sdkProjectAgents,
   buildOverviewAggregation,
   collectJobWallets,
-  sourceForAgentEvent,
-  isImportedArcLayerAgent,
-  matchesMetadataPrefix,
-  type ProjectedJob,
-  type ProjectedAgent,
-  type OverviewProjection,
 } from "@arclayer/sdk";
 import { getSupabaseAdmin } from "@/lib/x402/supabaseClient";
+import {
+  buildJobFilter,
+  buildAgentFilter,
+} from "@/lib/goldsky-scope-filters";
 
-// ── Env config (server-only, mirrors indexer/src/config.ts pattern) ─────────
+// ── Env config (server-only) ───────────────────────────────────────────────
 
 type IndexerScope = "arclayer" | "arcnetwork";
 
 const INDEXER_SCOPE: IndexerScope =
   process.env.INDEXER_SCOPE === "arcnetwork" ? "arcnetwork" : "arclayer";
 
-const WALLET_FILTER: string[] = (process.env.ARC_REFERENCE_WALLET_FILTER || "")
+const ENV_WALLET_FILTER: string[] = (process.env.ARC_REFERENCE_WALLET_FILTER || "")
   .split(",")
   .map((s) => s.trim().toLowerCase())
   .filter((s) => s.startsWith("0x") && s.length === 42);
 
-const AGENT_ID_FILTER: string[] = (
+const ENV_AGENT_ID_FILTER: string[] = (
   process.env.ARC_REFERENCE_AGENT_ID_FILTER || ""
 )
   .split(",")
@@ -57,6 +68,9 @@ const METADATA_PREFIX_FILTER: string[] = (
   .map((s) => s.trim())
   .filter(Boolean);
 
+/** Postgres schema for Goldsky raw tables. Default "public". */
+const GOLDSKY_SCHEMA = process.env.GOLDSKY_POSTGRES_SCHEMA || "public";
+
 // ── Raw table names ────────────────────────────────────────────────────────
 
 const TABLES = {
@@ -65,11 +79,15 @@ const TABLES = {
   erc8004Reputation: "goldsky_erc8004_reputation_events_raw",
 } as const;
 
-// ── Raw row types (what Goldsky writes into Supabase) ──────────────────────
-// These are typed adapters with narrow normalization.
-// If Goldsky schema differs, adjust the normalizers only.
+/** Tables required for the reader to function. Reputation is reserved/optional. */
+const REQUIRED_TABLES = ["erc8183", "erc8004Identity"] as const;
 
-/** Raw ERC-8183 job event row from Goldsky Turbo/Mirror. */
+/** Page size for paginated raw event queries. */
+const PAGE_SIZE = 5000;
+
+// ── Raw row types (Goldsky schema from arclayer-events.draft.yaml) ──────────
+
+/** Raw ERC-8183 job event row. */
 type RawJobEventRow = {
   event_name: string;
   block_number: string | number;
@@ -86,29 +104,91 @@ type RawJobEventRow = {
   deliverable: string | null;
   reason: string | null;
   rejector: string | null;
-  // Metadata
-  chain_id: number | null;
-  contract_address: string | null;
 };
 
-/** Raw ERC-8004 identity event row from Goldsky Turbo/Mirror. */
+/**
+ * Raw ERC-8004 identity event row.
+ * Goldsky emits Transfer events with from_address, to_address, token_id.
+ * Registration = from_address is zero address.
+ * Supports both token_id (Goldsky native) and agent_id (if pipeline adds it).
+ */
 type RawAgentEventRow = {
   event_name: string;
   block_number: string | number;
   transaction_hash: string;
   log_index: number;
+  /** Goldsky native column for ERC-721 Transfer. */
+  token_id: string | number | null;
+  /** Alias some pipelines may add. Used as fallback. */
   agent_id: string | number | null;
+  /** Transfer.from — zero address for registrations. */
+  from_address: string | null;
+  /** Transfer.to — the controller/recipient. */
+  to_address: string | null;
+  /** Optional: enriched by pipeline or join. */
   controller: string | null;
   metadata_uri: string | null;
   skill_hash: string | null;
-  from_address: string | null;
-  to_address: string | null;
-  // Metadata
   source: string | null;
   chain_id: number | null;
   registry_address: string | null;
   contract_address: string | null;
 };
+
+// ── Pagination helper ──────────────────────────────────────────────────────
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+/**
+ * Fetch all rows from a Goldsky raw table using cursor pagination.
+ * Uses block_number + log_index as cursor to avoid offset overhead.
+ */
+async function fetchAllPages<T extends { block_number: string | number; log_index: number }>(
+  table: string,
+  columns: string,
+): Promise<T[]> {
+  const supabase = getSupabaseAdmin();
+  const allRows: T[] = [];
+  let lastBlock = 0;
+  let lastLogIndex = -1;
+
+  // Paginate using (block_number, log_index) cursor
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let query = supabase
+      .schema(GOLDSKY_SCHEMA)
+      .from(table)
+      .select(columns)
+      .order("block_number", { ascending: true })
+      .order("log_index", { ascending: true })
+      .limit(PAGE_SIZE);
+
+    // Apply cursor after first page
+    if (allRows.length > 0) {
+      query = query.or(
+        `block_number.gt.${lastBlock},and(block_number.eq.${lastBlock},log_index.gt.${lastLogIndex})`,
+      );
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(`[goldsky-reader] fetchAllPages(${table}): ${error.message}`);
+    }
+
+    const rows = (data ?? []) as T[];
+    allRows.push(...rows);
+
+    if (rows.length < PAGE_SIZE) break; // last page
+
+    // Advance cursor
+    const last = rows[rows.length - 1];
+    lastBlock = Number(last.block_number);
+    lastLogIndex = Number(last.log_index);
+  }
+
+  return allRows;
+}
 
 // ── Normalizers (raw rows → SDK types) ─────────────────────────────────────
 
@@ -132,14 +212,24 @@ function normalizeJobEvent(row: RawJobEventRow): IndexedJobEvent {
   };
 }
 
+/**
+ * Normalize a Goldsky identity row to an SDK agent event.
+ *
+ * ERC-8004 registration = Transfer event where from_address is the zero address.
+ * The token_id (or agent_id) is the ERC-721 token = agent ID.
+ * Controller = to_address (the recipient of the mint).
+ */
 function normalizeAgentEvent(row: RawAgentEventRow): IndexedAgentEvent {
+  const agentId = row.token_id ?? row.agent_id;
+  const controller = row.controller ?? row.to_address ?? ZERO_ADDRESS;
+
   return {
     eventName: row.event_name as IndexedAgentEvent["eventName"],
     blockNumber: BigInt(row.block_number),
     transactionHash: row.transaction_hash as `0x${string}`,
     logIndex: Number(row.log_index),
-    agentId: row.agent_id != null ? BigInt(row.agent_id) : 0n,
-    controller: (row.controller ?? row.to_address ?? "0x0000000000000000000000000000000000000000") as any,
+    agentId: agentId != null ? BigInt(agentId) : 0n,
+    controller: controller as any,
     metadataURI: row.metadata_uri ?? undefined,
     skillHash: row.skill_hash as any,
     source: row.source ?? undefined,
@@ -149,104 +239,146 @@ function normalizeAgentEvent(row: RawAgentEventRow): IndexedAgentEvent {
   };
 }
 
-// ── Scope gating (mirrors indexer/src/reference-filters.ts logic) ──────────
+// ── Dynamic allowlist loading from Supabase ────────────────────────────────
 
-function walletFilterActive(): boolean {
-  return WALLET_FILTER.length > 0;
+type DynamicAllowlists = {
+  wallets: Set<string>;
+  agentIds: Set<string>;
+};
+
+function normalizeWallet(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const lower = value.trim().toLowerCase();
+  return lower.startsWith("0x") && lower.length === 42 ? lower : null;
 }
 
-function agentIdFilterActive(): boolean {
-  return AGENT_ID_FILTER.length > 0;
-}
+/**
+ * Load dynamic allowlists from Supabase tables (agent_manifests, a2a_jobs).
+ * Merges with env allowlists. Env values are additive, not the only source.
+ * Returns empty sets if Supabase is unreachable (reader still works with env-only).
+ */
+export async function loadDynamicAllowlists(): Promise<DynamicAllowlists> {
+  const supabase = getSupabaseAdmin();
+  const wallets = new Set(ENV_WALLET_FILTER.map((w) => w.toLowerCase()));
+  const agentIds = new Set(ENV_AGENT_ID_FILTER.map((id) => id.toLowerCase()));
 
-function matchesWallet(addr: unknown): boolean {
-  if (INDEXER_SCOPE === "arcnetwork") return true;
-  if (!walletFilterActive()) return true;
-  if (typeof addr !== "string") return false;
-  return WALLET_FILTER.includes(addr.toLowerCase());
-}
+  // agent_manifests: agent_id, controller, signer
+  try {
+    const { data } = await supabase
+      .from("agent_manifests")
+      .select("agent_id,controller,signer")
+      .limit(10000);
+    for (const row of data ?? []) {
+      const aid = row.agent_id != null ? String(row.agent_id).trim().toLowerCase() : "";
+      if (aid) agentIds.add(aid);
+      for (const key of ["controller", "signer"]) {
+        const w = normalizeWallet((row as any)[key]);
+        if (w) wallets.add(w);
+      }
+    }
+  } catch {
+    // Supabase unreachable or table missing — continue with env-only
+  }
 
-function agentIdCandidates(value: unknown): string[] {
-  if (value === null || value === undefined) return [];
-  const id = String(value).trim().toLowerCase();
-  if (!id) return [];
-  const raw = id.includes(":") ? id.split(":").pop() || id : id;
-  return Array.from(new Set([raw, id, `erc8004_identity_registry:${raw}`, `imported_arclayer_registry:${raw}`]));
-}
+  // a2a_jobs: provider, evaluator, claimed_by
+  try {
+    const { data } = await supabase
+      .from("a2a_jobs")
+      .select("provider,evaluator,claimed_by")
+      .limit(10000);
+    for (const row of data ?? []) {
+      for (const key of ["provider", "evaluator", "claimed_by"]) {
+        const w = normalizeWallet((row as any)[key]);
+        if (w) wallets.add(w);
+      }
+    }
+  } catch {
+    try {
+      const { data } = await supabase
+        .from("a2a_jobs")
+        .select("provider,evaluator")
+        .limit(10000);
+      for (const row of data ?? []) {
+        for (const key of ["provider", "evaluator"]) {
+          const w = normalizeWallet((row as any)[key]);
+          if (w) wallets.add(w);
+        }
+      }
+    } catch {
+      // Supabase unreachable — continue with env-only
+    }
+  }
 
-function matchesAgentId(agentId: unknown): boolean {
-  if (INDEXER_SCOPE === "arcnetwork") return true;
-  if (!agentIdFilterActive()) return true;
-  const candidates = agentIdCandidates(agentId);
-  return candidates.some((id) => AGENT_ID_FILTER.includes(id));
-}
-
-/** Job filter callback for arclayer scope. */
-function jobFilter(created: IndexedJobEvent | undefined): boolean {
-  return (
-    matchesWallet(created?.client) ||
-    matchesWallet(created?.provider) ||
-    matchesWallet(created?.evaluator)
-  );
-}
-
-/** Agent filter callback for arclayer scope. */
-function agentFilter(
-  event: IndexedAgentEvent,
-  arcJobWallets?: Set<string>,
-): boolean {
-  if (isImportedArcLayerAgent(event)) return true;
-  if (INDEXER_SCOPE === "arcnetwork") return true;
-  if (!walletFilterActive()) return true;
-
-  const ctrl = (event.controller ?? "").toLowerCase();
-  const uri = event.metadataURI ?? "";
-  const rawAgentId = String(event.agentId);
-  const source = sourceForAgentEvent(event);
-  const sourceAgentId = `${source}:${rawAgentId}`;
-
-  if (matchesWallet(ctrl)) return true;
-  if (arcJobWallets?.has(ctrl)) return true;
-  if (matchesAgentId(rawAgentId) || matchesAgentId(sourceAgentId)) return true;
-  if (matchesMetadataPrefix(uri, METADATA_PREFIX_FILTER)) return true;
-  return false;
+  return { wallets, agentIds };
 }
 
 // ── Supabase query helpers ─────────────────────────────────────────────────
 
 async function fetchRawJobEvents(): Promise<RawJobEventRow[]> {
-  const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from(TABLES.erc8183)
-    .select("*")
-    .order("block_number", { ascending: true })
-    .order("log_index", { ascending: true })
-    .limit(50000);
-
-  if (error) {
-    throw new Error(`[goldsky-reader] fetchRawJobEvents: ${error.message}`);
-  }
-  return (data ?? []) as RawJobEventRow[];
+  return fetchAllPages<RawJobEventRow>(
+    TABLES.erc8183,
+    "event_name,block_number,transaction_hash,log_index,job_id,client,provider,evaluator,hook,expired_at,description,amount,deliverable,reason,rejector",
+  );
 }
 
+/**
+ * Fetch raw identity events. Filters to registration transfers only
+ * (from_address = zero address) to avoid ownership transfers/burns
+ * corrupting the projected controller during SDK deduplication.
+ */
 async function fetchRawAgentEvents(): Promise<RawAgentEventRow[]> {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from(TABLES.erc8004Identity)
-    .select("*")
-    .order("block_number", { ascending: true })
-    .order("log_index", { ascending: true })
-    .limit(50000);
+  const allRows: RawAgentEventRow[] = [];
+  let lastBlock = 0;
+  let lastLogIndex = -1;
 
-  if (error) {
-    throw new Error(`[goldsky-reader] fetchRawAgentEvents: ${error.message}`);
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    let query = supabase
+      .schema(GOLDSKY_SCHEMA)
+      .from(TABLES.erc8004Identity)
+      .select("event_name,block_number,transaction_hash,log_index,token_id,agent_id,from_address,to_address,controller,metadata_uri,skill_hash,source,chain_id,registry_address,contract_address")
+      .eq("from_address", ZERO_ADDRESS)
+      .order("block_number", { ascending: true })
+      .order("log_index", { ascending: true })
+      .limit(PAGE_SIZE);
+
+    if (allRows.length > 0) {
+      query = query.or(
+        `block_number.gt.${lastBlock},and(block_number.eq.${lastBlock},log_index.gt.${lastLogIndex})`,
+      );
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(`[goldsky-reader] fetchRawAgentEvents: ${error.message}`);
+    }
+
+    const rows = (data ?? []) as RawAgentEventRow[];
+    allRows.push(...rows);
+
+    if (rows.length < PAGE_SIZE) break;
+
+    const last = rows[rows.length - 1];
+    lastBlock = Number(last.block_number);
+    lastLogIndex = Number(last.log_index);
   }
-  return (data ?? []) as RawAgentEventRow[];
+
+  return allRows;
 }
 
 // ── Public reader functions ────────────────────────────────────────────────
 
-/** Health check — verifies Supabase connection and raw table accessibility. */
+/**
+ * Health check — verifies Supabase connection and raw table accessibility.
+ *
+ * ok = true when:
+ * - Supabase client initializes successfully
+ * - All required tables (erc8183, erc8004Identity) are accessible
+ * - In arclayer scope: at least one attribution source is active
+ *   (env allowlists OR dynamic Supabase allowlists OR metadata prefixes)
+ */
 export async function readGoldskyHealth(): Promise<{
   ok: boolean;
   scope: IndexerScope;
@@ -254,47 +386,102 @@ export async function readGoldskyHealth(): Promise<{
   agentIdFilterActive: boolean;
   metadataPrefixes: string[];
   tables: Record<string, boolean>;
+  dynamicAllowlists?: { wallets: number; agentIds: number };
   error?: string;
 }> {
-  const supabase = getSupabaseAdmin();
+  // Catch Supabase client initialization failures
+  let supabase;
+  try {
+    supabase = getSupabaseAdmin();
+  } catch (err) {
+    return {
+      ok: false,
+      scope: INDEXER_SCOPE,
+      walletFilterActive: false,
+      agentIdFilterActive: false,
+      metadataPrefixes: METADATA_PREFIX_FILTER,
+      tables: {},
+      error: `Supabase client init failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+
   const tableChecks: Record<string, boolean> = {};
 
+  // Probe block_number (exists in all Goldsky raw tables) instead of id
   for (const [key, table] of Object.entries(TABLES)) {
     try {
-      const { error } = await supabase.from(table).select("id").limit(1);
+      const { error } = await supabase
+        .schema(GOLDSKY_SCHEMA)
+        .from(table)
+        .select("block_number")
+        .limit(1);
       tableChecks[key] = !error;
     } catch {
       tableChecks[key] = false;
     }
   }
 
-  const allTablesOk = Object.values(tableChecks).every(Boolean);
+  const allRequiredOk = REQUIRED_TABLES.every((key) => tableChecks[key]);
+
+  // Load dynamic allowlists for health reporting
+  let dynamicAllowlists: { wallets: number; agentIds: number } | undefined;
+  try {
+    const dal = await loadDynamicAllowlists();
+    dynamicAllowlists = { wallets: dal.wallets.size, agentIds: dal.agentIds.size };
+  } catch {
+    // ignore
+  }
+
+  const hasWalletFilter = (ENV_WALLET_FILTER.length > 0) || (dynamicAllowlists?.wallets ?? 0) > 0;
+  const hasAgentIdFilter = (ENV_AGENT_ID_FILTER.length > 0) || (dynamicAllowlists?.agentIds ?? 0) > 0;
+  const hasMetadataPrefixes = METADATA_PREFIX_FILTER.length > 0;
+
+  // In arclayer scope, at least one attribution source must be active
+  // to prevent exposing global shared-contract activity as ArcLayer data.
+  const gateConfigured = INDEXER_SCOPE === "arcnetwork"
+    || hasWalletFilter
+    || hasAgentIdFilter
+    || hasMetadataPrefixes;
 
   return {
-    ok: allTablesOk,
+    ok: allRequiredOk && gateConfigured,
     scope: INDEXER_SCOPE,
-    walletFilterActive: walletFilterActive(),
-    agentIdFilterActive: agentIdFilterActive(),
+    walletFilterActive: hasWalletFilter,
+    agentIdFilterActive: hasAgentIdFilter,
     metadataPrefixes: METADATA_PREFIX_FILTER,
     tables: tableChecks,
-    ...(allTablesOk ? {} : { error: "One or more raw tables not accessible" }),
+    dynamicAllowlists,
+    ...((allRequiredOk && gateConfigured) ? {} : {
+      error: !allRequiredOk
+        ? "One or more required raw tables not accessible"
+        : "ArcLayer scope requires at least one attribution source (wallet filter, agent ID filter, or metadata prefix)",
+    }),
   };
 }
 
 /** Read all projected jobs from Goldsky raw tables. */
 export async function readGoldskyJobs(): Promise<ProjectedJob[]> {
+  const allowlists = await loadDynamicAllowlists();
   const rawEvents = await fetchRawJobEvents();
   const events = rawEvents.map(normalizeJobEvent);
-  return sdkProjectJobs(events, jobFilter);
+
+  if (INDEXER_SCOPE === "arcnetwork") {
+    return sdkProjectJobs(events);
+  }
+
+  return sdkProjectJobs(events, buildJobFilter(allowlists.wallets));
 }
 
 /** Read a single job detail by jobId. */
 export async function readGoldskyJobDetail(
   jobId: string,
 ): Promise<{ job: ProjectedJob; proof: null } | null> {
+  const allowlists = await loadDynamicAllowlists();
   const rawEvents = await fetchRawJobEvents();
   const events = rawEvents.map(normalizeJobEvent);
-  const jobs = sdkProjectJobs(events, jobFilter);
+
+  const filter = INDEXER_SCOPE === "arcnetwork" ? undefined : buildJobFilter(allowlists.wallets);
+  const jobs = sdkProjectJobs(events, filter);
   const job = jobs.find((j) => j.id === jobId);
   if (!job) return null;
   return { job, proof: null };
@@ -302,17 +489,22 @@ export async function readGoldskyJobDetail(
 
 /** Read all projected agents from Goldsky raw tables. */
 export async function readGoldskyAgents(): Promise<ProjectedAgent[]> {
+  const allowlists = await loadDynamicAllowlists();
   const rawJobEvents = await fetchRawJobEvents();
   const rawAgentEvents = await fetchRawAgentEvents();
   const jobEvents = rawJobEvents.map(normalizeJobEvent);
   const agentEvents = rawAgentEvents.map(normalizeAgentEvent);
 
-  // Build job wallets for cross-referencing agents in arclayer jobs
-  const jobs = sdkProjectJobs(jobEvents, jobFilter);
+  if (INDEXER_SCOPE === "arcnetwork") {
+    return sdkProjectAgents(agentEvents);
+  }
+
+  const jobs = sdkProjectJobs(jobEvents, buildJobFilter(allowlists.wallets));
   const jobWallets = collectJobWallets(jobs);
 
-  return sdkProjectAgents(agentEvents, (event) =>
-    agentFilter(event, jobWallets),
+  return sdkProjectAgents(
+    agentEvents,
+    buildAgentFilter(allowlists.wallets, allowlists.agentIds, jobWallets),
   );
 }
 
@@ -320,24 +512,30 @@ export async function readGoldskyAgents(): Promise<ProjectedAgent[]> {
 export async function readGoldskyAgentDetail(
   agentId: string,
 ): Promise<{ agent: ProjectedAgent; jobs: ProjectedJob[]; proofs: [] } | null> {
+  const allowlists = await loadDynamicAllowlists();
   const rawJobEvents = await fetchRawJobEvents();
   const rawAgentEvents = await fetchRawAgentEvents();
   const jobEvents = rawJobEvents.map(normalizeJobEvent);
   const agentEvents = rawAgentEvents.map(normalizeAgentEvent);
 
-  const jobs = sdkProjectJobs(jobEvents, jobFilter);
+  const jFilter = INDEXER_SCOPE === "arcnetwork" ? undefined : buildJobFilter(allowlists.wallets);
+  const jobs = sdkProjectJobs(jobEvents, jFilter);
   const jobWallets = collectJobWallets(jobs);
-  const agents = sdkProjectAgents(agentEvents, (event) =>
-    agentFilter(event, jobWallets),
-  );
+
+  const aFilterFn = INDEXER_SCOPE === "arcnetwork"
+    ? undefined
+    : buildAgentFilter(allowlists.wallets, allowlists.agentIds, jobWallets);
+  const agents = sdkProjectAgents(agentEvents, aFilterFn);
 
   const agent = agents.find((a) => a.agentId === agentId);
   if (!agent) return null;
 
+  const agentCtrl = agent.controller.toLowerCase();
   const agentJobs = jobs.filter(
     (job) =>
-      job.provider?.toLowerCase() === agent.controller.toLowerCase() ||
-      job.client?.toLowerCase() === agent.controller.toLowerCase(),
+      job.provider?.toLowerCase() === agentCtrl ||
+      job.client?.toLowerCase() === agentCtrl ||
+      job.evaluator?.toLowerCase() === agentCtrl,
   );
 
   return { agent, jobs: agentJobs, proofs: [] };
@@ -345,15 +543,20 @@ export async function readGoldskyAgentDetail(
 
 /** Read overview aggregation from Goldsky raw tables. */
 export async function readGoldskyOverview(): Promise<OverviewProjection> {
+  const allowlists = await loadDynamicAllowlists();
   const rawJobEvents = await fetchRawJobEvents();
   const rawAgentEvents = await fetchRawAgentEvents();
   const jobEvents = rawJobEvents.map(normalizeJobEvent);
   const agentEvents = rawAgentEvents.map(normalizeAgentEvent);
 
-  const jobs = sdkProjectJobs(jobEvents, jobFilter);
-  const agents = sdkProjectAgents(agentEvents, (event) =>
-    agentFilter(event, collectJobWallets(jobs)),
-  );
+  const jFilter = INDEXER_SCOPE === "arcnetwork" ? undefined : buildJobFilter(allowlists.wallets);
+  const jobs = sdkProjectJobs(jobEvents, jFilter);
+  const jobWallets = collectJobWallets(jobs);
+
+  const aFilterFn = INDEXER_SCOPE === "arcnetwork"
+    ? undefined
+    : buildAgentFilter(allowlists.wallets, allowlists.agentIds, jobWallets);
+  const agents = sdkProjectAgents(agentEvents, aFilterFn);
 
   return buildOverviewAggregation(jobs, agents, jobEvents.length + agentEvents.length);
 }
