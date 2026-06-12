@@ -75,6 +75,10 @@ Generated: 2026-06-12
 
 **Required Config:** agentId, role, circle.walletAddress
 
+**Live Endpoint:** `https://arclayers.xyz/api/x402/protected-resource`
+
+**allowedX402Hosts:** Use domain only: `arclayers.xyz` (not the full URL path)
+
 ---
 
 ### Identity Agent
