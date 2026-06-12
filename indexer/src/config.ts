@@ -45,11 +45,21 @@ export type IndexerProvider = 'custom' | 'goldsky';
 export type IndexerScope = 'arclayer' | 'arcnetwork';
 
 export const INDEXER_PROVIDER: IndexerProvider =
-  (process.env.INDEXER_PROVIDER as IndexerProvider) || 'custom';
+  parseIndexerProvider(process.env.INDEXER_PROVIDER);
 
 /** Default scope is arclayer — only show agents/jobs registered through ArcLayer. */
 export const INDEXER_SCOPE: IndexerScope =
-  (process.env.INDEXER_SCOPE as IndexerScope) || 'arclayer';
+  parseIndexerScope(process.env.INDEXER_SCOPE);
+
+function parseIndexerProvider(raw: string | undefined): IndexerProvider {
+  if (raw === 'goldsky') return 'goldsky';
+  return 'custom';
+}
+
+function parseIndexerScope(raw: string | undefined): IndexerScope {
+  if (raw === 'arcnetwork') return 'arcnetwork';
+  return 'arclayer';
+}
 
 /** Fallback URL when Goldsky reader fails (typically the PM2 indexer). */
 export const INDEXER_FALLBACK_URL = process.env.INDEXER_FALLBACK_URL || '';

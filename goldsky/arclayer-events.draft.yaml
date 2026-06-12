@@ -1,0 +1,122 @@
+# ┌────────────────────────────────────────────────────────────────────┐
+# │ PSEUDO CONFIG — NOT goldsky pipeline apply COMPATIBLE             │
+# │                                                                    │
+# │ This file documents the INTENDED pipeline shape for ArcLayer      │
+# │ gated indexing. It must be replaced by the output of:              │
+# │                                                                    │
+# │   goldsky pipeline create arclayer-arc-events                     │
+# │   goldsky pipeline get-definition arclayer-arc-events \           │
+# │     > goldsky/arclayer-events.yaml                                │
+# │                                                                    │
+# │ The actual Goldsky Mirror schema uses:                            │
+# │   - apiVersion: 3                                                 │
+# │   - top-level name, sources (object), transforms, sinks (object) │
+# │   - sinks use `from:` to reference sources/transforms            │
+# │   - sinks use `secret_name:` for credentials                     │
+# │   - columns are auto-created from decoded event args             │
+# │                                                                    │
+# │ This draft is a design doc, not deployable YAML.                 │
+# └────────────────────────────────────────────────────────────────────┘
+
+# Pipeline name (for goldsky CLI)
+name: arclayer-arc-events
+apiVersion: 3
+description: >
+  ArcLayer gated indexer — ERC-8183 AgenticCommerce + ERC-8004 Identity +
+  ERC-8004 Reputation events from Arc Testnet. Sinks to Postgres raw tables.
+  Gate logic applied by the reader layer, not the pipeline.
+
+# ── Sources ──────────────────────────────────────────────────────────
+#
+# Use Goldsky dataset sources for Arc Testnet log decoding.
+# Dataset names follow the pattern: <chain>.<dataset_type>
+# Run `goldsky dataset list` to discover available Arc Testnet datasets.
+#
+# Contract addresses are the canonical Arc Testnet reference contracts.
+# Do NOT change these — they are shared infrastructure.
+
+sources:
+
+  # ERC-8183 AgenticCommerce — job lifecycle events
+  erc8183_agentic_commerce:
+    type: dataset
+    dataset_name: arc.logs  # placeholder — verify with `goldsky dataset list`
+    version: "1.0.0"
+    start_at: "41752050"
+    filter: "address = '0x0747EEf0706327138c69792bF28Cd525089e4583'"
+
+  # ERC-8004 Identity Registry — Transfer{from=0x0} = agent registration
+  erc8004_identity_registry:
+    type: dataset
+    dataset_name: arc.logs  # placeholder — verify with `goldsky dataset list`
+    version: "1.0.0"
+    start_at: "41752050"
+    filter: "address = '0x8004A818BFB912233c491871b3d84c89A494BD9e'"
+
+  # ERC-8004 Reputation Registry — feedback events
+  erc8004_reputation_registry:
+    type: dataset
+    dataset_name: arc.logs  # placeholder — verify with `goldsky dataset list`
+    version: "1.0.0"
+    start_at: "41752050"
+    filter: "address = '0x8004B663056A597Dffe9eCcC1965A193B7388713'"
+
+# ── Transforms ───────────────────────────────────────────────────────
+#
+# SQL transforms decode raw logs into structured event rows.
+# Use `_gs_log_decode()` for ABI decoding.
+# See: /turbo-transforms or docs.goldsky.com
+
+transforms: {}
+# TODO: Add SQL transforms for:
+#   - ERC-8183 event decoding (JobCreated, BudgetSet, etc.)
+#   - ERC-8004 Transfer decoding (filter from=0x0 for registrations)
+#   - ERC-8004 NewFeedback decoding
+
+# ── Sinks ────────────────────────────────────────────────────────────
+#
+# Secret: GOLDSKY_ARCLAYER_POSTGRES (create via `goldsky secret create`)
+# Format: postgresql://user:password@host:5432/dbname
+#
+# Raw tables store decoded event args + block metadata.
+# The reader layer (goldsky-indexer.ts) queries these and applies
+# projection + gate logic before serving to the API.
+#
+# Columns are auto-created by Goldsky from decoded event args.
+# The column names below document the EXPECTED schema — actual names
+# depend on the transform output.
+
+sinks:
+
+  erc8183_events_raw:
+    type: postgres
+    table: goldsky_erc8183_events_raw
+    schema: public
+    secret_name: GOLDSKY_ARCLAYER_POSTGRES
+    from: erc8183_agentic_commerce
+    # Expected columns (auto-created):
+    #   block_number, block_timestamp, transaction_hash, log_index,
+    #   event_name, client, provider, evaluator, job_id, amount,
+    #   expired_at, description, hook, deliverable, reason, rejector
+
+  erc8004_identity_events_raw:
+    type: postgres
+    table: goldsky_erc8004_identity_events_raw
+    schema: public
+    secret_name: GOLDSKY_ARCLAYER_POSTGRES
+    from: erc8004_identity_registry
+    # Expected columns (auto-created):
+    #   block_number, block_timestamp, transaction_hash, log_index,
+    #   event_name, from_address, to_address, token_id
+
+  erc8004_reputation_events_raw:
+    type: postgres
+    table: goldsky_erc8004_reputation_events_raw
+    schema: public
+    secret_name: GOLDSKY_ARCLAYER_POSTGRES
+    from: erc8004_reputation_registry
+    # Expected columns (auto-created):
+    #   block_number, block_timestamp, transaction_hash, log_index,
+    #   event_name, agent_id, client_address, feedback_index,
+    #   value, value_decimals, tag1, tag2, endpoint,
+    #   feedback_uri, feedback_hash
