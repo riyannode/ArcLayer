@@ -219,10 +219,13 @@ async function handleGoldskyRequest(request: NextRequest): Promise<NextResponse>
 
   // ── Agent detail (object → _meta in body) ────────────────────────────
   if (path.startsWith('/agents/')) {
-    const agentId = decodeURIComponent(path.replace('/agents/', ''));
-    if (!agentId.trim()) {
+    const rawAgentId = decodeURIComponent(path.replace('/agents/', ''));
+    if (!rawAgentId.trim()) {
       return jsonResponse({ error: 'Invalid agent id.' }, m, { status: 400 });
     }
+    // Normalize: strip source prefix (e.g. "erc8004_identity_registry:42" → "42")
+    // readGoldskyAgentDetail matches on raw token_id (SDK projection's agentId)
+    const agentId = rawAgentId.includes(':') ? rawAgentId.split(':').pop()! : rawAgentId;
     const detail = await readGoldskyAgentDetail(agentId);
     if (!detail) {
       return jsonResponse({ error: 'Agent not found.' }, m, { status: 404 });
