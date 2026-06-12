@@ -144,6 +144,10 @@ export function loadRunnerConfig(): RunnerConfig {
 
   // ── 4. Merge: file → policy → env ─────────────────────────────────────
   const flat = buildFlatConfig(fileConfig, policyFile, envConfig);
+  // Inject dataDir from resolved paths (receipts/ledger storage)
+  if (!flat.dataDir) {
+    flat.dataDir = paths.dataDir;
+  }
   return RunnerConfigSchema.parse(flat);
 }
 
@@ -181,6 +185,10 @@ export function loadRunnerConfigForStdio(): RunnerConfig {
   }
 
   const flat = buildFlatConfig(fileConfig, policyFile, envConfig);
+  // Inject dataDir from resolved paths (receipts/ledger storage)
+  if (!flat.dataDir) {
+    flat.dataDir = paths.dataDir;
+  }
   return RunnerConfigSchema.parse(flat);
 }
 

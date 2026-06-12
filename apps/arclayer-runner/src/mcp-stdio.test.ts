@@ -179,7 +179,7 @@ describe("MCP STDIO: handleStdioRequest", () => {
     );
 
     const parsed = JSON.parse((result!.result as any).content[0].text);
-    expect(parsed.error).toContain("Unknown tool");
+    expect(parsed.error).toContain("ROLE_TOOL_NOT_ALLOWED");
   });
 
   it("unknown method returns -32601", async () => {
@@ -279,5 +279,96 @@ describe("MCP STDIO: runMcpStdio stream integration", () => {
     expect(lines.length).toBe(1);
     const err = JSON.parse(lines[0]);
     expect(err.error.code).toBe(-32600);
+  });
+});
+
+// ── Role enforcement tests ─────────────────────────────────────────────────
+
+describe("MCP STDIO: Role enforcement at tools/call", () => {
+  it("provider cannot call x402.pay", async () => {
+    const ctx = makeContext({ defaultRole: "provider", allowedRoles: ["provider"] });
+    const result = await handleStdioRequest(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "x402.pay", arguments: { url: "https://test.com", maxAmountUsdc: "0.01", reason: "test" } } },
+      ctx
+    );
+    const parsed = JSON.parse((result!.result as any).content[0].text);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toBe("ROLE_TOOL_NOT_ALLOWED");
+  });
+
+  it("provider cannot call erc8183.complete_job", async () => {
+    const ctx = makeContext({ defaultRole: "provider", allowedRoles: ["provider"] });
+    const result = await handleStdioRequest(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "erc8183.complete_job", arguments: { jobId: "1", reason: "test" } } },
+      ctx
+    );
+    const parsed = JSON.parse((result!.result as any).content[0].text);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toBe("ROLE_TOOL_NOT_ALLOWED");
+  });
+
+  it("provider cannot call erc8183.claim_refund", async () => {
+    const ctx = makeContext({ defaultRole: "provider", allowedRoles: ["provider"] });
+    const result = await handleStdioRequest(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "erc8183.claim_refund", arguments: { jobId: "1" } } },
+      ctx
+    );
+    const parsed = JSON.parse((result!.result as any).content[0].text);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toBe("ROLE_TOOL_NOT_ALLOWED");
+  });
+
+  it("evaluator can call erc8183.complete_job", async () => {
+    const ctx = makeContext({ defaultRole: "evaluator", allowedRoles: ["evaluator"] });
+    const result = await handleStdioRequest(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "erc8183.complete_job", arguments: { jobId: "1", reason: "test" } } },
+      ctx
+    );
+    // Should NOT be blocked by role enforcement (may fail for other reasons like Circle CLI)
+    const parsed = JSON.parse((result!.result as any).content[0].text);
+    expect(parsed.error).not.toBe("ROLE_TOOL_NOT_ALLOWED");
+  });
+
+  it("x402-agent can call x402.pay", async () => {
+    const ctx = makeContext({ defaultRole: "x402-agent", allowedRoles: ["x402-agent"] });
+    const result = await handleStdioRequest(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "x402.pay", arguments: { url: "https://test.com", maxAmountUsdc: "0.01", reason: "test" } } },
+      ctx
+    );
+    // Should NOT be blocked by role enforcement
+    const parsed = JSON.parse((result!.result as any).content[0].text);
+    expect(parsed.error).not.toBe("ROLE_TOOL_NOT_ALLOWED");
+  });
+
+  it("client can call erc8183.create_job", async () => {
+    const ctx = makeContext({ defaultRole: "client", allowedRoles: ["client"] });
+    const result = await handleStdioRequest(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "erc8183.create_job", arguments: { provider: "0x0000000000000000000000000000000000000001", evaluator: "0x0000000000000000000000000000000000000002", expiredAt: "9999999999", description: "test" } } },
+      ctx
+    );
+    // Should NOT be blocked by role enforcement
+    const parsed = JSON.parse((result!.result as any).content[0].text);
+    expect(parsed.error).not.toBe("ROLE_TOOL_NOT_ALLOWED");
+  });
+
+  it("provider can call runner.health (allowed tool)", async () => {
+    const ctx = makeContext({ defaultRole: "provider", allowedRoles: ["provider"] });
+    const result = await handleStdioRequest(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "runner.health", arguments: {} } },
+      ctx
+    );
+    const parsed = JSON.parse((result!.result as any).content[0].text);
+    expect(parsed.ok).toBe(true);
+  });
+
+  it("provider cannot call circle.gateway_deposit", async () => {
+    const ctx = makeContext({ defaultRole: "provider", allowedRoles: ["provider"] });
+    const result = await handleStdioRequest(
+      { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "circle.gateway_deposit", arguments: { amount: "1", method: "eco" } } },
+      ctx
+    );
+    const parsed = JSON.parse((result!.result as any).content[0].text);
+    expect(parsed.ok).toBe(false);
+    expect(parsed.error).toBe("ROLE_TOOL_NOT_ALLOWED");
   });
 });
