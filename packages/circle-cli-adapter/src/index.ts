@@ -277,6 +277,21 @@ export class CircleCliAdapter {
     chain: string;
     method?: string;
   }): Promise<CircleCliResult> {
+    // Default method: direct for ARC-TESTNET, eco only for BASE/BASE-SEPOLIA
+    let method = input.method;
+    if (!method) {
+      method = input.chain.toUpperCase().includes("ARC") ? "direct" : "direct";
+    }
+
+    // Reject eco on ARC-TESTNET — eco only supports BASE/BASE-SEPOLIA
+    if (method === "eco" && input.chain.toUpperCase().includes("ARC")) {
+      throw new RunnerError(
+        "GATEWAY_DEPOSIT_METHOD_INVALID",
+        "Gateway deposit method 'eco' is not supported on ARC-TESTNET. Use 'direct' instead.",
+        400
+      );
+    }
+
     const args = [
       "gateway",
       "deposit",
@@ -286,13 +301,11 @@ export class CircleCliAdapter {
       input.address,
       "--chain",
       input.chain,
+      "--method",
+      method,
       "--output",
       "json"
     ];
-
-    if (input.method) {
-      args.push("--method", input.method);
-    }
 
     return this.run(args);
   }

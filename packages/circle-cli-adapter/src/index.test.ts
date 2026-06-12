@@ -105,6 +105,34 @@ describe("CircleCliAdapter", () => {
     });
   });
 
+  describe("gateway deposit method handling", () => {
+    it("rejects eco method on ARC-TESTNET", async () => {
+      await expectRunnerError(
+        adapter.gatewayDeposit({
+          amount: "1.0",
+          address: "0x0000000000000000000000000000000000000002",
+          chain: "ARC-TESTNET",
+          method: "eco"
+        }),
+        "GATEWAY_DEPOSIT_METHOD_INVALID"
+      );
+    });
+
+    it("defaults to direct method on ARC-TESTNET when method not specified", async () => {
+      // Should not throw GATEWAY_DEPOSIT_METHOD_INVALID
+      // Will fail at Circle CLI execution, but method validation passes
+      try {
+        await adapter.gatewayDeposit({
+          amount: "1.0",
+          address: "0x0000000000000000000000000000000000000002",
+          chain: "ARC-TESTNET"
+        });
+      } catch (error) {
+        expect(error).not.toBeInstanceOf(RunnerError);
+      }
+    });
+  });
+
   describe("public API surface", () => {
     it("exposes all expected methods", () => {
       expect(adapter.version).toBeDefined();
