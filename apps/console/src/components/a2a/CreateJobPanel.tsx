@@ -69,7 +69,7 @@ export function CreateJobPanel({
         functionName: 'createJob',
         args: [
           providerAddress,
-          '0x0000000000000000000000000000000000000000', // evaluator = zero (self-eval)
+          address, // evaluator = connected wallet (self-evaluation, Arc spec requires non-zero)
           expiredAt,
           descHash,
           '0x0000000000000000000000000000000000000000', // hook = none
