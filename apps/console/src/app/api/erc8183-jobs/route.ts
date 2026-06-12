@@ -57,12 +57,18 @@ export async function POST(req: NextRequest) {
     // Validate required fields
     const required = [
       'buyerAgentId', 'clientAddress', 'providerAgentId',
-      'providerAddress', 'expiredAtUnix', 'budgetAtomic', 'inputPayload',
+      'providerAddress', 'evaluatorAddress', 'expiredAtUnix', 'budgetAtomic', 'inputPayload',
     ] as const;
     for (const field of required) {
       if (!body[field]) {
         return humanJson(req, { ok: false, error: 'missing_field', message: `Missing required field: ${field}` }, { status: 400 });
       }
+    }
+
+    // ERC-8183: evaluator MUST be non-zero (reverts on zero address)
+    const ZERO = '0x0000000000000000000000000000000000000000';
+    if (String(body.evaluatorAddress).toLowerCase() === ZERO) {
+      return humanJson(req, { ok: false, error: 'invalid_evaluator', message: 'evaluatorAddress cannot be zero. Use client wallet as evaluator for self-evaluation.' }, { status: 400 });
     }
 
     // Create local job record
@@ -86,7 +92,7 @@ export async function POST(req: NextRequest) {
       functionName: 'createJob',
       args: [
         body.providerAddress,
-        body.evaluatorAddress ?? '0x0000000000000000000000000000000000000000',
+        body.evaluatorAddress,
         body.expiredAtUnix,
         body.description ?? '',
         body.hookAddress ?? '0x0000000000000000000000000000000000000000',
