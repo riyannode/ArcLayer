@@ -27,14 +27,14 @@ importers:
   apps/arclayer-runner:
     dependencies:
       '@arclayer/circle-cli-adapter':
-        specifier: workspace:^
-        version: link:../../packages/circle-cli-adapter
+        specifier: ^0.1.4
+        version: 0.1.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
       '@arclayer/runner-core':
-        specifier: workspace:^
-        version: link:../../packages/runner-core
+        specifier: ^0.1.4
+        version: 0.1.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
       '@arclayer/sdk':
-        specifier: workspace:^
-        version: link:../../sdk
+        specifier: ^0.1.4
+        version: 0.1.4(viem@2.48.11(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76))
       commander:
         specifier: ^14.0.2
         version: 14.0.2
@@ -177,8 +177,8 @@ importers:
   packages/arclayer-setup:
     dependencies:
       '@arclayer/runner':
-        specifier: workspace:^
-        version: link:../../apps/arclayer-runner
+        specifier: ^0.1.4
+        version: 0.1.4(typescript@5.9.3)
     devDependencies:
       '@types/node':
         specifier: ^22.19.19
@@ -199,8 +199,8 @@ importers:
   packages/circle-cli-adapter:
     dependencies:
       '@arclayer/runner-core':
-        specifier: workspace:^
-        version: link:../runner-core
+        specifier: ^0.1.4
+        version: 0.1.4(typescript@5.9.3)
     devDependencies:
       '@types/node':
         specifier: ^22.19.19
@@ -280,6 +280,21 @@ packages:
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
+
+  '@arclayer/circle-cli-adapter@0.1.4':
+    resolution: {integrity: sha512-ahNWaAKbUvFjdzQL0bNz3CfU/3UXdFf93ggCufK9qJCaN3tng0PCtGwEuKLKMkbLEj1c4T4u0jRLPa9Lxn3sng==}
+
+  '@arclayer/runner-core@0.1.4':
+    resolution: {integrity: sha512-YsyAQArwlqsUv0bkl21Y5IcvDC6y58eFFOWg2/vZ95HJE6IMfSyDgXinzz3Ps350kg6Kk8rE++j3aJdsSt3jXg==}
+
+  '@arclayer/runner@0.1.4':
+    resolution: {integrity: sha512-yrCOzGj9W/muLP4FvduUoyn8OBYcSwuGZT98JBZRxUB82gpzZJ7+pIyr6BGyEDQpv8H5XLOPdVLxnqkGTtC4Cg==}
+    hasBin: true
+
+  '@arclayer/sdk@0.1.4':
+    resolution: {integrity: sha512-XSnKwaYb0k6uc+QeyXFgH02CCNzU6XEQdG3fUr9aIk9KvabDSROxaHfO3qd73yh3z6WPQXqwsHZSs/FeHXsWdg==}
+    peerDependencies:
+      viem: ^2.17.0
 
   '@babel/runtime@7.29.2':
     resolution: {integrity: sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g==}
@@ -4033,6 +4048,62 @@ snapshots:
   '@adraffy/ens-normalize@1.11.1': {}
 
   '@alloc/quick-lru@5.2.0': {}
+
+  '@arclayer/circle-cli-adapter@0.1.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)':
+    dependencies:
+      '@arclayer/runner-core': 0.1.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
+
+  '@arclayer/circle-cli-adapter@0.1.4(typescript@5.9.3)':
+    dependencies:
+      '@arclayer/runner-core': 0.1.4(typescript@5.9.3)
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
+
+  '@arclayer/runner-core@0.1.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)':
+    dependencies:
+      viem: 2.48.11(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
+
+  '@arclayer/runner-core@0.1.4(typescript@5.9.3)':
+    dependencies:
+      viem: 2.48.11(typescript@5.9.3)(zod@3.25.76)
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
+
+  '@arclayer/runner@0.1.4(typescript@5.9.3)':
+    dependencies:
+      '@arclayer/circle-cli-adapter': 0.1.4(typescript@5.9.3)
+      '@arclayer/runner-core': 0.1.4(typescript@5.9.3)
+      '@arclayer/sdk': 0.1.4(viem@2.48.11(typescript@5.9.3)(zod@3.25.76))
+      commander: 14.0.2
+      viem: 2.48.11(typescript@5.9.3)(zod@3.25.76)
+      yaml: 2.9.0
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
+
+  '@arclayer/sdk@0.1.4(viem@2.48.11(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76))':
+    dependencies:
+      viem: 2.48.11(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76)
+
+  '@arclayer/sdk@0.1.4(viem@2.48.11(typescript@5.9.3)(zod@3.25.76))':
+    dependencies:
+      viem: 2.48.11(typescript@5.9.3)(zod@3.25.76)
 
   '@babel/runtime@7.29.2': {}
 
@@ -8325,7 +8396,7 @@ snapshots:
     dependencies:
       ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
 
-  isows@1.0.7(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)):
+  isows@1.0.7(ws@8.21.0):
     dependencies:
       ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
 
@@ -9413,7 +9484,7 @@ snapshots:
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
       abitype: 1.2.3(typescript@5.9.3)(zod@3.22.4)
-      isows: 1.0.7(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
+      isows: 1.0.7(ws@8.21.0)
       ox: 0.14.20(typescript@5.9.3)(zod@3.22.4)
       ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
     optionalDependencies:
@@ -9430,7 +9501,7 @@ snapshots:
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
       abitype: 1.2.3(typescript@5.9.3)(zod@3.25.76)
-      isows: 1.0.7(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
+      isows: 1.0.7(ws@8.21.0)
       ox: 0.14.20(typescript@5.9.3)(zod@3.25.76)
       ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
     optionalDependencies:
@@ -9447,8 +9518,25 @@ snapshots:
       '@scure/bip32': 1.7.0
       '@scure/bip39': 1.6.0
       abitype: 1.2.3(typescript@5.9.3)(zod@4.4.3)
-      isows: 1.0.7(ws@8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10))
+      isows: 1.0.7(ws@8.21.0)
       ox: 0.14.20(typescript@5.9.3)(zod@4.4.3)
+      ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
+    optionalDependencies:
+      typescript: 5.9.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+      - zod
+
+  viem@2.48.11(typescript@5.9.3)(zod@3.25.76):
+    dependencies:
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
+      abitype: 1.2.3(typescript@5.9.3)(zod@3.25.76)
+      isows: 1.0.7(ws@8.21.0)
+      ox: 0.14.20(typescript@5.9.3)(zod@3.25.76)
       ws: 8.21.0(bufferutil@4.1.0)(utf-8-validate@5.0.10)
     optionalDependencies:
       typescript: 5.9.3
