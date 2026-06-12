@@ -28,9 +28,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@arclayer/circle-cli-adapter": "^0.1.2",
-    "@arclayer/runner-core": "^0.1.2",
-    "@arclayer/sdk": "^0.1.2",
+    "@arclayer/circle-cli-adapter": "workspace:^",
+    "@arclayer/runner-core": "workspace:^",
+    "@arclayer/sdk": "workspace:^",
     "commander": "^14.0.2",
     "yaml": "^2.7.0",
     "zod": "^3.23.0",
