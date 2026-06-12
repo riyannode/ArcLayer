@@ -123,6 +123,15 @@ describe("assertX402InspectAllowed", () => {
     );
   });
 
+  it("allows any host when wildcard * is configured", () => {
+    expect(() =>
+      assertX402InspectAllowed(
+        makeConfig({ allowedX402Hosts: ["*"] }),
+        makePayment({ url: "https://any-host.example.com/api" })
+      )
+    ).not.toThrow();
+  });
+
   it("passes even when payment disabled (inspect is read-only)", () => {
     expect(() =>
       assertX402InspectAllowed(makeConfig({ paymentEnabled: false }), makePayment())
