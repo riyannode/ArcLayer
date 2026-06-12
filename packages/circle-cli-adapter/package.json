@@ -1,8 +1,8 @@
 {
   "name": "@arclayer/circle-cli-adapter",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "type": "module",
-  "description": "ArcLayer Circle CLI Adapter — allowlisted shell bridge to Circle CLI with input redaction and blocked dangerous commands",
+  "description": "ArcLayer Circle CLI Adapter \u2014 allowlisted shell bridge to Circle CLI with input redaction and blocked dangerous commands",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -33,7 +33,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@arclayer/runner-core": "workspace:^"
+    "@arclayer/runner-core": "^0.1.4"
   },
   "devDependencies": {
     "@types/node": "^22.19.19",

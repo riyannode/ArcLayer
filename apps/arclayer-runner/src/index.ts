@@ -15,7 +15,7 @@ import { registerSetupCommand } from "./setup";
 import { registerInstallCommand } from "./install";
 
 // Read version from package.json
-let PKG_VERSION = "0.1.3";
+let PKG_VERSION = "0.1.4";
 try {
   const require = createRequire(import.meta.url);
   PKG_VERSION = require("../package.json").version;
