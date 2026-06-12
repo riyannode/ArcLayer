@@ -1,0 +1,183 @@
+# Goldsky Pipeline — ArcLayer Gated Indexer (DRAFT)
+#
+# Status: DRAFT — not yet validated with `goldsky pipeline apply`.
+# Run the commands in docs/indexing.md to create, validate, and deploy.
+#
+# This pipeline ingests ERC-8183 and ERC-8004 events from Arc Testnet
+# into Postgres raw tables. A separate reader layer (goldsky-indexer.ts)
+# applies ArcLayer-only gate logic before serving to the API/UI.
+#
+# Contract addresses are the canonical Arc Testnet reference contracts.
+# Do NOT change these — they are shared infrastructure.
+
+spec:
+  name: arclayer-arc-events
+  description: >
+    ArcLayer gated indexer — ERC-8183 AgenticCommerce + ERC-8004 Identity +
+    ERC-8004 Reputation events from Arc Testnet. Sinks to Postgres raw tables.
+    Gate logic applied by the reader layer, not the pipeline.
+
+  # ── Source: Arc Testnet ─────────────────────────────────────────────
+  networks:
+    - name: arc-testnet
+      chain_id: 5042002
+      rpc_url: https://rpc.testnet.arc.network
+
+  sources:
+    # ERC-8183 AgenticCommerce — job lifecycle events
+    - name: erc8183_agentic_commerce
+      network: arc-testnet
+      address: "0x0747EEf0706327138c69792bF28Cd525089e4583"
+      start_block: 41752050
+      events:
+        - event: "JobCreated(address indexed client, address indexed provider, address indexed evaluator, uint256 jobId, uint256 expiredAt, string description, address hook)"
+        - event: "BudgetSet(uint256 indexed jobId, uint256 amount)"
+        - event: "JobFunded(uint256 indexed jobId, uint256 amount)"
+        - event: "JobSubmitted(uint256 indexed jobId, bytes32 deliverable)"
+        - event: "JobCompleted(uint256 indexed jobId, bytes32 reason)"
+        - event: "JobRejected(uint256 indexed jobId, bytes32 reason, address indexed rejector)"
+        - event: "JobExpired(uint256 indexed jobId)"
+
+    # ERC-8004 Identity Registry — Transfer{from=0x0} signals agent registration
+    - name: erc8004_identity_registry
+      network: arc-testnet
+      address: "0x8004A818BFB912233c491871b3d84c89A494BD9e"
+      start_block: 41752050
+      events:
+        - event: "Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"
+
+    # ERC-8004 Reputation Registry — feedback events
+    - name: erc8004_reputation_registry
+      network: arc-testnet
+      address: "0x8004B663056A597Dffe9eCcC1965A193B7388713"
+      start_block: 41752050
+      events:
+        - event: >
+            NewFeedback(
+              uint256 indexed agentId,
+              address indexed clientAddress,
+              uint256 feedbackIndex,
+              uint256 value,
+              uint8 valueDecimals,
+              string tag1,
+              string tag2,
+              string endpoint,
+              string feedbackURI,
+              bytes32 feedbackHash
+            )
+
+  # ── Sink: Postgres raw tables ───────────────────────────────────────
+  #
+  # Secret GOLDSKY_ARCLAYER_POSTGRES must be configured in the Goldsky
+  # project settings before pipeline apply. Format:
+  #   postgresql://user:password@host:5432/dbname
+  #
+  # Raw tables store decoded event args + block metadata. The reader
+  # layer (goldsky-indexer.ts) queries these and applies projection +
+  # gate logic before serving to the API.
+
+  sinks:
+    - name: erc8183_events_raw
+      source: erc8183_agentic_commerce
+      destination:
+        type: postgres
+        secret: GOLDSKY_ARCLAYER_POSTGRES
+        schema: public
+        table: goldsky_erc8183_events_raw
+      columns:
+        - name: block_number
+          type: bigint
+        - name: block_timestamp
+          type: bigint
+        - name: transaction_hash
+          type: text
+        - name: log_index
+          type: integer
+        - name: event_name
+          type: text
+        - name: client
+          type: text
+        - name: provider
+          type: text
+        - name: evaluator
+          type: text
+        - name: job_id
+          type: numeric
+        - name: amount
+          type: numeric
+        - name: expired_at
+          type: numeric
+        - name: description
+          type: text
+        - name: hook
+          type: text
+        - name: deliverable
+          type: text
+        - name: reason
+          type: text
+        - name: rejector
+          type: text
+
+    - name: erc8004_identity_events_raw
+      source: erc8004_identity_registry
+      destination:
+        type: postgres
+        secret: GOLDSKY_ARCLAYER_POSTGRES
+        schema: public
+        table: goldsky_erc8004_identity_events_raw
+      columns:
+        - name: block_number
+          type: bigint
+        - name: block_timestamp
+          type: bigint
+        - name: transaction_hash
+          type: text
+        - name: log_index
+          type: integer
+        - name: event_name
+          type: text
+        - name: from_address
+          type: text
+        - name: to_address
+          type: text
+        - name: token_id
+          type: numeric
+
+    - name: erc8004_reputation_events_raw
+      source: erc8004_reputation_registry
+      destination:
+        type: postgres
+        secret: GOLDSKY_ARCLAYER_POSTGRES
+        schema: public
+        table: goldsky_erc8004_reputation_events_raw
+      columns:
+        - name: block_number
+          type: bigint
+        - name: block_timestamp
+          type: bigint
+        - name: transaction_hash
+          type: text
+        - name: log_index
+          type: integer
+        - name: event_name
+          type: text
+        - name: agent_id
+          type: numeric
+        - name: client_address
+          type: text
+        - name: feedback_index
+          type: integer
+        - name: value
+          type: numeric
+        - name: value_decimals
+          type: integer
+        - name: tag1
+          type: text
+        - name: tag2
+          type: text
+        - name: endpoint
+          type: text
+        - name: feedback_uri
+          type: text
+        - name: feedback_hash
+          type: text
