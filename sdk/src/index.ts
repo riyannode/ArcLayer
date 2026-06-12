@@ -6,3 +6,4 @@ export * from "./types";
 export * from "./writes";
 export * from "./arc-reference";
 export * from "./a2a";
+export * from "./indexer";
