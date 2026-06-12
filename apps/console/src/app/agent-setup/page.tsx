@@ -9,7 +9,7 @@ function Badge({ children }: { children: React.ReactNode }) {
   return <span className="rounded-md border border-[#F3C536]/20 bg-[#F3C536]/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#F3C536]">{children}</span>;
 }
 
-const INSTALL_CMD = 'curl -fsSL https://arclayers.xyz/install/erc8183-bot.sh | bash -s -- --role provider';
+const INSTALL_CMD = 'npx -y @arclayer/setup@next';
 const CODEX_CMD = 'npx arclayer-codex@latest';
 
 export default function AgentSetupPage() {
@@ -67,14 +67,14 @@ export default function AgentSetupPage() {
         <div className="mb-6 flex flex-wrap gap-3"><Badge>Agent ID</Badge><Badge>Manifest</Badge><Badge>Role preset</Badge><Badge>API key</Badge></div>
 
         <div className="mb-5 rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
-          <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]"><Terminal className="h-5 w-5" /></div><div><div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Manual runtime option</div><h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F4EFE5]">External PM2 Provider Bot</h2></div></div>
-          <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">Run a self-hosted ERC-8183 provider bot on your VPS.</p>
+          <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]"><Terminal className="h-5 w-5" /></div><div><div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Recommended</div><h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F4EFE5]">External Agent</h2></div></div>
+          <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">Run a self-hosted bot on your VPS and connect to Hermes, OpenClaw, or any MCP-compatible agent runtime.</p>
           <div className="mt-4 rounded-md border border-white/10 bg-black/35 px-4 py-3 font-mono text-[12px] text-[#EAE4D8]/80 break-all">{INSTALL_CMD}</div>
           <div className="mt-4"><button type="button" onClick={handleCopy} className={`inline-flex h-10 items-center gap-3 rounded-lg border px-5 text-[12px] font-semibold transition ${copied ? 'border-[#B8CD7E]/40 bg-[#B8CD7E]/10 text-[#B8CD7E]' : 'border-[#F0B84A]/40 bg-[#F0B84A] text-black shadow-[0_0_34px_rgba(240,184,74,0.22)] hover:scale-[1.01] hover:bg-[#FFD084]'}`}>{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? 'Copied' : 'Copy install command'}</button></div>
         </div>
 
         <div className="mb-5 rounded-lg border border-white/10 bg-[#07090D]/88 px-7 py-5 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]">
-          <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]"><Code2 className="h-5 w-5" /></div><div><div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Recommended</div><h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F4EFE5]">OAuth Codex Connector</h2></div></div>
+          <div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#C5A67C]/20 bg-[#C5A67C]/10 text-[#F0B84A]"><Code2 className="h-5 w-5" /></div><div><div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#F3C536]">Self-hosted option</div><h2 className="mt-1 text-[18px] font-semibold tracking-[-0.03em] text-[#F4EFE5]">OAuth Codex Connector</h2></div></div>
           <p className="mt-3 text-[13px] leading-5 text-[#EAE4D8]/62">Run this once on the device where Codex is installed:</p>
           <div className="mt-4 rounded-md border border-white/10 bg-black/35 px-4 py-3 font-mono text-[14px] text-[#EAE4D8] break-all">{CODEX_CMD}</div>
           <div className="mt-4"><button type="button" onClick={handleCodexCopy} className={`inline-flex h-10 items-center gap-3 rounded-lg border px-5 text-[12px] font-semibold transition ${codexCopied ? 'border-[#B8CD7E]/40 bg-[#B8CD7E]/10 text-[#B8CD7E]' : 'border-[#F0B84A]/40 bg-[#F0B84A] text-black shadow-[0_0_34px_rgba(240,184,74,0.22)] hover:scale-[1.01] hover:bg-[#FFD084]'}`}>{codexCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{codexCopied ? 'Copied' : 'Copy install command'}</button></div>

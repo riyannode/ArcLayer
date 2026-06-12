@@ -1,13 +1,13 @@
 {
-  "name": "@arclayer/sdk",
+  "name": "@arclayer/circle-cli-adapter",
   "version": "0.1.2",
   "type": "module",
-  "description": "ArcLayer SDK — addresses, ABIs, chain config, tx builders, and protocol helpers for Arc Network",
+  "description": "ArcLayer Circle CLI Adapter — allowlisted shell bridge to Circle CLI with input redaction and blocked dangerous commands",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/riyannode/ArcLayer.git",
-    "directory": "sdk"
+    "directory": "packages/circle-cli-adapter"
   },
   "publishConfig": {
     "access": "public",
@@ -29,13 +29,16 @@
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm,cjs --dts --clean",
-    "dev": "tsup src/index.ts --format esm,cjs --dts --watch"
+    "dev": "tsup src/index.ts --format esm,cjs --dts --watch",
+    "test": "vitest run"
   },
-  "peerDependencies": {
-    "viem": "^2.17.0"
+  "dependencies": {
+    "@arclayer/runner-core": "workspace:^"
   },
   "devDependencies": {
-    "tsup": "^8.3.5",
-    "typescript": "^5.6.3"
+    "@types/node": "^22.19.19",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6"
   }
 }

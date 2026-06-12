@@ -1,0 +1,220 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# .github/workflows/publish-npm.yml
+#
+# Manual workflow to publish @arclayer packages to npm.
+#
+# Usage:
+#   GitHub UI → Actions → "Publish @arclayer to npm" → Run workflow
+#
+# Inputs:
+#   tag:      "next" (beta) or "latest" (stable)
+#   version:  package version to set before publish (e.g. 0.1.0-beta.0)
+#   dry_run:  true = validate only, false = actually publish
+#
+# Secrets:
+#   NPM_TOKEN: npm authentication token with @arclayer publish scope
+#
+# Safety:
+#   - NPM_TOKEN is never printed
+#   - dry_run defaults to true (safe by default)
+#   - manual trigger only (no auto-publish on push)
+# ─────────────────────────────────────────────────────────────────────────────
+name: Publish @arclayer to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "npm dist-tag (next = beta, latest = stable)"
+        required: true
+        type: choice
+        options:
+          - next
+          - latest
+        default: next
+      version:
+        description: "Package version (e.g. 0.1.0-beta.0)"
+        required: true
+        type: string
+        default: "0.1.0-beta.0"
+      dry_run:
+        description: "Dry run (validate only, do not publish)"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Set package versions
+        run: |
+          VERSION="${{ inputs.version }}"
+          echo "Setting all @arclayer packages to version $VERSION"
+
+          for pkg_json in \
+            sdk/package.json \
+            packages/runner-core/package.json \
+            packages/circle-cli-adapter/package.json \
+            apps/arclayer-runner/package.json \
+            packages/arclayer-setup/package.json
+          do
+            node -e "
+              const fs = require('fs');
+              const pkg = JSON.parse(fs.readFileSync('$pkg_json', 'utf8'));
+              pkg.version = '$VERSION';
+
+              // Update workspace:* deps to real semver
+              const depGroups = ['dependencies', 'devDependencies', 'peerDependencies'];
+              for (const group of depGroups) {
+                if (pkg[group]) {
+                  for (const [name, version] of Object.entries(pkg[group])) {
+                    if (typeof version === 'string' && version.startsWith('workspace:')) {
+                      pkg[group][name] = '^' + '$VERSION';
+                    }
+                  }
+                }
+              }
+
+              fs.writeFileSync('$pkg_json', JSON.stringify(pkg, null, 2) + '\n');
+              console.log('  Updated $pkg_json → ' + pkg.name + '@' + pkg.version);
+            "
+          done
+
+      - name: Build all publishable packages
+        run: npm run build:publish
+
+      - name: Run tests
+        run: npm run test:publish
+
+      - name: Validate packs (no workspace:*, no secrets)
+        run: |
+          set -euo pipefail
+          FORBIDDEN_DEP_PATTERNS=("workspace:*" "workspace:~" "link:" "file:")
+          FORBIDDEN_FILE_PATTERNS=(".env" "NPM_TOKEN" "private_key" "seed_phrase" "otp" "receipts.jsonl" "ledger.jsonl" "node_modules" "coverage")
+
+          PACKAGES=(
+            "sdk"
+            "packages/runner-core"
+            "packages/circle-cli-adapter"
+            "apps/arclayer-runner"
+            "packages/arclayer-setup"
+          )
+
+          for pkg_dir in "${PACKAGES[@]}"; do
+            pkg_name="$(node -e "console.log(require('./$pkg_dir/package.json').name)")"
+            echo "Validating $pkg_name..."
+
+            # Check package.json for forbidden dep specs
+            for pattern in "${FORBIDDEN_DEP_PATTERNS[@]}"; do
+              if grep -qE "\"$pattern" "$pkg_dir/package.json"; then
+                echo "FATAL: $pkg_name package.json contains '$pattern'"
+                exit 1
+              fi
+            done
+
+            # Check packed file list for forbidden files (use pnpm pack for workspace:^ resolution)
+            TEMP_TAR_DIR="$(mktemp -d)"
+            PACK_OUTPUT="$(cd "$pkg_dir" && pnpm pack --pack-destination "$TEMP_TAR_DIR" 2>&1)"
+            TARBALL="$(ls "$TEMP_TAR_DIR"/*.tgz 2>/dev/null | head -1)"
+            for pattern in "${FORBIDDEN_FILE_PATTERNS[@]}"; do
+              if [[ -n "$TARBALL" ]] && tar -tzf "$TARBALL" | grep -qi "$pattern"; then
+                echo "FATAL: $pkg_name pack contains forbidden file matching '$pattern'"
+                exit 1
+              fi
+            done
+
+            # Also check packed package.json for bad workspace specs
+            if [[ -n "$TARBALL" ]]; then
+              EXTRACT_DIR="$TEMP_TAR_DIR/extract"
+              mkdir -p "$EXTRACT_DIR"
+              tar -xzf "$TARBALL" -C "$EXTRACT_DIR"
+              PACKED_PKG="$EXTRACT_DIR/package/package.json"
+              for pattern in "${FORBIDDEN_DEP_PATTERNS[@]}"; do
+                if grep -qE "\"$pattern" "$PACKED_PKG" 2>/dev/null; then
+                  echo "FATAL: $pkg_name PACKED package.json contains forbidden dep '$pattern'"
+                  exit 1
+                fi
+              done
+              rm -rf "$EXTRACT_DIR"
+            fi
+            rm -rf "$TEMP_TAR_DIR"
+
+            echo "  $pkg_name OK"
+          done
+
+          echo "All pack validations passed."
+
+      - name: Publish packages
+        if: ${{ inputs.dry_run == false }}
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+
+          # Create temporary .npmrc for auth (never write to repo)
+          TEMP_NPMRC="$(mktemp)"
+          printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > "$TEMP_NPMRC"
+          export NPM_CONFIG_USERCONFIG="$TEMP_NPMRC"
+
+          PACKAGES=(
+            "sdk"
+            "packages/runner-core"
+            "packages/circle-cli-adapter"
+            "apps/arclayer-runner"
+            "packages/arclayer-setup"
+          )
+
+          for pkg_dir in "${PACKAGES[@]}"; do
+            pkg_name="$(node -e "console.log(require('./$pkg_dir/package.json').name)")"
+            pkg_version="$(node -e "console.log(require('./$pkg_dir/package.json').version)")"
+            echo "Publishing $pkg_name@$pkg_version (tag: $TAG)..."
+            pnpm publish --access public --tag "$TAG" --no-git-checks "$pkg_dir"
+            echo "  Published $pkg_name@$pkg_version"
+          done
+
+          rm -f "$TEMP_NPMRC"
+
+      - name: Verify published packages
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          TAG="${{ inputs.tag }}"
+          for pkg in @arclayer/sdk @arclayer/runner-core @arclayer/circle-cli-adapter @arclayer/runner @arclayer/setup; do
+            if [[ "$TAG" == "next" ]]; then
+              VER="$(npm view "$pkg@next" version 2>/dev/null || echo 'NOT FOUND')"
+            else
+              VER="$(npm view "$pkg" version 2>/dev/null || echo 'NOT FOUND')"
+            fi
+            echo "  $pkg@$VER"
+          done
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run == true }}
+        run: |
+          echo "────────────────────────────────────────"
+          echo "  DRY RUN COMPLETE — no packages published"
+          echo "  Re-run with dry_run=false to publish"
+          echo "────────────────────────────────────────"
