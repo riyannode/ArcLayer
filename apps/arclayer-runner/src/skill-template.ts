@@ -50,6 +50,49 @@ Your runtime calls these tools via \`arclayer-runner mcp\` (STDIO):
 - \`erc8183.provider_run_and_submit\` — Full lifecycle: run + submit
 - \`erc8183.provider_runtime_status\` — Provider runtime context
 
+## x402 Usage
+
+### Inspect first (free)
+\`\`\`json
+{ "name": "x402.inspect", "arguments": { "url": "https://arclayers.xyz/api/x402/protected-resource" } }
+\`\`\`
+
+### Pay (requires paymentEnabled)
+\`\`\`json
+{
+  "name": "x402.pay",
+  "arguments": {
+    "url": "https://arclayers.xyz/api/x402/protected-resource",
+    "maxAmountUsdc": "0.01",
+    "reason": "access protected resource",
+    "idempotencyKey": "my-unique-key-123"
+  }
+}
+\`\`\`
+
+**Required fields:** url, maxAmountUsdc, reason
+**Optional:** idempotencyKey (prevents double-spend), method, body
+
+### Batch pay
+\`\`\`json
+{
+  "name": "x402.batch_pay",
+  "arguments": {
+    "batchId": "batch-001",
+    "taskId": "task-001",
+    "payments": [
+      {
+        "type": "x402_service_pay",
+        "url": "https://arclayers.xyz/api/x402/protected-resource",
+        "maxAmountUsdc": "0.01",
+        "reason": "resource A",
+        "idempotencyKey": "batch-001:item-0"
+      }
+    ]
+  }
+}
+\`\`\`
+
 ## Usage Rules
 
 1. **Never ask for private keys, seed phrases, or OTP.** Runner handles wallet operations safely.

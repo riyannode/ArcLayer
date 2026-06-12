@@ -135,7 +135,7 @@ export function registerSetupCommand(program: Command): void {
         const batchMaxTotalUsdc = await askOptional(rl, "  Batch max total (USDC)", "0.05");
 
         // ── 7. Allowed x402 hosts ──────────────────────────────────────
-        console.log("\n  Allowed x402 hosts (comma-separated, or empty for any): ");
+        console.log("\n  Allowed x402 hosts (comma-separated, domain only, e.g. arclayers.xyz): ");
         const hostsInput = await ask(rl, "  ");
         const allowedX402Hosts = hostsInput
           ? hostsInput.split(",").map((h) => h.trim()).filter(Boolean)
