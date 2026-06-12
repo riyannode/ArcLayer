@@ -225,4 +225,60 @@ describe("InitFileConfigSchema", () => {
     expect(config.runtime.target).toBe("openclaw");
     expect(config.mcp.mode).toBe("stdio");
   });
+
+  it("allowIdentityRegister defaults to false", () => {
+    const config = InitFileConfigSchema.parse({ agentId: "test-agent" });
+    expect(config.allowIdentityRegister).toBe(false);
+  });
+
+  it("allowIdentityRegister true is preserved from config.json", () => {
+    const config = InitFileConfigSchema.parse({
+      agentId: "test-agent",
+      allowIdentityRegister: true
+    });
+    expect(config.allowIdentityRegister).toBe(true);
+  });
+
+  it("allowIdentityRegister string 'true' is parsed", () => {
+    const config = InitFileConfigSchema.parse({
+      agentId: "test-agent",
+      allowIdentityRegister: "true"
+    });
+    expect(config.allowIdentityRegister).toBe(true);
+  });
+
+  it("allowGatewayDeposit defaults to false", () => {
+    const config = InitFileConfigSchema.parse({ agentId: "test-agent" });
+    expect(config.allowGatewayDeposit).toBe(false);
+  });
+
+  it("allowGatewayDeposit true is preserved", () => {
+    const config = InitFileConfigSchema.parse({
+      agentId: "test-agent",
+      allowGatewayDeposit: true
+    });
+    expect(config.allowGatewayDeposit).toBe(true);
+  });
+
+  it("transformFileConfig preserves allowIdentityRegister", () => {
+    const { transformFileConfig } = require("@arclayer/runner-core");
+    const file = InitFileConfigSchema.parse({
+      agentId: "test-agent",
+      allowIdentityRegister: true
+    });
+    const policy = PolicyConfigSchema.parse({});
+    const flat = transformFileConfig(file, policy);
+    expect(flat.allowIdentityRegister).toBe(true);
+  });
+
+  it("transformFileConfig preserves allowGatewayDeposit", () => {
+    const { transformFileConfig } = require("@arclayer/runner-core");
+    const file = InitFileConfigSchema.parse({
+      agentId: "test-agent",
+      allowGatewayDeposit: true
+    });
+    const policy = PolicyConfigSchema.parse({});
+    const flat = transformFileConfig(file, policy);
+    expect(flat.allowGatewayDeposit).toBe(true);
+  });
 });

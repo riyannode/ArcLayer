@@ -209,7 +209,9 @@ describe("Runner MCP Server", () => {
 
   it("returns error for unknown tool", async () => {
     const result = await callMcp("tools/call", { name: "nonexistent.tool", arguments: {} });
-    expect(result.result.error).toContain("Unknown tool");
+    // Unknown tools are blocked by role enforcement (not in any role's tool list)
+    const content = JSON.parse(result.result.content[0].text);
+    expect(content.error).toContain("ROLE_TOOL_NOT_ALLOWED");
   });
 
   it("returns error for unknown method", async () => {
