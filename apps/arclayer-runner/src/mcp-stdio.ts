@@ -14,8 +14,19 @@
 
 import { createInterface } from "node:readline";
 import type { Readable, Writable } from "node:stream";
+import { createRequire } from "node:module";
 import { RUNNER_MCP_TOOLS } from "./mcp-schemas";
 import { handleMcpTool, type McpToolContext } from "./mcp-tools";
+import { getToolNamesForRole } from "./tool-registry";
+
+// Read version from package.json (works in both dev and bundled)
+let PKG_VERSION = "0.1.3";
+try {
+  const require = createRequire(import.meta.url);
+  PKG_VERSION = require("../package.json").version;
+} catch {
+  // fallback — keep default
+}
 
 export type JsonRpcRequest = {
   jsonrpc: "2.0";
@@ -33,7 +44,7 @@ export type JsonRpcResponse = {
 
 const SERVER_INFO = {
   name: "arclayer-runner",
-  version: "0.1.0"
+  version: PKG_VERSION
 };
 
 const PROTOCOL_VERSION = "2024-11-05";
@@ -104,6 +115,33 @@ export async function handleStdioRequest(
 
       if (!toolName) {
         return rpcError(id, -32602, "Missing tool name");
+      }
+
+      // ── Role authorization gate ──────────────────────────────────────
+      // tools/list is cosmetic filtering. This is the REAL enforcement.
+      const allowedRoles = ctx.config.allowedRoles ?? [ctx.config.defaultRole];
+      const allowedTools = new Set<string>();
+      for (const role of allowedRoles) {
+        for (const name of getToolNamesForRole(role)) {
+          allowedTools.add(name);
+        }
+      }
+      if (!allowedTools.has(toolName)) {
+        stderrLog(`tools/call BLOCKED: ${toolName} not allowed for role ${ctx.config.defaultRole}`);
+        return rpcOk(id, {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                ok: false,
+                error: "ROLE_TOOL_NOT_ALLOWED",
+                message: `Tool '${toolName}' is not allowed for role '${ctx.config.defaultRole}'`,
+                allowedRoles
+              })
+            }
+          ],
+          isError: true
+        });
       }
 
       stderrLog(`tools/call: ${toolName}`);
