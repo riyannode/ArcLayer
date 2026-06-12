@@ -107,10 +107,13 @@ type RawJobEventRow = {
 };
 
 /**
- * Raw ERC-8004 identity event row.
- * Goldsky emits Transfer events with from_address, to_address, token_id.
- * Registration = from_address is zero address.
- * Supports both token_id (Goldsky native) and agent_id (if pipeline adds it).
+ * Raw ERC-8004 identity event row — only columns guaranteed by Goldsky draft schema.
+ * goldsky/arclayer-events.draft.yaml documents:
+ *   block_number, block_timestamp, transaction_hash, log_index,
+ *   event_name, from_address, to_address, token_id
+ *
+ * Enriched columns (metadata_uri, controller, source, etc.) are NOT queried
+ * unless a separate enrichment source is added later.
  */
 type RawAgentEventRow = {
   event_name: string;
@@ -119,20 +122,10 @@ type RawAgentEventRow = {
   log_index: number;
   /** Goldsky native column for ERC-721 Transfer. */
   token_id: string | number | null;
-  /** Alias some pipelines may add. Used as fallback. */
-  agent_id: string | number | null;
   /** Transfer.from — zero address for registrations. */
   from_address: string | null;
   /** Transfer.to — the controller/recipient. */
   to_address: string | null;
-  /** Optional: enriched by pipeline or join. */
-  controller: string | null;
-  metadata_uri: string | null;
-  skill_hash: string | null;
-  source: string | null;
-  chain_id: number | null;
-  registry_address: string | null;
-  contract_address: string | null;
 };
 
 // ── Pagination helper ──────────────────────────────────────────────────────
@@ -216,26 +209,24 @@ function normalizeJobEvent(row: RawJobEventRow): IndexedJobEvent {
  * Normalize a Goldsky identity row to an SDK agent event.
  *
  * ERC-8004 registration = Transfer event where from_address is the zero address.
- * The token_id (or agent_id) is the ERC-721 token = agent ID.
- * Controller = to_address (the recipient of the mint).
+ * token_id is the ERC-721 token = agent ID.
+ * controller = to_address (the recipient of the mint).
+ *
+ * Only guaranteed Goldsky columns are used. Enriched fields (metadataURI,
+ * skillHash, source, chainId, registryAddress, contractAddress) are left
+ * undefined unless a separate enrichment source is added later.
  */
 function normalizeAgentEvent(row: RawAgentEventRow): IndexedAgentEvent {
-  const agentId = row.token_id ?? row.agent_id;
-  const controller = row.controller ?? row.to_address ?? ZERO_ADDRESS;
-
   return {
     eventName: row.event_name as IndexedAgentEvent["eventName"],
     blockNumber: BigInt(row.block_number),
     transactionHash: row.transaction_hash as `0x${string}`,
     logIndex: Number(row.log_index),
-    agentId: agentId != null ? BigInt(agentId) : 0n,
-    controller: controller as any,
-    metadataURI: row.metadata_uri ?? undefined,
-    skillHash: row.skill_hash as any,
-    source: row.source ?? undefined,
-    chainId: row.chain_id ?? undefined,
-    registryAddress: row.registry_address as any,
-    contractAddress: row.contract_address as any,
+    agentId: row.token_id != null ? BigInt(row.token_id) : 0n,
+    controller: (row.to_address ?? ZERO_ADDRESS) as any,
+    // Enriched fields — undefined from raw Transfer rows.
+    // metadataURI, skillHash, source, chainId, registryAddress, contractAddress
+    // will be populated when a separate enrichment source is added.
   };
 }
 
@@ -337,7 +328,7 @@ async function fetchRawAgentEvents(): Promise<RawAgentEventRow[]> {
     let query = supabase
       .schema(GOLDSKY_SCHEMA)
       .from(TABLES.erc8004Identity)
-      .select("event_name,block_number,transaction_hash,log_index,token_id,agent_id,from_address,to_address,controller,metadata_uri,skill_hash,source,chain_id,registry_address,contract_address")
+      .select("event_name,block_number,transaction_hash,log_index,token_id,from_address,to_address")
       .eq("from_address", ZERO_ADDRESS)
       .order("block_number", { ascending: true })
       .order("log_index", { ascending: true })
