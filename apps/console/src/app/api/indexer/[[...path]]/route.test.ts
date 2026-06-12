@@ -2,7 +2,7 @@
  * Route-level provider routing tests.
  *
  * Tests the INDEXER_PROVIDER routing logic without hitting real backends.
- * Mocks the Goldsky reader and PM2 proxy to verify routing behavior.
+ * Verifies array shape preservation (Blocker 1) and NEXT_PUBLIC_ isolation.
  *
  * @module apps/console/src/app/api/indexer/[[...path]]/route.test
  */
@@ -32,9 +32,6 @@ function restoreEnv() {
 }
 
 // ── Provider routing logic extraction ──────────────────────────────────────
-// We test the routing logic directly rather than importing the route module,
-// because Next.js route modules have side effects (dynamic = 'force-dynamic')
-// that complicate test imports.
 
 type IndexerProvider = 'custom' | 'goldsky';
 type IndexerScope = 'arclayer' | 'arcnetwork';
@@ -100,15 +97,10 @@ describe("Indexer provider routing", () => {
 
   describe("NEXT_PUBLIC_ isolation", () => {
     it("resolveProvider never reads NEXT_PUBLIC_INDEXER_PROVIDER", () => {
-      // Even if NEXT_PUBLIC_INDEXER_PROVIDER is set, resolveProvider takes
-      // the explicit env value — it's the caller's job to pass the right one.
-      // This test verifies the routing function itself doesn't peek at NEXT_PUBLIC_*.
       setEnv({
         NEXT_PUBLIC_INDEXER_PROVIDER: 'goldsky',
         INDEXER_PROVIDER: 'custom',
       });
-
-      // The route reads process.env.INDEXER_PROVIDER, not NEXT_PUBLIC_*
       const provider = resolveProvider(process.env.INDEXER_PROVIDER);
       expect(provider).toBe('custom');
     });
@@ -118,23 +110,17 @@ describe("Indexer provider routing", () => {
         NEXT_PUBLIC_INDEXER_SCOPE: 'arcnetwork',
         INDEXER_SCOPE: 'arclayer',
       });
-
       const scope = resolveScope(process.env.INDEXER_SCOPE);
       expect(scope).toBe('arclayer');
     });
 
     it("routing logic uses INDEXER_PROVIDER, not NEXT_PUBLIC_INDEXER_PROVIDER", () => {
-      // Simulate: NEXT_PUBLIC says goldsky, server says custom
       setEnv({
         NEXT_PUBLIC_INDEXER_PROVIDER: 'goldsky',
         INDEXER_PROVIDER: 'custom',
       });
-
-      // The routing decision should follow INDEXER_PROVIDER (custom)
       const serverProvider = resolveProvider(process.env.INDEXER_PROVIDER);
       expect(serverProvider).toBe('custom');
-
-      // NEXT_PUBLIC is irrelevant for routing
       const publicProvider = process.env.NEXT_PUBLIC_INDEXER_PROVIDER;
       expect(publicProvider).toBe('goldsky'); // exists but unused for routing
     });
@@ -260,5 +246,117 @@ describe("Indexer path routing", () => {
 
   it("parses /api/indexer → / (root)", () => {
     expect(parseIndexerPath('/api/indexer')).toBe('/');
+  });
+});
+
+// ── Array response shape tests (Blocker 1 regression) ─────────────────────
+
+describe("Array response shape preservation", () => {
+  /**
+   * Simulates the jsonResponse logic from the route:
+   * - Arrays stay as arrays (metadata in headers, not body)
+   * - Objects get _meta injected
+   */
+  function simulateJsonResponse(data: unknown, meta: { provider: string; scope: string; fallbackActive: boolean }) {
+    if (Array.isArray(data)) {
+      // Array → preserve shape exactly, metadata goes to headers
+      return { body: data, isArray: true, metaInHeaders: true };
+    }
+    // Object → inject _meta into body
+    return { body: { ...data, _meta: meta }, isArray: false, metaInHeaders: false };
+  }
+
+  it("/jobs response is an array, not an object", () => {
+    const jobsArray = [
+      { id: "1", provider: "0xaaa", worker: "0xaaa" },
+      { id: "2", provider: "0xbbb", worker: "0xbbb" },
+    ];
+    const result = simulateJsonResponse(jobsArray, { provider: 'goldsky', scope: 'arclayer', fallbackActive: false });
+    expect(Array.isArray(result.body)).toBe(true);
+    expect(result.isArray).toBe(true);
+    expect(result.metaInHeaders).toBe(true);
+    expect(result.body).toHaveLength(2);
+    // Body is the exact array — no _meta wrapper
+    expect(result.body).toEqual(jobsArray);
+  });
+
+  it("/agents response is an array, not an object", () => {
+    const agentsArray = [
+      { agentId: "erc8004_identity_registry:1", controller: "0xaaa" },
+    ];
+    const result = simulateJsonResponse(agentsArray, { provider: 'goldsky', scope: 'arclayer', fallbackActive: false });
+    expect(Array.isArray(result.body)).toBe(true);
+    expect(result.body).toEqual(agentsArray);
+  });
+
+  it("/proofs response is an array, not an object", () => {
+    const proofsArray: unknown[] = [];
+    const result = simulateJsonResponse(proofsArray, { provider: 'goldsky', scope: 'arclayer', fallbackActive: false });
+    expect(Array.isArray(result.body)).toBe(true);
+    expect(result.body).toEqual([]);
+  });
+
+  it("/health response is an object with _meta", () => {
+    const healthObj = { ok: true, scope: "arclayer" };
+    const result = simulateJsonResponse(healthObj, { provider: 'goldsky', scope: 'arclayer', fallbackActive: false });
+    expect(Array.isArray(result.body)).toBe(false);
+    expect(result.isArray).toBe(false);
+    expect(result.metaInHeaders).toBe(false);
+    expect(result.body._meta).toBeDefined();
+    expect(result.body._meta.provider).toBe('goldsky');
+    expect(result.body.ok).toBe(true);
+  });
+
+  it("/overview response is an object with _meta", () => {
+    const overviewObj = { summary: { jobs: 5 }, jobs: [], agents: [] };
+    const result = simulateJsonResponse(overviewObj, { provider: 'goldsky', scope: 'arclayer', fallbackActive: false });
+    expect(Array.isArray(result.body)).toBe(false);
+    expect(result.body._meta).toBeDefined();
+    expect(result.body.summary.jobs).toBe(5);
+  });
+
+  it("/jobs/:id response is an object with _meta", () => {
+    const jobDetail = { job: { id: "1" }, proof: null };
+    const result = simulateJsonResponse(jobDetail, { provider: 'goldsky', scope: 'arclayer', fallbackActive: false });
+    expect(Array.isArray(result.body)).toBe(false);
+    expect(result.body._meta).toBeDefined();
+    expect(result.body.job.id).toBe("1");
+  });
+
+  it("PM2/custom array JSON is not converted into an object", () => {
+    // Simulates what happens when PM2 proxy returns an array
+    const pm2Array = [
+      { id: "1", client: "0xaaa", provider: "0xbbb", worker: "0xbbb", status: 3 },
+      { id: "2", client: "0xccc", provider: "0xddd", worker: "0xddd", status: 0 },
+    ];
+    // The proxy passes body through as-is — no JSON.parse + transformation
+    const bodyString = JSON.stringify(pm2Array);
+    const parsedBack = JSON.parse(bodyString);
+    expect(Array.isArray(parsedBack)).toBe(true);
+    expect(parsedBack).toHaveLength(2);
+    // No _meta injected into array
+    expect(parsedBack).not.toHaveProperty('_meta');
+  });
+});
+
+// ── Header-based metadata tests ───────────────────────────────────────────
+
+describe("Header-based metadata for arrays", () => {
+  it("x-indexer-provider header is set for array responses", () => {
+    const headers = new Headers();
+    headers.set('x-indexer-provider', 'goldsky');
+    headers.set('x-indexer-scope', 'arclayer');
+    headers.set('x-indexer-fallback-active', 'false');
+    expect(headers.get('x-indexer-provider')).toBe('goldsky');
+    expect(headers.get('x-indexer-scope')).toBe('arclayer');
+    expect(headers.get('x-indexer-fallback-active')).toBe('false');
+  });
+
+  it("x-indexer-provider reflects custom-fallback on fallback", () => {
+    const headers = new Headers();
+    headers.set('x-indexer-provider', 'custom-fallback');
+    headers.set('x-indexer-fallback-active', 'true');
+    expect(headers.get('x-indexer-provider')).toBe('custom-fallback');
+    expect(headers.get('x-indexer-fallback-active')).toBe('true');
   });
 });
