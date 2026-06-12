@@ -20,7 +20,7 @@ import { handleMcpTool, type McpToolContext } from "./mcp-tools";
 import { getToolNamesForRole } from "./tool-registry";
 
 // Read version from package.json (works in both dev and bundled)
-let PKG_VERSION = "0.1.3";
+let PKG_VERSION = "0.1.4";
 try {
   const require = createRequire(import.meta.url);
   PKG_VERSION = require("../package.json").version;

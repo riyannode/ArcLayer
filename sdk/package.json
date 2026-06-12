@@ -1,8 +1,8 @@
 {
   "name": "@arclayer/sdk",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "type": "module",
-  "description": "ArcLayer SDK — addresses, ABIs, chain config, tx builders, and protocol helpers for Arc Network",
+  "description": "ArcLayer SDK \u2014 addresses, ABIs, chain config, tx builders, and protocol helpers for Arc Network",
   "license": "MIT",
   "repository": {
     "type": "git",
