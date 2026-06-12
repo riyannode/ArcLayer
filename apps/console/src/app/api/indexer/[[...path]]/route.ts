@@ -81,7 +81,7 @@ function jsonResponse(
   }
 
   // Object → inject _meta into body
-  const enriched = { ...data, _meta: m };
+  const enriched = { ...(data as Record<string, unknown>), _meta: m };
   return new NextResponse(JSON.stringify(enriched, null, 2), {
     ...init,
     headers,
