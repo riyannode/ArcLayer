@@ -12,7 +12,16 @@ import { signDispatchRequest, HMAC_TIMESTAMP_HEADER, HMAC_NONCE_HEADER, HMAC_SIG
 import { findRunnerForTask, getRunnerSecret, insertDispatchLog, touchRunner } from './store';
 import type { DispatchInput, DispatchResult } from './types';
 
-const DISPATCH_TIMEOUT_MS = 30_000;
+const DEFAULT_DISPATCH_TIMEOUT_MS = 30_000;
+
+function getDispatchTimeoutMs(): number {
+  const env = process.env.ARCLAYER_RUNNER_DISPATCH_TIMEOUT_MS;
+  if (env) {
+    const parsed = Number.parseInt(env, 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return DEFAULT_DISPATCH_TIMEOUT_MS;
+}
 
 /**
  * Dispatch a task to a registered runner via HMAC-signed HTTP.
@@ -65,7 +74,7 @@ export async function dispatchToRunner(input: DispatchInput): Promise<DispatchRe
 
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), DISPATCH_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), getDispatchTimeoutMs());
 
     const res = await fetch(url, {
       method: 'POST',

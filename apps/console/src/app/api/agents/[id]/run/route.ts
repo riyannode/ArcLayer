@@ -99,9 +99,11 @@ async function handler(req: NextRequest) {
     // Empty body is fine for simple runs
   }
 
-  const taskId = (body.taskId as string) ?? `task_${Date.now()}_${randomUUID().slice(0, 8)}`;
-  const role = (body.role as string) ?? 'provider';
-  const protocol = (body.protocol as string) ?? 'generic';
+  // Public paid-run: role and protocol are server-controlled.
+  // External users cannot set these — Console is not a confused deputy.
+  const role = 'provider';
+  const protocol = 'generic';
+  const taskId = `task_${Date.now()}_${randomUUID().slice(0, 8)}`;
 
   try {
     const result = await dispatchToRunner({
@@ -142,7 +144,7 @@ async function handler(req: NextRequest) {
         sha256: result.proofSha256,
       },
       payment: { status: 'settled' },
-    });
+    }, { status: result.ok ? 200 : 502 });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
