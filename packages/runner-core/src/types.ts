@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RunnerError } from "./errors";
 
 // ── Runtime & Role ─────────────────────────────────────────────────────────
 
@@ -277,6 +278,32 @@ export const RuntimeResultSchema = z.object({
 });
 
 export type RuntimeResult = z.infer<typeof RuntimeResultSchema>;
+
+/**
+ * Assert that a runtime result is in a submittable state.
+ * Only "completed" results may be hashed and submitted on-chain.
+ * All other statuses are rejected with a clear error message.
+ *
+ * Call this before hashing + submitting a deliverable.
+ */
+export function assertSubmittableRuntimeResult(result: RuntimeResult): void {
+  if (result.status === "completed") return;
+
+  const status = result.status ?? "unknown";
+  throw new RunnerError(
+    "RUNTIME_NOT_SUBMITTABLE",
+    `Cannot submit provider deliverable for runtime status: ${status}`,
+    422
+  );
+}
+
+/**
+ * Check whether a runtime result is in a submittable state.
+ * Returns true only for "completed" status.
+ */
+export function isSubmittableProviderResult(result: RuntimeResult): boolean {
+  return result.status === "completed";
+}
 
 // ── ERC-8183 Provider Job ───────────────────────────────────────────────────
 

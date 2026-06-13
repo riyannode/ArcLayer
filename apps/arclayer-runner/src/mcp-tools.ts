@@ -255,7 +255,7 @@ export async function handleMcpTool(
         description: string;
         input: unknown;
       }>(name, args);
-      return services.runErc8183ProviderJob({
+      return services.runProviderJob({
         taskId: input.taskId,
         jobId: input.jobId,
         agentId: input.agentId,
@@ -292,7 +292,7 @@ export async function handleMcpTool(
         description: string;
         input: unknown;
       }>(name, args);
-      return services.runErc8183ProviderJob({
+      return services.runAndSubmitProviderJob({
         taskId: input.taskId,
         jobId: input.jobId,
         agentId: input.agentId,

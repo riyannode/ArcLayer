@@ -75,7 +75,7 @@ export function buildExternalBotManifest(input: ManifestBuildInput): AgentManife
       outputFormats: ['markdown', 'json', 'proof'],
     },
     proof: {
-      types: ['signed_result', 'workproof_nft', 'url'],
+      types: ['signed_result', 'payload_hash', 'payment_receipt', 'erc8183_settlement', 'url'],
       signing: 'eip191',
     },
     host: 'self-hosted',
