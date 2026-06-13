@@ -3,6 +3,8 @@ import {
   McpToolBroker,
   BrokerError,
   BrokerErrorCode,
+  isNonIdempotentWrite,
+  isBrokerAbortOrTimeout,
   type ToolBudgetConfig,
 } from "./mcp-broker";
 
@@ -623,6 +625,244 @@ describe("McpToolBroker", () => {
     it("getAuditLog returns readonly array", () => {
       const log = broker.getAuditLog();
       expect(log).toHaveLength(0);
+    });
+  });
+
+  // ── Non-idempotent write tool timeout ──────────────────────────────────
+
+  describe("non-idempotent write tool defaults", () => {
+    it("isNonIdempotentWrite returns true for x402 payment tools", () => {
+      expect(isNonIdempotentWrite("x402.pay")).toBe(true);
+      expect(isNonIdempotentWrite("x402.batch_pay")).toBe(true);
+    });
+
+    it("isNonIdempotentWrite returns true for all erc8183 lifecycle writes", () => {
+      const tools = [
+        "erc8183.provider_submit_deliverable",
+        "erc8183.provider_run_and_submit",
+        "erc8183.create_job",
+        "erc8183.set_budget",
+        "erc8183.approve_usdc",
+        "erc8183.fund_job",
+        "erc8183.complete_job",
+        "erc8183.reject_job",
+        "erc8183.claim_refund",
+        "erc8183.set_provider",
+      ];
+      for (const tool of tools) {
+        expect(isNonIdempotentWrite(tool)).toBe(true);
+      }
+    });
+
+    it("isNonIdempotentWrite returns true for identity and gateway writes", () => {
+      expect(isNonIdempotentWrite("erc8004.register_via_circle_cli")).toBe(true);
+      expect(isNonIdempotentWrite("circle.gateway_deposit")).toBe(true);
+    });
+
+    it("isNonIdempotentWrite returns false for read-only tools", () => {
+      expect(isNonIdempotentWrite("runner.health")).toBe(false);
+      expect(isNonIdempotentWrite("x402.inspect")).toBe(false);
+      expect(isNonIdempotentWrite("runner.audit_log")).toBe(false);
+      expect(isNonIdempotentWrite("circle.status")).toBe(false);
+    });
+
+    it("every write tool in tool-registry (risk: external-process|payment) is covered", () => {
+      // Canonical list of tools that perform on-chain writes or payments.
+      // Derived from tool-registry.ts risk labels: "external-process", "payment".
+      // If a new write tool is added to the registry, it MUST be added to
+      // NON_IDEMPOTENT_WRITE_TOOLS or this test will fail.
+      const registryWriteTools = [
+        "x402.pay",
+        "x402.batch_pay",
+        "erc8183.provider_submit_deliverable",
+        "erc8183.provider_run_and_submit",
+        "erc8183.create_job",
+        "erc8183.set_budget",
+        "erc8183.approve_usdc",
+        "erc8183.fund_job",
+        "erc8183.complete_job",
+        "erc8183.reject_job",
+        "erc8183.claim_refund",
+        "erc8183.set_provider",
+        "erc8004.register_via_circle_cli",
+        "circle.gateway_deposit",
+      ];
+      for (const tool of registryWriteTools) {
+        expect(isNonIdempotentWrite(tool)).toBe(true);
+      }
+    });
+
+    it("getTimeoutMs returns 120s for write tools by default (no defaultTimeoutMs)", () => {
+      const defaultBroker = new McpToolBroker();
+      expect(defaultBroker.getTimeoutMs("x402.pay")).toBe(120_000);
+      expect(defaultBroker.getTimeoutMs("erc8183.provider_submit_deliverable")).toBe(120_000);
+      expect(defaultBroker.getTimeoutMs("erc8183.fund_job")).toBe(120_000);
+      expect(defaultBroker.getTimeoutMs("circle.gateway_deposit")).toBe(120_000);
+    });
+
+    it("getTimeoutMs returns 120s for write tools EVEN WHEN defaultTimeoutMs=30000", () => {
+      // This is the critical case: RunnerConfigSchema defaults defaultTimeoutMs
+      // to 30000, which must NOT shadow the write tool 120s default.
+      const brokerWith30s = new McpToolBroker({ defaultTimeoutMs: 30_000 });
+      expect(brokerWith30s.getTimeoutMs("x402.pay")).toBe(120_000);
+      expect(brokerWith30s.getTimeoutMs("erc8183.fund_job")).toBe(120_000);
+      expect(brokerWith30s.getTimeoutMs("erc8183.provider_submit_deliverable")).toBe(120_000);
+      expect(brokerWith30s.getTimeoutMs("erc8183.complete_job")).toBe(120_000);
+      expect(brokerWith30s.getTimeoutMs("circle.gateway_deposit")).toBe(120_000);
+    });
+
+    it("getTimeoutMs returns 30s for non-write tools by default", () => {
+      const defaultBroker = new McpToolBroker();
+      expect(defaultBroker.getTimeoutMs("runner.health")).toBe(30_000);
+      expect(defaultBroker.getTimeoutMs("x402.inspect")).toBe(30_000);
+    });
+
+    it("getTimeoutMs returns defaultTimeoutMs for read tools when configured", () => {
+      const customBroker = new McpToolBroker({ defaultTimeoutMs: 45_000 });
+      expect(customBroker.getTimeoutMs("runner.health")).toBe(45_000);
+      expect(customBroker.getTimeoutMs("x402.inspect")).toBe(45_000);
+    });
+
+    it("explicit timeoutOverridesMs wins over write tool default", () => {
+      const customBroker = new McpToolBroker({
+        timeoutOverridesMs: { "x402.pay": 60_000 },
+      });
+      expect(customBroker.getTimeoutMs("x402.pay")).toBe(60_000);
+    });
+
+    it("explicit timeoutOverridesMs wins over write tool default even with defaultTimeoutMs", () => {
+      const customBroker = new McpToolBroker({
+        defaultTimeoutMs: 30_000,
+        timeoutOverridesMs: { "x402.pay": 60_000 },
+      });
+      expect(customBroker.getTimeoutMs("x402.pay")).toBe(60_000);
+      // Other write tools still get 120s
+      expect(customBroker.getTimeoutMs("erc8183.fund_job")).toBe(120_000);
+    });
+  });
+
+  // ── Timeout audit distinction ──────────────────────────────────────────
+
+  describe("timeout audit distinction", () => {
+    it("recordFailure with timedOut=true sets timedOut on audit entry for write tools", () => {
+      broker.recordFailure(
+        "x402.pay",
+        { url: "https://api.test", maxAmountUsdc: "1.0" },
+        new BrokerError(BrokerErrorCode.TOOL_TIMEOUT, "timed out", {}),
+        5000,
+        true
+      );
+
+      const log = broker.getAuditLog();
+      expect(log).toHaveLength(1);
+      expect(log[0].ok).toBe(false);
+      expect(log[0].errorCode).toBe(BrokerErrorCode.TOOL_TIMEOUT);
+      expect(log[0].timedOut).toBe(true);
+    });
+
+    it("recordFailure with timedOut=true sets timedOut for erc8183 write tools", () => {
+      broker.recordFailure(
+        "erc8183.fund_job",
+        { jobId: "123" },
+        new BrokerError(BrokerErrorCode.TOOL_TIMEOUT, "timed out", {}),
+        5000,
+        true
+      );
+
+      const log = broker.getAuditLog();
+      expect(log).toHaveLength(1);
+      expect(log[0].timedOut).toBe(true);
+    });
+
+    it("recordFailure with timedOut=true does NOT set timedOut for non-write tools", () => {
+      broker.recordFailure(
+        "runner.health",
+        {},
+        new BrokerError(BrokerErrorCode.TOOL_TIMEOUT, "timed out", {}),
+        5000,
+        true
+      );
+
+      const log = broker.getAuditLog();
+      expect(log).toHaveLength(1);
+      expect(log[0].timedOut).toBeUndefined();
+    });
+
+    it("recordFailure with timedOut=false does NOT set timedOut for write tools", () => {
+      broker.recordFailure(
+        "x402.pay",
+        { url: "https://api.test", maxAmountUsdc: "1.0" },
+        new Error("some error"),
+        5000,
+        false
+      );
+
+      const log = broker.getAuditLog();
+      expect(log).toHaveLength(1);
+      expect(log[0].timedOut).toBeUndefined();
+    });
+
+    it("recordFailure default timedOut is false", () => {
+      broker.recordFailure(
+        "x402.pay",
+        { url: "https://api.test", maxAmountUsdc: "1.0" },
+        new Error("some error"),
+        5000
+      );
+
+      const log = broker.getAuditLog();
+      expect(log).toHaveLength(1);
+      expect(log[0].timedOut).toBeUndefined();
+    });
+  });
+
+  // ── isBrokerAbortOrTimeout ─────────────────────────────────────────────
+
+  describe("isBrokerAbortOrTimeout", () => {
+    it("returns true for BrokerError with TOOL_TIMEOUT code", () => {
+      const error = new BrokerError(BrokerErrorCode.TOOL_TIMEOUT, "timed out", {});
+      expect(isBrokerAbortOrTimeout(error)).toBe(true);
+    });
+
+    it("returns true for BrokerError TOOL_TIMEOUT even without signal", () => {
+      const error = new BrokerError(BrokerErrorCode.TOOL_TIMEOUT, "timed out", {});
+      expect(isBrokerAbortOrTimeout(error, undefined)).toBe(true);
+    });
+
+    it("returns true when signal is already aborted", () => {
+      const controller = new AbortController();
+      controller.abort();
+      expect(isBrokerAbortOrTimeout(new Error("killed"), controller.signal)).toBe(true);
+    });
+
+    it("returns true for AbortError (Node execFile signal kill)", () => {
+      const error = new Error("The operation was aborted");
+      error.name = "AbortError";
+      expect(isBrokerAbortOrTimeout(error)).toBe(true);
+    });
+
+    it("returns true for error with code ABORT_ERR", () => {
+      const error = { code: "ABORT_ERR", message: "aborted" };
+      expect(isBrokerAbortOrTimeout(error)).toBe(true);
+    });
+
+    it("returns false for normal Error without signal abort", () => {
+      expect(isBrokerAbortOrTimeout(new Error("ECONNREFUSED"))).toBe(false);
+    });
+
+    it("returns false for BrokerError with different code", () => {
+      const error = new BrokerError(BrokerErrorCode.BUDGET_EXCEEDED, "over budget", {});
+      expect(isBrokerAbortOrTimeout(error)).toBe(false);
+    });
+
+    it("returns false for non-aborted signal with normal error", () => {
+      const controller = new AbortController();
+      expect(isBrokerAbortOrTimeout(new Error("timeout"), controller.signal)).toBe(false);
+    });
+
+    it("returns false for null/undefined error without signal", () => {
+      expect(isBrokerAbortOrTimeout(null)).toBe(false);
+      expect(isBrokerAbortOrTimeout(undefined)).toBe(false);
     });
   });
 });

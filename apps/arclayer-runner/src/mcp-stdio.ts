@@ -73,10 +73,19 @@ function rpcError(
 
 /**
  * Wrap a promise with a timeout. Rejects with BrokerError on timeout.
+ *
+ * When the timeout fires, the provided AbortController is aborted so that
+ * underlying operations (Circle CLI subprocess, HTTP fetch) can be cancelled.
  */
-function withTimeout<T>(promise: Promise<T>, ms: number, toolName: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  toolName: string,
+  controller?: AbortController
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
+      controller?.abort();
       reject(new BrokerError(
         BrokerErrorCode.TOOL_TIMEOUT,
         `Tool '${toolName}' timed out after ${ms}ms`,
@@ -202,11 +211,16 @@ export async function handleStdioRequest(
       const timeoutMs = broker?.getTimeoutMs(toolName) ?? 30_000;
       const startTime = Date.now();
 
+      // Create AbortController for cancellation propagation.
+      const abortController = new AbortController();
+
       try {
+        const ctxWithSignal = { ...ctx, signal: abortController.signal };
         const result = await withTimeout(
-          handleMcpTool(toolName, toolArgs, ctx),
+          handleMcpTool(toolName, toolArgs, ctxWithSignal),
           timeoutMs,
-          toolName
+          toolName,
+          abortController
         );
 
         // ── Broker: post-execute checks (output size + audit) ──────────
@@ -226,9 +240,14 @@ export async function handleStdioRequest(
       } catch (error: any) {
         const durationMs = Date.now() - startTime;
 
+        // Detect timeout errors — for non-idempotent writes, the underlying
+        // operation may still complete even though the client timed out.
+        const isTimeout = error instanceof BrokerError
+          && error.code === BrokerErrorCode.TOOL_TIMEOUT;
+
         // Record failure in audit log
         if (broker) {
-          broker.recordFailure(toolName, toolArgs, error, durationMs);
+          broker.recordFailure(toolName, toolArgs, error, durationMs, isTimeout);
         }
 
         const message = error?.message ?? "Tool execution failed";

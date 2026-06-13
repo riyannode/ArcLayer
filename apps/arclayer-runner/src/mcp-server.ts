@@ -78,16 +78,21 @@ function brokerErrorToRpcCode(code: BrokerErrorCode): number {
 /**
  * Wrap a promise with a timeout. Rejects with BrokerError on timeout.
  *
- * NOTE: The underlying promise continues running after timeout. For tools
- * with non-cancellable side effects (Circle CLI writes, on-chain txs),
- * the operation may still complete after the client receives TIMEOUT.
- * This is acceptable for read-only tools and idempotent payment tools
- * (x402 uses idempotency keys). For non-idempotent writes, consider
- * increasing timeoutOverridesMs for those specific tools.
+ * When the timeout fires, the provided AbortController is aborted so that
+ * underlying operations (Circle CLI subprocess, HTTP fetch) can be cancelled.
+ * This distinguishes "client timed out, operation may have completed" from
+ * "operation actually failed" for non-idempotent on-chain writes.
  */
-function withTimeout<T>(promise: Promise<T>, ms: number, toolName: string): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  toolName: string,
+  controller?: AbortController
+): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
+      // Abort the underlying operation if an AbortController was provided
+      controller?.abort();
       reject(new BrokerError(
         BrokerErrorCode.TOOL_TIMEOUT,
         `Tool '${toolName}' timed out after ${ms}ms`,
@@ -215,14 +220,23 @@ export async function handleMcpRequest(
         const timeoutMs = toolBroker?.getTimeoutMs(toolName) ?? 30_000;
         const startTime = Date.now();
 
+        // Create AbortController for cancellation propagation.
+        // When the broker timeout fires, controller.abort() is called,
+        // which propagates the signal to Circle CLI subprocess / HTTP fetch.
+        const abortController = new AbortController();
+
         try {
-          // Pass broker into ctx so introspection tools (runner.broker_status,
-          // runner.audit_log) can access it via ctx.broker.
-          const ctxWithBroker = toolBroker ? { ...ctx, broker: toolBroker } : ctx;
+          // Pass broker + signal into ctx so tools can access them.
+          const ctxWithExtras = {
+            ...ctx,
+            broker: toolBroker ?? ctx.broker,
+            signal: abortController.signal,
+          };
           const result = await withTimeout(
-            handleMcpTool(toolName, toolArgs, ctxWithBroker),
+            handleMcpTool(toolName, toolArgs, ctxWithExtras),
             timeoutMs,
-            toolName
+            toolName,
+            abortController
           );
 
           // ── Broker: post-execute checks (output size + audit) ──────
@@ -234,9 +248,14 @@ export async function handleMcpRequest(
         } catch (error) {
           const durationMs = Date.now() - startTime;
 
+          // Detect timeout errors — for non-idempotent writes, the underlying
+          // operation may still complete even though the client timed out.
+          const isTimeout = error instanceof BrokerError
+            && error.code === BrokerErrorCode.TOOL_TIMEOUT;
+
           // Record failure in audit log (also releases call slot)
           if (toolBroker) {
-            toolBroker.recordFailure(toolName, toolArgs, error, durationMs);
+            toolBroker.recordFailure(toolName, toolArgs, error, durationMs, isTimeout);
           }
 
           if (error instanceof BrokerError) {
