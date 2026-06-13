@@ -1,5 +1,7 @@
 -- Runner Registry: stores registered runners that Console can dispatch tasks to.
--- Each runner has an HMAC secret (stored encrypted), endpoint, and allowed roles.
+-- Each runner has an HMAC secret, endpoint, and allowed roles.
+-- HMAC secret is stored as service-role-only bytea for MVP.
+-- For production: use pgcrypto/KMS or secret reference pattern.
 
 create table if not exists public.runner_registry (
   id uuid primary key default gen_random_uuid(),

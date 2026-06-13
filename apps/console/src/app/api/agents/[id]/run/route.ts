@@ -133,19 +133,24 @@ async function handler(req: NextRequest) {
     });
 
     // Store proof/receipt for successful dispatches
+    let proofStored = false;
     if (result.ok) {
-      await storeDispatchProof({
-        agentId: String(agentId),
-        taskId,
-        dispatchId: result.dispatchId,
-        runnerId: result.runnerId,
-        role,
-        result: result.result,
-        proofSha256: result.proofSha256,
-        durationMs: result.durationMs,
-      }).catch((err) => {
-        console.error('[run] Failed to store proof:', err);
-      });
+      try {
+        await storeDispatchProof({
+          agentId: String(agentId),
+          taskId,
+          dispatchId: result.dispatchId,
+          runnerId: result.runnerId,
+          role,
+          result: result.result,
+          proofSha256: result.proofSha256,
+          durationMs: result.durationMs,
+        });
+        proofStored = true;
+      } catch (proofErr) {
+        console.error('[run] Proof storage failed:', proofErr);
+        // Dispatch succeeded but proof didn't persist — caller should know
+      }
     }
 
     return humanJson(req, {
@@ -160,6 +165,7 @@ async function handler(req: NextRequest) {
       result: result.result,
       proof: {
         sha256: result.proofSha256,
+        stored: proofStored,
       },
       payment: { status: 'settled' },
     }, { status: result.ok ? 200 : 502 });
