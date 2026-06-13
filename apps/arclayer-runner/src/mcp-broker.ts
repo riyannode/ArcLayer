@@ -95,18 +95,23 @@ export type BrokerSessionState = {
 // subprocess and on-chain confirmation can be slow.
 
 const NON_IDEMPOTENT_WRITE_TOOLS = new Set([
+  // x402 payments (idempotency-keyed, but timeout still leaves ambiguous state)
   "x402.pay",
   "x402.batch_pay",
-  "erc8183.submit",
-  "erc8183.fund",
-  "erc8183.complete",
-  "erc8183.reject",
-  "erc8183.claim_refund",
-  "erc8183.set_provider",
+  // ERC-8183 lifecycle writes (on-chain, non-idempotent)
+  "erc8183.provider_submit_deliverable",
+  "erc8183.provider_run_and_submit",
   "erc8183.create_job",
   "erc8183.set_budget",
+  "erc8183.approve_usdc",
+  "erc8183.fund_job",
+  "erc8183.complete_job",
+  "erc8183.reject_job",
+  "erc8183.claim_refund",
+  "erc8183.set_provider",
+  // ERC-8004 identity write
   "erc8004.register_via_circle_cli",
-  "circle.approve_usdc",
+  // Circle gateway deposit
   "circle.gateway_deposit",
 ]);
 
@@ -407,13 +412,20 @@ export class McpToolBroker {
 
   /**
    * Get timeout for a specific tool.
-   * Non-idempotent write tools default to 120s (vs 30s) because Circle CLI
-   * subprocesses and on-chain confirmation can be slow.
+   *
+   * Precedence:
+   * 1. Explicit per-tool override (timeoutOverridesMs[toolName])
+   * 2. If non-idempotent write → write default 120s
+   * 3. Otherwise → defaultTimeoutMs or 30s
+   *
+   * This ensures write tools get 120s even when the broker is configured
+   * with defaultTimeoutMs=30000 (which is the RunnerConfigSchema default).
    */
   getTimeoutMs(toolName: string): number {
     return this.budget.timeoutOverridesMs?.[toolName]
-      ?? this.budget.defaultTimeoutMs
-      ?? (NON_IDEMPOTENT_WRITE_TOOLS.has(toolName) ? WRITE_TOOL_TIMEOUT_MS : 30_000);
+      ?? (NON_IDEMPOTENT_WRITE_TOOLS.has(toolName)
+        ? WRITE_TOOL_TIMEOUT_MS
+        : (this.budget.defaultTimeoutMs ?? 30_000));
   }
 
   /**
