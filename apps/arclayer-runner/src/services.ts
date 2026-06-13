@@ -319,11 +319,14 @@ export class RunnerServices {
     }
   }
 
-  async submitDeliverableViaCircleCli(input: {
-    jobId: string;
-    deliverableHash: `0x${string}`;
-    optParams?: `0x${string}`;
-  }) {
+  async submitDeliverableViaCircleCli(
+    input: {
+      jobId: string;
+      deliverableHash: `0x${string}`;
+      optParams?: `0x${string}`;
+    },
+    signal?: AbortSignal
+  ) {
     if (!this.config.circleWalletAddress) {
       return {
         ok: false,
@@ -342,7 +345,8 @@ export class RunnerServices {
       params: [input.jobId, input.deliverableHash, input.optParams ?? "0x"],
       contract: contractAddress,
       address: this.config.circleWalletAddress,
-      chain: this.config.chain
+      chain: this.config.chain,
+      signal,
     });
   }
 
@@ -353,7 +357,7 @@ export class RunnerServices {
    * Signature: createJob(provider, evaluator, expiredAt, description, hook)
    * hook is an address (not bytes) — the callback contract.
    */
-  async createJob(body: unknown) {
+  async createJob(body: unknown, signal?: AbortSignal) {
     const input = body as {
       provider: string;
       evaluator: string;
@@ -387,7 +391,8 @@ export class RunnerServices {
       ],
       contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       address: this.config.circleWalletAddress,
-      chain: this.config.chain
+      chain: this.config.chain,
+      signal,
     });
 
     const receipt = await this.receipts.append({
@@ -410,7 +415,7 @@ export class RunnerServices {
    * Set budget for an ERC-8183 job.
    * Signature: setBudget(jobId, amount, optParams)
    */
-  async setBudget(body: unknown) {
+  async setBudget(body: unknown, signal?: AbortSignal) {
     const input = body as { jobId: string; amount: string; optParams?: string };
 
     if (!this.config.circleWalletAddress) {
@@ -422,7 +427,8 @@ export class RunnerServices {
       params: [input.jobId, input.amount, input.optParams ?? "0x"],
       contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       address: this.config.circleWalletAddress,
-      chain: this.config.chain
+      chain: this.config.chain,
+      signal,
     });
 
     const receipt = await this.receipts.append({
@@ -445,7 +451,7 @@ export class RunnerServices {
    * Approve USDC for the ERC-8183 AgenticCommerce contract.
    * Must be called before fund().
    */
-  async approveUsdcForErc8183(body: unknown) {
+  async approveUsdcForErc8183(body: unknown, signal?: AbortSignal) {
     const input = body as { amount: string };
 
     if (!this.config.circleWalletAddress) {
@@ -457,7 +463,8 @@ export class RunnerServices {
       usdcAddress: CONTRACTS.USDC,
       spenderAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       walletAddress: this.config.circleWalletAddress,
-      chain: this.config.chain
+      chain: this.config.chain,
+      signal,
     });
 
     const receipt = await this.receipts.append({
@@ -480,7 +487,7 @@ export class RunnerServices {
    * Signature: fund(jobId, optParams)
    * Requires prior USDC approve.
    */
-  async fundJob(body: unknown) {
+  async fundJob(body: unknown, signal?: AbortSignal) {
     const input = body as { jobId: string; optParams?: string };
 
     if (!this.config.circleWalletAddress) {
@@ -492,7 +499,8 @@ export class RunnerServices {
       params: [input.jobId, input.optParams ?? "0x"],
       contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       address: this.config.circleWalletAddress,
-      chain: this.config.chain
+      chain: this.config.chain,
+      signal,
     });
 
     const receipt = await this.receipts.append({
@@ -516,7 +524,7 @@ export class RunnerServices {
    * Signature: complete(jobId, reason, optParams)
    * reason is bytes32 — strings are keccak256-hashed.
    */
-  async completeJob(body: unknown) {
+  async completeJob(body: unknown, signal?: AbortSignal) {
     const input = body as { jobId: string; reason: string; optParams?: string };
 
     if (!this.config.circleWalletAddress) {
@@ -532,7 +540,8 @@ export class RunnerServices {
       params: [input.jobId, reasonHash, input.optParams ?? "0x"],
       contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       address: this.config.circleWalletAddress,
-      chain: this.config.chain
+      chain: this.config.chain,
+      signal,
     });
 
     const receipt = await this.receipts.append({
@@ -556,7 +565,7 @@ export class RunnerServices {
    * Signature: reject(jobId, reason, optParams)
    * reason is bytes32 — strings are keccak256-hashed.
    */
-  async rejectJob(body: unknown) {
+  async rejectJob(body: unknown, signal?: AbortSignal) {
     const input = body as { jobId: string; reason: string; optParams?: string };
 
     if (!this.config.circleWalletAddress) {
@@ -572,7 +581,8 @@ export class RunnerServices {
       params: [input.jobId, reasonHash, input.optParams ?? "0x"],
       contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       address: this.config.circleWalletAddress,
-      chain: this.config.chain
+      chain: this.config.chain,
+      signal,
     });
 
     const receipt = await this.receipts.append({
@@ -596,7 +606,7 @@ export class RunnerServices {
    * Signature: claimRefund(uint256 jobId) — single arg, NO optParams.
    * Caller: client (job creator). Job must be expired.
    */
-  async claimRefund(body: unknown) {
+  async claimRefund(body: unknown, signal?: AbortSignal) {
     const input = body as { jobId: string };
 
     if (!this.config.circleWalletAddress) {
@@ -608,7 +618,8 @@ export class RunnerServices {
       params: [input.jobId],
       contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       address: this.config.circleWalletAddress,
-      chain: this.config.chain
+      chain: this.config.chain,
+      signal,
     });
 
     const receipt = await this.receipts.append({
@@ -632,7 +643,7 @@ export class RunnerServices {
    * Signature: setProvider(uint256 jobId, address provider_)
    * Caller: client (job creator). Job must be Open, current provider must be 0x0.
    */
-  async setProvider(body: unknown) {
+  async setProvider(body: unknown, signal?: AbortSignal) {
     const input = body as { jobId: string; provider: string };
 
     if (!this.config.circleWalletAddress) {
@@ -654,7 +665,8 @@ export class RunnerServices {
       params: [input.jobId, input.provider],
       contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       address: this.config.circleWalletAddress,
-      chain: this.config.chain
+      chain: this.config.chain,
+      signal,
     });
 
     const receipt = await this.receipts.append({
@@ -677,7 +689,7 @@ export class RunnerServices {
    * Gateway deposit — gated behind allowGatewayDeposit config flag.
    * Disabled by default. Only for devops-admin role.
    */
-  async gatewayDeposit(body: unknown) {
+  async gatewayDeposit(body: unknown, signal?: AbortSignal) {
     if (!this.config.allowGatewayDeposit) {
       throw new RunnerError(
         "GATEWAY_DEPOSIT_DISABLED",
@@ -696,7 +708,8 @@ export class RunnerServices {
       amount: input.amount,
       address: this.config.circleWalletAddress,
       chain: this.config.chain,
-      method: input.method
+      method: input.method,
+      signal,
     });
 
     const receipt = await this.receipts.append({
@@ -718,7 +731,7 @@ export class RunnerServices {
    * Gated behind allowIdentityRegister config flag.
    * Verifies tx receipt + ownerOf(tokenId) == configured wallet.
    */
-  async registerIdentityViaCircleCli(body: unknown) {
+  async registerIdentityViaCircleCli(body: unknown, signal?: AbortSignal) {
     if (!this.config.allowIdentityRegister) {
       throw new RunnerError(
         "IDENTITY_REGISTER_DISABLED",
@@ -743,7 +756,8 @@ export class RunnerServices {
       contract: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
       address: this.config.circleWalletAddress,
       chain: this.config.chain,
-      allowRegister: true
+      allowRegister: true,
+      signal,
     });
 
     // Extract txHash from result
@@ -762,7 +776,8 @@ export class RunnerServices {
             signature: "ownerOf(uint256)",
             params: [String(tokenId)],
             contract: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
-            chain: this.config.chain
+            chain: this.config.chain,
+            signal,
           });
           const ownerJson = ownerResult.json as any;
           const owner = (ownerJson?.outputs?.[0] ?? ownerJson?.result ?? "").toString().toLowerCase();
@@ -792,14 +807,15 @@ export class RunnerServices {
    * Inspect an x402 service (read-only, no payment).
    * Only requires URL validation and host allowlist.
    */
-  async inspectX402(body: unknown) {
+  async inspectX402(body: unknown, signal?: AbortSignal) {
     const payment = PaymentRequestSchema.parse(body);
     assertX402InspectAllowed(this.config, payment);
 
     const result = await this.circle.inspectService({
       url: payment.url,
       method: payment.method,
-      body: payment.body
+      body: payment.body,
+      signal,
     });
 
     return { ok: true, result };
@@ -808,7 +824,7 @@ export class RunnerServices {
   /**
    * Pay an x402 service with idempotency and persistent spending limits.
    */
-  async payX402(body: unknown) {
+  async payX402(body: unknown, signal?: AbortSignal) {
     const payment = PaymentRequestSchema.parse(body);
     assertX402PaymentAllowed(this.config, payment);
 
@@ -858,7 +874,8 @@ export class RunnerServices {
           body: payment.body,
           maxAmountUsdc: payment.maxAmountUsdc,
           address: this.config.circleWalletAddress!,
-          chain: this.config.chain
+          chain: this.config.chain,
+          signal,
         });
 
         const receipt = await this.receipts.append({
@@ -924,7 +941,7 @@ export class RunnerServices {
     });
   }
 
-  async batchPayX402(body: unknown) {
+  async batchPayX402(body: unknown, signal?: AbortSignal) {
     const batch = BatchPaymentRequestSchema.parse(body);
 
     const payments = batch.payments.map((p, i) => {
@@ -943,7 +960,7 @@ export class RunnerServices {
 
     for (const payment of payments) {
       try {
-        const result = await this.payX402(payment);
+        const result = await this.payX402(payment, signal);
         results.push({ ok: true, payment, result });
       } catch (error) {
         results.push({
