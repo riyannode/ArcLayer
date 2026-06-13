@@ -18,6 +18,11 @@ import { createRequire } from "node:module";
 import { RUNNER_MCP_TOOLS } from "./mcp-schemas";
 import { handleMcpTool, type McpToolContext } from "./mcp-tools";
 import { getToolNamesForRole } from "./tool-registry";
+import {
+  McpToolBroker,
+  BrokerError,
+  BrokerErrorCode,
+} from "./mcp-broker";
 
 // Read version from package.json (works in both dev and bundled)
 let PKG_VERSION = "0.1.4";
@@ -64,6 +69,26 @@ function rpcError(
   data?: unknown
 ): JsonRpcResponse {
   return { jsonrpc: "2.0", id, error: { code, message, data } };
+}
+
+/**
+ * Wrap a promise with a timeout. Rejects with BrokerError on timeout.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, toolName: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new BrokerError(
+        BrokerErrorCode.TOOL_TIMEOUT,
+        `Tool '${toolName}' timed out after ${ms}ms`,
+        { tool: toolName, timeoutMs: ms }
+      ));
+    }, ms);
+
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); }
+    );
+  });
 }
 
 /**
@@ -146,8 +171,49 @@ export async function handleStdioRequest(
 
       stderrLog(`tools/call: ${toolName}`);
 
+      // ── Broker: pre-execute checks ───────────────────────────────────
+      const broker = ctx.broker;
+      if (broker) {
+        try {
+          broker.preExecute(toolName, toolArgs);
+        } catch (error) {
+          if (error instanceof BrokerError) {
+            // Audit the rejection (highest-value forensics event)
+            broker.recordRejection(toolName, toolArgs, error);
+            stderrLog(`tools/call BLOCKED by broker: ${error.code} — ${error.message}`);
+            return rpcOk(id, {
+              content: [{
+                type: "text",
+                text: JSON.stringify({
+                  ok: false,
+                  error: error.code,
+                  message: error.message,
+                  details: error.details
+                })
+              }],
+              isError: true
+            });
+          }
+          throw error;
+        }
+      }
+
+      // ── Broker: execute with timeout ─────────────────────────────────
+      const timeoutMs = broker?.getTimeoutMs(toolName) ?? 30_000;
+      const startTime = Date.now();
+
       try {
-        const result = await handleMcpTool(toolName, toolArgs, ctx);
+        const result = await withTimeout(
+          handleMcpTool(toolName, toolArgs, ctx),
+          timeoutMs,
+          toolName
+        );
+
+        // ── Broker: post-execute checks (output size + audit) ──────────
+        if (broker) {
+          broker.postExecute(toolName, toolArgs, result, Date.now() - startTime);
+        }
+
         // MCP tools/call wraps result in content array
         return rpcOk(id, {
           content: [
@@ -158,13 +224,26 @@ export async function handleStdioRequest(
           ]
         });
       } catch (error: any) {
+        const durationMs = Date.now() - startTime;
+
+        // Record failure in audit log
+        if (broker) {
+          broker.recordFailure(toolName, toolArgs, error, durationMs);
+        }
+
         const message = error?.message ?? "Tool execution failed";
-        stderrLog(`tools/call error: ${message}`);
+        const errorCode = error instanceof BrokerError ? error.code : undefined;
+        stderrLog(`tools/call error${errorCode ? ` (${errorCode})` : ""}: ${message}`);
         return rpcOk(id, {
           content: [
             {
               type: "text",
-              text: JSON.stringify({ ok: false, error: message })
+              text: JSON.stringify({
+                ok: false,
+                error: errorCode ?? message,
+                message,
+                details: error instanceof BrokerError ? error.details : undefined
+              })
             }
           ],
           isError: true

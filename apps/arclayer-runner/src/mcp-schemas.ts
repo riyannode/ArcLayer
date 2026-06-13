@@ -250,6 +250,19 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
     }
   },
 
+  // ── MCP Tool Broker Introspection (PR #3) ─────────────────────────────
+  {
+    name: "runner.broker_status",
+    description: "MCP Tool Broker session state: call count, total cost, budget limits"
+  },
+  {
+    name: "runner.audit_log",
+    description: "MCP Tool Broker audit log — all tool calls with timing, cost, errors",
+    inputSchema: {
+      limit: { type: "number", description: "Max entries to return (default: 50)" }
+    }
+  },
+
   // ── Skill Context Tools (Phase 3) ────────────────────────────────────
   {
     name: "runner.skills_list",
