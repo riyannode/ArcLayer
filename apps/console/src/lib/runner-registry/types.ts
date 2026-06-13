@@ -50,7 +50,7 @@ export interface RegisterRunnerInput {
   allowedRoles?: string[];
   defaultRole?: string;
   runtimeKind?: RuntimeKind;
-  hmacSecret: string; // plaintext — will be stored encrypted
+  hmacSecret: string; // plaintext input; stored service-role-only in hmac_secret bytea for MVP
   metadata?: Record<string, unknown>;
 }
 
