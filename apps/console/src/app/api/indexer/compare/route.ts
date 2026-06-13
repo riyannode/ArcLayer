@@ -147,18 +147,17 @@ export async function GET(request: NextRequest) {
       readGoldskyAgents,
       readGoldskyProofs,
       readGoldskyOverview,
-      readGoldskyJobsFromBlock,
-      readGoldskyAgentsFromBlock,
     } = await import("@/lib/goldsky-supabase-indexer");
 
     // Fetch raw data once, build all projections from the snapshot
     const health = await readGoldskyHealth();
     goldskyHealth = health as unknown as Record<string, unknown>;
 
-    // If fromBlock is specified, use block-filtered readers
+    // readGoldskyJobs/Agents now accept optional fromBlock parameter
+    // Overview uses a single shared fetch internally
     const [jobs, agents, proofs, overview] = await Promise.all([
-      fromBlock ? readGoldskyJobsFromBlock(fromBlock) : readGoldskyJobs(),
-      fromBlock ? readGoldskyAgentsFromBlock(fromBlock) : readGoldskyAgents(),
+      readGoldskyJobs(fromBlock || undefined),
+      readGoldskyAgents(fromBlock || undefined),
       readGoldskyProofs(),
       readGoldskyOverview(),
     ]);

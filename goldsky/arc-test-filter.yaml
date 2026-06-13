@@ -1,0 +1,17 @@
+name: arc-test-filter
+resource_size: xs
+description: Test pipeline — raw_logs no filter, blackhole, to check if data exists
+
+sources:
+  logs:
+    type: dataset
+    dataset_name: arc_testnet.raw_logs
+    version: "1.0.0"
+    start_at: latest
+
+transforms: {}
+
+sinks:
+  blackhole:
+    type: blackhole
+    from: logs

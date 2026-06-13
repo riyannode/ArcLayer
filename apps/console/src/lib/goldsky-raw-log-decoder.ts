@@ -8,32 +8,41 @@
  * This module decodes topics and data into structured ERC-8004 and ERC-8183 events
  * that can be fed into existing SDK projection helpers.
  *
- * Topic hashes verified against actual Arc Testnet chain data via eth_getLogs.
+ * Topic hashes verified against actual Arc Testnet on-chain ABI:
+ *   IdentityRegistryUpgradeable: Transfer, Registered, MetadataSet
+ *   AgenticCommerce: JobCreated, BudgetSet, JobFunded, JobSubmitted,
+ *                    JobCompleted, JobRejected, JobExpired
  *
  * SERVER-ONLY — uses no browser APIs, no client imports.
  *
  * @module apps/console/src/lib/goldsky-raw-log-decoder
  */
 
-// ── Event signature hashes (topic[0]) — verified from chain data ──────────
+// ── Event signature hashes (topic[0]) — verified from on-chain ABI ─────────
+//
+// IdentityRegistryUpgradeable implementation:
+//   0x7274e874CA62410a93Bd8bf61c69d8045E399c02
+//   Events: Transfer, Registered, MetadataSet, Approval, ApprovalForAll,
+//           BatchMetadataUpdate, EIP712DomainChanged, Initialized,
+//           MetadataUpdate, OwnershipTransferred, URIUpdated, Upgraded
+//
+// AgenticCommerce (SDK ABI):
+//   Events: JobCreated, BudgetSet, JobFunded, JobSubmitted,
+//           JobCompleted, JobRejected, JobExpired
 
 /** ERC-721 Transfer(from, to, tokenId) — used by ERC-8004 Identity Registry. */
 const ERC721_TRANSFER_TOPIC =
   "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
 
-/** ERC-8004 IdentityRegistry NewRegistered(tokenId). */
-const ERC8004_NEW_REGISTERED_TOPIC =
-  "0xf8e1a15aba9398e019f0b49df1a4fde98ee17ae345cb5f6b5e2c27f5033e8ce7";
-
-/** ERC-8004 IdentityRegistry AgentRegistered(tokenId, controller, metadataURI). */
-const ERC8004_AGENT_REGISTERED_TOPIC =
-  "0x2c149ed548c6d2993cd73efe187df6eccabe4538091b33adbd25fafdb8a1468b";
-
-/** ERC-8004 IdentityRegistry AgentWallet(tokenId, wallet). */
-const ERC8004_AGENT_WALLET_TOPIC =
+/** ERC-8004 Registered(uint256 indexed agentId, string metadataURI, address indexed owner). */
+const ERC8004_REGISTERED_TOPIC =
   "0xca52e62c367d81bb2e328eb795f7c7ba24afb478408a26c0e201d155c449bc4a";
 
-/** ERC-8183 JobCreated(jobId, client, provider, expiredAt, hook, evaluator). */
+/** ERC-8004 MetadataSet(uint256 indexed agentId, string indexed indexedMetadataKey, string value, bytes data) — metadata update, NOT registration. */
+const ERC8004_METADATA_SET_TOPIC =
+  "0x2c149ed548c6d2993cd73efe187df6eccabe4538091b33adbd25fafdb8a1468b";
+
+/** ERC-8183 JobCreated(jobId, client, provider, evaluator, expiredAt, hook). */
 const ERC8183_JOB_CREATED_TOPIC =
   "0xb0f0239bfdd96453e24733e18bfc24b70d8fadf123dd977473518dd577ee79b9";
 
@@ -53,9 +62,9 @@ const ERC8183_JOB_SUBMITTED_TOPIC =
 const ERC8183_JOB_COMPLETED_TOPIC =
   "0x0fd54bd364fa9e67f17b091aefe930932c09fe7651cf5ad02c71a418f3341444";
 
-/** ERC-8183 JobRejected(jobId, rejector, reason). */
+/** ERC-8183 JobRejected(uint256 indexed jobId, address indexed rejector, bytes32 reason). */
 const ERC8183_JOB_REJECTED_TOPIC =
-  "0x21d71db5be59bb9fa133895586b7404307dd33fb93b16db09dc6f1d9d7d231b0";
+  "0xae7362b1af91f4492868987b9c73990d780060811551b58728fbe96fd1bab275";
 
 /** ERC-8183 JobExpired(jobId). */
 const ERC8183_JOB_EXPIRED_TOPIC =
@@ -91,38 +100,17 @@ export type DecodedTransfer = {
   logIndex: number;
 };
 
-export type DecodedNewRegistered = {
-  kind: "NewRegistered";
-  tokenId: bigint;
-  blockNumber: bigint;
-  transactionHash: string;
-  logIndex: number;
-};
-
-export type DecodedAgentRegistered = {
-  kind: "AgentRegistered";
-  tokenId: bigint;
-  controller: string;
+export type DecodedRegistered = {
+  kind: "Registered";
+  agentId: bigint;
   metadataURI: string;
+  owner: string; // indexed owner/controller address
   blockNumber: bigint;
   transactionHash: string;
   logIndex: number;
 };
 
-export type DecodedAgentWallet = {
-  kind: "AgentWallet";
-  tokenId: bigint;
-  wallet: string;
-  blockNumber: bigint;
-  transactionHash: string;
-  logIndex: number;
-};
-
-export type DecodedIdentityEvent =
-  | DecodedTransfer
-  | DecodedNewRegistered
-  | DecodedAgentRegistered
-  | DecodedAgentWallet;
+export type DecodedIdentityEvent = DecodedTransfer | DecodedRegistered;
 
 export type DecodedJobCreated = {
   kind: "JobCreated";
@@ -226,37 +214,61 @@ function topicToAddress(topic: string): string {
   return "0x" + topic.slice(26).toLowerCase();
 }
 
-/** Decode ABI-encoded string from hex data at the given word offset.
- *  wordOffset is in ABI words (32 bytes = 64 hex chars each).
- *  Reads length at that word, then reads length bytes of string data. */
-function decodeAbiString(data: string, wordOffset: number): string {
+/**
+ * Decode ABI-encoded dynamic string from hex data using UTF-8.
+ *
+ * ABI encoding for `string`:
+ *   - offset (32 bytes): points to start of string data within the full encoding
+ *   - length (32 bytes): byte length of the string
+ *   - data: UTF-8 bytes, padded to 32-byte boundary
+ *
+ * @param data - Full ABI-encoded hex data (with 0x prefix)
+ * @param paramIndex - Index of the string param in the ABI encoding (0-based)
+ */
+function decodeAbiString(data: string, paramIndex: number): string {
   if (!data || data === "0x") return "";
   const dataHex = data.startsWith("0x") ? data.slice(2) : data;
-  const hexOffset = wordOffset * 64; // each ABI word = 32 bytes = 64 hex chars
-  // Read string length at offset position
-  const lengthHex = dataHex.slice(hexOffset, hexOffset + 64);
+
+  // Read offset at paramIndex * 32 bytes (64 hex chars each)
+  const offsetHexPos = paramIndex * 64;
+  const offsetHex = dataHex.slice(offsetHexPos, offsetHexPos + 64);
+  if (!offsetHex || offsetHex.length < 64) return "";
+  const offset = parseInt(offsetHex, 16);
+  if (isNaN(offset)) return "";
+
+  // Read string length at offset position (offset is in bytes, multiply by 2 for hex char position)
+  const lengthHexPos = offset * 2;
+  const lengthHex = dataHex.slice(lengthHexPos, lengthHexPos + 64);
   if (!lengthHex || lengthHex.length < 64) return "";
   const length = parseInt(lengthHex, 16);
   if (length === 0 || isNaN(length)) return "";
+
   // Read string data (starts 32 bytes after length)
-  const dataStart = hexOffset + 64;
-  const dataHex2 = dataHex.slice(dataStart, dataStart + length * 2);
-  if (!dataHex2) return "";
-  // Convert hex to UTF-8
-  let result = "";
-  for (let i = 0; i < dataHex2.length; i += 2) {
-    const code = parseInt(dataHex2.slice(i, i + 2), 16);
-    if (code === 0) break;
-    result += String.fromCharCode(code);
+  const dataStart = lengthHexPos + 64;
+  const dataHexBytes = dataHex.slice(dataStart, dataStart + length * 2);
+  if (!dataHexBytes) return "";
+
+  // Convert hex bytes to UTF-8 using TextDecoder, then strip trailing null bytes
+  try {
+    const bytes = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+      bytes[i] = parseInt(dataHexBytes.slice(i * 2, i * 2 + 2), 16);
+    }
+    // Strip trailing null bytes (ABI padding)
+    let end = length;
+    while (end > 0 && bytes[end - 1] === 0) end--;
+    return new TextDecoder("utf-8").decode(bytes.subarray(0, end));
+  } catch {
+    return "";
   }
-  return result;
 }
 
 // ── Identity event decoder ──────────────────────────────────────────────────
 
 /**
  * Decode a single raw log row into an identity event.
- * Returns null if the log is not a recognized ERC-8004 identity event.
+ * Returns null if the log is not a recognized ERC-8004 identity event
+ * or if it is a non-registration event (e.g. MetadataSet).
  */
 export function decodeIdentityEvent(row: RawLogRow): DecodedIdentityEvent | null {
   try {
@@ -268,6 +280,7 @@ export function decodeIdentityEvent(row: RawLogRow): DecodedIdentityEvent | null
     const txHash = row.transaction_hash;
     const logIndex = Number(row.log_index);
 
+    // Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
     if (topic0 === ERC721_TRANSFER_TOPIC && topics.length >= 4) {
       const from = topicToAddress(topics[1]);
       const to = topicToAddress(topics[2]);
@@ -283,76 +296,32 @@ export function decodeIdentityEvent(row: RawLogRow): DecodedIdentityEvent | null
       };
     }
 
-    if (topic0 === ERC8004_NEW_REGISTERED_TOPIC && topics.length >= 2) {
-      const tokenId = topicToBigInt(topics[1]);
-      return {
-        kind: "NewRegistered",
-        tokenId,
-        blockNumber,
-        transactionHash: txHash,
-        logIndex,
-      };
-    }
-
-    if (topic0 === ERC8004_AGENT_REGISTERED_TOPIC && topics.length >= 2) {
-      const tokenId = topicToBigInt(topics[1]);
-      const data = row.data;
-      let controller = ZERO_ADDRESS;
-      let metadataURI = "";
-
-      // Decode controller from first 32 bytes of data
-      if (data && data !== "0x") {
-        const dataHex = data.startsWith("0x") ? data.slice(2) : data;
-        if (dataHex.length >= 64) {
-          controller = "0x" + dataHex.slice(24, 64).toLowerCase();
-        }
-        // Decode metadataURI (ABI string starting at word offset 2)
-        metadataURI = decodeAbiString(data, 1);
-      }
-
-      // Also check if controller is in topic[2] (indexed in some versions)
-      if (topics.length >= 3) {
-        const topicController = topicToAddress(topics[2]);
-        if (topicController !== ZERO_ADDRESS) {
-          controller = topicController;
-        }
-      }
+    // Registered(uint256 indexed agentId, string metadataURI, address indexed owner)
+    // This is the canonical registration event — NOT AgentWallet.
+    // topics[1] = agentId (indexed), topics[2] = owner (indexed)
+    // data = ABI-encoded string metadataURI
+    if (topic0 === ERC8004_REGISTERED_TOPIC && topics.length >= 3) {
+      const agentId = topicToBigInt(topics[1]);
+      const owner = topicToAddress(topics[2]);
+      const metadataURI = decodeAbiString(row.data, 0);
 
       return {
-        kind: "AgentRegistered",
-        tokenId,
-        controller,
+        kind: "Registered",
+        agentId,
         metadataURI,
+        owner,
         blockNumber,
         transactionHash: txHash,
         logIndex,
       };
     }
 
-    if (topic0 === ERC8004_AGENT_WALLET_TOPIC && topics.length >= 2) {
-      const tokenId = topicToBigInt(topics[1]);
-      let wallet = ZERO_ADDRESS;
-      const data = row.data;
-      if (data && data !== "0x") {
-        const dataHex = data.startsWith("0x") ? data.slice(2) : data;
-        if (dataHex.length >= 64) {
-          wallet = "0x" + dataHex.slice(24, 64).toLowerCase();
-        }
-      }
-      if (topics.length >= 3) {
-        const topicWallet = topicToAddress(topics[2]);
-        if (topicWallet !== ZERO_ADDRESS) {
-          wallet = topicWallet;
-        }
-      }
-      return {
-        kind: "AgentWallet",
-        tokenId,
-        wallet,
-        blockNumber,
-        transactionHash: txHash,
-        logIndex,
-      };
+    // MetadataSet(uint256 indexed agentId, string indexed key, string value, bytes data)
+    // This is a metadata UPDATE — not a registration event.
+    // Skip it: agent projection is last-event-wins, and using MetadataSet
+    // as registration would fabricate a controller from ABI offset data.
+    if (topic0 === ERC8004_METADATA_SET_TOPIC) {
+      return null;
     }
 
     return null;

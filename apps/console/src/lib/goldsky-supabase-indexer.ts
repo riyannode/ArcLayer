@@ -227,8 +227,13 @@ function normalizeJobEvent(decoded: ReturnType<typeof decodeJobEvents>[number]):
 /**
  * Normalize decoded ERC-8004 identity events into SDK IndexedAgentEvent.
  *
- * Transfer events where from=0x0 are registrations (agentId=tokenId, controller=to).
- * AgentRegistered events provide metadataURI.
+ * Identity events from the on-chain IdentityRegistryUpgradeable:
+ * - Transfer(address indexed from, address indexed to, uint256 indexed tokenId)
+ *   → from=0x0 means registration; from≠0x0 means ownership transfer
+ * - Registered(uint256 indexed agentId, string metadataURI, address indexed owner)
+ *   → canonical registration event with metadataURI and owner/controller
+ *
+ * MetadataSet events are skipped by the decoder (not a registration event).
  */
 function normalizeAgentEvent(
   decoded: ReturnType<typeof decodeIdentityEvents>[number],
@@ -241,40 +246,22 @@ function normalizeAgentEvent(
 
   switch (decoded.kind) {
     case "Transfer":
-      // Registration = Transfer from zero address
-      if (decoded.from.toLowerCase() !== ZERO_ADDRESS) {
-        // Ownership transfer — still track but not a registration
-        return {
-          eventName: "Transfer",
-          ...base,
-          agentId: decoded.tokenId,
-          controller: decoded.to as `0x${string}`,
-        };
-      }
+      // ERC-721 Transfer: registration when from=0x0
       return {
         eventName: "Transfer",
         ...base,
         agentId: decoded.tokenId,
         controller: decoded.to as `0x${string}`,
       };
-    case "NewRegistered":
+    case "Registered":
+      // Registered(uint256 indexed agentId, string metadataURI, address indexed owner)
+      // This is the canonical registration event with metadata + controller
       return {
-        eventName: "NewRegistered",
+        eventName: "Registered",
         ...base,
-        agentId: decoded.tokenId,
-      };
-    case "AgentRegistered":
-      return {
-        eventName: "AgentRegistered",
-        ...base,
-        agentId: decoded.tokenId,
-        controller: decoded.controller as `0x${string}`,
-      };
-    case "AgentWallet":
-      return {
-        eventName: "AgentWallet",
-        ...base,
-        agentId: decoded.tokenId,
+        agentId: decoded.agentId,
+        controller: decoded.owner as `0x${string}`,
+        metadataURI: decoded.metadataURI,
       };
   }
 }
@@ -435,18 +422,59 @@ export async function readGoldskyHealth(): Promise<{
   };
 }
 
-/** Read all projected jobs from Goldsky raw tables. */
-export async function readGoldskyJobs(): Promise<ProjectedJob[]> {
+/** Shared fetch + decode helper to avoid redundant Supabase scans. */
+async function fetchAllDecoded(fromBlock?: number) {
+  const [rawJobRows, rawAgentRows] = await Promise.all([
+    fetchAllRawLogs(TABLES.erc8183, fromBlock),
+    fetchAllRawLogs(TABLES.erc8004Identity, fromBlock),
+  ]);
+  const jobEvents = decodeJobEvents(rawJobRows).map(normalizeJobEvent);
+  const agentEvents = decodeIdentityEvents(rawAgentRows).map(normalizeAgentEvent);
+  return { jobEvents, agentEvents };
+}
+
+/**
+ * Read projected jobs. Fetches full history once and filters at entity level.
+ * Preserves complete job lifecycle even when called with fromBlock.
+ */
+export async function readGoldskyJobs(fromBlock?: number): Promise<ProjectedJob[]> {
   const allowlists = await loadDynamicAllowlists();
-  const rawRows = await fetchAllRawLogs(TABLES.erc8183);
-  const decoded = decodeJobEvents(rawRows);
-  const events = decoded.map(normalizeJobEvent);
+  const { jobEvents } = await fetchAllDecoded(fromBlock);
 
   if (INDEXER_SCOPE === "arcnetwork") {
-    return sdkProjectJobs(events);
+    return sdkProjectJobs(jobEvents);
   }
 
-  return sdkProjectJobs(events, buildJobFilter(allowlists.wallets));
+  return sdkProjectJobs(jobEvents, buildJobFilter(allowlists.wallets));
+}
+
+/**
+ * Read projected agents. Always fetches full job history for wallet collection,
+ * then filters agents by creation block if fromBlock is set.
+ */
+export async function readGoldskyAgents(fromBlock?: number): Promise<ProjectedAgent[]> {
+  const allowlists = await loadDynamicAllowlists();
+  // Always fetch ALL jobs to collect complete wallet set for attribution
+  const [rawJobRows, rawAgentRows] = await Promise.all([
+    fetchAllRawLogs(TABLES.erc8183), // NO fromBlock — need all job wallets
+    fetchAllRawLogs(TABLES.erc8004Identity, fromBlock),
+  ]);
+  const decodedJobs = decodeJobEvents(rawJobRows);
+  const decodedAgents = decodeIdentityEvents(rawAgentRows);
+  const jobEvents = decodedJobs.map(normalizeJobEvent);
+  const agentEvents = decodedAgents.map(normalizeAgentEvent);
+
+  if (INDEXER_SCOPE === "arcnetwork") {
+    return sdkProjectAgents(agentEvents);
+  }
+
+  const jobs = sdkProjectJobs(jobEvents, buildJobFilter(allowlists.wallets));
+  const jobWallets = collectJobWallets(jobs);
+
+  return sdkProjectAgents(
+    agentEvents,
+    buildAgentFilter(allowlists.wallets, allowlists.agentIds, jobWallets),
+  );
 }
 
 /** Read a single job detail by jobId. */
@@ -491,62 +519,28 @@ export async function readGoldskyAgents(): Promise<ProjectedAgent[]> {
 }
 
 /**
- * Read projected jobs filtered to only events after a specific block.
- * Used by start-block-aware compare.
- */
-export async function readGoldskyJobsFromBlock(
-  fromBlock: number,
-): Promise<ProjectedJob[]> {
-  const allowlists = await loadDynamicAllowlists();
-  const rawRows = await fetchAllRawLogs(TABLES.erc8183, fromBlock);
-  const decoded = decodeJobEvents(rawRows);
-  const events = decoded.map(normalizeJobEvent);
-
-  if (INDEXER_SCOPE === "arcnetwork") {
-    return sdkProjectJobs(events);
-  }
-
-  return sdkProjectJobs(events, buildJobFilter(allowlists.wallets));
-}
-
-/**
- * Read projected agents filtered to only events after a specific block.
- * Used by start-block-aware compare.
- */
-export async function readGoldskyAgentsFromBlock(
-  fromBlock: number,
-): Promise<ProjectedAgent[]> {
-  const allowlists = await loadDynamicAllowlists();
-  const [rawJobRows, rawAgentRows] = await Promise.all([
-    fetchAllRawLogs(TABLES.erc8183, fromBlock),
-    fetchAllRawLogs(TABLES.erc8004Identity, fromBlock),
-  ]);
-  const decodedJobs = decodeJobEvents(rawJobRows);
-  const decodedAgents = decodeIdentityEvents(rawAgentRows);
-  const jobEvents = decodedJobs.map(normalizeJobEvent);
-  const agentEvents = decodedAgents.map(normalizeAgentEvent);
-
-  if (INDEXER_SCOPE === "arcnetwork") {
-    return sdkProjectAgents(agentEvents);
-  }
-
-  const jobs = sdkProjectJobs(jobEvents, buildJobFilter(allowlists.wallets));
-  const jobWallets = collectJobWallets(jobs);
-
-  return sdkProjectAgents(
-    agentEvents,
-    buildAgentFilter(allowlists.wallets, allowlists.agentIds, jobWallets),
-  );
-}
-
-/**
  * Read overview aggregation from Goldsky raw tables.
+ * Uses a single shared fetch to avoid redundant Supabase scans.
  */
 export async function readGoldskyOverview(): Promise<OverviewProjection> {
-  const jobs = await readGoldskyJobs();
-  const agents = await readGoldskyAgents();
-  const proofs: never[] = [];
-  return buildOverviewAggregation(jobs, agents, proofs);
+  const { jobEvents, agentEvents } = await fetchAllDecoded();
+  const allowlists = await loadDynamicAllowlists();
+  const jobs =
+    INDEXER_SCOPE === "arcnetwork"
+      ? sdkProjectJobs(jobEvents)
+      : sdkProjectJobs(jobEvents, buildJobFilter(allowlists.wallets));
+
+  const jobWallets = collectJobWallets(jobs);
+  const agents =
+    INDEXER_SCOPE === "arcnetwork"
+      ? sdkProjectAgents(agentEvents)
+      : sdkProjectAgents(
+          agentEvents,
+          buildAgentFilter(allowlists.wallets, allowlists.agentIds, jobWallets),
+        );
+
+  const eventCount = jobEvents.length + agentEvents.length;
+  return buildOverviewAggregation(jobs, agents, eventCount);
 }
 
 /**
