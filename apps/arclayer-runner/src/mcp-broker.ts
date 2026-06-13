@@ -325,7 +325,7 @@ export class McpToolBroker {
       );
     }
 
-    // Max total spend check
+    // Max total spend check (already-committed spend)
     if (this.budget.maxTotalUsdc) {
       const maxMicros = decimalToMicros(this.budget.maxTotalUsdc);
       if (this.state.totalCostMicros >= maxMicros) {
@@ -335,6 +335,34 @@ export class McpToolBroker {
           { spent: this.state.totalCostMicros.toString(), limit: maxMicros.toString() }
         );
       }
+    }
+  }
+
+  /**
+   * Pre-execution spend check for payment tools.
+   * Checks requested payment amount against remaining budget BEFORE execution.
+   * Prevents a single x402.pay from exceeding the remaining budget.
+   */
+  assertPaymentBudgetAllowed(toolName: string, args: Record<string, unknown>): void {
+    if (!this.budget.maxTotalUsdc) return;
+
+    const requestedMicros = extractCostMicrosFromArgs(toolName, args);
+    if (requestedMicros === 0n) return; // Not a payment tool
+
+    const maxMicros = decimalToMicros(this.budget.maxTotalUsdc);
+    const remaining = maxMicros - this.state.totalCostMicros;
+
+    if (requestedMicros > remaining) {
+      throw new BrokerError(
+        BrokerErrorCode.BUDGET_EXCEEDED,
+        `Payment ${requestedMicros} micros exceeds remaining budget ${remaining} micros (spent ${this.state.totalCostMicros}/${maxMicros})`,
+        {
+          requested: requestedMicros.toString(),
+          remaining: remaining.toString(),
+          spent: this.state.totalCostMicros.toString(),
+          limit: maxMicros.toString(),
+        }
+      );
     }
   }
 
@@ -430,13 +458,14 @@ export class McpToolBroker {
   }
 
   /**
-   * Full pre-execution check: allowlist + schema + budget.
+   * Full pre-execution check: allowlist + schema + budget + payment spend.
    * Reserves a call slot on success; caller must release on completion.
    */
   preExecute(toolName: string, args: Record<string, unknown>): void {
     this.assertToolAllowed(toolName);
     this.validateArgs(toolName, args);
     this.assertBudgetAllowed();
+    this.assertPaymentBudgetAllowed(toolName, args);
     this.reserveCallSlot();
   }
 
