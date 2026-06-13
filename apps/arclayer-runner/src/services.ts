@@ -245,8 +245,14 @@ export class RunnerServices {
       }
 
       // Step 4: For non-completed statuses (needs_payment, needs_action),
-      // return without hashing or submitting
+      // write checkpoint so hosted run state is recoverable, then return
       if (result.status !== "completed") {
+        await this.mcp.writeCheckpoint(job.jobId, {
+          status: result.status,
+          paymentRequests: result.paymentRequests,
+          actionRequests: result.actionRequests
+        }).catch(() => {});
+
         lifecycle?.markTaskCompleted?.(job.taskId, job.agentId);
         return {
           ok: false,
@@ -260,9 +266,34 @@ export class RunnerServices {
       // Step 5: Hash deliverable — but do NOT submit on-chain
       const deliverableHash = erc8183Hash(result.output ?? result);
 
-      // Step 6: Complete MCP run
-      await this.mcp.completeJobRun(job.jobId, result.output, runId).catch((err) => {
-        console.warn(`[runner] MCP completeJobRun failed: ${err.message}`);
+      // Step 6: Store runtime receipt — durable evidence of request + output + hash.
+      // Do NOT call completeJobRun here; that is terminal cleanup reserved for
+      // the submit step (runAndSubmitProviderJob / submitProviderDeliverable).
+      // Keeping the hosted run active preserves resumable job state.
+      const isOpenClaw = this.runtime.kind === "openclaw";
+      const receiptRequest = isOpenClaw ? sanitizeTaskForUntrustedRuntime({
+        taskId: job.taskId,
+        protocol: "erc8183",
+        role: "provider",
+        agentId: job.agentId,
+        input: job.input,
+        metadata: { jobId: job.jobId, provider: job.provider, evaluator: job.evaluator, description: job.description }
+      }) : { jobId: job.jobId, provider: job.provider, description: job.description };
+
+      const receipt = await this.receipts.append({
+        type: "runtime_result",
+        taskId: job.taskId,
+        jobId: job.jobId,
+        agentId: job.agentId,
+        request: receiptRequest,
+        response: result,
+        proof: {
+          sha256: sha256Json(result),
+          deliverableHash,
+          runtimeKind: this.runtime.kind,
+          sanitized: isOpenClaw,
+          endpointHost: safeHostFromUrl(this.config.runtimeEndpoint),
+        }
       });
 
       lifecycle?.markTaskCompleted?.(job.taskId, job.agentId);
@@ -272,7 +303,8 @@ export class RunnerServices {
         role: "provider",
         result,
         deliverableHash,
-        runId
+        runId,
+        receipt
       };
 
     } catch (error) {
@@ -371,8 +403,31 @@ export class RunnerServices {
       optParams: "0x"
     }, signal);
 
+    // Step 4: Propagate submit failure — do not mask with ok:true from runtime
+    if (!submitResult.ok) {
+      return {
+        ok: false,
+        status: "submit_failure",
+        role: "provider" as const,
+        result: runResult.result,
+        deliverableHash: runResult.deliverableHash,
+        submitReceipt: submitResult.submitReceipt,
+        error: submitResult.error ?? "On-chain submit failed"
+      };
+    }
+
+    // Step 5: Submit succeeded — now complete the hosted MCP run (terminal cleanup)
+    await this.mcp.completeJobRun(job.jobId, runResult.result.output, runResult.runId).catch((err) => {
+      console.warn(`[runner] MCP completeJobRun failed: ${err.message}`);
+    });
+
     return {
-      ...runResult,
+      ok: true,
+      status: "completed",
+      role: "provider" as const,
+      result: runResult.result,
+      deliverableHash: runResult.deliverableHash,
+      runId: runResult.runId,
       submitReceipt: submitResult.submitReceipt,
       receipt: submitResult.receipt
     };

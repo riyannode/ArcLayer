@@ -1049,10 +1049,17 @@ describe("runProviderJob", () => {
     expect(startSpy).toHaveBeenCalledWith("42");
   });
 
-  it("calls MCP completeJobRun after successful runtime", async () => {
+  it("does NOT call MCP completeJobRun (deferred to submit step)", async () => {
     const completeSpy = vi.spyOn(mcp, "completeJobRun");
     await services.runProviderJob(validJob);
-    expect(completeSpy).toHaveBeenCalled();
+    expect(completeSpy).not.toHaveBeenCalled();
+  });
+
+  it("stores runtime_result receipt for durable evidence", async () => {
+    const result = await services.runProviderJob(validJob);
+    expect(result.ok).toBe(true);
+    expect(result.receipt).toBeDefined();
+    expect(result.receipt.type).toBe("runtime_result");
   });
 });
 
@@ -1267,5 +1274,47 @@ describe("runAndSubmitProviderJob", () => {
     expect(result.ok).toBe(true);
     expect(result.deliverableHash).toBeDefined();
     expect((result as any).submitReceipt).toBeDefined();
+  });
+
+  it("propagates submit failure instead of masking with runtime ok:true", async () => {
+    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+      ok: false,
+      mode: "prepared-only",
+      reason: "CIRCLE_WALLET_ADDRESS not configured",
+      prepared: {}
+    });
+
+    const result = await services.runAndSubmitProviderJob(validJob);
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("submit_failure");
+    expect(result.error).toContain("CIRCLE_WALLET_ADDRESS");
+    expect(result.deliverableHash).toBeDefined(); // runtime succeeded
+  });
+
+  it("calls MCP completeJobRun only after successful submit", async () => {
+    const completeSpy = vi.spyOn(mcp, "completeJobRun");
+    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+      ok: true,
+      command: "circle",
+      args: [],
+      json: { txHash: "0x" + "ab".repeat(32) }
+    } as any);
+
+    await services.runAndSubmitProviderJob(validJob);
+    expect(completeSpy).toHaveBeenCalled();
+  });
+
+  it("does NOT call MCP completeJobRun when submit fails", async () => {
+    const completeSpy = vi.spyOn(mcp, "completeJobRun");
+    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+      ok: false,
+      mode: "prepared-only",
+      reason: "not configured",
+      prepared: {}
+    });
+
+    await services.runAndSubmitProviderJob(validJob);
+    expect(completeSpy).not.toHaveBeenCalled();
   });
 });
