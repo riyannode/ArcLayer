@@ -799,3 +799,122 @@ describe("Task idempotency lifecycle", () => {
     expect(failed).toEqual(["task-7"]);
   });
 });
+
+// ── Patch: sanitized request in OpenClaw receipts ─────────────────────
+
+describe("OpenClaw receipt request sanitization", () => {
+  it("OpenClaw receipt does not include sensitive metadata (apiToken, runnerSecret, privateKey, walletAddress)", async () => {
+    const config = makeConfig();
+    const openClawRuntime: RuntimeConnector = {
+      kind: "openclaw",
+      async run(_task) {
+        return {
+          ok: true,
+          status: "completed",
+          output: { result: "done" },
+          artifacts: [],
+          paymentRequests: [],
+          actionRequests: [],
+        };
+      }
+    };
+    const mcp = makeMockMcp();
+    const skill = { content: "# Skill", sha256: "abc123", path: "/test/skill.md" };
+    const svc = new RunnerServices(config, openClawRuntime, mcp, skill);
+
+    // Spy on receipts.append to capture the written record
+    const appended: any[] = [];
+    const originalAppend = svc.receipts.append.bind(svc.receipts);
+    svc.receipts.append = async (record: any) => {
+      appended.push(record);
+      return originalAppend(record);
+    };
+
+    await svc.runGeneric({
+      taskId: "task-oc-1",
+      protocol: "generic",
+      role: "provider",
+      agentId: "agent-1",
+      input: { prompt: "hello" },
+      metadata: {
+        jobId: "123",
+        description: "test job",
+        runnerSecret: "super-secret",
+        apiToken: "tok-123",
+        walletAddress: "0x1234",
+        privateKey: "0xdeadbeef",
+        authorization: "Bearer xyz",
+      },
+    });
+
+    expect(appended).toHaveLength(1);
+    const req = appended[0].request;
+
+    // Sensitive keys must be stripped
+    expect(req.metadata.runnerSecret).toBeUndefined();
+    expect(req.metadata.apiToken).toBeUndefined();
+    expect(req.metadata.walletAddress).toBeUndefined();
+    expect(req.metadata.privateKey).toBeUndefined();
+    expect(req.metadata.authorization).toBeUndefined();
+
+    // Safe keys must be preserved
+    expect(req.metadata.jobId).toBe("123");
+    expect(req.metadata.description).toBe("test job");
+
+    // Proof sanitized=true
+    expect(appended[0].proof.sanitized).toBe(true);
+    expect(appended[0].proof.runtimeKind).toBe("openclaw");
+  });
+
+  it("Hermes receipt stores full task (no sanitization)", async () => {
+    const config = makeConfig({ runtimeKind: "hermes" });
+    const hermesRuntime: RuntimeConnector = {
+      kind: "hermes",
+      async run(_task) {
+        return {
+          ok: true,
+          status: "completed",
+          output: { result: "done" },
+          artifacts: [],
+          paymentRequests: [],
+          actionRequests: [],
+        };
+      }
+    };
+    const mcp = makeMockMcp();
+    const skill = { content: "# Skill", sha256: "abc123", path: "/test/skill.md" };
+    const svc = new RunnerServices(config, hermesRuntime, mcp, skill);
+
+    const appended: any[] = [];
+    const originalAppend = svc.receipts.append.bind(svc.receipts);
+    svc.receipts.append = async (record: any) => {
+      appended.push(record);
+      return originalAppend(record);
+    };
+
+    await svc.runGeneric({
+      taskId: "task-hermes-1",
+      protocol: "generic",
+      role: "provider",
+      agentId: "agent-1",
+      input: { prompt: "hello" },
+      metadata: {
+        jobId: "456",
+        runnerSecret: "should-be-preserved",
+        walletAddress: "0xabcd",
+      },
+    });
+
+    expect(appended).toHaveLength(1);
+    const req = appended[0].request;
+
+    // Hermes stores full metadata (trusted)
+    expect(req.metadata.runnerSecret).toBe("should-be-preserved");
+    expect(req.metadata.walletAddress).toBe("0xabcd");
+    expect(req.metadata.jobId).toBe("456");
+
+    // Proof sanitized=false for hermes
+    expect(appended[0].proof.sanitized).toBe(false);
+    expect(appended[0].proof.runtimeKind).toBe("hermes");
+  });
+});
