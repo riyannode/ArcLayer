@@ -72,8 +72,16 @@ export type CircleCliExecuteFn = (
 // ── Result Classification ──────────────────────────────────────────────
 
 /**
- * Classify a Circle CLI result into a terminal operation state.
- * Returns 'unknown' when the result is ambiguous (timeout, missing tx hash).
+ * Classify a Circle CLI result into an operation state.
+ *
+ * Classification rules:
+ *   - explicit success receipt with txHash → confirmed
+ *   - txHash only (no explicit success)   → broadcast
+ *   - timeout/abort/no clear result       → unknown
+ *   - explicit CLI error                  → failed
+ *
+ * broadcast is NON-terminal — caller can retry to get confirmation.
+ * unknown is NON-terminal — tx may have been broadcast; needs reconciliation.
  */
 function classifyCircleResult(
   result: CircleCliResult,
@@ -98,10 +106,17 @@ function classifyCircleResult(
     return "failed";
   }
 
-  // If we can extract a tx hash, consider it broadcast at minimum
   const txHash = extractTxHash(result);
-  if (txHash) {
+
+  // Explicit success receipt with txHash → confirmed
+  // Circle CLI returns { status: "confirmed" } or similar on finality
+  if (txHash && json?.status === "confirmed") {
     return "confirmed";
+  }
+
+  // txHash present but no explicit confirmation → broadcast (not terminal)
+  if (txHash) {
+    return "broadcast";
   }
 
   // Ambiguous — CLI returned but no tx hash and no explicit error
@@ -183,11 +198,18 @@ export class ExecutionGateway {
           409
         );
       }
-      // If existing is failed/unknown/cancelled, allow re-execution
-      // by removing the old entry and creating a new one
+      // unknown: tx may have been broadcast — cannot safely retry
+      if (existing.state === "unknown") {
+        throw new RunnerError(
+          "RECONCILIATION_REQUIRED" satisfies OperationErrorCode,
+          `Operation ${existing.operationId} is in unknown state — tx may have been broadcast. Reconciliation required before retry.`,
+          409,
+          { operationId: existing.operationId, idempotencyKey: input.idempotencyKey }
+        );
+      }
+      // failed/cancelled: safe to re-execute by removing old entry
       if (
         existing.state === "failed" ||
-        existing.state === "unknown" ||
         existing.state === "cancelled"
       ) {
         this.operations.delete(existing.operationId);
@@ -226,7 +248,7 @@ export class ExecutionGateway {
 
     // ── Validate prerequisites ────────────────────────────────────────
     if (!input.walletAddress) {
-      this.failOperation(operationId, "MISSING_WALLET", "circleWalletAddress not configured");
+      this.failOperation(operationId, "BROADCAST_FAILED", "circleWalletAddress not configured");
       return this.buildResult(operationId);
     }
 

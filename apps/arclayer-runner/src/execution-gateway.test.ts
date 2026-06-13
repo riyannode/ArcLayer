@@ -17,6 +17,17 @@ function makeMockCircleCliResult(overrides: Partial<CircleCliResult> = {}): Circ
   };
 }
 
+/** Result with txHash but no explicit status — should classify as broadcast */
+function makeBroadcastCircleCliResult(): CircleCliResult {
+  return {
+    command: "circle",
+    args: ["wallet", "execute", "submit(uint256,bytes32,bytes)", "1", "0xabc", "0x"],
+    stdout: JSON.stringify({ txHash: "0x" + "a".repeat(64) }),
+    stderr: "",
+    json: { txHash: "0x" + "a".repeat(64) },
+  };
+}
+
 function makeMockCircle() {
   return {
     executeErc8183Write: vi.fn().mockResolvedValue(makeMockCircleCliResult()),
@@ -96,7 +107,7 @@ describe("ExecutionGateway", () => {
 
       expect(result.ok).toBe(false);
       expect(result.state).toBe("failed");
-      expect(result.errorCode).toBe("MISSING_WALLET");
+      expect(result.errorCode).toBe("BROADCAST_FAILED");
       expect(executeFn).not.toHaveBeenCalled();
     });
 
@@ -225,7 +236,72 @@ describe("ExecutionGateway", () => {
     });
   });
 
-  // ── Direct CircleCliAdapter access ─────────────────────────────────
+  // ── Broadcast Classification ────────────────────────────────────────
+
+  describe("broadcast classification", () => {
+    it("classifies txHash without explicit status as broadcast (non-terminal)", async () => {
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeBroadcastCircleCliResult());
+      const result = await gateway.execute(makeInput(), executeFn);
+
+      expect(result.state).toBe("broadcast");
+      expect(result.ok).toBe(false); // broadcast is not confirmed
+      expect(result.txHash).toBeDefined();
+    });
+
+    it("broadcast state blocks re-execution with OPERATION_IN_PROGRESS", async () => {
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeBroadcastCircleCliResult());
+
+      // First execution → broadcast
+      const result1 = await gateway.execute(makeInput(), executeFn);
+      expect(result1.state).toBe("broadcast");
+
+      // Retry with same key+params → should be blocked
+      await expect(
+        gateway.execute(makeInput(), executeFn)
+      ).rejects.toThrow(/already in state broadcast/);
+    });
+  });
+
+  // ── Unknown State Blocks Retry ──────────────────────────────────────
+
+  describe("unknown state safety", () => {
+    it("throws RECONCILIATION_REQUIRED when retrying unknown state", async () => {
+      // First execution → unknown (timeout)
+      const timeoutFn: CircleCliExecuteFn = async () => {
+        const err = new Error("Operation timed out");
+        err.name = "AbortError";
+        throw err;
+      };
+      const result1 = await gateway.execute(makeInput(), timeoutFn);
+      expect(result1.state).toBe("unknown");
+
+      // Retry with same key+params → RECONCILIATION_REQUIRED
+      await expect(
+        gateway.execute(makeInput(), vi.fn())
+      ).rejects.toThrow(/Reconciliation required/);
+    });
+
+    it("unknown state does NOT delete old record on retry", async () => {
+      const timeoutFn: CircleCliExecuteFn = async () => {
+        const err = new Error("timeout");
+        err.name = "AbortError";
+        throw err;
+      };
+      const result1 = await gateway.execute(makeInput(), timeoutFn);
+      const opId = result1.operationId;
+
+      // Retry throws
+      await expect(
+        gateway.execute(makeInput(), vi.fn())
+      ).rejects.toThrow(/Reconciliation required/);
+
+      // Original record still exists
+      const record = gateway.getOperation(opId);
+      expect(record).toBeDefined();
+      expect(record!.state).toBe("unknown");
+      expect(gateway.operationCount).toBe(1); // no new record created
+    });
+  });
 
   describe("direct CircleCliAdapter access", () => {
     it("gateway owns the Circle CLI calls — executeFn receives circle reference", async () => {
