@@ -889,3 +889,110 @@ describe("Blocker 4 — error message sanitization", () => {
     expect(mapped.message).not.toContain("supersecret");
   });
 });
+
+// ── Body timeout — timeout stays alive during response.json() ───────────
+
+describe("body read timeout protection", () => {
+  it("timeout fires if runtime sends headers but stalls body", async () => {
+    // Server that sends 200 headers, starts chunked transfer, then stalls
+    const stallServer = createServer((_req, res) => {
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "transfer-encoding": "chunked",
+      });
+      // Send a partial chunk to keep connection alive, then stall
+      res.write('{"ok":');
+      // Never send the rest — stall mid-body
+    });
+    await new Promise<void>((resolve) => stallServer.listen(0, "127.0.0.1", resolve));
+    const address = stallServer.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 500);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      // Should timeout or get invalid response — not hang forever
+      expect(["RUNTIME_TIMEOUT", "RUNTIME_INVALID_RESPONSE"]).toContain(error.code);
+    } finally {
+      stallServer.close();
+    }
+  });
+});
+
+// ── needs_* status rejection from OpenClaw ──────────────────────────────
+
+describe("OpenClaw needs_* status rejection", () => {
+  it("rejects status: needs_payment", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 200,
+      body: { ok: true, status: "needs_payment", output: { pending: true } },
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_INVALID_RESPONSE");
+      expect(error.message).toContain("needs_payment");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("rejects status: needs_action", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 200,
+      body: { ok: true, status: "needs_action", output: { pending: true } },
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_INVALID_RESPONSE");
+      expect(error.message).toContain("needs_action");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("accepts status: completed", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 200,
+      body: makeValidResult({ status: "completed" }),
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      const result = await adapter.run(makeTask());
+      expect(result.status).toBe("completed");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("accepts status: failed (passed through for caller to handle)", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 200,
+      body: makeValidResult({ ok: false, status: "failed", error: "runtime error" }),
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      const result = await adapter.run(makeTask());
+      expect(result.status).toBe("failed");
+      expect(result.ok).toBe(false);
+    } finally {
+      server.close();
+    }
+  });
+});
