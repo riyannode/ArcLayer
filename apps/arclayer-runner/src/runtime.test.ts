@@ -1042,6 +1042,13 @@ describe("IPv4-mapped IPv6 artifact host rejection", () => {
     });
     expect(() => validateOpenClawResponse(result)).not.toThrow();
   });
+
+  it("rejects https://[::]/file (IPv6 unspecified address)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "unspec", uri: "https://[::]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("mapped");
+  });
 });
 
 // ── Patch: full result size cap ───────────────────────────────────────

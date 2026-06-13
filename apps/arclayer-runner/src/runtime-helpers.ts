@@ -249,11 +249,12 @@ function validateArtifactUri(uri: string): void {
     );
   }
 
-  // Block IPv6 loopback, link-local, unique-local, and IPv4-mapped IPv6
+  // Block IPv6 loopback, link-local, unique-local, unspecified, and IPv4-mapped IPv6
   // (JS URL API returns [::1] with brackets)
   const bareHostname = hostname.replace(/^\[|\]$/g, "");
   if (
     bareHostname === "::1" ||
+    bareHostname === "::" ||
     bareHostname.startsWith("fe80:") ||
     bareHostname.startsWith("fc") ||
     bareHostname.startsWith("fd") ||
