@@ -129,6 +129,17 @@ export function validateOpenClawResponse(
     );
   }
 
+  // Reject incomplete statuses — OpenClaw must not return needs_payment/needs_action
+  // because runErc8183ProviderJob only checks status === "failed" before settlement.
+  // An unfinished result with needs_* status could still be hashed and submitted.
+  if (parsed.status === "needs_payment" || parsed.status === "needs_action") {
+    throw new RunnerError(
+      RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
+      `OpenClaw runtime returned incomplete status: ${parsed.status}`,
+      502
+    );
+  }
+
   if (parsed.actionRequests && parsed.actionRequests.length > 0) {
     throw new RunnerError(
       RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
@@ -307,10 +318,11 @@ export class HttpRuntimeConnector implements RuntimeConnector {
   ) {}
 
   /**
-   * Send a request to the runtime and return the raw fetch response.
-   * Subclasses can use this for custom response handling.
+   * Send a request to the runtime and return the raw fetch response
+   * with a cleanup handle. Caller MUST call done() after consuming the
+   * response body to release the abort timer.
    */
-  protected async fetchRuntime(body: unknown): Promise<Response> {
+  protected async fetchRuntime(body: unknown): Promise<{ response: Response; done: () => void }> {
     const url = new URL(this.runPath, this.endpoint);
     const headers: Record<string, string> = {
       "content-type": "application/json"
@@ -321,16 +333,19 @@ export class HttpRuntimeConnector implements RuntimeConnector {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    const done = () => clearTimeout(timeout);
 
     try {
-      return await fetch(url, {
+      const response = await fetch(url, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
         signal: controller.signal
       });
-    } finally {
-      clearTimeout(timeout);
+      return { response, done };
+    } catch (error) {
+      done(); // clean up on fetch failure
+      throw error;
     }
   }
 
@@ -340,8 +355,17 @@ export class HttpRuntimeConnector implements RuntimeConnector {
   }
 
   async run(task: AgentTask): Promise<RuntimeResult> {
+    let fetchResult: { response: Response; done: () => void };
     try {
-      const response = await this.fetchRuntime(task);
+      fetchResult = await this.fetchRuntime(task);
+    } catch (error: any) {
+      if (error instanceof RunnerError) throw error;
+      if (error.name === "AbortError") throw mapRuntimeError(error, undefined, this.endpoint);
+      throw mapRuntimeError(error, undefined, this.endpoint);
+    }
+    const { response, done } = fetchResult;
+
+    try {
       const body = await response.json().catch(() => null);
 
       if (!response.ok) {
@@ -357,6 +381,8 @@ export class HttpRuntimeConnector implements RuntimeConnector {
       if (error instanceof RunnerError) throw error;
       if (error.name === "AbortError") throw mapRuntimeError(error, undefined, this.endpoint);
       throw mapRuntimeError(error, undefined, this.endpoint);
+    } finally {
+      done();
     }
   }
 

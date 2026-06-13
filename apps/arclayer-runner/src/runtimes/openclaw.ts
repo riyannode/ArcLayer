@@ -37,10 +37,21 @@ export class OpenClawRuntimeConnector extends HttpRuntimeConnector implements Ru
     // 1. Sanitize outbound task
     const sanitizedTask = sanitizeTaskForUntrustedRuntime(task);
 
+    // 2. Use protected fetchRuntime() — keep timeout alive during body read
+    let fetchResult: { response: Response; done: () => void };
     try {
-      // 2. Use protected fetchRuntime() from base class
-      const response = await this.fetchRuntime(sanitizedTask);
+      fetchResult = await this.fetchRuntime(sanitizedTask);
+    } catch (error: unknown) {
+      // fetchRuntime throws AbortError on timeout, or network errors
+      if (error instanceof RunnerError) throw error;
+      if (error instanceof Error && error.name === "AbortError") {
+        throw mapRuntimeError(error, undefined, this.getEndpoint());
+      }
+      throw mapRuntimeError(error, undefined, this.getEndpoint());
+    }
+    const { response, done } = fetchResult;
 
+    try {
       // 3. Map HTTP errors BEFORE JSON parsing — non-2xx may return HTML/plaintext
       if (!response.ok) {
         throw mapRuntimeError(new Error(`HTTP ${response.status}`), response.status, this.getEndpoint());
@@ -66,6 +77,8 @@ export class OpenClawRuntimeConnector extends HttpRuntimeConnector implements Ru
         throw mapRuntimeError(error, undefined, this.getEndpoint());
       }
       throw mapRuntimeError(error, undefined, this.getEndpoint());
+    } finally {
+      done();
     }
   }
 
