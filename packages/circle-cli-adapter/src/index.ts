@@ -95,7 +95,10 @@ export class CircleCliAdapter {
     }
 
     const { stdout, stderr } = await execFileAsync(this.bin, args, {
-      timeout: this.timeoutMs,
+      // When a signal is provided (broker timeout), don't set execFile timeout.
+      // The broker's AbortSignal handles cancellation at the correct deadline.
+      // Without signal, use the adapter's default timeout as a safety net.
+      ...(signal ? {} : { timeout: this.timeoutMs }),
       maxBuffer: 10 * 1024 * 1024,
       env: { ...process.env, CIRCLE_ACCEPT_TERMS: "1" },
       signal,

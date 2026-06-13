@@ -24,6 +24,7 @@ import { CircleCliAdapter } from "@arclayer/circle-cli-adapter";
 import { CONTRACTS } from "@arclayer/sdk";
 import type { RuntimeConnector } from "./runtime";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
+import { BrokerError, BrokerErrorCode } from "./mcp-broker";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -894,6 +895,30 @@ export class RunnerServices {
         return { ok: true, result, receipt, idempotencyKey };
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
+
+        // ── Broker timeout: payment state unknown ─────────────────────
+        // When the broker times out, the Circle CLI subprocess may have
+        // already submitted the payment or may still be running. We must
+        // NOT mark the ledger as terminal failure — leave the attempt
+        // pending so that retries check idempotency correctly.
+        const isBrokerTimeout =
+          error instanceof BrokerError &&
+          error.code === BrokerErrorCode.TOOL_TIMEOUT;
+
+        if (isBrokerTimeout) {
+          await this.receipts.append({
+            type: "x402_payment",
+            agentId: this.config.agentId,
+            idempotencyKey,
+            request: payment,
+            error: `BROKER_TIMEOUT: payment state unknown — ${msg}`,
+            proof: { sha256: sha256Text(msg) }
+          });
+          // Do NOT call ledger.recordFailure — leave as pending attempt.
+          // Retry will find hasPendingAttempt and either get a 409 (already
+          // paid) or can resubmit with the same idempotency key.
+          throw error;
+        }
 
         // ── 409 already-paid/idempotent-safe ────────────────────────────
         // Circle CLI exits non-zero when server returns HTTP 409 (already paid
