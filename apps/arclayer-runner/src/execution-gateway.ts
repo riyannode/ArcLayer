@@ -44,6 +44,8 @@ export type WriteOperationInput = {
   agentId?: string;
   walletAddress: string;
   chain: string;
+  /** Chain ID for operation record (default: 5042002 Arc Testnet). */
+  chainId?: number;
   contractAddress: string;
   /** Human-readable description for receipts. */
   description?: string;
@@ -90,13 +92,20 @@ function classifyCircleResult(
   // If we got an error, check if it's a timeout/abort (ambiguous)
   if (error) {
     const msg = error.message.toLowerCase();
+    // AbortSignal abort
+    if (error.name === "AbortError") return "unknown";
+    // execFile timeout: child process killed by SIGTERM
+    if (
+      (error as any).killed === true ||
+      (error as any).signal === "SIGTERM"
+    ) return "unknown";
+    // Message-based detection for timeout/abort
     if (
       msg.includes("timeout") ||
       msg.includes("abort") ||
-      error.name === "AbortError"
-    ) {
-      return "unknown";
-    }
+      msg.includes("timed out") ||
+      msg.includes("etimedout")
+    ) return "unknown";
     return "failed";
   }
 
@@ -106,11 +115,21 @@ function classifyCircleResult(
     return "failed";
   }
 
+  // Check Circle's terminal state field (data.state)
+  // Circle CLI waits for terminal state: CONFIRMED, FAILED, DENIED, CANCELLED
+  const dataState = (json?.data as Record<string, unknown> | undefined)?.state;
+  if (typeof dataState === "string") {
+    const upper = dataState.toUpperCase();
+    if (upper === "FAILED" || upper === "DENIED" || upper === "CANCELLED") {
+      return "failed";
+    }
+  }
+
   const txHash = extractTxHash(result);
 
   // Explicit success receipt with txHash → confirmed
-  // Circle CLI returns { status: "confirmed" } or similar on finality
-  if (txHash && json?.status === "confirmed") {
+  // Circle CLI returns { status: "confirmed" } or data.state: "CONFIRMED" on finality
+  if (txHash && (json?.status === "confirmed" || dataState === "CONFIRMED")) {
     return "confirmed";
   }
 
@@ -124,11 +143,28 @@ function classifyCircleResult(
 }
 
 /**
- * Extract a possible transaction hash from a Circle CLI result.
+ * Extract a transaction hash from Circle CLI result.
+ *
+ * Only inspects json.stdout / json fields — does NOT scan the full
+ * result object (which includes args with bytes32 values that match
+ * the 0x{64} pattern and would false-positive as tx hashes).
  */
-function extractTxHash(value: unknown): string | undefined {
-  const text = JSON.stringify(value);
-  const match = text.match(/0x[a-fA-F0-9]{64}/);
+function extractTxHash(result: CircleCliResult): string | undefined {
+  // Prefer the json-parsed stdout (Circle CLI --output json)
+  const json = result.json as Record<string, unknown> | undefined;
+  if (json) {
+    // Direct txHash field
+    if (typeof json.txHash === "string") return json.txHash;
+    // Nested data.txHash
+    const data = json.data as Record<string, unknown> | undefined;
+    if (data && typeof data.txHash === "string") return data.txHash;
+    // Nested outputs[0] (some CLI versions)
+    if (Array.isArray(json.outputs) && typeof json.outputs[0] === "string" && /^0x[a-fA-F0-9]{64}$/.test(json.outputs[0])) {
+      return json.outputs[0];
+    }
+  }
+  // Fallback: scan stdout string only (not the full result object)
+  const match = result.stdout.match(/0x[a-fA-F0-9]{64}/);
   return match?.[0];
 }
 
@@ -140,6 +176,12 @@ export class ExecutionGateway {
    * Phase 5 will replace with SQLite.
    */
   private operations = new Map<string, OperationRecord>();
+
+  /**
+   * Stored CircleCliResult per operation for idempotent replay.
+   * Keyed by operationId.
+   */
+  private resultCache = new Map<string, CircleCliResult>();
 
   /**
    * Idempotency index: `${idempotencyKey}:${paramsHash}` → operationId.
@@ -182,6 +224,7 @@ export class ExecutionGateway {
           operationId: existing.operationId,
           state: existing.state,
           txHash: existing.txHash,
+          circleResult: this.resultCache.get(existing.operationId),
           idempotent: true,
         };
       }
@@ -213,6 +256,7 @@ export class ExecutionGateway {
         existing.state === "cancelled"
       ) {
         this.operations.delete(existing.operationId);
+        this.resultCache.delete(existing.operationId);
         this.idempotencyIndex.delete(
           `${input.idempotencyKey}:${input.paramsHash}`
         );
@@ -229,7 +273,7 @@ export class ExecutionGateway {
       toolName: input.kind,
       agentId: input.agentId ?? this.config.agentId,
       walletAddress: input.walletAddress,
-      chainId: 5042002, // Arc Testnet
+      chainId: input.chainId ?? 5042002, // Default: Arc Testnet
       contractAddress: input.contractAddress,
       paramsHash: input.paramsHash,
       state: "created",
@@ -278,6 +322,11 @@ export class ExecutionGateway {
       this.transitionState(operationId, "confirmed");
     } else {
       this.transitionState(operationId, terminalState);
+    }
+
+    // ── Cache result for idempotent replay ────────────────────────────
+    if (cliResult) {
+      this.resultCache.set(operationId, cliResult);
     }
 
     // ── Update record with result ─────────────────────────────────────
