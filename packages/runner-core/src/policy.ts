@@ -26,14 +26,13 @@ export function assertRoleAllowed(config: RunnerConfig, role: RunnerRole): void 
   }
 }
 
-export function assertProviderOnlyForExternal(config: RunnerConfig, role: RunnerRole): void {
-  if (config.defaultRole === "provider" && role !== "provider") {
-    throw new RunnerError(
-      "EXTERNAL_RUNNER_PROVIDER_ONLY",
-      "External 24/7 runner is provider-only in v1",
-      403
-    );
-  }
+/**
+ * @deprecated — assertRoleAllowed already covers this. Kept as no-op for backward compat.
+ * Previously blocked all non-provider roles when defaultRole=provider,
+ * which was too restrictive for evaluator/client runners with separate wallets.
+ */
+export function assertProviderOnlyForExternal(_config: RunnerConfig, _role: RunnerRole): void {
+  // No-op. assertRoleAllowed handles role gating.
 }
 
 export function assertAgentIdentity(config: RunnerConfig, agentId: string): void {
