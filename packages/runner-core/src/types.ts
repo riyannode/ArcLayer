@@ -83,7 +83,8 @@ export const InitFileConfigSchema = z.object({
     chain: z.string().default("ARC-TESTNET")
   }).default({}),
   runtime: z.object({
-    target: RuntimeKindSchema.default("openclaw")
+    target: RuntimeKindSchema.default("openclaw"),
+    timeoutMs: z.coerce.number().int().min(1000).optional(),
   }).default({}),
   mcp: z.object({
     mode: z.enum(["stdio", "http"]).default("stdio")
@@ -140,6 +141,7 @@ export function transformFileConfig(
     circleWalletAddress: file.circle?.walletAddress || undefined,
     chain: file.circle?.chain ?? "ARC-TESTNET",
     runtimeKind: file.runtime?.target ?? "openclaw",
+    runtimeTimeoutMs: file.runtime?.timeoutMs ?? 120_000,
     runtimeEndpoint: "http://127.0.0.1:8787", // default, overridable via env
     runtimeRunPath: "/run",
     // Privileged opt-in flags
@@ -165,6 +167,7 @@ export const RunnerConfigSchema = z.object({
   runtimeKind: RuntimeKindSchema,
   runtimeEndpoint: z.string().url(),
   runtimeRunPath: z.string().default("/run"),
+  runtimeTimeoutMs: z.coerce.number().int().min(1000).default(120_000),
   defaultRole: RunnerRoleSchema.default("provider"),
   allowedRoles: z.array(RunnerRoleSchema).default(["provider"]),
   skillPath: z.string().optional(),
@@ -332,6 +335,14 @@ export type ReceiptRecord = {
     txHash?: string;
     deliverableHash?: string;
     circleCommand?: string;
+    circleError?: string;
+    // Runtime proof metadata (PR #528)
+    runtimeKind?: string;
+    durationMs?: number;
+    responseHash?: string;
+    sanitized?: boolean;
+    responseValidated?: boolean;
+    endpointHost?: string;
   };
 };
 

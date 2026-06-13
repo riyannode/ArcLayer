@@ -23,6 +23,7 @@ import {
 import { CircleCliAdapter } from "@arclayer/circle-cli-adapter";
 import { CONTRACTS } from "@arclayer/sdk";
 import type { RuntimeConnector } from "./runtime";
+import { safeHostFromUrl } from "./runtime";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
 import { isBrokerAbortOrTimeout } from "./mcp-broker";
 import { randomUUID } from "node:crypto";
@@ -119,8 +120,11 @@ export class RunnerServices {
     // Reserve taskId AFTER all validation passes — before dispatch
     lifecycle?.reserveTaskId?.(task.taskId, task.agentId);
 
+    const startTime = Date.now();
+
     try {
       const result = await this.runtime.run(task);
+      const durationMs = Date.now() - startTime;
       lifecycle?.markTaskCompleted?.(task.taskId, task.agentId);
 
       const receipt = await this.receipts.append({
@@ -129,7 +133,15 @@ export class RunnerServices {
         agentId: task.agentId,
         request: task,
         response: result,
-        proof: { sha256: sha256Json(result) }
+        proof: {
+          sha256: sha256Json(result),
+          runtimeKind: this.runtime.kind,
+          durationMs,
+          responseHash: sha256Json(result),
+          sanitized: this.runtime.kind === "openclaw",
+          responseValidated: true,
+          endpointHost: safeHostFromUrl(this.config.runtimeEndpoint),
+        }
       });
 
       return { ok: true, result, receipt };

@@ -1,105 +1,59 @@
-import { RunnerError, RuntimeResultSchema, type AgentTask, type RuntimeResult } from "@arclayer/runner-core";
+/**
+ * Runtime adapter interface, factory, and shared helpers.
+ *
+ * Concrete adapters live in:
+ *   runtimes/hermes.ts  — trusted Hermes runtime
+ *   runtimes/openclaw.ts — untrusted OpenClaw runtime (strict boundary)
+ *
+ * Shared helpers live in:
+ *   runtime-helpers.ts  — HttpRuntimeConnector, error mapper, sanitizer, validator
+ */
 
-const DEFAULT_TIMEOUT_MS = 120_000; // 2 minutes
+import type { AgentTask, RuntimeResult } from "@arclayer/runner-core";
+import { HermesRuntimeConnector } from "./runtimes/hermes";
+import { OpenClawRuntimeConnector } from "./runtimes/openclaw";
+import { HttpRuntimeConnector } from "./runtime-helpers";
+
+// Re-export everything from runtime-helpers for backward compat
+export {
+  HttpRuntimeConnector,
+  RuntimeErrorCode,
+  sanitizeTaskForUntrustedRuntime,
+  validateOpenClawResponse,
+  mapRuntimeError,
+  safeHostFromUrl,
+  type RuntimeCapabilities,
+} from "./runtime-helpers";
+
+// ── Runtime Connector Interface ─────────────────────────────────────────
 
 export interface RuntimeConnector {
   readonly kind: string;
   run(task: AgentTask): Promise<RuntimeResult>;
+  /** Optional health check. Not startup-blocking. For doctor/preflight only. */
+  healthCheck?(): Promise<{ ok: boolean; latencyMs?: number; error?: string }>;
+  /** Optional capability declaration. */
+  getCapabilities?(): import("./runtime-helpers").RuntimeCapabilities;
 }
 
-export class HttpRuntimeConnector implements RuntimeConnector {
-  readonly kind = "http";
-
-  constructor(
-    private readonly endpoint: string,
-    private readonly runPath: string = "/run",
-    private readonly secret?: string,
-    private readonly timeoutMs: number = DEFAULT_TIMEOUT_MS
-  ) {}
-
-  async run(task: AgentTask): Promise<RuntimeResult> {
-    const url = new URL(this.runPath, this.endpoint);
-    const headers: Record<string, string> = {
-      "content-type": "application/json"
-    };
-    if (this.secret) {
-      headers.authorization = `Bearer ${this.secret}`;
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(task),
-        signal: controller.signal
-      });
-
-      const body = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new RunnerError("RUNTIME_ERROR", `Runtime returned ${response.status}`, 502, body);
-      }
-
-      return RuntimeResultSchema.parse(body);
-    } catch (error: any) {
-      if (error.name === "AbortError") {
-        throw new RunnerError(
-          "RUNTIME_TIMEOUT",
-          `Runtime request timed out after ${this.timeoutMs}ms`,
-          504
-        );
-      }
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-}
-
-export class HermesRuntimeConnector implements RuntimeConnector {
-  readonly kind = "hermes";
-  private readonly http: HttpRuntimeConnector;
-
-  constructor(endpoint: string, runPath: string = "/run", apiKey?: string, timeoutMs?: number) {
-    this.http = new HttpRuntimeConnector(endpoint, runPath, apiKey, timeoutMs);
-  }
-
-  async run(task: AgentTask): Promise<RuntimeResult> {
-    return this.http.run(task);
-  }
-}
-
-export class OpenClawRuntimeConnector implements RuntimeConnector {
-  readonly kind = "openclaw";
-  private readonly http: HttpRuntimeConnector;
-
-  constructor(endpoint: string, runPath: string = "/run", apiKey?: string, timeoutMs?: number) {
-    this.http = new HttpRuntimeConnector(endpoint, runPath, apiKey, timeoutMs);
-  }
-
-  async run(task: AgentTask): Promise<RuntimeResult> {
-    return this.http.run(task);
-  }
-}
-
+// ── Factory ─────────────────────────────────────────────────────────────
 
 export function createRuntimeConnector(
   kind: string,
   endpoint: string,
   runPath: string,
-  secret?: string
+  secret?: string,
+  timeoutMs?: number
 ): RuntimeConnector {
+  const timeout = timeoutMs ?? 120_000;
+
   switch (kind) {
     case "hermes":
-      return new HermesRuntimeConnector(endpoint, runPath, secret);
+      return new HermesRuntimeConnector(endpoint, runPath, secret, timeout);
     case "openclaw":
-      return new OpenClawRuntimeConnector(endpoint, runPath, secret);
+      return new OpenClawRuntimeConnector(endpoint, runPath, secret, timeout);
     case "custom":
-      return new HttpRuntimeConnector(endpoint, runPath, secret);
     default:
-      return new HttpRuntimeConnector(endpoint, runPath, secret);
+      return new HttpRuntimeConnector(endpoint, runPath, secret, timeout);
   }
 }
