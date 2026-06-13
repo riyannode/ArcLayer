@@ -1,13 +1,62 @@
 /**
  * Runner-local MCP tool schemas.
  * JSON-RPC 2.0 compatible input/output definitions.
+ *
+ * For write/payment tools, inputSchema is derived from runner-core Zod schemas
+ * via zodInputSchemaToJsonSchema() — ensuring tools/list and execution validation
+ * always agree on the schema contract.
+ *
+ * Read-only introspection tools keep hand-written schemas (trivial shape).
  */
+
+import { zodInputSchemaToJsonSchema } from "@arclayer/runner-core";
+import {
+  X402InspectInputSchema,
+  X402PayInputSchema,
+  X402BatchPayInputSchema,
+  Erc8004PrepareRegisterInputSchema,
+  Erc8004RegisterViaCircleCliInputSchema,
+  Erc8183ProviderRunJobInputSchema,
+  Erc8183ProviderSubmitDeliverableInputSchema,
+  Erc8183ProviderRunAndSubmitInputSchema,
+  Erc8183CreateJobInputSchema,
+  Erc8183SetBudgetInputSchema,
+  Erc8183ApproveUsdcInputSchema,
+  Erc8183FundJobInputSchema,
+  Erc8183CompleteJobInputSchema,
+  Erc8183RejectJobInputSchema,
+  Erc8183ClaimRefundInputSchema,
+  Erc8183SetProviderInputSchema,
+  CircleGatewayDepositInputSchema,
+} from "@arclayer/runner-core";
 
 export type McpToolDef = {
   name: string;
   description: string;
   inputSchema?: Record<string, unknown>;
 };
+
+// ── Helper: derive inputSchema from Zod, add description overrides ────────
+
+/**
+ * Build an MCP-compatible inputSchema from a Zod schema,
+ * merging in field-level descriptions from a overrides map.
+ */
+function fromZod(
+  schema: Parameters<typeof zodInputSchemaToJsonSchema>[0],
+  descriptionOverrides?: Record<string, string>
+): Record<string, unknown> | undefined {
+  const base = zodInputSchemaToJsonSchema(schema);
+  if (!base || !descriptionOverrides) return base ?? undefined;
+
+  // Merge descriptions into the schema
+  for (const [field, description] of Object.entries(descriptionOverrides)) {
+    if (base[field] && typeof base[field] === "object") {
+      (base[field] as Record<string, unknown>).description = description;
+    }
+  }
+  return base;
+}
 
 export const RUNNER_MCP_TOOLS: McpToolDef[] = [
   // ── Runner introspection ──────────────────────────────────────────────
@@ -64,45 +113,32 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
   {
     name: "x402.inspect",
     description: "Inspect x402 service (read-only, no payment)",
-    inputSchema: {
-      url: { type: "string", required: true },
-      method: { type: "string" },
-      body: { type: "object" }
-    }
+    inputSchema: fromZod(X402InspectInputSchema, {
+      url: "x402 service URL",
+      method: "HTTP method (default: GET)",
+      body: "Request body (optional)",
+    })
   },
   {
     name: "x402.pay",
     description: "Pay x402 service (requires paymentEnabled + wallet)",
-    inputSchema: {
-      url: { type: "string", required: true },
-      method: { type: "string" },
-      maxAmountUsdc: { type: "string", required: true },
-      reason: { type: "string", required: true },
-      idempotencyKey: { type: "string" },
-      body: { type: "object" }
-    }
+    inputSchema: fromZod(X402PayInputSchema, {
+      url: "x402 service URL",
+      method: "HTTP method (default: GET)",
+      maxAmountUsdc: "Max payment amount in USDC",
+      reason: "Payment reason (for audit)",
+      idempotencyKey: "Idempotency key (optional, auto-generated if missing)",
+      body: "Request body (optional)",
+    })
   },
   {
     name: "x402.batch_pay",
     description: "Batch pay multiple x402 services",
-    inputSchema: {
-      batchId: { type: "string", required: true },
-      taskId: { type: "string", required: true },
-      payments: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            url: { type: "string" },
-            method: { type: "string" },
-            maxAmountUsdc: { type: "string" },
-            reason: { type: "string" },
-            idempotencyKey: { type: "string" }
-          }
-        },
-        minItems: 1
-      }
-    }
+    inputSchema: fromZod(X402BatchPayInputSchema, {
+      batchId: "Batch identifier",
+      taskId: "Task identifier",
+      payments: "Array of payment requests",
+    })
   },
   {
     name: "x402.list_receipts",
@@ -118,43 +154,43 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
   {
     name: "erc8004.prepare_register",
     description: "Prepare ERC-8004 agent registration (unsigned calldata)",
-    inputSchema: {
-      metadataURI: { type: "string", required: true, description: "Agent manifest URL" }
-    }
+    inputSchema: fromZod(Erc8004PrepareRegisterInputSchema, {
+      metadataURI: "Agent manifest URL",
+    })
   },
 
   // ── ERC-8183 ──────────────────────────────────────────────────────────
   {
     name: "erc8183.provider_run_job",
     description: "Dispatch job to LLM runtime (no on-chain submit)",
-    inputSchema: {
-      taskId: { type: "string", required: true },
-      jobId: { type: "string", required: true },
-      agentId: { type: "string", required: true },
-      provider: { type: "string", required: true },
-      description: { type: "string", required: true },
-      input: { type: "object", required: true }
-    }
+    inputSchema: fromZod(Erc8183ProviderRunJobInputSchema, {
+      taskId: "Task identifier",
+      jobId: "ERC-8183 job ID (numeric string)",
+      agentId: "Agent identifier",
+      provider: "Provider wallet address (0x...)",
+      description: "Job description",
+      input: "Job input payload",
+    })
   },
   {
     name: "erc8183.provider_submit_deliverable",
     description: "Submit deliverable on-chain via Circle CLI",
-    inputSchema: {
-      jobId: { type: "string", required: true },
-      deliverableHash: { type: "string", required: true }
-    }
+    inputSchema: fromZod(Erc8183ProviderSubmitDeliverableInputSchema, {
+      jobId: "ERC-8183 job ID (numeric string)",
+      deliverableHash: "Deliverable hash (bytes32)",
+    })
   },
   {
     name: "erc8183.provider_run_and_submit",
     description: "Run job + submit deliverable (full lifecycle)",
-    inputSchema: {
-      taskId: { type: "string", required: true },
-      jobId: { type: "string", required: true },
-      agentId: { type: "string", required: true },
-      provider: { type: "string", required: true },
-      description: { type: "string", required: true },
-      input: { type: "object", required: true }
-    }
+    inputSchema: fromZod(Erc8183ProviderRunAndSubmitInputSchema, {
+      taskId: "Task identifier",
+      jobId: "ERC-8183 job ID (numeric string)",
+      agentId: "Agent identifier",
+      provider: "Provider wallet address (0x...)",
+      description: "Job description",
+      input: "Job input payload",
+    })
   },
   {
     name: "erc8183.provider_runtime_status",
@@ -165,89 +201,89 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
   {
     name: "erc8183.create_job",
     description: "Create ERC-8183 job on-chain via Circle CLI. hook is an address (not bytes).",
-    inputSchema: {
-      provider: { type: "string", required: true, description: "Provider wallet address" },
-      evaluator: { type: "string", required: true, description: "Evaluator wallet address" },
-      expiredAt: { type: "string", required: true, description: "Job expiry as unix timestamp" },
-      description: { type: "string", required: true, description: "Job description" },
-      hook: { type: "string", description: "Callback contract address (default: zero address)" }
-    }
+    inputSchema: fromZod(Erc8183CreateJobInputSchema, {
+      provider: "Provider wallet address",
+      evaluator: "Evaluator wallet address",
+      expiredAt: "Job expiry as unix timestamp",
+      description: "Job description",
+      hook: "Callback contract address (default: zero address)",
+    })
   },
   {
     name: "erc8183.set_budget",
     description: "Set budget for an ERC-8183 job",
-    inputSchema: {
-      jobId: { type: "string", required: true },
-      amount: { type: "string", required: true, description: "Budget amount in USDC (6 decimals)" },
-      optParams: { type: "string", description: "Optional params bytes (default: 0x)" }
-    }
+    inputSchema: fromZod(Erc8183SetBudgetInputSchema, {
+      jobId: "ERC-8183 job ID (numeric string)",
+      amount: "Budget amount in USDC (6 decimals)",
+      optParams: "Optional params bytes (default: 0x)",
+    })
   },
   {
     name: "erc8183.approve_usdc",
     description: "Approve USDC for ERC-8183 AgenticCommerce contract. Must be called before fund_job.",
-    inputSchema: {
-      amount: { type: "string", required: true, description: "Amount to approve in USDC (6 decimals)" }
-    }
+    inputSchema: fromZod(Erc8183ApproveUsdcInputSchema, {
+      amount: "Amount to approve in USDC (6 decimals)",
+    })
   },
   {
     name: "erc8183.fund_job",
     description: "Fund an ERC-8183 job. Requires prior approve_usdc.",
-    inputSchema: {
-      jobId: { type: "string", required: true },
-      optParams: { type: "string", description: "Optional params bytes (default: 0x)" }
-    }
+    inputSchema: fromZod(Erc8183FundJobInputSchema, {
+      jobId: "ERC-8183 job ID (numeric string)",
+      optParams: "Optional params bytes (default: 0x)",
+    })
   },
   {
     name: "erc8183.complete_job",
     description: "Complete an ERC-8183 job (evaluator action). reason is bytes32 or string (auto-hashed).",
-    inputSchema: {
-      jobId: { type: "string", required: true },
-      reason: { type: "string", required: true, description: "bytes32 hash or plaintext string" },
-      optParams: { type: "string", description: "Optional params bytes (default: 0x)" }
-    }
+    inputSchema: fromZod(Erc8183CompleteJobInputSchema, {
+      jobId: "ERC-8183 job ID (numeric string)",
+      reason: "bytes32 hash or plaintext string",
+      optParams: "Optional params bytes (default: 0x)",
+    })
   },
   {
     name: "erc8183.reject_job",
     description: "Reject an ERC-8183 job (evaluator action). reason is bytes32 or string (auto-hashed).",
-    inputSchema: {
-      jobId: { type: "string", required: true },
-      reason: { type: "string", required: true, description: "bytes32 hash or plaintext string" },
-      optParams: { type: "string", description: "Optional params bytes (default: 0x)" }
-    }
+    inputSchema: fromZod(Erc8183RejectJobInputSchema, {
+      jobId: "ERC-8183 job ID (numeric string)",
+      reason: "bytes32 hash or plaintext string",
+      optParams: "Optional params bytes (default: 0x)",
+    })
   },
   {
     name: "erc8183.claim_refund",
     description: "Claim refund for an expired ERC-8183 job (client action). Single arg — no optParams.",
-    inputSchema: {
-      jobId: { type: "string", required: true }
-    }
+    inputSchema: fromZod(Erc8183ClaimRefundInputSchema, {
+      jobId: "ERC-8183 job ID (numeric string)",
+    })
   },
   {
     name: "erc8183.set_provider",
     description: "Assign provider to an open ERC-8183 job (client action). Job must be Open, provider must be 0x0.",
-    inputSchema: {
-      jobId: { type: "string", required: true },
-      provider: { type: "string", required: true, description: "Provider wallet address (0x...)" }
-    }
+    inputSchema: fromZod(Erc8183SetProviderInputSchema, {
+      jobId: "ERC-8183 job ID (numeric string)",
+      provider: "Provider wallet address (0x...)",
+    })
   },
 
   // ── ERC-8004 Register via Circle CLI ────────────────────────────────────
   {
     name: "erc8004.register_via_circle_cli",
     description: "Register ERC-8004 identity on-chain via Circle CLI. Gated behind allowIdentityRegister.",
-    inputSchema: {
-      metadataURI: { type: "string", required: true, description: "Agent manifest URL" }
-    }
+    inputSchema: fromZod(Erc8004RegisterViaCircleCliInputSchema, {
+      metadataURI: "Agent manifest URL",
+    })
   },
 
   // ── Gateway Deposit ─────────────────────────────────────────────────────
   {
     name: "circle.gateway_deposit",
     description: "Deposit USDC into Circle Gateway. Gated behind allowGatewayDeposit. devops-admin only.",
-    inputSchema: {
-      amount: { type: "string", required: true, description: "Amount in USDC" },
-      method: { type: "string", description: "Deposit method: eco (fast, no gas) or direct (on-chain)" }
-    }
+    inputSchema: fromZod(CircleGatewayDepositInputSchema, {
+      amount: "Amount in USDC",
+      method: "Deposit method: eco (fast, no gas) or direct (on-chain)",
+    })
   },
 
   // ── MCP Tool Broker Introspection (PR #3) ─────────────────────────────

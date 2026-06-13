@@ -14,6 +14,7 @@
 
 import { RUNNER_MCP_TOOLS, type McpToolDef } from "./mcp-schemas";
 import { getToolByName } from "./tool-registry";
+import { safeValidateMcpToolInput, getMcpToolInputSchema } from "@arclayer/runner-core";
 
 // ── Stable Error Codes ────────────────────────────────────────────────────
 
@@ -208,27 +209,42 @@ function redactArgs(args: Record<string, unknown>): RedactedArgs {
 // ── Schema Validation ─────────────────────────────────────────────────────
 
 /**
- * Validate tool arguments against the tool's inputSchema from mcp-schemas.
+ * Validate tool arguments using the same Zod schemas that execution uses.
  * Returns null if valid, BrokerError if invalid.
  *
- * This is a pragmatic validator — checks required fields and type hints.
- * Not a full JSON Schema validator (would add dependency); covers the 90% case.
+ * For write/payment tools with registered Zod schemas in runner-core,
+ * this uses Zod-based validation — the single source of truth.
  *
- * The "object" type accepts any JSON value (object, array, primitive) since
- * fields like `body` in x402 tools accept arbitrary JSON payloads.
+ * For read-only tools without Zod schemas, falls back to the JSON Schema
+ * inputSchema from mcp-schemas.ts (simple required/type checks).
  */
 function validateToolArgs(
   toolDef: McpToolDef,
   args: Record<string, unknown>
 ): BrokerError | null {
+  // Try Zod-based validation first (write/payment tools)
+  const hasZodSchema = getMcpToolInputSchema(toolDef.name) !== undefined;
+
+  if (hasZodSchema) {
+    const result = safeValidateMcpToolInput(toolDef.name, args);
+    if (!result.ok) {
+      return new BrokerError(
+        BrokerErrorCode.SCHEMA_VALIDATION_FAILED,
+        `Schema validation failed for tool '${toolDef.name}': ${result.error}`,
+        { tool: toolDef.name, issues: result.issues }
+      );
+    }
+    return null;
+  }
+
+  // Fallback: JSON Schema validation for read-only tools without Zod schemas
   const schema = toolDef.inputSchema;
-  if (!schema) return null; // No schema = no validation
+  if (!schema) return null;
 
   for (const [field, spec] of Object.entries(schema)) {
     const fieldSpec = spec as { type?: string; required?: boolean; description?: string };
     const value = args[field];
 
-    // Required check
     if (fieldSpec.required && (value === undefined || value === null || value === "")) {
       return new BrokerError(
         BrokerErrorCode.SCHEMA_VALIDATION_FAILED,
@@ -237,19 +253,13 @@ function validateToolArgs(
       );
     }
 
-    // Type check (only if value is present)
     if (value !== undefined && value !== null && fieldSpec.type) {
       const actualType = typeof value;
       const expectedType = fieldSpec.type;
-
-      // Flexible type mapping
-      // "object" accepts any JSON value (objects, arrays, primitives)
-      // because fields like `body` in x402 tools accept arbitrary payloads.
       const typeOk =
         (expectedType === "string" && actualType === "string") ||
         (expectedType === "number" && actualType === "number") ||
         (expectedType === "boolean" && actualType === "boolean") ||
-        // "object" = any JSON value (objects, arrays, string, number, boolean, null)
         (expectedType === "object") ||
         (expectedType === "array" && Array.isArray(value));
 
