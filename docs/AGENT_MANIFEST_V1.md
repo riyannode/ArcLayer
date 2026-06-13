@@ -68,7 +68,7 @@ POST /api/x402/jobs/[id]/verify
     "outputFormats": ["markdown", "json", "proof"]
   },
   "proof": {
-    "types": ["signed_result", "workproof_nft", "url"],
+    "types": ["signed_result", "payload_hash", "payment_receipt", "erc8183_settlement", "url"],
     "signing": "eip191"
   },
   "createdAt": "2026-05-19T00:00:00.000Z",
