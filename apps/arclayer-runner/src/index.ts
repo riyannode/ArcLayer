@@ -52,6 +52,8 @@ async function main() {
     const services = new RunnerServices(config, runtime, mcp, skill);
     const mcpToolCtx = { services, mcp, config, skill };
 
+    const authMode = process.env.ARCLAYER_AUTH_MODE === "bearer" ? "bearer" : "hmac";
+
     const server = createRouter(
       [
         // ── Public routes (no auth) ─────────────────────────────────────
@@ -145,17 +147,19 @@ async function main() {
           }
         }
       ],
-      config.runnerSecret
+      config.runnerSecret,
+      { authMode }
     );
 
-    server.listen(config.port, () => {
-      console.log(`ArcLayer Runner listening on http://127.0.0.1:${config.port}`);
+    server.listen(config.port, config.host, () => {
+      console.log(`ArcLayer Runner listening on http://${config.host}:${config.port}`);
       console.log(`Agent ${config.agentId} (${config.defaultRole}) -> ${config.runtimeKind} ${config.runtimeEndpoint}`);
       console.log(`Runtime run path: ${config.runtimeRunPath}`);
-      console.log(`Runner MCP: POST /mcp (Bearer auth)`);
+      console.log(`Runner MCP: POST /mcp (${authMode} auth)`);
       console.log(`Console MCP bridge: ${process.env.ARCLAYER_MCP_BASE_URL || config.runtimeEndpoint}/api/mcp`);
       console.log(`Payment: ${config.paymentEnabled ? "enabled" : "disabled"}`);
-      console.log(`Auth: required for all routes except /health, /.well-known/*, /skills/*`);
+      console.log(`Auth: ${authMode.toUpperCase()} — required for all routes except /health, /.well-known/*, /skills/*`);
+      console.log(`Host binding: ${config.host}`);
     });
   });
 

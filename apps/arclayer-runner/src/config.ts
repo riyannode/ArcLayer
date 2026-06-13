@@ -236,6 +236,7 @@ function buildEnvConfig(): Record<string, unknown> {
 
   if (process.env.ARCLAYER_RUNNER_DATA_DIR) set("dataDir", process.env.ARCLAYER_RUNNER_DATA_DIR);
   if (process.env.ARCLAYER_RUNNER_PORT) set("port", process.env.ARCLAYER_RUNNER_PORT);
+  if (process.env.ARCLAYER_RUNNER_HOST) set("host", process.env.ARCLAYER_RUNNER_HOST);
   set("runnerSecret", process.env.ARCLAYER_RUNNER_SECRET);
 
   return envConfig;
