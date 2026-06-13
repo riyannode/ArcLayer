@@ -206,7 +206,6 @@ export async function GET(request: NextRequest) {
     customOverview: customOverviewRes.data,
     goldskyOverview,
     goldskyMaxBlock,
-    fromBlock,
   });
 
   // ── Warnings (stable codes only — no raw URLs, secrets, or exception text) ──
@@ -220,6 +219,7 @@ export async function GET(request: NextRequest) {
 
   const response: Record<string, unknown> = {
     ...report,
+    ...(fromBlock ? { fromBlock } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 
