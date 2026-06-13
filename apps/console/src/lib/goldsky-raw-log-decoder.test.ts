@@ -112,34 +112,19 @@ describe("decodeIdentityEvent — Transfer", () => {
   });
 });
 
-// ── decodeIdentityEvent — NewRegistered ──────────────────────────────────
+// ── decodeIdentityEvent — Registered ─────────────────────────────────────
+// Registered(uint256 indexed agentId, string metadataURI, address indexed owner)
+// topics[1] = agentId, topics[2] = owner, data = ABI-encoded string metadataURI
 
-describe("decodeIdentityEvent — NewRegistered", () => {
-  it("decodes NewRegistered event", () => {
+describe("decodeIdentityEvent — Registered", () => {
+  it("decodes Registered event with metadataURI in data", () => {
+    // topics[0] = Registered topic, topics[1] = agentId, topics[2] = owner
+    // data = ABI-encoded string: offset(0x20) + length(0x3c) + "https://example.com/test-agent" + padding
     const row = makeRawLog({
       topics:
-        "0xf8e1a15aba9398e019f0b49df1a4fde98ee17ae345cb5f6b5e2c27f5033e8ce7," +
-        "0x00000000000000000000000000000000000000000000000000000000000780b8",
-      data: "0x",
-    });
-    const result = decodeIdentityEvent(row);
-    expect(result).not.toBeNull();
-    expect(result!.kind).toBe("NewRegistered");
-    if (result!.kind === "NewRegistered") {
-      expect(result!.tokenId).toBe(491704n);
-    }
-  });
-});
-
-// ── decodeIdentityEvent — AgentRegistered ────────────────────────────────
-
-describe("decodeIdentityEvent — AgentRegistered", () => {
-  it("decodes AgentRegistered with metadataURI in data", () => {
-    // Real chain data: topic[0]=sig, topic[1]=tokenId, data=controller+metadataURI
-    const row = makeRawLog({
-      topics:
-        "0x2c149ed548c6d2993cd73efe187df6eccabe4538091b33adbd25fafdb8a1468b," +
-        "0x00000000000000000000000000000000000000000000000000000000000780c4",
+        "0xca52e62c367d81bb2e328eb795f7c7ba24afb478408a26c0e201d155c449bc4a," +
+        "0x00000000000000000000000000000000000000000000000000000000000780c4," +
+        "0x000000000000000000000000f5f11e68fbcbfa20de9208709ab60ff81509cb20",
       data:
         "0x0000000000000000000000000000000000000000000000000000000000000020" +
         "000000000000000000000000000000000000000000000000000000000000003c" +
@@ -147,32 +132,64 @@ describe("decodeIdentityEvent — AgentRegistered", () => {
     });
     const result = decodeIdentityEvent(row);
     expect(result).not.toBeNull();
-    expect(result!.kind).toBe("AgentRegistered");
-    if (result!.kind === "AgentRegistered") {
-      expect(result!.tokenId).toBe(491716n);
+    expect(result!.kind).toBe("Registered");
+    if (result!.kind === "Registered") {
+      expect(result!.agentId).toBe(491716n);
+      expect(result!.owner).toBe("0xf5f11e68fbcbfa20de9208709ab60ff81509cb20");
       expect(result!.metadataURI).toContain("example.com/test-agent");
     }
   });
-});
 
-// ── decodeIdentityEvent — AgentWallet ────────────────────────────────────
-
-describe("decodeIdentityEvent — AgentWallet", () => {
-  it("decodes AgentWallet event with wallet in topic[2]", () => {
+  it("decodes Registered with empty metadataURI", () => {
     const row = makeRawLog({
       topics:
         "0xca52e62c367d81bb2e328eb795f7c7ba24afb478408a26c0e201d155c449bc4a," +
-        "0x00000000000000000000000000000000000000000000000000000000000780c4," +
-        "0x000000000000000000000000f5f11e68fbcbfa20de9208709ab60ff81509cb20",
+        "0x0000000000000000000000000000000000000000000000000000000000000001," +
+        "0x000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       data: "0x",
     });
     const result = decodeIdentityEvent(row);
     expect(result).not.toBeNull();
-    expect(result!.kind).toBe("AgentWallet");
-    if (result!.kind === "AgentWallet") {
-      expect(result!.tokenId).toBe(491716n);
-      expect(result!.wallet).toBe("0xf5f11e68fbcbfa20de9208709ab60ff81509cb20");
+    expect(result!.kind).toBe("Registered");
+    if (result!.kind === "Registered") {
+      expect(result!.agentId).toBe(1n);
+      expect(result!.owner).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+      expect(result!.metadataURI).toBe("");
     }
+  });
+});
+
+// ── decodeIdentityEvent — MetadataSet (should be skipped) ────────────────
+// MetadataSet is NOT a registration event — decoder returns null.
+
+describe("decodeIdentityEvent — MetadataSet (ignored)", () => {
+  it("returns null for MetadataSet events", () => {
+    const row = makeRawLog({
+      topics:
+        "0x2c149ed548c6d2993cd73efe187df6eccabe4538091b33adbd25fafdb8a1468b," +
+        "0x00000000000000000000000000000000000000000000000000000000000780c4," +
+        "0x0000000000000000000000000000000000000000000000000000000000000040",
+      data:
+        "0x0000000000000000000000000000000000000000000000000000000000000000" +
+        "0000000000000000000000000000000000000000000000000000000000000000",
+    });
+    const result = decodeIdentityEvent(row);
+    expect(result).toBeNull();
+  });
+});
+
+// ── decodeIdentityEvent — unknown events ─────────────────────────────────
+
+describe("decodeIdentityEvent — unknown events", () => {
+  it("returns null for unknown topic hashes", () => {
+    const row = makeRawLog({
+      topics:
+        "0xf8e1a15aba9398e019f0b49df1a4fde98ee17ae345cb5f6b5e2c27f5033e8ce7," +
+        "0x00000000000000000000000000000000000000000000000000000000000780b8",
+      data: "0x",
+    });
+    const result = decodeIdentityEvent(row);
+    expect(result).toBeNull();
   });
 });
 
@@ -319,12 +336,13 @@ describe("decodeJobEvent — JobSubmitted", () => {
 });
 
 // ── decodeJobEvent — JobRejected ─────────────────────────────────────────
+// Uses canonical topic hash: keccak256("JobRejected(uint256,address,bytes32)")
 
 describe("decodeJobEvent — JobRejected", () => {
-  it("decodes JobRejected event", () => {
+  it("decodes JobRejected event with canonical topic hash", () => {
     const row = makeRawLog({
       topics:
-        "0x21d71db5be59bb9fa133895586b7404307dd33fb93b16db09dc6f1d9d7d231b0," +
+        "0xae7362b1af91f4492868987b9c73990d780060811551b58728fbe96fd1bab275," +
         "0x000000000000000000000000000000000000000000000000000000000001cd16," +
         "0x000000000000000000000000d867647b431cc6fd354e1c261a9c05d6cc999999",
       data: "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -335,6 +353,7 @@ describe("decodeJobEvent — JobRejected", () => {
     if (result!.kind === "JobRejected") {
       expect(result!.jobId).toBe(118038n);
       expect(result!.rejector).toBe("0xd867647b431cc6fd354e1c261a9c05d6cc999999");
+      expect(result!.reason).toBe("0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
     }
   });
 });

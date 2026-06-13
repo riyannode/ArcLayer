@@ -2,9 +2,10 @@ import type { Address } from "viem";
 
 // ── Official ERC-8004 / ERC-8183 events ─────────────────────────────────────
 
-/** ERC-8004 IdentityRegistry — Transfer event signals registration (from=0x0). */
+/** ERC-8004 IdentityRegistry — Transfer event signals registration (from=0x0).
+ *  Registered event is the canonical registration with metadataURI + owner/controller. */
 export type IndexedAgentEvent = {
-  eventName: "AgentRegistered" | "Transfer";
+  eventName: "Registered" | "AgentRegistered" | "Transfer";
   blockNumber: bigint;
   transactionHash: `0x${string}`;
   logIndex: number;

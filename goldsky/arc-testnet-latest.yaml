@@ -1,0 +1,17 @@
+name: arc-testnet-latest
+resource_size: xs
+description: Minimal Arc Testnet — latest raw_logs, no filter, blackhole
+
+sources:
+  logs:
+    type: dataset
+    dataset_name: arc_testnet.raw_logs
+    version: "1.0.0"
+    start_at: latest
+
+transforms: {}
+
+sinks:
+  blackhole:
+    type: blackhole
+    from: logs
