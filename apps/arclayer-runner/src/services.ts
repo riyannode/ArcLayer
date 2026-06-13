@@ -345,6 +345,16 @@ export class RunnerServices {
       };
     }
 
+    // MCP prepare/preflight — validates deliverable before on-chain submit.
+    // Matches old runErc8183ProviderJob flow that called prepareSubmitDeliverable.
+    const preparedTx = await this.mcp.prepareSubmitDeliverable(
+      input.jobId,
+      input.deliverableHash
+    ).catch((err) => {
+      console.warn(`[runner] MCP prepareSubmitDeliverable failed: ${err.message}`);
+      return null;
+    });
+
     // Call Circle CLI submit — only place this is allowed
     const submitReceipt = await this.submitDeliverableViaCircleCli({
       jobId: input.jobId,
@@ -358,21 +368,22 @@ export class RunnerServices {
         ok: false,
         status: "prepared-only",
         deliverableHash: input.deliverableHash,
+        preparedTx,
         submitReceipt,
         error: submitReceipt.reason ?? "On-chain submit not available"
       };
     }
 
-    // Store receipt with proof
+    // Store receipt with proof — preserve runtime result for audit linkage
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
       jobId: input.jobId,
       agentId: this.config.agentId,
       request: { jobId: input.jobId, deliverableHash: input.deliverableHash },
-      response: { submitReceipt },
+      response: { result: input.result, preparedTx, submitReceipt },
       proof: {
         deliverableHash: input.deliverableHash,
-        sha256: sha256Json({ submitReceipt }),
+        sha256: sha256Json({ result: input.result, preparedTx, submitReceipt }),
         txHash: extractPossibleTxHash(submitReceipt)
       }
     });
@@ -380,6 +391,7 @@ export class RunnerServices {
     return {
       ok: true,
       deliverableHash: input.deliverableHash,
+      preparedTx,
       submitReceipt,
       receipt
     };
@@ -395,10 +407,11 @@ export class RunnerServices {
     }
 
     // Step 3: Submit deliverable on-chain
+    // After the guard above, runResult is the completed branch with deliverableHash
     const job = Erc8183ProviderJobSchema.parse(body);
     const submitResult = await this.submitProviderDeliverable({
       jobId: job.jobId,
-      deliverableHash: runResult.deliverableHash,
+      deliverableHash: runResult.deliverableHash as `0x${string}`,
       result: runResult.result as RuntimeResult,
       optParams: "0x"
     }, signal);
