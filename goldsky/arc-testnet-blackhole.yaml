@@ -1,0 +1,18 @@
+name: arc-testnet-blackhole
+resource_size: s
+description: Minimal Arc Testnet pipeline — blackhole sink to test source ingestion
+
+sources:
+  erc8183_logs:
+    type: dataset
+    dataset_name: arc_testnet.raw_logs
+    version: "1.0.0"
+    start_at: "41752050"
+    filter: "address = '0x0747EEf0706327138c69792bF28Cd525089e4583'"
+
+transforms: {}
+
+sinks:
+  blackhole:
+    type: blackhole
+    from: erc8183_logs

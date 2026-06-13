@@ -1,0 +1,21 @@
+name: arc-testnet-minimal
+resource_size: s
+description: Minimal Arc Testnet pipeline — single contract ERC-8183 logs to Supabase
+
+sources:
+  erc8183_logs:
+    type: dataset
+    dataset_name: arc_testnet.raw_logs
+    version: "1.0.0"
+    start_at: "41752050"
+    filter: "address = '0x0747EEf0706327138c69792bF28Cd525089e4583'"
+
+transforms: {}
+
+sinks:
+  erc8183_events_raw:
+    type: postgres
+    table: goldsky_erc8183_events_raw
+    schema: public
+    secret_name: ARCLAYER_POSTGRES
+    from: erc8183_logs

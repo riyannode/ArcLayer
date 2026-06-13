@@ -1,0 +1,49 @@
+name: arclayer-arc-events
+resource_size: s
+description: ArcLayer gated indexer — ERC-8183 + ERC-8004 Identity + ERC-8004 Reputation events from Arc Testnet to Supabase
+
+sources:
+  erc8183_agentic_commerce:
+    type: dataset
+    dataset_name: arc_testnet.raw_logs
+    version: "1.0.0"
+    start_at: latest
+    filter: "address = '0x0747eef0706327138c69792bf28cd525089e4583'"
+
+  erc8004_identity_registry:
+    type: dataset
+    dataset_name: arc_testnet.raw_logs
+    version: "1.0.0"
+    start_at: latest
+    filter: "address = '0x8004a818bfb912233c491871b3d84c89a494bd9e'"
+
+  erc8004_reputation_registry:
+    type: dataset
+    dataset_name: arc_testnet.raw_logs
+    version: "1.0.0"
+    start_at: latest
+    filter: "address = '0x8004b663056a597dffe9ecc1965a193b7388713'"
+
+transforms: {}
+
+sinks:
+  erc8183_events_raw:
+    type: postgres
+    table: goldsky_erc8183_events_raw
+    schema: public
+    secret_name: ARCLAYER_POSTGRES
+    from: erc8183_agentic_commerce
+
+  erc8004_identity_events_raw:
+    type: postgres
+    table: goldsky_erc8004_identity_events_raw
+    schema: public
+    secret_name: ARCLAYER_POSTGRES
+    from: erc8004_identity_registry
+
+  erc8004_reputation_events_raw:
+    type: postgres
+    table: goldsky_erc8004_reputation_events_raw
+    schema: public
+    secret_name: ARCLAYER_POSTGRES
+    from: erc8004_reputation_registry
