@@ -108,7 +108,17 @@ export function validateOpenClawResponse(
   result: unknown,
   maxOutputBytes: number = DEFAULT_MAX_OUTPUT_BYTES
 ): RuntimeResult {
-  const parsed = RuntimeResultSchema.parse(result);
+  // Wrap Zod parse — malformed payload must become RUNTIME_INVALID_RESPONSE
+  let parsed: RuntimeResult;
+  try {
+    parsed = RuntimeResultSchema.parse(result);
+  } catch {
+    throw new RunnerError(
+      RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
+      "OpenClaw returned invalid RuntimeResult",
+      502
+    );
+  }
 
   const outputSize = Buffer.byteLength(JSON.stringify(parsed.output ?? ""), "utf-8");
   if (outputSize > maxOutputBytes) {
@@ -169,8 +179,6 @@ function validateArtifactUri(uri: string): void {
   const hostname = parsed.hostname.toLowerCase();
   if (
     hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "::1" ||
     hostname === "0.0.0.0" ||
     hostname.endsWith(".local") ||
     hostname.endsWith(".internal")
@@ -178,6 +186,21 @@ function validateArtifactUri(uri: string): void {
     throw new RunnerError(
       RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
       `Artifact URI must not target internal/private host: ${hostname}`,
+      502
+    );
+  }
+
+  // Block IPv6 loopback and link-local (JS URL API returns [::1] with brackets)
+  const bareHostname = hostname.replace(/^\[|\]$/g, "");
+  if (
+    bareHostname === "::1" ||
+    bareHostname.startsWith("fe80:") ||
+    bareHostname.startsWith("fc") ||
+    bareHostname.startsWith("fd")
+  ) {
+    throw new RunnerError(
+      RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
+      `Artifact URI must not target IPv6 loopback/link-local/private: ${hostname}`,
       502
     );
   }
@@ -194,9 +217,20 @@ function validateArtifactUri(uri: string): void {
 function isPrivateIp(hostname: string): boolean {
   const parts = hostname.split(".").map(Number);
   if (parts.length !== 4 || parts.some(isNaN)) return false;
+
+  // 10.0.0.0/8
   if (parts[0] === 10) return true;
+  // 172.16.0.0/12
   if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  // 192.168.0.0/16
   if (parts[0] === 192 && parts[1] === 168) return true;
+  // 127.0.0.0/8 (entire loopback range)
+  if (parts[0] === 127) return true;
+  // 169.254.0.0/16 (link-local / cloud metadata)
+  if (parts[0] === 169 && parts[1] === 254) return true;
+  // 100.64.0.0/10 (CGNAT / shared address space)
+  if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
+
   return false;
 }
 
@@ -235,7 +269,7 @@ export function mapRuntimeError(
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
     if (msg.includes("econnrefused") || msg.includes("enotfound") || msg.includes("econnreset") || msg.includes("fetch failed") || msg.includes("network")) {
-      return new RunnerError(RuntimeErrorCode.RUNTIME_UNAVAILABLE, `Runtime unavailable at ${host}: ${error.message}`, 502);
+      return new RunnerError(RuntimeErrorCode.RUNTIME_UNAVAILABLE, `Runtime unavailable at ${host}: ${sanitizeErrorMessage(error.message)}`, 502);
     }
   }
 

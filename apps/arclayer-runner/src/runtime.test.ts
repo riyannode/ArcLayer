@@ -224,7 +224,7 @@ describe("validateOpenClawResponse", () => {
     const result = makeValidResult({
       artifacts: [{ name: "loopback", uri: "https://127.0.0.1/file" }],
     });
-    expect(() => validateOpenClawResponse(result)).toThrow("internal/private host");
+    expect(() => validateOpenClawResponse(result)).toThrow("private IP");
   });
 
   it("rejects https://localhost artifact URI", () => {
@@ -704,5 +704,188 @@ describe("runtime proof metadata in receipts", () => {
 
     // Verify sanitized flag matches runtime kind
     expect(proof.sanitized).toBe(proof.runtimeKind === "openclaw");
+  });
+});
+
+// ── Blocker 1: malformed RuntimeResult => RUNTIME_INVALID_RESPONSE ──────
+
+describe("Blocker 1 — malformed RuntimeResult error code", () => {
+  it("OpenClaw returns { notOk: true } => RUNTIME_INVALID_RESPONSE via integration", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 200,
+      body: { notOk: true }, // not a valid RuntimeResult
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_INVALID_RESPONSE");
+      expect(error.message).toContain("invalid RuntimeResult");
+      // Must NOT leak raw Zod payload
+      expect(error.message).not.toContain("notOk");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("validateOpenClawResponse with garbage object => RUNTIME_INVALID_RESPONSE", () => {
+    try {
+      validateOpenClawResponse({ totally: "wrong", shape: true });
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_INVALID_RESPONSE");
+    }
+  });
+
+  it("validateOpenClawResponse with null => RUNTIME_INVALID_RESPONSE", () => {
+    try {
+      validateOpenClawResponse(null);
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_INVALID_RESPONSE");
+    }
+  });
+});
+
+// ── Blocker 2: non-JSON error responses map by status ───────────────────
+
+describe("Blocker 2 — non-JSON error responses", () => {
+  it("non-JSON 401 => RUNTIME_AUTH_FAILED (not RUNTIME_INVALID_RESPONSE)", async () => {
+    const errServer = createServer((_req, res) => {
+      res.writeHead(401, { "content-type": "text/html" });
+      res.end("<html>Unauthorized</html>");
+    });
+    await new Promise<void>((resolve) => errServer.listen(0, "127.0.0.1", resolve));
+    const address = errServer.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_AUTH_FAILED");
+    } finally {
+      errServer.close();
+    }
+  });
+
+  it("non-JSON 429 => RUNTIME_RATE_LIMITED", async () => {
+    const errServer = createServer((_req, res) => {
+      res.writeHead(429, { "content-type": "text/plain" });
+      res.end("Too Many Requests");
+    });
+    await new Promise<void>((resolve) => errServer.listen(0, "127.0.0.1", resolve));
+    const address = errServer.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_RATE_LIMITED");
+    } finally {
+      errServer.close();
+    }
+  });
+
+  it("non-JSON 503 => RUNTIME_UNAVAILABLE", async () => {
+    const errServer = createServer((_req, res) => {
+      res.writeHead(503, { "content-type": "text/html" });
+      res.end("<html>Service Unavailable</html>");
+    });
+    await new Promise<void>((resolve) => errServer.listen(0, "127.0.0.1", resolve));
+    const address = errServer.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_UNAVAILABLE");
+    } finally {
+      errServer.close();
+    }
+  });
+});
+
+// ── Blocker 3: expanded private IP guard ────────────────────────────────
+
+describe("Blocker 3 — expanded private IP guard", () => {
+  it("rejects https://127.0.0.2/file (127/8 beyond exact 127.0.0.1)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "loopback2", uri: "https://127.0.0.2/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("private IP");
+  });
+
+  it("rejects https://169.254.169.254/file (cloud metadata)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "metadata", uri: "https://169.254.169.254/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("private IP");
+  });
+
+  it("rejects https://100.64.0.1/file (CGNAT)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "cgnat", uri: "https://100.64.0.1/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("private IP");
+  });
+
+  it("rejects https://[::1]/file (IPv6 loopback)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "v6loop", uri: "https://[::1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("IPv6 loopback");
+  });
+
+  it("rejects https://[fe80::1]/file (IPv6 link-local)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "v6link", uri: "https://[fe80::1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("IPv6 loopback");
+  });
+
+  it("rejects https://[fd00::1]/file (IPv6 unique local)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "v6private", uri: "https://[fd00::1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("IPv6 loopback");
+  });
+});
+
+// ── Blocker 4: sanitize raw error messages ──────────────────────────────
+
+describe("Blocker 4 — error message sanitization", () => {
+  it("network error with bearer token is sanitized", () => {
+    const error = new Error("ECONNREFUSED: bearer sk-abc123secrettoken456 at 127.0.0.1:8787");
+    const mapped = mapRuntimeError(error);
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+    expect(mapped.message).not.toContain("sk-abc123secrettoken456");
+    expect(mapped.message).toContain("[REDACTED]");
+  });
+
+  it("network error with 0x secret is sanitized", () => {
+    const error = new Error("fetch failed: 0xabcdef1234567890abcdef1234567890abcdef12");
+    const mapped = mapRuntimeError(error);
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+    expect(mapped.message).not.toContain("0xabcdef1234567890abcdef1234567890abcdef12");
+    expect(mapped.message).toContain("0x[REDACTED]");
+  });
+
+  it("network error with URL credentials is sanitized", () => {
+    const error = new Error("ECONNREFUSED: https://admin:supersecret@internal.corp:8787/api");
+    const mapped = mapRuntimeError(error);
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+    expect(mapped.message).not.toContain("supersecret");
   });
 });

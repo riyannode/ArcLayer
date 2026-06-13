@@ -41,7 +41,12 @@ export class OpenClawRuntimeConnector extends HttpRuntimeConnector implements Ru
       // 2. Use protected fetchRuntime() from base class
       const response = await this.fetchRuntime(sanitizedTask);
 
-      // 3. Parse JSON — reject non-JSON
+      // 3. Map HTTP errors BEFORE JSON parsing — non-2xx may return HTML/plaintext
+      if (!response.ok) {
+        throw mapRuntimeError(new Error(`HTTP ${response.status}`), response.status, this.getEndpoint());
+      }
+
+      // 4. Parse JSON — reject non-JSON for 2xx responses
       let body: unknown;
       try {
         body = await response.json();
@@ -51,11 +56,6 @@ export class OpenClawRuntimeConnector extends HttpRuntimeConnector implements Ru
           `OpenClaw returned non-JSON response (HTTP ${response.status})`,
           502
         );
-      }
-
-      // 4. Map HTTP errors
-      if (!response.ok) {
-        throw mapRuntimeError(new Error(`HTTP ${response.status}`), response.status, this.getEndpoint());
       }
 
       // 5. Strict response validation
