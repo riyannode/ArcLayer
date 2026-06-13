@@ -136,6 +136,18 @@ async function main() {
         },
         {
           method: "POST",
+          path: "/erc8183/provider/run-only",
+          handler: async ({ body, reserveTaskId, markTaskCompleted, markTaskFailed }) =>
+            services.runProviderJob(body, { reserveTaskId, markTaskCompleted, markTaskFailed })
+        },
+        {
+          method: "POST",
+          path: "/erc8183/provider/run-and-submit",
+          handler: async ({ body, reserveTaskId, markTaskCompleted, markTaskFailed }) =>
+            services.runAndSubmitProviderJob(body, { reserveTaskId, markTaskCompleted, markTaskFailed })
+        },
+        {
+          method: "POST",
           path: "/x402/inspect",
           handler: async ({ body }) => services.inspectX402(body)
         },
