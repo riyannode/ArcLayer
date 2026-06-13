@@ -85,35 +85,6 @@ export class OpenClawRuntimeConnector implements RuntimeConnector {
   }
 }
 
-export class MockRuntimeConnector implements RuntimeConnector {
-  readonly kind = "mock";
-  private results: RuntimeResult[] = [];
-  private callLog: AgentTask[] = [];
-
-  queueResult(result: RuntimeResult): void {
-    this.results.push(result);
-  }
-
-  getCallLog(): AgentTask[] {
-    return [...this.callLog];
-  }
-
-  async run(task: AgentTask): Promise<RuntimeResult> {
-    this.callLog.push(task);
-    const next = this.results.shift();
-    if (!next) {
-      return {
-        ok: true,
-        status: "completed",
-        output: { mock: true, taskId: task.taskId },
-        artifacts: [],
-        paymentRequests: [],
-        actionRequests: []
-      };
-    }
-    return next;
-  }
-}
 
 export function createRuntimeConnector(
   kind: string,

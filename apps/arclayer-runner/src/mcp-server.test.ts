@@ -5,7 +5,7 @@ import { getToolsForRole } from "./tool-registry";
 import type { RunnerConfig } from "@arclayer/runner-core";
 import type { RunnerServices } from "./services";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { ServerResponse } from "node:http";
 
 function makeConfig(overrides: Partial<RunnerConfig> = {}): RunnerConfig {
   return {
@@ -32,21 +32,6 @@ function makeConfig(overrides: Partial<RunnerConfig> = {}): RunnerConfig {
     runnerSecret: "test-secret-at-least-16-chars",
     ...overrides
   };
-}
-
-function makeMockReq(body?: string, auth?: string): IncomingMessage {
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (auth) headers.authorization = auth;
-  const chunks = body ? [Buffer.from(body)] : [];
-  let i = 0;
-  return {
-    headers,
-    method: "POST",
-    url: "/mcp",
-    async *[Symbol.asyncIterator]() {
-      for (const chunk of chunks) yield chunk;
-    }
-  } as unknown as IncomingMessage;
 }
 
 function makeMockRes(): { res: ServerResponse; output: () => { status: number; body: string } } {
@@ -79,6 +64,7 @@ function makeMockServices(): any {
     prepareRegister: async (body: unknown) => ({ ok: true, mode: "prepare-only" }),
     runErc8183ProviderJob: async (body: unknown) => ({ ok: true, result: {} }),
     submitDeliverableViaCircleCli: async (body: unknown) => ({ ok: true }),
+    runGeneric: async (body: unknown) => ({ ok: true, result: {} }),
     circle: {
       gatewayBalance: async () => ({ ok: true }),
       walletBalance: async () => ({ ok: true }),
@@ -93,8 +79,14 @@ function makeMockMcp(): any {
   };
 }
 
-describe("Runner MCP Server", () => {
-  const secret = "test-secret-at-least-16-chars";
+/**
+ * Build a JSON-RPC body object (pre-parsed, as router would deliver).
+ */
+function makeRpcBody(method: string, params?: Record<string, unknown>, id = "test-1") {
+  return { jsonrpc: "2.0" as const, id, method, params: params ?? {} };
+}
+
+describe("Runner MCP Server (router-authenticated)", () => {
   let services: any;
   let mcp: any;
   let config: RunnerConfig;
@@ -109,49 +101,26 @@ describe("Runner MCP Server", () => {
     ctx = { services, mcp, config, skill };
   });
 
-  async function callMcp(method: string, params?: any, auth?: string): Promise<any> {
-    const body = JSON.stringify({
-      jsonrpc: "2.0",
-      id: "test-1",
-      method,
-      params: params ?? {}
-    });
-    const req = makeMockReq(body, auth ?? `Bearer ${secret}`);
+  async function callMcp(body: unknown): Promise<any> {
     const { res, output } = makeMockRes();
-    await handleMcpRequest(req, res, secret, ctx);
+    await handleMcpRequest(res, body, ctx);
     return JSON.parse(output().body);
   }
 
-  it("rejects missing auth", async () => {
-    const req = makeMockReq(JSON.stringify({
-      jsonrpc: "2.0", id: "1", method: "tools/list", params: {}
-    }));
-    const { res, output } = makeMockRes();
-
-    await handleMcpRequest(req, res, secret, ctx);
-    const parsed = JSON.parse(output().body);
-    expect(parsed.error).toBeDefined();
-    expect(parsed.error.message).toContain("Missing Authorization");
-  });
-
-  it("rejects wrong bearer token", async () => {
-    const result = await callMcp("tools/list", {}, "Bearer wrong-token");
-    expect(result.error).toBeDefined();
-    expect(result.error.message).toContain("Invalid runner secret");
-  });
+  // ── Auth is handled by router, not MCP handler ───────────────────────
+  // Tests for auth (HMAC missing, invalid, nonce replay) belong in the
+  // router integration tests, not here. MCP handler receives pre-auth body.
 
   it("tools/list returns Runner-local tool names", async () => {
-    const result = await callMcp("tools/list");
+    const result = await callMcp(makeRpcBody("tools/list"));
     expect(result.result.tools).toBeDefined();
     const names = result.result.tools.map((t: any) => t.name);
-    // Old tools still present
     expect(names).toContain("runner.health");
     expect(names).toContain("runner.manifest");
     expect(names).toContain("x402.pay");
     expect(names).toContain("erc8183.provider_run_and_submit");
     expect(names).toContain("circle.status");
     expect(names).toContain("erc8004.prepare_register");
-    // New lifecycle tools
     expect(names).toContain("erc8183.create_job");
     expect(names).toContain("erc8183.set_budget");
     expect(names).toContain("erc8183.approve_usdc");
@@ -163,70 +132,89 @@ describe("Runner MCP Server", () => {
   });
 
   it("tools/call runner.health works", async () => {
-    const result = await callMcp("tools/call", { name: "runner.health", arguments: {} });
+    const result = await callMcp(makeRpcBody("tools/call", { name: "runner.health", arguments: {} }));
     expect(result.result.ok).toBe(true);
     expect(result.result.runnerId).toBe("test-runner");
   });
 
   it("tools/call runner.manifest works", async () => {
-    const result = await callMcp("tools/call", { name: "runner.manifest", arguments: {} });
+    const result = await callMcp(makeRpcBody("tools/call", { name: "runner.manifest", arguments: {} }));
     expect(result.result.name).toBe("ArcLayer Runner");
   });
 
   it("tools/call x402.inspect does not require paymentEnabled", async () => {
     config.paymentEnabled = false;
     ctx.config = config;
-    const result = await callMcp("tools/call", {
+    const result = await callMcp(makeRpcBody("tools/call", {
       name: "x402.inspect",
       arguments: { url: "https://api.example.com/test" }
-    });
+    }));
     expect(result.result.ok).toBe(true);
   });
 
   it("tools/call x402.payment_policy returns policy", async () => {
-    const result = await callMcp("tools/call", { name: "x402.payment_policy", arguments: {} });
+    const result = await callMcp(makeRpcBody("tools/call", { name: "x402.payment_policy", arguments: {} }));
     expect(result.result.paymentEnabled).toBe(true);
     expect(result.result.perTxLimitUsdc).toBe("0.01");
   });
 
   it("tools/call circle.wallet_policy_status returns runnerPolicy", async () => {
-    const result = await callMcp("tools/call", { name: "circle.wallet_policy_status", arguments: {} });
+    const result = await callMcp(makeRpcBody("tools/call", { name: "circle.wallet_policy_status", arguments: {} }));
     expect(result.result.runnerPolicy).toBeDefined();
     expect(result.result.runnerPolicy.perTxLimitUsdc).toBe("0.01");
     expect(result.result.walletAddress).toBe("0x0000000000000000000000000000000000000002");
-    // Circle CLI not installed — should have warnings
     expect(result.result.warnings.length).toBeGreaterThan(0);
   });
 
   it("circle.wallet_policy_status handles missing wallet gracefully", async () => {
     config.circleWalletAddress = undefined;
     ctx.config = config;
-    const result = await callMcp("tools/call", { name: "circle.wallet_policy_status", arguments: {} });
+    const result = await callMcp(makeRpcBody("tools/call", { name: "circle.wallet_policy_status", arguments: {} }));
     expect(result.result.ok).toBe(false);
     expect(result.result.runnerPolicy).toBeDefined();
     expect(result.result.warnings).toContain("CIRCLE_WALLET_ADDRESS not configured");
   });
 
   it("returns error for unknown tool", async () => {
-    const result = await callMcp("tools/call", { name: "nonexistent.tool", arguments: {} });
-    // Unknown tools are blocked by role enforcement (not in any role's tool list)
+    const result = await callMcp(makeRpcBody("tools/call", { name: "nonexistent.tool", arguments: {} }));
     const content = JSON.parse(result.result.content[0].text);
     expect(content.error).toContain("ROLE_TOOL_NOT_ALLOWED");
   });
 
   it("returns error for unknown method", async () => {
-    const result = await callMcp("unknown/method");
+    const result = await callMcp(makeRpcBody("unknown/method"));
     expect(result.error).toBeDefined();
     expect(result.error.message).toContain("Method not found");
   });
 
   it("returns error for invalid JSON-RPC", async () => {
-    const req = makeMockReq(JSON.stringify({ not: "jsonrpc" }), `Bearer ${secret}`);
+    const result = await callMcp({ not: "jsonrpc" });
+    expect(result.error).toBeDefined();
+    expect(result.error.code).toBe(-32600);
+  });
+
+  it("returns error for missing tool name in tools/call", async () => {
+    const result = await callMcp(makeRpcBody("tools/call", {}));
+    expect(result.error).toBeDefined();
+    expect(result.error.code).toBe(-32602);
+  });
+
+  it("returns error for null body", async () => {
+    const result = await callMcp(null);
+    expect(result.error).toBeDefined();
+    expect(result.error.code).toBe(-32600);
+  });
+
+  it("does NOT do internal Bearer auth (router owns auth)", async () => {
+    // This test verifies that handleMcpRequest accepts pre-parsed body
+    // without requiring any auth headers. Auth is the router's job.
     const { res, output } = makeMockRes();
-    await handleMcpRequest(req, res, secret, ctx);
+    const body = makeRpcBody("tools/list");
+    await handleMcpRequest(res, body, ctx);
     const parsed = JSON.parse(output().body);
-    expect(parsed.error).toBeDefined();
-    expect(parsed.error.code).toBe(-32600);
+    // Should succeed — no auth error
+    expect(parsed.result.tools).toBeDefined();
+    expect(parsed.error).toBeUndefined();
   });
 });
 
@@ -261,13 +249,11 @@ describe("Runner MCP tool catalog", () => {
     expect(names).toContain("erc8004.prepare_register");
     expect(names).toContain("erc8004.register_via_circle_cli");
 
-    // ERC-8183 — old tools still present
+    // ERC-8183
     expect(names).toContain("erc8183.provider_run_job");
     expect(names).toContain("erc8183.provider_submit_deliverable");
     expect(names).toContain("erc8183.provider_run_and_submit");
     expect(names).toContain("erc8183.provider_runtime_status");
-
-    // ERC-8183 — new lifecycle tools
     expect(names).toContain("erc8183.create_job");
     expect(names).toContain("erc8183.set_budget");
     expect(names).toContain("erc8183.approve_usdc");

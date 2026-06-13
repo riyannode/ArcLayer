@@ -6,3 +6,5 @@ export * from "./hash";
 export * from "./errors";
 export * from "./auth";
 export * from "./paths";
+export * from "./nonce-store";
+export * from "./task-idempotency";
