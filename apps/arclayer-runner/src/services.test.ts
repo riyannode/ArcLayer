@@ -339,6 +339,93 @@ describe("RunnerServices", () => {
     });
   });
 
+  describe("x402 broker timeout — non-terminal ledger", () => {
+    it("AbortError with aborted signal does NOT call ledger.recordFailure", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      const abortError = new Error("The operation was aborted");
+      abortError.name = "AbortError";
+
+      const paySpy = vi.spyOn(services.circle, "payService").mockRejectedValue(abortError);
+      const failureSpy = vi.spyOn(services.ledger, "recordFailure");
+
+      await expect(
+        services.payX402({
+          type: "x402_service_pay",
+          url: "https://api.example.com/test",
+          maxAmountUsdc: "0.005",
+          reason: "test-abort",
+          idempotencyKey: "abort-key-1",
+        }, controller.signal)
+      ).rejects.toThrow();
+
+      // recordFailure must NOT be called — attempt stays pending
+      expect(failureSpy).not.toHaveBeenCalled();
+
+      paySpy.mockRestore();
+      failureSpy.mockRestore();
+    });
+
+    it("pending attempt remains pending after AbortError (retry hits PAYMENT_IN_PROGRESS)", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      const abortError = new Error("The operation was aborted");
+      abortError.name = "AbortError";
+
+      const paySpy = vi.spyOn(services.circle, "payService").mockRejectedValue(abortError);
+
+      // First attempt — will abort
+      await expect(
+        services.payX402({
+          type: "x402_service_pay",
+          url: "https://api.example.com/test",
+          maxAmountUsdc: "0.005",
+          reason: "test-pending",
+          idempotencyKey: "abort-pending-key",
+        }, controller.signal)
+      ).rejects.toThrow();
+
+      paySpy.mockRestore();
+
+      // Retry with same idempotencyKey — should hit PAYMENT_IN_PROGRESS
+      // because the attempt was left pending (not terminal failure).
+      await expect(
+        services.payX402({
+          type: "x402_service_pay",
+          url: "https://api.example.com/test",
+          maxAmountUsdc: "0.005",
+          reason: "test-pending",
+          idempotencyKey: "abort-pending-key",
+        })
+      ).rejects.toThrow(/already in progress/);
+    });
+
+    it("normal non-timeout Circle CLI failure still calls ledger.recordFailure", async () => {
+      const paySpy = vi.spyOn(services.circle, "payService").mockRejectedValue(
+        new Error("Insufficient funds in wallet")
+      );
+      const failureSpy = vi.spyOn(services.ledger, "recordFailure");
+
+      await expect(
+        services.payX402({
+          type: "x402_service_pay",
+          url: "https://api.example.com/test",
+          maxAmountUsdc: "0.005",
+          reason: "test-normal-failure",
+          idempotencyKey: "normal-fail-key",
+        })
+      ).rejects.toThrow("Insufficient funds");
+
+      // recordFailure SHOULD be called for real errors
+      expect(failureSpy).toHaveBeenCalledWith("normal-fail-key", expect.stringContaining("Insufficient funds"));
+
+      paySpy.mockRestore();
+      failureSpy.mockRestore();
+    });
+  });
+
   describe("createJob evaluator guard", () => {
     it("rejects zero evaluator address", async () => {
       await expectRunnerError(

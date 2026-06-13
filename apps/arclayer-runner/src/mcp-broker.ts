@@ -73,6 +73,13 @@ export type AuditEntry = {
   errorMessage?: string;
   /** USDC cost if this was a payment tool */
   costUsdc?: string;
+  /**
+   * true when the broker timed out but the underlying operation may still
+   * complete (non-idempotent on-chain writes, Circle CLI subprocesses).
+   * Distinguishes "client timed out, operation may have completed" from
+   * "operation actually failed".
+   */
+  timedOut?: boolean;
 };
 
 export type BrokerSessionState = {
@@ -81,6 +88,76 @@ export type BrokerSessionState = {
   totalCostMicros: bigint;
   auditLog: AuditEntry[];
 };
+
+// ── Non-idempotent write tools ──────────────────────────────────────────
+// These tools perform on-chain writes that cannot be safely retried.
+// They get a higher default timeout (120s vs 30s) because Circle CLI
+// subprocess and on-chain confirmation can be slow.
+
+const NON_IDEMPOTENT_WRITE_TOOLS = new Set([
+  // x402 payments (idempotency-keyed, but timeout still leaves ambiguous state)
+  "x402.pay",
+  "x402.batch_pay",
+  // ERC-8183 lifecycle writes (on-chain, non-idempotent)
+  "erc8183.provider_submit_deliverable",
+  "erc8183.provider_run_and_submit",
+  "erc8183.create_job",
+  "erc8183.set_budget",
+  "erc8183.approve_usdc",
+  "erc8183.fund_job",
+  "erc8183.complete_job",
+  "erc8183.reject_job",
+  "erc8183.claim_refund",
+  "erc8183.set_provider",
+  // ERC-8004 identity write
+  "erc8004.register_via_circle_cli",
+  // Circle gateway deposit
+  "circle.gateway_deposit",
+]);
+
+/** Default timeout for non-idempotent write tools (120 seconds). */
+const WRITE_TOOL_TIMEOUT_MS = 120_000;
+
+/**
+ * Check if a tool is a non-idempotent write that may have side effects
+ * even after the broker reports a timeout.
+ */
+export function isNonIdempotentWrite(toolName: string): boolean {
+  return NON_IDEMPOTENT_WRITE_TOOLS.has(toolName);
+}
+
+/**
+ * Detect whether an error was caused by a broker timeout or signal abort.
+ *
+ * When the broker's AbortController fires, the Circle CLI subprocess is
+ * killed by the OS signal. Node raises an AbortError / ABORT_ERR, NOT a
+ * BrokerError. The BrokerError is only created by withTimeout() in the
+ * transport layer (mcp-server / mcp-stdio). By the time the error reaches
+ * a service method like payX402(), it's the AbortError from execFile.
+ *
+ * This helper checks all four shapes so callers can detect broker-initiated
+ * cancellation regardless of where in the stack the error originated.
+ */
+export function isBrokerAbortOrTimeout(error: unknown, signal?: AbortSignal): boolean {
+  // BrokerError from withTimeout() in mcp-server / mcp-stdio
+  if (error instanceof BrokerError && error.code === BrokerErrorCode.TOOL_TIMEOUT) {
+    return true;
+  }
+  // Signal was aborted (broker fired controller.abort())
+  if (signal?.aborted) {
+    return true;
+  }
+  // Node AbortError from execFile killed by signal
+  if (error instanceof Error && error.name === "AbortError") {
+    return true;
+  }
+  // ABORT_ERR code (some Node versions / custom errors)
+  if (typeof error === "object" && error !== null && "code" in error &&
+      (error as { code: unknown }).code === "ABORT_ERR") {
+    return true;
+  }
+  return false;
+}
 
 // ── Args Redaction ────────────────────────────────────────────────────────
 
@@ -368,11 +445,20 @@ export class McpToolBroker {
 
   /**
    * Get timeout for a specific tool.
+   *
+   * Precedence:
+   * 1. Explicit per-tool override (timeoutOverridesMs[toolName])
+   * 2. If non-idempotent write → write default 120s
+   * 3. Otherwise → defaultTimeoutMs or 30s
+   *
+   * This ensures write tools get 120s even when the broker is configured
+   * with defaultTimeoutMs=30000 (which is the RunnerConfigSchema default).
    */
   getTimeoutMs(toolName: string): number {
     return this.budget.timeoutOverridesMs?.[toolName]
-      ?? this.budget.defaultTimeoutMs
-      ?? 30_000;
+      ?? (NON_IDEMPOTENT_WRITE_TOOLS.has(toolName)
+        ? WRITE_TOOL_TIMEOUT_MS
+        : (this.budget.defaultTimeoutMs ?? 30_000));
   }
 
   /**
@@ -505,12 +591,16 @@ export class McpToolBroker {
   /**
    * Record a failed tool call in the audit log.
    * Releases the call slot reserved by preExecute.
+   *
+   * @param timedOut - true when the failure was a broker timeout and the
+   *   underlying operation may still complete (non-idempotent writes).
    */
   recordFailure(
     toolName: string,
     args: Record<string, unknown>,
     error: unknown,
-    durationMs: number
+    durationMs: number,
+    timedOut = false
   ): void {
     try {
       const isBrokerError = error instanceof BrokerError;
@@ -522,6 +612,7 @@ export class McpToolBroker {
         outputBytes: 0,
         errorCode: isBrokerError ? error.code : BrokerErrorCode.INTERNAL_ERROR,
         errorMessage: error instanceof Error ? error.message : "Unknown error",
+        timedOut: timedOut && isNonIdempotentWrite(toolName) ? true : undefined,
       });
     } finally {
       this.releaseCallSlot();
