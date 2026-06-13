@@ -7,12 +7,21 @@
  * stream or re-verify auth.
  *
  * Tools call existing Runner service methods — no direct Circle CLI.
+ *
+ * PR #3: MCP Tool Broker integration — schema validation, timeouts,
+ * budget enforcement, output size caps, audit logging.
  */
 
 import type { ServerResponse } from "node:http";
 import { RUNNER_MCP_TOOLS } from "./mcp-schemas";
 import { handleMcpTool, type McpToolContext } from "./mcp-tools";
 import { getToolNamesForRole } from "./tool-registry";
+import {
+  McpToolBroker,
+  BrokerError,
+  BrokerErrorCode,
+  type ToolBudgetConfig,
+} from "./mcp-broker";
 
 type JsonRpcRequest = {
   jsonrpc: "2.0";
@@ -48,6 +57,70 @@ function sendJson(res: ServerResponse, data: JsonRpcResponse) {
 }
 
 /**
+ * Map BrokerError to JSON-RPC error code.
+ * Uses -32000 to -32099 range (server-defined errors per JSON-RPC spec).
+ */
+function brokerErrorToRpcCode(code: BrokerErrorCode): number {
+  const map: Record<BrokerErrorCode, number> = {
+    [BrokerErrorCode.TOOL_NOT_FOUND]: -32001,
+    [BrokerErrorCode.SCHEMA_VALIDATION_FAILED]: -32002,
+    [BrokerErrorCode.TOOL_NOT_ALLOWED]: -32003,
+    [BrokerErrorCode.TOOL_TIMEOUT]: -32004,
+    [BrokerErrorCode.BUDGET_EXCEEDED]: -32005,
+    [BrokerErrorCode.MAX_CALLS_EXCEEDED]: -32006,
+    [BrokerErrorCode.OUTPUT_TOO_LARGE]: -32007,
+    [BrokerErrorCode.PRIVILEGED_TOOL_DENIED]: -32008,
+    [BrokerErrorCode.INTERNAL_ERROR]: -32603,
+  };
+  return map[code] ?? -32603;
+}
+
+/**
+ * Wrap a promise with a timeout. Rejects with BrokerError on timeout.
+ *
+ * NOTE: The underlying promise continues running after timeout. For tools
+ * with non-cancellable side effects (Circle CLI writes, on-chain txs),
+ * the operation may still complete after the client receives TIMEOUT.
+ * This is acceptable for read-only tools and idempotent payment tools
+ * (x402 uses idempotency keys). For non-idempotent writes, consider
+ * increasing timeoutOverridesMs for those specific tools.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, toolName: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new BrokerError(
+        BrokerErrorCode.TOOL_TIMEOUT,
+        `Tool '${toolName}' timed out after ${ms}ms`,
+        { tool: toolName, timeoutMs: ms }
+      ));
+    }, ms);
+
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); }
+    );
+  });
+}
+
+/**
+ * Send a broker error as a JSON-RPC result (MCP tools/call error format).
+ */
+function sendBrokerError(res: ServerResponse, rpcId: string | number, error: BrokerError): void {
+  sendJson(res, jsonRpcOk(rpcId, {
+    content: [{
+      type: "text",
+      text: JSON.stringify({
+        ok: false,
+        error: error.code,
+        message: error.message,
+        details: error.details
+      })
+    }],
+    isError: true
+  }));
+}
+
+/**
  * Handle POST /mcp — JSON-RPC 2.0 endpoint.
  *
  * Auth is done by the HTTP router before this handler is called.
@@ -59,13 +132,20 @@ function sendJson(res: ServerResponse, data: JsonRpcResponse) {
  * @param res - HTTP response (for writing JSON-RPC responses)
  * @param body - Pre-parsed JSON body from router (JSON-RPC request)
  * @param ctx - MCP tool context (services, mcp, config, skill)
+ * @param broker - MCP Tool Broker instance (per-session budget/audit), or null if disabled
  */
 export async function handleMcpRequest(
   res: ServerResponse,
   body: unknown,
-  ctx: McpToolContext
+  ctx: McpToolContext,
+  broker?: McpToolBroker | null
 ): Promise<void> {
   let rpcId: string | number = 0;
+
+  // broker=undefined → no broker (backward compat / disabled)
+  // broker=McpToolBroker → active broker
+  // Do NOT create a default broker when explicitly disabled.
+  const toolBroker = broker ?? undefined;
 
   try {
     // Validate JSON-RPC envelope (auth already done by router)
@@ -116,8 +196,55 @@ export async function handleMcpRequest(
           return;
         }
 
-        const result = await handleMcpTool(toolName, toolArgs, ctx);
-        sendJson(res, jsonRpcOk(rpc.id, result));
+        // ── Broker: pre-execute checks ───────────────────────────────
+        if (toolBroker) {
+          try {
+            toolBroker.preExecute(toolName, toolArgs);
+          } catch (error) {
+            if (error instanceof BrokerError) {
+              // Audit the rejection (highest-value forensics event)
+              toolBroker.recordRejection(toolName, toolArgs, error);
+              sendBrokerError(res, rpc.id, error);
+              return;
+            }
+            throw error;
+          }
+        }
+
+        // ── Broker: execute with timeout ─────────────────────────────
+        const timeoutMs = toolBroker?.getTimeoutMs(toolName) ?? 30_000;
+        const startTime = Date.now();
+
+        try {
+          // Pass broker into ctx so introspection tools (runner.broker_status,
+          // runner.audit_log) can access it via ctx.broker.
+          const ctxWithBroker = toolBroker ? { ...ctx, broker: toolBroker } : ctx;
+          const result = await withTimeout(
+            handleMcpTool(toolName, toolArgs, ctxWithBroker),
+            timeoutMs,
+            toolName
+          );
+
+          // ── Broker: post-execute checks (output size + audit) ──────
+          if (toolBroker) {
+            toolBroker.postExecute(toolName, toolArgs, result, Date.now() - startTime);
+          }
+
+          sendJson(res, jsonRpcOk(rpc.id, result));
+        } catch (error) {
+          const durationMs = Date.now() - startTime;
+
+          // Record failure in audit log (also releases call slot)
+          if (toolBroker) {
+            toolBroker.recordFailure(toolName, toolArgs, error, durationMs);
+          }
+
+          if (error instanceof BrokerError) {
+            sendBrokerError(res, rpc.id, error);
+            return;
+          }
+          throw error;
+        }
         break;
       }
 

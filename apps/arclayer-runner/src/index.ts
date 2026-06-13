@@ -9,6 +9,7 @@ import { createRouter } from "./http";
 import { RunnerServices } from "./services";
 import { handleMcpRequest } from "./mcp-server";
 import { runMcpStdio } from "./mcp-stdio";
+import { McpToolBroker, type ToolBudgetConfig } from "./mcp-broker";
 import { runDoctor } from "./doctor";
 import { registerInitCommand } from "./init";
 import { registerSetupCommand } from "./setup";
@@ -50,7 +51,18 @@ async function main() {
     });
 
     const services = new RunnerServices(config, runtime, mcp, skill);
-    const mcpToolCtx = { services, mcp, config, skill };
+
+    // MCP Tool Broker — one instance at startup, shared across all /mcp requests.
+    // Budget (maxCalls, maxTotalUsdc) and audit log persist for the runner lifetime.
+    const brokerBudget: ToolBudgetConfig = {
+      maxTotalUsdc: config.toolMaxTotalUsdc,
+      maxCalls: config.toolMaxCalls,
+      defaultTimeoutMs: config.toolDefaultTimeoutMs,
+      maxOutputBytes: config.toolMaxOutputBytes,
+    };
+    const broker = config.toolBrokerEnabled ? new McpToolBroker(brokerBudget) : null;
+    // Include broker in ctx so handleMcpTool can access it (introspection tools).
+    const mcpToolCtx = { services, mcp, config, skill, broker: broker ?? undefined };
 
     const authMode = process.env.ARCLAYER_AUTH_MODE === "bearer" ? "bearer" : "hmac";
 
@@ -92,7 +104,8 @@ async function main() {
           rawHandler: async (ctx) => {
             // Router already verified HMAC/Bearer auth and parsed body.
             // MCP handler receives pre-authenticated context — no internal auth needed.
-            await handleMcpRequest(ctx.res, ctx.body, mcpToolCtx);
+            // Pass shared broker (null if disabled) for budget/audit enforcement.
+            await handleMcpRequest(ctx.res, ctx.body, mcpToolCtx, broker);
           }
         },
 
@@ -240,7 +253,16 @@ async function main() {
       });
 
       const services = new RunnerServices(config, runtime, mcp, skill);
-      const mcpToolCtx = { services, mcp, config, skill };
+
+      // Create MCP Tool Broker from config (STDIO mode)
+      const brokerBudget: ToolBudgetConfig = {
+        maxTotalUsdc: config.toolMaxTotalUsdc,
+        maxCalls: config.toolMaxCalls,
+        defaultTimeoutMs: config.toolDefaultTimeoutMs,
+        maxOutputBytes: config.toolMaxOutputBytes,
+      };
+      const broker = config.toolBrokerEnabled ? new McpToolBroker(brokerBudget) : undefined;
+      const mcpToolCtx = { services, mcp, config, skill, broker };
 
       await runMcpStdio(mcpToolCtx);
     });

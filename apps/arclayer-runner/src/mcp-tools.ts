@@ -12,12 +12,15 @@ import { resolveAllSkills, resolveSkill, getSkillsForRole, getSkillsByIds, bundl
 import { getToolsForRole, getToolByName, CONSOLE_MCP_PROXY_TOOLS, ALL_TOOLS } from "./tool-registry";
 import { getRolePreset, listRolePresets } from "./role-presets";
 import { proxyToConsoleMcp } from "./console-tool-proxy";
+import type { McpToolBroker } from "./mcp-broker";
 
 export type McpToolContext = {
   services: RunnerServices;
   mcp: ArcLayerMcpConnector;
   config: RunnerConfig;
   skill: { content: string; sha256: string; path: string };
+  /** MCP Tool Broker — per-session budget, timeout, audit. Optional for backward compat. */
+  broker?: McpToolBroker;
 };
 
 export async function handleMcpTool(
@@ -73,6 +76,39 @@ export async function handleMcpTool(
         chain: config.chain,
         circleWalletAddress: config.circleWalletAddress
       };
+
+    // ── MCP Tool Broker ───────────────────────────────────────────────
+    case "runner.broker_status": {
+      if (!ctx.broker) {
+        return { ok: false, error: "BROKER_NOT_ENABLED", message: "MCP Tool Broker is not enabled for this session" };
+      }
+      const state = ctx.broker.getState();
+      return {
+        ok: true,
+        enabled: true,
+        callCount: state.callCount,
+        totalCostMicros: state.totalCostMicros.toString(),
+        budgetLimits: {
+          maxCalls: ctx.config.toolMaxCalls,
+          maxTotalUsdc: ctx.config.toolMaxTotalUsdc,
+          defaultTimeoutMs: ctx.config.toolDefaultTimeoutMs,
+          maxOutputBytes: ctx.config.toolMaxOutputBytes,
+        }
+      };
+    }
+
+    case "runner.audit_log": {
+      if (!ctx.broker) {
+        return { ok: false, error: "BROKER_NOT_ENABLED", message: "MCP Tool Broker is not enabled for this session" };
+      }
+      const limit = typeof args.limit === "number" ? Math.min(args.limit, 200) : 50;
+      const log = ctx.broker.getAuditLog();
+      return {
+        ok: true,
+        total: log.length,
+        entries: log.slice(-limit)
+      };
+    }
 
     // ── Circle CLI ────────────────────────────────────────────────────
     case "circle.status":
