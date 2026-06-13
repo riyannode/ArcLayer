@@ -24,7 +24,7 @@ import { CircleCliAdapter } from "@arclayer/circle-cli-adapter";
 import { CONTRACTS } from "@arclayer/sdk";
 import type { RuntimeConnector } from "./runtime";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
-import { BrokerError, BrokerErrorCode } from "./mcp-broker";
+import { isBrokerAbortOrTimeout } from "./mcp-broker";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -897,13 +897,11 @@ export class RunnerServices {
         const msg = error instanceof Error ? error.message : String(error);
 
         // ── Broker timeout: payment state unknown ─────────────────────
-        // When the broker times out, the Circle CLI subprocess may have
-        // already submitted the payment or may still be running. We must
-        // NOT mark the ledger as terminal failure — leave the attempt
-        // pending so that retries check idempotency correctly.
-        const isBrokerTimeout =
-          error instanceof BrokerError &&
-          error.code === BrokerErrorCode.TOOL_TIMEOUT;
+        // When the broker times out or signal is aborted, the Circle CLI
+        // subprocess may have already submitted the payment or may still
+        // be running. We must NOT mark the ledger as terminal failure —
+        // leave the attempt pending so retries check idempotency correctly.
+        const isBrokerTimeout = isBrokerAbortOrTimeout(error, signal);
 
         if (isBrokerTimeout) {
           await this.receipts.append({

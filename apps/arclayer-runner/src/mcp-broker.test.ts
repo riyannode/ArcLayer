@@ -4,6 +4,7 @@ import {
   BrokerError,
   BrokerErrorCode,
   isNonIdempotentWrite,
+  isBrokerAbortOrTimeout,
   type ToolBudgetConfig,
 } from "./mcp-broker";
 
@@ -812,6 +813,56 @@ describe("McpToolBroker", () => {
       const log = broker.getAuditLog();
       expect(log).toHaveLength(1);
       expect(log[0].timedOut).toBeUndefined();
+    });
+  });
+
+  // ── isBrokerAbortOrTimeout ─────────────────────────────────────────────
+
+  describe("isBrokerAbortOrTimeout", () => {
+    it("returns true for BrokerError with TOOL_TIMEOUT code", () => {
+      const error = new BrokerError(BrokerErrorCode.TOOL_TIMEOUT, "timed out", {});
+      expect(isBrokerAbortOrTimeout(error)).toBe(true);
+    });
+
+    it("returns true for BrokerError TOOL_TIMEOUT even without signal", () => {
+      const error = new BrokerError(BrokerErrorCode.TOOL_TIMEOUT, "timed out", {});
+      expect(isBrokerAbortOrTimeout(error, undefined)).toBe(true);
+    });
+
+    it("returns true when signal is already aborted", () => {
+      const controller = new AbortController();
+      controller.abort();
+      expect(isBrokerAbortOrTimeout(new Error("killed"), controller.signal)).toBe(true);
+    });
+
+    it("returns true for AbortError (Node execFile signal kill)", () => {
+      const error = new Error("The operation was aborted");
+      error.name = "AbortError";
+      expect(isBrokerAbortOrTimeout(error)).toBe(true);
+    });
+
+    it("returns true for error with code ABORT_ERR", () => {
+      const error = { code: "ABORT_ERR", message: "aborted" };
+      expect(isBrokerAbortOrTimeout(error)).toBe(true);
+    });
+
+    it("returns false for normal Error without signal abort", () => {
+      expect(isBrokerAbortOrTimeout(new Error("ECONNREFUSED"))).toBe(false);
+    });
+
+    it("returns false for BrokerError with different code", () => {
+      const error = new BrokerError(BrokerErrorCode.BUDGET_EXCEEDED, "over budget", {});
+      expect(isBrokerAbortOrTimeout(error)).toBe(false);
+    });
+
+    it("returns false for non-aborted signal with normal error", () => {
+      const controller = new AbortController();
+      expect(isBrokerAbortOrTimeout(new Error("timeout"), controller.signal)).toBe(false);
+    });
+
+    it("returns false for null/undefined error without signal", () => {
+      expect(isBrokerAbortOrTimeout(null)).toBe(false);
+      expect(isBrokerAbortOrTimeout(undefined)).toBe(false);
     });
   });
 });
