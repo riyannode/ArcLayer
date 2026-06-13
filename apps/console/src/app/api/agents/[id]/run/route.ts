@@ -30,55 +30,72 @@ function parseAgentId(req: NextRequest) {
 /**
  * Store proof/receipt after a successful runner dispatch.
  * Inserts into agent_bridge_events (work_proof) and agent_bridge_receipts.
+ *
+ * payload_hash hashes the ACTUAL stored payload, not just the runner result.
+ * runnerProofSha256 (from runner response) goes into metadata.
  */
 async function storeDispatchProof(params: {
   agentId: string;
   taskId: string;
   dispatchId: string;
   runnerId: string;
+  role: string;
   result: unknown;
   proofSha256: string | null;
   durationMs: number;
 }) {
   const supabase = getSupabaseAdmin();
   const sessionId = `run_${params.agentId}_${Date.now()}`;
-  const payloadHash = params.proofSha256
-    ? `0x${params.proofSha256}`
-    : `0x${createHash('sha256').update(JSON.stringify(params.result ?? {})).digest('hex')}`;
+
+  // Hash the ACTUAL stored payload, not just the runner result
+  const eventPayload = {
+    taskId: params.taskId,
+    dispatchId: params.dispatchId,
+    result: params.result,
+    durationMs: params.durationMs,
+  };
+  const payloadHash = `0x${createHash('sha256').update(JSON.stringify(eventPayload)).digest('hex')}`;
 
   // Store as bridge event (work_proof type)
-  await supabase.from('agent_bridge_events').insert({
+  const eventInsert = await supabase.from('agent_bridge_events').insert({
     session_id: sessionId,
     runtime_id: params.runnerId,
     agent_id: String(params.agentId),
-    role: 'provider',
+    role: params.role,
     event_type: 'work_proof',
-    payload: {
-      taskId: params.taskId,
-      dispatchId: params.dispatchId,
-      result: params.result,
-      durationMs: params.durationMs,
-    },
+    payload: eventPayload,
     payload_hash: payloadHash,
-    metadata: { source: 'console-dispatch', runnerId: params.runnerId },
+    metadata: {
+      source: 'console-dispatch',
+      runnerId: params.runnerId,
+      runnerProofSha256: params.proofSha256,
+    },
     source: 'console-dispatch',
     dry_run: false,
   }).select('id').single();
 
-  // Store receipt
-  await supabase.from('agent_bridge_receipts').insert({
+  if (eventInsert.error) {
+    throw new Error(`agent_bridge_events_insert_failed:${eventInsert.error.message}`);
+  }
+
+  // Store receipt — x402_circle_gateway matches allowedRails: ['circle-gateway-passkey']
+  const receiptInsert = await supabase.from('agent_bridge_receipts').insert({
     session_id: sessionId,
-    receipt_type: 'x402_arc_native',
+    receipt_type: 'x402_circle_gateway',
     payload_hash: payloadHash,
     metadata: {
       taskId: params.taskId,
       dispatchId: params.dispatchId,
       runnerId: params.runnerId,
       agentId: String(params.agentId),
-      proofSha256: params.proofSha256,
+      runnerProofSha256: params.proofSha256,
       durationMs: params.durationMs,
     },
   }).select('id').single();
+
+  if (receiptInsert.error) {
+    throw new Error(`agent_bridge_receipts_insert_failed:${receiptInsert.error.message}`);
+  }
 }
 
 /**
@@ -122,6 +139,7 @@ async function handler(req: NextRequest) {
         taskId,
         dispatchId: result.dispatchId,
         runnerId: result.runnerId,
+        role,
         result: result.result,
         proofSha256: result.proofSha256,
         durationMs: result.durationMs,
@@ -153,8 +171,8 @@ async function handler(req: NextRequest) {
       return humanJson(req, {
         ok: false,
         agentId,
-        error: 'no_runner_registered',
-        message: `No active runner registered for agent ${agentId}. Register a runner first.`,
+        code: 'no_runner_registered',
+        guidance: `Register a runner first for agent ${agentId}.`,
         payment: { status: 'settled' },
       }, { status: 404 });
     }
@@ -162,8 +180,7 @@ async function handler(req: NextRequest) {
     return humanJson(req, {
       ok: false,
       agentId,
-      error: 'dispatch_failed',
-      message,
+      code: 'dispatch_failed',
       payment: { status: 'settled' },
     }, { status: 502 });
   }
