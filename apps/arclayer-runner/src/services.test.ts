@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RunnerServices } from "./services";
 import { RunnerError } from "@arclayer/runner-core";
+import { TaskIdempotencyStore } from "@arclayer/runner-core";
 import type { RunnerConfig } from "@arclayer/runner-core";
 import type { RuntimeConnector } from "./runtime";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
@@ -517,5 +518,197 @@ describe("RunnerServices", () => {
         expect(error).not.toBeInstanceOf(RunnerError);
       }
     });
+  });
+});
+
+describe("Task idempotency lifecycle", () => {
+  let config: RunnerConfig;
+  let runtime: RuntimeConnector;
+  let mcp: ArcLayerMcpConnector;
+  let skill: { content: string; sha256: string; path: string };
+  let services: RunnerServices;
+
+  beforeEach(() => {
+    config = makeConfig();
+    runtime = makeMockRuntime();
+    mcp = makeMockMcp();
+    skill = { content: "# Skill", sha256: "abc123", path: "/test/skill.md" };
+    services = new RunnerServices(config, runtime, mcp, skill);
+  });
+
+  it("invalid agentId does not burn taskId", async () => {
+    const reserved: string[] = [];
+    const lifecycle = {
+      reserveTaskId: (taskId: string, _agentId: string) => { reserved.push(taskId); },
+    };
+
+    await expect(
+      services.runGeneric({
+        taskId: "task-1",
+        protocol: "generic",
+        role: "provider",
+        agentId: "wrong-agent",
+        input: {}
+      }, lifecycle)
+    ).rejects.toThrow();
+
+    // taskId should NOT have been reserved — validation failed before dispatch
+    expect(reserved).toHaveLength(0);
+  });
+
+  it("invalid role does not burn taskId", async () => {
+    const reserved: string[] = [];
+    const lifecycle = {
+      reserveTaskId: (taskId: string, _agentId: string) => { reserved.push(taskId); },
+    };
+
+    await expect(
+      services.runGeneric({
+        taskId: "task-2",
+        protocol: "generic",
+        role: "evaluator",
+        agentId: "agent-1",
+        input: {}
+      }, lifecycle)
+    ).rejects.toThrow();
+
+    expect(reserved).toHaveLength(0);
+  });
+
+  it("retry same taskId with valid body succeeds after failed validation", async () => {
+    const reserved: string[] = [];
+    const lifecycle = {
+      reserveTaskId: (taskId: string, _agentId: string) => { reserved.push(taskId); },
+    };
+
+    // First attempt: wrong agentId — should NOT burn taskId
+    await expect(
+      services.runGeneric({
+        taskId: "task-3",
+        protocol: "generic",
+        role: "provider",
+        agentId: "wrong-agent",
+        input: {}
+      }, lifecycle)
+    ).rejects.toThrow();
+
+    expect(reserved).toHaveLength(0);
+
+    // Second attempt: correct agentId — should succeed
+    const result = await services.runGeneric({
+      taskId: "task-3",
+      protocol: "generic",
+      role: "provider",
+      agentId: "agent-1",
+      input: {}
+    }, lifecycle);
+
+    expect(result.ok).toBe(true);
+    expect(reserved).toEqual(["task-3"]);
+  });
+
+  it("valid dispatched task duplicated returns DUPLICATE_TASK", async () => {
+    const store = new TaskIdempotencyStore();
+    const lifecycle = {
+      reserveTaskId: (taskId: string, agentId: string) => store.checkAndMark(taskId, agentId),
+    };
+
+    // First dispatch — succeeds
+    const result1 = await services.runGeneric({
+      taskId: "task-4",
+      protocol: "generic",
+      role: "provider",
+      agentId: "agent-1",
+      input: {}
+    }, lifecycle);
+    expect(result1.ok).toBe(true);
+
+    // Second dispatch — same taskId, should throw DUPLICATE_TASK
+    await expect(
+      services.runGeneric({
+        taskId: "task-4",
+        protocol: "generic",
+        role: "provider",
+        agentId: "agent-1",
+        input: {}
+      }, lifecycle)
+    ).rejects.toMatchObject({ code: "DUPLICATE_TASK" });
+
+    store.destroy();
+  });
+
+  it("same taskId for different agents does not conflict", async () => {
+    const store = new TaskIdempotencyStore();
+    const lifecycle = {
+      reserveTaskId: (taskId: string, agentId: string) => store.checkAndMark(taskId, agentId),
+    };
+
+    // agent-1 dispatches task-5
+    const result1 = await services.runGeneric({
+      taskId: "task-5",
+      protocol: "generic",
+      role: "provider",
+      agentId: "agent-1",
+      input: {}
+    }, lifecycle);
+    expect(result1.ok).toBe(true);
+
+    // agent-1 dispatches task-5 again — should fail
+    await expect(
+      services.runGeneric({
+        taskId: "task-5",
+        protocol: "generic",
+        role: "provider",
+        agentId: "agent-1",
+        input: {}
+      }, lifecycle)
+    ).rejects.toMatchObject({ code: "DUPLICATE_TASK" });
+
+    store.destroy();
+  });
+
+  it("markTaskCompleted called on success", async () => {
+    const completed: string[] = [];
+    const lifecycle = {
+      reserveTaskId: () => {},
+      markTaskCompleted: (taskId: string, _agentId: string) => { completed.push(taskId); },
+    };
+
+    await services.runGeneric({
+      taskId: "task-6",
+      protocol: "generic",
+      role: "provider",
+      agentId: "agent-1",
+      input: {}
+    }, lifecycle);
+
+    expect(completed).toEqual(["task-6"]);
+  });
+
+  it("markTaskFailed called on runtime error", async () => {
+    const failed: string[] = [];
+    const lifecycle = {
+      reserveTaskId: () => {},
+      markTaskFailed: (taskId: string, _agentId: string) => { failed.push(taskId); },
+    };
+
+    // Make runtime throw
+    const throwingRuntime: RuntimeConnector = {
+      kind: "mock",
+      async run() { throw new Error("runtime exploded"); }
+    };
+    const failServices = new RunnerServices(config, throwingRuntime, mcp, skill);
+
+    await expect(
+      failServices.runGeneric({
+        taskId: "task-7",
+        protocol: "generic",
+        role: "provider",
+        agentId: "agent-1",
+        input: {}
+      }, lifecycle)
+    ).rejects.toThrow("runtime exploded");
+
+    expect(failed).toEqual(["task-7"]);
   });
 });
