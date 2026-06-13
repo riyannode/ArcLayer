@@ -9,3 +9,4 @@ export * from "./paths";
 export * from "./nonce-store";
 export * from "./task-idempotency";
 export * from "./mcp-input-schemas";
+export * from "./operation";
