@@ -39,7 +39,6 @@ import {
   type RawLogRow,
   decodeIdentityEvents,
   decodeJobEvents,
-  filterByBlock,
 } from "@/lib/goldsky-raw-log-decoder";
 
 // ── Env config (server-only) ───────────────────────────────────────────────
@@ -98,19 +97,32 @@ const RAW_COLUMNS =
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+/** Options for fetchAllRawLogs. */
+type FetchRawLogsOptions = {
+  /** Minimum block number to fetch. If undefined, uses GOLDSKY_START_BLOCK (unless ignoreEnvStartBlock). */
+  fromBlock?: number;
+  /** When true, ignore GOLDSKY_START_BLOCK and fetch all available rows. */
+  ignoreEnvStartBlock?: boolean;
+};
+
 /**
  * Fetch all rows from a Goldsky raw table using cursor pagination.
  * Uses block_number + log_index as cursor to avoid offset overhead.
+ *
+ * By default, applies GOLDSKY_START_BLOCK from env. Pass { ignoreEnvStartBlock: true }
+ * to bypass it (e.g. for full-history job attribution queries).
  */
 async function fetchAllRawLogs(
   table: string,
-  fromBlock?: number,
+  opts: FetchRawLogsOptions = {},
 ): Promise<RawLogRow[]> {
   const supabase = getSupabaseAdmin();
   const allRows: RawLogRow[] = [];
   let lastBlock = 0;
   let lastLogIndex = -1;
-  const effectiveFromBlock = fromBlock ?? GOLDSKY_START_BLOCK;
+  const effectiveFromBlock = opts.ignoreEnvStartBlock
+    ? (opts.fromBlock ?? 0)
+    : (opts.fromBlock ?? GOLDSKY_START_BLOCK);
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -422,11 +434,11 @@ export async function readGoldskyHealth(): Promise<{
   };
 }
 
-/** Shared fetch + decode helper to avoid redundant Supabase scans. */
-async function fetchAllDecoded(fromBlock?: number) {
+/** Shared fetch + decode helper. Fetches full history by default. */
+async function fetchAllDecoded(opts?: FetchRawLogsOptions) {
   const [rawJobRows, rawAgentRows] = await Promise.all([
-    fetchAllRawLogs(TABLES.erc8183, fromBlock),
-    fetchAllRawLogs(TABLES.erc8004Identity, fromBlock),
+    fetchAllRawLogs(TABLES.erc8183, opts),
+    fetchAllRawLogs(TABLES.erc8004Identity, opts),
   ]);
   const jobEvents = decodeJobEvents(rawJobRows).map(normalizeJobEvent);
   const agentEvents = decodeIdentityEvents(rawAgentRows).map(normalizeAgentEvent);
@@ -434,30 +446,37 @@ async function fetchAllDecoded(fromBlock?: number) {
 }
 
 /**
- * Read projected jobs. Fetches full history once and filters at entity level.
- * Preserves complete job lifecycle even when called with fromBlock.
+ * Read projected jobs. Fetches full available history and projects complete
+ * lifecycles. If fromBlock is provided, filters projected jobs at entity level
+ * by createdAtBlock — never filters raw events before projection.
  */
 export async function readGoldskyJobs(fromBlock?: number): Promise<ProjectedJob[]> {
   const allowlists = await loadDynamicAllowlists();
-  const { jobEvents } = await fetchAllDecoded(fromBlock);
+  const { jobEvents } = await fetchAllDecoded({ ignoreEnvStartBlock: true });
 
-  if (INDEXER_SCOPE === "arcnetwork") {
-    return sdkProjectJobs(jobEvents);
+  const allJobs =
+    INDEXER_SCOPE === "arcnetwork"
+      ? sdkProjectJobs(jobEvents)
+      : sdkProjectJobs(jobEvents, buildJobFilter(allowlists.wallets));
+
+  // Entity-level filter: only include jobs whose creation block >= fromBlock
+  if (fromBlock && fromBlock > 0) {
+    return allJobs.filter((j) => Number(j.createdAtBlock ?? 0) >= fromBlock);
   }
-
-  return sdkProjectJobs(jobEvents, buildJobFilter(allowlists.wallets));
+  return allJobs;
 }
 
 /**
- * Read projected agents. Always fetches full job history for wallet collection,
- * then filters agents by creation block if fromBlock is set.
+ * Read projected agents. Always fetches full job history for wallet collection
+ * (ignoreEnvStartBlock: true for attribution), then filters projected agents
+ * at entity level if fromBlock is set.
  */
 export async function readGoldskyAgents(fromBlock?: number): Promise<ProjectedAgent[]> {
   const allowlists = await loadDynamicAllowlists();
-  // Always fetch ALL jobs to collect complete wallet set for attribution
+  // Always fetch ALL jobs (ignoreEnvStartBlock) to collect complete wallet set
   const [rawJobRows, rawAgentRows] = await Promise.all([
-    fetchAllRawLogs(TABLES.erc8183), // NO fromBlock — need all job wallets
-    fetchAllRawLogs(TABLES.erc8004Identity, fromBlock),
+    fetchAllRawLogs(TABLES.erc8183, { ignoreEnvStartBlock: true }),
+    fetchAllRawLogs(TABLES.erc8004Identity, { ignoreEnvStartBlock: true }),
   ]);
   const decodedJobs = decodeJobEvents(rawJobRows);
   const decodedAgents = decodeIdentityEvents(rawAgentRows);
@@ -465,16 +484,22 @@ export async function readGoldskyAgents(fromBlock?: number): Promise<ProjectedAg
   const agentEvents = decodedAgents.map(normalizeAgentEvent);
 
   if (INDEXER_SCOPE === "arcnetwork") {
-    return sdkProjectAgents(agentEvents);
+    const agents = sdkProjectAgents(agentEvents);
+    return fromBlock && fromBlock > 0
+      ? agents.filter((a) => Number(a.registeredAtBlock ?? 0) >= fromBlock)
+      : agents;
   }
 
   const jobs = sdkProjectJobs(jobEvents, buildJobFilter(allowlists.wallets));
   const jobWallets = collectJobWallets(jobs);
-
-  return sdkProjectAgents(
+  const agents = sdkProjectAgents(
     agentEvents,
     buildAgentFilter(allowlists.wallets, allowlists.agentIds, jobWallets),
   );
+
+  return fromBlock && fromBlock > 0
+    ? agents.filter((a) => Number(a.registeredAtBlock ?? 0) >= fromBlock)
+    : agents;
 }
 
 /** Read a single job detail by jobId. */
