@@ -493,29 +493,12 @@ export async function readGoldskyJobDetail(
   return { job, proof: null };
 }
 
-/** Read all projected agents from Goldsky raw tables. */
-export async function readGoldskyAgents(): Promise<ProjectedAgent[]> {
-  const allowlists = await loadDynamicAllowlists();
-  const [rawJobRows, rawAgentRows] = await Promise.all([
-    fetchAllRawLogs(TABLES.erc8183),
-    fetchAllRawLogs(TABLES.erc8004Identity),
-  ]);
-  const decodedJobs = decodeJobEvents(rawJobRows);
-  const decodedAgents = decodeIdentityEvents(rawAgentRows);
-  const jobEvents = decodedJobs.map(normalizeJobEvent);
-  const agentEvents = decodedAgents.map(normalizeAgentEvent);
-
-  if (INDEXER_SCOPE === "arcnetwork") {
-    return sdkProjectAgents(agentEvents);
-  }
-
-  const jobs = sdkProjectJobs(jobEvents, buildJobFilter(allowlists.wallets));
-  const jobWallets = collectJobWallets(jobs);
-
-  return sdkProjectAgents(
-    agentEvents,
-    buildAgentFilter(allowlists.wallets, allowlists.agentIds, jobWallets),
-  );
+/** Read a single agent detail by agentId (projectId format). */
+export async function readGoldskyAgentDetail(
+  agentId: string,
+): Promise<ProjectedAgent | null> {
+  const agents = await readGoldskyAgents();
+  return agents.find((a) => a.agentId === agentId) ?? null;
 }
 
 /**
