@@ -13,7 +13,7 @@
  */
 
 import { RUNNER_MCP_TOOLS, type McpToolDef } from "./mcp-schemas";
-import { getToolByName, type RunnerToolRegistryItem } from "./tool-registry";
+import { getToolByName } from "./tool-registry";
 
 // ── Stable Error Codes ────────────────────────────────────────────────────
 
@@ -59,10 +59,13 @@ export type ToolBudgetConfig = {
   outputSizeOverridesBytes?: Record<string, number>;
 };
 
+/** Redacted args for audit — strips sensitive fields. */
+type RedactedArgs = Record<string, unknown>;
+
 export type AuditEntry = {
   timestamp: string;
   toolName: string;
-  args: Record<string, unknown>;
+  args: RedactedArgs;
   ok: boolean;
   durationMs: number;
   outputBytes: number;
@@ -74,9 +77,56 @@ export type AuditEntry = {
 
 export type BrokerSessionState = {
   callCount: number;
+  pendingCalls: number;
   totalCostMicros: bigint;
   auditLog: AuditEntry[];
 };
+
+// ── Args Redaction ────────────────────────────────────────────────────────
+
+/** Fields that should never appear in audit logs (all lowercase for case-insensitive match). */
+const SENSITIVE_FIELDS = new Set([
+  "idempotencykey",
+  "idempotency_key",
+  "token",
+  "bearer",
+  "authorization",
+  "secret",
+  "password",
+  "privatekey",
+  "private_key",
+]);
+
+/**
+ * Redact sensitive fields from tool args before storing in audit log.
+ * Preserves non-sensitive fields for forensic value (url, method, amount, etc).
+ */
+function redactArgs(args: Record<string, unknown>): RedactedArgs {
+  const redacted: RedactedArgs = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (SENSITIVE_FIELDS.has(key.toLowerCase())) {
+      redacted[key] = "[REDACTED]";
+    } else if (key === "body") {
+      // body can contain arbitrary secrets — redact entirely
+      redacted[key] = "[REDACTED]";
+    } else if (key === "url" && typeof value === "string" && value.includes("@")) {
+      // URLs with embedded credentials
+      try {
+        const u = new URL(value);
+        if (u.username || u.password) {
+          u.username = "***";
+          u.password = "";
+        }
+        redacted[key] = u.toString();
+      } catch {
+        redacted[key] = "[REDACTED_URL]";
+      }
+    } else {
+      redacted[key] = value;
+    }
+  }
+  return redacted;
+}
 
 // ── Schema Validation ─────────────────────────────────────────────────────
 
@@ -86,6 +136,9 @@ export type BrokerSessionState = {
  *
  * This is a pragmatic validator — checks required fields and type hints.
  * Not a full JSON Schema validator (would add dependency); covers the 90% case.
+ *
+ * The "object" type accepts any JSON value (object, array, primitive) since
+ * fields like `body` in x402 tools accept arbitrary JSON payloads.
  */
 function validateToolArgs(
   toolDef: McpToolDef,
@@ -113,11 +166,14 @@ function validateToolArgs(
       const expectedType = fieldSpec.type;
 
       // Flexible type mapping
+      // "object" accepts any JSON value (objects, arrays, primitives)
+      // because fields like `body` in x402 tools accept arbitrary payloads.
       const typeOk =
         (expectedType === "string" && actualType === "string") ||
         (expectedType === "number" && actualType === "number") ||
         (expectedType === "boolean" && actualType === "boolean") ||
-        (expectedType === "object" && (actualType === "object" && !Array.isArray(value))) ||
+        // "object" = any JSON value (objects, arrays, string, number, boolean, null)
+        (expectedType === "object") ||
         (expectedType === "array" && Array.isArray(value));
 
       if (!typeOk) {
@@ -146,37 +202,37 @@ function measureOutputSize(result: unknown): number {
 // ── Cost Extraction ───────────────────────────────────────────────────────
 
 /**
- * Extract USDC cost from a tool result if applicable (payment tools).
- * Returns micros as bigint, or 0n if not a payment result.
+ * Extract USDC cost from tool arguments (not result).
+ *
+ * The actual payX402/batchPayX402 results don't contain `amount` — they return
+ * `{ ok, result: CircleCliResult, receipt, idempotencyKey }`. The cost is known
+ * from the request args (`maxAmountUsdc`), which represent the committed spend.
+ *
+ * This approach is correct because:
+ * - x402.pay args.maxAmountUsdc = the amount that was/will be paid
+ * - x402.batch_pay args.payments[].maxAmountUsdc = each item's amount
+ * - The policy already validated these amounts before execution
  */
-function extractCostMicros(toolName: string, result: unknown): bigint {
-  // Payment tools return { ok: true, result: { amount: "..." } } or similar
-  // We look for known payment tool patterns
-  if (!toolName.startsWith("x402.")) return 0n;
-
-  try {
-    const r = result as Record<string, unknown>;
-    if (!r?.ok) return 0n;
-
-    // x402.pay returns result with amount info
-    const inner = r.result as Record<string, unknown> | undefined;
-    if (inner?.amount && typeof inner.amount === "string") {
-      return decimalToMicros(inner.amount);
+function extractCostMicrosFromArgs(toolName: string, args: Record<string, unknown>): bigint {
+  if (toolName === "x402.pay") {
+    const maxAmount = args.maxAmountUsdc;
+    if (typeof maxAmount === "string" && maxAmount) {
+      return decimalToMicros(maxAmount);
     }
+  }
 
-    // x402.batch_pay returns results array
-    if (Array.isArray(inner?.results)) {
+  if (toolName === "x402.batch_pay") {
+    const payments = args.payments;
+    if (Array.isArray(payments)) {
       let total = 0n;
-      for (const item of inner.results) {
+      for (const item of payments) {
         const itemRecord = item as Record<string, unknown>;
-        if (itemRecord?.amount && typeof itemRecord.amount === "string") {
-          total += decimalToMicros(itemRecord.amount);
+        if (typeof itemRecord.maxAmountUsdc === "string") {
+          total += decimalToMicros(itemRecord.maxAmountUsdc);
         }
       }
       return total;
     }
-  } catch {
-    // Not a payment result or unexpected shape
   }
 
   return 0n;
@@ -200,6 +256,7 @@ export class McpToolBroker {
     this.maxOutputBytes = budget.maxOutputBytes ?? 1_048_576; // 1MB default
     this.state = {
       callCount: 0,
+      pendingCalls: 0,
       totalCostMicros: 0n,
       auditLog: [],
     };
@@ -255,14 +312,16 @@ export class McpToolBroker {
 
   /**
    * Check budget constraints before executing a tool call.
+   * Includes pending calls in the count to prevent concurrent oversubscription.
    */
   assertBudgetAllowed(): void {
-    // Max calls check
-    if (this.budget.maxCalls !== undefined && this.state.callCount >= this.budget.maxCalls) {
+    // Max calls check — include pending calls to prevent concurrent oversubscription
+    const effectiveCount = this.state.callCount + this.state.pendingCalls;
+    if (this.budget.maxCalls !== undefined && effectiveCount >= this.budget.maxCalls) {
       throw new BrokerError(
         BrokerErrorCode.MAX_CALLS_EXCEEDED,
-        `Tool call limit exceeded: ${this.state.callCount}/${this.budget.maxCalls}`,
-        { callCount: this.state.callCount, maxCalls: this.budget.maxCalls }
+        `Tool call limit exceeded: ${effectiveCount}/${this.budget.maxCalls} (${this.state.pendingCalls} pending)`,
+        { callCount: this.state.callCount, pendingCalls: this.state.pendingCalls, maxCalls: this.budget.maxCalls }
       );
     }
 
@@ -315,12 +374,14 @@ export class McpToolBroker {
 
   /**
    * Record a completed tool call in the audit log and update budget state.
+   * Args are redacted before storage to strip sensitive fields.
    */
   recordCall(entry: Omit<AuditEntry, "timestamp">): void {
     this.state.callCount++;
 
     const fullEntry: AuditEntry = {
       ...entry,
+      args: redactArgs(entry.args),
       timestamp: new Date().toISOString(),
     };
 
@@ -333,16 +394,55 @@ export class McpToolBroker {
   }
 
   /**
+   * Reserve a call slot before execution.
+   * Increments pendingCalls to prevent concurrent oversubscription.
+   * Call this before dispatching the tool; call releaseCallSlot() when done.
+   */
+  reserveCallSlot(): void {
+    this.state.pendingCalls++;
+  }
+
+  /**
+   * Release a reserved call slot after execution completes (success or failure).
+   */
+  releaseCallSlot(): void {
+    this.state.pendingCalls = Math.max(0, this.state.pendingCalls - 1);
+  }
+
+  /**
+   * Record a pre-execution rejection as a failed audit entry.
+   * These are the highest-value events for forensics.
+   */
+  recordRejection(
+    toolName: string,
+    args: Record<string, unknown>,
+    error: BrokerError
+  ): void {
+    this.recordCall({
+      toolName,
+      args,
+      ok: false,
+      durationMs: 0,
+      outputBytes: 0,
+      errorCode: error.code,
+      errorMessage: error.message,
+    });
+  }
+
+  /**
    * Full pre-execution check: allowlist + schema + budget.
+   * Reserves a call slot on success; caller must release on completion.
    */
   preExecute(toolName: string, args: Record<string, unknown>): void {
     this.assertToolAllowed(toolName);
     this.validateArgs(toolName, args);
     this.assertBudgetAllowed();
+    this.reserveCallSlot();
   }
 
   /**
    * Full post-execution check: output size + audit log + cost tracking.
+   * Releases the call slot reserved by preExecute.
    */
   postExecute(
     toolName: string,
@@ -350,27 +450,32 @@ export class McpToolBroker {
     result: unknown,
     durationMs: number
   ): unknown {
-    // Output size check
-    this.assertOutputSize(toolName, result);
+    try {
+      // Output size check
+      this.assertOutputSize(toolName, result);
 
-    // Extract cost for payment tools
-    const costMicros = extractCostMicros(toolName, result);
+      // Extract cost from request args (not result — result doesn't contain amount)
+      const costMicros = extractCostMicrosFromArgs(toolName, args);
 
-    // Audit log
-    this.recordCall({
-      toolName,
-      args,
-      ok: true,
-      durationMs,
-      outputBytes: measureOutputSize(result),
-      costUsdc: costMicros > 0n ? (Number(costMicros) / 1_000_000).toFixed(6) : undefined,
-    });
+      // Audit log
+      this.recordCall({
+        toolName,
+        args,
+        ok: true,
+        durationMs,
+        outputBytes: measureOutputSize(result),
+        costUsdc: costMicros > 0n ? (Number(costMicros) / 1_000_000).toFixed(6) : undefined,
+      });
 
-    return result;
+      return result;
+    } finally {
+      this.releaseCallSlot();
+    }
   }
 
   /**
    * Record a failed tool call in the audit log.
+   * Releases the call slot reserved by preExecute.
    */
   recordFailure(
     toolName: string,
@@ -378,15 +483,19 @@ export class McpToolBroker {
     error: unknown,
     durationMs: number
   ): void {
-    const isBrokerError = error instanceof BrokerError;
-    this.recordCall({
-      toolName,
-      args,
-      ok: false,
-      durationMs,
-      outputBytes: 0,
-      errorCode: isBrokerError ? error.code : BrokerErrorCode.INTERNAL_ERROR,
-      errorMessage: error instanceof Error ? error.message : "Unknown error",
-    });
+    try {
+      const isBrokerError = error instanceof BrokerError;
+      this.recordCall({
+        toolName,
+        args,
+        ok: false,
+        durationMs,
+        outputBytes: 0,
+        errorCode: isBrokerError ? error.code : BrokerErrorCode.INTERNAL_ERROR,
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+      });
+    } finally {
+      this.releaseCallSlot();
+    }
   }
 }

@@ -178,6 +178,8 @@ export async function handleStdioRequest(
           broker.preExecute(toolName, toolArgs);
         } catch (error) {
           if (error instanceof BrokerError) {
+            // Audit the rejection (highest-value forensics event)
+            broker.recordRejection(toolName, toolArgs, error);
             stderrLog(`tools/call BLOCKED by broker: ${error.code} — ${error.message}`);
             return rpcOk(id, {
               content: [{

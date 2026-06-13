@@ -77,6 +77,13 @@ function brokerErrorToRpcCode(code: BrokerErrorCode): number {
 
 /**
  * Wrap a promise with a timeout. Rejects with BrokerError on timeout.
+ *
+ * NOTE: The underlying promise continues running after timeout. For tools
+ * with non-cancellable side effects (Circle CLI writes, on-chain txs),
+ * the operation may still complete after the client receives TIMEOUT.
+ * This is acceptable for read-only tools and idempotent payment tools
+ * (x402 uses idempotency keys). For non-idempotent writes, consider
+ * increasing timeoutOverridesMs for those specific tools.
  */
 function withTimeout<T>(promise: Promise<T>, ms: number, toolName: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -96,6 +103,24 @@ function withTimeout<T>(promise: Promise<T>, ms: number, toolName: string): Prom
 }
 
 /**
+ * Send a broker error as a JSON-RPC result (MCP tools/call error format).
+ */
+function sendBrokerError(res: ServerResponse, rpcId: string | number, error: BrokerError): void {
+  sendJson(res, jsonRpcOk(rpcId, {
+    content: [{
+      type: "text",
+      text: JSON.stringify({
+        ok: false,
+        error: error.code,
+        message: error.message,
+        details: error.details
+      })
+    }],
+    isError: true
+  }));
+}
+
+/**
  * Handle POST /mcp — JSON-RPC 2.0 endpoint.
  *
  * Auth is done by the HTTP router before this handler is called.
@@ -107,18 +132,20 @@ function withTimeout<T>(promise: Promise<T>, ms: number, toolName: string): Prom
  * @param res - HTTP response (for writing JSON-RPC responses)
  * @param body - Pre-parsed JSON body from router (JSON-RPC request)
  * @param ctx - MCP tool context (services, mcp, config, skill)
- * @param broker - MCP Tool Broker instance (per-session budget/audit)
+ * @param broker - MCP Tool Broker instance (per-session budget/audit), or null if disabled
  */
 export async function handleMcpRequest(
   res: ServerResponse,
   body: unknown,
   ctx: McpToolContext,
-  broker?: McpToolBroker
+  broker?: McpToolBroker | null
 ): Promise<void> {
   let rpcId: string | number = 0;
 
-  // Create broker if not provided (backward compat / default behavior)
-  const toolBroker = broker ?? new McpToolBroker();
+  // broker=undefined → no broker (backward compat / disabled)
+  // broker=McpToolBroker → active broker
+  // Do NOT create a default broker when explicitly disabled.
+  const toolBroker = broker ?? undefined;
 
   try {
     // Validate JSON-RPC envelope (auth already done by router)
@@ -170,29 +197,22 @@ export async function handleMcpRequest(
         }
 
         // ── Broker: pre-execute checks ───────────────────────────────
-        try {
-          toolBroker.preExecute(toolName, toolArgs);
-        } catch (error) {
-          if (error instanceof BrokerError) {
-            sendJson(res, jsonRpcOk(rpc.id, {
-              content: [{
-                type: "text",
-                text: JSON.stringify({
-                  ok: false,
-                  error: error.code,
-                  message: error.message,
-                  details: error.details
-                })
-              }],
-              isError: true
-            }));
-            return;
+        if (toolBroker) {
+          try {
+            toolBroker.preExecute(toolName, toolArgs);
+          } catch (error) {
+            if (error instanceof BrokerError) {
+              // Audit the rejection (highest-value forensics event)
+              toolBroker.recordRejection(toolName, toolArgs, error);
+              sendBrokerError(res, rpc.id, error);
+              return;
+            }
+            throw error;
           }
-          throw error;
         }
 
         // ── Broker: execute with timeout ─────────────────────────────
-        const timeoutMs = toolBroker.getTimeoutMs(toolName);
+        const timeoutMs = toolBroker?.getTimeoutMs(toolName) ?? 30_000;
         const startTime = Date.now();
 
         try {
@@ -203,33 +223,21 @@ export async function handleMcpRequest(
           );
 
           // ── Broker: post-execute checks (output size + audit) ──────
-          const checkedResult = toolBroker.postExecute(
-            toolName,
-            toolArgs,
-            result,
-            Date.now() - startTime
-          );
+          if (toolBroker) {
+            toolBroker.postExecute(toolName, toolArgs, result, Date.now() - startTime);
+          }
 
-          sendJson(res, jsonRpcOk(rpc.id, checkedResult));
+          sendJson(res, jsonRpcOk(rpc.id, result));
         } catch (error) {
           const durationMs = Date.now() - startTime;
 
-          // Record failure in audit log
-          toolBroker.recordFailure(toolName, toolArgs, error, durationMs);
+          // Record failure in audit log (also releases call slot)
+          if (toolBroker) {
+            toolBroker.recordFailure(toolName, toolArgs, error, durationMs);
+          }
 
           if (error instanceof BrokerError) {
-            sendJson(res, jsonRpcOk(rpc.id, {
-              content: [{
-                type: "text",
-                text: JSON.stringify({
-                  ok: false,
-                  error: error.code,
-                  message: error.message,
-                  details: error.details
-                })
-              }],
-              isError: true
-            }));
+            sendBrokerError(res, rpc.id, error);
             return;
           }
           throw error;
