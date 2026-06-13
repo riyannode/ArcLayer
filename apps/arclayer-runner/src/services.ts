@@ -335,18 +335,9 @@ export class RunnerServices {
     // Validate runtime result is submittable (only completed passes)
     assertSubmittableRuntimeResult(input.result);
 
-    // Verify provider address is configured
-    if (!this.config.circleWalletAddress) {
-      return {
-        ok: false,
-        mode: "prepared-only",
-        reason: "CIRCLE_WALLET_ADDRESS not configured",
-        prepared: input
-      };
-    }
-
     // MCP prepare/preflight — validates deliverable before on-chain submit.
-    // Matches old runErc8183ProviderJob flow that called prepareSubmitDeliverable.
+    // Runs before circleWalletAddress check so prepared-only responses
+    // can still include preparedTx (matches old runErc8183ProviderJob flow).
     const preparedTx = await this.mcp.prepareSubmitDeliverable(
       input.jobId,
       input.deliverableHash
@@ -354,6 +345,17 @@ export class RunnerServices {
       console.warn(`[runner] MCP prepareSubmitDeliverable failed: ${err.message}`);
       return null;
     });
+
+    // Verify provider address is configured
+    if (!this.config.circleWalletAddress) {
+      return {
+        ok: false,
+        mode: "prepared-only",
+        reason: "CIRCLE_WALLET_ADDRESS not configured",
+        preparedTx,
+        prepared: input
+      };
+    }
 
     // Call Circle CLI submit — only place this is allowed
     const submitReceipt = await this.submitDeliverableViaCircleCli({
