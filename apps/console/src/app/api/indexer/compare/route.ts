@@ -157,7 +157,7 @@ export async function GET(request: NextRequest) {
       readGoldskyOverview,
     } = await import("@/lib/goldsky-supabase-indexer");
 
-    // Fetch raw data once, build all projections from the snapshot
+    // Fetch from Goldsky reader (each call fetches internally)
     const health = await readGoldskyHealth();
     goldskyHealth = health as unknown as Record<string, unknown>;
 
@@ -196,7 +196,7 @@ export async function GET(request: NextRequest) {
       return block >= fromBlock;
     });
     customAgents = customAgents.filter((a: any) => {
-      const block = Number(a.createdAtBlock ?? a.blockNumber ?? 0);
+      const block = Number(a.registeredAtBlock ?? a.blockNumber ?? a.createdAtBlock ?? 0);
       return block >= fromBlock;
     });
   }
