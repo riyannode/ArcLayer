@@ -977,7 +977,7 @@ describe("runProviderJob", () => {
     circleSpy.mockRestore();
   });
 
-  it("Hermes/custom needs_payment does NOT submit", async () => {
+  it("Hermes/custom needs_payment writes checkpoint and does not submit", async () => {
     const needsPaymentRuntime: RuntimeConnector = {
       kind: "hermes",
       async run() {
@@ -991,6 +991,7 @@ describe("runProviderJob", () => {
       }
     };
     const svc = new RunnerServices(config, needsPaymentRuntime, mcp, skill);
+    const checkpointSpy = vi.spyOn(mcp, "writeCheckpoint");
     const circleSpy = vi.spyOn(svc.circle, "executeErc8183Write");
 
     const result = await svc.runProviderJob(validJob);
@@ -998,11 +999,17 @@ describe("runProviderJob", () => {
     expect(result.ok).toBe(false);
     expect(result.status).toBe("needs_payment");
     expect((result as any).deliverableHash).toBeUndefined();
+    // checkpoint must be written with status and paymentRequests
+    expect(checkpointSpy).toHaveBeenCalledWith("42", expect.objectContaining({
+      status: "needs_payment",
+      paymentRequests: expect.any(Array)
+    }));
+    // no Circle CLI submit
     expect(circleSpy).not.toHaveBeenCalled();
     circleSpy.mockRestore();
   });
 
-  it("Hermes/custom needs_action does NOT submit", async () => {
+  it("Hermes/custom needs_action writes checkpoint and does not submit", async () => {
     const needsActionRuntime: RuntimeConnector = {
       kind: "hermes",
       async run() {
@@ -1016,6 +1023,7 @@ describe("runProviderJob", () => {
       }
     };
     const svc = new RunnerServices(config, needsActionRuntime, mcp, skill);
+    const checkpointSpy = vi.spyOn(mcp, "writeCheckpoint");
     const circleSpy = vi.spyOn(svc.circle, "executeErc8183Write");
 
     const result = await svc.runProviderJob(validJob);
@@ -1023,6 +1031,12 @@ describe("runProviderJob", () => {
     expect(result.ok).toBe(false);
     expect(result.status).toBe("needs_action");
     expect((result as any).deliverableHash).toBeUndefined();
+    // checkpoint must be written with status and actionRequests
+    expect(checkpointSpy).toHaveBeenCalledWith("42", expect.objectContaining({
+      status: "needs_action",
+      actionRequests: expect.any(Array)
+    }));
+    // no Circle CLI submit
     expect(circleSpy).not.toHaveBeenCalled();
     circleSpy.mockRestore();
   });
@@ -1175,6 +1189,56 @@ describe("submitProviderDeliverable", () => {
     expect(result.ok).toBe(false);
     expect((result as any).mode).toBe("prepared-only");
   });
+
+  it("calls prepareSubmitDeliverable before Circle CLI submit", async () => {
+    const prepareSpy = vi.spyOn(mcp, "prepareSubmitDeliverable");
+    const submitSpy = vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+      ok: true,
+      command: "circle",
+      args: [],
+      json: { txHash: "0x" + "ab".repeat(32) }
+    } as any);
+
+    await services.submitProviderDeliverable({
+      jobId: "42",
+      deliverableHash: validHash,
+      result: completedResult
+    });
+
+    expect(prepareSpy).toHaveBeenCalledWith("42", validHash);
+    // prepare must be called before submit
+    expect(prepareSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      submitSpy.mock.invocationCallOrder[0]
+    );
+    prepareSpy.mockRestore();
+    submitSpy.mockRestore();
+  });
+
+  it("submit receipt contains runtime result, deliverableHash, submitReceipt, and txHash", async () => {
+    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+      ok: true,
+      command: "circle",
+      args: [],
+      json: { txHash: "0x" + "ab".repeat(32) }
+    } as any);
+
+    const result = await services.submitProviderDeliverable({
+      jobId: "42",
+      deliverableHash: validHash,
+      result: completedResult
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.receipt).toBeDefined();
+    // response includes runtime result and preparedTx
+    expect(result.receipt.response).toHaveProperty("result");
+    expect(result.receipt.response).toHaveProperty("submitReceipt");
+    expect(result.receipt.response).toHaveProperty("preparedTx");
+    // proof includes deliverableHash and txHash
+    expect(result.receipt.proof.deliverableHash).toBe(validHash);
+    expect(result.receipt.proof.txHash).toBeDefined();
+    expect(result.receipt.proof.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+  });
 });
 
 describe("runAndSubmitProviderJob", () => {
@@ -1316,5 +1380,62 @@ describe("runAndSubmitProviderJob", () => {
 
     await services.runAndSubmitProviderJob(validJob);
     expect(completeSpy).not.toHaveBeenCalled();
+  });
+
+  it("submit failure returns non-success status and no final success receipt", async () => {
+    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+      ok: false,
+      mode: "prepared-only",
+      reason: "CIRCLE_WALLET_ADDRESS not configured",
+      prepared: {}
+    });
+
+    const appended: any[] = [];
+    const originalAppend = services.receipts.append.bind(services.receipts);
+    services.receipts.append = async (record: any) => {
+      appended.push(record);
+      return originalAppend(record);
+    };
+
+    const result = await services.runAndSubmitProviderJob(validJob);
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("submit_failure");
+    // runtime result and deliverableHash are preserved for debugging
+    expect(result.deliverableHash).toBeDefined();
+    expect(result.result).toBeDefined();
+    // no erc8183_submit receipt with ok:true should be emitted
+    const successReceipts = appended.filter(
+      (r) => r.type === "erc8183_submit" && r.response?.submitReceipt?.ok === true
+    );
+    expect(successReceipts).toHaveLength(0);
+  });
+
+  it("submit success emits erc8183_submit receipt with runtime result", async () => {
+    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+      ok: true,
+      command: "circle",
+      args: [],
+      json: { txHash: "0x" + "ab".repeat(32) }
+    } as any);
+
+    const appended: any[] = [];
+    const originalAppend = services.receipts.append.bind(services.receipts);
+    services.receipts.append = async (record: any) => {
+      appended.push(record);
+      return originalAppend(record);
+    };
+
+    const result = await services.runAndSubmitProviderJob(validJob);
+
+    expect(result.ok).toBe(true);
+    // runtime_result receipt from runProviderJob + erc8183_submit from submitProviderDeliverable
+    const submitReceipts = appended.filter((r) => r.type === "erc8183_submit");
+    expect(submitReceipts.length).toBeGreaterThanOrEqual(1);
+    // submit receipt includes runtime result
+    expect(submitReceipts[0].response).toHaveProperty("result");
+    expect(submitReceipts[0].response).toHaveProperty("preparedTx");
+    expect(submitReceipts[0].proof).toHaveProperty("deliverableHash");
+    expect(submitReceipts[0].proof).toHaveProperty("txHash");
   });
 });
