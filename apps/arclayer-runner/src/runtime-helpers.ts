@@ -76,6 +76,8 @@ export function sanitizeTaskForUntrustedRuntime(task: AgentTask): AgentTask {
     "description",
     "traceId",
     "requestId",
+    "provider",
+    "evaluator",
   ]);
 
   const sanitizedMetadata: Record<string, unknown> = {};
@@ -348,7 +350,7 @@ export function safeHostFromUrl(url: string): string {
 
 function sanitizeErrorMessage(msg: string): string {
   let clean = msg.replace(/https?:\/\/[^@\s]+@/g, "https://***@");
-  clean = clean.replace(/bearer\s+[a-zA-Z0-9_-]+/gi, "bearer [REDACTED]");
+  clean = clean.replace(/bearer\s+[a-zA-Z0-9_\-\.]+/gi, "bearer [REDACTED]");
   clean = clean.replace(/0x[a-fA-F0-9]{32,}/g, "0x[REDACTED]");
   if (clean.length > 300) clean = clean.slice(0, 300) + "...";
   return clean;

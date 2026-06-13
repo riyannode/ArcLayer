@@ -58,10 +58,15 @@ export class OpenClawRuntimeConnector extends HttpRuntimeConnector implements Ru
       }
 
       // 4. Parse JSON — reject non-JSON for 2xx responses
+      // AbortError during body read must propagate as RUNTIME_TIMEOUT,
+      // NOT be swallowed as RUNTIME_INVALID_RESPONSE.
       let body: unknown;
       try {
         body = await response.json();
-      } catch {
+      } catch (parseError: unknown) {
+        if (parseError instanceof Error && parseError.name === "AbortError") {
+          throw parseError; // re-throw — outer catch maps to RUNTIME_TIMEOUT
+        }
         throw new RunnerError(
           RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
           `OpenClaw returned non-JSON response (HTTP ${response.status})`,
