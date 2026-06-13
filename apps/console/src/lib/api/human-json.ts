@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const PUBLIC_ERROR_BODY = { error: 'internal_error' } as const;
+const PUBLIC_ERROR_MESSAGE = 'internal_error';
+const SENSITIVE_ERROR_KEYS = new Set(['message', 'error', 'stack', 'details', 'cause']);
 
 function sanitizeJsonBody(body: unknown): unknown {
   if (body instanceof Error) {
@@ -13,7 +15,12 @@ function sanitizeJsonBody(body: unknown): unknown {
 
   if (body && typeof body === 'object' && Object.getPrototypeOf(body) === Object.prototype) {
     return Object.fromEntries(
-      Object.entries(body).map(([key, value]) => [key, sanitizeJsonBody(value)]),
+      Object.entries(body).map(([key, value]) => {
+        if (SENSITIVE_ERROR_KEYS.has(key) && (typeof value === 'string' || value instanceof Error)) {
+          return [key, PUBLIC_ERROR_MESSAGE];
+        }
+        return [key, sanitizeJsonBody(value)];
+      }),
     );
   }
 
