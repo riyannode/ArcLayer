@@ -103,6 +103,9 @@ export function sanitizeTaskForUntrustedRuntime(task: AgentTask): AgentTask {
 // ── OpenClaw Response Validation ────────────────────────────────────────
 
 const DEFAULT_MAX_OUTPUT_BYTES = 1_048_576; // 1 MB
+const MAX_FULL_RESULT_BYTES = 2_097_152; // 2 MB — full serialized result cap
+const MAX_ARTIFACTS = 10;
+const MAX_ARTIFACT_FIELD_LENGTH = 4096; // name, uri, contentType
 
 export function validateOpenClawResponse(
   result: unknown,
@@ -120,11 +123,22 @@ export function validateOpenClawResponse(
     );
   }
 
+  // Cap output size
   const outputSize = Buffer.byteLength(JSON.stringify(parsed.output ?? ""), "utf-8");
   if (outputSize > maxOutputBytes) {
     throw new RunnerError(
       RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
       `Output size ${outputSize} bytes exceeds limit ${maxOutputBytes}`,
+      502
+    );
+  }
+
+  // Cap full result size (output + artifacts + error + everything)
+  const fullSize = Buffer.byteLength(JSON.stringify(parsed), "utf-8");
+  if (fullSize > MAX_FULL_RESULT_BYTES) {
+    throw new RunnerError(
+      RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
+      `Full result size ${fullSize} bytes exceeds limit ${MAX_FULL_RESULT_BYTES}`,
       502
     );
   }
@@ -157,7 +171,39 @@ export function validateOpenClawResponse(
   }
 
   if (parsed.artifacts && parsed.artifacts.length > 0) {
+    // Cap artifact count
+    if (parsed.artifacts.length > MAX_ARTIFACTS) {
+      throw new RunnerError(
+        RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
+        `Artifact count ${parsed.artifacts.length} exceeds limit ${MAX_ARTIFACTS}`,
+        502
+      );
+    }
+
     for (const artifact of parsed.artifacts) {
+      // Cap artifact field lengths
+      if (artifact.name && artifact.name.length > MAX_ARTIFACT_FIELD_LENGTH) {
+        throw new RunnerError(
+          RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
+          `Artifact name length ${artifact.name.length} exceeds limit ${MAX_ARTIFACT_FIELD_LENGTH}`,
+          502
+        );
+      }
+      if (artifact.uri && artifact.uri.length > MAX_ARTIFACT_FIELD_LENGTH) {
+        throw new RunnerError(
+          RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
+          `Artifact URI length ${artifact.uri.length} exceeds limit ${MAX_ARTIFACT_FIELD_LENGTH}`,
+          502
+        );
+      }
+      if (artifact.contentType && artifact.contentType.length > MAX_ARTIFACT_FIELD_LENGTH) {
+        throw new RunnerError(
+          RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
+          `Artifact contentType length ${artifact.contentType.length} exceeds limit ${MAX_ARTIFACT_FIELD_LENGTH}`,
+          502
+        );
+      }
+
       if (artifact.uri) {
         validateArtifactUri(artifact.uri);
       }
@@ -201,17 +247,20 @@ function validateArtifactUri(uri: string): void {
     );
   }
 
-  // Block IPv6 loopback and link-local (JS URL API returns [::1] with brackets)
+  // Block IPv6 loopback, link-local, unique-local, and IPv4-mapped IPv6
+  // (JS URL API returns [::1] with brackets)
   const bareHostname = hostname.replace(/^\[|\]$/g, "");
   if (
     bareHostname === "::1" ||
     bareHostname.startsWith("fe80:") ||
     bareHostname.startsWith("fc") ||
-    bareHostname.startsWith("fd")
+    bareHostname.startsWith("fd") ||
+    bareHostname.startsWith("::ffff:") ||
+    bareHostname.startsWith("0:0:0:0:0:ffff:")
   ) {
     throw new RunnerError(
       RuntimeErrorCode.RUNTIME_INVALID_RESPONSE,
-      `Artifact URI must not target IPv6 loopback/link-local/private: ${hostname}`,
+      `Artifact URI must not target IPv6 loopback/link-local/private/mapped: ${hostname}`,
       502
     );
   }

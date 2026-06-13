@@ -996,3 +996,106 @@ describe("OpenClaw needs_* status rejection", () => {
     }
   });
 });
+
+// ── Patch: IPv4-mapped IPv6 rejection ─────────────────────────────────
+
+describe("IPv4-mapped IPv6 artifact host rejection", () => {
+  it("rejects https://[::ffff:127.0.0.1]/file", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "mapped", uri: "https://[::ffff:127.0.0.1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("mapped");
+  });
+
+  it("rejects https://[::ffff:10.0.0.1]/file", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "mapped10", uri: "https://[::ffff:10.0.0.1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("mapped");
+  });
+
+  it("rejects https://[::ffff:192.168.1.1]/file", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "mapped192", uri: "https://[::ffff:192.168.1.1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("mapped");
+  });
+
+  it("rejects normalized hex form ::ffff:7f00:1", () => {
+    // JS URL may normalize ::ffff:127.0.0.1 to ::ffff:7f00:1
+    const result = makeValidResult({
+      artifacts: [{ name: "hex", uri: "https://[::ffff:7f00:1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("mapped");
+  });
+
+  it("rejects long form 0:0:0:0:0:ffff:127.0.0.1", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "longform", uri: "https://[0:0:0:0:0:ffff:127.0.0.1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("mapped");
+  });
+
+  it("still accepts valid public IPv6 URI", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "pubv6", uri: "https://[2606:4700::1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).not.toThrow();
+  });
+});
+
+// ── Patch: full result size cap ───────────────────────────────────────
+
+describe("full result size cap", () => {
+  it("rejects huge artifact name (output small, artifacts huge)", () => {
+    const result = makeValidResult({
+      output: "ok",
+      artifacts: [{ name: "x".repeat(5000), uri: "https://cdn.example.com/file" }],
+    });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).toThrow("Artifact name length");
+  });
+
+  it("rejects huge artifact URI", () => {
+    const result = makeValidResult({
+      output: "ok",
+      artifacts: [{ name: "file", uri: "https://cdn.example.com/" + "a".repeat(5000) }],
+    });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).toThrow("Artifact URI length");
+  });
+
+  it("rejects huge artifact contentType", () => {
+    const result = makeValidResult({
+      output: "ok",
+      artifacts: [{ name: "file", uri: "https://cdn.example.com/f", contentType: "x".repeat(5000) }],
+    });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).toThrow("Artifact contentType length");
+  });
+
+  it("rejects too many artifacts", () => {
+    const artifacts = Array.from({ length: 11 }, (_, i) => ({
+      name: `f${i}`,
+      uri: `https://cdn.example.com/f${i}`,
+    }));
+    const result = makeValidResult({ output: "ok", artifacts });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).toThrow("Artifact count 11 exceeds limit 10");
+  });
+
+  it("rejects huge error string", () => {
+    const result = makeValidResult({
+      ok: false,
+      status: "failed",
+      output: "ok",
+      error: "x".repeat(3_000_000),
+    });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).toThrow("Full result size");
+  });
+
+  it("accepts 10 artifacts within limits", () => {
+    const artifacts = Array.from({ length: 10 }, (_, i) => ({
+      name: `f${i}`,
+      uri: `https://cdn.example.com/f${i}`,
+    }));
+    const result = makeValidResult({ output: "ok", artifacts });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).not.toThrow();
+  });
+});
