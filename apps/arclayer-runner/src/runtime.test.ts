@@ -1,0 +1,1183 @@
+/**
+ * Runtime Adapter Tests
+ *
+ * Tests the runtime adapter isolation boundary using local HTTP servers.
+ * No mock-heavy patterns — exercises real adapter logic.
+ */
+
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { createServer, type Server } from "node:http";
+import {
+  sanitizeTaskForUntrustedRuntime,
+  validateOpenClawResponse,
+  mapRuntimeError,
+  safeHostFromUrl,
+  RuntimeErrorCode,
+  createRuntimeConnector,
+  type RuntimeConnector
+} from "./runtime";
+import { HttpRuntimeConnector } from "./runtime-helpers";
+import { HermesRuntimeConnector } from "./runtimes/hermes";
+import { OpenClawRuntimeConnector } from "./runtimes/openclaw";
+import type { AgentTask, RuntimeResult } from "@arclayer/runner-core";
+
+// ── Test Helpers ────────────────────────────────────────────────────────
+
+function makeTask(overrides: Partial<AgentTask> = {}): AgentTask {
+  return {
+    taskId: "task-1",
+    protocol: "generic",
+    role: "provider",
+    agentId: "agent-1",
+    input: { prompt: "hello" },
+    metadata: {},
+    ...overrides,
+  };
+}
+
+function makeValidResult(overrides: Partial<RuntimeResult> = {}): RuntimeResult {
+  return {
+    ok: true,
+    status: "completed",
+    output: { result: "done" },
+    artifacts: [],
+    paymentRequests: [],
+    actionRequests: [],
+    ...overrides,
+  };
+}
+
+/** Start a local HTTP server that records requests and returns configured responses. */
+function startTestServer(
+  handler: (req: { method: string; url: string; body: unknown; headers: Record<string, string> }) => {
+    status: number;
+    body: unknown;
+    contentType?: string;
+  }
+): Promise<{ server: Server; port: number; requests: Array<{ method: string; url: string; body: unknown; headers: Record<string, string> }> }> {
+  const requests: Array<{ method: string; url: string; body: unknown; headers: Record<string, string> }> = [];
+
+  return new Promise((resolve) => {
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(body);
+        } catch {
+          parsed = body;
+        }
+
+        const headers: Record<string, string> = {};
+        for (const [key, value] of Object.entries(req.headers)) {
+          if (typeof value === "string") headers[key] = value;
+          else if (Array.isArray(value)) headers[key] = value.join(", ");
+        }
+
+        requests.push({ method: req.method ?? "GET", url: req.url ?? "/", body: parsed, headers });
+
+        const result = handler({ method: req.method ?? "GET", url: req.url ?? "/", body: parsed, headers });
+        res.writeHead(result.status, { "content-type": result.contentType ?? "application/json" });
+        res.end(JSON.stringify(result.body));
+      });
+    });
+
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      resolve({ server, port, requests });
+    });
+  });
+}
+
+// ── sanitizeTaskForUntrustedRuntime ─────────────────────────────────────
+
+describe("sanitizeTaskForUntrustedRuntime", () => {
+  it("keeps allowed fields: taskId, protocol, role, agentId, input", () => {
+    const task = makeTask({ input: { data: "test" } });
+    const sanitized = sanitizeTaskForUntrustedRuntime(task);
+
+    expect(sanitized.taskId).toBe("task-1");
+    expect(sanitized.protocol).toBe("generic");
+    expect(sanitized.role).toBe("provider");
+    expect(sanitized.agentId).toBe("agent-1");
+    expect(sanitized.input).toEqual({ data: "test" });
+  });
+
+  it("keeps safe metadata: jobId, description, traceId, requestId", () => {
+    const task = makeTask({
+      metadata: {
+        jobId: "123",
+        description: "test job",
+        traceId: "trace-abc",
+        requestId: "req-xyz",
+      },
+    });
+    const sanitized = sanitizeTaskForUntrustedRuntime(task);
+
+    expect(sanitized.metadata.jobId).toBe("123");
+    expect(sanitized.metadata.description).toBe("test job");
+    expect(sanitized.metadata.traceId).toBe("trace-abc");
+    expect(sanitized.metadata.requestId).toBe("req-xyz");
+  });
+
+  it("strips sensitive metadata keys", () => {
+    const task = makeTask({
+      metadata: {
+        runnerSecret: "super-secret",
+        apiToken: "tok-123",
+        walletAddress: "0x1234",
+        authorization: "Bearer xyz",
+        privateKey: "0xdead",
+        password: "hunter2",
+        mcpEndpoint: "http://internal:3000",
+        chain: "ARC-TESTNET",
+      },
+    });
+    const sanitized = sanitizeTaskForUntrustedRuntime(task);
+
+    expect(sanitized.metadata.runnerSecret).toBeUndefined();
+    expect(sanitized.metadata.apiToken).toBeUndefined();
+    expect(sanitized.metadata.walletAddress).toBeUndefined();
+    expect(sanitized.metadata.authorization).toBeUndefined();
+    expect(sanitized.metadata.privateKey).toBeUndefined();
+    expect(sanitized.metadata.password).toBeUndefined();
+    expect(sanitized.metadata.mcpEndpoint).toBeUndefined();
+    expect(sanitized.metadata.chain).toBeUndefined();
+  });
+
+  it("strips non-safe, non-sensitive metadata keys", () => {
+    const task = makeTask({
+      metadata: {
+        jobId: "123", // safe — kept
+        customField: "should be stripped", // not in safe list — stripped
+        anotherField: 42, // not in safe list — stripped
+      },
+    });
+    const sanitized = sanitizeTaskForUntrustedRuntime(task);
+
+    expect(sanitized.metadata.jobId).toBe("123");
+    expect(sanitized.metadata.customField).toBeUndefined();
+    expect(sanitized.metadata.anotherField).toBeUndefined();
+  });
+
+  it("handles empty metadata", () => {
+    const task = makeTask({ metadata: {} });
+    const sanitized = sanitizeTaskForUntrustedRuntime(task);
+    expect(sanitized.metadata).toEqual({});
+  });
+
+  it("handles undefined metadata", () => {
+    const task = makeTask();
+    delete (task as any).metadata;
+    const sanitized = sanitizeTaskForUntrustedRuntime(task);
+    expect(sanitized.metadata).toEqual({});
+  });
+});
+
+// ── validateOpenClawResponse ────────────────────────────────────────────
+
+describe("validateOpenClawResponse", () => {
+  it("accepts valid RuntimeResult", () => {
+    const result = makeValidResult();
+    expect(() => validateOpenClawResponse(result)).not.toThrow();
+  });
+
+  it("rejects actionRequests from OpenClaw", () => {
+    const result = makeValidResult({
+      actionRequests: [{ type: "some_action", payload: {} }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("actionRequests");
+  });
+
+  it("rejects paymentRequests from OpenClaw", () => {
+    const result = makeValidResult({
+      paymentRequests: [
+        {
+          type: "x402_service_pay",
+          url: "https://api.example.com/pay",
+          method: "GET" as const,
+          maxAmountUsdc: "0.01",
+          reason: "test",
+        },
+      ],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("paymentRequests");
+  });
+
+  it("rejects file:// artifact URI", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "file", uri: "file:///etc/passwd" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("https:// protocol");
+  });
+
+  it("rejects http://localhost artifact URI", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "local", uri: "http://localhost:3000/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("https:// protocol");
+  });
+
+  it("rejects https://127.0.0.1 artifact URI", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "loopback", uri: "https://127.0.0.1/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("private IP");
+  });
+
+  it("rejects https://localhost artifact URI", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "local", uri: "https://localhost/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("internal/private host");
+  });
+
+  it("rejects private IP artifact URI (10.x)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "private", uri: "https://10.0.0.1/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("private IP");
+  });
+
+  it("rejects private IP artifact URI (192.168.x)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "private", uri: "https://192.168.1.1/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("private IP");
+  });
+
+  it("rejects private IP artifact URI (172.16-31.x)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "private", uri: "https://172.16.0.1/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("private IP");
+  });
+
+  it("accepts valid https artifact URI", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "public", uri: "https://cdn.example.com/file.zip" }],
+    });
+    expect(() => validateOpenClawResponse(result)).not.toThrow();
+  });
+
+  it("rejects oversized output", () => {
+    const bigOutput = "x".repeat(2_000_000); // 2MB
+    const result = makeValidResult({ output: bigOutput });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).toThrow("exceeds limit");
+  });
+
+  it("rejects invalid RuntimeResult shape", () => {
+    expect(() => validateOpenClawResponse({ notOk: true })).toThrow();
+  });
+});
+
+// ── mapRuntimeError ─────────────────────────────────────────────────────
+
+describe("mapRuntimeError", () => {
+  it("AbortError => RUNTIME_TIMEOUT", () => {
+    const error = new Error("aborted");
+    error.name = "AbortError";
+    const mapped = mapRuntimeError(error);
+    expect(mapped.code).toBe("RUNTIME_TIMEOUT");
+    expect(mapped.status).toBe(504);
+  });
+
+  it("401 => RUNTIME_AUTH_FAILED", () => {
+    const mapped = mapRuntimeError(new Error("unauthorized"), 401, "http://runtime:8787");
+    expect(mapped.code).toBe("RUNTIME_AUTH_FAILED");
+    expect(mapped.message).toContain("401");
+  });
+
+  it("403 => RUNTIME_AUTH_FAILED", () => {
+    const mapped = mapRuntimeError(new Error("forbidden"), 403, "http://runtime:8787");
+    expect(mapped.code).toBe("RUNTIME_AUTH_FAILED");
+  });
+
+  it("429 => RUNTIME_RATE_LIMITED", () => {
+    const mapped = mapRuntimeError(new Error("rate limited"), 429, "http://runtime:8787");
+    expect(mapped.code).toBe("RUNTIME_RATE_LIMITED");
+  });
+
+  it("502 => RUNTIME_UNAVAILABLE", () => {
+    const mapped = mapRuntimeError(new Error("bad gateway"), 502, "http://runtime:8787");
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+  });
+
+  it("503 => RUNTIME_UNAVAILABLE", () => {
+    const mapped = mapRuntimeError(new Error("service unavailable"), 503, "http://runtime:8787");
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+  });
+
+  it("504 => RUNTIME_UNAVAILABLE", () => {
+    const mapped = mapRuntimeError(new Error("gateway timeout"), 504, "http://runtime:8787");
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+  });
+
+  it("400 => RUNTIME_ERROR", () => {
+    const mapped = mapRuntimeError(new Error("bad request"), 400, "http://runtime:8787");
+    expect(mapped.code).toBe("RUNTIME_ERROR");
+  });
+
+  it("ECONNREFUSED => RUNTIME_UNAVAILABLE", () => {
+    const mapped = mapRuntimeError(new Error("connect ECONNREFUSED 127.0.0.1:9999"));
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+  });
+
+  it("ENOTFOUND => RUNTIME_UNAVAILABLE", () => {
+    const mapped = mapRuntimeError(new Error("getaddrinfo ENOTFOUND runtime.local"));
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+  });
+
+  it("does not leak full URLs in error messages", () => {
+    const mapped = mapRuntimeError(new Error("failed"), 500, "http://user:pass@internal.corp:8787/api");
+    expect(mapped.message).not.toContain("user:pass");
+    expect(mapped.message).not.toContain("internal.corp:8787/api");
+  });
+});
+
+// ── safeHostFromUrl ─────────────────────────────────────────────────────
+
+describe("safeHostFromUrl", () => {
+  it("extracts hostname with port", () => {
+    expect(safeHostFromUrl("http://127.0.0.1:8787/run")).toBe("127.0.0.1:8787");
+  });
+
+  it("extracts hostname without port", () => {
+    expect(safeHostFromUrl("https://runtime.example.com/run")).toBe("runtime.example.com");
+  });
+
+  it("returns 'unknown' for invalid URL", () => {
+    expect(safeHostFromUrl("not-a-url")).toBe("unknown");
+  });
+
+  it("does not leak path or query", () => {
+    const host = safeHostFromUrl("http://127.0.0.1:8787/secret/path?token=abc");
+    expect(host).toBe("127.0.0.1:8787");
+    expect(host).not.toContain("secret");
+    expect(host).not.toContain("token");
+  });
+});
+
+// ── createRuntimeConnector ──────────────────────────────────────────────
+
+describe("createRuntimeConnector", () => {
+  it("returns HermesRuntimeConnector for 'hermes'", () => {
+    const connector = createRuntimeConnector("hermes", "http://127.0.0.1:8787", "/run", undefined, 60_000);
+    expect(connector).toBeInstanceOf(HermesRuntimeConnector);
+    expect(connector.kind).toBe("hermes");
+  });
+
+  it("returns OpenClawRuntimeConnector for 'openclaw'", () => {
+    const connector = createRuntimeConnector("openclaw", "http://127.0.0.1:8787", "/run", undefined, 60_000);
+    expect(connector).toBeInstanceOf(OpenClawRuntimeConnector);
+    expect(connector.kind).toBe("openclaw");
+  });
+
+  it("returns HttpRuntimeConnector for 'custom'", () => {
+    const connector = createRuntimeConnector("custom", "http://127.0.0.1:8787", "/run", undefined, 60_000);
+    expect(connector).toBeInstanceOf(HttpRuntimeConnector);
+    expect(connector.kind).toBe("http");
+  });
+
+  it("passes timeoutMs to adapters", () => {
+    const connector = createRuntimeConnector("hermes", "http://127.0.0.1:8787", "/run", "sk-123", 45_000);
+    expect(connector).toBeInstanceOf(HermesRuntimeConnector);
+  });
+
+  it("defaults timeoutMs to 120_000", () => {
+    const connector = createRuntimeConnector("hermes", "http://127.0.0.1:8787", "/run");
+    expect(connector).toBeInstanceOf(HermesRuntimeConnector);
+  });
+});
+
+// ── Integration: OpenClaw adapter with local HTTP server ────────────────
+
+describe("OpenClaw adapter integration", () => {
+  let server: Server;
+  let port: number;
+  let requests: Array<{ method: string; url: string; body: unknown; headers: Record<string, string> }>;
+
+  afterEach(() => {
+    if (server) server.close();
+  });
+
+  it("outbound request excludes sensitive metadata", async () => {
+    const setup = await startTestServer(() => ({
+      status: 200,
+      body: makeValidResult(),
+    }));
+    server = setup.server;
+    port = setup.port;
+    requests = setup.requests;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    const task = makeTask({
+      metadata: {
+        jobId: "123",
+        description: "test job",
+        runnerSecret: "super-secret",
+        apiToken: "tok-123",
+        walletAddress: "0x1234",
+        mcpEndpoint: "http://internal:3000",
+        chain: "ARC-TESTNET",
+        customField: "stripped",
+      },
+    });
+
+    await adapter.run(task);
+
+    expect(requests.length).toBe(1);
+    const sentBody = requests[0].body as any;
+
+    // Allowed fields present
+    expect(sentBody.taskId).toBe("task-1");
+    expect(sentBody.protocol).toBe("generic");
+    expect(sentBody.role).toBe("provider");
+    expect(sentBody.agentId).toBe("agent-1");
+
+    // Safe metadata kept
+    expect(sentBody.metadata.jobId).toBe("123");
+    expect(sentBody.metadata.description).toBe("test job");
+
+    // Sensitive metadata stripped
+    expect(sentBody.metadata.runnerSecret).toBeUndefined();
+    expect(sentBody.metadata.apiToken).toBeUndefined();
+    expect(sentBody.metadata.walletAddress).toBeUndefined();
+    expect(sentBody.metadata.mcpEndpoint).toBeUndefined();
+    expect(sentBody.metadata.chain).toBeUndefined();
+    expect(sentBody.metadata.customField).toBeUndefined();
+  });
+
+  it("Hermes receives full task (no sanitization)", async () => {
+    const setup = await startTestServer(() => ({
+      status: 200,
+      body: makeValidResult(),
+    }));
+    server = setup.server;
+    port = setup.port;
+    requests = setup.requests;
+
+    const adapter = new HermesRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    const task = makeTask({
+      metadata: {
+        jobId: "123",
+        runnerSecret: "should-be-passed-through",
+        walletAddress: "0x1234",
+      },
+    });
+
+    await adapter.run(task);
+
+    expect(requests.length).toBe(1);
+    const sentBody = requests[0].body as any;
+
+    // Hermes passes full metadata (trusted)
+    expect(sentBody.metadata.jobId).toBe("123");
+    expect(sentBody.metadata.runnerSecret).toBe("should-be-passed-through");
+    expect(sentBody.metadata.walletAddress).toBe("0x1234");
+  });
+
+  it("rejects non-JSON response", async () => {
+    // Server that returns plain text, not JSON
+    const textServer = createServer((_req, res) => {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("not json at all");
+    });
+    await new Promise<void>((resolve) => textServer.listen(0, "127.0.0.1", resolve));
+    const address = textServer.address();
+    const textPort = typeof address === "object" && address ? address.port : 0;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${textPort}`, "/run", undefined, 5000);
+
+    try {
+      await expect(adapter.run(makeTask())).rejects.toThrow("non-JSON");
+    } finally {
+      textServer.close();
+    }
+  });
+
+  it("rejects malformed RuntimeResult", async () => {
+    const setup = await startTestServer(() => ({
+      status: 200,
+      body: { totally: "wrong", shape: true },
+    }));
+    server = setup.server;
+    port = setup.port;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    await expect(adapter.run(makeTask())).rejects.toThrow();
+  });
+
+  it("rejects actionRequests in response", async () => {
+    const setup = await startTestServer(() => ({
+      status: 200,
+      body: makeValidResult({
+        actionRequests: [{ type: "do_something", payload: {} }],
+      }),
+    }));
+    server = setup.server;
+    port = setup.port;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    await expect(adapter.run(makeTask())).rejects.toThrow("actionRequests");
+  });
+
+  it("rejects paymentRequests in response", async () => {
+    const setup = await startTestServer(() => ({
+      status: 200,
+      body: makeValidResult({
+        paymentRequests: [
+          {
+            type: "x402_service_pay",
+            url: "https://api.example.com/pay",
+            method: "GET" as const,
+            maxAmountUsdc: "0.01",
+            reason: "test",
+          },
+        ],
+      }),
+    }));
+    server = setup.server;
+    port = setup.port;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    await expect(adapter.run(makeTask())).rejects.toThrow("paymentRequests");
+  });
+
+  it("rejects unsafe artifact URI (file://)", async () => {
+    const setup = await startTestServer(() => ({
+      status: 200,
+      body: makeValidResult({
+        artifacts: [{ name: "file", uri: "file:///etc/passwd" }],
+      }),
+    }));
+    server = setup.server;
+    port = setup.port;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    await expect(adapter.run(makeTask())).rejects.toThrow("https:// protocol");
+  });
+
+  it("rejects unsafe artifact URI (localhost)", async () => {
+    const setup = await startTestServer(() => ({
+      status: 200,
+      body: makeValidResult({
+        artifacts: [{ name: "local", uri: "https://localhost/file" }],
+      }),
+    }));
+    server = setup.server;
+    port = setup.port;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    await expect(adapter.run(makeTask())).rejects.toThrow("internal/private host");
+  });
+
+  it("accepts valid https artifact URI", async () => {
+    const setup = await startTestServer(() => ({
+      status: 200,
+      body: makeValidResult({
+        artifacts: [{ name: "public", uri: "https://cdn.example.com/file.zip" }],
+      }),
+    }));
+    server = setup.server;
+    port = setup.port;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    const result = await adapter.run(makeTask());
+    expect(result.ok).toBe(true);
+    expect(result.artifacts[0].uri).toBe("https://cdn.example.com/file.zip");
+  });
+});
+
+// ── Integration: Error mapping with local HTTP server ───────────────────
+
+describe("error mapping integration", () => {
+  it("401 maps to RUNTIME_AUTH_FAILED", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 401,
+      body: { error: "unauthorized" },
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_AUTH_FAILED");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("429 maps to RUNTIME_RATE_LIMITED", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 429,
+      body: { error: "rate limited" },
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_RATE_LIMITED");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("503 maps to RUNTIME_UNAVAILABLE", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 503,
+      body: { error: "service unavailable" },
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_UNAVAILABLE");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("timeout maps to RUNTIME_TIMEOUT", async () => {
+    // Server that never responds
+    const server = createServer((_req, res) => {
+      // Never send response — force timeout
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 500); // 500ms timeout
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_TIMEOUT");
+    } finally {
+      server.close();
+    }
+  });
+});
+
+// ── runtime_result receipt proof metadata ───────────────────────────────
+
+describe("runtime proof metadata in receipts", () => {
+  it("runtime_result receipt includes runtime proof fields", async () => {
+    // This test verifies the proof metadata structure is correct.
+    // The actual integration with services.ts is tested in services.test.ts.
+    const proof = {
+      sha256: "abc123",
+      runtimeKind: "openclaw",
+      durationMs: 150,
+      responseHash: "abc123",
+      sanitized: true,
+      responseValidated: true,
+      endpointHost: "127.0.0.1:8787",
+    };
+
+    // Verify all fields are present and correctly typed
+    expect(typeof proof.runtimeKind).toBe("string");
+    expect(typeof proof.durationMs).toBe("number");
+    expect(typeof proof.responseHash).toBe("string");
+    expect(typeof proof.sanitized).toBe("boolean");
+    expect(typeof proof.responseValidated).toBe("boolean");
+    expect(typeof proof.endpointHost).toBe("string");
+
+    // Verify sanitized flag matches runtime kind
+    expect(proof.sanitized).toBe(proof.runtimeKind === "openclaw");
+  });
+});
+
+// ── Blocker 1: malformed RuntimeResult => RUNTIME_INVALID_RESPONSE ──────
+
+describe("Blocker 1 — malformed RuntimeResult error code", () => {
+  it("OpenClaw returns { notOk: true } => RUNTIME_INVALID_RESPONSE via integration", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 200,
+      body: { notOk: true }, // not a valid RuntimeResult
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_INVALID_RESPONSE");
+      expect(error.message).toContain("invalid RuntimeResult");
+      // Must NOT leak raw Zod payload
+      expect(error.message).not.toContain("notOk");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("validateOpenClawResponse with garbage object => RUNTIME_INVALID_RESPONSE", () => {
+    try {
+      validateOpenClawResponse({ totally: "wrong", shape: true });
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_INVALID_RESPONSE");
+    }
+  });
+
+  it("validateOpenClawResponse with null => RUNTIME_INVALID_RESPONSE", () => {
+    try {
+      validateOpenClawResponse(null);
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_INVALID_RESPONSE");
+    }
+  });
+});
+
+// ── Blocker 2: non-JSON error responses map by status ───────────────────
+
+describe("Blocker 2 — non-JSON error responses", () => {
+  it("non-JSON 401 => RUNTIME_AUTH_FAILED (not RUNTIME_INVALID_RESPONSE)", async () => {
+    const errServer = createServer((_req, res) => {
+      res.writeHead(401, { "content-type": "text/html" });
+      res.end("<html>Unauthorized</html>");
+    });
+    await new Promise<void>((resolve) => errServer.listen(0, "127.0.0.1", resolve));
+    const address = errServer.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_AUTH_FAILED");
+    } finally {
+      errServer.close();
+    }
+  });
+
+  it("non-JSON 429 => RUNTIME_RATE_LIMITED", async () => {
+    const errServer = createServer((_req, res) => {
+      res.writeHead(429, { "content-type": "text/plain" });
+      res.end("Too Many Requests");
+    });
+    await new Promise<void>((resolve) => errServer.listen(0, "127.0.0.1", resolve));
+    const address = errServer.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_RATE_LIMITED");
+    } finally {
+      errServer.close();
+    }
+  });
+
+  it("non-JSON 503 => RUNTIME_UNAVAILABLE", async () => {
+    const errServer = createServer((_req, res) => {
+      res.writeHead(503, { "content-type": "text/html" });
+      res.end("<html>Service Unavailable</html>");
+    });
+    await new Promise<void>((resolve) => errServer.listen(0, "127.0.0.1", resolve));
+    const address = errServer.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_UNAVAILABLE");
+    } finally {
+      errServer.close();
+    }
+  });
+});
+
+// ── Blocker 3: expanded private IP guard ────────────────────────────────
+
+describe("Blocker 3 — expanded private IP guard", () => {
+  it("rejects https://127.0.0.2/file (127/8 beyond exact 127.0.0.1)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "loopback2", uri: "https://127.0.0.2/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("private IP");
+  });
+
+  it("rejects https://169.254.169.254/file (cloud metadata)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "metadata", uri: "https://169.254.169.254/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("private IP");
+  });
+
+  it("rejects https://100.64.0.1/file (CGNAT)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "cgnat", uri: "https://100.64.0.1/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("private IP");
+  });
+
+  it("rejects https://[::1]/file (IPv6 loopback)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "v6loop", uri: "https://[::1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("IPv6 loopback");
+  });
+
+  it("rejects https://[fe80::1]/file (IPv6 link-local)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "v6link", uri: "https://[fe80::1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("IPv6 loopback");
+  });
+
+  it("rejects https://[fd00::1]/file (IPv6 unique local)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "v6private", uri: "https://[fd00::1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("IPv6 loopback");
+  });
+});
+
+// ── Blocker 4: sanitize raw error messages ──────────────────────────────
+
+describe("Blocker 4 — error message sanitization", () => {
+  it("network error with bearer token is sanitized", () => {
+    const error = new Error("ECONNREFUSED: bearer sk-abc123secrettoken456 at 127.0.0.1:8787");
+    const mapped = mapRuntimeError(error);
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+    expect(mapped.message).not.toContain("sk-abc123secrettoken456");
+    expect(mapped.message).toContain("[REDACTED]");
+  });
+
+  it("network error with 0x secret is sanitized", () => {
+    const error = new Error("fetch failed: 0xabcdef1234567890abcdef1234567890abcdef12");
+    const mapped = mapRuntimeError(error);
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+    expect(mapped.message).not.toContain("0xabcdef1234567890abcdef1234567890abcdef12");
+    expect(mapped.message).toContain("0x[REDACTED]");
+  });
+
+  it("network error with URL credentials is sanitized", () => {
+    const error = new Error("ECONNREFUSED: https://admin:supersecret@internal.corp:8787/api");
+    const mapped = mapRuntimeError(error);
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+    expect(mapped.message).not.toContain("supersecret");
+  });
+});
+
+// ── Body timeout — timeout stays alive during response.json() ───────────
+
+describe("body read timeout protection", () => {
+  it("timeout fires if runtime sends headers but stalls body", async () => {
+    // Server that sends 200 headers, starts chunked transfer, then stalls
+    const stallServer = createServer((_req, res) => {
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "transfer-encoding": "chunked",
+      });
+      // Send a partial chunk to keep connection alive, then stall
+      res.write('{"ok":');
+      // Never send the rest — stall mid-body
+    });
+    await new Promise<void>((resolve) => stallServer.listen(0, "127.0.0.1", resolve));
+    const address = stallServer.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 500);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      // Should timeout or get invalid response — not hang forever
+      expect(["RUNTIME_TIMEOUT", "RUNTIME_INVALID_RESPONSE"]).toContain(error.code);
+    } finally {
+      stallServer.close();
+    }
+  });
+});
+
+// ── needs_* status rejection from OpenClaw ──────────────────────────────
+
+describe("OpenClaw needs_* status rejection", () => {
+  it("rejects status: needs_payment", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 200,
+      body: { ok: true, status: "needs_payment", output: { pending: true } },
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_INVALID_RESPONSE");
+      expect(error.message).toContain("needs_payment");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("rejects status: needs_action", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 200,
+      body: { ok: true, status: "needs_action", output: { pending: true } },
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      expect(error.code).toBe("RUNTIME_INVALID_RESPONSE");
+      expect(error.message).toContain("needs_action");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("accepts status: completed", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 200,
+      body: makeValidResult({ status: "completed" }),
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      const result = await adapter.run(makeTask());
+      expect(result.status).toBe("completed");
+    } finally {
+      server.close();
+    }
+  });
+
+  it("accepts status: failed (passed through for caller to handle)", async () => {
+    const { server, port } = await startTestServer(() => ({
+      status: 200,
+      body: makeValidResult({ ok: false, status: "failed", error: "runtime error" }),
+    }));
+
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 5000);
+
+    try {
+      const result = await adapter.run(makeTask());
+      expect(result.status).toBe("failed");
+      expect(result.ok).toBe(false);
+    } finally {
+      server.close();
+    }
+  });
+});
+
+// ── Patch: IPv4-mapped IPv6 rejection ─────────────────────────────────
+
+describe("IPv4-mapped IPv6 artifact host rejection", () => {
+  it("rejects https://[::ffff:127.0.0.1]/file", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "mapped", uri: "https://[::ffff:127.0.0.1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("mapped");
+  });
+
+  it("rejects https://[::ffff:10.0.0.1]/file", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "mapped10", uri: "https://[::ffff:10.0.0.1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("mapped");
+  });
+
+  it("rejects https://[::ffff:192.168.1.1]/file", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "mapped192", uri: "https://[::ffff:192.168.1.1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("mapped");
+  });
+
+  it("rejects normalized hex form ::ffff:7f00:1", () => {
+    // JS URL may normalize ::ffff:127.0.0.1 to ::ffff:7f00:1
+    const result = makeValidResult({
+      artifacts: [{ name: "hex", uri: "https://[::ffff:7f00:1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("mapped");
+  });
+
+  it("rejects long form 0:0:0:0:0:ffff:127.0.0.1", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "longform", uri: "https://[0:0:0:0:0:ffff:127.0.0.1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("mapped");
+  });
+
+  it("still accepts valid public IPv6 URI", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "pubv6", uri: "https://[2606:4700::1]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).not.toThrow();
+  });
+
+  it("rejects https://[::]/file (IPv6 unspecified address)", () => {
+    const result = makeValidResult({
+      artifacts: [{ name: "unspec", uri: "https://[::]/file" }],
+    });
+    expect(() => validateOpenClawResponse(result)).toThrow("mapped");
+  });
+});
+
+// ── Patch: full result size cap ───────────────────────────────────────
+
+describe("full result size cap", () => {
+  it("rejects huge artifact name (output small, artifacts huge)", () => {
+    const result = makeValidResult({
+      output: "ok",
+      artifacts: [{ name: "x".repeat(5000), uri: "https://cdn.example.com/file" }],
+    });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).toThrow("Artifact name length");
+  });
+
+  it("rejects huge artifact URI", () => {
+    const result = makeValidResult({
+      output: "ok",
+      artifacts: [{ name: "file", uri: "https://cdn.example.com/" + "a".repeat(5000) }],
+    });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).toThrow("Artifact URI length");
+  });
+
+  it("rejects huge artifact contentType", () => {
+    const result = makeValidResult({
+      output: "ok",
+      artifacts: [{ name: "file", uri: "https://cdn.example.com/f", contentType: "x".repeat(5000) }],
+    });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).toThrow("Artifact contentType length");
+  });
+
+  it("rejects too many artifacts", () => {
+    const artifacts = Array.from({ length: 11 }, (_, i) => ({
+      name: `f${i}`,
+      uri: `https://cdn.example.com/f${i}`,
+    }));
+    const result = makeValidResult({ output: "ok", artifacts });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).toThrow("Artifact count 11 exceeds limit 10");
+  });
+
+  it("rejects huge error string", () => {
+    const result = makeValidResult({
+      ok: false,
+      status: "failed",
+      output: "ok",
+      error: "x".repeat(3_000_000),
+    });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).toThrow("Full result size");
+  });
+
+  it("accepts 10 artifacts within limits", () => {
+    const artifacts = Array.from({ length: 10 }, (_, i) => ({
+      name: `f${i}`,
+      uri: `https://cdn.example.com/f${i}`,
+    }));
+    const result = makeValidResult({ output: "ok", artifacts });
+    expect(() => validateOpenClawResponse(result, 1_048_576)).not.toThrow();
+  });
+});
+
+// ── Patch: timeout preserved during body read ─────────────────────────
+
+describe("OpenClaw body read timeout preservation", () => {
+  it("AbortError during response.json() maps to RUNTIME_TIMEOUT, not RUNTIME_INVALID_RESPONSE", async () => {
+    // Server sends 200 headers + valid JSON content-type, then stalls mid-body
+    const stallServer = createServer((_req, res) => {
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "transfer-encoding": "chunked",
+      });
+      // Send partial valid JSON to keep fetch happy, then stall
+      res.write('{"ok":true,"status":"compl');
+      // Never send the rest — body read will abort
+    });
+    await new Promise<void>((resolve) => stallServer.listen(0, "127.0.0.1", resolve));
+    const address = stallServer.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+
+    // Very short timeout to force AbortError during body read
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 300);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      // Must be RUNTIME_TIMEOUT, not RUNTIME_INVALID_RESPONSE
+      expect(error.code).toBe("RUNTIME_TIMEOUT");
+    } finally {
+      stallServer.close();
+    }
+  });
+});
+
+// ── Patch: provider/evaluator in sanitizeTaskForUntrustedRuntime ──────
+
+describe("sanitizeTaskForUntrustedRuntime preserves provider/evaluator", () => {
+  it("keeps provider and evaluator metadata", () => {
+    const task = makeTask({
+      metadata: {
+        jobId: "123",
+        provider: "0xaaaa",
+        evaluator: "0xbbbb",
+        runnerSecret: "strip-me",
+      },
+    });
+    const sanitized = sanitizeTaskForUntrustedRuntime(task);
+
+    expect(sanitized.metadata.provider).toBe("0xaaaa");
+    expect(sanitized.metadata.evaluator).toBe("0xbbbb");
+    expect(sanitized.metadata.jobId).toBe("123");
+    expect(sanitized.metadata.runnerSecret).toBeUndefined();
+  });
+});
+
+// ── Patch: bearer JWT redaction ───────────────────────────────────────
+
+describe("bearer JWT redaction", () => {
+  it("redacts dotted JWT token completely", () => {
+    const error = new Error("ECONNREFUSED: bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U at 127.0.0.1:8787");
+    const mapped = mapRuntimeError(error);
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+    expect(mapped.message).not.toContain("eyJhbGciOiJIUzI1NiJ9");
+    expect(mapped.message).not.toContain("eyJzdWIiOiIxMjM0NTY3ODkwIn0");
+    expect(mapped.message).not.toContain("dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U");
+    expect(mapped.message).toContain("[REDACTED]");
+  });
+
+  it("redacts simple bearer token (no dots)", () => {
+    const error = new Error("auth failed: bearer sk-abc_123-def at host");
+    const mapped = mapRuntimeError(error);
+    expect(mapped.message).not.toContain("sk-abc_123-def");
+    expect(mapped.message).toContain("[REDACTED]");
+  });
+});

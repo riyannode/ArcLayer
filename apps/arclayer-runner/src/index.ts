@@ -37,11 +37,18 @@ async function main() {
     const config = loadRunnerConfig();
     const skill = loadGlobalSkill(config.skillPath);
 
+    const apiKey = config.runtimeKind === "hermes"
+      ? process.env.HERMES_API_SERVER_KEY
+      : config.runtimeKind === "openclaw"
+        ? process.env.OPENCLAW_API_SERVER_KEY
+        : undefined;
+
     const runtime = createRuntimeConnector(
       config.runtimeKind,
       config.runtimeEndpoint,
       config.runtimeRunPath,
-      process.env.HERMES_API_SERVER_KEY || process.env.OPENCLAW_API_SERVER_KEY
+      apiKey,
+      config.runtimeTimeoutMs
     );
 
     const mcp = new ArcLayerMcpConnector({
@@ -239,11 +246,18 @@ async function main() {
         process.stderr.write("[arclayer-runner-mcp] Global skill not found — continuing without it\n");
       }
 
+      const apiKey = config.runtimeKind === "hermes"
+        ? process.env.HERMES_API_SERVER_KEY
+        : config.runtimeKind === "openclaw"
+          ? process.env.OPENCLAW_API_SERVER_KEY
+          : undefined;
+
       const runtime = createRuntimeConnector(
         config.runtimeKind,
         config.runtimeEndpoint,
         config.runtimeRunPath,
-        process.env.HERMES_API_SERVER_KEY || process.env.OPENCLAW_API_SERVER_KEY
+        apiKey,
+        config.runtimeTimeoutMs
       );
 
       const mcp = new ArcLayerMcpConnector({
