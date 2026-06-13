@@ -664,17 +664,32 @@ export class RunnerServices {
   /**
    * Approve USDC for the ERC-8183 AgenticCommerce contract.
    * Must be called before fund().
+   *
+   * Idempotency: caller SHOULD provide a stable idempotencyKey (e.g. tied to
+   * the jobId or request that needs the allowance). If omitted, a key is
+   * derived from amount+spender — safe for single-use but does NOT protect
+   * retries after unknown/broadcast if the server restarts.
    */
   async approveUsdcForErc8183(body: unknown, signal?: AbortSignal) {
-    const input = body as { amount: string };
+    const input = body as {
+      amount: string;
+      /** Caller-provided stable key for retry safety. */
+      idempotencyKey?: string;
+      /** Optional context for key derivation when idempotencyKey is omitted. */
+      requestId?: string;
+    };
 
     if (!this.config.circleWalletAddress) {
       return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
     }
 
-    // Each approval is a unique operation — allowance can be consumed by fund(),
-    // so re-approving the same amount for a later job must not replay the old result.
-    const idempotencyKey = `approveUsdc:${randomUUID()}`;
+    // Stable idempotency key: prefer caller-provided, then derive from context.
+    // TODO: callers in the job lifecycle (setBudget→approve→fund) should pass
+    // a jobId-derived key so retries after unknown/broadcast are safe.
+    const idempotencyKey = input.idempotencyKey
+      ?? (input.requestId
+        ? `approveUsdc:${input.requestId}:${input.amount}`
+        : `approveUsdc:${input.amount}:${CONTRACTS.ERC8183_AGENTIC_COMMERCE}`);
     const paramsHash = sha256Json({ amount: input.amount, usdcAddress: CONTRACTS.USDC, spenderAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE });
 
     const gwResult = await this.gateway.execute(
