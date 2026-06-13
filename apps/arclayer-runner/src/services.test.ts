@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RunnerServices } from "./services";
 import { RunnerError } from "@arclayer/runner-core";
 import { TaskIdempotencyStore } from "@arclayer/runner-core";
-import type { RunnerConfig } from "@arclayer/runner-core";
+import type { RunnerConfig, RuntimeResult } from "@arclayer/runner-core";
 import type { RuntimeConnector } from "./runtime";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
 
@@ -916,5 +916,356 @@ describe("OpenClaw receipt request sanitization", () => {
     // Proof sanitized=false for hermes
     expect(appended[0].proof.sanitized).toBe(false);
     expect(appended[0].proof.runtimeKind).toBe("hermes");
+  });
+});
+
+// ── Phase 3: runProviderJob / submitProviderDeliverable / runAndSubmitProviderJob ──
+
+describe("runProviderJob", () => {
+  let config: RunnerConfig;
+  let runtime: RuntimeConnector;
+  let mcp: ArcLayerMcpConnector;
+  let skill: { content: string; sha256: string; path: string };
+  let services: RunnerServices;
+
+  beforeEach(() => {
+    config = makeConfig();
+    runtime = makeMockRuntime();
+    mcp = makeMockMcp();
+    skill = { content: "# Skill", sha256: "abc123", path: "/test/skill.md" };
+    services = new RunnerServices(config, runtime, mcp, skill);
+  });
+
+  const validJob = {
+    taskId: "t1",
+    jobId: "42",
+    agentId: "agent-1",
+    provider: "0x0000000000000000000000000000000000000001",
+    description: "test job",
+    input: { prompt: "do work" }
+  };
+
+  it("completed result returns runtime result without Circle CLI submit", async () => {
+    const circleSpy = vi.spyOn(services.circle, "executeErc8183Write");
+    const result = await services.runProviderJob(validJob);
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("completed");
+    expect(result.deliverableHash).toBeDefined();
+    expect(result.deliverableHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
+    // Circle CLI must NOT be called
+    expect(circleSpy).not.toHaveBeenCalled();
+    circleSpy.mockRestore();
+  });
+
+  it("failed result returns controlled error without Circle CLI submit", async () => {
+    const failRuntime: RuntimeConnector = {
+      kind: "mock",
+      async run() {
+        return { ok: false, status: "failed", error: "runtime exploded", artifacts: [], paymentRequests: [], actionRequests: [] } as RuntimeResult;
+      }
+    };
+    const svc = new RunnerServices(config, failRuntime, mcp, skill);
+    const circleSpy = vi.spyOn(svc.circle, "executeErc8183Write");
+
+    const result = await svc.runProviderJob(validJob);
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("runtime_failure");
+    expect(result.error).toContain("runtime exploded");
+    expect(circleSpy).not.toHaveBeenCalled();
+    circleSpy.mockRestore();
+  });
+
+  it("Hermes/custom needs_payment does NOT submit", async () => {
+    const needsPaymentRuntime: RuntimeConnector = {
+      kind: "hermes",
+      async run() {
+        return {
+          ok: true,
+          status: "needs_payment",
+          artifacts: [],
+          actionRequests: [],
+          paymentRequests: [{ type: "x402_service_pay" as const, url: "https://api.example.com/pay", maxAmountUsdc: "0.01", reason: "unlock", method: "GET" as const }]
+        } as RuntimeResult;
+      }
+    };
+    const svc = new RunnerServices(config, needsPaymentRuntime, mcp, skill);
+    const circleSpy = vi.spyOn(svc.circle, "executeErc8183Write");
+
+    const result = await svc.runProviderJob(validJob);
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("needs_payment");
+    expect((result as any).deliverableHash).toBeUndefined();
+    expect(circleSpy).not.toHaveBeenCalled();
+    circleSpy.mockRestore();
+  });
+
+  it("Hermes/custom needs_action does NOT submit", async () => {
+    const needsActionRuntime: RuntimeConnector = {
+      kind: "hermes",
+      async run() {
+        return {
+          ok: true,
+          status: "needs_action",
+          artifacts: [],
+          paymentRequests: [],
+          actionRequests: [{ type: "user_confirm", payload: {} }]
+        } as RuntimeResult;
+      }
+    };
+    const svc = new RunnerServices(config, needsActionRuntime, mcp, skill);
+    const circleSpy = vi.spyOn(svc.circle, "executeErc8183Write");
+
+    const result = await svc.runProviderJob(validJob);
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("needs_action");
+    expect((result as any).deliverableHash).toBeUndefined();
+    expect(circleSpy).not.toHaveBeenCalled();
+    circleSpy.mockRestore();
+  });
+
+  it("rejects wrong agentId", async () => {
+    await expectRunnerError(
+      services.runProviderJob({ ...validJob, agentId: "wrong-agent" }),
+      "AGENT_ID_MISMATCH"
+    );
+  });
+
+  it("rejects when provider role not in allowedRoles", async () => {
+    const noProviderConfig = makeConfig({ allowedRoles: [] });
+    const svc = new RunnerServices(noProviderConfig, runtime, mcp, skill);
+    await expectRunnerError(
+      svc.runProviderJob(validJob),
+      "ROLE_NOT_ALLOWED"
+    );
+  });
+
+  it("calls MCP startJobRun before runtime dispatch", async () => {
+    const startSpy = vi.spyOn(mcp, "startJobRun");
+    await services.runProviderJob(validJob);
+    expect(startSpy).toHaveBeenCalledWith("42");
+  });
+
+  it("calls MCP completeJobRun after successful runtime", async () => {
+    const completeSpy = vi.spyOn(mcp, "completeJobRun");
+    await services.runProviderJob(validJob);
+    expect(completeSpy).toHaveBeenCalled();
+  });
+});
+
+describe("submitProviderDeliverable", () => {
+  let config: RunnerConfig;
+  let runtime: RuntimeConnector;
+  let mcp: ArcLayerMcpConnector;
+  let skill: { content: string; sha256: string; path: string };
+  let services: RunnerServices;
+
+  const completedResult: RuntimeResult = {
+    ok: true,
+    status: "completed",
+    output: { result: "test-output" },
+    artifacts: [],
+    paymentRequests: [],
+    actionRequests: []
+  };
+
+  const validHash = "0x" + "a".repeat(64) as `0x${string}`;
+
+  beforeEach(() => {
+    config = makeConfig();
+    runtime = makeMockRuntime();
+    mcp = makeMockMcp();
+    skill = { content: "# Skill", sha256: "abc123", path: "/test/skill.md" };
+    services = new RunnerServices(config, runtime, mcp, skill);
+  });
+
+  it("completed result submits once", async () => {
+    const submitSpy = vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+      ok: true,
+      command: "circle",
+      args: [],
+      json: { txHash: "0x" + "ab".repeat(32) }
+    } as any);
+
+    const result = await services.submitProviderDeliverable({
+      jobId: "42",
+      deliverableHash: validHash,
+      result: completedResult
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.deliverableHash).toBe(validHash);
+    expect(submitSpy).toHaveBeenCalledOnce();
+    submitSpy.mockRestore();
+  });
+
+  it("failed result rejected", async () => {
+    const failedResult = { ok: false, status: "failed", error: "boom", artifacts: [], paymentRequests: [], actionRequests: [] } as RuntimeResult;
+    await expect(
+      services.submitProviderDeliverable({
+        jobId: "42",
+        deliverableHash: validHash,
+        result: failedResult
+      })
+    ).rejects.toThrow(/Cannot submit provider deliverable for runtime status: failed/);
+  });
+
+  it("needs_payment rejected", async () => {
+    const needsPaymentResult = { ok: true, status: "needs_payment", paymentRequests: [], artifacts: [], actionRequests: [] } as RuntimeResult;
+    await expect(
+      services.submitProviderDeliverable({
+        jobId: "42",
+        deliverableHash: validHash,
+        result: needsPaymentResult
+      })
+    ).rejects.toThrow(/Cannot submit provider deliverable for runtime status: needs_payment/);
+  });
+
+  it("needs_action rejected", async () => {
+    const needsActionResult = { ok: true, status: "needs_action", actionRequests: [], artifacts: [], paymentRequests: [] } as RuntimeResult;
+    await expect(
+      services.submitProviderDeliverable({
+        jobId: "42",
+        deliverableHash: validHash,
+        result: needsActionResult
+      })
+    ).rejects.toThrow(/Cannot submit provider deliverable for runtime status: needs_action/);
+  });
+
+  it("invalid deliverableHash rejected", async () => {
+    await expect(
+      services.submitProviderDeliverable({
+        jobId: "42",
+        deliverableHash: "not-a-hash" as any,
+        result: completedResult
+      })
+    ).rejects.toThrow(/deliverableHash must be a valid bytes32/);
+  });
+
+  it("invalid jobId rejected", async () => {
+    await expect(
+      services.submitProviderDeliverable({
+        jobId: "",
+        deliverableHash: validHash,
+        result: completedResult
+      })
+    ).rejects.toThrow(/jobId must be a numeric string/);
+  });
+
+  it("returns prepared-only when circleWalletAddress not configured", async () => {
+    const noWalletConfig = makeConfig({ circleWalletAddress: undefined });
+    const svc = new RunnerServices(noWalletConfig, runtime, mcp, skill);
+
+    const result = await svc.submitProviderDeliverable({
+      jobId: "42",
+      deliverableHash: validHash,
+      result: completedResult
+    });
+
+    expect(result.ok).toBe(false);
+    expect((result as any).mode).toBe("prepared-only");
+  });
+});
+
+describe("runAndSubmitProviderJob", () => {
+  let config: RunnerConfig;
+  let runtime: RuntimeConnector;
+  let mcp: ArcLayerMcpConnector;
+  let skill: { content: string; sha256: string; path: string };
+  let services: RunnerServices;
+
+  const validJob = {
+    taskId: "t1",
+    jobId: "42",
+    agentId: "agent-1",
+    provider: "0x0000000000000000000000000000000000000001",
+    description: "test job",
+    input: { prompt: "do work" }
+  };
+
+  beforeEach(() => {
+    config = makeConfig();
+    runtime = makeMockRuntime();
+    mcp = makeMockMcp();
+    skill = { content: "# Skill", sha256: "abc123", path: "/test/skill.md" };
+    services = new RunnerServices(config, runtime, mcp, skill);
+  });
+
+  it("calls runtime first, then submit", async () => {
+    const runSpy = vi.spyOn(runtime, "run");
+    const submitSpy = vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+      ok: true,
+      command: "circle",
+      args: [],
+      json: { txHash: "0x" + "ab".repeat(32) }
+    } as any);
+
+    const result = await services.runAndSubmitProviderJob(validJob);
+
+    expect(runSpy).toHaveBeenCalled();
+    expect(submitSpy).toHaveBeenCalled();
+    expect(result.ok).toBe(true);
+    expect(result.deliverableHash).toBeDefined();
+    runSpy.mockRestore();
+    submitSpy.mockRestore();
+  });
+
+  it("completed result submits", async () => {
+    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+      ok: true,
+      command: "circle",
+      args: [],
+      json: { txHash: "0x" + "ab".repeat(32) }
+    } as any);
+
+    const result = await services.runAndSubmitProviderJob(validJob);
+
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe("completed");
+    expect((result as any).submitReceipt).toBeDefined();
+  });
+
+  it("non-completed result never submits", async () => {
+    const needsPaymentRuntime: RuntimeConnector = {
+      kind: "hermes",
+      async run() {
+        return {
+          ok: true,
+          status: "needs_payment",
+          artifacts: [],
+          actionRequests: [],
+          paymentRequests: [{ type: "x402_service_pay" as const, url: "https://api.example.com/pay", maxAmountUsdc: "0.01", reason: "unlock", method: "GET" as const }]
+        } as RuntimeResult;
+      }
+    };
+    const svc = new RunnerServices(config, needsPaymentRuntime, mcp, skill);
+    const circleSpy = vi.spyOn(svc.circle, "executeErc8183Write");
+
+    const result = await svc.runAndSubmitProviderJob(validJob);
+
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe("needs_payment");
+    expect((result as any).submitReceipt).toBeUndefined();
+    expect(circleSpy).not.toHaveBeenCalled();
+    circleSpy.mockRestore();
+  });
+
+  it("keeps previous runErc8183ProviderJob behavior for successful completed result", async () => {
+    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+      ok: true,
+      command: "circle",
+      args: [],
+      json: { txHash: "0x" + "ab".repeat(32) }
+    } as any);
+
+    // runErc8183ProviderJob is the backward-compat wrapper
+    const result = await services.runErc8183ProviderJob(validJob);
+
+    expect(result.ok).toBe(true);
+    expect(result.deliverableHash).toBeDefined();
+    expect((result as any).submitReceipt).toBeDefined();
   });
 });

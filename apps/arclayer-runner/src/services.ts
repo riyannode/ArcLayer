@@ -13,12 +13,14 @@ import {
   assertRoleAllowed,
   assertX402InspectAllowed,
   assertX402PaymentAllowed,
+  assertSubmittableRuntimeResult,
   decimalToMicros,
   erc8183Hash,
   sha256Json,
   sha256Text,
   RunnerError,
-  type RunnerConfig
+  type RunnerConfig,
+  type RuntimeResult
 } from "@arclayer/runner-core";
 import { CircleCliAdapter } from "@arclayer/circle-cli-adapter";
 import { CONTRACTS } from "@arclayer/sdk";
@@ -190,7 +192,7 @@ export class RunnerServices {
     };
   }
 
-  async runErc8183ProviderJob(body: unknown, lifecycle?: TaskLifecycle) {
+  async runProviderJob(body: unknown, lifecycle?: TaskLifecycle) {
     const job = Erc8183ProviderJobSchema.parse(body);
     assertAgentIdentity(this.config, job.agentId);
     assertRoleAllowed(this.config, "provider");
@@ -225,114 +227,161 @@ export class RunnerServices {
 
       const result = await this.runtime.run(runtimeTask);
 
-      // Step 3: Check runtime result before proceeding with settlement
+      // Step 3: Check runtime result — only completed results are hashable
       if (!result.ok || result.status === "failed") {
         await this.mcp.writeCheckpoint(job.jobId, {
           status: "failed",
           error: result.error ?? "Runtime returned failure"
         }).catch(() => {});
 
-        const receipt = await this.receipts.append({
-          type: "erc8183_submit",
-          taskId: job.taskId,
-          jobId: job.jobId,
-          agentId: job.agentId,
-          request: job,
-          response: { result, skipped: true, reason: "runtime_failure" },
-          proof: { sha256: sha256Json(result) }
-        });
-
-        lifecycle?.markTaskCompleted?.(job.taskId, job.agentId);
+        lifecycle?.markTaskFailed?.(job.taskId, job.agentId);
         return {
           ok: false,
           status: "runtime_failure",
           role: "provider",
           result,
-          receipt,
           error: result.error ?? "Runtime returned ok=false or status=failed"
         };
       }
 
-      // Step 4: Hash deliverable and prepare submit
-      const deliverableHash = erc8183Hash(result.output ?? result);
-
-      const preparedTx = await this.mcp.prepareSubmitDeliverable(
-        job.jobId,
-        deliverableHash
-      ).catch((err) => {
-        console.warn(`[runner] MCP prepareSubmitDeliverable failed: ${err.message}`);
-        return null;
-      });
-
-      // Step 5: Execute on-chain submit via Circle CLI
-      const submitReceipt = await this.submitDeliverableViaCircleCli({
-        jobId: job.jobId,
-        deliverableHash,
-        optParams: "0x"
-      });
-
-      // Step 6: If submit was prepared-only (no contract/wallet), stop here
-      if (submitReceipt && typeof submitReceipt === "object" && "ok" in submitReceipt && !submitReceipt.ok) {
-        const receipt = await this.receipts.append({
-          type: "erc8183_submit",
-          taskId: job.taskId,
-          jobId: job.jobId,
-          agentId: job.agentId,
-          request: job,
-          response: { result, preparedTx, submitReceipt },
-          proof: {
-            deliverableHash,
-            sha256: sha256Json({ result, submitReceipt })
-          }
-        });
-
+      // Step 4: For non-completed statuses (needs_payment, needs_action),
+      // return without hashing or submitting
+      if (result.status !== "completed") {
         lifecycle?.markTaskCompleted?.(job.taskId, job.agentId);
         return {
           ok: false,
-          status: "prepared-only",
+          status: result.status,
           role: "provider",
           result,
-          deliverableHash,
-          submitReceipt,
-          receipt,
-          error: submitReceipt.reason ?? "On-chain submit not available"
+          error: `Runtime returned non-completed status: ${result.status}`
         };
       }
 
-      // Step 7: Complete MCP run
+      // Step 5: Hash deliverable — but do NOT submit on-chain
+      const deliverableHash = erc8183Hash(result.output ?? result);
+
+      // Step 6: Complete MCP run
       await this.mcp.completeJobRun(job.jobId, result.output, runId).catch((err) => {
         console.warn(`[runner] MCP completeJobRun failed: ${err.message}`);
-      });
-
-      // Step 8: Store receipt with proof
-      const receipt = await this.receipts.append({
-        type: "erc8183_submit",
-        taskId: job.taskId,
-        jobId: job.jobId,
-        agentId: job.agentId,
-        request: job,
-        response: { result, preparedTx, submitReceipt },
-        proof: {
-          deliverableHash,
-          sha256: sha256Json({ result, submitReceipt }),
-          txHash: extractPossibleTxHash(submitReceipt)
-        }
       });
 
       lifecycle?.markTaskCompleted?.(job.taskId, job.agentId);
       return {
         ok: true,
+        status: "completed",
         role: "provider",
         result,
         deliverableHash,
-        submitReceipt,
-        receipt
+        runId
       };
 
     } catch (error) {
       lifecycle?.markTaskFailed?.(job.taskId, job.agentId);
       throw error;
     }
+  }
+
+  async submitProviderDeliverable(
+    input: {
+      jobId: string;
+      deliverableHash: `0x${string}`;
+      result: RuntimeResult;
+      optParams?: `0x${string}`;
+    },
+    signal?: AbortSignal
+  ) {
+    // Validate jobId
+    if (!input.jobId || !/^[0-9]+$/.test(input.jobId)) {
+      throw new RunnerError("INVALID_JOB_ID", "jobId must be a numeric string", 400);
+    }
+
+    // Validate deliverableHash bytes32
+    if (!input.deliverableHash || !/^0x[a-fA-F0-9]{64}$/.test(input.deliverableHash)) {
+      throw new RunnerError("INVALID_DELIVERABLE_HASH", "deliverableHash must be a valid bytes32 hex string", 400);
+    }
+
+    // Validate runtime result is submittable (only completed passes)
+    assertSubmittableRuntimeResult(input.result);
+
+    // Verify provider address is configured
+    if (!this.config.circleWalletAddress) {
+      return {
+        ok: false,
+        mode: "prepared-only",
+        reason: "CIRCLE_WALLET_ADDRESS not configured",
+        prepared: input
+      };
+    }
+
+    // Call Circle CLI submit — only place this is allowed
+    const submitReceipt = await this.submitDeliverableViaCircleCli({
+      jobId: input.jobId,
+      deliverableHash: input.deliverableHash,
+      optParams: input.optParams ?? "0x"
+    }, signal);
+
+    // If submit was prepared-only (no contract/wallet), return failure
+    if (submitReceipt && typeof submitReceipt === "object" && "ok" in submitReceipt && !submitReceipt.ok) {
+      return {
+        ok: false,
+        status: "prepared-only",
+        deliverableHash: input.deliverableHash,
+        submitReceipt,
+        error: submitReceipt.reason ?? "On-chain submit not available"
+      };
+    }
+
+    // Store receipt with proof
+    const receipt = await this.receipts.append({
+      type: "erc8183_submit",
+      jobId: input.jobId,
+      agentId: this.config.agentId,
+      request: { jobId: input.jobId, deliverableHash: input.deliverableHash },
+      response: { submitReceipt },
+      proof: {
+        deliverableHash: input.deliverableHash,
+        sha256: sha256Json({ submitReceipt }),
+        txHash: extractPossibleTxHash(submitReceipt)
+      }
+    });
+
+    return {
+      ok: true,
+      deliverableHash: input.deliverableHash,
+      submitReceipt,
+      receipt
+    };
+  }
+
+  async runAndSubmitProviderJob(body: unknown, lifecycle?: TaskLifecycle, signal?: AbortSignal) {
+    // Step 1: Run runtime only (no on-chain submit)
+    const runResult = await this.runProviderJob(body, lifecycle);
+
+    // Step 2: If runtime did not complete, return without submitting
+    if (!runResult.ok || runResult.status !== "completed") {
+      return runResult;
+    }
+
+    // Step 3: Submit deliverable on-chain
+    const job = Erc8183ProviderJobSchema.parse(body);
+    const submitResult = await this.submitProviderDeliverable({
+      jobId: job.jobId,
+      deliverableHash: runResult.deliverableHash,
+      result: runResult.result as RuntimeResult,
+      optParams: "0x"
+    }, signal);
+
+    return {
+      ...runResult,
+      submitReceipt: submitResult.submitReceipt,
+      receipt: submitResult.receipt
+    };
+  }
+
+  async runErc8183ProviderJob(body: unknown, lifecycle?: TaskLifecycle) {
+    // Backward-compat wrapper: delegates to runAndSubmitProviderJob
+    // which splits runtime execution from on-chain submission.
+    return this.runAndSubmitProviderJob(body, lifecycle);
   }
 
   async submitDeliverableViaCircleCli(
