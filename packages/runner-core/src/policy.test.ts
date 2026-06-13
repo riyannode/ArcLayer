@@ -91,13 +91,13 @@ describe("assertRoleAllowed", () => {
   });
 });
 
-describe("assertProviderOnlyForExternal", () => {
+describe("assertProviderOnlyForExternal (deprecated no-op)", () => {
   it("allows provider for provider-default runner", () => {
     expect(() => assertProviderOnlyForExternal(makeConfig(), "provider")).not.toThrow();
   });
 
-  it("rejects evaluator for provider-default runner", () => {
-    expectRunnerError(() => assertProviderOnlyForExternal(makeConfig(), "evaluator"), "EXTERNAL_RUNNER_PROVIDER_ONLY");
+  it("allows evaluator for provider-default runner (no-op)", () => {
+    expect(() => assertProviderOnlyForExternal(makeConfig(), "evaluator")).not.toThrow();
   });
 });
 
