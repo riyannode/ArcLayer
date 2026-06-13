@@ -109,6 +109,16 @@ function checkAuth(request: NextRequest, requireToken: boolean): {
 
 export async function GET(request: NextRequest) {
   const verbose = request.nextUrl.searchParams.get("verbose") === "1";
+  const fromBlockParam = request.nextUrl.searchParams.get("fromBlock");
+  const fromBlock = fromBlockParam ? parseInt(fromBlockParam, 10) : undefined;
+
+  // Validate fromBlock
+  if (fromBlockParam && (!fromBlock || fromBlock <= 0 || !Number.isSafeInteger(fromBlock))) {
+    return NextResponse.json(
+      { error: "invalid_from_block" },
+      { status: 400 },
+    );
+  }
 
   // verbose=1 requires token even if non-verbose compare is enabled
   const auth = checkAuth(request, verbose || !!INDEXER_COMPARE_TOKEN);
@@ -147,13 +157,15 @@ export async function GET(request: NextRequest) {
       readGoldskyOverview,
     } = await import("@/lib/goldsky-supabase-indexer");
 
-    // Fetch raw data once, build all projections from the snapshot
+    // Fetch from Goldsky reader (each call fetches internally)
     const health = await readGoldskyHealth();
     goldskyHealth = health as unknown as Record<string, unknown>;
 
+    // readGoldskyJobs/Agents now accept optional fromBlock parameter
+    // Overview uses a single shared fetch internally
     const [jobs, agents, proofs, overview] = await Promise.all([
-      readGoldskyJobs(),
-      readGoldskyAgents(),
+      readGoldskyJobs(fromBlock || undefined),
+      readGoldskyAgents(fromBlock || undefined),
       readGoldskyProofs(),
       readGoldskyOverview(),
     ]);
@@ -175,13 +187,27 @@ export async function GET(request: NextRequest) {
     console.error("[indexer-compare] Goldsky reader failed:", err instanceof Error ? err.message : String(err));
   }
 
+  // Filter custom PM2 data to fromBlock if specified
+  let customJobs = customJobsRes.data;
+  let customAgents = customAgentsRes.data;
+  if (fromBlock && fromBlock > 0) {
+    customJobs = customJobs.filter((j: any) => {
+      const block = Number(j.createdAtBlock ?? j.blockNumber ?? 0);
+      return block >= fromBlock;
+    });
+    customAgents = customAgents.filter((a: any) => {
+      const block = Number(a.registeredAtBlock ?? a.blockNumber ?? a.createdAtBlock ?? 0);
+      return block >= fromBlock;
+    });
+  }
+
   // ── Build comparison report ─────────────────────────────────────────
   const report = buildComparisonReport({
     customHealth: customHealthRes.data,
     goldskyHealth,
-    customJobs: customJobsRes.data,
+    customJobs,
     goldskyJobs,
-    customAgents: customAgentsRes.data,
+    customAgents,
     goldskyAgents,
     customProofs: customProofsRes.data,
     goldskyProofs,
@@ -201,14 +227,15 @@ export async function GET(request: NextRequest) {
 
   const response: Record<string, unknown> = {
     ...report,
+    ...(fromBlock ? { fromBlock, overviewScope: "full_history" } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 
   // Verbose mode: include the raw fetched arrays for debugging
   if (verbose) {
-    response.customJobs = customJobsRes.data;
+    response.customJobs = customJobs;
     response.goldskyJobs = goldskyJobs;
-    response.customAgents = customAgentsRes.data;
+    response.customAgents = customAgents;
     response.goldskyAgents = goldskyAgents;
   } else {
     // Non-verbose: strip any raw arrays that might have leaked into report
