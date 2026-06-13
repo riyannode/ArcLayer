@@ -484,8 +484,9 @@ export class RunnerServices {
     // circle.chain is for Circle CLI wallet ops only — contract target is hardcoded.
     const contractAddress = CONTRACTS.ERC8183_AGENTIC_COMMERCE;
 
+    const normalizedOptParams = input.optParams ?? "0x";
     const idempotencyKey = `submitDeliverable:${input.jobId}:${input.deliverableHash}`;
-    const paramsHash = sha256Json({ jobId: input.jobId, deliverableHash: input.deliverableHash, optParams: input.optParams });
+    const paramsHash = sha256Json({ jobId: input.jobId, deliverableHash: input.deliverableHash, optParams: normalizedOptParams });
 
     const gwResult = await this.gateway.execute(
       {
@@ -519,7 +520,13 @@ export class RunnerServices {
       };
     }
 
-    return gwResult.circleResult ?? { ok: true, operationId: gwResult.operationId };
+    return {
+      ok: true,
+      ...(gwResult.circleResult ?? {}),
+      operationId: gwResult.operationId,
+      state: gwResult.state,
+      idempotent: gwResult.idempotent,
+    };
   }
 
   // ── ERC-8183 Full Lifecycle ──────────────────────────────────────────────
@@ -552,8 +559,9 @@ export class RunnerServices {
       );
     }
 
-    const idempotencyKey = `createJob:${input.provider}:${input.evaluator}:${input.expiredAt}:${input.description}`;
-    const paramsHash = sha256Json({ provider: input.provider, evaluator: input.evaluator, expiredAt: input.expiredAt, description: input.description, hook: input.hook });
+    const normalizedHook = input.hook ?? "0x0000000000000000000000000000000000000000";
+    const idempotencyKey = `createJob:${input.provider}:${input.evaluator}:${input.expiredAt}:${input.description}:${normalizedHook}`;
+    const paramsHash = sha256Json({ provider: input.provider, evaluator: input.evaluator, expiredAt: input.expiredAt, description: input.description, hook: normalizedHook });
 
     const gwResult = await this.gateway.execute(
       {
@@ -610,8 +618,9 @@ export class RunnerServices {
       return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
     }
 
+    const normalizedOptParams = input.optParams ?? "0x";
     const idempotencyKey = `setBudget:${input.jobId}:${input.amount}`;
-    const paramsHash = sha256Json({ jobId: input.jobId, amount: input.amount, optParams: input.optParams });
+    const paramsHash = sha256Json({ jobId: input.jobId, amount: input.amount, optParams: normalizedOptParams });
 
     const gwResult = await this.gateway.execute(
       {
@@ -645,6 +654,7 @@ export class RunnerServices {
         txHash: gwResult.txHash,
         operationId: gwResult.operationId,
         operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
@@ -662,7 +672,9 @@ export class RunnerServices {
       return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
     }
 
-    const idempotencyKey = `approveUsdc:${input.amount}:${CONTRACTS.ERC8183_AGENTIC_COMMERCE}`;
+    // Each approval is a unique operation — allowance can be consumed by fund(),
+    // so re-approving the same amount for a later job must not replay the old result.
+    const idempotencyKey = `approveUsdc:${randomUUID()}`;
     const paramsHash = sha256Json({ amount: input.amount, usdcAddress: CONTRACTS.USDC, spenderAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE });
 
     const gwResult = await this.gateway.execute(
@@ -696,6 +708,7 @@ export class RunnerServices {
         txHash: gwResult.txHash,
         operationId: gwResult.operationId,
         operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
@@ -714,8 +727,9 @@ export class RunnerServices {
       return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
     }
 
+    const normalizedOptParams = input.optParams ?? "0x";
     const idempotencyKey = `fundJob:${input.jobId}`;
-    const paramsHash = sha256Json({ jobId: input.jobId, optParams: input.optParams });
+    const paramsHash = sha256Json({ jobId: input.jobId, optParams: normalizedOptParams });
 
     const gwResult = await this.gateway.execute(
       {
@@ -749,6 +763,7 @@ export class RunnerServices {
         txHash: gwResult.txHash,
         operationId: gwResult.operationId,
         operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
@@ -771,8 +786,9 @@ export class RunnerServices {
       ? input.reason
       : erc8183Hash(input.reason);
 
+    const normalizedOptParams = input.optParams ?? "0x";
     const idempotencyKey = `completeJob:${input.jobId}:${reasonHash}`;
-    const paramsHash = sha256Json({ jobId: input.jobId, reasonHash, optParams: input.optParams });
+    const paramsHash = sha256Json({ jobId: input.jobId, reasonHash, optParams: normalizedOptParams });
 
     const gwResult = await this.gateway.execute(
       {
@@ -806,6 +822,7 @@ export class RunnerServices {
         txHash: gwResult.txHash,
         operationId: gwResult.operationId,
         operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
@@ -828,8 +845,9 @@ export class RunnerServices {
       ? input.reason
       : erc8183Hash(input.reason);
 
+    const normalizedOptParams = input.optParams ?? "0x";
     const idempotencyKey = `rejectJob:${input.jobId}:${reasonHash}`;
-    const paramsHash = sha256Json({ jobId: input.jobId, reasonHash, optParams: input.optParams });
+    const paramsHash = sha256Json({ jobId: input.jobId, reasonHash, optParams: normalizedOptParams });
 
     const gwResult = await this.gateway.execute(
       {
@@ -863,6 +881,7 @@ export class RunnerServices {
         txHash: gwResult.txHash,
         operationId: gwResult.operationId,
         operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
@@ -916,6 +935,7 @@ export class RunnerServices {
         txHash: gwResult.txHash,
         operationId: gwResult.operationId,
         operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
@@ -979,6 +999,7 @@ export class RunnerServices {
         txHash: gwResult.txHash,
         operationId: gwResult.operationId,
         operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
