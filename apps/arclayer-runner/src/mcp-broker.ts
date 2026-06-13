@@ -126,6 +126,39 @@ export function isNonIdempotentWrite(toolName: string): boolean {
   return NON_IDEMPOTENT_WRITE_TOOLS.has(toolName);
 }
 
+/**
+ * Detect whether an error was caused by a broker timeout or signal abort.
+ *
+ * When the broker's AbortController fires, the Circle CLI subprocess is
+ * killed by the OS signal. Node raises an AbortError / ABORT_ERR, NOT a
+ * BrokerError. The BrokerError is only created by withTimeout() in the
+ * transport layer (mcp-server / mcp-stdio). By the time the error reaches
+ * a service method like payX402(), it's the AbortError from execFile.
+ *
+ * This helper checks all four shapes so callers can detect broker-initiated
+ * cancellation regardless of where in the stack the error originated.
+ */
+export function isBrokerAbortOrTimeout(error: unknown, signal?: AbortSignal): boolean {
+  // BrokerError from withTimeout() in mcp-server / mcp-stdio
+  if (error instanceof BrokerError && error.code === BrokerErrorCode.TOOL_TIMEOUT) {
+    return true;
+  }
+  // Signal was aborted (broker fired controller.abort())
+  if (signal?.aborted) {
+    return true;
+  }
+  // Node AbortError from execFile killed by signal
+  if (error instanceof Error && error.name === "AbortError") {
+    return true;
+  }
+  // ABORT_ERR code (some Node versions / custom errors)
+  if (typeof error === "object" && error !== null && "code" in error &&
+      (error as { code: unknown }).code === "ABORT_ERR") {
+    return true;
+  }
+  return false;
+}
+
 // ── Args Redaction ────────────────────────────────────────────────────────
 
 /** Fields that should never appear in audit logs (all lowercase for case-insensitive match). */
