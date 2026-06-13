@@ -37,10 +37,10 @@ export function isTerminalOperationState(state: OperationState): boolean {
 
 const ALLOWED_TRANSITIONS: ReadonlyMap<OperationState, ReadonlySet<OperationState>> =
   new Map([
-    ["created", new Set(["prepared", "cancelled"])],
+    ["created", new Set(["prepared", "failed", "cancelled"])],
     ["prepared", new Set(["reserved", "failed"])],
     ["reserved", new Set(["executing", "failed"])],
-    ["executing", new Set(["broadcast", "failed"])],
+    ["executing", new Set(["broadcast", "unknown", "failed"])],
     ["broadcast", new Set(["confirmed", "unknown", "failed"])],
     ["unknown", new Set(["confirmed", "failed"])],
     // Terminal states have no outgoing transitions
@@ -106,7 +106,7 @@ export type OperationRecord = {
   chainId?: number;
   contractAddress?: string;
   method?: string;
-  paramsHash?: string;
+  paramsHash: string;
   amount?: string;
   state: OperationState;
   txHash?: string;
