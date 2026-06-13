@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { handleMcpRequest } from "./mcp-server";
 import { RUNNER_MCP_TOOLS } from "./mcp-schemas";
 import { getToolsForRole } from "./tool-registry";
+import { McpToolBroker, BrokerErrorCode } from "./mcp-broker";
 import type { RunnerConfig } from "@arclayer/runner-core";
 import type { RunnerServices } from "./services";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
@@ -27,6 +28,13 @@ function makeConfig(overrides: Partial<RunnerConfig> = {}): RunnerConfig {
     batchMaxItems: 10,
     batchMaxTotalUsdc: "0.05",
     allowedX402Hosts: ["api.example.com"],
+    allowGatewayDeposit: false,
+    allowIdentityRegister: false,
+    toolBrokerEnabled: true,
+    toolMaxCalls: 100,
+    toolMaxTotalUsdc: "10",
+    toolDefaultTimeoutMs: 30_000,
+    toolMaxOutputBytes: 1_048_576,
     dataDir: ".test-mcp",
     port: 8787,
     runnerSecret: "test-secret-at-least-16-chars",
@@ -101,15 +109,13 @@ describe("Runner MCP Server (router-authenticated)", () => {
     ctx = { services, mcp, config, skill };
   });
 
-  async function callMcp(body: unknown): Promise<any> {
+  async function callMcp(body: unknown, broker?: McpToolBroker): Promise<any> {
     const { res, output } = makeMockRes();
-    await handleMcpRequest(res, body, ctx);
+    await handleMcpRequest(res, body, ctx, broker);
     return JSON.parse(output().body);
   }
 
   // ── Auth is handled by router, not MCP handler ───────────────────────
-  // Tests for auth (HMAC missing, invalid, nonce replay) belong in the
-  // router integration tests, not here. MCP handler receives pre-auth body.
 
   it("tools/list returns Runner-local tool names", async () => {
     const result = await callMcp(makeRpcBody("tools/list"));
@@ -206,15 +212,117 @@ describe("Runner MCP Server (router-authenticated)", () => {
   });
 
   it("does NOT do internal Bearer auth (router owns auth)", async () => {
-    // This test verifies that handleMcpRequest accepts pre-parsed body
-    // without requiring any auth headers. Auth is the router's job.
     const { res, output } = makeMockRes();
     const body = makeRpcBody("tools/list");
     await handleMcpRequest(res, body, ctx);
     const parsed = JSON.parse(output().body);
-    // Should succeed — no auth error
     expect(parsed.result.tools).toBeDefined();
     expect(parsed.error).toBeUndefined();
+  });
+});
+
+describe("Runner MCP Server with Broker", () => {
+  let services: any;
+  let mcp: any;
+  let config: RunnerConfig;
+  let skill: { content: string; sha256: string; path: string };
+  let ctx: any;
+  let broker: McpToolBroker;
+
+  beforeEach(() => {
+    config = makeConfig();
+    services = makeMockServices();
+    mcp = makeMockMcp();
+    skill = { content: "# Skill", sha256: "abc123", path: "/test/skill.md" };
+    broker = new McpToolBroker({
+      maxCalls: 3,
+      maxTotalUsdc: "1.0",
+      defaultTimeoutMs: 5000,
+      maxOutputBytes: 1024,
+    });
+    ctx = { services, mcp, config, skill, broker };
+  });
+
+  async function callMcp(body: unknown): Promise<any> {
+    const { res, output } = makeMockRes();
+    await handleMcpRequest(res, body, ctx, broker);
+    return JSON.parse(output().body);
+  }
+
+  it("broker introspection tools appear in tools/list", async () => {
+    const result = await callMcp(makeRpcBody("tools/list"));
+    const names = result.result.tools.map((t: any) => t.name);
+    expect(names).toContain("runner.broker_status");
+    expect(names).toContain("runner.audit_log");
+  });
+
+  it("runner.broker_status returns session state", async () => {
+    const result = await callMcp(makeRpcBody("tools/call", { name: "runner.broker_status", arguments: {} }));
+    expect(result.result.ok).toBe(true);
+    expect(result.result.enabled).toBe(true);
+    expect(result.result.callCount).toBe(0);
+    expect(result.result.budgetLimits).toBeDefined();
+  });
+
+  it("runner.audit_log returns empty log initially", async () => {
+    const result = await callMcp(makeRpcBody("tools/call", { name: "runner.audit_log", arguments: {} }));
+    expect(result.result.ok).toBe(true);
+    expect(result.result.total).toBe(0);
+    expect(result.result.entries).toEqual([]);
+  });
+
+  it("broker tracks calls through audit log", async () => {
+    // Make a tool call
+    await callMcp(makeRpcBody("tools/call", { name: "runner.health", arguments: {} }));
+
+    // Check audit log
+    const result = await callMcp(makeRpcBody("tools/call", { name: "runner.audit_log", arguments: {} }));
+    expect(result.result.total).toBe(1);
+    expect(result.result.entries[0].toolName).toBe("runner.health");
+    expect(result.result.entries[0].ok).toBe(true);
+  });
+
+  it("broker rejects when max calls exceeded", async () => {
+    // Exhaust the budget (maxCalls = 3)
+    await callMcp(makeRpcBody("tools/call", { name: "runner.health", arguments: {} }));
+    await callMcp(makeRpcBody("tools/call", { name: "runner.health", arguments: {} }));
+    await callMcp(makeRpcBody("tools/call", { name: "runner.health", arguments: {} }));
+
+    // 4th call should fail
+    const result = await callMcp(makeRpcBody("tools/call", { name: "runner.health", arguments: {} }));
+    const content = JSON.parse(result.result.content[0].text);
+    expect(content.ok).toBe(false);
+    expect(content.error).toBe(BrokerErrorCode.MAX_CALLS_EXCEEDED);
+  });
+
+    it("broker rejects schema validation failures", async () => {
+      // x402.pay requires maxAmountUsdc and reason
+      // Use x402-agent role which has access to x402.pay
+      config.allowedRoles = ["x402-agent", "provider"];
+      ctx.config = config;
+      const result = await callMcp(makeRpcBody("tools/call", {
+        name: "x402.pay",
+        arguments: { url: "https://api.example.com/test" }
+      }));
+      const content = JSON.parse(result.result.content[0].text);
+      expect(content.ok).toBe(false);
+      expect(content.error).toBe(BrokerErrorCode.SCHEMA_VALIDATION_FAILED);
+    });
+
+  it("broker allows valid tool calls through", async () => {
+    const result = await callMcp(makeRpcBody("tools/call", {
+      name: "x402.inspect",
+      arguments: { url: "https://api.example.com/test" }
+    }));
+    expect(result.result.ok).toBe(true);
+  });
+
+  it("works without broker (backward compat)", async () => {
+    const ctxNoBroker = { services, mcp, config, skill };
+    const { res, output } = makeMockRes();
+    await handleMcpRequest(res, makeRpcBody("tools/call", { name: "runner.health", arguments: {} }), ctxNoBroker);
+    const result = JSON.parse(output().body);
+    expect(result.result.ok).toBe(true);
   });
 });
 
@@ -229,6 +337,10 @@ describe("Runner MCP tool catalog", () => {
     expect(names).toContain("runner.receipts");
     expect(names).toContain("runner.ledger");
     expect(names).toContain("runner.policy");
+
+    // Broker introspection
+    expect(names).toContain("runner.broker_status");
+    expect(names).toContain("runner.audit_log");
 
     // Circle
     expect(names).toContain("circle.status");
@@ -325,5 +437,15 @@ describe("Role-based tool filtering", () => {
     expect(names).not.toContain("erc8183.fund_job");
     expect(names).not.toContain("erc8183.complete_job");
     expect(names).not.toContain("erc8183.reject_job");
+  });
+
+  it("all roles get broker introspection tools", () => {
+    const roles = ["provider", "client", "evaluator", "x402-agent", "identity-agent", "devops-admin", "full-stack-agent"];
+    for (const role of roles) {
+      const tools = getToolsForRole(role);
+      const names = tools.map((t) => t.name);
+      expect(names).toContain("runner.broker_status");
+      expect(names).toContain("runner.audit_log");
+    }
   });
 });
