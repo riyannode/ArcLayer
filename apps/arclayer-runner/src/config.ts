@@ -209,6 +209,7 @@ function buildEnvConfig(): Record<string, unknown> {
   set("runtimeKind", process.env.ARCLAYER_RUNTIME_KIND);
   set("runtimeEndpoint", process.env.ARCLAYER_RUNTIME_ENDPOINT);
   set("runtimeRunPath", process.env.ARCLAYER_RUNTIME_RUN_PATH);
+  if (process.env.ARCLAYER_RUNTIME_TIMEOUT_MS) set("runtimeTimeoutMs", process.env.ARCLAYER_RUNTIME_TIMEOUT_MS);
   if (process.env.ARCLAYER_DEFAULT_ROLE) set("defaultRole", process.env.ARCLAYER_DEFAULT_ROLE);
   if (process.env.ARCLAYER_ALLOWED_ROLES) set("allowedRoles", splitCsv(process.env.ARCLAYER_ALLOWED_ROLES));
   set("skillPath", process.env.ARCLAYER_GLOBAL_SKILL_PATH);

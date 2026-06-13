@@ -41,7 +41,8 @@ async function main() {
       config.runtimeKind,
       config.runtimeEndpoint,
       config.runtimeRunPath,
-      process.env.HERMES_API_SERVER_KEY || process.env.OPENCLAW_API_SERVER_KEY
+      process.env.HERMES_API_SERVER_KEY || process.env.OPENCLAW_API_SERVER_KEY,
+      config.runtimeTimeoutMs
     );
 
     const mcp = new ArcLayerMcpConnector({
@@ -243,7 +244,8 @@ async function main() {
         config.runtimeKind,
         config.runtimeEndpoint,
         config.runtimeRunPath,
-        process.env.HERMES_API_SERVER_KEY || process.env.OPENCLAW_API_SERVER_KEY
+        process.env.HERMES_API_SERVER_KEY || process.env.OPENCLAW_API_SERVER_KEY,
+        config.runtimeTimeoutMs
       );
 
       const mcp = new ArcLayerMcpConnector({
