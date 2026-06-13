@@ -199,12 +199,25 @@ export async function handleMcpTool(
           maxAmountUsdc: string;
           reason: string;
           idempotencyKey?: string;
+          body?: unknown;
         }>;
       }>(name, args);
+      // Inject type literal and body for each payment — the MCP schema
+      // doesn't include `type` (it's an internal constant), but
+      // BatchPaymentRequestSchema requires it via PaymentRequestSchema.
+      const payments = input.payments.map((p) => ({
+        type: "x402_service_pay" as const,
+        url: p.url,
+        method: p.method,
+        maxAmountUsdc: p.maxAmountUsdc,
+        reason: p.reason,
+        idempotencyKey: p.idempotencyKey,
+        body: p.body,
+      }));
       return services.batchPayX402({
         batchId: input.batchId,
         taskId: input.taskId,
-        payments: input.payments
+        payments,
       }, ctx.signal);
     }
 

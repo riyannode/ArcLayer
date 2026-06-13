@@ -626,3 +626,109 @@ describe("8. safeValidateMcpToolInput Never Throws", () => {
     expect(result.ok).toBe(true);
   });
 });
+
+// ── 9. Provider Input Required (not undefined) ──────────────────────────
+
+describe("9. Provider job input must not be undefined", () => {
+  const VALID_PROVIDER_JOB = {
+    taskId: "t1",
+    jobId: "42",
+    agentId: "agent-1",
+    provider: "0x1234567890123456789012345678901234567890",
+    description: "test job",
+    input: { prompt: "hello" },
+  };
+
+  it("erc8183.provider_run_job accepts valid input with JSON payload", () => {
+    const result = safeValidateMcpToolInput("erc8183.provider_run_job", VALID_PROVIDER_JOB);
+    expect(result.ok).toBe(true);
+  });
+
+  it("erc8183.provider_run_job accepts input=0 (falsy but defined)", () => {
+    const result = safeValidateMcpToolInput("erc8183.provider_run_job", {
+      ...VALID_PROVIDER_JOB, input: 0,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("erc8183.provider_run_job accepts input=false (falsy but defined)", () => {
+    const result = safeValidateMcpToolInput("erc8183.provider_run_job", {
+      ...VALID_PROVIDER_JOB, input: false,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("erc8183.provider_run_job accepts input=null (defined)", () => {
+    const result = safeValidateMcpToolInput("erc8183.provider_run_job", {
+      ...VALID_PROVIDER_JOB, input: null,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("erc8183.provider_run_job accepts input=[] (empty array)", () => {
+    const result = safeValidateMcpToolInput("erc8183.provider_run_job", {
+      ...VALID_PROVIDER_JOB, input: [],
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("erc8183.provider_run_job rejects missing input (undefined)", () => {
+    const { input, ...withoutInput } = VALID_PROVIDER_JOB;
+    const result = safeValidateMcpToolInput("erc8183.provider_run_job", withoutInput);
+    expect(result.ok).toBe(false);
+  });
+
+  it("erc8183.provider_run_and_submit rejects missing input (undefined)", () => {
+    const { input, ...withoutInput } = VALID_PROVIDER_JOB;
+    const result = safeValidateMcpToolInput("erc8183.provider_run_and_submit", withoutInput);
+    expect(result.ok).toBe(false);
+  });
+});
+
+// ── 10. Required Fields Emitted in tools/list ────────────────────────────
+
+describe("10. Required fields emitted in generated tool schemas", () => {
+  it("x402.pay inputSchema marks url, maxAmountUsdc, reason as required", () => {
+    const toolDef = RUNNER_MCP_TOOLS.find((t) => t.name === "x402.pay")!;
+    const schema = toolDef.inputSchema as Record<string, Record<string, unknown>>;
+    expect(schema.url.required).toBe(true);
+    expect(schema.maxAmountUsdc.required).toBe(true);
+    expect(schema.reason.required).toBe(true);
+  });
+
+  it("x402.pay inputSchema does NOT mark method, idempotencyKey, body as required", () => {
+    const toolDef = RUNNER_MCP_TOOLS.find((t) => t.name === "x402.pay")!;
+    const schema = toolDef.inputSchema as Record<string, Record<string, unknown>>;
+    expect(schema.method?.required).toBeUndefined();
+    expect(schema.idempotencyKey?.required).toBeUndefined();
+    expect(schema.body?.required).toBeUndefined();
+  });
+
+  it("erc8183.create_job marks provider, evaluator, expiredAt, description as required", () => {
+    const toolDef = RUNNER_MCP_TOOLS.find((t) => t.name === "erc8183.create_job")!;
+    const schema = toolDef.inputSchema as Record<string, Record<string, unknown>>;
+    expect(schema.provider.required).toBe(true);
+    expect(schema.evaluator.required).toBe(true);
+    expect(schema.expiredAt.required).toBe(true);
+    expect(schema.description.required).toBe(true);
+  });
+
+  it("erc8183.create_job does NOT mark hook as required", () => {
+    const toolDef = RUNNER_MCP_TOOLS.find((t) => t.name === "erc8183.create_job")!;
+    const schema = toolDef.inputSchema as Record<string, Record<string, unknown>>;
+    expect(schema.hook?.required).toBeUndefined();
+  });
+
+  it("erc8183.provider_run_job marks input as required", () => {
+    const toolDef = RUNNER_MCP_TOOLS.find((t) => t.name === "erc8183.provider_run_job")!;
+    const schema = toolDef.inputSchema as Record<string, Record<string, unknown>>;
+    expect(schema.input.required).toBe(true);
+  });
+
+  it("circle.gateway_deposit marks amount as required, method as optional", () => {
+    const toolDef = RUNNER_MCP_TOOLS.find((t) => t.name === "circle.gateway_deposit")!;
+    const schema = toolDef.inputSchema as Record<string, Record<string, unknown>>;
+    expect(schema.amount.required).toBe(true);
+    expect(schema.method?.required).toBeUndefined();
+  });
+});

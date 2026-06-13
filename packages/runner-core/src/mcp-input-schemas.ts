@@ -39,6 +39,7 @@ export const X402BatchPayInputSchema = z.object({
     maxAmountUsdc: z.string().regex(/^[0-9]+(\.[0-9]+)?$/, "maxAmountUsdc must be a decimal string"),
     reason: z.string().min(1, "reason is required"),
     idempotencyKey: z.string().optional(),
+    body: z.unknown().optional(),
   })).min(1, "At least one payment is required"),
 });
 
@@ -66,7 +67,12 @@ export const Erc8183ProviderRunJobInputSchema = z.object({
   agentId: z.string().min(1, "agentId is required"),
   provider: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "provider must be a valid address"),
   description: z.string().min(1, "description is required"),
-  input: z.unknown(),
+  // Reject undefined (missing input) while permitting any JSON value.
+  // z.unknown() alone accepts undefined — the refine catches it.
+  input: z.unknown().refine(
+    (v) => v !== undefined,
+    { message: "input is required (must be a JSON value, not undefined)" }
+  ),
 });
 
 /** erc8183.provider_submit_deliverable — submit deliverable on-chain */
@@ -256,6 +262,10 @@ function zodShapeToJsonSchema(schema: z.ZodTypeAny): Record<string, unknown> | u
     const field = fieldSchema as z.ZodTypeAny;
     const spec = zodFieldToSpec(field);
     if (spec) {
+      // Mark non-optional fields as required for MCP tools/list consumers
+      if (!isOptional(field)) {
+        spec.required = true;
+      }
       result[key] = spec;
     }
   }
