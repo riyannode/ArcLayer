@@ -191,6 +191,19 @@ export const RunnerConfigSchema = z.object({
     z.boolean().default(false)
   ),
 
+  // ── MCP Tool Broker budget config ──────────────────────────────────────
+  toolBrokerEnabled: z.preprocess(
+    (v) => {
+      if (typeof v === "string") return v === "true" || v === "1";
+      return v;
+    },
+    z.boolean().default(true)
+  ),
+  toolMaxCalls: z.coerce.number().int().min(1).default(500),
+  toolMaxTotalUsdc: z.string().default("10"),
+  toolDefaultTimeoutMs: z.coerce.number().int().min(1000).default(30_000),
+  toolMaxOutputBytes: z.coerce.number().int().min(1024).default(1_048_576),
+
   dataDir: z.string().default(".arclayer-runner"),
   port: z.coerce.number().int().min(1).max(65535).default(8787),
   host: z.string().default("127.0.0.1"),

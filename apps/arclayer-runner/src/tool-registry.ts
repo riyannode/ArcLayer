@@ -51,6 +51,10 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
   { name: "runner.ledger", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["ledger"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "devops-admin", "full-stack-agent"], description: "Recent spending ledger records" },
   { name: "runner.policy", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["policy"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "devops-admin", "full-stack-agent"], description: "Current spending policy limits" },
 
+  // MCP Tool Broker introspection
+  { name: "runner.broker_status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["broker"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "devops-admin", "full-stack-agent"], description: "MCP Tool Broker session state" },
+  { name: "runner.audit_log", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["broker", "audit"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "devops-admin", "full-stack-agent"], description: "MCP Tool Broker audit log" },
+
   // Circle CLI
   { name: "circle.status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["circle", "wallet"], roles: ["provider", "x402-agent", "devops-admin"], requiresCircle: true, description: "Circle CLI version, wallet status, gateway balance" },
   { name: "circle.gateway_balance", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["circle", "gateway"], roles: ["provider", "x402-agent"], requiresCircle: true, description: "Gateway balance for configured wallet" },
