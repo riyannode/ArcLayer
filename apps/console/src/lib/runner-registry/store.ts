@@ -15,9 +15,8 @@ import type {
 
 /**
  * Register a new runner. Upserts on runner_id conflict.
- * hmacSecret is stored as plaintext in the hmac_secret_encrypted column
- * (encryption at rest is handled by Supabase/Postgres pgcrypto if enabled).
- * For now we store as bytea from the UTF-8 encoded secret.
+ * hmacSecret is stored as raw bytes (bytea). NOT encrypted — protected by service_role RLS only.
+ * For production: use pgcrypto/KMS or secret reference pattern.
  */
 export async function registerRunner(input: RegisterRunnerInput): Promise<RunnerRegistryRow> {
   const supabase = getSupabaseAdmin();
@@ -31,7 +30,7 @@ export async function registerRunner(input: RegisterRunnerInput): Promise<Runner
     default_role: input.defaultRole ?? 'provider',
     status: 'active' as RunnerStatus,
     runtime_kind: input.runtimeKind ?? 'openclaw',
-    hmac_secret_encrypted: Buffer.from(input.hmacSecret, 'utf-8'),
+    hmac_secret: Buffer.from(input.hmacSecret, 'utf-8'),
     metadata: input.metadata ?? {},
     last_seen_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -64,22 +63,23 @@ export async function getRunner(runnerId: string): Promise<RunnerRegistryRow | n
 }
 
 /**
- * Get the HMAC secret for a runner (plaintext from stored bytes).
+ * Get the HMAC secret for a runner (raw bytes decoded to UTF-8).
  * Returns null if runner not found or no secret stored.
+ * Secret is stored as raw bytea — NOT encrypted. Protected by service_role RLS only.
  */
 export async function getRunnerSecret(runnerId: string): Promise<string | null> {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from('runner_registry')
-    .select('hmac_secret_encrypted')
+    .select('hmac_secret')
     .eq('runner_id', runnerId)
     .maybeSingle();
 
   if (error) throw new Error(`getRunnerSecret failed: ${error.message}`);
-  if (!data?.hmac_secret_encrypted) return null;
+  if (!data?.hmac_secret) return null;
 
-  // hmac_secret_encrypted is stored as bytea — decode to UTF-8 string
-  const buf = Buffer.from(data.hmac_secret_encrypted as unknown as string, 'base64');
+  // hmac_secret is stored as bytea — decode to UTF-8 string
+  const buf = Buffer.from(data.hmac_secret as unknown as string, 'base64');
   return buf.toString('utf-8');
 }
 

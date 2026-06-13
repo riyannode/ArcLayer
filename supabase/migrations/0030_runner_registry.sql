@@ -12,9 +12,10 @@ create table if not exists public.runner_registry (
   status text not null default 'active' check (status in ('active', 'paused', 'revoked')),
   runtime_kind text not null default 'openclaw' check (runtime_kind in ('hermes', 'openclaw', 'custom')),
   
-  -- HMAC secret for signing dispatch requests. Encrypted at rest via pgcrypto.
-  -- Console encrypts on insert, decrypts on read for dispatch.
-  hmac_secret_encrypted bytea null,
+  -- HMAC secret for signing dispatch requests. Stored as raw bytes (bytea).
+  -- NOT encrypted at rest — protected by service_role RLS only.
+  -- For production: use pgcrypto/KMS or secret reference pattern.
+  hmac_secret bytea null,
   
   -- Metadata: Circle wallet address, chain, policy overrides, etc.
   metadata jsonb not null default '{}'::jsonb,

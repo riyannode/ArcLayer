@@ -16,7 +16,7 @@ export interface RunnerRegistryRow {
   default_role: string;
   status: RunnerStatus;
   runtime_kind: RuntimeKind;
-  hmac_secret_encrypted: Buffer | null;
+  hmac_secret: Buffer | null;
   metadata: Record<string, unknown>;
   last_seen_at: string | null;
   created_at: string;
