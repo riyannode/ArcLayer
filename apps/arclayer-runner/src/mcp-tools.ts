@@ -2,11 +2,16 @@
  * Runner-local MCP tool implementations.
  * Each tool calls existing Runner service methods.
  * No direct Circle CLI calls, no policy bypass.
+ *
+ * Write/payment tools use Zod-based input parsing (from runner-core) to ensure
+ * the same validation schema is used at parse time and execution time.
+ * The broker pre-validates args; this layer parses into typed objects.
  */
 
 import type { RunnerServices } from "./services";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
 import type { RunnerConfig } from "@arclayer/runner-core";
+import { validateMcpToolInput } from "@arclayer/runner-core";
 import { getCirclePolicyStatus } from "./doctor";
 import { resolveAllSkills, resolveSkill, getSkillsForRole, getSkillsByIds, bundleSkillsForRole, SKILL_MANIFEST, type RunnerRole } from "./skill-manifest";
 import { getToolsForRole, getToolByName, CONSOLE_MCP_PROXY_TOOLS, ALL_TOOLS } from "./tool-registry";
@@ -147,34 +152,74 @@ export async function handleMcpTool(
     case "circle.wallet_policy_status":
       return getCirclePolicyStatus(config);
 
-    // ── x402 ──────────────────────────────────────────────────────────
-    case "x402.inspect":
+    // ── x402 (Zod-validated) ──────────────────────────────────────────
+    case "x402.inspect": {
+      const input = validateMcpToolInput<{
+        url: string;
+        method: string;
+        body?: unknown;
+      }>(name, args);
       return services.inspectX402({
         type: "x402_service_pay",
-        url: args.url as string,
-        method: (args.method as string) ?? "GET",
+        url: input.url,
+        method: input.method,
         maxAmountUsdc: "0",
         reason: "inspect",
-        body: args.body
+        body: input.body
       }, ctx.signal);
+    }
 
-    case "x402.pay":
+    case "x402.pay": {
+      const input = validateMcpToolInput<{
+        url: string;
+        method: string;
+        maxAmountUsdc: string;
+        reason: string;
+        idempotencyKey?: string;
+        body?: unknown;
+      }>(name, args);
       return services.payX402({
         type: "x402_service_pay",
-        url: args.url as string,
-        method: (args.method as string) ?? "GET",
-        maxAmountUsdc: args.maxAmountUsdc as string,
-        reason: args.reason as string,
-        idempotencyKey: args.idempotencyKey as string | undefined,
-        body: args.body
+        url: input.url,
+        method: input.method,
+        maxAmountUsdc: input.maxAmountUsdc,
+        reason: input.reason,
+        idempotencyKey: input.idempotencyKey,
+        body: input.body
       }, ctx.signal);
+    }
 
-    case "x402.batch_pay":
+    case "x402.batch_pay": {
+      const input = validateMcpToolInput<{
+        batchId: string;
+        taskId: string;
+        payments: Array<{
+          url: string;
+          method: string;
+          maxAmountUsdc: string;
+          reason: string;
+          idempotencyKey?: string;
+          body?: unknown;
+        }>;
+      }>(name, args);
+      // Inject type literal and body for each payment — the MCP schema
+      // doesn't include `type` (it's an internal constant), but
+      // BatchPaymentRequestSchema requires it via PaymentRequestSchema.
+      const payments = input.payments.map((p) => ({
+        type: "x402_service_pay" as const,
+        url: p.url,
+        method: p.method,
+        maxAmountUsdc: p.maxAmountUsdc,
+        reason: p.reason,
+        idempotencyKey: p.idempotencyKey,
+        body: p.body,
+      }));
       return services.batchPayX402({
-        batchId: args.batchId as string,
-        taskId: args.taskId as string,
-        payments: args.payments as any[]
+        batchId: input.batchId,
+        taskId: input.taskId,
+        payments,
       }, ctx.signal);
+    }
 
     case "x402.list_receipts": {
       const limit = typeof args.limit === "number" ? args.limit : 100;
@@ -194,113 +239,185 @@ export async function handleMcpTool(
         allowedX402Hosts: config.allowedX402Hosts
       };
 
-    // ── ERC-8004 ──────────────────────────────────────────────────────
-    case "erc8004.prepare_register":
-      return services.prepareRegister({ metadataURI: args.metadataURI });
+    // ── ERC-8004 (Zod-validated) ──────────────────────────────────────
+    case "erc8004.prepare_register": {
+      const input = validateMcpToolInput<{ metadataURI: string }>(name, args);
+      return services.prepareRegister({ metadataURI: input.metadataURI });
+    }
 
-    // ── ERC-8183 ──────────────────────────────────────────────────────
-    case "erc8183.provider_run_job":
+    // ── ERC-8183 Provider (Zod-validated) ─────────────────────────────
+    case "erc8183.provider_run_job": {
+      const input = validateMcpToolInput<{
+        taskId: string;
+        jobId: string;
+        agentId: string;
+        provider: string;
+        description: string;
+        input: unknown;
+      }>(name, args);
       return services.runErc8183ProviderJob({
-        taskId: args.taskId as string,
-        jobId: args.jobId as string,
-        agentId: args.agentId as string,
-        provider: args.provider as string,
-        description: args.description as string,
-        input: args.input,
+        taskId: input.taskId,
+        jobId: input.jobId,
+        agentId: input.agentId,
+        provider: input.provider,
+        description: input.description,
+        input: input.input,
         metadata: {}
       });
+    }
 
     case "erc8183.provider_submit_deliverable": {
-      const hash = args.deliverableHash as string;
+      const input = validateMcpToolInput<{
+        jobId: string;
+        deliverableHash: string;
+      }>(name, args);
+      // Normalize hash: ensure 0x prefix and 66 chars
+      const hash = input.deliverableHash;
       const deliverableHash = (hash.startsWith("0x") && hash.length === 66
         ? hash
         : `0x${hash}`) as `0x${string}`;
       return services.submitDeliverableViaCircleCli({
-        jobId: args.jobId as string,
+        jobId: input.jobId,
         deliverableHash,
         optParams: "0x"
       }, ctx.signal);
     }
 
-    case "erc8183.provider_run_and_submit":
+    case "erc8183.provider_run_and_submit": {
+      const input = validateMcpToolInput<{
+        taskId: string;
+        jobId: string;
+        agentId: string;
+        provider: string;
+        description: string;
+        input: unknown;
+      }>(name, args);
       return services.runErc8183ProviderJob({
-        taskId: args.taskId as string,
-        jobId: args.jobId as string,
-        agentId: args.agentId as string,
-        provider: args.provider as string,
-        description: args.description as string,
-        input: args.input,
+        taskId: input.taskId,
+        jobId: input.jobId,
+        agentId: input.agentId,
+        provider: input.provider,
+        description: input.description,
+        input: input.input,
         metadata: {}
       });
+    }
 
     case "erc8183.provider_runtime_status":
       return mcp.getRuntimeContext();
 
-    // ── ERC-8183 Full Lifecycle ────────────────────────────────────────
-    case "erc8183.create_job":
+    // ── ERC-8183 Full Lifecycle (Zod-validated) ───────────────────────
+    case "erc8183.create_job": {
+      const input = validateMcpToolInput<{
+        provider: string;
+        evaluator: string;
+        expiredAt: string | number;
+        description: string;
+        hook?: string;
+      }>(name, args);
       return services.createJob({
-        provider: args.provider as string,
-        evaluator: args.evaluator as string,
-        expiredAt: args.expiredAt as string | number,
-        description: args.description as string,
-        hook: args.hook as string | undefined,
+        provider: input.provider,
+        evaluator: input.evaluator,
+        expiredAt: input.expiredAt,
+        description: input.description,
+        hook: input.hook,
       }, ctx.signal);
+    }
 
-    case "erc8183.set_budget":
+    case "erc8183.set_budget": {
+      const input = validateMcpToolInput<{
+        jobId: string;
+        amount: string;
+        optParams?: string;
+      }>(name, args);
       return services.setBudget({
-        jobId: args.jobId as string,
-        amount: args.amount as string,
-        optParams: args.optParams as string | undefined,
+        jobId: input.jobId,
+        amount: input.amount,
+        optParams: input.optParams,
       }, ctx.signal);
+    }
 
-    case "erc8183.approve_usdc":
+    case "erc8183.approve_usdc": {
+      const input = validateMcpToolInput<{ amount: string }>(name, args);
       return services.approveUsdcForErc8183({
-        amount: args.amount as string,
+        amount: input.amount,
       }, ctx.signal);
+    }
 
-    case "erc8183.fund_job":
+    case "erc8183.fund_job": {
+      const input = validateMcpToolInput<{
+        jobId: string;
+        optParams?: string;
+      }>(name, args);
       return services.fundJob({
-        jobId: args.jobId as string,
-        optParams: args.optParams as string | undefined,
+        jobId: input.jobId,
+        optParams: input.optParams,
       }, ctx.signal);
+    }
 
-    case "erc8183.complete_job":
+    case "erc8183.complete_job": {
+      const input = validateMcpToolInput<{
+        jobId: string;
+        reason: string;
+        optParams?: string;
+      }>(name, args);
       return services.completeJob({
-        jobId: args.jobId as string,
-        reason: args.reason as string,
-        optParams: args.optParams as string | undefined,
+        jobId: input.jobId,
+        reason: input.reason,
+        optParams: input.optParams,
       }, ctx.signal);
+    }
 
-    case "erc8183.reject_job":
+    case "erc8183.reject_job": {
+      const input = validateMcpToolInput<{
+        jobId: string;
+        reason: string;
+        optParams?: string;
+      }>(name, args);
       return services.rejectJob({
-        jobId: args.jobId as string,
-        reason: args.reason as string,
-        optParams: args.optParams as string | undefined,
+        jobId: input.jobId,
+        reason: input.reason,
+        optParams: input.optParams,
       }, ctx.signal);
+    }
 
-    case "erc8183.claim_refund":
+    case "erc8183.claim_refund": {
+      const input = validateMcpToolInput<{ jobId: string }>(name, args);
       return services.claimRefund({
-        jobId: args.jobId as string,
+        jobId: input.jobId,
       }, ctx.signal);
+    }
 
-    case "erc8183.set_provider":
+    case "erc8183.set_provider": {
+      const input = validateMcpToolInput<{
+        jobId: string;
+        provider: string;
+      }>(name, args);
       return services.setProvider({
-        jobId: args.jobId as string,
-        provider: args.provider as string,
+        jobId: input.jobId,
+        provider: input.provider,
       }, ctx.signal);
+    }
 
-    // ── ERC-8004 Register via Circle CLI ───────────────────────────────
-    case "erc8004.register_via_circle_cli":
+    // ── ERC-8004 Register via Circle CLI (Zod-validated) ──────────────
+    case "erc8004.register_via_circle_cli": {
+      const input = validateMcpToolInput<{ metadataURI: string }>(name, args);
       return services.registerIdentityViaCircleCli({
-        metadataURI: args.metadataURI as string,
+        metadataURI: input.metadataURI,
       }, ctx.signal);
+    }
 
-    // ── Gateway Deposit ────────────────────────────────────────────────
-    case "circle.gateway_deposit":
+    // ── Gateway Deposit (Zod-validated) ────────────────────────────────
+    case "circle.gateway_deposit": {
+      const input = validateMcpToolInput<{
+        amount: string;
+        method?: string;
+      }>(name, args);
       return services.gatewayDeposit({
-        amount: args.amount as string,
-        method: args.method as string | undefined,
+        amount: input.amount,
+        method: input.method,
       }, ctx.signal);
+    }
 
     // ── Skill Context Tools ───────────────────────────────────────────
     case "runner.skills_list": {
