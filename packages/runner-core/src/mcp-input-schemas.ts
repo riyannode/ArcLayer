@@ -72,7 +72,12 @@ export const Erc8183ProviderRunJobInputSchema = z.object({
 /** erc8183.provider_submit_deliverable — submit deliverable on-chain */
 export const Erc8183ProviderSubmitDeliverableInputSchema = z.object({
   jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string"),
-  deliverableHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/, "deliverableHash must be bytes32"),
+  // Accept both 0x-prefixed (66 chars) and bare hex (64 chars).
+  // Handler normalizes to 0x-prefixed before calling the service.
+  deliverableHash: z.string().regex(
+    /^(0x)?[a-fA-F0-9]{64}$/,
+    "deliverableHash must be 64 hex chars, optionally 0x-prefixed"
+  ),
 });
 
 /** erc8183.provider_run_and_submit — full lifecycle: run + submit */
