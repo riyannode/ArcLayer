@@ -65,7 +65,7 @@ export class CircleCliAdapter {
     this.timeoutMs = options.timeoutMs ?? 60_000;
   }
 
-  private async run(args: string[]): Promise<CircleCliResult> {
+  private async run(args: string[], signal?: AbortSignal): Promise<CircleCliResult> {
     const joined = args.join(" ");
 
     // ── Blocked commands ──────────────────────────────────────────────────
@@ -97,7 +97,8 @@ export class CircleCliAdapter {
     const { stdout, stderr } = await execFileAsync(this.bin, args, {
       timeout: this.timeoutMs,
       maxBuffer: 10 * 1024 * 1024,
-      env: { ...process.env, CIRCLE_ACCEPT_TERMS: "1" }
+      env: { ...process.env, CIRCLE_ACCEPT_TERMS: "1" },
+      signal,
     });
 
     const result: CircleCliResult = {
@@ -142,6 +143,8 @@ export class CircleCliAdapter {
     method?: string;
     body?: unknown;
     headers?: string[];
+    /** AbortSignal for cancellation (e.g. broker timeout). */
+    signal?: AbortSignal;
   }): Promise<CircleCliResult> {
     const args = ["services", "inspect", input.url, "--output", "json"];
 
@@ -149,7 +152,7 @@ export class CircleCliAdapter {
     if (input.body !== undefined) args.push("-d", JSON.stringify(input.body));
     for (const header of input.headers ?? []) args.push("-H", header);
 
-    return this.run(args);
+    return this.run(args, input.signal);
   }
 
   async payService(input: {
@@ -161,6 +164,8 @@ export class CircleCliAdapter {
     body?: unknown;
     headers?: string[];
     timeoutSeconds?: number;
+    /** AbortSignal for cancellation (e.g. broker timeout). */
+    signal?: AbortSignal;
   }): Promise<CircleCliResult> {
     const args = [
       "services",
@@ -181,7 +186,7 @@ export class CircleCliAdapter {
     for (const header of input.headers ?? []) args.push("-H", header);
     if (input.timeoutSeconds) args.push("--timeout", String(input.timeoutSeconds));
 
-    return this.run(args);
+    return this.run(args, input.signal);
   }
 
   // ── Allowlisted Arc Contract Writes ─────────────────────────────────────
@@ -212,6 +217,8 @@ export class CircleCliAdapter {
     contract: string;
     address: string;
     chain: string;
+    /** AbortSignal for cancellation (e.g. broker timeout). */
+    signal?: AbortSignal;
   }): Promise<CircleCliResult> {
     if (!CircleCliAdapter.ERC8183_SIGNATURES.has(input.signature)) {
       throw new RunnerError(
@@ -236,7 +243,7 @@ export class CircleCliAdapter {
       "json"
     ];
 
-    return this.run(args);
+    return this.run(args, input.signal);
   }
 
   /**
@@ -249,6 +256,8 @@ export class CircleCliAdapter {
     spenderAddress: string;
     walletAddress: string;
     chain: string;
+    /** AbortSignal for cancellation (e.g. broker timeout). */
+    signal?: AbortSignal;
   }): Promise<CircleCliResult> {
     const args = [
       "wallet",
@@ -266,7 +275,7 @@ export class CircleCliAdapter {
       "json"
     ];
 
-    return this.run(args);
+    return this.run(args, input.signal);
   }
 
   /**
@@ -278,6 +287,8 @@ export class CircleCliAdapter {
     address: string;
     chain: string;
     method?: string;
+    /** AbortSignal for cancellation (e.g. broker timeout). */
+    signal?: AbortSignal;
   }): Promise<CircleCliResult> {
     // Default method: direct for ARC-TESTNET, eco only for BASE/BASE-SEPOLIA
     let method = input.method;
@@ -309,7 +320,7 @@ export class CircleCliAdapter {
       "json"
     ];
 
-    return this.run(args);
+    return this.run(args, input.signal);
   }
 
   /**
@@ -323,6 +334,8 @@ export class CircleCliAdapter {
     address: string;
     chain: string;
     allowRegister?: boolean;
+    /** AbortSignal for cancellation (e.g. broker timeout). */
+    signal?: AbortSignal;
   }): Promise<CircleCliResult> {
     if (input.signature === "register(string)" && !input.allowRegister) {
       throw new RunnerError(
@@ -351,7 +364,7 @@ export class CircleCliAdapter {
       "json"
     ];
 
-    return this.run(args);
+    return this.run(args, input.signal);
   }
 
   /**
@@ -363,6 +376,8 @@ export class CircleCliAdapter {
     params: string[];
     contract: string;
     chain: string;
+    /** AbortSignal for cancellation. */
+    signal?: AbortSignal;
   }): Promise<CircleCliResult> {
     const args = [
       "contract",
@@ -377,6 +392,6 @@ export class CircleCliAdapter {
       "json"
     ];
 
-    return this.run(args);
+    return this.run(args, input.signal);
   }
 }

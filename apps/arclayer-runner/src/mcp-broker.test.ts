@@ -3,6 +3,7 @@ import {
   McpToolBroker,
   BrokerError,
   BrokerErrorCode,
+  isNonIdempotentWrite,
   type ToolBudgetConfig,
 } from "./mcp-broker";
 
@@ -623,6 +624,131 @@ describe("McpToolBroker", () => {
     it("getAuditLog returns readonly array", () => {
       const log = broker.getAuditLog();
       expect(log).toHaveLength(0);
+    });
+  });
+
+  // ── Non-idempotent write tool timeout ──────────────────────────────────
+
+  describe("non-idempotent write tool defaults", () => {
+    it("isNonIdempotentWrite returns true for x402.pay", () => {
+      expect(isNonIdempotentWrite("x402.pay")).toBe(true);
+    });
+
+    it("isNonIdempotentWrite returns true for erc8183.submit", () => {
+      expect(isNonIdempotentWrite("erc8183.submit")).toBe(true);
+    });
+
+    it("isNonIdempotentWrite returns true for all erc8183.* tools", () => {
+      const tools = [
+        "erc8183.submit", "erc8183.fund", "erc8183.complete",
+        "erc8183.reject", "erc8183.claim_refund", "erc8183.set_provider",
+        "erc8183.create_job", "erc8183.set_budget",
+      ];
+      for (const tool of tools) {
+        expect(isNonIdempotentWrite(tool)).toBe(true);
+      }
+    });
+
+    it("isNonIdempotentWrite returns true for circle write tools", () => {
+      expect(isNonIdempotentWrite("erc8004.register_via_circle_cli")).toBe(true);
+      expect(isNonIdempotentWrite("circle.approve_usdc")).toBe(true);
+      expect(isNonIdempotentWrite("circle.gateway_deposit")).toBe(true);
+    });
+
+    it("isNonIdempotentWrite returns false for read-only tools", () => {
+      expect(isNonIdempotentWrite("runner.health")).toBe(false);
+      expect(isNonIdempotentWrite("x402.inspect")).toBe(false);
+      expect(isNonIdempotentWrite("runner.manifest")).toBe(false);
+    });
+
+    it("getTimeoutMs returns 120s for non-idempotent write tools by default", () => {
+      const defaultBroker = new McpToolBroker();
+      expect(defaultBroker.getTimeoutMs("x402.pay")).toBe(120_000);
+      expect(defaultBroker.getTimeoutMs("erc8183.submit")).toBe(120_000);
+      expect(defaultBroker.getTimeoutMs("erc8183.fund")).toBe(120_000);
+      expect(defaultBroker.getTimeoutMs("circle.gateway_deposit")).toBe(120_000);
+    });
+
+    it("getTimeoutMs returns 30s for non-write tools by default", () => {
+      const defaultBroker = new McpToolBroker();
+      expect(defaultBroker.getTimeoutMs("runner.health")).toBe(30_000);
+      expect(defaultBroker.getTimeoutMs("x402.inspect")).toBe(30_000);
+    });
+
+    it("getTimeoutMs respects explicit timeoutOverridesMs over write tool default", () => {
+      const customBroker = new McpToolBroker({
+        timeoutOverridesMs: { "x402.pay": 60_000 },
+      });
+      expect(customBroker.getTimeoutMs("x402.pay")).toBe(60_000);
+    });
+
+    it("getTimeoutMs respects explicit defaultTimeoutMs over write tool default", () => {
+      const customBroker = new McpToolBroker({
+        defaultTimeoutMs: 45_000,
+      });
+      expect(customBroker.getTimeoutMs("x402.pay")).toBe(45_000);
+      expect(customBroker.getTimeoutMs("runner.health")).toBe(45_000);
+    });
+  });
+
+  // ── Timeout audit distinction ──────────────────────────────────────────
+
+  describe("timeout audit distinction", () => {
+    it("recordFailure with timedOut=true sets timedOut on audit entry for write tools", () => {
+      broker.recordFailure(
+        "x402.pay",
+        { url: "https://api.test", maxAmountUsdc: "1.0" },
+        new BrokerError(BrokerErrorCode.TOOL_TIMEOUT, "timed out", {}),
+        5000,
+        true
+      );
+
+      const log = broker.getAuditLog();
+      expect(log).toHaveLength(1);
+      expect(log[0].ok).toBe(false);
+      expect(log[0].errorCode).toBe(BrokerErrorCode.TOOL_TIMEOUT);
+      expect(log[0].timedOut).toBe(true);
+    });
+
+    it("recordFailure with timedOut=true does NOT set timedOut for non-write tools", () => {
+      broker.recordFailure(
+        "runner.health",
+        {},
+        new BrokerError(BrokerErrorCode.TOOL_TIMEOUT, "timed out", {}),
+        5000,
+        true
+      );
+
+      const log = broker.getAuditLog();
+      expect(log).toHaveLength(1);
+      expect(log[0].timedOut).toBeUndefined();
+    });
+
+    it("recordFailure with timedOut=false does NOT set timedOut for write tools", () => {
+      broker.recordFailure(
+        "x402.pay",
+        { url: "https://api.test", maxAmountUsdc: "1.0" },
+        new Error("some error"),
+        5000,
+        false
+      );
+
+      const log = broker.getAuditLog();
+      expect(log).toHaveLength(1);
+      expect(log[0].timedOut).toBeUndefined();
+    });
+
+    it("recordFailure default timedOut is false", () => {
+      broker.recordFailure(
+        "x402.pay",
+        { url: "https://api.test", maxAmountUsdc: "1.0" },
+        new Error("some error"),
+        5000
+      );
+
+      const log = broker.getAuditLog();
+      expect(log).toHaveLength(1);
+      expect(log[0].timedOut).toBeUndefined();
     });
   });
 });

@@ -21,6 +21,12 @@ export type McpToolContext = {
   skill: { content: string; sha256: string; path: string };
   /** MCP Tool Broker — per-session budget, timeout, audit. Optional for backward compat. */
   broker?: McpToolBroker;
+  /**
+   * AbortSignal propagated from the broker timeout.
+   * When the broker fires a timeout, this signal is aborted so that
+   * underlying Circle CLI subprocesses and HTTP fetches can be cancelled.
+   */
+  signal?: AbortSignal;
 };
 
 export async function handleMcpTool(
@@ -150,7 +156,7 @@ export async function handleMcpTool(
         maxAmountUsdc: "0",
         reason: "inspect",
         body: args.body
-      });
+      }, ctx.signal);
 
     case "x402.pay":
       return services.payX402({
@@ -161,14 +167,14 @@ export async function handleMcpTool(
         reason: args.reason as string,
         idempotencyKey: args.idempotencyKey as string | undefined,
         body: args.body
-      });
+      }, ctx.signal);
 
     case "x402.batch_pay":
       return services.batchPayX402({
         batchId: args.batchId as string,
         taskId: args.taskId as string,
         payments: args.payments as any[]
-      });
+      }, ctx.signal);
 
     case "x402.list_receipts": {
       const limit = typeof args.limit === "number" ? args.limit : 100;
@@ -213,7 +219,7 @@ export async function handleMcpTool(
         jobId: args.jobId as string,
         deliverableHash,
         optParams: "0x"
-      });
+      }, ctx.signal);
     }
 
     case "erc8183.provider_run_and_submit":
@@ -238,63 +244,63 @@ export async function handleMcpTool(
         expiredAt: args.expiredAt as string | number,
         description: args.description as string,
         hook: args.hook as string | undefined,
-      });
+      }, ctx.signal);
 
     case "erc8183.set_budget":
       return services.setBudget({
         jobId: args.jobId as string,
         amount: args.amount as string,
         optParams: args.optParams as string | undefined,
-      });
+      }, ctx.signal);
 
     case "erc8183.approve_usdc":
       return services.approveUsdcForErc8183({
         amount: args.amount as string,
-      });
+      }, ctx.signal);
 
     case "erc8183.fund_job":
       return services.fundJob({
         jobId: args.jobId as string,
         optParams: args.optParams as string | undefined,
-      });
+      }, ctx.signal);
 
     case "erc8183.complete_job":
       return services.completeJob({
         jobId: args.jobId as string,
         reason: args.reason as string,
         optParams: args.optParams as string | undefined,
-      });
+      }, ctx.signal);
 
     case "erc8183.reject_job":
       return services.rejectJob({
         jobId: args.jobId as string,
         reason: args.reason as string,
         optParams: args.optParams as string | undefined,
-      });
+      }, ctx.signal);
 
     case "erc8183.claim_refund":
       return services.claimRefund({
         jobId: args.jobId as string,
-      });
+      }, ctx.signal);
 
     case "erc8183.set_provider":
       return services.setProvider({
         jobId: args.jobId as string,
         provider: args.provider as string,
-      });
+      }, ctx.signal);
 
     // ── ERC-8004 Register via Circle CLI ───────────────────────────────
     case "erc8004.register_via_circle_cli":
       return services.registerIdentityViaCircleCli({
         metadataURI: args.metadataURI as string,
-      });
+      }, ctx.signal);
 
     // ── Gateway Deposit ────────────────────────────────────────────────
     case "circle.gateway_deposit":
       return services.gatewayDeposit({
         amount: args.amount as string,
         method: args.method as string | undefined,
-      });
+      }, ctx.signal);
 
     // ── Skill Context Tools ───────────────────────────────────────────
     case "runner.skills_list": {

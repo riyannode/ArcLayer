@@ -73,6 +73,13 @@ export type AuditEntry = {
   errorMessage?: string;
   /** USDC cost if this was a payment tool */
   costUsdc?: string;
+  /**
+   * true when the broker timed out but the underlying operation may still
+   * complete (non-idempotent on-chain writes, Circle CLI subprocesses).
+   * Distinguishes "client timed out, operation may have completed" from
+   * "operation actually failed".
+   */
+  timedOut?: boolean;
 };
 
 export type BrokerSessionState = {
@@ -81,6 +88,38 @@ export type BrokerSessionState = {
   totalCostMicros: bigint;
   auditLog: AuditEntry[];
 };
+
+// ── Non-idempotent write tools ──────────────────────────────────────────
+// These tools perform on-chain writes that cannot be safely retried.
+// They get a higher default timeout (120s vs 30s) because Circle CLI
+// subprocess and on-chain confirmation can be slow.
+
+const NON_IDEMPOTENT_WRITE_TOOLS = new Set([
+  "x402.pay",
+  "x402.batch_pay",
+  "erc8183.submit",
+  "erc8183.fund",
+  "erc8183.complete",
+  "erc8183.reject",
+  "erc8183.claim_refund",
+  "erc8183.set_provider",
+  "erc8183.create_job",
+  "erc8183.set_budget",
+  "erc8004.register_via_circle_cli",
+  "circle.approve_usdc",
+  "circle.gateway_deposit",
+]);
+
+/** Default timeout for non-idempotent write tools (120 seconds). */
+const WRITE_TOOL_TIMEOUT_MS = 120_000;
+
+/**
+ * Check if a tool is a non-idempotent write that may have side effects
+ * even after the broker reports a timeout.
+ */
+export function isNonIdempotentWrite(toolName: string): boolean {
+  return NON_IDEMPOTENT_WRITE_TOOLS.has(toolName);
+}
 
 // ── Args Redaction ────────────────────────────────────────────────────────
 
@@ -368,11 +407,13 @@ export class McpToolBroker {
 
   /**
    * Get timeout for a specific tool.
+   * Non-idempotent write tools default to 120s (vs 30s) because Circle CLI
+   * subprocesses and on-chain confirmation can be slow.
    */
   getTimeoutMs(toolName: string): number {
     return this.budget.timeoutOverridesMs?.[toolName]
       ?? this.budget.defaultTimeoutMs
-      ?? 30_000;
+      ?? (NON_IDEMPOTENT_WRITE_TOOLS.has(toolName) ? WRITE_TOOL_TIMEOUT_MS : 30_000);
   }
 
   /**
@@ -505,12 +546,16 @@ export class McpToolBroker {
   /**
    * Record a failed tool call in the audit log.
    * Releases the call slot reserved by preExecute.
+   *
+   * @param timedOut - true when the failure was a broker timeout and the
+   *   underlying operation may still complete (non-idempotent writes).
    */
   recordFailure(
     toolName: string,
     args: Record<string, unknown>,
     error: unknown,
-    durationMs: number
+    durationMs: number,
+    timedOut = false
   ): void {
     try {
       const isBrokerError = error instanceof BrokerError;
@@ -522,6 +567,7 @@ export class McpToolBroker {
         outputBytes: 0,
         errorCode: isBrokerError ? error.code : BrokerErrorCode.INTERNAL_ERROR,
         errorMessage: error instanceof Error ? error.message : "Unknown error",
+        timedOut: timedOut && isNonIdempotentWrite(toolName) ? true : undefined,
       });
     } finally {
       this.releaseCallSlot();
