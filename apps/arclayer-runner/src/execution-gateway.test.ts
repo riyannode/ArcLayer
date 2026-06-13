@@ -303,6 +303,64 @@ describe("ExecutionGateway", () => {
     });
   });
 
+  // ── Stable Idempotency Key (approveUsdc pattern) ──────────────────
+
+  describe("stable idempotency key for approvals", () => {
+    it("retry with same stable key after unknown throws RECONCILIATION_REQUIRED", async () => {
+      // Simulate approveUsdc with a stable caller-provided key
+      const stableKey = "approveUsdc:job-42:0.01";
+      const input = makeInput({ idempotencyKey: stableKey });
+
+      // First execution → unknown (timeout)
+      const timeoutFn: CircleCliExecuteFn = async () => {
+        const err = new Error("timeout");
+        err.name = "AbortError";
+        throw err;
+      };
+      const result1 = await gateway.execute(input, timeoutFn);
+      expect(result1.state).toBe("unknown");
+
+      // Retry with SAME stable key → blocked
+      await expect(
+        gateway.execute(input, vi.fn())
+      ).rejects.toThrow(/Reconciliation required/);
+
+      // Original record preserved
+      expect(gateway.operationCount).toBe(1);
+    });
+
+    it("retry with same stable key after broadcast throws OPERATION_IN_PROGRESS", async () => {
+      const stableKey = "approveUsdc:job-42:0.01";
+      const input = makeInput({ idempotencyKey: stableKey });
+
+      // First execution → broadcast (txHash, no explicit confirmation)
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeBroadcastCircleCliResult());
+      const result1 = await gateway.execute(input, executeFn);
+      expect(result1.state).toBe("broadcast");
+
+      // Retry with SAME stable key → blocked
+      await expect(
+        gateway.execute(input, vi.fn())
+      ).rejects.toThrow(/already in state broadcast/);
+    });
+
+    it("different stable key treated as separate intentional approval", async () => {
+      const input1 = makeInput({ idempotencyKey: "approveUsdc:job-42:0.01" });
+      const input2 = makeInput({ idempotencyKey: "approveUsdc:job-99:0.01" });
+
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeMockCircleCliResult());
+
+      // Both should succeed independently
+      const result1 = await gateway.execute(input1, executeFn);
+      const result2 = await gateway.execute(input2, executeFn);
+
+      expect(result1.state).toBe("confirmed");
+      expect(result2.state).toBe("confirmed");
+      expect(result1.operationId).not.toBe(result2.operationId);
+      expect(executeFn).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe("direct CircleCliAdapter access", () => {
     it("gateway owns the Circle CLI calls — executeFn receives circle reference", async () => {
       const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeMockCircleCliResult());
