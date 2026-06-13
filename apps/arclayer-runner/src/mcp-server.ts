@@ -216,8 +216,11 @@ export async function handleMcpRequest(
         const startTime = Date.now();
 
         try {
+          // Pass broker into ctx so introspection tools (runner.broker_status,
+          // runner.audit_log) can access it via ctx.broker.
+          const ctxWithBroker = toolBroker ? { ...ctx, broker: toolBroker } : ctx;
           const result = await withTimeout(
-            handleMcpTool(toolName, toolArgs, ctx),
+            handleMcpTool(toolName, toolArgs, ctxWithBroker),
             timeoutMs,
             toolName
           );

@@ -418,6 +418,118 @@ describe("McpToolBroker", () => {
     });
   });
 
+  // ── Blocker 3: Pre-execution payment budget check ────────────────────
+
+  describe("Blocker 3 — pre-execution payment budget check", () => {
+    it("x402.pay maxAmountUsdc=100 blocked when budget is 10 and spent is 0", () => {
+      const smallBroker = new McpToolBroker({
+        maxCalls: 100,
+        maxTotalUsdc: "10",
+      });
+
+      expect(() =>
+        smallBroker.preExecute("x402.pay", {
+          url: "https://api.example.com",
+          maxAmountUsdc: "100",
+          reason: "test",
+        })
+      ).toThrow(BrokerError);
+
+      try {
+        smallBroker.preExecute("x402.pay", {
+          url: "https://api.example.com",
+          maxAmountUsdc: "100",
+          reason: "test",
+        });
+      } catch (e) {
+        expect(e).toBeInstanceOf(BrokerError);
+        expect((e as BrokerError).code).toBe(BrokerErrorCode.BUDGET_EXCEEDED);
+        expect((e as BrokerError).message).toContain("exceeds remaining budget");
+      }
+    });
+
+    it("batch sum over remaining budget is blocked", () => {
+      const smallBroker = new McpToolBroker({
+        maxCalls: 100,
+        maxTotalUsdc: "0.5",
+      });
+
+      expect(() =>
+        smallBroker.preExecute("x402.batch_pay", {
+          batchId: "b1",
+          taskId: "t1",
+          payments: [
+            { url: "https://a.com", maxAmountUsdc: "0.3", reason: "r1" },
+            { url: "https://b.com", maxAmountUsdc: "0.4", reason: "r2" }, // 0.3 + 0.4 = 0.7 > 0.5
+          ],
+        })
+      ).toThrow(BrokerError);
+    });
+
+    it("payment within remaining budget passes", () => {
+      const smallBroker = new McpToolBroker({
+        maxCalls: 100,
+        maxTotalUsdc: "1.0",
+      });
+
+      expect(() =>
+        smallBroker.preExecute("x402.pay", {
+          url: "https://api.example.com",
+          maxAmountUsdc: "0.5",
+          reason: "test",
+        })
+      ).not.toThrow();
+
+      // Clean up
+      smallBroker.postExecute("x402.pay", { url: "https://api.example.com", maxAmountUsdc: "0.5", reason: "test" }, { ok: true }, 10);
+    });
+
+    it("postExecute still records committed cost", () => {
+      const smallBroker = new McpToolBroker({
+        maxCalls: 100,
+        maxTotalUsdc: "10",
+      });
+
+      smallBroker.preExecute("x402.pay", {
+        url: "https://api.example.com",
+        maxAmountUsdc: "2.5",
+        reason: "test",
+      });
+      smallBroker.postExecute("x402.pay", { url: "https://api.example.com", maxAmountUsdc: "2.5", reason: "test" }, { ok: true }, 100);
+
+      expect(smallBroker.getState().totalCostMicros).toBe(2500000n); // 2.5 USDC
+
+      const log = smallBroker.getAuditLog();
+      expect(log).toHaveLength(1);
+      expect(log[0].costUsdc).toBe("2.500000");
+    });
+
+    it("second payment blocked after first consumed most of budget", () => {
+      const smallBroker = new McpToolBroker({
+        maxCalls: 100,
+        maxTotalUsdc: "1.0",
+      });
+
+      // First: 0.8 USDC — passes
+      smallBroker.preExecute("x402.pay", {
+        url: "https://a.com",
+        maxAmountUsdc: "0.8",
+        reason: "r1",
+      });
+      smallBroker.postExecute("x402.pay", { url: "https://a.com", maxAmountUsdc: "0.8", reason: "r1" }, { ok: true }, 10);
+      expect(smallBroker.getState().totalCostMicros).toBe(800000n);
+
+      // Second: 0.5 USDC — 0.8 + 0.5 = 1.3 > 1.0 — should fail
+      expect(() =>
+        smallBroker.preExecute("x402.pay", {
+          url: "https://b.com",
+          maxAmountUsdc: "0.5",
+          reason: "r2",
+        })
+      ).toThrow(BrokerError);
+    });
+  });
+
   // ── Full Lifecycle (preExecute + postExecute) ─────────────────────────
 
   describe("full lifecycle", () => {
