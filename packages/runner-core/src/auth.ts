@@ -171,13 +171,15 @@ export function verifyHmacSignature(
  * @param secret - Runner HMAC secret
  * @param rawBody - Raw request body as Buffer (must be read BEFORE JSON parse)
  * @param pathname - Request pathname (for payload)
- * @param skewMs - Timestamp skew tolerance in ms
+ * @param requestTarget - Request path including query string (e.g. "/ledger?limit=1").
+ *                      Must be url.pathname + url.search. Route matching uses pathname only,
+ *                      but HMAC verification covers the full request target including query.
  */
 export function assertHmacAuthenticated(
   req: IncomingMessage,
   secret: string,
   rawBody: Buffer,
-  pathname: string,
+  requestTarget: string,
   skewMs: number = DEFAULT_HMAC_SKEW_MS
 ): { timestamp: string; nonce: string } {
   // 1. Extract headers
@@ -199,9 +201,9 @@ export function assertHmacAuthenticated(
   // 4. Compute body hash
   const bodyHash = sha256Buffer(rawBody);
 
-  // 5. Build payload
+  // 5. Build payload — uses full request target (pathname + query string)
   const method = (req.method || "GET").toUpperCase();
-  const payload = buildHmacPayload(method, pathname, headers.timestamp, headers.nonce, bodyHash);
+  const payload = buildHmacPayload(method, requestTarget, headers.timestamp, headers.nonce, bodyHash);
 
   // 6. Verify signature
   verifyHmacSignature(secret, payload, headers.signature);

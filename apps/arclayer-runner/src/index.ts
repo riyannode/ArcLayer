@@ -100,7 +100,24 @@ async function main() {
         {
           method: "POST",
           path: "/runtime/run",
-          handler: async ({ body }) => services.runGeneric(body)
+          handler: async ({ body, reserveTaskId, markTaskCompleted, markTaskFailed }) => {
+            // Reserve taskId AFTER validation passes (done inside runGeneric).
+            // We wrap the dispatch to track completion.
+            const task = body as Record<string, unknown>;
+            const taskId = task?.taskId as string;
+            const agentId = task?.agentId as string;
+            if (taskId && agentId && reserveTaskId) {
+              reserveTaskId(taskId, agentId);
+            }
+            try {
+              const result = await services.runGeneric(body);
+              if (taskId && agentId && markTaskCompleted) markTaskCompleted(taskId, agentId);
+              return result;
+            } catch (error) {
+              if (taskId && agentId && markTaskFailed) markTaskFailed(taskId, agentId);
+              throw error;
+            }
+          }
         },
         {
           method: "POST",
@@ -110,7 +127,22 @@ async function main() {
         {
           method: "POST",
           path: "/erc8183/provider/run",
-          handler: async ({ body }) => services.runErc8183ProviderJob(body)
+          handler: async ({ body, reserveTaskId, markTaskCompleted, markTaskFailed }) => {
+            const task = body as Record<string, unknown>;
+            const taskId = task?.taskId as string;
+            const agentId = task?.agentId as string;
+            if (taskId && agentId && reserveTaskId) {
+              reserveTaskId(taskId, agentId);
+            }
+            try {
+              const result = await services.runErc8183ProviderJob(body);
+              if (taskId && agentId && markTaskCompleted) markTaskCompleted(taskId, agentId);
+              return result;
+            } catch (error) {
+              if (taskId && agentId && markTaskFailed) markTaskFailed(taskId, agentId);
+              throw error;
+            }
+          }
         },
         {
           method: "POST",

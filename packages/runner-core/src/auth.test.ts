@@ -305,11 +305,65 @@ describe("assertHmacAuthenticated", () => {
     const nonce = "nonce";
     // Sign for /run but request comes to /x402/pay
     const sig = computeValidSignature(secret, "POST", "/run", now, nonce, bodyHash);
-
     const req = makeHmacReq({ method: "POST", path: "/run", timestamp: now, nonce, signature: sig });
     expectRunnerError(
       () => assertHmacAuthenticated(req, secret, body, "/x402/pay"),
       "AUTH_INVALID_SIGNATURE"
     );
+  });
+
+  // ── Query string tests (requestTarget = pathname + search) ─────────────
+
+  it("accepts signed /ledger?limit=1 when requested with same query", () => {
+    const body = Buffer.alloc(0);
+    const bodyHash = sha256Buffer(body);
+    const now = new Date().toISOString();
+    const nonce = "nonce-qs-1";
+    const requestTarget = "/ledger?limit=1";
+    const sig = computeValidSignature(secret, "GET", requestTarget, now, nonce, bodyHash);
+
+    const req = makeHmacReq({ method: "GET", timestamp: now, nonce, signature: sig });
+    const result = assertHmacAuthenticated(req, secret, body, requestTarget);
+    expect(result.nonce).toBe(nonce);
+  });
+
+  it("rejects signed /ledger?limit=1 when requested with /ledger?limit=1000", () => {
+    const body = Buffer.alloc(0);
+    const bodyHash = sha256Buffer(body);
+    const now = new Date().toISOString();
+    const nonce = "nonce-qs-2";
+    const sig = computeValidSignature(secret, "GET", "/ledger?limit=1", now, nonce, bodyHash);
+
+    const req = makeHmacReq({ method: "GET", timestamp: now, nonce, signature: sig });
+    expectRunnerError(
+      () => assertHmacAuthenticated(req, secret, body, "/ledger?limit=1000"),
+      "AUTH_INVALID_SIGNATURE"
+    );
+  });
+
+  it("rejects signed /receipts?limit=1 when requested with /receipts?limit=50", () => {
+    const body = Buffer.alloc(0);
+    const bodyHash = sha256Buffer(body);
+    const now = new Date().toISOString();
+    const nonce = "nonce-qs-3";
+    const sig = computeValidSignature(secret, "GET", "/receipts?limit=1", now, nonce, bodyHash);
+
+    const req = makeHmacReq({ method: "GET", timestamp: now, nonce, signature: sig });
+    expectRunnerError(
+      () => assertHmacAuthenticated(req, secret, body, "/receipts?limit=50"),
+      "AUTH_INVALID_SIGNATURE"
+    );
+  });
+
+  it("path without query string still works", () => {
+    const body = Buffer.alloc(0);
+    const bodyHash = sha256Buffer(body);
+    const now = new Date().toISOString();
+    const nonce = "nonce-qs-4";
+    const sig = computeValidSignature(secret, "POST", "/run", now, nonce, bodyHash);
+
+    const req = makeHmacReq({ method: "POST", timestamp: now, nonce, signature: sig });
+    const result = assertHmacAuthenticated(req, secret, body, "/run");
+    expect(result.nonce).toBe(nonce);
   });
 });
