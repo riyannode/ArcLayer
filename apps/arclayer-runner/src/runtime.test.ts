@@ -1099,3 +1099,78 @@ describe("full result size cap", () => {
     expect(() => validateOpenClawResponse(result, 1_048_576)).not.toThrow();
   });
 });
+
+// ── Patch: timeout preserved during body read ─────────────────────────
+
+describe("OpenClaw body read timeout preservation", () => {
+  it("AbortError during response.json() maps to RUNTIME_TIMEOUT, not RUNTIME_INVALID_RESPONSE", async () => {
+    // Server sends 200 headers + valid JSON content-type, then stalls mid-body
+    const stallServer = createServer((_req, res) => {
+      res.writeHead(200, {
+        "content-type": "application/json",
+        "transfer-encoding": "chunked",
+      });
+      // Send partial valid JSON to keep fetch happy, then stall
+      res.write('{"ok":true,"status":"compl');
+      // Never send the rest — body read will abort
+    });
+    await new Promise<void>((resolve) => stallServer.listen(0, "127.0.0.1", resolve));
+    const address = stallServer.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+
+    // Very short timeout to force AbortError during body read
+    const adapter = new OpenClawRuntimeConnector(`http://127.0.0.1:${port}`, "/run", undefined, 300);
+
+    try {
+      await adapter.run(makeTask());
+      expect.fail("should have thrown");
+    } catch (error: any) {
+      // Must be RUNTIME_TIMEOUT, not RUNTIME_INVALID_RESPONSE
+      expect(error.code).toBe("RUNTIME_TIMEOUT");
+    } finally {
+      stallServer.close();
+    }
+  });
+});
+
+// ── Patch: provider/evaluator in sanitizeTaskForUntrustedRuntime ──────
+
+describe("sanitizeTaskForUntrustedRuntime preserves provider/evaluator", () => {
+  it("keeps provider and evaluator metadata", () => {
+    const task = makeTask({
+      metadata: {
+        jobId: "123",
+        provider: "0xaaaa",
+        evaluator: "0xbbbb",
+        runnerSecret: "strip-me",
+      },
+    });
+    const sanitized = sanitizeTaskForUntrustedRuntime(task);
+
+    expect(sanitized.metadata.provider).toBe("0xaaaa");
+    expect(sanitized.metadata.evaluator).toBe("0xbbbb");
+    expect(sanitized.metadata.jobId).toBe("123");
+    expect(sanitized.metadata.runnerSecret).toBeUndefined();
+  });
+});
+
+// ── Patch: bearer JWT redaction ───────────────────────────────────────
+
+describe("bearer JWT redaction", () => {
+  it("redacts dotted JWT token completely", () => {
+    const error = new Error("ECONNREFUSED: bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U at 127.0.0.1:8787");
+    const mapped = mapRuntimeError(error);
+    expect(mapped.code).toBe("RUNTIME_UNAVAILABLE");
+    expect(mapped.message).not.toContain("eyJhbGciOiJIUzI1NiJ9");
+    expect(mapped.message).not.toContain("eyJzdWIiOiIxMjM0NTY3ODkwIn0");
+    expect(mapped.message).not.toContain("dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U");
+    expect(mapped.message).toContain("[REDACTED]");
+  });
+
+  it("redacts simple bearer token (no dots)", () => {
+    const error = new Error("auth failed: bearer sk-abc_123-def at host");
+    const mapped = mapRuntimeError(error);
+    expect(mapped.message).not.toContain("sk-abc_123-def");
+    expect(mapped.message).toContain("[REDACTED]");
+  });
+});
