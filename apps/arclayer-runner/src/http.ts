@@ -23,10 +23,22 @@ export type HandlerContext = {
 export type RouteHandler = (ctx: HandlerContext) => Promise<unknown>;
 
 /**
- * Raw handler for routes that need direct req/res access (e.g. JSON-RPC MCP).
- * If rawHandler is set, the standard body reading and JSON response are skipped.
+ * Raw handler context — same as HandlerContext but for routes that write
+ * directly to res (e.g. JSON-RPC MCP). Auth and body reading are already
+ * done by the router; rawHandler MUST NOT re-read the request stream
+ * or re-verify auth.
  */
-export type RawRouteHandler = (req: IncomingMessage, res: ServerResponse, url: URL) => Promise<void>;
+export type RawHandlerContext = {
+  req: IncomingMessage;
+  res: ServerResponse;
+  url: URL;
+  /** Raw body buffer as received (before JSON parse) */
+  rawBody: Buffer;
+  /** Parsed JSON body (undefined for GET/HEAD or empty body) */
+  body: unknown;
+};
+
+export type RawRouteHandler = (ctx: RawHandlerContext) => Promise<void>;
 
 type Route = {
   method: string;
@@ -144,61 +156,51 @@ export function createRouter(
           const body = parseBody(rawBody, req.method ?? "GET");
 
           // Task idempotency check (if body has taskId)
-          if (body && typeof body === "object" && "taskId" in body) {
-            const taskId = (body as { taskId: string }).taskId;
-            const agentId = (body as { agentId: string }).agentId ?? "unknown";
+          if (body && typeof body === "object" && "taskId" in (body as Record<string, unknown>)) {
+            const taskId = String((body as Record<string, unknown>).taskId ?? "");
+            const agentId = String((body as Record<string, unknown>).agentId ?? "unknown");
             if (taskId) {
               taskIdempotency.checkAndMark(taskId, agentId);
             }
           }
 
-          // Raw handler (for MCP JSON-RPC, etc.)
+          // Dispatch to handler — router owns auth, handler does NOT re-read req
           if (route.rawHandler) {
-            // For raw handlers, we still need to re-inject the body
-            // since they read from req directly. But auth is already done.
-            await route.rawHandler(req, res, url);
-            return;
+            await route.rawHandler({ req, res, url, rawBody, body });
+          } else {
+            const result = await route.handler!({ req, res, url, body, rawBody });
+            send(res, 200, result ?? { ok: true });
           }
-
-          const result = await route.handler!({
-            req, res, url, body,
-            rawBody
-          });
-          send(res, 200, result ?? { ok: true });
 
         } else {
           // Legacy Bearer auth mode
           assertAuthenticated(req, runnerSecret);
 
-          // Raw handler
           if (route.rawHandler) {
-            await route.rawHandler(req, res, url);
-            return;
+            // Bearer mode: still need to read body for rawHandler
+            const rawBody = await readRawBody(req, req.method ?? "GET");
+            const body = parseBody(rawBody, req.method ?? "GET");
+            await route.rawHandler({ req, res, url, rawBody, body });
+          } else {
+            const rawBody = await readRawBody(req, req.method ?? "GET");
+            const body = parseBody(rawBody, req.method ?? "GET");
+            const result = await route.handler!({ req, res, url, body, rawBody });
+            send(res, 200, result ?? { ok: true });
           }
-
-          const rawBody = await readRawBody(req, req.method ?? "GET");
-          const body = parseBody(rawBody, req.method ?? "GET");
-          const result = await route.handler!({
-            req, res, url, body,
-            rawBody
-          });
-          send(res, 200, result ?? { ok: true });
         }
 
       } else {
         // Public route — no auth needed
         if (route.rawHandler) {
-          await route.rawHandler(req, res, url);
-          return;
+          const rawBody = await readRawBody(req, req.method ?? "GET");
+          const body = parseBody(rawBody, req.method ?? "GET");
+          await route.rawHandler({ req, res, url, rawBody, body });
+        } else {
+          const rawBody = await readRawBody(req, req.method ?? "GET");
+          const body = parseBody(rawBody, req.method ?? "GET");
+          const result = await route.handler!({ req, res, url, body, rawBody });
+          send(res, 200, result ?? { ok: true });
         }
-
-        const rawBody = await readRawBody(req, req.method ?? "GET");
-        const body = parseBody(rawBody, req.method ?? "GET");
-        const result = await route.handler!({
-          req, res, url, body,
-          rawBody
-        });
-        send(res, 200, result ?? { ok: true });
       }
     } catch (error) {
       const err = asRunnerError(error);

@@ -121,25 +121,35 @@ export function validateTimestamp(timestamp: string, skewMs: number = DEFAULT_HM
 }
 
 /**
- * Verify HMAC signature using timing-safe comparison.
- * Throws RunnerError(401) if signature is invalid.
+ * Verify HMAC signature using timing-safe comparison on raw bytes.
+ *
+ * Parses the received "sha256=<64 hex>" signature, converts both
+ * expected and received hex to 32-byte buffers, and compares with
+ * timingSafeEqual. This avoids string-length timing leakage.
+ *
+ * Throws RunnerError(401) if signature format is invalid or mismatched.
  */
 export function verifyHmacSignature(
   secret: string,
   payload: string,
   receivedSignature: string
 ): void {
-  // receivedSignature format: sha256=<hex>
-  const expectedHex = hmacSha256(secret, payload);
-  const expected = `sha256=${expectedHex}`;
-
-  // Timing-safe comparison
-  if (expected.length !== receivedSignature.length) {
-    throw new RunnerError("AUTH_INVALID_SIGNATURE", "Invalid HMAC signature", 401);
+  // Parse received signature: must be "sha256=<64 hex chars>"
+  if (!receivedSignature.startsWith("sha256=") || receivedSignature.length !== 71) {
+    throw new RunnerError("AUTH_INVALID_SIGNATURE", "Invalid HMAC signature format", 401);
   }
 
-  const expectedBuf = Buffer.from(expected, "utf8");
-  const receivedBuf = Buffer.from(receivedSignature, "utf8");
+  const receivedHex = receivedSignature.slice(7);
+  if (!/^[a-f0-9]{64}$/.test(receivedHex)) {
+    throw new RunnerError("AUTH_INVALID_SIGNATURE", "Invalid HMAC signature hex", 401);
+  }
+
+  // Compute expected HMAC
+  const expectedHex = hmacSha256(secret, payload);
+
+  // Compare as 32-byte buffers (constant-time on raw digest, not hex string)
+  const expectedBuf = Buffer.from(expectedHex, "hex");
+  const receivedBuf = Buffer.from(receivedHex, "hex");
 
   if (!timingSafeEqual(expectedBuf, receivedBuf)) {
     throw new RunnerError("AUTH_INVALID_SIGNATURE", "Invalid HMAC signature", 401);

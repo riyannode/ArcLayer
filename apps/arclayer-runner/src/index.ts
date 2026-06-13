@@ -89,8 +89,10 @@ async function main() {
         {
           method: "POST",
           path: "/mcp",
-          rawHandler: async (req, res) => {
-            await handleMcpRequest(req, res, config.runnerSecret, mcpToolCtx);
+          rawHandler: async (ctx) => {
+            // Router already verified HMAC/Bearer auth and parsed body.
+            // MCP handler receives pre-authenticated context — no internal auth needed.
+            await handleMcpRequest(ctx.res, ctx.body, mcpToolCtx);
           }
         },
 

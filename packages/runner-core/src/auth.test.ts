@@ -212,6 +212,21 @@ describe("verifyHmacSignature", () => {
     );
   });
 
+  it("throws AUTH_INVALID_SIGNATURE for short signature", () => {
+    expectRunnerError(
+      () => verifyHmacSignature(secret, "payload", "sha256=abc"),
+      "AUTH_INVALID_SIGNATURE"
+    );
+  });
+
+  it("throws AUTH_INVALID_SIGNATURE for non-hex signature", () => {
+    const badSig = "sha256=" + "z".repeat(64);
+    expectRunnerError(
+      () => verifyHmacSignature(secret, "payload", badSig),
+      "AUTH_INVALID_SIGNATURE"
+    );
+  });
+
   it("throws AUTH_INVALID_SIGNATURE for wrong secret", () => {
     const payload = buildHmacPayload("POST", "/run", "ts", "nonce", "hash");
     const sig = `sha256=${hmacSha256("wrong-secret", payload)}`;
