@@ -112,6 +112,14 @@ export async function GET(request: NextRequest) {
   const fromBlockParam = request.nextUrl.searchParams.get("fromBlock");
   const fromBlock = fromBlockParam ? parseInt(fromBlockParam, 10) : undefined;
 
+  // Validate fromBlock
+  if (fromBlockParam && (!fromBlock || fromBlock <= 0 || !Number.isSafeInteger(fromBlock))) {
+    return NextResponse.json(
+      { error: "invalid_from_block" },
+      { status: 400 },
+    );
+  }
+
   // verbose=1 requires token even if non-verbose compare is enabled
   const auth = checkAuth(request, verbose || !!INDEXER_COMPARE_TOKEN);
   if (!auth.ok) {
@@ -219,7 +227,7 @@ export async function GET(request: NextRequest) {
 
   const response: Record<string, unknown> = {
     ...report,
-    ...(fromBlock ? { fromBlock } : {}),
+    ...(fromBlock ? { fromBlock, overviewScope: "full_history" } : {}),
     ...(warnings.length > 0 ? { warnings } : {}),
   };
 
