@@ -239,5 +239,12 @@ function buildEnvConfig(): Record<string, unknown> {
   if (process.env.ARCLAYER_RUNNER_HOST) set("host", process.env.ARCLAYER_RUNNER_HOST);
   set("runnerSecret", process.env.ARCLAYER_RUNNER_SECRET);
 
+  // ── MCP Tool Broker limits ────────────────────────────────────────────
+  if (process.env.ARCLAYER_TOOL_BROKER_ENABLED) set("toolBrokerEnabled", process.env.ARCLAYER_TOOL_BROKER_ENABLED);
+  if (process.env.ARCLAYER_TOOL_MAX_CALLS) set("toolMaxCalls", process.env.ARCLAYER_TOOL_MAX_CALLS);
+  if (process.env.ARCLAYER_TOOL_MAX_TOTAL_USDC) set("toolMaxTotalUsdc", process.env.ARCLAYER_TOOL_MAX_TOTAL_USDC);
+  if (process.env.ARCLAYER_TOOL_DEFAULT_TIMEOUT_MS) set("toolDefaultTimeoutMs", process.env.ARCLAYER_TOOL_DEFAULT_TIMEOUT_MS);
+  if (process.env.ARCLAYER_TOOL_MAX_OUTPUT_BYTES) set("toolMaxOutputBytes", process.env.ARCLAYER_TOOL_MAX_OUTPUT_BYTES);
+
   return envConfig;
 }

@@ -52,15 +52,18 @@ async function main() {
 
     const services = new RunnerServices(config, runtime, mcp, skill);
 
-    // Create MCP Tool Broker from config
+    // MCP Tool Broker config (shared), but each /mcp request gets its own broker instance
+    // to isolate session state (call counts, budget, audit log).
     const brokerBudget: ToolBudgetConfig = {
       maxTotalUsdc: config.toolMaxTotalUsdc,
       maxCalls: config.toolMaxCalls,
       defaultTimeoutMs: config.toolDefaultTimeoutMs,
       maxOutputBytes: config.toolMaxOutputBytes,
     };
-    const broker = config.toolBrokerEnabled ? new McpToolBroker(brokerBudget) : undefined;
-    const mcpToolCtx = { services, mcp, config, skill, broker };
+    const createBroker = config.toolBrokerEnabled
+      ? () => new McpToolBroker(brokerBudget)
+      : () => null;
+    const mcpToolCtx = { services, mcp, config, skill };
 
     const authMode = process.env.ARCLAYER_AUTH_MODE === "bearer" ? "bearer" : "hmac";
 
@@ -102,8 +105,8 @@ async function main() {
           rawHandler: async (ctx) => {
             // Router already verified HMAC/Bearer auth and parsed body.
             // MCP handler receives pre-authenticated context — no internal auth needed.
-            // Pass broker for per-session budget/audit enforcement.
-            await handleMcpRequest(ctx.res, ctx.body, mcpToolCtx, mcpToolCtx.broker);
+            // Create a fresh broker per request for session isolation.
+            await handleMcpRequest(ctx.res, ctx.body, mcpToolCtx, createBroker());
           }
         },
 

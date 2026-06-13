@@ -109,7 +109,7 @@ describe("Runner MCP Server (router-authenticated)", () => {
     ctx = { services, mcp, config, skill };
   });
 
-  async function callMcp(body: unknown, broker?: McpToolBroker): Promise<any> {
+  async function callMcp(body: unknown, broker?: McpToolBroker | null): Promise<any> {
     const { res, output } = makeMockRes();
     await handleMcpRequest(res, body, ctx, broker);
     return JSON.parse(output().body);

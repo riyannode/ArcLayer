@@ -103,6 +103,20 @@ export const InitFileConfigSchema = z.object({
     },
     z.boolean().default(false)
   ),
+  // ── MCP Tool Broker config ──────────────────────────────────────────
+  broker: z.object({
+    enabled: z.preprocess(
+      (v) => {
+        if (typeof v === "string") return v === "true" || v === "1";
+        return v;
+      },
+      z.boolean().default(true)
+    ),
+    maxCalls: z.coerce.number().int().min(1).default(500),
+    maxTotalUsdc: z.string().default("10"),
+    defaultTimeoutMs: z.coerce.number().int().min(1000).default(30_000),
+    maxOutputBytes: z.coerce.number().int().min(1024).default(1_048_576),
+  }).default({}),
 });
 
 export type InitFileConfig = z.infer<typeof InitFileConfigSchema>;
@@ -131,6 +145,12 @@ export function transformFileConfig(
     // Privileged opt-in flags
     allowIdentityRegister: file.allowIdentityRegister ?? false,
     allowGatewayDeposit: file.allowGatewayDeposit ?? false,
+    // MCP Tool Broker config (flattened from nested broker.*)
+    toolBrokerEnabled: file.broker?.enabled ?? true,
+    toolMaxCalls: file.broker?.maxCalls ?? 500,
+    toolMaxTotalUsdc: file.broker?.maxTotalUsdc ?? "10",
+    toolDefaultTimeoutMs: file.broker?.defaultTimeoutMs ?? 30_000,
+    toolMaxOutputBytes: file.broker?.maxOutputBytes ?? 1_048_576,
     // Policy fields from policy.json
     ...policy
   };
