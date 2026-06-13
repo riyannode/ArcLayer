@@ -193,6 +193,7 @@ export const RunnerConfigSchema = z.object({
 
   dataDir: z.string().default(".arclayer-runner"),
   port: z.coerce.number().int().min(1).max(65535).default(8787),
+  host: z.string().default("127.0.0.1"),
   runnerSecret: z.string().min(16)
 });
 

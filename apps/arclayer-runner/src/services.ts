@@ -27,6 +27,16 @@ import type { ArcLayerMcpConnector } from "./mcp-connector";
 import { randomUUID } from "node:crypto";
 
 /**
+ * Task lifecycle callbacks — called AFTER validation passes.
+ * Router passes these; service methods invoke them at the right moment.
+ */
+export type TaskLifecycle = {
+  reserveTaskId?: (taskId: string, agentId: string) => void;
+  markTaskCompleted?: (taskId: string, agentId: string) => void;
+  markTaskFailed?: (taskId: string, agentId: string) => void;
+};
+
+/**
  * In-memory lock per idempotencyKey.
  * Prevents concurrent requests with the same key from double-paying.
  */
@@ -99,23 +109,33 @@ export class RunnerServices {
     };
   }
 
-  async runGeneric(body: unknown) {
+  async runGeneric(body: unknown, lifecycle?: TaskLifecycle) {
     const task = AgentTaskSchema.parse(body);
     assertAgentIdentity(this.config, task.agentId);
     assertRoleAllowed(this.config, task.role);
     assertProviderOnlyForExternal(this.config, task.role);
 
-    const result = await this.runtime.run(task);
-    const receipt = await this.receipts.append({
-      type: "runtime_result",
-      taskId: task.taskId,
-      agentId: task.agentId,
-      request: task,
-      response: result,
-      proof: { sha256: sha256Json(result) }
-    });
+    // Reserve taskId AFTER all validation passes — before dispatch
+    lifecycle?.reserveTaskId?.(task.taskId, task.agentId);
 
-    return { ok: true, result, receipt };
+    try {
+      const result = await this.runtime.run(task);
+      lifecycle?.markTaskCompleted?.(task.taskId, task.agentId);
+
+      const receipt = await this.receipts.append({
+        type: "runtime_result",
+        taskId: task.taskId,
+        agentId: task.agentId,
+        request: task,
+        response: result,
+        proof: { sha256: sha256Json(result) }
+      });
+
+      return { ok: true, result, receipt };
+    } catch (error) {
+      lifecycle?.markTaskFailed?.(task.taskId, task.agentId);
+      throw error;
+    }
   }
 
   async prepareRegister(body: unknown) {
@@ -154,87 +174,121 @@ export class RunnerServices {
     };
   }
 
-  async runErc8183ProviderJob(body: unknown) {
+  async runErc8183ProviderJob(body: unknown, lifecycle?: TaskLifecycle) {
     const job = Erc8183ProviderJobSchema.parse(body);
     assertAgentIdentity(this.config, job.agentId);
     assertRoleAllowed(this.config, "provider");
     assertProviderOnlyForExternal(this.config, "provider");
 
-    // Step 1: Start MCP run
-    const startResult = await this.mcp.startJobRun(job.jobId).catch((err) => {
-      console.warn(`[runner] MCP startJobRun failed: ${err.message}`);
-      return null;
-    });
-    const runId = (startResult as any)?.runId;
+    // Reserve taskId AFTER all validation passes — before dispatch
+    lifecycle?.reserveTaskId?.(job.taskId, job.agentId);
 
-    // Step 2: Dispatch to LLM runtime
-    const runtimeTask = {
-      taskId: job.taskId,
-      protocol: "erc8183" as const,
-      role: "provider" as const,
-      agentId: job.agentId,
-      input: job.input,
-      metadata: {
-        ...job.metadata,
-        jobId: job.jobId,
-        provider: job.provider,
-        evaluator: job.evaluator,
-        description: job.description
-      }
-    };
+    try {
+      // Step 1: Start MCP run
+      const startResult = await this.mcp.startJobRun(job.jobId).catch((err) => {
+        console.warn(`[runner] MCP startJobRun failed: ${err.message}`);
+        return null;
+      });
+      const runId = (startResult as any)?.runId;
 
-    const result = await this.runtime.run(runtimeTask);
-
-    // Step 3: Check runtime result before proceeding with settlement
-    if (!result.ok || result.status === "failed") {
-      // Runtime reported failure — do NOT submit on-chain
-      // Record failure via local receipt only (no hosted MCP fail_job tool exists)
-      // Optionally write checkpoint if MCP is available
-      await this.mcp.writeCheckpoint(job.jobId, {
-        status: "failed",
-        error: result.error ?? "Runtime returned failure"
-      }).catch(() => {});
-
-      const receipt = await this.receipts.append({
-        type: "erc8183_submit",
+      // Step 2: Dispatch to LLM runtime
+      const runtimeTask = {
         taskId: job.taskId,
-        jobId: job.jobId,
+        protocol: "erc8183" as const,
+        role: "provider" as const,
         agentId: job.agentId,
-        request: job,
-        response: { result, skipped: true, reason: "runtime_failure" },
-        proof: { sha256: sha256Json(result) }
+        input: job.input,
+        metadata: {
+          ...job.metadata,
+          jobId: job.jobId,
+          provider: job.provider,
+          evaluator: job.evaluator,
+          description: job.description
+        }
+      };
+
+      const result = await this.runtime.run(runtimeTask);
+
+      // Step 3: Check runtime result before proceeding with settlement
+      if (!result.ok || result.status === "failed") {
+        await this.mcp.writeCheckpoint(job.jobId, {
+          status: "failed",
+          error: result.error ?? "Runtime returned failure"
+        }).catch(() => {});
+
+        const receipt = await this.receipts.append({
+          type: "erc8183_submit",
+          taskId: job.taskId,
+          jobId: job.jobId,
+          agentId: job.agentId,
+          request: job,
+          response: { result, skipped: true, reason: "runtime_failure" },
+          proof: { sha256: sha256Json(result) }
+        });
+
+        lifecycle?.markTaskCompleted?.(job.taskId, job.agentId);
+        return {
+          ok: false,
+          status: "runtime_failure",
+          role: "provider",
+          result,
+          receipt,
+          error: result.error ?? "Runtime returned ok=false or status=failed"
+        };
+      }
+
+      // Step 4: Hash deliverable and prepare submit
+      const deliverableHash = erc8183Hash(result.output ?? result);
+
+      const preparedTx = await this.mcp.prepareSubmitDeliverable(
+        job.jobId,
+        deliverableHash
+      ).catch((err) => {
+        console.warn(`[runner] MCP prepareSubmitDeliverable failed: ${err.message}`);
+        return null;
       });
 
-      return {
-        ok: false,
-        status: "runtime_failure",
-        role: "provider",
-        result,
-        receipt,
-        error: result.error ?? "Runtime returned ok=false or status=failed"
-      };
-    }
+      // Step 5: Execute on-chain submit via Circle CLI
+      const submitReceipt = await this.submitDeliverableViaCircleCli({
+        jobId: job.jobId,
+        deliverableHash,
+        optParams: "0x"
+      });
 
-    // Step 4: Hash deliverable and prepare submit
-    const deliverableHash = erc8183Hash(result.output ?? result);
+      // Step 6: If submit was prepared-only (no contract/wallet), stop here
+      if (submitReceipt && typeof submitReceipt === "object" && "ok" in submitReceipt && !submitReceipt.ok) {
+        const receipt = await this.receipts.append({
+          type: "erc8183_submit",
+          taskId: job.taskId,
+          jobId: job.jobId,
+          agentId: job.agentId,
+          request: job,
+          response: { result, preparedTx, submitReceipt },
+          proof: {
+            deliverableHash,
+            sha256: sha256Json({ result, submitReceipt })
+          }
+        });
 
-    const preparedTx = await this.mcp.prepareSubmitDeliverable(
-      job.jobId,
-      deliverableHash
-    ).catch((err) => {
-      console.warn(`[runner] MCP prepareSubmitDeliverable failed: ${err.message}`);
-      return null;
-    });
+        lifecycle?.markTaskCompleted?.(job.taskId, job.agentId);
+        return {
+          ok: false,
+          status: "prepared-only",
+          role: "provider",
+          result,
+          deliverableHash,
+          submitReceipt,
+          receipt,
+          error: submitReceipt.reason ?? "On-chain submit not available"
+        };
+      }
 
-    // Step 5: Execute on-chain submit via Circle CLI
-    const submitReceipt = await this.submitDeliverableViaCircleCli({
-      jobId: job.jobId,
-      deliverableHash,
-      optParams: "0x"
-    });
+      // Step 7: Complete MCP run
+      await this.mcp.completeJobRun(job.jobId, result.output, runId).catch((err) => {
+        console.warn(`[runner] MCP completeJobRun failed: ${err.message}`);
+      });
 
-    // Step 6: If submit was prepared-only (no contract/wallet), stop here
-    if (submitReceipt && typeof submitReceipt === "object" && "ok" in submitReceipt && !submitReceipt.ok) {
+      // Step 8: Store receipt with proof
       const receipt = await this.receipts.append({
         type: "erc8183_submit",
         taskId: job.taskId,
@@ -244,50 +298,25 @@ export class RunnerServices {
         response: { result, preparedTx, submitReceipt },
         proof: {
           deliverableHash,
-          sha256: sha256Json({ result, submitReceipt })
+          sha256: sha256Json({ result, submitReceipt }),
+          txHash: extractPossibleTxHash(submitReceipt)
         }
       });
 
+      lifecycle?.markTaskCompleted?.(job.taskId, job.agentId);
       return {
-        ok: false,
-        status: "prepared-only",
+        ok: true,
         role: "provider",
         result,
         deliverableHash,
         submitReceipt,
-        receipt,
-        error: submitReceipt.reason ?? "On-chain submit not available"
+        receipt
       };
+
+    } catch (error) {
+      lifecycle?.markTaskFailed?.(job.taskId, job.agentId);
+      throw error;
     }
-
-    // Step 7: Complete MCP run
-    await this.mcp.completeJobRun(job.jobId, result.output, runId).catch((err) => {
-      console.warn(`[runner] MCP completeJobRun failed: ${err.message}`);
-    });
-
-    // Step 8: Store receipt with proof
-    const receipt = await this.receipts.append({
-      type: "erc8183_submit",
-      taskId: job.taskId,
-      jobId: job.jobId,
-      agentId: job.agentId,
-      request: job,
-      response: { result, preparedTx, submitReceipt },
-      proof: {
-        deliverableHash,
-        sha256: sha256Json({ result, submitReceipt }),
-        txHash: extractPossibleTxHash(submitReceipt)
-      }
-    });
-
-    return {
-      ok: true,
-      role: "provider",
-      result,
-      deliverableHash,
-      submitReceipt,
-      receipt
-    };
   }
 
   async submitDeliverableViaCircleCli(input: {
