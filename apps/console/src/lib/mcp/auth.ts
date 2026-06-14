@@ -33,8 +33,14 @@ export async function resolveMcpBearerAuth(
     const session = await resolveMcpSessionByToken(token);
     if (!session) return null;
 
-    const scopes = session.permissions?.scopes;
-    if (!Array.isArray(scopes) || scopes.length === 0) return null;
+    // Derive scopes from session permissions
+    // Priority: explicit scopes > derived from allowedContracts/allowedActions > default
+    let scopes = session.permissions?.scopes;
+    if (!Array.isArray(scopes) || scopes.length === 0) {
+      // Legacy sessions store allowedContracts/allowedActions instead of scopes
+      scopes = deriveScopesFromPermissions(session.permissions);
+    }
+    if (!scopes || scopes.length === 0) return null;
 
     // Reject wildcard scopes
     if (scopes.includes('*')) return null;
@@ -91,3 +97,63 @@ export async function resolveMcpBearerAuth(
 
 export const MCP_OAUTH_CHALLENGE =
   'Bearer resource_metadata="https://arclayers.xyz/.well-known/oauth-protected-resource"';
+
+/**
+ * Derive MCP scopes from legacy session permissions.
+ * Maps allowedContracts/allowedActions to explicit MCP scopes.
+ */
+function deriveScopesFromPermissions(
+  permissions?: Record<string, unknown>,
+): string[] {
+  if (!permissions) return [];
+
+  const allowedContracts = permissions.allowedContracts as string[] | undefined;
+  const allowedActions = permissions.allowedActions as string[] | undefined;
+  const scopes = new Set<string>();
+
+  // Always grant read access
+  scopes.add('arclayer:read');
+
+  // Map allowedContracts to scopes
+  if (Array.isArray(allowedContracts)) {
+    for (const contract of allowedContracts) {
+      switch (contract) {
+        case 'ERC8004_IDENTITY_REGISTRY':
+          scopes.add('tx:request');
+          break;
+        case 'ERC8183_AGENTIC_COMMERCE':
+          scopes.add('jobs:prepare');
+          break;
+        case 'ERC8004_REPUTATION_REGISTRY':
+          scopes.add('tx:request');
+          break;
+        case 'ERC8004_VALIDATION_REGISTRY':
+          scopes.add('tx:request');
+          break;
+      }
+    }
+  }
+
+  // Map allowedActions to scopes
+  if (Array.isArray(allowedActions)) {
+    for (const action of allowedActions) {
+      switch (action) {
+        case 'identity.register':
+          scopes.add('tx:request');
+          break;
+        case 'jobs.create':
+        case 'jobs.fund':
+        case 'jobs.submit':
+        case 'jobs.complete':
+        case 'jobs.reject':
+          scopes.add('jobs:prepare');
+          break;
+        case 'provider.runtime':
+          scopes.add('provider:runtime');
+          break;
+      }
+    }
+  }
+
+  return Array.from(scopes);
+}

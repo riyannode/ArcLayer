@@ -41,19 +41,64 @@ export function createRunnerMcpServer(ctx: McpToolContext): McpServer {
 }
 
 /**
- * Convert a JSON Schema object to a Zod raw shape.
- * Handles the subset of types used by Runner tools.
+ * Convert a tool inputSchema to a Zod raw shape.
+ * Handles both JSON Schema ({ type: 'object', properties }) and
+ * flat field map ({ fieldName: { type: 'string', required: true } }) formats.
  */
 function jsonSchemaToZodShape(
   schema?: Record<string, unknown>,
 ): Record<string, z.ZodTypeAny> | undefined {
-  if (!schema || schema.type !== 'object' || !schema.properties) return undefined;
+  if (!schema) return undefined;
 
-  const properties = schema.properties as Record<string, Record<string, unknown>>;
-  const required = new Set((schema.required as string[]) ?? []);
+  // JSON Schema format: { type: 'object', properties: { ... } }
+  if (schema.type === 'object' && schema.properties) {
+    const properties = schema.properties as Record<string, Record<string, unknown>>;
+    const required = new Set((schema.required as string[]) ?? []);
+    const shape: Record<string, z.ZodTypeAny> = {};
+
+    for (const [key, prop] of Object.entries(properties)) {
+      let field: z.ZodTypeAny;
+
+      switch (prop.type) {
+        case 'string':
+          field = z.string();
+          break;
+        case 'number':
+        case 'integer':
+          field = z.number();
+          break;
+        case 'boolean':
+          field = z.boolean();
+          break;
+        case 'object':
+          field = z.record(z.string(), z.unknown());
+          break;
+        case 'array':
+          field = z.array(z.unknown());
+          break;
+        default:
+          field = z.unknown();
+      }
+
+      if (prop.description) {
+        field = field.describe(prop.description as string);
+      }
+
+      if (!required.has(key)) {
+        field = field.optional();
+      }
+
+      shape[key] = field;
+    }
+
+    return shape;
+  }
+
+  // Flat field map format: { fieldName: { type: 'string', required: true } }
   const shape: Record<string, z.ZodTypeAny> = {};
-
-  for (const [key, prop] of Object.entries(properties)) {
+  for (const [key, spec] of Object.entries(schema)) {
+    if (typeof spec !== 'object' || spec === null) continue;
+    const prop = spec as Record<string, unknown>;
     let field: z.ZodTypeAny;
 
     switch (prop.type) {
@@ -68,7 +113,7 @@ function jsonSchemaToZodShape(
         field = z.boolean();
         break;
       case 'object':
-        field = z.record(z.unknown());
+        field = z.record(z.string(), z.unknown());
         break;
       case 'array':
         field = z.array(z.unknown());
@@ -81,12 +126,12 @@ function jsonSchemaToZodShape(
       field = field.describe(prop.description as string);
     }
 
-    if (!required.has(key)) {
+    if (!prop.required) {
       field = field.optional();
     }
 
     shape[key] = field;
   }
 
-  return shape;
+  return Object.keys(shape).length > 0 ? shape : undefined;
 }

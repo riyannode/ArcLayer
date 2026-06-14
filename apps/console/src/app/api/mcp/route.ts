@@ -10,6 +10,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import type { RequestContext } from '@/lib/mcp/registry';
 import { resolveMcpBearerAuth, MCP_OAUTH_CHALLENGE } from '@/lib/mcp/auth';
 import { createArcLayerMcpServer } from '@/lib/mcp/sdk-server';
+import { resolveAlias } from '@/lib/mcp/tool-catalog';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -82,8 +83,32 @@ export async function POST(req: NextRequest): Promise<Response> {
   await server.connect(transport);
 
   try {
-    // Pass the untouched Request to the transport
-    const response = await transport.handleRequest(req);
+    // Resolve legacy aliases in tools/call requests before passing to transport
+    const contentType = req.headers.get('content-type') ?? '';
+    let resolvedReq = req;
+    if (contentType.includes('application/json')) {
+      try {
+        const cloned = req.clone();
+        const body = await cloned.json();
+        if (body && typeof body === 'object' && body.method === 'tools/call' && body.params?.name) {
+          const resolved = resolveAlias(body.params.name);
+          if (resolved !== body.params.name) {
+            body.params.name = resolved;
+            resolvedReq = new Request(req.url, {
+              method: req.method,
+              headers: req.headers,
+              body: JSON.stringify(body),
+              signal: req.signal,
+            });
+          }
+        }
+      } catch {
+        // Not JSON or parse error — let transport handle it
+      }
+    }
+
+    // Pass the (possibly modified) Request to the transport
+    const response = await transport.handleRequest(resolvedReq);
     return response;
   } finally {
     // Cleanup after response is produced

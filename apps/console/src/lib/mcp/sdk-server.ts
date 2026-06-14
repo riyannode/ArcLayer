@@ -7,7 +7,7 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { McpToolContext } from './registry';
-import { registerAllTools, validateToolCatalog } from './tool-catalog';
+import { registerAllTools, validateToolCatalog, resolveAlias } from './tool-catalog';
 import { listTools } from './registry';
 import { buildSdkInputSchema } from './sdk-schema';
 import { executeCatalogTool } from './tool-executor';
