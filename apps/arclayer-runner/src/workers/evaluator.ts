@@ -178,14 +178,16 @@ export class EvaluatorWorker extends EventEmitter {
   }
 
   private async reconcilePending(): Promise<void> {
+    // Reconcile pending operations with postcondition verification
     try {
       const pendingOps = this.services.listReconcilableOperations();
       for (const op of pendingOps) {
         try {
+          const verified = await this.verifyPostcondition(op);
           await this.services.reconcileOperation(
             op.operationId,
-            "unknown",
-            { errorMessage: "Reconciled on startup" },
+            verified.outcome,
+            { txHash: verified.txHash, errorMessage: verified.error },
           );
         } catch (err) {
           console.warn(`[evaluator] Reconciliation failed for ${op.operationId}: ${err}`);
@@ -196,6 +198,46 @@ export class EvaluatorWorker extends EventEmitter {
       }
     } catch (err) {
       console.warn(`[evaluator] Reconciliation warning: ${err}`);
+    }
+  }
+
+  private async verifyPostcondition(
+    op: { operationId: string; kind: string; idempotencyKey: string },
+  ): Promise<{ outcome: "confirmed" | "failed" | "unknown"; txHash?: string; error?: string }> {
+    const parts = op.idempotencyKey.split(":");
+    const jobId = parts[1];
+    if (!jobId) {
+      return { outcome: "unknown", error: "Cannot extract jobId from idempotencyKey" };
+    }
+
+    try {
+      const statusRaw = await this.mcp.callTool("jobs.get_onchain_status", {
+        jobId,
+      });
+      const status = JSON.parse(statusRaw as string) as Record<string, unknown>;
+
+      switch (op.kind) {
+        case "completeJob": {
+          // JobCompleted: status should be Completed (3)
+          if (status.status === 3 || status.erc8183Status === "Completed") {
+            return { outcome: "confirmed" };
+          }
+          return { outcome: "unknown", error: "Job not in Completed state" };
+        }
+
+        case "rejectJob": {
+          // JobRejected: status should be Rejected (4)
+          if (status.status === 4 || status.erc8183Status === "Rejected") {
+            return { outcome: "confirmed" };
+          }
+          return { outcome: "unknown", error: "Job not in Rejected state" };
+        }
+
+        default:
+          return { outcome: "unknown", error: `Unknown operation kind: ${op.kind}` };
+      }
+    } catch (err) {
+      return { outcome: "unknown", error: `Postcondition check failed: ${err}` };
     }
   }
 

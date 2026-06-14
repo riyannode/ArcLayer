@@ -199,15 +199,17 @@ export class ProviderWorker extends EventEmitter {
   }
 
   private async reconcilePending(): Promise<void> {
-    // Reconcile any pending operations from previous run
+    // Reconcile pending operations with postcondition verification
     try {
       const pendingOps = this.services.listReconcilableOperations();
       for (const op of pendingOps) {
         try {
+          // Verify postcondition per operation kind
+          const verified = await this.verifyPostcondition(op);
           await this.services.reconcileOperation(
             op.operationId,
-            "unknown",
-            { errorMessage: "Reconciled on startup" },
+            verified.outcome,
+            { txHash: verified.txHash, errorMessage: verified.error },
           );
         } catch (err) {
           console.warn(`[provider] Reconciliation failed for ${op.operationId}: ${err}`);
@@ -218,6 +220,48 @@ export class ProviderWorker extends EventEmitter {
       }
     } catch (err) {
       console.warn(`[provider] Reconciliation warning: ${err}`);
+    }
+  }
+
+  private async verifyPostcondition(
+    op: { operationId: string; kind: string; idempotencyKey: string },
+  ): Promise<{ outcome: "confirmed" | "failed" | "unknown"; txHash?: string; error?: string }> {
+    // Extract jobId from idempotencyKey (format: "kind:jobId:...")
+    const parts = op.idempotencyKey.split(":");
+    const jobId = parts[1];
+    if (!jobId) {
+      return { outcome: "unknown", error: "Cannot extract jobId from idempotencyKey" };
+    }
+
+    try {
+      // Read on-chain job to verify postcondition
+      const statusRaw = await this.mcp.callTool("jobs.get_onchain_status", {
+        jobId,
+      });
+      const status = JSON.parse(statusRaw as string) as Record<string, unknown>;
+
+      switch (op.kind) {
+        case "setBudget": {
+          // BudgetSet: onchain budget should be set
+          if (status.budget && String(status.budget) !== "0") {
+            return { outcome: "confirmed" };
+          }
+          return { outcome: "unknown", error: "Budget not set on-chain" };
+        }
+
+        case "submitDeliverable": {
+          // JobSubmitted: status should be Submitted (2)
+          if (status.status === 2 || status.erc8183Status === "Submitted") {
+            return { outcome: "confirmed" };
+          }
+          return { outcome: "unknown", error: "Job not in Submitted state" };
+        }
+
+        default:
+          return { outcome: "unknown", error: `Unknown operation kind: ${op.kind}` };
+      }
+    } catch (err) {
+      return { outcome: "unknown", error: `Postcondition check failed: ${err}` };
     }
   }
 
@@ -479,13 +523,25 @@ export class ProviderWorker extends EventEmitter {
 
     // Check if runtime needs paid resources
     // Provider does NOT pay — it checkpoints and waits for x402-agent
-    if (runResult?.state === "needs_payment") {
+    if (runResult?.status === "needs_payment") {
       this.activeJob!.phase = "needs_action";
-      const paymentRequests = runResult.paymentRequests;
+      const paymentRequests =
+        (runResult.result as Record<string, unknown>)?.paymentRequests ??
+        runResult.paymentRequests ??
+        [];
       this.emit("needs_payment", { jobId, paymentRequests });
       await this.notifyTelegram(
         "runtime.needs_action",
         `Job ${jobId} needs paid resources. Waiting for x402-agent to complete payment.`,
+      );
+      return;
+    }
+
+    if (runResult?.status === "needs_action") {
+      this.activeJob!.phase = "needs_action";
+      await this.notifyTelegram(
+        "runtime.needs_action",
+        `Job ${jobId} needs manual action. No deliverable submitted.`,
       );
       return;
     }

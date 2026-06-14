@@ -22,6 +22,9 @@ import { requireMcpSession } from "./identity-tools";
 import { jsonSafe } from "./erc8183-tools";
 import { keccak256, toBytes, type Hex } from "viem";
 import {
+  EvaluationVerdictV1Schema,
+} from "@arclayer/runner-core";
+import {
   upsertDeliverable,
   getDeliverableByJobId,
   lockDeliverable,
@@ -120,7 +123,7 @@ async function readSubmittedDeliverableHash(jobId: bigint): Promise<Hex | null> 
 
   const latest = logs.at(-1);
   // Field is "deliverable" (not "deliverableHash") per SDK ABI
-  return latest?.args?.deliverable ?? null;
+  return (latest?.args as Record<string, unknown>)?.deliverable as Hex ?? null;
 }
 
 // ── provider.publish_deliverable ───────────────────────────────────────────
@@ -517,14 +520,7 @@ export async function handleEvaluatorPublishEvaluation(
       ? args.evaluationReceiptHash.trim()
       : undefined;
 
-  const verdict = args.verdict as {
-    decision?: string;
-    score?: number;
-    confidence?: number;
-    reason?: string;
-    evidence?: unknown[];
-    evaluatedDeliverableHash?: string;
-  } | undefined;
+  const verdict = args.verdict as Record<string, unknown> | undefined;
 
   // Validation
   if (!agentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "agentId required");
@@ -534,19 +530,26 @@ export async function handleEvaluatorPublishEvaluation(
     throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "deliverableHash must be bytes32");
   }
   if (!verdict) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "verdict required");
-  if (!verdict.decision) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "verdict.decision required");
-  if (typeof verdict.score !== "number") throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "verdict.score required");
-  if (typeof verdict.confidence !== "number") throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "verdict.confidence required");
-  if (!verdict.reason) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "verdict.reason required");
+
+  // Strict schema validation via EvaluationVerdictV1Schema
+  const parsedVerdict = EvaluationVerdictV1Schema.safeParse(verdict);
+
+  if (!parsedVerdict.success) {
+    throw new McpError(
+      MCP_ERRORS.VALIDATION_ERROR,
+      `Invalid EvaluationVerdictV1: ${parsedVerdict.error.issues
+        .map((i) => `${i.path.join(".")}: ${i.message}`)
+        .join("; ")}`,
+    );
+  }
+
+  const validatedVerdict = parsedVerdict.data;
 
   // Verify session owns this agent and address
   assertSessionBinding(session as any, agentId, evaluatorAddress);
 
-  // Verify verdict hash matches
-  if (
-    verdict.evaluatedDeliverableHash &&
-    verdict.evaluatedDeliverableHash.toLowerCase() !== deliverableHash.toLowerCase()
-  ) {
+  // Verify verdict hash matches (now mandatory, not optional)
+  if (validatedVerdict.evaluatedDeliverableHash.toLowerCase() !== deliverableHash.toLowerCase()) {
     throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "Verdict deliverable hash mismatch");
   }
 
@@ -579,11 +582,11 @@ export async function handleEvaluatorPublishEvaluation(
       evaluatorAgentId: agentId,
       evaluatorAddress,
       deliverableHash,
-      decision: verdict.decision as "complete" | "reject" | "manual_review",
-      score: verdict.score,
-      confidence: verdict.confidence,
-      reason: verdict.reason,
-      evidence: verdict.evidence ?? [],
+      decision: validatedVerdict.decision as "complete" | "reject" | "manual_review",
+      score: Number(validatedVerdict.score),
+      confidence: Number(validatedVerdict.confidence),
+      reason: String(validatedVerdict.reason),
+      evidence: Array.isArray(validatedVerdict.evidence) ? validatedVerdict.evidence : [],
       evaluationReceiptHash,
     });
 
@@ -725,6 +728,29 @@ export async function handleEvaluatorQueueReputation(
       throw new McpError(
         MCP_ERRORS.VALIDATION_ERROR,
         "Can only queue reputation for Completed/Rejected jobs",
+      );
+    }
+
+    // Enforce terminal status → feedback type mapping
+    if (onchainJob.status === 3 && feedbackType !== "successful_work") {
+      throw new McpError(
+        MCP_ERRORS.VALIDATION_ERROR,
+        "Completed jobs can only queue successful_work feedback",
+      );
+    }
+
+    if (onchainJob.status === 4 && feedbackType !== "failed_acceptance_criteria") {
+      throw new McpError(
+        MCP_ERRORS.VALIDATION_ERROR,
+        "Rejected jobs can only queue failed_acceptance_criteria feedback",
+      );
+    }
+
+    // Verify target is the on-chain provider
+    if (onchainJob.provider.toLowerCase() !== targetAddress.toLowerCase()) {
+      throw new McpError(
+        MCP_ERRORS.FORBIDDEN,
+        "Reputation target must be the on-chain provider",
       );
     }
 
