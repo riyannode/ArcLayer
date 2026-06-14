@@ -20,7 +20,7 @@ import { McpError, MCP_ERRORS } from "./errors";
 import type { McpToolContext } from "./registry";
 import { requireMcpSession } from "./identity-tools";
 import { jsonSafe } from "./erc8183-tools";
-import { keccak256, toBytes, type Hex } from "viem";
+import { keccak256, toBytes, decodeEventLog, type Hex } from "viem";
 import {
   EvaluationVerdictV1Schema,
 } from "@arclayer/runner-core";
@@ -113,11 +113,14 @@ async function readSubmittedDeliverableHash(jobId: bigint): Promise<Hex | null> 
     return null;
   }
 
+  // Use indexer default fromBlock instead of 0 to avoid scanning entire chain
+  const DEPLOYMENT_BLOCK = 41_752_050n;
+
   const logs = await client.getLogs({
     address: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
     event: jobSubmittedEvent,
     args: { jobId },
-    fromBlock: 0n,
+    fromBlock: DEPLOYMENT_BLOCK,
     toBlock: "latest",
   });
 
@@ -634,6 +637,11 @@ export async function handleEvaluatorAttachSettlementTx(
   if (!evaluatorAddress) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "evaluatorAddress required");
   if (!settlementTxHash) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "settlementTxHash required");
 
+  // Validate txHash format (bytes32)
+  if (!/^0x[a-fA-F0-9]{64}$/.test(settlementTxHash)) {
+    throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "settlementTxHash must be bytes32 (0x + 64 hex chars)");
+  }
+
   assertSessionBinding(session as any, agentId, evaluatorAddress);
 
   try {
@@ -648,6 +656,90 @@ export async function handleEvaluatorAttachSettlementTx(
       throw new McpError(
         MCP_ERRORS.VALIDATION_ERROR,
         `Job is not in terminal state (status=${onchainJob.status})`,
+      );
+    }
+
+    // Verify transaction receipt
+    const client = getArcPublicClient();
+    const receipt = await client.getTransactionReceipt({
+      hash: settlementTxHash as `0x${string}`,
+    });
+
+    if (!receipt) {
+      throw new McpError(MCP_ERRORS.NOT_FOUND, "Transaction receipt not found");
+    }
+
+    // Verify transaction succeeded
+    if (receipt.status !== "success") {
+      throw new McpError(
+        MCP_ERRORS.VALIDATION_ERROR,
+        `Transaction failed (status=${receipt.status})`,
+      );
+    }
+
+    // Verify transaction targets ERC-8183 contract
+    if (receipt.to?.toLowerCase() !== CONTRACTS.ERC8183_AGENTIC_COMMERCE.toLowerCase()) {
+      throw new McpError(
+        MCP_ERRORS.VALIDATION_ERROR,
+        "Transaction does not target ERC-8183 AgenticCommerce contract",
+      );
+    }
+
+    // Verify transaction contains JobCompleted or JobRejected event for this job
+    const jobCompletedEvent = ERC8183_AGENTIC_COMMERCE_ABI.find(
+      (item): item is Extract<typeof item, { type: "event" }> =>
+        item.type === "event" && item.name === "JobCompleted",
+    );
+    const jobRejectedEvent = ERC8183_AGENTIC_COMMERCE_ABI.find(
+      (item): item is Extract<typeof item, { type: "event" }> =>
+        item.type === "event" && item.name === "JobRejected",
+    );
+
+    let foundMatchingEvent = false;
+    for (const log of receipt.logs) {
+      if (log.address.toLowerCase() !== CONTRACTS.ERC8183_AGENTIC_COMMERCE.toLowerCase()) continue;
+
+      // Try JobCompleted
+      if (jobCompletedEvent) {
+        try {
+          const decoded = decodeEventLog({
+            abi: [jobCompletedEvent],
+            data: log.data,
+            topics: log.topics,
+          });
+          if (decoded.eventName === "JobCompleted") {
+            const eventJobId = (decoded.args as Record<string, unknown>).jobId;
+            if (String(eventJobId) === jobId) {
+              foundMatchingEvent = true;
+              break;
+            }
+          }
+        } catch { /* not this event */ }
+      }
+
+      // Try JobRejected
+      if (jobRejectedEvent) {
+        try {
+          const decoded = decodeEventLog({
+            abi: [jobRejectedEvent],
+            data: log.data,
+            topics: log.topics,
+          });
+          if (decoded.eventName === "JobRejected") {
+            const eventJobId = (decoded.args as Record<string, unknown>).jobId;
+            if (String(eventJobId) === jobId) {
+              foundMatchingEvent = true;
+              break;
+            }
+          }
+        } catch { /* not this event */ }
+      }
+    }
+
+    if (!foundMatchingEvent) {
+      throw new McpError(
+        MCP_ERRORS.VALIDATION_ERROR,
+        "Transaction does not contain JobCompleted/JobRejected event for this job",
       );
     }
 

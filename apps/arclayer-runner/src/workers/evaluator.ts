@@ -518,9 +518,9 @@ export class EvaluatorWorker extends EventEmitter {
         throw new Error(String(completeResult?.error ?? completeResult?.reason ?? "completeJob failed"));
       }
 
-      // Attach settlement tx
-      const settlementTxHash = String(completeResult.txHash ?? completeResult.operationId ?? "");
-      if (settlementTxHash) {
+      // Attach settlement tx — only use actual txHash, never operationId
+      const settlementTxHash = String(completeResult.txHash ?? "");
+      if (settlementTxHash && /^0x[a-fA-F0-9]{64}$/.test(settlementTxHash)) {
         try {
           await this.mcp.callTool("evaluator.attach_settlement_tx", {
             agentId: this.config.agentId,
@@ -531,6 +531,8 @@ export class EvaluatorWorker extends EventEmitter {
         } catch (err) {
           console.warn(`[evaluator] Failed to attach settlement tx: ${err}`);
         }
+      } else {
+        console.warn(`[evaluator] No valid txHash from completeJob, skipping settlement tx attachment`);
       }
 
       // Queue reputation for provider (successful_work)
@@ -582,9 +584,9 @@ export class EvaluatorWorker extends EventEmitter {
         throw new Error(String(rejectResult?.error ?? rejectResult?.reason ?? "rejectJob failed"));
       }
 
-      // Attach settlement tx
-      const settlementTxHash = String(rejectResult.txHash ?? rejectResult.operationId ?? "");
-      if (settlementTxHash) {
+      // Attach settlement tx — only use actual txHash, never operationId
+      const settlementTxHash = String(rejectResult.txHash ?? "");
+      if (settlementTxHash && /^0x[a-fA-F0-9]{64}$/.test(settlementTxHash)) {
         try {
           await this.mcp.callTool("evaluator.attach_settlement_tx", {
             agentId: this.config.agentId,
@@ -595,6 +597,8 @@ export class EvaluatorWorker extends EventEmitter {
         } catch (err) {
           console.warn(`[evaluator] Failed to attach settlement tx: ${err}`);
         }
+      } else {
+        console.warn(`[evaluator] No valid txHash from rejectJob, skipping settlement tx attachment`);
       }
 
       // Queue reputation for provider (failed_acceptance_criteria)

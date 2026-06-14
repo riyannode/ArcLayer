@@ -415,34 +415,44 @@ export function registerAllTools(): void {
   registerTool({
     name: 'reputation.give_feedback',
     domain: 'reputation',
-    description: 'Build unsigned calldata for ERC-8004 ReputationRegistry.giveFeedback(...).',
+    description: 'Build unsigned calldata for ERC-8004 ReputationRegistry.giveFeedback(agentTokenId, value, valueDecimals, tag1, tag2, endpoint, feedbackURI, feedbackHash).',
     requiredScope: 'tx:request',
     operation: 'tx_prepare',
     annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
-      { name: 'agentTokenId', type: 'string', required: true },
-      { name: 'score', type: 'string', required: true },
-      { name: 'category', type: 'string', required: true },
-      { name: 'comment', type: 'string', required: true },
-      { name: 'metadataURI', type: 'string', required: true },
-      { name: 'proofURI', type: 'string', required: true },
-      { name: 'context', type: 'string', required: true },
-      { name: 'ref', type: 'string', required: true },
+      { name: 'agentTokenId', type: 'string', required: true, description: 'ERC-8004 token ID of the target agent.' },
+      { name: 'value', type: 'string', required: true, description: 'Feedback value as int128 string (e.g. "95" for score 95).' },
+      { name: 'valueDecimals', type: 'number', required: true, description: 'Decimal precision 0-18. 0 means integer score.' },
+      { name: 'tag1', type: 'string', description: 'First tag (e.g. "erc8183-job").' },
+      { name: 'tag2', type: 'string', description: 'Second tag (e.g. "completed", "failed_acceptance_criteria").' },
+      { name: 'endpoint', type: 'string', description: 'Service endpoint URI.' },
+      { name: 'feedbackURI', type: 'string', description: 'URI to feedback file (HTTPS/IPFS/data:).' },
+      { name: 'feedbackHash', type: 'string', description: 'Keccak-256 hash of feedback file content (bytes32).' },
     ],
     handler: async (args) => {
+      const agentTokenId = BigInt(String(args.agentTokenId || '').trim());
+      const value = BigInt(String(args.value || '0').trim());
+      const valueDecimals = Number(args.valueDecimals ?? 0);
+      const tag1 = String(args.tag1 || '').trim();
+      const tag2 = String(args.tag2 || '').trim();
+      const endpoint = String(args.endpoint || '').trim();
+      const feedbackURI = String(args.feedbackURI || '').trim();
+      const feedbackHash = String(args.feedbackHash || '0x').trim();
+
+      // Validate valueDecimals range
+      if (valueDecimals < 0 || valueDecimals > 18 || !Number.isInteger(valueDecimals)) {
+        throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'valueDecimals must be integer 0-18');
+      }
+
+      // Validate feedbackHash format if provided
+      if (feedbackHash && feedbackHash !== '0x' && !/^0x[a-fA-F0-9]{64}$/.test(feedbackHash)) {
+        throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'feedbackHash must be bytes32 (0x + 64 hex chars)');
+      }
+
       const data = encodeFunctionData({
         abi: ERC8004_REPUTATION_REGISTRY_ABI as any,
         functionName: 'giveFeedback',
-        args: [
-          BigInt(String(args.agentTokenId || '').trim()),
-          BigInt(String(args.score || '').trim()),
-          Number(String(args.category || '').trim()),
-          String(args.comment || '').trim(),
-          String(args.metadataURI || '').trim(),
-          String(args.proofURI || '').trim(),
-          String(args.context || '').trim(),
-          String(args.ref || '').trim(),
-        ],
+        args: [agentTokenId, value, valueDecimals, tag1, tag2, endpoint, feedbackURI, feedbackHash as `0x${string}`],
       });
       return {
         chainId: ARC_CHAIN_ID,

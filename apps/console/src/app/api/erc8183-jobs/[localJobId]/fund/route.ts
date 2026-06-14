@@ -52,9 +52,19 @@ export async function POST(
         }, { status: 409 });
     }
 
-    // 2. priceAtomic must be present and positive
-    const priceAtomic = Number(job.priceAtomic);
-    if (!job.priceAtomic || Number.isNaN(priceAtomic) || priceAtomic <= 0) {
+    // 2. priceAtomic must be present and positive (exact bigint, no Number conversion)
+    let priceAtomic: bigint;
+    try {
+      priceAtomic = BigInt(job.priceAtomic);
+    } catch {
+      return humanJson(req, {
+          ok: false,
+          ...escrowRail(),
+          error: 'budget_zero',
+          message: 'Job budget is zero or missing. Provider must set a valid budget first.',
+        }, { status: 409 });
+    }
+    if (!job.priceAtomic || priceAtomic <= 0n) {
       return humanJson(req, {
           ok: false,
           ...escrowRail(),
@@ -136,7 +146,7 @@ export async function POST(
     //
     // If any mismatch exists, funding MUST fail to prevent partial escrow.
 
-    if (onchainJob.budget !== BigInt(priceAtomic)) {
+    if (onchainJob.budget !== priceAtomic) {
       return humanJson(req, {
           ok: false,
           ...escrowRail(),
