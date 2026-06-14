@@ -3,7 +3,7 @@
  *
  * Discovers Open and Funded jobs, executes the full provider lifecycle:
  *   Open   → validate proposal → setBudget → notify client
- *   Funded → execute runtime → optional x402 → publish deliverable → submit
+ *   Funded → execute runtime → publish deliverable → submit
  *
  * Design:
  *   - 1 VPS = 1 role = 1 agentId = 1 wallet
@@ -25,8 +25,6 @@ import {
   isJobEnvelope,
   extractProposedBudget,
   parseUsdcToAtomic,
-  isLegacyJob,
-  type JobEnvelopeV1,
 } from "@arclayer/runner-core";
 import type { RunnerServices } from "../services";
 import type { ArcLayerMcpConnector } from "../mcp-connector";
@@ -384,44 +382,17 @@ export class ProviderWorker extends EventEmitter {
     this.emit("runtime_started", { jobId });
     await this.notifyTelegram("runtime_started", `Starting execution for job ${jobId}`);
 
-    // Check if x402 is enabled for this job
-    let x402Enabled = false;
-    if (isJobEnvelope(description)) {
-      const envelope = JSON.parse(description) as JobEnvelopeV1;
-      x402Enabled = envelope.x402.enabled && !isLegacyJob(description);
-    }
-
     // Execute via existing RunnerServices.runProviderJob()
+    // x402 payments are handled by the separate x402-agent role, not here.
     let runtimeResult: unknown;
     try {
       runtimeResult = await this.services.runProviderJob({
         jobId: erc8183JobId,
         description,
-        // Additional context from the job record
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`Runtime execution failed: ${msg}`);
-    }
-
-    // Handle x402 if required
-    if (x402Enabled) {
-      const result = runtimeResult as Record<string, unknown>;
-      if (result.state === "needs_payment") {
-        // Process x402 payments via existing payX402
-        const paymentRequests = result.paymentRequests as unknown[];
-        if (Array.isArray(paymentRequests)) {
-          for (const payment of paymentRequests) {
-            try {
-              await this.services.payX402(payment);
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              console.warn(`[provider-worker] x402 payment failed: ${msg}`);
-              // Non-fatal: continue execution
-            }
-          }
-        }
-      }
     }
 
     // Canonicalize deliverable
