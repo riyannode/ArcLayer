@@ -345,7 +345,6 @@ async function main() {
       const shutdown = async () => {
         await worker.stop();
         await context.mcp.close();
-        await context.services.close?.();
         process.exit(0);
       };
 
@@ -379,7 +378,6 @@ async function main() {
       const shutdown = async () => {
         await worker.stop();
         await context.mcp.close();
-        await context.services.close?.();
         process.exit(0);
       };
 

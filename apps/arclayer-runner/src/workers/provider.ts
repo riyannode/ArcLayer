@@ -226,15 +226,18 @@ export class ProviderWorker extends EventEmitter {
   private async verifyPostcondition(
     op: { operationId: string; kind: string; idempotencyKey: string },
   ): Promise<{ outcome: "confirmed" | "failed" | "unknown"; txHash?: string; error?: string }> {
-    // Extract jobId from idempotencyKey (format: "kind:jobId:...")
+    // Extract jobId and expected value from idempotencyKey
+    // setBudget:${jobId}:${amount}
+    // submitDeliverable:${jobId}:${deliverableHash}
     const parts = op.idempotencyKey.split(":");
     const jobId = parts[1];
+    const expectedValue = parts[2];
+
     if (!jobId) {
       return { outcome: "unknown", error: "Cannot extract jobId from idempotencyKey" };
     }
 
     try {
-      // Read on-chain job to verify postcondition
       const statusRaw = await this.mcp.callTool("jobs.get_onchain_status", {
         jobId,
       });
@@ -242,19 +245,37 @@ export class ProviderWorker extends EventEmitter {
 
       switch (op.kind) {
         case "setBudget": {
-          // BudgetSet: onchain budget should be set
-          if (status.budget && String(status.budget) !== "0") {
-            return { outcome: "confirmed" };
+          // BudgetSet: onchain budget equals expected amount
+          const onchainBudget = String(status.budget ?? "");
+          if (!onchainBudget || onchainBudget === "0") {
+            return { outcome: "unknown", error: "Budget not set on-chain" };
           }
-          return { outcome: "unknown", error: "Budget not set on-chain" };
+          if (expectedValue && onchainBudget !== expectedValue) {
+            return { outcome: "failed", error: `Budget mismatch: expected ${expectedValue}, got ${onchainBudget}` };
+          }
+          // Verify provider still equals local wallet
+          const onchainProvider = String(status.provider ?? "").toLowerCase();
+          if (onchainProvider && onchainProvider !== this.config.circleWalletAddress?.toLowerCase()) {
+            return { outcome: "failed", error: "Provider changed after setBudget" };
+          }
+          return { outcome: "confirmed" };
         }
 
         case "submitDeliverable": {
-          // JobSubmitted: status should be Submitted (2)
-          if (status.status === 2 || status.erc8183Status === "Submitted") {
-            return { outcome: "confirmed" };
+          // JobSubmitted: status Submitted + deliverable hash matches
+          const isSubmitted = status.status === 2 || status.erc8183Status === "Submitted";
+          const isCompleted = status.status === 3 || status.erc8183Status === "Completed";
+          const isRejected = status.status === 4 || status.erc8183Status === "Rejected";
+          if (!isSubmitted && !isCompleted && !isRejected) {
+            return { outcome: "unknown", error: "Job not in Submitted/Completed/Rejected state" };
           }
-          return { outcome: "unknown", error: "Job not in Submitted state" };
+          // Verify deliverable hash if available
+          if (expectedValue && status.deliverableHash) {
+            if (String(status.deliverableHash).toLowerCase() !== expectedValue.toLowerCase()) {
+              return { outcome: "failed", error: `Deliverable hash mismatch: expected ${expectedValue}, got ${status.deliverableHash}` };
+            }
+          }
+          return { outcome: "confirmed" };
         }
 
         default:

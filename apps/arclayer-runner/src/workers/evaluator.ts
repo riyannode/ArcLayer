@@ -206,6 +206,7 @@ export class EvaluatorWorker extends EventEmitter {
   ): Promise<{ outcome: "confirmed" | "failed" | "unknown"; txHash?: string; error?: string }> {
     const parts = op.idempotencyKey.split(":");
     const jobId = parts[1];
+
     if (!jobId) {
       return { outcome: "unknown", error: "Cannot extract jobId from idempotencyKey" };
     }
@@ -218,19 +219,26 @@ export class EvaluatorWorker extends EventEmitter {
 
       switch (op.kind) {
         case "completeJob": {
-          // JobCompleted: status should be Completed (3)
+          // JobCompleted: status Completed (3)
           if (status.status === 3 || status.erc8183Status === "Completed") {
             return { outcome: "confirmed" };
           }
-          return { outcome: "unknown", error: "Job not in Completed state" };
+          // If still Submitted, the tx may not have landed
+          if (status.status === 2 || status.erc8183Status === "Submitted") {
+            return { outcome: "unknown", error: "Job still Submitted — complete tx may not have landed" };
+          }
+          return { outcome: "failed", error: `Unexpected status: ${status.erc8183Status ?? status.status}` };
         }
 
         case "rejectJob": {
-          // JobRejected: status should be Rejected (4)
+          // JobRejected: status Rejected (4)
           if (status.status === 4 || status.erc8183Status === "Rejected") {
             return { outcome: "confirmed" };
           }
-          return { outcome: "unknown", error: "Job not in Rejected state" };
+          if (status.status === 2 || status.erc8183Status === "Submitted") {
+            return { outcome: "unknown", error: "Job still Submitted — reject tx may not have landed" };
+          }
+          return { outcome: "failed", error: `Unexpected status: ${status.erc8183Status ?? status.status}` };
         }
 
         default:
