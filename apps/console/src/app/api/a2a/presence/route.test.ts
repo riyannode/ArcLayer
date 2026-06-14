@@ -2,7 +2,8 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 // ─── Mocks (vi.hoisted makes them available during vi.mock hoisting) ─────────
 
-const { mockUpsert, mockMaybeSingle } = vi.hoisted(() => ({
+const { mockRequireApiKey, mockUpsert, mockMaybeSingle } = vi.hoisted(() => ({
+  mockRequireApiKey: vi.fn(),
   mockUpsert: vi.fn().mockResolvedValue({ ok: true }),
   mockMaybeSingle: vi.fn(),
 }));
@@ -22,7 +23,7 @@ vi.mock('@/lib/x402/supabaseClient', () => ({
 }));
 
 vi.mock('@/lib/a2a/auth', () => ({
-  requireApiKey: vi.fn(),
+  requireApiKey: (...args: unknown[]) => mockRequireApiKey(...args),
 }));
 
 vi.mock('@/lib/a2a/live-events', async (importOriginal) => {
@@ -55,8 +56,10 @@ function makePostRequest(body: Record<string, unknown>): NextRequest {
 describe('POST /api/a2a/presence — secret field rejection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.A2A_LIVE_EVENTS_TOKEN = 'test-token';
     mockUpsert.mockResolvedValue({ ok: true });
+    mockRequireApiKey.mockResolvedValue({
+      key: { agentId: '36192' },
+    });
   });
 
   it('rejects body with privateKey at top level', async () => {
@@ -117,8 +120,8 @@ describe('POST /api/a2a/presence — secret field rejection', () => {
       agentName: 'test-bot',
       status: 'online',
       role: 'provider',
-      runtimeType: 'erc8183-bot',
-      processName: 'arclayer-erc8183-provider',
+      runtimeType: 'runner',
+      processName: 'arclayer-runner',
       version: '0.1.0',
       chainId: 5042002,
       rpcOk: true,
@@ -193,8 +196,8 @@ describe('GET /api/agents/[agentId]/bot-health', () => {
       lastEventSummary: 'heartbeat',
       updatedAt: recentTime,
       role: 'provider',
-      runtimeType: 'erc8183-bot',
-      processName: 'arclayer-erc8183-provider',
+      runtimeType: 'runner',
+      processName: 'arclayer-runner',
       version: '0.1.0',
       chainId: 5042002,
       rpcOk: true,
@@ -204,7 +207,7 @@ describe('GET /api/agents/[agentId]/bot-health', () => {
     const json = await res.json();
     expect(json.status).toBe('online');
     expect(json.role).toBe('provider');
-    expect(json.runtimeType).toBe('erc8183-bot');
+    expect(json.runtimeType).toBe('runner');
   });
 
   it('returns offline when heartbeat is stale (>5min)', async () => {

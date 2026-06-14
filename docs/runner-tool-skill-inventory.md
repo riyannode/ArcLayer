@@ -184,10 +184,6 @@ Source: `apps/console/src/lib/mcp/server.ts`
 
 | Path | Purpose | Status | Reason |
 |------|---------|--------|--------|
-| `apps/console/public/install/erc8183-bot.sh` | PM2 one-click installer | LEGACY | Replaced by `npx -y @arclayer/setup@next` |
-| `apps/console/public/install/erc8183-provider.sh` | PM2 provider installer | LEGACY | Same |
-| `apps/console/public/install/erc8183-evaluator.sh` | PM2 evaluator installer | LEGACY | Same |
-| `examples/external-pm2-bots/` | PM2 bot examples | LEGACY | Runner MCP STDIO is new path |
 | `packages/mcp-connect/` | MCP connect plugin | KEEP_ACTIVE | Used by arclayer-codex |
 | `packages/mcp-connect/arclayer-codex-0.1.0.tgz` | Codex package | KEEP_ACTIVE | UI still uses `npx arclayer-codex@latest` |
 | `packages/mcp-connect/arclayer-mcp-connect-0.1.0.tgz` | MCP connect package | KEEP_ACTIVE | Codex depends on it |
