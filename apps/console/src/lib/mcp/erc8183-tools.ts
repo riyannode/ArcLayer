@@ -17,6 +17,7 @@ import {
   ERC8183_AGENTIC_COMMERCE_ABI,
   USDC_ABI,
   CONTRACTS,
+  ARC_DEPLOYMENT_BLOCK,
 } from '@arclayer/sdk';
 import { readOnchainJob, getArcPublicClient } from '@/lib/erc8183-jobs/receipt';
 import { indexerUrl } from '@/lib/indexer';
@@ -344,6 +345,8 @@ export async function handleJobsGetOnchainStatus(
 
   const { job, source } = result;
 
+  const statusCode = Number((job as any).status ?? 0);
+
   // Read additional on-chain data (only when contract read succeeded)
   let hasBudget: boolean | null = null;
   let paymentToken: string | null = null;
@@ -381,7 +384,7 @@ export async function handleJobsGetOnchainStatus(
             (item: any) => item.type === 'event' && item.name === 'JobSubmitted',
           ),
           args: { jobId },
-          fromBlock: 0n,
+          fromBlock: ARC_DEPLOYMENT_BLOCK,
           toBlock: 'latest',
         });
         const latest = logs.at(-1) as any;
@@ -391,8 +394,6 @@ export async function handleJobsGetOnchainStatus(
       }
     }
   }
-
-  const statusCode = Number((job as any).status ?? 0);
 
   return {
     ok: true,
