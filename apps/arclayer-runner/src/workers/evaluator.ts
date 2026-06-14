@@ -217,28 +217,34 @@ export class EvaluatorWorker extends EventEmitter {
       });
       const status = JSON.parse(statusRaw as string) as Record<string, unknown>;
 
+      // Helper: read status code from response
+      const readStatusCode = (): number | null => {
+        const direct = status.statusCode ?? (status.raw as Record<string, unknown>)?.status;
+        const n = Number(direct);
+        return Number.isFinite(n) ? n : null;
+      };
+
+      const statusCode = readStatusCode();
+
       switch (op.kind) {
         case "completeJob": {
           // JobCompleted: status Completed (3)
-          if (status.status === 3 || status.erc8183Status === "Completed") {
-            return { outcome: "confirmed" };
-          }
+          if (statusCode === 3) return { outcome: "confirmed" };
           // If still Submitted, the tx may not have landed
-          if (status.status === 2 || status.erc8183Status === "Submitted") {
+          if (statusCode === 2) {
             return { outcome: "unknown", error: "Job still Submitted — complete tx may not have landed" };
           }
-          return { outcome: "failed", error: `Unexpected status: ${status.erc8183Status ?? status.status}` };
+          return { outcome: "failed", error: `Unexpected status: ${status.statusLabel ?? statusCode}` };
         }
 
         case "rejectJob": {
           // JobRejected: status Rejected (4)
-          if (status.status === 4 || status.erc8183Status === "Rejected") {
-            return { outcome: "confirmed" };
-          }
-          if (status.status === 2 || status.erc8183Status === "Submitted") {
+          if (statusCode === 4) return { outcome: "confirmed" };
+          // If still Submitted, the tx may not have landed
+          if (statusCode === 2) {
             return { outcome: "unknown", error: "Job still Submitted — reject tx may not have landed" };
           }
-          return { outcome: "failed", error: `Unexpected status: ${status.erc8183Status ?? status.status}` };
+          return { outcome: "failed", error: `Unexpected status: ${status.statusLabel ?? statusCode}` };
         }
 
         default:

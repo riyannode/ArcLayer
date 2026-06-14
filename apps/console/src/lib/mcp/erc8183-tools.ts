@@ -347,6 +347,7 @@ export async function handleJobsGetOnchainStatus(
   // Read additional on-chain data (only when contract read succeeded)
   let hasBudget: boolean | null = null;
   let paymentToken: string | null = null;
+  let submittedDeliverableHash: string | null = null;
   if (source === 'contract') {
     try {
       const client = getArcPublicClient();
@@ -369,6 +370,26 @@ export async function handleJobsGetOnchainStatus(
     } catch {
       // Non-critical, omit
     }
+
+    // Read submitted deliverable hash from JobSubmitted event
+    if (statusCode >= 2) {
+      try {
+        const client = getArcPublicClient();
+        const logs = await client.getLogs({
+          address: CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address,
+          event: (ERC8183_AGENTIC_COMMERCE_ABI as any[]).find(
+            (item: any) => item.type === 'event' && item.name === 'JobSubmitted',
+          ),
+          args: { jobId },
+          fromBlock: 0n,
+          toBlock: 'latest',
+        });
+        const latest = logs.at(-1) as any;
+        submittedDeliverableHash = latest?.args?.deliverable ?? null;
+      } catch {
+        submittedDeliverableHash = null;
+      }
+    }
   }
 
   const statusCode = Number((job as any).status ?? 0);
@@ -389,6 +410,7 @@ export async function handleJobsGetOnchainStatus(
     hook: (job as any).hook ?? null,
     hasBudget,
     paymentToken,
+    submittedDeliverableHash,
     raw: jsonSafe(job),
   };
 }

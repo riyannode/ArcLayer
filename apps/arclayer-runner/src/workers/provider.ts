@@ -243,19 +243,44 @@ export class ProviderWorker extends EventEmitter {
       });
       const status = JSON.parse(statusRaw as string) as Record<string, unknown>;
 
+      // Helper: read status code from response (handles statusCode/status/raw.status)
+      const readStatusCode = (): number | null => {
+        const direct = status.statusCode ?? (status.raw as Record<string, unknown>)?.status;
+        const n = Number(direct);
+        return Number.isFinite(n) ? n : null;
+      };
+
+      // Helper: read budget atomic from response
+      const readBudgetAtomic = (): string => {
+        const raw = status.raw as Record<string, unknown> | undefined;
+        return String(status.budgetAtomic ?? raw?.budget ?? "");
+      };
+
+      // Helper: read provider from response
+      const readProvider = (): string => {
+        const raw = status.raw as Record<string, unknown> | undefined;
+        return String(status.provider ?? raw?.provider ?? "").toLowerCase();
+      };
+
       switch (op.kind) {
         case "setBudget": {
           // BudgetSet: onchain budget equals expected amount
-          const onchainBudget = String(status.budget ?? "");
+          const onchainBudget = readBudgetAtomic();
           if (!onchainBudget || onchainBudget === "0") {
             return { outcome: "unknown", error: "Budget not set on-chain" };
           }
-          if (expectedValue && onchainBudget !== expectedValue) {
+          if (!expectedValue) {
+            return { outcome: "unknown", error: "Missing expected budget in idempotencyKey" };
+          }
+          if (onchainBudget !== expectedValue) {
             return { outcome: "failed", error: `Budget mismatch: expected ${expectedValue}, got ${onchainBudget}` };
           }
           // Verify provider still equals local wallet
-          const onchainProvider = String(status.provider ?? "").toLowerCase();
-          if (onchainProvider && onchainProvider !== this.config.circleWalletAddress?.toLowerCase()) {
+          const onchainProvider = readProvider();
+          if (!onchainProvider) {
+            return { outcome: "unknown", error: "Provider missing from on-chain status" };
+          }
+          if (onchainProvider !== this.config.circleWalletAddress!.toLowerCase()) {
             return { outcome: "failed", error: "Provider changed after setBudget" };
           }
           return { outcome: "confirmed" };
@@ -263,17 +288,23 @@ export class ProviderWorker extends EventEmitter {
 
         case "submitDeliverable": {
           // JobSubmitted: status Submitted + deliverable hash matches
-          const isSubmitted = status.status === 2 || status.erc8183Status === "Submitted";
-          const isCompleted = status.status === 3 || status.erc8183Status === "Completed";
-          const isRejected = status.status === 4 || status.erc8183Status === "Rejected";
-          if (!isSubmitted && !isCompleted && !isRejected) {
-            return { outcome: "unknown", error: "Job not in Submitted/Completed/Rejected state" };
+          const statusCode = readStatusCode();
+          if (![2, 3, 4].includes(statusCode ?? -1)) {
+            return { outcome: "unknown", error: `Job not in Submitted/Completed/Rejected state: ${status.statusLabel ?? statusCode}` };
           }
-          // Verify deliverable hash if available
-          if (expectedValue && status.deliverableHash) {
-            if (String(status.deliverableHash).toLowerCase() !== expectedValue.toLowerCase()) {
-              return { outcome: "failed", error: `Deliverable hash mismatch: expected ${expectedValue}, got ${status.deliverableHash}` };
-            }
+          if (!expectedValue) {
+            return { outcome: "unknown", error: "Missing expected deliverable hash in idempotencyKey" };
+          }
+          const submittedHash = String(
+            status.submittedDeliverableHash ??
+            (status.raw as Record<string, unknown>)?.deliverable ??
+            "",
+          );
+          if (!submittedHash) {
+            return { outcome: "unknown", error: "Submitted deliverable hash missing from on-chain status" };
+          }
+          if (submittedHash.toLowerCase() !== expectedValue.toLowerCase()) {
+            return { outcome: "failed", error: `Deliverable hash mismatch: expected ${expectedValue}, got ${submittedHash}` };
           }
           return { outcome: "confirmed" };
         }
