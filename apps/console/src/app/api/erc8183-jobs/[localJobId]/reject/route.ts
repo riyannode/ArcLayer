@@ -1,4 +1,5 @@
 import { humanJson } from '@/lib/api/human-json';
+import { safeErrorForLog } from '@/lib/sanitize-error';
 /**
  * POST /api/erc8183-jobs/[localJobId]/reject
  *
@@ -178,7 +179,7 @@ export async function POST(
     try {
       claimed = await claimErc8183Reject({ localJobId });
     } catch (err) {
-      console.error(`[reject] claimErc8183Reject failed for job ${localJobId}:`, err);
+      console.error(`[reject] claimErc8183Reject failed for job ${localJobId}:`, safeErrorForLog(err));
       return humanJson(req, { ok: false, ...escrowRail(), error: 'claim_failed', message: 'An internal error occurred.' }, { status: 500 });
     }
 
@@ -246,7 +247,7 @@ export async function POST(
     try {
       onchainJob = await readOnchainJob(erc8183JobIdBigInt);
     } catch (err) {
-      console.error(`[reject] readOnchainJob failed for job ${localJobId}:`, err);
+      console.error(`[reject] readOnchainJob failed for job ${localJobId}:`, safeErrorForLog(err));
       await markErc8183RejectFailed({ localJobId }).catch(() => {});
       return humanJson(req, { ok: false, ...escrowRail(), error: 'onchain_read_failed', message: 'An internal error occurred.' }, { status: 502 });
     }
@@ -282,7 +283,7 @@ export async function POST(
         args: [erc8183JobIdBigInt, reasonHash as Hex, optParams as Hex],
       });
     } catch (err) {
-      console.error(`[reject] writeContract failed for job ${localJobId}:`, err);
+      console.error(`[reject] writeContract failed for job ${localJobId}:`, safeErrorForLog(err));
       await markErc8183RejectFailed({ localJobId }).catch(() => {});
       return humanJson(req, {
           ok: false,
@@ -302,7 +303,7 @@ export async function POST(
         timeout: 60_000,
       });
     } catch (err) {
-      console.error(`[reject] waitForTransactionReceipt failed for job ${localJobId}:`, err);
+      console.error(`[reject] waitForTransactionReceipt failed for job ${localJobId}:`, safeErrorForLog(err));
       await markErc8183RejectFailed({ localJobId }).catch(() => {});
       return humanJson(req, {
           ok: false,
@@ -337,7 +338,7 @@ export async function POST(
       if (err instanceof Error && err.message.includes('IDEMPOTENT')) {
         // Continue — already stored
       } else {
-        console.error(`[reject] attachErc8183RejectTx failed for job ${localJobId}:`, err);
+        console.error(`[reject] attachErc8183RejectTx failed for job ${localJobId}:`, safeErrorForLog(err));
         // Don't fail the response — tx was already sent on-chain
       }
     }
@@ -359,7 +360,7 @@ export async function POST(
         }).catch((err) => {
           console.error(
             `[reject] reputation write failed for provider ${providerAgentId}, job ${localJobId}:`,
-            err instanceof Error ? err.message : err,
+            safeErrorForLog(err),
           );
         });
       } else {
@@ -383,7 +384,7 @@ export async function POST(
       message: 'Job rejected successfully.',
     });
   } catch (err) {
-    console.error(`[reject] unexpected error for job ${localJobId}:`, err);
+    console.error(`[reject] unexpected error for job ${localJobId}:`, safeErrorForLog(err));
     // Rollback claim if we claimed but hit unexpected error
     if (claimed) {
       await markErc8183RejectFailed({ localJobId }).catch(() => {});
