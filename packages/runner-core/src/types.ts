@@ -119,6 +119,42 @@ export const InitFileConfigSchema = z.object({
     defaultTimeoutMs: z.coerce.number().int().min(1000).default(30_000),
     maxOutputBytes: z.coerce.number().int().min(1024).default(1_048_576),
   }).default({}),
+  // ── Autonomy config ──────────────────────────────────────────────────
+  autonomy: z.object({
+    enabled: z.preprocess(
+      (v) => {
+        if (typeof v === "string") return v === "true" || v === "1";
+        return v;
+      },
+      z.boolean().default(false)
+    ),
+    pollIntervalMs: z.coerce.number().int().min(1000).default(5000),
+    leaseMs: z.coerce.number().int().min(2000).default(60000),
+    maxRetries: z.coerce.number().int().min(0).max(10).default(3),
+    maxConcurrentJobs: z.coerce.number().int().min(1).max(10).default(1),
+    x402ResumeEnabled: z.preprocess(
+      (v) => {
+        if (typeof v === "string") return v === "true" || v === "1";
+        return v;
+      },
+      z.boolean().default(false)
+    ),
+    maxX402CyclesPerJob: z.coerce.number().int().min(0).max(10).default(3),
+    maxX402SpendPerJobUsdc: z.string().regex(/^\d+(\.\d+)?$/).default("0.05"),
+    evaluatorCompleteThreshold: z.coerce.number().int().min(0).max(100).default(80),
+    evaluatorManualReviewThreshold: z.coerce.number().int().min(0).max(100).default(60),
+    allowLegacyPlainTextJobs: z.preprocess(
+      (v) => {
+        if (typeof v === "string") return v === "true" || v === "1";
+        return v;
+      },
+      z.boolean().default(false)
+    ),
+  }).default({}),
+  // ── Network config ───────────────────────────────────────────────────
+  network: z.object({
+    rpcUrl: z.string().optional(),
+  }).default({}),
 });
 
 export type InitFileConfig = z.infer<typeof InitFileConfigSchema>;
@@ -154,6 +190,20 @@ export function transformFileConfig(
     toolMaxTotalUsdc: file.broker?.maxTotalUsdc ?? "10",
     toolDefaultTimeoutMs: file.broker?.defaultTimeoutMs ?? 30_000,
     toolMaxOutputBytes: file.broker?.maxOutputBytes ?? 1_048_576,
+    // Autonomy config (flattened from nested autonomy.*)
+    autonomyEnabled: file.autonomy?.enabled ?? false,
+    autonomyPollIntervalMs: file.autonomy?.pollIntervalMs ?? 5000,
+    autonomyLeaseMs: file.autonomy?.leaseMs ?? 60000,
+    autonomyMaxRetries: file.autonomy?.maxRetries ?? 3,
+    autonomyMaxConcurrentJobs: file.autonomy?.maxConcurrentJobs ?? 1,
+    autonomyX402ResumeEnabled: file.autonomy?.x402ResumeEnabled ?? false,
+    autonomyMaxX402CyclesPerJob: file.autonomy?.maxX402CyclesPerJob ?? 3,
+    autonomyMaxX402SpendPerJobUsdc: file.autonomy?.maxX402SpendPerJobUsdc ?? "0.05",
+    autonomyEvaluatorCompleteThreshold: file.autonomy?.evaluatorCompleteThreshold ?? 80,
+    autonomyEvaluatorManualReviewThreshold: file.autonomy?.evaluatorManualReviewThreshold ?? 60,
+    autonomyAllowLegacyPlainTextJobs: file.autonomy?.allowLegacyPlainTextJobs ?? false,
+    // Network config (flattened from nested network.*)
+    arcRpcUrl: file.network?.rpcUrl ?? undefined,
     // Policy fields from policy.json
     ...policy
   };
@@ -227,6 +277,29 @@ export const RunnerConfigSchema = z.object({
   toolMaxTotalUsdc: z.string().default("10"),
   toolDefaultTimeoutMs: z.coerce.number().int().min(1000).default(30_000),
   toolMaxOutputBytes: z.coerce.number().int().min(1024).default(1_048_576),
+
+  // ── Autonomy config (flattened from autonomy.*) ──────────────────────
+  autonomyEnabled: z.preprocess(
+    (v) => { if (typeof v === "string") return v === "true" || v === "1"; return v; },
+    z.boolean().default(false)
+  ),
+  autonomyPollIntervalMs: z.coerce.number().int().min(1000).default(5000),
+  autonomyLeaseMs: z.coerce.number().int().min(2000).default(60000),
+  autonomyMaxRetries: z.coerce.number().int().min(0).max(10).default(3),
+  autonomyMaxConcurrentJobs: z.coerce.number().int().min(1).max(10).default(1),
+  autonomyX402ResumeEnabled: z.preprocess(
+    (v) => { if (typeof v === "string") return v === "true" || v === "1"; return v; },
+    z.boolean().default(false)
+  ),
+  autonomyMaxX402CyclesPerJob: z.coerce.number().int().min(0).max(10).default(3),
+  autonomyMaxX402SpendPerJobUsdc: z.string().regex(/^\d+(\.\d+)?$/).default("0.05"),
+  autonomyEvaluatorCompleteThreshold: z.coerce.number().int().min(0).max(100).default(80),
+  autonomyEvaluatorManualReviewThreshold: z.coerce.number().int().min(0).max(100).default(60),
+  autonomyAllowLegacyPlainTextJobs: z.preprocess(
+    (v) => { if (typeof v === "string") return v === "true" || v === "1"; return v; },
+    z.boolean().default(false)
+  ),
+  arcRpcUrl: z.string().optional(),
 
   dataDir: z.string().default(".arclayer-runner"),
   port: z.coerce.number().int().min(1).max(65535).default(8787),

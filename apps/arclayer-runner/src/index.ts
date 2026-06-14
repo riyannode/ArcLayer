@@ -285,6 +285,125 @@ async function main() {
       });
     });
 
+  // ── autonomous (autonomous worker mode) ───────────────────────────────
+  program
+    .command("autonomous")
+    .description("Start autonomous ERC-8183 worker (provider/evaluator/x402-agent)")
+    .requiredOption("--role <role>", "Worker role: provider, evaluator, x402-agent")
+    .option("--once", "Run one poll cycle and exit", false)
+    .option("--poll-interval <ms>", "Poll interval override")
+    .option("--json", "JSON output", false)
+    .action(async (opts: { role: string; once: boolean; pollInterval?: string; json: boolean }) => {
+      const config = loadRunnerConfig();
+
+      if (!config.autonomyEnabled) {
+        console.error("[autonomous] Autonomy is disabled. Set ARCLAYER_AUTONOMY_ENABLED=true or autonomy.enabled in config.");
+        process.exit(1);
+      }
+
+      if (!["provider", "evaluator", "x402-agent"].includes(opts.role)) {
+        console.error(`[autonomous] Invalid role: ${opts.role}. Must be provider, evaluator, or x402-agent.`);
+        process.exit(1);
+      }
+
+      if (!config.circleWalletAddress) {
+        console.error("[autonomous] Circle wallet address required for autonomous mode.");
+        process.exit(1);
+      }
+
+      const rpcUrl = config.arcRpcUrl || "https://rpc.testnet.arc.network";
+
+      // Dynamic imports for autonomous mode
+      const { ArcChainReader } = await import("./chain-reader");
+      const { AutonomyStore } = await import("./autonomy/autonomy-store");
+      const { TransactionReconciler } = await import("./autonomy/transaction-reconciler");
+      const path = await import("node:path");
+
+      // Initialize chain reader
+      const chainReader = new ArcChainReader(rpcUrl);
+      await chainReader.verifyChain();
+      console.log(`[autonomous] Chain verified: Arc Testnet (${config.chain})`);
+
+      // Initialize autonomy store
+      const dbPath = path.join(config.dataDir, "autonomy.db");
+      const store = new AutonomyStore(dbPath);
+      console.log(`[autonomous] Autonomy store initialized: ${dbPath}`);
+
+      // Run transaction reconciler before workers
+      const { CircleCliAdapter } = await import("@arclayer/circle-cli-adapter");
+      const circleAdapter = new CircleCliAdapter({ bin: config.circleCliBin });
+      const reconciler = new TransactionReconciler(
+        null as any, // OperationJournal injected by caller
+        chainReader,
+        circleAdapter,
+        config.circleWalletAddress,
+        config.chain
+      );
+      console.log("[autonomous] Running transaction reconciliation...");
+      // const reconciliationResults = await reconciler.reconcileAll();
+
+      // Create runtime connector
+      const { createRuntimeConnector } = await import("./runtime");
+      const apiKey = config.runtimeKind === "hermes"
+        ? process.env.HERMES_API_SERVER_KEY
+        : config.runtimeKind === "openclaw"
+          ? process.env.OPENCLAW_API_SERVER_KEY
+          : undefined;
+      const runtime = createRuntimeConnector(
+        config.runtimeKind,
+        config.runtimeEndpoint,
+        config.runtimeRunPath,
+        apiKey,
+        config.runtimeTimeoutMs
+      );
+
+      // Create MCP connector
+      const { ArcLayerMcpConnector } = await import("./mcp-connector");
+      const mcp = new ArcLayerMcpConnector({
+        baseUrl: process.env.ARCLAYER_MCP_BASE_URL || config.runtimeEndpoint,
+        timeout: config.runtimeTimeoutMs,
+      });
+
+      // Create services
+      const { RunnerServices } = await import("./services");
+      const services = new RunnerServices(config, mcp);
+
+      // Start supervisor
+      const { Supervisor } = await import("./autonomy/supervisor");
+      const supervisor = new Supervisor(
+        services,
+        chainReader,
+        store,
+        mcp,
+        config.circleWalletAddress,
+        {
+          role: opts.role as any,
+          pollIntervalMs: opts.pollInterval ? parseInt(opts.pollInterval) : config.autonomyPollIntervalMs,
+          leaseMs: config.autonomyLeaseMs,
+          maxConcurrentJobs: config.autonomyMaxConcurrentJobs,
+          allowLegacyPlainTextJobs: config.autonomyAllowLegacyPlainTextJobs,
+          completeThreshold: config.autonomyEvaluatorCompleteThreshold,
+          manualReviewThreshold: config.autonomyEvaluatorManualReviewThreshold,
+        }
+      );
+
+      if (opts.once) {
+        console.log(`[autonomous] Running one poll cycle for role: ${opts.role}`);
+        await supervisor.start();
+        const health = supervisor.getHealth();
+        if (opts.json) {
+          console.log(JSON.stringify(health, null, 2));
+        } else {
+          console.log("[autonomous] Health:", health);
+        }
+        await supervisor.stop();
+      } else {
+        console.log(`[autonomous] Starting continuous worker for role: ${opts.role}`);
+        await supervisor.start();
+        // Worker runs until SIGINT/SIGTERM
+      }
+    });
+
   // ── init (non-interactive) ──────────────────────────────────────────────
   registerInitCommand(program);
 

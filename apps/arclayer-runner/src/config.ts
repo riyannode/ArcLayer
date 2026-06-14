@@ -247,5 +247,16 @@ function buildEnvConfig(): Record<string, unknown> {
   if (process.env.ARCLAYER_TOOL_DEFAULT_TIMEOUT_MS) set("toolDefaultTimeoutMs", process.env.ARCLAYER_TOOL_DEFAULT_TIMEOUT_MS);
   if (process.env.ARCLAYER_TOOL_MAX_OUTPUT_BYTES) set("toolMaxOutputBytes", process.env.ARCLAYER_TOOL_MAX_OUTPUT_BYTES);
 
+  // ── Autonomy config ──────────────────────────────────────────────────
+  if (process.env.ARCLAYER_AUTONOMY_ENABLED) set("autonomyEnabled", process.env.ARCLAYER_AUTONOMY_ENABLED);
+  if (process.env.ARCLAYER_AUTONOMY_POLL_INTERVAL_MS) set("autonomyPollIntervalMs", process.env.ARCLAYER_AUTONOMY_POLL_INTERVAL_MS);
+  if (process.env.ARCLAYER_AUTONOMY_LEASE_MS) set("autonomyLeaseMs", process.env.ARCLAYER_AUTONOMY_LEASE_MS);
+  if (process.env.ARCLAYER_AUTONOMY_MAX_RETRIES) set("autonomyMaxRetries", process.env.ARCLAYER_AUTONOMY_MAX_RETRIES);
+  if (process.env.ARCLAYER_AUTONOMY_MAX_CONCURRENT_JOBS) set("autonomyMaxConcurrentJobs", process.env.ARCLAYER_AUTONOMY_MAX_CONCURRENT_JOBS);
+  if (process.env.ARCLAYER_AUTONOMY_X402_RESUME_ENABLED) set("autonomyX402ResumeEnabled", process.env.ARCLAYER_AUTONOMY_X402_RESUME_ENABLED);
+  if (process.env.ARCLAYER_AUTONOMY_MAX_X402_CYCLES) set("autonomyMaxX402CyclesPerJob", process.env.ARCLAYER_AUTONOMY_MAX_X402_CYCLES);
+  if (process.env.ARCLAYER_AUTONOMY_MAX_X402_SPEND_USDC) set("autonomyMaxX402SpendPerJobUsdc", process.env.ARCLAYER_AUTONOMY_MAX_X402_SPEND_USDC);
+  if (process.env.ARC_RPC_URL) set("arcRpcUrl", process.env.ARC_RPC_URL);
+
   return envConfig;
 }

@@ -90,6 +90,12 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
   { name: "erc8183.claim_refund", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["client", "devops-admin", "full-stack-agent"], requiresCircle: true, description: "Claim refund for expired ERC-8183 job (client action)" },
   { name: "erc8183.set_provider", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["client", "devops-admin", "full-stack-agent"], requiresCircle: true, description: "Assign provider to open ERC-8183 job (client action)" },
 
+  // Autonomous ERC-8183 High-Level Tools
+  { name: "erc8183.client_create_and_fund", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle", "autonomy"], roles: ["client", "full-stack-agent"], requiresCircle: true, description: "Create and fund an ERC-8183 job in one call (autonomous client orchestration)" },
+  { name: "erc8183.client_workflow_status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8183", "autonomy"], roles: ["client", "provider", "evaluator", "full-stack-agent", "devops-admin"], description: "Get client workflow status" },
+  { name: "erc8183.autonomy_status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["autonomy"], roles: ["client", "provider", "evaluator", "x402-agent", "devops-admin", "full-stack-agent"], description: "Get autonomy worker health status" },
+  { name: "erc8183.autonomy_events", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["autonomy"], roles: ["client", "provider", "evaluator", "x402-agent", "devops-admin", "full-stack-agent"], description: "List autonomy workflow events" },
+
   // ERC-8004 Register via Circle CLI (guarded)
   { name: "erc8004.register_via_circle_cli", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity"], roles: ["identity-agent", "devops-admin"], requiresCircle: true, description: "Register ERC-8004 identity on-chain. Gated behind allowIdentityRegister." },
 

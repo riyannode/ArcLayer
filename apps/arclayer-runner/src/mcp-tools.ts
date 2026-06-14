@@ -434,6 +434,44 @@ export async function handleMcpTool(
       }, ctx.signal);
     }
 
+    // ── Autonomous ERC-8183 High-Level Tools ──────────────────────────
+    case "erc8183.client_create_and_fund": {
+      const input = validateMcpToolInput<{
+        requestId: string;
+        task: string;
+        input?: unknown;
+        acceptanceCriteria: string[];
+        outputFormat?: "text" | "json" | "markdown";
+        budgetUsdc: string;
+        provider: string;
+        evaluator: string;
+        expiresInSeconds?: number;
+        x402?: { allowed?: boolean; maxSpendUsdc?: string; allowedHosts?: string[] };
+      }>(name, args);
+      // Delegate to ClientOrchestrator (instantiated in services)
+      return services.clientCreateAndFund(input);
+    }
+
+    case "erc8183.client_workflow_status": {
+      const input = validateMcpToolInput<{
+        requestId?: string;
+        jobId?: string;
+      }>(name, args);
+      return services.clientWorkflowStatus(input);
+    }
+
+    case "erc8183.autonomy_status": {
+      return services.autonomyStatus();
+    }
+
+    case "erc8183.autonomy_events": {
+      const input = validateMcpToolInput<{
+        workflowId?: string;
+        jobId?: string;
+      }>(name, args);
+      return services.autonomyEvents(input);
+    }
+
     // ── ERC-8004 Register via Circle CLI (Zod-validated) ──────────────
     case "erc8004.register_via_circle_cli": {
       const input = validateMcpToolInput<{ metadataURI: string }>(name, args);

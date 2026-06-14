@@ -282,6 +282,47 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
     })
   },
 
+  // ── Autonomous ERC-8183 High-Level Tools ────────────────────────────────
+  {
+    name: "erc8183.client_create_and_fund",
+    description: "Create and fund an ERC-8183 job in one call. Encodes versioned job envelope, creates job, sets budget, approves USDC, funds. Idempotent by requestId.",
+    inputSchema: [
+      { name: "requestId", type: "string", required: true, description: "Unique request ID for idempotency." },
+      { name: "task", type: "string", required: true, description: "Task description for the provider." },
+      { name: "input", type: "string", description: "Optional task input (JSON)." },
+      { name: "acceptanceCriteria", type: "string", required: true, description: "JSON array of acceptance criteria strings." },
+      { name: "outputFormat", type: "string", description: "Output format: text, json, markdown." },
+      { name: "budgetUsdc", type: "string", required: true, description: "Budget in human-readable USDC (e.g. '0.1')." },
+      { name: "provider", type: "string", required: true, description: "Provider wallet address." },
+      { name: "evaluator", type: "string", required: true, description: "Evaluator wallet address (non-zero)." },
+      { name: "expiresInSeconds", type: "number", description: "Job expiry in seconds (default 3600)." },
+      { name: "x402Allowed", type: "boolean", description: "Allow x402 payments (default false)." },
+      { name: "x402MaxSpendUsdc", type: "string", description: "Max x402 spend per job in USDC." },
+      { name: "x402AllowedHosts", type: "string", description: "JSON array of allowed x402 hosts." },
+    ]
+  },
+  {
+    name: "erc8183.client_workflow_status",
+    description: "Get status of a client create-and-fund workflow. Returns state, jobId, operations, events.",
+    inputSchema: [
+      { name: "requestId", type: "string", description: "Request ID to look up." },
+      { name: "jobId", type: "string", description: "Job ID to look up." },
+    ]
+  },
+  {
+    name: "erc8183.autonomy_status",
+    description: "Get autonomy worker health status. Returns enabled, role, activeWorkflows, lastPollAt.",
+    inputSchema: []
+  },
+  {
+    name: "erc8183.autonomy_events",
+    description: "List autonomy workflow events. Returns event log for a workflow.",
+    inputSchema: [
+      { name: "workflowId", type: "string", description: "Workflow ID." },
+      { name: "jobId", type: "string", description: "Job ID (looks up workflow by job)." },
+    ]
+  },
+
   // ── ERC-8004 Register via Circle CLI ────────────────────────────────────
   {
     name: "erc8004.register_via_circle_cli",

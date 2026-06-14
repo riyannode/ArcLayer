@@ -1465,6 +1465,47 @@ export class RunnerServices {
     };
   }
 
+  // ── Autonomous ERC-8183 High-Level Methods ─────────────────────────
+
+  private _clientOrchestrator: import("./autonomy/client-orchestrator").ClientOrchestrator | null = null;
+
+  setClientOrchestrator(orchestrator: import("./autonomy/client-orchestrator").ClientOrchestrator): void {
+    this._clientOrchestrator = orchestrator;
+  }
+
+  async clientCreateAndFund(body: unknown): Promise<unknown> {
+    if (!this._clientOrchestrator) {
+      return { ok: false, error: "Client orchestrator not initialized. Run in autonomous mode first." };
+    }
+    return this._clientOrchestrator.createAndFund(body as any);
+  }
+
+  async clientWorkflowStatus(body: unknown): Promise<unknown> {
+    if (!this._clientOrchestrator) {
+      return { ok: false, error: "Client orchestrator not initialized." };
+    }
+    return this._clientOrchestrator.getWorkflowStatus(body as any);
+  }
+
+  async autonomyStatus(): Promise<unknown> {
+    return {
+      ok: true,
+      enabled: this.config.autonomyEnabled,
+      role: this.config.defaultRole,
+      config: {
+        pollIntervalMs: this.config.autonomyPollIntervalMs,
+        leaseMs: this.config.autonomyLeaseMs,
+        maxRetries: this.config.autonomyMaxRetries,
+        maxConcurrentJobs: this.config.autonomyMaxConcurrentJobs,
+        x402ResumeEnabled: this.config.autonomyX402ResumeEnabled,
+      },
+    };
+  }
+
+  async autonomyEvents(_body: unknown): Promise<unknown> {
+    return { ok: true, events: [], message: "Events available in autonomous mode with active store." };
+  }
+
   /**
    * Close persistent stores and release resources.
    * Called during graceful shutdown.
