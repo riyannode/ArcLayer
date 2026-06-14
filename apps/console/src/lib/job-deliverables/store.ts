@@ -73,7 +73,8 @@ export async function publishDeliverable(
   }
 
   // Upsert (one canonical deliverable per job)
-  const { data, error } = await supabase
+  // Cast to any — table type not in generated Supabase types until migration is applied
+  const { data, error } = await (supabase as any)
     .from("agent_job_deliverables")
     .upsert(
       {
@@ -102,7 +103,7 @@ export async function getDeliverable(
   supabase: ReturnType<typeof import("@supabase/supabase-js").createClient>,
   input: GetDeliverableInput
 ): Promise<(JobDeliverable & { integrityValid: boolean }) | null> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("agent_job_deliverables")
     .select("*")
     .eq("job_id", input.jobId)
