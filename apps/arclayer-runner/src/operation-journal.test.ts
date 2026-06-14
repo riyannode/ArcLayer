@@ -12,6 +12,12 @@ function tmpDbPath(): string {
   return join(tmpdir(), `op-journal-test-${randomUUID()}.db`);
 }
 
+function cleanupDb(dbPath: string) {
+  for (const suffix of ["", "-wal", "-shm"]) {
+    if (existsSync(dbPath + suffix)) unlinkSync(dbPath + suffix);
+  }
+}
+
 function makeRecord(overrides: Partial<OperationRecord> = {}): OperationRecord {
   const id = `op-${randomUUID()}`;
   const now = new Date().toISOString();
@@ -44,10 +50,7 @@ describe("OperationJournal", () => {
 
   afterEach(() => {
     journal.close();
-    if (existsSync(dbPath)) unlinkSync(dbPath);
-    // WAL/SHM files
-    if (existsSync(dbPath + "-wal")) unlinkSync(dbPath + "-wal");
-    if (existsSync(dbPath + "-shm")) unlinkSync(dbPath + "-shm");
+    cleanupDb(dbPath);
   });
 
   // ── Schema Migrations ────────────────────────────────────────────────
@@ -57,7 +60,7 @@ describe("OperationJournal", () => {
       expect(journal.getSchemaVersion()).toBe(1);
     });
 
-    it("migrations are idempotent — reopening with same version does not fail", () => {
+    it("migrations are idempotent", () => {
       journal.close();
       const journal2 = new OperationJournal(dbPath);
       expect(journal2.getSchemaVersion()).toBe(1);
@@ -72,504 +75,408 @@ describe("OperationJournal", () => {
     });
   });
 
-  // ── Operation CRUD ───────────────────────────────────────────────────
+  // ── createOperationWithLocks ─────────────────────────────────────────
 
-  describe("operation CRUD", () => {
-    it("inserts and retrieves an operation", () => {
+  describe("createOperationWithLocks", () => {
+    it("creates operation + idempotency key + wallet lock atomically", () => {
       const record = makeRecord();
-      journal.insertOperation(record);
+      const result = journal.createOperationWithLocks(record, { walletAddress: "0xABC" });
 
-      const row = journal.getOperation(record.operationId);
-      expect(row).toBeDefined();
-      expect(row!.operation_id).toBe(record.operationId);
-      expect(row!.state).toBe("created");
+      expect(result.ok).toBe(true);
+      expect(journal.getOperation(record.operationId)).toBeDefined();
+      expect(journal.hasWalletLock("0xABC")).toBe(true);
     });
 
-    it("updates operation state", () => {
+    it("creates operation + job lock atomically", () => {
       const record = makeRecord();
-      journal.insertOperation(record);
-      journal.updateOperation(record.operationId, { state: "confirmed" });
+      const result = journal.createOperationWithLocks(record, { jobId: "job-42" });
 
-      const row = journal.getOperation(record.operationId);
-      expect(row!.state).toBe("confirmed");
+      expect(result.ok).toBe(true);
+      expect(journal.hasJobLock("job-42")).toBe(true);
     });
 
-    it("updates tx_hash", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-      const txHash = "0x" + "a".repeat(64);
-      journal.updateOperation(record.operationId, { txHash });
+    it("returns IDEMPOTENCY_KEY_EXISTS for same key+params", () => {
+      const record = makeRecord({ idempotencyKey: "key-1", paramsHash: "0x" + "a".repeat(64) });
+      journal.createOperationWithLocks(record, {});
 
-      const row = journal.getOperation(record.operationId);
-      expect(row!.tx_hash).toBe(txHash);
+      const record2 = makeRecord({ idempotencyKey: "key-1", paramsHash: "0x" + "a".repeat(64) });
+      const result = journal.createOperationWithLocks(record2, {});
+
+      expect(result.ok).toBe(false);
+      expect((result as any).error).toBe("IDEMPOTENCY_KEY_EXISTS");
     });
 
-    it("updates error_code and error_message", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-      journal.updateOperation(record.operationId, {
-        errorCode: "BROADCAST_FAILED",
-        errorMessage: "Insufficient funds",
-      });
+    it("returns IDEMPOTENCY_CONFLICT for same key + different params", () => {
+      const record = makeRecord({ idempotencyKey: "key-1", paramsHash: "0x" + "a".repeat(64) });
+      journal.createOperationWithLocks(record, {});
 
-      const row = journal.getOperation(record.operationId);
-      expect(row!.error_code).toBe("BROADCAST_FAILED");
-      expect(row!.error_message).toBe("Insufficient funds");
+      const record2 = makeRecord({ idempotencyKey: "key-1", paramsHash: "0x" + "c".repeat(64) });
+      const result = journal.createOperationWithLocks(record2, {});
+
+      expect(result.ok).toBe(false);
+      expect((result as any).error).toBe("IDEMPOTENCY_CONFLICT");
     });
 
-    it("deletes operation and cascading records", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-      journal.storeResult(record.operationId, { stdout: "test" });
-      journal.storeReceipt(record.operationId, { receiptId: "r-1" });
+    it("returns WALLET_LOCKED when wallet is held", () => {
+      const r1 = makeRecord();
+      journal.createOperationWithLocks(r1, { walletAddress: "0xABC" });
 
-      journal.deleteOperation(record.operationId);
+      const r2 = makeRecord();
+      const result = journal.createOperationWithLocks(r2, { walletAddress: "0xABC" });
 
-      expect(journal.getOperation(record.operationId)).toBeUndefined();
-      expect(journal.getResult(record.operationId)).toBeUndefined();
-      expect(journal.getReceipt(record.operationId)).toBeUndefined();
+      expect(result.ok).toBe(false);
+      expect((result as any).error).toBe("WALLET_LOCKED");
     });
 
-    it("returns undefined for non-existent operation", () => {
-      expect(journal.getOperation("non-existent")).toBeUndefined();
+    it("returns JOB_LOCKED when job is held", () => {
+      const r1 = makeRecord();
+      journal.createOperationWithLocks(r1, { jobId: "job-42" });
+
+      const r2 = makeRecord();
+      const result = journal.createOperationWithLocks(r2, { jobId: "job-42" });
+
+      expect(result.ok).toBe(false);
+      expect((result as any).error).toBe("JOB_LOCKED");
     });
 
-    it("getOperationsByState returns correct operations", () => {
-      const r1 = makeRecord({ state: "confirmed" });
-      const r2 = makeRecord({ state: "failed" });
-      const r3 = makeRecord({ state: "confirmed" });
+    it("lock conflict leaves no operation row", () => {
+      const r1 = makeRecord();
+      journal.createOperationWithLocks(r1, { walletAddress: "0xLOCKED" });
 
-      journal.insertOperation(r1);
-      journal.insertOperation(r2);
-      journal.insertOperation(r3);
+      const countBefore = journal.getOperationCount();
+      const r2 = makeRecord();
+      journal.createOperationWithLocks(r2, { walletAddress: "0xLOCKED" });
+      const countAfter = journal.getOperationCount();
 
-      const confirmed = journal.getOperationsByState("confirmed");
-      expect(confirmed).toHaveLength(2);
-
-      const failed = journal.getOperationsByState("failed");
-      expect(failed).toHaveLength(1);
+      expect(countAfter).toBe(countBefore); // no new operation created
     });
 
-    it("getOperationCount returns total count", () => {
-      expect(journal.getOperationCount()).toBe(0);
-      journal.insertOperation(makeRecord());
-      expect(journal.getOperationCount()).toBe(1);
-      journal.insertOperation(makeRecord());
-      expect(journal.getOperationCount()).toBe(2);
+    it("lock conflict leaves no idempotency row", () => {
+      const r1 = makeRecord();
+      journal.createOperationWithLocks(r1, { walletAddress: "0xLOCKED" });
+
+      const r2 = makeRecord({ idempotencyKey: "unique-key-for-r2" });
+      journal.createOperationWithLocks(r2, { walletAddress: "0xLOCKED" });
+
+      // r2's idempotency key should not exist in the journal
+      const found = journal.getOperationsByState("created");
+      const foundR2 = found.find(r => r.idempotency_key === "unique-key-for-r2");
+      expect(foundR2).toBeUndefined();
+    });
+
+    it("wallet lock is case-insensitive", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, { walletAddress: "0xABC" });
+
+      expect(journal.hasWalletLock("0xabc")).toBe(true);
+      expect(journal.hasWalletLock("0xABC")).toBe(true);
+    });
+
+    it("different wallets do not conflict", () => {
+      const r1 = makeRecord();
+      journal.createOperationWithLocks(r1, { walletAddress: "0xAAA" });
+
+      const r2 = makeRecord();
+      const result = journal.createOperationWithLocks(r2, { walletAddress: "0xBBB" });
+      expect(result.ok).toBe(true);
+    });
+
+    it("different jobIds do not conflict", () => {
+      const r1 = makeRecord();
+      journal.createOperationWithLocks(r1, { jobId: "job-1" });
+
+      const r2 = makeRecord();
+      const result = journal.createOperationWithLocks(r2, { jobId: "job-2" });
+      expect(result.ok).toBe(true);
     });
   });
 
-  // ── Idempotency ──────────────────────────────────────────────────────
+  // ── finalizeOperation ────────────────────────────────────────────────
 
-  describe("idempotency keys", () => {
-    it("finds operation by idempotency key + params hash", () => {
-      const record = makeRecord({
-        idempotencyKey: "key-1",
-        paramsHash: "0x" + "a".repeat(64),
+  describe("finalizeOperation", () => {
+    it("atomically stores state + txHash + result + releases locks", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, { walletAddress: "0xFINAL", jobId: "job-f" });
+
+      journal.finalizeOperation(r.operationId, {
+        state: "confirmed",
+        txHash: "0x" + "a".repeat(64),
+        result: { stdout: '{"ok":true}', json: { ok: true } },
       });
-      journal.insertOperation(record);
 
-      const found = journal.findByIdempotencyKey("key-1", "0x" + "a".repeat(64));
-      expect(found).toBeDefined();
-      expect(found!.operation_id).toBe(record.operationId);
+      const op = journal.getOperation(r.operationId);
+      expect(op!.state).toBe("confirmed");
+      expect(op!.tx_hash).toBe("0x" + "a".repeat(64));
+
+      const result = journal.getResult(r.operationId);
+      expect(result!.stdout).toBe('{"ok":true}');
+
+      expect(journal.hasWalletLock("0xFINAL")).toBe(false);
+      expect(journal.hasJobLock("job-f")).toBe(false);
     });
 
-    it("returns undefined for non-matching idempotency key", () => {
-      const record = makeRecord({ idempotencyKey: "key-1" });
-      journal.insertOperation(record);
+    it("stores receipt metadata atomically", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, {});
 
-      expect(journal.findByIdempotencyKey("key-2", record.paramsHash)).toBeUndefined();
+      journal.finalizeOperation(r.operationId, {
+        state: "confirmed",
+        receipt: { receiptId: "r-1", receiptHash: "0xabc", proofKind: "erc8183" },
+      });
+
+      const receipt = journal.getReceipt(r.operationId);
+      expect(receipt!.receipt_id).toBe("r-1");
+      expect(receipt!.proof_kind).toBe("erc8183");
     });
 
-    it("detects idempotency conflict (same key, different params)", () => {
-      const record = makeRecord({
-        idempotencyKey: "key-1",
-        paramsHash: "0x" + "a".repeat(64),
-      });
-      journal.insertOperation(record);
+    it("releases locks on failed", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, { walletAddress: "0xFAIL", jobId: "job-fail" });
 
-      const conflict = journal.findIdempotencyConflict("key-1", "0x" + "b".repeat(64));
-      expect(conflict).toBeDefined();
-      expect(conflict!.operation_id).toBe(record.operationId);
+      journal.finalizeOperation(r.operationId, {
+        state: "failed",
+        errorCode: "BROADCAST_FAILED",
+        errorMessage: "test",
+      });
+
+      expect(journal.hasWalletLock("0xFAIL")).toBe(false);
+      expect(journal.hasJobLock("job-fail")).toBe(false);
     });
 
-    it("returns undefined when same key + same params (no conflict)", () => {
-      const record = makeRecord({
-        idempotencyKey: "key-1",
-        paramsHash: "0x" + "a".repeat(64),
-      });
-      journal.insertOperation(record);
+    it("releases locks on cancelled", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, { walletAddress: "0xCANCEL" });
 
-      expect(journal.findIdempotencyConflict("key-1", "0x" + "a".repeat(64))).toBeUndefined();
+      journal.finalizeOperation(r.operationId, { state: "cancelled" });
+
+      expect(journal.hasWalletLock("0xCANCEL")).toBe(false);
     });
 
-    it("idempotency survives restart", () => {
-      const record = makeRecord({
-        idempotencyKey: "key-persist",
-        paramsHash: "0x" + "c".repeat(64),
+    it("confirmed finalization survives restart", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, {});
+
+      journal.finalizeOperation(r.operationId, {
+        state: "confirmed",
+        txHash: "0x" + "a".repeat(64),
+        result: { stdout: "persisted", json: { ok: true } },
       });
-      journal.insertOperation(record);
-      journal.updateOperation(record.operationId, { state: "confirmed" });
+
+      journal.close();
+      journal = new OperationJournal(dbPath);
+
+      const op = journal.getOperation(r.operationId);
+      expect(op!.state).toBe("confirmed");
+
+      const result = journal.getResult(r.operationId);
+      expect(result!.stdout).toBe("persisted");
+    });
+  });
+
+  // ── Startup Recovery ─────────────────────────────────────────────────
+
+  describe("recoverNonTerminalOperations", () => {
+    it("created before restart does not wedge wallet lock", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, { walletAddress: "0xRECOVER" });
 
       // Simulate restart
       journal.close();
       journal = new OperationJournal(dbPath);
 
-      const found = journal.findByIdempotencyKey("key-persist", "0x" + "c".repeat(64));
-      expect(found).toBeDefined();
-      expect(found!.state).toBe("confirmed");
-    });
-  });
+      expect(journal.hasWalletLock("0xRECOVER")).toBe(true); // lock still held
 
-  // ── Operation Results ────────────────────────────────────────────────
+      const recovered = journal.recoverNonTerminalOperations();
+      expect(recovered.failed).toContain(r.operationId);
 
-  describe("operation results", () => {
-    it("stores and retrieves compact result", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
+      // Lock released after recovery
+      expect(journal.hasWalletLock("0xRECOVER")).toBe(false);
 
-      journal.storeResult(record.operationId, {
-        stdout: '{"txHash":"0xabc"}',
-        stderr: "",
-        json: { txHash: "0xabc", status: "confirmed" },
-        exitCode: 0,
-      });
-
-      const result = journal.getResult(record.operationId);
-      expect(result).toBeDefined();
-      expect(result!.stdout).toBe('{"txHash":"0xabc"}');
-      expect(JSON.parse(result!.json_data!)).toEqual({ txHash: "0xabc", status: "confirmed" });
+      const op = journal.getOperation(r.operationId);
+      expect(op!.state).toBe("failed");
+      expect(op!.error_code).toBe("STARTUP_RECOVERY_REQUIRED");
     });
 
-    it("overwrites result on re-store (INSERT OR REPLACE)", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-
-      journal.storeResult(record.operationId, { stdout: "first" });
-      journal.storeResult(record.operationId, { stdout: "second" });
-
-      const result = journal.getResult(record.operationId);
-      expect(result!.stdout).toBe("second");
-    });
-
-    it("result survives restart", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-      journal.storeResult(record.operationId, { stdout: "persisted" });
+    it("reserved before restart does not wedge job lock", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, { jobId: "job-wedge" });
+      // Manually set state to reserved
+      journal.finalizeOperation(r.operationId, { state: "reserved" as any });
 
       journal.close();
       journal = new OperationJournal(dbPath);
 
-      const result = journal.getResult(record.operationId);
-      expect(result!.stdout).toBe("persisted");
-    });
-  });
-
-  // ── Receipt Proof Metadata ───────────────────────────────────────────
-
-  describe("receipt proof metadata", () => {
-    it("stores and retrieves receipt", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-
-      journal.storeReceipt(record.operationId, {
-        receiptId: "receipt-1",
-        receiptHash: "0x" + "d".repeat(64),
-        proofKind: "erc8183-submit",
-        proofData: { jobId: 42, deliverableHash: "0xabc" },
-      });
-
-      const receipt = journal.getReceipt(record.operationId);
-      expect(receipt).toBeDefined();
-      expect(receipt!.receipt_id).toBe("receipt-1");
-      expect(receipt!.proof_kind).toBe("erc8183-submit");
-      expect(JSON.parse(receipt!.proof_data!)).toEqual({ jobId: 42, deliverableHash: "0xabc" });
+      const recovered = journal.recoverNonTerminalOperations();
+      expect(recovered.failed).toContain(r.operationId);
+      expect(journal.hasJobLock("job-wedge")).toBe(false);
     });
 
-    it("receipt survives restart", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-      journal.storeReceipt(record.operationId, { receiptId: "r-persist" });
+    it("executing before restart becomes reconcilable/unknown", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, {});
+      journal.finalizeOperation(r.operationId, { state: "executing" as any });
 
       journal.close();
       journal = new OperationJournal(dbPath);
 
-      const receipt = journal.getReceipt(record.operationId);
-      expect(receipt!.receipt_id).toBe("r-persist");
-    });
-  });
+      const recovered = journal.recoverNonTerminalOperations();
+      expect(recovered.madeUnknown).toContain(r.operationId);
 
-  // ── Wallet Locks ─────────────────────────────────────────────────────
-
-  describe("wallet locks", () => {
-    it("acquires wallet lock", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-
-      const acquired = journal.acquireWalletLock("0xABC", record.operationId);
-      expect(acquired).toBe(true);
-      expect(journal.hasWalletLock("0xABC")).toBe(true);
+      const op = journal.getOperation(r.operationId);
+      expect(op!.state).toBe("unknown");
+      expect(op!.error_code).toBe("STARTUP_RECOVERY_REQUIRED");
     });
 
-    it("blocks concurrent same-wallet writes", () => {
-      const r1 = makeRecord();
-      const r2 = makeRecord();
-      journal.insertOperation(r1);
-      journal.insertOperation(r2);
-
-      expect(journal.acquireWalletLock("0xABC", r1.operationId)).toBe(true);
-      expect(journal.acquireWalletLock("0xABC", r2.operationId)).toBe(false);
-    });
-
-    it("releases wallet lock", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-
-      journal.acquireWalletLock("0xABC", record.operationId);
-      journal.releaseWalletLock("0xABC");
-
-      expect(journal.hasWalletLock("0xABC")).toBe(false);
-    });
-
-    it("wallet lock is case-insensitive", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-
-      journal.acquireWalletLock("0xABC", record.operationId);
-      expect(journal.hasWalletLock("0xabc")).toBe(true);
-      expect(journal.hasWalletLock("0xABC")).toBe(true);
-    });
-
-    it("getWalletLockOperation returns the holding operation", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-
-      journal.acquireWalletLock("0xABC", record.operationId);
-      expect(journal.getWalletLockOperation("0xABC")).toBe(record.operationId);
-    });
-
-    it("wallet lock survives restart", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-      journal.acquireWalletLock("0xPERSIST", record.operationId);
-
-      journal.close();
-      journal = new OperationJournal(dbPath);
-
-      expect(journal.hasWalletLock("0xPERSIST")).toBe(true);
-      expect(journal.getWalletLockOperation("0xPERSIST")).toBe(record.operationId);
-    });
-  });
-
-  // ── Job Locks ────────────────────────────────────────────────────────
-
-  describe("job locks", () => {
-    it("acquires job lock", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-
-      const acquired = journal.acquireJobLock("job-42", record.operationId);
-      expect(acquired).toBe(true);
-      expect(journal.hasJobLock("job-42")).toBe(true);
-    });
-
-    it("blocks concurrent same-job writes", () => {
-      const r1 = makeRecord();
-      const r2 = makeRecord();
-      journal.insertOperation(r1);
-      journal.insertOperation(r2);
-
-      expect(journal.acquireJobLock("job-42", r1.operationId)).toBe(true);
-      expect(journal.acquireJobLock("job-42", r2.operationId)).toBe(false);
-    });
-
-    it("releases job lock", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-
-      journal.acquireJobLock("job-42", record.operationId);
-      journal.releaseJobLock("job-42");
-
-      expect(journal.hasJobLock("job-42")).toBe(false);
-    });
-
-    it("getJobLockOperation returns the holding operation", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-
-      journal.acquireJobLock("job-42", record.operationId);
-      expect(journal.getJobLockOperation("job-42")).toBe(record.operationId);
-    });
-
-    it("job lock survives restart", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-      journal.acquireJobLock("job-persist", record.operationId);
-
-      journal.close();
-      journal = new OperationJournal(dbPath);
-
-      expect(journal.hasJobLock("job-persist")).toBe(true);
-    });
-
-    it("locks release on confirmed (via releaseLocksForOperation)", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-
-      journal.acquireWalletLock("0xW", record.operationId);
-      journal.acquireJobLock("job-1", record.operationId);
-
-      journal.releaseLocksForOperation(record.operationId);
-
-      expect(journal.hasWalletLock("0xW")).toBe(false);
-      expect(journal.hasJobLock("job-1")).toBe(false);
-    });
-  });
-
-  // ── Startup Reconciliation ───────────────────────────────────────────
-
-  describe("startup reconciliation", () => {
-    it("returns broadcast operations as reconcilable", () => {
-      const record = makeRecord({ state: "broadcast" });
-      record.txHash = "0x" + "a".repeat(64);
-      journal.insertOperation(record);
-      journal.updateOperation(record.operationId, { state: "broadcast", txHash: "0x" + "a".repeat(64) });
-
-      const reconcilable = journal.getReconcilableOperations();
-      expect(reconcilable).toHaveLength(1);
-      expect(reconcilable[0].state).toBe("broadcast");
-      expect(reconcilable[0].txHash).toBeDefined();
-    });
-
-    it("returns unknown operations as reconcilable", () => {
-      const record = makeRecord({ state: "unknown" });
-      journal.insertOperation(record);
-      journal.updateOperation(record.operationId, { state: "unknown" });
-
-      const reconcilable = journal.getReconcilableOperations();
-      expect(reconcilable).toHaveLength(1);
-      expect(reconcilable[0].state).toBe("unknown");
-    });
-
-    it("does not return confirmed/failed operations as reconcilable", () => {
-      journal.insertOperation(makeRecord({ state: "confirmed" }));
-      journal.insertOperation(makeRecord({ state: "failed" }));
-
-      expect(journal.getReconcilableOperations()).toHaveLength(0);
-    });
-
-    it("reconcileOperation transitions broadcast → confirmed", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-      journal.updateOperation(record.operationId, { state: "broadcast" });
-
-      journal.reconcileOperation(record.operationId, "confirmed", {
+    it("confirmed before restart is not affected by recovery", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, {});
+      journal.finalizeOperation(r.operationId, {
+        state: "confirmed",
         txHash: "0x" + "a".repeat(64),
       });
 
-      const row = journal.getOperation(record.operationId);
-      expect(row!.state).toBe("confirmed");
-      expect(row!.tx_hash).toBe("0x" + "a".repeat(64));
+      journal.close();
+      journal = new OperationJournal(dbPath);
+
+      const recovered = journal.recoverNonTerminalOperations();
+      expect(recovered.failed).toHaveLength(0);
+      expect(recovered.madeUnknown).toHaveLength(0);
+    });
+  });
+
+  // ── Startup Result Loading (bounded) ─────────────────────────────────
+
+  describe("loadConfirmedResults", () => {
+    it("loads confirmed results with bound", () => {
+      for (let i = 0; i < 5; i++) {
+        const r = makeRecord();
+        journal.createOperationWithLocks(r, {});
+        journal.finalizeOperation(r.operationId, {
+          state: "confirmed",
+          txHash: "0x" + i.toString(16).padStart(64, "0"),
+          result: { stdout: `result-${i}` },
+        });
+      }
+
+      const loaded = journal.loadConfirmedResults(3);
+      expect(loaded).toHaveLength(3);
     });
 
-    it("reconcileOperation transitions unknown → failed", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-      journal.updateOperation(record.operationId, { state: "unknown" });
+    it("newest entries retained when bounded", () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const r = makeRecord();
+        journal.createOperationWithLocks(r, {});
+        // Set explicit updated_at to ensure ordering
+        journal.finalizeOperation(r.operationId, {
+          state: "confirmed",
+          result: { stdout: `result-${i}` },
+        });
+        // Manually update the timestamp to ensure deterministic ordering
+        (journal as any).db.prepare(
+          "UPDATE operations SET updated_at = datetime('now', ?) WHERE operation_id = ?"
+        ).run(`+${i} seconds`, r.operationId);
+        ids.push(r.operationId);
+      }
 
-      journal.reconcileOperation(record.operationId, "failed", {
-        errorCode: "BROADCAST_FAILED",
-        errorMessage: "Reconciled as failed after verification",
+      const loaded = journal.loadConfirmedResults(3);
+      expect(loaded).toHaveLength(3);
+      // Should be newest (highest offset = last inserted)
+      const loadedIds = loaded.map(l => l.operationId);
+      expect(loadedIds).toContain(ids[4]);
+      expect(loadedIds).toContain(ids[3]);
+      expect(loadedIds).toContain(ids[2]);
+    });
+
+    it("startup reload respects MAX_RESULT_CACHE_ENTRIES", () => {
+      for (let i = 0; i < 10; i++) {
+        const r = makeRecord();
+        journal.createOperationWithLocks(r, {});
+        journal.finalizeOperation(r.operationId, {
+          state: "confirmed",
+          result: { stdout: `result-${i}` },
+        });
+      }
+
+      const loaded = journal.loadConfirmedResults(5);
+      expect(loaded).toHaveLength(5); // bounded to 5
+    });
+  });
+
+  // ── Reconciliation ───────────────────────────────────────────────────
+
+  describe("reconciliation", () => {
+    it("getReconcilableOperations returns broadcast/unknown", () => {
+      const r1 = makeRecord();
+      journal.createOperationWithLocks(r1, {});
+      journal.finalizeOperation(r1.operationId, { state: "broadcast", txHash: "0x" + "a".repeat(64) });
+
+      const r2 = makeRecord();
+      journal.createOperationWithLocks(r2, {});
+      journal.finalizeOperation(r2.operationId, { state: "unknown" });
+
+      const reconcilable = journal.getReconcilableOperations();
+      expect(reconcilable).toHaveLength(2);
+    });
+
+    it("reconcileOperation confirmed clears stale error fields", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, {});
+      journal.finalizeOperation(r.operationId, {
+        state: "unknown",
+        errorCode: "UNKNOWN_TX_STATE",
+        errorMessage: "timeout",
       });
 
-      const row = journal.getOperation(record.operationId);
-      expect(row!.state).toBe("failed");
-      expect(row!.error_code).toBe("BROADCAST_FAILED");
+      journal.reconcileOperation(r.operationId, "confirmed", { txHash: "0x" + "a".repeat(64) });
+
+      const op = journal.getOperation(r.operationId);
+      expect(op!.state).toBe("confirmed");
+      expect(op!.error_code).toBeNull();
+      expect(op!.error_message).toBeNull();
+      expect(op!.tx_hash).toBe("0x" + "a".repeat(64));
     });
 
-    it("reconcileOperation releases locks for terminal states", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-      journal.updateOperation(record.operationId, { state: "broadcast" });
-      journal.acquireWalletLock("0xRECONCILE", record.operationId);
-      journal.acquireJobLock("job-reconcile", record.operationId);
+    it("reconcileOperation confirmed releases locks", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, { walletAddress: "0xRECONCILE", jobId: "job-recon" });
+      journal.finalizeOperation(r.operationId, { state: "broadcast" });
 
-      journal.reconcileOperation(record.operationId, "confirmed");
+      journal.reconcileOperation(r.operationId, "confirmed");
 
       expect(journal.hasWalletLock("0xRECONCILE")).toBe(false);
-      expect(journal.hasJobLock("job-reconcile")).toBe(false);
+      expect(journal.hasJobLock("job-recon")).toBe(false);
     });
 
-    it("reconcilable operations survive restart", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
-      journal.updateOperation(record.operationId, {
-        state: "broadcast",
-        txHash: "0x" + "e".repeat(64),
+    it("reconcileOperation failed persists errorCode with default", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, {});
+      journal.finalizeOperation(r.operationId, { state: "broadcast" });
+
+      journal.reconcileOperation(r.operationId, "failed");
+
+      const op = journal.getOperation(r.operationId);
+      expect(op!.state).toBe("failed");
+      expect(op!.error_code).toBe("BROADCAST_FAILED");
+      expect(op!.error_message).toBe("Reconciled as failed");
+    });
+
+    it("failed reconciliation survives restart with errorCode/errorMessage", () => {
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, {});
+      journal.finalizeOperation(r.operationId, { state: "broadcast" });
+      journal.reconcileOperation(r.operationId, "failed", {
+        errorCode: "BROADCAST_FAILED",
+        errorMessage: "Verified: tx reverted",
       });
 
       journal.close();
       journal = new OperationJournal(dbPath);
 
-      const reconcilable = journal.getReconcilableOperations();
-      expect(reconcilable).toHaveLength(1);
-      expect(reconcilable[0].operationId).toBe(record.operationId);
-      expect(reconcilable[0].state).toBe("broadcast");
-    });
-  });
-
-  // ── Full Lifecycle ───────────────────────────────────────────────────
-
-  describe("full operation lifecycle", () => {
-    it("write → confirm → replay returns cached result", () => {
-      const record = makeRecord({
-        idempotencyKey: "lifecycle-key",
-        paramsHash: "0x" + "f".repeat(64),
-      });
-      journal.insertOperation(record);
-
-      // Simulate state transitions
-      journal.updateOperation(record.operationId, { state: "prepared" });
-      journal.updateOperation(record.operationId, { state: "reserved" });
-      journal.updateOperation(record.operationId, { state: "executing" });
-      journal.updateOperation(record.operationId, { state: "broadcast" });
-      journal.updateOperation(record.operationId, { state: "confirmed", txHash: "0x" + "a".repeat(64) });
-
-      // Store result
-      journal.storeResult(record.operationId, {
-        stdout: '{"status":"confirmed","txHash":"0xaaa..."}',
-        json: { status: "confirmed" },
-      });
-
-      // Idempotent replay
-      const found = journal.findByIdempotencyKey("lifecycle-key", "0x" + "f".repeat(64));
-      expect(found).toBeDefined();
-      expect(found!.state).toBe("confirmed");
-
-      const result = journal.getResult(record.operationId);
-      expect(result).toBeDefined();
-      expect(JSON.parse(result!.json_data!).status).toBe("confirmed");
-    });
-
-    it("failed → retry → delete old → insert new", () => {
-      const key = "retry-key";
-      const params = "0x" + "a".repeat(64);
-
-      const r1 = makeRecord({ idempotencyKey: key, paramsHash: params, state: "failed" });
-      journal.insertOperation(r1);
-      journal.updateOperation(r1.operationId, { state: "failed", errorCode: "BROADCAST_FAILED" });
-
-      // Allow retry: delete old
-      journal.deleteOperation(r1.operationId);
-
-      // Insert new
-      const r2 = makeRecord({ idempotencyKey: key, paramsHash: params });
-      journal.insertOperation(r2);
-      journal.updateOperation(r2.operationId, { state: "confirmed" });
-
-      const found = journal.findByIdempotencyKey(key, params);
-      expect(found!.operation_id).toBe(r2.operationId);
-      expect(found!.state).toBe("confirmed");
+      const op = journal.getOperation(r.operationId);
+      expect(op!.state).toBe("failed");
+      expect(op!.error_code).toBe("BROADCAST_FAILED");
+      expect(op!.error_message).toBe("Verified: tx reverted");
     });
   });
 
@@ -577,21 +484,20 @@ describe("OperationJournal", () => {
 
   describe("transaction safety", () => {
     it("transaction rolls back on error", () => {
-      const record = makeRecord();
-      journal.insertOperation(record);
+      const r = makeRecord();
+      journal.createOperationWithLocks(r, {});
 
       try {
         journal.transaction(() => {
-          journal.updateOperation(record.operationId, { state: "prepared" });
+          journal.finalizeOperation(r.operationId, { state: "confirmed" });
           throw new Error("rollback!");
         });
       } catch {
         // expected
       }
 
-      // State should be unchanged
-      const row = journal.getOperation(record.operationId);
-      expect(row!.state).toBe("created");
+      const op = journal.getOperation(r.operationId);
+      expect(op!.state).toBe("created"); // unchanged
     });
   });
 });
