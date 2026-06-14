@@ -87,6 +87,25 @@ export async function handleMcpTool(
         chain: config.chain,
         circleWalletAddress: config.circleWalletAddress
       };
+    case "runner.list_reconcilable_operations":
+      return services.listReconcilableOperations();
+    case "runner.reconcile_operation": {
+      const { operationId, outcome, txHash, errorCode, errorMessage } = args as {
+        operationId: string;
+        outcome: "confirmed" | "failed" | "unknown";
+        txHash?: string;
+        errorCode?: string;
+        errorMessage?: string;
+      };
+      if (!operationId || !outcome) {
+        return { ok: false, error: "MISSING_FIELDS", message: "operationId and outcome are required" };
+      }
+      if (!["confirmed", "failed", "unknown"].includes(outcome)) {
+        return { ok: false, error: "INVALID_OUTCOME", message: "outcome must be confirmed, failed, or unknown" };
+      }
+      const reconciled = services.reconcileOperation(operationId, outcome, { txHash, errorCode, errorMessage });
+      return { ok: true, operationId, state: reconciled.state };
+    }
 
     // ── MCP Tool Broker ───────────────────────────────────────────────
     case "runner.broker_status": {
