@@ -94,7 +94,7 @@ export async function POST(req: NextRequest): Promise<Response> {
           const resolved = resolveAlias(body.params.name);
           if (resolved !== body.params.name) {
             body.params.name = resolved;
-            resolvedReq = new Request(req.url, {
+            resolvedReq = new NextRequest(req.url, {
               method: req.method,
               headers: req.headers,
               body: JSON.stringify(body),
