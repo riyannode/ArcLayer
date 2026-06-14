@@ -237,6 +237,8 @@ export const ROLE_PRESETS: RunnerRolePreset[] = [
       "circle.status",
       "circle.wallet_policy_status",
       "circle.gateway_deposit",
+      "runner.list_reconcilable_operations",
+      "runner.reconcile_operation",
       "x402.payment_policy",
       "erc8183.create_job",
       "erc8183.set_budget",

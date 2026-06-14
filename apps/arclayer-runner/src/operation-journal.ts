@@ -192,7 +192,7 @@ export class OperationJournal {
       this.db.prepare(`
         INSERT OR IGNORE INTO schema_migrations (version, checksum) VALUES (?, ?)
       `).run(SCHEMA_VERSION, `phase5-v${SCHEMA_VERSION}`);
-    });
+    }).immediate;
 
     txn();
   }
@@ -332,7 +332,7 @@ export class OperationJournal {
       }
 
       return { ok: true as const, operationId: record.operationId };
-    });
+    }).immediate;
 
     return txn();
   }
@@ -415,7 +415,7 @@ export class OperationJournal {
         this.db.prepare("DELETE FROM wallet_locks WHERE operation_id = ?").run(operationId);
         this.db.prepare("DELETE FROM job_locks WHERE operation_id = ?").run(operationId);
       }
-    });
+    }).immediate;
 
     txn();
   }
@@ -454,7 +454,7 @@ export class OperationJournal {
       this.db.prepare("DELETE FROM job_locks WHERE operation_id = ?").run(operationId);
       this.db.prepare("DELETE FROM idempotency_keys WHERE operation_id = ?").run(operationId);
       this.db.prepare("DELETE FROM operations WHERE operation_id = ?").run(operationId);
-    });
+    }).immediate;
     txn();
   }
 
@@ -521,7 +521,7 @@ export class OperationJournal {
         `).run(row.operation_id);
         madeUnknown.push(row.operation_id);
       }
-    });
+    }).immediate;
 
     txn();
     return { failed, madeUnknown };
@@ -604,7 +604,7 @@ export class OperationJournal {
         this.db.prepare("DELETE FROM wallet_locks WHERE operation_id = ?").run(operationId);
         this.db.prepare("DELETE FROM job_locks WHERE operation_id = ?").run(operationId);
       }
-    });
+    }).immediate;
 
     txn();
   }
@@ -648,8 +648,10 @@ export class OperationJournal {
 
   /** Release all locks held by an operation. */
   releaseLocksForOperation(operationId: string): void {
-    this.db.prepare("DELETE FROM wallet_locks WHERE operation_id = ?").run(operationId);
-    this.db.prepare("DELETE FROM job_locks WHERE operation_id = ?").run(operationId);
+    this.db.transaction(() => {
+      this.db.prepare("DELETE FROM wallet_locks WHERE operation_id = ?").run(operationId);
+      this.db.prepare("DELETE FROM job_locks WHERE operation_id = ?").run(operationId);
+    }).immediate();
   }
 
   /** Check if a wallet lock is held. */
@@ -691,8 +693,8 @@ export class OperationJournal {
     this.db.close();
   }
 
-  /** Run inside a transaction. */
+  /** Run inside an immediate transaction. */
   transaction<T>(fn: () => T): T {
-    return this.db.transaction(fn)();
+    return this.db.transaction(fn).immediate();
   }
 }
