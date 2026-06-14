@@ -392,6 +392,41 @@ describe("Runner MCP: Official SDK E2E", () => {
 
     await server.close();
   });
+
+  it("stderr log does not leak raw URLs/paths/tokens", async () => {
+    const SECRET_TOKEN = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4";
+    const INTERNAL_URL = "https://internal-api.arclayer.xyz/v1/runtime";
+    const INTERNAL_PATH = "/root/.arclayer/config/secrets.json";
+
+    const ctxProxy = makeContext();
+    (ctxProxy.mcp as any).callTool = async () => {
+      throw new Error(`Request failed: ${INTERNAL_URL}?token=${SECRET_TOKEN} at ${INTERNAL_PATH}`);
+    };
+
+    // Capture stderr
+    const stderrChunks: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: any) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    }) as any;
+
+    try {
+      const { client, server } = await createConnectedPair(ctxProxy);
+      await client.callTool({ name: "provider.runtime_heartbeat", arguments: {} });
+      await server.close();
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+
+    const stderrOutput = stderrChunks.join("");
+    expect(stderrOutput).not.toContain(SECRET_TOKEN);
+    expect(stderrOutput).not.toContain(INTERNAL_URL);
+    expect(stderrOutput).not.toContain(INTERNAL_PATH);
+    // Should contain sanitized placeholders
+    expect(stderrOutput).toContain("[url]");
+    expect(stderrOutput).toContain("[path]");
+  });
 });
 
 // ── Proxy Schema Parity ──────────────────────────────────────────────────

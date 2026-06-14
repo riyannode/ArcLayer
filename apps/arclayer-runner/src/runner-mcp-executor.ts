@@ -184,7 +184,7 @@ export async function executeRunnerMcpTool(
     const message = error?.message ?? 'Tool execution failed';
     const errorCode = error instanceof BrokerError ? error.code : undefined;
     const sanitizedMessage = sanitizeErrorMessage(message);
-    stderrLog(`tools/call error${errorCode ? ` (${errorCode})` : ''}: ${message}`);
+    stderrLog(`tools/call error${errorCode ? ` (${errorCode})` : ''}: ${sanitizedMessage}`);
 
     return {
       content: [
