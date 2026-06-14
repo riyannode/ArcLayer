@@ -6,6 +6,7 @@ import { humanJson } from '@/lib/api/human-json';
 import { NextRequest } from 'next/server';
 import { createPublicClient, formatUnits, getAddress, http, parseUnits } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import { safeErrorForLog } from '@/lib/sanitize-error';
 
 export const runtime = 'nodejs';
 
@@ -51,10 +52,11 @@ export async function GET(req: NextRequest) {
       circleFaucetUrl: CIRCLE_FAUCET_URL,
     });
   } catch (err) {
+    console.error(`[faucet/status] status check failed: ${safeErrorForLog(err)}`);
     return humanJson(req, {
       ready: false,
       reason: 'status_check_failed',
-      error: err instanceof Error ? err.message : String(err),
+      error: 'internal_error',
       circleFaucetUrl: CIRCLE_FAUCET_URL,
     }, { status: 500 });
   }
