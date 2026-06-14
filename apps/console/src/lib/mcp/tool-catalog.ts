@@ -437,7 +437,7 @@ export function registerAllTools(): void {
       const tag2 = String(args.tag2 || '').trim();
       const endpoint = String(args.endpoint || '').trim();
       const feedbackURI = String(args.feedbackURI || '').trim();
-      const feedbackHash = String(args.feedbackHash || '0x').trim();
+      const feedbackHash = String(args.feedbackHash || '0x0000000000000000000000000000000000000000000000000000000000000000').trim();
 
       // Validate valueDecimals range
       if (valueDecimals < 0 || valueDecimals > 18 || !Number.isInteger(valueDecimals)) {
@@ -445,7 +445,7 @@ export function registerAllTools(): void {
       }
 
       // Validate feedbackHash format if provided
-      if (feedbackHash && feedbackHash !== '0x' && !/^0x[a-fA-F0-9]{64}$/.test(feedbackHash)) {
+      if (feedbackHash && !/^0x[a-fA-F0-9]{64}$/.test(feedbackHash)) {
         throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'feedbackHash must be bytes32 (0x + 64 hex chars)');
       }
 
