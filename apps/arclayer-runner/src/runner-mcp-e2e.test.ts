@@ -340,6 +340,166 @@ describe("Runner MCP: Official SDK E2E", () => {
     await server.close();
     await server.close(); // second close should not throw
   });
+
+  // ── Proxy error sanitization ─────────────────────────────────────────
+
+  it("proxy error with URL/path/token is sanitized", async () => {
+    // Mock mcp.callTool to throw with internal URLs and paths
+    const ctxProxy = makeContext();
+    (ctxProxy.mcp as any).callTool = async () => {
+      throw new Error("Request failed: https://internal-api.arclayer.xyz/v1/runtime?token=a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4 at /root/.arclayer/config/secrets.json");
+    };
+
+    const { client, server } = await createConnectedPair(ctxProxy);
+    const result = await client.callTool({ name: "provider.runtime_heartbeat", arguments: {} });
+
+    expect(result.isError).toBe(true);
+    const text = (result.content as any[])[0].text;
+    const parsed = JSON.parse(text);
+
+    // Should NOT contain raw URLs or paths
+    expect(parsed.message).not.toContain("internal-api.arclayer.xyz");
+    expect(parsed.message).not.toContain("/root/.arclayer");
+    expect(parsed.message).not.toContain("a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4");
+
+    // Should contain sanitized placeholders
+    expect(parsed.message).toContain("[url]");
+    expect(parsed.message).toContain("[path]");
+
+    // Should be recorded as failure in broker audit
+    const log = ctxProxy.broker!.getAuditLog();
+    const proxyEntry = log.find((e) => e.toolName === "provider.runtime_heartbeat");
+    expect(proxyEntry).toBeDefined();
+    expect(proxyEntry!.ok).toBe(false);
+
+    await server.close();
+  });
+
+  it("proxy error is recorded as broker failure (not success)", async () => {
+    const ctxProxy = makeContext();
+    (ctxProxy.mcp as any).callTool = async () => {
+      throw new Error("Upstream Console MCP returned 500");
+    };
+
+    const { client, server } = await createConnectedPair(ctxProxy);
+    await client.callTool({ name: "provider.runtime_heartbeat", arguments: {} });
+
+    const log = ctxProxy.broker!.getAuditLog();
+    const entry = log.find((e) => e.toolName === "provider.runtime_heartbeat");
+    expect(entry).toBeDefined();
+    expect(entry!.ok).toBe(false);
+    expect(entry!.errorCode).toBeDefined();
+
+    await server.close();
+  });
+});
+
+// ── Proxy Schema Parity ──────────────────────────────────────────────────
+
+describe("Proxy Schema Parity: Runner vs Hosted Console", () => {
+  it("all proxy tool names are unique", async () => {
+    const { CONSOLE_PROXY_MCP_TOOLS } = await import("./mcp-schemas");
+    const names = CONSOLE_PROXY_MCP_TOOLS.map((t: any) => t.name);
+    const unique = new Set(names);
+    expect(names.length).toBe(unique.size);
+  });
+
+  it("every proxy tool has a description", async () => {
+    const { CONSOLE_PROXY_MCP_TOOLS } = await import("./mcp-schemas");
+    for (const tool of CONSOLE_PROXY_MCP_TOOLS) {
+      expect(tool.description).toBeTruthy();
+      expect(tool.description.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("proxy tools with inputSchema have valid field definitions", async () => {
+    const { CONSOLE_PROXY_MCP_TOOLS } = await import("./mcp-schemas");
+    const validTypes = new Set(["string", "number", "integer", "boolean", "object", "array"]);
+    for (const tool of CONSOLE_PROXY_MCP_TOOLS) {
+      if (!tool.inputSchema) continue;
+      for (const [fieldName, fieldDef] of Object.entries(tool.inputSchema)) {
+        const def = fieldDef as any;
+        expect(validTypes.has(def.type)).toBe(true);
+        expect(typeof fieldName).toBe("string");
+      }
+    }
+  });
+
+  it("jobs.list_public has evaluatorAddress field (Console parity)", async () => {
+    const { CONSOLE_PROXY_MCP_TOOLS } = await import("./mcp-schemas");
+    const tool = CONSOLE_PROXY_MCP_TOOLS.find((t: any) => t.name === "jobs.list_public");
+    expect(tool).toBeDefined();
+    expect(tool.inputSchema.evaluatorAddress).toBeDefined();
+    expect(tool.inputSchema.evaluatorAddress.type).toBe("string");
+  });
+
+  it("reputation.give_feedback has all 8 required fields (Console parity)", async () => {
+    const { CONSOLE_PROXY_MCP_TOOLS } = await import("./mcp-schemas");
+    const tool = CONSOLE_PROXY_MCP_TOOLS.find((t: any) => t.name === "reputation.give_feedback");
+    expect(tool).toBeDefined();
+    const requiredFields = ["agentTokenId", "score", "category", "comment", "metadataURI", "proofURI", "context", "ref"];
+    for (const field of requiredFields) {
+      expect(tool.inputSchema[field]).toBeDefined();
+      expect(tool.inputSchema[field].required).toBe(true);
+    }
+  });
+
+  it("provider.runtime_write_checkpoint has all Console fields", async () => {
+    const { CONSOLE_PROXY_MCP_TOOLS } = await import("./mcp-schemas");
+    const tool = CONSOLE_PROXY_MCP_TOOLS.find((t: any) => t.name === "provider.runtime_write_checkpoint");
+    expect(tool).toBeDefined();
+    const expectedFields = ["jobId", "runId", "phase", "status", "txHash", "deliverableHash", "payloadHash", "note", "metadata"];
+    for (const field of expectedFields) {
+      expect(tool.inputSchema[field]).toBeDefined();
+    }
+    // jobId, phase, status are required
+    expect(tool.inputSchema.jobId.required).toBe(true);
+    expect(tool.inputSchema.phase.required).toBe(true);
+    expect(tool.inputSchema.status.required).toBe(true);
+  });
+
+  it("provider.apply_open_job has all Console fields", async () => {
+    const { CONSOLE_PROXY_MCP_TOOLS } = await import("./mcp-schemas");
+    const tool = CONSOLE_PROXY_MCP_TOOLS.find((t: any) => t.name === "provider.apply_open_job");
+    expect(tool).toBeDefined();
+    const expectedFields = ["jobId", "providerAddress", "quoteAmountUsdc", "quoteAmountAtomic", "message", "capabilities", "metadata"];
+    for (const field of expectedFields) {
+      expect(tool.inputSchema[field]).toBeDefined();
+    }
+  });
+
+  it("evaluator.prepare_complete_job has reasonHash and optParams", async () => {
+    const { CONSOLE_PROXY_MCP_TOOLS } = await import("./mcp-schemas");
+    const tool = CONSOLE_PROXY_MCP_TOOLS.find((t: any) => t.name === "evaluator.prepare_complete_job");
+    expect(tool).toBeDefined();
+    expect(tool.inputSchema.reasonHash).toBeDefined();
+    expect(tool.inputSchema.optParams).toBeDefined();
+  });
+
+  it("no proxy tool includes agentId in inputSchema (auto-injected by connector)", async () => {
+    const { CONSOLE_PROXY_MCP_TOOLS } = await import("./mcp-schemas");
+    for (const tool of CONSOLE_PROXY_MCP_TOOLS) {
+      if (!tool.inputSchema) continue;
+      expect(tool.inputSchema.agentId).toBeUndefined();
+    }
+  });
+
+  it("proxy tool names match CONSOLE_MCP_PROXY_TOOLS in tool-registry", async () => {
+    const { CONSOLE_PROXY_MCP_TOOLS } = await import("./mcp-schemas");
+    const { CONSOLE_MCP_PROXY_TOOLS } = await import("./tool-registry");
+
+    const schemaNames = new Set(CONSOLE_PROXY_MCP_TOOLS.map((t: any) => t.name));
+    const registryNames = new Set(CONSOLE_MCP_PROXY_TOOLS.map((t: any) => t.name));
+
+    // Every schema tool should be in registry
+    for (const name of schemaNames) {
+      expect(registryNames.has(name)).toBe(true);
+    }
+    // Every registry tool should be in schema
+    for (const name of registryNames) {
+      expect(schemaNames.has(name)).toBe(true);
+    }
+  });
 });
 
 // ── Connector reconnect safety ────────────────────────────────────────────
