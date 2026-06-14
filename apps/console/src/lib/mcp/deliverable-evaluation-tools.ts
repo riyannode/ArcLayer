@@ -54,6 +54,26 @@ function rethrowAsMcpError(err: unknown, fallbackMessage: string): never {
 }
 
 /**
+ * Map raw Supabase agent_jobs row to camelCase DTO for workers.
+ * Workers expect: erc8183JobId, providerAddress, evaluatorAddress, priceAtomic, etc.
+ */
+function toAssignedJob(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    erc8183JobId: String(row.erc8183_job_id ?? row.onchain_job_id ?? ""),
+    providerAgentId: row.provider_agent_id,
+    evaluatorAgentId: row.evaluator_agent_id,
+    providerAddress: row.provider_address ?? row.provider ?? "",
+    evaluatorAddress: row.evaluator_address ?? row.evaluator ?? "",
+    proposedBudgetUsdc: row.proposed_budget_usdc ?? row.budget ?? "",
+    priceAtomic: row.price_atomic ?? row.budget_atomic ?? "",
+    description: row.description ?? "",
+    status: row.status ?? "",
+    createdAt: row.created_at,
+  };
+}
+
+/**
  * Verify that the MCP session owns the requested agentId and address.
  * Prevents one session from operating on another agent's data.
  */
@@ -412,7 +432,7 @@ export async function handleEvaluatorListAssignedJobs(
       evaluatorAddress,
       status,
       count: jobs?.length ?? 0,
-      jobs: jobs ?? [],
+      jobs: (jobs ?? []).map(toAssignedJob),
     });
   } catch (err) {
     if (err instanceof McpError) throw err;
@@ -477,7 +497,7 @@ export async function handleProviderListAssignedJobsExtended(
       providerAddress,
       status,
       count: jobs?.length ?? 0,
-      jobs: jobs ?? [],
+      jobs: (jobs ?? []).map(toAssignedJob),
     });
   } catch (err) {
     if (err instanceof McpError) throw err;

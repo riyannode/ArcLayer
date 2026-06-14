@@ -640,7 +640,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -697,7 +697,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -768,7 +768,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -826,7 +826,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -888,7 +888,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -950,7 +950,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -1007,7 +1007,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -1074,7 +1074,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   // ── Reconciliation (operator path) ─────────────────────────────────

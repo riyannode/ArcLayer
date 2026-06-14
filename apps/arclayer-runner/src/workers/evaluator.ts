@@ -32,6 +32,7 @@ import {
 } from "@arclayer/runner-core";
 import type { RunnerServices } from "../services";
 import type { ArcLayerMcpConnector } from "../mcp-connector";
+import { requireObject } from "../mcp-connector";
 import type { RuntimeConnector } from "../runtime";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -215,7 +216,7 @@ export class EvaluatorWorker extends EventEmitter {
       const statusRaw = await this.mcp.callTool("jobs.get_onchain_status", {
         jobId,
       });
-      const status = JSON.parse(statusRaw as string) as Record<string, unknown>;
+      const status = requireObject(statusRaw);
 
       // Helper: read status code from response
       const readStatusCode = (): number | null => {
@@ -348,7 +349,7 @@ export class EvaluatorWorker extends EventEmitter {
         jobId: erc8183JobId,
         evaluatorAddress: this.config.circleWalletAddress,
       });
-      deliverableData = JSON.parse(result as string) as Record<string, unknown>;
+      deliverableData = requireObject(result);
     } catch (err) {
       throw new Error(`Failed to fetch deliverable: ${err}`);
     }
@@ -645,7 +646,7 @@ export class EvaluatorWorker extends EventEmitter {
         status,
         limit: 20,
       });
-      const parsed = JSON.parse(result as string) as Record<string, unknown>;
+      const parsed = requireObject(result);
       return (parsed.jobs as unknown[]) ?? [];
     } catch (err) {
       console.error(`[evaluator-worker] MCP list_assigned_jobs failed: ${err}`);

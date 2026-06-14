@@ -9,6 +9,31 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { RunnerError } from '@arclayer/runner-core';
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Normalize MCP tool result to a plain object.
+ *
+ * Official MCP SDK returns structuredContent as object.
+ * Text content fallback may be JSON string or plain string.
+ * This helper unifies all shapes into Record<string, unknown>.
+ */
+export function requireObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  if (typeof value === "string") {
+    const parsed: unknown = JSON.parse(value);
+
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  }
+
+  throw new Error("Expected MCP structured object result");
+}
+
 export type McpConnectorOptions = {
   baseUrl: string;
   token?: string;

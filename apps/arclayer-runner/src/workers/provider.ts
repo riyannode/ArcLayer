@@ -30,6 +30,7 @@ import {
 } from "@arclayer/runner-core";
 import type { RunnerServices } from "../services";
 import type { ArcLayerMcpConnector } from "../mcp-connector";
+import { requireObject } from "../mcp-connector";
 import type { RuntimeConnector } from "../runtime";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -241,7 +242,7 @@ export class ProviderWorker extends EventEmitter {
       const statusRaw = await this.mcp.callTool("jobs.get_onchain_status", {
         jobId,
       });
-      const status = JSON.parse(statusRaw as string) as Record<string, unknown>;
+      const status = requireObject(statusRaw);
 
       // Helper: read status code from response (handles statusCode/status/raw.status)
       const readStatusCode = (): number | null => {
@@ -427,9 +428,10 @@ export class ProviderWorker extends EventEmitter {
 
     // Call existing setBudget via RunnerServices
     try {
+      const budgetAtomic = parseUsdcToAtomic(proposedBudget).toString();
       const result = await this.services.setBudget({
         jobId: erc8183JobId,
-        amount: proposedBudget,
+        amount: budgetAtomic,
         optParams: "0x",
       });
 
@@ -444,10 +446,10 @@ export class ProviderWorker extends EventEmitter {
       const statusRaw = await this.mcp.callTool("jobs.get_onchain_status", {
         jobId: erc8183JobId,
       });
-      const status = JSON.parse(statusRaw as string) as Record<string, unknown>;
+      const status = requireObject(statusRaw);
       const expectedAtomic = parseUsdcToAtomic(proposedBudget);
 
-      if (String(status.budget ?? "") !== expectedAtomic.toString()) {
+      if (String(status.budgetAtomic ?? status.budget ?? "") !== budgetAtomic) {
         throw new Error(
           `On-chain budget mismatch: expected ${expectedAtomic}, got ${status.budget}`,
         );
@@ -553,7 +555,9 @@ export class ProviderWorker extends EventEmitter {
       throw new Error(`Job ${jobId} has an invalid evaluator address`);
     }
 
-    const taskId = `provider:${erc8183JobId}:${Date.now()}`;
+    // Stable task ID — ensures idempotency across crashes/retries.
+    // If runtime already completed for this job, ExecutionGateway detects duplicate.
+    const taskId = `provider:${erc8183JobId}`;
 
     // Execute via existing RunnerServices.runProviderJob()
     let runResult: Record<string, unknown>;
@@ -680,7 +684,7 @@ export class ProviderWorker extends EventEmitter {
           limit: 20,
         },
       );
-      const parsed = JSON.parse(result as string) as Record<string, unknown>;
+      const parsed = requireObject(result);
       return (parsed.jobs as unknown[]) ?? [];
     } catch (err) {
       console.error(`[provider-worker] MCP list_assigned_jobs failed: ${err}`);

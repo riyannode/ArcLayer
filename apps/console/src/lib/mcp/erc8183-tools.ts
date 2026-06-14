@@ -380,7 +380,7 @@ export async function handleJobsGetOnchainStatus(
         const client = getArcPublicClient();
         const logs = await client.getLogs({
           address: CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address,
-          event: (ERC8183_AGENTIC_COMMERCE_ABI as any[]).find(
+          event: (ERC8183_AGENTIC_COMMERCE_ABI as unknown as any[]).find(
             (item: any) => item.type === 'event' && item.name === 'JobSubmitted',
           ),
           args: { jobId },
