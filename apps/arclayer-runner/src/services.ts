@@ -1464,6 +1464,21 @@ export class RunnerServices {
       records: await this.ledger.list(limit)
     };
   }
+
+  /**
+   * Close persistent stores and release resources.
+   * Called during graceful shutdown.
+   */
+  async close(): Promise<void> {
+    // Receipt store and ledger may hold file handles or SQLite connections.
+    // Close them if they expose a close method.
+    if (typeof (this.receipts as any).close === "function") {
+      await (this.receipts as any).close();
+    }
+    if (typeof (this.ledger as any).close === "function") {
+      await (this.ledger as any).close();
+    }
+  }
 }
 
 function extractPossibleTxHash(value: unknown): string | undefined {

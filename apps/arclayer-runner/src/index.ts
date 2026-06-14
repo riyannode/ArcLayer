@@ -14,6 +14,10 @@ import { registerInitCommand } from "./init";
 import { registerSetupCommand } from "./setup";
 import { registerInstallCommand } from "./install";
 
+function stderrLog(msg: string): void {
+  process.stderr.write(`[arclayer-runner] ${msg}\n`);
+}
+
 // Read version from package.json
 let PKG_VERSION = "0.1.4";
 try {
@@ -269,7 +273,16 @@ async function main() {
       const broker = config.toolBrokerEnabled ? new McpToolBroker(brokerBudget) : undefined;
       const mcpToolCtx = { services, mcp, config, skill, broker };
 
-      await runMcpStdio(mcpToolCtx);
+      await runMcpStdio(mcpToolCtx, {
+        closeMcp: async () => {
+          stderrLog('Closing MCP connector...');
+          await mcp.close();
+        },
+        closeServices: async () => {
+          stderrLog('Closing services...');
+          await services.close?.();
+        },
+      });
     });
 
   // ── init (non-interactive) ──────────────────────────────────────────────
