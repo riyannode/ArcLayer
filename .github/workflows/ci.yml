@@ -38,6 +38,12 @@ jobs:
       - name: Build runner-core
         run: pnpm --filter @arclayer/runner-core build
 
+      - name: Build SDK
+        run: pnpm --filter @arclayer/sdk build
+
+      - name: Build circle-cli-adapter
+        run: pnpm --filter @arclayer/circle-cli-adapter build
+
       - name: Test runner-core
         run: pnpm --filter @arclayer/runner-core test
 
