@@ -30,11 +30,17 @@ export type ProxyResult = {
  * Attempt to proxy a tool call to Console MCP.
  * Returns { proxied: false } if the tool is not in the allowlist,
  * so the caller can try other handlers.
+ *
+ * @param timeoutMs - Optional timeout for the SDK client callTool.
+ *                    Passed through to the connector so the remote MCP
+ *                    request uses the same timeout as the broker's
+ *                    withTimeout wrapper.
  */
 export async function proxyToConsoleMcp(
   toolName: string,
   args: Record<string, unknown>,
-  mcp: ArcLayerMcpConnector
+  mcp: ArcLayerMcpConnector,
+  timeoutMs?: number,
 ): Promise<ProxyResult> {
   // Check allowlist first
   if (!isProxyToolAllowed(toolName)) {
@@ -42,7 +48,7 @@ export async function proxyToConsoleMcp(
   }
 
   try {
-    const result = await mcp.callTool(toolName, args);
+    const result = await mcp.callTool(toolName, args, timeoutMs);
     return { ok: true, proxied: true, result };
   } catch (error: any) {
     return {

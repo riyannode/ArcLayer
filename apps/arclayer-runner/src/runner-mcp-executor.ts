@@ -22,6 +22,35 @@ function stderrLog(msg: string): void {
 }
 
 /**
+ * Sanitize error messages before returning to MCP host.
+ * Strips internal paths, URLs, tokens, and sensitive details.
+ */
+function sanitizeErrorMessage(message: string): string {
+  if (!message) return 'Tool execution failed';
+
+  // Strip absolute paths (Unix and Windows)
+  let sanitized = message.replace(/\/[\w./-]+/g, '[path]');
+  sanitized = sanitized.replace(/[A-Z]:\\[\w\\.-]+/g, '[path]');
+
+  // Strip URLs with auth info or internal hosts
+  sanitized = sanitized.replace(/https?:\/\/[^\s]+/g, '[url]');
+
+  // Strip potential tokens/secrets (long hex strings, base64)
+  sanitized = sanitized.replace(/\b[0-9a-f]{32,}\b/gi, '[redacted]');
+  sanitized = sanitized.replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/g, '[redacted]');
+
+  // Strip file:// paths
+  sanitized = sanitized.replace(/file:\/\/[^\s]+/g, '[path]');
+
+  // Cap length
+  if (sanitized.length > 500) {
+    sanitized = sanitized.slice(0, 497) + '...';
+  }
+
+  return sanitized;
+}
+
+/**
  * Wrap a promise with a timeout. Rejects with BrokerError on timeout.
  */
 function withTimeout<T>(
@@ -117,7 +146,7 @@ export async function executeRunnerMcpTool(
   const abortController = new AbortController();
 
   try {
-    const ctxWithSignal = { ...ctx, signal: abortController.signal };
+    const ctxWithSignal = { ...ctx, signal: abortController.signal, proxyTimeoutMs: timeoutMs };
     const result = await withTimeout(
       handleMcpTool(toolName, args, ctxWithSignal),
       timeoutMs,
@@ -156,6 +185,7 @@ export async function executeRunnerMcpTool(
 
     const message = error?.message ?? 'Tool execution failed';
     const errorCode = error instanceof BrokerError ? error.code : undefined;
+    const sanitizedMessage = sanitizeErrorMessage(message);
     stderrLog(`tools/call error${errorCode ? ` (${errorCode})` : ''}: ${message}`);
 
     return {
@@ -165,7 +195,7 @@ export async function executeRunnerMcpTool(
           text: JSON.stringify({
             ok: false,
             error: errorCode ?? 'TOOL_ERROR',
-            message,
+            message: sanitizedMessage,
             details: error instanceof BrokerError ? error.details : undefined,
           }),
         },
