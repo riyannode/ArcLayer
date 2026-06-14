@@ -130,40 +130,6 @@ const ANNOTATIONS = {
   }),
 } as const;
 
-// ─── LEGACY ALIASES ──────────────────────────────────────────────────────────
-
-/**
- * Legacy tool name → canonical tool name mapping.
- * Preserved for backward compatibility with existing MCP clients.
- */
-const LEGACY_ALIASES: Record<string, string> = {
-  arc_network_info: 'protocol.status',
-  protocol_overview: 'protocol.health',
-  list_agents: 'agents.discover',
-  get_agent: 'agents.get',
-  list_jobs: 'jobs.list_public',
-  get_job: 'jobs.get_public',
-  arc_docs_search: 'docs.arc_search',
-  register_agent_calldata: 'identity.prepare_register_agent',
-  give_feedback_calldata: 'reputation.give_feedback',
-  validation_request_calldata: 'validation.request_calldata',
-  validation_response_calldata: 'validation.response_calldata',
-  validation_status_read: 'validation.status_read',
-  create_job_calldata: 'client.prepare_create_job',
-  set_budget_calldata: 'provider.prepare_set_budget',
-  approve_usdc_calldata: 'client.prepare_approve_usdc',
-  fund_job_calldata: 'client.prepare_fund_job',
-  submit_job_calldata: 'provider.prepare_submit_job',
-  complete_job_calldata: 'evaluator.prepare_complete_job',
-  reject_job_calldata: 'evaluator.prepare_reject_job',
-  register_agent_approval: 'identity.request_register_agent_approval',
-};
-
-/** Resolve a legacy alias to canonical name. Returns input if not an alias. */
-export function resolveAlias(name: string): string {
-  return LEGACY_ALIASES[name] ?? name;
-}
-
 // ─── REGISTER ALL TOOLS ─────────────────────────────────────────────────────
 
 let registered = false;

@@ -27,6 +27,14 @@ import type {
 // ── Constants ─────────────────────────────────────────────────────────────
 
 const DEFAULT_PERMISSIONS: McpSessionPermissions = {
+  scopes: [
+    'arclayer:read',
+    'agents:read',
+    'jobs:read',
+    'jobs:prepare',
+    'provider:runtime',
+    'tx:request',
+  ],
   allowedContracts: ['ERC8004_IDENTITY_REGISTRY'],
   allowedActions: ['identity.register'],
 };
