@@ -230,12 +230,30 @@ export class ClientWorkflow {
       return { ok: false, message: "Invalid context or wrong state." };
     }
 
+    // All required invariants must be present from prepareJob()
+    if (!ctx.erc8183JobId) {
+      ctx.state = "failed";
+      return { ok: false, message: "❌ Missing erc8183JobId in context." };
+    }
+    if (!ctx.proposedBudgetAtomic) {
+      ctx.state = "failed";
+      return { ok: false, message: "❌ Missing proposedBudgetAtomic in context." };
+    }
+    if (!ctx.providerAddress) {
+      ctx.state = "failed";
+      return { ok: false, message: "❌ Missing providerAddress in context." };
+    }
+    if (!ctx.evaluatorAddress) {
+      ctx.state = "failed";
+      return { ok: false, message: "❌ Missing evaluatorAddress in context." };
+    }
+
     ctx.state = "approving";
 
     try {
       // Step 0: Read on-chain job to get actual budget and verify preconditions
       const onchainStatus = await this.mcp.callTool("jobs.get_onchain_status", {
-        jobId: ctx.erc8183JobId!,
+        jobId: ctx.erc8183JobId,
       }) as Record<string, unknown>;
 
       const statusCode = Number(onchainStatus.statusCode ?? -1);
@@ -250,8 +268,8 @@ export class ClientWorkflow {
         return { ok: false, message: "❌ Provider has not set budget yet." };
       }
 
-      // Invariant: proposed budget === onchain budget
-      if (ctx.proposedBudgetAtomic && onchainBudget !== ctx.proposedBudgetAtomic) {
+      // Invariant: proposed budget === onchain budget (strict)
+      if (onchainBudget !== ctx.proposedBudgetAtomic) {
         ctx.state = "failed";
         return {
           ok: false,
@@ -259,24 +277,32 @@ export class ClientWorkflow {
         };
       }
 
-      // Invariant: provider address must match proposal
+      // Invariant: provider address must match proposal (strict)
       const onchainProvider = String(onchainStatus.provider ?? "").toLowerCase();
-      if (ctx.providerAddress && onchainProvider && onchainProvider !== ctx.providerAddress) {
+      if (!onchainProvider) {
+        ctx.state = "failed";
+        return { ok: false, message: "❌ Provider not set on-chain. Funding blocked." };
+      }
+      if (onchainProvider !== ctx.providerAddress) {
         ctx.state = "failed";
         return { ok: false, message: "❌ Provider mismatch. Funding blocked." };
       }
 
-      // Invariant: evaluator address must match proposal
+      // Invariant: evaluator address must match proposal (strict)
       const onchainEvaluator = String(onchainStatus.evaluator ?? "").toLowerCase();
-      if (ctx.evaluatorAddress && onchainEvaluator && onchainEvaluator !== ctx.evaluatorAddress) {
+      if (!onchainEvaluator) {
+        ctx.state = "failed";
+        return { ok: false, message: "❌ Evaluator not set on-chain. Funding blocked." };
+      }
+      if (onchainEvaluator !== ctx.evaluatorAddress) {
         ctx.state = "failed";
         return { ok: false, message: "❌ Evaluator mismatch. Funding blocked." };
       }
 
-      // Step 1: Approve USDC for exact on-chain budget
+      // Step 1: Approve USDC for exact proposed budget (invariant amount)
       const approveResult = await this.services.approveUsdcForErc8183({
-        amount: onchainBudget,
-        idempotencyKey: `approveUsdc:job-${ctx.erc8183JobId}:${onchainBudget}`,
+        amount: ctx.proposedBudgetAtomic,
+        idempotencyKey: `approveUsdc:job-${ctx.erc8183JobId}:${ctx.proposedBudgetAtomic}`,
       });
 
       const approveObj = approveResult as Record<string, unknown>;
@@ -285,7 +311,7 @@ export class ClientWorkflow {
 
       // Step 2: Fund job
       const fundResult = await this.services.fundJob({
-        jobId: ctx.erc8183JobId!,
+        jobId: ctx.erc8183JobId,
         optParams: "0x",
       });
 

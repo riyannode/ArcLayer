@@ -25,6 +25,7 @@ import {
   isJobEnvelope,
   extractProposedBudget,
   parseUsdcToAtomic,
+  atomicToUsdc,
   hashDeliverable,
   RuntimeResultSchema,
 } from "@arclayer/runner-core";
@@ -66,6 +67,11 @@ type JobPhase =
   | "failed"
   | "needs_action";
 
+type FundedJobOutcome =
+  | "submitted"
+  | "waiting_payment"
+  | "waiting_action";
+
 type ActiveJob = {
   jobId: string;
   erc8183JobId: string;
@@ -74,6 +80,31 @@ type ActiveJob = {
   retryCount: number;
   lastError?: string;
 };
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Resolve budget as USDC decimal string from explicit job fields.
+ * NO heuristic size guessing — fields are distinguished by name.
+ *
+ * proposedBudgetUsdc → always decimal human-readable (e.g. "5.00")
+ * priceAtomic        → always atomic bigint string (e.g. "5000000")
+ */
+function resolveBudgetUsdc(job: Record<string, unknown>): string | null {
+  if (typeof job.proposedBudgetUsdc === "string" && job.proposedBudgetUsdc) {
+    return job.proposedBudgetUsdc;
+  }
+
+  if (typeof job.priceAtomic === "string" && job.priceAtomic) {
+    try {
+      return atomicToUsdc(BigInt(job.priceAtomic));
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
 
 // ── Provider Worker ────────────────────────────────────────────────────────
 
@@ -403,17 +434,11 @@ export class ProviderWorker extends EventEmitter {
       proposedBudget = extractProposedBudget(description);
     }
 
-    // If no envelope, use the job's proposed budget from the description
+    // If no envelope, resolve from explicit fields — NO heuristic size guessing.
+    // proposedBudgetUsdc is always decimal human-readable (e.g. "5.00")
+    // priceAtomic is always atomic bigint string (e.g. "5000000")
     if (!proposedBudget) {
-      proposedBudget = String(job.proposedBudget ?? job.priceAtomic ?? "");
-      if (proposedBudget) {
-        // Convert from atomic to USDC if needed
-        const atomic = Number(proposedBudget);
-        if (atomic > 1000000) {
-          // Likely atomic units, convert
-          proposedBudget = (atomic / 1_000_000).toFixed(6);
-        }
-      }
+      proposedBudget = resolveBudgetUsdc(job);
     }
 
     if (!proposedBudget || proposedBudget === "0") {
@@ -496,9 +521,12 @@ export class ProviderWorker extends EventEmitter {
       };
 
       try {
-        await this.processFundedJob(jobRecord);
-        this.processedFundedIds.add(jobId);
-        this.retryCounts.delete(jobId);
+        const outcome = await this.processFundedJob(jobRecord);
+        if (outcome === "submitted") {
+          this.processedFundedIds.add(jobId);
+          this.retryCounts.delete(jobId);
+        }
+        // waiting_payment / waiting_action: do NOT mark processed — re-check on next poll
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[provider-worker] Funded job ${jobId} failed: ${msg}`);
@@ -526,7 +554,7 @@ export class ProviderWorker extends EventEmitter {
     }
   }
 
-  private async processFundedJob(job: Record<string, unknown>): Promise<void> {
+  private async processFundedJob(job: Record<string, unknown>): Promise<FundedJobOutcome> {
     const jobId = String(job.id ?? job.erc8183JobId ?? "");
     const erc8183JobId = String(job.erc8183JobId ?? "");
     const description = String(job.description ?? "");
@@ -590,7 +618,7 @@ export class ProviderWorker extends EventEmitter {
         "runtime.needs_action",
         `Job ${jobId} needs paid resources. Waiting for x402-agent to complete payment.`,
       );
-      return;
+      return "waiting_payment";
     }
 
     if (runResult?.status === "needs_action") {
@@ -599,7 +627,7 @@ export class ProviderWorker extends EventEmitter {
         "runtime.needs_action",
         `Job ${jobId} needs manual action. No deliverable submitted.`,
       );
-      return;
+      return "waiting_action";
     }
 
     if (!runResult.ok || runResult.status !== "completed") {
@@ -668,6 +696,8 @@ export class ProviderWorker extends EventEmitter {
 
     // Complete runtime checkpoint
     this.emit("runtime_completed", { jobId });
+
+    return "submitted";
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────
