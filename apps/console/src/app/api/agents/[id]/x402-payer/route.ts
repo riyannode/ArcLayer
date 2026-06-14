@@ -25,7 +25,7 @@ import { isAgentAccountServerRailEnabled } from '@/lib/agent-accounts/feature-fl
 import type { AgentX402Rail, AgentX402Scope } from '@/lib/x402/agent-payer';
 
 const ERROR_CACHE = 'no-store, no-cache, max-age=0';
-const VALID_RAILS = new Set<AgentX402Rail>(['circle-gateway', 'arc-native']);
+const VALID_RAILS = new Set<AgentX402Rail>(['circle-gateway']);
 const VALID_SCOPES = new Set<AgentX402Scope>(['homepage', 'a2a']);
 
 // ── Shared auth helper ─────────────────────────────────────────────────────

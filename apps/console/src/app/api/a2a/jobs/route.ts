@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { createA2AJob, listA2AJobs } from '@/lib/a2a/jobs';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { withX402 } from '@/lib/x402';
+import { getPlatformX402PayTo } from '@/lib/x402/platform-pay-to';
 
 
 export const runtime = 'nodejs';
@@ -66,6 +67,8 @@ async function postHandler(req: NextRequest) {
 // 0.000001 USDC = 1 atomic (6 decimals). Creating a job is a paid action.
 export const POST = withX402(postHandler, {
   amount: '1',
+  payTo: getPlatformX402PayTo(),
+  // Platform-owned seller: payTo = ArcLayer platform payout.
   resource: '/api/a2a/jobs',
   description: 'Create a new A2A job — anti-spam fee',
 });

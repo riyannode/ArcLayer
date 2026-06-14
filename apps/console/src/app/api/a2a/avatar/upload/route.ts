@@ -5,6 +5,7 @@ import { recoverMessageAddress } from 'viem';
 import { getERC8004OwnerOf } from '@/lib/contracts/erc8004';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 import { withX402 } from '@/lib/x402';
+import { getPlatformX402PayTo } from '@/lib/x402/platform-pay-to';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -134,8 +135,8 @@ async function postHandler(req: NextRequest) {
 
 export const POST = withX402(postHandler, {
   amount: '1',
+  payTo: getPlatformX402PayTo(),
+  // Platform-owned seller: payTo = ArcLayer platform payout.
   resource: '/api/a2a/avatar/upload',
   description: 'Upload an A2A agent avatar — storage anti-spam fee',
-  requireResourceContext: false,
-  settleBeforeHandler: true,
 });

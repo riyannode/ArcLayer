@@ -271,9 +271,7 @@ export function withCircleAgentGate(
       amount: ctx.amountAtomic,
       resource: ctx.resource,
       description: `Circle x402 gate: ${ctx.category}/${ctx.market}/${ctx.role}/${ctx.scope}`,
-      allowedRails: ['circle-gateway-passkey'],
       payTo: servicePayoutAddress,
-      requireExplicitPayTo: true,
       liveAgentId: ctx.agentId,
       liveAgentName: `${ctx.category}:${ctx.role}`,
       onSettled: async (settle) => {

@@ -12,7 +12,7 @@ import { randomBytes } from 'crypto';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type AllowedRail = 'arc-native-eoa' | 'circle-gateway-passkey';
+export type AllowedRail = 'circle-gateway-passkey';
 
 export interface RailSession {
   sessionId: string;
@@ -100,7 +100,7 @@ export function validateRailSession(opts: {
     return {
       ok: false,
       error: 'rail_mismatch',
-      message: `This session only accepts ${session.allowedRail === 'arc-native-eoa' ? 'Arc Native' : 'Circle Gateway'} payment. Got ${opts.incomingRail === 'arc-native-eoa' ? 'Arc Native' : 'Circle Gateway'}.`,
+      message: `This session only accepts ${'Circle Gateway'} payment. Got ${'Circle Gateway'}.`,
     };
   }
 

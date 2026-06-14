@@ -8,7 +8,6 @@ export const X402_VERSION_V2 = 2 as const;
 
 export const USDC_ADDRESS = '0x3600000000000000000000000000000000000000' as const;
 
-export const X_PAYMENT_HEADER = 'X-PAYMENT' as const;
 export const PAYMENT_REQUIRED_HEADER = 'PAYMENT-REQUIRED' as const;
 export const PAYMENT_RESPONSE_HEADER = 'PAYMENT-RESPONSE' as const;
 

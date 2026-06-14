@@ -1,6 +1,7 @@
 import { humanJson } from '@/lib/api/human-json';
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402';
+import { getPlatformX402PayTo } from '@/lib/x402/platform-pay-to';
 
 /**
  * POST /api/x402/jobs/create — x402-gated job creation.
@@ -44,7 +45,8 @@ async function handler(req: NextRequest): Promise<NextResponse> {
 // 0.000001 USDC = 1 atomic (6 decimals)
 export const POST = withX402(handler, {
   amount: '1',
+  payTo: getPlatformX402PayTo(),
+  // Platform-owned seller: payTo = ArcLayer platform payout.
   resource: '/api/x402/jobs/create',
   description: 'Create a new job on ArcLayer marketplace',
-  requireResourceContext: false,
 });

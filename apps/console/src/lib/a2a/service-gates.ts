@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/x402/supabaseClient";
 
 const TABLE = "a2a_agent_service_gates";
 
-export type ServiceGateRail = "circle-gateway" | "arc-native";
+export type ServiceGateRail = "circle-gateway";
 
 export type A2AAgentServiceGate = {
   id: string;
@@ -151,11 +151,8 @@ export function normalizeOptionalAddress(value: unknown): `0x${string}` | null {
 
 function normalizeRail(value: unknown): ServiceGateRail {
   const rail = normalizeServiceSlug(value || "circle-gateway", "rail");
-  if (rail !== "circle-gateway" && rail !== "arc-native") {
-    throw serviceGateError(
-      "invalid_rail",
-      "rail must be circle-gateway or arc-native",
-    );
+  if (rail !== "circle-gateway") {
+    throw serviceGateError("invalid_rail", "rail must be circle-gateway");
   }
   return rail;
 }

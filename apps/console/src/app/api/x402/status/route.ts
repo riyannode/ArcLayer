@@ -1,34 +1,26 @@
-import { humanJson } from '@/lib/api/human-json';
-import { NextRequest } from 'next/server';
-import { isGatewayEnabled, probeGatewayRuntimeSupport } from '@/lib/x402';
+import { NextResponse } from 'next/server';
+import { getAddress } from 'viem';
+import { GATEWAY_NETWORK_NAME, USDC_ADDRESS, X402_VERSION_V2 } from '@/lib/x402/constants';
+import { gatewayFacilitatorUrl, isGatewayEnabled } from '@/lib/x402/gateway/batch-client';
+import { getGatewayContractAddressServer } from '@/lib/x402/gateway/config';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
-  const gateway = await probeGatewayRuntimeSupport().catch((error) => ({ ok: false, error: error instanceof Error ? error.message : String(error) }));
-
-  return humanJson(req, {
+export async function GET() {
+  return NextResponse.json({
     ok: true,
-    facilitator: 'ArcLayer',
-    version: 2,
-    rails: {
-      native: {
-        enabled: true,
-        scheme: 'exact',
-        network: 'eip155:5042002',
-        transferMethod: 'eip3009',
-        settleMode: 'self-hosted-relayer',
-      },
-      circleGateway: {
-        enabled: isGatewayEnabled(),
-        scheme: 'exact',
-        network: 'eip155:5042002',
-        transferMethod: 'gateway-batched-eip3009',
-        runtime: gateway,
-      },
-    },
-    legacy: {
-      arcEscrow: false,
+    x402Version: X402_VERSION_V2,
+    rail: 'circle-gateway-batched-eip3009',
+    network: 'arcTestnet',
+    caip2Network: GATEWAY_NETWORK_NAME,
+    asset: 'USDC',
+    assetAddress: getAddress(USDC_ADDRESS),
+    settlement: 'circle-gateway-batched',
+    gateway: {
+      enabled: isGatewayEnabled(),
+      facilitatorUrl: gatewayFacilitatorUrl(),
+      contractAddress: getGatewayContractAddressServer(),
     },
   });
 }

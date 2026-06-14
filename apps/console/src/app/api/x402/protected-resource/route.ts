@@ -1,6 +1,7 @@
 import { humanJson } from '@/lib/api/human-json';
 import { NextRequest } from 'next/server';
 import { withX402 } from '@/lib/x402';
+import { getPlatformX402PayTo } from '@/lib/x402/platform-pay-to';
 
 export const runtime = 'nodejs';
 
@@ -23,8 +24,9 @@ async function protectedHandler(_req: NextRequest) {
 export const GET = withX402(protectedHandler, {
   amount: process.env.X402_PROTECTED_RESOURCE_AMOUNT_ATOMIC || process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC,
   resource: RESOURCE,
-  description: 'ArcLayer x402 protected resource: Circle Gateway + Arc Native EIP-3009',
-  requireResourceContext: false,
+  payTo: getPlatformX402PayTo(),
+  // Platform-owned seller: payTo = ArcLayer platform payout.
+  description: 'ArcLayer x402 protected resource: Circle Gateway nanopayment',
 });
 
 export const POST = GET;

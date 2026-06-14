@@ -23,6 +23,7 @@ import { humanJson } from '@/lib/api/human-json';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getPlatformX402PayTo } from '@/lib/x402/platform-pay-to';
 import { withX402 } from '@/lib/x402/middleware';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { getAgentJob, markJobSettlementPending, markJobSettled } from '@/lib/agent-jobs/store';
@@ -92,8 +93,9 @@ export const POST = (() => {
       },
       {
         amount: priceAtomic,
+        payTo: getPlatformX402PayTo(),
+        // Platform-owned seller compatibility for legacy agent-job settle route.
         resource: `/api/agent-jobs/${jobId}/settle`,
-        allowedRails: ['arc-native-eoa'],
         onSettled: async (ctx) => {
           await markJobSettled({
             jobId,

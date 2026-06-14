@@ -12,6 +12,7 @@ import {
   getManifest,
 } from '@/lib/a2a/manifest';
 import { withX402 } from '@/lib/x402';
+import { getPlatformX402PayTo } from '@/lib/x402/platform-pay-to';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -132,8 +133,8 @@ async function postHandler(req: NextRequest): Promise<NextResponse> {
 // 0.000001 USDC = 1 atomic (6 decimals). GET remains free; publishing/updating a manifest is paid anti-spam.
 export const POST = withX402(postHandler, {
   amount: '1',
+  payTo: getPlatformX402PayTo(),
+  // Platform-owned seller: payTo = ArcLayer platform payout.
   resource: '/api/a2a/manifest',
   description: 'Publish or update an A2A agent manifest — anti-spam fee',
-  requireResourceContext: false,
-  settleBeforeHandler: true,
 });

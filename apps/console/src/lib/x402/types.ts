@@ -1,21 +1,5 @@
-/**
- * x402 Dual-Mode Types — Arc Native (EIP-3009) + Circle Gateway.
- *
- */
+/** x402 Gateway-only Types — Circle Gateway batched EIP-3009. */
 
 export type X402Scheme = 'exact';
 export type X402Network = 'eip155:5042002';
-
-// Re-export exact types as canonical
-export type {
-  PaymentPayload,
-  PaymentRequirements,
-  VerifyResponse,
-  SettleResponse,
-  InvalidReason,
-  SettleErrorReason,
-  ExactEvmAuthorization,
-  ExactEvmPayload,
-  SupportedKind,
-  Network,
-} from './exact/types';
+export type X402PaymentRail = 'circle-gateway';

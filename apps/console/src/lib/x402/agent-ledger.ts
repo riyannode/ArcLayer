@@ -19,7 +19,7 @@ export interface AgentX402LedgerEntry {
   sessionId?: string | null;
   jobId?: string | null;
   resource: string;
-  rail: 'circle-gateway' | 'arc-native';
+  rail: 'circle-gateway';
   amount: string;
   currency?: 'USDC';
   paymentId?: string | null;

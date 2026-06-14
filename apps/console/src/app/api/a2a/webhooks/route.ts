@@ -4,6 +4,7 @@ import { requireApiKey } from '@/lib/a2a/auth';
 import { applyRateLimit } from '@/lib/rate-limit';
 import { createWebhook, listWebhooks } from '@/lib/a2a/webhooks';
 import { withX402 } from '@/lib/x402';
+import { getPlatformX402PayTo } from '@/lib/x402/platform-pay-to';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,6 +45,8 @@ async function postHandler(req: NextRequest) {
 // 0.000001 USDC = 1 atomic (6 decimals). Creating webhook subscriptions is a paid action.
 export const POST = withX402(postHandler, {
   amount: '1',
+  payTo: getPlatformX402PayTo(),
+  // Platform-owned seller: payTo = ArcLayer platform payout.
   resource: '/api/a2a/webhooks',
   description: 'Create an A2A webhook subscription — anti-spam fee',
 });

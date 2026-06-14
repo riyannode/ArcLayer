@@ -1,6 +1,7 @@
 import { humanJson } from '@/lib/api/human-json';
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402';
+import { getPlatformX402PayTo } from '@/lib/x402/platform-pay-to';
 
 /**
  * GET /api/x402/agents/[id]/full-report — x402-gated agent reputation report.
@@ -47,6 +48,8 @@ async function handler(req: NextRequest): Promise<NextResponse> {
         id: `receipt_${Date.now() - i * 3600_000}_${Math.random().toString(36).slice(2, 6)}`,
         jobId: `job_${Date.now() - i * 3600_000}_${Math.random().toString(36).slice(2, 6)}`,
         amount: (Math.random() * 0.5 + 0.05).toFixed(4),
+  payTo: getPlatformX402PayTo(),
+  // Platform-owned seller: payTo = ArcLayer platform payout.
         verifiedAt: new Date(Date.now() - i * 3600_000).toISOString(),
         result: Math.random() > 0.15 ? 'PASSED' : 'FAILED',
       })),
@@ -60,7 +63,8 @@ async function handler(req: NextRequest): Promise<NextResponse> {
 // 0.02 USDC = 20000 atomic (6 decimals)
 export const GET = withX402(handler, {
   amount: '20000',
+  payTo: getPlatformX402PayTo(),
+  // Platform-owned seller: payTo = ArcLayer platform payout.
   resource: '/api/x402/agents/[id]/full-report',
   description: 'Full reputation report for an ArcLayer agent',
-  requireResourceContext: false,
 });

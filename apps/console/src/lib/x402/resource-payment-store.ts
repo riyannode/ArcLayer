@@ -10,7 +10,7 @@ export interface ResourcePaymentRecord {
   resource: string;
   payTo: string;
   amount: string;
-  mode: 'arc-native';
+  mode: 'circle-gateway';
   status: 'pending' | 'settled' | 'failed';
   paymentId: string;
   transaction?: string | null;
@@ -44,7 +44,7 @@ function mapRecord(data: Record<string, unknown>): ResourcePaymentRecord {
     resource: String(data.resource),
     payTo: String(data.pay_to ?? ''),
     amount: String(data.amount ?? ''),
-    mode: 'arc-native',
+    mode: 'circle-gateway',
     status: data.status as ResourcePaymentRecord['status'],
     paymentId: String(data.payment_id ?? ''),
     transaction: (data.transaction as string | null | undefined) ?? null,

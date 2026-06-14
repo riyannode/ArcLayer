@@ -1,6 +1,7 @@
 import { humanJson } from '@/lib/api/human-json';
 import { NextRequest } from 'next/server';
 import { withX402 } from '@/lib/x402';
+import { getPlatformX402PayTo } from '@/lib/x402/platform-pay-to';
 
 export const runtime = 'nodejs';
 
@@ -20,9 +21,10 @@ async function handler(_req: NextRequest) {
 
 export const GET = withX402(handler, {
   amount: process.env.X402_REGISTER_GATE_AMOUNT_ATOMIC || AMOUNT_ATOMIC,
+  payTo: getPlatformX402PayTo(),
+  // Platform-owned seller: payTo = ArcLayer platform payout.
   resource: RESOURCE,
   description: 'Anti-spam registration fee — prevents spam agent listings on the marketplace.',
-  requireResourceContext: false,
 });
 
 export const POST = GET;

@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
       accessType: String(input.accessType ?? ''),
       market: typeof input.market === 'string' ? input.market : '*',
       priceAtomic: String(input.priceAtomic ?? ''),
-      rail: typeof input.rail === 'string' ? input.rail as 'circle-gateway' | 'arc-native' : 'circle-gateway',
+      rail: typeof input.rail === 'string' ? input.rail as 'circle-gateway' : 'circle-gateway',
       payTo: input.payTo,
       reputationEligible: typeof input.reputationEligible === 'boolean' ? input.reputationEligible : undefined,
       llmReceiptRequired: typeof input.llmReceiptRequired === 'boolean' ? input.llmReceiptRequired : undefined,

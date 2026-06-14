@@ -16,7 +16,7 @@ import { isAgentAccountA2aAutoBindEnabled } from '@/lib/agent-accounts/feature-f
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type AgentX402Rail = 'circle-gateway' | 'arc-native';
+export type AgentX402Rail = 'circle-gateway';
 export type AgentX402Scope = 'homepage' | 'a2a';
 
 export type AgentX402PayerResolution = {

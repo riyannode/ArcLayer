@@ -10,8 +10,9 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { humanJson } from '@/lib/api/human-json';
 import { NextRequest } from 'next/server';
+import { getPlatformX402PayTo } from '@/lib/x402/platform-pay-to';
 import { withX402 } from '@/lib/x402';
-import type { AgentX402Rail, AgentX402Scope } from '@/lib/x402/agent-payer';
+import type { AgentX402Scope } from '@/lib/x402/agent-payer';
 import { dispatchToRunner } from '@/lib/runner-registry/dispatch';
 import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 
@@ -78,7 +79,6 @@ async function storeDispatchProof(params: {
     throw new Error(`agent_bridge_events_insert_failed:${eventInsert.error.message}`);
   }
 
-  // Store receipt — x402_circle_gateway matches allowedRails: ['circle-gateway-passkey']
   const receiptInsert = await supabase.from('agent_bridge_receipts').insert({
     session_id: sessionId,
     receipt_type: 'x402_circle_gateway',
@@ -200,14 +200,15 @@ export async function POST(req: NextRequest) {
 
   return withX402(handler, {
     amount: process.env.X402_AGENT_RUN_AMOUNT_ATOMIC || '1',
+  payTo: getPlatformX402PayTo(),
+  // Platform-owned seller: payTo = ArcLayer platform payout.
+    // Platform-owned seller: payTo = ArcLayer platform payout for hosted agent run endpoint.
     resource: `/api/agents/${agentId}/run`,
     description: 'x402-protected agent run endpoint',
     liveAgentId: String(agentId),
     liveAgentName: `Agent ${agentId}`,
-    allowedRails: ['circle-gateway-passkey'],
     agentPayerBinding: {
       required: true,
-      rail: 'circle-gateway' as AgentX402Rail,
       scope: 'homepage' as AgentX402Scope,
       getContext: async (req: NextRequest) => {
         const id = parseAgentId(req);

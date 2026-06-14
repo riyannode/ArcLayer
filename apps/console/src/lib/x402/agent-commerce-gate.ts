@@ -345,10 +345,21 @@ export function withPredictionMarketSellerCommerceGate(
       payTo: servicePayoutAddress,
       resource: ctx.resource,
       description: `Prediction-market commerce: ${ctx.buyerAgentId}/${ctx.buyerRole} pays ${ctx.sellerAgentId}/${ctx.sellerRole} for ${ctx.accessType}`,
-      allowedRails: ['circle-gateway-passkey'],
-      requireExplicitPayTo: true,
       liveAgentId: ctx.buyerAgentId,
       liveAgentName: `${ctx.category}:${ctx.buyerRole}`,
+      // A2A seller: payTo = seller agent payout from database.
+      agentPayerBinding: {
+        required: true,
+        scope: 'a2a',
+        getContext: async () => ({
+          agentId: ctx.buyerAgentId,
+          sessionId: ctx.sessionId,
+          jobId: null,
+          sellerAgentId: ctx.sellerAgentId,
+          serviceId: serviceGate?.id ?? null,
+          gateKey: ctx.gateKey ?? null,
+        }),
+      },
       onSettled: async (settle) => {
         const duplicate = await getBridgeReceiptByPayload({
           sessionId: ctx.sessionId,

@@ -13,7 +13,7 @@
 
 import { supabaseAdmin } from './supabaseClient';
 
-export type Rail = 'arc-native' | 'circle-gateway';
+export type Rail = 'circle-gateway';
 
 export interface ClaimResult {
   ok: boolean;
