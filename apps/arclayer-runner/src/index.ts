@@ -13,8 +13,8 @@ import { runDoctor } from "./doctor";
 import { registerInitCommand } from "./init";
 import { registerSetupCommand } from "./setup";
 import { registerInstallCommand } from "./install";
-import { createProviderWorker } from "./workers/provider-worker";
-import { createEvaluatorWorker } from "./workers/evaluator-worker";
+import { createProviderWorker } from "./workers/provider";
+import { createEvaluatorWorker } from "./workers/evaluator";
 
 function stderrLog(msg: string): void {
   process.stderr.write(`[arclayer-runner] ${msg}\n`);
@@ -353,13 +353,12 @@ async function main() {
       process.once("SIGTERM", shutdown);
 
       if (once) {
-        await worker.start();
-        await worker.stop();
+        await worker.runOnce();
         await context.mcp.close();
-        await context.services.close?.();
-      } else {
-        await worker.start();
+        return;
       }
+
+      await worker.start();
     });
 
   // ── evaluator-worker ────────────────────────────────────────────────
@@ -388,13 +387,12 @@ async function main() {
       process.once("SIGTERM", shutdown);
 
       if (once) {
-        await worker.start();
-        await worker.stop();
+        await worker.runOnce();
         await context.mcp.close();
-        await context.services.close?.();
-      } else {
-        await worker.start();
+        return;
       }
+
+      await worker.start();
     });
 
   program.parse(process.argv);

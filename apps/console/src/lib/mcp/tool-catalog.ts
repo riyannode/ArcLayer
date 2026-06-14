@@ -89,6 +89,9 @@ import {
   handleEvaluatorGetDeliverable,
   handleEvaluatorListAssignedJobs,
   handleProviderListAssignedJobsExtended,
+  handleEvaluatorPublishEvaluation,
+  handleEvaluatorAttachSettlementTx,
+  handleEvaluatorQueueReputation,
 } from './deliverable-evaluation-tools';
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
@@ -1668,6 +1671,65 @@ export function registerAllTools(): void {
       { name: 'limit', type: 'number', description: 'Max results (default 20, max 100).' },
     ],
     handler: handleProviderListAssignedJobsExtended,
+  });
+
+  registerTool({
+    name: 'evaluator.publish_evaluation',
+    domain: 'evaluator',
+    description:
+      'Persist evaluator verdict before ERC-8183 settlement. Verifies on-chain evaluator, job status, and hash consistency.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'evaluatorAddress', type: 'string', required: true, description: 'Evaluator wallet address.' },
+      { name: 'deliverableHash', type: 'string', required: true, description: 'Keccak-256 hash of deliverable (bytes32).' },
+      { name: 'verdict', type: 'object', required: true, description: 'EvaluationVerdictV1 object with decision, score, confidence, reason, evidence.' },
+      { name: 'evaluationReceiptHash', type: 'string', description: 'Optional receipt hash from evaluation runtime.' },
+    ],
+    handler: handleEvaluatorPublishEvaluation,
+  });
+
+  registerTool({
+    name: 'evaluator.attach_settlement_tx',
+    domain: 'evaluator',
+    description:
+      'Attach settlement tx hash to evaluation after complete/reject. Verifies terminal onchain state.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'evaluatorAddress', type: 'string', required: true, description: 'Evaluator wallet address.' },
+      { name: 'settlementTxHash', type: 'string', required: true, description: 'Settlement transaction hash.' },
+    ],
+    handler: handleEvaluatorAttachSettlementTx,
+  });
+
+  registerTool({
+    name: 'evaluator.queue_reputation',
+    domain: 'evaluator',
+    description:
+      'Queue ERC-8004 reputation publication after verified terminal state. Only for Completed/Rejected jobs.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'evaluatorAddress', type: 'string', required: true, description: 'Evaluator wallet address.' },
+      { name: 'targetAgentId', type: 'string', required: true, description: 'Target agent ID for reputation.' },
+      { name: 'targetAddress', type: 'string', required: true, description: 'Target wallet address.' },
+      { name: 'feedbackType', type: 'string', required: true, description: 'Feedback type: successful_work or failed_acceptance_criteria.' },
+      { name: 'score', type: 'number', description: 'Score (0-100).' },
+      { name: 'tag', type: 'string', description: 'Optional tag.' },
+      { name: 'reason', type: 'string', description: 'Optional reason.' },
+      { name: 'evidenceHash', type: 'string', description: 'Optional evidence hash.' },
+    ],
+    handler: handleEvaluatorQueueReputation,
   });
 }
 

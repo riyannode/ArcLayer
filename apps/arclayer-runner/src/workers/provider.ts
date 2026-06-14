@@ -140,6 +140,26 @@ export class ProviderWorker extends EventEmitter {
     return this.activeJob;
   }
 
+  /**
+   * Run one poll cycle then exit. No setInterval.
+   * Used by CLI --once flag.
+   */
+  async runOnce(): Promise<void> {
+    if (this.state !== "idle" && this.state !== "stopped") {
+      throw new Error(`Cannot run once in state ${this.state}`);
+    }
+
+    await this.verifyIdentity();
+    await this.reconcilePending();
+
+    this.state = "running";
+    try {
+      await this.poll();
+    } finally {
+      this.state = "stopped";
+    }
+  }
+
   // ── Startup Verification ───────────────────────────────────────────────
 
   private async verifyIdentity(): Promise<void> {
@@ -180,12 +200,24 @@ export class ProviderWorker extends EventEmitter {
 
   private async reconcilePending(): Promise<void> {
     // Reconcile any pending operations from previous run
-    // Uses OperationJournal.reconcilePendingOperations()
     try {
-      // TODO: Call reconciliation when OperationJournal is wired
-      console.log("[provider-worker] Reconciliation check passed");
+      const pendingOps = this.services.listReconcilableOperations();
+      for (const op of pendingOps) {
+        try {
+          await this.services.reconcileOperation(
+            op.operationId,
+            "unknown",
+            { errorMessage: "Reconciled on startup" },
+          );
+        } catch (err) {
+          console.warn(`[provider] Reconciliation failed for ${op.operationId}: ${err}`);
+        }
+      }
+      if (pendingOps.length > 0) {
+        console.log(`[provider] Reconciled ${pendingOps.length} pending operations`);
+      }
     } catch (err) {
-      console.warn(`[provider-worker] Reconciliation warning: ${err}`);
+      console.warn(`[provider] Reconciliation warning: ${err}`);
     }
   }
 

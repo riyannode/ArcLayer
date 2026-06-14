@@ -25,10 +25,13 @@ import {
   upsertDeliverable,
   getDeliverableByJobId,
   lockDeliverable,
+  insertEvaluation,
+  attachSettlementTx,
+  queueReputationPublication,
   type DeliverableRow,
 } from "@/lib/erc8183-jobs/deliverable-store";
 import { readOnchainJob, getArcPublicClient } from "@/lib/erc8183-jobs/receipt";
-import { CONTRACTS } from "@arclayer/sdk";
+import { CONTRACTS, ERC8183_AGENTIC_COMMERCE_ABI } from "@arclayer/sdk";
 import { getSupabaseAdmin } from "@/lib/x402/supabaseClient";
 
 function supabase() {
@@ -73,12 +76,51 @@ function assertSessionBinding(
       .map((a) => a!.toLowerCase()),
   );
 
-  if (boundAddresses.size > 0 && !boundAddresses.has(requestedAddress.toLowerCase())) {
+  // Strict: session MUST have at least one bound wallet address
+  if (boundAddresses.size === 0) {
+    throw new McpError(
+      MCP_ERRORS.FORBIDDEN,
+      "MCP session has no bound wallet address",
+    );
+  }
+
+  if (!boundAddresses.has(requestedAddress.toLowerCase())) {
     throw new McpError(
       MCP_ERRORS.FORBIDDEN,
       "Requested wallet is not bound to this MCP session",
     );
   }
+}
+
+/**
+ * Read the on-chain submitted deliverable hash from JobSubmitted event.
+ * Uses the SDK ABI to find the exact event signature.
+ */
+async function readSubmittedDeliverableHash(jobId: bigint): Promise<Hex | null> {
+  const client = getArcPublicClient();
+
+  // Find the JobSubmitted event from the SDK ABI
+  const jobSubmittedEvent = ERC8183_AGENTIC_COMMERCE_ABI.find(
+    (item): item is Extract<typeof item, { type: "event" }> =>
+      item.type === "event" && item.name === "JobSubmitted",
+  );
+
+  if (!jobSubmittedEvent) {
+    console.warn("[deliverable-tools] JobSubmitted event not found in SDK ABI");
+    return null;
+  }
+
+  const logs = await client.getLogs({
+    address: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+    event: jobSubmittedEvent,
+    args: { jobId },
+    fromBlock: 0n,
+    toBlock: "latest",
+  });
+
+  const latest = logs.at(-1);
+  // Field is "deliverable" (not "deliverableHash") per SDK ABI
+  return latest?.args?.deliverable ?? null;
 }
 
 // ── provider.publish_deliverable ───────────────────────────────────────────
@@ -275,6 +317,26 @@ export async function handleEvaluatorGetDeliverable(
       );
     }
 
+    // Read on-chain submitted deliverable hash from JobSubmitted event
+    const onchainDeliverableHash = await readSubmittedDeliverableHash(BigInt(jobId));
+
+    if (!onchainDeliverableHash) {
+      throw new McpError(
+        MCP_ERRORS.NOT_FOUND,
+        "On-chain submitted deliverable hash not found",
+      );
+    }
+
+    if (
+      onchainDeliverableHash.toLowerCase() !==
+      deliverable.deliverable_hash.toLowerCase()
+    ) {
+      throw new McpError(
+        MCP_ERRORS.INTERNAL_ERROR,
+        "Stored deliverable hash does not match on-chain submitted hash",
+      );
+    }
+
     return jsonSafe({
       ok: true,
       jobId,
@@ -284,6 +346,7 @@ export async function handleEvaluatorGetDeliverable(
       artifacts: deliverable.artifacts_json,
       runtimeReceiptHash: deliverable.runtime_receipt_hash,
       submittedAt: deliverable.locked_at,
+      onchainDeliverableHash,
     });
   } catch (err) {
     if (err instanceof McpError) throw err;
@@ -416,5 +479,279 @@ export async function handleProviderListAssignedJobsExtended(
   } catch (err) {
     if (err instanceof McpError) throw err;
     rethrowAsMcpError(err, "Failed to list assigned jobs");
+  }
+}
+
+// ── evaluator.publish_evaluation ──────────────────────────────────────────
+
+/**
+ * evaluator.publish_evaluation
+ *
+ * Persist evaluator verdict before ERC-8183 settlement.
+ * Server verifies:
+ *   1. MCP Bearer token authentication
+ *   2. Session owns agentId and evaluator wallet
+ *   3. On-chain evaluator matches evaluatorAddress
+ *   4. Job status is Submitted/Completed/Rejected
+ *   5. Verdict.deliverableHash matches supplied deliverableHash
+ *   6. Persists via insertEvaluation()
+ *
+ * Flow: publish_evaluation → complete/reject → attach settlement tx → queue reputation
+ */
+export async function handleEvaluatorPublishEvaluation(
+  args: Record<string, unknown>,
+  ctx: McpToolContext,
+): Promise<unknown> {
+  const session = await requireMcpSession(ctx);
+
+  const agentId = typeof args.agentId === "string" ? args.agentId.trim() : "";
+  const jobId = typeof args.jobId === "string" ? args.jobId.trim() : "";
+  const evaluatorAddress =
+    typeof args.evaluatorAddress === "string"
+      ? args.evaluatorAddress.trim().toLowerCase()
+      : "";
+  const deliverableHash =
+    typeof args.deliverableHash === "string" ? args.deliverableHash.trim() : "";
+  const evaluationReceiptHash =
+    typeof args.evaluationReceiptHash === "string"
+      ? args.evaluationReceiptHash.trim()
+      : undefined;
+
+  const verdict = args.verdict as {
+    decision?: string;
+    score?: number;
+    confidence?: number;
+    reason?: string;
+    evidence?: unknown[];
+    evaluatedDeliverableHash?: string;
+  } | undefined;
+
+  // Validation
+  if (!agentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "agentId required");
+  if (!jobId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "jobId required");
+  if (!evaluatorAddress) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "evaluatorAddress required");
+  if (!/^0x[a-fA-F0-9]{64}$/.test(deliverableHash)) {
+    throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "deliverableHash must be bytes32");
+  }
+  if (!verdict) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "verdict required");
+  if (!verdict.decision) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "verdict.decision required");
+  if (typeof verdict.score !== "number") throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "verdict.score required");
+  if (typeof verdict.confidence !== "number") throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "verdict.confidence required");
+  if (!verdict.reason) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "verdict.reason required");
+
+  // Verify session owns this agent and address
+  assertSessionBinding(session as any, agentId, evaluatorAddress);
+
+  // Verify verdict hash matches
+  if (
+    verdict.evaluatedDeliverableHash &&
+    verdict.evaluatedDeliverableHash.toLowerCase() !== deliverableHash.toLowerCase()
+  ) {
+    throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "Verdict deliverable hash mismatch");
+  }
+
+  try {
+    // Read on-chain job to verify evaluator and status
+    const onchainJob = await readOnchainJob(BigInt(jobId));
+    if (!onchainJob) {
+      throw new McpError(MCP_ERRORS.NOT_FOUND, "Job not found on-chain");
+    }
+
+    // Verify on-chain evaluator matches
+    if (onchainJob.evaluator.toLowerCase() !== evaluatorAddress) {
+      throw new McpError(
+        MCP_ERRORS.FORBIDDEN,
+        "On-chain evaluator does not match requested address",
+      );
+    }
+
+    // Verify job status is Submitted (2), Completed (3), or Rejected (4)
+    if (![2, 3, 4].includes(onchainJob.status)) {
+      throw new McpError(
+        MCP_ERRORS.VALIDATION_ERROR,
+        "Job is not Submitted/Completed/Rejected",
+      );
+    }
+
+    // Persist evaluation
+    const result = await insertEvaluation({
+      jobId,
+      evaluatorAgentId: agentId,
+      evaluatorAddress,
+      deliverableHash,
+      decision: verdict.decision as "complete" | "reject" | "manual_review",
+      score: verdict.score,
+      confidence: verdict.confidence,
+      reason: verdict.reason,
+      evidence: verdict.evidence ?? [],
+      evaluationReceiptHash,
+    });
+
+    if (!result.ok) {
+      throw new McpError(MCP_ERRORS.INTERNAL_ERROR, result.error ?? "Failed to persist evaluation");
+    }
+
+    return jsonSafe({
+      ok: true,
+      jobId,
+      deliverableHash,
+      evaluationId: result.row?.id,
+    });
+  } catch (err) {
+    if (err instanceof McpError) throw err;
+    rethrowAsMcpError(err, "Failed to publish evaluation");
+  }
+}
+
+// ── evaluator.attach_settlement_tx ──────────────────────────────────────────
+
+/**
+ * evaluator.attach_settlement_tx
+ *
+ * Attach settlement tx hash to evaluation after complete/reject.
+ * Verifies terminal onchain state before attaching.
+ */
+export async function handleEvaluatorAttachSettlementTx(
+  args: Record<string, unknown>,
+  ctx: McpToolContext,
+): Promise<unknown> {
+  const session = await requireMcpSession(ctx);
+
+  const agentId = typeof args.agentId === "string" ? args.agentId.trim() : "";
+  const jobId = typeof args.jobId === "string" ? args.jobId.trim() : "";
+  const evaluatorAddress =
+    typeof args.evaluatorAddress === "string"
+      ? args.evaluatorAddress.trim().toLowerCase()
+      : "";
+  const settlementTxHash =
+    typeof args.settlementTxHash === "string" ? args.settlementTxHash.trim() : "";
+
+  if (!agentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "agentId required");
+  if (!jobId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "jobId required");
+  if (!evaluatorAddress) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "evaluatorAddress required");
+  if (!settlementTxHash) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "settlementTxHash required");
+
+  assertSessionBinding(session as any, agentId, evaluatorAddress);
+
+  try {
+    // Verify on-chain terminal state
+    const onchainJob = await readOnchainJob(BigInt(jobId));
+    if (!onchainJob) {
+      throw new McpError(MCP_ERRORS.NOT_FOUND, "Job not found on-chain");
+    }
+
+    // Must be Completed (3) or Rejected (4)
+    if (![3, 4].includes(onchainJob.status)) {
+      throw new McpError(
+        MCP_ERRORS.VALIDATION_ERROR,
+        `Job is not in terminal state (status=${onchainJob.status})`,
+      );
+    }
+
+    // Attach settlement tx
+    const result = await attachSettlementTx(jobId, settlementTxHash);
+
+    if (!result.ok) {
+      throw new McpError(MCP_ERRORS.INTERNAL_ERROR, result.error ?? "Failed to attach settlement tx");
+    }
+
+    return jsonSafe({
+      ok: true,
+      jobId,
+      settlementTxHash,
+      terminalStatus: onchainJob.erc8183Status,
+    });
+  } catch (err) {
+    if (err instanceof McpError) throw err;
+    rethrowAsMcpError(err, "Failed to attach settlement tx");
+  }
+}
+
+// ── evaluator.queue_reputation ──────────────────────────────────────────────
+
+/**
+ * evaluator.queue_reputation
+ *
+ * Queue ERC-8004 reputation publication after verified terminal state.
+ * Only queues — actual publication is async.
+ * Manual review must NOT queue automatic reputation.
+ */
+export async function handleEvaluatorQueueReputation(
+  args: Record<string, unknown>,
+  ctx: McpToolContext,
+): Promise<unknown> {
+  const session = await requireMcpSession(ctx);
+
+  const agentId = typeof args.agentId === "string" ? args.agentId.trim() : "";
+  const jobId = typeof args.jobId === "string" ? args.jobId.trim() : "";
+  const evaluatorAddress =
+    typeof args.evaluatorAddress === "string"
+      ? args.evaluatorAddress.trim().toLowerCase()
+      : "";
+  const targetAgentId = typeof args.targetAgentId === "string" ? args.targetAgentId.trim() : "";
+  const targetAddress = typeof args.targetAddress === "string" ? args.targetAddress.trim().toLowerCase() : "";
+  const feedbackType = typeof args.feedbackType === "string" ? args.feedbackType.trim() : "";
+  const score = typeof args.score === "number" ? args.score : 0;
+  const tag = typeof args.tag === "string" ? args.tag.trim() : undefined;
+  const reason = typeof args.reason === "string" ? args.reason.trim() : undefined;
+  const evidenceHash = typeof args.evidenceHash === "string" ? args.evidenceHash.trim() : undefined;
+
+  if (!agentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "agentId required");
+  if (!jobId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "jobId required");
+  if (!evaluatorAddress) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "evaluatorAddress required");
+  if (!targetAgentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "targetAgentId required");
+  if (!targetAddress) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "targetAddress required");
+  if (!feedbackType) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "feedbackType required");
+
+  // Only allow valid feedback types
+  const validFeedbackTypes = ["successful_work", "failed_acceptance_criteria"];
+  if (!validFeedbackTypes.includes(feedbackType)) {
+    throw new McpError(
+      MCP_ERRORS.VALIDATION_ERROR,
+      `Invalid feedbackType. Allowed: ${validFeedbackTypes.join(", ")}`,
+    );
+  }
+
+  assertSessionBinding(session as any, agentId, evaluatorAddress);
+
+  try {
+    // Verify terminal state
+    const onchainJob = await readOnchainJob(BigInt(jobId));
+    if (!onchainJob) {
+      throw new McpError(MCP_ERRORS.NOT_FOUND, "Job not found on-chain");
+    }
+
+    if (![3, 4].includes(onchainJob.status)) {
+      throw new McpError(
+        MCP_ERRORS.VALIDATION_ERROR,
+        "Can only queue reputation for Completed/Rejected jobs",
+      );
+    }
+
+    const result = await queueReputationPublication({
+      jobId,
+      sourceAgentId: agentId,
+      targetAgentId,
+      targetAddress,
+      feedbackType,
+      score,
+      tag,
+      reason,
+      evidenceHash,
+    });
+
+    if (!result.ok) {
+      throw new McpError(MCP_ERRORS.INTERNAL_ERROR, result.error ?? "Failed to queue reputation");
+    }
+
+    return jsonSafe({
+      ok: true,
+      jobId,
+      feedbackType,
+      publicationId: result.row?.id,
+    });
+  } catch (err) {
+    if (err instanceof McpError) throw err;
+    rethrowAsMcpError(err, "Failed to queue reputation");
   }
 }

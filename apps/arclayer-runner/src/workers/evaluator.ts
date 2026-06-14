@@ -12,6 +12,7 @@
  *   - Hash mismatch → manual review
  *   - Low confidence → manual review
  *   - Reuses existing RunnerServices (completeJob, rejectJob)
+ *   - Settlement flow: publish_evaluation → complete/reject → attach_settlement_tx → queue_reputation
  *
  * CLI:
  *   arclayer-runner evaluator-worker
@@ -125,6 +126,26 @@ export class EvaluatorWorker extends EventEmitter {
     return this.state;
   }
 
+  /**
+   * Run one poll cycle then exit. No setInterval.
+   * Used by CLI --once flag.
+   */
+  async runOnce(): Promise<void> {
+    if (this.state !== "idle" && this.state !== "stopped") {
+      throw new Error(`Cannot run once in state ${this.state}`);
+    }
+
+    await this.verifyIdentity();
+    await this.reconcilePending();
+
+    this.state = "running";
+    try {
+      await this.poll();
+    } finally {
+      this.state = "stopped";
+    }
+  }
+
   // ── Startup Verification ───────────────────────────────────────────────
 
   private async verifyIdentity(): Promise<void> {
@@ -157,7 +178,25 @@ export class EvaluatorWorker extends EventEmitter {
   }
 
   private async reconcilePending(): Promise<void> {
-    console.log("[evaluator-worker] Reconciliation check passed");
+    try {
+      const pendingOps = this.services.listReconcilableOperations();
+      for (const op of pendingOps) {
+        try {
+          await this.services.reconcileOperation(
+            op.operationId,
+            "unknown",
+            { errorMessage: "Reconciled on startup" },
+          );
+        } catch (err) {
+          console.warn(`[evaluator] Reconciliation failed for ${op.operationId}: ${err}`);
+        }
+      }
+      if (pendingOps.length > 0) {
+        console.log(`[evaluator] Reconciled ${pendingOps.length} pending operations`);
+      }
+    } catch (err) {
+      console.warn(`[evaluator] Reconciliation warning: ${err}`);
+    }
   }
 
   // ── Poll Loop ──────────────────────────────────────────────────────────
@@ -261,6 +300,8 @@ export class EvaluatorWorker extends EventEmitter {
     const canonicalPayload = String(deliverableData.canonicalPayload ?? "");
     const storedHash = String(deliverableData.deliverableHash ?? "");
     const onchainHash = String(deliverableData.onchainDeliverableHash ?? "");
+    const providerAgentId = String(deliverableData.providerAgentId ?? "");
+    const providerAddress = String(job.providerAddress ?? "");
 
     // Step 2: Recompute Keccak-256 and verify three-way hash
     const computedHash = keccak256(toBytes(canonicalPayload));
@@ -387,11 +428,11 @@ export class EvaluatorWorker extends EventEmitter {
 
     switch (action) {
       case "auto_complete":
-        await this.settleComplete(jobId, erc8183JobId, verdict);
+        await this.settleComplete(jobId, erc8183JobId, verdict, storedHash, providerAgentId, providerAddress);
         break;
 
       case "auto_reject":
-        await this.settleReject(jobId, erc8183JobId, verdict);
+        await this.settleReject(jobId, erc8183JobId, verdict, storedHash, providerAgentId, providerAddress);
         break;
 
       case "manual_review":
@@ -410,14 +451,54 @@ export class EvaluatorWorker extends EventEmitter {
     jobId: string,
     erc8183JobId: string,
     verdict: EvaluationVerdictV1,
+    storedHash: string,
+    providerAgentId: string,
+    providerAddress: string,
   ): Promise<void> {
     try {
       const reasonHash = keccak256(toBytes(verdict.reason));
-      await this.services.completeJob({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const completeResult = await this.services.completeJob({
         jobId: erc8183JobId,
         reason: reasonHash,
         optParams: "0x",
-      });
+      }) as any;
+
+      if (!completeResult?.ok) {
+        throw new Error(String(completeResult?.error ?? completeResult?.reason ?? "completeJob failed"));
+      }
+
+      // Attach settlement tx
+      const settlementTxHash = String(completeResult.txHash ?? completeResult.operationId ?? "");
+      if (settlementTxHash) {
+        try {
+          await this.mcp.callTool("evaluator.attach_settlement_tx", {
+            agentId: this.config.agentId,
+            jobId: erc8183JobId,
+            evaluatorAddress: this.config.circleWalletAddress,
+            settlementTxHash,
+          });
+        } catch (err) {
+          console.warn(`[evaluator] Failed to attach settlement tx: ${err}`);
+        }
+      }
+
+      // Queue reputation for provider (successful_work)
+      try {
+        await this.mcp.callTool("evaluator.queue_reputation", {
+          agentId: this.config.agentId,
+          jobId: erc8183JobId,
+          evaluatorAddress: this.config.circleWalletAddress,
+          targetAgentId: providerAgentId,
+          targetAddress: providerAddress,
+          feedbackType: "successful_work",
+          score: verdict.score,
+          reason: verdict.reason,
+          evidenceHash: storedHash,
+        });
+      } catch (err) {
+        console.warn(`[evaluator] Failed to queue reputation: ${err}`);
+      }
 
       this.activeEval!.phase = "completed";
       this.emit("evaluation_completed", { jobId, decision: "complete", score: verdict.score });
@@ -434,14 +515,54 @@ export class EvaluatorWorker extends EventEmitter {
     jobId: string,
     erc8183JobId: string,
     verdict: EvaluationVerdictV1,
+    storedHash: string,
+    providerAgentId: string,
+    providerAddress: string,
   ): Promise<void> {
     try {
       const reasonHash = keccak256(toBytes(verdict.reason));
-      await this.services.rejectJob({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rejectResult = await this.services.rejectJob({
         jobId: erc8183JobId,
         reason: reasonHash,
         optParams: "0x",
-      });
+      }) as any;
+
+      if (!rejectResult?.ok) {
+        throw new Error(String(rejectResult?.error ?? rejectResult?.reason ?? "rejectJob failed"));
+      }
+
+      // Attach settlement tx
+      const settlementTxHash = String(rejectResult.txHash ?? rejectResult.operationId ?? "");
+      if (settlementTxHash) {
+        try {
+          await this.mcp.callTool("evaluator.attach_settlement_tx", {
+            agentId: this.config.agentId,
+            jobId: erc8183JobId,
+            evaluatorAddress: this.config.circleWalletAddress,
+            settlementTxHash,
+          });
+        } catch (err) {
+          console.warn(`[evaluator] Failed to attach settlement tx: ${err}`);
+        }
+      }
+
+      // Queue reputation for provider (failed_acceptance_criteria)
+      try {
+        await this.mcp.callTool("evaluator.queue_reputation", {
+          agentId: this.config.agentId,
+          jobId: erc8183JobId,
+          evaluatorAddress: this.config.circleWalletAddress,
+          targetAgentId: providerAgentId,
+          targetAddress: providerAddress,
+          feedbackType: "failed_acceptance_criteria",
+          score: verdict.score,
+          reason: verdict.reason,
+          evidenceHash: storedHash,
+        });
+      } catch (err) {
+        console.warn(`[evaluator] Failed to queue reputation: ${err}`);
+      }
 
       this.activeEval!.phase = "rejected";
       this.emit("evaluation_completed", { jobId, decision: "reject", score: verdict.score });
