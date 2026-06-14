@@ -300,7 +300,7 @@ describe("RunnerServices", () => {
   describe("x402 server-side 409 idempotent-safe", () => {
     it("treats Circle CLI 409 error as idempotent success", async () => {
       // Mock payService to throw like Circle CLI does on server 409
-      const paySpy = vi.spyOn(services.circle, "payService").mockRejectedValue(
+      const paySpy = vi.spyOn((services as any).circle, "payService").mockRejectedValue(
         new Error("Payment submitted but request failed with HTTP 409.\nServer response: You already have an active access session for this resource.")
       );
 
@@ -322,7 +322,7 @@ describe("RunnerServices", () => {
     });
 
     it("still throws for non-409 Circle CLI errors", async () => {
-      const paySpy = vi.spyOn(services.circle, "payService").mockRejectedValue(
+      const paySpy = vi.spyOn((services as any).circle, "payService").mockRejectedValue(
         new Error("Insufficient funds in wallet")
       );
 
@@ -347,7 +347,7 @@ describe("RunnerServices", () => {
       const abortError = new Error("The operation was aborted");
       abortError.name = "AbortError";
 
-      const paySpy = vi.spyOn(services.circle, "payService").mockRejectedValue(abortError);
+      const paySpy = vi.spyOn((services as any).circle, "payService").mockRejectedValue(abortError);
       const failureSpy = vi.spyOn(services.ledger, "recordFailure");
 
       await expect(
@@ -374,7 +374,7 @@ describe("RunnerServices", () => {
       const abortError = new Error("The operation was aborted");
       abortError.name = "AbortError";
 
-      const paySpy = vi.spyOn(services.circle, "payService").mockRejectedValue(abortError);
+      const paySpy = vi.spyOn((services as any).circle, "payService").mockRejectedValue(abortError);
 
       // First attempt — will abort
       await expect(
@@ -403,7 +403,7 @@ describe("RunnerServices", () => {
     });
 
     it("normal non-timeout Circle CLI failure still calls ledger.recordFailure", async () => {
-      const paySpy = vi.spyOn(services.circle, "payService").mockRejectedValue(
+      const paySpy = vi.spyOn((services as any).circle, "payService").mockRejectedValue(
         new Error("Insufficient funds in wallet")
       );
       const failureSpy = vi.spyOn(services.ledger, "recordFailure");
@@ -594,15 +594,17 @@ describe("RunnerServices", () => {
       // Verify the method exists and accepts the right params
       expect(services.submitDeliverableViaCircleCli).toBeDefined();
 
-      // Will fail at CLI but should not throw schema errors
+      // Will fail at CLI — gateway wraps as RunnerError via assertGatewayWriteSucceeded
       try {
         await services.submitDeliverableViaCircleCli({
           jobId: "42",
           deliverableHash: "0x" + "ab".repeat(32)
         });
+        expect.fail("should have thrown");
       } catch (error) {
-        // Expected: circle CLI not installed
-        expect(error).not.toBeInstanceOf(RunnerError);
+        // Expected: gateway wraps CLI failure as RunnerError
+        expect(error).toBeInstanceOf(RunnerError);
+        expect((error as RunnerError).code).toBe("BROADCAST_FAILED");
       }
     });
   });
@@ -946,7 +948,7 @@ describe("runProviderJob", () => {
   };
 
   it("completed result returns runtime result without Circle CLI submit", async () => {
-    const circleSpy = vi.spyOn(services.circle, "executeErc8183Write");
+    const circleSpy = vi.spyOn((services as any).circle, "executeErc8183Write");
     const result = await services.runProviderJob(validJob);
 
     expect(result.ok).toBe(true);

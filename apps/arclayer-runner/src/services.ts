@@ -29,6 +29,31 @@ import { safeHostFromUrl, sanitizeTaskForUntrustedRuntime } from "./runtime";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
 import { isBrokerAbortOrTimeout } from "./mcp-broker";
 import { randomUUID } from "node:crypto";
+import { ExecutionGateway, assertGatewayWriteSucceeded } from "./execution-gateway";
+import type { WriteOperationKind } from "./execution-gateway";
+
+// ── Canonical Helpers ──────────────────────────────────────────────────
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+function canonicalAddress(value: string | undefined, fallback = ZERO_ADDRESS): string {
+  const raw = value ?? fallback;
+  return raw.toLowerCase();
+}
+
+function canonicalExpiredAt(value: string | number): string {
+  return String(value);
+}
+
+function stableRequestKey(
+  prefix: string,
+  input: { idempotencyKey?: string; requestId?: string },
+  fallback: string
+): string {
+  if (input.idempotencyKey) return input.idempotencyKey;
+  if (input.requestId) return `${prefix}:${input.requestId}`;
+  return fallback;
+}
 
 /**
  * Task lifecycle callbacks — called AFTER validation passes.
@@ -72,7 +97,9 @@ async function withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
 export class RunnerServices {
   readonly receipts: JsonlReceiptStore;
   readonly ledger: SpendingLedger;
-  readonly circle: CircleCliAdapter;
+  /** @private — owned by ExecutionGateway. Use gateway.execute() for writes. */
+  private readonly circle: CircleCliAdapter;
+  readonly gateway: ExecutionGateway;
 
   constructor(
     readonly config: RunnerConfig,
@@ -83,6 +110,11 @@ export class RunnerServices {
     this.receipts = new JsonlReceiptStore(config.dataDir);
     this.ledger = new SpendingLedger(config.dataDir);
     this.circle = new CircleCliAdapter({ bin: config.circleCliBin });
+    this.gateway = new ExecutionGateway(this.circle, this.receipts, {
+      agentId: config.agentId,
+      circleWalletAddress: config.circleWalletAddress,
+      chain: config.chain,
+    });
   }
 
   manifest() {
@@ -376,7 +408,9 @@ export class RunnerServices {
       };
     }
 
-    // Store receipt with proof — preserve runtime result for audit linkage
+    // Store receipt with proof — preserve runtime result for audit linkage.
+    // Include gateway metadata (operationId, idempotent) so receipt/history
+    // consumers can distinguish replays from fresh writes.
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
       jobId: input.jobId,
@@ -386,7 +420,9 @@ export class RunnerServices {
       proof: {
         deliverableHash: input.deliverableHash,
         sha256: sha256Json({ result: input.result, preparedTx, submitReceipt }),
-        txHash: extractPossibleTxHash(submitReceipt)
+        txHash: extractPossibleTxHash(submitReceipt),
+        operationId: submitReceipt?.operationId,
+        idempotent: submitReceipt?.idempotent,
       }
     });
 
@@ -475,14 +511,39 @@ export class RunnerServices {
     // circle.chain is for Circle CLI wallet ops only — contract target is hardcoded.
     const contractAddress = CONTRACTS.ERC8183_AGENTIC_COMMERCE;
 
-    return this.circle.executeErc8183Write({
-      signature: "submit(uint256,bytes32,bytes)",
-      params: [input.jobId, input.deliverableHash, input.optParams ?? "0x"],
-      contract: contractAddress,
-      address: this.config.circleWalletAddress,
-      chain: this.config.chain,
-      signal,
-    });
+    const normalizedOptParams = input.optParams ?? "0x";
+    const idempotencyKey = `submitDeliverable:${input.jobId}:${input.deliverableHash}`;
+    const paramsHash = sha256Json({ jobId: input.jobId, deliverableHash: input.deliverableHash, optParams: normalizedOptParams });
+
+    const gwResult = await this.gateway.execute(
+      {
+        kind: "submitDeliverable" as WriteOperationKind,
+        idempotencyKey,
+        paramsHash,
+        walletAddress: this.config.circleWalletAddress,
+        chain: this.config.chain,
+        contractAddress,
+      },
+      async (circle, sig) => circle.executeErc8183Write({
+        signature: "submit(uint256,bytes32,bytes)",
+        params: [input.jobId, input.deliverableHash, input.optParams ?? "0x"],
+        contract: contractAddress,
+        address: this.config.circleWalletAddress!,
+        chain: this.config.chain,
+        signal: sig,
+      }),
+      signal
+    );
+
+    assertGatewayWriteSucceeded(gwResult);
+
+    return {
+      ok: true,
+      ...(gwResult.circleResult ?? {}),
+      operationId: gwResult.operationId,
+      state: gwResult.state,
+      idempotent: gwResult.idempotent,
+    };
   }
 
   // ── ERC-8183 Full Lifecycle ──────────────────────────────────────────────
@@ -499,6 +560,8 @@ export class RunnerServices {
       expiredAt: string | number;
       description: string;
       hook?: string;
+      idempotencyKey?: string;
+      requestId?: string;
     };
 
     if (!this.config.circleWalletAddress) {
@@ -506,8 +569,7 @@ export class RunnerServices {
     }
 
     // Arc/Circle spec: createJob reverts if evaluator is zero address
-    const ZERO = "0x0000000000000000000000000000000000000000";
-    if (!input.evaluator || input.evaluator.toLowerCase() === ZERO) {
+    if (!input.evaluator || input.evaluator.toLowerCase() === ZERO_ADDRESS) {
       throw new RunnerError(
         "INVALID_EVALUATOR",
         "evaluator must be non-zero (Arc spec: createJob reverts with zero evaluator)",
@@ -515,35 +577,68 @@ export class RunnerServices {
       );
     }
 
-    const result = await this.circle.executeErc8183Write({
-      signature: "createJob(address,address,uint256,string,address)",
-      params: [
-        input.provider,
-        input.evaluator,
-        String(input.expiredAt),
-        input.description,
-        input.hook ?? "0x0000000000000000000000000000000000000000"
-      ],
-      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
-      address: this.config.circleWalletAddress,
-      chain: this.config.chain,
-      signal,
+    const normalizedProvider = canonicalAddress(input.provider);
+    const normalizedEvaluator = canonicalAddress(input.evaluator);
+    const normalizedHook = canonicalAddress(input.hook);
+    const normalizedExpiredAt = canonicalExpiredAt(input.expiredAt);
+
+    const fallbackIdempotencyKey =
+      `createJob:${normalizedProvider}:${normalizedEvaluator}:${normalizedExpiredAt}:${input.description}:${normalizedHook}`;
+
+    const idempotencyKey = stableRequestKey("createJob", input, fallbackIdempotencyKey);
+
+    const paramsHash = sha256Json({
+      provider: normalizedProvider,
+      evaluator: normalizedEvaluator,
+      expiredAt: normalizedExpiredAt,
+      description: input.description,
+      hook: normalizedHook,
     });
+
+    const gwResult = await this.gateway.execute(
+      {
+        kind: "createJob" as WriteOperationKind,
+        idempotencyKey,
+        paramsHash,
+        walletAddress: this.config.circleWalletAddress,
+        chain: this.config.chain,
+        contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      },
+      async (circle, sig) => circle.executeErc8183Write({
+        signature: "createJob(address,address,uint256,string,address)",
+        params: [
+          normalizedProvider,
+          normalizedEvaluator,
+          normalizedExpiredAt,
+          input.description,
+          normalizedHook,
+        ],
+        contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        address: this.config.circleWalletAddress!,
+        chain: this.config.chain,
+        signal: sig,
+      }),
+      signal
+    );
+
+    assertGatewayWriteSucceeded(gwResult);
 
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
       taskId: `createJob-${Date.now()}`,
       agentId: this.config.agentId,
       request: body,
-      response: result,
+      response: gwResult.circleResult ?? gwResult,
       proof: {
-        circleCommand: [result.command, ...result.args].join(" "),
-        sha256: sha256Json(result),
-        txHash: extractPossibleTxHash(result)
+        sha256: sha256Json(gwResult.circleResult ?? gwResult),
+        txHash: gwResult.txHash,
+        operationId: gwResult.operationId,
+        operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
-    return { ok: true, result, receipt };
+    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -557,14 +652,31 @@ export class RunnerServices {
       return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
     }
 
-    const result = await this.circle.executeErc8183Write({
-      signature: "setBudget(uint256,uint256,bytes)",
-      params: [input.jobId, input.amount, input.optParams ?? "0x"],
-      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
-      address: this.config.circleWalletAddress,
-      chain: this.config.chain,
-      signal,
-    });
+    const normalizedOptParams = input.optParams ?? "0x";
+    const idempotencyKey = `setBudget:${input.jobId}:${input.amount}`;
+    const paramsHash = sha256Json({ jobId: input.jobId, amount: input.amount, optParams: normalizedOptParams });
+
+    const gwResult = await this.gateway.execute(
+      {
+        kind: "setBudget" as WriteOperationKind,
+        idempotencyKey,
+        paramsHash,
+        walletAddress: this.config.circleWalletAddress,
+        chain: this.config.chain,
+        contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      },
+      async (circle, sig) => circle.executeErc8183Write({
+        signature: "setBudget(uint256,uint256,bytes)",
+        params: [input.jobId, input.amount, input.optParams ?? "0x"],
+        contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        address: this.config.circleWalletAddress!,
+        chain: this.config.chain,
+        signal: sig,
+      }),
+      signal
+    );
+
+    assertGatewayWriteSucceeded(gwResult);
 
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
@@ -572,49 +684,88 @@ export class RunnerServices {
       jobId: input.jobId,
       agentId: this.config.agentId,
       request: body,
-      response: result,
+      response: gwResult.circleResult ?? gwResult,
       proof: {
-        sha256: sha256Json(result),
-        txHash: extractPossibleTxHash(result)
+        sha256: sha256Json(gwResult.circleResult ?? gwResult),
+        txHash: gwResult.txHash,
+        operationId: gwResult.operationId,
+        operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
-    return { ok: true, result, receipt };
+    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
    * Approve USDC for the ERC-8183 AgenticCommerce contract.
    * Must be called before fund().
+   *
+   * Idempotency: caller SHOULD provide a stable idempotencyKey (e.g. tied to
+   * the jobId or request that needs the allowance). If omitted, a key is
+   * derived from amount+spender — safe for single-use but does NOT protect
+   * retries after unknown/broadcast if the server restarts.
    */
   async approveUsdcForErc8183(body: unknown, signal?: AbortSignal) {
-    const input = body as { amount: string };
+    const input = body as {
+      amount: string;
+      /** Caller-provided stable key for retry safety. */
+      idempotencyKey?: string;
+      /** Optional context for key derivation when idempotencyKey is omitted. */
+      requestId?: string;
+    };
 
     if (!this.config.circleWalletAddress) {
       return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
     }
 
-    const result = await this.circle.approveUsdc({
-      amount: input.amount,
-      usdcAddress: CONTRACTS.USDC,
-      spenderAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
-      walletAddress: this.config.circleWalletAddress,
-      chain: this.config.chain,
-      signal,
-    });
+    // Stable idempotency key: prefer caller-provided, then derive from context.
+    // TODO: callers in the job lifecycle (setBudget→approve→fund) should pass
+    // a jobId-derived key so retries after unknown/broadcast are safe.
+    const idempotencyKey = input.idempotencyKey
+      ?? (input.requestId
+        ? `approveUsdc:${input.requestId}:${input.amount}`
+        : `approveUsdc:${input.amount}:${CONTRACTS.ERC8183_AGENTIC_COMMERCE}`);
+    const paramsHash = sha256Json({ amount: input.amount, usdcAddress: CONTRACTS.USDC, spenderAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE });
+
+    const gwResult = await this.gateway.execute(
+      {
+        kind: "approveUsdc" as WriteOperationKind,
+        idempotencyKey,
+        paramsHash,
+        walletAddress: this.config.circleWalletAddress,
+        chain: this.config.chain,
+        contractAddress: CONTRACTS.USDC,
+      },
+      async (circle, sig) => circle.approveUsdc({
+        amount: input.amount,
+        usdcAddress: CONTRACTS.USDC,
+        spenderAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        walletAddress: this.config.circleWalletAddress!,
+        chain: this.config.chain,
+        signal: sig,
+      }),
+      signal
+    );
+
+    assertGatewayWriteSucceeded(gwResult);
 
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
       taskId: `approve-${Date.now()}`,
       agentId: this.config.agentId,
       request: body,
-      response: result,
+      response: gwResult.circleResult ?? gwResult,
       proof: {
-        sha256: sha256Json(result),
-        txHash: extractPossibleTxHash(result)
+        sha256: sha256Json(gwResult.circleResult ?? gwResult),
+        txHash: gwResult.txHash,
+        operationId: gwResult.operationId,
+        operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
-    return { ok: true, result, receipt };
+    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -629,14 +780,31 @@ export class RunnerServices {
       return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
     }
 
-    const result = await this.circle.executeErc8183Write({
-      signature: "fund(uint256,bytes)",
-      params: [input.jobId, input.optParams ?? "0x"],
-      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
-      address: this.config.circleWalletAddress,
-      chain: this.config.chain,
-      signal,
-    });
+    const normalizedOptParams = input.optParams ?? "0x";
+    const idempotencyKey = `fundJob:${input.jobId}`;
+    const paramsHash = sha256Json({ jobId: input.jobId, optParams: normalizedOptParams });
+
+    const gwResult = await this.gateway.execute(
+      {
+        kind: "fundJob" as WriteOperationKind,
+        idempotencyKey,
+        paramsHash,
+        walletAddress: this.config.circleWalletAddress,
+        chain: this.config.chain,
+        contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      },
+      async (circle, sig) => circle.executeErc8183Write({
+        signature: "fund(uint256,bytes)",
+        params: [input.jobId, input.optParams ?? "0x"],
+        contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        address: this.config.circleWalletAddress!,
+        chain: this.config.chain,
+        signal: sig,
+      }),
+      signal
+    );
+
+    assertGatewayWriteSucceeded(gwResult);
 
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
@@ -644,14 +812,17 @@ export class RunnerServices {
       jobId: input.jobId,
       agentId: this.config.agentId,
       request: body,
-      response: result,
+      response: gwResult.circleResult ?? gwResult,
       proof: {
-        sha256: sha256Json(result),
-        txHash: extractPossibleTxHash(result)
+        sha256: sha256Json(gwResult.circleResult ?? gwResult),
+        txHash: gwResult.txHash,
+        operationId: gwResult.operationId,
+        operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
-    return { ok: true, result, receipt };
+    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -670,14 +841,31 @@ export class RunnerServices {
       ? input.reason
       : erc8183Hash(input.reason);
 
-    const result = await this.circle.executeErc8183Write({
-      signature: "complete(uint256,bytes32,bytes)",
-      params: [input.jobId, reasonHash, input.optParams ?? "0x"],
-      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
-      address: this.config.circleWalletAddress,
-      chain: this.config.chain,
-      signal,
-    });
+    const normalizedOptParams = input.optParams ?? "0x";
+    const idempotencyKey = `completeJob:${input.jobId}:${reasonHash}`;
+    const paramsHash = sha256Json({ jobId: input.jobId, reasonHash, optParams: normalizedOptParams });
+
+    const gwResult = await this.gateway.execute(
+      {
+        kind: "completeJob" as WriteOperationKind,
+        idempotencyKey,
+        paramsHash,
+        walletAddress: this.config.circleWalletAddress,
+        chain: this.config.chain,
+        contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      },
+      async (circle, sig) => circle.executeErc8183Write({
+        signature: "complete(uint256,bytes32,bytes)",
+        params: [input.jobId, reasonHash, input.optParams ?? "0x"],
+        contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        address: this.config.circleWalletAddress!,
+        chain: this.config.chain,
+        signal: sig,
+      }),
+      signal
+    );
+
+    assertGatewayWriteSucceeded(gwResult);
 
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
@@ -685,14 +873,17 @@ export class RunnerServices {
       jobId: input.jobId,
       agentId: this.config.agentId,
       request: body,
-      response: result,
+      response: gwResult.circleResult ?? gwResult,
       proof: {
-        sha256: sha256Json(result),
-        txHash: extractPossibleTxHash(result)
+        sha256: sha256Json(gwResult.circleResult ?? gwResult),
+        txHash: gwResult.txHash,
+        operationId: gwResult.operationId,
+        operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
-    return { ok: true, result, receipt };
+    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -711,14 +902,31 @@ export class RunnerServices {
       ? input.reason
       : erc8183Hash(input.reason);
 
-    const result = await this.circle.executeErc8183Write({
-      signature: "reject(uint256,bytes32,bytes)",
-      params: [input.jobId, reasonHash, input.optParams ?? "0x"],
-      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
-      address: this.config.circleWalletAddress,
-      chain: this.config.chain,
-      signal,
-    });
+    const normalizedOptParams = input.optParams ?? "0x";
+    const idempotencyKey = `rejectJob:${input.jobId}:${reasonHash}`;
+    const paramsHash = sha256Json({ jobId: input.jobId, reasonHash, optParams: normalizedOptParams });
+
+    const gwResult = await this.gateway.execute(
+      {
+        kind: "rejectJob" as WriteOperationKind,
+        idempotencyKey,
+        paramsHash,
+        walletAddress: this.config.circleWalletAddress,
+        chain: this.config.chain,
+        contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      },
+      async (circle, sig) => circle.executeErc8183Write({
+        signature: "reject(uint256,bytes32,bytes)",
+        params: [input.jobId, reasonHash, input.optParams ?? "0x"],
+        contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        address: this.config.circleWalletAddress!,
+        chain: this.config.chain,
+        signal: sig,
+      }),
+      signal
+    );
+
+    assertGatewayWriteSucceeded(gwResult);
 
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
@@ -726,14 +934,17 @@ export class RunnerServices {
       jobId: input.jobId,
       agentId: this.config.agentId,
       request: body,
-      response: result,
+      response: gwResult.circleResult ?? gwResult,
       proof: {
-        sha256: sha256Json(result),
-        txHash: extractPossibleTxHash(result)
+        sha256: sha256Json(gwResult.circleResult ?? gwResult),
+        txHash: gwResult.txHash,
+        operationId: gwResult.operationId,
+        operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
-    return { ok: true, result, receipt };
+    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -748,14 +959,30 @@ export class RunnerServices {
       return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
     }
 
-    const result = await this.circle.executeErc8183Write({
-      signature: "claimRefund(uint256)",
-      params: [input.jobId],
-      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
-      address: this.config.circleWalletAddress,
-      chain: this.config.chain,
-      signal,
-    });
+    const idempotencyKey = `claimRefund:${input.jobId}`;
+    const paramsHash = sha256Json({ jobId: input.jobId });
+
+    const gwResult = await this.gateway.execute(
+      {
+        kind: "claimRefund" as WriteOperationKind,
+        idempotencyKey,
+        paramsHash,
+        walletAddress: this.config.circleWalletAddress,
+        chain: this.config.chain,
+        contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      },
+      async (circle, sig) => circle.executeErc8183Write({
+        signature: "claimRefund(uint256)",
+        params: [input.jobId],
+        contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        address: this.config.circleWalletAddress!,
+        chain: this.config.chain,
+        signal: sig,
+      }),
+      signal
+    );
+
+    assertGatewayWriteSucceeded(gwResult);
 
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
@@ -763,14 +990,17 @@ export class RunnerServices {
       jobId: input.jobId,
       agentId: this.config.agentId,
       request: body,
-      response: result,
+      response: gwResult.circleResult ?? gwResult,
       proof: {
-        sha256: sha256Json(result),
-        txHash: extractPossibleTxHash(result)
+        sha256: sha256Json(gwResult.circleResult ?? gwResult),
+        txHash: gwResult.txHash,
+        operationId: gwResult.operationId,
+        operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
-    return { ok: true, result, receipt };
+    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -795,14 +1025,30 @@ export class RunnerServices {
       );
     }
 
-    const result = await this.circle.executeErc8183Write({
-      signature: "setProvider(uint256,address)",
-      params: [input.jobId, input.provider],
-      contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
-      address: this.config.circleWalletAddress,
-      chain: this.config.chain,
-      signal,
-    });
+    const idempotencyKey = `setProvider:${input.jobId}:${input.provider}`;
+    const paramsHash = sha256Json({ jobId: input.jobId, provider: input.provider });
+
+    const gwResult = await this.gateway.execute(
+      {
+        kind: "setProvider" as WriteOperationKind,
+        idempotencyKey,
+        paramsHash,
+        walletAddress: this.config.circleWalletAddress,
+        chain: this.config.chain,
+        contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+      },
+      async (circle, sig) => circle.executeErc8183Write({
+        signature: "setProvider(uint256,address)",
+        params: [input.jobId, input.provider],
+        contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        address: this.config.circleWalletAddress!,
+        chain: this.config.chain,
+        signal: sig,
+      }),
+      signal
+    );
+
+    assertGatewayWriteSucceeded(gwResult);
 
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
@@ -810,14 +1056,17 @@ export class RunnerServices {
       jobId: input.jobId,
       agentId: this.config.agentId,
       request: body,
-      response: result,
+      response: gwResult.circleResult ?? gwResult,
       proof: {
-        sha256: sha256Json(result),
-        txHash: extractPossibleTxHash(result)
+        sha256: sha256Json(gwResult.circleResult ?? gwResult),
+        txHash: gwResult.txHash,
+        operationId: gwResult.operationId,
+        operationState: gwResult.state,
+        idempotent: gwResult.idempotent,
       }
     });
 
-    return { ok: true, result, receipt };
+    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**

@@ -314,6 +314,8 @@ export async function handleMcpTool(
         expiredAt: string | number;
         description: string;
         hook?: string;
+        idempotencyKey?: string;
+        requestId?: string;
       }>(name, args);
       return services.createJob({
         provider: input.provider,
@@ -321,6 +323,8 @@ export async function handleMcpTool(
         expiredAt: input.expiredAt,
         description: input.description,
         hook: input.hook,
+        idempotencyKey: input.idempotencyKey,
+        requestId: input.requestId,
       }, ctx.signal);
     }
 
@@ -338,9 +342,15 @@ export async function handleMcpTool(
     }
 
     case "erc8183.approve_usdc": {
-      const input = validateMcpToolInput<{ amount: string }>(name, args);
+      const input = validateMcpToolInput<{
+        amount: string;
+        idempotencyKey?: string;
+        requestId?: string;
+      }>(name, args);
       return services.approveUsdcForErc8183({
         amount: input.amount,
+        idempotencyKey: input.idempotencyKey,
+        requestId: input.requestId,
       }, ctx.signal);
     }
 

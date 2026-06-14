@@ -370,6 +370,10 @@ export type ReceiptRecord = {
     sanitized?: boolean;
     responseValidated?: boolean;
     endpointHost?: string;
+    // ExecutionGateway metadata (PR #532)
+    operationId?: string;
+    operationState?: string;
+    idempotent?: boolean;
   };
 };
 
