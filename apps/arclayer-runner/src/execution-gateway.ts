@@ -457,3 +457,67 @@ export class ExecutionGateway {
     return this.operations.size;
   }
 }
+
+// ── Gateway Result Assertion ──────────────────────────────────────────
+
+/**
+ * Assert that a gateway write succeeded. Throws a RunnerError if the
+ * result is not in a confirmed state, ensuring MCP tools/call returns
+ * isError=true instead of a successful envelope with an error payload.
+ *
+ * Call this BEFORE writing success receipts. If it throws, no receipt
+ * is appended — the MCP error path handles the failure.
+ */
+export function assertGatewayWriteSucceeded(
+  gwResult: WriteOperationResult
+): void {
+  if (gwResult.ok && gwResult.state === "confirmed") return;
+
+  const metadata = {
+    operationId: gwResult.operationId,
+    operationState: gwResult.state,
+    txHash: gwResult.txHash,
+    errorCode: gwResult.errorCode,
+  };
+
+  switch (gwResult.state) {
+    case "broadcast":
+      throw new RunnerError(
+        "OPERATION_IN_PROGRESS",
+        `Gateway write broadcast but not confirmed — tx may be pending. operationId=${gwResult.operationId}`,
+        409,
+        metadata
+      );
+    case "unknown":
+      throw new RunnerError(
+        "RECONCILIATION_REQUIRED",
+        `Gateway write in unknown state — tx may have been broadcast. Reconciliation required. operationId=${gwResult.operationId}`,
+        409,
+        metadata
+      );
+    case "failed":
+      throw new RunnerError(
+        gwResult.errorCode ?? "BROADCAST_FAILED",
+        gwResult.errorMessage ?? `Gateway write failed. operationId=${gwResult.operationId}`,
+        422,
+        metadata
+      );
+    case "prepared":
+    case "reserved":
+    case "executing":
+      throw new RunnerError(
+        "OPERATION_IN_PROGRESS",
+        `Gateway write still in progress (state=${gwResult.state}). operationId=${gwResult.operationId}`,
+        409,
+        metadata
+      );
+    case "created":
+    case "cancelled":
+      throw new RunnerError(
+        "BROADCAST_FAILED",
+        `Gateway write ended in unexpected state: ${gwResult.state}. operationId=${gwResult.operationId}`,
+        422,
+        metadata
+      );
+  }
+}

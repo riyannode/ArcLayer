@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ExecutionGateway } from "./execution-gateway";
+import { ExecutionGateway, assertGatewayWriteSucceeded } from "./execution-gateway";
 import type { WriteOperationKind, WriteOperationInput, CircleCliExecuteFn } from "./execution-gateway";
 import type { CircleCliResult } from "@arclayer/circle-cli-adapter";
 import { RunnerError } from "@arclayer/runner-core";
@@ -358,6 +358,89 @@ describe("ExecutionGateway", () => {
       expect(result2.state).toBe("confirmed");
       expect(result1.operationId).not.toBe(result2.operationId);
       expect(executeFn).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ── assertGatewayWriteSucceeded ────────────────────────────────────
+
+  describe("assertGatewayWriteSucceeded", () => {
+    it("confirmed result does not throw", async () => {
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeMockCircleCliResult());
+      const result = await gateway.execute(makeInput(), executeFn);
+      expect(result.state).toBe("confirmed");
+      expect(() => assertGatewayWriteSucceeded(result)).not.toThrow();
+    });
+
+    it("broadcast result throws OPERATION_IN_PROGRESS", async () => {
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeBroadcastCircleCliResult());
+      const result = await gateway.execute(makeInput(), executeFn);
+      expect(result.state).toBe("broadcast");
+      try {
+        assertGatewayWriteSucceeded(result);
+        expect.fail("should have thrown");
+      } catch (e) {
+        expect(e).toBeInstanceOf(RunnerError);
+        expect((e as RunnerError).code).toBe("OPERATION_IN_PROGRESS");
+        expect((e as RunnerError).status).toBe(409);
+        expect((e as RunnerError).details).toMatchObject({
+          operationId: result.operationId,
+          operationState: "broadcast",
+        });
+      }
+    });
+
+    it("unknown result throws RECONCILIATION_REQUIRED", async () => {
+      const executeFn: CircleCliExecuteFn = async () => {
+        const err = new Error("timeout");
+        err.name = "AbortError";
+        throw err;
+      };
+      const result = await gateway.execute(makeInput(), executeFn);
+      expect(result.state).toBe("unknown");
+      try {
+        assertGatewayWriteSucceeded(result);
+        expect.fail("should have thrown");
+      } catch (e) {
+        expect(e).toBeInstanceOf(RunnerError);
+        expect((e as RunnerError).code).toBe("RECONCILIATION_REQUIRED");
+        expect((e as RunnerError).status).toBe(409);
+        expect((e as RunnerError).details).toMatchObject({
+          operationId: result.operationId,
+          operationState: "unknown",
+        });
+      }
+    });
+
+    it("failed result throws BROADCAST_FAILED with metadata", async () => {
+      const executeFn: CircleCliExecuteFn = async () => {
+        throw new Error("Insufficient funds");
+      };
+      const result = await gateway.execute(makeInput(), executeFn);
+      expect(result.state).toBe("failed");
+      try {
+        assertGatewayWriteSucceeded(result);
+        expect.fail("should have thrown");
+      } catch (e) {
+        expect(e).toBeInstanceOf(RunnerError);
+        expect((e as RunnerError).code).toBe("BROADCAST_FAILED");
+        expect((e as RunnerError).details).toMatchObject({
+          operationId: result.operationId,
+          operationState: "failed",
+        });
+      }
+    });
+
+    it("confirmed idempotent replay does not throw", async () => {
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeMockCircleCliResult());
+
+      // First execution → confirmed
+      const result1 = await gateway.execute(makeInput(), executeFn);
+      expect(() => assertGatewayWriteSucceeded(result1)).not.toThrow();
+
+      // Idempotent replay → also confirmed, also does not throw
+      const result2 = await gateway.execute(makeInput(), executeFn);
+      expect(result2.idempotent).toBe(true);
+      expect(() => assertGatewayWriteSucceeded(result2)).not.toThrow();
     });
   });
 
