@@ -349,3 +349,52 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
     }
   }
 ];
+
+// ── Console MCP Proxy Tool Schemas ─────────────────────────────────────────
+// These are proxied to Console MCP. Input schemas define the shape visible
+// in tools/list; actual validation happens on the Console side.
+
+export const CONSOLE_PROXY_MCP_TOOLS: McpToolDef[] = [
+  // Identity
+  { name: "identity.prepare_register_agent", description: "ERC-8004 register() calldata via Console MCP", inputSchema: { metadataURI: { type: "string", required: true, description: "Agent manifest URL" } } },
+  { name: "identity.prepare_register_agent_for_session", description: "Session-bound register via Console MCP", inputSchema: { metadataURI: { type: "string", required: true, description: "Agent manifest URL" } } },
+  { name: "identity.request_register_agent_approval", description: "Approval URL for registration", inputSchema: { metadataURI: { type: "string", required: true, description: "Agent manifest URL" } } },
+  { name: "identity.get_registration_status", description: "Check registration status" },
+  { name: "identity.get_agent_account", description: "Get agent account details" },
+
+  // Reputation
+  { name: "reputation.give_feedback", description: "Submit reputation feedback", inputSchema: { agentTokenId: { type: "string", required: true }, score: { type: "string", required: true }, category: { type: "string", required: true }, comment: { type: "string" }, metadataURI: { type: "string" }, proofURI: { type: "string" }, context: { type: "string" }, ref: { type: "string" } } },
+
+  // Validation
+  { name: "validation.request_calldata", description: "Request validation calldata" },
+  { name: "validation.response_calldata", description: "Response validation calldata" },
+  { name: "validation.status_read", description: "Read validation status" },
+
+  // Jobs
+  { name: "jobs.list_public", description: "List public jobs", inputSchema: { status: { type: "string" }, limit: { type: "number" } } },
+  { name: "jobs.get_public", description: "Get job details", inputSchema: { jobId: { type: "string", required: true, description: "Job ID" } } },
+  { name: "jobs.get_onchain_status", description: "On-chain job status", inputSchema: { jobId: { type: "string", required: true } } },
+  { name: "jobs.get_lifecycle_summary", description: "Job lifecycle summary", inputSchema: { jobId: { type: "string", required: true } } },
+
+  // Client
+  { name: "client.prepare_create_job", description: "Create job calldata", inputSchema: { provider: { type: "string", required: true }, evaluator: { type: "string", required: true }, expiredAt: { type: "string", required: true }, description: { type: "string", required: true }, hook: { type: "string" } } },
+  { name: "client.prepare_approve_usdc", description: "Approve USDC for job", inputSchema: { amount: { type: "string", required: true } } },
+  { name: "client.prepare_fund_job", description: "Fund job calldata", inputSchema: { jobId: { type: "string", required: true } } },
+
+  // Provider
+  { name: "provider.prepare_set_budget", description: "Set budget calldata", inputSchema: { jobId: { type: "string", required: true }, amount: { type: "string", required: true } } },
+  { name: "provider.prepare_submit_job", description: "Submit job calldata", inputSchema: { jobId: { type: "string", required: true }, deliverableHash: { type: "string", required: true } } },
+  { name: "provider.runtime_get_context", description: "Runtime context", inputSchema: { providerAddress: { type: "string" } } },
+  { name: "provider.runtime_heartbeat", description: "Runtime heartbeat" },
+  { name: "provider.runtime_start_job", description: "Start job execution", inputSchema: { jobId: { type: "string", required: true } } },
+  { name: "provider.runtime_write_checkpoint", description: "Write runtime checkpoint", inputSchema: { jobId: { type: "string", required: true }, checkpoint: { type: "object", required: true } } },
+  { name: "provider.runtime_get_resume_plan", description: "Get resume plan", inputSchema: { jobId: { type: "string" }, providerAddress: { type: "string" } } },
+  { name: "provider.runtime_complete_run", description: "Complete runtime run", inputSchema: { jobId: { type: "string", required: true }, result: { type: "object", required: true }, runId: { type: "string" } } },
+  { name: "provider.list_open_jobs", description: "List open jobs", inputSchema: { limit: { type: "number" } } },
+  { name: "provider.list_assigned_jobs", description: "List assigned jobs" },
+  { name: "provider.apply_open_job", description: "Apply for open job", inputSchema: { jobId: { type: "string", required: true }, capabilities: { type: "array" } } },
+
+  // Evaluator
+  { name: "evaluator.prepare_complete_job", description: "Complete job calldata", inputSchema: { jobId: { type: "string", required: true }, reason: { type: "string" } } },
+  { name: "evaluator.prepare_reject_job", description: "Reject job calldata", inputSchema: { jobId: { type: "string", required: true }, reason: { type: "string" } } },
+];

@@ -2,17 +2,27 @@
  * ArcLayer Runner MCP — Official SDK Server Factory.
  *
  * Creates an McpServer using @modelcontextprotocol/sdk v1.29.0.
- * Tools registered from runner-core Zod schemas.
+ * Registers both local Runner tools and Console MCP proxy tools,
+ * filtered by the configured role(s).
  */
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { McpToolContext } from './mcp-tools';
 import { executeRunnerMcpTool } from './runner-mcp-executor';
-import { RUNNER_MCP_TOOLS } from './mcp-schemas';
+import { RUNNER_MCP_TOOLS, CONSOLE_PROXY_MCP_TOOLS, type McpToolDef } from './mcp-schemas';
+import { proxyToConsoleMcp } from './console-tool-proxy';
+import { getToolNamesForRole } from './tool-registry';
 
 /**
- * Create an official MCP server with all Runner tools registered.
+ * Create an official MCP server with tools registered for the configured role(s).
+ *
+ * Registers:
+ * - Local Runner tools (from RUNNER_MCP_TOOLS)
+ * - Console MCP proxy tools (from CONSOLE_PROXY_MCP_TOOLS)
+ *
+ * Both sets are filtered by the union of tools allowed for `config.allowedRoles`.
+ * Execution-time role checks in the executor remain as defense in depth.
  */
 export function createRunnerMcpServer(ctx: McpToolContext): McpServer {
   const server = new McpServer({
@@ -20,24 +30,56 @@ export function createRunnerMcpServer(ctx: McpToolContext): McpServer {
     version: '0.1.4',
   });
 
-  // Register tools from RUNNER_MCP_TOOLS definitions
-  for (const toolDef of RUNNER_MCP_TOOLS) {
-    // Convert JSON Schema to Zod shape for the SDK
-    const inputSchema = jsonSchemaToZodShape(toolDef.inputSchema);
+  // Build the set of allowed tool names for the configured role(s)
+  const allowedRoles = ctx.config.allowedRoles ?? [ctx.config.defaultRole];
+  const allowedToolNames = new Set<string>();
+  for (const role of allowedRoles) {
+    for (const name of getToolNamesForRole(role)) {
+      allowedToolNames.add(name);
+    }
+  }
 
-    server.registerTool(
-      toolDef.name,
-      {
-        description: toolDef.description,
-        inputSchema: inputSchema ? z.object(inputSchema) : undefined,
-      },
-      async (args: Record<string, unknown>) => {
-        return executeRunnerMcpTool(toolDef.name, args, ctx);
-      },
-    );
+  // Register local Runner tools (filtered by role)
+  for (const toolDef of RUNNER_MCP_TOOLS) {
+    if (!allowedToolNames.has(toolDef.name)) continue;
+    registerToolDef(server, toolDef, ctx, 'local');
+  }
+
+  // Register Console MCP proxy tools (filtered by role)
+  for (const toolDef of CONSOLE_PROXY_MCP_TOOLS) {
+    if (!allowedToolNames.has(toolDef.name)) continue;
+    registerToolDef(server, toolDef, ctx, 'proxy');
   }
 
   return server;
+}
+
+/**
+ * Register a single tool definition on the McpServer.
+ */
+function registerToolDef(
+  server: McpServer,
+  toolDef: McpToolDef,
+  ctx: McpToolContext,
+  source: 'local' | 'proxy',
+): void {
+  const inputSchema = jsonSchemaToZodShape(toolDef.inputSchema);
+
+  server.registerTool(
+    toolDef.name,
+    {
+      description: toolDef.description,
+      inputSchema: inputSchema ? z.object(inputSchema) : undefined,
+    },
+    async (args: Record<string, unknown>) => {
+      if (source === 'proxy') {
+        // Proxy tools are forwarded to Console MCP via the connector.
+        // The executor's role gate still applies (defense in depth).
+        return executeRunnerMcpTool(toolDef.name, args, ctx);
+      }
+      return executeRunnerMcpTool(toolDef.name, args, ctx);
+    },
+  );
 }
 
 /**
