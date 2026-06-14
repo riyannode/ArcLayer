@@ -16,7 +16,6 @@ import {
   decodeJobEnvelope,
   validateJobEnvelope,
   isJobEnvelope,
-  isLegacyJob,
   extractProposedBudget,
   parseUsdcToAtomic,
   atomicToUsdc,
@@ -38,11 +37,11 @@ function makeEnvelope(overrides?: Partial<JobEnvelopeV1>): JobEnvelopeV1 {
       proposedBudgetUsdc: "5.00",
       clientWillFund: true,
     },
-    x402: {
-      enabled: false,
+    paymentDelegation: {
+      delegationEnabled: false,
       maxSpendUsdc: "0.01",
       allowedHosts: [],
-      maxCycles: 3,
+      maxRequests: 3,
     },
     ...overrides,
   };
@@ -56,13 +55,18 @@ describe("encodeJobEnvelope", () => {
     const env2: JobEnvelopeV1 = {
       version: 1,
       schema: "arclayer.job",
-      x402: { maxCycles: 3, allowedHosts: [], maxSpendUsdc: "0.01", enabled: false },
       task: "Analyze smart contract for vulnerabilities",
       commercialTerms: { clientWillFund: true, proposedBudgetUsdc: "5.00" },
       acceptanceCriteria: [
         { mandatory: true, id: "c1", description: "Find all reentrancy bugs" },
         { mandatory: false, id: "c2", description: "Gas optimization suggestions" },
       ],
+      paymentDelegation: {
+        maxRequests: 3,
+        allowedHosts: [],
+        maxSpendUsdc: "0.01",
+        delegationEnabled: false,
+      },
     };
 
     const encoded1 = encodeJobEnvelope(env1);
@@ -134,7 +138,6 @@ describe("decodeJobEnvelope", () => {
     // Manually construct JSON with different key order
     const json = JSON.stringify({
       version: 1,
-      x402: { enabled: false, maxSpendUsdc: "0.01", allowedHosts: [], maxCycles: 3 },
       task: "Test task",
       acceptanceCriteria: [{ id: "c1", description: "Test", mandatory: true }],
       schema: "arclayer.job",
@@ -213,16 +216,7 @@ describe("isJobEnvelope", () => {
   });
 });
 
-describe("isLegacyJob", () => {
-  it("returns true for plain text", () => {
-    expect(isLegacyJob("plain text description")).toBe(true);
-  });
-
-  it("returns false for valid envelope", () => {
-    const encoded = encodeJobEnvelope(makeEnvelope());
-    expect(isLegacyJob(encoded)).toBe(false);
-  });
-});
+// isLegacyJob removed — x402 delegation is now optional in JobEnvelopeV1
 
 // ── Budget extraction ──────────────────────────────────────────────────────
 

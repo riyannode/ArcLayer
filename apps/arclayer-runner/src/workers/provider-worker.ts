@@ -395,6 +395,22 @@ export class ProviderWorker extends EventEmitter {
       throw new Error(`Runtime execution failed: ${msg}`);
     }
 
+    // Check if runtime needs paid resources
+    // Provider does NOT pay — it checkpoints and waits for x402-agent
+    const resultObj = runtimeResult as Record<string, unknown>;
+    if (resultObj?.state === "needs_payment") {
+      this.activeJob!.phase = "needs_action";
+      const paymentRequests = resultObj.paymentRequests;
+      this.emit("needs_payment", { jobId, paymentRequests });
+      await this.notifyTelegram(
+        "runtime.needs_action",
+        `Job ${jobId} needs paid resources. Waiting for x402-agent to complete payment.`,
+      );
+      // Checkpoint the payment request for x402-agent pickup
+      // Worker will resume after receiving PaymentDelegationReceipt
+      return;
+    }
+
     // Canonicalize deliverable
     this.activeJob!.phase = "publishing";
     const output = (runtimeResult as Record<string, unknown>)?.output ?? runtimeResult;
@@ -408,7 +424,7 @@ export class ProviderWorker extends EventEmitter {
     try {
       await this.services.submitProviderDeliverable({
         jobId: erc8183JobId,
-        deliverableHash: "0x" + "00".repeat(32), // Placeholder — actual hash from canonicalizeDeliverable
+        deliverableHash: ("0x" + "00".repeat(32)) as `0x${string}`, // Placeholder — actual hash from canonicalizeDeliverable
         optParams: "0x",
       });
     } catch (err) {

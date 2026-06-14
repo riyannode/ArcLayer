@@ -1,7 +1,7 @@
 /**
  * JobEnvelopeV1 — Canonical job description schema for ERC-8183 agentic commerce.
  *
- * Encodes task, acceptance criteria, commercial terms, and x402 policy
+ * Encodes task, acceptance criteria, and commercial terms
  * into a deterministic JSON envelope that travels on-chain as `description`.
  *
  * Design:
@@ -10,7 +10,9 @@
  *   - Reject unknown versions
  *   - Exact decimal parsing for USDC amounts
  *   - Legacy plain text allowed only with explicit compatibility mode
- *   - Legacy jobs cannot use automatic x402 or automatic evaluator settlement
+ *
+ * x402 payment delegation is optional and handled by a separate x402-agent role.
+ * Provider/evaluator/client roles never execute x402 payments directly.
  */
 
 import { z } from "zod";
@@ -26,29 +28,16 @@ const AcceptanceCriterionSchema = z.object({
 const CommercialTermsSchema = z.object({
   proposedBudgetUsdc: z.string().refine(
     (v) => {
-      const match = v.match(/^\d+(\.\d{1,6})?$/);
-      if (!match) return false;
-      const num = parseFloat(v);
-      return num > 0 && num <= 1_000_000;
+      if (!/^\d+(\.\d{1,6})?$/.test(v)) return false;
+      // Validate range using string comparison to avoid float
+      const [intPart, fracPart = ""] = v.split(".");
+      if (intPart.length > 7) return false; // max 9,999,999
+      const atomic = BigInt(intPart) * 1_000_000n + BigInt(fracPart.padEnd(6, "0"));
+      return atomic > 0n && atomic <= 1_000_000_000_000n; // max 1M USDC
     },
     { message: "proposedBudgetUsdc must be a positive USDC string with max 6 decimals" },
   ),
   clientWillFund: z.literal(true),
-});
-
-const X402PolicySchema = z.object({
-  enabled: z.boolean(),
-  maxSpendUsdc: z.string().refine(
-    (v) => {
-      const match = v.match(/^\d+(\.\d{1,6})?$/);
-      if (!match) return false;
-      const num = parseFloat(v);
-      return num >= 0 && num <= 10_000;
-    },
-    { message: "maxSpendUsdc must be a non-negative USDC string with max 6 decimals" },
-  ),
-  allowedHosts: z.array(z.string().url()).max(64),
-  maxCycles: z.number().int().min(0).max(100),
 });
 
 /**
@@ -56,6 +45,33 @@ const X402PolicySchema = z.object({
  * Guides how the provider should structure deliverable output.
  */
 const OutputFormatSchema = z.enum(["text", "markdown", "json"]);
+
+/**
+ * Optional payment delegation authorization.
+ *
+ * This is NOT a payment policy for the provider. It authorizes a separate
+ * x402-agent to make payments on behalf of the job, subject to limits.
+ *
+ * The provider worker detects needs_payment from the runtime, creates a
+ * PaymentDelegationRequest, and waits for the x402-agent to complete payment
+ * and return a PaymentDelegationReceipt.
+ *
+ * When omitted, the job has no x402 payment delegation.
+ */
+const PaymentDelegationSchema = z.object({
+  delegationEnabled: z.boolean(),
+  maxSpendUsdc: z.string().refine(
+    (v) => {
+      if (!/^\d+(\.\d{1,6})?$/.test(v)) return false;
+      const [intPart, fracPart = ""] = v.split(".");
+      const atomic = BigInt(intPart) * 1_000_000n + BigInt(fracPart.padEnd(6, "0"));
+      return atomic >= 0n && atomic <= 10_000_000_000n; // max 10K USDC
+    },
+    { message: "maxSpendUsdc must be a non-negative USDC string with max 6 decimals" },
+  ),
+  allowedHosts: z.array(z.string().url()).max(64),
+  maxRequests: z.number().int().min(0).max(100),
+});
 
 /**
  * JobEnvelopeV1 — the canonical on-chain description format.
@@ -76,7 +92,12 @@ export const JobEnvelopeV1Schema = z.object({
 
   commercialTerms: CommercialTermsSchema,
 
-  x402: X402PolicySchema,
+  /**
+   * Optional payment delegation for x402-agent.
+   * When present, authorizes a separate x402-agent to handle paid resources.
+   * When absent, the job has no x402 payment capability.
+   */
+  paymentDelegation: PaymentDelegationSchema.optional(),
 
   metadata: z.record(z.unknown()).optional(),
 });
@@ -87,7 +108,7 @@ export type AcceptanceCriterion = z.infer<typeof AcceptanceCriterionSchema>;
 
 export type CommercialTerms = z.infer<typeof CommercialTermsSchema>;
 
-export type X402Policy = z.infer<typeof X402PolicySchema>;
+export type PaymentDelegation = z.infer<typeof PaymentDelegationSchema>;
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -101,7 +122,7 @@ const ENVELOPE_VERSION = 1;
 /**
  * Deterministic JSON serialization.
  * Recursively sorts all object keys at every nesting level.
- * This ensures the same logical envelope always produces the same bytes.
+ * Ensures the same logical envelope always produces the same bytes.
  */
 function canonicalStringify(value: unknown): string {
   if (value === null || value === undefined) return "null";
@@ -150,22 +171,15 @@ export function encodeJobEnvelope(envelope: JobEnvelopeV1): string {
  * Accepts both canonical and non-canonical JSON (reordered keys are fine).
  * Rejects unknown schema/version combinations.
  *
- * For legacy plain-text descriptions (non-JSON or wrong schema), returns null
- * when `allowLegacy` is false (default), or throws when allowLegacy is true
- * and the input is neither valid JSON nor a JobEnvelope.
+ * For legacy plain-text descriptions (non-JSON or wrong schema), returns null.
  */
-export function decodeJobEnvelope(
-  raw: string,
-  options?: { allowLegacy?: boolean },
-): JobEnvelopeV1 | null {
+export function decodeJobEnvelope(raw: string): JobEnvelopeV1 | null {
   if (!raw || typeof raw !== "string") return null;
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    // Not JSON — legacy plain text
-    if (options?.allowLegacy) return null;
     return null;
   }
 
@@ -283,11 +297,13 @@ export function isJobEnvelope(raw: string): boolean {
 }
 
 /**
- * Check if a legacy plain-text job is eligible for automatic x402.
- * Legacy jobs MUST NOT use automatic x402 or automatic evaluator settlement.
+ * Check if a job has payment delegation enabled.
+ * Returns the delegation config if present and enabled, null otherwise.
  */
-export function isLegacyJob(description: string): boolean {
-  return !isJobEnvelope(description);
+export function getPaymentDelegation(description: string): PaymentDelegation | null {
+  const envelope = decodeJobEnvelope(description);
+  if (!envelope?.paymentDelegation?.delegationEnabled) return null;
+  return envelope.paymentDelegation;
 }
 
 /**
