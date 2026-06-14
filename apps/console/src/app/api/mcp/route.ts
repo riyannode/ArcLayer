@@ -65,15 +65,15 @@ export async function POST(req: NextRequest): Promise<Response> {
   }
 
   // Authenticate and build context
-  let context: Awaited<ReturnType<typeof buildAuthenticatedContext>>;
+  let requestContext: Awaited<ReturnType<typeof buildAuthenticatedContext>>;
   try {
-    context = await buildAuthenticatedContext(req);
+    requestContext = await buildAuthenticatedContext(req);
   } catch (response) {
     return response as Response;
   }
 
   // Create request-scoped MCP server and transport
-  const server = createArcLayerMcpServer(context);
+  const server = createArcLayerMcpServer({ request: requestContext, auth: requestContext.auth });
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // stateless
     enableJsonResponse: true,
