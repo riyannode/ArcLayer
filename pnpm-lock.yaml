@@ -9,7 +9,7 @@ overrides:
   ws: ^8.20.1
   postcss: ^8.5.0
   uuid: ^13.0.1
-  esbuild: '>=0.28.1'
+  esbuild: ~0.28.1
 
 importers:
 
@@ -2112,7 +2112,7 @@ packages:
     resolution: {integrity: sha512-3WrrOuZiyaaZPWiEt4G3+IffISVC9HYlWueJEBWED4ZH4aIAC2PnkdnuRrR94M+w6yGWn4AglWtJtBI8YqvgoA==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
     peerDependencies:
-      esbuild: '>=0.28.1'
+      esbuild: ~0.28.1
 
   cac@6.7.14:
     resolution: {integrity: sha512-b6Ilus+c3RrdDk+JhLKUAQfzzgLEPy6wcXqS7f/xe1EETvsDP6GORG7SFuOs6cID5YkqchW/LXZbX5bc8j7ZcQ==}
@@ -3797,7 +3797,7 @@ packages:
     peerDependencies:
       '@types/node': ^20.19.0 || >=22.12.0
       '@vitejs/devtools': ^0.1.18
-      esbuild: '>=0.28.1'
+      esbuild: ~0.28.1
       jiti: '>=1.21.0'
       less: ^4.0.0
       sass: ^1.70.0
