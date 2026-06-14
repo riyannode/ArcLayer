@@ -13,6 +13,8 @@ export type McpConnectorOptions = {
   baseUrl: string;
   token?: string;
   agentId: string;
+  /** Request timeout in ms for SDK client callTool (default: 60_000) */
+  requestTimeoutMs?: number;
 };
 
 export type McpToolResult = {
@@ -25,6 +27,7 @@ export class ArcLayerMcpConnector {
   private readonly baseUrl: string;
   private readonly token?: string;
   private readonly agentId: string;
+  private readonly requestTimeoutMs: number;
   private client?: Client;
   private transport?: StreamableHTTPClientTransport;
   private connectPromise?: Promise<void>;
@@ -34,11 +37,16 @@ export class ArcLayerMcpConnector {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
     this.token = options.token;
     this.agentId = options.agentId;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? 60_000;
   }
 
   /**
    * Lazy, concurrency-safe connect.
    * Multiple simultaneous first calls reuse one connectPromise.
+   *
+   * Uses local variables and only assigns to this.client/this.transport
+   * AFTER successful connect. If connect fails, the promise is cleared
+   * so the next call retries.
    */
   private async ensureConnected(): Promise<void> {
     if (this.client) return;
@@ -46,12 +54,12 @@ export class ArcLayerMcpConnector {
 
     if (!this.connectPromise) {
       this.connectPromise = (async () => {
-        this.client = new Client({
+        const client = new Client({
           name: 'arclayer-runner',
           version: '0.1.4',
         });
 
-        this.transport = new StreamableHTTPClientTransport(
+        const transport = new StreamableHTTPClientTransport(
           new URL(`${this.baseUrl}/api/mcp`),
           {
             requestInit: {
@@ -62,7 +70,17 @@ export class ArcLayerMcpConnector {
           },
         );
 
-        await this.client.connect(this.transport);
+        try {
+          await client.connect(transport);
+          // Only assign after successful connect
+          this.client = client;
+          this.transport = transport;
+        } catch (error) {
+          // Clean up on failure — allow retry on next call
+          await client.close().catch(() => {});
+          this.connectPromise = undefined;
+          throw error;
+        }
       })();
     }
 
@@ -71,18 +89,27 @@ export class ArcLayerMcpConnector {
 
   /**
    * Call a Console MCP tool via official SDK.
+   *
+   * @param timeoutMs - Optional per-call timeout override. Falls back to
+   *                    the connector's default requestTimeoutMs.
    */
-  async callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
+  async callTool(name: string, args: Record<string, unknown> = {}, timeoutMs?: number): Promise<unknown> {
     await this.ensureConnected();
 
+    const effectiveTimeout = timeoutMs ?? this.requestTimeoutMs;
+
     try {
-      const result = await this.client!.callTool({
-        name,
-        arguments: {
-          agentId: this.agentId,
-          ...args,
+      const result = await this.client!.callTool(
+        {
+          name,
+          arguments: {
+            agentId: this.agentId,
+            ...args,
+          },
         },
-      });
+        undefined, // resultSchema
+        { timeout: effectiveTimeout },
+      );
 
       // Handle isError
       if (result.isError) {
