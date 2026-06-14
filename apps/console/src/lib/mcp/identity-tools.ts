@@ -27,7 +27,7 @@ import { getApproval, getEffectiveStatus, createApproval } from '@/lib/mcp/appro
 import type { McpSession } from '@/lib/agent-accounts/types';
 import type { McpToolContext } from './registry';
 import { MCP_ERRORS, McpError } from './errors';
-import { authAsLegacySession } from './auth-session';
+import { authAsRuntimeSession } from './auth-session';
 
 // ── Constants ─────────────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ const ALLOWED_ROLES = new Set([
  * Throws McpError if not authenticated.
  */
 export async function requireMcpSession(ctx: McpToolContext): Promise<McpSession> {
-  if (ctx.auth) return authAsLegacySession(ctx.auth);
+  if (ctx.auth) return authAsRuntimeSession(ctx.auth);
   const auth = ctx.request.authorization;
   const match = auth?.match(/^Bearer\s+(.+)$/i);
   if (!match || !match[1].startsWith('arc_mcp_sess_')) throw new McpError(MCP_ERRORS.UNAUTHORIZED, 'MCP Bearer token required');
