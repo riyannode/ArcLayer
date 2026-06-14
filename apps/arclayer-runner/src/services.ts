@@ -1470,8 +1470,10 @@ export class RunnerServices {
    * Called during graceful shutdown.
    */
   async close(): Promise<void> {
-    // Receipt store and ledger may hold file handles or SQLite connections.
-    // Close them if they expose a close method.
+    // Close gateway (operation journal SQLite) first
+    this.gateway.close();
+
+    // Receipt store and ledger may hold file handles
     if (typeof (this.receipts as any).close === "function") {
       await (this.receipts as any).close();
     }
