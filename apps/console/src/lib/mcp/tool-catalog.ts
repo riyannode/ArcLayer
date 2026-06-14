@@ -839,6 +839,19 @@ export function registerAllTools(): void {
     operation: 'read',
     annotations: ANNOTATIONS.readOnly(),
     inputSchema: [{ name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' }],
+    outputSchema: [
+      { name: 'ok', type: 'boolean', required: true, description: 'Success flag.' },
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID.' },
+      { name: 'source', type: 'string', required: true, description: 'Data source (contract or indexer).' },
+      { name: 'statusCode', type: 'number', required: true, description: 'ERC-8183 status enum (0=Open, 1=Funded, 2=Submitted, 3=Completed, 4=Rejected, 5=Expired).' },
+      { name: 'statusLabel', type: 'string', required: true, description: 'Human-readable status.' },
+      { name: 'client', type: 'string', required: false, description: 'Client address.' },
+      { name: 'provider', type: 'string', required: false, description: 'Provider address.' },
+      { name: 'evaluator', type: 'string', required: false, description: 'Evaluator address.' },
+      { name: 'budgetAtomic', type: 'string', required: false, description: 'Budget in atomic USDC units.' },
+      { name: 'budgetUsdc', type: 'string', required: false, description: 'Budget in human-readable USDC.' },
+      { name: 'submittedDeliverableHash', type: 'string', required: false, description: 'Submitted deliverable hash from JobSubmitted event.' },
+    ],
     handler: (args) => handleJobsGetOnchainStatus(args),
   });
 
@@ -851,6 +864,17 @@ export function registerAllTools(): void {
     operation: 'read',
     annotations: ANNOTATIONS.readOnly(),
     inputSchema: [{ name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' }],
+    outputSchema: [
+      { name: 'ok', type: 'boolean', required: true, description: 'Success flag.' },
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID.' },
+      { name: 'statusCode', type: 'number', required: true, description: 'ERC-8183 status enum.' },
+      { name: 'statusLabel', type: 'string', required: true, description: 'Human-readable status.' },
+      { name: 'nextActor', type: 'string', required: true, description: 'Who should act next (client, provider, evaluator).' },
+      { name: 'nextAction', type: 'string', required: true, description: 'What action to take.' },
+      { name: 'recommendedTool', type: 'string', required: true, description: 'MCP tool to call for the next action.' },
+      { name: 'notes', type: 'array', required: false, description: 'Additional context notes.' },
+      { name: 'terminal', type: 'boolean', required: true, description: 'Whether the job is in a terminal state.' },
+    ],
     handler: (args) => handleJobsGetLifecycleSummary(args),
   });
 
@@ -1034,6 +1058,12 @@ export function registerAllTools(): void {
     operation: 'read',
     annotations: ANNOTATIONS.readOnly(),
     inputSchema: [],
+    outputSchema: [
+      { name: 'ok', type: 'boolean', required: true, description: 'Success flag.' },
+      { name: 'ownerAddress', type: 'string', required: false, description: 'Owner EOA address.' },
+      { name: 'agentAccountAddress', type: 'string', required: false, description: 'Agent account (Circle Smart Account) address.' },
+      { name: 'agentId', type: 'string', required: false, description: 'ERC-8004 agent token ID.' },
+    ],
     handler: handleGetAgentAccount,
   });
 
@@ -1630,6 +1660,13 @@ export function registerAllTools(): void {
       { name: 'artifacts', type: 'array', description: 'Array of artifact objects (name, uri, contentType, sha256).' },
       { name: 'runtimeReceiptHash', type: 'string', description: 'Optional runtime receipt hash.' },
     ],
+    outputSchema: [
+      { name: 'ok', type: 'boolean', required: true, description: 'Success flag.' },
+      { name: 'deliverableId', type: 'string', required: true, description: 'Deliverable record ID.' },
+      { name: 'deliverableHash', type: 'string', required: true, description: 'Verified Keccak-256 hash.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'idempotent', type: 'boolean', required: false, description: 'True if record already existed.' },
+    ],
     handler: handleProviderPublishDeliverable,
   });
 
@@ -1645,6 +1682,14 @@ export function registerAllTools(): void {
       { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
       { name: 'evaluatorAddress', type: 'string', required: true, description: 'Evaluator wallet address.' },
+    ],
+    outputSchema: [
+      { name: 'ok', type: 'boolean', required: true, description: 'Success flag.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'deliverableHash', type: 'string', required: true, description: 'Keccak-256 hash of deliverable.' },
+      { name: 'canonicalPayload', type: 'string', required: true, description: 'Exact canonical deliverable JSON.' },
+      { name: 'providerAgentId', type: 'string', required: false, description: 'Provider agent ID.' },
+      { name: 'artifacts', type: 'array', required: false, description: 'Deliverable artifacts.' },
     ],
     handler: handleEvaluatorGetDeliverable,
   });

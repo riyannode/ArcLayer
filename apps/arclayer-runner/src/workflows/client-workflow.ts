@@ -12,7 +12,7 @@
  * Client NEVER automatically funds without second confirmation.
  */
 
-import { isJobEnvelope, extractProposedBudget, parseUsdcToAtomic } from "@arclayer/runner-core";
+import { isJobEnvelope, extractProposedBudget, parseUsdcToAtomic, atomicToUsdc } from "@arclayer/runner-core";
 import type { RunnerServices } from "../services";
 import type { ArcLayerMcpConnector } from "../mcp-connector";
 
@@ -79,7 +79,8 @@ export class ClientWorkflow {
       state: "awaiting_create_confirmation",
     });
 
-    const budget = parseFloat(draft.proposedBudgetUsdc).toFixed(2);
+    // Exact decimal formatting — no floating-point arithmetic
+    const budget = atomicToUsdc(parseUsdcToAtomic(draft.proposedBudgetUsdc));
     const deadline = `${draft.deadlineHours}h`;
 
     const criteria = draft.acceptanceCriteria
@@ -185,7 +186,8 @@ export class ClientWorkflow {
     ctx.state = "awaiting_fund_confirmation";
     ctx.setBudgetTxHash = setBudgetTxHash;
 
-    const budget = parseFloat(budgetUsdc).toFixed(2);
+    // Exact decimal formatting — no floating-point arithmetic
+    const budget = atomicToUsdc(parseUsdcToAtomic(budgetUsdc));
 
     return [
       `💰 *Provider Set Budget*`,
@@ -225,10 +227,27 @@ export class ClientWorkflow {
     ctx.state = "approving";
 
     try {
-      // Step 1: Approve USDC
-      const approveResult = await this.services.approveUsdc({
+      // Step 0: Read on-chain job to get actual budget and verify preconditions
+      const onchainStatus = await this.mcp.callTool("jobs.get_onchain_status", {
         jobId: ctx.erc8183JobId!,
-        amount: "0", // Will be read from on-chain budget
+      }) as Record<string, unknown>;
+
+      const statusCode = Number(onchainStatus.statusCode ?? -1);
+      if (statusCode !== 0) {
+        ctx.state = "failed";
+        return { ok: false, message: `❌ Job is not Open (status: ${onchainStatus.statusLabel ?? statusCode}). Cannot fund.` };
+      }
+
+      const onchainBudget = String(onchainStatus.budgetAtomic ?? "");
+      if (!onchainBudget || onchainBudget === "0") {
+        ctx.state = "failed";
+        return { ok: false, message: "❌ Provider has not set budget yet." };
+      }
+
+      // Step 1: Approve USDC for exact on-chain budget
+      const approveResult = await this.services.approveUsdcForErc8183({
+        amount: onchainBudget,
+        idempotencyKey: `approveUsdc:job-${ctx.erc8183JobId}:${onchainBudget}`,
       });
 
       const approveObj = approveResult as Record<string, unknown>;

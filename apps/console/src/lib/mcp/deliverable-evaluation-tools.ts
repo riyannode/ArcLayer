@@ -34,7 +34,7 @@ import {
   type DeliverableRow,
 } from "@/lib/erc8183-jobs/deliverable-store";
 import { readOnchainJob, getArcPublicClient } from "@/lib/erc8183-jobs/receipt";
-import { CONTRACTS, ERC8183_AGENTIC_COMMERCE_ABI } from "@arclayer/sdk";
+import { CONTRACTS, ERC8183_AGENTIC_COMMERCE_ABI, ARC_DEPLOYMENT_BLOCK } from "@arclayer/sdk";
 import { getSupabaseAdmin } from "@/lib/x402/supabaseClient";
 
 function supabase() {
@@ -113,14 +113,11 @@ async function readSubmittedDeliverableHash(jobId: bigint): Promise<Hex | null> 
     return null;
   }
 
-  // Use indexer default fromBlock instead of 0 to avoid scanning entire chain
-  const DEPLOYMENT_BLOCK = 41_752_050n;
-
   const logs = await client.getLogs({
     address: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
     event: jobSubmittedEvent,
     args: { jobId },
-    fromBlock: DEPLOYMENT_BLOCK,
+    fromBlock: ARC_DEPLOYMENT_BLOCK,
     toBlock: "latest",
   });
 

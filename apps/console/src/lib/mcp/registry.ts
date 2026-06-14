@@ -70,6 +70,8 @@ export interface McpToolDefinition {
   annotations: McpToolAnnotations;
   /** Input parameter schema for tools/list. */
   inputSchema: McpToolParam[];
+  /** Optional output schema for structured tool results. */
+  outputSchema?: McpToolParam[];
   /** Execution handler. */
   handler: McpToolHandler;
 }
