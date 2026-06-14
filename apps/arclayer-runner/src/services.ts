@@ -29,7 +29,7 @@ import { safeHostFromUrl, sanitizeTaskForUntrustedRuntime } from "./runtime";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
 import { isBrokerAbortOrTimeout } from "./mcp-broker";
 import { randomUUID } from "node:crypto";
-import { ExecutionGateway } from "./execution-gateway";
+import { ExecutionGateway, assertGatewayWriteSucceeded } from "./execution-gateway";
 import type { WriteOperationKind } from "./execution-gateway";
 
 /**
@@ -508,17 +508,7 @@ export class RunnerServices {
       signal
     );
 
-    // If gateway returned non-ok (e.g. unknown state), wrap it
-    if (!gwResult.ok) {
-      return {
-        ok: false,
-        mode: gwResult.state === "unknown" ? "unknown" : "failed",
-        reason: gwResult.errorMessage ?? `Gateway write failed: ${gwResult.state}`,
-        prepared: input,
-        operationId: gwResult.operationId,
-        state: gwResult.state,
-      };
-    }
+    assertGatewayWriteSucceeded(gwResult);
 
     return {
       ok: true,
@@ -589,6 +579,8 @@ export class RunnerServices {
       signal
     );
 
+    assertGatewayWriteSucceeded(gwResult);
+
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
       taskId: `createJob-${Date.now()}`,
@@ -641,6 +633,8 @@ export class RunnerServices {
       }),
       signal
     );
+
+    assertGatewayWriteSucceeded(gwResult);
 
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
@@ -712,6 +706,8 @@ export class RunnerServices {
       signal
     );
 
+    assertGatewayWriteSucceeded(gwResult);
+
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
       taskId: `approve-${Date.now()}`,
@@ -765,6 +761,8 @@ export class RunnerServices {
       }),
       signal
     );
+
+    assertGatewayWriteSucceeded(gwResult);
 
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
@@ -825,6 +823,8 @@ export class RunnerServices {
       signal
     );
 
+    assertGatewayWriteSucceeded(gwResult);
+
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
       taskId: `complete-${input.jobId}`,
@@ -884,6 +884,8 @@ export class RunnerServices {
       signal
     );
 
+    assertGatewayWriteSucceeded(gwResult);
+
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
       taskId: `reject-${input.jobId}`,
@@ -937,6 +939,8 @@ export class RunnerServices {
       }),
       signal
     );
+
+    assertGatewayWriteSucceeded(gwResult);
 
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
@@ -1001,6 +1005,8 @@ export class RunnerServices {
       }),
       signal
     );
+
+    assertGatewayWriteSucceeded(gwResult);
 
     const receipt = await this.receipts.append({
       type: "erc8183_submit",

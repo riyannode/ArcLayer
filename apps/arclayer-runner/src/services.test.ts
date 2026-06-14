@@ -594,15 +594,17 @@ describe("RunnerServices", () => {
       // Verify the method exists and accepts the right params
       expect(services.submitDeliverableViaCircleCli).toBeDefined();
 
-      // Will fail at CLI but should not throw schema errors
+      // Will fail at CLI — gateway wraps as RunnerError via assertGatewayWriteSucceeded
       try {
         await services.submitDeliverableViaCircleCli({
           jobId: "42",
           deliverableHash: "0x" + "ab".repeat(32)
         });
+        expect.fail("should have thrown");
       } catch (error) {
-        // Expected: circle CLI not installed
-        expect(error).not.toBeInstanceOf(RunnerError);
+        // Expected: gateway wraps CLI failure as RunnerError
+        expect(error).toBeInstanceOf(RunnerError);
+        expect((error as RunnerError).code).toBe("BROADCAST_FAILED");
       }
     });
   });
