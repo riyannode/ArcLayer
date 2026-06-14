@@ -29,7 +29,26 @@ const MAX_EXPIRY_DAYS = 30;
 const DEFAULT_EXPIRY_DAYS = 30;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+/** All valid MCP scopes. Reject anything not in this set. */
+const ALLOWED_MCP_SCOPES = new Set([
+  'arclayer:read',
+  'agents:read',
+  'jobs:read',
+  'jobs:prepare',
+  'provider:runtime',
+  'tx:request',
+]);
+
+/** Default permissions — explicit scopes + legacy contract/action maps. */
 const DEFAULT_PERMISSIONS: McpSessionPermissions = {
+  scopes: [
+    'arclayer:read',
+    'agents:read',
+    'jobs:read',
+    'jobs:prepare',
+    'provider:runtime',
+    'tx:request',
+  ],
   allowedContracts: ['ERC8004_IDENTITY_REGISTRY'],
   allowedActions: ['identity.register'],
 };
@@ -100,16 +119,33 @@ export async function POST(req: NextRequest) {
   const clampedDays = Math.max(1, Math.min(MAX_EXPIRY_DAYS, Math.floor(requestedDays)));
   const expiresInMs = clampedDays * MS_PER_DAY;
 
-  // 6. Parse permissions — empty/missing → DEFAULT_PERMISSIONS
+  // 6. Parse permissions — validate scopes, fall back to DEFAULT_PERMISSIONS
   const rawPerms = typeof body.permissions === 'object' && body.permissions !== null
     ? body.permissions as McpSessionPermissions
     : undefined;
 
-  const hasContracts = Array.isArray(rawPerms?.allowedContracts) && rawPerms!.allowedContracts!.length > 0;
-  const hasActions = Array.isArray(rawPerms?.allowedActions) && rawPerms!.allowedActions!.length > 0;
-  const permissions: McpSessionPermissions = (hasContracts && hasActions)
-    ? rawPerms!
-    : DEFAULT_PERMISSIONS;
+  let permissions: McpSessionPermissions;
+
+  if (rawPerms?.scopes && Array.isArray(rawPerms.scopes) && rawPerms.scopes.length > 0) {
+    // Caller provided explicit scopes — validate them
+    const invalid = rawPerms.scopes.filter((s) => !ALLOWED_MCP_SCOPES.has(s));
+    if (invalid.length > 0) {
+      return NextResponse.json(
+        { ok: false, error: 'invalid_scopes', detail: `Invalid scopes: ${invalid.join(', ')}. Allowed: ${[...ALLOWED_MCP_SCOPES].join(', ')}` },
+        { status: 400 },
+      );
+    }
+    if (rawPerms.scopes.includes('*')) {
+      return NextResponse.json(
+        { ok: false, error: 'wildcard_scope', detail: 'Wildcard scope (*) is not allowed.' },
+        { status: 400 },
+      );
+    }
+    permissions = rawPerms;
+  } else {
+    // No scopes provided — use defaults
+    permissions = DEFAULT_PERMISSIONS;
+  }
 
   // 7. Upsert agent account binding + create session
   try {

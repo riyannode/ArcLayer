@@ -349,3 +349,277 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
     }
   }
 ];
+
+// ── Console MCP Proxy Tool Schemas ─────────────────────────────────────────
+// Canonical source: apps/console/src/lib/mcp/tool-catalog.ts
+// These are proxied to Console MCP via ArcLayerMcpConnector.callTool().
+// NOTE: agentId is auto-injected by the connector — do NOT include it here.
+// Keep in sync with Hosted Console catalog. Run parity test to verify.
+
+export const CONSOLE_PROXY_MCP_TOOLS: McpToolDef[] = [
+  // ── Identity ──────────────────────────────────────────────────────────
+  {
+    name: "identity.prepare_register_agent",
+    description: "Build unsigned calldata for ERC-8004 IdentityRegistry.register(metadataURI).",
+    inputSchema: { metadataURI: { type: "string", required: true, description: "Public agent manifest URL (HTTPS or IPFS)." } },
+  },
+  {
+    name: "identity.prepare_register_agent_for_session",
+    description: "Validate agent metadata and build encoded calldata for ERC-8004 IdentityRegistry.register(metadataURI). Authenticated.",
+    inputSchema: {
+      name: { type: "string", required: true, description: "Agent name (max 128 chars)." },
+      role: { type: "string", required: true, description: "Agent role: provider, client, evaluator, agent, oracle, analyzer, executor, worker, buyer, settler." },
+      capabilities: { type: "array", required: true, description: "Array of capability strings (non-empty, max 20)." },
+      description: { type: "string", required: true, description: "Agent description (max 1024 chars)." },
+      endpoint: { type: "string", description: "Optional endpoint URL." },
+    },
+  },
+  {
+    name: "identity.request_register_agent_approval",
+    description: "Prepare + create approval for ERC-8004 identity registration in one call.",
+    inputSchema: {
+      name: { type: "string", required: true, description: "Agent name (max 128 chars)." },
+      role: { type: "string", required: true, description: "Agent role: provider, client, evaluator, agent, oracle, analyzer, executor, worker, buyer, settler." },
+      capabilities: { type: "array", required: true, description: "Array of capability strings (non-empty, max 20)." },
+      description: { type: "string", required: true, description: "Agent description (max 1024 chars)." },
+      endpoint: { type: "string", description: "Optional endpoint URL." },
+    },
+  },
+  {
+    name: "identity.get_registration_status",
+    description: "Get the status of an identity registration approval.",
+    inputSchema: { approvalId: { type: "string", required: true, description: "Approval ID from request_register_agent_approval." } },
+  },
+  {
+    name: "identity.get_agent_account",
+    description: "Get the agent account (Circle Smart Account) bound to the authenticated MCP session.",
+    // No inputSchema — Console has empty inputSchema
+  },
+
+  // ── Reputation ────────────────────────────────────────────────────────
+  {
+    name: "reputation.give_feedback",
+    description: "Build unsigned calldata for ERC-8004 ReputationRegistry.giveFeedback(...).",
+    inputSchema: {
+      agentTokenId: { type: "string", required: true },
+      score: { type: "string", required: true },
+      category: { type: "string", required: true },
+      comment: { type: "string", required: true },
+      metadataURI: { type: "string", required: true },
+      proofURI: { type: "string", required: true },
+      context: { type: "string", required: true },
+      ref: { type: "string", required: true },
+    },
+  },
+
+  // ── Validation ────────────────────────────────────────────────────────
+  {
+    name: "validation.request_calldata",
+    description: "Build unsigned calldata for ERC-8004 ValidationRegistry.validationRequest(...).",
+    inputSchema: {
+      validator: { type: "string", required: true },
+      agentTokenId: { type: "string", required: true },
+      taskUri: { type: "string", required: true },
+      requestHash: { type: "string", required: true },
+    },
+  },
+  {
+    name: "validation.response_calldata",
+    description: "Build unsigned calldata for ERC-8004 ValidationRegistry.validationResponse(...).",
+    inputSchema: {
+      requestHash: { type: "string", required: true },
+      status: { type: "string", required: true },
+      resultUri: { type: "string", required: true },
+      resultHash: { type: "string", required: true },
+      reason: { type: "string", required: true },
+    },
+  },
+  {
+    name: "validation.status_read",
+    description: "Read helper for ValidationRegistry.getValidationStatus([requestHash]).",
+    inputSchema: { requestHash: { type: "string", required: true } },
+  },
+
+  // ── Jobs (read) ───────────────────────────────────────────────────────
+  {
+    name: "jobs.list_public",
+    description: "List jobs from the indexer. Supports optional status and evaluatorAddress filters.",
+    inputSchema: {
+      status: { type: "string", description: "created | funded | submitted | completed" },
+      evaluatorAddress: { type: "string", description: "Filter by evaluator address (case-insensitive)." },
+      limit: { type: "number", description: "Optional max count (1-50)." },
+    },
+  },
+  {
+    name: "jobs.get_public",
+    description: "Get a single job by jobId.",
+    inputSchema: { jobId: { type: "string", required: true, description: "Job ID." } },
+  },
+  {
+    name: "jobs.get_onchain_status",
+    description: "Read on-chain ERC-8183 job state via AgenticCommerce.getJob().",
+    inputSchema: { jobId: { type: "string", required: true, description: "Job ID (uint256)." } },
+  },
+  {
+    name: "jobs.get_lifecycle_summary",
+    description: "Compute next actor/action for an ERC-8183 job based on on-chain state.",
+    inputSchema: { jobId: { type: "string", required: true, description: "Job ID (uint256)." } },
+  },
+
+  // ── Client (tx prepare) ───────────────────────────────────────────────
+  {
+    name: "client.prepare_create_job",
+    description: "Build unsigned calldata for ERC-8183 AgenticCommerce.createJob(provider, evaluator, expiredAt, description, hook).",
+    inputSchema: {
+      provider: { type: "string", required: true, description: "Provider/worker wallet address." },
+      evaluator: { type: "string", required: true, description: "Evaluator wallet address." },
+      expiredAt: { type: "string", required: true, description: "Unix timestamp when job expires." },
+      description: { type: "string", required: true, description: "Job description string." },
+      hook: { type: "string", description: "Optional hook contract address (default: 0x0)." },
+    },
+  },
+  {
+    name: "client.prepare_approve_usdc",
+    description: "Build unsigned calldata for USDC.approve(AgenticCommerce, amount). Must be called before fund().",
+    inputSchema: { amount: { type: "string", required: true, description: "Amount in USDC atomic units (6 decimals)." } },
+  },
+  {
+    name: "client.prepare_fund_job",
+    description: "Build unsigned calldata for ERC-8183 AgenticCommerce.fund(jobId, optParams).",
+    inputSchema: {
+      jobId: { type: "string", required: true, description: "Job ID (uint256)." },
+      optParams: { type: "string", description: "Optional bytes payload (default \"0x\")." },
+    },
+  },
+
+  // ── Provider (tx prepare) ─────────────────────────────────────────────
+  {
+    name: "provider.prepare_set_budget",
+    description: "Build unsigned calldata for ERC-8183 AgenticCommerce.setBudget(jobId, amount, optParams).",
+    inputSchema: {
+      jobId: { type: "string", required: true, description: "Job ID (uint256)." },
+      amount: { type: "string", required: true, description: "Budget in USDC atomic units (6 decimals)." },
+      optParams: { type: "string", description: "Optional bytes payload (default \"0x\")." },
+    },
+  },
+  {
+    name: "provider.prepare_submit_job",
+    description: "Build unsigned calldata for ERC-8183 AgenticCommerce.submit(jobId, deliverableHash, optParams).",
+    inputSchema: {
+      jobId: { type: "string", required: true, description: "Job ID (uint256)." },
+      deliverableHash: { type: "string", required: true, description: "Keccak256 hash of the deliverable content." },
+      optParams: { type: "string", description: "Optional bytes payload (default \"0x\")." },
+    },
+  },
+
+  // ── Provider Runtime ──────────────────────────────────────────────────
+  {
+    name: "provider.runtime_get_context",
+    description: "Get provider runtime context: state, active run, latest checkpoint, active applications, resume plan.",
+    inputSchema: { providerAddress: { type: "string", description: "Provider wallet address. If provided, resume plan verifies on-chain provider matches." } },
+  },
+  {
+    name: "provider.runtime_heartbeat",
+    description: "Update provider last_seen_at. Creates runtime state if missing.",
+    // No inputSchema beyond agentId (auto-injected)
+  },
+  {
+    name: "provider.runtime_start_job",
+    description: "Start a new job run or return existing active run. Idempotent on provider:agentId:job:jobId.",
+    inputSchema: {
+      jobId: { type: "string", required: true, description: "ERC-8183 job ID." },
+      phase: { type: "string", description: "Initial phase (default: budget_tx_sent)." },
+    },
+  },
+  {
+    name: "provider.runtime_write_checkpoint",
+    description: "Write an append-only checkpoint for a job run. NOT idempotent — each call creates a new row.",
+    inputSchema: {
+      jobId: { type: "string", required: true, description: "ERC-8183 job ID." },
+      runId: { type: "string", description: "Run ID (auto-resolved if omitted)." },
+      phase: { type: "string", required: true, description: "Checkpoint phase." },
+      status: { type: "string", required: true, description: "Checkpoint status." },
+      txHash: { type: "string", description: "Transaction hash (if applicable)." },
+      deliverableHash: { type: "string", description: "Deliverable hash (if applicable)." },
+      payloadHash: { type: "string", description: "Payload hash (if applicable)." },
+      note: { type: "string", description: "Human-readable note." },
+      metadata: { type: "object", description: "Additional metadata." },
+    },
+  },
+  {
+    name: "provider.runtime_get_resume_plan",
+    description: "Compute next provider action from checkpoint + on-chain state.",
+    inputSchema: {
+      jobId: { type: "string", description: "Specific job ID (optional, uses active run if omitted)." },
+      providerAddress: { type: "string", description: "Provider wallet address. Verifies on-chain provider matches this bot." },
+    },
+  },
+  {
+    name: "provider.runtime_retry_job",
+    description: "Retry a failed provider job run.",
+    inputSchema: {
+      jobId: { type: "string", required: true, description: "ERC-8183 job ID to retry." },
+      reason: { type: "string", description: "Reason for retry (default: manual retry)." },
+    },
+  },
+  {
+    name: "provider.runtime_complete_run",
+    description: "Mark a job run as completed. Clears active job/run from runtime state.",
+    inputSchema: {
+      jobId: { type: "string", required: true, description: "ERC-8183 job ID." },
+      runId: { type: "string", required: true, description: "Run ID to complete." },
+    },
+  },
+  {
+    name: "provider.list_open_jobs",
+    description: "List open/global jobs where provider = address(0). Server-side filtered, bounded pagination.",
+    inputSchema: {
+      limit: { type: "number", description: "Max results (1-50, default 20)." },
+      minBudgetUsdc: { type: "string", description: "Minimum budget in USDC." },
+      includeExpired: { type: "boolean", description: "Include expired jobs (default false)." },
+    },
+  },
+  {
+    name: "provider.list_assigned_jobs",
+    description: "List jobs assigned to a specific provider address (provider = address, status = Open).",
+    inputSchema: {
+      providerAddress: { type: "string", required: true, description: "Provider wallet address to search for." },
+      limit: { type: "number", description: "Max results (1-50, default 20)." },
+    },
+  },
+  {
+    name: "provider.apply_open_job",
+    description: "Apply to an open/global job. Provider bot must NOT call setProvider — client assigns onchain.",
+    inputSchema: {
+      jobId: { type: "string", required: true, description: "ERC-8183 job ID." },
+      providerAddress: { type: "string", required: true, description: "Provider wallet address." },
+      quoteAmountUsdc: { type: "string", description: "Quote amount in USDC (e.g. \"1.5\")." },
+      quoteAmountAtomic: { type: "string", description: "Quote amount in atomic units (6 decimals)." },
+      message: { type: "string", description: "Application message." },
+      capabilities: { type: "array", description: "Provider capabilities array (string[])." },
+      metadata: { type: "object", description: "Additional metadata." },
+    },
+  },
+
+  // ── Evaluator (tx prepare) ────────────────────────────────────────────
+  {
+    name: "evaluator.prepare_complete_job",
+    description: "Build unsigned calldata for ERC-8183 AgenticCommerce.complete(jobId, reason, optParams).",
+    inputSchema: {
+      jobId: { type: "string", required: true, description: "Job ID (uint256)." },
+      reason: { type: "string", description: "Reason string (will be keccak256-hashed) OR a 0x-prefixed 32-byte hash." },
+      reasonHash: { type: "string", description: "Optional pre-computed bytes32 reason hash; takes precedence." },
+      optParams: { type: "string", description: "Optional bytes payload (default \"0x\")." },
+    },
+  },
+  {
+    name: "evaluator.prepare_reject_job",
+    description: "Build unsigned calldata for ERC-8183 AgenticCommerce.reject(jobId, reason, optParams).",
+    inputSchema: {
+      jobId: { type: "string", required: true, description: "Job ID (uint256)." },
+      reason: { type: "string", description: "Reason string (will be keccak256-hashed) OR a 0x-prefixed 32-byte hash." },
+      reasonHash: { type: "string", description: "Optional pre-computed bytes32 reason hash; takes precedence." },
+      optParams: { type: "string", description: "Optional bytes payload (default \"0x\")." },
+    },
+  },
+];

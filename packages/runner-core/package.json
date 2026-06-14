@@ -2,7 +2,7 @@
   "name": "@arclayer/runner-core",
   "version": "0.1.4",
   "type": "module",
-  "description": "ArcLayer Runner Core \u2014 types, Zod schemas, policy engine, receipt store, and ledger for the external agent runtime",
+  "description": "ArcLayer Runner Core — types, Zod schemas, policy engine, receipt store, and ledger for the external agent runtime",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -33,8 +33,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "zod": "^3.23.0",
-    "viem": "^2.17.0"
+    "viem": "^2.17.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^22.19.19",

@@ -31,6 +31,7 @@ export interface UpsertAgentAccountParams {
 // ── MCP Session ────────────────────────────────────────────────────────────
 
 export interface McpSessionPermissions {
+  scopes?: string[];
   allowedContracts?: string[];
   allowedActions?: string[];
   [key: string]: unknown;

@@ -31,11 +31,12 @@
     "@arclayer/circle-cli-adapter": "workspace:^",
     "@arclayer/runner-core": "workspace:^",
     "@arclayer/sdk": "workspace:^",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "better-sqlite3": "^12.10.1",
     "commander": "^14.0.2",
     "viem": "^2.17.0",
     "yaml": "^2.7.0",
-    "zod": "^3.23.0"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

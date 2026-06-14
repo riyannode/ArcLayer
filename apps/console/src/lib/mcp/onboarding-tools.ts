@@ -7,14 +7,14 @@ import type { McpSession } from '@/lib/agent-accounts/types';
 import { handleCreateApiKey } from './api-key-tools';
 import type { McpToolContext } from './registry';
 import { MCP_ERRORS, McpError } from './errors';
-import { authAsLegacySession } from './auth-session';
+import { authAsRuntimeSession } from './auth-session';
 
 function baseUrlFromContext(ctx: McpToolContext) {
   return process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/+$/, '') || ctx.request.origin?.replace(/\/+$/, '') || 'https://arclayers.xyz';
 }
 
 async function requireMcpSession(ctx: McpToolContext): Promise<McpSession> {
-  if (ctx.auth) return authAsLegacySession(ctx.auth);
+  if (ctx.auth) return authAsRuntimeSession(ctx.auth);
   const auth = ctx.request.authorization;
   const match = auth?.match(/^Bearer\s+(.+)$/i);
   if (!match || !match[1].startsWith('arc_mcp_sess_')) throw new McpError(MCP_ERRORS.UNAUTHORIZED, 'MCP Bearer token required');

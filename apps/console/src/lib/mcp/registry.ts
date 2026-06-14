@@ -1,8 +1,8 @@
 /**
  * ArcLayer Global MCP — Tool Registry.
  *
- * Static deny-by-default registry. Every tool must be explicitly registered.
- * Supports legacy aliases so old tool names resolve to canonical tools.
+ * Static deny-by-default registry. Every tool must be explicitly registered
+ * with scope, operation type, and annotations. No legacy aliases.
  */
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
@@ -39,6 +39,21 @@ export interface McpToolParam {
   description?: string;
 }
 
+/** Operation classification for MCP tool. */
+export type McpOperation =
+  | 'read'
+  | 'mutation'
+  | 'tx_prepare'
+  | 'signing_request';
+
+/** MCP tool annotations (explicit per tool, NOT auto-derived). */
+export type McpToolAnnotations = {
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  idempotentHint: boolean;
+  openWorldHint: boolean;
+};
+
 /** Full tool definition stored in the registry. */
 export interface McpToolDefinition {
   /** Canonical MCP tool name (e.g. "protocol.status"). */
@@ -47,30 +62,26 @@ export interface McpToolDefinition {
   domain: string;
   /** Human-readable description. */
   description: string;
-  /** Whether this tool requires authentication (future use). */
-  authRequired: boolean;
-  /** Roles allowed to invoke this tool (future use). */
-  roles: string[];
+  /** Explicit required OAuth/runtime scope (e.g. "arclayer:read"). */
+  requiredScope: string;
+  /** Operation type. */
+  operation: McpOperation;
+  /** MCP tool annotations. */
+  annotations: McpToolAnnotations;
   /** Input parameter schema for tools/list. */
   inputSchema: McpToolParam[];
-  /** Legacy alias names that resolve to this tool. */
-  legacyAliases: string[];
   /** Execution handler. */
   handler: McpToolHandler;
-  /** Tool kind: read-only or returns unsigned tx instructions. */
-  kind: 'read' | 'tx_instruction';
 }
 
 // ─── REGISTRY STATE ──────────────────────────────────────────────────────────
 
 const tools = new Map<string, McpToolDefinition>();
-const aliasMap = new Map<string, string>(); // alias → canonical name
 
 // ─── REGISTRATION ────────────────────────────────────────────────────────────
 
 /**
  * Register a tool in the global registry.
- * Also registers all legacy aliases.
  * Throws if a canonical name is registered twice.
  */
 export function registerTool(def: McpToolDefinition): void {
@@ -78,28 +89,16 @@ export function registerTool(def: McpToolDefinition): void {
     throw new Error(`MCP tool already registered: ${def.name}`);
   }
   tools.set(def.name, def);
-  for (const alias of def.legacyAliases) {
-    if (aliasMap.has(alias) && aliasMap.get(alias) !== def.name) {
-      throw new Error(`MCP alias conflict: "${alias}" already maps to "${aliasMap.get(alias)}"`);
-    }
-    aliasMap.set(alias, def.name);
-  }
 }
 
 // ─── LOOKUP ──────────────────────────────────────────────────────────────────
 
 /**
- * Resolve a tool name or legacy alias to its definition.
+ * Resolve a tool name to its definition.
  * Returns undefined if not found.
  */
 export function getTool(name: string): McpToolDefinition | undefined {
-  const canonical = aliasMap.get(name) ?? name;
-  return tools.get(canonical);
-}
-
-/** Check whether a tool name or alias exists. */
-export function hasTool(name: string): boolean {
-  return tools.has(name) || aliasMap.has(name);
+  return tools.get(name);
 }
 
 /** List all registered tools (canonical names only). */
@@ -112,30 +111,7 @@ export function listToolNames(): string[] {
   return Array.from(tools.keys());
 }
 
-/** Get all registered alias names. */
-export function listAliases(): string[] {
-  return Array.from(aliasMap.keys());
-}
-
-/**
- * Convert a tool definition into the MCP tools/list response shape.
- */
-export function toMcpToolSchema(def: McpToolDefinition) {
-  return {
-    name: def.name,
-    description: def.description,
-    inputSchema: {
-      type: 'object' as const,
-      properties: Object.fromEntries(
-        def.inputSchema.map((p) => [
-          p.name,
-          {
-            type: p.type,
-            ...(p.description ? { description: p.description } : {}),
-          },
-        ]),
-      ),
-      required: def.inputSchema.filter((p) => p.required).map((p) => p.name),
-    },
-  };
+/** Clear all registered tools (for testing). */
+export function clearRegistry(): void {
+  tools.clear();
 }

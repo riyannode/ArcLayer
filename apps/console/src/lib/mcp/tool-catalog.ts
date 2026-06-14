@@ -1,8 +1,16 @@
 /**
- * ArcLayer Global MCP — Server.
+ * ArcLayer Global MCP — Tool Catalog.
  *
- * Contains all tool implementations, registration, and MCP JSON-RPC dispatch.
- * Route layer is a thin passthrough; all logic lives here.
+ * All tool registrations extracted from server.ts with explicit
+ * requiredScope, operation, and annotations per tool.
+ *
+ * Invariants enforced by validateToolCatalog():
+ * - No duplicate tool names
+ * - Every tool has non-empty requiredScope
+ * - Every tool has operation
+ * - Every annotation has four booleans
+ * - No wildcard scope
+ * - No unsupported schema type
  */
 
 import { encodeFunctionData, keccak256, toBytes, type Hex } from 'viem';
@@ -15,6 +23,13 @@ import {
   ARC_TOKENS,
 } from '@arclayer/sdk';
 import { indexerUrl } from '@/lib/indexer';
+import {
+  type McpToolDefinition,
+  type McpToolAnnotations,
+  registerTool,
+  listTools,
+} from './registry';
+import { McpError, MCP_ERRORS } from './errors';
 import {
   handleJobsGetOnchainStatus,
   handleJobsGetLifecycleSummary,
@@ -29,28 +44,6 @@ import {
   handleEvaluatorPrepareRejectJobForSession,
   handleClientPrepareClaimRefundForSession,
 } from './erc8183-tools';
-import {
-  type McpToolDefinition,
-  type McpToolContext,
-  type RequestContext,
-  registerTool,
-  getTool,
-  listTools,
-  hasTool,
-  toMcpToolSchema,
-} from './registry';
-import {
-  MCP_ERRORS,
-  McpError,
-  okResult,
-  errorResult,
-  jsonRpcResult,
-  jsonRpcError,
-  thrownToMcpError,
-} from './errors';
-import { redactString } from './redact';
-import { resolveMcpBearerAuth } from './auth';
-import { hasMcpScope, PUBLIC_MCP_TOOLS, TOOL_SCOPES } from './tool-scopes';
 import {
   handleGetAgentAccount,
   handlePrepareRegisterAgent,
@@ -96,11 +89,48 @@ import {
 
 const ARC_CHAIN_ID = 5042002;
 const ARC_RPC = 'https://rpc.drpc.testnet.arc.network';
-const MCP_VERSION = '0.1.0';
-const MCP_SERVER_NAME = 'arclayer-global-mcp';
-const PROTOCOL_VERSION = '2025-06-18';
 
-// ─── TOOL REGISTRATION ───────────────────────────────────────────────────────
+// ─── ANNOTATION HELPERS ─────────────────────────────────────────────────────
+
+const ANNOTATIONS = {
+  /** Read-only protocol lookup. */
+  readOnly: (): McpToolAnnotations => ({
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
+  /** Prepare unsigned calldata (not destructive, idempotent). */
+  txPrepare: (): McpToolAnnotations => ({
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
+  /** Heartbeat/checkpoint mutation (not destructive, idempotent). */
+  mutation: (): McpToolAnnotations => ({
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: true,
+  }),
+  /** Key revoke or destructive administrative action. */
+  destructive: (): McpToolAnnotations => ({
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  }),
+  /** Non-idempotent mutation (e.g. create API key). */
+  mutationNonIdempotent: (): McpToolAnnotations => ({
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: true,
+  }),
+} as const;
+
+// ─── REGISTER ALL TOOLS ─────────────────────────────────────────────────────
 
 let registered = false;
 
@@ -118,11 +148,10 @@ export function registerAllTools(): void {
     name: 'protocol.status',
     domain: 'protocol',
     description: 'Get Arc Network configuration: chain ID, RPC, contracts, explorer, faucet.',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'arclayer:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [],
-    legacyAliases: ['arc_network_info'],
-    kind: 'read',
     handler: async () => ({
       network: 'Arc Testnet',
       chainId: ARC_CHAIN_ID,
@@ -140,7 +169,6 @@ export function registerAllTools(): void {
       },
       cctpDomain: 26,
       supportedStandards: ['ERC-8004', 'ERC-8183', 'x402'],
-      mcpVersion: MCP_VERSION,
       docs: {
         main: 'https://docs.arc.io',
         mcpDocs: 'https://docs.arc.io/ai/mcp',
@@ -155,16 +183,14 @@ export function registerAllTools(): void {
     name: 'protocol.health',
     domain: 'protocol',
     description: 'Aggregate protocol health: indexer liveness + timestamp.',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'arclayer:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [],
-    legacyAliases: ['protocol_overview'],
-    kind: 'read',
     handler: async () => {
       const BUDGET_MS = 2000;
       const ts = new Date().toISOString();
 
-      // Run health + overview in parallel under a single 2s budget.
       const [healthResult, overviewResult] = await Promise.allSettled([
         fetch(indexerUrl('/health'), { cache: 'no-store', signal: AbortSignal.timeout(BUDGET_MS) }),
         fetch(indexerUrl('/overview'), { cache: 'no-store', signal: AbortSignal.timeout(BUDGET_MS) }).then((r) => r.json().catch(() => null)),
@@ -187,15 +213,14 @@ export function registerAllTools(): void {
     name: 'agents.discover',
     domain: 'agents',
     description: 'List all registered agents from the indexer.',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'agents:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'limit', type: 'number', description: 'Optional max count (1-50).' },
       { name: 'role', type: 'string', description: 'Optional role filter.' },
       { name: 'capability', type: 'string', description: 'Optional capability filter.' },
     ],
-    legacyAliases: ['list_agents'],
-    kind: 'read',
     handler: async (args) => {
       const limit = typeof args.limit === 'number' ? Math.max(1, Math.min(50, args.limit)) : undefined;
       const roleFilter = typeof args.role === 'string' ? args.role.toLowerCase().trim() : undefined;
@@ -204,7 +229,6 @@ export function registerAllTools(): void {
       const json = await res.json().catch(() => ({}));
       let list: unknown[] = Array.isArray(json) ? json : json.agents || json.data || [];
 
-      // Apply role filter: match agent.role, agent.roles[].name, or agent.roles[].id
       if (roleFilter) {
         list = list.filter((a: any) => {
           const primary = String(a.role || '').toLowerCase();
@@ -215,7 +239,6 @@ export function registerAllTools(): void {
         });
       }
 
-      // Apply capability filter: match any entry in agent.capabilities array
       if (capabilityFilter) {
         list = list.filter((a: any) => {
           const caps: string[] = Array.isArray(a.capabilities)
@@ -237,11 +260,10 @@ export function registerAllTools(): void {
     name: 'agents.get',
     domain: 'agents',
     description: 'Get a single agent by tokenId (ERC-8004 NFT ID).',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'agents:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [{ name: 'tokenId', type: 'string', required: true, description: 'ERC-8004 NFT token ID.' }],
-    legacyAliases: ['get_agent'],
-    kind: 'read',
     handler: async (args) => {
       const id = String(args.tokenId || '').trim();
       if (!id) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'tokenId required');
@@ -257,15 +279,14 @@ export function registerAllTools(): void {
     name: 'jobs.list_public',
     domain: 'jobs',
     description: 'List jobs from the indexer. Supports optional status and evaluatorAddress filters.',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'jobs:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'status', type: 'string', description: 'created | funded | submitted | completed' },
       { name: 'evaluatorAddress', type: 'string', description: 'Filter by evaluator address (case-insensitive).' },
       { name: 'limit', type: 'number', description: 'Optional max count (1-50).' },
     ],
-    legacyAliases: ['list_jobs'],
-    kind: 'read',
     handler: async (args) => {
       const STATUS_MAP: Record<string, number> = {
         created: 0, open: 0,
@@ -297,11 +318,10 @@ export function registerAllTools(): void {
     name: 'jobs.get_public',
     domain: 'jobs',
     description: 'Get a single job by jobId.',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'jobs:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [{ name: 'jobId', type: 'string', required: true, description: 'Job ID.' }],
-    legacyAliases: ['get_job'],
-    kind: 'read',
     handler: async (args) => {
       const id = String(args.jobId || '').trim();
       if (!id) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
@@ -317,11 +337,10 @@ export function registerAllTools(): void {
     name: 'docs.arc_search',
     domain: 'docs',
     description: 'Search Arc Network documentation by scanning https://docs.arc.io/llms.txt.',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'arclayer:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [{ name: 'query', type: 'string', required: true, description: 'Search query for Arc docs.' }],
-    legacyAliases: ['arc_docs_search'],
-    kind: 'read',
     handler: async (args) => {
       const query = String(args.query || '').trim();
       if (!query) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'query required');
@@ -348,13 +367,12 @@ export function registerAllTools(): void {
     domain: 'identity',
     description:
       'Build unsigned calldata for ERC-8004 IdentityRegistry.register(metadataURI). Returns tx instructions; the caller signs and sends.',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'tx:request',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'metadataURI', type: 'string', required: true, description: 'Public agent manifest URL (HTTPS or IPFS).' },
     ],
-    legacyAliases: ['register_agent_calldata'],
-    kind: 'tx_instruction',
     handler: async (args) => {
       const metadataURI = String(args.metadataURI || '').trim();
       if (!metadataURI) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'metadataURI required');
@@ -389,8 +407,9 @@ export function registerAllTools(): void {
     name: 'reputation.give_feedback',
     domain: 'reputation',
     description: 'Build unsigned calldata for ERC-8004 ReputationRegistry.giveFeedback(...).',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'tx:request',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'agentTokenId', type: 'string', required: true },
       { name: 'score', type: 'string', required: true },
@@ -401,8 +420,6 @@ export function registerAllTools(): void {
       { name: 'context', type: 'string', required: true },
       { name: 'ref', type: 'string', required: true },
     ],
-    legacyAliases: ['give_feedback_calldata'],
-    kind: 'tx_instruction',
     handler: async (args) => {
       const data = encodeFunctionData({
         abi: ERC8004_REPUTATION_REGISTRY_ABI as any,
@@ -435,16 +452,15 @@ export function registerAllTools(): void {
     name: 'validation.request_calldata',
     domain: 'validation',
     description: 'Build unsigned calldata for ERC-8004 ValidationRegistry.validationRequest(...).',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'tx:request',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'validator', type: 'string', required: true },
       { name: 'agentTokenId', type: 'string', required: true },
       { name: 'taskUri', type: 'string', required: true },
       { name: 'requestHash', type: 'string', required: true },
     ],
-    legacyAliases: ['validation_request_calldata'],
-    kind: 'tx_instruction',
     handler: async (args) => {
       const data = encodeFunctionData({
         abi: ERC8004_VALIDATION_REGISTRY_ABI as any,
@@ -471,8 +487,9 @@ export function registerAllTools(): void {
     name: 'validation.response_calldata',
     domain: 'validation',
     description: 'Build unsigned calldata for ERC-8004 ValidationRegistry.validationResponse(...).',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'tx:request',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'requestHash', type: 'string', required: true },
       { name: 'status', type: 'string', required: true },
@@ -480,8 +497,6 @@ export function registerAllTools(): void {
       { name: 'resultHash', type: 'string', required: true },
       { name: 'reason', type: 'string', required: true },
     ],
-    legacyAliases: ['validation_response_calldata'],
-    kind: 'tx_instruction',
     handler: async (args) => {
       const data = encodeFunctionData({
         abi: ERC8004_VALIDATION_REGISTRY_ABI as any,
@@ -509,11 +524,10 @@ export function registerAllTools(): void {
     name: 'validation.status_read',
     domain: 'validation',
     description: 'Read helper for ValidationRegistry.getValidationStatus([requestHash]).',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'arclayer:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [{ name: 'requestHash', type: 'string', required: true }],
-    legacyAliases: ['validation_status_read'],
-    kind: 'read',
     handler: async (args) => ({
       method: 'getValidationStatus',
       contract: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
@@ -530,8 +544,9 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Build unsigned calldata for ERC-8183 AgenticCommerce.createJob(provider, evaluator, expiredAt, description, hook).',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'provider', type: 'string', required: true, description: 'Provider/worker wallet address.' },
       { name: 'evaluator', type: 'string', required: true, description: 'Evaluator wallet address.' },
@@ -539,8 +554,6 @@ export function registerAllTools(): void {
       { name: 'description', type: 'string', required: true, description: 'Job description string.' },
       { name: 'hook', type: 'string', description: 'Optional hook contract address (default: 0x0).' },
     ],
-    legacyAliases: ['create_job_calldata'],
-    kind: 'tx_instruction',
     handler: async (args) => {
       const provider = String(args.provider || '').trim();
       const evaluator = String(args.evaluator || '').trim();
@@ -580,15 +593,14 @@ export function registerAllTools(): void {
     name: 'provider.prepare_set_budget',
     domain: 'jobs',
     description: 'Build unsigned calldata for ERC-8183 AgenticCommerce.setBudget(jobId, amount, optParams).',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'amount', type: 'string', required: true, description: 'Budget in USDC atomic units (6 decimals).' },
       { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
-    legacyAliases: ['set_budget_calldata'],
-    kind: 'tx_instruction',
     handler: async (args) => {
       const jobIdRaw = String(args.jobId || '').trim();
       const amountRaw = String(args.amount || '').trim();
@@ -615,13 +627,12 @@ export function registerAllTools(): void {
     name: 'client.prepare_approve_usdc',
     domain: 'jobs',
     description: 'Build unsigned calldata for USDC.approve(AgenticCommerce, amount). Must be called before fund().',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'amount', type: 'string', required: true, description: 'Amount in USDC atomic units (6 decimals).' },
     ],
-    legacyAliases: ['approve_usdc_calldata'],
-    kind: 'tx_instruction',
     handler: async (args) => {
       const amountRaw = String(args.amount || '').trim();
       if (!amountRaw) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'amount required');
@@ -646,14 +657,13 @@ export function registerAllTools(): void {
     name: 'client.prepare_fund_job',
     domain: 'jobs',
     description: 'Build unsigned calldata for ERC-8183 AgenticCommerce.fund(jobId, optParams).',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
-    legacyAliases: ['fund_job_calldata'],
-    kind: 'tx_instruction',
     handler: async (args) => {
       const jobIdRaw = String(args.jobId || '').trim();
       const optParams = (String(args.optParams || '0x').trim() || '0x') as Hex;
@@ -679,15 +689,14 @@ export function registerAllTools(): void {
     name: 'provider.prepare_submit_job',
     domain: 'jobs',
     description: 'Build unsigned calldata for ERC-8183 AgenticCommerce.submit(jobId, deliverableHash, optParams).',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'deliverableHash', type: 'string', required: true, description: 'Keccak256 hash of the deliverable content.' },
       { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
-    legacyAliases: ['submit_job_calldata'],
-    kind: 'tx_instruction',
     handler: async (args) => {
       const jobIdRaw = String(args.jobId || '').trim();
       const deliverableHash = String(args.deliverableHash || '').trim();
@@ -714,16 +723,15 @@ export function registerAllTools(): void {
     name: 'evaluator.prepare_complete_job',
     domain: 'jobs',
     description: 'Build unsigned calldata for ERC-8183 AgenticCommerce.complete(jobId, reason, optParams).',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'reason', type: 'string', description: 'Reason string (will be keccak256-hashed) OR a 0x-prefixed 32-byte hash.' },
       { name: 'reasonHash', type: 'string', description: 'Optional pre-computed bytes32 reason hash; takes precedence.' },
       { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
-    legacyAliases: ['complete_job_calldata'],
-    kind: 'tx_instruction',
     handler: async (args) => {
       const jobIdRaw = String(args.jobId || '').trim();
       if (!jobIdRaw) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
@@ -760,16 +768,15 @@ export function registerAllTools(): void {
     name: 'evaluator.prepare_reject_job',
     domain: 'jobs',
     description: 'Build unsigned calldata for ERC-8183 AgenticCommerce.reject(jobId, reason, optParams).',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'reason', type: 'string', description: 'Reason string (will be keccak256-hashed) OR a 0x-prefixed 32-byte hash.' },
       { name: 'reasonHash', type: 'string', description: 'Optional pre-computed bytes32 reason hash; takes precedence.' },
       { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
-    legacyAliases: ['reject_job_calldata'],
-    kind: 'tx_instruction',
     handler: async (args) => {
       const jobIdRaw = String(args.jobId || '').trim();
       if (!jobIdRaw) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId required');
@@ -809,13 +816,10 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Read on-chain ERC-8183 job state via AgenticCommerce.getJob(). Falls back to indexer if contract read fails.',
-    authRequired: false,
-    roles: [],
-    inputSchema: [
-      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
-    ],
-    legacyAliases: [],
-    kind: 'read',
+    requiredScope: 'jobs:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
+    inputSchema: [{ name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' }],
     handler: (args) => handleJobsGetOnchainStatus(args),
   });
 
@@ -824,13 +828,10 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Compute next actor/action for an ERC-8183 job based on on-chain state. Supports both direct hire and open/global flows.',
-    authRequired: false,
-    roles: [],
-    inputSchema: [
-      { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
-    ],
-    legacyAliases: [],
-    kind: 'read',
+    requiredScope: 'jobs:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
+    inputSchema: [{ name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' }],
     handler: (args) => handleJobsGetLifecycleSummary(args),
   });
 
@@ -841,8 +842,9 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Build unsigned calldata for AgenticCommerce.createJob (direct hire flow). Provider is required and non-zero. Requires MCP Bearer session.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'provider', type: 'string', required: true, description: 'Provider/worker wallet address (non-zero).' },
       { name: 'evaluator', type: 'string', description: 'Evaluator wallet address. Defaults to session owner for self-evaluation.' },
@@ -850,8 +852,6 @@ export function registerAllTools(): void {
       { name: 'deadlineMinutes', type: 'number', description: 'Minutes until job expires (15-43200, default 1440).' },
       { name: 'hook', type: 'string', description: 'Optional hook contract address (default: 0x0).' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleClientPrepareCreateJobForSession(args, ctx),
   });
 
@@ -860,16 +860,15 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Build unsigned calldata for AgenticCommerce.createJob with provider=address(0) (open/global job board flow). Provider must be assigned later via setProvider. Requires MCP Bearer session.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'evaluator', type: 'string', description: 'Evaluator wallet address. Defaults to session owner for self-evaluation.' },
       { name: 'description', type: 'string', required: true, description: 'Job description (max 2048 chars).' },
       { name: 'deadlineMinutes', type: 'number', description: 'Minutes until job expires (15-43200, default 1440).' },
       { name: 'hook', type: 'string', description: 'Optional hook contract address (default: 0x0).' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleClientPrepareCreateOpenJobForSession(args, ctx),
   });
 
@@ -878,14 +877,13 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Build unsigned calldata for AgenticCommerce.setProvider(jobId, provider). Assigns/hires a provider for an open job created with provider=address(0). Verified 2-arg on-chain signature. Requires MCP Bearer session.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'provider', type: 'string', required: true, description: 'Provider/worker wallet address (non-zero).' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleClientPrepareSetProviderForSession(args, ctx),
   });
 
@@ -894,16 +892,15 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Build unsigned calldata for AgenticCommerce.setBudget(jobId, amount, optParams). Current Arc Testnet deployment requires the assigned provider to call this while the job is Open. Requires MCP Bearer session.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'amountAtomic', type: 'string', description: 'Budget in USDC atomic units (6 decimals).' },
       { name: 'amountUsdc', type: 'string', description: 'Budget in USDC (e.g. "1.5"). Converted to 6-decimal atomic.' },
       { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleProviderPrepareSetBudgetForSession(args, ctx),
   });
 
@@ -912,8 +909,9 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Build ordered unsigned txs for USDC approve + AgenticCommerce.fund(jobId, optParams). Checks USDC allowance if clientAddress is provided; returns fund-only if sufficient. Requires MCP Bearer session.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'amountAtomic', type: 'string', description: 'Fund amount in USDC atomic units. If omitted, reads budget from on-chain.' },
@@ -921,8 +919,6 @@ export function registerAllTools(): void {
       { name: 'clientAddress', type: 'string', description: 'Client wallet address for allowance check.' },
       { name: 'optParams', type: 'string', description: 'Optional bytes payload for fund (default "0x").' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleClientPrepareFundJobBundleForSession(args, ctx),
   });
 
@@ -931,16 +927,15 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Build unsigned calldata for AgenticCommerce.submit(jobId, deliverableHash, optParams). Requires MCP Bearer session.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'deliverableHash', type: 'string', description: 'Keccak256 hash of the deliverable (0x-prefixed 32-byte hex).' },
       { name: 'deliverable', type: 'string', description: 'Deliverable content string (will be keccak256-hashed).' },
       { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleProviderPrepareSubmitJobForSession(args, ctx),
   });
 
@@ -949,16 +944,15 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Build unsigned calldata for AgenticCommerce.complete(jobId, reasonHash, optParams). Releases escrowed USDC to provider. Requires MCP Bearer session.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'reason', type: 'string', description: 'Reason string (will be keccak256-hashed). Default: "approved".' },
       { name: 'reasonHash', type: 'string', description: 'Pre-computed bytes32 reason hash (takes precedence).' },
       { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleEvaluatorPrepareCompleteJobForSession(args, ctx),
   });
 
@@ -967,16 +961,15 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Build unsigned calldata for AgenticCommerce.reject(jobId, reasonHash, optParams). Client rejects/cancels an Open job before funding. Requires MCP Bearer session.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'reason', type: 'string', description: 'Reason string (will be keccak256-hashed). Default: "client_rejected".' },
       { name: 'reasonHash', type: 'string', description: 'Pre-computed bytes32 reason hash (takes precedence).' },
       { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleClientPrepareRejectJobForSession(args, ctx),
   });
 
@@ -985,16 +978,15 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Build unsigned calldata for AgenticCommerce.reject(jobId, reasonHash, optParams). Evaluator rejects a Funded or Submitted job. If escrow exists, funds are refunded to client. Requires MCP Bearer session.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
       { name: 'reason', type: 'string', description: 'Reason string (will be keccak256-hashed). Default: "rejected".' },
       { name: 'reasonHash', type: 'string', description: 'Pre-computed bytes32 reason hash (takes precedence).' },
       { name: 'optParams', type: 'string', description: 'Optional bytes payload (default "0x").' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleEvaluatorPrepareRejectJobForSession(args, ctx),
   });
 
@@ -1003,13 +995,12 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Build unsigned calldata for AgenticCommerce.claimRefund(jobId). Returns escrow to client after job expiry. Signature: claimRefund(uint256 jobId) — no optParams. Requires MCP Bearer session.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleClientPrepareClaimRefundForSession(args, ctx),
   });
 
@@ -1020,11 +1011,10 @@ export function registerAllTools(): void {
     domain: 'identity',
     description:
       'Get the agent account (Circle Smart Account) bound to the authenticated MCP session. Returns owner and agent account addresses.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'arclayer:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleGetAgentAccount,
   });
 
@@ -1033,8 +1023,9 @@ export function registerAllTools(): void {
     domain: 'identity',
     description:
       'Validate agent metadata and build encoded calldata for ERC-8004 IdentityRegistry.register(metadataURI). Authenticated — requires MCP Bearer token. Does NOT create approval or execute tx.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'tx:request',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'name', type: 'string', required: true, description: 'Agent name (max 128 chars).' },
       { name: 'role', type: 'string', required: true, description: 'Agent role: provider, client, evaluator, agent, oracle, analyzer, executor, worker, buyer, settler.' },
@@ -1042,8 +1033,6 @@ export function registerAllTools(): void {
       { name: 'description', type: 'string', required: true, description: 'Agent description (max 1024 chars).' },
       { name: 'endpoint', type: 'string', description: 'Optional endpoint URL.' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: handlePrepareRegisterAgent,
   });
 
@@ -1052,8 +1041,9 @@ export function registerAllTools(): void {
     domain: 'identity',
     description:
       'Prepare + create approval for ERC-8004 identity registration in one call. Validates metadata, builds calldata, creates approval via approval engine. Returns approval ID for tracking.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'tx:request',
+    operation: 'tx_prepare',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'name', type: 'string', required: true, description: 'Agent name (max 128 chars).' },
       { name: 'role', type: 'string', required: true, description: 'Agent role: provider, client, evaluator, agent, oracle, analyzer, executor, worker, buyer, settler.' },
@@ -1061,8 +1051,6 @@ export function registerAllTools(): void {
       { name: 'description', type: 'string', required: true, description: 'Agent description (max 1024 chars).' },
       { name: 'endpoint', type: 'string', description: 'Optional endpoint URL.' },
     ],
-    legacyAliases: ['register_agent_approval'],
-    kind: 'tx_instruction',
     handler: handleRequestRegisterAgentApproval,
   });
 
@@ -1071,16 +1059,14 @@ export function registerAllTools(): void {
     domain: 'identity',
     description:
       'Get the status of an identity registration approval. Returns approval status, addresses, timestamps, and summary.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'arclayer:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'approvalId', type: 'string', required: true, description: 'Approval ID from request_register_agent_approval.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleGetRegistrationStatus,
   });
-
 
   // ── ONBOARDING: MCP registration fallback ───────────────────────────────
 
@@ -1088,13 +1074,12 @@ export function registerAllTools(): void {
     name: 'onboarding.list_role_presets',
     domain: 'onboarding',
     description: 'List ArcLayer-approved ERC-8183 onboarding role presets. Enabled presets are returned by default.',
-    authRequired: false,
-    roles: [],
+    requiredScope: 'arclayer:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'includeDisabled', type: 'boolean', description: 'Include disabled/staged presets when true.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleListOnboardingRolePresets,
   });
 
@@ -1102,8 +1087,9 @@ export function registerAllTools(): void {
     name: 'onboarding.create_registration_draft',
     domain: 'onboarding',
     description: 'Create an approved MCP onboarding registration draft and return a browser mint URL for /register/erc8004.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'rolePresetId', type: 'string', required: true, description: 'Approved role preset id from onboarding.list_role_presets.' },
       { name: 'name', type: 'string', required: true, description: 'Agent name.' },
@@ -1113,18 +1099,16 @@ export function registerAllTools(): void {
       { name: 'avatar', type: 'string', description: 'Optional avatar URL.' },
       { name: 'links', type: 'object', description: 'Optional homepage/docs/repo/x links.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleCreateRegistrationDraft,
   });
-
 
   registerTool({
     name: 'onboarding.start_agent_bundle',
     domain: 'onboarding',
     description: 'Create a full ArcLayer Agent Bundle draft: role preset, manifest, metadata URI, registration intent, and browser ERC-8004 mint URL.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'jobs:prepare',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'rolePresetId', type: 'string', description: 'Approved role preset id. Defaults to provider.' },
       { name: 'name', type: 'string', description: 'Agent name.' },
@@ -1134,8 +1118,6 @@ export function registerAllTools(): void {
       { name: 'avatar', type: 'string', description: 'Optional avatar URL.' },
       { name: 'links', type: 'object', description: 'Optional homepage/docs/repo/x links.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleStartAgentBundle,
   });
 
@@ -1143,13 +1125,12 @@ export function registerAllTools(): void {
     name: 'onboarding.get_agent_bundle_status',
     domain: 'onboarding',
     description: 'Poll an ArcLayer Agent Bundle registration intent after browser mint. Returns draft, expired, or completed status.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'jobs:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'intentId', type: 'string', required: true, description: 'Registration intent id from onboarding.start_agent_bundle.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleGetAgentBundleStatus,
   });
 
@@ -1157,16 +1138,15 @@ export function registerAllTools(): void {
     name: 'onboarding.create_agent_runtime_key',
     domain: 'onboarding',
     description: 'Create an ArcLayer API key for a completed Agent Bundle. Returns raw key once and env snippet.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutationNonIdempotent(),
     inputSchema: [
       { name: 'intentId', type: 'string', description: 'Completed registration intent id.' },
       { name: 'agentId', type: 'string', description: 'Optional agent id. If intentId is present, intent agentId is used.' },
       { name: 'preset', type: 'string', description: 'Optional role/API-key preset. Defaults to intent rolePresetId or provider.' },
       { name: 'label', type: 'string', description: 'Optional key label.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleCreateAgentRuntimeKey,
   });
 
@@ -1177,15 +1157,14 @@ export function registerAllTools(): void {
     domain: 'provider',
     description:
       'Create an API key for a registered agent. Preset "provider" or "client". Returns raw key ONCE. Requires MCP Bearer token and agent ownership.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutationNonIdempotent(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Agent ID or token ID.' },
       { name: 'preset', type: 'string', description: 'Key preset: "provider" (default) or "client".' },
       { name: 'label', type: 'string', description: 'Optional human-readable label (max 80 chars).' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleCreateApiKey,
   });
 
@@ -1194,13 +1173,12 @@ export function registerAllTools(): void {
     domain: 'provider',
     description:
       'List API key metadata for an agent. Returns id, prefix, label, scopes, status. Never returns raw key or hash. Requires MCP Bearer token and agent ownership.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Agent ID or token ID.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleListApiKeys,
   });
 
@@ -1209,14 +1187,13 @@ export function registerAllTools(): void {
     domain: 'provider',
     description:
       'Revoke an API key by ID. Requires MCP Bearer token and agent ownership.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.destructive(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Agent ID or token ID.' },
       { name: 'keyId', type: 'string', required: true, description: 'API key ID to revoke.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleRevokeApiKey,
   });
 
@@ -1227,14 +1204,13 @@ export function registerAllTools(): void {
     domain: 'provider',
     description:
       'Get provider runtime context: state, active run, latest checkpoint, active applications, resume plan.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'providerAddress', type: 'string', description: 'Provider wallet address. If provided, resume plan verifies on-chain provider matches.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleProviderRuntimeGetContext,
   });
 
@@ -1242,13 +1218,12 @@ export function registerAllTools(): void {
     name: 'provider.runtime_heartbeat',
     domain: 'provider',
     description: 'Update provider last_seen_at. Creates runtime state if missing.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleProviderRuntimeHeartbeat,
   });
 
@@ -1257,15 +1232,14 @@ export function registerAllTools(): void {
     domain: 'provider',
     description:
       'Start a new job run or return existing active run. Idempotent on provider:agentId:job:jobId.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
       { name: 'phase', type: 'string', description: 'Initial phase (default: budget_tx_sent).' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleProviderRuntimeStartJob,
   });
 
@@ -1273,8 +1247,9 @@ export function registerAllTools(): void {
     name: 'provider.runtime_write_checkpoint',
     domain: 'provider',
     description: 'Write an append-only checkpoint for a job run. NOT idempotent — each call creates a new row.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutationNonIdempotent(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
@@ -1287,8 +1262,6 @@ export function registerAllTools(): void {
       { name: 'note', type: 'string', description: 'Human-readable note.' },
       { name: 'metadata', type: 'object', description: 'Additional metadata.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleProviderRuntimeWriteCheckpoint,
   });
 
@@ -1296,15 +1269,14 @@ export function registerAllTools(): void {
     name: 'provider.runtime_get_resume_plan',
     domain: 'provider',
     description: 'Compute next provider action from checkpoint + on-chain state.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'jobId', type: 'string', description: 'Specific job ID (optional, uses active run if omitted).' },
       { name: 'providerAddress', type: 'string', description: 'Provider wallet address. Verifies on-chain provider matches this bot.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleProviderRuntimeGetResumePlan,
   });
 
@@ -1313,16 +1285,15 @@ export function registerAllTools(): void {
     domain: 'provider',
     description:
       'List open/global jobs where provider = address(0). Server-side filtered, bounded pagination.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'limit', type: 'number', description: 'Max results (1-50, default 20).' },
       { name: 'minBudgetUsdc', type: 'string', description: 'Minimum budget in USDC.' },
       { name: 'includeExpired', type: 'boolean', description: 'Include expired jobs (default false).' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleProviderListOpenJobs,
   });
 
@@ -1331,15 +1302,14 @@ export function registerAllTools(): void {
     domain: 'provider',
     description:
       'List jobs assigned to a specific provider address (provider = address, status = Open). For direct-assigned job discovery.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'providerAddress', type: 'string', required: true, description: 'Provider wallet address to search for.' },
       { name: 'limit', type: 'number', description: 'Max results (1-50, default 20).' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleProviderListAssignedJobs,
   });
 
@@ -1348,8 +1318,9 @@ export function registerAllTools(): void {
     domain: 'provider',
     description:
       'Apply to an open/global job. Provider bot must NOT call setProvider — client assigns onchain.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
@@ -1357,11 +1328,9 @@ export function registerAllTools(): void {
       { name: 'quoteAmountUsdc', type: 'string', description: 'Quote amount in USDC (e.g. "1.5").' },
       { name: 'quoteAmountAtomic', type: 'string', description: 'Quote amount in atomic units (6 decimals).' },
       { name: 'message', type: 'string', description: 'Application message.' },
-      { name: 'capabilities', type: 'object', description: 'Provider capabilities array.' },
+      { name: 'capabilities', type: 'array', description: 'Provider capabilities array (string[]).' },
       { name: 'metadata', type: 'object', description: 'Additional metadata.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleProviderApplyOpenJob,
   });
 
@@ -1369,14 +1338,13 @@ export function registerAllTools(): void {
     name: 'provider.withdraw_open_job_application',
     domain: 'provider',
     description: 'Withdraw an open job application.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleProviderWithdrawOpenJobApplication,
   });
 
@@ -1384,14 +1352,13 @@ export function registerAllTools(): void {
     name: 'provider.list_my_open_job_applications',
     domain: 'provider',
     description: "List provider's open job applications.",
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'status', type: 'string', description: 'Filter by status (submitted, withdrawn, selected, rejected, expired).' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleProviderListMyOpenJobApplications,
   });
 
@@ -1400,15 +1367,14 @@ export function registerAllTools(): void {
     domain: 'provider',
     description:
       'Retry a failed provider job run. Allowed only if latest phase is runtime_failed or submit_tx_failed, on-chain status is Funded, and retry count < 3.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID to retry.' },
       { name: 'reason', type: 'string', description: 'Reason for retry (default: manual retry).' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleProviderRuntimeRetryJob,
   });
 
@@ -1417,15 +1383,14 @@ export function registerAllTools(): void {
     domain: 'provider',
     description:
       'Mark a job run as completed. Clears active job/run from runtime state. Used by bot to clean up terminal jobs.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'provider:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
       { name: 'runId', type: 'string', required: true, description: 'Run ID to complete.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: handleProviderRuntimeCompleteRun,
   });
 
@@ -1436,8 +1401,9 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Create an ERC-8183 job via web-session signing. Sends signing request to open ArcLayer Profile. Requires ARCLAYER_SIGNING_SESSION_ID.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'tx:request',
+    operation: 'signing_request',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'provider', type: 'string', required: true, description: 'Provider/worker wallet address.' },
       { name: 'evaluator', type: 'string', required: true, description: 'Evaluator wallet address (non-zero, usually client wallet).' },
@@ -1445,8 +1411,6 @@ export function registerAllTools(): void {
       { name: 'description', type: 'string', required: true, description: 'Job description.' },
       { name: 'hook', type: 'string', description: 'Hook address (default: 0x).' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleRequestCreateJobWebSign(args, ctx),
   });
 
@@ -1455,14 +1419,13 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Fund a job that already has budget set (provider must set budget first). Builds USDC approve + fund bundle. This tool does not set budget.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'tx:request',
+    operation: 'signing_request',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
       { name: 'amount', type: 'string', description: 'Amount in USDC atomic units (optional — derived from on-chain budget if omitted, must match if provided).' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleRequestFundJobWebSign(args, ctx),
   });
 
@@ -1471,238 +1434,126 @@ export function registerAllTools(): void {
     domain: 'jobs',
     description:
       'Complete an ERC-8183 job via web-session signing. Releases escrow to provider.',
-    authRequired: true,
-    roles: [],
+    requiredScope: 'tx:request',
+    operation: 'signing_request',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
       { name: 'reasonHash', type: 'string', description: 'Reason hash (bytes32). Defaults to keccak256("approved").' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleRequestCompleteJobWebSign(args, ctx),
   });
 
   registerTool({
     name: 'client.request_reject_job_web_sign',
     domain: 'jobs',
-    description:
-      'Reject an ERC-8183 job via web-session signing.',
-    authRequired: true,
-    roles: [],
+    description: 'Reject an ERC-8183 job via web-session signing.',
+    requiredScope: 'tx:request',
+    operation: 'signing_request',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
       { name: 'reasonHash', type: 'string', description: 'Reason hash (bytes32). Defaults to keccak256("approved").' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleRequestRejectJobWebSign(args, ctx),
   });
 
   registerTool({
     name: 'client.request_claim_refund_web_sign',
     domain: 'jobs',
-    description:
-      'Claim refund for an expired ERC-8183 job via web-session signing.',
-    authRequired: true,
-    roles: [],
+    description: 'Claim refund for an expired ERC-8183 job via web-session signing.',
+    requiredScope: 'tx:request',
+    operation: 'signing_request',
+    annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
       { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
     ],
-    legacyAliases: [],
-    kind: 'tx_instruction',
     handler: (args, ctx) => handleRequestClaimRefundWebSign(args, ctx),
   });
 
   registerTool({
     name: 'client.get_signing_request_status',
     domain: 'jobs',
-    description:
-      'Poll the status of a web-session signing request. Returns txHash, jobId (for createJob), and result.',
-    authRequired: true,
-    roles: [],
+    description: 'Poll the status of a web-session signing request. Returns txHash, jobId (for createJob), and result.',
+    requiredScope: 'tx:request',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'requestId', type: 'string', required: true, description: 'Signing request ID.' },
     ],
-    legacyAliases: [],
-    kind: 'read',
     handler: (args, ctx) => handleGetSigningRequestStatus(args, ctx),
   });
 }
 
-// ─── MANIFEST ────────────────────────────────────────────────────────────────
+// ─── CATALOG VALIDATION ─────────────────────────────────────────────────────
 
-export function buildManifest(_ctx?: RequestContext) {
+/**
+ * Validate the tool catalog. Must pass before build.
+ * Rejects: duplicate names, missing scope, empty scope, missing annotation,
+ * unsupported operation, unsupported input type, wildcard scope.
+ */
+export function validateToolCatalog(): void {
   registerAllTools();
-  return {
-    name: MCP_SERVER_NAME,
-    version: MCP_VERSION,
-    description:
-      'ArcLayer Global MCP — agentic commerce tools on Arc Testnet. This is NOT the official Arc MCP server (https://docs.arc.io/mcp).',
-    network: {
-      name: 'Arc Testnet',
-      chainId: ARC_CHAIN_ID,
-      rpc: ARC_RPC,
-      explorer: 'https://testnet.arcscan.app',
-      faucet: 'https://faucet.circle.com',
-    },
-    contracts: {
-      identityRegistry_ERC8004: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
-      reputationRegistry_ERC8004: CONTRACTS.ERC8004_REPUTATION_REGISTRY,
-      validationRegistry_ERC8004: CONTRACTS.ERC8004_VALIDATION_REGISTRY,
-      agenticCommerce_ERC8183: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
-      usdc_ERC20: CONTRACTS.USDC,
-      eurc: ARC_TOKENS.EURC,
-    },
-    tools: listTools().map((t) => ({
+  const allTools = listTools();
+
+  const validOperations = new Set(['read', 'mutation', 'tx_prepare', 'signing_request']);
+  const validTypes = new Set(['string', 'number', 'integer', 'boolean', 'object', 'array']);
+  const names = new Set<string>();
+
+  for (const tool of allTools) {
+    // Duplicate names
+    if (names.has(tool.name)) {
+      throw new Error(`Duplicate tool name: ${tool.name}`);
+    }
+    names.add(tool.name);
+
+    // Missing/empty scope
+    if (!tool.requiredScope || tool.requiredScope.trim() === '') {
+      throw new Error(`Tool "${tool.name}" missing requiredScope`);
+    }
+
+    // Wildcard scope
+    if (tool.requiredScope === '*') {
+      throw new Error(`Tool "${tool.name}" has wildcard scope`);
+    }
+
+    // Operation
+    if (!validOperations.has(tool.operation)) {
+      throw new Error(`Tool "${tool.name}" has invalid operation: ${tool.operation}`);
+    }
+
+    // Annotations
+    const a = tool.annotations;
+    if (
+      typeof a.readOnlyHint !== 'boolean' ||
+      typeof a.destructiveHint !== 'boolean' ||
+      typeof a.idempotentHint !== 'boolean' ||
+      typeof a.openWorldHint !== 'boolean'
+    ) {
+      throw new Error(`Tool "${tool.name}" has incomplete annotations`);
+    }
+
+    // Input types
+    for (const param of tool.inputSchema) {
+      if (!validTypes.has(param.type)) {
+        throw new Error(
+          `Tool "${tool.name}" param "${param.name}" has unsupported type: ${param.type}`,
+        );
+      }
+    }
+  }
+
+  // Sorted snapshot for debugging
+  const snapshot = allTools
+    .map((t) => ({
       name: t.name,
-      description: t.description,
-      kind: t.kind,
-      args: t.inputSchema,
-    })),
-    docs: {
-      arc: 'https://docs.arc.io',
-      llms: 'https://docs.arc.io/llms.txt',
-      mcp: 'https://docs.arc.io/mcp',
-    },
-  };
-}
+      scope: t.requiredScope,
+      op: t.operation,
+      ro: t.annotations.readOnlyHint,
+      dest: t.annotations.destructiveHint,
+      idem: t.annotations.idempotentHint,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
-// ─── INVOKE TOOL ─────────────────────────────────────────────────────────────
-
-async function invokeTool(
-  name: string,
-  args: Record<string, unknown>,
-  context: McpToolContext,
-): Promise<unknown> {
-  registerAllTools();
-  const tool = getTool(name);
-  if (!tool) {
-    throw new McpError(MCP_ERRORS.UNKNOWN_TOOL, `Unknown tool: ${name}`);
-  }
-  const protectedTool = tool.authRequired && !PUBLIC_MCP_TOOLS.has(tool.name);
-  if (protectedTool) {
-    const auth = context.auth ?? await resolveMcpBearerAuth(context.request.authorization);
-    if (!auth) throw new McpError(MCP_ERRORS.UNAUTHORIZED, 'Valid OAuth bearer token or legacy MCP session token required', 401);
-    const requiredScope = TOOL_SCOPES[tool.name] ?? (tool.domain === 'provider' ? 'provider:runtime' : tool.kind === 'tx_instruction' ? 'jobs:prepare' : 'arclayer:read');
-    if (!hasMcpScope(auth.scopes, requiredScope)) throw new McpError(MCP_ERRORS.FORBIDDEN, `Missing required OAuth scope: ${requiredScope}`, 403);
-    context.auth = auth;
-  }
-  return tool.handler(args, context);
-}
-
-// ─── HANDLE POST ─────────────────────────────────────────────────────────────
-
-export async function handleMcpPost(
-  body: unknown,
-  ctx: RequestContext,
-): Promise<{ json: unknown; status: number }> {
-  registerAllTools();
-  const mcpCtx: McpToolContext = { request: ctx };
-
-  // Validate basic JSON-RPC shape
-  if (!body || typeof body !== 'object') {
-    return { json: jsonRpcError(null, MCP_ERRORS.INVALID_REQUEST, 'Request body must be a JSON object'), status: 400 };
-  }
-
-  const b = body as Record<string, unknown>;
-  const id = (b.id as string | number | null) ?? null;
-
-  // ── JSON-RPC shape: { method, params } ─────────────────────────────────
-  if (typeof b.method === 'string') {
-    const method = b.method;
-    const params = (b.params && typeof b.params === 'object' ? b.params : {}) as Record<string, unknown>;
-
-    // initialize
-    if (method === 'initialize') {
-      return {
-        json: jsonRpcResult(id, {
-          protocolVersion: PROTOCOL_VERSION,
-          serverInfo: { name: MCP_SERVER_NAME, version: MCP_VERSION },
-          capabilities: { tools: {} },
-        }),
-        status: 200,
-      };
-    }
-
-    // tools/list
-    if (method === 'tools/list') {
-      const toolsList = listTools().map(toMcpToolSchema);
-      return { json: jsonRpcResult(id, { tools: toolsList }), status: 200 };
-    }
-
-    // tools/call
-    if (method === 'tools/call') {
-      const toolName = params.name;
-      if (typeof toolName !== 'string' || !toolName.trim()) {
-        return { json: jsonRpcError(id, MCP_ERRORS.VALIDATION_ERROR, 'params.name must be a non-empty string'), status: 400 };
-      }
-      const toolArgs = (params.arguments && typeof params.arguments === 'object' ? params.arguments : {}) as Record<string, unknown>;
-      try {
-        const result = await invokeTool(toolName.trim(), toolArgs, mcpCtx);
-        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
-        return { json: jsonRpcResult(id, okResult(text, result as Record<string, unknown>)), status: 200 };
-      } catch (e) {
-        const mcpErr = thrownToMcpError(e);
-        return { json: jsonRpcError(id, mcpErr.code, redactString(mcpErr.message)), status: mcpErr.status };
-      }
-    }
-
-    // Legacy method fallback: treat method as a tool name/alias
-    if (hasTool(method)) {
-      try {
-        const result = await invokeTool(method, params, mcpCtx);
-        return { json: jsonRpcResult(id, { tool: method, kind: getTool(method)?.kind, result }), status: 200 };
-      } catch (e) {
-        const mcpErr = thrownToMcpError(e);
-        return { json: jsonRpcError(id, mcpErr.code, redactString(mcpErr.message)), status: mcpErr.status };
-      }
-    }
-
-    // Unknown method
-    return { json: jsonRpcError(id, MCP_ERRORS.UNKNOWN_METHOD, `Unknown method: ${method}`), status: 400 };
-  }
-
-  // ── Simple shape: { tool, args } ───────────────────────────────────────
-  if (typeof b.tool === 'string') {
-    const toolArgs = (b.args && typeof b.args === 'object' ? b.args : {}) as Record<string, unknown>;
-    try {
-      const result = await invokeTool(b.tool, toolArgs, mcpCtx);
-      return { json: { tool: b.tool, kind: getTool(b.tool)?.kind, result }, status: 200 };
-    } catch (e) {
-      const mcpErr = thrownToMcpError(e);
-      return { json: { tool: b.tool, error: redactString(mcpErr.message) }, status: mcpErr.status };
-    }
-  }
-
-  return { json: jsonRpcError(id, MCP_ERRORS.INVALID_REQUEST, 'Provide { tool, args } or { jsonrpc, method, params }'), status: 400 };
-}
-
-// ─── HANDLE GET ──────────────────────────────────────────────────────────────
-
-export async function handleMcpGet(
-  searchParams: URLSearchParams,
-  ctx: RequestContext,
-): Promise<unknown> {
-  registerAllTools();
-  const toolName = searchParams.get('tool');
-  const mcpCtx: McpToolContext = { request: ctx };
-
-  // GET without tool → manifest
-  if (!toolName) {
-    return buildManifest(ctx);
-  }
-
-  // GET with tool → invoke
-  const args: Record<string, unknown> = {};
-  searchParams.forEach((v, k) => {
-    if (k !== 'tool') args[k] = v;
-  });
-
-  try {
-    const result = await invokeTool(toolName, args, mcpCtx);
-    return { tool: toolName, kind: getTool(toolName)?.kind, result };
-  } catch (e) {
-    const mcpErr = thrownToMcpError(e);
-    return { tool: toolName, error: redactString(mcpErr.message) };
-  }
+  console.log(`[MCP] Tool catalog validated: ${snapshot.length} tools`);
 }
