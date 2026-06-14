@@ -2,7 +2,7 @@
 
 This file is the operating guide for AI coding agents working on ArcLayer.
 
-ArcLayer is an Arc/Circle reference-first protocol layer for the agentic economy. It connects external AI agents, PM2 bots, MCP clients, and agent-facing applications to Arc Testnet identity, paid jobs, x402 payments, receipts, and proof-history workflows.
+ArcLayer is an Arc/Circle reference-first protocol layer for the agentic economy. It connects external AI agents, MCP clients, and agent-facing applications to Arc Testnet identity, paid jobs, x402 payments, receipts, and proof-history workflows.
 
 ArcLayer is infrastructure. It is not a prediction market app, not a trading bot, and not a private-key custody service.
 
@@ -37,9 +37,6 @@ sdk/src/writes.ts
 ├── apps/
 │   └── console/                  # Next.js app, UI, API routes, MCP, x402, vault, runtime APIs
 ├── docs/                         # Protocol docs, MCP docs, integration notes
-├── examples/
-│   ├── external-pm2-bots/         # Current external runtime bot examples
-│   └── external-erc8183-bots/     # Legacy ERC-8183 examples; do not prioritize unless requested
 ├── indexer/                      # Node indexer for Arc reference events and projection APIs
 ├── sdk/                          # Shared SDK: addresses, ABIs, chain config, tx builders, types
 ├── supabase/
@@ -92,11 +89,11 @@ ArcLayer has five main runtime surfaces:
    * Maintains local projections for agents, jobs, proofs, reputation, and overview endpoints.
    * Must stay attribution-filtered in production.
 
-5. External bots
+5. ArcLayer Runner
 
-   * Path: `examples/external-pm2-bots`
-   * Current reference examples for PM2/external agent runtimes.
-   * Bots should interact with ArcLayer APIs and SDK helpers, not hardcoded private local dependencies.
+   * Path: `apps/arclayer-runner`
+   * Policy boundary for external LLM runtimes with MCP bridge, Circle CLI, ERC-8004, ERC-8183, and x402.
+   * Connects via MCP STDIO (Hermes, OpenClaw) or remote MCP connector (hosted Console MCP).
 
 ## Protocol positioning
 
@@ -116,7 +113,7 @@ ERC-8183 agentic job settlement
 x402 paid access
 Circle Gateway batched EIP-3009
 Arc Native EIP-3009
-External PM2 bot runtime
+External runtime support
 Global MCP tooling
 Proof/history UI
 ```
@@ -331,13 +328,9 @@ Rules:
 * Avoid polling too aggressively. Pause or reduce polling when the document is hidden.
 * Do not break existing dark UI readability.
 
-## External PM2 bot rules
+## External runtime rules
 
-Current runtime examples are in:
-
-```txt
-examples/external-pm2-bots
-```
+External runtimes connect through ArcLayer Runner via MCP STDIO or hosted MCP endpoint.
 
 Rules:
 
@@ -497,7 +490,7 @@ When implementing a change:
    * domain logic: `apps/console/src/lib`
    * protocol constants/helpers: `sdk/src`
    * indexing/projections: `indexer/src`
-   * external bot examples: `examples/external-pm2-bots`
+   * runner: `apps/arclayer-runner`
    * docs: `docs`
 
 2. Reuse existing SDK constants and helpers.

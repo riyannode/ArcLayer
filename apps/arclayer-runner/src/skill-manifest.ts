@@ -156,14 +156,14 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     capabilities: ["x402", "payer-binding", "security"],
   },
   {
-    id: "provider-runtime-memory",
-    title: "Provider Runtime Memory",
-    path: "docs/provider-runtime-memory.md",
+    id: "runner-runtime-recovery",
+    title: "Runner Runtime Recovery",
+    path: "docs/runner-runtime-recovery.md",
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["provider"],
-    capabilities: ["runtime", "memory", "provider"],
+    roles: ["provider", "client", "evaluator"],
+    capabilities: ["runtime", "recovery", "checkpoint", "resume"],
   },
 ];
 

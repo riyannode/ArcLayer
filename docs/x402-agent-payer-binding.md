@@ -61,7 +61,7 @@ curl https://arclayers.xyz/api/agents/36191/x402-payer \
 
 The payer EOA needs a Gateway deposit. Use Circle GatewayClient or faucet.
 
-## Step 4: Start External PM2 Bot
+## Step 4: Start External Runtime
 
 ```bash
 # .env
@@ -229,7 +229,6 @@ External Bot (PM2)
 | `apps/console/src/app/api/agents/[id]/run/route.ts` | Bound route: `agentPayerBinding.required = true`, `allowedRails: ['circle-gateway-passkey']` |
 | `apps/console/src/lib/x402/middleware.ts` | Patch: agentPayerBinding option + payer check in handleGateway |
 | `apps/console/src/lib/x402/gateway/payment-store.ts` | Patch: extend types + recordGatewayPayment with agent context |
-| `examples/external-pm2-bots/market-agent-bridge/shared/x402-gateway-client.js` | New: Gateway bot client |
 | `apps/console/src/lib/x402/agent-payer.test.ts` | 24 tests: validateAgentId, resolver, assertion, binding flow |
 | `docs/x402-agent-payer-binding.md` | Manual verification guide (10 test scenarios) |
 

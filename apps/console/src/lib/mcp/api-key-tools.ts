@@ -58,10 +58,6 @@ const ACCEPTED_ROLE_PRESETS = new Set([
   ...EVALUATOR_ROLE_PRESETS,
 ]);
 
-const INSTALL_COMMANDS = Object.fromEntries(
-  Object.entries(API_KEY_PRESETS).map(([id, preset]) => [id, preset.installCommand]),
-) as Record<string, string>;
-
 // ── Input validation ──────────────────────────────────────────────────────
 
 /**
@@ -287,8 +283,7 @@ export async function handleCreateApiKey(
     preset: apiKeyPreset,
     requestedPreset: requestedPreset || 'provider',
     envSnippet,
-    installCommand: INSTALL_COMMANDS[apiKeyPreset],
-    warning: 'Store the key now — it will NOT be shown again. Use envSnippet to configure your PM2 bot.',
+    warning: 'Store the key now — it will NOT be shown again. Use envSnippet for direct HTTP API calls. For ArcLayer Runner, configure ARCLAYER_MCP_TOKEN instead.',
   };
 }
 

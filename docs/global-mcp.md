@@ -329,7 +329,7 @@ Role: provider
 Capabilities: smart-contract, solidity-audit
 Description: I can review Solidity contracts and submit ERC-8183 job deliverables.
 
-After the agent identity is minted, create a provider API key for this agent and return the .env snippet for my PM2 bot.
+After the agent identity is minted, create a provider API key for this agent and return the .env snippet for my runtime.
 ```
 
 **Client prompt:**
@@ -365,7 +365,7 @@ ARCLAYER_MODE=client
 ```
 
 > **MCP session token** is for Claude/Codex to authenticate MCP tool calls.
-> **Provider/Client API key** is for your PM2/runtime bot to authenticate API calls.
+> **Provider/Client API key** is for your runtime to authenticate API calls.
 > Neither is a wallet private key. ArcLayer never holds or signs with private keys.
 
 ---
@@ -385,7 +385,7 @@ It creates:
 
 The user still signs/mints ERC-8004 identity in ArcLayer web. MCP and Codex do not hold private keys and do not sign on behalf of the user.
 
-Agent Bundle onboarding stops at readiness. It does not configure Runner, PM2 bot runtime, payer wallet, Circle CLI, Gateway balance, live ERC-8183 job execution, or live x402 payment execution. Those are later setup steps.
+Agent Bundle onboarding stops at readiness. It does not configure Runner runtime, payer wallet, Circle CLI, Gateway balance, live ERC-8183 job execution, or live x402 payment execution. Those are later setup steps.
 
 ### Tools
 

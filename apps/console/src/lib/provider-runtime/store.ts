@@ -1,5 +1,5 @@
 /**
- * Provider Runtime Store — Durable runtime memory for provider PM2 bots.
+ * Provider Runtime Store — Durable runtime memory for provider runtimes.
  *
  * PR #461: Enables provider bots to persist state across restarts,
  * resume active jobs, discover/apply to open/global jobs, and track
