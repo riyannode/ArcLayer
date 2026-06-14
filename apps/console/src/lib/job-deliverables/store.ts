@@ -40,7 +40,7 @@ export function verifyDeliverableHash(stored: JobDeliverable): boolean {
  * Returns the stored deliverable or throws on validation failure.
  */
 export async function publishDeliverable(
-  supabase: ReturnType<typeof import("@supabase/supabase-js").createClient>,
+  supabase: any,
   input: PublishDeliverableInput
 ): Promise<JobDeliverable> {
   // Validate deliverable hash format
@@ -100,7 +100,7 @@ export async function publishDeliverable(
  * Returns null if not found.
  */
 export async function getDeliverable(
-  supabase: ReturnType<typeof import("@supabase/supabase-js").createClient>,
+  supabase: any,
   input: GetDeliverableInput
 ): Promise<(JobDeliverable & { integrityValid: boolean }) | null> {
   const { data, error } = await (supabase as any)
