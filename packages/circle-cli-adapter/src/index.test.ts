@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { CircleCliAdapter } from "./index";
+import {
+  CircleCliAdapter,
+  normalizeCircleTransaction,
+  extractCircleTransactions,
+  extractCircleTransactionId,
+  extractCircleTxHash,
+  extractCircleState,
+  type CircleCliResult,
+} from "./index";
 import { RunnerError } from "@arclayer/runner-core";
 
 function expectRunnerError(promise: Promise<unknown>, code: string) {
@@ -156,6 +164,194 @@ describe("CircleCliAdapter", () => {
       expect((adapter as any).withdraw).toBeUndefined();
       expect((adapter as any).transfer).toBeUndefined();
       expect((adapter as any).swap).toBeUndefined();
+    });
+
+    it("exposes transactionList and normalization helpers", () => {
+      expect(adapter.transactionList).toBeDefined();
+      expect(normalizeCircleTransaction).toBeDefined();
+      expect(extractCircleTransactions).toBeDefined();
+      expect(extractCircleTransactionId).toBeDefined();
+      expect(extractCircleTxHash).toBeDefined();
+      expect(extractCircleState).toBeDefined();
+    });
+  });
+
+  describe("transaction normalization", () => {
+    it("normalizes a flat transaction object", () => {
+      const tx = normalizeCircleTransaction({
+        id: "tx-001",
+        txHash: "0xabc",
+        state: "CONFIRMED",
+        operation: "execute",
+        contractAddress: "0xcontract",
+        abiFunctionSignature: "fund(uint256,bytes)",
+        createdAt: "2025-01-01T00:00:00Z",
+      });
+      expect(tx.id).toBe("tx-001");
+      expect(tx.txHash).toBe("0xabc");
+      expect(tx.state).toBe("confirmed");
+      expect(tx.operation).toBe("execute");
+    });
+
+    it("normalizes nested data envelope", () => {
+      const tx = normalizeCircleTransaction({
+        data: {
+          id: "tx-002",
+          hash: "0xdef",
+          status: "SENT",
+        },
+      });
+      expect(tx.id).toBe("tx-002");
+      expect(tx.txHash).toBe("0xdef");
+      expect(tx.state).toBe("sent");
+    });
+
+    it("returns unknown for missing/empty input", () => {
+      const tx = normalizeCircleTransaction(null);
+      expect(tx.state).toBe("unknown");
+      expect(tx.id).toBeUndefined();
+    });
+
+    it("maps all known states", () => {
+      const states = [
+        "INITIATED", "QUEUED", "SENT", "CONFIRMED", "COMPLETE",
+        "FAILED", "CANCELLED", "DENIED", "CLEARED", "STUCK",
+      ];
+      for (const s of states) {
+        const tx = normalizeCircleTransaction({ state: s });
+        expect(tx.state).not.toBe("unknown");
+      }
+    });
+
+    it("returns unknown for unrecognized state", () => {
+      const tx = normalizeCircleTransaction({ state: "PENDING_REVIEW" });
+      expect(tx.state).toBe("unknown");
+    });
+  });
+
+  describe("extractCircleTransactions", () => {
+    it("extracts from array response", () => {
+      const result: CircleCliResult = {
+        command: "circle",
+        args: [],
+        stdout: "[]",
+        stderr: "",
+        json: [{ id: "1", state: "CONFIRMED" }, { id: "2", state: "SENT" }],
+      };
+      const txs = extractCircleTransactions(result);
+      expect(txs).toHaveLength(2);
+      expect(txs[0].id).toBe("1");
+    });
+
+    it("extracts from { data: [...] } envelope", () => {
+      const result: CircleCliResult = {
+        command: "circle",
+        args: [],
+        stdout: "{}",
+        stderr: "",
+        json: { data: [{ id: "3", state: "FAILED" }] },
+      };
+      const txs = extractCircleTransactions(result);
+      expect(txs).toHaveLength(1);
+      expect(txs[0].state).toBe("failed");
+    });
+
+    it("extracts from { transactions: [...] } envelope", () => {
+      const result: CircleCliResult = {
+        command: "circle",
+        args: [],
+        stdout: "{}",
+        stderr: "",
+        json: { transactions: [{ id: "4" }] },
+      };
+      const txs = extractCircleTransactions(result);
+      expect(txs).toHaveLength(1);
+    });
+
+    it("extracts from { data: { transactions: [...] } } envelope", () => {
+      const result: CircleCliResult = {
+        command: "circle",
+        args: [],
+        stdout: "{}",
+        stderr: "",
+        json: { data: { transactions: [{ id: "5" }] } },
+      };
+      const txs = extractCircleTransactions(result);
+      expect(txs).toHaveLength(1);
+    });
+
+    it("returns empty for null json", () => {
+      const result: CircleCliResult = {
+        command: "circle",
+        args: [],
+        stdout: "",
+        stderr: "",
+      };
+      expect(extractCircleTransactions(result)).toEqual([]);
+    });
+  });
+
+  describe("extractCircleTransactionId/TxHash/State", () => {
+    it("extracts from flat response", () => {
+      const result: CircleCliResult = {
+        command: "circle",
+        args: [],
+        stdout: "{}",
+        stderr: "",
+        json: { id: "tx-10", txHash: "0x123", state: "CONFIRMED" },
+      };
+      expect(extractCircleTransactionId(result)).toBe("tx-10");
+      expect(extractCircleTxHash(result)).toBe("0x123");
+      expect(extractCircleState(result)).toBe("confirmed");
+    });
+
+    it("extracts from nested data envelope", () => {
+      const result: CircleCliResult = {
+        command: "circle",
+        args: [],
+        stdout: "{}",
+        stderr: "",
+        json: { data: { id: "tx-11", hash: "0x456", status: "COMPLETE" } },
+      };
+      expect(extractCircleTransactionId(result)).toBe("tx-11");
+      expect(extractCircleTxHash(result)).toBe("0x456");
+      expect(extractCircleState(result)).toBe("complete");
+    });
+
+    it("returns undefined/unknown for missing fields", () => {
+      const result: CircleCliResult = {
+        command: "circle",
+        args: [],
+        stdout: "{}",
+        stderr: "",
+        json: {},
+      };
+      expect(extractCircleTransactionId(result)).toBeUndefined();
+      expect(extractCircleTxHash(result)).toBeUndefined();
+      expect(extractCircleState(result)).toBe("unknown");
+    });
+  });
+
+  describe("blocked commands remain blocked", () => {
+    it("blocks transaction cancel", async () => {
+      await expectRunnerError(
+        (adapter as any).run(["transaction", "cancel", "--id", "tx-1"]),
+        "CIRCLE_COMMAND_BLOCKED"
+      );
+    });
+
+    it("blocks transaction accelerate", async () => {
+      await expectRunnerError(
+        (adapter as any).run(["transaction", "accelerate", "--id", "tx-1"]),
+        "CIRCLE_COMMAND_BLOCKED"
+      );
+    });
+
+    it("blocks wallet import", async () => {
+      await expectRunnerError(
+        (adapter as any).run(["wallet", "import"]),
+        "CIRCLE_COMMAND_BLOCKED"
+      );
     });
   });
 });

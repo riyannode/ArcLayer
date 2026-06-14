@@ -397,4 +397,178 @@ export class CircleCliAdapter {
 
     return this.run(args, input.signal);
   }
+
+  // ── Transaction History (for reconciliation) ───────────────────────────
+
+  /**
+   * List Circle CLI transactions for a wallet address.
+   * Used by the transaction reconciler to match Circle tx IDs to onchain receipts.
+   */
+  async transactionList(input: {
+    address: string;
+    chain: string;
+    operation?: "transfer" | "execute";
+    state?: Exclude<CircleTransactionState, "unknown">;
+    limit?: number;
+    cursor?: string;
+    signal?: AbortSignal;
+  }): Promise<CircleCliResult> {
+    const args = [
+      "transaction", "list",
+      "--address", input.address,
+      "--chain", input.chain,
+      "--output", "json",
+    ];
+    if (input.operation) args.push("--operation", input.operation);
+    if (input.state) args.push("--state", input.state);
+    if (input.limit) args.push("--limit", String(input.limit));
+    if (input.cursor) args.push("--cursor", input.cursor);
+    return this.run(args, input.signal);
+  }
+}
+
+// ── Transaction Normalization (for reconciliation) ─────────────────────
+
+/**
+ * Circle CLI terminal states.
+ * Maps to onchain reconciliation outcomes.
+ */
+export type CircleTransactionState =
+  | "initiated"
+  | "queued"
+  | "sent"
+  | "confirmed"
+  | "complete"
+  | "failed"
+  | "cancelled"
+  | "denied"
+  | "cleared"
+  | "stuck"
+  | "unknown";
+
+/**
+ * Normalized Circle transaction from CLI output.
+ * Tolerant of varying response envelopes.
+ */
+export type NormalizedCircleTransaction = {
+  id?: string;
+  txHash?: string;
+  state: CircleTransactionState;
+  operation?: string;
+  contractAddress?: string;
+  abiFunctionSignature?: string;
+  createdAt?: string;
+  raw: unknown;
+};
+
+/**
+ * Normalize a raw Circle CLI transaction object into a consistent shape.
+ * Circle CLI output may have fields at different nesting levels.
+ */
+export function normalizeCircleTransaction(raw: unknown): NormalizedCircleTransaction {
+  const obj = (raw ?? {}) as Record<string, unknown>;
+  const data = (obj.data ?? obj) as Record<string, unknown>;
+
+  const id = (obj.id ?? data.id ?? data.transactionId ?? undefined) as string | undefined;
+  const txHash = (obj.txHash ?? data.txHash ?? data.hash ?? data.transactionHash ?? undefined) as string | undefined;
+  const stateRaw = (obj.state ?? data.state ?? obj.status ?? data.status ?? "unknown") as string;
+  const operation = (obj.operation ?? data.operation ?? undefined) as string | undefined;
+  const contractAddress = (obj.contractAddress ?? data.contractAddress ?? undefined) as string | undefined;
+  const abiFunctionSignature = (obj.abiFunctionSignature ?? data.abiFunctionSignature ?? undefined) as string | undefined;
+  const createdAt = (obj.createdAt ?? data.createdAt ?? obj.created_at ?? data.created_at ?? undefined) as string | undefined;
+
+  return {
+    id: id ? String(id) : undefined,
+    txHash: txHash ? String(txHash) : undefined,
+    state: normalizeCircleState(stateRaw),
+    operation: operation ? String(operation) : undefined,
+    contractAddress: contractAddress ? String(contractAddress) : undefined,
+    abiFunctionSignature: abiFunctionSignature ? String(abiFunctionSignature) : undefined,
+    createdAt: createdAt ? String(createdAt) : undefined,
+    raw,
+  };
+}
+
+/**
+ * Extract all transactions from a CircleCliResult, handling multiple response envelopes:
+ * - array directly
+ * - { data: [...] }
+ * - { transactions: [...] }
+ * - { data: { transactions: [...] } }
+ */
+export function extractCircleTransactions(result: CircleCliResult): NormalizedCircleTransaction[] {
+  const json = result.json;
+  if (!json) return [];
+
+  let rawList: unknown[] = [];
+  if (Array.isArray(json)) {
+    rawList = json;
+  } else if (typeof json === "object" && json !== null) {
+    const obj = json as Record<string, unknown>;
+    if (Array.isArray(obj.data)) {
+      rawList = obj.data;
+    } else if (Array.isArray(obj.transactions)) {
+      rawList = obj.transactions;
+    } else if (obj.data && typeof obj.data === "object" && Array.isArray((obj.data as Record<string, unknown>).transactions)) {
+      rawList = (obj.data as Record<string, unknown>).transactions as unknown[];
+    }
+  }
+
+  return rawList.map(normalizeCircleTransaction);
+}
+
+/**
+ * Extract Circle transaction ID from a CircleCliResult (single tx response).
+ */
+export function extractCircleTransactionId(result: CircleCliResult): string | undefined {
+  const json = result.json;
+  if (!json || typeof json !== "object") return undefined;
+  const obj = json as Record<string, unknown>;
+  const data = (obj.data ?? obj) as Record<string, unknown>;
+  const id = data.id ?? data.transactionId ?? obj.id ?? obj.transactionId;
+  return id ? String(id) : undefined;
+}
+
+/**
+ * Extract txHash from a CircleCliResult (single tx response).
+ */
+export function extractCircleTxHash(result: CircleCliResult): string | undefined {
+  const json = result.json;
+  if (!json || typeof json !== "object") return undefined;
+  const obj = json as Record<string, unknown>;
+  const data = (obj.data ?? obj) as Record<string, unknown>;
+  const hash = data.txHash ?? data.hash ?? data.transactionHash ?? obj.txHash ?? obj.hash;
+  return hash ? String(hash) : undefined;
+}
+
+/**
+ * Extract normalized state from a CircleCliResult (single tx response).
+ */
+export function extractCircleState(result: CircleCliResult): CircleTransactionState {
+  const json = result.json;
+  if (!json || typeof json !== "object") return "unknown";
+  const obj = json as Record<string, unknown>;
+  const data = (obj.data ?? obj) as Record<string, unknown>;
+  const stateRaw = String(data.state ?? obj.state ?? data.status ?? obj.status ?? "unknown");
+  return normalizeCircleState(stateRaw);
+}
+
+/**
+ * Map raw Circle CLI state strings to canonical CircleTransactionState.
+ */
+function normalizeCircleState(raw: string): CircleTransactionState {
+  const lower = raw.toLowerCase();
+  const map: Record<string, CircleTransactionState> = {
+    initiated: "initiated",
+    queued: "queued",
+    sent: "sent",
+    confirmed: "confirmed",
+    complete: "complete",
+    failed: "failed",
+    cancelled: "cancelled",
+    denied: "denied",
+    cleared: "cleared",
+    stuck: "stuck",
+  };
+  return map[lower] ?? "unknown";
 }
