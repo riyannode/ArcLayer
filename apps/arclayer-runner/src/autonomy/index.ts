@@ -3,6 +3,7 @@
  */
 export { AutonomyStore } from "./autonomy-store";
 export { TransactionReconciler, type ReconciliationResult } from "./transaction-reconciler";
+export { ClientOrchestrator, type ClientCreateAndFundInput, type ClientCreateAndFundOutput } from "./client-orchestrator";
 export {
   type AutonomyRole,
   type AutonomyWorkflow,
