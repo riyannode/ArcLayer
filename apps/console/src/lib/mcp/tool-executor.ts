@@ -30,7 +30,7 @@ export async function executeCatalogTool(
   authScopes?: string[],
 ): Promise<{
   content: Array<{ type: 'text'; text: string }>;
-  structuredContent?: unknown;
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }> {
   // Scope verification
@@ -47,9 +47,9 @@ export async function executeCatalogTool(
     const serialized = serializeBigInt(result);
 
     // Wrap primitive/array results
-    const structuredContent =
+    const structuredContent: Record<string, unknown> =
       typeof serialized === 'object' && serialized !== null && !Array.isArray(serialized)
-        ? serialized
+        ? (serialized as Record<string, unknown>)
         : { value: serialized };
 
     const text = JSON.stringify(serialized, bigintReplacer, 2);
