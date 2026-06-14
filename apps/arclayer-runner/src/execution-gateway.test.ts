@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ExecutionGateway, assertGatewayWriteSucceeded } from "./execution-gateway";
 import type { WriteOperationKind, WriteOperationInput, CircleCliExecuteFn } from "./execution-gateway";
 import type { CircleCliResult } from "@arclayer/circle-cli-adapter";
-import { RunnerError } from "@arclayer/runner-core";
+import { RunnerError, sha256Json } from "@arclayer/runner-core";
 
 // ── Mocks ─────────────────────────────────────────────────────────────
 
@@ -501,6 +501,231 @@ describe("ExecutionGateway", () => {
       await gateway.execute(makeInput(), executeFn, controller.signal);
 
       expect(executeFn).toHaveBeenCalledWith(circle, controller.signal);
+    });
+  });
+
+  // ── CANCELLED state classification ─────────────────────────────────
+
+  describe("CANCELLED state classification", () => {
+    it("{ data: { state: CANCELLED, txHash } } → cancelled", async () => {
+      const cancelledResult: CircleCliResult = {
+        command: "circle",
+        args: [],
+        stdout: JSON.stringify({ data: { state: "CANCELLED", txHash: "0x" + "a".repeat(64) } }),
+        stderr: "",
+        json: { data: { state: "CANCELLED", txHash: "0x" + "a".repeat(64) } },
+      };
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(cancelledResult);
+      const result = await gateway.execute(makeInput(), executeFn);
+
+      expect(result.state).toBe("cancelled");
+      expect(result.ok).toBe(false);
+    });
+
+    it("cancelled result throws OPERATION_CANCELLED via assertGatewayWriteSucceeded", async () => {
+      const cancelledResult: CircleCliResult = {
+        command: "circle",
+        args: [],
+        stdout: JSON.stringify({ data: { state: "CANCELLED" } }),
+        stderr: "",
+        json: { data: { state: "CANCELLED" } },
+      };
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(cancelledResult);
+      const result = await gateway.execute(makeInput(), executeFn);
+
+      expect(result.state).toBe("cancelled");
+      try {
+        assertGatewayWriteSucceeded(result);
+        expect.fail("should have thrown");
+      } catch (e) {
+        expect(e).toBeInstanceOf(RunnerError);
+        expect((e as RunnerError).code).toBe("OPERATION_CANCELLED");
+      }
+    });
+
+    it("FAILED/DENIED/REVERTED remain failed", async () => {
+      for (const state of ["FAILED", "DENIED", "REVERTED"]) {
+        const failedResult: CircleCliResult = {
+          command: "circle",
+          args: [],
+          stdout: JSON.stringify({ data: { state } }),
+          stderr: "",
+          json: { data: { state } },
+        };
+        const gw = new ExecutionGateway(circle, receipts, {
+          agentId: "agent-1",
+          circleWalletAddress: "0x3c46624b62fa4cf3d63e6bdd60dc1b79a43ceb22",
+          chain: "ARC-TESTNET",
+        });
+        const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(failedResult);
+        const result = await gw.execute(makeInput(), executeFn);
+        expect(result.state).toBe("failed");
+      }
+    });
+  });
+
+  // ── Bounded resultCache ────────────────────────────────────────────
+
+  describe("bounded resultCache", () => {
+    it("does not grow past max entries", async () => {
+      const gw = new ExecutionGateway(circle, receipts, {
+        agentId: "agent-1",
+        circleWalletAddress: "0x3c46624b62fa4cf3d63e6bdd60dc1b79a43ceb22",
+        chain: "ARC-TESTNET",
+      });
+
+      // Fill cache beyond max (1000)
+      for (let i = 0; i < 1005; i++) {
+        const input = makeInput({
+          idempotencyKey: `key-${i}`,
+          paramsHash: sha256Json({ i }),
+        });
+        const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeMockCircleCliResult());
+        await gw.execute(input, executeFn);
+      }
+
+      expect(gw.resultCacheSize).toBeLessThanOrEqual(1000);
+      expect(gw.operationCount).toBe(1005); // operations not evicted
+    });
+
+    it("cached stdout is truncated for large results", async () => {
+      const largeStdout = "x".repeat(100 * 1024); // 100KB
+      const largeResult: CircleCliResult = {
+        command: "circle",
+        args: [],
+        stdout: largeStdout,
+        stderr: "",
+        json: { txHash: "0x" + "a".repeat(64), status: "confirmed" },
+      };
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(largeResult);
+      const result = await gateway.execute(makeInput(), executeFn);
+
+      expect(result.state).toBe("confirmed");
+      // The cached result should have truncated stdout
+      const cached = gateway.getOperation(result.operationId);
+      expect(cached).toBeDefined();
+    });
+
+    it("confirmed replay still returns cached result", async () => {
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeMockCircleCliResult());
+      const result1 = await gateway.execute(makeInput(), executeFn);
+      expect(result1.state).toBe("confirmed");
+
+      const result2 = await gateway.execute(makeInput(), executeFn);
+      expect(result2.idempotent).toBe(true);
+      expect(result2.circleResult).toBeDefined();
+    });
+  });
+
+  // ── Chain validation ───────────────────────────────────────────────
+
+  describe("chain validation", () => {
+    it("supported Arc chain resolves to 5042002", async () => {
+      for (const chain of ["ARC-TESTNET", "arc-testnet", "Arc", "5042002"]) {
+        const gw = new ExecutionGateway(circle, receipts, {
+          agentId: "agent-1",
+          circleWalletAddress: "0x3c46624b62fa4cf3d63e6bdd60dc1b79a43ceb22",
+          chain,
+        });
+        const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeMockCircleCliResult());
+        const result = await gw.execute(makeInput({ chain }), executeFn);
+        expect(result.state).toBe("confirmed");
+        const record = gw.getOperation(result.operationId);
+        expect(record!.chainId).toBe(5042002);
+      }
+    });
+
+    it("explicit chainId is recorded", async () => {
+      const gw = new ExecutionGateway(circle, receipts, {
+        agentId: "agent-1",
+        circleWalletAddress: "0x3c46624b62fa4cf3d63e6bdd60dc1b79a43ceb22",
+        chain: "ARC-TESTNET",
+      });
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeMockCircleCliResult());
+      const result = await gw.execute(makeInput({ chainId: 12345 }), executeFn);
+      const record = gw.getOperation(result.operationId);
+      expect(record!.chainId).toBe(12345);
+    });
+
+    it("unsupported chain throws UNSUPPORTED_CHAIN", async () => {
+      const gw = new ExecutionGateway(circle, receipts, {
+        agentId: "agent-1",
+        circleWalletAddress: "0x3c46624b62fa4cf3d63e6bdd60dc1b79a43ceb22",
+        chain: "ethereum-mainnet",
+      });
+      const executeFn: CircleCliExecuteFn = vi.fn();
+      try {
+        await gw.execute(makeInput({ chain: "ethereum-mainnet" }), executeFn);
+        expect.fail("should have thrown");
+      } catch (e) {
+        expect(e).toBeInstanceOf(RunnerError);
+        expect((e as RunnerError).code).toBe("UNSUPPORTED_CHAIN");
+      }
+    });
+  });
+
+  // ── ReconcileBroadcast ─────────────────────────────────────────────
+
+  describe("reconcileBroadcast", () => {
+    it("broadcast can be reconciled to confirmed", async () => {
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeBroadcastCircleCliResult());
+      const result = await gateway.execute(makeInput(), executeFn);
+      expect(result.state).toBe("broadcast");
+
+      const reconciled = gateway.reconcileBroadcast(result.operationId, "confirmed", {
+        txHash: "0x" + "b".repeat(64),
+      });
+      expect(reconciled.state).toBe("confirmed");
+      expect(reconciled.txHash).toBe("0x" + "b".repeat(64));
+    });
+
+    it("broadcast can be reconciled to failed", async () => {
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeBroadcastCircleCliResult());
+      const result = await gateway.execute(makeInput(), executeFn);
+      expect(result.state).toBe("broadcast");
+
+      const reconciled = gateway.reconcileBroadcast(result.operationId, "failed", {
+        errorMessage: "Tx reverted on-chain",
+      });
+      expect(reconciled.state).toBe("failed");
+      expect(reconciled.errorMessage).toBe("Tx reverted on-chain");
+    });
+
+    it("unknown can remain unknown", async () => {
+      const executeFn: CircleCliExecuteFn = async () => {
+        const err = new Error("timeout");
+        err.name = "AbortError";
+        throw err;
+      };
+      const result = await gateway.execute(makeInput(), executeFn);
+      expect(result.state).toBe("unknown");
+
+      const reconciled = gateway.reconcileBroadcast(result.operationId, "unknown");
+      expect(reconciled.state).toBe("unknown");
+    });
+
+    it("retry after reconciled confirmed returns idempotent success", async () => {
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeBroadcastCircleCliResult());
+      const result = await gateway.execute(makeInput(), executeFn);
+      expect(result.state).toBe("broadcast");
+
+      // Reconcile to confirmed
+      gateway.reconcileBroadcast(result.operationId, "confirmed");
+
+      // Retry with same key → idempotent
+      const result2 = await gateway.execute(makeInput(), executeFn);
+      expect(result2.state).toBe("confirmed");
+      expect(result2.idempotent).toBe(true);
+    });
+
+    it("non-broadcast/unknown operations are returned as-is", async () => {
+      const executeFn: CircleCliExecuteFn = vi.fn().mockResolvedValue(makeMockCircleCliResult());
+      const result = await gateway.execute(makeInput(), executeFn);
+      expect(result.state).toBe("confirmed");
+
+      // Reconcile on confirmed → no-op
+      const reconciled = gateway.reconcileBroadcast(result.operationId, "failed");
+      expect(reconciled.state).toBe("confirmed"); // unchanged
     });
   });
 });

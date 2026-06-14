@@ -40,7 +40,7 @@ const ALLOWED_TRANSITIONS: ReadonlyMap<OperationState, ReadonlySet<OperationStat
     ["created", new Set(["prepared", "failed", "cancelled"])],
     ["prepared", new Set(["reserved", "failed"])],
     ["reserved", new Set(["executing", "failed"])],
-    ["executing", new Set(["broadcast", "unknown", "failed"])],
+    ["executing", new Set(["broadcast", "unknown", "failed", "cancelled"])],
     ["broadcast", new Set(["confirmed", "unknown", "failed"])],
     ["unknown", new Set(["confirmed", "failed"])],
     // Terminal states have no outgoing transitions
@@ -69,6 +69,8 @@ export const OPERATION_ERROR_CODES = [
   "CONFIRMATION_TIMEOUT",
   "RECONCILIATION_REQUIRED",
   "UNKNOWN_TX_STATE",
+  "OPERATION_CANCELLED",
+  "UNSUPPORTED_CHAIN",
 ] as const;
 
 export type OperationErrorCode = (typeof OPERATION_ERROR_CODES)[number];
