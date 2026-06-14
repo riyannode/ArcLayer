@@ -32,7 +32,7 @@ export function buildSdkInputSchema(params: McpToolParam[]): z.ZodObject<any> {
         fieldSchema = z.boolean();
         break;
       case 'object':
-        fieldSchema = z.record(z.unknown());
+        fieldSchema = z.record(z.string(), z.unknown());
         break;
       case 'array':
         fieldSchema = z.array(z.unknown());
