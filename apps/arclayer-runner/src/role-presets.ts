@@ -86,6 +86,7 @@ export const ROLE_PRESETS: RunnerRolePreset[] = [
       "x402.inspect",
       "x402.payment_policy",
       "erc8183.create_job",
+      "erc8183.set_budget",
       "erc8183.approve_usdc",
       "erc8183.fund_job",
       "erc8183.claim_refund",
