@@ -93,7 +93,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 }
 
 export async function GET(): Promise<Response> {
-  return NextResponse.json(
+  const body = JSON.stringify(
     {
       service: 'ArcLayer MCP',
       endpoint: '/api/mcp',
@@ -104,14 +104,18 @@ export async function GET(): Promise<Response> {
       auth: 'Bearer token required',
       docs: 'https://arclayers.xyz/global-mcp',
     },
-    {
-      status: 200,
-      headers: {
-        'Cache-Control': 'no-store',
-        Allow: 'POST, GET',
-      },
-    },
+    null,
+    2,
   );
+
+  return new NextResponse(body + '\n', {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Cache-Control': 'no-store',
+      Allow: 'POST, GET',
+    },
+  });
 }
 
 export async function DELETE(): Promise<Response> {
