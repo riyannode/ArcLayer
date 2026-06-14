@@ -1,11 +1,11 @@
-# ArcLayer PM2 Market-Agent Bridge
+# ArcLayer Market-Agent Bridge
 
 ArcLayer is a protocol bridge for autonomous market agents: identity, API auth, x402 access/payment, bridge events, receipts/proofs, payload hashes, and history on Arc.
 
-The external PM2 market agent bridge example shows:
+The external market agent bridge example shows:
 
 ```text
-external PM2 bot
+external runtime
   -> raw Polymarket BTC 15m data
   -> local/optional-LLM analysis
   -> risk evaluation
@@ -16,7 +16,7 @@ external PM2 bot
   -> /live-a2a-agent frontend viewer
 ```
 
-This is **not** a generic external LLM demo. External PM2 bots make market decisions; ArcLayer handles x402 payment, event receipts, and proof history on Arc.
+This is **not** a generic external LLM demo. External runtimes make market decisions; ArcLayer handles x402 payment, event receipts, and proof history on Arc.
 
 ## What ArcLayer is
 
@@ -35,11 +35,11 @@ This is **not** a generic external LLM demo. External PM2 bots make market decis
 - ArcLayer does not hardcode trading strategy inside `apps/console`.
 - Market-agent bots are owner-operated runtimes/examples, not console core product APIs.
 
-## External PM2 market agent bridge example
+## External market agent bridge example
 
 Required demo path:
 
-1. PM2 oracle bot fetches raw Polymarket BTC 15m data from ArcLayer data routes.
+1. oracle bot fetches raw Polymarket BTC 15m data from ArcLayer data routes.
 2. Analyzer bot uses local deterministic logic or an optional local LLM key.
 3. Evaluator bot emits risk/evaluation output.
 4. Executor bot emits a `DRY_RUN` intent only.
@@ -51,7 +51,7 @@ Required demo path:
 ## Runtime boundary
 
 - ArcLayer is the protocol bridge.
-- Bots run anywhere: PM2, VPS, worker runtimes, containers, or owner infrastructure.
+- Bots run anywhere: VPS, worker runtimes, containers, or owner infrastructure.
 - Bots own strategy, local LLM keys, and any execution integrations.
 - ArcLayer handles identity, x402, events, receipts, payload hashes, and history.
 - `LLM_API_KEY` is local-only for bot runtimes; it must never be sent to ArcLayer or Supabase and must never be printed.
@@ -97,7 +97,7 @@ Example body:
   "role": "analyzer",
   "type": "resolver_output",
   "payload": { "suggestedDirection": "UP", "confidence": 62 },
-  "metadata": { "source": "external-pm2-market-agent-bridge", "dryRunOnly": true }
+  "metadata": { "source": "market-agent-bridge", "dryRunOnly": true }
 }
 ```
 
@@ -128,7 +128,7 @@ Supported scopes: `summary`, `full_events`, `receipts`, `payload`, `external_tra
 
 ## Session viewer
 
-`/live-a2a-agent` is the frontend viewer for the PM2 market-agent bridge proof. It reads `GET /api/agent-bridge/sessions/latest` and displays runtime identity, event timeline, dynamic roles, payload hashes, receipts, and x402 access status.
+`/live-a2a-agent` is the frontend viewer for the market-agent bridge proof. It reads `GET /api/agent-bridge/sessions/latest` and displays runtime identity, event timeline, dynamic roles, payload hashes, receipts, and x402 access status.
 
 ## Security model
 
@@ -144,4 +144,4 @@ Supported scopes: `summary`, `full_events`, `receipts`, `payload`, `external_tra
 - Use `POST /api/agent-bridge/events` instead of legacy market-specific live signal routes.
 - Use `GET /api/agent-bridge/sessions/latest` for UI state.
 - Use `POST /api/x402/bridge-access` for paid bridge resource access.
-- Keep market-agent bot integrations in `examples/external-pm2-bots/` or owner-operated external runtimes.
+- Keep market-agent bot integrations as owner-operated external runtimes. Use the authenticated HTTP APIs directly (`POST /api/agent-bridge/events`, `GET /api/agent-bridge/sessions/latest`, `POST /api/x402/bridge-access`) with scoped API keys. The ArcLayer Runner does not currently expose agent-bridge or A2A live-event tools.

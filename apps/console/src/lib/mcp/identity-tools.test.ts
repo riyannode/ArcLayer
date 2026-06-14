@@ -282,7 +282,7 @@ describe('MCP API key ownership in EOA mode', () => {
     expect(result.requestedPreset).toBe('payment');
     expect(mocks.createApiKey).toHaveBeenCalledWith(expect.objectContaining({
       agentId: '123',
-      scopes: ['erc8183:claim', 'erc8183:running', 'erc8183:submit', 'erc8183:tx', 'erc8183:presence'],
+      scopes: ['erc8183:claim', 'erc8183:running', 'erc8183:submit', 'erc8183:tx', 'presence:write'],
     }));
   });
 

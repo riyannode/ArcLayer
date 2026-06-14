@@ -1,7 +1,7 @@
 /**
  * MCP Provider Runtime Tools — Durable runtime memory + open job discovery.
  *
- * PR #461: Tools for provider PM2 bots to persist state, resume jobs,
+ * PR #461: Tools for provider runtimes to persist state, resume jobs,
  * discover/apply to open/global jobs, and track phase transitions.
  *
  * Auth: MCP Bearer session required (arc_mcp_sess_*).

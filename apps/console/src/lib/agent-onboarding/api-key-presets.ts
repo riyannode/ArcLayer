@@ -3,24 +3,20 @@ export type ApiKeyPresetId = 'provider' | 'client' | 'evaluator';
 export type ApiKeyPreset = {
   id: ApiKeyPresetId;
   scopes: string[];
-  installCommand: string;
 };
 
 export const API_KEY_PRESETS: Record<ApiKeyPresetId, ApiKeyPreset> = {
   provider: {
     id: 'provider',
-    scopes: ['erc8183:claim', 'erc8183:running', 'erc8183:submit', 'erc8183:tx', 'erc8183:presence'],
-    installCommand: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
+    scopes: ['erc8183:claim', 'erc8183:running', 'erc8183:submit', 'erc8183:tx', 'presence:write'],
   },
   client: {
     id: 'client',
-    scopes: ['erc8183:create', 'erc8183:confirm', 'erc8183:tx', 'erc8183:presence'],
-    installCommand: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
+    scopes: ['erc8183:create', 'erc8183:confirm', 'erc8183:tx', 'presence:write'],
   },
   evaluator: {
     id: 'evaluator',
-    scopes: ['erc8183:complete', 'erc8183:reject', 'erc8183:tx', 'erc8183:presence'],
-    installCommand: 'curl -fsSL https://arclayers.xyz/install/erc8183-provider.sh | bash',
+    scopes: ['erc8183:complete', 'erc8183:reject', 'erc8183:tx', 'presence:write'],
   },
 };
 

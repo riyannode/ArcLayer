@@ -7,17 +7,6 @@ import { requireApiKey } from '@/lib/a2a/auth';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-function checkGlobalToken(request: Request): boolean {
-  const required = process.env.A2A_LIVE_EVENTS_TOKEN?.trim();
-  if (!required) return process.env.NODE_ENV !== 'production';
-
-  const auth = request.headers.get('authorization') ?? '';
-  const bearer = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : null;
-  const header = request.headers.get('x-arclayer-live-token')?.trim() ?? null;
-
-  return bearer === required || header === required;
-}
-
 /**
  * Recursive secret-field rejection.
  * Scans all keys in plain objects and arrays.
@@ -106,45 +95,15 @@ export async function POST(request: NextRequest) {
     return humanJson(request, { ok: false, error: 'secret_fields_rejected' }, { status: 400 });
   }
 
-  // Dual auth: global A2A_LIVE_EVENTS_TOKEN OR per-agent ARCLAYER_API_KEY
-  if (checkGlobalToken(request)) {
-    // Global token passes — proceed with write (backward compat)
-    const result = await upsertAgentPresence({
-      agentId: body.agentId,
-      agentName: body.agentName,
-      status: body.status,
-      lastEventType: body.lastEventType ?? 'heartbeat',
-      lastEventSummary: body.lastEventSummary ?? 'heartbeat',
-      role: body.role ?? undefined,
-      runtimeType: body.runtimeType ?? undefined,
-      processName: body.processName ?? undefined,
-      version: body.version ?? undefined,
-      chainId: body.chainId ?? undefined,
-      rpcOk: body.rpcOk ?? undefined,
-    });
-
-    if (!result.ok) {
-      return humanJson(request, { ok: false, error: result.error }, { status: 400 });
-    }
-
-    return humanJson(request, { ok: true });
-  }
-
-  // Determine required scope based on runtimeType
+  // Authenticate via per-agent ARCLAYER_API_KEY
   const runtimeType = body.runtimeType as string | undefined;
-  let requiredScopes: string[];
 
-  if (runtimeType === 'erc8183-bot') {
-    requiredScopes = ['erc8183:presence'];
-  } else if (runtimeType === 'x402-agent') {
+  if (runtimeType === 'x402-agent') {
     // Reserved for future x402 agent heartbeat — not yet implemented
     return humanJson(request, { ok: false, error: 'unsupported_runtime_type', hint: 'x402:presence not yet implemented' }, { status: 501 });
-  } else {
-    // Legacy A2A bots: preserve existing presence:write behavior
-    requiredScopes = ['presence:write'];
   }
 
-  const auth = await requireApiKey(request, requiredScopes);
+  const auth = await requireApiKey(request, ['presence:write']);
   if (auth.error) return auth.error;
 
   // Enforce key.agentId === body.agentId

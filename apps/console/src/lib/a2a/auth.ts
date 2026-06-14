@@ -23,6 +23,7 @@ export const API_KEY_SCOPES = {
   ERC8183_REJECT: 'erc8183:reject',
   // ERC-8183 bot heartbeat/presence
   ERC8183_PRESENCE: 'erc8183:presence',
+  PRESENCE_WRITE: 'presence:write',
   // Reserved for future x402 agent heartbeat
   X402_PRESENCE: 'x402:presence',
 } as const;
