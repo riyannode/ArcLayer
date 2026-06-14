@@ -129,13 +129,20 @@ export async function POST(
         }, { status: 409 });
     }
 
-    // ── Budget mismatch warning (non-blocking) ────────────────────────────
+    // ── Budget mismatch — HARD ERROR (409 budget_mismatch) ────────────────
+    //
+    // Critical invariant: client proposed budget == local agent_jobs.price_atomic
+    // == BudgetSet event amount == onchain job.budget == approved/funded amount.
+    //
+    // If any mismatch exists, funding MUST fail to prevent partial escrow.
 
     if (onchainJob.budget !== BigInt(priceAtomic)) {
-      console.warn(
-        `[fund] budget_mismatch localJobId=${localJobId} erc8183JobId=${job.erc8183JobId} ` +
-        `local_priceAtomic=${job.priceAtomic} onchain_budget=${onchainJob.budget.toString()}`,
-      );
+      return humanJson(req, {
+          ok: false,
+          ...escrowRail(),
+          error: 'budget_mismatch',
+          message: `On-chain budget (${onchainJob.budget.toString()}) does not match local price (${job.priceAtomic}). Provider may have set a different budget than proposed. Rejecting fund to prevent partial escrow.`,
+        }, { status: 409 });
     }
 
     // ── All checks passed — return tx instructions ────────────────────────
