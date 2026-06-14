@@ -144,7 +144,7 @@ const EVENT_EMOJI: Record<NotificationEvent, string> = {
  * Prevents garbled messages when payload contains `_`, `*`, `` ` ``, etc.
  */
 function escapeTelegramMarkdown(value: string): string {
-  return value.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
+  return value.replace(/[\\_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
 }
 
 // ── Notifier ───────────────────────────────────────────────────────────────
