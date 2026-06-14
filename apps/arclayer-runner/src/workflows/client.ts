@@ -45,6 +45,9 @@ export type ClientJobState =
 export type ClientJobContext = {
   localJobId?: string;
   erc8183JobId?: string;
+  proposedBudgetAtomic?: string;
+  providerAddress?: string;
+  evaluatorAddress?: string;
   createTxHash?: string;
   setBudgetTxHash?: string;
   approveTxHash?: string;
@@ -77,6 +80,9 @@ export class ClientWorkflow {
 
     this.jobs.set(contextId, {
       state: "awaiting_create_confirmation",
+      proposedBudgetAtomic: parseUsdcToAtomic(draft.proposedBudgetUsdc).toString(),
+      providerAddress: draft.providerAddress.toLowerCase(),
+      evaluatorAddress: draft.evaluatorAddress.toLowerCase(),
     });
 
     // Exact decimal formatting — no floating-point arithmetic
@@ -242,6 +248,29 @@ export class ClientWorkflow {
       if (!onchainBudget || onchainBudget === "0") {
         ctx.state = "failed";
         return { ok: false, message: "❌ Provider has not set budget yet." };
+      }
+
+      // Invariant: proposed budget === onchain budget
+      if (ctx.proposedBudgetAtomic && onchainBudget !== ctx.proposedBudgetAtomic) {
+        ctx.state = "failed";
+        return {
+          ok: false,
+          message: `❌ Budget mismatch. Proposed ${ctx.proposedBudgetAtomic}, on-chain ${onchainBudget}. Funding blocked.`,
+        };
+      }
+
+      // Invariant: provider address must match proposal
+      const onchainProvider = String(onchainStatus.provider ?? "").toLowerCase();
+      if (ctx.providerAddress && onchainProvider && onchainProvider !== ctx.providerAddress) {
+        ctx.state = "failed";
+        return { ok: false, message: "❌ Provider mismatch. Funding blocked." };
+      }
+
+      // Invariant: evaluator address must match proposal
+      const onchainEvaluator = String(onchainStatus.evaluator ?? "").toLowerCase();
+      if (ctx.evaluatorAddress && onchainEvaluator && onchainEvaluator !== ctx.evaluatorAddress) {
+        ctx.state = "failed";
+        return { ok: false, message: "❌ Evaluator mismatch. Funding blocked." };
       }
 
       // Step 1: Approve USDC for exact on-chain budget

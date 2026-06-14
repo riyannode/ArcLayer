@@ -137,6 +137,16 @@ const EVENT_EMOJI: Record<NotificationEvent, string> = {
   "job.failed": "❌",
 };
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Escape Telegram Markdown v1 special characters in user/runtime content.
+ * Prevents garbled messages when payload contains `_`, `*`, `` ` ``, etc.
+ */
+function escapeTelegramMarkdown(value: string): string {
+  return value.replace(/[_*[\]()~`>#+\-=|{}.!]/g, "\\$&");
+}
+
 // ── Notifier ───────────────────────────────────────────────────────────────
 
 export class TelegramNotifier {
@@ -166,7 +176,7 @@ export class TelegramNotifier {
     const emoji = EVENT_EMOJI[payload.event] ?? "📢";
     const levelTag = eventLevel === "info" ? "" : ` [${eventLevel.toUpperCase()}]`;
 
-    const text = `${emoji} *${payload.event}*${levelTag}\n\n${payload.message}`;
+    const text = `${emoji} *${escapeTelegramMarkdown(payload.event)}*${levelTag}\n\n${escapeTelegramMarkdown(payload.message)}`;
 
     try {
       const body: Record<string, unknown> = {
