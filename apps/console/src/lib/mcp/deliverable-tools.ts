@@ -56,7 +56,7 @@ export async function handleProviderPublishDeliverable(
   const runtimeReceiptHash = args.runtimeReceiptHash ? String(args.runtimeReceiptHash) : undefined;
 
   if (!agentId || !jobId || !providerAddress || !deliverableHash || payload === undefined) {
-    throw new McpError(MCP_ERRORS.INVALID_PARAMS, 'agentId, jobId, providerAddress, deliverableHash, and payload are required');
+    throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'agentId, jobId, providerAddress, deliverableHash, and payload are required');
   }
 
   // Validate agent ownership
@@ -99,7 +99,7 @@ export async function handleEvaluatorGetDeliverable(
   const jobId = String(args.jobId ?? '');
 
   if (!jobId) {
-    throw new McpError(MCP_ERRORS.INVALID_PARAMS, 'jobId is required');
+    throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'jobId is required');
   }
 
   const supabase = getSupabase();
