@@ -23,6 +23,7 @@ describe("canTransitionOperationState", () => {
     ["executing", "broadcast"],
     ["executing", "unknown"],
     ["executing", "failed"],
+    ["executing", "cancelled"],
     ["broadcast", "confirmed"],
     ["broadcast", "unknown"],
     ["broadcast", "failed"],
@@ -129,7 +130,7 @@ describe("OPERATION_ERROR_CODES", () => {
     expect(OPERATION_ERROR_CODES).toContain("CONFIRMATION_TIMEOUT");
     expect(OPERATION_ERROR_CODES).toContain("RECONCILIATION_REQUIRED");
     expect(OPERATION_ERROR_CODES).toContain("UNKNOWN_TX_STATE");
-    expect(OPERATION_ERROR_CODES).toHaveLength(7);
+    expect(OPERATION_ERROR_CODES).toHaveLength(9);
   });
 });
 
