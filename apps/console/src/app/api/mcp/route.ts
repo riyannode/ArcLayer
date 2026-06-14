@@ -1,8 +1,9 @@
 /**
  * ArcLayer Global MCP — Route handler.
  *
- * POST-only. Uses official @modelcontextprotocol/sdk WebStandardStreamableHTTPServerTransport.
- * GET/DELETE/PUT/PATCH → 405 with Allow: POST.
+ * POST: MCP protocol via official @modelcontextprotocol/sdk WebStandardStreamableHTTPServerTransport.
+ * GET: Service discovery / health info (JSON).
+ * DELETE/PUT/PATCH → 405 with Allow: POST, GET.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -92,29 +93,44 @@ export async function POST(req: NextRequest): Promise<Response> {
 }
 
 export async function GET(): Promise<Response> {
-  return new NextResponse('Method Not Allowed', {
-    status: 405,
-    headers: { Allow: 'POST', 'Cache-Control': 'no-store' },
-  });
+  return NextResponse.json(
+    {
+      service: 'ArcLayer MCP',
+      endpoint: '/api/mcp',
+      transport: 'Streamable HTTP',
+      method: 'POST',
+      protocolVersion: '2025-03-26',
+      tools: 61,
+      auth: 'Bearer token required',
+      docs: 'https://arclayers.xyz/global-mcp',
+    },
+    {
+      status: 200,
+      headers: {
+        'Cache-Control': 'no-store',
+        Allow: 'POST, GET',
+      },
+    },
+  );
 }
 
 export async function DELETE(): Promise<Response> {
   return new NextResponse('Method Not Allowed', {
     status: 405,
-    headers: { Allow: 'POST', 'Cache-Control': 'no-store' },
+    headers: { Allow: 'POST, GET', 'Cache-Control': 'no-store' },
   });
 }
 
 export async function PUT(): Promise<Response> {
   return new NextResponse('Method Not Allowed', {
     status: 405,
-    headers: { Allow: 'POST', 'Cache-Control': 'no-store' },
+    headers: { Allow: 'POST, GET', 'Cache-Control': 'no-store' },
   });
 }
 
 export async function PATCH(): Promise<Response> {
   return new NextResponse('Method Not Allowed', {
     status: 405,
-    headers: { Allow: 'POST', 'Cache-Control': 'no-store' },
+    headers: { Allow: 'POST, GET', 'Cache-Control': 'no-store' },
   });
 }
