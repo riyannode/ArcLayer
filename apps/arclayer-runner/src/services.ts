@@ -32,6 +32,29 @@ import { randomUUID } from "node:crypto";
 import { ExecutionGateway, assertGatewayWriteSucceeded } from "./execution-gateway";
 import type { WriteOperationKind } from "./execution-gateway";
 
+// ── Canonical Helpers ──────────────────────────────────────────────────
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+function canonicalAddress(value: string | undefined, fallback = ZERO_ADDRESS): string {
+  const raw = value ?? fallback;
+  return raw.toLowerCase();
+}
+
+function canonicalExpiredAt(value: string | number): string {
+  return String(value);
+}
+
+function stableRequestKey(
+  prefix: string,
+  input: { idempotencyKey?: string; requestId?: string },
+  fallback: string
+): string {
+  if (input.idempotencyKey) return input.idempotencyKey;
+  if (input.requestId) return `${prefix}:${input.requestId}`;
+  return fallback;
+}
+
 /**
  * Task lifecycle callbacks — called AFTER validation passes.
  * Router passes these; service methods invoke them at the right moment.
@@ -533,6 +556,8 @@ export class RunnerServices {
       expiredAt: string | number;
       description: string;
       hook?: string;
+      idempotencyKey?: string;
+      requestId?: string;
     };
 
     if (!this.config.circleWalletAddress) {
@@ -540,8 +565,7 @@ export class RunnerServices {
     }
 
     // Arc/Circle spec: createJob reverts if evaluator is zero address
-    const ZERO = "0x0000000000000000000000000000000000000000";
-    if (!input.evaluator || input.evaluator.toLowerCase() === ZERO) {
+    if (!input.evaluator || input.evaluator.toLowerCase() === ZERO_ADDRESS) {
       throw new RunnerError(
         "INVALID_EVALUATOR",
         "evaluator must be non-zero (Arc spec: createJob reverts with zero evaluator)",
@@ -549,9 +573,23 @@ export class RunnerServices {
       );
     }
 
-    const normalizedHook = input.hook ?? "0x0000000000000000000000000000000000000000";
-    const idempotencyKey = `createJob:${input.provider}:${input.evaluator}:${input.expiredAt}:${input.description}:${normalizedHook}`;
-    const paramsHash = sha256Json({ provider: input.provider, evaluator: input.evaluator, expiredAt: input.expiredAt, description: input.description, hook: normalizedHook });
+    const normalizedProvider = canonicalAddress(input.provider);
+    const normalizedEvaluator = canonicalAddress(input.evaluator);
+    const normalizedHook = canonicalAddress(input.hook);
+    const normalizedExpiredAt = canonicalExpiredAt(input.expiredAt);
+
+    const fallbackIdempotencyKey =
+      `createJob:${normalizedProvider}:${normalizedEvaluator}:${normalizedExpiredAt}:${input.description}:${normalizedHook}`;
+
+    const idempotencyKey = stableRequestKey("createJob", input, fallbackIdempotencyKey);
+
+    const paramsHash = sha256Json({
+      provider: normalizedProvider,
+      evaluator: normalizedEvaluator,
+      expiredAt: normalizedExpiredAt,
+      description: input.description,
+      hook: normalizedHook,
+    });
 
     const gwResult = await this.gateway.execute(
       {
@@ -565,11 +603,11 @@ export class RunnerServices {
       async (circle, sig) => circle.executeErc8183Write({
         signature: "createJob(address,address,uint256,string,address)",
         params: [
-          input.provider,
-          input.evaluator,
-          String(input.expiredAt),
+          normalizedProvider,
+          normalizedEvaluator,
+          normalizedExpiredAt,
           input.description,
-          input.hook ?? "0x0000000000000000000000000000000000000000"
+          normalizedHook,
         ],
         contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         address: this.config.circleWalletAddress!,

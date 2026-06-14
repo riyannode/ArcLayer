@@ -14,6 +14,13 @@
 
 import { z } from "zod";
 
+// ── Shared Optional Fields ──────────────────────────────────────────────
+
+const OptionalIdempotencyFields = {
+  idempotencyKey: z.string().min(1, "idempotencyKey must not be empty").optional(),
+  requestId: z.string().min(1, "requestId must not be empty").optional(),
+};
+
 // ── Individual Tool Input Schemas ─────────────────────────────────────────
 // These schemas define the MCP tool input shape — what arrives from the client.
 // Internal type literals (like `type: "x402_service_pay"`) are NOT included;
@@ -102,6 +109,7 @@ export const Erc8183CreateJobInputSchema = z.object({
   ),
   description: z.string().min(1, "description is required"),
   hook: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "hook must be a valid address").optional(),
+  ...OptionalIdempotencyFields,
 });
 
 /** erc8183.set_budget — set budget for a job */
@@ -114,6 +122,7 @@ export const Erc8183SetBudgetInputSchema = z.object({
 /** erc8183.approve_usdc — approve USDC for AgenticCommerce */
 export const Erc8183ApproveUsdcInputSchema = z.object({
   amount: z.string().regex(/^[0-9]+(\.[0-9]+)?$/, "amount must be a decimal string"),
+  ...OptionalIdempotencyFields,
 });
 
 /** erc8183.fund_job — fund a job */

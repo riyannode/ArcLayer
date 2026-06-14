@@ -73,6 +73,49 @@ export type CircleCliExecuteFn = (
 
 // ── Result Classification ──────────────────────────────────────────────
 
+const ARC_TESTNET_CHAIN_ID = 5042002;
+const ARC_TESTNET_CHAIN_NAMES = new Set([
+  "arc-testnet",
+  "arc",
+  "arctestnet",
+  "5042002",
+]);
+
+const TERMINAL_SUCCESS_STATES = new Set([
+  "CONFIRMED",
+  "COMPLETE",
+  "COMPLETED",
+  "SUCCESS",
+  "SUCCEEDED",
+]);
+
+const MAX_RESULT_CACHE_ENTRIES = 1000;
+const MAX_CACHED_STDOUT_BYTES = 64 * 1024;
+
+function truncateText(value: string, maxBytes: number): string {
+  if (Buffer.byteLength(value, "utf8") <= maxBytes) return value;
+  return Buffer.from(value, "utf8").subarray(0, maxBytes).toString("utf8") + "\n...[truncated]";
+}
+
+function compactCircleResult(result: CircleCliResult): CircleCliResult {
+  return {
+    ...result,
+    stdout: truncateText(result.stdout ?? "", MAX_CACHED_STDOUT_BYTES),
+    stderr: truncateText(result.stderr ?? "", MAX_CACHED_STDOUT_BYTES),
+  };
+}
+
+function resolveChainId(chain: string, chainId?: number): number {
+  if (chainId !== undefined) return chainId;
+  if (ARC_TESTNET_CHAIN_NAMES.has(chain.toLowerCase())) return ARC_TESTNET_CHAIN_ID;
+  throw new RunnerError(
+    "UNSUPPORTED_CHAIN" satisfies OperationErrorCode,
+    `ExecutionGateway write attempted on unsupported chain: ${chain}`,
+    400,
+    { chain }
+  );
+}
+
 /**
  * Classify a Circle CLI result into an operation state.
  *
@@ -116,21 +159,31 @@ function classifyCircleResult(
   }
 
   // Check Circle's terminal state field (data.state)
-  // Circle CLI waits for terminal state: CONFIRMED, FAILED, DENIED, CANCELLED
+  // Circle CLI waits for terminal state: CONFIRMED, FAILED, DENIED, CANCELLED, etc.
   const dataState = (json?.data as Record<string, unknown> | undefined)?.state;
   if (typeof dataState === "string") {
     const upper = dataState.toUpperCase();
-    if (upper === "FAILED" || upper === "DENIED" || upper === "CANCELLED") {
+    if (upper === "FAILED" || upper === "DENIED" || upper === "REVERTED") {
       return "failed";
+    }
+    if (upper === "CANCELLED" || upper === "CANCELED") {
+      return "cancelled";
     }
   }
 
   const txHash = extractTxHash(result);
 
   // Explicit success receipt with txHash → confirmed
-  // Circle CLI returns { status: "confirmed" } or data.state: "CONFIRMED" on finality
-  if (txHash && (json?.status === "confirmed" || dataState === "CONFIRMED")) {
-    return "confirmed";
+  // Check both json.status and data.state for terminal success
+  if (txHash) {
+    const statusUpper = typeof json?.status === "string" ? json.status.toUpperCase() : undefined;
+    const dataStateUpper = typeof dataState === "string" ? dataState.toUpperCase() : undefined;
+    if (
+      (statusUpper && TERMINAL_SUCCESS_STATES.has(statusUpper)) ||
+      (dataStateUpper && TERMINAL_SUCCESS_STATES.has(dataStateUpper))
+    ) {
+      return "confirmed";
+    }
   }
 
   // txHash present but no explicit confirmation → broadcast (not terminal)
@@ -273,7 +326,7 @@ export class ExecutionGateway {
       toolName: input.kind,
       agentId: input.agentId ?? this.config.agentId,
       walletAddress: input.walletAddress,
-      chainId: input.chainId ?? 5042002, // Default: Arc Testnet
+      chainId: resolveChainId(input.chain, input.chainId),
       contractAddress: input.contractAddress,
       paramsHash: input.paramsHash,
       state: "created",
@@ -326,7 +379,13 @@ export class ExecutionGateway {
 
     // ── Cache result for idempotent replay ────────────────────────────
     if (cliResult) {
-      this.resultCache.set(operationId, cliResult);
+      this.resultCache.set(operationId, compactCircleResult(cliResult));
+      // Evict oldest entries if cache exceeds max
+      while (this.resultCache.size > MAX_RESULT_CACHE_ENTRIES) {
+        const oldestKey = this.resultCache.keys().next().value;
+        if (!oldestKey) break;
+        this.resultCache.delete(oldestKey);
+      }
     }
 
     // ── Update record with result ─────────────────────────────────────
@@ -456,6 +515,55 @@ export class ExecutionGateway {
   get operationCount(): number {
     return this.operations.size;
   }
+
+  /** Get the current resultCache size (for testing). */
+  get resultCacheSize(): number {
+    return this.resultCache.size;
+  }
+
+  /**
+   * Reconcile a broadcast or unknown operation to a final state.
+   * This is the minimal in-memory reconciliation path — Phase 5 will
+   * provide persistent reconciliation with SQLite.
+   *
+   * Only operations in "broadcast" or "unknown" state can be reconciled.
+   */
+  reconcileBroadcast(
+    operationId: string,
+    outcome: "confirmed" | "failed" | "unknown",
+    details?: { txHash?: string; errorCode?: OperationErrorCode; errorMessage?: string }
+  ): OperationRecord {
+    const record = this.operations.get(operationId);
+    if (!record) {
+      throw new RunnerError("OPERATION_NOT_FOUND", `Operation ${operationId} not found`, 404);
+    }
+
+    if (record.state !== "broadcast" && record.state !== "unknown") {
+      return record;
+    }
+
+    if (details?.txHash) record.txHash = details.txHash;
+
+    if (outcome === "confirmed") {
+      if (record.state === "unknown") {
+        // Phase 5 can provide richer reconciliation transition handling.
+        record.state = "confirmed";
+      } else {
+        this.transitionState(operationId, "confirmed");
+      }
+    } else if (outcome === "failed") {
+      record.state = "failed";
+      record.errorCode = details?.errorCode ?? "BROADCAST_FAILED";
+      record.errorMessage = details?.errorMessage ?? "Reconciled as failed";
+    } else {
+      record.state = "unknown";
+      record.errorCode = details?.errorCode ?? "UNKNOWN_TX_STATE";
+      record.errorMessage = details?.errorMessage ?? "Still unknown after reconciliation";
+    }
+
+    record.updatedAt = new Date().toISOString();
+    return record;
+  }
 }
 
 // ── Gateway Result Assertion ──────────────────────────────────────────
@@ -512,11 +620,17 @@ export function assertGatewayWriteSucceeded(
         metadata
       );
     case "created":
-    case "cancelled":
       throw new RunnerError(
         "BROADCAST_FAILED",
         `Gateway write ended in unexpected state: ${gwResult.state}. operationId=${gwResult.operationId}`,
         422,
+        metadata
+      );
+    case "cancelled":
+      throw new RunnerError(
+        "OPERATION_CANCELLED",
+        `Gateway write was cancelled. operationId=${gwResult.operationId}`,
+        409,
         metadata
       );
   }
