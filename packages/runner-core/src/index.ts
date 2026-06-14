@@ -10,3 +10,4 @@ export * from "./nonce-store";
 export * from "./task-idempotency";
 export * from "./mcp-input-schemas";
 export * from "./operation";
+export * from "./autonomy-schemas";
