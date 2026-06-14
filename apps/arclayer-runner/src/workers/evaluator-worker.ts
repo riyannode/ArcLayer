@@ -75,6 +75,7 @@ export class EvaluatorWorker extends EventEmitter {
   private pollTimer?: ReturnType<typeof setInterval>;
   private activeEval: ActiveEvaluation | null = null;
   private processedIds = new Set<string>();
+  private readonly retryCounts = new Map<string, number>();
 
   constructor(
     private readonly config: RunnerConfig,
@@ -127,17 +128,31 @@ export class EvaluatorWorker extends EventEmitter {
   // ── Startup Verification ───────────────────────────────────────────────
 
   private async verifyIdentity(): Promise<void> {
-    if (this.config.role !== "evaluator") {
-      throw new Error(`Worker requires role=evaluator, got ${this.config.role}`);
+    if (this.config.defaultRole !== "evaluator") {
+      throw new Error(`Worker requires role=evaluator, got ${this.config.defaultRole}`);
     }
-    if (!this.config.mcpToken) {
-      throw new Error("MCP Bearer token required");
+    if (!process.env.ARCLAYER_MCP_TOKEN) {
+      throw new Error("ARCLAYER_MCP_TOKEN required");
     }
     if (!this.config.circleWalletAddress) {
       throw new Error("Circle wallet address required");
     }
-    if (this.config.chainId !== 5042002) {
-      throw new Error(`Expected Arc Testnet chain ID 5042002, got ${this.config.chainId}`);
+    if (this.config.chain !== "ARC-TESTNET") {
+      throw new Error(`Expected ARC-TESTNET, got ${this.config.chain}`);
+    }
+
+    // Verify ERC-8004 registration
+    try {
+      await this.mcp.callTool("identity.get_agent_account", {});
+    } catch (err) {
+      throw new Error(`ERC-8004 identity verification failed: ${err}`);
+    }
+
+    // Verify Circle CLI status
+    try {
+      await this.services.circleStatus();
+    } catch (err) {
+      throw new Error(`Circle CLI status check failed: ${err}`);
     }
   }
 
@@ -182,32 +197,36 @@ export class EvaluatorWorker extends EventEmitter {
         erc8183JobId,
         phase: "discovered",
         startedAt: new Date(),
-        retryCount: 0,
+        retryCount: this.retryCounts.get(jobId) ?? 0,
       };
 
       try {
         await this.processSubmittedJob(jobRecord);
         this.processedIds.add(jobId);
+        this.retryCounts.delete(jobId);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[evaluator-worker] Job ${jobId} failed: ${msg}`);
         this.activeEval.phase = "failed";
         this.activeEval.lastError = msg;
 
-        if (this.activeEval.retryCount < this.workerConfig.maxRuntimeRetries) {
-          this.activeEval.retryCount++;
-          const backoff = this.workerConfig.baseBackoffMs * Math.pow(2, this.activeEval.retryCount - 1);
-          console.log(`[evaluator-worker] Retrying job ${jobId} in ${backoff}ms`);
-          await this.sleep(backoff);
-          this.processedIds.delete(jobId);
-        } else {
+        const nextRetry = (this.retryCounts.get(jobId) ?? 0) + 1;
+        this.retryCounts.set(jobId, nextRetry);
+
+        if (nextRetry >= this.workerConfig.maxRuntimeRetries) {
           // Runtime failure NEVER auto-rejects
-          this.activeEval.phase = "needs_action";
+          this.processedIds.add(jobId);
+          this.activeEval.phase = "manual_review";
           await this.notifyTelegram(
-            "evaluation.needs_action",
-            `Job ${jobId} needs manual review after ${this.workerConfig.maxRuntimeRetries} retries: ${msg}`,
+            "evaluation.manual_review",
+            `Job ${jobId} requires manual review after ${nextRetry} attempts: ${msg}`,
           );
+          return;
         }
+
+        const backoff = this.workerConfig.baseBackoffMs * Math.pow(2, nextRetry - 1);
+        console.log(`[evaluator-worker] Retrying job ${jobId} in ${backoff}ms (attempt ${nextRetry})`);
+        await this.sleep(backoff);
       } finally {
         this.activeEval = null;
       }
@@ -241,6 +260,7 @@ export class EvaluatorWorker extends EventEmitter {
 
     const canonicalPayload = String(deliverableData.canonicalPayload ?? "");
     const storedHash = String(deliverableData.deliverableHash ?? "");
+    const onchainHash = String(deliverableData.onchainDeliverableHash ?? "");
 
     // Step 2: Recompute Keccak-256 and verify three-way hash
     const computedHash = keccak256(toBytes(canonicalPayload));
@@ -250,6 +270,16 @@ export class EvaluatorWorker extends EventEmitter {
       await this.notifyTelegram(
         "evaluation.manual_review",
         `Job ${jobId}: hash mismatch (computed ${computedHash} != stored ${storedHash}). Manual review required.`,
+      );
+      return;
+    }
+
+    // Verify onchain submitted hash matches stored hash
+    if (onchainHash && onchainHash.toLowerCase() !== storedHash.toLowerCase()) {
+      this.activeEval!.phase = "manual_review";
+      await this.notifyTelegram(
+        "evaluation.manual_review",
+        `Job ${jobId}: onchain hash mismatch (onchain ${onchainHash} != stored ${storedHash}). Manual review required.`,
       );
       return;
     }
@@ -264,11 +294,15 @@ export class EvaluatorWorker extends EventEmitter {
       // The runtime checks acceptance criteria from the JobEnvelope
       runtimeResult = await this.runtime.run({
         taskId: `eval-${jobId}`,
+        agentId: this.config.agentId,
+        role: "evaluator" as const,
+        protocol: "erc8183" as const,
         input: {
           jobId: erc8183JobId,
           deliverable: canonicalPayload,
           deliverableHash: storedHash,
         },
+        metadata: { localJobId: jobId },
       });
     } catch (err) {
       // Runtime failure NEVER auto-rejects
@@ -329,7 +363,27 @@ export class EvaluatorWorker extends EventEmitter {
 
     const action = determineSettlementAction(verdict, mandatoryCriteriaIds);
 
+    // Persist evaluation before settlement
     this.activeEval!.phase = "settling";
+    try {
+      await this.mcp.callTool("evaluator.publish_evaluation", {
+        agentId: this.config.agentId,
+        jobId: erc8183JobId,
+        evaluatorAddress: this.config.circleWalletAddress,
+        deliverableHash: storedHash as `0x${string}`,
+        verdict,
+        evaluationReceiptHash: undefined,
+      });
+      this.emit("evaluation_published", { jobId, decision: action });
+    } catch (err) {
+      // Evaluation persistence failure → manual review
+      this.activeEval!.phase = "manual_review";
+      await this.notifyTelegram(
+        "evaluation.manual_review",
+        `Job ${jobId}: failed to persist evaluation: ${err}. Manual review required.`,
+      );
+      return;
+    }
 
     switch (action) {
       case "auto_complete":

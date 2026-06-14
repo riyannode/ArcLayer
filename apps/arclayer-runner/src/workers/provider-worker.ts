@@ -26,6 +26,7 @@ import {
   extractProposedBudget,
   parseUsdcToAtomic,
   hashDeliverable,
+  RuntimeResultSchema,
 } from "@arclayer/runner-core";
 import type { RunnerServices } from "../services";
 import type { ArcLayerMcpConnector } from "../mcp-connector";
@@ -143,29 +144,37 @@ export class ProviderWorker extends EventEmitter {
 
   private async verifyIdentity(): Promise<void> {
     // Verify role=provider
-    if (this.config.role !== "provider") {
-      throw new Error(`Worker requires role=provider, got ${this.config.role}`);
+    if (this.config.defaultRole !== "provider") {
+      throw new Error(`Worker requires role=provider, got ${this.config.defaultRole}`);
     }
 
     // Verify MCP token
-    if (!this.config.mcpToken) {
-      throw new Error("MCP Bearer token required");
+    if (!process.env.ARCLAYER_MCP_TOKEN) {
+      throw new Error("ARCLAYER_MCP_TOKEN required");
     }
-
-    // Verify ERC-8004 registration
-    // (done via MCP identity tools)
-
-    // Verify Circle CLI status
-    // (done via circle.status tool)
 
     // Verify configured wallet
     if (!this.config.circleWalletAddress) {
       throw new Error("Circle wallet address required");
     }
 
-    // Verify Arc chain ID
-    if (this.config.chainId !== 5042002) {
-      throw new Error(`Expected Arc Testnet chain ID 5042002, got ${this.config.chainId}`);
+    // Verify Arc chain
+    if (this.config.chain !== "ARC-TESTNET") {
+      throw new Error(`Expected ARC-TESTNET, got ${this.config.chain}`);
+    }
+
+    // Verify ERC-8004 registration
+    try {
+      await this.mcp.callTool("identity.get_agent_account", {});
+    } catch (err) {
+      throw new Error(`ERC-8004 identity verification failed: ${err}`);
+    }
+
+    // Verify Circle CLI status
+    try {
+      await this.services.circleStatus();
+    } catch (err) {
+      throw new Error(`Circle CLI status check failed: ${err}`);
     }
   }
 
@@ -304,7 +313,25 @@ export class ProviderWorker extends EventEmitter {
       );
 
       // Verify on-chain budget equals proposal
-      // (done via MCP get_onchain_status)
+      const statusRaw = await this.mcp.callTool("jobs.get_onchain_status", {
+        jobId: erc8183JobId,
+      });
+      const status = JSON.parse(statusRaw as string) as Record<string, unknown>;
+      const expectedAtomic = parseUsdcToAtomic(proposedBudget);
+
+      if (String(status.budget ?? "") !== expectedAtomic.toString()) {
+        throw new Error(
+          `On-chain budget mismatch: expected ${expectedAtomic}, got ${status.budget}`,
+        );
+      }
+
+      if (
+        status.provider &&
+        String(status.provider).toLowerCase() !==
+          this.config.circleWalletAddress!.toLowerCase()
+      ) {
+        throw new Error("On-chain provider changed after setBudget");
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`setBudget failed: ${msg}`);
@@ -375,8 +402,14 @@ export class ProviderWorker extends EventEmitter {
     const description = String(job.description ?? "");
 
     // Verify on-chain provider equals local wallet
-    const providerAddress = String(job.providerAddress ?? "").toLowerCase();
-    if (providerAddress !== this.config.circleWalletAddress!.toLowerCase()) {
+    const assignedProviderAddress = String(job.providerAddress ?? "").toLowerCase();
+    const configuredProviderAddress = this.config.circleWalletAddress;
+
+    if (!configuredProviderAddress) {
+      throw new Error("Circle wallet address required");
+    }
+
+    if (assignedProviderAddress !== configuredProviderAddress.toLowerCase()) {
       console.log(`[provider-worker] Job ${jobId}: provider mismatch, skipping`);
       return;
     }
@@ -386,7 +419,6 @@ export class ProviderWorker extends EventEmitter {
     this.emit("runtime_started", { jobId });
     await this.notifyTelegram("runtime_started", `Starting execution for job ${jobId}`);
 
-    const providerAddress = this.config.circleWalletAddress!;
     const evaluatorAddress = String(job.evaluatorAddress ?? job.evaluator ?? "");
 
     if (!/^0x[a-fA-F0-9]{40}$/.test(evaluatorAddress)) {
@@ -402,7 +434,7 @@ export class ProviderWorker extends EventEmitter {
         taskId,
         jobId: erc8183JobId,
         agentId: this.config.agentId,
-        provider: providerAddress,
+        provider: configuredProviderAddress,
         evaluator: evaluatorAddress,
         description,
         input: { description, jobEnvelope: description },
@@ -434,8 +466,12 @@ export class ProviderWorker extends EventEmitter {
 
     // Build canonical deliverable and compute real hash
     this.activeJob!.phase = "publishing";
-    const runtimeOutput = runResult.result ?? runResult.output ?? null;
-    const runtimeArtifacts = Array.isArray(runResult.artifacts) ? runResult.artifacts : [];
+
+    // Parse the runtime result into the proper RuntimeResult type
+    const runtimeResult = RuntimeResultSchema.parse(runResult.result ?? runResult);
+
+    const runtimeOutput = runtimeResult.output ?? null;
+    const runtimeArtifacts = runtimeResult.artifacts;
 
     const deliverable = {
       schema: "arclayer.deliverable" as const,
@@ -456,11 +492,12 @@ export class ProviderWorker extends EventEmitter {
     await this.mcp.callTool("provider.publish_deliverable", {
       agentId: this.config.agentId,
       jobId: erc8183JobId,
-      providerAddress,
+      providerAddress: configuredProviderAddress,
       canonicalPayload,
       deliverableHash,
       artifacts: runtimeArtifacts,
-      runtimeReceiptHash: runResult.receipt?.proof?.sha256 ?? undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      runtimeReceiptHash: (runResult as any).receipt?.proof?.sha256 ?? undefined,
     });
     this.emit("deliverable_published", { jobId, deliverableHash });
 
@@ -470,7 +507,7 @@ export class ProviderWorker extends EventEmitter {
       const submitResult = await this.services.submitProviderDeliverable({
         jobId: erc8183JobId,
         deliverableHash,
-        result: runtimeOutput,
+        result: runtimeResult,
         optParams: "0x",
       });
       if (submitResult && !submitResult.ok) {

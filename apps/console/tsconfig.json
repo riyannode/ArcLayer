@@ -18,6 +18,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@arclayer/sdk": ["../../sdk/src/index.ts"],
+      "@arclayer/runner-core": ["../../packages/runner-core/src/index.ts"],
       "@arclayer/indexer/*": ["../../indexer/src/*"]
     }
   },

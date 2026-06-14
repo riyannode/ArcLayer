@@ -13,6 +13,8 @@ import { runDoctor } from "./doctor";
 import { registerInitCommand } from "./init";
 import { registerSetupCommand } from "./setup";
 import { registerInstallCommand } from "./install";
+import { createProviderWorker } from "./workers/provider-worker";
+import { createEvaluatorWorker } from "./workers/evaluator-worker";
 
 function stderrLog(msg: string): void {
   process.stderr.write(`[arclayer-runner] ${msg}\n`);
@@ -293,6 +295,107 @@ async function main() {
 
   // ── install (MCP sidecar installer) ───────────────────────────────────
   registerInstallCommand(program);
+
+  // ── Helper: create runner context for workers ───────────────────────
+  function createRunnerContext() {
+    const config = loadRunnerConfig();
+    const skill = loadGlobalSkill(config.skillPath);
+
+    const apiKey =
+      config.runtimeKind === "hermes"
+        ? process.env.HERMES_API_SERVER_KEY
+        : config.runtimeKind === "openclaw"
+          ? process.env.OPENCLAW_API_SERVER_KEY
+          : undefined;
+
+    const runtime = createRuntimeConnector(
+      config.runtimeKind,
+      config.runtimeEndpoint,
+      config.runtimeRunPath,
+      apiKey,
+      config.runtimeTimeoutMs,
+    );
+
+    const mcp = new ArcLayerMcpConnector({
+      baseUrl: process.env.ARCLAYER_MCP_BASE_URL ?? config.runtimeEndpoint,
+      token: process.env.ARCLAYER_MCP_TOKEN,
+      agentId: config.agentId,
+    });
+
+    const services = new RunnerServices(config, runtime, mcp, skill);
+
+    return { config, skill, runtime, mcp, services };
+  }
+
+  // ── provider-worker ─────────────────────────────────────────────────
+  program
+    .command("provider-worker")
+    .description("Run the autonomous provider worker")
+    .option("--once", "Run one poll cycle then exit")
+    .action(async ({ once }: { once?: boolean }) => {
+      const context = createRunnerContext();
+
+      const worker = createProviderWorker(
+        context.config,
+        context.services,
+        context.mcp,
+        context.runtime,
+      );
+
+      const shutdown = async () => {
+        await worker.stop();
+        await context.mcp.close();
+        await context.services.close?.();
+        process.exit(0);
+      };
+
+      process.once("SIGINT", shutdown);
+      process.once("SIGTERM", shutdown);
+
+      if (once) {
+        await worker.start();
+        await worker.stop();
+        await context.mcp.close();
+        await context.services.close?.();
+      } else {
+        await worker.start();
+      }
+    });
+
+  // ── evaluator-worker ────────────────────────────────────────────────
+  program
+    .command("evaluator-worker")
+    .description("Run the autonomous evaluator worker")
+    .option("--once", "Run one poll cycle then exit")
+    .action(async ({ once }: { once?: boolean }) => {
+      const context = createRunnerContext();
+
+      const worker = createEvaluatorWorker(
+        context.config,
+        context.services,
+        context.mcp,
+        context.runtime,
+      );
+
+      const shutdown = async () => {
+        await worker.stop();
+        await context.mcp.close();
+        await context.services.close?.();
+        process.exit(0);
+      };
+
+      process.once("SIGINT", shutdown);
+      process.once("SIGTERM", shutdown);
+
+      if (once) {
+        await worker.start();
+        await worker.stop();
+        await context.mcp.close();
+        await context.services.close?.();
+      } else {
+        await worker.start();
+      }
+    });
 
   program.parse(process.argv);
 }
