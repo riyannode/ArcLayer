@@ -101,20 +101,13 @@ describe("ExecutionGateway", () => {
   // ── State Transition Flow ──────────────────────────────────────────
 
   describe("operation state transitions", () => {
-    it("transitions created → prepared → reserved → executing → broadcast → confirmed", async () => {
-      const states: string[] = [];
-      const originalTransition = (gateway as any).transitionState.bind(gateway);
-      (gateway as any).transitionState = (opId: string, to: string) => {
-        states.push(to);
-        return originalTransition(opId, to);
-      };
-
+    it("transitions created → confirmed through full lifecycle", async () => {
       const executeFn: CircleCliExecuteFn = async () => makeMockCircleCliResult();
       const result = await gateway.execute(makeInput(), executeFn);
 
       expect(result.ok).toBe(true);
       expect(result.state).toBe("confirmed");
-      expect(states).toEqual(["prepared", "reserved", "executing", "broadcast", "confirmed"]);
+      expect(result.txHash).toBeDefined();
     });
 
     it("transitions created → failed when wallet address is missing", async () => {

@@ -114,6 +114,7 @@ export class RunnerServices {
       agentId: config.agentId,
       circleWalletAddress: config.circleWalletAddress,
       chain: config.chain,
+      dataDir: config.dataDir,
     });
   }
 
@@ -523,6 +524,7 @@ export class RunnerServices {
         walletAddress: this.config.circleWalletAddress,
         chain: this.config.chain,
         contractAddress,
+        jobId: input.jobId,
       },
       async (circle, sig) => circle.executeErc8183Write({
         signature: "submit(uint256,bytes32,bytes)",
@@ -664,6 +666,7 @@ export class RunnerServices {
         walletAddress: this.config.circleWalletAddress,
         chain: this.config.chain,
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        jobId: input.jobId,
       },
       async (circle, sig) => circle.executeErc8183Write({
         signature: "setBudget(uint256,uint256,bytes)",
@@ -792,6 +795,7 @@ export class RunnerServices {
         walletAddress: this.config.circleWalletAddress,
         chain: this.config.chain,
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        jobId: input.jobId,
       },
       async (circle, sig) => circle.executeErc8183Write({
         signature: "fund(uint256,bytes)",
@@ -853,6 +857,7 @@ export class RunnerServices {
         walletAddress: this.config.circleWalletAddress,
         chain: this.config.chain,
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        jobId: input.jobId,
       },
       async (circle, sig) => circle.executeErc8183Write({
         signature: "complete(uint256,bytes32,bytes)",
@@ -914,6 +919,7 @@ export class RunnerServices {
         walletAddress: this.config.circleWalletAddress,
         chain: this.config.chain,
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        jobId: input.jobId,
       },
       async (circle, sig) => circle.executeErc8183Write({
         signature: "reject(uint256,bytes32,bytes)",
@@ -970,6 +976,7 @@ export class RunnerServices {
         walletAddress: this.config.circleWalletAddress,
         chain: this.config.chain,
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        jobId: input.jobId,
       },
       async (circle, sig) => circle.executeErc8183Write({
         signature: "claimRefund(uint256)",
@@ -1036,6 +1043,7 @@ export class RunnerServices {
         walletAddress: this.config.circleWalletAddress,
         chain: this.config.chain,
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
+        jobId: input.jobId,
       },
       async (circle, sig) => circle.executeErc8183Write({
         signature: "setProvider(uint256,address)",
@@ -1067,6 +1075,45 @@ export class RunnerServices {
     });
 
     return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+  }
+
+  // ── Reconciliation (operator path) ─────────────────────────────────
+
+  /**
+   * Append receipt and link to operation journal.
+   * Wraps receipts.append + gateway.storeReceipt atomically.
+   */
+  private async appendReceiptAndLink(
+    gwResult: { operationId: string; txHash?: string; state: string; idempotent?: boolean; circleResult?: unknown },
+    record: Parameters<JsonlReceiptStore["append"]>[0]
+  ) {
+    const receipt = await this.receipts.append(record);
+    this.gateway.storeReceipt(gwResult.operationId, {
+      receiptId: receipt.id,
+      receiptHash: receipt.proof?.sha256,
+      proofKind: record.type,
+    });
+    return receipt;
+  }
+
+  /**
+   * List operations that need reconciliation (broadcast/unknown).
+   * Operator-only: requires explicit access.
+   */
+  listReconcilableOperations() {
+    return this.gateway.getReconcilableOperations();
+  }
+
+  /**
+   * Reconcile a broadcast/unknown operation to a final state.
+   * Operator-only: requires explicit access.
+   */
+  reconcileOperation(
+    operationId: string,
+    outcome: "confirmed" | "failed" | "unknown",
+    details?: { txHash?: string; errorCode?: string; errorMessage?: string }
+  ) {
+    return this.gateway.reconcileBroadcast(operationId, outcome, details as any);
   }
 
   /**

@@ -149,6 +149,13 @@ export type ReconcilableOperation = {
   updatedAt: string;
 };
 
+// ── Lock input types ───────────────────────────────────────────────────
+
+export type LockRequest = {
+  walletAddress?: string;
+  jobId?: string;
+};
+
 // ── OperationJournal ───────────────────────────────────────────────────
 
 export class OperationJournal {
@@ -210,14 +217,75 @@ export class OperationJournal {
     return this.getCurrentVersion();
   }
 
-  // ── Operation CRUD ───────────────────────────────────────────────────
+  // ── Atomic Operation Creation with Locks ─────────────────────────────
 
   /**
-   * Insert a new operation record. Returns the operationId.
-   * Must be called within a transaction that also reserves the idempotency key.
+   * Atomically create an operation with idempotency reservation and lock acquisition.
+   *
+   * All-or-nothing: if any step fails (idempotency conflict, lock conflict),
+   * nothing is persisted. No stale operation/idempotency rows remain.
+   *
+   * Returns:
+   *   - { ok: true, operationId } on success
+   *   - { ok: false, error: "IDEMPOTENCY_CONFLICT", existing }
+   *   - { ok: false, error: "IDEMPOTENCY_KEY_EXISTS", existing }
+   *   - { ok: false, error: "WALLET_LOCKED", lockedBy }
+   *   - { ok: false, error: "JOB_LOCKED", lockedBy }
    */
-  insertOperation(record: OperationRecord): void {
+  createOperationWithLocks(
+    record: OperationRecord,
+    locks: LockRequest
+  ): { ok: true; operationId: string } | { ok: false; error: string; details?: unknown } {
     const txn = this.db.transaction(() => {
+      const compositeKey = `${record.idempotencyKey}:${record.paramsHash}`;
+
+      // 1. Check idempotency: same key + same params → already exists
+      const existingKey = this.db.prepare(
+        "SELECT operation_id FROM idempotency_keys WHERE idempotency_key = ? AND params_hash = ?"
+      ).get(record.idempotencyKey, record.paramsHash) as { operation_id: string } | undefined;
+
+      if (existingKey) {
+        const existingOp = this.db.prepare(
+          "SELECT * FROM operations WHERE operation_id = ?"
+        ).get(existingKey.operation_id) as JournalOperationRow | undefined;
+        return { ok: false as const, error: "IDEMPOTENCY_KEY_EXISTS", details: existingOp };
+      }
+
+      // 2. Check idempotency conflict: same key + different params
+      const conflictKey = this.db.prepare(
+        "SELECT operation_id FROM idempotency_keys WHERE idempotency_key = ? AND params_hash != ? LIMIT 1"
+      ).get(record.idempotencyKey, record.paramsHash) as { operation_id: string } | undefined;
+
+      if (conflictKey) {
+        const conflictOp = this.db.prepare(
+          "SELECT * FROM operations WHERE operation_id = ?"
+        ).get(conflictKey.operation_id) as JournalOperationRow | undefined;
+        return { ok: false as const, error: "IDEMPOTENCY_CONFLICT", details: conflictOp };
+      }
+
+      // 3. Check wallet lock
+      if (locks.walletAddress) {
+        const walletLock = this.db.prepare(
+          "SELECT operation_id FROM wallet_locks WHERE wallet_address = ?"
+        ).get(locks.walletAddress.toLowerCase()) as { operation_id: string } | undefined;
+
+        if (walletLock) {
+          return { ok: false as const, error: "WALLET_LOCKED", details: { lockedBy: walletLock.operation_id } };
+        }
+      }
+
+      // 4. Check job lock
+      if (locks.jobId) {
+        const jobLock = this.db.prepare(
+          "SELECT operation_id FROM job_locks WHERE job_id = ?"
+        ).get(locks.jobId) as { operation_id: string } | undefined;
+
+        if (jobLock) {
+          return { ok: false as const, error: "JOB_LOCKED", details: { lockedBy: jobLock.operation_id } };
+        }
+      }
+
+      // 5. All checks passed — insert everything atomically
       this.db.prepare(`
         INSERT INTO operations (
           operation_id, idempotency_key, params_hash, kind,
@@ -243,97 +311,139 @@ export class OperationJournal {
         record.updatedAt,
       );
 
-      // Reserve idempotency key
+      // 6. Reserve idempotency key
       this.db.prepare(`
         INSERT INTO idempotency_keys (composite_key, operation_id, idempotency_key, params_hash)
         VALUES (?, ?, ?, ?)
-      `).run(
-        `${record.idempotencyKey}:${record.paramsHash}`,
-        record.operationId,
-        record.idempotencyKey,
-        record.paramsHash,
-      );
+      `).run(compositeKey, record.operationId, record.idempotencyKey, record.paramsHash);
+
+      // 7. Acquire wallet lock
+      if (locks.walletAddress) {
+        this.db.prepare(`
+          INSERT INTO wallet_locks (wallet_address, operation_id) VALUES (?, ?)
+        `).run(locks.walletAddress.toLowerCase(), record.operationId);
+      }
+
+      // 8. Acquire job lock
+      if (locks.jobId) {
+        this.db.prepare(`
+          INSERT INTO job_locks (job_id, operation_id) VALUES (?, ?)
+        `).run(locks.jobId, record.operationId);
+      }
+
+      return { ok: true as const, operationId: record.operationId };
+    });
+
+    return txn();
+  }
+
+  // ── Atomic Operation Finalization ────────────────────────────────────
+
+  /**
+   * Atomically finalize an operation: update state, persist result/receipt metadata,
+   * release locks. All in one transaction — no crash window between confirmed and
+   * metadata persistence.
+   */
+  finalizeOperation(
+    operationId: string,
+    finalization: {
+      state: OperationState;
+      txHash?: string;
+      errorCode?: OperationErrorCode;
+      errorMessage?: string;
+      result?: { stdout?: string; stderr?: string; json?: unknown; exitCode?: number };
+      receipt?: { receiptId?: string; receiptHash?: string; proofKind?: string; proofData?: unknown };
+    }
+  ): void {
+    const txn = this.db.transaction(() => {
+      // 1. Update operation state + metadata
+      const sets: string[] = ["updated_at = datetime('now')"];
+      const params: unknown[] = [];
+
+      sets.push("state = ?");
+      params.push(finalization.state);
+
+      if (finalization.txHash !== undefined) {
+        sets.push("tx_hash = ?");
+        params.push(finalization.txHash);
+      }
+      if (finalization.errorCode !== undefined) {
+        sets.push("error_code = ?");
+        params.push(finalization.errorCode);
+      }
+      if (finalization.errorMessage !== undefined) {
+        sets.push("error_message = ?");
+        params.push(finalization.errorMessage);
+      }
+
+      params.push(operationId);
+
+      this.db.prepare(
+        `UPDATE operations SET ${sets.join(", ")} WHERE operation_id = ?`
+      ).run(...params);
+
+      // 2. Store compact result
+      if (finalization.result) {
+        this.db.prepare(`
+          INSERT OR REPLACE INTO operation_results (operation_id, stdout, stderr, json_data, exit_code)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(
+          operationId,
+          finalization.result.stdout ?? null,
+          finalization.result.stderr ?? null,
+          finalization.result.json ? JSON.stringify(finalization.result.json) : null,
+          finalization.result.exitCode ?? null,
+        );
+      }
+
+      // 3. Store receipt metadata
+      if (finalization.receipt) {
+        this.db.prepare(`
+          INSERT OR REPLACE INTO operation_receipts (operation_id, receipt_id, receipt_hash, proof_kind, proof_data)
+          VALUES (?, ?, ?, ?, ?)
+        `).run(
+          operationId,
+          finalization.receipt.receiptId ?? null,
+          finalization.receipt.receiptHash ?? null,
+          finalization.receipt.proofKind ?? null,
+          finalization.receipt.proofData ? JSON.stringify(finalization.receipt.proofData) : null,
+        );
+      }
+
+      // 4. Release locks for terminal states
+      if (finalization.state === "confirmed" || finalization.state === "failed" || finalization.state === "cancelled") {
+        this.db.prepare("DELETE FROM wallet_locks WHERE operation_id = ?").run(operationId);
+        this.db.prepare("DELETE FROM job_locks WHERE operation_id = ?").run(operationId);
+      }
     });
 
     txn();
   }
 
-  /**
-   * Update operation state and metadata.
-   * Used for state transitions and result persistence.
-   */
-  updateOperation(
-    operationId: string,
-    updates: {
-      state?: OperationState;
-      txHash?: string;
-      errorCode?: OperationErrorCode;
-      errorMessage?: string;
-    }
-  ): void {
-    const sets: string[] = ["updated_at = datetime('now')"];
-    const params: unknown[] = [];
+  // ── Operation Queries ────────────────────────────────────────────────
 
-    if (updates.state !== undefined) {
-      sets.push("state = ?");
-      params.push(updates.state);
-    }
-    if (updates.txHash !== undefined) {
-      sets.push("tx_hash = ?");
-      params.push(updates.txHash);
-    }
-    if (updates.errorCode !== undefined) {
-      sets.push("error_code = ?");
-      params.push(updates.errorCode);
-    }
-    if (updates.errorMessage !== undefined) {
-      sets.push("error_message = ?");
-      params.push(updates.errorMessage);
-    }
-
-    params.push(operationId);
-
-    this.db.prepare(
-      `UPDATE operations SET ${sets.join(", ")} WHERE operation_id = ?`
-    ).run(...params);
-  }
-
-  /**
-   * Get an operation by ID.
-   */
+  /** Get an operation by ID. */
   getOperation(operationId: string): JournalOperationRow | undefined {
     return this.db.prepare(
       "SELECT * FROM operations WHERE operation_id = ?"
     ).get(operationId) as JournalOperationRow | undefined;
   }
 
-  /**
-   * Look up an operation by idempotency key + params hash.
-   */
-  findByIdempotencyKey(idempotencyKey: string, paramsHash: string): JournalOperationRow | undefined {
-    const row = this.db.prepare(
-      "SELECT operation_id FROM idempotency_keys WHERE idempotency_key = ? AND params_hash = ?"
-    ).get(idempotencyKey, paramsHash) as { operation_id: string } | undefined;
+  /** Get all operations in a given state. */
+  getOperationsByState(state: OperationState): JournalOperationRow[] {
+    return this.db.prepare(
+      "SELECT * FROM operations WHERE state = ? ORDER BY created_at ASC"
+    ).all(state) as JournalOperationRow[];
+  }
 
-    if (!row) return undefined;
-    return this.getOperation(row.operation_id);
+  /** Get total operation count. */
+  getOperationCount(): number {
+    const row = this.db.prepare("SELECT COUNT(*) as count FROM operations").get() as { count: number };
+    return row.count;
   }
 
   /**
-   * Find any operation with the same idempotency key but different params hash.
-   * Used for IDEMPOTENCY_CONFLICT detection.
-   */
-  findIdempotencyConflict(idempotencyKey: string, paramsHash: string): JournalOperationRow | undefined {
-    const row = this.db.prepare(
-      "SELECT operation_id FROM idempotency_keys WHERE idempotency_key = ? AND params_hash != ? LIMIT 1"
-    ).get(idempotencyKey, paramsHash) as { operation_id: string } | undefined;
-
-    if (!row) return undefined;
-    return this.getOperation(row.operation_id);
-  }
-
-  /**
-   * Delete an operation and all related records (idempotency key, results, receipts, locks).
+   * Delete an operation and all related records.
    * Used when allowing retry for failed/cancelled operations.
    */
   deleteOperation(operationId: string): void {
@@ -348,44 +458,9 @@ export class OperationJournal {
     txn();
   }
 
-  /**
-   * Get all operations in a given state.
-   */
-  getOperationsByState(state: OperationState): JournalOperationRow[] {
-    return this.db.prepare(
-      "SELECT * FROM operations WHERE state = ? ORDER BY created_at ASC"
-    ).all(state) as JournalOperationRow[];
-  }
-
-  /**
-   * Get total operation count.
-   */
-  getOperationCount(): number {
-    const row = this.db.prepare("SELECT COUNT(*) as count FROM operations").get() as { count: number };
-    return row.count;
-  }
-
   // ── Operation Results (compact Circle CLI output) ────────────────────
 
-  /**
-   * Store compact Circle CLI result for idempotent replay.
-   */
-  storeResult(operationId: string, result: { stdout?: string; stderr?: string; json?: unknown; exitCode?: number }): void {
-    this.db.prepare(`
-      INSERT OR REPLACE INTO operation_results (operation_id, stdout, stderr, json_data, exit_code)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-      operationId,
-      result.stdout ?? null,
-      result.stderr ?? null,
-      result.json ? JSON.stringify(result.json) : null,
-      result.exitCode ?? null,
-    );
-  }
-
-  /**
-   * Get stored result for idempotent replay.
-   */
+  /** Get stored result for idempotent replay. */
   getResult(operationId: string): JournalResultRow | undefined {
     return this.db.prepare(
       "SELECT * FROM operation_results WHERE operation_id = ?"
@@ -394,117 +469,62 @@ export class OperationJournal {
 
   // ── Receipt Proof Metadata ───────────────────────────────────────────
 
-  /**
-   * Store receipt proof metadata.
-   */
-  storeReceipt(operationId: string, receipt: { receiptId?: string; receiptHash?: string; proofKind?: string; proofData?: unknown }): void {
-    this.db.prepare(`
-      INSERT OR REPLACE INTO operation_receipts (operation_id, receipt_id, receipt_hash, proof_kind, proof_data)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(
-      operationId,
-      receipt.receiptId ?? null,
-      receipt.receiptHash ?? null,
-      receipt.proofKind ?? null,
-      receipt.proofData ? JSON.stringify(receipt.proofData) : null,
-    );
-  }
-
-  /**
-   * Get stored receipt proof metadata.
-   */
+  /** Get stored receipt proof metadata. */
   getReceipt(operationId: string): JournalReceiptRow | undefined {
     return this.db.prepare(
       "SELECT * FROM operation_receipts WHERE operation_id = ?"
     ).get(operationId) as JournalReceiptRow | undefined;
   }
 
-  // ── Wallet Locks ─────────────────────────────────────────────────────
+  // ── Startup Recovery ─────────────────────────────────────────────────
 
   /**
-   * Acquire a wallet lock. Returns true if acquired, false if already held.
+   * Recover non-terminal operations on startup.
+   *
+   * Pre-terminal states that may have been interrupted:
+   *   - created, prepared, reserved: never reached Circle CLI → safe to fail + release locks
+   *   - executing: may have sent tx → move to unknown (reconcilable)
+   *
+   * Returns recovered operation IDs.
    */
-  acquireWalletLock(walletAddress: string, operationId: string): boolean {
-    try {
-      this.db.prepare(`
-        INSERT INTO wallet_locks (wallet_address, operation_id) VALUES (?, ?)
-      `).run(walletAddress.toLowerCase(), operationId);
-      return true;
-    } catch (err: any) {
-      if (err.code === "SQLITE_CONSTRAINT_PRIMARYKEY") return false;
-      throw err;
-    }
-  }
+  recoverNonTerminalOperations(): { failed: string[]; madeUnknown: string[] } {
+    const failed: string[] = [];
+    const madeUnknown: string[] = [];
 
-  /**
-   * Release a wallet lock.
-   */
-  releaseWalletLock(walletAddress: string): void {
-    this.db.prepare("DELETE FROM wallet_locks WHERE wallet_address = ?").run(walletAddress.toLowerCase());
-  }
+    const txn = this.db.transaction(() => {
+      // created, prepared, reserved → failed with STARTUP_RECOVERY_REQUIRED
+      const preBroadcast = this.db.prepare(
+        "SELECT operation_id FROM operations WHERE state IN ('created', 'prepared', 'reserved')"
+      ).all() as { operation_id: string }[];
 
-  /**
-   * Check if a wallet lock is held.
-   */
-  hasWalletLock(walletAddress: string): boolean {
-    const row = this.db.prepare(
-      "SELECT 1 FROM wallet_locks WHERE wallet_address = ?"
-    ).get(walletAddress.toLowerCase());
-    return !!row;
-  }
+      for (const row of preBroadcast) {
+        this.db.prepare(`
+          UPDATE operations SET state = 'failed', error_code = 'STARTUP_RECOVERY_REQUIRED',
+          error_message = 'Operation was in pre-broadcast state at shutdown. Safe to retry.',
+          updated_at = datetime('now') WHERE operation_id = ?
+        `).run(row.operation_id);
+        this.db.prepare("DELETE FROM wallet_locks WHERE operation_id = ?").run(row.operation_id);
+        this.db.prepare("DELETE FROM job_locks WHERE operation_id = ?").run(row.operation_id);
+        failed.push(row.operation_id);
+      }
 
-  /**
-   * Get the operation holding a wallet lock.
-   */
-  getWalletLockOperation(walletAddress: string): string | undefined {
-    const row = this.db.prepare(
-      "SELECT operation_id FROM wallet_locks WHERE wallet_address = ?"
-    ).get(walletAddress.toLowerCase()) as { operation_id: string } | undefined;
-    return row?.operation_id;
-  }
+      // executing → unknown (may have broadcast tx)
+      const executing = this.db.prepare(
+        "SELECT operation_id FROM operations WHERE state = 'executing'"
+      ).all() as { operation_id: string }[];
 
-  // ── Job Locks ────────────────────────────────────────────────────────
+      for (const row of executing) {
+        this.db.prepare(`
+          UPDATE operations SET state = 'unknown', error_code = 'STARTUP_RECOVERY_REQUIRED',
+          error_message = 'Operation was executing at shutdown. Tx may have been broadcast. Reconciliation required.',
+          updated_at = datetime('now') WHERE operation_id = ?
+        `).run(row.operation_id);
+        madeUnknown.push(row.operation_id);
+      }
+    });
 
-  /**
-   * Acquire a job lock. Returns true if acquired, false if already held.
-   */
-  acquireJobLock(jobId: string, operationId: string): boolean {
-    try {
-      this.db.prepare(`
-        INSERT INTO job_locks (job_id, operation_id) VALUES (?, ?)
-      `).run(jobId, operationId);
-      return true;
-    } catch (err: any) {
-      if (err.code === "SQLITE_CONSTRAINT_PRIMARYKEY") return false;
-      throw err;
-    }
-  }
-
-  /**
-   * Release a job lock.
-   */
-  releaseJobLock(jobId: string): void {
-    this.db.prepare("DELETE FROM job_locks WHERE job_id = ?").run(jobId);
-  }
-
-  /**
-   * Check if a job lock is held.
-   */
-  hasJobLock(jobId: string): boolean {
-    const row = this.db.prepare(
-      "SELECT 1 FROM job_locks WHERE job_id = ?"
-    ).get(jobId);
-    return !!row;
-  }
-
-  /**
-   * Get the operation holding a job lock.
-   */
-  getJobLockOperation(jobId: string): string | undefined {
-    const row = this.db.prepare(
-      "SELECT operation_id FROM job_locks WHERE job_id = ?"
-    ).get(jobId) as { operation_id: string } | undefined;
-    return row?.operation_id;
+    txn();
+    return { failed, madeUnknown };
   }
 
   // ── Startup Reconciliation ───────────────────────────────────────────
@@ -533,7 +553,7 @@ export class OperationJournal {
 
   /**
    * Reconcile an operation to a final state.
-   * Used during startup reconciliation.
+   * Atomic: updates state, persists metadata, releases locks in one transaction.
    */
   reconcileOperation(
     operationId: string,
@@ -541,50 +561,137 @@ export class OperationJournal {
     details?: { txHash?: string; errorCode?: OperationErrorCode; errorMessage?: string }
   ): void {
     const txn = this.db.transaction(() => {
-      const updates: {
-        state?: OperationState;
-        txHash?: string;
-        errorCode?: OperationErrorCode;
-        errorMessage?: string;
-      } = { state: outcome };
+      const sets: string[] = ["updated_at = datetime('now')"];
+      const params: unknown[] = [];
 
-      if (details?.txHash) updates.txHash = details.txHash;
-      if (details?.errorCode) updates.errorCode = details.errorCode;
-      if (details?.errorMessage) updates.errorMessage = details.errorMessage;
+      sets.push("state = ?");
+      params.push(outcome);
 
-      this.updateOperation(operationId, updates);
+      if (outcome === "confirmed") {
+        // Confirmed: set txHash, clear stale error fields
+        if (details?.txHash) {
+          sets.push("tx_hash = ?");
+          params.push(details.txHash);
+        }
+        sets.push("error_code = NULL");
+        sets.push("error_message = NULL");
+      } else if (outcome === "failed") {
+        // Failed: persist error metadata with defaults
+        sets.push("error_code = ?");
+        params.push(details?.errorCode ?? "BROADCAST_FAILED");
+        sets.push("error_message = ?");
+        params.push(details?.errorMessage ?? "Reconciled as failed");
+      } else {
+        // Unknown: persist error metadata
+        if (details?.errorCode) {
+          sets.push("error_code = ?");
+          params.push(details.errorCode);
+        }
+        if (details?.errorMessage) {
+          sets.push("error_message = ?");
+          params.push(details.errorMessage);
+        }
+      }
+
+      params.push(operationId);
+
+      this.db.prepare(
+        `UPDATE operations SET ${sets.join(", ")} WHERE operation_id = ?`
+      ).run(...params);
 
       // Release locks for terminal states
       if (outcome === "confirmed" || outcome === "failed") {
-        this.releaseLocksForOperation(operationId);
+        this.db.prepare("DELETE FROM wallet_locks WHERE operation_id = ?").run(operationId);
+        this.db.prepare("DELETE FROM job_locks WHERE operation_id = ?").run(operationId);
       }
     });
 
     txn();
   }
 
-  // ── Lock Release Helpers ─────────────────────────────────────────────
+  // ── Startup Result Loading (bounded) ─────────────────────────────────
 
   /**
-   * Release all locks held by an operation.
+   * Load confirmed operation results for idempotent replay cache.
+   * Bounded to maxEntries — newest first, oldest evicted.
    */
+  loadConfirmedResults(maxEntries: number): Array<{
+    operationId: string;
+    idempotencyKey: string;
+    paramsHash: string;
+    txHash: string | null;
+    result: JournalResultRow | undefined;
+  }> {
+    const rows = this.db.prepare(`
+      SELECT o.operation_id, o.idempotency_key, o.params_hash, o.tx_hash
+      FROM operations o
+      WHERE o.state = 'confirmed'
+      ORDER BY o.updated_at DESC
+      LIMIT ?
+    `).all(maxEntries) as Array<{
+      operation_id: string;
+      idempotency_key: string;
+      params_hash: string;
+      tx_hash: string | null;
+    }>;
+
+    return rows.map(row => ({
+      operationId: row.operation_id,
+      idempotencyKey: row.idempotency_key,
+      paramsHash: row.params_hash,
+      txHash: row.tx_hash,
+      result: this.getResult(row.operation_id),
+    }));
+  }
+
+  // ── Lock Helpers ─────────────────────────────────────────────────────
+
+  /** Release all locks held by an operation. */
   releaseLocksForOperation(operationId: string): void {
     this.db.prepare("DELETE FROM wallet_locks WHERE operation_id = ?").run(operationId);
     this.db.prepare("DELETE FROM job_locks WHERE operation_id = ?").run(operationId);
   }
 
+  /** Check if a wallet lock is held. */
+  hasWalletLock(walletAddress: string): boolean {
+    const row = this.db.prepare(
+      "SELECT 1 FROM wallet_locks WHERE wallet_address = ?"
+    ).get(walletAddress.toLowerCase());
+    return !!row;
+  }
+
+  /** Check if a job lock is held. */
+  hasJobLock(jobId: string): boolean {
+    const row = this.db.prepare(
+      "SELECT 1 FROM job_locks WHERE job_id = ?"
+    ).get(jobId);
+    return !!row;
+  }
+
+  /** Get the operation holding a wallet lock. */
+  getWalletLockOperation(walletAddress: string): string | undefined {
+    const row = this.db.prepare(
+      "SELECT operation_id FROM wallet_locks WHERE wallet_address = ?"
+    ).get(walletAddress.toLowerCase()) as { operation_id: string } | undefined;
+    return row?.operation_id;
+  }
+
+  /** Get the operation holding a job lock. */
+  getJobLockOperation(jobId: string): string | undefined {
+    const row = this.db.prepare(
+      "SELECT operation_id FROM job_locks WHERE job_id = ?"
+    ).get(jobId) as { operation_id: string } | undefined;
+    return row?.operation_id;
+  }
+
   // ── Cleanup ──────────────────────────────────────────────────────────
 
-  /**
-   * Close the database connection.
-   */
+  /** Close the database connection. */
   close(): void {
     this.db.close();
   }
 
-  /**
-   * Run inside a transaction.
-   */
+  /** Run inside a transaction. */
   transaction<T>(fn: () => T): T {
     return this.db.transaction(fn)();
   }
