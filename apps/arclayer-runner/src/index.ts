@@ -361,12 +361,14 @@ async function main() {
       const { ArcLayerMcpConnector } = await import("./mcp-connector");
       const mcp = new ArcLayerMcpConnector({
         baseUrl: process.env.ARCLAYER_MCP_BASE_URL || config.runtimeEndpoint,
-        timeout: config.runtimeTimeoutMs,
+        agentId: config.agentId,
+        requestTimeoutMs: config.runtimeTimeoutMs,
       });
 
       // Create services
       const { RunnerServices } = await import("./services");
-      const services = new RunnerServices(config, mcp);
+      const skill = { content: "", sha256: "", path: "(autonomous)" };
+      const services = new RunnerServices(config, runtime, mcp, skill);
 
       // Start supervisor
       const { Supervisor } = await import("./autonomy/supervisor");
