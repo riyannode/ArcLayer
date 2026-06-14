@@ -408,7 +408,9 @@ export class RunnerServices {
       };
     }
 
-    // Store receipt with proof — preserve runtime result for audit linkage
+    // Store receipt with proof — preserve runtime result for audit linkage.
+    // Include gateway metadata (operationId, idempotent) so receipt/history
+    // consumers can distinguish replays from fresh writes.
     const receipt = await this.receipts.append({
       type: "erc8183_submit",
       jobId: input.jobId,
@@ -418,7 +420,9 @@ export class RunnerServices {
       proof: {
         deliverableHash: input.deliverableHash,
         sha256: sha256Json({ result: input.result, preparedTx, submitReceipt }),
-        txHash: extractPossibleTxHash(submitReceipt)
+        txHash: extractPossibleTxHash(submitReceipt),
+        operationId: submitReceipt?.operationId,
+        idempotent: submitReceipt?.idempotent,
       }
     });
 
