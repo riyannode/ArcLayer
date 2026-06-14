@@ -1,15 +1,18 @@
 /**
  * ExecutionGateway — single write-operation boundary for all Circle CLI / contract writes.
  *
- * Phase 4B: in-memory OperationRecord lifecycle + idempotency.
- * No SQLite, no persistent locks (Phase 5).
+ * Phase 5: SQLite-backed operation journal, persistent idempotency, wallet/job locks,
+ * and startup reconciliation hooks.
  *
  * Every write operation routed through this gateway:
- *   1. Creates an OperationRecord
- *   2. Validates idempotencyKey + paramsHash
- *   3. Transitions through operation states
- *   4. Executes the Circle CLI write
- *   5. Classifies result (confirmed / failed / unknown)
+ *   1. Creates an OperationRecord (persisted to SQLite)
+ *   2. Validates idempotencyKey + paramsHash (SQLite-backed)
+ *   3. Acquires wallet/job locks (persistent)
+ *   4. Transitions through operation states
+ *   5. Executes the Circle CLI write
+ *   6. Classify result → confirmed | broadcast | unknown | failed | cancelled
+ *   7. Persists result + receipt metadata
+ *   8. Releases locks on terminal states
  */
 
 import { randomUUID } from "node:crypto";
@@ -23,6 +26,7 @@ import {
 } from "@arclayer/runner-core";
 import { CircleCliAdapter, type CircleCliResult } from "@arclayer/circle-cli-adapter";
 import type { JsonlReceiptStore } from "@arclayer/runner-core";
+import { OperationJournal } from "./operation-journal";
 
 // ── Write Operation Types ──────────────────────────────────────────────
 
@@ -49,6 +53,8 @@ export type WriteOperationInput = {
   contractAddress: string;
   /** Human-readable description for receipts. */
   description?: string;
+  /** ERC-8183 job ID for job-level locking. */
+  jobId?: string;
 };
 
 export type WriteOperationResult = {
@@ -225,22 +231,28 @@ function extractTxHash(result: CircleCliResult): string | undefined {
 
 export class ExecutionGateway {
   /**
-   * In-memory operation store: operationId → OperationRecord.
-   * Phase 5 will replace with SQLite.
+   * In-memory operation cache: operationId → OperationRecord.
+   * Backed by SQLite journal for restart safety.
    */
   private operations = new Map<string, OperationRecord>();
 
   /**
    * Stored CircleCliResult per operation for idempotent replay.
-   * Keyed by operationId.
+   * Keyed by operationId. Backed by SQLite journal.
    */
   private resultCache = new Map<string, CircleCliResult>();
 
   /**
    * Idempotency index: `${idempotencyKey}:${paramsHash}` → operationId.
-   * Allows safe resume/replay for exact matches.
+   * Backed by SQLite journal for restart safety.
    */
   private idempotencyIndex = new Map<string, string>();
+
+  /**
+   * SQLite operation journal for persistent state.
+   * Phase 5: restart-safe persistence.
+   */
+  readonly journal: OperationJournal;
 
   constructor(
     private readonly circle: CircleCliAdapter,
@@ -249,8 +261,84 @@ export class ExecutionGateway {
       agentId: string;
       circleWalletAddress?: string;
       chain: string;
+      dataDir?: string;
+    },
+    journal?: OperationJournal
+  ) {
+    // Use provided journal or create one from dataDir
+    if (journal) {
+      this.journal = journal;
+    } else {
+      const path = require("node:path");
+      const dataDir = config.dataDir ?? path.join(
+        require("node:os").homedir(),
+        ".arclayer", "runner"
+      );
+      this.journal = new OperationJournal(path.join(dataDir, "operations.db"));
     }
-  ) {}
+
+    // Reload existing operations from journal on startup
+    this.reloadFromJournal();
+  }
+
+  /**
+   * Reload operations and idempotency index from SQLite on startup.
+   * Preserves confirmed replay behavior and unknown/broadcast protection.
+   */
+  private reloadFromJournal(): void {
+    const ops = this.journal.getOperationsByState("confirmed");
+    const broadcasts = this.journal.getOperationsByState("broadcast");
+    const unknowns = this.journal.getOperationsByState("unknown");
+    const executings = this.journal.getOperationsByState("executing");
+    const faileds = this.journal.getOperationsByState("failed");
+    const cancelleds = this.journal.getOperationsByState("cancelled");
+
+    const allOps = [...ops, ...broadcasts, ...unknowns, ...executings, ...faileds, ...cancelleds];
+
+    for (const row of allOps) {
+      const record: OperationRecord = {
+        operationId: row.operation_id,
+        idempotencyKey: row.idempotency_key,
+        toolName: row.kind,
+        agentId: row.agent_id ?? undefined,
+        walletAddress: row.wallet_address ?? undefined,
+        chainId: row.chain_id ?? undefined,
+        contractAddress: row.contract_address ?? undefined,
+        paramsHash: row.params_hash,
+        state: row.state as OperationState,
+        txHash: row.tx_hash ?? undefined,
+        errorCode: (row.error_code ?? undefined) as OperationErrorCode | undefined,
+        errorMessage: row.error_message ?? undefined,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+
+      this.operations.set(record.operationId, record);
+      this.idempotencyIndex.set(
+        `${record.idempotencyKey}:${record.paramsHash}`,
+        record.operationId
+      );
+
+      // Reload cached results for confirmed operations (idempotent replay)
+      if (record.state === "confirmed") {
+        const resultRow = this.journal.getResult(record.operationId);
+        if (resultRow?.json_data) {
+          try {
+            const json = JSON.parse(resultRow.json_data);
+            this.resultCache.set(record.operationId, {
+              command: "circle",
+              args: [],
+              stdout: resultRow.stdout ?? "",
+              stderr: resultRow.stderr ?? "",
+              json,
+            });
+          } catch {
+            // Malformed JSON — skip cache
+          }
+        }
+      }
+    }
+  }
 
   // ── Core Execute ───────────────────────────────────────────────────
 
@@ -268,7 +356,7 @@ export class ExecutionGateway {
     executeFn: CircleCliExecuteFn,
     signal?: AbortSignal
   ): Promise<WriteOperationResult> {
-    // ── Idempotency check ─────────────────────────────────────────────
+    // ── Idempotency check (journal-backed) ──────────────────────────────
     const existing = this.checkIdempotency(input.idempotencyKey, input.paramsHash);
     if (existing) {
       if (existing.state === "confirmed") {
@@ -313,6 +401,8 @@ export class ExecutionGateway {
         this.idempotencyIndex.delete(
           `${input.idempotencyKey}:${input.paramsHash}`
         );
+        // Delete from journal (cascading)
+        this.journal.deleteOperation(existing.operationId);
       }
     }
 
@@ -334,6 +424,41 @@ export class ExecutionGateway {
       updatedAt: now,
     };
 
+    // Persist to journal FIRST (locks have FK to operations)
+    this.journal.insertOperation(record);
+
+    // ── Acquire persistent locks ─────────────────────────────────────
+    // Wallet lock
+    if (input.walletAddress) {
+      const walletLocked = this.journal.acquireWalletLock(input.walletAddress, operationId);
+      if (!walletLocked) {
+        const holdingOp = this.journal.getWalletLockOperation(input.walletAddress);
+        throw new RunnerError(
+          "LOCK_CONFLICT" satisfies OperationErrorCode,
+          `Wallet ${input.walletAddress} is locked by operation ${holdingOp}`,
+          409,
+          { walletAddress: input.walletAddress, lockedBy: holdingOp }
+        );
+      }
+    }
+
+    // Job lock (if jobId provided)
+    if (input.jobId) {
+      const jobLocked = this.journal.acquireJobLock(input.jobId, operationId);
+      if (!jobLocked) {
+        // Release wallet lock before throwing
+        if (input.walletAddress) this.journal.releaseWalletLock(input.walletAddress);
+        const holdingOp = this.journal.getJobLockOperation(input.jobId);
+        throw new RunnerError(
+          "LOCK_CONFLICT" satisfies OperationErrorCode,
+          `Job ${input.jobId} is locked by operation ${holdingOp}`,
+          409,
+          { jobId: input.jobId, lockedBy: holdingOp }
+        );
+      }
+    }
+
+    // Update in-memory caches
     this.operations.set(operationId, record);
     this.idempotencyIndex.set(
       `${input.idempotencyKey}:${input.paramsHash}`,
@@ -349,10 +474,10 @@ export class ExecutionGateway {
       return this.buildResult(operationId);
     }
 
-    // ── Transition: prepared → reserved ───────────────────────────────
+    // ── Transition: prepared → reserved ──────────────────────────────
     this.transitionState(operationId, "reserved");
 
-    // ── Transition: reserved → executing ──────────────────────────────
+    // ── Transition: reserved → executing ─────────────────────────────
     this.transitionState(operationId, "executing");
 
     let cliResult: CircleCliResult | undefined;
@@ -364,10 +489,10 @@ export class ExecutionGateway {
       cliError = error instanceof Error ? error : new Error(String(error));
     }
 
-    // ── Classify result ───────────────────────────────────────────────
+    // ── Classify result ─────────────────────────────────────────────
     const terminalState = classifyCircleResult(cliResult!, cliError);
 
-    // ── Transition: executing → terminal ──────────────────────────────
+    // ── Transition: executing → terminal ─────────────────────────────
     // The state machine allows executing → broadcast, executing → unknown, executing → failed
     if (terminalState === "confirmed") {
       // confirmed goes through broadcast first
@@ -377,21 +502,12 @@ export class ExecutionGateway {
       this.transitionState(operationId, terminalState);
     }
 
-    // ── Cache result for idempotent replay ────────────────────────────
-    if (cliResult) {
-      this.resultCache.set(operationId, compactCircleResult(cliResult));
-      // Evict oldest entries if cache exceeds max
-      while (this.resultCache.size > MAX_RESULT_CACHE_ENTRIES) {
-        const oldestKey = this.resultCache.keys().next().value;
-        if (!oldestKey) break;
-        this.resultCache.delete(oldestKey);
-      }
-    }
-
-    // ── Update record with result ─────────────────────────────────────
+    // ── Persist result and update record ─────────────────────────────
     const record_final = this.operations.get(operationId)!;
-    if (cliResult) {
-      record_final.txHash = extractTxHash(cliResult);
+    const txHash = cliResult ? extractTxHash(cliResult) : undefined;
+
+    if (txHash) {
+      record_final.txHash = txHash;
     }
     if (terminalState === "failed") {
       record_final.errorCode = "BROADCAST_FAILED";
@@ -403,6 +519,42 @@ export class ExecutionGateway {
         "Circle CLI timeout or ambiguous result — tx may have been broadcast";
     }
     record_final.updatedAt = new Date().toISOString();
+
+    // Persist final state to journal
+    this.journal.updateOperation(operationId, {
+      state: terminalState,
+      txHash: txHash ?? undefined,
+      errorCode: record_final.errorCode,
+      errorMessage: record_final.errorMessage,
+    });
+
+    // Store compact result in journal for idempotent replay
+    if (cliResult) {
+      const compact = compactCircleResult(cliResult);
+      this.journal.storeResult(operationId, {
+        stdout: compact.stdout,
+        stderr: compact.stderr,
+        json: compact.json,
+      });
+
+      // Update in-memory cache
+      this.resultCache.set(operationId, compact);
+      // Evict oldest entries if cache exceeds max
+      while (this.resultCache.size > MAX_RESULT_CACHE_ENTRIES) {
+        const oldestKey = this.resultCache.keys().next().value;
+        if (!oldestKey) break;
+        this.resultCache.delete(oldestKey);
+      }
+    }
+
+    // ── Release locks on terminal states ─────────────────────────────
+    if (
+      terminalState === "confirmed" ||
+      terminalState === "failed" ||
+      terminalState === "cancelled"
+    ) {
+      this.journal.releaseLocksForOperation(operationId);
+    }
 
     return this.buildResult(operationId, cliResult);
   }
@@ -417,18 +569,15 @@ export class ExecutionGateway {
     const operationId = this.idempotencyIndex.get(compositeKey);
     if (!operationId) {
       // Check for same idempotencyKey with DIFFERENT paramsHash → conflict
-      for (const [key, opId] of this.idempotencyIndex.entries()) {
-        if (key.startsWith(`${idempotencyKey}:`) && key !== compositeKey) {
-          const existing = this.operations.get(opId);
-          if (existing) {
-            throw new RunnerError(
-              "IDEMPOTENCY_CONFLICT" satisfies OperationErrorCode,
-              `Idempotency conflict: key ${idempotencyKey} was previously used with different params`,
-              409,
-              { existingParamsHash: existing.paramsHash, requestedParamsHash: paramsHash }
-            );
-          }
-        }
+      // Use journal for authoritative check (survives restart)
+      const conflict = this.journal.findIdempotencyConflict(idempotencyKey, paramsHash);
+      if (conflict) {
+        throw new RunnerError(
+          "IDEMPOTENCY_CONFLICT" satisfies OperationErrorCode,
+          `Idempotency conflict: key ${idempotencyKey} was previously used with different params`,
+          409,
+          { existingParamsHash: conflict.params_hash, requestedParamsHash: paramsHash }
+        );
       }
       return null;
     }
@@ -445,6 +594,9 @@ export class ExecutionGateway {
     assertOperationStateTransition(record.state, to);
     record.state = to;
     record.updatedAt = new Date().toISOString();
+
+    // Persist state transition to journal
+    this.journal.updateOperation(operationId, { state: to });
   }
 
   private failOperation(
@@ -477,6 +629,16 @@ export class ExecutionGateway {
     record.errorCode = code;
     record.errorMessage = message;
     record.updatedAt = new Date().toISOString();
+
+    // Persist to journal
+    this.journal.updateOperation(operationId, {
+      state: "failed",
+      errorCode: code,
+      errorMessage: message,
+    });
+
+    // Release locks on failure
+    this.journal.releaseLocksForOperation(operationId);
   }
 
   private buildResult(
@@ -523,8 +685,7 @@ export class ExecutionGateway {
 
   /**
    * Reconcile a broadcast or unknown operation to a final state.
-   * This is the minimal in-memory reconciliation path — Phase 5 will
-   * provide persistent reconciliation with SQLite.
+   * Phase 5: persistent reconciliation via SQLite journal.
    *
    * Only operations in "broadcast" or "unknown" state can be reconciled.
    */
@@ -546,10 +707,10 @@ export class ExecutionGateway {
 
     if (outcome === "confirmed") {
       if (record.state === "unknown") {
-        // Phase 5 can provide richer reconciliation transition handling.
         record.state = "confirmed";
       } else {
-        this.transitionState(operationId, "confirmed");
+        assertOperationStateTransition(record.state, "confirmed");
+        record.state = "confirmed";
       }
     } else if (outcome === "failed") {
       record.state = "failed";
@@ -562,7 +723,28 @@ export class ExecutionGateway {
     }
 
     record.updatedAt = new Date().toISOString();
+
+    // Persist reconciliation to journal
+    this.journal.reconcileOperation(operationId, outcome, details);
+
     return record;
+  }
+
+  /**
+   * Get all operations that need reconciliation on startup.
+   * Returns broadcast and unknown operations from the journal.
+   */
+  getReconcilableOperations() {
+    return this.journal.getReconcilableOperations();
+  }
+
+  // ── Cleanup ────────────────────────────────────────────────────────
+
+  /**
+   * Close the gateway and its journal.
+   */
+  close(): void {
+    this.journal.close();
   }
 }
 
