@@ -77,6 +77,10 @@ import {
   handleProviderRuntimeCompleteRun,
 } from './provider-runtime-tools';
 import {
+  handleProviderPublishDeliverable,
+  handleEvaluatorGetDeliverable,
+} from './deliverable-tools';
+import {
   handleRequestCreateJobWebSign,
   handleRequestFundJobWebSign,
   handleRequestCompleteJobWebSign,
@@ -1301,13 +1305,14 @@ export function registerAllTools(): void {
     name: 'provider.list_assigned_jobs',
     domain: 'provider',
     description:
-      'List jobs assigned to a specific provider address (provider = address, status = Open). For direct-assigned job discovery.',
+      'List jobs assigned to a specific provider address. Supports status filtering (Open, Funded, Submitted). For autonomous provider workers, pass statuses=["Funded"].',
     requiredScope: 'provider:runtime',
     operation: 'read',
     annotations: ANNOTATIONS.readOnly(),
     inputSchema: [
       { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
       { name: 'providerAddress', type: 'string', required: true, description: 'Provider wallet address to search for.' },
+      { name: 'statuses', type: 'string', description: 'Comma-separated status filter: Open, Funded, Submitted. Default: Open,Funded.' },
       { name: 'limit', type: 'number', description: 'Max results (1-50, default 20).' },
     ],
     handler: handleProviderListAssignedJobs,
@@ -1392,6 +1397,42 @@ export function registerAllTools(): void {
       { name: 'runId', type: 'string', required: true, description: 'Run ID to complete.' },
     ],
     handler: handleProviderRuntimeCompleteRun,
+  });
+
+  // ── DELIVERABLE STORAGE: Provider → Evaluator ──────────────────────────
+
+  registerTool({
+    name: 'provider.publish_deliverable',
+    domain: 'provider',
+    description:
+      'Publish a completed job deliverable to shared storage. Hash is recomputed server-side and must match. One deliverable per job.',
+    requiredScope: 'provider:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'providerAddress', type: 'string', required: true, description: 'Provider wallet address.' },
+      { name: 'deliverableHash', type: 'string', required: true, description: 'SHA-256 hash of deliverable payload (bytes32 hex).' },
+      { name: 'payload', type: 'string', required: true, description: 'Deliverable payload (JSON string).' },
+      { name: 'artifacts', type: 'string', description: 'JSON array of artifact references (name, uri, contentType, sha256).' },
+      { name: 'runtimeReceiptHash', type: 'string', description: 'Optional runtime receipt hash.' },
+    ],
+    handler: (args, ctx) => handleProviderPublishDeliverable(args, ctx),
+  });
+
+  registerTool({
+    name: 'evaluator.get_deliverable',
+    domain: 'evaluator',
+    description:
+      'Fetch a published deliverable for evaluation. Returns payload, artifacts, hash, and integrity verification. Only readable for Submitted/Completed/Rejected/Expired jobs.',
+    requiredScope: 'jobs:read',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
+    inputSchema: [
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+    ],
+    handler: (args, ctx) => handleEvaluatorGetDeliverable(args, ctx),
   });
 
   // ── WEB SIGNING BRIDGE: MCP → Profile signing ──────────────────────────
