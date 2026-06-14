@@ -547,15 +547,7 @@ export async function handleMcpTool(
     }
 
     default:
-      // Try Console MCP proxy for unknown tools
-      if (name.includes(".")) {
-        const proxyResult = await proxyToConsoleMcp(name, args, mcp, ctx.proxyTimeoutMs);
-        if (proxyResult.proxied) {
-          return proxyResult.ok
-            ? proxyResult.result
-            : { ok: false, error: proxyResult.error };
-        }
-      }
-      return { ok: false, error: `Unknown tool: ${name}` };
+      // Proxy to Console MCP — errors propagate to executor's error handler
+      return proxyToConsoleMcp(name, args, mcp, ctx.proxyTimeoutMs);
   }
 }

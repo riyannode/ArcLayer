@@ -28,19 +28,17 @@ function stderrLog(msg: string): void {
 function sanitizeErrorMessage(message: string): string {
   if (!message) return 'Tool execution failed';
 
-  // Strip absolute paths (Unix and Windows)
-  let sanitized = message.replace(/\/[\w./-]+/g, '[path]');
-  sanitized = sanitized.replace(/[A-Z]:\\[\w\\.-]+/g, '[path]');
+  // Strip URLs first (before paths, to avoid partial matches)
+  let sanitized = message.replace(/https?:\/\/[^\s]+/g, '[url]');
+  sanitized = sanitized.replace(/file:\/\/[^\s]+/g, '[url]');
 
-  // Strip URLs with auth info or internal hosts
-  sanitized = sanitized.replace(/https?:\/\/[^\s]+/g, '[url]');
+  // Strip absolute paths (Unix and Windows)
+  sanitized = sanitized.replace(/\/[\w./-]+/g, '[path]');
+  sanitized = sanitized.replace(/[A-Z]:\\[\w\\.-]+/g, '[path]');
 
   // Strip potential tokens/secrets (long hex strings, base64)
   sanitized = sanitized.replace(/\b[0-9a-f]{32,}\b/gi, '[redacted]');
   sanitized = sanitized.replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/g, '[redacted]');
-
-  // Strip file:// paths
-  sanitized = sanitized.replace(/file:\/\/[^\s]+/g, '[path]');
 
   // Cap length
   if (sanitized.length > 500) {

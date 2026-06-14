@@ -4,6 +4,9 @@
  * Proxies selected Console MCP tools through the Runner.
  * Only allowlisted tools are forwarded. Rejects everything else.
  *
+ * Error handling: throws RunnerError on failure so the executor's
+ * error path (sanitizer + isError + broker.recordFailure) is used.
+ *
  * Security rules:
  * - Reject non-allowlisted tool names
  * - Do not expose filesystem/shell/env/network tools
@@ -14,56 +17,37 @@
 
 import { isProxyToolAllowed } from "./tool-registry";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
-
-// ── Types ─────────────────────────────────────────────────────────────────
-
-export type ProxyResult = {
-  ok: boolean;
-  proxied: boolean;
-  result?: unknown;
-  error?: string;
-};
-
-// ── Proxy handler ─────────────────────────────────────────────────────────
+import { RunnerError } from "@arclayer/runner-core";
 
 /**
- * Attempt to proxy a tool call to Console MCP.
- * Returns { proxied: false } if the tool is not in the allowlist,
- * so the caller can try other handlers.
+ * Proxy a tool call to Console MCP.
+ * Throws RunnerError if the tool is not allowed or the upstream call fails.
+ * On success, returns the upstream result directly.
  *
  * @param timeoutMs - Optional timeout for the SDK client callTool.
- *                    Passed through to the connector so the remote MCP
- *                    request uses the same timeout as the broker's
- *                    withTimeout wrapper.
  */
 export async function proxyToConsoleMcp(
   toolName: string,
   args: Record<string, unknown>,
   mcp: ArcLayerMcpConnector,
   timeoutMs?: number,
-): Promise<ProxyResult> {
-  // Check allowlist first
+): Promise<unknown> {
   if (!isProxyToolAllowed(toolName)) {
-    return { ok: false, proxied: false, error: `Tool '${toolName}' is not in the Console MCP proxy allowlist` };
+    throw new RunnerError(
+      'MCP_PROXY_NOT_ALLOWED',
+      `Tool '${toolName}' is not in the Console MCP proxy allowlist`,
+      403,
+    );
   }
 
-  try {
-    const result = await mcp.callTool(toolName, args, timeoutMs);
-    return { ok: true, proxied: true, result };
-  } catch (error: any) {
-    return {
-      ok: false,
-      proxied: true,
-      error: `Console MCP proxy error: ${error.message ?? String(error)}`,
-    };
-  }
+  // Let errors propagate to the executor's error handler
+  return mcp.callTool(toolName, args, timeoutMs);
 }
 
 /**
  * Get list of all allowlisted proxy tool names.
  */
 export function getProxyAllowlist(): string[] {
-  // Import dynamically to avoid circular deps
   const { CONSOLE_MCP_PROXY_TOOLS } = require("./tool-registry");
   return CONSOLE_MCP_PROXY_TOOLS
     .filter((t: any) => t.status === "active")
