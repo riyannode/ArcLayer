@@ -137,49 +137,27 @@ The matching Codex plugin bundle is under `packages/mcp-connect/plugin/`. This f
 
 ---
 
-## Legacy Compatibility
+## Canonical Tool Names
 
-All old tool names still work via aliases:
+All tools use canonical names only (e.g. `protocol.status`, `agents.discover`). Legacy alias names like `arc_network_info` or `list_agents` are no longer supported. Update any callers to use the canonical names listed in the tool table above.
 
-| Legacy Name | Canonical Name |
-|-------------|---------------|
-| `arc_network_info` | `protocol.status` |
-| `protocol_overview` | `protocol.health` |
-| `list_agents` | `agents.discover` |
-| `get_agent` | `agents.get` |
-| `list_jobs` | `jobs.list_public` |
-| `get_job` | `jobs.get_public` |
-| `arc_docs_search` | `docs.arc_search` |
-| `register_agent_calldata` | `identity.prepare_register_agent` |
-| `give_feedback_calldata` | `reputation.give_feedback` |
-| `validation_request_calldata` | `validation.request_calldata` |
-| `validation_response_calldata` | `validation.response_calldata` |
-| `validation_status_read` | `validation.status_read` |
-| `create_job_calldata` | `client.prepare_create_job` |
-| `set_budget_calldata` | `provider.prepare_set_budget` |
-| `approve_usdc_calldata` | `client.prepare_approve_usdc` |
-| `fund_job_calldata` | `client.prepare_fund_job` |
-| `submit_job_calldata` | `provider.prepare_submit_job` |
-| `complete_job_calldata` | `evaluator.prepare_complete_job` |
-
-### Legacy Call Shapes (all still work)
+### MCP Protocol Examples
 
 ```bash
-# GET manifest
-curl -s https://arclayers.xyz/api/mcp | jq
-
-# GET tool invocation
-curl -s "https://arclayers.xyz/api/mcp?tool=arc_network_info" | jq
-
-# POST simple shape
+# POST JSON-RPC initialize
 curl -s https://arclayers.xyz/api/mcp \
   -H "content-type: application/json" \
-  -d '{"tool":"arc_network_info","args":{}}' | jq
+  -d '{"jsonrpc":"2.0","id":"1","method":"initialize","params":{}}'
 
-# POST JSON-RPC with legacy method name
+# POST JSON-RPC tools/list
 curl -s https://arclayers.xyz/api/mcp \
   -H "content-type: application/json" \
-  -d '{"jsonrpc":"2.0","id":"legacy-1","method":"arc_network_info","params":{}}' | jq
+  -d '{"jsonrpc":"2.0","id":"2","method":"tools/list","params":{}}'
+
+# POST JSON-RPC tools/call
+curl -s https://arclayers.xyz/api/mcp \
+  -H "content-type: application/json" \
+  -d '{"jsonrpc":"2.0","id":"3","method":"tools/call","params":{"name":"protocol.status","arguments":{}}}'
 ```
 
 ---
@@ -189,11 +167,11 @@ curl -s https://arclayers.xyz/api/mcp \
 | Code | Meaning |
 |------|---------|
 | `INVALID_REQUEST` | Missing or malformed JSON-RPC fields |
-| `UNKNOWN_METHOD` | Method not recognized (not initialize/tools/list/tools/call or legacy alias) |
-| `UNKNOWN_TOOL` | Tool name/alias not in registry |
+| `UNKNOWN_METHOD` | Method not recognized (not initialize/tools/list/tools/call) |
+| `UNKNOWN_TOOL` | Tool name not in registry |
 | `VALIDATION_ERROR` | Missing or invalid required parameters |
-| `UNAUTHORIZED` | Auth required (future use) |
-| `FORBIDDEN` | Insufficient permissions (future use) |
+| `UNAUTHORIZED` | Auth required |
+| `FORBIDDEN` | Insufficient permissions / missing scope |
 | `NOT_FOUND` | Resource not found |
 | `CONFLICT` | State conflict |
 | `INTERNAL_ERROR` | Unhandled server error |
@@ -202,9 +180,9 @@ Stack traces are **never** exposed in API responses. Error messages are redacted
 
 ---
 
-## Legacy MCP Registration Draft Flow
+## MCP Registration Draft Flow
 
-`onboarding.create_registration_draft` remains available as a compatibility fallback. New users should prefer the merged Agent Bundle flow:
+`onboarding.create_registration_draft` is available as a convenience tool. New users should prefer the merged Agent Bundle flow:
 
 ```text
 1. MCP client calls onboarding.start_agent_bundle
@@ -395,11 +373,11 @@ Agent Bundle onboarding stops at readiness. It does not configure Runner runtime
 | `onboarding.get_agent_bundle_status` | required | Poll intent status after browser mint. Returns draft, expired, or completed state. |
 | `onboarding.create_agent_runtime_key` | required | Create ArcLayer API key after completed mint/finalize. Returns raw key once and env snippet. |
 
-### Legacy token fallback from Agent Setup
+### Runtime session token from Agent Setup
 
-For clients without OAuth support, open `/agent-setup`, connect your wallet, then click **Create Legacy Token**.
+For clients without OAuth support, open `/agent-setup`, connect your wallet, then click **Create Token**.
 
-ArcLayer creates an EOA-backed legacy MCP session that is valid for 30 days and returns a one-time fallback setup command. Run that command on the machine where Codex is installed. The command writes the ArcLayer MCP server entry to `~/.codex/config.toml` and stores `ARCLAYER_MCP_TOKEN` for Codex.
+ArcLayer creates an EOA-backed MCP runtime session that is valid for 30 days and returns a one-time setup command. Run that command on the machine where Codex is installed. The command writes the ArcLayer MCP server entry to `~/.codex/config.toml` and stores `ARCLAYER_MCP_TOKEN` for Codex.
 
 After setup, open Codex and ask:
 
@@ -554,7 +532,7 @@ createJob(provider=0x0, evaluator, expiredAt, description, hook)
 POST /api/mcp
   → route.ts (thin: parse body, create RequestContext)
     → server.ts (dispatch: initialize/tools/list/tools/call/legacy)
-      → registry.ts (tool lookup by name or alias)
+      → registry.ts (tool lookup by canonical name)
         → tool handler (fetch indexer / encode calldata)
       → errors.ts (structured error responses)
       → redact.ts (secret redaction on errors)
@@ -594,8 +572,8 @@ npx arclayer-codex@latest uninstall codex
 
 OAuth grants scoped MCP access only. It does not expose a private key, sign, or broadcast transactions. Transaction-request tools create a wallet-scoped browser signing request; every onchain transaction still requires approval in ArcLayer web.
 
-### Legacy token fallback
+### Runtime session tokens
 
-MCP clients without OAuth support can open `/agent-setup` and create a **Legacy Codex Token Session**. The one-time setup command contains `ARCLAYER_MCP_TOKEN`; do not share it. Legacy sessions remain valid for at most 30 days and can be revoked from Profile.
+MCP clients without OAuth support can open `/agent-setup` and create a **Runtime Session Token**. The one-time setup command contains `ARCLAYER_MCP_TOKEN`; do not share it. Runtime sessions remain valid for at most 30 days and can be revoked from Profile.
 
 The OAuth schema is provided at `supabase/migrations/20250305000000_mcp_oauth.sql`. It is not applied automatically. An operator applies it manually with `supabase migration up --linked` after reviewing the migration.

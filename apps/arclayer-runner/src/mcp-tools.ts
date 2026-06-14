@@ -32,6 +32,12 @@ export type McpToolContext = {
    * underlying Circle CLI subprocesses and HTTP fetches can be cancelled.
    */
   signal?: AbortSignal;
+  /**
+   * Timeout in ms for proxy calls to Console MCP.
+   * Set by the executor based on broker timeout, so the SDK client
+   * uses the same timeout as the broker's withTimeout wrapper.
+   */
+  proxyTimeoutMs?: number;
 };
 
 export async function handleMcpTool(
@@ -541,15 +547,7 @@ export async function handleMcpTool(
     }
 
     default:
-      // Try Console MCP proxy for unknown tools
-      if (name.includes(".")) {
-        const proxyResult = await proxyToConsoleMcp(name, args, mcp);
-        if (proxyResult.proxied) {
-          return proxyResult.ok
-            ? proxyResult.result
-            : { ok: false, error: proxyResult.error };
-        }
-      }
-      return { ok: false, error: `Unknown tool: ${name}` };
+      // Proxy to Console MCP — errors propagate to executor's error handler
+      return proxyToConsoleMcp(name, args, mcp, ctx.proxyTimeoutMs);
   }
 }

@@ -7,13 +7,16 @@ import { createRuntimeConnector } from "./runtime";
 import { ArcLayerMcpConnector } from "./mcp-connector";
 import { createRouter } from "./http";
 import { RunnerServices } from "./services";
-import { handleMcpRequest } from "./mcp-server";
 import { runMcpStdio } from "./mcp-stdio";
 import { McpToolBroker, type ToolBudgetConfig } from "./mcp-broker";
 import { runDoctor } from "./doctor";
 import { registerInitCommand } from "./init";
 import { registerSetupCommand } from "./setup";
 import { registerInstallCommand } from "./install";
+
+function stderrLog(msg: string): void {
+  process.stderr.write(`[arclayer-runner] ${msg}\n`);
+}
 
 // Read version from package.json
 let PKG_VERSION = "0.1.4";
@@ -59,8 +62,7 @@ async function main() {
 
     const services = new RunnerServices(config, runtime, mcp, skill);
 
-    // MCP Tool Broker — one instance at startup, shared across all /mcp requests.
-    // Budget (maxCalls, maxTotalUsdc) and audit log persist for the runner lifetime.
+    // MCP Tool Broker — one instance at startup, shared across all requests.
     const brokerBudget: ToolBudgetConfig = {
       maxTotalUsdc: config.toolMaxTotalUsdc,
       maxCalls: config.toolMaxCalls,
@@ -68,10 +70,7 @@ async function main() {
       maxOutputBytes: config.toolMaxOutputBytes,
     };
     const broker = config.toolBrokerEnabled ? new McpToolBroker(brokerBudget) : null;
-    // Include broker in ctx so handleMcpTool can access it (introspection tools).
     const mcpToolCtx = { services, mcp, config, skill, broker: broker ?? undefined };
-
-    const authMode = process.env.ARCLAYER_AUTH_MODE === "bearer" ? "bearer" : "hmac";
 
     const server = createRouter(
       [
@@ -104,19 +103,7 @@ async function main() {
           })
         },
 
-        // ── Protected: Runner MCP (JSON-RPC) ────────────────────────────
-        {
-          method: "POST",
-          path: "/mcp",
-          rawHandler: async (ctx) => {
-            // Router already verified HMAC/Bearer auth and parsed body.
-            // MCP handler receives pre-authenticated context — no internal auth needed.
-            // Pass shared broker (null if disabled) for budget/audit enforcement.
-            await handleMcpRequest(ctx.res, ctx.body, mcpToolCtx, broker);
-          }
-        },
-
-        // ── Protected: HTTP API routes ──────────────────────────────────
+        // ── Protected: HTTP API routes (HMAC-only) ──────────────────────
         {
           method: "POST",
           path: "/runtime/run",
@@ -183,18 +170,16 @@ async function main() {
           }
         }
       ],
-      config.runnerSecret,
-      { authMode }
+      config.runnerSecret
     );
 
     server.listen(config.port, config.host, () => {
-      console.log(`ArcLayer Runner listening on http://${config.host}:${config.port}`);
+      console.log(`ArcLayer Runner REST: HMAC protected`);
+      console.log(`ArcLayer Runner MCP: use 'arclayer-runner mcp'`);
+      console.log(`Console MCP bridge: ${process.env.ARCLAYER_MCP_BASE_URL || config.runtimeEndpoint}/api/mcp`);
       console.log(`Agent ${config.agentId} (${config.defaultRole}) -> ${config.runtimeKind} ${config.runtimeEndpoint}`);
       console.log(`Runtime run path: ${config.runtimeRunPath}`);
-      console.log(`Runner MCP: POST /mcp (${authMode} auth)`);
-      console.log(`Console MCP bridge: ${process.env.ARCLAYER_MCP_BASE_URL || config.runtimeEndpoint}/api/mcp`);
       console.log(`Payment: ${config.paymentEnabled ? "enabled" : "disabled"}`);
-      console.log(`Auth: ${authMode.toUpperCase()} — required for all routes except /health, /.well-known/*, /skills/*`);
       console.log(`Host binding: ${config.host}`);
     });
   });
@@ -246,9 +231,8 @@ async function main() {
   // ── mcp (STDIO) ──────────────────────────────────────────────────────
   program
     .command("mcp")
-    .description("Start MCP server over STDIO (JSON-RPC 2.0 for Hermes/OpenClaw)")
+    .description("Start ArcLayer Runner MCP over STDIO (for Hermes/OpenClaw)")
     .action(async () => {
-      // STDIO mode: no HTTP, no Bearer auth, process isolation is the boundary
       const config = loadRunnerConfigForStdio();
       let skill: { content: string; sha256: string; path: string };
       try {
@@ -280,7 +264,6 @@ async function main() {
 
       const services = new RunnerServices(config, runtime, mcp, skill);
 
-      // Create MCP Tool Broker from config (STDIO mode)
       const brokerBudget: ToolBudgetConfig = {
         maxTotalUsdc: config.toolMaxTotalUsdc,
         maxCalls: config.toolMaxCalls,
@@ -290,7 +273,16 @@ async function main() {
       const broker = config.toolBrokerEnabled ? new McpToolBroker(brokerBudget) : undefined;
       const mcpToolCtx = { services, mcp, config, skill, broker };
 
-      await runMcpStdio(mcpToolCtx);
+      await runMcpStdio(mcpToolCtx, {
+        closeMcp: async () => {
+          stderrLog('Closing MCP connector...');
+          await mcp.close();
+        },
+        closeServices: async () => {
+          stderrLog('Closing services...');
+          await services.close?.();
+        },
+      });
     });
 
   // ── init (non-interactive) ──────────────────────────────────────────────

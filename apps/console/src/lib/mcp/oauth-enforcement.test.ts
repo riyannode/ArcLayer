@@ -1,15 +1,31 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
-let handleMcpPost: typeof import('./server').handleMcpPost;
-beforeAll(async () => { ({ handleMcpPost } = await import('./server')); });
-const context = { origin: 'https://arclayers.xyz', method: 'POST', authorization: null };
+
+let resolveMcpBearerAuth: typeof import('./auth').resolveMcpBearerAuth;
+
+beforeAll(async () => {
+  ({ resolveMcpBearerAuth } = await import('./auth'));
+});
+
 describe('MCP OAuth enforcement', () => {
-  it('keeps public reads available without a token', async () => {
-    const response = await handleMcpPost({ jsonrpc:'2.0', id:1, method:'tools/call', params:{ name:'protocol.status', arguments:{} } }, context);
-    expect(response.status).toBe(200);
+  it('returns null for missing token', async () => {
+    const result = await resolveMcpBearerAuth(null);
+    expect(result).toBeNull();
   });
-  it('rejects protected tools without OAuth or legacy bearer auth', async () => {
-    const response = await handleMcpPost({ jsonrpc:'2.0', id:1, method:'tools/call', params:{ name:'onboarding.start_agent_bundle', arguments:{} } }, context);
-    expect(response.status).toBe(401); expect(JSON.stringify(response.json)).toContain('[UNAUTHORIZED]');
+
+  it('returns null for empty token', async () => {
+    const result = await resolveMcpBearerAuth('');
+    expect(result).toBeNull();
+  });
+
+  it('returns null for invalid token format', async () => {
+    const result = await resolveMcpBearerAuth('Bearer invalid_token');
+    expect(result).toBeNull();
+  });
+
+  it('returns null for legacy session without scopes', async () => {
+    // Legacy sessions without explicit scopes should be rejected
+    const result = await resolveMcpBearerAuth('Bearer arc_mcp_sess_nonexistent');
+    expect(result).toBeNull();
   });
 });

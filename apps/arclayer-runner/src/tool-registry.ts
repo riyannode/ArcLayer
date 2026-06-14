@@ -148,6 +148,7 @@ export const CONSOLE_MCP_PROXY_TOOLS: RunnerToolRegistryItem[] = [
   { name: "provider.list_open_jobs", source: "console-mcp-proxy", status: "active", risk: ["read-only"], capabilities: ["provider", "jobs"], roles: ["provider"], description: "List open jobs" },
   { name: "provider.list_assigned_jobs", source: "console-mcp-proxy", status: "active", risk: ["read-only"], capabilities: ["provider", "jobs"], roles: ["provider"], description: "List assigned jobs" },
   { name: "provider.apply_open_job", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["provider", "jobs"], roles: ["provider"], description: "Apply for open job" },
+  { name: "provider.runtime_retry_job", source: "console-mcp-proxy", status: "active", risk: ["runtime"], capabilities: ["provider", "runtime"], roles: ["provider"], description: "Retry a failed provider job run" },
 
   // Evaluator
   { name: "evaluator.prepare_complete_job", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["evaluator", "erc8183"], roles: ["evaluator"], description: "Complete job calldata" },

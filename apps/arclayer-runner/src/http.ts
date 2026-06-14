@@ -119,11 +119,6 @@ export type RouterOptions = {
   nonceTtlMs?: number;
   /** Task idempotency TTL in ms. Default: 86400000 (24h) */
   taskIdempotencyTtlMs?: number;
-  /**
-   * Auth mode: 'hmac' for production HMAC auth, 'bearer' for legacy Bearer auth.
-   * Default: 'hmac'
-   */
-  authMode?: "hmac" | "bearer";
 };
 
 export function createRouter(
@@ -135,7 +130,6 @@ export function createRouter(
     hmacSkewMs = 300_000,
     nonceTtlMs = 300_000,
     taskIdempotencyTtlMs = 86_400_000,
-    authMode = "hmac"
   } = options;
 
   const nonceStore = new NonceStore(nonceTtlMs);
@@ -151,65 +145,38 @@ export function createRouter(
         return;
       }
 
-      // ── Auth middleware (DEFAULT-DENY) ──────────────────────────────────
+      // ── Auth middleware (DEFAULT-DENY, HMAC-only) ─────────────────────────
       if (!isPublicRoute(url.pathname)) {
-        if (authMode === "hmac") {
-          // Read raw body BEFORE auth (needed for body hash)
-          const rawBody = await readRawBody(req, req.method ?? "GET");
+        // Read raw body BEFORE auth (needed for body hash)
+        const rawBody = await readRawBody(req, req.method ?? "GET");
 
-          // HMAC verification — covers full request target including query string
-          const signedTarget = `${url.pathname}${url.search}`;
-          const { nonce } = assertHmacAuthenticated(
-            req,
-            runnerSecret,
-            rawBody,
-            signedTarget,
-            hmacSkewMs
-          );
+        // HMAC verification — covers full request target including query string
+        const signedTarget = `${url.pathname}${url.search}`;
+        const { nonce } = assertHmacAuthenticated(
+          req,
+          runnerSecret,
+          rawBody,
+          signedTarget,
+          hmacSkewMs
+        );
 
-          // Nonce replay check
-          nonceStore.checkAndMark(nonce, "runner");
+        // Nonce replay check
+        nonceStore.checkAndMark(nonce, "runner");
 
-          // Parse JSON AFTER auth succeeds
-          const body = parseBody(rawBody, req.method ?? "GET");
+        // Parse JSON AFTER auth succeeds
+        const body = parseBody(rawBody, req.method ?? "GET");
 
-          // NOTE: Task idempotency is NOT checked at router level.
-          // Handlers call ctx.reserveTaskId() after schema/role validation,
-          // immediately before dispatch. This prevents burning taskId on
-          // fixable validation errors.
-
-          // Dispatch to handler — router owns auth, handler does NOT re-read req
-          if (route.rawHandler) {
-            await route.rawHandler({ req, res, url, rawBody, body });
-          } else {
-            const result = await route.handler!({
-              req, res, url, body, rawBody,
-              reserveTaskId: (taskId, agentId) => taskIdempotency.checkAndMark(taskId, agentId),
-              markTaskCompleted: (taskId, agentId) => taskIdempotency.markCompleted(taskId, agentId),
-              markTaskFailed: (taskId, agentId) => taskIdempotency.markFailed(taskId, agentId),
-            });
-            send(res, 200, result ?? { ok: true });
-          }
-
+        // Dispatch to handler — router owns auth, handler does NOT re-read req
+        if (route.rawHandler) {
+          await route.rawHandler({ req, res, url, rawBody, body });
         } else {
-          // Legacy Bearer auth mode
-          assertAuthenticated(req, runnerSecret);
-
-          if (route.rawHandler) {
-            const rawBody = await readRawBody(req, req.method ?? "GET");
-            const body = parseBody(rawBody, req.method ?? "GET");
-            await route.rawHandler({ req, res, url, rawBody, body });
-          } else {
-            const rawBody = await readRawBody(req, req.method ?? "GET");
-            const body = parseBody(rawBody, req.method ?? "GET");
-            const result = await route.handler!({
-              req, res, url, body, rawBody,
-              reserveTaskId: (taskId, agentId) => taskIdempotency.checkAndMark(taskId, agentId),
-              markTaskCompleted: (taskId, agentId) => taskIdempotency.markCompleted(taskId, agentId),
-              markTaskFailed: (taskId, agentId) => taskIdempotency.markFailed(taskId, agentId),
-            });
-            send(res, 200, result ?? { ok: true });
-          }
+          const result = await route.handler!({
+            req, res, url, body, rawBody,
+            reserveTaskId: (taskId, agentId) => taskIdempotency.checkAndMark(taskId, agentId),
+            markTaskCompleted: (taskId, agentId) => taskIdempotency.markCompleted(taskId, agentId),
+            markTaskFailed: (taskId, agentId) => taskIdempotency.markFailed(taskId, agentId),
+          });
+          send(res, 200, result ?? { ok: true });
         }
 
       } else {

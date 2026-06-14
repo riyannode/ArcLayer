@@ -1,369 +1,76 @@
 /**
- * MCP STDIO transport — JSON-RPC 2.0 over stdin/stdout.
+ * ArcLayer Runner MCP — Local MCP server via STDIO transport.
  *
- * Protocol: MCP 2024-11-05
- * - stdin: NDJSON (one JSON-RPC request per line)
- * - stdout: JSON-RPC responses only (no logs, no noise)
- * - stderr: all logs
- *
- * Security: No Bearer auth. Process isolation is the boundary.
- * This mode is designed for local MCP sidecar use (Hermes, OpenClaw).
- *
- * Reuses RUNNER_MCP_TOOLS and handleMcpTool from the HTTP MCP server.
+ * Thin wrapper using official @modelcontextprotocol/sdk StdioServerTransport.
+ * All tool logic, broker, policy, audit handled by runner-mcp-executor.ts.
  */
 
-import { createInterface } from "node:readline";
-import type { Readable, Writable } from "node:stream";
-import { createRequire } from "node:module";
-import { RUNNER_MCP_TOOLS } from "./mcp-schemas";
-import { handleMcpTool, type McpToolContext } from "./mcp-tools";
-import { getToolNamesForRole } from "./tool-registry";
-import {
-  McpToolBroker,
-  BrokerError,
-  BrokerErrorCode,
-} from "./mcp-broker";
-
-// Read version from package.json (works in both dev and bundled)
-let PKG_VERSION = "0.1.4";
-try {
-  const require = createRequire(import.meta.url);
-  PKG_VERSION = require("../package.json").version;
-} catch {
-  // fallback — keep default
-}
-
-export type JsonRpcRequest = {
-  jsonrpc: "2.0";
-  id?: string | number;
-  method: string;
-  params?: Record<string, unknown>;
-};
-
-export type JsonRpcResponse = {
-  jsonrpc: "2.0";
-  id: string | number;
-  result?: unknown;
-  error?: { code: number; message: string; data?: unknown };
-};
-
-const SERVER_INFO = {
-  name: "arclayer-runner",
-  version: PKG_VERSION
-};
-
-const PROTOCOL_VERSION = "2024-11-05";
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type { McpToolContext } from './mcp-tools';
+import { createRunnerMcpServer } from './runner-mcp-server';
 
 function stderrLog(msg: string): void {
   process.stderr.write(`[arclayer-runner-mcp] ${msg}\n`);
 }
 
-function rpcOk(id: string | number, result: unknown): JsonRpcResponse {
-  return { jsonrpc: "2.0", id, result };
-}
-
-function rpcError(
-  id: string | number,
-  code: number,
-  message: string,
-  data?: unknown
-): JsonRpcResponse {
-  return { jsonrpc: "2.0", id, error: { code, message, data } };
-}
+export type McpStdioCleanup = {
+  /** Close the remote MCP connector (Console bridge) */
+  closeMcp?: () => Promise<void>;
+  /** Close services (stores, SQLite, etc.) */
+  closeServices?: () => Promise<void>;
+};
 
 /**
- * Wrap a promise with a timeout. Rejects with BrokerError on timeout.
+ * Run the ArcLayer Runner MCP server over STDIO.
+ * Uses official SDK StdioServerTransport.
  *
- * When the timeout fires, the provided AbortController is aborted so that
- * underlying operations (Circle CLI subprocess, HTTP fetch) can be cancelled.
- */
-function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  toolName: string,
-  controller?: AbortController
-): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      controller?.abort();
-      reject(new BrokerError(
-        BrokerErrorCode.TOOL_TIMEOUT,
-        `Tool '${toolName}' timed out after ${ms}ms`,
-        { tool: toolName, timeoutMs: ms }
-      ));
-    }, ms);
-
-    promise.then(
-      (value) => { clearTimeout(timer); resolve(value); },
-      (error) => { clearTimeout(timer); reject(error); }
-    );
-  });
-}
-
-/**
- * Handle a single JSON-RPC request.
- * Exported for direct unit testing.
- * Returns undefined for notifications (no id → no response).
- */
-export async function handleStdioRequest(
-  rpc: JsonRpcRequest,
-  ctx: McpToolContext
-): Promise<JsonRpcResponse | undefined> {
-  const { method, params } = rpc;
-
-  // Notifications (no id) — no response needed
-  if (rpc.id === undefined) {
-    if (method === "notifications/initialized") {
-      stderrLog("Client initialized");
-    } else {
-      stderrLog(`Notification: ${method}`);
-    }
-    return undefined;
-  }
-
-  const id = rpc.id;
-
-  switch (method) {
-    // ── MCP Initialize ─────────────────────────────────────────────────
-    case "initialize": {
-      stderrLog(`Initialize from ${(params as any)?.clientInfo?.name ?? "unknown"}`);
-      return rpcOk(id, {
-        protocolVersion: PROTOCOL_VERSION,
-        capabilities: {
-          tools: {}
-        },
-        serverInfo: SERVER_INFO
-      });
-    }
-
-    // ── Tools List ─────────────────────────────────────────────────────
-    case "tools/list": {
-      stderrLog(`tools/list → ${RUNNER_MCP_TOOLS.length} tools`);
-      return rpcOk(id, { tools: RUNNER_MCP_TOOLS });
-    }
-
-    // ── Tools Call ─────────────────────────────────────────────────────
-    case "tools/call": {
-      const toolName = (params as any)?.name;
-      const toolArgs = (params as any)?.arguments ?? {};
-
-      if (!toolName) {
-        return rpcError(id, -32602, "Missing tool name");
-      }
-
-      // ── Role authorization gate ──────────────────────────────────────
-      // tools/list is cosmetic filtering. This is the REAL enforcement.
-      const allowedRoles = ctx.config.allowedRoles ?? [ctx.config.defaultRole];
-      const allowedTools = new Set<string>();
-      for (const role of allowedRoles) {
-        for (const name of getToolNamesForRole(role)) {
-          allowedTools.add(name);
-        }
-      }
-      if (!allowedTools.has(toolName)) {
-        stderrLog(`tools/call BLOCKED: ${toolName} not allowed for role ${ctx.config.defaultRole}`);
-        return rpcOk(id, {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({
-                ok: false,
-                error: "ROLE_TOOL_NOT_ALLOWED",
-                message: `Tool '${toolName}' is not allowed for role '${ctx.config.defaultRole}'`,
-                allowedRoles
-              })
-            }
-          ],
-          isError: true
-        });
-      }
-
-      stderrLog(`tools/call: ${toolName}`);
-
-      // ── Broker: pre-execute checks ───────────────────────────────────
-      const broker = ctx.broker;
-      if (broker) {
-        try {
-          broker.preExecute(toolName, toolArgs);
-        } catch (error) {
-          if (error instanceof BrokerError) {
-            // Audit the rejection (highest-value forensics event)
-            broker.recordRejection(toolName, toolArgs, error);
-            stderrLog(`tools/call BLOCKED by broker: ${error.code} — ${error.message}`);
-            return rpcOk(id, {
-              content: [{
-                type: "text",
-                text: JSON.stringify({
-                  ok: false,
-                  error: error.code,
-                  message: error.message,
-                  details: error.details
-                })
-              }],
-              isError: true
-            });
-          }
-          throw error;
-        }
-      }
-
-      // ── Broker: execute with timeout ─────────────────────────────────
-      const timeoutMs = broker?.getTimeoutMs(toolName) ?? 30_000;
-      const startTime = Date.now();
-
-      // Create AbortController for cancellation propagation.
-      const abortController = new AbortController();
-
-      try {
-        const ctxWithSignal = { ...ctx, signal: abortController.signal };
-        const result = await withTimeout(
-          handleMcpTool(toolName, toolArgs, ctxWithSignal),
-          timeoutMs,
-          toolName,
-          abortController
-        );
-
-        // ── Broker: post-execute checks (output size + audit) ──────────
-        if (broker) {
-          broker.postExecute(toolName, toolArgs, result, Date.now() - startTime);
-        }
-
-        // MCP tools/call wraps result in content array
-        return rpcOk(id, {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2)
-            }
-          ]
-        });
-      } catch (error: any) {
-        const durationMs = Date.now() - startTime;
-
-        // Detect timeout errors — for non-idempotent writes, the underlying
-        // operation may still complete even though the client timed out.
-        const isTimeout = error instanceof BrokerError
-          && error.code === BrokerErrorCode.TOOL_TIMEOUT;
-
-        // Record failure in audit log
-        if (broker) {
-          broker.recordFailure(toolName, toolArgs, error, durationMs, isTimeout);
-        }
-
-        const message = error?.message ?? "Tool execution failed";
-        const errorCode = error instanceof BrokerError ? error.code : undefined;
-        stderrLog(`tools/call error${errorCode ? ` (${errorCode})` : ""}: ${message}`);
-        return rpcOk(id, {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({
-                ok: false,
-                error: errorCode ?? message,
-                message,
-                details: error instanceof BrokerError ? error.details : undefined
-              })
-            }
-          ],
-          isError: true
-        });
-      }
-    }
-
-    // ── Ping ───────────────────────────────────────────────────────────
-    case "ping": {
-      return rpcOk(id, {});
-    }
-
-    // ── Unknown method ─────────────────────────────────────────────────
-    default: {
-      stderrLog(`Unknown method: ${method}`);
-      return rpcError(id, -32601, `Method not found: ${method}`);
-    }
-  }
-}
-
-/**
- * Run the MCP STDIO server.
- * Reads NDJSON from input, writes JSON-RPC to output.
- * Resolves when input closes (EOF).
- *
- * Accepts streams for testability. Defaults to process.stdin/stdout.
+ * @param ctx - MCP tool context (services, mcp, config, broker)
+ * @param cleanup - Optional cleanup callbacks for graceful shutdown.
+ *                  Called in order: server → mcp → services.
  */
 export async function runMcpStdio(
   ctx: McpToolContext,
-  input: Readable = process.stdin,
-  output: Writable = process.stdout
+  cleanup?: McpStdioCleanup,
 ): Promise<void> {
-  stderrLog("ArcLayer Runner MCP STDIO server starting");
+  stderrLog('ArcLayer Runner MCP starting (STDIO)');
   stderrLog(`Agent: ${ctx.config.agentId} (${ctx.config.defaultRole})`);
   stderrLog(`Runtime: ${ctx.config.runtimeKind} → ${ctx.config.runtimeEndpoint}`);
-  stderrLog(`Tools: ${RUNNER_MCP_TOOLS.map((t) => t.name).join(", ")}`);
-  stderrLog("Waiting for JSON-RPC on stdin...");
 
-  return new Promise<void>((resolve) => {
-    const rl = createInterface({
-      input,
-      terminal: false
-    });
+  const server = createRunnerMcpServer(ctx);
+  const transport = new StdioServerTransport();
 
-    let lineCount = 0;
-    let pending = 0;
+  await server.connect(transport);
 
-    const sendResponse = (response: JsonRpcResponse): void => {
-      output.write(JSON.stringify(response) + "\n");
-    };
+  stderrLog('ArcLayer Runner MCP connected. Waiting for requests...');
 
-    rl.on("line", async (line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
+  // Graceful shutdown — idempotent, runs once
+  let shuttingDown = false;
+  const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    stderrLog('Shutting down...');
 
-      lineCount++;
-      let rpc: JsonRpcRequest;
-
-      try {
-        rpc = JSON.parse(trimmed);
-      } catch {
-        sendResponse(rpcError(0, -32700, "Parse error"));
-        return;
-      }
-
-      if (!rpc || rpc.jsonrpc !== "2.0" || !rpc.method) {
-        const id = (rpc as any)?.id ?? 0;
-        sendResponse(rpcError(id, -32600, "Invalid Request"));
-        return;
-      }
-
-      pending++;
-      try {
-        const response = await handleStdioRequest(rpc, ctx);
-        if (response) {
-          sendResponse(response);
-        }
-      } catch (error: any) {
-        const message = error?.message ?? "Internal error";
-        stderrLog(`Unhandled error: ${message}`);
-        if (rpc.id !== undefined) {
-          sendResponse(rpcError(rpc.id, -32603, message));
-        }
-      } finally {
-        pending--;
-        if (pending === 0 && rl.closed) {
-          resolve();
-        }
-      }
-    });
-
-    rl.on("close", () => {
-      stderrLog(`stdin closed after ${lineCount} lines. Exiting.`);
-      if (pending === 0) {
-        resolve();
-      }
-    });
-
-    // Keep process alive when used as main entry
-    if (input === process.stdin) {
-      process.stdin.resume();
+    try {
+      await server.close();
+    } catch {
+      // ignore close errors
     }
-  });
+
+    try {
+      await cleanup?.closeMcp?.();
+    } catch {
+      // ignore close errors
+    }
+
+    try {
+      await cleanup?.closeServices?.();
+    } catch {
+      // ignore close errors
+    }
+
+    process.exit(0);
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
