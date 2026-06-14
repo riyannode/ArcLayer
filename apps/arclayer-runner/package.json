@@ -3,7 +3,7 @@
   "version": "0.1.4",
   "private": false,
   "type": "module",
-  "description": "ArcLayer Runner \u2014 policy boundary for external LLM runtimes with MCP bridge, Circle CLI, ERC-8004, ERC-8183, and x402",
+  "description": "ArcLayer Runner — policy boundary for external LLM runtimes with MCP bridge, Circle CLI, ERC-8004, ERC-8183, and x402",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -31,12 +31,14 @@
     "@arclayer/circle-cli-adapter": "workspace:^",
     "@arclayer/runner-core": "workspace:^",
     "@arclayer/sdk": "workspace:^",
+    "better-sqlite3": "^12.10.1",
     "commander": "^14.0.2",
+    "viem": "^2.17.0",
     "yaml": "^2.7.0",
-    "zod": "^3.23.0",
-    "viem": "^2.17.0"
+    "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.19.19",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",

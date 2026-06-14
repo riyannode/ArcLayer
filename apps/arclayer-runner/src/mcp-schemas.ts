@@ -86,6 +86,21 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
     name: "runner.policy",
     description: "Current spending policy limits"
   },
+  {
+    name: "runner.list_reconcilable_operations",
+    description: "List operations needing reconciliation (broadcast/unknown). Operator/admin only."
+  },
+  {
+    name: "runner.reconcile_operation",
+    description: "Reconcile a broadcast/unknown operation to confirmed or failed. Operator/admin only.",
+    inputSchema: {
+      operationId: { type: "string", description: "Operation ID to reconcile" },
+      outcome: { type: "string", enum: ["confirmed", "failed", "unknown"], description: "Reconciliation outcome" },
+      txHash: { type: "string", description: "Transaction hash (for confirmed outcome)" },
+      errorCode: { type: "string", description: "Error code (for failed outcome)" },
+      errorMessage: { type: "string", description: "Error message (for failed outcome)" }
+    }
+  },
 
   // ── Circle CLI ────────────────────────────────────────────────────────
   {

@@ -39,6 +39,9 @@
       "ws": "^8.20.1",
       "postcss": "^8.5.0",
       "uuid": "^13.0.1"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   }
 }

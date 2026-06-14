@@ -50,6 +50,8 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
   { name: "runner.receipts", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["receipts"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "devops-admin", "full-stack-agent"], description: "Recent receipts" },
   { name: "runner.ledger", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["ledger"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "devops-admin", "full-stack-agent"], description: "Recent spending ledger records" },
   { name: "runner.policy", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["policy"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "devops-admin", "full-stack-agent"], description: "Current spending policy limits" },
+  { name: "runner.list_reconcilable_operations", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["reconciliation"], roles: ["devops-admin"], description: "List operations needing reconciliation" },
+  { name: "runner.reconcile_operation", source: "runner-local", status: "active", risk: ["write"], capabilities: ["reconciliation"], roles: ["devops-admin"], description: "Reconcile broadcast/unknown operation" },
 
   // MCP Tool Broker introspection
   { name: "runner.broker_status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["broker"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "devops-admin", "full-stack-agent"], description: "MCP Tool Broker session state" },
