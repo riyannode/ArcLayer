@@ -44,3 +44,23 @@ export function sanitizeErrorMessage(err: unknown): string {
 
   return msg || 'agent execution failed';
 }
+
+/**
+ * Sanitize an error for server-side logging.
+ *
+ * Unlike sanitizeErrorMessage (for HTTP responses), this preserves the full
+ * stack trace for debugging but redacts credentials and embedded secrets.
+ * Use in console.error() — never return this to clients.
+ */
+export function safeErrorForLog(err: unknown): string {
+  const raw =
+    err instanceof Error
+      ? err.stack || err.message || err.name
+      : String(err);
+
+  let sanitized = raw;
+  for (const [pattern, replacement] of SECRET_PATTERNS) {
+    sanitized = sanitized.replace(pattern, replacement);
+  }
+  return sanitized;
+}
