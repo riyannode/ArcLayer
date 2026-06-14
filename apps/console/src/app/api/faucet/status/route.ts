@@ -51,10 +51,11 @@ export async function GET(req: NextRequest) {
       circleFaucetUrl: CIRCLE_FAUCET_URL,
     });
   } catch (err) {
+    console.error('[faucet/status] status check failed:', err);
     return humanJson(req, {
       ready: false,
       reason: 'status_check_failed',
-      error: err instanceof Error ? err.message : String(err),
+      error: 'internal_error',
       circleFaucetUrl: CIRCLE_FAUCET_URL,
     }, { status: 500 });
   }
