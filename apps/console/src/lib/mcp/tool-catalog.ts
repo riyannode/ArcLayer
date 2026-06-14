@@ -1328,7 +1328,7 @@ export function registerAllTools(): void {
       { name: 'quoteAmountUsdc', type: 'string', description: 'Quote amount in USDC (e.g. "1.5").' },
       { name: 'quoteAmountAtomic', type: 'string', description: 'Quote amount in atomic units (6 decimals).' },
       { name: 'message', type: 'string', description: 'Application message.' },
-      { name: 'capabilities', type: 'object', description: 'Provider capabilities array.' },
+      { name: 'capabilities', type: 'array', description: 'Provider capabilities array (string[]).' },
       { name: 'metadata', type: 'object', description: 'Additional metadata.' },
     ],
     handler: handleProviderApplyOpenJob,

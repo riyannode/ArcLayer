@@ -503,6 +503,14 @@ describe("Proxy Schema Parity: Runner vs Hosted Console", () => {
     }
   });
 
+  it("provider.apply_open_job.capabilities is type array (not object)", async () => {
+    const { CONSOLE_PROXY_MCP_TOOLS } = await import("./mcp-schemas");
+    const tool = CONSOLE_PROXY_MCP_TOOLS.find((t: any) => t.name === "provider.apply_open_job");
+    expect(tool).toBeDefined();
+    // MUST be 'array' — handler uses Array.isArray(), Zod z.array() validates correctly
+    expect(tool.inputSchema.capabilities.type).toBe("array");
+  });
+
   it("evaluator.prepare_complete_job has reasonHash and optParams", async () => {
     const { CONSOLE_PROXY_MCP_TOOLS } = await import("./mcp-schemas");
     const tool = CONSOLE_PROXY_MCP_TOOLS.find((t: any) => t.name === "evaluator.prepare_complete_job");

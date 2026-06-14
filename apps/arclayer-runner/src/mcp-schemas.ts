@@ -596,7 +596,7 @@ export const CONSOLE_PROXY_MCP_TOOLS: McpToolDef[] = [
       quoteAmountUsdc: { type: "string", description: "Quote amount in USDC (e.g. \"1.5\")." },
       quoteAmountAtomic: { type: "string", description: "Quote amount in atomic units (6 decimals)." },
       message: { type: "string", description: "Application message." },
-      capabilities: { type: "object", description: "Provider capabilities array." },
+      capabilities: { type: "array", description: "Provider capabilities array (string[])." },
       metadata: { type: "object", description: "Additional metadata." },
     },
   },
