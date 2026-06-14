@@ -47,6 +47,40 @@ function rethrowAsMcpError(err: unknown, fallbackMessage: string): never {
   throw new McpError(MCP_ERRORS.INTERNAL_ERROR, message);
 }
 
+/**
+ * Verify that the MCP session owns the requested agentId and address.
+ * Prevents one session from operating on another agent's data.
+ */
+function assertSessionBinding(
+  session: {
+    agentId?: string | null;
+    ownerAddress?: string;
+    agentAccountAddress?: string;
+  },
+  requestedAgentId: string,
+  requestedAddress: string,
+): void {
+  if (!session.agentId || session.agentId !== requestedAgentId) {
+    throw new McpError(
+      MCP_ERRORS.FORBIDDEN,
+      "Session does not own the requested agentId",
+    );
+  }
+
+  const boundAddresses = new Set(
+    [session.ownerAddress, session.agentAccountAddress]
+      .filter(Boolean)
+      .map((a) => a!.toLowerCase()),
+  );
+
+  if (boundAddresses.size > 0 && !boundAddresses.has(requestedAddress.toLowerCase())) {
+    throw new McpError(
+      MCP_ERRORS.FORBIDDEN,
+      "Requested wallet is not bound to this MCP session",
+    );
+  }
+}
+
 // ── provider.publish_deliverable ───────────────────────────────────────────
 
 /**
@@ -91,6 +125,9 @@ export async function handleProviderPublishDeliverable(
   if (!providerAddress) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "providerAddress required");
   if (!canonicalPayload) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "canonicalPayload required");
   if (!deliverableHash) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "deliverableHash required");
+
+  // Verify session owns this agent and address
+  assertSessionBinding(session as any, agentId, providerAddress);
 
   // Verify hash format
   if (!/^0x[a-fA-F0-9]{64}$/.test(deliverableHash)) {
@@ -196,6 +233,9 @@ export async function handleEvaluatorGetDeliverable(
   if (!agentId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "agentId required");
   if (!jobId) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "jobId required");
   if (!evaluatorAddress) throw new McpError(MCP_ERRORS.VALIDATION_ERROR, "evaluatorAddress required");
+
+  // Verify session owns this agent and address
+  assertSessionBinding(session as any, agentId, evaluatorAddress);
 
   try {
     // Read on-chain job

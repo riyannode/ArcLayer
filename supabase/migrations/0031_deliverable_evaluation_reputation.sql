@@ -89,3 +89,15 @@ CREATE TABLE IF NOT EXISTS agent_reputation_publication (
 CREATE INDEX IF NOT EXISTS idx_reputation_pub_status ON agent_reputation_publication (status);
 CREATE INDEX IF NOT EXISTS idx_reputation_pub_target ON agent_reputation_publication (target_agent_id);
 CREATE INDEX IF NOT EXISTS idx_reputation_pub_next_attempt ON agent_reputation_publication (next_attempt_at) WHERE status = 'pending';
+
+-- ── Row Level Security ─────────────────────────────────────────────────────
+-- Server uses service-role Supabase client, so backend retains full access.
+-- Anon/authenticated roles are blocked from direct access.
+
+ALTER TABLE agent_job_deliverables ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_job_evaluations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE agent_reputation_publication ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE agent_job_deliverables FROM anon, authenticated;
+REVOKE ALL ON TABLE agent_job_evaluations FROM anon, authenticated;
+REVOKE ALL ON TABLE agent_reputation_publication FROM anon, authenticated;

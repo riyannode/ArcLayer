@@ -25,6 +25,7 @@ import {
   isJobEnvelope,
   extractProposedBudget,
   parseUsdcToAtomic,
+  hashDeliverable,
 } from "@arclayer/runner-core";
 import type { RunnerServices } from "../services";
 import type { ArcLayerMcpConnector } from "../mcp-connector";
@@ -80,6 +81,7 @@ export class ProviderWorker extends EventEmitter {
   private activeJob: ActiveJob | null = null;
   private processedOpenIds = new Set<string>();
   private processedFundedIds = new Set<string>();
+  private readonly retryCounts = new Map<string, number>();
 
   constructor(
     private readonly config: RunnerConfig,
@@ -333,32 +335,34 @@ export class ProviderWorker extends EventEmitter {
         erc8183JobId,
         phase: "discovered",
         startedAt: new Date(),
-        retryCount: 0,
+        retryCount: this.retryCounts.get(jobId) ?? 0,
       };
 
       try {
         await this.processFundedJob(jobRecord);
         this.processedFundedIds.add(jobId);
+        this.retryCounts.delete(jobId);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[provider-worker] Funded job ${jobId} failed: ${msg}`);
         this.activeJob.phase = "failed";
         this.activeJob.lastError = msg;
 
-        // Retry policy
-        if (this.activeJob.retryCount < this.workerConfig.maxRuntimeRetries) {
-          this.activeJob.retryCount++;
-          const backoff = this.workerConfig.baseBackoffMs * Math.pow(2, this.activeJob.retryCount - 1);
-          console.log(`[provider-worker] Retrying job ${jobId} in ${backoff}ms (attempt ${this.activeJob.retryCount})`);
-          await this.sleep(backoff);
-          // Will be retried on next poll cycle
-          this.processedFundedIds.delete(jobId);
-        } else {
+        const nextRetry = (this.retryCounts.get(jobId) ?? 0) + 1;
+        this.retryCounts.set(jobId, nextRetry);
+
+        if (nextRetry >= this.workerConfig.maxRuntimeRetries) {
+          this.processedFundedIds.add(jobId);
           await this.notifyTelegram(
             "job.failed",
-            `Job ${jobId} failed after ${this.workerConfig.maxRuntimeRetries} retries: ${msg}`,
+            `Job ${jobId} failed after ${nextRetry} attempts: ${msg}`,
           );
+          return;
         }
+
+        const backoff = this.workerConfig.baseBackoffMs * Math.pow(2, nextRetry - 1);
+        console.log(`[provider-worker] Retrying job ${jobId} in ${backoff}ms (attempt ${nextRetry})`);
+        await this.sleep(backoff);
       } finally {
         this.activeJob = null;
       }
@@ -382,14 +386,28 @@ export class ProviderWorker extends EventEmitter {
     this.emit("runtime_started", { jobId });
     await this.notifyTelegram("runtime_started", `Starting execution for job ${jobId}`);
 
+    const providerAddress = this.config.circleWalletAddress!;
+    const evaluatorAddress = String(job.evaluatorAddress ?? job.evaluator ?? "");
+
+    if (!/^0x[a-fA-F0-9]{40}$/.test(evaluatorAddress)) {
+      throw new Error(`Job ${jobId} has an invalid evaluator address`);
+    }
+
+    const taskId = `provider:${erc8183JobId}:${Date.now()}`;
+
     // Execute via existing RunnerServices.runProviderJob()
-    // x402 payments are handled by the separate x402-agent role, not here.
-    let runtimeResult: unknown;
+    let runResult: Record<string, unknown>;
     try {
-      runtimeResult = await this.services.runProviderJob({
+      runResult = (await this.services.runProviderJob({
+        taskId,
         jobId: erc8183JobId,
+        agentId: this.config.agentId,
+        provider: providerAddress,
+        evaluator: evaluatorAddress,
         description,
-      });
+        input: { description, jobEnvelope: description },
+        metadata: { localJobId: jobId },
+      })) as Record<string, unknown>;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`Runtime execution failed: ${msg}`);
@@ -397,36 +415,67 @@ export class ProviderWorker extends EventEmitter {
 
     // Check if runtime needs paid resources
     // Provider does NOT pay — it checkpoints and waits for x402-agent
-    const resultObj = runtimeResult as Record<string, unknown>;
-    if (resultObj?.state === "needs_payment") {
+    if (runResult?.state === "needs_payment") {
       this.activeJob!.phase = "needs_action";
-      const paymentRequests = resultObj.paymentRequests;
+      const paymentRequests = runResult.paymentRequests;
       this.emit("needs_payment", { jobId, paymentRequests });
       await this.notifyTelegram(
         "runtime.needs_action",
         `Job ${jobId} needs paid resources. Waiting for x402-agent to complete payment.`,
       );
-      // Checkpoint the payment request for x402-agent pickup
-      // Worker will resume after receiving PaymentDelegationReceipt
       return;
     }
 
-    // Canonicalize deliverable
+    if (!runResult.ok || runResult.status !== "completed") {
+      throw new Error(
+        String(runResult.error ?? `Runtime did not complete: ${String(runResult.status)}`),
+      );
+    }
+
+    // Build canonical deliverable and compute real hash
     this.activeJob!.phase = "publishing";
-    const output = (runtimeResult as Record<string, unknown>)?.output ?? runtimeResult;
+    const runtimeOutput = runResult.result ?? runResult.output ?? null;
+    const runtimeArtifacts = Array.isArray(runResult.artifacts) ? runResult.artifacts : [];
+
+    const deliverable = {
+      schema: "arclayer.deliverable" as const,
+      version: 1 as const,
+      jobId: erc8183JobId,
+      providerAgentId: this.config.agentId,
+      output: runtimeOutput,
+      artifacts: runtimeArtifacts,
+      runtime: {
+        taskId,
+        completedAt: new Date().toISOString(),
+      },
+    };
+
+    const { canonicalPayload, deliverableHash } = hashDeliverable(deliverable);
 
     // Publish deliverable via MCP
-    // (This would call provider.publish_deliverable)
-    this.emit("deliverable_published", { jobId });
+    await this.mcp.callTool("provider.publish_deliverable", {
+      agentId: this.config.agentId,
+      jobId: erc8183JobId,
+      providerAddress,
+      canonicalPayload,
+      deliverableHash,
+      artifacts: runtimeArtifacts,
+      runtimeReceiptHash: runResult.receipt?.proof?.sha256 ?? undefined,
+    });
+    this.emit("deliverable_published", { jobId, deliverableHash });
 
     // Submit deliverable on-chain via existing submitProviderDeliverable()
     this.activeJob!.phase = "submitting";
     try {
-      await this.services.submitProviderDeliverable({
+      const submitResult = await this.services.submitProviderDeliverable({
         jobId: erc8183JobId,
-        deliverableHash: ("0x" + "00".repeat(32)) as `0x${string}`, // Placeholder — actual hash from canonicalizeDeliverable
+        deliverableHash,
+        result: runtimeOutput,
         optParams: "0x",
       });
+      if (submitResult && !submitResult.ok) {
+        throw new Error(String(submitResult.error ?? "Provider deliverable submission failed"));
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`Submit failed: ${msg}`);

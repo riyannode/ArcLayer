@@ -262,7 +262,7 @@ export async function getUnifiedReputation(agentId: string): Promise<{
     : 0;
 
   // Get published reputation feedback
-  const { data: feedback } = await db
+  const { data: feedback, error: feedbackError } = await db
     .from("agent_reputation_publication")
     .select("*")
     .eq("target_agent_id", agentId)
@@ -270,23 +270,50 @@ export async function getUnifiedReputation(agentId: string): Promise<{
     .order("created_at", { ascending: false })
     .limit(10);
 
-  const feedbackCount = feedback?.length ?? 0;
-  const erc8004Score = feedbackCount > 0
-    ? Math.round(feedback.reduce((sum, f) => sum + f.score, 0) / feedbackCount)
-    : 0;
+  if (feedbackError) {
+    console.warn(
+      `[reputation] failed to load published feedback for agent ${agentId}:`,
+      feedbackError.message,
+    );
+  }
 
-  // Combined score (weighted average)
-  const combinedScore = totalJobs > 0
-    ? Math.round(workScore * 0.6 + (erc8004Score + 100) * 0.2) // Normalize erc8004 to 0-200, then weight
-    : erc8004Score;
+  const publishedFeedback = feedback ?? [];
+  const feedbackCount = publishedFeedback.length;
+
+  const erc8004Score =
+    feedbackCount > 0
+      ? Math.round(
+          publishedFeedback.reduce(
+            (sum, item) => sum + Number(item.score ?? 0),
+            0,
+          ) / feedbackCount,
+        )
+      : 0;
+
+  // ERC-8004 feedback uses -100..100.
+  // Normalize it to 0..100 before combining with the work score.
+  const normalizedErc8004Score = Math.max(
+    0,
+    Math.min(100, Math.round((erc8004Score + 100) / 2)),
+  );
+
+  const combinedScore =
+    totalJobs > 0 && feedbackCount > 0
+      ? Math.round(workScore * 0.6 + normalizedErc8004Score * 0.4)
+      : totalJobs > 0
+        ? workScore
+        : normalizedErc8004Score;
 
   return {
     score: String(combinedScore),
     workScore: String(workScore),
     erc8004Score: String(erc8004Score),
     feedbackCount,
-    latestFeedback: feedback?.[0] ?? null,
-    validation: {}, // TODO: integrate validation registry
-    source: ["erc8183_jobs", "erc8004_reputation"],
+    latestFeedback: publishedFeedback[0] ?? null,
+    validation: {},
+    source: [
+      ...(totalJobs > 0 ? ["erc8183_jobs"] : []),
+      ...(feedbackCount > 0 ? ["erc8004_reputation"] : []),
+    ],
   };
 }

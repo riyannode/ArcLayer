@@ -289,7 +289,8 @@ export async function attachSettlementTx(
   settlementTxHash: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const db = supabase();
-  const { error } = await db
+
+  const { data, error } = await db
     .from("agent_job_evaluations")
     .update({
       settlement_tx_hash: settlementTxHash,
@@ -297,9 +298,20 @@ export async function attachSettlementTx(
     })
     .eq("job_id", jobId)
     .is("settlement_tx_hash", null)
-    .update({ settlement_tx_hash: settlementTxHash });
+    .select("id")
+    .maybeSingle();
 
-  if (error) return { ok: false, error: error.message };
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  if (!data) {
+    return {
+      ok: false,
+      error: "Evaluation not found or settlement transaction already attached",
+    };
+  }
+
   return { ok: true };
 }
 
@@ -336,6 +348,8 @@ export async function queueReputationPublication(params: {
         evidence_hash: params.evidenceHash ?? null,
         status: "pending",
         attempts: 0,
+        next_attempt_at: new Date().toISOString(),
+        last_error: null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "job_id,source_agent_id,target_agent_id,feedback_type" },
@@ -354,15 +368,21 @@ export async function getPendingPublications(
   limit = 10,
 ): Promise<ReputationPublicationRow[]> {
   const db = supabase();
-  const { data } = await db
+  const now = new Date().toISOString();
+
+  const { data, error } = await db
     .from("agent_reputation_publication")
     .select("*")
     .eq("status", "pending")
-    .lte("next_attempt_at", new Date().toISOString())
+    .or(`next_attempt_at.is.null,next_attempt_at.lte.${now}`)
     .order("created_at", { ascending: true })
     .limit(limit);
 
-  return (data as ReputationPublicationRow[]) ?? [];
+  if (error) {
+    throw new Error(`Failed to load reputation queue: ${error.message}`);
+  }
+
+  return (data ?? []) as ReputationPublicationRow[];
 }
 
 /**
@@ -373,15 +393,32 @@ export async function markPublicationPublished(
   txHash: string,
 ): Promise<void> {
   const db = supabase();
-  await db
+
+  const { data: current, error: readError } = await db
+    .from("agent_reputation_publication")
+    .select("attempts")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (readError) {
+    throw new Error(`Failed to read reputation attempt: ${readError.message}`);
+  }
+
+  const { error } = await db
     .from("agent_reputation_publication")
     .update({
       status: "published",
       tx_hash: txHash,
-      attempts: db.rpc ? undefined : 1, // increment handled by RPC or manual
+      attempts: Number(current?.attempts ?? 0) + 1,
+      next_attempt_at: null,
+      last_error: null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
+
+  if (error) {
+    throw new Error(`Failed to mark reputation published: ${error.message}`);
+  }
 }
 
 /**
@@ -389,17 +426,36 @@ export async function markPublicationPublished(
  */
 export async function markPublicationFailed(
   id: string,
-  error: string,
+  errorMessage: string,
   nextAttemptAt?: Date,
 ): Promise<void> {
   const db = supabase();
-  await db
+
+  const { data: current, error: readError } = await db
+    .from("agent_reputation_publication")
+    .select("attempts")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (readError) {
+    throw new Error(`Failed to read reputation attempt: ${readError.message}`);
+  }
+
+  const attempts = Number(current?.attempts ?? 0) + 1;
+  const terminal = !nextAttemptAt;
+
+  const { error } = await db
     .from("agent_reputation_publication")
     .update({
-      status: "failed",
-      last_error: error,
-      next_attempt_at: nextAttemptAt?.toISOString() ?? null,
+      status: terminal ? "failed" : "pending",
+      attempts,
+      last_error: errorMessage,
+      next_attempt_at: terminal ? null : nextAttemptAt.toISOString(),
       updated_at: new Date().toISOString(),
     })
     .eq("id", id);
+
+  if (error) {
+    throw new Error(`Failed to update reputation attempt: ${error.message}`);
+  }
 }

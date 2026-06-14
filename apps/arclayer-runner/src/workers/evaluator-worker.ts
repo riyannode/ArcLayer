@@ -25,8 +25,9 @@ import {
   decodeEvaluationVerdict,
   determineSettlementAction,
   verifyEvaluatedHash,
+  decodeJobEnvelope,
+  decodeDeliverable,
   type EvaluationVerdictV1,
-  AUTO_SETTLEMENT_CONFIDENCE_THRESHOLD,
 } from "@arclayer/runner-core";
 import type { RunnerServices } from "../services";
 import type { ArcLayerMcpConnector } from "../mcp-connector";
@@ -55,6 +56,7 @@ type EvalPhase =
   | "completed"
   | "rejected"
   | "manual_review"
+  | "needs_action"
   | "failed";
 
 type ActiveEvaluation = {
@@ -298,10 +300,32 @@ export class EvaluatorWorker extends EventEmitter {
       return;
     }
 
-    // Step 5: Determine settlement action
-    const mandatoryCriteriaIds = verdict.evidence
-      .filter((e) => e.passed !== undefined)
-      .map((e) => e.criterionId);
+    // Step 5: Get mandatory criteria from JobEnvelope (not from verdict)
+    const jobDescription = String(job.description ?? "");
+    const envelope = decodeJobEnvelope(jobDescription);
+
+    if (!envelope) {
+      this.activeEval!.phase = "manual_review";
+      await this.notifyTelegram(
+        "evaluation.manual_review",
+        `Job ${jobId}: JobEnvelope missing or invalid. Manual review required.`,
+      );
+      return;
+    }
+
+    const mandatoryCriteriaIds = envelope.acceptanceCriteria
+      .filter((c) => c.mandatory)
+      .map((c) => c.id);
+
+    const decodedDeliverable = decodeDeliverable(canonicalPayload);
+    if (!decodedDeliverable) {
+      this.activeEval!.phase = "manual_review";
+      await this.notifyTelegram(
+        "evaluation.manual_review",
+        `Job ${jobId}: canonical deliverable is invalid. Manual review required.`,
+      );
+      return;
+    }
 
     const action = determineSettlementAction(verdict, mandatoryCriteriaIds);
 
