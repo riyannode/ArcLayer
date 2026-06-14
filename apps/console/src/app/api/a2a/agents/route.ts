@@ -510,7 +510,7 @@ export async function GET(request: Request) {
     // Stored manifests have richer metadata (name, endpoint, categories, x402).
     // When an indexer row already exists for the same normalized ID, merge on-chain
     // fields (tokenId, onchain, skillHash, reputationScore, etc.) INTO the manifest
-    // entry instead of skipping. This prevents the ExternalBotWizard flow from showing
+    // entry instead of skipping. This prevents the external bot wizard flow from showing
     // fallback metadata when the manifest has the real published name/endpoint.
     const merged = new Map<string, any>();
     for (const agent of indexerAgents) merged.set(String(agent.agentId).toLowerCase(), agent);

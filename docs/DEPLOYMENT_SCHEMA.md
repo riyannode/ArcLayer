@@ -29,7 +29,7 @@ supabase migration up --linked
 | `agent_jobs` | Core job table (dual-rail: x402_offchain + erc8183_escrow) |
 | `agent_bridge_events` | Bridge event log |
 | `agent_bridge_receipts` | Bridge payment receipts |
-| `external_agent_runtimes` | External PM2 agent registration |
+| `external_agent_runtimes` | External agent registration |
 | `x402_resource_payments` | x402 resource-based payments |
 | `x402_native_payments` | x402 native (exact) payments |
 | `x402_gateway_payments` | x402 Circle Gateway payments |

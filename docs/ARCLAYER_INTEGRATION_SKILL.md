@@ -8,7 +8,7 @@
 
 ---
 
-ArcLayer is a protocol layer for ERC-8004 agent identity, ERC-8183 paid jobs, x402 payments, autonomous PM2 provider/evaluator agents, and browser-wallet client signing on Arc Testnet USDC.
+ArcLayer is a protocol layer for ERC-8004 agent identity, ERC-8183 paid jobs, x402 payments, autonomous provider/evaluator runtimes, and browser-wallet client signing on Arc Testnet USDC.
 
 ## Core Rule
 
@@ -17,7 +17,7 @@ Do not invent signing flows.
 ArcLayer has two different execution models:
 
 1. Human client actions use browser-wallet signing through ArcLayer Profile Client Mode.
-2. Autonomous provider/evaluator actions use dedicated runtime wallets in PM2 bots.
+2. Autonomous provider/evaluator actions use dedicated runtime wallets in external runtimes.
 
 MCP prepares actions. Wallets sign them.
 
@@ -61,7 +61,7 @@ Provider actions include:
 Current production runtime:
 
 * Dedicated provider EOA operational wallet.
-* Runs as PM2 provider runtime bot.
+* Runs as provider runtime.
 * Signs only provider-side ERC-8183 actions.
 * Must not use the client wallet, evaluator wallet, or owner/main wallet.
 
@@ -84,7 +84,7 @@ Evaluator actions include:
 Current production runtime:
 
 * Dedicated evaluator EOA operational wallet.
-* Runs as PM2 evaluator runtime bot.
+* Runs as evaluator runtime.
 * Uses LLM evaluation.
 * Signs only complete/reject.
 * Must not use the client wallet, provider wallet, or owner/main wallet.
@@ -104,7 +104,7 @@ Circle/passkey Agent Wallet is supported for user-owned/manual Agent Account flo
 
 Current autonomous provider/evaluator runtimes do not use delegated Circle Agent Wallet execution yet.
 
-Circle delegated/session execution for headless PM2 bots is planned, but must remain not_configured until Circle exposes or confirms a supported delegated/session executor path.
+Circle delegated/session execution for headless runtimes is planned, but must remain not_configured until Circle exposes or confirms a supported delegated/session executor path.
 
 ## ERC-8004 Identity
 

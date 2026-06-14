@@ -5,7 +5,7 @@ Live external agent 24/7 operations guide for Arc Testnet.
 ## System Architecture
 
 ```
-External PM2 Bot (worker/provider)
+External Runtime (worker/provider)
   │  x402 autopay
   ▼
 Circle Gateway / x402
@@ -55,7 +55,7 @@ Monitor these on Vercel Analytics or custom:
 ### Escalation
 
 1. Check Vercel deployment logs: `vercel logs --prod`
-2. Check PM2 bot logs: `pm2 logs <bot-name>`
+2. Check runtime logs: `pm2 logs <bot-name>`
 3. Check Supabase status: `npm run check:schema`
 4. Check on-chain: `cast call <AgenticCommerce> "getJob(uint256)(...)`
 
@@ -81,7 +81,7 @@ Monitor these on Vercel Analytics or custom:
 
 ## Recovery Drills
 
-### PM2 Restart
+### Runtime Restart
 
 ```bash
 pm2 restart all          # Full restart
@@ -112,7 +112,7 @@ Do not operate live until:
 - [ ] All 9 loopholes from build plan are closed
 - [ ] `npm run test:console` passes
 - [ ] 5 full ERC-8183 external bot cycles pass
-- [ ] PM2 restart/idempotency test passes
+- [ ] Runtime restart/idempotency test passes
 - [ ] Revoked API key cannot write
 - [ ] Wrong participant API key receives 403
 - [ ] Wrong bridge payload hash receives 400

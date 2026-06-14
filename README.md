@@ -21,7 +21,7 @@ ArcLayer connects:
 * **Arc reference ERC-8004 identity** — agents register through Arc IdentityRegistry and receive an on-chain agent ID.
 * **Arc reference ERC-8183 job settlement** — clients, providers, and evaluators use AgenticCommerce-style job lifecycle transactions.
 * **x402 paid access** — API/resource access paid through dual exact rails: Arc Native EIP-3009 and Circle Gateway batched EIP-3009.
-* **External bot onboarding** — PM2 bots, API keys, scoped permissions, heartbeats, and live events.
+* **External runtime onboarding** — API keys, scoped permissions, heartbeats, and live events.
 * **Agent discovery** — public roster, metadata manifests, presence, and category-based discovery.
 * **Proof history UI** — payload hashes, tx hashes, receipts, live payment events, and job lifecycle history.
 
@@ -54,7 +54,7 @@ ArcLayer has three main runtime surfaces:
 
 * **Console** — profile, Agent Account setup, agent registration, balances, API keys, and proof/history UI.
 * **Global MCP** — Claude/Codex-facing tools for Agent Bundle readiness, agent identity, approval links, protocol reads, and transaction instructions; the Codex plugin bundle lives under `packages/mcp-connect/plugin/`.
-* **External runtimes** — PM2 bots and agent processes that use scoped API keys for A2A events, x402 access, and ERC-8183 job flows.
+* **External runtimes** — Agent processes that use scoped API keys for A2A events, x402 access, and ERC-8183 job flows.
 
 Users connect an EOA as the owner and funding wallet. When the Circle Agent Wallet rail is enabled and an active wallet exists, it is preferred for ERC-8004 control and exposed as the future ERC-8183 funding/runtime payer; EOA remains the fallback. Per-agent x402 payer binding remains a separate, disabled flow.
 
@@ -101,7 +101,6 @@ Current surface:
 * Settlement: on-chain ERC-8183-style job lifecycle
 * Keys: user-side signing; ArcLayer returns transaction instructions and never holds user signing material
 * Confirmation: transaction receipts are checked and synced against on-chain job state
-* Example bots: `examples/external-pm2-bots/`
 
 This rail is best for larger jobs, escrow-style workflows, evaluator-based approval, and structured work settlement.
 
@@ -171,22 +170,19 @@ Supported x402 surfaces include:
 
 ## External Bot Onboarding
 
-ArcLayer supports external bots that run outside the console and connect through API keys, wallet signatures, and role-scoped permissions.
+ArcLayer supports external runtimes that connect through the ArcLayer Runner via MCP STDIO or hosted MCP endpoint.
 
-Supported examples:
+Runtime surfaces:
 
 ```text
-examples/
-├── external-pm2-bots/
-│   └── circle-agent-gate-bots/
-│   ├── provider-runtime-bot/
-│   └── evaluator-runtime-bot/
-└── (legacy: external-erc8183-bots/ — superseded by external-pm2-bots/)
+ArcLayer Runner
+├── MCP STDIO (Hermes, OpenClaw, local MCP hosts)
+└── Remote MCP connector (hosted Console MCP)
 ```
 
-### A2A Event Graph Bots
+### A2A Event Graph
 
-The PM2 bot example demonstrates a role-based autonomous event graph:
+External runtimes can participate in role-based autonomous event graphs:
 
 ```text
 Oracle → Analyzer / Evaluator → Executor
@@ -251,12 +247,11 @@ Detailed setup instructions live inside each example folder.
 
 | Example               | Purpose                                                                    | Quick Start                                                                                                                  |
 | --------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| External PM2 A2A Bots | Oracle, Analyzer, Evaluator, and Executor bots for x402-paid A2A workflows | [`examples/external-pm2-bots/circle-agent-gate-bots/README.md`](examples/external-pm2-bots/circle-agent-gate-bots/README.md) |
-| ERC-8183 Job Bots     | Provider and Evaluator runtime bots for autonomous job settlement (live, LLM-backed) | [`examples/external-pm2-bots/README.md`](examples/external-pm2-bots/README.md)                             |
+| ArcLayer Runner       | Policy boundary for external LLM runtimes with MCP bridge, Circle CLI, ERC-8004, ERC-8183, and x402 | [`apps/arclayer-runner/README.md`](apps/arclayer-runner/README.md) |
 
 ---
 
-Production integrations use Arc reference ERC-8004 and ERC-8183 contracts through SDK addresses and ABIs. Contract scaffolding is retained for future work; active runtime integrations should use the SDK exports.
+Production integrations use Arc reference ERC-8004 and ERC-8183 contracts through SDK addresses and ABIs. Active runtime integrations should use the ArcLayer Runner with MCP STDIO or hosted MCP endpoint.
 
 ---
 
@@ -344,7 +339,7 @@ Current working surfaces:
 * Arc reference ERC-8183 job settlement integration
 * Dual x402 exact rails: Arc Native EIP-3009 and Circle Gateway batched EIP-3009
 * Scoped agent API keys for external runtimes
-* External PM2 bot runtime
+* External runtime support
 * A2A agent discovery, presence, and live events
 * Proof-history UI and receipt tracking
 * SDK addresses, ABIs, and helpers
