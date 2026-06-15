@@ -100,11 +100,17 @@ export class ArcLayerMcpConnector {
           // Only assign after successful connect
           this.client = client;
           this.transport = transport;
-        } catch (error) {
+        } catch (error: any) {
           // Clean up on failure — allow retry on next call
           await client.close().catch(() => {});
           this.connectPromise = undefined;
-          throw error;
+          // Network-level failure: ECONNREFUSED, DNS failure, timeout, etc.
+          const reason = error?.cause?.code ?? error?.code ?? error?.message ?? "unknown";
+          throw new RunnerError(
+            "MCP_UNREACHABLE",
+            `Console MCP unreachable at ${this.baseUrl}: ${reason}`,
+            503
+          );
         }
       })();
     }
@@ -174,7 +180,13 @@ export class ArcLayerMcpConnector {
     } catch (e) {
       if (e instanceof RunnerError) throw e;
       const msg = e instanceof Error ? e.message : String(e);
-      throw new RunnerError('MCP_ERROR', `MCP call failed: ${msg}`, 502);
+      // Detect network-level failures and throw MCP_UNREACHABLE (503) instead of MCP_ERROR (502)
+      const isNetwork = /ECONNREFUSED|ENOTFOUND|ECONNRESET|fetch failed|timeout/i.test(msg);
+      throw new RunnerError(
+        isNetwork ? 'MCP_UNREACHABLE' : 'MCP_ERROR',
+        isNetwork ? `Console MCP unreachable: ${msg}` : `MCP call failed: ${msg}`,
+        isNetwork ? 503 : 502
+      );
     }
   }
 

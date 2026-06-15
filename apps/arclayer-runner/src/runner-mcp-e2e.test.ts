@@ -148,7 +148,7 @@ describe("Runner MCP: Official SDK E2E", () => {
 
     // Provider should NOT see tools for other roles
     expect(toolNames).not.toContain("x402.pay"); // x402-agent only
-    expect(toolNames).not.toContain("circle.gateway_deposit"); // devops-admin only
+    expect(toolNames).not.toContain("circle.gateway_deposit"); // x402-agent only
 
     await server.close();
   });
