@@ -31,6 +31,7 @@ import { isBrokerAbortOrTimeout } from "./mcp-broker";
 import { randomUUID } from "node:crypto";
 import { ExecutionGateway, assertGatewayWriteSucceeded } from "./execution-gateway";
 import type { WriteOperationKind } from "./execution-gateway";
+import { ApprovalManager } from "./approval-manager";
 
 // ── Canonical Helpers ──────────────────────────────────────────────────
 
@@ -100,6 +101,7 @@ export class RunnerServices {
   /** @private — owned by ExecutionGateway. Use gateway.execute() for writes. */
   private readonly circle: CircleCliAdapter;
   readonly gateway: ExecutionGateway;
+  readonly approvalManager: ApprovalManager;
 
   constructor(
     readonly config: RunnerConfig,
@@ -116,6 +118,7 @@ export class RunnerServices {
       chain: config.chain,
       dataDir: config.dataDir,
     });
+    this.approvalManager = new ApprovalManager(this, config.dataDir);
   }
 
   manifest() {

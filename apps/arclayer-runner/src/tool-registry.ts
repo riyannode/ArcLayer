@@ -90,6 +90,14 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
   { name: "erc8183.claim_refund", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["client", "full-stack-agent"], requiresCircle: true, description: "Claim refund for expired ERC-8183 job (client action)" },
   { name: "erc8183.set_provider", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["client", "full-stack-agent"], requiresCircle: true, description: "Assign provider to open ERC-8183 job (client action)" },
 
+  // Approvals (client chat-mediated flow)
+  { name: "approvals.create", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals", "erc8183"], roles: ["client", "full-stack-agent"], description: "Create pending approval for client ERC-8183 action" },
+  { name: "approvals.get", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client", "full-stack-agent"], description: "Get approval record by ID" },
+  { name: "approvals.approve", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["approvals", "erc8183"], roles: ["client"], requiresCircle: true, description: "Approve and execute pending approval" },
+  { name: "approvals.reject", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client"], description: "Reject pending approval" },
+  { name: "approvals.cancel", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client"], description: "Cancel pending approval" },
+  { name: "approvals.list_pending", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client", "full-stack-agent"], description: "List pending approvals" },
+
   // ERC-8004 Register via Circle CLI (guarded)
   { name: "erc8004.register_via_circle_cli", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity"], roles: ["identity-agent", ], requiresCircle: true, description: "Register ERC-8004 identity on-chain. Gated behind allowIdentityRegister." },
 

@@ -162,6 +162,54 @@ export const CircleGatewayDepositInputSchema = z.object({
   method: z.enum(["eco", "direct"]).optional(),
 });
 
+// ── Approvals ───────────────────────────────────────────────────────────
+
+/** approvals.create — create a pending approval for a client action */
+export const ApprovalsCreateInputSchema = z.object({
+  actionType: z.enum(["createJob", "approveUsdc", "fundJob", "claimRefund"]),
+  walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "walletAddress must be a valid address"),
+  chainId: z.number().int().positive(),
+  jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").optional(),
+  amount: z.string().optional(),
+  params: z.record(z.unknown()),
+  expiresInSeconds: z.number().int().min(60).max(86400).optional(),
+  idempotencyKey: z.string().min(1).optional(),
+});
+
+/** approvals.get — get an approval by id */
+export const ApprovalsGetInputSchema = z.object({
+  approvalId: z.string().min(1),
+});
+
+/** approvals.approve — approve a pending approval */
+export const ApprovalsApproveInputSchema = z.object({
+  approvalId: z.string().min(1),
+  walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "walletAddress must be a valid address"),
+  role: z.string().min(1),
+  expectedRequestHash: z.string().optional(),
+});
+
+/** approvals.reject — reject a pending approval */
+export const ApprovalsRejectInputSchema = z.object({
+  approvalId: z.string().min(1),
+  walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "walletAddress must be a valid address"),
+  role: z.string().min(1),
+  reason: z.string().optional(),
+});
+
+/** approvals.cancel — cancel a pending approval */
+export const ApprovalsCancelInputSchema = z.object({
+  approvalId: z.string().min(1),
+  walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "walletAddress must be a valid address"),
+  role: z.string().min(1),
+});
+
+/** approvals.list_pending — list pending approvals */
+export const ApprovalsListPendingInputSchema = z.object({
+  walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "walletAddress must be a valid address").optional(),
+  limit: z.number().int().min(1).max(100).optional(),
+});
+
 // ── Schema Registry ──────────────────────────────────────────────────────
 
 /**
@@ -188,6 +236,12 @@ export const MCP_TOOL_INPUT_SCHEMAS: Record<string, z.ZodTypeAny> = {
   "erc8183.claim_refund": Erc8183ClaimRefundInputSchema,
   "erc8183.set_provider": Erc8183SetProviderInputSchema,
   "circle.gateway_deposit": CircleGatewayDepositInputSchema,
+  "approvals.create": ApprovalsCreateInputSchema,
+  "approvals.get": ApprovalsGetInputSchema,
+  "approvals.approve": ApprovalsApproveInputSchema,
+  "approvals.reject": ApprovalsRejectInputSchema,
+  "approvals.cancel": ApprovalsCancelInputSchema,
+  "approvals.list_pending": ApprovalsListPendingInputSchema,
 };
 
 /**
