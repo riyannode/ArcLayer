@@ -577,3 +577,111 @@ OAuth grants scoped MCP access only. It does not expose a private key, sign, or 
 MCP clients without OAuth support can open `/agent-setup` and create a **Runtime Session Token**. The one-time setup command contains `ARCLAYER_MCP_TOKEN`; do not share it. Runtime sessions remain valid for at most 30 days and can be revoked from Profile.
 
 The OAuth schema is provided at `supabase/migrations/20250305000000_mcp_oauth.sql`. It is not applied automatically. An operator applies it manually with `supabase migration up --linked` after reviewing the migration.
+
+---
+
+## Client Approval Tools (Runner MCP)
+
+The Runner exposes 6 approval MCP tools for the client-mediated ERC-8183 approval lifecycle. These tools are available through the Runner MCP STDIO connector and handle on-chain action approvals with security checks.
+
+### Lifecycle
+
+```text
+1. Client calls approvals.create → returns approvalId, summary, renderableMessage
+2. Approval is displayed to user in chat (renderableMessage)
+3. User replies "approve" → client calls approvals.approve → validates + executes on-chain
+   OR user replies "reject" → client calls approvals.reject
+   OR client cancels → approvals.cancel
+4. approvals.get checks current state at any time
+5. approvals.list_pending shows all pending approvals for a wallet
+```
+
+### Tools
+
+| Tool | Description |
+|------|-------------|
+| `approvals.create` | Create a pending approval for a client ERC-8183 action. Validates params against action schema, derives display fields (jobId/amount) from validated params, and returns a renderable message for chat display. |
+| `approvals.get` | Get an approval by ID. Validates role and wallet ownership. |
+| `approvals.approve` | Approve a pending approval. Validates role, wallet, chainId, requestHash, and configured chain/signer. Executes the underlying action via services on success. |
+| `approvals.reject` | Reject a pending approval. Only pending approvals can be rejected. |
+| `approvals.cancel` | Cancel a pending approval. Only pending approvals can be cancelled. |
+| `approvals.list_pending` | List pending approvals for a wallet address. |
+
+### Args
+
+**approvals.create:**
+- `actionType` (required) — `createJob`, `approveUsdc`, `fundJob`, or `claimRefund`
+- `walletAddress` (required) — Client wallet address (0x...)
+- `chainId` (required) — Chain ID (e.g. 5042002 for Arc Testnet)
+- `params` (required) — Full action params object to be executed on approve
+- `jobId` (optional) — ERC-8183 job ID (auto-derived from params for fundJob/claimRefund)
+- `amount` (optional) — USDC amount (auto-derived from params for approveUsdc)
+- `expiresInSeconds` (optional) — Approval expiry in seconds (60-86400, default 300)
+- `idempotencyKey` (optional) — Idempotency key (auto-generated if missing)
+
+**approvals.approve:**
+- `approvalId` (required) — Approval ID (apr-...)
+- `walletAddress` (required) — Client wallet approving (must match approval)
+- `role` (required) — Client role (must be "client")
+- `chainId` (required) — Chain ID (must match approval's chainId)
+- `expectedRequestHash` (optional) — Request hash to verify approval hasn't changed
+
+**approvals.reject:**
+- `approvalId` (required)
+- `walletAddress` (required)
+- `role` (required)
+- `reason` (optional)
+
+**approvals.cancel:**
+- `approvalId` (required)
+- `walletAddress` (required)
+- `role` (required)
+
+**approvals.get:**
+- `approvalId` (required)
+- `walletAddress` (required)
+- `role` (required)
+
+**approvals.list_pending:**
+- `walletAddress` (required)
+- `limit` (optional, 1-100)
+
+### Response Shape
+
+**approvals.create:**
+```json
+{
+  "ok": true,
+  "approvalId": "apr-...",
+  "state": "pending",
+  "expiresAt": "2025-01-01T00:05:00.000Z",
+  "requestHash": "sha256hex...",
+  "summary": "Action: createJob | Wallet: 0x... | Chain: 5042002 | Expires: ...",
+  "renderableMessage": "🔐 **Approval Required**\n\n**Action:** createJob\n..."
+}
+```
+
+**approvals.approve (success):**
+```json
+{
+  "ok": true,
+  "approvalId": "apr-...",
+  "state": "executed",
+  "txHash": "0x...",
+  "result": { "..." },
+  "operationId": "op-..."
+}
+```
+
+### Security Checks
+
+- **Role validation:** Only "client" role can create/approve/reject/cancel
+- **Wallet ownership:** All operations validate wallet matches the approval
+- **Chain ID:** approve validates caller's chainId matches the approval
+- **Configured chain:** approve validates approval's chainId matches the runner's configured chain
+- **Configured signer:** create validates walletAddress matches the runner's configured signer wallet
+- **Request hash:** Optional expectedRequestHash prevents param tampering between create and approve
+- **Display param binding:** jobId/amount are derived from validated params, not from caller-supplied top-level values
+- **Idempotency conflict:** Same idempotency key with different actionType/wallet/chainId/params throws 409
+- **Single-use:** Atomic pending→executing transition prevents duplicate execution
+- **Expiry:** Check-on-read and check-on-approve (no background reaper)
