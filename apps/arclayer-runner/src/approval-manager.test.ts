@@ -50,7 +50,7 @@ function approveUsdcParams(overrides?: Record<string, unknown>) {
 }
 
 /** Catch error and return it — avoids unhandled rejection warnings */
-async function catchError(fn: () => Promise<unknown>): Promise<any> {
+async function catchError(fn: () => unknown): Promise<any> {
   try {
     await fn();
     expect.fail("should have thrown");
@@ -660,27 +660,17 @@ describe("ApprovalManager", () => {
       expect(stored!.state).toBe("failed");
     });
 
-    it("rejects invalid params before executing", async () => {
-      const created = manager.createApproval({
-        actionType: "approveUsdc",
-        walletAddress: WALLET_A,
-        chainId: CHAIN_ID,
-        params: { amount: "not-a-number" },
-      });
-
-      const result = await manager.approve({
-        approvalId: created.approvalId,
-        walletAddress: WALLET_A,
-        role: "client",
-        chainId: CHAIN_ID,
-      });
-
-      expect(result.ok).toBe(false);
-      expect(result.state).toBe("failed");
-      expect(result.error).toContain("Approval params failed approveUsdc schema");
-
-      // Service should NOT have been called
-      expect(mockServices.approveUsdcForErc8183).not.toHaveBeenCalled();
+    it("rejects invalid params at create time", async () => {
+      // With fix #1, params are validated at create time, not approve time
+      const e = await catchError(() =>
+        manager.createApproval({
+          actionType: "approveUsdc",
+          walletAddress: WALLET_A,
+          chainId: CHAIN_ID,
+          params: { amount: "not-a-number" },
+        })
+      );
+      expect(e.code).toBe("INVALID_PARAMS");
     });
   });
 
@@ -840,6 +830,281 @@ describe("ApprovalManager", () => {
 
       const pendingA = manager.listPending(WALLET_A);
       expect(pendingA.every((r) => r.walletAddress === WALLET_A)).toBe(true);
+    });
+  });
+
+  // ── Fix #1: Display fields from validated params ─────────────────────
+
+  describe("display fields from validated params", () => {
+    it("rejects conflicting top-level amount for approveUsdc", async () => {
+      const e = await catchError(() =>
+        manager.createApproval({
+          actionType: "approveUsdc",
+          walletAddress: WALLET_A,
+          chainId: CHAIN_ID,
+          amount: "999999", // conflicts with params
+          params: { amount: "5000000" },
+        })
+      );
+      expect(e.code).toBe("DISPLAY_PARAMS_MISMATCH");
+    });
+
+    it("rejects conflicting top-level jobId for fundJob", async () => {
+      const e = await catchError(() =>
+        manager.createApproval({
+          actionType: "fundJob",
+          walletAddress: WALLET_A,
+          chainId: CHAIN_ID,
+          jobId: "11111", // conflicts with params
+          params: { jobId: "12345" },
+        })
+      );
+      expect(e.code).toBe("DISPLAY_PARAMS_MISMATCH");
+    });
+
+    it("creates with matching derived fields", () => {
+      const result = manager.createApproval({
+        actionType: "approveUsdc",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        amount: "5000000", // matches params
+        params: { amount: "5000000" },
+      });
+      expect(result.ok).toBe(true);
+      expect(result.approvalId).toMatch(/^apr-/);
+
+      // Verify stored values
+      const stored = manager.store.get(result.approvalId);
+      expect(stored!.amount).toBe("5000000");
+    });
+
+    it("derives jobId from params for fundJob when not supplied", () => {
+      const result = manager.createApproval({
+        actionType: "fundJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: { jobId: "12345" },
+      });
+      expect(result.ok).toBe(true);
+      const stored = manager.store.get(result.approvalId);
+      expect(stored!.jobId).toBe("12345");
+    });
+  });
+
+  // ── Fix #2: Configured chain validation ─────────────────────────────
+
+  describe("configured chain validation", () => {
+    it("blocks approval with wrong configured chain", async () => {
+      const chainManager = new ApprovalManager(mockServices, tmpDir, CHAIN_ID);
+
+      // Create approval on the WRONG_CHAIN
+      const created = chainManager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: WRONG_CHAIN,
+        params: createJobParams(),
+      });
+
+      const e = await catchError(() =>
+        chainManager.approve({
+          approvalId: created.approvalId,
+          walletAddress: WALLET_A,
+          role: "client",
+          chainId: WRONG_CHAIN,
+        })
+      );
+      expect(e.code).toBe("CHAIN_MISMATCH");
+      expect(e.message).toContain("configured chain");
+    });
+
+    it("allows approval with matching configured chain", async () => {
+      const chainManager = new ApprovalManager(mockServices, tmpDir, CHAIN_ID);
+
+      const created = chainManager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+
+      const result = await chainManager.approve({
+        approvalId: created.approvalId,
+        walletAddress: WALLET_A,
+        role: "client",
+        chainId: CHAIN_ID,
+      });
+      expect(result.ok).toBe(true);
+      expect(result.state).toBe("executed");
+    });
+  });
+
+  // ── Fix #3: Configured signer wallet validation ─────────────────────
+
+  describe("configured signer wallet validation", () => {
+    it("blocks create with wrong signer wallet", async () => {
+      const walletManager = new ApprovalManager(mockServices, tmpDir, undefined, WALLET_A);
+
+      const e = await catchError(() =>
+        walletManager.createApproval({
+          actionType: "createJob",
+          walletAddress: WALLET_B,
+          chainId: CHAIN_ID,
+          params: createJobParams(),
+        })
+      );
+      expect(e.code).toBe("SIGNER_WALLET_MISMATCH");
+    });
+
+    it("allows create with matching signer wallet", () => {
+      const walletManager = new ApprovalManager(mockServices, tmpDir, undefined, WALLET_A);
+
+      const result = walletManager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    it("normalizes case for wallet comparison", () => {
+      const walletManager = new ApprovalManager(
+        mockServices, tmpDir, undefined,
+        WALLET_A.toUpperCase()
+      );
+
+      const result = walletManager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+      expect(result.ok).toBe(true);
+    });
+  });
+
+  // ── Fix #4: AbortSignal propagation ─────────────────────────────────
+
+  describe("abort signal propagation", () => {
+    it("aborts execution when signal is already aborted", async () => {
+      const created = manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+
+      const controller = new AbortController();
+      controller.abort();
+
+      const result = await manager.approve({
+        approvalId: created.approvalId,
+        walletAddress: WALLET_A,
+        role: "client",
+        chainId: CHAIN_ID,
+        signal: controller.signal,
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.state).toBe("failed");
+      expect(result.error).toContain("aborted");
+    });
+  });
+
+  // ── Fix #5: Idempotency conflict validation ─────────────────────────
+
+  describe("idempotency conflict validation", () => {
+    it("rejects idempotency conflict with different wallet", async () => {
+      const key = `test-idem-conflict-${Date.now()}`;
+
+      manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+        idempotencyKey: key,
+      });
+
+      const e = await catchError(() =>
+        manager.createApproval({
+          actionType: "createJob",
+          walletAddress: WALLET_B,
+          chainId: CHAIN_ID,
+          params: createJobParams(),
+          idempotencyKey: key,
+        })
+      );
+      expect(e.code).toBe("IDEMPOTENCY_KEY_CONFLICT");
+    });
+
+    it("rejects idempotency conflict with different actionType", async () => {
+      const key = `test-idem-action-${Date.now()}`;
+
+      manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+        idempotencyKey: key,
+      });
+
+      const e = await catchError(() =>
+        manager.createApproval({
+          actionType: "approveUsdc",
+          walletAddress: WALLET_A,
+          chainId: CHAIN_ID,
+          params: { amount: "1000" },
+          idempotencyKey: key,
+        })
+      );
+      expect(e.code).toBe("IDEMPOTENCY_KEY_CONFLICT");
+    });
+
+    it("rejects idempotency conflict with different chainId", async () => {
+      const key = `test-idem-chain-${Date.now()}`;
+
+      manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+        idempotencyKey: key,
+      });
+
+      const e = await catchError(() =>
+        manager.createApproval({
+          actionType: "createJob",
+          walletAddress: WALLET_A,
+          chainId: WRONG_CHAIN,
+          params: createJobParams(),
+          idempotencyKey: key,
+        })
+      );
+      expect(e.code).toBe("IDEMPOTENCY_KEY_CONFLICT");
+    });
+
+    it("allows idempotency replay with same metadata", () => {
+      const key = `test-idem-replay-${Date.now()}`;
+      const params = createJobParams();
+
+      const result1 = manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params,
+        idempotencyKey: key,
+      });
+
+      const result2 = manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params,
+        idempotencyKey: key,
+      });
+
+      expect(result1.approvalId).toBe(result2.approvalId);
+      expect(result2.ok).toBe(true);
     });
   });
 

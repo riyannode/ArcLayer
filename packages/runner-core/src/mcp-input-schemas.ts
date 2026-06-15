@@ -475,6 +475,10 @@ function zodFieldToSpec(schema: z.ZodTypeAny): Record<string, unknown> | undefin
   if (typeName === "ZodUnknown" || typeName === "ZodAny") {
     return { type: "object" };
   }
+  // Record (z.record(...)) — emit as object with additionalProperties
+  if (typeName === "ZodRecord") {
+    return { type: "object", additionalProperties: {} };
+  }
 
   // Fallback
   return { type: "string" };

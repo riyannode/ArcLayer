@@ -54,6 +54,7 @@ export type ApproveArgs = {
   role: string;
   chainId: number;
   expectedRequestHash?: string;
+  signal?: AbortSignal;
 };
 
 export type RejectArgs = {
@@ -82,6 +83,8 @@ export class ApprovalManager {
   constructor(
     private readonly services: RunnerServices,
     dataDir: string,
+    private readonly configuredChainId?: number,
+    private readonly configuredSignerWallet?: string,
   ) {
     this.store = new ApprovalStore(
       path.join(dataDir, "approvals.db")
@@ -109,10 +112,33 @@ export class ApprovalManager {
     const requestHash = computeRequestHash(args.params);
     const idempotencyKey = args.idempotencyKey
       ?? `approval:${args.actionType}:${requestHash.slice(0, 16)}:${randomUUID().slice(0, 8)}`;
+    // ── Fix #3: Configured signer wallet validation ─────────────────────
+    if (this.configuredSignerWallet) {
+      if (args.walletAddress.toLowerCase() !== this.configuredSignerWallet.toLowerCase()) {
+        throw new RunnerError(
+          "SIGNER_WALLET_MISMATCH",
+          `Approval wallet ${args.walletAddress} does not match configured signer ${this.configuredSignerWallet}`,
+          403,
+        );
+      }
+    }
 
-    // Check for existing approval with same idempotency key
+    // ── Fix #5: Idempotency conflict validation ─────────────────────────
     const existing = this.store.getByIdempotencyKey(idempotencyKey);
     if (existing) {
+      // Check for idempotency conflict — same key but different metadata
+      if (
+        existing.actionType !== args.actionType
+        || existing.walletAddress !== args.walletAddress.toLowerCase()
+        || existing.chainId !== args.chainId
+        || existing.requestHash !== requestHash
+      ) {
+        throw new RunnerError(
+          "IDEMPOTENCY_KEY_CONFLICT",
+          `Idempotency key ${idempotencyKey} already exists with different metadata`,
+          409,
+        );
+      }
       return {
         ok: true,
         approvalId: existing.approvalId,
@@ -123,14 +149,40 @@ export class ApprovalManager {
         renderableMessage: this.buildRenderableMessage(existing),
       };
     }
+    // ── Fix #1: Validate params and derive display fields ──────────────
+    const validatedParams = this.validateActionParams(args.actionType, args.params);
+    const { derivedJobId, derivedAmount } = this.deriveDisplayFields(
+      args.actionType,
+      validatedParams,
+    );
+
+    // If caller supplied top-level values that conflict, throw
+    if (args.jobId !== undefined && derivedJobId !== undefined && args.jobId !== derivedJobId) {
+      throw new RunnerError(
+        "DISPLAY_PARAMS_MISMATCH",
+        `Caller supplied jobId '${args.jobId}' but validated params derive '${derivedJobId}'`,
+        400,
+      );
+    }
+    if (args.amount !== undefined && derivedAmount !== undefined && args.amount !== derivedAmount) {
+      throw new RunnerError(
+        "DISPLAY_PARAMS_MISMATCH",
+        `Caller supplied amount '${args.amount}' but validated params derive '${derivedAmount}'`,
+        400,
+      );
+    }
+
+    // Use derived values (validated) over caller-supplied values
+    const finalJobId = derivedJobId ?? args.jobId;
+    const finalAmount = derivedAmount ?? args.amount;
 
     const approval = this.store.create({
       actionType: args.actionType,
       role: "client",
       walletAddress: args.walletAddress,
       chainId: args.chainId,
-      jobId: args.jobId,
-      amount: args.amount,
+      jobId: finalJobId,
+      amount: finalAmount,
       requestHash,
       idempotencyKey,
       params: args.params,
@@ -231,6 +283,15 @@ export class ApprovalManager {
         400,
       );
     }
+    // ── Fix #2: Configured chain validation ────────────────────────────
+    if (this.configuredChainId !== undefined && approval.chainId !== this.configuredChainId) {
+      throw new RunnerError(
+        "CHAIN_MISMATCH",
+        `Approval chainId ${approval.chainId} does not match configured chain ${this.configuredChainId}`,
+        400,
+      );
+    }
+
 
     // Terminal states: return existing result, no new tx
     if (approval.state === "executed") {
@@ -291,7 +352,7 @@ export class ApprovalManager {
     try {
       const params = JSON.parse(approval.paramsJson) as Record<string, unknown>;
       const validatedParams = this.validateActionParams(approval.actionType, params);
-      const result = await this.executeAction(approval.actionType, validatedParams);
+      const result = await this.executeAction(approval.actionType, validatedParams, args.signal);
 
       // Check if service returned structured failure instead of throwing
       const resultObj = result as Record<string, unknown>;
@@ -455,10 +516,36 @@ export class ApprovalManager {
     }
   }
 
+  /**
+   * Derive display fields (jobId, amount) from validated action params.
+   * This prevents a caller from showing one amount/jobId while executing different params.
+   */
+  private deriveDisplayFields(
+    actionType: ApprovalActionType,
+    validatedParams: Record<string, unknown>,
+  ): { derivedJobId?: string; derivedAmount?: string } {
+    switch (actionType) {
+      case "createJob":
+        return {}; // No jobId or amount needed
+      case "approveUsdc":
+        return { derivedAmount: validatedParams.amount as string | undefined };
+      case "fundJob":
+      case "claimRefund":
+        return { derivedJobId: validatedParams.jobId as string | undefined };
+      default:
+        return {};
+    }
+  }
+
   private async executeAction(
     actionType: ApprovalActionType,
     params: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<unknown> {
+    // ── Fix #4: AbortSignal check before execution ─────────────────────
+    if (signal?.aborted) {
+      throw new Error("Execution aborted by signal");
+    }
     switch (actionType) {
       case "createJob":
         return this.services.createJob(params);

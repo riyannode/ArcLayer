@@ -598,6 +598,7 @@ export async function handleMcpTool(
         role: input.role,
         chainId: input.chainId,
         expectedRequestHash: input.expectedRequestHash,
+        signal: ctx.signal,
       });
     }
 
