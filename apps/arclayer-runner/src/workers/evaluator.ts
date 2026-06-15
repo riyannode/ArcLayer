@@ -307,7 +307,7 @@ export class EvaluatorWorker extends EventEmitter {
         if (nextRetry >= this.workerConfig.maxRuntimeRetries) {
           // Runtime failure NEVER auto-rejects
           this.processedIds.add(jobId);
-          this.activeEval.phase = "manual_review";
+          this.emitManualReview(jobId, `Requires manual review after ${nextRetry} attempts: ${msg}`, { attempts: nextRetry });
           return;
         }
 
@@ -355,13 +355,13 @@ export class EvaluatorWorker extends EventEmitter {
     const computedHash = keccak256(toBytes(canonicalPayload));
     if (computedHash.toLowerCase() !== storedHash.toLowerCase()) {
       // Hash mismatch → manual review (never auto-reject)
-      this.activeEval!.phase = "manual_review";
+      this.emitManualReview(jobId, `Hash mismatch (computed ${computedHash} != stored ${storedHash})`, { computedHash, storedHash });
       return;
     }
 
     // Verify onchain submitted hash matches stored hash
     if (onchainHash && onchainHash.toLowerCase() !== storedHash.toLowerCase()) {
-      this.activeEval!.phase = "manual_review";
+      this.emitManualReview(jobId, `Onchain hash mismatch (onchain ${onchainHash} != stored ${storedHash})`, { onchainHash, storedHash });
       return;
     }
 
@@ -397,13 +397,13 @@ export class EvaluatorWorker extends EventEmitter {
 
     if (!verdict) {
       // Invalid verdict → manual review
-      this.activeEval!.phase = "manual_review";
+      this.emitManualReview(jobId, "Invalid evaluation verdict");
       return;
     }
 
     // Verify evaluated hash matches
     if (!verifyEvaluatedHash(verdict, storedHash as Hex)) {
-      this.activeEval!.phase = "manual_review";
+      this.emitManualReview(jobId, "Verdict hash mismatch");
       return;
     }
 
@@ -412,7 +412,7 @@ export class EvaluatorWorker extends EventEmitter {
     const envelope = decodeJobEnvelope(jobDescription);
 
     if (!envelope) {
-      this.activeEval!.phase = "manual_review";
+      this.emitManualReview(jobId, "JobEnvelope missing or invalid");
       return;
     }
 
@@ -422,7 +422,7 @@ export class EvaluatorWorker extends EventEmitter {
 
     const decodedDeliverable = decodeDeliverable(canonicalPayload);
     if (!decodedDeliverable) {
-      this.activeEval!.phase = "manual_review";
+      this.emitManualReview(jobId, "Canonical deliverable is invalid");
       return;
     }
 
@@ -442,7 +442,7 @@ export class EvaluatorWorker extends EventEmitter {
       this.emit("evaluation_published", { jobId, decision: action });
     } catch (err) {
       // Evaluation persistence failure → manual review
-      this.activeEval!.phase = "manual_review";
+      this.emitManualReview(jobId, `Failed to persist evaluation: ${err}`);
       return;
     }
 
@@ -456,7 +456,7 @@ export class EvaluatorWorker extends EventEmitter {
         break;
 
       case "manual_review":
-        this.activeEval!.phase = "manual_review";
+        this.emitManualReview(jobId, `Low confidence (${verdict.confidence}) or ambiguous evidence`, { confidence: verdict.confidence, score: verdict.score });
         break;
     }
   }
@@ -603,6 +603,20 @@ export class EvaluatorWorker extends EventEmitter {
       console.error(`[evaluator-worker] MCP list_assigned_jobs failed: ${err}`);
       return [];
     }
+  }
+
+  private emitManualReview(jobId: string, reason: string, metadata: Record<string, unknown> = {}): void {
+    this.activeEval!.phase = "manual_review";
+    this.emit("evaluation.manual_review", { jobId, agentId: this.config.agentId, reason, ...metadata });
+    console.warn("[arclayer:evaluator]", JSON.stringify({
+      event: "evaluation.manual_review",
+      jobId,
+      agentId: this.config.agentId,
+      phase: "manual_review",
+      reason,
+      ...metadata,
+      timestamp: new Date().toISOString(),
+    }));
   }
 
   private sleep(ms: number): Promise<void> {

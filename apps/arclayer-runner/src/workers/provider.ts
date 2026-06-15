@@ -524,6 +524,16 @@ export class ProviderWorker extends EventEmitter {
 
         if (nextRetry >= this.workerConfig.maxRuntimeRetries) {
           this.processedFundedIds.add(jobId);
+          this.emit("job.failed", { jobId, attempts: nextRetry, error: msg });
+          console.error("[arclayer:provider]", JSON.stringify({
+            event: "job.failed",
+            jobId,
+            agentId: this.config.agentId,
+            phase: "failed",
+            attempts: nextRetry,
+            error: msg.slice(0, 200),
+            timestamp: new Date().toISOString(),
+          }));
           return;
         }
 
@@ -595,11 +605,28 @@ export class ProviderWorker extends EventEmitter {
         runResult.paymentRequests ??
         [];
       this.emit("needs_payment", { jobId, paymentRequests });
+      console.warn("[arclayer:provider]", JSON.stringify({
+        event: "runtime.needs_payment",
+        jobId,
+        agentId: this.config.agentId,
+        phase: "needs_payment",
+        paymentRequestCount: Array.isArray(paymentRequests) ? paymentRequests.length : 0,
+        timestamp: new Date().toISOString(),
+      }));
       return "waiting_payment";
     }
 
     if (runResult?.status === "needs_action") {
       this.activeJob!.phase = "needs_action";
+      this.emit("needs_action", { jobId });
+      console.warn("[arclayer:provider]", JSON.stringify({
+        event: "runtime.needs_action",
+        jobId,
+        agentId: this.config.agentId,
+        phase: "needs_action",
+        message: "Job needs manual action. No deliverable submitted.",
+        timestamp: new Date().toISOString(),
+      }));
       return "waiting_action";
     }
 
