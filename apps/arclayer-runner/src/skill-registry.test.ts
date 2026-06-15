@@ -185,8 +185,8 @@ describe("tool registry", () => {
 // ── Role Presets Tests ────────────────────────────────────────────────────
 
 describe("role presets", () => {
-  it("ROLE_PRESETS has 8 entries", () => {
-    expect(ROLE_PRESETS.length).toBe(8);
+  it("ROLE_PRESETS has 7 entries", () => {
+    expect(ROLE_PRESETS.length).toBe(7);
   });
 
   it("all presets have required fields", () => {
@@ -214,14 +214,13 @@ describe("role presets", () => {
 
   it("listRolePresets returns all presets", () => {
     const list = listRolePresets();
-    expect(list.length).toBe(8);
+    expect(list.length).toBe(7);
     expect(list.map((p) => p.id)).toContain("provider");
     expect(list.map((p) => p.id)).toContain("client");
     expect(list.map((p) => p.id)).toContain("evaluator");
     expect(list.map((p) => p.id)).toContain("x402-agent");
     expect(list.map((p) => p.id)).toContain("identity-agent");
     expect(list.map((p) => p.id)).toContain("validation-agent");
-    expect(list.map((p) => p.id)).toContain("devops-admin");
     expect(list.map((p) => p.id)).toContain("full-stack-agent");
   });
 

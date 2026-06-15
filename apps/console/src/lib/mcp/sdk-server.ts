@@ -36,13 +36,19 @@ export function createArcLayerMcpServer(
 
   // Register all tools from catalog
   for (const tool of listTools()) {
+    const registration: Record<string, unknown> = {
+      description: tool.description,
+      inputSchema: buildSdkInputSchema(tool.inputSchema),
+      annotations: tool.annotations,
+    };
+
+    if (tool.outputSchema && tool.outputSchema.length > 0) {
+      registration.outputSchema = buildSdkInputSchema(tool.outputSchema);
+    }
+
     server.registerTool(
       tool.name,
-      {
-        description: tool.description,
-        inputSchema: buildSdkInputSchema(tool.inputSchema),
-        annotations: tool.annotations,
-      },
+      registration as any,
       async (args: Record<string, unknown>) => {
         return executeCatalogTool(tool, args, context, context.auth?.scopes);
       },

@@ -10,3 +10,6 @@ export * from "./nonce-store";
 export * from "./task-idempotency";
 export * from "./mcp-input-schemas";
 export * from "./operation";
+export * from "./job-envelope";
+export * from "./deliverable";
+export * from "./evaluation-verdict";

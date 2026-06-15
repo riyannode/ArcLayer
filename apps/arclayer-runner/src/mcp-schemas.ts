@@ -294,7 +294,7 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
   // ── Gateway Deposit ─────────────────────────────────────────────────────
   {
     name: "circle.gateway_deposit",
-    description: "Deposit USDC into Circle Gateway. Gated behind allowGatewayDeposit. devops-admin only.",
+    description: "Deposit USDC into Circle Gateway. Gated behind allowGatewayDeposit.",
     inputSchema: fromZod(CircleGatewayDepositInputSchema, {
       amount: "Amount in USDC",
       method: "Deposit method: eco (fast, no gas) or direct (on-chain)",

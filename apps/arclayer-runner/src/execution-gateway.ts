@@ -92,6 +92,7 @@ const TERMINAL_SUCCESS_STATES = new Set([
   "COMPLETED",
   "SUCCESS",
   "SUCCEEDED",
+  "SENT",
 ]);
 
 const MAX_RESULT_CACHE_ENTRIES = 1000;

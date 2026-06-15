@@ -93,48 +93,29 @@ export async function POST(req: NextRequest): Promise<Response> {
 }
 
 export async function GET(): Promise<Response> {
-  const body = JSON.stringify(
-    {
-      service: 'ArcLayer MCP',
-      endpoint: '/api/mcp',
-      transport: 'Streamable HTTP',
-      method: 'POST',
-      protocolVersion: '2025-03-26',
-      tools: 61,
-      auth: 'Bearer token required',
-      docs: 'https://arclayers.xyz/global-mcp',
-    },
-    null,
-    2,
-  );
-
-  return new NextResponse(body + '\n', {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
-      Allow: 'POST, GET',
-    },
+  return new NextResponse('Method Not Allowed — use POST for MCP protocol, GET /api/mcp/manifest for service discovery', {
+    status: 405,
+    headers: { Allow: 'POST', 'Cache-Control': 'no-store' },
   });
 }
 
 export async function DELETE(): Promise<Response> {
   return new NextResponse('Method Not Allowed', {
     status: 405,
-    headers: { Allow: 'POST, GET', 'Cache-Control': 'no-store' },
+    headers: { Allow: 'POST', 'Cache-Control': 'no-store' },
   });
 }
 
 export async function PUT(): Promise<Response> {
   return new NextResponse('Method Not Allowed', {
     status: 405,
-    headers: { Allow: 'POST, GET', 'Cache-Control': 'no-store' },
+    headers: { Allow: 'POST', 'Cache-Control': 'no-store' },
   });
 }
 
 export async function PATCH(): Promise<Response> {
   return new NextResponse('Method Not Allowed', {
     status: 405,
-    headers: { Allow: 'POST, GET', 'Cache-Control': 'no-store' },
+    headers: { Allow: 'POST', 'Cache-Control': 'no-store' },
   });
 }
