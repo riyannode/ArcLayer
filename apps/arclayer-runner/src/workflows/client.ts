@@ -1,8 +1,11 @@
 /**
- * Client Workflow — Human-assisted ERC-8183 job creation via Telegram/Hermes.
+ * Client Workflow — Human-assisted ERC-8183 job creation via Hermes/OpenClaw.
  *
  * Client VPS flow:
- *   Telegram → Hermes → local Runner MCP role=client → Circle CLI → ERC-8183
+ *   Hermes/OpenClaw → local Runner MCP role=client → Circle CLI → ERC-8183
+ *
+ * Chat transport (Telegram, Discord, etc.) is owned by Hermes/OpenClaw.
+ * ArcLayer exposes MCP tools only.
  *
  * The client remains human-assisted. Two confirmation gates:
  *   1. "Confirm job creation?" → createJob only
@@ -69,8 +72,8 @@ export class ClientWorkflow {
   /**
    * Step 1: Prepare job draft for client confirmation.
    *
-   * Hermes calls this when the client says "Create a backend job..."
-   * Returns a formatted message for Telegram confirmation.
+   * Hermes/OpenClaw calls this when the client says "Create a backend job..."
+   * Returns a formatted message for confirmation.
    */
   prepareJob(draft: ClientJobDraft): {
     confirmationMessage: string;

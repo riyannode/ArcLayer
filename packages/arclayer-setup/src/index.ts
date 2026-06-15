@@ -14,7 +14,7 @@
  *   3. Configures Runner as MCP STDIO sidecar for Hermes/OpenClaw
  *
  * What it does NOT do:
- *   - Configure Telegram/Discord (that's Hermes/OpenClaw's job)
+ *   - Configure Telegram/Discord (chat transport is owned by Hermes/OpenClaw)
  *   - Run circle wallet login
  *   - Run circle wallet limit set
  *   - Ask for OTP or store private keys
