@@ -42,9 +42,6 @@ export type EvaluatorWorkerConfig = {
   maxConcurrentJobs: number;
   maxRuntimeRetries: number;
   baseBackoffMs: number;
-  telegramEnabled: boolean;
-  telegramBotToken?: string;
-  telegramChatId?: string;
 };
 
 type WorkerState = "idle" | "running" | "stopping" | "stopped";
@@ -101,7 +98,6 @@ export class EvaluatorWorker extends EventEmitter {
 
     this.state = "running";
     this.emit("worker.started", { agentId: this.config.agentId });
-    await this.notifyTelegram("worker.started", `Evaluator worker started for agent ${this.config.agentId}`);
 
     this.pollTimer = setInterval(() => {
       this.poll().catch((err) => {
@@ -120,7 +116,6 @@ export class EvaluatorWorker extends EventEmitter {
     }
     this.state = "stopped";
     this.emit("worker.stopped", { agentId: this.config.agentId });
-    await this.notifyTelegram("worker.stopped", `Evaluator worker stopped for agent ${this.config.agentId}`);
   }
 
   getState(): WorkerState {
@@ -312,11 +307,7 @@ export class EvaluatorWorker extends EventEmitter {
         if (nextRetry >= this.workerConfig.maxRuntimeRetries) {
           // Runtime failure NEVER auto-rejects
           this.processedIds.add(jobId);
-          this.activeEval.phase = "manual_review";
-          await this.notifyTelegram(
-            "evaluation.manual_review",
-            `Job ${jobId} requires manual review after ${nextRetry} attempts: ${msg}`,
-          );
+          this.emitManualReview(jobId, `Requires manual review after ${nextRetry} attempts: ${msg}`, { attempts: nextRetry });
           return;
         }
 
@@ -364,21 +355,13 @@ export class EvaluatorWorker extends EventEmitter {
     const computedHash = keccak256(toBytes(canonicalPayload));
     if (computedHash.toLowerCase() !== storedHash.toLowerCase()) {
       // Hash mismatch → manual review (never auto-reject)
-      this.activeEval!.phase = "manual_review";
-      await this.notifyTelegram(
-        "evaluation.manual_review",
-        `Job ${jobId}: hash mismatch (computed ${computedHash} != stored ${storedHash}). Manual review required.`,
-      );
+      this.emitManualReview(jobId, `Hash mismatch (computed ${computedHash} != stored ${storedHash})`, { computedHash, storedHash });
       return;
     }
 
     // Verify onchain submitted hash matches stored hash
     if (onchainHash && onchainHash.toLowerCase() !== storedHash.toLowerCase()) {
-      this.activeEval!.phase = "manual_review";
-      await this.notifyTelegram(
-        "evaluation.manual_review",
-        `Job ${jobId}: onchain hash mismatch (onchain ${onchainHash} != stored ${storedHash}). Manual review required.`,
-      );
+      this.emitManualReview(jobId, `Onchain hash mismatch (onchain ${onchainHash} != stored ${storedHash})`, { onchainHash, storedHash });
       return;
     }
 
@@ -414,21 +397,13 @@ export class EvaluatorWorker extends EventEmitter {
 
     if (!verdict) {
       // Invalid verdict → manual review
-      this.activeEval!.phase = "manual_review";
-      await this.notifyTelegram(
-        "evaluation.manual_review",
-        `Job ${jobId}: invalid evaluation verdict. Manual review required.`,
-      );
+      this.emitManualReview(jobId, "Invalid evaluation verdict");
       return;
     }
 
     // Verify evaluated hash matches
     if (!verifyEvaluatedHash(verdict, storedHash as Hex)) {
-      this.activeEval!.phase = "manual_review";
-      await this.notifyTelegram(
-        "evaluation.manual_review",
-        `Job ${jobId}: verdict hash mismatch. Manual review required.`,
-      );
+      this.emitManualReview(jobId, "Verdict hash mismatch");
       return;
     }
 
@@ -437,11 +412,7 @@ export class EvaluatorWorker extends EventEmitter {
     const envelope = decodeJobEnvelope(jobDescription);
 
     if (!envelope) {
-      this.activeEval!.phase = "manual_review";
-      await this.notifyTelegram(
-        "evaluation.manual_review",
-        `Job ${jobId}: JobEnvelope missing or invalid. Manual review required.`,
-      );
+      this.emitManualReview(jobId, "JobEnvelope missing or invalid");
       return;
     }
 
@@ -451,11 +422,7 @@ export class EvaluatorWorker extends EventEmitter {
 
     const decodedDeliverable = decodeDeliverable(canonicalPayload);
     if (!decodedDeliverable) {
-      this.activeEval!.phase = "manual_review";
-      await this.notifyTelegram(
-        "evaluation.manual_review",
-        `Job ${jobId}: canonical deliverable is invalid. Manual review required.`,
-      );
+      this.emitManualReview(jobId, "Canonical deliverable is invalid");
       return;
     }
 
@@ -475,11 +442,7 @@ export class EvaluatorWorker extends EventEmitter {
       this.emit("evaluation_published", { jobId, decision: action });
     } catch (err) {
       // Evaluation persistence failure → manual review
-      this.activeEval!.phase = "manual_review";
-      await this.notifyTelegram(
-        "evaluation.manual_review",
-        `Job ${jobId}: failed to persist evaluation: ${err}. Manual review required.`,
-      );
+      this.emitManualReview(jobId, `Failed to persist evaluation: ${err}`);
       return;
     }
 
@@ -493,11 +456,7 @@ export class EvaluatorWorker extends EventEmitter {
         break;
 
       case "manual_review":
-        this.activeEval!.phase = "manual_review";
-        await this.notifyTelegram(
-          "evaluation.manual_review",
-          `Job ${jobId}: low confidence (${verdict.confidence}) or ambiguous evidence. Manual review required.`,
-        );
+        this.emitManualReview(jobId, `Low confidence (${verdict.confidence}) or ambiguous evidence`, { confidence: verdict.confidence, score: verdict.score });
         break;
     }
   }
@@ -561,10 +520,6 @@ export class EvaluatorWorker extends EventEmitter {
 
       this.activeEval!.phase = "completed";
       this.emit("evaluation_completed", { jobId, decision: "complete", score: verdict.score });
-      await this.notifyTelegram(
-        "job.completed",
-        `Job ${jobId} completed! Score: ${verdict.score}, Confidence: ${verdict.confidence}`,
-      );
     } catch (err) {
       throw new Error(`completeJob failed: ${err}`);
     }
@@ -627,10 +582,6 @@ export class EvaluatorWorker extends EventEmitter {
 
       this.activeEval!.phase = "rejected";
       this.emit("evaluation_completed", { jobId, decision: "reject", score: verdict.score });
-      await this.notifyTelegram(
-        "job.rejected",
-        `Job ${jobId} rejected. Score: ${verdict.score}, Confidence: ${verdict.confidence}`,
-      );
     } catch (err) {
       throw new Error(`rejectJob failed: ${err}`);
     }
@@ -654,28 +605,18 @@ export class EvaluatorWorker extends EventEmitter {
     }
   }
 
-  private async notifyTelegram(event: string, message: string): Promise<void> {
-    if (!this.workerConfig.telegramEnabled) return;
-    if (!this.workerConfig.telegramBotToken || !this.workerConfig.telegramChatId) return;
-
-    try {
-      const text = `🔍 *Evaluator Worker*\n\n${message}`;
-      await fetch(
-        `https://api.telegram.org/bot${this.workerConfig.telegramBotToken}/sendMessage`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: this.workerConfig.telegramChatId,
-            text,
-            parse_mode: "Markdown",
-          }),
-        },
-      );
-    } catch (err) {
-      // Telegram failure must not fail the job
-      console.warn(`[evaluator-worker] Telegram notification failed: ${err}`);
-    }
+  private emitManualReview(jobId: string, reason: string, metadata: Record<string, unknown> = {}): void {
+    this.activeEval!.phase = "manual_review";
+    this.emit("evaluation.manual_review", { jobId, agentId: this.config.agentId, reason, ...metadata });
+    console.warn("[arclayer:evaluator]", JSON.stringify({
+      event: "evaluation.manual_review",
+      jobId,
+      agentId: this.config.agentId,
+      phase: "manual_review",
+      reason,
+      ...metadata,
+      timestamp: new Date().toISOString(),
+    }));
   }
 
   private sleep(ms: number): Promise<void> {
@@ -697,9 +638,6 @@ export function createEvaluatorWorker(
     maxConcurrentJobs: 1,
     maxRuntimeRetries: 3,
     baseBackoffMs: 5000,
-    telegramEnabled: process.env.ARCLAYER_TELEGRAM_ENABLED === "true",
-    telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
-    telegramChatId: process.env.TELEGRAM_CHAT_ID,
     ...workerConfig,
   };
 
