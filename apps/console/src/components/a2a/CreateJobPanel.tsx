@@ -3,20 +3,16 @@
 import { useState, useCallback } from 'react';
 import { useWriteContract } from 'wagmi';
 import { waitForTransactionReceipt } from '@wagmi/core';
-import { parseUnits, keccak256, toBytes, type Hex } from 'viem';
+import { keccak256, toBytes } from 'viem';
 import { config } from '@/lib/wagmi';
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { ERC8183_ABI } from '@/lib/contracts/erc8183';
-import { USDC_ADDRESS } from '@/lib/x402/constants';
+
 import type { NetworkAgent } from '@/types/agent-network';
 
 const AGENTIC_COMMERCE = '0x0747EEf0706327138c69792bF28Cd525089e4583' as const;
-const USDC_ABI = [
-  { type: 'function', name: 'approve', stateMutability: 'nonpayable', inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }], outputs: [{ type: 'bool' }] },
-  { type: 'function', name: 'allowance', stateMutability: 'view', inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }], outputs: [{ type: 'uint256' }] },
-] as const;
 
-type Step = 'idle' | 'creating' | 'budget' | 'approving' | 'funding' | 'done' | 'error';
+type Step = 'idle' | 'creating' | 'done' | 'error';
 
 export function CreateJobPanel({
   agent,
@@ -59,6 +55,8 @@ export function CreateJobPanel({
 
     try {
       // Step 1: createJob on-chain
+      // Per ERC-8183 production lifecycle: client ONLY creates the job.
+      // Provider must call setBudget. Client approves+funds AFTER provider sets budget.
       setStep('creating');
       const expiredAt = BigInt(Math.floor(Date.now() / 1000) + Number(duration) * 3600);
       const descHash = description || `Job for ${agent.name}`;
@@ -102,44 +100,7 @@ export function CreateJobPanel({
 
       setCreatedJobId(jobId);
       setTxHashes([...hashes]);
-
-      // Step 2: setBudget
-      setStep('budget');
-      const budgetAtomic = parseUnits(budget, 6); // USDC 6 decimals
-      const setBudgetTx = await writeContractAsync({
-        address: AGENTIC_COMMERCE,
-        abi: ERC8183_ABI as any,
-        functionName: 'setBudget',
-        args: [jobId, budgetAtomic, '0x' as Hex],
-      });
-      hashes.push(setBudgetTx);
-      await waitForTransactionReceipt(config, { hash: setBudgetTx });
-      setTxHashes([...hashes]);
-
-      // Step 3: approve USDC
-      setStep('approving');
-      const approveTx = await writeContractAsync({
-        address: USDC_ADDRESS as `0x${string}`,
-        abi: USDC_ABI as any,
-        functionName: 'approve',
-        args: [AGENTIC_COMMERCE, budgetAtomic],
-      });
-      hashes.push(approveTx);
-      await waitForTransactionReceipt(config, { hash: approveTx });
-      setTxHashes([...hashes]);
-
-      // Step 4: fund
-      setStep('funding');
-      const fundTx = await writeContractAsync({
-        address: AGENTIC_COMMERCE,
-        abi: ERC8183_ABI as any,
-        functionName: 'fund',
-        args: [jobId, '0x' as Hex],
-      });
-      hashes.push(fundTx);
-      await waitForTransactionReceipt(config, { hash: fundTx });
-      setTxHashes([...hashes]);
-
+      // Client is done. Provider must setBudget, then client approves+funds.
       setStep('done');
       onCreated?.(jobId.toString());
     } catch (err: any) {
@@ -152,11 +113,8 @@ export function CreateJobPanel({
 
   const stepLabel: Record<Step, string> = {
     idle: 'Ready',
-    creating: '1/4 · Creating job on-chain…',
-    budget: '2/4 · Setting budget…',
-    approving: '3/4 · Approving USDC…',
-    funding: '4/4 · Funding escrow…',
-    done: '✓ Job created & funded',
+    creating: 'Creating job on-chain…',
+    done: '✓ Job created — waiting for provider to set budget',
     error: 'Error',
   };
 

@@ -579,6 +579,24 @@ export class RunnerServices {
       );
     }
 
+    // Validate expiredAt is in the future
+    const expiredAtNum = Number(input.expiredAt);
+    if (isNaN(expiredAtNum) || expiredAtNum <= 0) {
+      throw new RunnerError(
+        "INVALID_EXPIRED_AT",
+        "expiredAt must be a valid positive unix timestamp",
+        400
+      );
+    }
+    const nowUnix = Math.floor(Date.now() / 1000);
+    if (expiredAtNum <= nowUnix) {
+      throw new RunnerError(
+        "INVALID_EXPIRED_AT",
+        `expiredAt (${expiredAtNum}) must be in the future (now: ${nowUnix})`,
+        400
+      );
+    }
+
     const normalizedProvider = canonicalAddress(input.provider);
     const normalizedEvaluator = canonicalAddress(input.evaluator);
     const normalizedHook = canonicalAddress(input.hook);
@@ -640,7 +658,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -658,6 +676,9 @@ export class RunnerServices {
     const idempotencyKey = `setBudget:${input.jobId}:${input.amount}`;
     const paramsHash = sha256Json({ jobId: input.jobId, amount: input.amount, optParams: normalizedOptParams });
 
+    // Convert USDC decimal to micros (uint256) for on-chain call
+    const amountMicros = decimalToMicros(input.amount).toString();
+
     const gwResult = await this.gateway.execute(
       {
         kind: "setBudget" as WriteOperationKind,
@@ -670,7 +691,7 @@ export class RunnerServices {
       },
       async (circle, sig) => circle.executeErc8183Write({
         signature: "setBudget(uint256,uint256,bytes)",
-        params: [input.jobId, input.amount, input.optParams ?? "0x"],
+        params: [input.jobId, amountMicros, input.optParams ?? "0x"],
         contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         address: this.config.circleWalletAddress!,
         chain: this.config.chain,
@@ -697,7 +718,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -768,7 +789,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -826,7 +847,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -888,7 +909,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -950,7 +971,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -1007,7 +1028,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   /**
@@ -1074,7 +1095,7 @@ export class RunnerServices {
       }
     });
 
-    return { ok: gwResult.ok, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
+    return { ok: gwResult.ok, txHash: gwResult.txHash, result: gwResult.circleResult, receipt, operationId: gwResult.operationId, idempotent: gwResult.idempotent };
   }
 
   // ── Reconciliation (operator path) ─────────────────────────────────

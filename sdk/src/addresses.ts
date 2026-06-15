@@ -6,6 +6,12 @@ export const ARC_NATIVE_USDC_DECIMALS = 18;
 export const ARC_ERC20_USDC_DECIMALS = 6;
 export const ARC_CCTP_DOMAIN = 26;
 
+/**
+ * Canonical deployment block for all Arc Testnet reference contracts.
+ * Use this instead of scanning from block 0.
+ */
+export const ARC_DEPLOYMENT_BLOCK = 41752050n;
+
 export const ARC_TOKENS = {
   USDC: "0x3600000000000000000000000000000000000000",
   EURC: "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a",

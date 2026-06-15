@@ -17,6 +17,7 @@ import {
   ERC8183_AGENTIC_COMMERCE_ABI,
   USDC_ABI,
   CONTRACTS,
+  ARC_DEPLOYMENT_BLOCK,
 } from '@arclayer/sdk';
 import { readOnchainJob, getArcPublicClient } from '@/lib/erc8183-jobs/receipt';
 import { indexerUrl } from '@/lib/indexer';
@@ -344,9 +345,12 @@ export async function handleJobsGetOnchainStatus(
 
   const { job, source } = result;
 
+  const statusCode = Number((job as any).status ?? 0);
+
   // Read additional on-chain data (only when contract read succeeded)
   let hasBudget: boolean | null = null;
   let paymentToken: string | null = null;
+  let submittedDeliverableHash: string | null = null;
   if (source === 'contract') {
     try {
       const client = getArcPublicClient();
@@ -369,28 +373,61 @@ export async function handleJobsGetOnchainStatus(
     } catch {
       // Non-critical, omit
     }
+
+    // Read submitted deliverable hash from JobSubmitted event
+    if (statusCode >= 2) {
+      try {
+        const client = getArcPublicClient();
+        const logs = await client.getLogs({
+          address: CONTRACTS.ERC8183_AGENTIC_COMMERCE as Address,
+          event: (ERC8183_AGENTIC_COMMERCE_ABI as unknown as any[]).find(
+            (item: any) => item.type === 'event' && item.name === 'JobSubmitted',
+          ),
+          args: { jobId },
+          fromBlock: ARC_DEPLOYMENT_BLOCK,
+          toBlock: 'latest',
+        });
+        const latest = logs.at(-1) as any;
+        submittedDeliverableHash = latest?.args?.deliverable ?? null;
+      } catch {
+        submittedDeliverableHash = null;
+      }
+    }
   }
 
-  const statusCode = Number((job as any).status ?? 0);
-
-  return {
+  const out: Record<string, unknown> = {
     ok: true,
     jobId: jobIdRaw,
     source,
     statusCode,
     statusLabel: statusLabel(statusCode),
-    client: (job as any).client ?? null,
-    provider: (job as any).provider ?? null,
-    evaluator: (job as any).evaluator ?? null,
-    description: (job as any).description ?? null,
-    budgetAtomic: (job as any).budget?.toString?.() ?? (job as any).budget ?? null,
-    budgetUsdc: (job as any).budget ? formatAtomicUsdc((job as any).budget) : null,
-    expiredAt: (job as any).expiredAt?.toString?.() ?? (job as any).expiredAt ?? null,
-    hook: (job as any).hook ?? null,
-    hasBudget,
-    paymentToken,
-    raw: jsonSafe(job),
   };
+
+  // Only include optional fields when they have a value (MCP output schema validation
+  // rejects null for fields declared as type 'string' even when required:false)
+  const clientAddr = (job as any).client ?? null;
+  if (clientAddr) out.client = clientAddr;
+  const providerAddr = (job as any).provider ?? null;
+  if (providerAddr) out.provider = providerAddr;
+  const evaluatorAddr = (job as any).evaluator ?? null;
+  if (evaluatorAddr) out.evaluator = evaluatorAddr;
+  const desc = (job as any).description ?? null;
+  if (desc) out.description = desc;
+  const budgetRaw = (job as any).budget;
+  if (budgetRaw) {
+    out.budgetAtomic = budgetRaw?.toString?.() ?? budgetRaw;
+    out.budgetUsdc = formatAtomicUsdc(budgetRaw);
+  }
+  const expiredAtRaw = (job as any).expiredAt ?? null;
+  if (expiredAtRaw) out.expiredAt = expiredAtRaw?.toString?.() ?? expiredAtRaw;
+  const hookRaw = (job as any).hook ?? null;
+  if (hookRaw && hookRaw !== '0x0000000000000000000000000000000000000000') out.hook = hookRaw;
+  if (hasBudget !== null) out.hasBudget = hasBudget;
+  if (paymentToken) out.paymentToken = paymentToken;
+  if (submittedDeliverableHash) out.submittedDeliverableHash = submittedDeliverableHash;
+  out.raw = jsonSafe(job);
+
+  return out;
 }
 
 /**
@@ -508,12 +545,13 @@ export async function handleJobsGetLifecycleSummary(
   return {
     ok: true,
     jobId: jobIdRaw,
+    statusCode: job.status,
     statusLabel: statusLabel(job.status),
     terminal,
     expired,
     nextActor,
     nextAction,
-    recommendedTool: recommendedTool || null,
+    recommendedTool: recommendedTool || '',
     notes,
   };
 }

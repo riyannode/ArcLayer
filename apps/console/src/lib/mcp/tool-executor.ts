@@ -33,8 +33,8 @@ export async function executeCatalogTool(
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }> {
-  // Scope verification
-  if (authScopes && !hasMcpScope(authScopes, tool.requiredScope)) {
+  // Scope verification — fail-closed: reject if scopes missing
+  if (!authScopes || !hasMcpScope(authScopes, tool.requiredScope)) {
     throw new McpError(
       MCP_ERRORS.FORBIDDEN,
       `Missing required scope: ${tool.requiredScope}`,

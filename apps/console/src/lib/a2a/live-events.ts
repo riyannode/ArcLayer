@@ -28,7 +28,24 @@ export type AgentLiveEventType =
   | 'job_claimed'
   | 'job_run'
   | 'proof_submitted'
-  | 'error';
+  | 'error'
+  // PR #2: ERC-8183 production lifecycle events
+  | 'runtime_started'
+  | 'runtime_completed'
+  | 'job_discovered'
+  | 'job_budget_set'
+  | 'job_funded'
+  | 'deliverable_published'
+  | 'job_submitted'
+  | 'evaluation_started'
+  | 'evaluation_completed'
+  | 'job_completed'
+  | 'job_rejected'
+  | 'reputation_queued'
+  | 'reputation_published'
+  | 'x402_payment_requested'
+  | 'reconciliation_failed'
+  | 'manual_review';
 
 export type AgentPresenceStatus = 'online' | 'idle' | 'offline' | 'error';
 

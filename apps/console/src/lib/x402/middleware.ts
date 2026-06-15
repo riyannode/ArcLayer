@@ -228,6 +228,9 @@ function buildNativeRequirements(opts: X402MiddlewareOptions, railSessionId?: st
   };
 }
 
+// Gateway batched settlement needs 7 days + buffer (604900 seconds)
+const CIRCLE_GATEWAY_TIMEOUT_SECONDS = 604_900;
+
 function buildGatewayRequirements(opts: X402MiddlewareOptions, railSessionId?: string) {
   if (opts.requireExplicitPayTo && !opts.payTo) {
     throw Object.assign(new Error('service_payout_address_missing'), { code: 'service_payout_address_missing' });
@@ -239,7 +242,7 @@ function buildGatewayRequirements(opts: X402MiddlewareOptions, railSessionId?: s
     asset: getAddress(USDC_ADDRESS) as `0x${string}`,
     amount: opts.amount,
     payTo: opts.payTo ? getAddress(opts.payTo) as `0x${string}` : resolvePayTo(opts.payTo),
-    maxTimeoutSeconds: opts.maxTimeoutSeconds ?? 300,
+    maxTimeoutSeconds: opts.maxTimeoutSeconds ?? CIRCLE_GATEWAY_TIMEOUT_SECONDS,
     extra: {
       name: CIRCLE_BATCHING_NAME,
       version: CIRCLE_BATCHING_VERSION,

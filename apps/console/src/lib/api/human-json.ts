@@ -14,9 +14,13 @@ function sanitizeJsonBody(body: unknown): unknown {
   }
 
   if (body && typeof body === 'object' && Object.getPrototypeOf(body) === Object.prototype) {
+    // Skip sanitization for success responses — `message` may be legitimate
+    // data (e.g. wallet signing message in nonce endpoint), not an error detail.
+    const isSuccess = (body as Record<string, unknown>).ok === true;
+
     return Object.fromEntries(
       Object.entries(body).map(([key, value]) => {
-        if (SENSITIVE_ERROR_KEYS.has(key) && (typeof value === 'string' || value instanceof Error)) {
+        if (!isSuccess && SENSITIVE_ERROR_KEYS.has(key) && (typeof value === 'string' || value instanceof Error)) {
           return [key, PUBLIC_ERROR_MESSAGE];
         }
         return [key, sanitizeJsonBody(value)];

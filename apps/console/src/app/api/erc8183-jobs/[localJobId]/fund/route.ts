@@ -52,9 +52,19 @@ export async function POST(
         }, { status: 409 });
     }
 
-    // 2. priceAtomic must be present and positive
-    const priceAtomic = Number(job.priceAtomic);
-    if (!job.priceAtomic || Number.isNaN(priceAtomic) || priceAtomic <= 0) {
+    // 2. priceAtomic must be present and positive (exact bigint, no Number conversion)
+    let priceAtomic: bigint;
+    try {
+      priceAtomic = BigInt(job.priceAtomic);
+    } catch {
+      return humanJson(req, {
+          ok: false,
+          ...escrowRail(),
+          error: 'budget_zero',
+          message: 'Job budget is zero or missing. Provider must set a valid budget first.',
+        }, { status: 409 });
+    }
+    if (!job.priceAtomic || priceAtomic <= 0n) {
       return humanJson(req, {
           ok: false,
           ...escrowRail(),
@@ -129,13 +139,20 @@ export async function POST(
         }, { status: 409 });
     }
 
-    // ── Budget mismatch warning (non-blocking) ────────────────────────────
+    // ── Budget mismatch — HARD ERROR (409 budget_mismatch) ────────────────
+    //
+    // Critical invariant: client proposed budget == local agent_jobs.price_atomic
+    // == BudgetSet event amount == onchain job.budget == approved/funded amount.
+    //
+    // If any mismatch exists, funding MUST fail to prevent partial escrow.
 
-    if (onchainJob.budget !== BigInt(priceAtomic)) {
-      console.warn(
-        `[fund] budget_mismatch localJobId=${localJobId} erc8183JobId=${job.erc8183JobId} ` +
-        `local_priceAtomic=${job.priceAtomic} onchain_budget=${onchainJob.budget.toString()}`,
-      );
+    if (onchainJob.budget !== priceAtomic) {
+      return humanJson(req, {
+          ok: false,
+          ...escrowRail(),
+          error: 'budget_mismatch',
+          message: `On-chain budget (${onchainJob.budget.toString()}) does not match local price (${job.priceAtomic}). Provider may have set a different budget than proposed. Rejecting fund to prevent partial escrow.`,
+        }, { status: 409 });
     }
 
     // ── All checks passed — return tx instructions ────────────────────────

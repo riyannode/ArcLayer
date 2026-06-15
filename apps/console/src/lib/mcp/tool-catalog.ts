@@ -84,6 +84,15 @@ import {
   handleRequestClaimRefundWebSign,
   handleGetSigningRequestStatus,
 } from './signing-bridge-tools';
+import {
+  handleProviderPublishDeliverable,
+  handleEvaluatorGetDeliverable,
+  handleEvaluatorListAssignedJobs,
+  handleProviderListAssignedJobsExtended,
+  handleEvaluatorPublishEvaluation,
+  handleEvaluatorAttachSettlementTx,
+  handleEvaluatorQueueReputation,
+} from './deliverable-evaluation-tools';
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
 
@@ -406,34 +415,44 @@ export function registerAllTools(): void {
   registerTool({
     name: 'reputation.give_feedback',
     domain: 'reputation',
-    description: 'Build unsigned calldata for ERC-8004 ReputationRegistry.giveFeedback(...).',
+    description: 'Build unsigned calldata for ERC-8004 ReputationRegistry.giveFeedback(agentTokenId, value, valueDecimals, tag1, tag2, endpoint, feedbackURI, feedbackHash).',
     requiredScope: 'tx:request',
     operation: 'tx_prepare',
     annotations: ANNOTATIONS.txPrepare(),
     inputSchema: [
-      { name: 'agentTokenId', type: 'string', required: true },
-      { name: 'score', type: 'string', required: true },
-      { name: 'category', type: 'string', required: true },
-      { name: 'comment', type: 'string', required: true },
-      { name: 'metadataURI', type: 'string', required: true },
-      { name: 'proofURI', type: 'string', required: true },
-      { name: 'context', type: 'string', required: true },
-      { name: 'ref', type: 'string', required: true },
+      { name: 'agentTokenId', type: 'string', required: true, description: 'ERC-8004 token ID of the target agent.' },
+      { name: 'value', type: 'string', required: true, description: 'Feedback value as int128 string (e.g. "95" for score 95).' },
+      { name: 'valueDecimals', type: 'number', required: true, description: 'Decimal precision 0-18. 0 means integer score.' },
+      { name: 'tag1', type: 'string', description: 'First tag (e.g. "erc8183-job").' },
+      { name: 'tag2', type: 'string', description: 'Second tag (e.g. "completed", "failed_acceptance_criteria").' },
+      { name: 'endpoint', type: 'string', description: 'Service endpoint URI.' },
+      { name: 'feedbackURI', type: 'string', description: 'URI to feedback file (HTTPS/IPFS/data:).' },
+      { name: 'feedbackHash', type: 'string', description: 'Keccak-256 hash of feedback file content (bytes32).' },
     ],
     handler: async (args) => {
+      const agentTokenId = BigInt(String(args.agentTokenId || '').trim());
+      const value = BigInt(String(args.value || '0').trim());
+      const valueDecimals = Number(args.valueDecimals ?? 0);
+      const tag1 = String(args.tag1 || '').trim();
+      const tag2 = String(args.tag2 || '').trim();
+      const endpoint = String(args.endpoint || '').trim();
+      const feedbackURI = String(args.feedbackURI || '').trim();
+      const feedbackHash = String(args.feedbackHash || '0x0000000000000000000000000000000000000000000000000000000000000000').trim();
+
+      // Validate valueDecimals range
+      if (valueDecimals < 0 || valueDecimals > 18 || !Number.isInteger(valueDecimals)) {
+        throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'valueDecimals must be integer 0-18');
+      }
+
+      // Validate feedbackHash format if provided
+      if (feedbackHash && !/^0x[a-fA-F0-9]{64}$/.test(feedbackHash)) {
+        throw new McpError(MCP_ERRORS.VALIDATION_ERROR, 'feedbackHash must be bytes32 (0x + 64 hex chars)');
+      }
+
       const data = encodeFunctionData({
         abi: ERC8004_REPUTATION_REGISTRY_ABI as any,
         functionName: 'giveFeedback',
-        args: [
-          BigInt(String(args.agentTokenId || '').trim()),
-          BigInt(String(args.score || '').trim()),
-          Number(String(args.category || '').trim()),
-          String(args.comment || '').trim(),
-          String(args.metadataURI || '').trim(),
-          String(args.proofURI || '').trim(),
-          String(args.context || '').trim(),
-          String(args.ref || '').trim(),
-        ],
+        args: [agentTokenId, value, valueDecimals, tag1, tag2, endpoint, feedbackURI, feedbackHash as `0x${string}`],
       });
       return {
         chainId: ARC_CHAIN_ID,
@@ -820,6 +839,19 @@ export function registerAllTools(): void {
     operation: 'read',
     annotations: ANNOTATIONS.readOnly(),
     inputSchema: [{ name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' }],
+    outputSchema: [
+      { name: 'ok', type: 'boolean', required: true, description: 'Success flag.' },
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID.' },
+      { name: 'source', type: 'string', required: true, description: 'Data source (contract or indexer).' },
+      { name: 'statusCode', type: 'number', required: true, description: 'ERC-8183 status enum (0=Open, 1=Funded, 2=Submitted, 3=Completed, 4=Rejected, 5=Expired).' },
+      { name: 'statusLabel', type: 'string', required: true, description: 'Human-readable status.' },
+      { name: 'client', type: 'string', required: false, description: 'Client address.' },
+      { name: 'provider', type: 'string', required: false, description: 'Provider address.' },
+      { name: 'evaluator', type: 'string', required: false, description: 'Evaluator address.' },
+      { name: 'budgetAtomic', type: 'string', required: false, description: 'Budget in atomic USDC units.' },
+      { name: 'budgetUsdc', type: 'string', required: false, description: 'Budget in human-readable USDC.' },
+      { name: 'submittedDeliverableHash', type: 'string', required: false, description: 'Submitted deliverable hash from JobSubmitted event.' },
+    ],
     handler: (args) => handleJobsGetOnchainStatus(args),
   });
 
@@ -832,6 +864,17 @@ export function registerAllTools(): void {
     operation: 'read',
     annotations: ANNOTATIONS.readOnly(),
     inputSchema: [{ name: 'jobId', type: 'string', required: true, description: 'Job ID (uint256).' }],
+    outputSchema: [
+      { name: 'ok', type: 'boolean', required: true, description: 'Success flag.' },
+      { name: 'jobId', type: 'string', required: true, description: 'Job ID.' },
+      { name: 'statusCode', type: 'number', required: true, description: 'ERC-8183 status enum.' },
+      { name: 'statusLabel', type: 'string', required: true, description: 'Human-readable status.' },
+      { name: 'nextActor', type: 'string', required: true, description: 'Who should act next (client, provider, evaluator).' },
+      { name: 'nextAction', type: 'string', required: true, description: 'What action to take.' },
+      { name: 'recommendedTool', type: 'string', required: true, description: 'MCP tool to call for the next action.' },
+      { name: 'notes', type: 'array', required: false, description: 'Additional context notes.' },
+      { name: 'terminal', type: 'boolean', required: true, description: 'Whether the job is in a terminal state.' },
+    ],
     handler: (args) => handleJobsGetLifecycleSummary(args),
   });
 
@@ -1015,6 +1058,12 @@ export function registerAllTools(): void {
     operation: 'read',
     annotations: ANNOTATIONS.readOnly(),
     inputSchema: [],
+    outputSchema: [
+      { name: 'ok', type: 'boolean', required: true, description: 'Success flag.' },
+      { name: 'ownerAddress', type: 'string', required: false, description: 'Owner EOA address.' },
+      { name: 'agentAccountAddress', type: 'string', required: false, description: 'Agent account (Circle Smart Account) address.' },
+      { name: 'agentId', type: 'string', required: false, description: 'ERC-8004 agent token ID.' },
+    ],
     handler: handleGetAgentAccount,
   });
 
@@ -1394,6 +1443,114 @@ export function registerAllTools(): void {
     handler: handleProviderRuntimeCompleteRun,
   });
 
+  // ── Evaluator Runtime Tools (PR #2) ──────────────────────────────────────
+  // Same underlying runtime operations as provider, scoped to evaluator role.
+  // Do NOT create separate evaluator runtime tables — reuse agent_runtime_state.
+
+  registerTool({
+    name: 'evaluator.runtime_get_context',
+    domain: 'evaluator',
+    description:
+      'Get evaluator runtime context: state, active run, latest checkpoint, resume plan.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'evaluatorAddress', type: 'string', description: 'Evaluator wallet address for resume plan verification.' },
+    ],
+    handler: handleProviderRuntimeGetContext,
+  });
+
+  registerTool({
+    name: 'evaluator.runtime_heartbeat',
+    domain: 'evaluator',
+    description: 'Update evaluator last_seen_at. Creates runtime state if missing.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+    ],
+    handler: handleProviderRuntimeHeartbeat,
+  });
+
+  registerTool({
+    name: 'evaluator.runtime_start_job',
+    domain: 'evaluator',
+    description:
+      'Start a new evaluator job run or return existing active run. Idempotent on evaluator:agentId:job:jobId.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'phase', type: 'string', description: 'Initial phase (default: evaluation_started).' },
+    ],
+    handler: handleProviderRuntimeStartJob,
+  });
+
+  registerTool({
+    name: 'evaluator.runtime_write_checkpoint',
+    domain: 'evaluator',
+    description: 'Write an append-only checkpoint for an evaluator job run.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'runId', type: 'string', required: true, description: 'Run ID.' },
+      { name: 'kind', type: 'string', required: true, description: 'Checkpoint kind (progress, result, error, needs_action).' },
+      { name: 'data', type: 'object', required: true, description: 'Checkpoint payload.' },
+    ],
+    handler: handleProviderRuntimeWriteCheckpoint,
+  });
+
+  registerTool({
+    name: 'evaluator.runtime_get_resume_plan',
+    domain: 'evaluator',
+    description: 'Get resume plan for evaluator: which jobs need evaluation, which are stuck.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'evaluatorAddress', type: 'string', description: 'Evaluator wallet address for on-chain verification.' },
+    ],
+    handler: handleProviderRuntimeGetResumePlan,
+  });
+
+  registerTool({
+    name: 'evaluator.runtime_retry_job',
+    domain: 'evaluator',
+    description: 'Retry a failed evaluator job run. Creates a new run from the latest checkpoint.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+    ],
+    handler: handleProviderRuntimeRetryJob,
+  });
+
+  registerTool({
+    name: 'evaluator.runtime_complete_run',
+    domain: 'evaluator',
+    description: 'Mark an evaluator job run as completed. Clears active job/run from runtime state.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'runId', type: 'string', required: true, description: 'Run ID to complete.' },
+    ],
+    handler: handleProviderRuntimeCompleteRun,
+  });
+
   // ── WEB SIGNING BRIDGE: MCP → Profile signing ──────────────────────────
 
   registerTool({
@@ -1482,6 +1639,152 @@ export function registerAllTools(): void {
       { name: 'requestId', type: 'string', required: true, description: 'Signing request ID.' },
     ],
     handler: (args, ctx) => handleGetSigningRequestStatus(args, ctx),
+  });
+
+  // ── Deliverable & Evaluation Tools (PR #2) ──────────────────────────────
+
+  registerTool({
+    name: 'provider.publish_deliverable',
+    domain: 'provider',
+    description:
+      'Publish a canonical deliverable for a funded job. Server recomputes Keccak-256 hash and verifies on-chain provider/status. Idempotent until submit locks the record.',
+    requiredScope: 'provider:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'providerAddress', type: 'string', required: true, description: 'Provider wallet address.' },
+      { name: 'canonicalPayload', type: 'string', required: true, description: 'Canonical deliverable JSON string.' },
+      { name: 'deliverableHash', type: 'string', required: true, description: 'Keccak-256 hash of canonical payload.' },
+      { name: 'artifacts', type: 'array', description: 'Array of artifact objects (name, uri, contentType, sha256).' },
+      { name: 'runtimeReceiptHash', type: 'string', description: 'Optional runtime receipt hash.' },
+    ],
+    outputSchema: [
+      { name: 'ok', type: 'boolean', required: true, description: 'Success flag.' },
+      { name: 'deliverableId', type: 'string', required: true, description: 'Deliverable record ID.' },
+      { name: 'deliverableHash', type: 'string', required: true, description: 'Verified Keccak-256 hash.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'idempotent', type: 'boolean', required: false, description: 'True if record already existed.' },
+    ],
+    handler: handleProviderPublishDeliverable,
+  });
+
+  registerTool({
+    name: 'evaluator.get_deliverable',
+    domain: 'evaluator',
+    description:
+      'Get the canonical deliverable for a submitted job. Verifies evaluator ownership, job status, and three-way hash consistency.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'evaluatorAddress', type: 'string', required: true, description: 'Evaluator wallet address.' },
+    ],
+    outputSchema: [
+      { name: 'ok', type: 'boolean', required: true, description: 'Success flag.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'deliverableHash', type: 'string', required: true, description: 'Keccak-256 hash of deliverable.' },
+      { name: 'canonicalPayload', type: 'string', required: true, description: 'Exact canonical deliverable JSON.' },
+      { name: 'providerAgentId', type: 'string', required: false, description: 'Provider agent ID.' },
+      { name: 'artifacts', type: 'array', required: false, description: 'Deliverable artifacts.' },
+    ],
+    handler: handleEvaluatorGetDeliverable,
+  });
+
+  registerTool({
+    name: 'evaluator.list_assigned_jobs',
+    domain: 'evaluator',
+    description:
+      'List jobs assigned to the evaluator, filtered by status (Submitted, Completed, Rejected). Server-side filtering.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'evaluatorAddress', type: 'string', required: true, description: 'Evaluator wallet address.' },
+      { name: 'status', type: 'string', description: 'Job status filter: Submitted, Completed, Rejected. Default: Submitted.' },
+      { name: 'limit', type: 'number', description: 'Max results (default 20, max 100).' },
+    ],
+    handler: handleEvaluatorListAssignedJobs,
+  });
+
+  registerTool({
+    name: 'provider.list_assigned_jobs_extended',
+    domain: 'provider',
+    description:
+      'List provider jobs filtered by status (Open, Funded, Submitted). Provider worker uses Open→setBudget, Funded→execute.',
+    requiredScope: 'provider:runtime',
+    operation: 'read',
+    annotations: ANNOTATIONS.readOnly(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Provider agent ID.' },
+      { name: 'providerAddress', type: 'string', required: true, description: 'Provider wallet address.' },
+      { name: 'status', type: 'string', description: 'Job status filter: Open, Funded, Submitted. Default: Open.' },
+      { name: 'limit', type: 'number', description: 'Max results (default 20, max 100).' },
+    ],
+    handler: handleProviderListAssignedJobsExtended,
+  });
+
+  registerTool({
+    name: 'evaluator.publish_evaluation',
+    domain: 'evaluator',
+    description:
+      'Persist evaluator verdict before ERC-8183 settlement. Verifies on-chain evaluator, job status, and hash consistency.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'evaluatorAddress', type: 'string', required: true, description: 'Evaluator wallet address.' },
+      { name: 'deliverableHash', type: 'string', required: true, description: 'Keccak-256 hash of deliverable (bytes32).' },
+      { name: 'verdict', type: 'object', required: true, description: 'EvaluationVerdictV1 object with decision, score, confidence, reason, evidence.' },
+      { name: 'evaluationReceiptHash', type: 'string', description: 'Optional receipt hash from evaluation runtime.' },
+    ],
+    handler: handleEvaluatorPublishEvaluation,
+  });
+
+  registerTool({
+    name: 'evaluator.attach_settlement_tx',
+    domain: 'evaluator',
+    description:
+      'Attach settlement tx hash to evaluation after complete/reject. Verifies terminal onchain state.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'evaluatorAddress', type: 'string', required: true, description: 'Evaluator wallet address.' },
+      { name: 'settlementTxHash', type: 'string', required: true, description: 'Settlement transaction hash.' },
+    ],
+    handler: handleEvaluatorAttachSettlementTx,
+  });
+
+  registerTool({
+    name: 'evaluator.queue_reputation',
+    domain: 'evaluator',
+    description:
+      'Queue ERC-8004 reputation publication after verified terminal state. Only for Completed/Rejected jobs.',
+    requiredScope: 'evaluator:runtime',
+    operation: 'mutation',
+    annotations: ANNOTATIONS.mutation(),
+    inputSchema: [
+      { name: 'agentId', type: 'string', required: true, description: 'Evaluator agent ID.' },
+      { name: 'jobId', type: 'string', required: true, description: 'ERC-8183 job ID.' },
+      { name: 'evaluatorAddress', type: 'string', required: true, description: 'Evaluator wallet address.' },
+      { name: 'targetAgentId', type: 'string', required: true, description: 'Target agent ID for reputation.' },
+      { name: 'targetAddress', type: 'string', required: true, description: 'Target wallet address.' },
+      { name: 'feedbackType', type: 'string', required: true, description: 'Feedback type: successful_work or failed_acceptance_criteria.' },
+      { name: 'score', type: 'number', description: 'Score (0-100).' },
+      { name: 'tag', type: 'string', description: 'Optional tag.' },
+      { name: 'reason', type: 'string', description: 'Optional reason.' },
+      { name: 'evidenceHash', type: 'string', description: 'Optional evidence hash.' },
+    ],
+    handler: handleEvaluatorQueueReputation,
   });
 }
 

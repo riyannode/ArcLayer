@@ -9,6 +9,31 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { RunnerError } from '@arclayer/runner-core';
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/**
+ * Normalize MCP tool result to a plain object.
+ *
+ * Official MCP SDK returns structuredContent as object.
+ * Text content fallback may be JSON string or plain string.
+ * This helper unifies all shapes into Record<string, unknown>.
+ */
+export function requireObject(value: unknown): Record<string, unknown> {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  if (typeof value === "string") {
+    const parsed: unknown = JSON.parse(value);
+
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  }
+
+  throw new Error("Expected MCP structured object result");
+}
+
 export type McpConnectorOptions = {
   baseUrl: string;
   token?: string;
@@ -75,11 +100,17 @@ export class ArcLayerMcpConnector {
           // Only assign after successful connect
           this.client = client;
           this.transport = transport;
-        } catch (error) {
+        } catch (error: any) {
           // Clean up on failure — allow retry on next call
           await client.close().catch(() => {});
           this.connectPromise = undefined;
-          throw error;
+          // Network-level failure: ECONNREFUSED, DNS failure, timeout, etc.
+          const reason = error?.cause?.code ?? error?.code ?? error?.message ?? "unknown";
+          throw new RunnerError(
+            "MCP_UNREACHABLE",
+            `Console MCP unreachable at ${this.baseUrl}: ${reason}`,
+            503
+          );
         }
       })();
     }
@@ -149,7 +180,13 @@ export class ArcLayerMcpConnector {
     } catch (e) {
       if (e instanceof RunnerError) throw e;
       const msg = e instanceof Error ? e.message : String(e);
-      throw new RunnerError('MCP_ERROR', `MCP call failed: ${msg}`, 502);
+      // Detect network-level failures and throw MCP_UNREACHABLE (503) instead of MCP_ERROR (502)
+      const isNetwork = /ECONNREFUSED|ENOTFOUND|ECONNRESET|fetch failed|timeout/i.test(msg);
+      throw new RunnerError(
+        isNetwork ? 'MCP_UNREACHABLE' : 'MCP_ERROR',
+        isNetwork ? `Console MCP unreachable: ${msg}` : `MCP call failed: ${msg}`,
+        isNetwork ? 503 : 502
+      );
     }
   }
 
