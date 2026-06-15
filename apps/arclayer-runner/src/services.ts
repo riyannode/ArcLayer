@@ -31,10 +31,24 @@ import { isBrokerAbortOrTimeout } from "./mcp-broker";
 import { randomUUID } from "node:crypto";
 import { ExecutionGateway, assertGatewayWriteSucceeded } from "./execution-gateway";
 import type { WriteOperationKind } from "./execution-gateway";
+import { ApprovalManager } from "./approval-manager";
 
 // ── Canonical Helpers ──────────────────────────────────────────────────
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+/** Map config.chain string to numeric chainId for approval validation. */
+function resolveChainId(chain: string): number {
+  const normalized = chain.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (normalized === "arc" || normalized === "arctestnet" || normalized === "5042002") {
+    return 5042002;
+  }
+  // Fallback: try parsing as number directly
+  const parsed = Number(chain);
+  if (!isNaN(parsed) && parsed > 0) return parsed;
+  // Default to Arc Testnet
+  return 5042002;
+}
 
 function canonicalAddress(value: string | undefined, fallback = ZERO_ADDRESS): string {
   const raw = value ?? fallback;
@@ -100,6 +114,7 @@ export class RunnerServices {
   /** @private — owned by ExecutionGateway. Use gateway.execute() for writes. */
   private readonly circle: CircleCliAdapter;
   readonly gateway: ExecutionGateway;
+  readonly approvalManager: ApprovalManager;
 
   constructor(
     readonly config: RunnerConfig,
@@ -116,6 +131,12 @@ export class RunnerServices {
       chain: config.chain,
       dataDir: config.dataDir,
     });
+    this.approvalManager = new ApprovalManager(
+      this,
+      config.dataDir,
+      resolveChainId(config.chain),
+      config.circleWalletAddress,
+    );
   }
 
   manifest() {

@@ -546,6 +546,102 @@ export async function handleMcpTool(
       };
     }
 
+    // ── Approvals (client chat-mediated flow) ─────────────────────────
+    case "approvals.create": {
+      const input = validateMcpToolInput<{
+        actionType: "createJob" | "approveUsdc" | "fundJob" | "claimRefund";
+        walletAddress: string;
+        chainId: number;
+        jobId?: string;
+        amount?: string;
+        params: Record<string, unknown>;
+        expiresInSeconds?: number;
+        idempotencyKey?: string;
+      }>(name, args);
+      return services.approvalManager.createApproval({
+        actionType: input.actionType,
+        walletAddress: input.walletAddress,
+        chainId: input.chainId,
+        jobId: input.jobId,
+        amount: input.amount,
+        params: input.params,
+        expiresInSeconds: input.expiresInSeconds,
+        idempotencyKey: input.idempotencyKey,
+      });
+    }
+
+    case "approvals.get": {
+      const input = validateMcpToolInput<{
+        approvalId: string;
+        walletAddress: string;
+        role: string;
+      }>(name, args);
+      const approval = services.approvalManager.getApproval(
+        input.approvalId,
+        input.walletAddress,
+        input.role,
+      );
+      return { ok: true, approval };
+    }
+
+    case "approvals.approve": {
+      const input = validateMcpToolInput<{
+        approvalId: string;
+        walletAddress: string;
+        role: string;
+        chainId: number;
+        expectedRequestHash?: string;
+      }>(name, args);
+      return services.approvalManager.approve({
+        approvalId: input.approvalId,
+        walletAddress: input.walletAddress,
+        role: input.role,
+        chainId: input.chainId,
+        expectedRequestHash: input.expectedRequestHash,
+        signal: ctx.signal,
+      });
+    }
+
+    case "approvals.reject": {
+      const input = validateMcpToolInput<{
+        approvalId: string;
+        walletAddress: string;
+        role: string;
+        reason?: string;
+      }>(name, args);
+      return services.approvalManager.reject({
+        approvalId: input.approvalId,
+        walletAddress: input.walletAddress,
+        role: input.role,
+        reason: input.reason,
+      });
+    }
+
+    case "approvals.cancel": {
+      const input = validateMcpToolInput<{
+        approvalId: string;
+        walletAddress: string;
+        role: string;
+      }>(name, args);
+      return services.approvalManager.cancel({
+        approvalId: input.approvalId,
+        walletAddress: input.walletAddress,
+        role: input.role,
+      });
+    }
+
+    case "approvals.list_pending": {
+      const input = validateMcpToolInput<{
+        walletAddress: string;
+        limit?: number;
+      }>(name, args);
+      const approvals = services.approvalManager.listPending(
+        input.walletAddress,
+        input.limit,
+      );
+      return { ok: true, approvals, count: approvals.length };
+    }
+
     default:
       // Proxy to Console MCP — errors propagate to executor's error handler
       return proxyToConsoleMcp(name, args, mcp, ctx.proxyTimeoutMs);

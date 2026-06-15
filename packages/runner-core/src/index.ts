@@ -13,3 +13,4 @@ export * from "./operation";
 export * from "./job-envelope";
 export * from "./deliverable";
 export * from "./evaluation-verdict";
+export * from "./approval";

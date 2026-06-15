@@ -28,6 +28,12 @@ import {
   Erc8183ClaimRefundInputSchema,
   Erc8183SetProviderInputSchema,
   CircleGatewayDepositInputSchema,
+  ApprovalsCreateInputSchema,
+  ApprovalsGetInputSchema,
+  ApprovalsApproveInputSchema,
+  ApprovalsRejectInputSchema,
+  ApprovalsCancelInputSchema,
+  ApprovalsListPendingInputSchema,
 } from "@arclayer/runner-core";
 
 export type McpToolDef = {
@@ -298,6 +304,69 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
     inputSchema: fromZod(CircleGatewayDepositInputSchema, {
       amount: "Amount in USDC",
       method: "Deposit method: eco (fast, no gas) or direct (on-chain)",
+    })
+  },
+
+  // ── Approvals (client chat-mediated flow) ──────────────────────────────
+  {
+    name: "approvals.create",
+    description: "Create a pending approval for a client ERC-8183 action. Returns approvalId, summary, and renderable message for chat display.",
+    inputSchema: fromZod(ApprovalsCreateInputSchema, {
+      actionType: "Action type: createJob, approveUsdc, fundJob, or claimRefund",
+      walletAddress: "Client wallet address (0x...)",
+      chainId: "Chain ID (e.g. 5042002 for Arc Testnet)",
+      jobId: "ERC-8183 job ID (required for fundJob, claimRefund)",
+      amount: "Amount in USDC (required for approveUsdc)",
+      params: "Full action params to be executed on approve",
+      expiresInSeconds: "Approval expiry in seconds (60-86400, default 300)",
+      idempotencyKey: "Idempotency key (optional, auto-generated if missing)",
+    })
+  },
+  {
+    name: "approvals.get",
+    description: "Get an approval record by ID. Validates role and wallet.",
+    inputSchema: fromZod(ApprovalsGetInputSchema, {
+      approvalId: "Approval ID (apr-...)",
+      walletAddress: "Client wallet address (must match approval)",
+      role: "Client role (must match approval)",
+    })
+  },
+  {
+    name: "approvals.approve",
+    description: "Approve a pending approval. Validates role, wallet, chain, requestHash, then executes via ExecutionGateway.",
+    inputSchema: fromZod(ApprovalsApproveInputSchema, {
+      approvalId: "Approval ID (apr-...)",
+      walletAddress: "Client wallet address approving (must match approval)",
+      role: "Client role (must be 'client')",
+      chainId: "Chain ID (must match approval's chainId)",
+      expectedRequestHash: "Optional request hash to verify approval hasn't changed",
+    })
+  },
+  {
+    name: "approvals.reject",
+    description: "Reject a pending approval. Only pending approvals can be rejected.",
+    inputSchema: fromZod(ApprovalsRejectInputSchema, {
+      approvalId: "Approval ID (apr-...)",
+      walletAddress: "Client wallet address (must match approval)",
+      role: "Client role",
+      reason: "Optional rejection reason",
+    })
+  },
+  {
+    name: "approvals.cancel",
+    description: "Cancel a pending approval. Only pending approvals can be cancelled.",
+    inputSchema: fromZod(ApprovalsCancelInputSchema, {
+      approvalId: "Approval ID (apr-...)",
+      walletAddress: "Client wallet address (must match approval)",
+      role: "Client role",
+    })
+  },
+  {
+    name: "approvals.list_pending",
+    description: "List pending approvals for a wallet address.",
+    inputSchema: fromZod(ApprovalsListPendingInputSchema, {
+      walletAddress: "Wallet address (required)",
+      limit: "Max results (1-100, default 50)",
     })
   },
 
