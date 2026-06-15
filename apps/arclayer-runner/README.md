@@ -52,10 +52,15 @@ This runs the ArcLayer Runner setup wizard:
 3. **Prints Circle Wallet Policy instructions** (manual setup required)
 
 **What it does NOT do:**
-- ❌ Configure Telegram/Discord (that's Hermes/OpenClaw's job)
+- ❌ Configure Telegram/Discord — chat transport is owned by Hermes/OpenClaw
 - ❌ Run `circle wallet login`
 - ❌ Run `circle wallet limit set`
 - ❌ Ask for OTP or store private keys
+
+**Telegram / Chat transport:**
+ArcLayer does not own Telegram bot tokens, chat sessions, or message rendering.
+All chat transport is owned by Hermes/OpenClaw. ArcLayer exposes MCP tools and structured backend status only.
+ArcLayer works without any Telegram environment variables.
 
 **After setup:**
 ```bash

@@ -67,10 +67,6 @@ export type ReconciliationConfig = {
   maxAttempts: number;
   /** Base backoff delay in ms (default: 5000) */
   baseBackoffMs: number;
-  /** Whether to send Telegram alerts on failure */
-  telegramEnabled: boolean;
-  /** Telegram notify function */
-  notifyTelegram?: (event: string, message: string) => Promise<void>;
 };
 
 // ── Expected Postconditions ────────────────────────────────────────────────
@@ -170,13 +166,6 @@ export async function reconcileOperation(
   // If max attempts exceeded, move to manual review
   if (attempts > config.maxAttempts) {
     const reason = `Max reconciliation attempts (${config.maxAttempts}) exceeded`;
-
-    if (config.telegramEnabled && config.notifyTelegram) {
-      await config.notifyTelegram(
-        "reconciliation.failed",
-        `Operation ${op.operationId} (${op.kind}) needs manual review: ${reason}`,
-      ).catch(() => {}); // Telegram failure must not fail reconciliation
-    }
 
     return {
       operationId: op.operationId,

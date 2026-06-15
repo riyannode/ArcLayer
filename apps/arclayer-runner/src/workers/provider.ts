@@ -45,12 +45,6 @@ export type ProviderWorkerConfig = {
   maxRuntimeRetries: number;
   /** Base backoff delay in ms (default: 5000) */
   baseBackoffMs: number;
-  /** Enable Telegram notifications */
-  telegramEnabled: boolean;
-  /** Telegram bot token */
-  telegramBotToken?: string;
-  /** Telegram chat ID */
-  telegramChatId?: string;
 };
 
 type WorkerState = "idle" | "running" | "stopping" | "stopped";
@@ -140,8 +134,6 @@ export class ProviderWorker extends EventEmitter {
     this.state = "running";
     this.emit("worker.started", { agentId: this.config.agentId });
 
-    await this.notifyTelegram("worker.started", `Provider worker started for agent ${this.config.agentId}`);
-
     // Start polling
     this.pollTimer = setInterval(() => {
       this.poll().catch((err) => {
@@ -161,7 +153,6 @@ export class ProviderWorker extends EventEmitter {
     }
     this.state = "stopped";
     this.emit("worker.stopped", { agentId: this.config.agentId });
-    await this.notifyTelegram("worker.stopped", `Provider worker stopped for agent ${this.config.agentId}`);
   }
 
   getState(): WorkerState {
@@ -407,7 +398,6 @@ export class ProviderWorker extends EventEmitter {
         console.error(`[provider-worker] Open job ${jobId} failed: ${msg}`);
         this.activeJob.phase = "failed";
         this.activeJob.lastError = msg;
-        await this.notifyTelegram("job.failed", `Open job ${jobId} failed: ${msg}`);
       } finally {
         this.activeJob = null;
       }
@@ -462,10 +452,6 @@ export class ProviderWorker extends EventEmitter {
 
       this.activeJob!.phase = "budget_set";
       this.emit("job_budget_set", { jobId, budget: proposedBudget });
-      await this.notifyTelegram(
-        "job_budget_set",
-        `Budget set to ${proposedBudget} USDC for job ${jobId}`,
-      );
 
       // Verify on-chain budget equals proposal
       const statusRaw = await this.mcp.callTool("jobs.get_onchain_status", {
@@ -538,10 +524,6 @@ export class ProviderWorker extends EventEmitter {
 
         if (nextRetry >= this.workerConfig.maxRuntimeRetries) {
           this.processedFundedIds.add(jobId);
-          await this.notifyTelegram(
-            "job.failed",
-            `Job ${jobId} failed after ${nextRetry} attempts: ${msg}`,
-          );
           return;
         }
 
@@ -575,7 +557,6 @@ export class ProviderWorker extends EventEmitter {
     // Load/resume runtime state
     this.activeJob!.phase = "executing";
     this.emit("runtime_started", { jobId });
-    await this.notifyTelegram("runtime_started", `Starting execution for job ${jobId}`);
 
     const evaluatorAddress = String(job.evaluatorAddress ?? job.evaluator ?? "");
 
@@ -614,19 +595,11 @@ export class ProviderWorker extends EventEmitter {
         runResult.paymentRequests ??
         [];
       this.emit("needs_payment", { jobId, paymentRequests });
-      await this.notifyTelegram(
-        "runtime.needs_action",
-        `Job ${jobId} needs paid resources. Waiting for x402-agent to complete payment.`,
-      );
       return "waiting_payment";
     }
 
     if (runResult?.status === "needs_action") {
       this.activeJob!.phase = "needs_action";
-      await this.notifyTelegram(
-        "runtime.needs_action",
-        `Job ${jobId} needs manual action. No deliverable submitted.`,
-      );
       return "waiting_action";
     }
 
@@ -692,7 +665,6 @@ export class ProviderWorker extends EventEmitter {
 
     this.activeJob!.phase = "completed";
     this.emit("job_submitted", { jobId });
-    await this.notifyTelegram("job_submitted", `Job ${jobId} submitted successfully`);
 
     // Complete runtime checkpoint
     this.emit("runtime_completed", { jobId });
@@ -722,30 +694,6 @@ export class ProviderWorker extends EventEmitter {
     }
   }
 
-  private async notifyTelegram(event: string, message: string): Promise<void> {
-    if (!this.workerConfig.telegramEnabled) return;
-    if (!this.workerConfig.telegramBotToken || !this.workerConfig.telegramChatId) return;
-
-    try {
-      const text = `🤖 *Provider Worker*\n\n${message}`;
-      await fetch(
-        `https://api.telegram.org/bot${this.workerConfig.telegramBotToken}/sendMessage`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            chat_id: this.workerConfig.telegramChatId,
-            text,
-            parse_mode: "Markdown",
-          }),
-        },
-      );
-    } catch (err) {
-      // Telegram failure must not fail the job
-      console.warn(`[provider-worker] Telegram notification failed: ${err}`);
-    }
-  }
-
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
@@ -765,9 +713,6 @@ export function createProviderWorker(
     maxConcurrentJobs: 1,
     maxRuntimeRetries: 3,
     baseBackoffMs: 5000,
-    telegramEnabled: process.env.ARCLAYER_TELEGRAM_ENABLED === "true",
-    telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
-    telegramChatId: process.env.TELEGRAM_CHAT_ID,
     ...workerConfig,
   };
 
