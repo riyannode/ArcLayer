@@ -29,6 +29,7 @@ function createMockServices() {
 const WALLET_A = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const WALLET_B = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const CHAIN_ID = 5042002;
+const WRONG_CHAIN = 1;
 
 function createJobParams(overrides?: Record<string, unknown>) {
   return {
@@ -46,6 +47,16 @@ function approveUsdcParams(overrides?: Record<string, unknown>) {
     amount: "5000000",
     ...overrides,
   };
+}
+
+/** Catch error and return it — avoids unhandled rejection warnings */
+async function catchError(fn: () => Promise<unknown>): Promise<any> {
+  try {
+    await fn();
+    expect.fail("should have thrown");
+  } catch (e: any) {
+    return e;
+  }
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -155,6 +166,7 @@ describe("ApprovalManager", () => {
         approvalId: created.approvalId,
         walletAddress: WALLET_A,
         role: "client",
+        chainId: CHAIN_ID,
       });
 
       expect(result.ok).toBe(true);
@@ -176,6 +188,7 @@ describe("ApprovalManager", () => {
         approvalId: created.approvalId,
         walletAddress: WALLET_A,
         role: "client",
+        chainId: CHAIN_ID,
       });
 
       expect(result.ok).toBe(true);
@@ -196,6 +209,7 @@ describe("ApprovalManager", () => {
         approvalId: created.approvalId,
         walletAddress: WALLET_A,
         role: "client",
+        chainId: CHAIN_ID,
       });
 
       expect(result.ok).toBe(true);
@@ -216,11 +230,31 @@ describe("ApprovalManager", () => {
         approvalId: created.approvalId,
         walletAddress: WALLET_A,
         role: "client",
+        chainId: CHAIN_ID,
       });
 
       expect(result.ok).toBe(true);
       expect(result.state).toBe("executed");
       expect(mockServices.claimRefund).toHaveBeenCalledTimes(1);
+    });
+
+    it("executes with correct chainId", async () => {
+      const created = manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+
+      const result = await manager.approve({
+        approvalId: created.approvalId,
+        walletAddress: WALLET_A,
+        role: "client",
+        chainId: CHAIN_ID,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(result.state).toBe("executed");
     });
   });
 
@@ -239,11 +273,13 @@ describe("ApprovalManager", () => {
         approvalId: created.approvalId,
         walletAddress: WALLET_A,
         role: "client",
+        chainId: CHAIN_ID,
       });
       const result2 = await manager.approve({
         approvalId: created.approvalId,
         walletAddress: WALLET_A,
         role: "client",
+        chainId: CHAIN_ID,
       });
 
       expect(result1.state).toBe("executed");
@@ -272,6 +308,7 @@ describe("ApprovalManager", () => {
         approvalId: created.approvalId,
         walletAddress: WALLET_A,
         role: "client",
+        chainId: CHAIN_ID,
       });
 
       // Wait a tick for the state to transition to executing
@@ -282,6 +319,7 @@ describe("ApprovalManager", () => {
         approvalId: created.approvalId,
         walletAddress: WALLET_A,
         role: "client",
+        chainId: CHAIN_ID,
       });
 
       expect(result2.ok).toBe(false);
@@ -300,7 +338,7 @@ describe("ApprovalManager", () => {
   // ── Security checks ─────────────────────────────────────────────────
 
   describe("security checks", () => {
-    it("blocks wrong role", async () => {
+    it("approve blocks wrong role", async () => {
       const created = manager.createApproval({
         actionType: "createJob",
         walletAddress: WALLET_A,
@@ -308,19 +346,18 @@ describe("ApprovalManager", () => {
         params: createJobParams(),
       });
 
-      try {
-        await manager.approve({
+      const e = await catchError(() =>
+        manager.approve({
           approvalId: created.approvalId,
           walletAddress: WALLET_A,
           role: "provider",
-        });
-        expect.fail("should have thrown");
-      } catch (e: any) {
-        expect(e.code).toBe("ROLE_MISMATCH");
-      }
+          chainId: CHAIN_ID,
+        })
+      );
+      expect(e.code).toBe("ROLE_MISMATCH");
     });
 
-    it("blocks wrong wallet", async () => {
+    it("approve blocks wrong wallet", async () => {
       const created = manager.createApproval({
         actionType: "createJob",
         walletAddress: WALLET_A,
@@ -328,19 +365,18 @@ describe("ApprovalManager", () => {
         params: createJobParams(),
       });
 
-      try {
-        await manager.approve({
+      const e = await catchError(() =>
+        manager.approve({
           approvalId: created.approvalId,
           walletAddress: WALLET_B,
           role: "client",
-        });
-        expect.fail("should have thrown");
-      } catch (e: any) {
-        expect(e.code).toBe("WALLET_MISMATCH");
-      }
+          chainId: CHAIN_ID,
+        })
+      );
+      expect(e.code).toBe("WALLET_MISMATCH");
     });
 
-    it("blocks expectedRequestHash mismatch", async () => {
+    it("approve blocks wrong chain", async () => {
       const created = manager.createApproval({
         actionType: "createJob",
         walletAddress: WALLET_A,
@@ -348,20 +384,38 @@ describe("ApprovalManager", () => {
         params: createJobParams(),
       });
 
-      try {
-        await manager.approve({
+      const e = await catchError(() =>
+        manager.approve({
           approvalId: created.approvalId,
           walletAddress: WALLET_A,
           role: "client",
-          expectedRequestHash: "0000000000000000000000000000000000000000000000000000000000000000",
-        });
-        expect.fail("should have thrown");
-      } catch (e: any) {
-        expect(e.code).toBe("REQUEST_HASH_MISMATCH");
-      }
+          chainId: WRONG_CHAIN,
+        })
+      );
+      expect(e.code).toBe("CHAIN_MISMATCH");
     });
 
-    it("blocks rejected approval", async () => {
+    it("approve blocks expectedRequestHash mismatch", async () => {
+      const created = manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+
+      const e = await catchError(() =>
+        manager.approve({
+          approvalId: created.approvalId,
+          walletAddress: WALLET_A,
+          role: "client",
+          chainId: CHAIN_ID,
+          expectedRequestHash: "0000000000000000000000000000000000000000000000000000000000000000",
+        })
+      );
+      expect(e.code).toBe("REQUEST_HASH_MISMATCH");
+    });
+
+    it("approve blocks rejected approval", async () => {
       const created = manager.createApproval({
         actionType: "createJob",
         walletAddress: WALLET_A,
@@ -375,19 +429,18 @@ describe("ApprovalManager", () => {
         role: "client",
       });
 
-      try {
-        await manager.approve({
+      const e = await catchError(() =>
+        manager.approve({
           approvalId: created.approvalId,
           walletAddress: WALLET_A,
           role: "client",
-        });
-        expect.fail("should have thrown");
-      } catch (e: any) {
-        expect(e.code).toBe("APPROVAL_REJECTED");
-      }
+          chainId: CHAIN_ID,
+        })
+      );
+      expect(e.code).toBe("APPROVAL_REJECTED");
     });
 
-    it("blocks cancelled approval", async () => {
+    it("approve blocks cancelled approval", async () => {
       const created = manager.createApproval({
         actionType: "createJob",
         walletAddress: WALLET_A,
@@ -401,45 +454,120 @@ describe("ApprovalManager", () => {
         role: "client",
       });
 
-      try {
-        await manager.approve({
+      const e = await catchError(() =>
+        manager.approve({
           approvalId: created.approvalId,
           walletAddress: WALLET_A,
           role: "client",
-        });
-        expect.fail("should have thrown");
-      } catch (e: any) {
-        expect(e.code).toBe("APPROVAL_CANCELLED");
-      }
+          chainId: CHAIN_ID,
+        })
+      );
+      expect(e.code).toBe("APPROVAL_CANCELLED");
     });
 
-    it("blocks expired approval", async () => {
+    it("approve blocks expired approval", async () => {
       const created = manager.createApproval({
         actionType: "createJob",
         walletAddress: WALLET_A,
         chainId: CHAIN_ID,
         params: createJobParams(),
-        expiresInSeconds: 60, // minimum
+        expiresInSeconds: 60,
       });
-
-      // Manually expire by setting expiresAt in the past via store
-      const approval = manager.store.get(created.approvalId);
-      expect(approval).toBeDefined();
 
       // Directly manipulate the DB to set expiresAt in the past
       (manager.store as any).db.prepare(
         "UPDATE approvals SET expires_at = '2020-01-01T00:00:00.000Z' WHERE approval_id = ?"
       ).run(created.approvalId);
 
-      try {
-        await manager.approve({
+      const e = await catchError(() =>
+        manager.approve({
           approvalId: created.approvalId,
           walletAddress: WALLET_A,
           role: "client",
+          chainId: CHAIN_ID,
+        })
+      );
+      expect(e.code).toBe("APPROVAL_EXPIRED");
+    });
+
+    it("reject blocks wrong role", () => {
+      const created = manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+
+      try {
+        manager.reject({
+          approvalId: created.approvalId,
+          walletAddress: WALLET_A,
+          role: "provider",
         });
         expect.fail("should have thrown");
       } catch (e: any) {
-        expect(e.code).toBe("APPROVAL_EXPIRED");
+        expect(e.code).toBe("ROLE_MISMATCH");
+      }
+    });
+
+    it("cancel blocks wrong role", () => {
+      const created = manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+
+      try {
+        manager.cancel({
+          approvalId: created.approvalId,
+          walletAddress: WALLET_A,
+          role: "provider",
+        });
+        expect.fail("should have thrown");
+      } catch (e: any) {
+        expect(e.code).toBe("ROLE_MISMATCH");
+      }
+    });
+
+    it("getApproval blocks wrong role", () => {
+      const created = manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+
+      try {
+        manager.getApproval(created.approvalId, WALLET_A, "provider");
+        expect.fail("should have thrown");
+      } catch (e: any) {
+        expect(e.code).toBe("ROLE_MISMATCH");
+      }
+    });
+
+    it("getApproval blocks wrong wallet", () => {
+      const created = manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+
+      try {
+        manager.getApproval(created.approvalId, WALLET_B, "client");
+        expect.fail("should have thrown");
+      } catch (e: any) {
+        expect(e.code).toBe("WALLET_MISMATCH");
+      }
+    });
+
+    it("listPending requires walletAddress", () => {
+      try {
+        manager.listPending("" as any);
+        expect.fail("should have thrown");
+      } catch (e: any) {
+        expect(e.code).toBe("INVALID_WALLET");
       }
     });
   });
@@ -461,6 +589,7 @@ describe("ApprovalManager", () => {
         approvalId: created.approvalId,
         walletAddress: WALLET_A,
         role: "client",
+        chainId: CHAIN_ID,
       });
 
       expect(result.ok).toBe(false);
@@ -486,6 +615,7 @@ describe("ApprovalManager", () => {
         approvalId: created.approvalId,
         walletAddress: WALLET_A,
         role: "client",
+        chainId: CHAIN_ID,
       });
 
       // Try again — should return failed state, not retry
@@ -493,11 +623,64 @@ describe("ApprovalManager", () => {
         approvalId: created.approvalId,
         walletAddress: WALLET_A,
         role: "client",
+        chainId: CHAIN_ID,
       });
 
       expect(result2.ok).toBe(false);
       expect(result2.state).toBe("failed");
       expect(mockServices.createJob).toHaveBeenCalledTimes(1); // no retry
+    });
+
+    it("transitions to failed when service returns ok:false", async () => {
+      mockServices.createJob.mockResolvedValue({
+        ok: false,
+        mode: "prepared-only",
+        reason: "CIRCLE_WALLET_ADDRESS not configured",
+      });
+
+      const created = manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+
+      const result = await manager.approve({
+        approvalId: created.approvalId,
+        walletAddress: WALLET_A,
+        role: "client",
+        chainId: CHAIN_ID,
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.state).toBe("failed");
+      expect(result.error).toContain("CIRCLE_WALLET_ADDRESS");
+
+      const stored = manager.store.get(created.approvalId);
+      expect(stored!.state).toBe("failed");
+    });
+
+    it("rejects invalid params before executing", async () => {
+      const created = manager.createApproval({
+        actionType: "approveUsdc",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: { amount: "not-a-number" },
+      });
+
+      const result = await manager.approve({
+        approvalId: created.approvalId,
+        walletAddress: WALLET_A,
+        role: "client",
+        chainId: CHAIN_ID,
+      });
+
+      expect(result.ok).toBe(false);
+      expect(result.state).toBe("failed");
+      expect(result.error).toContain("Approval params failed approveUsdc schema");
+
+      // Service should NOT have been called
+      expect(mockServices.approveUsdcForErc8183).not.toHaveBeenCalled();
     });
   });
 
@@ -583,6 +766,7 @@ describe("ApprovalManager", () => {
         approvalId: created.approvalId,
         walletAddress: WALLET_A,
         role: "client",
+        chainId: CHAIN_ID,
       });
 
       // Wait for state transition
@@ -602,7 +786,7 @@ describe("ApprovalManager", () => {
   // ── List Pending ─────────────────────────────────────────────────────
 
   describe("listPending", () => {
-    it("lists pending approvals", () => {
+    it("lists pending approvals for a wallet", () => {
       manager.createApproval({
         actionType: "createJob",
         walletAddress: WALLET_A,
@@ -617,7 +801,7 @@ describe("ApprovalManager", () => {
         amount: "5000000",
       });
 
-      const pending = manager.listPending();
+      const pending = manager.listPending(WALLET_A);
       expect(pending.length).toBeGreaterThanOrEqual(2);
       expect(pending.every((r) => r.state === "pending")).toBe(true);
     });
@@ -636,8 +820,26 @@ describe("ApprovalManager", () => {
         role: "client",
       });
 
-      const pending = manager.listPending();
+      const pending = manager.listPending(WALLET_A);
       expect(pending.find((r) => r.approvalId === created.approvalId)).toBeUndefined();
+    });
+
+    it("returns only approvals for the specified wallet", () => {
+      manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+      manager.createApproval({
+        actionType: "createJob",
+        walletAddress: WALLET_B,
+        chainId: CHAIN_ID,
+        params: createJobParams(),
+      });
+
+      const pendingA = manager.listPending(WALLET_A);
+      expect(pendingA.every((r) => r.walletAddress === WALLET_A)).toBe(true);
     });
   });
 

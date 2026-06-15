@@ -179,6 +179,8 @@ export const ApprovalsCreateInputSchema = z.object({
 /** approvals.get — get an approval by id */
 export const ApprovalsGetInputSchema = z.object({
   approvalId: z.string().min(1),
+  walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "walletAddress must be a valid address"),
+  role: z.string().min(1),
 });
 
 /** approvals.approve — approve a pending approval */
@@ -186,6 +188,7 @@ export const ApprovalsApproveInputSchema = z.object({
   approvalId: z.string().min(1),
   walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "walletAddress must be a valid address"),
   role: z.string().min(1),
+  chainId: z.number().int().positive(),
   expectedRequestHash: z.string().optional(),
 });
 
@@ -206,7 +209,7 @@ export const ApprovalsCancelInputSchema = z.object({
 
 /** approvals.list_pending — list pending approvals */
 export const ApprovalsListPendingInputSchema = z.object({
-  walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "walletAddress must be a valid address").optional(),
+  walletAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "walletAddress must be a valid address"),
   limit: z.number().int().min(1).max(100).optional(),
 });
 

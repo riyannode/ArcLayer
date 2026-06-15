@@ -324,9 +324,11 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
   },
   {
     name: "approvals.get",
-    description: "Get an approval record by ID.",
+    description: "Get an approval record by ID. Validates role and wallet.",
     inputSchema: fromZod(ApprovalsGetInputSchema, {
       approvalId: "Approval ID (apr-...)",
+      walletAddress: "Client wallet address (must match approval)",
+      role: "Client role (must match approval)",
     })
   },
   {
@@ -336,6 +338,7 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
       approvalId: "Approval ID (apr-...)",
       walletAddress: "Client wallet address approving (must match approval)",
       role: "Client role (must be 'client')",
+      chainId: "Chain ID (must match approval's chainId)",
       expectedRequestHash: "Optional request hash to verify approval hasn't changed",
     })
   },
@@ -360,9 +363,9 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
   },
   {
     name: "approvals.list_pending",
-    description: "List pending approvals, optionally filtered by wallet address.",
+    description: "List pending approvals for a wallet address.",
     inputSchema: fromZod(ApprovalsListPendingInputSchema, {
-      walletAddress: "Filter by wallet address (optional)",
+      walletAddress: "Wallet address (required)",
       limit: "Max results (1-100, default 50)",
     })
   },

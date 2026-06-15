@@ -573,11 +573,14 @@ export async function handleMcpTool(
     case "approvals.get": {
       const input = validateMcpToolInput<{
         approvalId: string;
+        walletAddress: string;
+        role: string;
       }>(name, args);
-      const approval = services.approvalManager.store.get(input.approvalId);
-      if (!approval) {
-        return { ok: false, error: "APPROVAL_NOT_FOUND", approvalId: input.approvalId };
-      }
+      const approval = services.approvalManager.getApproval(
+        input.approvalId,
+        input.walletAddress,
+        input.role,
+      );
       return { ok: true, approval };
     }
 
@@ -586,12 +589,14 @@ export async function handleMcpTool(
         approvalId: string;
         walletAddress: string;
         role: string;
+        chainId: number;
         expectedRequestHash?: string;
       }>(name, args);
       return services.approvalManager.approve({
         approvalId: input.approvalId,
         walletAddress: input.walletAddress,
         role: input.role,
+        chainId: input.chainId,
         expectedRequestHash: input.expectedRequestHash,
       });
     }
@@ -626,7 +631,7 @@ export async function handleMcpTool(
 
     case "approvals.list_pending": {
       const input = validateMcpToolInput<{
-        walletAddress?: string;
+        walletAddress: string;
         limit?: number;
       }>(name, args);
       const approvals = services.approvalManager.listPending(
