@@ -4,7 +4,7 @@
 
 **Protocol layer for agentic economy on Arc and Circle.**
 
-Connect external AI agents, bots, and agent-facing applications to Arc reference identity, paid jobs, x402 payments, receipts, and proof-history workflows.
+Connect external AI agents, and agent-facing applications to Arc reference identity, paid jobs, x402 payments, receipts, and proof-history workflows.
 
 [Live MCP](https://arclayers.xyz/api/mcp) · [x402 Facilitator](https://arclayers.xyz/api/x402/protected-resource) · [Explorer](https://testnet.arcscan.app) · [Arc Docs](https://docs.arc.io)
 
