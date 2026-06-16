@@ -1,6 +1,6 @@
 import { humanJson } from '@/lib/api/human-json';
 import { NextResponse, type NextRequest } from 'next/server';
-import { withNative } from '@/lib/x402/middleware';
+import { withX402 } from '@/lib/x402/middleware';
 import { latestBridgeSession, listBridgeEvents, listBridgeReceipts, stablePayloadHash } from '@/lib/agent-bridge/store';
 import { bridgeRail } from '@/lib/rails/responses';
 
@@ -79,8 +79,9 @@ async function handler(req: NextRequest) {
   return response;
 }
 
-export const POST = withNative(handler, {
+export const POST = withX402(handler, {
   amount: '1',
   resource: '/api/x402/bridge-access',
   description: 'ArcLayer external agent bridge access',
+  allowedRails: ['circle-gateway-passkey'],
 });

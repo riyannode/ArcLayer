@@ -1,15 +1,15 @@
 /**
- * x402 Dual-Mode Middleware — Circle Gateway + Arc Native (EIP-3009).
+ * x402 Middleware — Circle Gateway only.
  *
  * Pattern: Matches Circle's `withGateway()` from `circlefin/arc-nanopayments`.
  * Single protected endpoint handles both 402 issuance AND payment verification/settlement.
  *
  * Flow:
- *   1. Request without payment header → 402 + PAYMENT-REQUIRED
- *   2. Request with PAYMENT-SIGNATURE (Arc Native x402 V2 or Circle Gateway) or X-PAYMENT (legacy Native) →
- *      verify → settle → run handler → return content + PAYMENT-RESPONSE
+ *   1. Request without payment header → 402 + PAYMENT-REQUIRED (Circle Gateway only)
+ *   2. Request with PAYMENT-SIGNATURE (Circle Gateway) → verify → settle → run handler → return content + PAYMENT-RESPONSE
+ *   3. X-PAYMENT (deprecated Arc Native) → 402 with deprecation error
  *
- * Dual-mode: accepts both Circle Gateway batching AND Arc Native EIP-3009.
+ * Only Circle Gateway batching is accepted. Arc Native EIP-3009 has been removed.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -276,7 +276,7 @@ function encodePaymentResponse(value: unknown): string {
   return Buffer.from(JSON.stringify(value)).toString('base64url');
 }
 
-function extractPayment(req: NextRequest, opts?: X402MiddlewareOptions): { proof: Record<string, unknown>; mode: 'gateway' | 'native' } | null {
+function extractPayment(req: NextRequest, opts?: X402MiddlewareOptions): { proof: Record<string, unknown>; mode: 'gateway' | 'native' | 'deprecated-native' } | null {
   // PAYMENT-SIGNATURE (x402 V2 protocol — used by both Arc Native and Circle Gateway)
   const paySig = req.headers.get('payment-signature');
   if (paySig) {
@@ -288,26 +288,19 @@ function extractPayment(req: NextRequest, opts?: X402MiddlewareOptions): { proof
       if (classified === 'gateway' || classified === 'native') {
         return { proof, mode: classified };
       }
-      // Unclassifiable payload — apply fallback from opts.allowedRails
-      if (opts?.allowedRails) {
-        if (opts.allowedRails.length === 1) {
-          if (opts.allowedRails[0] === 'arc-native-eoa') {
-            return { proof, mode: 'native' };
-          }
-          if (opts.allowedRails[0] === 'circle-gateway-passkey') {
-            return { proof, mode: 'gateway' };
-          }
-        }
+      // Unclassifiable payload — default to gateway (gateway-only mode)
+      if (opts?.allowedRails && opts.allowedRails[0] === 'arc-native-eoa') {
+        return { proof, mode: 'native' };
       }
-      // Absent or allows both rails — no extracted payment
-      return null;
+      return { proof, mode: 'gateway' };
     }
   }
-  // X-PAYMENT (legacy Arc Native fallback)
+  // X-PAYMENT — deprecated Arc Native header
   const native = req.headers.get('x-payment');
   if (native) {
+    console.warn('[x402] X-PAYMENT header received — Arc Native x402 has been removed. Returning deprecated error.');
     const decoded = decodePaymentHeader(native);
-    if (decoded && typeof decoded === 'object') return { proof: decoded as Record<string, unknown>, mode: 'native' };
+    if (decoded && typeof decoded === 'object') return { proof: decoded as Record<string, unknown>, mode: 'deprecated-native' };
   }
   return null;
 }
@@ -371,7 +364,7 @@ function paymentRequiredResponse(opts: X402MiddlewareOptions, req: NextRequest) 
           ok: false,
           error: 'rail_not_allowed',
           message: `Rail ${requested.rail} is not allowed for this resource.`,
-          allowedRails: opts.allowedRails ?? ['arc-native-eoa', 'circle-gateway-passkey'],
+          allowedRails: opts.allowedRails ?? ['circle-gateway-passkey'],
         },
         { status: 403, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
       );
@@ -386,15 +379,13 @@ function paymentRequiredResponse(opts: X402MiddlewareOptions, req: NextRequest) 
     });
 
     if (requested.rail === 'arc-native-eoa') {
-      accepts.push(buildNativeRequirements(opts, session.sessionId));
+      // Arc Native deprecated — emit gateway instead
+      if (isGatewayEnabled()) accepts.push(buildGatewayRequirements(opts, session.sessionId));
     } else if (isGatewayEnabled()) {
       accepts.push(buildGatewayRequirements(opts, session.sessionId));
     }
   } else {
-    if (railAllowed(opts, 'arc-native-eoa')) {
-      accepts.push(buildNativeRequirements(opts));
-    }
-
+    // Gateway-only: only emit Circle Gateway accepts
     if (railAllowed(opts, 'circle-gateway-passkey') && isGatewayEnabled()) {
       accepts.push(buildGatewayRequirements(opts));
     }
@@ -445,7 +436,7 @@ async function handleGateway(
 ): Promise<NextResponse> {
   if (!isGatewayEnabled()) {
     return NextResponse.json(
-      { ok: false, error: 'gateway_disabled', message: 'Circle Gateway mode is disabled. Use Arc Native (X-PAYMENT header).' },
+      { ok: false, error: 'gateway_disabled', message: 'Circle Gateway mode is disabled. Configure GATEWAY_API_KEY to enable x402 payments.' },
       { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
     );
   }
@@ -1593,10 +1584,30 @@ export function withX402(
 
     // Route to appropriate handler
     try {
-      if (extracted.mode === 'gateway') {
-        return await handleGateway(extracted.proof, opts, handler, req);
+      // Arc Native x402 deprecated — return clear error
+      if (extracted.mode === 'deprecated-native') {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'arc_native_x402_deprecated',
+            message: 'Arc Native x402 has been removed. Use Circle Gateway PAYMENT-SIGNATURE.',
+          },
+          { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
       }
-      return await handleNative(extracted.proof, opts, handler, req);
+      // Arc Native via PAYMENT-SIGNATURE — also deprecated
+      if (extracted.mode === 'native') {
+        console.warn('[x402] Arc Native payment detected — returning deprecated error for %s', String(opts.resource));
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'arc_native_x402_deprecated',
+            message: 'Arc Native x402 has been removed. Use Circle Gateway PAYMENT-SIGNATURE.',
+          },
+          { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
+      }
+      return await handleGateway(extracted.proof, opts, handler, req);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Payment processing error';
       console.error(
