@@ -10,7 +10,7 @@ import { useCircleWallet } from '@/hooks/useCircleWallet';
  * Checks sessionStorage for an active x402 payment session.
  * When `hasAccess` is false, action buttons should be disabled.
  *
- * The X402DemoPanel stores payment proof in sessionStorage as:
+ * The X402Panel stores payment proof in sessionStorage as:
  *   key: `x402_paid:{rail}:/api/x402/protected-resource:{address}`
  *   value: JSON with { txHash }
  *
@@ -88,7 +88,7 @@ export function useX402Access(): X402AccessState {
     if (typeof window === 'undefined') return;
     const handler = () => check();
     window.addEventListener('storage', handler);
-    // Also listen for custom event dispatched by X402DemoPanel after payment
+    // Also listen for custom event dispatched by X402Panel after payment
     window.addEventListener('x402:paid', handler);
     return () => {
       window.removeEventListener('storage', handler);
