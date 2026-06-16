@@ -474,7 +474,7 @@ body {
 
 /* ─── x402 global UI lock ──────────────────────────────────────────────── */
 /* Applied only while the homepage is locked. The actual unlock panel is the
-   existing homepage X402DemoPanel marked with data-x402-unlock-zone="true". */
+   existing homepage X402Panel marked with data-x402-unlock-zone="true". */
 
 [data-x402-locked-home="true"] [data-x402-blur-zone="true"] {
   filter: blur(12px) brightness(0.35);

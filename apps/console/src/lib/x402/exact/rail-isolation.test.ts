@@ -1,15 +1,12 @@
 /**
- * Rail isolation & double-charge prevention tests.
+ * Rail isolation tests (Gateway-only mode).
  *
  * Proves:
- * 1. Arc Native rail never calls Circle Gateway
- * 2. Circle Gateway rail never falls back to self-hosted native relayer
- * 3. Middleware rejects missing paymentRail
- * 4. Middleware rejects rail mismatch (arc-native + GatewayWalletBatched)
- * 5. Middleware rejects rail mismatch (circle-gateway + non-batch)
- * 6. Arc Native idempotency: same nonce returns alreadySettled
- * 7. Arc Native lost-success recovery: authorization_used → backfill
- * 8. Gateway replay: consumed payment cannot unlock twice
+ * 1. Arc Native idempotency: same nonce returns alreadySettled (historical)
+ * 2. Arc Native lost-success recovery: authorization_used → backfill (historical)
+ * 3. Gateway replay: consumed payment cannot unlock twice
+ *
+ * Arc Native runtime has been removed. Native tests kept as historical.
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { deriveNativePaymentId } from './native-payment-store';
@@ -185,7 +182,7 @@ describe('Rail Isolation', () => {
 });
 
 describe('Double-Charge Prevention', () => {
-  describe('Arc Native: atomic reserve prevents double-submit', () => {
+  describe.skip('Arc Native: atomic reserve prevents double-submit [HISTORICAL — Arc Native removed]', () => {
     it('deriveNativePaymentId is pure and deterministic (same input = same output)', () => {
       // If two concurrent requests derive the same paymentId, the DB atomic claim
       // ensures only one proceeds. This test verifies the derivation is stable.
@@ -195,7 +192,7 @@ describe('Double-Charge Prevention', () => {
     });
   });
 
-  describe('Arc Native: lost-success recovery contract', () => {
+  describe.skip('Arc Native: lost-success recovery contract [HISTORICAL — Arc Native removed]', () => {
     it('verifyExactSettlementProof returns ok=true with txHash when nonce is used on-chain', async () => {
       // This is a type/interface contract test — the function signature supports recovery
       const { verifyExactSettlementProof } = await import('./verify-settlement-proof');

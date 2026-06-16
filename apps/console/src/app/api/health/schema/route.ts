@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
       { table: 'agent_bridge_receipts', columns: ['session_id', 'event_id'] },
       { table: 'external_agent_runtimes', columns: ['runtime_id', 'agent_id'] },
       { table: 'x402_resource_payments', columns: ['payment_id', 'resource', 'status'] },
-      { table: 'x402_native_payments', columns: ['payment_id', 'payer', 'status'] },
+      // x402_native_payments table kept as historical record — no longer a runtime dependency
       { table: 'x402_gateway_payments', columns: ['payment_id', 'status'] },
     ];
 

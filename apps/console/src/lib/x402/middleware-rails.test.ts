@@ -1,15 +1,15 @@
 /**
- * x402 middleware rail classification tests.
+ * x402 middleware rail classification tests (Gateway-only mode).
  *
- * Proves PAYMENT-SIGNATURE header is classified correctly for
- * both Arc Native (eip3009) and Circle Gateway (gateway-batched-eip3009).
+ * Proves PAYMENT-SIGNATURE header is classified correctly and
+ * Circle Gateway is the only active rail. Arc Native is deprecated.
  */
 import { describe, expect, it, vi, beforeAll } from 'vitest';
 import { NextRequest, NextResponse } from 'next/server';
 import {
   testClassifyPaymentFromProof,
   testExtractPayment,
-  withNative,
+  withX402,
   type X402MiddlewareOptions,
 } from './middleware';
 
@@ -165,16 +165,16 @@ describe('extractPayment', () => {
     expect(result).toEqual({ proof: GATEWAY_PROOF, mode: 'gateway' });
   });
 
-  it('classifies native PAYMENT-SIGNATURE as native mode', () => {
+  it('classifies native PAYMENT-SIGNATURE as native mode (classification only, rejected at runtime)', () => {
     const req = mockReq({ 'payment-signature': encodeProof(NATIVE_PROOF) });
     const result = testExtractPayment(req);
     expect(result).toEqual({ proof: NATIVE_PROOF, mode: 'native' });
   });
 
-  it('X-PAYMENT header always returns native (legacy)', () => {
+  it('X-PAYMENT header returns deprecated-native mode', () => {
     const req = mockReq({ 'x-payment': encodeProof(NATIVE_PROOF) });
     const result = testExtractPayment(req);
-    expect(result?.mode).toBe('native');
+    expect(result?.mode).toBe('deprecated-native');
   });
 
   it('unclassifiable with allowedRails=["arc-native-eoa"] falls through to native', () => {
@@ -199,21 +199,14 @@ describe('extractPayment', () => {
     expect(result).toEqual({ proof: UNKNOWN_PROOF, mode: 'gateway' });
   });
 
-  it('unclassifiable with both rails allowed returns null (no silent routing)', () => {
+  it('unclassifiable with both rails allowed defaults to gateway (gateway-only mode)', () => {
     const req = mockReq({ 'payment-signature': encodeProof(UNKNOWN_PROOF) });
     const opts: X402MiddlewareOptions = {
       amount: '10000',
       resource: '/test',
-      allowedRails: ['arc-native-eoa', 'circle-gateway-passkey'],
     };
     const result = testExtractPayment(req, opts);
-    expect(result).toBeNull();
-  });
-
-  it('unclassifiable with no allowedRails returns null', () => {
-    const req = mockReq({ 'payment-signature': encodeProof(UNKNOWN_PROOF) });
-    const result = testExtractPayment(req);
-    expect(result).toBeNull();
+    expect(result).toEqual({ proof: UNKNOWN_PROOF, mode: 'gateway' });
   });
 
   it('returns null when no payment header present', () => {
@@ -223,7 +216,7 @@ describe('extractPayment', () => {
   });
 });
 
-// ─── withNative integration ───────────────────────────────────────────────────
+// ─── Gateway-only runtime behavior ────────────────────────────────────────────
 
 vi.mock('./gateway/batch-client', () => {
   const isGatewayEnabled = vi.fn(() => false);
@@ -303,20 +296,52 @@ vi.mock('@/lib/a2a/live-events', () => ({
   recordAgentLiveEvent: async () => undefined,
 }));
 
-describe('withNative integration', () => {
+describe('Gateway-only runtime behavior', () => {
   beforeAll(() => {
     process.env.X402_RECEIVER_ADDRESS = '0x9fC73BE13EAB35DD55547f89b1aD2663b9038eE5';
   });
 
-  it('withNative rejects a Gateway PAYMENT-SIGNATURE payload (rail_not_allowed)', async () => {
+  it('Arc Native PAYMENT-SIGNATURE returns arc_native_x402_deprecated', async () => {
     const handler = async () => NextResponse.json({ ok: true }, { status: 200 });
-    const wrapped = withNative(handler, {
+    const wrapped = withX402(handler, {
       amount: '10000',
       resource: '/api/test',
-      allowedRails: ['arc-native-eoa'],
     });
 
-    const req = mockReq({ 'payment-signature': encodeProof(GATEWAY_PROOF) });
+    const req = mockReq({ 'payment-signature': encodeProof(NATIVE_PROOF) });
+    const res = await wrapped(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(402);
+    expect(body.error).toBe('arc_native_x402_deprecated');
+    expect(body.message).toContain('Arc Native x402 has been removed');
+  });
+
+  it('X-PAYMENT header returns arc_native_x402_deprecated', async () => {
+    const handler = async () => NextResponse.json({ ok: true }, { status: 200 });
+    const wrapped = withX402(handler, {
+      amount: '10000',
+      resource: '/api/test',
+    });
+
+    const req = mockReq({ 'x-payment': encodeProof(NATIVE_PROOF) });
+    const res = await wrapped(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(402);
+    expect(body.error).toBe('arc_native_x402_deprecated');
+    expect(body.message).toContain('Arc Native x402 has been removed');
+  });
+
+  it('arc-native-eoa rail is rejected via withX402 allowedRails gate', async () => {
+    const handler = async () => NextResponse.json({ ok: true }, { status: 200 });
+    const wrapped = withX402(handler, {
+      amount: '10000',
+      resource: '/api/test',
+      allowedRails: ['circle-gateway-passkey'],
+    });
+
+    const req = mockReq({ 'payment-signature': encodeProof(NATIVE_PROOF) });
     const res = await wrapped(req);
     const body = await res.json();
 
@@ -324,38 +349,19 @@ describe('withNative integration', () => {
     expect(body.error).toBe('rail_not_allowed');
   });
 
-  it('withNative accepts an Arc Native PAYMENT-SIGNATURE payload (no rail_not_allowed)', async () => {
-    const handler = async () =>
-      NextResponse.json({ ok: true, handled: true }, { status: 200 });
-    const wrapped = withNative(handler, {
+  it('no payment header returns 402 with Gateway-only accepts', async () => {
+    const handler = async () => NextResponse.json({ ok: true }, { status: 200 });
+    const wrapped = withX402(handler, {
       amount: '10000',
       resource: '/api/test',
-      allowedRails: ['arc-native-eoa'],
     });
 
-    const req = mockReq({ 'payment-signature': encodeProof(NATIVE_PROOF) });
+    const req = mockReq({});
     const res = await wrapped(req);
     const body = await res.json();
 
-    expect(body.error).not.toBe('rail_not_allowed');
-    expect([200, 402, 403, 500]).toContain(res.status);
-  });
-
-  it('X-PAYMENT legacy native route still works with withNative', async () => {
-    const handler = async () =>
-      NextResponse.json({ ok: true, handled: true }, { status: 200 });
-    const wrapped = withNative(handler, {
-      amount: '10000',
-      resource: '/api/test',
-      allowedRails: ['arc-native-eoa'],
-    });
-
-    const req = mockReq({ 'x-payment': encodeProof(NATIVE_PROOF) });
-    const res = await wrapped(req);
-    const body = await res.json();
-
-    expect(body.error).not.toBe('rail_not_allowed');
-    expect(body.error).not.toBe('payment_required');
+    expect(res.status).toBe(402);
+    expect(body.error).toBe('payment_required');
   });
 });
 

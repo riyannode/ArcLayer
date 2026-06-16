@@ -53,7 +53,7 @@ const paymentRequirements = {
   maxTimeoutSeconds: 300,
 } as any;
 
-describe('settleExactPayment relayer gas check', () => {
+describe.skip('settleExactPayment relayer gas check [HISTORICAL — Arc Native removed]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.X402_RELAYER_PRIVATE_KEY = `0x${'12'.repeat(32)}`;

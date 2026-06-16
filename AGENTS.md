@@ -112,7 +112,6 @@ ERC-8004 validation
 ERC-8183 agentic job settlement
 x402 paid access
 Circle Gateway batched EIP-3009
-Arc Native EIP-3009
 External runtime support
 Global MCP tooling
 Proof/history UI
@@ -204,12 +203,13 @@ Rules:
 
 ## x402 payment rules
 
-ArcLayer supports two practical payment rails:
+ArcLayer uses Circle Gateway as the sole x402 payment rail:
 
 ```txt
-Arc Native EIP-3009
 Circle Gateway batched EIP-3009
 ```
+
+> **Historical note:** ArcLayer previously supported an Arc Native EIP-3009 rail via X-PAYMENT. That rail has been removed. Circle Gateway is the only active x402 surface.
 
 Use x402 for:
 
@@ -230,7 +230,7 @@ Important rules:
 * Preserve payment ID derivation.
 * Preserve rail/session binding where it already exists.
 * Preserve `PAYMENT-RESPONSE` behavior for successful protected access.
-* Keep Arc Native and Circle Gateway behavior separate and explicit.
+* Circle Gateway is the sole active x402 rail. Do not reintroduce Arc Native or X-PAYMENT code paths.
 
 ## MCP rules
 

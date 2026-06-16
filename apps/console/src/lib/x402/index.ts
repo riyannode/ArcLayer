@@ -1,9 +1,8 @@
 /**
- * x402 Dual-Payment Library — public surface.
+ * x402 Payment Library — Circle Gateway only (public surface).
  *
- * Two payment rails only:
- *   1. Arc Native (EIP-3009 transferWithAuthorization, self-hosted relayer)
- *   2. Circle Gateway (batched EIP-3009 via Circle facilitator)
+ * Arc Native x402 runtime has been removed.
+ * Circle Gateway (batched EIP-3009 via Circle facilitator) is the only active rail.
  *
  */
 
@@ -12,27 +11,8 @@ export * from './constants';
 export * from './exact/types';
 export {
   parseExactVerifyRequest,
-  verifyExactEvmPayment,
   exactEip3009Abi,
 } from './exact/verify-exact';
-export { settleExactPayment } from './exact/settle-exact';
-export {
-  verifyExactSettlementProof,
-  type SettlementProofResult,
-} from './exact/verify-settlement-proof';
-export {
-  backfillNativeSettled,
-  claimNativePayment,
-  consumeNativePayment,
-  deriveNativePaymentId,
-  getNativePayment,
-  markNativeFailed,
-  markNativeSettled,
-  type ClaimNativePaymentResult,
-  type NativePaymentEvidence,
-  type NativePaymentIdentity,
-  type NativePaymentStatus,
-} from './exact/native-payment-store';
 export {
   getArcTestnetGatewayConfig,
   getBatchFacilitatorClient,
@@ -52,7 +32,6 @@ export {
 } from './gateway/payment-store';
 export { supabaseAdmin } from './supabaseClient';
 export {
-  createArcNativeReceipt,
   createGatewayReceipt,
   type X402PaymentReceipt,
   type X402PaymentProvider,
@@ -61,6 +40,6 @@ export {
 export {
   withX402,
   withGateway,
-  withNative,
+  CIRCLE_GATEWAY_TIMEOUT_SECONDS,
   type X402MiddlewareOptions,
 } from './middleware';

@@ -10,11 +10,14 @@ import { useCircleWallet } from '@/hooks/useCircleWallet';
  * Checks sessionStorage for an active x402 payment session.
  * When `hasAccess` is false, action buttons should be disabled.
  *
- * The X402DemoPanel stores payment proof in sessionStorage as:
+ * The X402Panel stores payment proof in sessionStorage as:
  *   key: `x402_paid:{rail}:/api/x402/protected-resource:{address}`
  *   value: JSON with { txHash }
  *
- * This hook checks both rails (arc-native, circle-gateway).
+ * This hook checks both rails (arc-native, circle-gateway) for backward
+ * compatibility. Note: Arc Native x402 runtime has been removed (2026-06).
+ * Circle Gateway is the only active rail. The `'arc-native'` check is retained
+ * so existing sessionStorage entries remain readable.
  */
 
 const RESOURCE = '/api/x402/protected-resource';
@@ -85,7 +88,7 @@ export function useX402Access(): X402AccessState {
     if (typeof window === 'undefined') return;
     const handler = () => check();
     window.addEventListener('storage', handler);
-    // Also listen for custom event dispatched by X402DemoPanel after payment
+    // Also listen for custom event dispatched by X402Panel after payment
     window.addEventListener('x402:paid', handler);
     return () => {
       window.removeEventListener('storage', handler);

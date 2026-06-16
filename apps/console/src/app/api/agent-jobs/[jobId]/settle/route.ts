@@ -1,9 +1,9 @@
 import { humanJson } from '@/lib/api/human-json';
 /**
- * POST /api/agent-jobs/[jobId]/settle — ArcLayer off-chain job settlement via x402 Arc-native payment
+ * POST /api/agent-jobs/[jobId]/settle — ArcLayer off-chain job settlement via x402 Circle Gateway payment
  *
  * Protected by withX402 middleware.
- * Arc native only — no Circle Gateway.
+ * Circle Gateway only — Arc Native x402 has been removed.
  * Idempotent via x402_resource_payments.
  *
  * This is ArcLayer off-chain job settlement (x402 USDC transfer + Supabase status update).
@@ -12,20 +12,21 @@ import { humanJson } from '@/lib/api/human-json';
  *   - /api/a2a/erc8183-complete  (A2A ERC-8183 on-chain complete)
  *   - apps/console/src/app/job/[id]/page.tsx (ERC-8183 UI)
  *
- * Circle Gateway / Circle Skills-compatible payment support is experimental
- * and not production-certified yet.
+ * A2A payments require agentId + registered payer wallet.
+ * No shared/platform payer fallback.
  *
  * Flow:
  *   1. Extract jobId, validate status/price/buyer BEFORE x402 (pure check, no status mutation)
- *   2. withX402 verifies payment → runs handler → completes x402 Arc-native job settlement
+ *   2. withX402 verifies Circle Gateway payment → runs handler → completes x402 job settlement
  *   3. Inner handler marks settlement_pending (safe: x402 already verified payment)
- *   4. onSettled marks job settled after consumeNativePayment succeeds
+ *   4. onSettled marks job settled after consumeGatewayPayment succeeds
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { withX402 } from '@/lib/x402/middleware';
 import { API_KEY_SCOPES, requireApiKey } from '@/lib/a2a/auth';
 import { getAgentJob, markJobSettlementPending, markJobSettled } from '@/lib/agent-jobs/store';
+import type { AgentX402Rail, AgentX402Scope } from '@/lib/x402/agent-payer';
 
 export const POST = (() => {
   return async function settlePost(req: NextRequest): Promise<NextResponse> {
@@ -93,15 +94,29 @@ export const POST = (() => {
       {
         amount: priceAtomic,
         resource: `/api/agent-jobs/${jobId}/settle`,
-        allowedRails: ['arc-native-eoa'],
+        allowedRails: ['circle-gateway-passkey'],
+        onSettledFailureMode: 'fail-response',
+        agentPayerBinding: {
+          required: true,
+          rail: 'circle-gateway' as AgentX402Rail,
+          scope: 'agent-job-settle' as AgentX402Scope,
+          getContext: async () => ({
+            agentId: buyerAgentId,
+            runtimeId: null,
+            sessionId: null,
+            jobId,
+          }),
+        },
         onSettled: async (ctx) => {
           await markJobSettled({
             jobId,
             buyerAgentId,
             paymentId: ctx.paymentId,
-            txHash: ctx.transaction ?? '',
+            txHash: null, // Gateway settlement ref is not an EVM tx hash
             payer: ctx.payer ?? '',
             payTo: ctx.payTo,
+            settlementRef: ctx.transaction ?? null,
+            settlementRail: 'circle-gateway',
           });
         },
       },

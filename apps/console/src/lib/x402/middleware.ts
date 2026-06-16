@@ -1,15 +1,15 @@
 /**
- * x402 Dual-Mode Middleware — Circle Gateway + Arc Native (EIP-3009).
+ * x402 Middleware — Circle Gateway only.
  *
  * Pattern: Matches Circle's `withGateway()` from `circlefin/arc-nanopayments`.
  * Single protected endpoint handles both 402 issuance AND payment verification/settlement.
  *
  * Flow:
- *   1. Request without payment header → 402 + PAYMENT-REQUIRED
- *   2. Request with PAYMENT-SIGNATURE (Arc Native x402 V2 or Circle Gateway) or X-PAYMENT (legacy Native) →
- *      verify → settle → run handler → return content + PAYMENT-RESPONSE
+ *   1. Request without payment header → 402 + PAYMENT-REQUIRED (Circle Gateway only)
+ *   2. Request with PAYMENT-SIGNATURE (Circle Gateway) → verify → settle → run handler → return content + PAYMENT-RESPONSE
+ *   3. X-PAYMENT (deprecated Arc Native) → 402 with deprecation error
  *
- * Dual-mode: accepts both Circle Gateway batching AND Arc Native EIP-3009.
+ * Only Circle Gateway batching is accepted. Arc Native EIP-3009 has been removed.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -34,17 +34,6 @@ import {
   consumeGatewayPayment,
   claimGatewaySettlement,
 } from './gateway/payment-store';
-import {
-  claimNativePayment,
-  consumeNativePayment,
-  deriveNativePaymentId,
-  getNativePayment,
-  markNativeSettled,
-  markNativeFailed,
-} from './exact/native-payment-store';
-import { settleExactPayment } from './exact/settle-exact';
-import { verifyExactEvmPayment } from './exact/verify-exact';
-import { verifyExactSettlementProof } from './exact/verify-settlement-proof';
 import { claimAccessSession, completeAccessSession, releaseAccessSession } from './access-session';
 import {
   createRailSession,
@@ -60,7 +49,6 @@ import {
   markResourcePaymentSettled,
   markResourcePaymentFailed,
 } from './resource-payment-store';
-import type { PaymentRequirements, PaymentPayload } from './exact/types';
 import {
   resolveRequiredAgentX402Payer,
   assertX402PayerMatches,
@@ -145,6 +133,21 @@ export interface X402MiddlewareOptions {
       jobId?: string | null;
     }>;
   };
+  /**
+   * Optional preflight validation hook, run AFTER payment verification
+   * but BEFORE Gateway settlement. If preflight returns a response,
+   * payment is NOT settled and the response is returned directly.
+   * Use for routes that need to validate request body (scope, sessionId, etc.)
+   * before charging the payer.
+   */
+  preflight?: (req: NextRequest) => Promise<NextResponse | null>;
+  /**
+   * Controls behavior when onSettled hook throws after payment is already settled.
+   * "warn" (default): log warning, add header, return success (payer already paid).
+   * "fail-response": return explicit error with job_settlement_record_failed.
+   * Use "fail-response" for critical settlement recording (e.g., agent job settlement).
+   */
+  onSettledFailureMode?: 'warn' | 'fail-response';
 }
 
 function resolvePayTo(override?: `0x${string}`): `0x${string}` {
@@ -216,20 +219,8 @@ async function emitX402LiveEvent(params: {
 
 // ─── Requirements builders ───────────────────────────────────────────────────
 
-function buildNativeRequirements(opts: X402MiddlewareOptions, railSessionId?: string): PaymentRequirements {
-  return {
-    scheme: 'exact',
-    network: ARC_TESTNET_CAIP2_NETWORK,
-    asset: getAddress(USDC_ADDRESS) as `0x${string}`,
-    amount: opts.amount,
-    payTo: resolvePayTo(opts.payTo),
-    maxTimeoutSeconds: opts.maxTimeoutSeconds ?? 300,
-    extra: { name: 'USDC', version: '2', transferMethod: 'eip3009', decimals: 6, symbol: 'USDC', ...(railSessionId ? { railSessionId } : {}) },
-  };
-}
-
 // Gateway batched settlement needs 7 days + buffer (604900 seconds)
-const CIRCLE_GATEWAY_TIMEOUT_SECONDS = 604_900;
+export const CIRCLE_GATEWAY_TIMEOUT_SECONDS = 604_900;
 
 function buildGatewayRequirements(opts: X402MiddlewareOptions, railSessionId?: string) {
   if (opts.requireExplicitPayTo && !opts.payTo) {
@@ -276,7 +267,7 @@ function encodePaymentResponse(value: unknown): string {
   return Buffer.from(JSON.stringify(value)).toString('base64url');
 }
 
-function extractPayment(req: NextRequest, opts?: X402MiddlewareOptions): { proof: Record<string, unknown>; mode: 'gateway' | 'native' } | null {
+function extractPayment(req: NextRequest, opts?: X402MiddlewareOptions): { proof: Record<string, unknown>; mode: 'gateway' | 'native' | 'deprecated-native' } | null {
   // PAYMENT-SIGNATURE (x402 V2 protocol — used by both Arc Native and Circle Gateway)
   const paySig = req.headers.get('payment-signature');
   if (paySig) {
@@ -288,26 +279,19 @@ function extractPayment(req: NextRequest, opts?: X402MiddlewareOptions): { proof
       if (classified === 'gateway' || classified === 'native') {
         return { proof, mode: classified };
       }
-      // Unclassifiable payload — apply fallback from opts.allowedRails
-      if (opts?.allowedRails) {
-        if (opts.allowedRails.length === 1) {
-          if (opts.allowedRails[0] === 'arc-native-eoa') {
-            return { proof, mode: 'native' };
-          }
-          if (opts.allowedRails[0] === 'circle-gateway-passkey') {
-            return { proof, mode: 'gateway' };
-          }
-        }
+      // Unclassifiable payload — default to gateway (gateway-only mode)
+      if (opts?.allowedRails && opts.allowedRails[0] === 'arc-native-eoa') {
+        return { proof, mode: 'native' };
       }
-      // Absent or allows both rails — no extracted payment
-      return null;
+      return { proof, mode: 'gateway' };
     }
   }
-  // X-PAYMENT (legacy Arc Native fallback)
+  // X-PAYMENT — deprecated Arc Native header
   const native = req.headers.get('x-payment');
   if (native) {
+    console.warn('[x402] X-PAYMENT header received — Arc Native x402 has been removed. Returning deprecated error.');
     const decoded = decodePaymentHeader(native);
-    if (decoded && typeof decoded === 'object') return { proof: decoded as Record<string, unknown>, mode: 'native' };
+    if (decoded && typeof decoded === 'object') return { proof: decoded as Record<string, unknown>, mode: 'deprecated-native' };
   }
   return null;
 }
@@ -365,13 +349,25 @@ function paymentRequiredResponse(opts: X402MiddlewareOptions, req: NextRequest) 
   const accepts: unknown[] = [];
 
   if (requested.rail && requested.payer) {
+    // Arc Native rail deprecated — reject immediately, do not create session
+    if (requested.rail === 'arc-native-eoa') {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'arc_native_x402_deprecated',
+          message: 'Arc Native x402 has been removed. Use Circle Gateway PAYMENT-SIGNATURE.',
+        },
+        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+
     if (!railAllowed(opts, requested.rail)) {
       return NextResponse.json(
         {
           ok: false,
           error: 'rail_not_allowed',
           message: `Rail ${requested.rail} is not allowed for this resource.`,
-          allowedRails: opts.allowedRails ?? ['arc-native-eoa', 'circle-gateway-passkey'],
+          allowedRails: opts.allowedRails ?? ['circle-gateway-passkey'],
         },
         { status: 403, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
       );
@@ -385,16 +381,11 @@ function paymentRequiredResponse(opts: X402MiddlewareOptions, req: NextRequest) 
       ttlMs: (opts.maxTimeoutSeconds ?? 300) * 1000,
     });
 
-    if (requested.rail === 'arc-native-eoa') {
-      accepts.push(buildNativeRequirements(opts, session.sessionId));
-    } else if (isGatewayEnabled()) {
+    if (isGatewayEnabled()) {
       accepts.push(buildGatewayRequirements(opts, session.sessionId));
     }
   } else {
-    if (railAllowed(opts, 'arc-native-eoa')) {
-      accepts.push(buildNativeRequirements(opts));
-    }
-
+    // Gateway-only: only emit Circle Gateway accepts
     if (railAllowed(opts, 'circle-gateway-passkey') && isGatewayEnabled()) {
       accepts.push(buildGatewayRequirements(opts));
     }
@@ -445,7 +436,7 @@ async function handleGateway(
 ): Promise<NextResponse> {
   if (!isGatewayEnabled()) {
     return NextResponse.json(
-      { ok: false, error: 'gateway_disabled', message: 'Circle Gateway mode is disabled. Use Arc Native (X-PAYMENT header).' },
+      { ok: false, error: 'gateway_disabled', message: 'Circle Gateway mode is disabled. Configure GATEWAY_API_KEY to enable x402 payments.' },
       { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
     );
   }
@@ -561,6 +552,17 @@ async function handleGateway(
         { ok: false, error: code, message: msg },
         { status: code === 'agent_x402_payer_not_configured' ? 403 : 500, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
       );
+    }
+  }
+
+  // ─── Preflight validation (before settlement) ─────────────────────────
+  // Run route-specific validation BEFORE charging the payer.
+  // If preflight returns a response, do NOT settle.
+  if (opts.preflight) {
+    const preflightResponse = await opts.preflight(req);
+    if (preflightResponse) {
+      if (earlyPayer) await releaseAccessSession(earlyPayer, opts.resource, 'circle-gateway');
+      return preflightResponse;
     }
   }
 
@@ -730,6 +732,19 @@ async function handleGateway(
         msg,
       );
 
+      if (opts.onSettledFailureMode === 'fail-response') {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'job_settlement_record_failed',
+            paymentId,
+            message: `Payment settled on Circle but job state update failed: ${msg}`,
+          },
+          { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
+      }
+
+      // Default "warn" mode: add header, return success (payer already paid)
       response.headers.set('X-ArcLayer-Receipt-Warning', 'settlement_record_failed');
       response.headers.set('X-ArcLayer-Receipt-Warning-Reason', msg.slice(0, 200));
     }
@@ -748,818 +763,16 @@ async function handleGateway(
   return response;
 }
 
-const ALLOWED_RESOURCE_ACTOR_ROLES = new Set([
-  'oracle',
-  'analyzer',
-  'evaluator',
-  'executor',
-  'buyer',
-  'provider',
-  'worker',
-  'settler',
-]);
-
-function normalizeResourceActorRole(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const role = value.trim().toLowerCase();
-  return ALLOWED_RESOURCE_ACTOR_ROLES.has(role) ? role : null;
-}
-
-// ─── Native verify + settle (Arc EIP-3009 pattern) ───────────────────────────
-
-async function handleNative(
-  proof: Record<string, unknown>,
-  opts: X402MiddlewareOptions,
-  handler: (req: NextRequest) => Promise<NextResponse>,
-  req: NextRequest,
-): Promise<NextResponse> {
-  const requirements = buildNativeRequirements(opts);
-  const needsResourceContext = requiresNativeResourceContext(opts);
-  const reqBody = needsResourceContext
-    ? await req.clone().json().catch(() => ({} as Record<string, unknown>))
-    : ({} as Record<string, unknown>);
-  const scope = typeof reqBody.scope === 'string' && reqBody.scope.trim().length > 0 ? reqBody.scope.trim() : null;
-  const inputSessionId = typeof reqBody.sessionId === 'string' && reqBody.sessionId.trim().length > 0 ? reqBody.sessionId.trim() : null;
-  const role = normalizeResourceActorRole(reqBody.role);
-
-  if (needsResourceContext) {
-    if (!inputSessionId) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_session', message: 'sessionId is required for x402 bridge-access payments.' },
-        { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-    if (!scope) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_scope', message: 'scope is required and must be non-empty for x402 bridge-access payments.' },
-        { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-    if (!role) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_role', message: 'role must be a canonical resource actor role.' },
-        { status: 400, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-  }
-
-  const resourceRole = role ?? '';
-
-  // ─── Resource payment store readiness guard ─────────────────────────────────
-  // Do not settle any bridge-access or agent-job payment if the idempotency
-  // table is unreachable.
-  if (needsResourceContext && process.env.PROTOCOL_TX_MODE === 'ARC_TESTNET') {
-    try {
-      await assertResourcePaymentStoreReady();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'x402_resource_payments_unavailable';
-      return NextResponse.json(
-        { ok: false, error: 'x402_resource_payments_unavailable', message },
-        { status: 503, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-  }
-
-  // ─── Rail session guard ─────────────────────────────────────────────────────
-  const railSessionId = getRailSessionId(proof);
-  if (railSessionId) {
-    const payload = proof.payload as Record<string, unknown> | undefined;
-    const authorization = payload?.authorization as Record<string, unknown> | undefined;
-    const earlyPayer = (authorization?.from as string | undefined) ?? '';
-    const railCheck = validateRailSession({
-      sessionId: railSessionId,
-      incomingRail: 'arc-native-eoa',
-      payer: earlyPayer,
-      resource: opts.resource,
-      amount: opts.amount,
-    });
-    if (railCheck.ok === false) {
-      return NextResponse.json(
-        { ok: false, error: railCheck.error, message: railCheck.message },
-        { status: 403, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-  }
-
-  // Validate payload structure
-  const payload = proof.payload as Record<string, unknown> | undefined;
-  const authorization = payload?.authorization as Record<string, unknown> | undefined;
-  if (!payload?.signature || !authorization?.from || !authorization?.to || !authorization?.value || !authorization?.validAfter || !authorization?.validBefore || !authorization?.nonce) {
-    return NextResponse.json(
-      { ok: false, error: 'invalid_payment_proof', message: 'Payment proof must include payload.signature and full payload.authorization (from, to, value, validAfter, validBefore, nonce).' },
-      { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
-  }
-
-  // ─── Pre-settlement resource binding ───────────────────────────────────────
-  // EIP-3009 verifies the user signed *a* transfer, but the middleware must prove
-  // it is the transfer required by this protected resource before unlocking it.
-  let paymentPayload: PaymentPayload;
-  try {
-    paymentPayload = proof as unknown as PaymentPayload;
-    const proofNetwork = paymentPayload.accepted?.network ?? requirements.network;
-    const proofAsset = getAddress(paymentPayload.accepted?.asset ?? requirements.asset);
-    const proofPayTo = getAddress(authorization.to as string);
-    const requiredPayTo = getAddress(requirements.payTo);
-
-    if (proofNetwork !== requirements.network) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_network', message: `Payment network ${proofNetwork} does not match required ${requirements.network}` },
-        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-    if (proofAsset !== getAddress(requirements.asset)) {
-      return NextResponse.json(
-        { ok: false, error: 'unsupported_asset', message: 'Payment asset does not match required asset.' },
-        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-    if (proofPayTo !== requiredPayTo) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_recipient', message: 'Payment recipient does not match protected resource recipient.' },
-        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-    if (String(authorization.value) !== requirements.amount) {
-      return NextResponse.json(
-        { ok: false, error: 'invalid_amount', message: `Payment amount ${String(authorization.value)} does not match required ${requirements.amount}` },
-        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-
-    const verifyResult = await verifyExactEvmPayment({
-      paymentPayload,
-      paymentRequirements: requirements,
-    });
-    if (!verifyResult.isValid) {
-      return NextResponse.json(
-        { ok: false, error: 'payment_verification_failed', reason: verifyResult.invalidReason, message: verifyResult.invalidMessage },
-        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Invalid Arc Native payment proof.';
-    return NextResponse.json(
-      { ok: false, error: 'invalid_payment_proof', message },
-      { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
-  }
-
-  // ─── GENERIC NATIVE: No resource context required (e.g. /api/x402/protected-resource) ──
-  // For routes that do NOT require sessionId/scope/role (non-bridge, non-agent-job),
-  // skip the resource payment store entirely and go straight to handler→settle→consume.
-  // Payment ID is derived before any handler execution for both modes.
-  if (!needsResourceContext) {
-    // ─── Derive payment ID before any handler execution ───────────────────
-    const paymentId = deriveNativePaymentId({
-      network: requirements.network,
-      asset: requirements.asset,
-      from: authorization.from as string,
-      nonce: authorization.nonce as string,
-    });
-
-    if (opts.settleBeforeHandler) {
-      // ─── SETTLE-BEFORE-HANDLER PATH (manifest, avatar) ────────────────
-      // Order: settle → consume → handler → PAYMENT-RESPONSE → live event → onSettled
-      let settleResult;
-      try {
-        settleResult = await settleExactPayment({
-          paymentPayload: proof as unknown as PaymentPayload,
-          paymentRequirements: requirements,
-          selfHosted: true,
-        });
-      } catch (settleErr) {
-        console.error('[x402] generic native settlement failed', {
-          errorName: settleErr instanceof Error ? settleErr.name : 'unknown',
-          resource: opts.resource,
-        });
-        return NextResponse.json(
-          { ok: false, error: 'settlement_failed', reason: 'settle_exception', message: 'Arc Native settlement failed.' },
-          { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-        );
-      }
-
-      if (!settleResult.success && !settleResult.alreadySettled) {
-        return NextResponse.json(
-          { ok: false, error: 'settlement_failed', reason: settleResult.errorReason, message: settleResult.errorMessage },
-          { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-        );
-      }
-
-      const consumed = await consumeNativePayment(paymentId);
-      if (consumed.ok === false) {
-        const reason = consumed.reason;
-        if (reason === 'replayed') {
-          return NextResponse.json(
-            { ok: false, error: 'payment_replayed', message: 'This payment has already been consumed.', paymentId },
-            { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-          );
-        }
-        if (reason === 'not_settled') {
-          return NextResponse.json(
-            { ok: false, error: 'payment_not_settled', message: 'Payment is not in settled state after settlement.', paymentId },
-            { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-          );
-        }
-        return NextResponse.json(
-          { ok: false, error: 'native_payment_not_consumed', reason, paymentId },
-          { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-        );
-      }
-
-      let response: NextResponse;
-      try {
-        response = await handler(req);
-      } catch (handlerErr) {
-        return NextResponse.json(
-          { ok: false, error: 'handler_failed', message: 'Handler execution failed.' },
-          { status: 500, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-        );
-      }
-
-      // Consume rail session (one-shot)
-      if (railSessionId) consumeRailSession(railSessionId);
-
-      const paymentResponse = {
-        success: true,
-        mode: 'arc-native',
-        transaction: settleResult.transaction,
-        network: requirements.network,
-        payer: authorization.from as string,
-        amount: requirements.amount,
-        paymentId,
-      };
-
-      response.headers.set('PAYMENT-RESPONSE', encodePaymentResponse(paymentResponse));
-      await emitX402LiveEvent({
-        req,
-        response,
-        opts,
-        mode: 'arc-native',
-        paymentId,
-        payer: authorization.from as string,
-        transaction: settleResult.transaction ?? null,
-        amount: requirements.amount,
-      });
-
-      // Call onSettled after PAYMENT-RESPONSE + live event
-      if (opts.onSettled) {
-        try {
-          await opts.onSettled({
-            req,
-            response,
-            mode: 'arc-native',
-            paymentId,
-            transaction: settleResult.transaction ?? null,
-            payer: authorization.from as string,
-            payTo: requirements.payTo,
-            amount: requirements.amount,
-            resource: opts.resource,
-          });
-        } catch (settledErr) {
-          console.error('[x402] onSettled hook failed', { resource: opts.resource, paymentId });
-          return NextResponse.json(
-            {
-              ok: false,
-              error: 'job_settlement_record_failed',
-              message: 'onSettled hook failed.',
-              paymentId,
-              transaction: settleResult.transaction ?? null,
-            },
-            { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-          );
-        }
-      }
-
-      return response;
-    }
-
-    // ─── DEFAULT VERIFY-FIRST PATH ───────────────────────────────────────
-    // Pre-handler replay guard using getNativePayment
-    try {
-      const existing = await getNativePayment(paymentId);
-      if (existing) {
-        if (existing.consumedAt) {
-          return NextResponse.json(
-            { ok: false, error: 'payment_replayed', message: 'This payment has already been consumed.', paymentId },
-            { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-          );
-        }
-        if (existing.status === 'pending') {
-          return NextResponse.json(
-            { ok: false, error: 'native_payment_in_flight', message: 'Payment is already being processed.', paymentId },
-            { status: 425, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-          );
-        }
-      }
-    } catch {
-      // getNativePayment may throw on DB error; log and continue to let existing handler-before-settle path proceed
-      console.error('[x402] getNativePayment guard failed', { resource: opts.resource, paymentId });
-    }
-
-    // Execute handler BEFORE settlement (verify-first pattern)
-    let response: NextResponse;
-    try {
-      response = await handler(req);
-    } catch (handlerErr) {
-      const msg = handlerErr instanceof Error ? handlerErr.message : 'Handler execution failed';
-      return NextResponse.json(
-        { ok: false, error: 'handler_failed', message: msg },
-        { status: 500, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-    if (response.status >= 400) return response;
-
-    // Settle on-chain via relayer
-    let settleResult;
-    try {
-      settleResult = await settleExactPayment({
-        paymentPayload: proof as unknown as PaymentPayload,
-        paymentRequirements: requirements,
-        selfHosted: true,
-      });
-    } catch (settleErr) {
-      console.error('[x402] generic native settlement failed', {
-        errorName: settleErr instanceof Error ? settleErr.name : 'unknown',
-        resource: opts.resource,
-      });
-      return NextResponse.json(
-        { ok: false, error: 'settlement_failed', reason: 'settle_exception', message: 'Arc Native settlement failed.' },
-        { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-
-    if (!settleResult.success && !settleResult.alreadySettled) {
-      return NextResponse.json(
-        { ok: false, error: 'settlement_failed', reason: settleResult.errorReason, message: settleResult.errorMessage },
-        { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-
-    const consumed = await consumeNativePayment(paymentId);
-    if (consumed.ok === false) {
-      const reason = consumed.reason;
-      if (reason === 'replayed') {
-        return NextResponse.json(
-          { ok: false, error: 'payment_replayed', message: 'This payment has already been consumed.', paymentId },
-          { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-        );
-      }
-      return NextResponse.json(
-        { ok: false, error: 'native_payment_not_consumed', reason, paymentId },
-        { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-
-    // Call onSettled if provided
-    if (opts.onSettled) {
-      try {
-        await opts.onSettled({
-          req,
-          response,
-          mode: 'arc-native',
-          paymentId,
-          transaction: settleResult.transaction ?? null,
-          payer: authorization.from as string,
-          payTo: requirements.payTo,
-          amount: requirements.amount,
-          resource: opts.resource,
-        });
-      } catch (settledErr) {
-        console.error('[x402] onSettled hook failed', { resource: opts.resource, paymentId });
-        return NextResponse.json(
-          {
-            ok: false,
-            error: 'job_settlement_record_failed',
-            message: 'onSettled hook failed.',
-            paymentId,
-            transaction: settleResult.transaction ?? null,
-          },
-          { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-        );
-      }
-    }
-
-    // Consume rail session (one-shot)
-    if (railSessionId) consumeRailSession(railSessionId);
-
-    const paymentResponse = {
-      success: true,
-      mode: 'arc-native',
-      transaction: settleResult.transaction,
-      network: requirements.network,
-      payer: authorization.from as string,
-      amount: requirements.amount,
-      paymentId,
-    };
-
-    response.headers.set('PAYMENT-RESPONSE', encodePaymentResponse(paymentResponse));
-    await emitX402LiveEvent({
-      req,
-      response,
-      opts,
-      mode: 'arc-native',
-      paymentId,
-      payer: authorization.from as string,
-      transaction: settleResult.transaction ?? null,
-      amount: requirements.amount,
-    });
-    return response;
-  }
-
-  const resourcePaymentKey = buildResourcePaymentKey({
-    sessionId: inputSessionId,
-    scope,
-    role: resourceRole,
-    resource: opts.resource,
-  });
-  const existingResourcePayment = await getResourcePayment(resourcePaymentKey);
-  if (existingResourcePayment?.status === 'settled') {
-    const paymentResponse = {
-      success: true,
-      mode: 'arc-native' as const,
-      transaction: existingResourcePayment.transaction ?? null,
-      network: ARC_TESTNET_CAIP2_NETWORK,
-      payer: existingResourcePayment.payer,
-      payTo: existingResourcePayment.payTo,
-      amount: existingResourcePayment.amount,
-      paymentId: existingResourcePayment.paymentId,
-    };
-
-    // Call onSettled if provided — idempotent, safe on job settlement retry
-    if (opts.onSettled) {
-      try {
-        await opts.onSettled({
-          req,
-          response: NextResponse.json(
-            {
-              ok: true,
-              error: 'session_already_paid',
-              sessionId: existingResourcePayment.sessionId,
-              scope: existingResourcePayment.scope,
-              role: existingResourcePayment.role,
-              paymentId: existingResourcePayment.paymentId,
-              transaction: existingResourcePayment.transaction ?? null,
-              payer: existingResourcePayment.payer,
-              payTo: existingResourcePayment.payTo,
-              amount: existingResourcePayment.amount,
-              mode: 'arc-native',
-            },
-            {
-              status: 200,
-              headers: {
-                'X-402-Version': String(X402_VERSION_V2),
-                'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse),
-              },
-            },
-          ),
-          mode: 'arc-native',
-          paymentId: existingResourcePayment.paymentId,
-          transaction: existingResourcePayment.transaction ?? null,
-          payer: existingResourcePayment.payer,
-          payTo: existingResourcePayment.payTo,
-          amount: existingResourcePayment.amount,
-          resource: opts.resource,
-        });
-      } catch (settledErr) {
-        const msg = settledErr instanceof Error ? settledErr.message : 'onSettled hook failed';
-        console.error('[x402] onSettled hook failed for %s:', opts.resource, msg);
-        return NextResponse.json(
-          {
-            ok: false,
-            error: 'job_settlement_record_failed',
-            message: msg,
-            paymentId: existingResourcePayment.paymentId,
-            transaction: existingResourcePayment.transaction ?? null,
-          },
-          { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-        );
-      }
-    }
-
-    return NextResponse.json(
-      {
-        ok: true,
-        error: 'session_already_paid',
-        sessionId: existingResourcePayment.sessionId,
-        scope: existingResourcePayment.scope,
-        role: existingResourcePayment.role,
-        paymentId: existingResourcePayment.paymentId,
-        transaction: existingResourcePayment.transaction ?? null,
-        payer: existingResourcePayment.payer,
-        payTo: existingResourcePayment.payTo,
-        amount: existingResourcePayment.amount,
-        mode: 'arc-native',
-      },
-      {
-        status: 200,
-        headers: {
-          'X-402-Version': String(X402_VERSION_V2),
-          'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse),
-        },
-      },
-    );
-  }
-
-  // ─── VERIFY-FIRST PATTERN: Execute handler BEFORE settlement ──────────────
-  // Rationale: If handler fails (DB error, timeout, panic), user should NOT be
-  // charged. Settlement is irreversible on-chain. Handler success is the gate.
-  //
-  // Order: verify (done above) → handler → settle → consume
-  // Replay/double-spend protection is enforced by EIP-3009 nonce usage +
-  // consumeNativePayment(paymentId). No per-payer time lock: reviewers can run
-  // multiple fresh payments with fresh nonces.
-
-  let response: NextResponse;
-  try {
-    response = await handler(req);
-  } catch (handlerErr) {
-    const msg = handlerErr instanceof Error ? handlerErr.message : 'Handler execution failed';
-    return NextResponse.json(
-      { ok: false, error: 'handler_failed', message: msg },
-      { status: 500, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
-  }
-
-  // Handler succeeded — check response status (non-2xx = logical failure)
-  if (response.status >= 400) {
-    return response; // Pass through handler's error response without settling
-  }
-
-  const paymentId = deriveNativePaymentId({
-    network: requirements.network,
-    asset: requirements.asset,
-    from: authorization.from as string,
-    nonce: authorization.nonce as string,
-  });
-  const claim = await claimResourcePayment({
-    paymentKey: resourcePaymentKey,
-    sessionId: inputSessionId,
-    scope,
-    role: resourceRole,
-    payer: String(authorization.from),
-    resource: opts.resource,
-    payTo: String(requirements.payTo),
-    amount: requirements.amount,
-    mode: 'arc-native',
-    status: 'pending',
-    paymentId,
-    transaction: null,
-  });
-  if (claim.kind === 'settled') {
-    const paymentResponse = {
-      success: true,
-      mode: 'arc-native' as const,
-      transaction: claim.record.transaction ?? null,
-      network: ARC_TESTNET_CAIP2_NETWORK,
-      payer: claim.record.payer,
-      payTo: claim.record.payTo,
-      amount: claim.record.amount,
-      paymentId: claim.record.paymentId,
-    };
-
-    // Call onSettled if provided — idempotent, safe on job settlement retry
-    if (opts.onSettled) {
-      try {
-        await opts.onSettled({
-          req,
-          response: NextResponse.json(
-            {
-              ok: true,
-              error: 'session_already_paid',
-              sessionId: claim.record.sessionId,
-              scope: claim.record.scope,
-              role: claim.record.role,
-              paymentId: claim.record.paymentId,
-              transaction: claim.record.transaction ?? null,
-              payer: claim.record.payer,
-              payTo: claim.record.payTo,
-              amount: claim.record.amount,
-              mode: 'arc-native',
-            },
-            {
-              status: 200,
-              headers: {
-                'X-402-Version': String(X402_VERSION_V2),
-                'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse),
-              },
-            },
-          ),
-          mode: 'arc-native',
-          paymentId: claim.record.paymentId,
-          transaction: claim.record.transaction ?? null,
-          payer: claim.record.payer,
-          payTo: claim.record.payTo,
-          amount: claim.record.amount,
-          resource: opts.resource,
-        });
-      } catch (settledErr) {
-        const msg = settledErr instanceof Error ? settledErr.message : 'onSettled hook failed';
-        console.error(
-          '[x402] onSettled hook failed for %s:',
-          String(opts.resource),
-          msg,
-        );
-        return NextResponse.json(
-          {
-            ok: false,
-            error: 'job_settlement_record_failed',
-            message: msg,
-            paymentId: claim.record.paymentId,
-            transaction: claim.record.transaction ?? null,
-          },
-          { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-        );
-      }
-    }
-
-    return NextResponse.json(
-      {
-        ok: true,
-        error: 'session_already_paid',
-        sessionId: claim.record.sessionId,
-        scope: claim.record.scope,
-        role: claim.record.role,
-        paymentId: claim.record.paymentId,
-        transaction: claim.record.transaction ?? null,
-        payer: claim.record.payer,
-        payTo: claim.record.payTo,
-        amount: claim.record.amount,
-        mode: 'arc-native',
-      },
-      {
-        status: 200,
-        headers: {
-          'X-402-Version': String(X402_VERSION_V2),
-          'PAYMENT-RESPONSE': encodePaymentResponse(paymentResponse),
-        },
-      },
-    );
-  }
-  if (claim.kind === 'failed') {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: 'payment_state_failed',
-        message: 'Previous payment attempt for this resource/session/scope/role is in failed state and will not be retried automatically.'
-      },
-      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
-  }
-  if (claim.kind === 'pending') {
-    return NextResponse.json(
-      { ok: false, error: 'payment_in_flight', message: 'Payment is already being processed for this resource/session/scope/role.' },
-      { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
-  }
-
-  // ─── Settle on-chain via relayer (only after handler success) ──────────────
-  let settleResult;
-  try {
-    settleResult = await settleExactPayment({
-      paymentPayload: proof as unknown as PaymentPayload,
-      paymentRequirements: requirements,
-      selfHosted: true,
-    });
-  } catch (settleErr) {
-    const message = settleErr instanceof Error ? settleErr.message : 'unknown_settle_error';
-    await markResourcePaymentFailed(resourcePaymentKey, `settle_exception:${message}`);
-    return NextResponse.json(
-      { ok: false, error: 'settlement_failed', reason: 'settle_exception', message },
-      { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
-  }
-
-  if (!settleResult.success) {
-    if (!settleResult.alreadySettled) {
-      await markResourcePaymentFailed(resourcePaymentKey, settleResult.errorReason ?? settleResult.errorMessage ?? 'settlement_failed');
-      return NextResponse.json(
-        { ok: false, error: 'settlement_failed', reason: settleResult.errorReason, message: settleResult.errorMessage },
-        { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-  }
-
-  // Settlement succeeded or was already settled on-chain.
-  // Mark settled immediately BEFORE consumeNativePayment to ensure the row
-  // status reflects on-chain reality regardless of downstream outcomes.
-  await markResourcePaymentSettled(resourcePaymentKey, {
-    paymentId,
-    transaction: settleResult.transaction ?? null,
-  });
-
-  const consumed = await consumeNativePayment(paymentId);
-  if (consumed.ok === false) {
-    const reason = consumed.reason;
-    if (reason === 'replayed') {
-      return NextResponse.json(
-        { ok: false, error: 'payment_replayed', message: 'This payment has already been consumed.', paymentId },
-        { status: 409, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-    // missing/not_settled — settle just succeeded above, so this shouldn't happen
-    // but guard anyway. Do NOT mark resource payment failed — settlement already
-    // succeeded on-chain and was marked settled.
-    return NextResponse.json(
-      { ok: false, error: 'native_payment_not_consumed', reason, paymentId },
-      { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-    );
-  }
-
-  // ─── Call onSettled AFTER consumeNativePayment succeeds ────────────
-  // Order: markResourcePaymentSettled → consumeNativePayment → onSettled
-  // This ensures job settlement only fires after on-chain consume is confirmed.
-  if (opts.onSettled) {
-    try {
-      await opts.onSettled({
-        req,
-        response,
-        mode: 'arc-native',
-        paymentId,
-        transaction: settleResult.transaction ?? null,
-        payer: authorization.from as string,
-        payTo: requirements.payTo,
-        amount: requirements.amount,
-        resource: opts.resource,
-      });
-    } catch (settledErr) {
-      const msg = settledErr instanceof Error ? settledErr.message : 'onSettled hook failed';
-      console.error('[x402] onSettled hook failed for %s: %s', String(opts.resource), msg);
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'job_settlement_record_failed',
-          message: msg,
-          paymentId,
-          transaction: settleResult.transaction ?? null,
-        },
-        { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
-      );
-    }
-  }
-
-  // Consume rail session (one-shot)
-  if (railSessionId) consumeRailSession(railSessionId);
-
-  // Attach PAYMENT-RESPONSE
-  const paymentResponse = {
-    success: true,
-    mode: 'arc-native',
-    transaction: settleResult.transaction,
-    network: requirements.network,
-    payer: authorization.from as string,
-    amount: requirements.amount,
-    paymentId,
-  };
-
-  const bridgeSessionId = response.headers.get('X-Agent-Bridge-Session-Id');
-  if (bridgeSessionId) {
-    try {
-      const { insertBridgeReceipt } = await import('@/lib/agent-bridge/store');
-      await insertBridgeReceipt({
-        sessionId: bridgeSessionId,
-        receiptType: 'x402_arc_native',
-        paymentId,
-        transaction: settleResult.transaction ?? null,
-        payloadHash: response.headers.get('X-Agent-Bridge-Payload-Hash'),
-        metadata: {
-          role: resourceRole,
-          scope,
-          source: 'x402-autopay',
-          payer: authorization.from,
-          protocolTxMode: 'arc_testnet',
-        },
-      });
-    } catch (err) {
-      console.error('[x402] failed to attach agent bridge receipt', err instanceof Error ? err.message : 'unknown');
-    }
-  }
-
-  response.headers.set('PAYMENT-RESPONSE', encodePaymentResponse(paymentResponse));
-  await emitX402LiveEvent({
-    req,
-    response,
-    opts,
-    mode: 'arc-native',
-    paymentId,
-    payer: authorization.from as string,
-    transaction: settleResult.transaction ?? null,
-    amount: requirements.amount,
-  });
-  return response;
-}
 
 // ─── Main wrapper ────────────────────────────────────────────────────────────
 
 /**
- * Wrap a Next.js route handler with x402 dual-mode payment gating.
+ * Wrap a Next.js route handler with x402 Circle Gateway payment gating.
  *
  * Usage:
  *   export const GET = withX402(handler, { amount: '1', resource: '/api/x402/protected-resource' });
  *
- * Supports both:
- *   - Circle Gateway (PAYMENT-SIGNATURE header with gateway-batched-eip3009 metadata) — batched settlement via Circle facilitator
- *   - Arc Native (PAYMENT-SIGNATURE header with eip3009 metadata, or X-PAYMENT legacy header) — direct EIP-3009 transferWithAuthorization via relayer
+ * Circle Gateway only. Arc Native x402 runtime has been removed.
  */
 export function withX402(
   handler: (req: NextRequest) => Promise<NextResponse>,
@@ -1593,10 +806,30 @@ export function withX402(
 
     // Route to appropriate handler
     try {
-      if (extracted.mode === 'gateway') {
-        return await handleGateway(extracted.proof, opts, handler, req);
+      // Arc Native x402 deprecated — return clear error
+      if (extracted.mode === 'deprecated-native') {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'arc_native_x402_deprecated',
+            message: 'Arc Native x402 has been removed. Use Circle Gateway PAYMENT-SIGNATURE.',
+          },
+          { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
       }
-      return await handleNative(extracted.proof, opts, handler, req);
+      // Arc Native via PAYMENT-SIGNATURE — also deprecated
+      if (extracted.mode === 'native') {
+        console.warn('[x402] Arc Native payment detected — returning deprecated error for %s', String(opts.resource));
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'arc_native_x402_deprecated',
+            message: 'Arc Native x402 has been removed. Use Circle Gateway PAYMENT-SIGNATURE.',
+          },
+          { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
+      }
+      return await handleGateway(extracted.proof, opts, handler, req);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Payment processing error';
       console.error(
@@ -1631,7 +864,8 @@ export function withGateway(
 }
 
 /**
- * Convenience: Arc Native only.
+ * @deprecated Arc Native x402 has been removed. Use withGateway or withX402 with allowedRails: ['circle-gateway-passkey'].
+ * Kept temporarily for test compatibility only.
  */
 export function withNative(
   handler: (req: NextRequest) => Promise<NextResponse>,

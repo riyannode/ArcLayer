@@ -5,6 +5,7 @@ import {
   ARC_TESTNET_CHAIN_ID,
   CIRCLE_BATCHING_NAME,
   CIRCLE_BATCHING_VERSION,
+  CIRCLE_GATEWAY_TIMEOUT_SECONDS,
   GATEWAY_NETWORK_NAME,
   isGatewayEnabled,
   PAYMENT_REQUIRED_HEADER,
@@ -21,11 +22,9 @@ const DEFAULT_AMOUNT_ATOMIC = '1';
 const USDC_SYMBOL = 'USDC';
 const USDC_DECIMALS = 6;
 
-const ARC_NATIVE_RAIL_ID = 'arc-native-eip3009';
 const GATEWAY_RAIL_ID = 'circle-gateway-batched-eip3009';
 
 const RECOMMENDED_PAYMENT_HEADER = 'PAYMENT-SIGNATURE';
-const LEGACY_NATIVE_PAYMENT_HEADER = 'X-PAYMENT';
 const PAYMENT_RESPONSE_HEADER = 'PAYMENT-RESPONSE';
 
 function formatUsdcAtomic(amount: string): string {
@@ -48,34 +47,12 @@ function formatUsdcAtomic(amount: string): string {
 }
 
 export function GET(req: NextRequest) {
-  const maxTimeoutSeconds = Number(process.env.X402_REQUIREMENT_TTL_SECONDS || '300');
+  const maxTimeoutSeconds = Number(process.env.X402_GATEWAY_REQUIREMENT_TTL_SECONDS || String(CIRCLE_GATEWAY_TIMEOUT_SECONDS));
   const amount = process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC;
   const payTo = process.env.X402_RECEIVER_ADDRESS || process.env.X402_PAY_TO;
-  const includeGatewayDemoAccept = process.env.X402_INCLUDE_GATEWAY_DEMO_ACCEPT === 'true';
   const gatewayEnabled = isGatewayEnabled();
   const gatewayContractAddress = gatewayEnabled ? getGatewayContractAddressServer() : null;
   const displayAmount = formatUsdcAtomic(amount);
-
-  const arcNativeExact = {
-    rail: ARC_NATIVE_RAIL_ID,
-    x402Version: X402_VERSION_V2,
-    scheme: 'exact',
-    network: ARC_TESTNET_CAIP2_NETWORK,
-    asset: USDC_ADDRESS,
-    assetSymbol: USDC_SYMBOL,
-    decimals: USDC_DECIMALS,
-    amount,
-    amountAtomic: amount,
-    displayAmount,
-    payTo,
-    facilitator: '/api/x402',
-    maxTimeoutSeconds,
-    extra: {
-      name: USDC_SYMBOL,
-      version: '2',
-      transferMethod: 'eip3009',
-    },
-  };
 
   const gatewayBatched = gatewayContractAddress
     ? {
@@ -103,28 +80,7 @@ export function GET(req: NextRequest) {
     }
     : null;
 
-  const kinds: Array<Record<string, unknown>> = [
-    {
-      rail: ARC_NATIVE_RAIL_ID,
-      x402Version: X402_VERSION_V2,
-      scheme: 'exact',
-      network: ARC_TESTNET_CAIP2_NETWORK,
-      extra: {
-        asset: USDC_ADDRESS,
-        assetSymbol: USDC_SYMBOL,
-        decimals: USDC_DECIMALS,
-        eip712: {
-          name: USDC_SYMBOL,
-          version: '2',
-          chainId: ARC_TESTNET_CHAIN_ID,
-          verifyingContract: USDC_ADDRESS,
-        },
-        transferMethod: 'eip3009',
-        maxTimeoutSeconds,
-        status: 'live',
-      },
-    },
-  ];
+  const kinds: Array<Record<string, unknown>> = [];
 
   if (gatewayContractAddress) {
     kinds.push({
@@ -148,28 +104,9 @@ export function GET(req: NextRequest) {
   }
 
   const accepts: Array<Record<string, unknown>> = [];
-  if (payTo) accepts.push(arcNativeExact);
-  if (gatewayBatched && includeGatewayDemoAccept && payTo) accepts.push(gatewayBatched);
+  if (gatewayBatched && payTo) accepts.push(gatewayBatched);
 
-  const rails: Array<Record<string, unknown>> = [
-    {
-      id: ARC_NATIVE_RAIL_ID,
-      label: 'Arc Native USDC EIP-3009',
-      status: 'live',
-      recommendedFor:
-        'Direct paid API/page unlocks and native Arc Testnet USDC settlement.',
-      x402Version: X402_VERSION_V2,
-      scheme: 'exact',
-      network: ARC_TESTNET_CAIP2_NETWORK,
-      chainId: ARC_TESTNET_CHAIN_ID,
-      asset: USDC_ADDRESS,
-      assetSymbol: USDC_SYMBOL,
-      decimals: USDC_DECIMALS,
-      transferMethod: 'eip3009',
-      header: RECOMMENDED_PAYMENT_HEADER,
-      legacyHeader: LEGACY_NATIVE_PAYMENT_HEADER,
-    },
-  ];
+  const rails: Array<Record<string, unknown>> = [];
 
   if (gatewayContractAddress) {
     rails.push({
@@ -195,13 +132,6 @@ export function GET(req: NextRequest) {
   const networks = gatewayContractAddress
     ? [
       {
-        network: ARC_TESTNET_CAIP2_NETWORK,
-        name: 'Arc Testnet',
-        chainId: ARC_TESTNET_CHAIN_ID,
-        schemes: ['exact'],
-        assets: [{ symbol: USDC_SYMBOL, address: USDC_ADDRESS, decimals: USDC_DECIMALS }],
-      },
-      {
         network: GATEWAY_NETWORK_NAME,
         name: 'Circle Gateway Arc Testnet',
         chainId: ARC_TESTNET_CHAIN_ID,
@@ -212,19 +142,11 @@ export function GET(req: NextRequest) {
         contracts: { gatewayWallet: gatewayContractAddress },
       },
     ]
-    : [
-      {
-        network: ARC_TESTNET_CAIP2_NETWORK,
-        name: 'Arc Testnet',
-        chainId: ARC_TESTNET_CHAIN_ID,
-        schemes: ['exact'],
-        assets: [{ symbol: USDC_SYMBOL, address: USDC_ADDRESS, decimals: USDC_DECIMALS }],
-      },
-    ];
+    : [];
 
   return humanJson(req, {
     description:
-      'ArcLayer x402 discovery endpoint for Arc Testnet. Supports Arc Native EIP-3009 payments and Circle Gateway batched EIP-3009 nanopayments.',
+      'ArcLayer x402 discovery endpoint for Arc Testnet. Circle Gateway batched EIP-3009 only. Arc Native x402 has been removed.',
 
     kinds,
     accepts,
@@ -233,15 +155,9 @@ export function GET(req: NextRequest) {
     version: String(X402_VERSION_V2),
 
     recommendedHeader: RECOMMENDED_PAYMENT_HEADER,
-    legacyHeader: LEGACY_NATIVE_PAYMENT_HEADER,
 
     headers: {
       recommended: RECOMMENDED_PAYMENT_HEADER,
-      legacyNative: LEGACY_NATIVE_PAYMENT_HEADER,
-
-      // Backward-compatible existing keys.
-      arcNative: LEGACY_NATIVE_PAYMENT_HEADER,
-      gatewayPreferred: RECOMMENDED_PAYMENT_HEADER,
 
       required: PAYMENT_REQUIRED_HEADER,
       response: PAYMENT_RESPONSE_HEADER,
@@ -259,7 +175,8 @@ export function GET(req: NextRequest) {
       'Protected resources return a 402 challenge with PAYMENT-REQUIRED.',
       `Amounts are USDC atomic units. USDC has ${USDC_DECIMALS} decimals, so amount 1 means 0.000001 USDC.`,
       'Circle Gateway is a payment rail on Arc Testnet, not a separate chain.',
-      'Use PAYMENT-SIGNATURE for x402 v2 clients. X-PAYMENT is kept as a legacy/native fallback header.',
+      'Arc Native x402 runtime has been removed. Use Circle Gateway PAYMENT-SIGNATURE.',
+      'X-PAYMENT header is deprecated and unsupported.',
     ],
 
     rails,

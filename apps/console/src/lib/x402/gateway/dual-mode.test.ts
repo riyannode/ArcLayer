@@ -1,8 +1,9 @@
 /**
- * Minimal unit tests for dual-mode x402 routing logic.
+ * Minimal unit tests for Gateway x402 routing logic.
  * Covers: isBatchPayment routing, paymentId derivation stability,
- * replay protection (mocked Supabase), accepted_pending_settlement handling,
- * and /supported response shape.
+ * replay protection (mocked Supabase), accepted_pending_settlement handling.
+ *
+ * Arc Native x402 runtime has been removed. Gateway is the only active rail.
  */
 import { describe, expect, it, beforeAll, beforeEach, vi } from 'vitest';
 
