@@ -1642,7 +1642,8 @@ export function withGateway(
 }
 
 /**
- * Convenience: Arc Native only.
+ * @deprecated Arc Native x402 has been removed. Use withGateway or withX402 with allowedRails: ['circle-gateway-passkey'].
+ * Kept temporarily for test compatibility only.
  */
 export function withNative(
   handler: (req: NextRequest) => Promise<NextResponse>,

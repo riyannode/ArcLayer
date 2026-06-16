@@ -7,8 +7,6 @@ import {
   deriveGatewayPaymentId,
   claimGatewaySettlement,
   consumeGatewayPayment,
-  settleExactPayment,
-  verifyExactEvmPayment,
   X402_VERSION_V2,
 } from '@/lib/x402';
 import type { PaymentPayload, PaymentRequirements } from '@/lib/x402';
@@ -114,18 +112,15 @@ export function parseDualPaymentBody(body: Record<string, unknown> | null): Pars
 }
 
 async function verifyParsedPayment(parsed: ParsedOk): Promise<DualVerifyResult> {
-  if (parsed.mode === 'gateway') {
-    const facilitator = getBatchFacilitatorClient();
-    return facilitator.verify(
-      parsed.paymentPayload as unknown as Parameters<typeof facilitator.verify>[0],
-      parsed.paymentRequirements as unknown as Parameters<typeof facilitator.verify>[1],
-    ) as Promise<DualVerifyResult>;
+  if (parsed.mode !== 'gateway') {
+    return { isValid: false, invalidReason: 'arc_native_x402_deprecated: Arc Native x402 has been removed. Use Circle Gateway.' };
   }
 
-  return verifyExactEvmPayment({
-    paymentPayload: parsed.paymentPayload as PaymentPayload,
-    paymentRequirements: parsed.paymentRequirements as PaymentRequirements,
-  }) as Promise<DualVerifyResult>;
+  const facilitator = getBatchFacilitatorClient();
+  return facilitator.verify(
+    parsed.paymentPayload as unknown as Parameters<typeof facilitator.verify>[0],
+    parsed.paymentRequirements as unknown as Parameters<typeof facilitator.verify>[1],
+  ) as Promise<DualVerifyResult>;
 }
 
 export async function parseDualPaymentRequest(req: Request): Promise<Parsed> {
@@ -240,10 +235,10 @@ export async function settleDualPayment(req: Request) {
     return { parsed, result, settleResult };
   }
 
-  const settleResult = await settleExactPayment({
-    paymentPayload: parsed.paymentPayload as PaymentPayload,
-    paymentRequirements: parsed.paymentRequirements as PaymentRequirements,
-    selfHosted: true,
-  });
-  return { parsed, result, settleResult };
+  // Arc Native x402 deprecated
+  return {
+    parsed,
+    result,
+    settleResult: { success: false, errorReason: 'arc_native_x402_deprecated', transaction: null, payer: result.payer },
+  };
 }
