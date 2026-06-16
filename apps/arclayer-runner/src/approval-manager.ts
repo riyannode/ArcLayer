@@ -673,9 +673,10 @@ export class ApprovalManager {
               txHash: resultObj.txHash ?? existingResult.txHash,
               errorCode, reason: resultObj.reason,
               tokenId: resultObj.tokenId, agentId: resultObj.agentId,
+              agentVisible: resultObj.agentVisible,
             };
             this.store.transitionToFailedWithResult(approvalId, reason, failResult);
-            return { ok: false, approvalId, state: "failed", errorCode, error: reason.slice(0, 500) };
+            return { ok: false, approvalId, state: "failed", errorCode, txHash: resultObj.txHash as string | undefined ?? existingResult.txHash as string, agentVisible: resultObj.agentVisible as boolean | undefined, error: reason.slice(0, 500) };
           }
 
           // Success!
@@ -785,8 +786,9 @@ export class ApprovalManager {
           errorCode,
           tokenId: resultObj.tokenId as string | undefined,
           agentId: resultObj.agentId as string | undefined,
+          agentVisible: resultObj.agentVisible as boolean | undefined,
         });
-        return { ok: false, approvalId, state: "failed", errorCode, txHash: resultObj.txHash as string | undefined, error: reason.slice(0, 500) };
+        return { ok: false, approvalId, state: "failed", errorCode, txHash: resultObj.txHash as string | undefined, agentVisible: resultObj.agentVisible as boolean | undefined, error: reason.slice(0, 500) };
       }
 
       // Extract results

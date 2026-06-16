@@ -276,11 +276,12 @@ export class ApprovalStore {
       ).all(...states, limit) as ApprovalRow[];
     }
     const records = rows.map(mapRow);
-    // Check-on-read: expire stale pending approvals before returning
+    // Check-on-read: expire stale pending/approved approvals before returning
     for (const record of records) {
       this.checkAndExpire(record);
     }
-    return records;
+    // Filter out records that were just expired by checkAndExpire
+    return records.filter(r => states.includes(r.state));
   }
 
   /**
@@ -307,10 +308,14 @@ export class ApprovalStore {
       ).all(...activeStates, limit) as ApprovalRow[];
     }
     // Refresh each record via get() to trigger checkAndExpire on stale pending/approved
-    return rows
+    // Filter out records that expired during refresh (state changed to 'expired')
+    const allCandidates = rows
       .map(mapRow)
       .map((record) => this.get(record.approvalId))
       .filter((record): record is ApprovalRecord => Boolean(record));
+    return allCandidates.filter(
+      (r) => r.state !== "expired"
+    );
   }
 
   // ── Transitions ──────────────────────────────────────────────────────
@@ -518,13 +523,13 @@ export class ApprovalStore {
   // ── Expiry ───────────────────────────────────────────────────────────
 
   private checkAndExpire(record: ApprovalRecord): void {
-    if (record.state !== "pending") return;
+    if (record.state !== "pending" && record.state !== "approved") return;
 
     const now = new Date().toISOString();
     if (record.expiresAt > now) return;
 
     this.db.prepare(
-      "UPDATE approvals SET state = 'expired', updated_at = ? WHERE approval_id = ? AND state = 'pending'"
+      "UPDATE approvals SET state = 'expired', updated_at = ? WHERE approval_id = ? AND state IN ('pending', 'approved')"
     ).run(now, record.approvalId);
 
     record.state = "expired";
