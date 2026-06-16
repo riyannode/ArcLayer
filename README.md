@@ -20,7 +20,7 @@ ArcLayer connects:
 
 * **Arc reference ERC-8004 identity** — agents register through Arc IdentityRegistry and receive an on-chain agent ID.
 * **Arc reference ERC-8183 job settlement** — clients, providers, and evaluators use AgenticCommerce-style job lifecycle transactions.
-* **x402 paid access** — API/resource access paid through dual exact rails: Arc Native EIP-3009 and Circle Gateway batched EIP-3009.
+* **x402 paid access** — API/resource access paid through Circle Gateway batched EIP-3009 (Arc Native x402 removed; Gateway is the only active rail).
 * **External runtime onboarding** — API keys, scoped permissions, heartbeats, and live events.
 * **Agent discovery** — public roster, metadata manifests, presence, and category-based discovery.
 * **Proof history UI** — payload hashes, tx hashes, receipts, live payment events, and job lifecycle history.
@@ -60,9 +60,9 @@ Users connect an EOA as the owner and funding wallet. When the Circle Agent Wall
 
 ---
 
-## Two Payment Rails
+## Two Settlement Rails
 
-ArcLayer supports two practical settlement rails.
+ArcLayer supports two practical settlement rails. Circle Gateway is the only active x402 rail.
 
 ### 1. Access Rail — x402 Paid Access
 
@@ -76,8 +76,8 @@ Current surface:
 
 * Routes: `/api/x402/*`
 * Supported discovery: `/api/x402/supported`
-* Arc Native rail: EIP-3009 USDC via X-PAYMENT
-* Circle Gateway rail: batched EIP-3009 via PAYMENT-SIGNATURE when `X402_GATEWAY_ENABLED=true`
+* Arc Native rail: **Removed** (was EIP-3009 USDC via X-PAYMENT; kept as historical reference)
+* Circle Gateway rail: batched EIP-3009 via PAYMENT-SIGNATURE (active; Gateway-only)
 * Middleware: 402 challenge → verify → settle → replay guard → PAYMENT-RESPONSE
 * Receipts: payment ID, tx/settlement ref, payer, amount, resource, rail mode
 * Safety: rail sessions, access sessions, replay protection, and optional agent payer binding
@@ -158,8 +158,9 @@ Then the caller signs an EIP-3009 authorization and retries with a payment heade
 
 Supported x402 surfaces include:
 
-* Arc Native USDC settlement
-* EIP-3009 `transferWithAuthorization`
+* ~~Arc Native USDC settlement~~ (removed)
+* ~~EIP-3009 `transferWithAuthorization` via X-PAYMENT~~ (removed)
+* Circle Gateway batched EIP-3009 settlement
 * Replay protection
 * Payment ID derivation
 * Payment receipts
@@ -319,7 +320,7 @@ pnpm test:contracts   # Contract tests
 
 * ArcLayer does not custody user signing material for ERC-8004 or ERC-8183 transactions.
 * ERC-8183 jobs return transaction instructions for the user or bot wallet to sign.
-* x402 Arc Native settlement uses a relayer key only for broadcasting signed EIP-3009 authorizations.
+* ~~x402 Arc Native settlement uses a relayer key~~ (removed; Circle Gateway is the only active x402 rail).
 * API keys are scoped per agent and per action.
 * Live event and presence writes require API key or configured server token.
 * Prediction-market bots are dry-run/demo agents.
@@ -337,7 +338,7 @@ Current working surfaces:
 * Circle Agent Account profile flow
 * MCP identity approval flow with approval URLs
 * Arc reference ERC-8183 job settlement integration
-* Dual x402 exact rails: Arc Native EIP-3009 and Circle Gateway batched EIP-3009
+* Gateway-only x402 rail: Circle Gateway batched EIP-3009 (Arc Native x402 removed)
 * Scoped agent API keys for external runtimes
 * External runtime support
 * A2A agent discovery, presence, and live events

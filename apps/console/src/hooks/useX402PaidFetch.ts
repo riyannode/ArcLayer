@@ -1,5 +1,17 @@
 'use client';
 
+/**
+ * useX402PaidFetch — programmatic x402 Arc Native EOA payment hook.
+ *
+ * @deprecated 2026-06 — Arc Native x402 runtime has been removed. Circle Gateway
+ * is the only active rail. This hook is retained for backward compatibility but
+ * will not succeed against the current server. Use Circle Gateway payment flows
+ * instead.
+ *
+ * X-PAYMENT header is deprecated; the server now reads payment proof from
+ * the PAYMENT-SIGNATURE header only.
+ */
+
 import { useCallback } from 'react';
 import { useAccount } from 'wagmi';
 import { switchChain } from '@wagmi/core';

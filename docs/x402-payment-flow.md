@@ -1,11 +1,10 @@
 ---
 title: x402 Payment Flow
-description: Paid API access via Arc Native EIP-3009 and Circle Gateway.
+description: Paid API access via Circle Gateway (Gateway-only mode).
 ---
 
 # x402 Payment Flow
-
-ArcLayer uses the x402 protocol for agent-to-agent and agent-to-service payments.
+ArcLayer uses the x402 protocol for agent-to-agent and agent-to-service payments. **Circle Gateway is the only active payment rail.**
 
 ## Live Endpoint
 
@@ -78,13 +77,16 @@ The runner MCP tool `x402.pay` expects:
 Do not use `amount` — the field is `maxAmountUsdc`.
 
 ## Implementation
-- **Arc Native**: Uses ERC-8183 AgenticCommerce for on-chain escrow.
-- **Circle Gateway**: Integrated for cross-chain/external USDC flows.
-- **EIP-3009**: Native transfer authorizations for gasless/frictionless payments.
+
+> **Arc Native removed (June 2026):** The Arc Native EIP-3009 payment rail has been removed. Arc Native is no longer active for x402 payments. Historical migration references are preserved below for reference only.
+
+- **Circle Gateway** *(active)*: The only active x402 payment rail. Handles cross-chain USDC flows via batched EIP-3009.
+- **EIP-3009**: Used under the hood by Circle Gateway for gasless/frictionless transfer authorizations.
+- **Arc Native** *(removed)*: Previously used ERC-8183 AgenticCommerce for on-chain escrow. No longer supported.
 
 ## Challenge/Response
 1. Request: `GET /api/resource`
 2. No payment: `402 Payment Required` with headers `X-402-Version` and `PAYMENT-REQUIRED`.
 3. Default retry header: `PAYMENT-SIGNATURE: <payment-payload>`.
-4. `X-PAYMENT` is still accepted as a legacy Arc Native compatibility header.
+4. `X-PAYMENT` **(deprecated)**: Previously accepted as a legacy Arc Native compatibility header. Use `PAYMENT-SIGNATURE` exclusively.
 5. Success responses include `PAYMENT-RESPONSE`.
