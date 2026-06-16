@@ -1481,4 +1481,212 @@ describe("ApprovalManager", () => {
       expect(retryResult.txHash).toBe("0xcombo_retry");
     });
   });
+
+  // ── Dedup beyond pending (Fix 2) ────────────────────────────────────────
+
+  describe("findExistingByErc8004Signature", () => {
+    it("blocks duplicate pending approval", () => {
+      const created = manager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: erc8004Params(),
+      });
+
+      const existing = manager.findExistingByErc8004Signature(
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "https://example.com/metadata.json",
+        "provider",
+      );
+      expect(existing).toBeDefined();
+      expect(existing!.approvalId).toBe(created.approvalId);
+      expect(existing!.state).toBe("pending");
+    });
+
+    it("blocks duplicate approved approval", () => {
+      const created = manager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: erc8004Params(),
+      });
+      manager.approveById(created.approvalId);
+
+      const existing = manager.findExistingByErc8004Signature(
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "https://example.com/metadata.json",
+        "provider",
+      );
+      expect(existing).toBeDefined();
+      expect(existing!.approvalId).toBe(created.approvalId);
+      expect(existing!.state).toBe("approved");
+    });
+
+    it("blocks duplicate executing approval", async () => {
+      // Slow execution to keep in executing state
+      let resolveExec: (v: any) => void;
+      mockServices.registerErc8004WithApproval.mockReturnValueOnce(
+        new Promise((resolve) => { resolveExec = resolve; })
+      );
+
+      const created = manager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: erc8004Params(),
+      });
+      manager.approveById(created.approvalId);
+
+      // Start execution (don't await yet)
+      const execPromise = manager.executeErc8004Registration(created.approvalId);
+
+      const existing = manager.findExistingByErc8004Signature(
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "https://example.com/metadata.json",
+        "provider",
+      );
+      expect(existing).toBeDefined();
+      expect(existing!.approvalId).toBe(created.approvalId);
+      expect(existing!.state).toBe("executing");
+
+      // Cleanup
+      resolveExec!({ ok: true, txHash: "0xdup", tokenId: "1", agentId: "1", agentVisible: true });
+      await execPromise;
+    });
+
+    it("returns executed approval for idempotent lookup", async () => {
+      const created = manager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: erc8004Params(),
+      });
+      manager.approveById(created.approvalId);
+      await manager.executeErc8004Registration(created.approvalId);
+
+      const existing = manager.findExistingByErc8004Signature(
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "https://example.com/metadata.json",
+        "provider",
+      );
+      expect(existing).toBeDefined();
+      expect(existing!.approvalId).toBe(created.approvalId);
+      expect(existing!.state).toBe("executed");
+      expect(existing!.txHash).toBe("0xerc8004");
+    });
+
+    it("does not block on failed approval — allows new creation", () => {
+      // Create an approval and put it through to failed via proper state flow
+      const created = manager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: erc8004Params(),
+      });
+      manager.approveById(created.approvalId);
+      // Must be in executing state before transitionToFailed (WHERE state = 'executing')
+      manager.store.transitionFromApprovedToExecuting(created.approvalId);
+      manager.store.transitionToFailed(created.approvalId, "test failure");
+
+      const existing = manager.findExistingByErc8004Signature(
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "https://example.com/metadata.json",
+        "provider",
+      );
+      expect(existing).toBeUndefined();
+    });
+
+    it("does not block on rejected approval — allows new creation", () => {
+      const created = manager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: erc8004Params(),
+      });
+      manager.reject({ approvalId: created.approvalId, walletAddress: WALLET_A, role: "client" });
+
+      const existing = manager.findExistingByErc8004Signature(
+        "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "https://example.com/metadata.json",
+        "provider",
+      );
+      expect(existing).toBeUndefined();
+    });
+  });
+
+  // ── txHash preservation on persistence failure (Fix 5) ──────────────────
+
+  describe("txHash preservation on failed_persistence", () => {
+    it("preserves txHash when service returns ok:false + txHash + failed_persistence", async () => {
+      mockServices.registerErc8004WithApproval.mockResolvedValueOnce({
+        ok: false, txHash: "0xfailedpersist", agentVisible: false,
+        errorCode: "failed_persistence",
+        reason: "Supabase upsert failed",
+        tokenId: "99999", agentId: "99999",
+      });
+
+      const created = manager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: erc8004Params(),
+      });
+      manager.approveById(created.approvalId);
+
+      const result = await manager.executeErc8004Registration(created.approvalId);
+      expect(result.ok).toBe(false);
+      expect(result.state).toBe("failed");
+      expect(result.errorCode).toBe("failed_persistence");
+
+      // Verify the approval record preserves txHash
+      const record = manager.store.get(created.approvalId)!;
+      expect(record.state).toBe("failed");
+      expect(record.txHash).toBe("0xfailedpersist");
+
+      // Verify resultJson contains txHash and errorCode
+      const resultJson = JSON.parse(record.resultJson!);
+      expect(resultJson.txHash).toBe("0xfailedpersist");
+      expect(resultJson.errorCode).toBe("failed_persistence");
+    });
+
+    it("preserves txHash on retry path non-retryable failure", async () => {
+      // First: 425 retryable
+      mockServices.registerErc8004WithApproval.mockResolvedValueOnce({
+        ok: false, txHash: "0xretryfail", agentVisible: false,
+        errorCode: "sync_pending_retryable", retryable: true,
+        reason: "Not mined yet",
+      });
+
+      const created = manager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: erc8004Params(),
+      });
+      manager.approveById(created.approvalId);
+      await manager.executeErc8004Registration(created.approvalId);
+
+      // Second: non-retryable failed_persistence
+      mockServices.registerErc8004WithApproval.mockResolvedValueOnce({
+        ok: false, txHash: "0xretryfail", agentVisible: false,
+        errorCode: "failed_persistence",
+        reason: "Console sync failed permanently",
+        tokenId: "88888", agentId: "88888",
+      });
+
+      const result2 = await manager.executeErc8004Registration(created.approvalId);
+      expect(result2.ok).toBe(false);
+      expect(result2.state).toBe("failed");
+      expect(result2.errorCode).toBe("failed_persistence");
+
+      // Verify the approval record preserves txHash
+      const record = manager.store.get(created.approvalId)!;
+      expect(record.state).toBe("failed");
+      expect(record.txHash).toBe("0xretryfail");
+      expect(record.resultJson).toBeTruthy();
+      const resultJson = JSON.parse(record.resultJson!);
+      expect(resultJson.txHash).toBe("0xretryfail");
+      expect(resultJson.errorCode).toBe("failed_persistence");
+    });
+  });
 });

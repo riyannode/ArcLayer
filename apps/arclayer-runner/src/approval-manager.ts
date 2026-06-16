@@ -524,14 +524,14 @@ export class ApprovalManager {
     return { ok: true, approvalId, state: "rejected" };
   }
 
-  /** Find existing pending erc8004_register_agent approval with same controller + metadataURI + role. */
-  findPendingByErc8004Signature(
+  /** Find existing erc8004_register_agent approval with same controller + metadataURI + role in active states. */
+  findExistingByErc8004Signature(
     controllerAddress: string,
     metadataURI: string,
     role: string,
   ): ApprovalRecord | undefined {
-    const pending = this.store.listPending(controllerAddress.toLowerCase());
-    return pending.find((a) => {
+    const active = this.store.listActiveByWallet(controllerAddress.toLowerCase());
+    return active.find((a) => {
       if (a.actionType !== "erc8004_register_agent") return false;
       try {
         const params = JSON.parse(a.paramsJson) as Record<string, unknown>;
@@ -658,8 +658,13 @@ export class ApprovalManager {
               };
             }
 
-            // Non-retryable failure
-            this.store.transitionToFailed(approvalId, reason);
+            // Non-retryable failure — preserve txHash for reconciliation
+            const failResult: Record<string, unknown> = {
+              txHash: resultObj.txHash ?? existingResult.txHash,
+              errorCode, reason: resultObj.reason,
+              tokenId: resultObj.tokenId, agentId: resultObj.agentId,
+            };
+            this.store.transitionToFailedWithResult(approvalId, reason, failResult);
             return { ok: false, approvalId, state: "failed", errorCode, error: reason.slice(0, 500) };
           }
 
@@ -684,7 +689,10 @@ export class ApprovalManager {
                 error: "Sync still pending. Retry after receipt mines.",
               };
             }
-            this.store.transitionToFailed(approvalId, "Retry sync failed: agent not dashboard-visible.");
+            this.store.transitionToFailedWithResult(approvalId, "Retry sync failed: agent not dashboard-visible.", {
+              txHash, errorCode: "failed_persistence",
+              tokenId: resultObj?.tokenId, agentId: resultObj?.agentId,
+            });
             return {
               ok: false, approvalId, state: "failed", txHash,
               errorCode: "failed_persistence",
@@ -761,8 +769,13 @@ export class ApprovalManager {
           };
         }
 
-        this.store.transitionToFailed(approvalId, reason);
-        return { ok: false, approvalId, state: "failed", errorCode, error: reason.slice(0, 500) };
+        this.store.transitionToFailedWithResult(approvalId, reason, {
+          txHash: resultObj.txHash as string | undefined,
+          errorCode,
+          tokenId: resultObj.tokenId as string | undefined,
+          agentId: resultObj.agentId as string | undefined,
+        });
+        return { ok: false, approvalId, state: "failed", errorCode, txHash: resultObj.txHash as string | undefined, error: reason.slice(0, 500) };
       }
 
       // Extract results
@@ -798,8 +811,15 @@ export class ApprovalManager {
           };
         }
 
-        // Non-retryable: real persistence failure
-        this.store.transitionToFailed(approvalId, "On-chain registration succeeded but erc8004_agents upsert failed. Agent is not dashboard-visible.");
+        // Non-retryable: real persistence failure — preserve txHash for reconciliation
+        const failResult: Record<string, unknown> = {
+          txHash, errorCode, reason: resultObj?.reason,
+          tokenId, agentId,
+        };
+        this.store.transitionToFailedWithResult(approvalId,
+          "On-chain registration succeeded but erc8004_agents upsert failed. Agent is not dashboard-visible.",
+          failResult,
+        );
         return {
           ok: false,
           approvalId,

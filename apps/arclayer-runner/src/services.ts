@@ -37,6 +37,41 @@ import { ApprovalManager } from "./approval-manager";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+/** Preflight: verify Console sync endpoint accepts our Bearer token. */
+async function verifyConsoleSyncAuth(
+  syncUrl: string,
+  syncSecret: string,
+  controllerAddress: string,
+  signal?: AbortSignal,
+): Promise<{ ok: true } | { ok: false; errorCode: string; reason: string }> {
+  try {
+    const response = await fetch(syncUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${syncSecret}`,
+      },
+      body: JSON.stringify({ txHash: "bad", controllerAddress, role: "provider" }),
+      signal,
+    });
+    const json = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (response.status === 400 && json.error === "invalid_txHash") {
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      errorCode: "sync_auth_preflight_failed",
+      reason: `Console sync auth preflight failed: status=${response.status}, error=${String(json.error ?? "unknown")}`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      errorCode: "sync_auth_preflight_failed",
+      reason: `Console sync auth preflight failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
 /** Map config.chain string to numeric chainId for approval validation. */
 function resolveChainId(chain: string): number {
   const normalized = chain.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -1328,15 +1363,38 @@ export class RunnerServices {
       };
     }
 
-    // Step 2: On-chain registration via Circle CLI
-    // Skip if caller provides a previously-submitted txHash (retry path)
+    // Step 2: Auth preflight + signer check before on-chain tx (skip on retry path)
     const skipOnChainTxHash = params.skipOnChainTxHash as string | undefined;
     let txHash: string;
 
     if (skipOnChainTxHash) {
-      // Retry path: reuse existing txHash, skip Circle CLI
+      // Retry path: reuse existing txHash, skip auth preflight and Circle CLI
       txHash = skipOnChainTxHash;
     } else {
+      // Auth preflight: verify Console accepts our Bearer token BEFORE submitting irreversible tx
+      const syncUrl = `${consoleUrl.replace(/\/$/, "")}/api/erc8004/register/sync`;
+      const preflight = await verifyConsoleSyncAuth(syncUrl, syncSecret, controllerAddress, signal);
+      if (!preflight.ok) {
+        return { ok: false, agentVisible: false, ...preflight };
+      }
+
+      // Verify controller matches configured Circle signer
+      const configuredSigner = process.env.CIRCLE_WALLET_ADDRESS;
+      if (!configuredSigner) {
+        return {
+          ok: false, agentVisible: false,
+          errorCode: "controller_signer_mismatch",
+          reason: "CIRCLE_WALLET_ADDRESS not configured — cannot verify signer",
+        };
+      }
+      if (controllerAddress.toLowerCase() !== configuredSigner.toLowerCase()) {
+        return {
+          ok: false, agentVisible: false,
+          errorCode: "controller_signer_mismatch",
+          reason: `Approved controller ${controllerAddress} does not match configured Circle signer ${configuredSigner}`,
+        };
+      }
+
       const registerResult = await this.registerIdentityViaCircleCli(
         { metadataURI },
         signal,

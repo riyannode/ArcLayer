@@ -262,6 +262,22 @@ export class ApprovalStore {
     return records.filter(r => r.state === "pending");
   }
 
+  /** List approvals in active states (pending/approved/executing/executed) for a wallet. */
+  listActiveByWallet(walletAddress?: string, limit = 50): ApprovalRecord[] {
+    const states = ["pending", "approved", "executing", "executed"];
+    let rows: ApprovalRow[];
+    if (walletAddress) {
+      rows = this.db.prepare(
+        `SELECT * FROM approvals WHERE state IN (?, ?, ?, ?) AND wallet_address = ? ORDER BY created_at DESC LIMIT ?`
+      ).all(...states, walletAddress.toLowerCase(), limit) as ApprovalRow[];
+    } else {
+      rows = this.db.prepare(
+        `SELECT * FROM approvals WHERE state IN (?, ?, ?, ?) ORDER BY created_at DESC LIMIT ?`
+      ).all(...states, limit) as ApprovalRow[];
+    }
+    return rows.map(mapRow);
+  }
+
   // ── Transitions ──────────────────────────────────────────────────────
 
   /**
@@ -391,6 +407,30 @@ export class ApprovalStore {
       WHERE approval_id = ? AND state = 'executing'
     `).run(errorMessage.slice(0, 500), now, approvalId);
 
+    return this.get(approvalId)!;
+  }
+
+  /**
+   * Transition from executing → failed, preserving result data (txHash, etc.)
+   * for reconciliation even when persistence/sync failed.
+   */
+  transitionToFailedWithResult(
+    approvalId: string,
+    errorMessage: string,
+    result?: Record<string, unknown>,
+  ): ApprovalRecord {
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      UPDATE approvals
+      SET state = 'failed', error_message = ?, result_json = ?, tx_hash = ?, updated_at = ?
+      WHERE approval_id = ? AND state = 'executing'
+    `).run(
+      errorMessage.slice(0, 500),
+      result ? JSON.stringify(result) : null,
+      result?.txHash ? String(result.txHash) : null,
+      now,
+      approvalId,
+    );
     return this.get(approvalId)!;
   }
 

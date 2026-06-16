@@ -170,7 +170,17 @@ export const Erc8004RegisterApprovalCreateInputSchema = z.object({
   ownerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "ownerAddress must be a valid EVM address"),
   agentName: z.string().min(1, "agentName is required").max(128),
   role: z.enum(["provider", "evaluator"], { errorMap: () => ({ message: "role must be provider or evaluator" }) }),
-  metadataURI: z.string().min(1, "metadataURI is required"),
+  metadataURI: z.string().min(1, "metadataURI is required").refine(
+    (value) => {
+      try {
+        const parsed = new URL(value);
+        return ["http:", "https:", "ipfs:"].includes(parsed.protocol);
+      } catch {
+        return false;
+      }
+    },
+    "metadataURI must be a valid http(s):// or ipfs:// URI"
+  ),
   metadataJson: z.record(z.unknown()).optional(),
   chainId: z.number().int().positive().optional(),
   registryAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),

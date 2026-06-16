@@ -679,21 +679,41 @@ export async function handleMcpTool(
         registryAddress: input.registryAddress ?? "0x8004A818BFB912233c491871b3d84c89A494BD9e",
       };
 
-      // Duplicate protection: check for existing pending approval with same controller + metadataURI + role
-      const existingPending = services.approvalManager.findPendingByErc8004Signature(
+      // Duplicate protection: check for existing approval with same controller + metadataURI + role (in active states)
+      const existingApproval = services.approvalManager.findExistingByErc8004Signature(
         input.controllerAddress,
         input.metadataURI,
         input.role,
       );
-      if (existingPending) {
-        return {
-          ok: true,
-          approvalId: existingPending.approvalId,
-          state: existingPending.state,
-          duplicate: true,
-          message: `Pending approval already exists for ${input.role} registration with this controller and metadata URI.`,
-          renderableMessage: services.approvalManager.buildRenderableMessage(existingPending),
-        };
+      if (existingApproval) {
+        const isActive = ["pending", "approved", "executing"].includes(existingApproval.state);
+        if (isActive) {
+          return {
+            ok: true,
+            approvalId: existingApproval.approvalId,
+            state: existingApproval.state,
+            duplicate: true,
+            message: `Approval already exists for ${input.role} registration with this controller and metadata URI (state: ${existingApproval.state}).`,
+            renderableMessage: services.approvalManager.buildRenderableMessage(existingApproval),
+          };
+        }
+        // executed — return idempotent/existing with result data
+        if (existingApproval.state === "executed") {
+          const resultData = existingApproval.resultJson
+            ? JSON.parse(existingApproval.resultJson) as Record<string, unknown>
+            : {};
+          return {
+            ok: true,
+            approvalId: existingApproval.approvalId,
+            state: existingApproval.state,
+            duplicate: true,
+            idempotent: true,
+            txHash: existingApproval.txHash ?? resultData.txHash as string | undefined,
+            tokenId: resultData.tokenId as string | undefined,
+            agentId: resultData.agentId as string | undefined,
+            message: `ERC-8004 registration already executed for ${input.role} with this controller and metadata URI.`,
+          };
+        }
       }
 
       return services.approvalManager.createApproval({
