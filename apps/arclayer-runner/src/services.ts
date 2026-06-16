@@ -1277,6 +1277,126 @@ export class RunnerServices {
   }
 
   /**
+   * Register ERC-8004 identity via Circle CLI and sync to erc8004_agents.
+   * Called by ApprovalManager after approval is approved.
+   *
+   * Success = tx ✓ + upsert ✓ + visible in GET /api/erc8004/agents ✓
+   * If tx succeeds but sync fails, returns ok: false with errorCode: failed_persistence.
+   */
+  async registerErc8004WithApproval(
+    params: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<{
+    ok: boolean;
+    txHash?: string;
+    tokenId?: string;
+    agentId?: string;
+    agentVisible?: boolean;
+    errorCode?: string;
+    reason?: string;
+    [key: string]: unknown;
+  }> {
+    const metadataURI = params.metadataURI as string;
+    const controllerAddress = params.controllerAddress as string;
+    const role = params.role as string;
+    const agentName = params.agentName as string;
+    const metadataJson = params.metadataJson as Record<string, unknown> | undefined;
+    const approvalId = params.approvalId as string | undefined;
+
+    if (!metadataURI) {
+      throw new RunnerError("MISSING_FIELD", "metadataURI is required", 400);
+    }
+
+    // Step 1: Execute on-chain registration via Circle CLI
+    const registerResult = await this.registerIdentityViaCircleCli(
+      { metadataURI },
+      signal,
+    );
+
+    if (!registerResult.ok) {
+      return {
+        ok: false,
+        reason: (registerResult as Record<string, unknown>).reason as string ?? "On-chain registration failed",
+        errorCode: "onchain_failed",
+      };
+    }
+
+    const txHash = registerResult.txHash;
+    if (!txHash) {
+      return {
+        ok: false,
+        reason: "No txHash returned from Circle CLI registration",
+        errorCode: "no_txhash",
+      };
+    }
+
+    // Step 2: Sync to erc8004_agents via Console API
+    const consoleUrl = this.config.consoleUrl ?? process.env.ARCLAYER_CONSOLE_URL;
+    if (!consoleUrl) {
+      // No console URL — registration succeeded on-chain but can't sync to dashboard
+      return {
+        ok: true,
+        txHash,
+        agentVisible: false,
+        errorCode: "no_console_url",
+        reason: "On-chain registration succeeded but consoleUrl not configured for dashboard sync",
+      };
+    }
+
+    try {
+      const syncUrl = `${consoleUrl.replace(/\/$/, "")}/api/erc8004/register/sync`;
+      const syncResponse = await fetch(syncUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          txHash,
+          controllerAddress,
+          role,
+          agentName,
+          metadataJson: metadataJson ?? {},
+          approvalId,
+        }),
+        signal,
+      });
+
+      const syncResult = (await syncResponse.json()) as Record<string, unknown>;
+
+      if (!syncResponse.ok || syncResult.ok !== true) {
+        // Sync failed — tx succeeded but dashboard upsert failed
+        return {
+          ok: false,
+          txHash,
+          tokenId: syncResult.tokenId as string | undefined,
+          agentId: syncResult.agentId as string | undefined,
+          agentVisible: false,
+          errorCode: "failed_persistence",
+          reason: `On-chain tx succeeded but erc8004_agents sync failed: ${syncResult.detail ?? syncResult.error ?? "unknown"}`,
+        };
+      }
+
+      // Full success
+      return {
+        ok: true,
+        txHash,
+        tokenId: syncResult.tokenId as string,
+        agentId: syncResult.agentId as string,
+        agentVisible: syncResult.agentVisible === true,
+        role: syncResult.role as string,
+      };
+    } catch (syncError: unknown) {
+      // Network error calling console — tx succeeded but can't verify dashboard
+      const message = syncError instanceof Error ? syncError.message : String(syncError);
+      return {
+        ok: false,
+        txHash,
+        agentVisible: false,
+        errorCode: "failed_persistence",
+        reason: `On-chain tx succeeded but console sync call failed: ${message}`,
+      };
+    }
+  }
+
+  /**
    * Inspect an x402 service (read-only, no payment).
    * Only requires URL validation and host allowlist.
    */

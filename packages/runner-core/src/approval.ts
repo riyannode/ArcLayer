@@ -23,7 +23,8 @@ export type ApprovalActionType =
   | "createJob"
   | "approveUsdc"
   | "fundJob"
-  | "claimRefund";
+  | "claimRefund"
+  | "erc8004_register_agent";
 
 export type ApprovalRecord = {
   approvalId: string;
@@ -67,7 +68,7 @@ export type TransitionResult =
 
 const ALLOWED_TRANSITIONS: Record<ApprovalState, ApprovalState[]> = {
   pending:   ["approved", "rejected", "cancelled", "expired", "executing"],
-  approved:  [],  // deprecated path — kept for schema compat
+  approved:  ["executing"],  // used by erc8004 registration flow (approve then execute)
   executing: ["executed", "failed"],
   executed:  [],
   failed:    [],

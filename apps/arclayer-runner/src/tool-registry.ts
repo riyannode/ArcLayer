@@ -101,6 +101,14 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
   // ERC-8004 Register via Circle CLI (guarded)
   { name: "erc8004.register_via_circle_cli", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity"], roles: ["identity-agent", ], requiresCircle: true, description: "Register ERC-8004 identity on-chain. Gated behind allowIdentityRegister." },
 
+  // ERC-8004 Chat-Approved Registration
+  { name: "erc8004.register_approval_create", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator", "full-stack-agent"], description: "Create pending ERC-8004 registration approval (provider/evaluator)" },
+  { name: "erc8004.register_approval_get", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator", "full-stack-agent"], description: "Get ERC-8004 registration approval by ID" },
+  { name: "erc8004.register_approval_approve", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator", "full-stack-agent"], description: "Approve pending ERC-8004 registration approval" },
+  { name: "erc8004.register_approval_reject", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator", "full-stack-agent"], description: "Reject pending ERC-8004 registration approval" },
+  { name: "erc8004.register_approval_execute", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator", "full-stack-agent"], requiresCircle: true, description: "Execute approved ERC-8004 registration on-chain" },
+  { name: "erc8004.register_approval_approve_and_execute", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator", "full-stack-agent"], requiresCircle: true, description: "Approve + execute ERC-8004 registration in one call" },
+
   // Gateway Deposit (guarded)
   { name: "circle.gateway_deposit", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["circle", "gateway"], roles: ["x402-agent"], requiresCircle: true, description: "Deposit USDC into Gateway. Gated behind allowGatewayDeposit." },
 ];

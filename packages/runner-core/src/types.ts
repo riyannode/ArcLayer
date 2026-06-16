@@ -214,6 +214,9 @@ export const RunnerConfigSchema = z.object({
     z.boolean().default(false)
   ),
 
+  // ── Console URL for erc8004_agents sync after registration ────────────
+  consoleUrl: z.string().optional(),
+
   // ── MCP Tool Broker budget config ──────────────────────────────────────
   toolBrokerEnabled: z.preprocess(
     (v) => {

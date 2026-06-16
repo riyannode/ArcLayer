@@ -265,6 +265,55 @@ export class ApprovalStore {
   // ── Transitions ──────────────────────────────────────────────────────
 
   /**
+   * Transition from pending → approved.
+   * Used by erc8004 registration flow (approve then execute separately).
+   */
+  transitionToApproved(approvalId: string): TransitionResult {
+    const now = new Date().toISOString();
+
+    const result = this.db.prepare(`
+      UPDATE approvals
+      SET state = 'approved', updated_at = ?
+      WHERE approval_id = ? AND state = 'pending'
+    `).run(now, approvalId);
+
+    if (result.changes === 0) {
+      const current = this.get(approvalId);
+      if (!current) {
+        return { ok: false, error: "APPROVAL_NOT_FOUND", current: undefined as unknown as ApprovalRecord };
+      }
+      return { ok: false, error: `INVALID_STATE: ${current.state}`, current };
+    }
+
+    return { ok: true, approval: this.get(approvalId)! };
+  }
+
+  /**
+   * Transition from approved → executing.
+   * Used by erc8004 registration flow after explicit approval.
+   */
+  transitionFromApprovedToExecuting(approvalId: string): TransitionResult {
+    const now = new Date().toISOString();
+
+    const result = this.db.prepare(`
+      UPDATE approvals
+      SET state = 'executing', updated_at = ?
+      WHERE approval_id = ? AND state = 'approved'
+    `).run(now, approvalId);
+
+    if (result.changes === 0) {
+      const current = this.get(approvalId);
+      if (!current) {
+        return { ok: false, error: "APPROVAL_NOT_FOUND", current: undefined as unknown as ApprovalRecord };
+      }
+      return { ok: false, error: `INVALID_STATE: ${current.state}`, current };
+    }
+
+    const updated = this.get(approvalId)!;
+    return { ok: true, approval: updated };
+  }
+
+  /**
    * Atomic transition from pending → executing.
    * Uses SQL WHERE state = 'pending' AND expires_at > now.
    * Does NOT hold a transaction open during execution.

@@ -642,6 +642,96 @@ export async function handleMcpTool(
       return { ok: true, approvals, count: approvals.length };
     }
 
+    // ── ERC-8004 Chat-Approved Registration ──────────────────────────
+    case "erc8004.register_approval_create": {
+      const input = validateMcpToolInput<{
+        controllerAddress: string;
+        ownerAddress: string;
+        agentName: string;
+        role: "provider" | "evaluator";
+        metadataURI: string;
+        metadataJson?: Record<string, unknown>;
+        chainId?: number;
+        registryAddress?: string;
+        expiresInSeconds?: number;
+        idempotencyKey?: string;
+      }>(name, args);
+
+      // Build params with role embedded
+      const params: Record<string, unknown> = {
+        controllerAddress: input.controllerAddress,
+        ownerAddress: input.ownerAddress,
+        agentName: input.agentName,
+        role: input.role,
+        metadataURI: input.metadataURI,
+        metadataJson: input.metadataJson ?? {},
+        registryAddress: input.registryAddress ?? "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+      };
+
+      // Duplicate protection: check for existing pending approval with same controller + metadataURI + role
+      const existingPending = services.approvalManager.findPendingByErc8004Signature(
+        input.controllerAddress,
+        input.metadataURI,
+        input.role,
+      );
+      if (existingPending) {
+        return {
+          ok: true,
+          approvalId: existingPending.approvalId,
+          state: existingPending.state,
+          duplicate: true,
+          message: `Pending approval already exists for ${input.role} registration with this controller and metadata URI.`,
+          renderableMessage: services.approvalManager.buildRenderableMessage(existingPending),
+        };
+      }
+
+      return services.approvalManager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: input.controllerAddress,
+        chainId: input.chainId ?? 5042002,
+        params,
+        expiresInSeconds: input.expiresInSeconds,
+        idempotencyKey: input.idempotencyKey,
+      });
+    }
+
+    case "erc8004.register_approval_get": {
+      const input = validateMcpToolInput<{ approvalId: string }>(name, args);
+      const approval = services.approvalManager.getApprovalById(input.approvalId);
+      if (!approval) {
+        return { ok: false, error: "APPROVAL_NOT_FOUND", message: `Approval ${input.approvalId} not found` };
+      }
+      return { ok: true, approval, renderableMessage: services.approvalManager.buildRenderableMessage(approval) };
+    }
+
+    case "erc8004.register_approval_approve": {
+      const input = validateMcpToolInput<{ approvalId: string }>(name, args);
+      const approval = services.approvalManager.getApprovalById(input.approvalId);
+      if (!approval) {
+        return { ok: false, error: "APPROVAL_NOT_FOUND" };
+      }
+      return services.approvalManager.approveById(input.approvalId);
+    }
+
+    case "erc8004.register_approval_reject": {
+      const input = validateMcpToolInput<{ approvalId: string; reason?: string }>(name, args);
+      const approval = services.approvalManager.getApprovalById(input.approvalId);
+      if (!approval) {
+        return { ok: false, error: "APPROVAL_NOT_FOUND" };
+      }
+      return services.approvalManager.rejectById(input.approvalId, input.reason);
+    }
+
+    case "erc8004.register_approval_execute": {
+      const input = validateMcpToolInput<{ approvalId: string }>(name, args);
+      return services.approvalManager.executeErc8004Registration(input.approvalId, ctx.signal);
+    }
+
+    case "erc8004.register_approval_approve_and_execute": {
+      const input = validateMcpToolInput<{ approvalId: string }>(name, args);
+      return services.approvalManager.approveAndExecuteErc8004(input.approvalId, ctx.signal);
+    }
+
     default:
       // Proxy to Console MCP — errors propagate to executor's error handler
       return proxyToConsoleMcp(name, args, mcp, ctx.proxyTimeoutMs);
