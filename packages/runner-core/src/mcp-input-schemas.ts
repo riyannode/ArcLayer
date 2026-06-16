@@ -179,7 +179,7 @@ export const Erc8004RegisterApprovalCreateInputSchema = z.object({
         return false;
       }
     },
-    "metadataURI must be a valid http(s):// or ipfs:// URI"
+    "metadataURI must be a valid http(s)://, ipfs://, or arclayer:// URI"
   ),
   metadataJson: z.record(z.unknown()).optional(),
   chainId: z.number().int().positive().optional(),

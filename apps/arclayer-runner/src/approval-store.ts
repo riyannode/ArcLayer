@@ -275,7 +275,12 @@ export class ApprovalStore {
         `SELECT * FROM approvals WHERE state IN (?, ?, ?, ?) ORDER BY created_at DESC LIMIT ?`
       ).all(...states, limit) as ApprovalRow[];
     }
-    return rows.map(mapRow);
+    const records = rows.map(mapRow);
+    // Check-on-read: expire stale pending approvals before returning
+    for (const record of records) {
+      this.checkAndExpire(record);
+    }
+    return records;
   }
 
   // ── Transitions ──────────────────────────────────────────────────────

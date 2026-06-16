@@ -1395,12 +1395,12 @@ export class RunnerServices {
       }
 
       // Verify controller matches configured Circle signer
-      const configuredSigner = process.env.CIRCLE_WALLET_ADDRESS;
+      const configuredSigner = this.config.circleWalletAddress;
       if (!configuredSigner) {
         return {
           ok: false, agentVisible: false,
           errorCode: "controller_signer_mismatch",
-          reason: "CIRCLE_WALLET_ADDRESS not configured — cannot verify signer",
+          reason: "Circle wallet address not configured — cannot verify signer",
         };
       }
       if (controllerAddress.toLowerCase() !== configuredSigner.toLowerCase()) {
@@ -1502,8 +1502,8 @@ export class RunnerServices {
           txHash,
           tokenId: syncResult.tokenId as string | undefined,
           agentId: syncResult.agentId as string | undefined,
-          agentVisible: false,
-          errorCode: "failed_persistence",
+          agentVisible: syncResult.agentVisible === true,
+          errorCode: (syncResult.errorCode as string) || "failed_persistence",
           reason: `On-chain tx succeeded but erc8004_agents sync failed: ${syncResult.detail ?? syncResult.error ?? "unknown"}`,
         };
       }

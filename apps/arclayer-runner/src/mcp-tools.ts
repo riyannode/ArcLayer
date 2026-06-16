@@ -18,6 +18,7 @@ import { getToolsForRole, getToolByName, CONSOLE_MCP_PROXY_TOOLS, ALL_TOOLS } fr
 import { getRolePreset, listRolePresets } from "./role-presets";
 import { proxyToConsoleMcp } from "./console-tool-proxy";
 import type { McpToolBroker } from "./mcp-broker";
+import { ARC_CHAIN_ID, CONTRACTS } from "@arclayer/sdk";
 
 export type McpToolContext = {
   services: RunnerServices;
@@ -658,8 +659,8 @@ export async function handleMcpTool(
       }>(name, args);
 
       // Enforce canonical Arc Testnet values
-      const CANONICAL_CHAIN_ID = 5042002;
-      const CANONICAL_REGISTRY = "0x8004A818BFB912233c491871b3d84c89A494BD9e";
+      const CANONICAL_CHAIN_ID = ARC_CHAIN_ID;
+      const CANONICAL_REGISTRY = CONTRACTS.ERC8004_IDENTITY_REGISTRY;
 
       if (input.chainId !== undefined && input.chainId !== CANONICAL_CHAIN_ID) {
         return { ok: false, error: "INVALID_CHAIN", message: `Only Arc Testnet (${CANONICAL_CHAIN_ID}) is supported. Got ${input.chainId}.` };

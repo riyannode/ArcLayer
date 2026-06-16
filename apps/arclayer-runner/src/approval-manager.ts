@@ -358,6 +358,22 @@ export class ApprovalManager {
       // Check if service returned structured failure instead of throwing
       const resultObj = result as Record<string, unknown>;
       if (resultObj && resultObj.ok === false) {
+        // Retryable failure (e.g. sync_pending_retryable): keep approval in executing state
+        // and persist txHash metadata for later sync-only retry
+        if (resultObj.retryable === true && resultObj.txHash) {
+          this.store.saveExecutingRetryMetadata(args.approvalId, {
+            txHash: resultObj.txHash,
+            syncPendingRetryable: true,
+          });
+          return {
+            ok: false,
+            approvalId: args.approvalId,
+            state: "executing",
+            error: (resultObj.reason ?? "Sync pending retryable") as string,
+            retryable: true,
+            txHash: resultObj.txHash as string,
+          };
+        }
         const reason = (resultObj.reason ?? resultObj.error ?? "Service returned ok: false") as string;
         this.store.transitionToFailed(args.approvalId, reason);
         return {
