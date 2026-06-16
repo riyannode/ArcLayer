@@ -590,6 +590,7 @@ export class ApprovalManager {
     errorCode?: string;
     error?: string;
     idempotent?: boolean;
+    retryable?: boolean;
   }> {
     const approval = this.store.get(approvalId);
     if (!approval) {
@@ -616,6 +617,100 @@ export class ApprovalManager {
     }
 
     if (approval.state === "executing") {
+      // Allow sync-only retry if previous execution left sync_pending_retryable metadata
+      const existingResult = approval.resultJson
+        ? JSON.parse(approval.resultJson) as Record<string, unknown>
+        : null;
+
+      if (existingResult?.sync_pending_retryable && existingResult?.txHash) {
+        // Retry path: skip on-chain tx, only re-sync with stored txHash
+        const retryParams = JSON.parse(approval.paramsJson) as Record<string, unknown>;
+        retryParams.skipOnChainTxHash = existingResult.txHash;
+
+        try {
+          if (signal?.aborted) {
+            this.store.transitionToFailed(approvalId, "Retry aborted by signal");
+            return { ok: false, approvalId, state: "failed", error: "Retry aborted" };
+          }
+
+          const result = await this.services.registerErc8004WithApproval(retryParams, signal);
+          const resultObj = result as Record<string, unknown>;
+
+          if (resultObj && resultObj.ok === false) {
+            const reason = (resultObj.reason ?? resultObj.error ?? "Service returned ok: false") as string;
+            const errorCode = (resultObj.errorCode as string) ?? "EXECUTION_FAILED";
+            const isRetryable = resultObj.retryable === true || errorCode === "sync_pending_retryable";
+
+            if (isRetryable) {
+              // Still retryable — persist updated txHash and stay in executing
+              this.store.saveExecutingRetryMetadata(approvalId, {
+                sync_pending_retryable: true,
+                txHash: resultObj.txHash ?? existingResult.txHash,
+              });
+              return {
+                ok: false,
+                approvalId,
+                state: "executing",
+                txHash: resultObj.txHash as string | undefined ?? existingResult.txHash as string,
+                errorCode: "sync_pending_retryable",
+                retryable: true,
+                error: reason.slice(0, 500),
+              };
+            }
+
+            // Non-retryable failure
+            this.store.transitionToFailed(approvalId, reason);
+            return { ok: false, approvalId, state: "failed", errorCode, error: reason.slice(0, 500) };
+          }
+
+          // Success!
+          const txHash = resultObj?.txHash as string | undefined ?? existingResult.txHash as string;
+          const tokenId = resultObj?.tokenId as string | undefined;
+          const agentId = resultObj?.agentId as string | undefined;
+          const agentVisible = resultObj?.agentVisible as boolean | undefined;
+
+          if (agentVisible === false) {
+            // Still not visible — check if retryable
+            const errCode = resultObj?.errorCode as string | undefined;
+            const retryable = resultObj?.retryable === true || errCode === "sync_pending_retryable";
+            if (retryable) {
+              this.store.saveExecutingRetryMetadata(approvalId, {
+                sync_pending_retryable: true,
+                txHash,
+              });
+              return {
+                ok: false, approvalId, state: "executing", txHash,
+                errorCode: "sync_pending_retryable", retryable: true,
+                error: "Sync still pending. Retry after receipt mines.",
+              };
+            }
+            this.store.transitionToFailed(approvalId, "Retry sync failed: agent not dashboard-visible.");
+            return {
+              ok: false, approvalId, state: "failed", txHash,
+              errorCode: "failed_persistence",
+              error: "Retry sync succeeded on-chain but agent is not visible from GET /api/erc8004/agents.",
+            };
+          }
+
+          // Full success on retry
+          const executed = this.store.transitionToExecuted(approvalId, txHash, result);
+          return {
+            ok: true,
+            approvalId: executed.approvalId,
+            state: "executed",
+            txHash: executed.txHash ?? txHash,
+            tokenId,
+            agentId,
+            agentVisible: true,
+          };
+        } catch (retryError: unknown) {
+          const message = retryError instanceof Error ? retryError.message : String(retryError);
+          this.store.transitionToFailed(approvalId, message);
+          return { ok: false, approvalId, state: "failed", error: message.slice(0, 500) };
+        }
+      }
+
+      // Not a retryable — block concurrent execution
       return { ok: false, approvalId, state: "executing", error: "Approval is currently being executed" };
     }
 
@@ -645,6 +740,27 @@ export class ApprovalManager {
       if (resultObj && resultObj.ok === false) {
         const reason = (resultObj.reason ?? resultObj.error ?? "Service returned ok: false") as string;
         const errorCode = (resultObj.errorCode as string) ?? "EXECUTION_FAILED";
+
+        // Retryable: tx submitted but sync pending — do NOT transition to failed
+        const isRetryable = resultObj.retryable === true || errorCode === "sync_pending_retryable";
+        if (isRetryable) {
+          const txHash = resultObj.txHash as string | undefined;
+          this.store.saveExecutingRetryMetadata(approvalId, {
+            sync_pending_retryable: true,
+            txHash,
+          });
+          return {
+            ok: false,
+            approvalId,
+            state: "executing",
+            txHash,
+            agentVisible: false,
+            errorCode: "sync_pending_retryable",
+            retryable: true,
+            error: reason.slice(0, 500),
+          };
+        }
+
         this.store.transitionToFailed(approvalId, reason);
         return { ok: false, approvalId, state: "failed", errorCode, error: reason.slice(0, 500) };
       }
@@ -663,7 +779,11 @@ export class ApprovalManager {
 
         if (isRetryable) {
           // Tx submitted but not mined yet — keep in executing so it can be retried
-          // Do NOT transition to failed; caller can re-call execute after receipt mines
+          // Persist txHash in resultJson so a later retry can skip on-chain tx
+          this.store.saveExecutingRetryMetadata(approvalId, {
+            sync_pending_retryable: true,
+            txHash,
+          });
           return {
             ok: false,
             approvalId,
@@ -729,6 +849,7 @@ export class ApprovalManager {
     errorCode?: string;
     error?: string;
     idempotent?: boolean;
+    retryable?: boolean;
   }> {
     const approval = this.store.get(approvalId);
     if (!approval) {

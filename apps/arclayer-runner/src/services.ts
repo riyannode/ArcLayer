@@ -1307,45 +1307,62 @@ export class RunnerServices {
       throw new RunnerError("MISSING_FIELD", "metadataURI is required", 400);
     }
 
-    // Step 1: Execute on-chain registration via Circle CLI
-    const registerResult = await this.registerIdentityViaCircleCli(
-      { metadataURI },
-      signal,
-    );
-
-    if (!registerResult.ok) {
-      return {
-        ok: false,
-        reason: (registerResult as Record<string, unknown>).reason as string ?? "On-chain registration failed",
-        errorCode: "onchain_failed",
-      };
-    }
-
-    const txHash = registerResult.txHash;
-    if (!txHash) {
-      return {
-        ok: false,
-        reason: "No txHash returned from Circle CLI registration",
-        errorCode: "no_txhash",
-      };
-    }
-
-    // Step 2: Sync to erc8004_agents via Console API
+    // Step 1: Preflight — validate sync config BEFORE submitting on-chain tx
     const consoleUrl = this.config.consoleUrl ?? process.env.ARCLAYER_CONSOLE_URL;
     if (!consoleUrl) {
-      // No console URL — registration succeeded on-chain but can't sync to dashboard
       return {
-        ok: true,
-        txHash,
+        ok: false,
         agentVisible: false,
         errorCode: "no_console_url",
-        reason: "On-chain registration succeeded but consoleUrl not configured for dashboard sync",
+        reason: "ARCLAYER_CONSOLE_URL/consoleUrl is required before submitting ERC-8004 registration",
       };
     }
 
+    const syncSecret = process.env.ARCLAYER_RUNNER_SYNC_SECRET;
+    if (!syncSecret) {
+      return {
+        ok: false,
+        agentVisible: false,
+        errorCode: "sync_secret_not_configured",
+        reason: "ARCLAYER_RUNNER_SYNC_SECRET is required before submitting ERC-8004 registration",
+      };
+    }
+
+    // Step 2: On-chain registration via Circle CLI
+    // Skip if caller provides a previously-submitted txHash (retry path)
+    const skipOnChainTxHash = params.skipOnChainTxHash as string | undefined;
+    let txHash: string;
+
+    if (skipOnChainTxHash) {
+      // Retry path: reuse existing txHash, skip Circle CLI
+      txHash = skipOnChainTxHash;
+    } else {
+      const registerResult = await this.registerIdentityViaCircleCli(
+        { metadataURI },
+        signal,
+      );
+
+      if (!registerResult.ok) {
+        return {
+          ok: false,
+          reason: (registerResult as Record<string, unknown>).reason as string ?? "On-chain registration failed",
+          errorCode: "onchain_failed",
+        };
+      }
+
+      if (!registerResult.txHash) {
+        return {
+          ok: false,
+          reason: "No txHash returned from Circle CLI registration",
+          errorCode: "no_txhash",
+        };
+      }
+      txHash = registerResult.txHash;
+    }
+
+    // Step 3: Sync to erc8004_agents via Console API
     try {
       const syncUrl = `${consoleUrl.replace(/\/$/, "")}/api/erc8004/register/sync`;
-      const syncSecret = process.env.ARCLAYER_RUNNER_SYNC_SECRET;
 
       // Retry loop for unmined tx (425 retryable)
       const MAX_SYNC_RETRIES = 12;
@@ -1362,7 +1379,7 @@ export class RunnerServices {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...(syncSecret ? { "Authorization": `Bearer ${syncSecret}` } : {}),
+            "Authorization": `Bearer ${syncSecret}`,
           },
           body: JSON.stringify({
             txHash,

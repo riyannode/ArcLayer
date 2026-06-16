@@ -366,6 +366,20 @@ export class ApprovalStore {
   }
 
   /**
+   * Save retry metadata while staying in executing state.
+   * Used by ERC-8004 sync_pending_retryable flow to persist txHash
+   * so a later retry can skip on-chain tx and only re-sync.
+   */
+  saveExecutingRetryMetadata(approvalId: string, resultJson: Record<string, unknown>): void {
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      UPDATE approvals
+      SET result_json = ?, updated_at = ?
+      WHERE approval_id = ? AND state = 'executing'
+    `).run(JSON.stringify(resultJson), now, approvalId);
+  }
+
+  /**
    * Transition from executing → failed.
    */
   transitionToFailed(approvalId: string, errorMessage: string): ApprovalRecord {
