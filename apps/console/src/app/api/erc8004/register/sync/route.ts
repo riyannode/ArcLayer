@@ -44,6 +44,7 @@ function assertRunnerSyncAuth(request: Request): Response | null {
 interface SyncRequestBody {
   txHash: string;
   controllerAddress: string;
+  metadataURI?: string;
   role?: string;
   agentName?: string;
   metadataJson?: Record<string, unknown>;
@@ -80,10 +81,19 @@ export async function POST(request: Request) {
       );
     }
 
+    const metadataURI = typeof body.metadataURI === 'string' ? body.metadataURI.trim() : '';
+    if (!metadataURI) {
+      return NextResponse.json(
+        { ok: false, error: 'missing_metadataURI', detail: 'metadataURI is required for sync assertion' },
+        { status: 400 },
+      );
+    }
+
     // 1. Sync on-chain mint to erc8004_agents (reuse existing sync logic)
     const syncResult = await syncErc8004Identity({
       txHash: body.txHash,
       expectedController: body.controllerAddress,
+      metadataURI,
     });
 
     // 2. Enrich metadata_json with role information
@@ -176,6 +186,13 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { ok: false, error: 'tx_sync_failed', detail, retryable: false, agentVisible: false },
         { status: 422 },
+      );
+    }
+
+    if (detail.includes('metadata_uri_mismatch')) {
+      return NextResponse.json(
+        { ok: false, error: 'metadataURI_mismatch', detail: 'Registered metadataURI does not match approved metadataURI', retryable: false, agentVisible: false },
+        { status: 409 },
       );
     }
 

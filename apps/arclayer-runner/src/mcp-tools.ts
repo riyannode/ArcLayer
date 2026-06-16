@@ -686,7 +686,7 @@ export async function handleMcpTool(
         role: input.role,
         metadataURI: input.metadataURI,
         metadataJson: input.metadataJson ?? {},
-        registryAddress: input.registryAddress ?? "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+        registryAddress: input.registryAddress ?? CONTRACTS.ERC8004_IDENTITY_REGISTRY,
       };
 
       // Duplicate protection: check for existing approval with same controller + metadataURI + role (in active states)
@@ -706,6 +706,22 @@ export async function handleMcpTool(
             message: `Approval already exists for ${input.role} registration with this controller and metadata URI (state: ${existingApproval.state}).`,
             renderableMessage: services.approvalManager.buildRenderableMessage(existingApproval),
           };
+        }
+        // failed with on-chain txHash — block duplicate on-chain registration
+        if (existingApproval.state === "failed") {
+          const parsedResult = existingApproval.resultJson
+            ? JSON.parse(existingApproval.resultJson) as Record<string, unknown>
+            : {};
+          const existingTxHash = existingApproval.txHash ?? parsedResult.txHash as string | undefined;
+          if (existingTxHash) {
+            return {
+              ok: false,
+              error: "DUPLICATE_ONCHAIN_REGISTRATION_ATTEMPT",
+              message: "A previous ERC-8004 registration for this controller/metadataURI/role already submitted an on-chain transaction but failed during sync. Reconcile or retry sync instead of creating a new on-chain registration.",
+              existingApprovalId: existingApproval.approvalId,
+              txHash: existingTxHash,
+            };
+          }
         }
         // executed — return idempotent/existing with result data
         if (existingApproval.state === "executed") {
@@ -729,7 +745,7 @@ export async function handleMcpTool(
       return services.approvalManager.createApproval({
         actionType: "erc8004_register_agent",
         walletAddress: input.controllerAddress,
-        chainId: input.chainId ?? 5042002,
+        chainId: input.chainId ?? ARC_CHAIN_ID,
         params,
         expiresInSeconds: input.expiresInSeconds,
         idempotencyKey: input.idempotencyKey,

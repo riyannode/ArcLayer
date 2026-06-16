@@ -1456,6 +1456,7 @@ export class RunnerServices {
           body: JSON.stringify({
             txHash,
             controllerAddress,
+            metadataURI,
             role,
             agentName,
             metadataJson: metadataJson ?? {},

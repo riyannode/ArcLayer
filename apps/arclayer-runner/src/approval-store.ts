@@ -283,6 +283,36 @@ export class ApprovalStore {
     return records;
   }
 
+  /**
+   * List ERC-8004 duplicate candidates: active states + failed approvals with on-chain txHash.
+   * Prevents creating duplicate on-chain registrations when a previous attempt succeeded
+   * on-chain but failed during Console sync.
+   */
+  listErc8004DuplicateCandidatesByWallet(walletAddress?: string, limit = 100): ApprovalRecord[] {
+    const activeStates = ["pending", "approved", "executing", "executed"];
+    let rows: ApprovalRow[];
+    if (walletAddress) {
+      rows = this.db.prepare(
+        `SELECT * FROM approvals WHERE wallet_address = ? AND (
+          state IN (?, ?, ?, ?)
+          OR (state = 'failed' AND action_type = 'erc8004_register_agent' AND (tx_hash IS NOT NULL OR result_json LIKE '%"txHash"%'))
+        ) ORDER BY created_at DESC LIMIT ?`
+      ).all(walletAddress.toLowerCase(), ...activeStates, limit) as ApprovalRow[];
+    } else {
+      rows = this.db.prepare(
+        `SELECT * FROM approvals WHERE (
+          state IN (?, ?, ?, ?)
+          OR (state = 'failed' AND action_type = 'erc8004_register_agent' AND (tx_hash IS NOT NULL OR result_json LIKE '%"txHash"%'))
+        ) ORDER BY created_at DESC LIMIT ?`
+      ).all(...activeStates, limit) as ApprovalRow[];
+    }
+    // Refresh each record via get() to trigger checkAndExpire on stale pending/approved
+    return rows
+      .map(mapRow)
+      .map((record) => this.get(record.approvalId))
+      .filter((record): record is ApprovalRecord => Boolean(record));
+  }
+
   // ── Transitions ──────────────────────────────────────────────────────
 
   /**

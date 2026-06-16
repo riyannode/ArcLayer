@@ -24,6 +24,7 @@ import {
   type ApprovalActionType,
   type ApprovalRecord,
 } from "@arclayer/runner-core";
+import { CONTRACTS } from "@arclayer/sdk";
 import {
   Erc8183CreateJobInputSchema,
   Erc8183ApproveUsdcInputSchema,
@@ -524,18 +525,26 @@ export class ApprovalManager {
     return { ok: true, approvalId, state: "rejected" };
   }
 
-  /** Find existing erc8004_register_agent approval with same controller + metadataURI + role in active states. */
+  /** Find existing erc8004_register_agent approval with same controller + metadataURI + role.
+   *  Includes active states AND failed approvals that already have an on-chain txHash
+   *  (to prevent duplicate on-chain registrations). */
   findExistingByErc8004Signature(
     controllerAddress: string,
     metadataURI: string,
     role: string,
   ): ApprovalRecord | undefined {
-    const active = this.store.listActiveByWallet(controllerAddress.toLowerCase());
-    return active.find((a) => {
+    const candidates = this.store.listErc8004DuplicateCandidatesByWallet(controllerAddress.toLowerCase());
+    return candidates.find((a) => {
       if (a.actionType !== "erc8004_register_agent") return false;
       try {
         const params = JSON.parse(a.paramsJson) as Record<string, unknown>;
-        return params.metadataURI === metadataURI && params.role === role;
+        if (params.metadataURI !== metadataURI || params.role !== role) return false;
+        // For failed approvals, only block if on-chain tx was submitted
+        if (a.state === "failed") {
+          const result = a.resultJson ? (JSON.parse(a.resultJson) as Record<string, unknown>) : {};
+          return Boolean(a.txHash || result.txHash);
+        }
+        return true;
       } catch {
         return false;
       }
@@ -1022,7 +1031,7 @@ export class ApprovalManager {
     const owner = (params.ownerAddress as string) ?? "—";
     const metadataURI = (params.metadataURI as string) ?? "—";
     const chainId = approval.chainId;
-    const registryAddress = (params.registryAddress as string) ?? "0x8004A818BFB912233c491871b3d84c89A494BD9e";
+    const registryAddress = (params.registryAddress as string) ?? CONTRACTS.ERC8004_IDENTITY_REGISTRY;
 
     const lines = [
       `📝 **Register ERC-8004 Agent**`,
