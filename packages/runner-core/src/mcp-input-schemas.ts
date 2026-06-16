@@ -174,7 +174,7 @@ export const Erc8004RegisterApprovalCreateInputSchema = z.object({
     (value) => {
       try {
         const parsed = new URL(value);
-        return ["http:", "https:", "ipfs:"].includes(parsed.protocol);
+        return ["http:", "https:", "ipfs:", "arclayer:"].includes(parsed.protocol);
       } catch {
         return false;
       }

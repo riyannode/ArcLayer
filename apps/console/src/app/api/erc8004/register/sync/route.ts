@@ -105,7 +105,6 @@ export async function POST(request: Request) {
       .from('erc8004_agents')
       .update({
         metadata_json: metadataJson,
-        source: 'chat_approval',
         updated_at: new Date().toISOString(),
       })
       .eq('token_id', syncResult.tokenId);
