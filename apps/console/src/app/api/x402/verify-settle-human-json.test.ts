@@ -58,7 +58,7 @@ describe('x402 sensitive response formatting', () => {
 
   it('/api/x402/verify preserves status, sensitive headers, and body schema across Accept modes', async () => {
     mocks.verifyDualPayment.mockResolvedValue({
-      parsed: { mode: 'native' },
+      parsed: { mode: 'gateway' },
       result: {
         isValid: false,
         invalidReason: 'insufficient_funds',
@@ -73,7 +73,7 @@ describe('x402 sensitive response formatting', () => {
     expect(applicationJson.status).toBe(402);
     expect(applicationJson.body).toEqual({
       ok: false,
-      mode: 'x402-native',
+      mode: 'x402-circle-gateway',
       isValid: false,
       invalidReason: 'insufficient_funds',
       payer: '0x1111111111111111111111111111111111111111',

@@ -67,7 +67,7 @@ describe('x402 access session check (core logic)', () => {
     expect(result.txHash).toBe('0xdef456');
   });
 
-  it('prefers arc-native over circle-gateway when both exist', () => {
+  it('prefers arc-native over circle-gateway when both exist [legacy session cleanup]', () => {
     const addr = '0x4aa3402575b6d98eace35a823efa267f7365bdd2';
     sessionStorage.setItem(
       `x402_paid:arc-native:${RESOURCE}:${addr}`,

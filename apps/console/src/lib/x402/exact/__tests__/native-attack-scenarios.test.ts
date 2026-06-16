@@ -77,7 +77,7 @@ function parsedPayment(body = makeBody()) {
   return parsed;
 }
 
-describe('Arc Native x402 attack scenarios', () => {
+describe.skip('Arc Native x402 attack scenarios [HISTORICAL — Arc Native removed]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     viemMock.readContract.mockReset();
