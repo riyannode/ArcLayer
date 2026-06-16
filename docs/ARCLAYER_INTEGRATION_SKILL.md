@@ -165,7 +165,9 @@ Job/read tools:
 
 ## x402
 
-ArcLayer supports x402 Arc Native payment flows and optional Circle Gateway support where documented.
+ArcLayer supports x402 payments via Circle Gateway batched EIP-3009.
+
+> **Migration note:** Arc Native EIP-3009 was previously supported as an x402 rail but has been removed. Circle Gateway is the only active x402 rail. Historical references to Arc Native may appear in older docs or migration guides.
 
 For x402 pay-to configuration, require:
 

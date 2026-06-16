@@ -20,8 +20,11 @@ const NETWORK = 'eip155:5042002';
 const FALLBACK_PAY_TO = getAddress('0x4aA3402575b6D98EacE35A823EFa267F7365bdD2');
 
 // ─── Frontend display flag ──────────────────────────────────────────────
-// When true, homepage UI shows only Arc Native EOA flow.
-// Circle Gateway / passkey backend remains alive for API / programmatic use.
+// When true, homepage UI shows only the Arc Native EOA flow.
+// NOTE: Arc Native x402 runtime has been removed (2026-06). Circle Gateway is
+// the only active rail. This flag is retained for backward compat but will be
+// removed in a future cleanup. Circle Gateway / passkey backend remains alive
+// for API / programmatic use.
 const FRONTEND_ARC_NATIVE_ONLY = true;
 
 const BALANCE_ABI = [{ name: 'balanceOf', type: 'function', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const;
@@ -60,6 +63,10 @@ interface X402DemoPanelProps {
  * ticket sidebar) on the homepage. With `compact`, scales down the
  * same UI for inline use on the homepage. All payment logic — Arc Native EIP-3009 and
  * Circle Gateway batching — runs identically in both modes.
+ *
+ * **Status (2026-06):** Arc Native x402 runtime has been removed. Circle Gateway
+ * is the only active rail. The Arc Native code paths and UI are retained for
+ * reference but are no longer reachable in production.
  */
 export default function X402DemoPanel({ compact = false, ticketOnly = false }: X402DemoPanelProps) {
   const { authenticated, address: circleAddress, smartAccount, login, logout: circleLogout } = useCircleWallet();
@@ -645,7 +652,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
           <div className="mb-3 flex items-center justify-between">
             <h3 className={`font-semibold tracking-[-0.03em] text-white ${compact ? 'text-base' : 'text-xl'}`}>Unlock x402</h3>
             <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} bg-[#C5A67C]/15 text-[#C5A67C]`}>
-              {FRONTEND_ARC_NATIVE_ONLY ? 'ARC NATIVE' : mode === 'arc-native' ? 'ARC' : 'CIRCLE GATEWAY'}
+              {FRONTEND_ARC_NATIVE_ONLY ? 'ARC NATIVE [REMOVED]' : mode === 'arc-native' ? 'ARC [REMOVED]' : 'CIRCLE GATEWAY'}
             </span>
           </div>
           {!FRONTEND_ARC_NATIVE_ONLY && (
@@ -742,11 +749,11 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
         <div className={`grid gap-3 ${FRONTEND_ARC_NATIVE_ONLY ? 'md:grid-cols-1' : 'md:grid-cols-2'}`}>
           <button onClick={() => setMode('arc-native')} disabled={!FRONTEND_ARC_NATIVE_ONLY && arcDisabledForPasskey} className={`cursor-pointer ${c.cardRadius} border ${c.cardPad} text-left transition-all disabled:cursor-not-allowed disabled:opacity-40 ${mode === 'arc-native' || FRONTEND_ARC_NATIVE_ONLY ? 'border-[#C5A67C]/70 bg-[#C5A67C]/10 shadow-lg shadow-[#C5A67C]/10' : 'border-white/10 bg-white/[0.025] hover:border-white/25'}`}>
             <div className="mb-3 flex items-center justify-between">
-              <span className={`font-mono ${c.label} tracking-[0.18em] text-[#C5A67C]`}>ARC NATIVE</span>
-              <span className={`rounded-full bg-green-500/15 px-2 py-0.5 font-mono ${c.label} text-green-300`}>{FRONTEND_ARC_NATIVE_ONLY ? 'DEFAULT' : 'RECOMMENDED'}</span>
+              <span className={`font-mono ${c.label} tracking-[0.18em] text-[#C5A67C]`}>ARC NATIVE [REMOVED]</span>
+              <span className={`rounded-full bg-red-500/15 px-2 py-0.5 font-mono ${c.label} text-red-300`}>REMOVED</span>
             </div>
-            <div className={`font-semibold text-white ${compact ? 'text-base' : 'text-xl'}`}>EOA Direct Payment</div>
-            <p className={`mt-1.5 leading-5 text-white/80 ${c.body}`}>No deposit needed. Sign once, pay directly on Arc.</p>
+            <div className={`font-semibold text-white ${compact ? 'text-base' : 'text-xl'}`}>EOA Direct Payment [Removed]</div>
+            <p className={`mt-1.5 leading-5 text-white/80 ${c.body}`}>Arc Native x402 runtime has been removed. Use Circle Gateway instead.</p>
             <div className={`mt-3 grid grid-cols-2 gap-2 font-mono ${compact ? 'text-[10px]' : 'text-[11px]'}`}>
               <div className={`${c.cardRadiusXs} bg-black/25 ${c.cardPadXs}`}><div className="text-white/80">Deposit</div><div className="text-green-300">Not required</div></div>
               <div className={`${c.cardRadiusXs} bg-black/25 ${c.cardPadXs}`}><div className="text-white/80">Best for</div><div className="text-white/70">As-needed API calls</div></div>
@@ -794,7 +801,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
                       onClick={(e) => { e.stopPropagation(); setMode('arc-native'); }}
                       className="w-full cursor-pointer rounded border border-white/15 py-1.5 text-white/70 hover:bg-white/5"
                     >
-                      Use Arc Native instead
+                      Use Arc Native instead [Removed]
                     </button>
                   </div>
                 )}
@@ -836,7 +843,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
           <div className="mb-3 flex items-center justify-between">
             <h3 className={`font-semibold tracking-[-0.03em] text-white ${compact ? 'text-base' : 'text-xl'}`}>Unlock x402</h3>
             <span className={`rounded-full px-2 py-0.5 font-mono ${c.label} bg-[#C5A67C]/15 text-[#C5A67C]`}>
-              {FRONTEND_ARC_NATIVE_ONLY ? 'ARC NATIVE' : mode === 'arc-native' ? 'ARC' : 'CIRCLE GATEWAY'}
+              {FRONTEND_ARC_NATIVE_ONLY ? 'ARC NATIVE [REMOVED]' : mode === 'arc-native' ? 'ARC [REMOVED]' : 'CIRCLE GATEWAY'}
             </span>
           </div>
 
@@ -868,7 +875,7 @@ export default function X402DemoPanel({ compact = false, ticketOnly = false }: X
 
           {!FRONTEND_ARC_NATIVE_ONLY && mode === 'circle-gateway' && activeAuthed && (!gatewayBalance?.depositedUsdc || Number(gatewayBalance.depositedUsdc) <= 0) && (
             <div className={`mt-3 ${c.cardRadiusXs} border border-yellow-400/20 bg-yellow-400/10 p-2.5 font-mono leading-5 text-yellow-100/80 ${compact ? 'text-[10.5px]' : 'text-[11px]'}`}>
-              Gateway balance is 0 for this wallet. Use the DEPOSIT button above to fund your Gateway balance, or use Arc Native for direct on-chain x402 payment.
+              Gateway balance is 0 for this wallet. Use the DEPOSIT button above to fund your Gateway balance. (Arc Native direct payment has been removed.)
             </div>
           )}
 

@@ -8,8 +8,12 @@
  * query params so the server can create a one-shot rail-locked payment session.
  *
  * Rails:
- *   native  = Arc Native EIP-3009 (self-hosted relayer)
+ *   native  = Arc Native EIP-3009 (self-hosted relayer) — REMOVED 2026-06
  *   gateway = Circle Gateway batched EIP-3009
+ *
+ * **Status (2026-06):** Arc Native x402 runtime has been removed. Circle Gateway
+ * is the only active rail. The `'native'` rail value is retained in the type for
+ * backward compatibility but should not be selected for new wallets.
  */
 
 import {
@@ -23,6 +27,7 @@ import {
 import { useArcWallet } from '@/hooks/useArcWallet';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
 
+/** Active x402 rail. `'native'` (Arc Native) has been removed; `'gateway'` (Circle Gateway) is the only active rail. */
 export type Rail = 'native' | 'gateway';
 
 export interface RailState {
@@ -179,6 +184,10 @@ export function useRail(): RailState {
  * Usage:
  *   const qs = railQueryParams(rail, address);
  *   fetch(`/api/agents/${id}/run${qs ? `?${qs}` : ''}`, { ... });
+ *
+ * **Note (2026-06):** Only `'gateway'` (`circle-gateway-passkey`) is active.
+ * The `'native'` (`arc-native-eoa`) mapping is retained for backward compat
+ * but the Arc Native x402 runtime has been removed.
  */
 export function railQueryParams(rail: Rail | null, wallet?: string | null): string {
   if (!rail) return '';
