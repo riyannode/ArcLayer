@@ -40,5 +40,6 @@ export {
 export {
   withX402,
   withGateway,
+  CIRCLE_GATEWAY_TIMEOUT_SECONDS,
   type X402MiddlewareOptions,
 } from './middleware';

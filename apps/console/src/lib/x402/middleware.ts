@@ -133,6 +133,21 @@ export interface X402MiddlewareOptions {
       jobId?: string | null;
     }>;
   };
+  /**
+   * Optional preflight validation hook, run AFTER payment verification
+   * but BEFORE Gateway settlement. If preflight returns a response,
+   * payment is NOT settled and the response is returned directly.
+   * Use for routes that need to validate request body (scope, sessionId, etc.)
+   * before charging the payer.
+   */
+  preflight?: (req: NextRequest) => Promise<NextResponse | null>;
+  /**
+   * Controls behavior when onSettled hook throws after payment is already settled.
+   * "warn" (default): log warning, add header, return success (payer already paid).
+   * "fail-response": return explicit error with job_settlement_record_failed.
+   * Use "fail-response" for critical settlement recording (e.g., agent job settlement).
+   */
+  onSettledFailureMode?: 'warn' | 'fail-response';
 }
 
 function resolvePayTo(override?: `0x${string}`): `0x${string}` {
@@ -205,7 +220,7 @@ async function emitX402LiveEvent(params: {
 // ─── Requirements builders ───────────────────────────────────────────────────
 
 // Gateway batched settlement needs 7 days + buffer (604900 seconds)
-const CIRCLE_GATEWAY_TIMEOUT_SECONDS = 604_900;
+export const CIRCLE_GATEWAY_TIMEOUT_SECONDS = 604_900;
 
 function buildGatewayRequirements(opts: X402MiddlewareOptions, railSessionId?: string) {
   if (opts.requireExplicitPayTo && !opts.payTo) {
@@ -334,6 +349,18 @@ function paymentRequiredResponse(opts: X402MiddlewareOptions, req: NextRequest) 
   const accepts: unknown[] = [];
 
   if (requested.rail && requested.payer) {
+    // Arc Native rail deprecated — reject immediately, do not create session
+    if (requested.rail === 'arc-native-eoa') {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'arc_native_x402_deprecated',
+          message: 'Arc Native x402 has been removed. Use Circle Gateway PAYMENT-SIGNATURE.',
+        },
+        { status: 402, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+      );
+    }
+
     if (!railAllowed(opts, requested.rail)) {
       return NextResponse.json(
         {
@@ -354,10 +381,7 @@ function paymentRequiredResponse(opts: X402MiddlewareOptions, req: NextRequest) 
       ttlMs: (opts.maxTimeoutSeconds ?? 300) * 1000,
     });
 
-    if (requested.rail === 'arc-native-eoa') {
-      // Arc Native deprecated — emit gateway instead
-      if (isGatewayEnabled()) accepts.push(buildGatewayRequirements(opts, session.sessionId));
-    } else if (isGatewayEnabled()) {
+    if (isGatewayEnabled()) {
       accepts.push(buildGatewayRequirements(opts, session.sessionId));
     }
   } else {
@@ -531,6 +555,17 @@ async function handleGateway(
     }
   }
 
+  // ─── Preflight validation (before settlement) ─────────────────────────
+  // Run route-specific validation BEFORE charging the payer.
+  // If preflight returns a response, do NOT settle.
+  if (opts.preflight) {
+    const preflightResponse = await opts.preflight(req);
+    if (preflightResponse) {
+      if (earlyPayer) await releaseAccessSession(earlyPayer, opts.resource, 'circle-gateway');
+      return preflightResponse;
+    }
+  }
+
   const claim = await claimGatewaySettlement({
     paymentId,
     payer: earlyPayer ?? verifyResult.payer ?? undefined,
@@ -697,6 +732,19 @@ async function handleGateway(
         msg,
       );
 
+      if (opts.onSettledFailureMode === 'fail-response') {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: 'job_settlement_record_failed',
+            paymentId,
+            message: `Payment settled on Circle but job state update failed: ${msg}`,
+          },
+          { status: 502, headers: { 'X-402-Version': String(X402_VERSION_V2) } },
+        );
+      }
+
+      // Default "warn" mode: add header, return success (payer already paid)
       response.headers.set('X-ArcLayer-Receipt-Warning', 'settlement_record_failed');
       response.headers.set('X-ArcLayer-Receipt-Warning-Reason', msg.slice(0, 200));
     }

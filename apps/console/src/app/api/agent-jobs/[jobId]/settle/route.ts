@@ -95,6 +95,7 @@ export const POST = (() => {
         amount: priceAtomic,
         resource: `/api/agent-jobs/${jobId}/settle`,
         allowedRails: ['circle-gateway-passkey'],
+        onSettledFailureMode: 'fail-response',
         agentPayerBinding: {
           required: true,
           rail: 'circle-gateway' as AgentX402Rail,
@@ -111,9 +112,11 @@ export const POST = (() => {
             jobId,
             buyerAgentId,
             paymentId: ctx.paymentId,
-            txHash: ctx.transaction ?? '',
+            txHash: null, // Gateway settlement ref is not an EVM tx hash
             payer: ctx.payer ?? '',
             payTo: ctx.payTo,
+            settlementRef: ctx.transaction ?? null,
+            settlementRail: 'circle-gateway',
           });
         },
       },

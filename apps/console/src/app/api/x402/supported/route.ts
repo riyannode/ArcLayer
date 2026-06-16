@@ -5,6 +5,7 @@ import {
   ARC_TESTNET_CHAIN_ID,
   CIRCLE_BATCHING_NAME,
   CIRCLE_BATCHING_VERSION,
+  CIRCLE_GATEWAY_TIMEOUT_SECONDS,
   GATEWAY_NETWORK_NAME,
   isGatewayEnabled,
   PAYMENT_REQUIRED_HEADER,
@@ -46,7 +47,7 @@ function formatUsdcAtomic(amount: string): string {
 }
 
 export function GET(req: NextRequest) {
-  const maxTimeoutSeconds = Number(process.env.X402_REQUIREMENT_TTL_SECONDS || '300');
+  const maxTimeoutSeconds = Number(process.env.X402_GATEWAY_REQUIREMENT_TTL_SECONDS || String(CIRCLE_GATEWAY_TIMEOUT_SECONDS));
   const amount = process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC;
   const payTo = process.env.X402_RECEIVER_ADDRESS || process.env.X402_PAY_TO;
   const gatewayEnabled = isGatewayEnabled();

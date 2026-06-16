@@ -105,9 +105,9 @@ export interface ListAgentJobsFilter {
 export type WithAgentJobNamespace<T> = T & {
   job_source: 'offchain_agent_jobs';
   status_namespace: 'agent_jobs';
-  settlement_rail: 'x402_arc_native';
+  settlement_rail: 'x402_circle_gateway';
   lifecycle_label: 'ArcLayer off-chain job';
-  settlement_label: 'x402 Arc-native settlement';
+  settlement_label: 'x402 Circle Gateway settlement';
 };
 
 export function withAgentJobNamespace<T extends AgentJob>(job: T): WithAgentJobNamespace<T> {
@@ -115,9 +115,9 @@ export function withAgentJobNamespace<T extends AgentJob>(job: T): WithAgentJobN
     ...job,
     job_source: 'offchain_agent_jobs',
     status_namespace: 'agent_jobs',
-    settlement_rail: 'x402_arc_native',
+    settlement_rail: 'x402_circle_gateway',
     lifecycle_label: 'ArcLayer off-chain job',
-    settlement_label: 'x402 Arc-native settlement',
+    settlement_label: 'x402 Circle Gateway settlement',
   };
 }
 
@@ -570,9 +570,15 @@ export async function markJobSettled(input: {
   jobId: string;
   buyerAgentId: string;
   paymentId: string;
-  txHash: string;
+  txHash?: string | null;
   payer: string;
   payTo: string;
+  /** Circle Gateway settlement reference (not an EVM tx hash). */
+  settlementRef?: string | null;
+  /** Settlement rail: circle-gateway, erc8183, etc. */
+  settlementRail?: string;
+  /** Extra metadata to merge into the settlement event. */
+  settlementMetadata?: Record<string, unknown>;
 }): Promise<AgentJob> {
   const db = ensureDb();
 
@@ -593,10 +599,11 @@ export async function markJobSettled(input: {
   }
 
   // Idempotency: already settled with same paymentId/txHash
+  const txHash = input.txHash ?? null;
   if (
     current.status === 'settled' &&
     String(current.settlement_payment_id) === input.paymentId &&
-    String(current.settlement_tx_hash) === input.txHash
+    String(current.settlement_tx_hash ?? '') === String(txHash ?? '')
   ) {
     const { data: existing } = await db
       .from('agent_jobs')
@@ -609,7 +616,7 @@ export async function markJobSettled(input: {
   // Conflict: settled with different paymentId/txHash
   if (current.status === 'settled') {
     throw new Error(
-      `markJobSettled conflict: job ${input.jobId} already settled with paymentId=${current.settlement_payment_id} txHash=${current.settlement_tx_hash}, cannot overwrite with paymentId=${input.paymentId} txHash=${input.txHash}`
+      `markJobSettled conflict: job ${input.jobId} already settled with paymentId=${current.settlement_payment_id} txHash=${current.settlement_tx_hash}, cannot overwrite with paymentId=${input.paymentId} txHash=${txHash}`
     );
   }
 
@@ -620,11 +627,13 @@ export async function markJobSettled(input: {
     .update({
       status: 'settled',
       settlement_payment_id: input.paymentId,
-      settlement_tx_hash: input.txHash,
+      settlement_tx_hash: txHash,
       settlement_payer: input.payer,
       settlement_pay_to: input.payTo,
       settled_at: now,
       updated_at: now,
+      // Store Gateway settlement ref in metadata, not tx_hash
+      ...(input.settlementMetadata ? { metadata: input.settlementMetadata } : {}),
     })
     .eq('job_id', input.jobId)
     .eq('buyer_agent_id', input.buyerAgentId)
@@ -638,7 +647,7 @@ export async function markJobSettled(input: {
     throw new Error(`markJobSettled: job ${input.jobId} lost race, status no longer in [verified, settlement_pending]`);
   }
 
-  // Write settlement event
+  // Write settlement event — tx_hash is null for Gateway (settlement ref goes in metadata)
   await db.from('agent_job_events').insert({
     job_id: input.jobId,
     event_type: 'settlement',
@@ -646,8 +655,14 @@ export async function markJobSettled(input: {
     status_before: current.status,
     status_after: 'settled',
     payment_id: input.paymentId,
-    tx_hash: input.txHash,
-    metadata: { payer: input.payer, payTo: input.payTo },
+    tx_hash: txHash,
+    metadata: {
+      payer: input.payer,
+      payTo: input.payTo,
+      settlementRail: input.settlementRail ?? 'unknown',
+      ...(input.settlementRef ? { gatewaySettlementRef: input.settlementRef } : {}),
+      ...input.settlementMetadata,
+    },
   });
 
   return mapJobRow(data);
