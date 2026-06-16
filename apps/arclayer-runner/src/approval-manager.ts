@@ -492,6 +492,9 @@ export class ApprovalManager {
     if (!approval) {
       return { ok: false, approvalId, state: "unknown", error: "APPROVAL_NOT_FOUND" };
     }
+    if (approval.actionType !== "erc8004_register_agent") {
+      return { ok: false, approvalId, state: approval.state, error: "INVALID_APPROVAL_ACTION_TYPE" };
+    }
     if (approval.state !== "pending") {
       return { ok: false, approvalId, state: approval.state, error: `Cannot approve: state is ${approval.state}` };
     }
@@ -507,6 +510,9 @@ export class ApprovalManager {
     const approval = this.store.get(approvalId);
     if (!approval) {
       return { ok: false, approvalId, state: "unknown", error: "APPROVAL_NOT_FOUND" };
+    }
+    if (approval.actionType !== "erc8004_register_agent") {
+      return { ok: false, approvalId, state: approval.state, error: "INVALID_APPROVAL_ACTION_TYPE" };
     }
     if (approval.state !== "pending") {
       return { ok: false, approvalId, state: approval.state, error: `Cannot reject: state is ${approval.state}` };
@@ -590,6 +596,10 @@ export class ApprovalManager {
       return { ok: false, approvalId, state: "unknown", error: "APPROVAL_NOT_FOUND" };
     }
 
+    if (approval.actionType !== "erc8004_register_agent") {
+      return { ok: false, approvalId, state: approval.state, error: "INVALID_APPROVAL_ACTION_TYPE" };
+    }
+
     // Idempotency: if already executed, return existing result
     if (approval.state === "executed") {
       const result = approval.resultJson ? JSON.parse(approval.resultJson) as Record<string, unknown> : {};
@@ -649,7 +659,26 @@ export class ApprovalManager {
       // Success means: tx ✓ + upsert ✓ + visible in GET /api/erc8004/agents ✓
       // If agentVisible is false, it's a partial failure
       if (agentVisible === false) {
-        // Tx succeeded but agent not visible — mark as failed_persistence
+        const isRetryable = resultObj?.retryable === true || errorCode === "sync_pending_retryable";
+
+        if (isRetryable) {
+          // Tx submitted but not mined yet — keep in executing so it can be retried
+          // Do NOT transition to failed; caller can re-call execute after receipt mines
+          return {
+            ok: false,
+            approvalId,
+            state: "executing",
+            txHash,
+            tokenId,
+            agentId,
+            agentVisible: false,
+            errorCode: "sync_pending_retryable",
+            retryable: true,
+            error: (resultObj?.reason as string) ?? "Tx submitted but dashboard sync pending. Retry after receipt mines.",
+          };
+        }
+
+        // Non-retryable: real persistence failure
         this.store.transitionToFailed(approvalId, "On-chain registration succeeded but erc8004_agents upsert failed. Agent is not dashboard-visible.");
         return {
           ok: false,
@@ -704,6 +733,10 @@ export class ApprovalManager {
     const approval = this.store.get(approvalId);
     if (!approval) {
       return { ok: false, approvalId, state: "unknown", error: "APPROVAL_NOT_FOUND" };
+    }
+
+    if (approval.actionType !== "erc8004_register_agent") {
+      return { ok: false, approvalId, state: approval.state, error: "INVALID_APPROVAL_ACTION_TYPE" };
     }
 
     // If already executed, return idempotent result

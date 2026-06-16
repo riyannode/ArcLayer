@@ -1346,27 +1346,68 @@ export class RunnerServices {
     try {
       const syncUrl = `${consoleUrl.replace(/\/$/, "")}/api/erc8004/register/sync`;
       const syncSecret = process.env.ARCLAYER_RUNNER_SYNC_SECRET;
-      const syncResponse = await fetch(syncUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(syncSecret ? { "Authorization": `Bearer ${syncSecret}` } : {}),
-        },
-        body: JSON.stringify({
-          txHash,
-          controllerAddress,
-          role,
-          agentName,
-          metadataJson: metadataJson ?? {},
-          approvalId,
-        }),
-        signal,
-      });
 
-      const syncResult = (await syncResponse.json()) as Record<string, unknown>;
+      // Retry loop for unmined tx (425 retryable)
+      const MAX_SYNC_RETRIES = 12;
+      const SYNC_RETRY_DELAY_MS = 5000;
 
-      if (!syncResponse.ok || syncResult.ok !== true) {
-        // Sync failed — tx succeeded but dashboard upsert failed
+      let lastSyncResult: Record<string, unknown> | null = null;
+
+      for (let attempt = 1; attempt <= MAX_SYNC_RETRIES; attempt++) {
+        if (signal?.aborted) {
+          return { ok: false, txHash, agentVisible: false, errorCode: "aborted", reason: "Sync aborted by signal" };
+        }
+
+        const syncResponse = await fetch(syncUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(syncSecret ? { "Authorization": `Bearer ${syncSecret}` } : {}),
+          },
+          body: JSON.stringify({
+            txHash,
+            controllerAddress,
+            role,
+            agentName,
+            metadataJson: metadataJson ?? {},
+            approvalId,
+          }),
+          signal,
+        });
+
+        const syncResult = (await syncResponse.json()) as Record<string, unknown>;
+        lastSyncResult = syncResult;
+
+        // Success
+        if (syncResponse.ok && syncResult.ok === true) {
+          return {
+            ok: true,
+            txHash,
+            tokenId: syncResult.tokenId as string,
+            agentId: syncResult.agentId as string,
+            agentVisible: syncResult.agentVisible === true,
+            role: syncResult.role as string,
+          };
+        }
+
+        // Retryable: tx not mined yet
+        if (syncResponse.status === 425 && syncResult.retryable === true) {
+          if (attempt < MAX_SYNC_RETRIES) {
+            await new Promise((resolve) => setTimeout(resolve, SYNC_RETRY_DELAY_MS));
+            continue;
+          }
+          // Exhausted retries — return pending, NOT failed_persistence
+          return {
+            ok: false,
+            txHash,
+            agentVisible: false,
+            errorCode: "sync_pending_retryable",
+            retryable: true,
+            reason: `Tx submitted (${txHash}) but dashboard sync pending after ${MAX_SYNC_RETRIES} attempts. Call erc8004.register_approval_execute again after receipt mines.`,
+          };
+        }
+
+        // Non-retryable sync failure
         return {
           ok: false,
           txHash,
@@ -1378,14 +1419,14 @@ export class RunnerServices {
         };
       }
 
-      // Full success
+      // Should not reach here, but safety fallback
       return {
-        ok: true,
+        ok: false,
         txHash,
-        tokenId: syncResult.tokenId as string,
-        agentId: syncResult.agentId as string,
-        agentVisible: syncResult.agentVisible === true,
-        role: syncResult.role as string,
+        agentVisible: false,
+        errorCode: "sync_pending_retryable",
+        retryable: true,
+        reason: `Sync loop exited unexpectedly. Last result: ${JSON.stringify(lastSyncResult)}`,
       };
     } catch (syncError: unknown) {
       // Network error calling console — tx succeeded but can't verify dashboard

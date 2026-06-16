@@ -657,6 +657,17 @@ export async function handleMcpTool(
         idempotencyKey?: string;
       }>(name, args);
 
+      // Enforce canonical Arc Testnet values
+      const CANONICAL_CHAIN_ID = 5042002;
+      const CANONICAL_REGISTRY = "0x8004A818BFB912233c491871b3d84c89A494BD9e";
+
+      if (input.chainId !== undefined && input.chainId !== CANONICAL_CHAIN_ID) {
+        return { ok: false, error: "INVALID_CHAIN", message: `Only Arc Testnet (${CANONICAL_CHAIN_ID}) is supported. Got ${input.chainId}.` };
+      }
+      if (input.registryAddress !== undefined && input.registryAddress.toLowerCase() !== CANONICAL_REGISTRY.toLowerCase()) {
+        return { ok: false, error: "INVALID_REGISTRY", message: `Only canonical registry ${CANONICAL_REGISTRY} is supported.` };
+      }
+
       // Build params with role embedded
       const params: Record<string, unknown> = {
         controllerAddress: input.controllerAddress,

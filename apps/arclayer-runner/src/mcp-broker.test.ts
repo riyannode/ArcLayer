@@ -656,6 +656,8 @@ describe("McpToolBroker", () => {
 
     it("isNonIdempotentWrite returns true for identity and gateway writes", () => {
       expect(isNonIdempotentWrite("erc8004.register_via_circle_cli")).toBe(true);
+      expect(isNonIdempotentWrite("erc8004.register_approval_execute")).toBe(true);
+      expect(isNonIdempotentWrite("erc8004.register_approval_approve_and_execute")).toBe(true);
       expect(isNonIdempotentWrite("circle.gateway_deposit")).toBe(true);
     });
 

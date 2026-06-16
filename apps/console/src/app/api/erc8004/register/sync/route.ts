@@ -166,9 +166,16 @@ export async function POST(request: Request) {
     const detail = err instanceof Error ? err.message : String(err);
 
     // Distinguish sync failures
-    if (detail.includes('tx_not_found') || detail.includes('tx_reverted')) {
+    if (detail.includes('tx_not_found') || detail.includes('not_mined')) {
       return NextResponse.json(
-        { ok: false, error: 'tx_sync_failed', detail, agentVisible: false },
+        { ok: false, error: 'tx_not_mined_yet', detail, retryable: true, agentVisible: false },
+        { status: 425 },
+      );
+    }
+
+    if (detail.includes('tx_reverted')) {
+      return NextResponse.json(
+        { ok: false, error: 'tx_sync_failed', detail, retryable: false, agentVisible: false },
         { status: 422 },
       );
     }
