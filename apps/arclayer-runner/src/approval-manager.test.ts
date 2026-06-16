@@ -1689,4 +1689,119 @@ describe("ApprovalManager", () => {
       expect(resultJson.errorCode).toBe("failed_persistence");
     });
   });
+
+  // ── Fix: sync_pending_retryable stays executing (network error after tx) ──
+
+  describe("sync exception retryable (P1 fix)", () => {
+    it("returns sync_pending_retryable when sync fetch throws after tx submitted", async () => {
+      mockServices.registerErc8004WithApproval.mockResolvedValueOnce({
+        ok: false, txHash: "0xsyncex", agentVisible: false,
+        errorCode: "sync_pending_retryable", retryable: true,
+        reason: "On-chain tx submitted (0xsyncex) but console sync call failed transiently",
+      });
+
+      const created = manager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: erc8004Params(),
+      });
+      manager.approveById(created.approvalId);
+
+      const result = await manager.executeErc8004Registration(created.approvalId);
+      expect(result.ok).toBe(false);
+      expect(result.state).toBe("executing");
+      expect(result.errorCode).toBe("sync_pending_retryable");
+      expect(result.retryable).toBe(true);
+      expect(result.txHash).toBe("0xsyncex");
+
+      // Should NOT be failed — stays executing for retry
+      const stored = manager.store.get(created.approvalId)!;
+      expect(stored.state).toBe("executing");
+    });
+
+    it("stays executing on retry path when sync exception is still retryable", async () => {
+      // First: 425
+      mockServices.registerErc8004WithApproval.mockResolvedValueOnce({
+        ok: false, txHash: "0xsyncret", agentVisible: false,
+        errorCode: "sync_pending_retryable", retryable: true,
+        reason: "Not mined yet",
+      });
+
+      const created = manager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: erc8004Params(),
+      });
+      manager.approveById(created.approvalId);
+      await manager.executeErc8004Registration(created.approvalId);
+
+      // Retry: sync exception returns retryable
+      mockServices.registerErc8004WithApproval.mockResolvedValueOnce({
+        ok: false, txHash: "0xsyncret", agentVisible: false,
+        errorCode: "sync_pending_retryable", retryable: true,
+        reason: "On-chain tx submitted (0xsyncret) but console sync call failed transiently",
+      });
+
+      const result2 = await manager.executeErc8004Registration(created.approvalId);
+      expect(result2.ok).toBe(false);
+      expect(result2.state).toBe("executing");
+      expect(result2.retryable).toBe(true);
+
+      const stored = manager.store.get(created.approvalId)!;
+      expect(stored.state).toBe("executing");
+    });
+  });
+
+  // ── Fix: approvalId injection into service params ─────────────────────────
+
+  describe("approvalId injection into service params", () => {
+    it("injects approvalId into service params on execute", async () => {
+      const created = manager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: erc8004Params(),
+      });
+      manager.approveById(created.approvalId);
+
+      await manager.executeErc8004Registration(created.approvalId);
+
+      // Check that registerErc8004WithApproval was called with params containing approvalId
+      const callParams = mockServices.registerErc8004WithApproval.mock.calls[0][0];
+      expect(callParams.approvalId).toBe(created.approvalId);
+    });
+
+    it("injects approvalId into retry params", async () => {
+      // First: 425 retryable
+      mockServices.registerErc8004WithApproval.mockResolvedValueOnce({
+        ok: false, txHash: "0xinjectretry", agentVisible: false,
+        errorCode: "sync_pending_retryable", retryable: true,
+        reason: "Not mined yet",
+      });
+
+      const created = manager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: WALLET_A,
+        chainId: CHAIN_ID,
+        params: erc8004Params(),
+      });
+      manager.approveById(created.approvalId);
+      await manager.executeErc8004Registration(created.approvalId);
+
+      // Retry
+      mockServices.registerErc8004WithApproval.mockResolvedValueOnce({
+        ok: true, txHash: "0xinjectretry", tokenId: "77777", agentId: "77777",
+        agentVisible: true, role: "provider",
+      });
+
+      await manager.executeErc8004Registration(created.approvalId);
+
+      // Check retry call also had approvalId
+      const retryParams = mockServices.registerErc8004WithApproval.mock.calls[1][0];
+      expect(retryParams.approvalId).toBe(created.approvalId);
+      expect(retryParams.skipOnChainTxHash).toBe("0xinjectretry");
+    });
+  });
 });

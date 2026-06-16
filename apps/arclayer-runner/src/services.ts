@@ -1353,6 +1353,23 @@ export class RunnerServices {
       };
     }
 
+    // Validate Console URL format before proceeding
+    let parsedConsoleUrl: URL;
+    try {
+      parsedConsoleUrl = new URL(consoleUrl);
+      if (!["http:", "https:"].includes(parsedConsoleUrl.protocol)) {
+        throw new Error(`unsupported protocol ${parsedConsoleUrl.protocol}`);
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        agentVisible: false,
+        errorCode: "invalid_console_url",
+        reason: `ARCLAYER_CONSOLE_URL/consoleUrl must be a valid http(s) URL: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    const syncUrl = new URL("/api/erc8004/register/sync", parsedConsoleUrl).toString();
+
     const syncSecret = process.env.ARCLAYER_RUNNER_SYNC_SECRET;
     if (!syncSecret) {
       return {
@@ -1372,7 +1389,6 @@ export class RunnerServices {
       txHash = skipOnChainTxHash;
     } else {
       // Auth preflight: verify Console accepts our Bearer token BEFORE submitting irreversible tx
-      const syncUrl = `${consoleUrl.replace(/\/$/, "")}/api/erc8004/register/sync`;
       const preflight = await verifyConsoleSyncAuth(syncUrl, syncSecret, controllerAddress, signal);
       if (!preflight.ok) {
         return { ok: false, agentVisible: false, ...preflight };
@@ -1420,8 +1436,6 @@ export class RunnerServices {
 
     // Step 3: Sync to erc8004_agents via Console API
     try {
-      const syncUrl = `${consoleUrl.replace(/\/$/, "")}/api/erc8004/register/sync`;
-
       // Retry loop for unmined tx (425 retryable)
       const MAX_SYNC_RETRIES = 12;
       const SYNC_RETRY_DELAY_MS = 5000;
@@ -1506,12 +1520,14 @@ export class RunnerServices {
     } catch (syncError: unknown) {
       // Network error calling console — tx succeeded but can't verify dashboard
       const message = syncError instanceof Error ? syncError.message : String(syncError);
+      // If txHash exists, on-chain tx succeeded — sync can be retried later
       return {
         ok: false,
         txHash,
         agentVisible: false,
-        errorCode: "failed_persistence",
-        reason: `On-chain tx succeeded but console sync call failed: ${message}`,
+        errorCode: "sync_pending_retryable",
+        retryable: true,
+        reason: `On-chain tx submitted (${txHash}) but console sync call failed transiently: ${message}. Retry erc8004.register_approval_execute later to resync.`,
       };
     }
   }

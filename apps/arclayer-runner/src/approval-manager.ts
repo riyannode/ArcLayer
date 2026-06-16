@@ -625,6 +625,7 @@ export class ApprovalManager {
       if (existingResult?.sync_pending_retryable && existingResult?.txHash) {
         // Retry path: skip on-chain tx, only re-sync with stored txHash
         const retryParams = JSON.parse(approval.paramsJson) as Record<string, unknown>;
+        retryParams.approvalId = approvalId;
         retryParams.skipOnChainTxHash = existingResult.txHash;
 
         try {
@@ -741,6 +742,7 @@ export class ApprovalManager {
       }
 
       const params = JSON.parse(approval.paramsJson) as Record<string, unknown>;
+      params.approvalId = approvalId;
       const result = await this.services.registerErc8004WithApproval(params, signal);
 
       // Check if service returned structured failure

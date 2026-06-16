@@ -668,6 +668,15 @@ export async function handleMcpTool(
         return { ok: false, error: "INVALID_REGISTRY", message: `Only canonical registry ${CANONICAL_REGISTRY} is supported.` };
       }
 
+      // Owner must match controller for Circle CLI register(string) flow
+      if (input.ownerAddress.toLowerCase() !== input.controllerAddress.toLowerCase()) {
+        return {
+          ok: false,
+          error: "OWNER_CONTROLLER_MISMATCH",
+          message: "ownerAddress must match controllerAddress for Circle CLI register(string) flow",
+        };
+      }
+
       // Build params with role embedded
       const params: Record<string, unknown> = {
         controllerAddress: input.controllerAddress,

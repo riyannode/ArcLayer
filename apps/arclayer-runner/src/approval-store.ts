@@ -314,8 +314,8 @@ export class ApprovalStore {
     const result = this.db.prepare(`
       UPDATE approvals
       SET state = 'executing', updated_at = ?
-      WHERE approval_id = ? AND state = 'approved'
-    `).run(now, approvalId);
+      WHERE approval_id = ? AND state = 'approved' AND expires_at > ?
+    `).run(now, approvalId, now);
 
     if (result.changes === 0) {
       const current = this.get(approvalId);
