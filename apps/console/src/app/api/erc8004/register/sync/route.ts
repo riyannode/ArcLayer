@@ -19,6 +19,28 @@ import { getSupabaseAdmin } from '@/lib/x402/supabaseClient';
 
 export const dynamic = 'force-dynamic';
 
+// ── Shared-secret auth for runner → console sync ─────────────────────────
+
+function assertRunnerSyncAuth(request: Request): Response | null {
+  const expected = process.env.ARCLAYER_RUNNER_SYNC_SECRET;
+  if (!expected) {
+    return NextResponse.json(
+      { ok: false, error: 'sync_secret_not_configured' },
+      { status: 500 },
+    );
+  }
+  const auth = request.headers.get('authorization');
+  const bearer = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length).trim() : null;
+  const headerSecret = request.headers.get('x-arclayer-runner-sync-secret');
+  if (bearer !== expected && headerSecret !== expected) {
+    return NextResponse.json(
+      { ok: false, error: 'unauthorized_sync_request' },
+      { status: 401 },
+    );
+  }
+  return null;
+}
+
 interface SyncRequestBody {
   txHash: string;
   controllerAddress: string;
@@ -29,6 +51,10 @@ interface SyncRequestBody {
 }
 
 export async function POST(request: Request) {
+  // Auth: require runner sync secret before reading body
+  const authError = assertRunnerSyncAuth(request);
+  if (authError) return authError;
+
   try {
     const body = (await request.json()) as SyncRequestBody;
 

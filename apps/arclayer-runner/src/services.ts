@@ -1345,9 +1345,13 @@ export class RunnerServices {
 
     try {
       const syncUrl = `${consoleUrl.replace(/\/$/, "")}/api/erc8004/register/sync`;
+      const syncSecret = process.env.ARCLAYER_RUNNER_SYNC_SECRET;
       const syncResponse = await fetch(syncUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(syncSecret ? { "Authorization": `Bearer ${syncSecret}` } : {}),
+        },
         body: JSON.stringify({
           txHash,
           controllerAddress,
