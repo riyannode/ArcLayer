@@ -37,37 +37,43 @@ import { ApprovalManager } from "./approval-manager";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-/** Preflight: verify Console sync endpoint accepts our Bearer token. */
+/**
+ * Preflight: verify Console sync endpoint accepts our Bearer token
+ * AND that the erc8004_agents Supabase table is reachable.
+ *
+ * Calls GET /api/erc8004/register/sync/health which probes:
+ * 1. Auth (Bearer token accepted)
+ * 2. Supabase client instantiation
+ * 3. erc8004_agents table accessibility (lightweight SELECT)
+ */
 async function verifyConsoleSyncAuth(
   syncUrl: string,
   syncSecret: string,
-  controllerAddress: string,
   signal?: AbortSignal,
 ): Promise<{ ok: true } | { ok: false; errorCode: string; reason: string }> {
+  const healthUrl = syncUrl.replace(/\/sync$/, "/sync/health");
   try {
-    const response = await fetch(syncUrl, {
-      method: "POST",
+    const response = await fetch(healthUrl, {
+      method: "GET",
       headers: {
-        "Content-Type": "application/json",
         "Authorization": `Bearer ${syncSecret}`,
       },
-      body: JSON.stringify({ txHash: "bad", controllerAddress, role: "provider" }),
       signal,
     });
     const json = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    if (response.status === 400 && json.error === "invalid_txHash") {
+    if (response.ok && json.ok === true) {
       return { ok: true };
     }
     return {
       ok: false,
-      errorCode: "sync_auth_preflight_failed",
-      reason: `Console sync auth preflight failed: status=${response.status}, error=${String(json.error ?? "unknown")}`,
+      errorCode: String(json.error ?? "sync_auth_preflight_failed"),
+      reason: `Console sync preflight failed: status=${response.status}, error=${String(json.error ?? "unknown")}, detail=${String(json.detail ?? "")}`,
     };
   } catch (err) {
     return {
       ok: false,
       errorCode: "sync_auth_preflight_failed",
-      reason: `Console sync auth preflight failed: ${err instanceof Error ? err.message : String(err)}`,
+      reason: `Console sync preflight failed: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 }
@@ -1389,7 +1395,7 @@ export class RunnerServices {
       txHash = skipOnChainTxHash;
     } else {
       // Auth preflight: verify Console accepts our Bearer token BEFORE submitting irreversible tx
-      const preflight = await verifyConsoleSyncAuth(syncUrl, syncSecret, controllerAddress, signal);
+      const preflight = await verifyConsoleSyncAuth(syncUrl, syncSecret, signal);
       if (!preflight.ok) {
         return { ok: false, agentVisible: false, ...preflight };
       }
