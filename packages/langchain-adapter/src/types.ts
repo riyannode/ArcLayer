@@ -31,6 +31,31 @@ export type ArcLayerAgentRole =
   | "evaluator"
   | "client";
 
+// ── Provider Pricing Policy ─────────────────────────────────────────────────
+
+/**
+ * Provider complexity-based pricing policy.
+ * All amounts are USDC decimal strings.
+ */
+export type ProviderPricingPolicy = {
+  minBudgetUsdc?: string;
+  maxBudgetUsdc?: string;
+  lowComplexityBudgetUsdc?: string;
+  mediumComplexityBudgetUsdc?: string;
+  highComplexityBudgetUsdc?: string;
+  defaultBudgetUsdc?: string;
+};
+
+/** Default provider pricing policy. */
+export const DEFAULT_PROVIDER_PRICING_POLICY: Required<ProviderPricingPolicy> = {
+  minBudgetUsdc: "1.00",
+  maxBudgetUsdc: "30.00",
+  lowComplexityBudgetUsdc: "5.00",
+  mediumComplexityBudgetUsdc: "15.00",
+  highComplexityBudgetUsdc: "30.00",
+  defaultBudgetUsdc: "5.00",
+};
+
 // ── Tool Creation Options ───────────────────────────────────────────────────
 
 export type CreateArcLayerLangChainToolsOptions = {
@@ -45,6 +70,10 @@ export type CreateArcLayerLangChainToolsOptions = {
   requireIdempotencyKey?: boolean;
   /** Explicit opt-in for arclayer_provider_run_and_submit (provider role only). Default: false. */
   enableProviderRunAndSubmit?: boolean;
+  /** Explicit opt-in for arclayer_provider_set_budget (provider role only). Default: false. */
+  enableProviderSetBudget?: boolean;
+  /** Provider complexity-based pricing policy. Uses defaults if not set. */
+  providerPricingPolicy?: ProviderPricingPolicy;
   timeoutMs?: number;
   logger?: ArcLayerLogger;
   /** Custom fetch implementation (for testing or proxy) */
@@ -77,6 +106,8 @@ export type ToolMapEntry = {
   method: "GET" | "POST";
   mcpName: string;
   risk: "read" | "payment" | "write";
+  /** If true, this tool is handled entirely by the adapter (no Runner HTTP call). */
+  adapterOnly?: boolean;
 };
 
 // ── x402 Schemas (input shapes for tools) ───────────────────────────────────
@@ -155,6 +186,58 @@ export type ProviderRunOnlyOutput = {
  */
 export type ProviderRunAndSubmitOutput = ProviderRunOnlyOutput & {
   submitReceipt: unknown;
+};
+
+// ── Provider Pricing Schemas ────────────────────────────────────────────────
+
+/**
+ * Input for arclayer_provider_quote_job (adapter-only).
+ * Estimates complexity and suggests a budget without making any on-chain calls.
+ */
+export type ProviderQuoteJobInput = {
+  jobId: string;
+  description: string;
+  input: unknown;
+  complexityHint?: "low" | "medium" | "high";
+  reason?: string;
+};
+
+/**
+ * Output from arclayer_provider_quote_job.
+ */
+export type ProviderQuoteJobOutput = {
+  ok: true;
+  jobId: string;
+  complexity: "low" | "medium" | "high";
+  suggestedBudgetUsdc: string;
+  maxBudgetUsdc: string;
+  reason: string;
+};
+
+/**
+ * Input for arclayer_provider_set_budget.
+ * Sends a setBudget transaction through Runner with reason encoded into optParams.
+ */
+export type ProviderSetBudgetInput = {
+  jobId: string;
+  amount: string;
+  complexity: "low" | "medium" | "high";
+  reason: string;
+};
+
+/**
+ * Output from arclayer_provider_set_budget.
+ */
+export type ProviderSetBudgetOutput = {
+  ok: boolean;
+  jobId: string;
+  amount: string;
+  complexity: "low" | "medium" | "high";
+  reason: string;
+  status: string;
+  txHash?: string;
+  receipt: unknown;
+  raw: unknown;
 };
 
 // ── Runner Response Wrappers ────────────────────────────────────────────────

@@ -10,12 +10,22 @@
  * Autonomous submit mode:
  *   ENABLE_AUTO_SUBMIT=true — arclayer_provider_run_and_submit becomes available
  *
+ * Provider pricing mode:
+ *   ENABLE_PROVIDER_SET_BUDGET=true — arclayer_provider_quote_job + arclayer_provider_set_budget become available
+ *   Provider quotes complexity, sets budget (max 30 USDC), then runs job.
+ *
  * Environment:
  *   ARCLAYER_RUNNER_URL        — Runner HTTP URL
  *   ARCLAYER_RUNNER_SECRET     — Runner HMAC secret
  *   OPENAI_API_KEY             — OpenAI API key for the LLM
  *   OPENAI_MODEL               — Optional LangChain model id, default openai:gpt-4o
  *   ENABLE_AUTO_SUBMIT         — "true" to expose run-and-submit tool
+ *   ENABLE_PROVIDER_SET_BUDGET — "true" to expose quote + set-budget tools
+ *   PROVIDER_MIN_BUDGET_USDC   — Min budget, default 1.00
+ *   PROVIDER_MAX_BUDGET_USDC   — Max budget, default 30.00
+ *   PROVIDER_LOW_COMPLEXITY_BUDGET_USDC    — default 5.00
+ *   PROVIDER_MEDIUM_COMPLEXITY_BUDGET_USDC — default 15.00
+ *   PROVIDER_HIGH_COMPLEXITY_BUDGET_USDC   — default 30.00
  *   TASK_POLL_INTERVAL_MS      — Poll interval, default 30000
  *   TASK_SOURCE                — "none" or "static", default "none"
  *   STATIC_PROVIDER_JOB_JSON   — JSON input for static test task
@@ -29,6 +39,7 @@ const RUNNER_URL = process.env.ARCLAYER_RUNNER_URL ?? "http://127.0.0.1:8787";
 const RUNNER_SECRET = process.env.ARCLAYER_RUNNER_SECRET;
 const OPENAI_MODEL = process.env.OPENAI_MODEL ?? "openai:gpt-4o";
 const ENABLE_AUTO_SUBMIT = process.env.ENABLE_AUTO_SUBMIT === "true";
+const ENABLE_PROVIDER_SET_BUDGET = process.env.ENABLE_PROVIDER_SET_BUDGET === "true";
 const TASK_SOURCE = process.env.TASK_SOURCE ?? "none";
 const TASK_POLL_INTERVAL_MS = Number.parseInt(
   process.env.TASK_POLL_INTERVAL_MS ?? "30000",
@@ -45,6 +56,18 @@ if (!Number.isFinite(TASK_POLL_INTERVAL_MS) || TASK_POLL_INTERVAL_MS < 1000) {
   process.exit(1);
 }
 
+// ── Provider Pricing Policy ─────────────────────────────────────────────
+
+const providerPricingPolicy = ENABLE_PROVIDER_SET_BUDGET
+  ? {
+      minBudgetUsdc: process.env.PROVIDER_MIN_BUDGET_USDC ?? "1.00",
+      maxBudgetUsdc: process.env.PROVIDER_MAX_BUDGET_USDC ?? "30.00",
+      lowComplexityBudgetUsdc: process.env.PROVIDER_LOW_COMPLEXITY_BUDGET_USDC ?? "5.00",
+      mediumComplexityBudgetUsdc: process.env.PROVIDER_MEDIUM_COMPLEXITY_BUDGET_USDC ?? "15.00",
+      highComplexityBudgetUsdc: process.env.PROVIDER_HIGH_COMPLEXITY_BUDGET_USDC ?? "30.00",
+    }
+  : undefined;
+
 // ── Agent Setup ─────────────────────────────────────────────────────────
 
 const agent = createArcLayerLangChainAgent({
@@ -53,6 +76,8 @@ const agent = createArcLayerLangChainAgent({
   runnerUrl: RUNNER_URL,
   runnerSecret: RUNNER_SECRET,
   enableProviderRunAndSubmit: ENABLE_AUTO_SUBMIT,
+  enableProviderSetBudget: ENABLE_PROVIDER_SET_BUDGET,
+  providerPricingPolicy,
 });
 
 // ── State ───────────────────────────────────────────────────────────────
@@ -92,6 +117,40 @@ function loadStaticProviderJob(): unknown | null {
 function buildProviderPrompt(job: unknown): string {
   const jobJson = JSON.stringify(job, null, 2);
 
+  if (ENABLE_PROVIDER_SET_BUDGET) {
+    const parts = [
+      "You are an ArcLayer ERC-8183 provider agent with pricing capability.",
+      "",
+      "Pricing workflow:",
+      "1. Use arclayer_provider_quote_job to assess job complexity (low/medium/high).",
+      "2. Choose budget from complexity mapping: low=5 USDC, medium=15 USDC, high=30 USDC.",
+      "3. Never request more than 30 USDC.",
+      "4. Call arclayer_provider_set_budget with the jobId, amount, complexity, and a pricing reason.",
+      "5. The reason will be encoded into on-chain calldata — do not include secrets.",
+    ];
+
+    if (ENABLE_AUTO_SUBMIT) {
+      parts.push(
+        "6. After budget is set, call arclayer_provider_run_and_submit.",
+      );
+    } else {
+      parts.push(
+        "6. After budget is set, call arclayer_provider_run_only.",
+      );
+    }
+
+    parts.push(
+      "",
+      "Do not create, fund, complete, or reject jobs.",
+      "Do not invent job IDs, agent IDs, wallet addresses, receipts, or tx hashes.",
+      "",
+      "Provider job JSON:",
+      jobJson,
+    );
+
+    return parts.join("\n");
+  }
+
   if (ENABLE_AUTO_SUBMIT) {
     return [
       "You are an ArcLayer ERC-8183 provider agent.",
@@ -129,9 +188,12 @@ async function processTask(job: unknown): Promise<void> {
 // ── Worker Loop ─────────────────────────────────────────────────────────
 
 async function workerLoop(): Promise<void> {
-  const availableTools = ["arclayer_provider_run_only"];
+  const availableTools = ["arclayer_provider_run_only", "arclayer_provider_quote_job"];
   if (ENABLE_AUTO_SUBMIT) {
     availableTools.push("arclayer_provider_run_and_submit");
+  }
+  if (ENABLE_PROVIDER_SET_BUDGET) {
+    availableTools.push("arclayer_provider_set_budget");
   }
 
   console.log("[provider-agent] started");
@@ -139,6 +201,7 @@ async function workerLoop(): Promise<void> {
   console.log(`  model: ${OPENAI_MODEL}`);
   console.log(`  task source: ${TASK_SOURCE}`);
   console.log(`  auto-submit: ${ENABLE_AUTO_SUBMIT}`);
+  console.log(`  provider pricing: ${ENABLE_PROVIDER_SET_BUDGET}`);
   console.log(`  tools: ${availableTools.join(", ")}`);
 
   while (!shuttingDown) {

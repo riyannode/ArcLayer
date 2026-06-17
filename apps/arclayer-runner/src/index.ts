@@ -137,6 +137,62 @@ async function main() {
         },
         {
           method: "POST",
+          path: "/erc8183/provider/set-budget",
+          handler: async ({ body }) => {
+            const HARD_CAP = "30.00";
+            const input = body as {
+              jobId?: string;
+              amount?: string;
+              complexity?: string;
+              reason?: string;
+              optParams?: string;
+            };
+
+            // Validate required fields
+            if (!input.jobId || !/^[0-9]+$/.test(input.jobId)) {
+              return { ok: false, error: "jobId must be a numeric string" };
+            }
+            if (!input.amount || !/^[0-9]+(\.[0-9]+)?$/.test(input.amount)) {
+              return { ok: false, error: "amount must be a decimal string" };
+            }
+            if (!input.reason || typeof input.reason !== "string" || input.reason.trim().length === 0) {
+              return { ok: false, error: "reason is required and must be non-empty" };
+            }
+            if (input.reason.length > 512) {
+              return { ok: false, error: "reason must be 512 characters or fewer" };
+            }
+            if (!input.complexity || !["low", "medium", "high"].includes(input.complexity)) {
+              return { ok: false, error: "complexity must be low, medium, or high" };
+            }
+
+            // Enforce budget bounds
+            const amountNum = parseFloat(input.amount);
+            if (isNaN(amountNum) || amountNum <= 0) {
+              return { ok: false, error: "amount must be greater than 0" };
+            }
+            if (amountNum > parseFloat(HARD_CAP)) {
+              return { ok: false, error: `amount must not exceed ${HARD_CAP} USDC` };
+            }
+
+            // Encode reason + complexity into optParams
+            const payload = {
+              version: 1,
+              type: "provider_budget_reason",
+              complexity: input.complexity,
+              budgetUsdc: input.amount,
+              reason: input.reason,
+            };
+            const optParams = `0x${Buffer.from(JSON.stringify(payload), "utf8").toString("hex")}`;
+
+            return services.setBudget({
+              jobId: input.jobId,
+              amount: input.amount,
+              optParams,
+            });
+          }
+        },
+        {
+          method: "POST",
           path: "/x402/inspect",
           handler: async ({ body }) => services.inspectX402(body)
         },

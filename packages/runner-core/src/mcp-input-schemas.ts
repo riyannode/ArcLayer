@@ -116,6 +116,8 @@ export const Erc8183CreateJobInputSchema = z.object({
 export const Erc8183SetBudgetInputSchema = z.object({
   jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string"),
   amount: z.string().regex(/^[0-9]+(\.[0-9]+)?$/, "amount must be a decimal string"),
+  complexity: z.enum(["low", "medium", "high"]).optional(),
+  reason: z.string().optional(),
   optParams: z.string().optional(),
 });
 
