@@ -134,10 +134,10 @@ export const CONSOLE_MCP_PROXY_TOOLS: RunnerToolRegistryItem[] = [
   { name: "identity.get_agent_account", source: "console-mcp-proxy", status: "active", risk: ["read-only"], capabilities: ["identity", "erc8004"], roles: ["provider", "evaluator", "x402-agent"], description: "Get agent account details" },
 
   // Reputation
-  { name: "reputation.give_feedback", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["reputation"], roles: ["evaluator"], description: "Submit reputation feedback" },
+  { name: "reputation.give_feedback", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["reputation"], roles: ["client"], description: "Submit reputation feedback" },
 
   // Validation
-  { name: "validation.request_calldata", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["validation"], roles: ["evaluator"], description: "Request validation calldata" },
+  { name: "validation.request_calldata", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["validation"], roles: ["client"], description: "Request validation calldata" },
   { name: "validation.response_calldata", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["validation"], roles: ["evaluator"], description: "Response validation calldata" },
   { name: "validation.status_read", source: "console-mcp-proxy", status: "active", risk: ["read-only"], capabilities: ["validation"], roles: ["evaluator"], description: "Read validation status" },
 
