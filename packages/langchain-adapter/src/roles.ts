@@ -20,9 +20,12 @@ type RoleToolOverrides = {
   allowedTools?: string[];
   deniedTools?: string[];
   enableProviderRunAndSubmit?: boolean;
+  enableProviderSetBudget?: boolean;
 };
 
 const PROVIDER_RUN_AND_SUBMIT_TOOL = "arclayer_provider_run_and_submit";
+const PROVIDER_QUOTE_JOB_TOOL = "arclayer_provider_quote_job";
+const PROVIDER_SET_BUDGET_TOOL = "arclayer_provider_set_budget";
 
 const ROLE_PRESETS: RolePreset[] = [
   {
@@ -55,12 +58,13 @@ const ROLE_PRESETS: RolePreset[] = [
     id: "provider",
     title: "Provider",
     description:
-      "Can run ERC-8183 provider jobs, read receipts and ledger. Run-only is default; run-and-submit requires explicit opt-in.",
+      "Can quote job complexity, run ERC-8183 provider jobs, read receipts and ledger. Run-only is default; run-and-submit and set-budget require explicit opt-in.",
     allowedTools: [
       "arclayer_x402_inspect",
       "arclayer_receipts",
       "arclayer_spend_ledger",
       "arclayer_provider_run_only",
+      "arclayer_provider_quote_job",
     ],
     runnerRole: "provider",
   },
@@ -92,9 +96,10 @@ const ROLE_PRESETS: RolePreset[] = [
 
 /**
  * Get the list of allowed tool names for a role,
- * applying enableProviderRunAndSubmit, deniedTools, and allowedTools overrides.
+ * applying enableProviderRunAndSubmit, enableProviderSetBudget,
+ * deniedTools, and allowedTools overrides.
  *
- * Precedence: deniedTools > enableProviderRunAndSubmit > allowedTools > role preset
+ * Precedence: deniedTools > enableProviderSetBudget > enableProviderRunAndSubmit > allowedTools > role preset
  */
 export function getArcLayerToolsForRole(
   role: ArcLayerAgentRole,
@@ -110,6 +115,11 @@ export function getArcLayerToolsForRole(
   // Explicit opt-in: add run-and-submit only for provider role when enabled
   if (role === "provider" && overrides?.enableProviderRunAndSubmit) {
     tools.push(PROVIDER_RUN_AND_SUBMIT_TOOL);
+  }
+
+  // Explicit opt-in: add set-budget only for provider role when enabled
+  if (role === "provider" && overrides?.enableProviderSetBudget) {
+    tools.push(PROVIDER_SET_BUDGET_TOOL);
   }
 
   // Deduplicate

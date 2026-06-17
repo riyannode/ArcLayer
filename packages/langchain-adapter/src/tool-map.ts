@@ -3,6 +3,9 @@
  *
  * Maps SDK-friendly LangChain tool names to Runner HTTP paths and MCP names.
  * MCP names are internal; LangChain names use arclayer_ prefix + snake_case.
+ *
+ * Tools with adapterOnly: true are handled entirely by the adapter —
+ * they do not make Runner HTTP calls.
  */
 
 import type { ToolMapEntry } from "./types.js";
@@ -48,6 +51,19 @@ export const TOOL_NAME_MAP: Record<string, ToolMapEntry> = {
     runnerPath: "/erc8183/provider/run-and-submit",
     method: "POST",
     mcpName: "erc8183.provider_run_and_submit",
+    risk: "write",
+  },
+  arclayer_provider_quote_job: {
+    runnerPath: "",
+    method: "POST",
+    mcpName: "erc8183.provider_quote_job",
+    risk: "read",
+    adapterOnly: true,
+  },
+  arclayer_provider_set_budget: {
+    runnerPath: "/erc8183/provider/set-budget",
+    method: "POST",
+    mcpName: "erc8183.provider_set_budget",
     risk: "write",
   },
 };

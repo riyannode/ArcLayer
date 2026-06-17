@@ -69,6 +69,65 @@ describe("roles", () => {
       expect(tools).not.toContain("arclayer_x402_batch_pay");
     });
 
+    it("provider default includes quote_job but not set_budget", () => {
+      const tools = getArcLayerToolsForRole("provider");
+      expect(tools).toContain("arclayer_provider_quote_job");
+      expect(tools).not.toContain("arclayer_provider_set_budget");
+    });
+
+    it("provider with enableProviderSetBudget=true includes set_budget", () => {
+      const tools = getArcLayerToolsForRole("provider", {
+        enableProviderSetBudget: true,
+      });
+      expect(tools).toContain("arclayer_provider_quote_job");
+      expect(tools).toContain("arclayer_provider_set_budget");
+    });
+
+    it("deniedTools removes set_budget even when enabled", () => {
+      const tools = getArcLayerToolsForRole("provider", {
+        enableProviderSetBudget: true,
+        deniedTools: ["arclayer_provider_set_budget"],
+      });
+      expect(tools).toContain("arclayer_provider_quote_job");
+      expect(tools).not.toContain("arclayer_provider_set_budget");
+    });
+
+    it("allowedTools cannot add set_budget unless enableProviderSetBudget=true", () => {
+      const tools = getArcLayerToolsForRole("provider", {
+        allowedTools: [
+          "arclayer_provider_quote_job",
+          "arclayer_provider_set_budget",
+        ],
+      });
+      expect(tools).toContain("arclayer_provider_quote_job");
+      // set_budget not in role preset and not enabled, so allowedTools intersection removes it
+      expect(tools).not.toContain("arclayer_provider_set_budget");
+    });
+
+    it("client role cannot access quote_job or set_budget", () => {
+      const tools = getArcLayerToolsForRole("client");
+      expect(tools).not.toContain("arclayer_provider_quote_job");
+      expect(tools).not.toContain("arclayer_provider_set_budget");
+    });
+
+    it("evaluator role cannot access quote_job or set_budget", () => {
+      const tools = getArcLayerToolsForRole("evaluator");
+      expect(tools).not.toContain("arclayer_provider_quote_job");
+      expect(tools).not.toContain("arclayer_provider_set_budget");
+    });
+
+    it("x402-agent role cannot access quote_job or set_budget", () => {
+      const tools = getArcLayerToolsForRole("x402-agent");
+      expect(tools).not.toContain("arclayer_provider_quote_job");
+      expect(tools).not.toContain("arclayer_provider_set_budget");
+    });
+
+    it("read-only role cannot access quote_job or set_budget", () => {
+      const tools = getArcLayerToolsForRole("read-only");
+      expect(tools).not.toContain("arclayer_provider_quote_job");
+      expect(tools).not.toContain("arclayer_provider_set_budget");
+    });
+
     it("deniedTools removes run-and-submit even when explicitly enabled", () => {
       const tools = getArcLayerToolsForRole("provider", {
         enableProviderRunAndSubmit: true,

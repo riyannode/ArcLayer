@@ -22,6 +22,8 @@ import type {
   ProviderRunAndSubmitInput,
   ProviderRunOnlyOutput,
   ProviderRunAndSubmitOutput,
+  ProviderSetBudgetInput,
+  ProviderSetBudgetOutput,
 } from "./types.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -296,6 +298,20 @@ export class ArcLayerRunnerClient {
   ): Promise<ProviderRunAndSubmitOutput> {
     return this.post<ProviderRunAndSubmitOutput>(
       "/erc8183/provider/run-and-submit",
+      input,
+    );
+  }
+
+  /**
+   * Set budget for an ERC-8183 provider job through Runner.
+   * Calls POST /erc8183/provider/set-budget.
+   * The Runner encodes reason + complexity into optParams before on-chain call.
+   */
+  async setProviderBudget(
+    input: ProviderSetBudgetInput,
+  ): Promise<ProviderSetBudgetOutput> {
+    return this.post<ProviderSetBudgetOutput>(
+      "/erc8183/provider/set-budget",
       input,
     );
   }
