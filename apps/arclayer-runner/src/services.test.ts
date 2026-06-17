@@ -300,7 +300,7 @@ describe("RunnerServices", () => {
   describe("x402 server-side 409 idempotent-safe", () => {
     it("treats Circle CLI 409 error as idempotent success", async () => {
       // Mock payService to throw like Circle CLI does on server 409
-      const paySpy = vi.spyOn((services as any).circle, "payService").mockRejectedValue(
+      const paySpy = vi.spyOn(services.wallet, "payService").mockRejectedValue(
         new Error("Payment submitted but request failed with HTTP 409.\nServer response: You already have an active access session for this resource.")
       );
 
@@ -322,7 +322,7 @@ describe("RunnerServices", () => {
     });
 
     it("still throws for non-409 Circle CLI errors", async () => {
-      const paySpy = vi.spyOn((services as any).circle, "payService").mockRejectedValue(
+      const paySpy = vi.spyOn(services.wallet, "payService").mockRejectedValue(
         new Error("Insufficient funds in wallet")
       );
 
@@ -347,7 +347,7 @@ describe("RunnerServices", () => {
       const abortError = new Error("The operation was aborted");
       abortError.name = "AbortError";
 
-      const paySpy = vi.spyOn((services as any).circle, "payService").mockRejectedValue(abortError);
+      const paySpy = vi.spyOn(services.wallet, "payService").mockRejectedValue(abortError);
       const failureSpy = vi.spyOn(services.ledger, "recordFailure");
 
       await expect(
@@ -374,7 +374,7 @@ describe("RunnerServices", () => {
       const abortError = new Error("The operation was aborted");
       abortError.name = "AbortError";
 
-      const paySpy = vi.spyOn((services as any).circle, "payService").mockRejectedValue(abortError);
+      const paySpy = vi.spyOn(services.wallet, "payService").mockRejectedValue(abortError);
 
       // First attempt — will abort
       await expect(
@@ -403,7 +403,7 @@ describe("RunnerServices", () => {
     });
 
     it("normal non-timeout Circle CLI failure still calls ledger.recordFailure", async () => {
-      const paySpy = vi.spyOn((services as any).circle, "payService").mockRejectedValue(
+      const paySpy = vi.spyOn(services.wallet, "payService").mockRejectedValue(
         new Error("Insufficient funds in wallet")
       );
       const failureSpy = vi.spyOn(services.ledger, "recordFailure");
@@ -519,14 +519,14 @@ describe("RunnerServices", () => {
       );
 
       await expectRunnerError(
-        guardedServices.registerIdentityViaCircleCli({ metadataURI: "ipfs://meta" }),
+        guardedServices.registerIdentityViaWallet({ metadataURI: "ipfs://meta" }),
         "IDENTITY_REGISTER_DISABLED"
       );
     });
 
     it("blocks register when allowIdentityRegister is not set", async () => {
       await expectRunnerError(
-        services.registerIdentityViaCircleCli({ metadataURI: "ipfs://meta" }),
+        services.registerIdentityViaWallet({ metadataURI: "ipfs://meta" }),
         "IDENTITY_REGISTER_DISABLED"
       );
     });
@@ -538,7 +538,7 @@ describe("RunnerServices", () => {
       );
 
       await expectRunnerError(
-        enabledServices.registerIdentityViaCircleCli({}),
+        enabledServices.registerIdentityViaWallet({}),
         "MISSING_FIELD"
       );
     });
@@ -552,7 +552,7 @@ describe("RunnerServices", () => {
       // Should NOT throw IDENTITY_REGISTER_DISABLED or MISSING_FIELD
       // Will fail at Circle CLI execution (not installed), but guard passes
       try {
-        await enabledServices.registerIdentityViaCircleCli({ metadataURI: "ipfs://meta" });
+        await enabledServices.registerIdentityViaWallet({ metadataURI: "ipfs://meta" });
       } catch (error) {
         expect(error).not.toBeInstanceOf(RunnerError);
         // Expected: circle CLI not installed
@@ -590,13 +590,13 @@ describe("RunnerServices", () => {
       expect(runSpy).toHaveBeenCalled();
     });
 
-    it("submitDeliverableViaCircleCli uses executeErc8183Write (not legacy)", async () => {
+    it("submitDeliverableViaWallet uses executeErc8183Write (not legacy)", async () => {
       // Verify the method exists and accepts the right params
-      expect(services.submitDeliverableViaCircleCli).toBeDefined();
+      expect(services.submitDeliverableViaWallet).toBeDefined();
 
       // Will fail at CLI — gateway wraps as RunnerError via assertGatewayWriteSucceeded
       try {
-        await services.submitDeliverableViaCircleCli({
+        await services.submitDeliverableViaWallet({
           jobId: "42",
           deliverableHash: "0x" + "ab".repeat(32)
         });
@@ -948,7 +948,7 @@ describe("runProviderJob", () => {
   };
 
   it("completed result returns runtime result without Circle CLI submit", async () => {
-    const circleSpy = vi.spyOn((services as any).circle, "executeErc8183Write");
+    const circleSpy = vi.spyOn(services.wallet, "executeErc8183Write");
     const result = await services.runProviderJob(validJob);
 
     expect(result.ok).toBe(true);
@@ -968,7 +968,7 @@ describe("runProviderJob", () => {
       }
     };
     const svc = new RunnerServices(config, failRuntime, mcp, skill);
-    const circleSpy = vi.spyOn(svc.circle, "executeErc8183Write");
+    const circleSpy = vi.spyOn(svc.wallet, "executeErc8183Write");
 
     const result = await svc.runProviderJob(validJob);
 
@@ -994,7 +994,7 @@ describe("runProviderJob", () => {
     };
     const svc = new RunnerServices(config, needsPaymentRuntime, mcp, skill);
     const checkpointSpy = vi.spyOn(mcp, "writeCheckpoint");
-    const circleSpy = vi.spyOn(svc.circle, "executeErc8183Write");
+    const circleSpy = vi.spyOn(svc.wallet, "executeErc8183Write");
 
     const result = await svc.runProviderJob(validJob);
 
@@ -1026,7 +1026,7 @@ describe("runProviderJob", () => {
     };
     const svc = new RunnerServices(config, needsActionRuntime, mcp, skill);
     const checkpointSpy = vi.spyOn(mcp, "writeCheckpoint");
-    const circleSpy = vi.spyOn(svc.circle, "executeErc8183Write");
+    const circleSpy = vi.spyOn(svc.wallet, "executeErc8183Write");
 
     const result = await svc.runProviderJob(validJob);
 
@@ -1106,7 +1106,7 @@ describe("submitProviderDeliverable", () => {
   });
 
   it("completed result submits once", async () => {
-    const submitSpy = vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+    const submitSpy = vi.spyOn(services, "submitDeliverableViaWallet").mockResolvedValue({
       ok: true,
       command: "circle",
       args: [],
@@ -1194,7 +1194,7 @@ describe("submitProviderDeliverable", () => {
 
   it("calls prepareSubmitDeliverable before Circle CLI submit", async () => {
     const prepareSpy = vi.spyOn(mcp, "prepareSubmitDeliverable");
-    const submitSpy = vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+    const submitSpy = vi.spyOn(services, "submitDeliverableViaWallet").mockResolvedValue({
       ok: true,
       command: "circle",
       args: [],
@@ -1217,7 +1217,7 @@ describe("submitProviderDeliverable", () => {
   });
 
   it("submit receipt contains runtime result, deliverableHash, submitReceipt, and txHash", async () => {
-    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+    vi.spyOn(services, "submitDeliverableViaWallet").mockResolvedValue({
       ok: true,
       command: "circle",
       args: [],
@@ -1269,7 +1269,7 @@ describe("runAndSubmitProviderJob", () => {
 
   it("calls runtime first, then submit", async () => {
     const runSpy = vi.spyOn(runtime, "run");
-    const submitSpy = vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+    const submitSpy = vi.spyOn(services, "submitDeliverableViaWallet").mockResolvedValue({
       ok: true,
       command: "circle",
       args: [],
@@ -1287,7 +1287,7 @@ describe("runAndSubmitProviderJob", () => {
   });
 
   it("completed result submits", async () => {
-    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+    vi.spyOn(services, "submitDeliverableViaWallet").mockResolvedValue({
       ok: true,
       command: "circle",
       args: [],
@@ -1315,7 +1315,7 @@ describe("runAndSubmitProviderJob", () => {
       }
     };
     const svc = new RunnerServices(config, needsPaymentRuntime, mcp, skill);
-    const circleSpy = vi.spyOn(svc.circle, "executeErc8183Write");
+    const circleSpy = vi.spyOn(svc.wallet, "executeErc8183Write");
 
     const result = await svc.runAndSubmitProviderJob(validJob);
 
@@ -1327,7 +1327,7 @@ describe("runAndSubmitProviderJob", () => {
   });
 
   it("keeps previous runErc8183ProviderJob behavior for successful completed result", async () => {
-    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+    vi.spyOn(services, "submitDeliverableViaWallet").mockResolvedValue({
       ok: true,
       command: "circle",
       args: [],
@@ -1343,7 +1343,7 @@ describe("runAndSubmitProviderJob", () => {
   });
 
   it("propagates submit failure instead of masking with runtime ok:true", async () => {
-    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+    vi.spyOn(services, "submitDeliverableViaWallet").mockResolvedValue({
       ok: false,
       mode: "prepared-only",
       reason: "CIRCLE_WALLET_ADDRESS not configured",
@@ -1360,7 +1360,7 @@ describe("runAndSubmitProviderJob", () => {
 
   it("calls MCP completeJobRun only after successful submit", async () => {
     const completeSpy = vi.spyOn(mcp, "completeJobRun");
-    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+    vi.spyOn(services, "submitDeliverableViaWallet").mockResolvedValue({
       ok: true,
       command: "circle",
       args: [],
@@ -1373,7 +1373,7 @@ describe("runAndSubmitProviderJob", () => {
 
   it("does NOT call MCP completeJobRun when submit fails", async () => {
     const completeSpy = vi.spyOn(mcp, "completeJobRun");
-    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+    vi.spyOn(services, "submitDeliverableViaWallet").mockResolvedValue({
       ok: false,
       mode: "prepared-only",
       reason: "not configured",
@@ -1385,7 +1385,7 @@ describe("runAndSubmitProviderJob", () => {
   });
 
   it("submit failure returns non-success status and no final success receipt", async () => {
-    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+    vi.spyOn(services, "submitDeliverableViaWallet").mockResolvedValue({
       ok: false,
       mode: "prepared-only",
       reason: "CIRCLE_WALLET_ADDRESS not configured",
@@ -1414,7 +1414,7 @@ describe("runAndSubmitProviderJob", () => {
   });
 
   it("submit success emits erc8183_submit receipt with runtime result", async () => {
-    vi.spyOn(services, "submitDeliverableViaCircleCli").mockResolvedValue({
+    vi.spyOn(services, "submitDeliverableViaWallet").mockResolvedValue({
       ok: true,
       command: "circle",
       args: [],

@@ -1,13 +1,18 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createWalletAdapter } from "../wallet-adapter-factory";
+import { describe, it, expect, vi } from "vitest";
 import { CircleCliAdapter } from "@arclayer/circle-cli-adapter";
 
-// Mock the circle-dev-wallet-adapter module
-vi.mock("@arclayer/circle-dev-wallet-adapter", () => ({
-  CircleDevWalletAdapter: class MockCircleDevWalletAdapter {
-    constructor(public opts: unknown) {}
-  },
-}));
+// Mock the circle-dev-wallet-adapter module BEFORE importing the factory
+vi.mock("@arclayer/circle-dev-wallet-adapter", () => {
+  return {
+    CircleDevWalletAdapter: class MockCircleDevWalletAdapter {
+      readonly _mockBrand = "circle-dev";
+      constructor(public opts: unknown) {}
+    },
+  };
+});
+
+// Import AFTER mock is set up
+import { createWalletAdapter } from "../wallet-adapter-factory";
 
 describe("createWalletAdapter", () => {
   const baseConfig = {
@@ -55,7 +60,6 @@ describe("createWalletAdapter", () => {
   });
 
   it("returns CircleDevWalletAdapter when walletRail is circle-dev", () => {
-    const { CircleDevWalletAdapter } = require("@arclayer/circle-dev-wallet-adapter");
     const adapter = createWalletAdapter({
       ...baseConfig,
       walletRail: "circle-dev",
@@ -63,7 +67,9 @@ describe("createWalletAdapter", () => {
       circleEntitySecret: "test-secret",
       circleWalletId: "test-wallet-id",
     });
-    expect(adapter).toBeInstanceOf(CircleDevWalletAdapter);
+    // Check it's NOT a CircleCliAdapter (i.e., it's the mock dev wallet adapter)
+    expect(adapter).not.toBeInstanceOf(CircleCliAdapter);
+    expect((adapter as any)._mockBrand).toBe("circle-dev");
   });
 
   it("throws when circle-dev rail is missing required config", () => {

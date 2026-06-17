@@ -9,6 +9,7 @@ import { RunnerError } from "@arclayer/runner-core";
 import type { RunnerConfig } from "@arclayer/runner-core";
 import type { WalletExecutionAdapter } from "@arclayer/runner-core";
 import { CircleCliAdapter } from "@arclayer/circle-cli-adapter";
+import { CircleDevWalletAdapter } from "@arclayer/circle-dev-wallet-adapter";
 
 export function createWalletAdapter(config: RunnerConfig): WalletExecutionAdapter {
   if (config.walletRail === "circle-dev") {
@@ -27,8 +28,6 @@ export function createWalletAdapter(config: RunnerConfig): WalletExecutionAdapte
       );
     }
 
-    // Dynamic import to avoid pulling Circle SDK when using circle-cli rail
-    const { CircleDevWalletAdapter } = requireCircleDevAdapter();
     return new CircleDevWalletAdapter({
       apiKey: config.circleApiKey!,
       entitySecret: config.circleEntitySecret!,
@@ -42,22 +41,4 @@ export function createWalletAdapter(config: RunnerConfig): WalletExecutionAdapte
 
   // Default: circle-cli
   return new CircleCliAdapter({ bin: config.circleCliBin });
-}
-
-/**
- * Dynamic require of circle-dev-wallet-adapter.
- * Separated for testability and to avoid top-level import of Circle SDK
- * when circle-cli rail is selected.
- */
-function requireCircleDevAdapter() {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require("@arclayer/circle-dev-wallet-adapter") as typeof import("@arclayer/circle-dev-wallet-adapter");
-  } catch {
-    throw new RunnerError(
-      "CONFIG_ERROR",
-      "circle-dev wallet rail requires @arclayer/circle-dev-wallet-adapter. Install it with: pnpm add @arclayer/circle-dev-wallet-adapter",
-      500,
-    );
-  }
 }
