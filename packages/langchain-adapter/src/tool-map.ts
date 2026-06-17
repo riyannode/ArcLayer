@@ -38,6 +38,18 @@ export const TOOL_NAME_MAP: Record<string, ToolMapEntry> = {
     mcpName: "runner.ledger",
     risk: "read",
   },
+  arclayer_provider_run_only: {
+    runnerPath: "/erc8183/provider/run-only",
+    method: "POST",
+    mcpName: "erc8183.provider_run_job",
+    risk: "write",
+  },
+  arclayer_provider_run_and_submit: {
+    runnerPath: "/erc8183/provider/run-and-submit",
+    method: "POST",
+    mcpName: "erc8183.provider_run_and_submit",
+    risk: "write",
+  },
 };
 
 /**

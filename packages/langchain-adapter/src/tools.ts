@@ -7,6 +7,7 @@
 
 import { tool, type DynamicStructuredTool } from "langchain";
 import { z } from "zod";
+import { Erc8183ProviderJobSchema } from "@arclayer/runner-core";
 import { ArcLayerRunnerClient } from "./client.js";
 import { getArcLayerToolsForRole } from "./roles.js";
 import { TOOL_NAME_MAP } from "./tool-map.js";
@@ -19,6 +20,33 @@ import type {
 } from "./types.js";
 
 // ── Zod Schemas ─────────────────────────────────────────────────────────────
+
+/**
+ * Provider run input schema — reuses Erc8183ProviderJobSchema from runner-core
+ * to avoid schema drift. Adds .describe() for LangChain tool parameter hints.
+ */
+const ProviderRunInputSchema = Erc8183ProviderJobSchema.extend({
+  taskId: Erc8183ProviderJobSchema.shape.taskId.describe("Task identifier"),
+  jobId: Erc8183ProviderJobSchema.shape.jobId.describe(
+    "ERC-8183 job ID (numeric string)",
+  ),
+  agentId: Erc8183ProviderJobSchema.shape.agentId.describe("Agent identifier"),
+  provider: Erc8183ProviderJobSchema.shape.provider.describe(
+    "Provider wallet address (0x...)",
+  ),
+  evaluator: Erc8183ProviderJobSchema.shape.evaluator?.describe(
+    "Evaluator wallet address (0x..., optional)",
+  ),
+  description: Erc8183ProviderJobSchema.shape.description.describe(
+    "Job description",
+  ),
+  input: Erc8183ProviderJobSchema.shape.input.describe(
+    "Job input payload (any JSON value)",
+  ),
+  metadata: Erc8183ProviderJobSchema.shape.metadata.describe(
+    "Optional metadata key-value pairs",
+  ),
+});
 
 const LimitInputSchema = z.object({
   limit: z
@@ -193,6 +221,7 @@ export function createArcLayerLangChainTools(
     allowedHosts,
     deniedHosts,
     requireIdempotencyKey = false,
+    enableProviderRunAndSubmit = false,
     timeoutMs,
     logger,
   } = options;
@@ -201,6 +230,7 @@ export function createArcLayerLangChainTools(
   const enabledTools = getArcLayerToolsForRole(role, {
     allowedTools,
     deniedTools,
+    enableProviderRunAndSubmit,
   });
 
   const client = new ArcLayerRunnerClient({
@@ -257,6 +287,18 @@ export function createArcLayerLangChainTools(
 
       case "arclayer_spend_ledger":
         tools.push(createLedgerTool(client, toolName, entry, { logger }));
+        break;
+
+      case "arclayer_provider_run_only":
+        tools.push(
+          createProviderRunOnlyTool(client, toolName, entry, { logger }),
+        );
+        break;
+
+      case "arclayer_provider_run_and_submit":
+        tools.push(
+          createProviderRunAndSubmitTool(client, toolName, entry, { logger }),
+        );
         break;
 
       default:
@@ -457,6 +499,84 @@ function createLedgerTool(
       description:
         "List recent spending ledger records from ArcLayer Runner. Shows all payment attempts, successes, and failures.",
       schema: LimitInputSchema,
+    },
+  );
+}
+
+function createProviderRunOnlyTool(
+  client: ArcLayerRunnerClient,
+  toolName: string,
+  entry: (typeof TOOL_NAME_MAP)[string],
+  opts: { logger?: ArcLayerLogger },
+) {
+  return tool(
+    async (input) => {
+      try {
+        const result = await client.runProviderJobOnly({
+          taskId: input.taskId,
+          jobId: input.jobId,
+          agentId: input.agentId,
+          provider: input.provider,
+          evaluator: input.evaluator,
+          description: input.description,
+          input: input.input,
+          metadata: input.metadata,
+        });
+        return normalizeToolResult(result);
+      } catch (e: unknown) {
+        const msg = sanitizeErrorMessage(
+          e instanceof Error ? e.message : String(e),
+        );
+        return `Error: ${msg}`;
+      }
+    },
+    {
+      name: toolName,
+      description:
+        "Run an ERC-8183 provider job through ArcLayer Runner (runtime only, no on-chain submit). " +
+        "Dispatches the job to the configured LLM runtime and returns the result + deliverableHash. " +
+        "Use this as the default provider execution path. " +
+        "The deliverable is NOT submitted on-chain — use arclayer_provider_run_and_submit for that.",
+      schema: ProviderRunInputSchema,
+    },
+  );
+}
+
+function createProviderRunAndSubmitTool(
+  client: ArcLayerRunnerClient,
+  toolName: string,
+  entry: (typeof TOOL_NAME_MAP)[string],
+  opts: { logger?: ArcLayerLogger },
+) {
+  return tool(
+    async (input) => {
+      try {
+        const result = await client.runAndSubmitProviderJob({
+          taskId: input.taskId,
+          jobId: input.jobId,
+          agentId: input.agentId,
+          provider: input.provider,
+          evaluator: input.evaluator,
+          description: input.description,
+          input: input.input,
+          metadata: input.metadata,
+        });
+        return normalizeToolResult(result);
+      } catch (e: unknown) {
+        const msg = sanitizeErrorMessage(
+          e instanceof Error ? e.message : String(e),
+        );
+        return `Error: ${msg}`;
+      }
+    },
+    {
+      name: toolName,
+      description:
+        "Run an ERC-8183 provider job AND submit the deliverable on-chain through ArcLayer Runner. " +
+        "This is the full lifecycle: runtime execution + Circle CLI submit. " +
+        "Only use when on-chain settlement is explicitly required. " +
+        "For runtime-only execution, prefer arclayer_provider_run_only.",
+      schema: ProviderRunInputSchema,
     },
   );
 }
