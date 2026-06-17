@@ -139,7 +139,7 @@ async function main() {
           method: "POST",
           path: "/erc8183/provider/set-budget",
           handler: async ({ body }) => {
-            const HARD_CAP = "30.00";
+            const HARD_CAP = "5.00";
             const input = body as {
               jobId?: string;
               amount?: string;

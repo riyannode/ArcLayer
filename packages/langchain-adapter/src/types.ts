@@ -49,11 +49,11 @@ export type ProviderPricingPolicy = {
 /** Default provider pricing policy. */
 export const DEFAULT_PROVIDER_PRICING_POLICY: Required<ProviderPricingPolicy> = {
   minBudgetUsdc: "1.00",
-  maxBudgetUsdc: "30.00",
-  lowComplexityBudgetUsdc: "5.00",
-  mediumComplexityBudgetUsdc: "15.00",
-  highComplexityBudgetUsdc: "30.00",
-  defaultBudgetUsdc: "5.00",
+  maxBudgetUsdc: "5.00",
+  lowComplexityBudgetUsdc: "1.00",
+  mediumComplexityBudgetUsdc: "3.00",
+  highComplexityBudgetUsdc: "5.00",
+  defaultBudgetUsdc: "1.00",
 };
 
 // ── Tool Creation Options ───────────────────────────────────────────────────

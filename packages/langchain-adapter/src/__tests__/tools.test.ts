@@ -815,7 +815,7 @@ describe("createArcLayerLangChainTools", () => {
     expect(fetchCalls.length).toBe(0); // No Runner call
   });
 
-  it("quote_job maps low complexity to 5.00", async () => {
+  it("quote_job maps low complexity to 1.00", async () => {
     const { createArcLayerLangChainTools } = await import("../tools.js");
 
     const tools = createArcLayerLangChainTools({
@@ -840,10 +840,10 @@ describe("createArcLayerLangChainTools", () => {
 
     const parsed = JSON.parse(result as string);
     expect(parsed.complexity).toBe("low");
-    expect(parsed.suggestedBudgetUsdc).toBe("5.00");
+    expect(parsed.suggestedBudgetUsdc).toBe("1.00");
   });
 
-  it("quote_job maps medium complexity to 15.00", async () => {
+  it("quote_job maps medium complexity to 3.00", async () => {
     const { createArcLayerLangChainTools } = await import("../tools.js");
 
     const tools = createArcLayerLangChainTools({
@@ -868,10 +868,10 @@ describe("createArcLayerLangChainTools", () => {
 
     const parsed = JSON.parse(result as string);
     expect(parsed.complexity).toBe("medium");
-    expect(parsed.suggestedBudgetUsdc).toBe("15.00");
+    expect(parsed.suggestedBudgetUsdc).toBe("3.00");
   });
 
-  it("quote_job maps high complexity to 30.00", async () => {
+  it("quote_job maps high complexity to 5.00", async () => {
     const { createArcLayerLangChainTools } = await import("../tools.js");
 
     const tools = createArcLayerLangChainTools({
@@ -896,7 +896,7 @@ describe("createArcLayerLangChainTools", () => {
 
     const parsed = JSON.parse(result as string);
     expect(parsed.complexity).toBe("high");
-    expect(parsed.suggestedBudgetUsdc).toBe("30.00");
+    expect(parsed.suggestedBudgetUsdc).toBe("5.00");
   });
 
   it("set_budget requires reason", async () => {
@@ -922,7 +922,7 @@ describe("createArcLayerLangChainTools", () => {
     await expect(
       setBudget.invoke({
         jobId: "100",
-        amount: "15.00",
+        amount: "3.00",
         complexity: "medium",
         reason: "",
       }),
@@ -952,7 +952,7 @@ describe("createArcLayerLangChainTools", () => {
     await expect(
       setBudget.invoke({
         jobId: "100",
-        amount: "15.00",
+        amount: "3.00",
         reason: "test reason",
       }),
     ).rejects.toThrow();
@@ -981,14 +981,14 @@ describe("createArcLayerLangChainTools", () => {
     await expect(
       setBudget.invoke({
         jobId: "100",
-        amount: "15.00",
+        amount: "3.00",
         complexity: "medium",
         reason: longReason,
       }),
     ).rejects.toThrow();
   });
 
-  it("set_budget rejects 30.01", async () => {
+  it("set_budget rejects 5.01", async () => {
     const { createArcLayerLangChainTools } = await import("../tools.js");
 
     const tools = createArcLayerLangChainTools({
@@ -1009,16 +1009,16 @@ describe("createArcLayerLangChainTools", () => {
 
     const result = await setBudget.invoke({
       jobId: "100",
-      amount: "30.01",
+      amount: "5.01",
       complexity: "high",
       reason: "test reason",
     });
 
     expect(result).toContain("Error:");
-    expect(result).toContain("30");
+    expect(result).toContain("5");
   });
 
-  it("set_budget accepts 30.00", async () => {
+  it("set_budget accepts 5.00", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const { createArcLayerLangChainTools } = await import("../tools.js");
 
@@ -1042,7 +1042,7 @@ describe("createArcLayerLangChainTools", () => {
 
     const result = await setBudget.invoke({
       jobId: "100",
-      amount: "30.00",
+      amount: "5.00",
       complexity: "high",
       reason: "High complexity job requiring full budget",
     });
@@ -1105,7 +1105,7 @@ describe("createArcLayerLangChainTools", () => {
 
     await setBudget.invoke({
       jobId: "100",
-      amount: "15.00",
+      amount: "3.00",
       complexity: "medium",
       reason: "Medium complexity job",
     });
@@ -1143,14 +1143,14 @@ describe("createArcLayerLangChainTools", () => {
 
     await setBudget.invoke({
       jobId: "200",
-      amount: "15.00",
+      amount: "3.00",
       complexity: "medium",
       reason: "Multi-step reasoning required",
     });
 
     const sentBody = JSON.parse(calls[0].init!.body as string);
     expect(sentBody.jobId).toBe("200");
-    expect(sentBody.amount).toBe("15.00");
+    expect(sentBody.amount).toBe("3.00");
     expect(sentBody.complexity).toBe("medium");
     expect(sentBody.reason).toBe("Multi-step reasoning required");
   });
@@ -1176,7 +1176,7 @@ describe("createArcLayerLangChainTools", () => {
 
     const result = await setBudget.invoke({
       jobId: "100",
-      amount: "15.00",
+      amount: "3.00",
       complexity: "medium",
       reason: "test reason",
     });

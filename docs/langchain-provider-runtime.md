@@ -40,11 +40,11 @@ Provider agents can autonomously assess job complexity and set budgets through E
 
 | Complexity | Budget (USDC) |
 |-----------|--------------|
-| `low`     | 5.00         |
-| `medium`  | 15.00        |
-| `high`    | 30.00        |
+| `low`     | 1.00         |
+| `medium`  | 3.00         |
+| `high`    | 5.00         |
 
-**Hard cap: 30.00 USDC.** No budget above 30.00 will be accepted.
+**Hard cap: 5.00 USDC.** No budget above 5.00 will be accepted.
 
 ### Workflow
 
@@ -66,7 +66,7 @@ The `optParams` payload (hex-encoded JSON):
   "version": 1,
   "type": "provider_budget_reason",
   "complexity": "medium",
-  "budgetUsdc": "15.00",
+  "budgetUsdc": "3.00",
   "reason": "Medium complexity job requiring multi-step reasoning"
 }
 ```
@@ -99,10 +99,10 @@ const agent = createArcLayerLangChainAgent({
   enableProviderSetBudget: true,
   providerPricingPolicy: {
     minBudgetUsdc: "1.00",
-    maxBudgetUsdc: "30.00",
+    maxBudgetUsdc: "5.00",
     lowComplexityBudgetUsdc: "5.00",
-    mediumComplexityBudgetUsdc: "15.00",
-    highComplexityBudgetUsdc: "30.00",
+    mediumComplexityBudgetUsdc: "3.00",
+    highComplexityBudgetUsdc: "5.00",
   },
 });
 
@@ -149,8 +149,8 @@ Provider pricing tools (`set_budget`) apply SDK-side validation before the netwo
 
 - `amount > 0`
 - `amount >= minBudgetUsdc` (default 1.00)
-- `amount <= maxBudgetUsdc` (default 30.00)
-- `amount <= 30.00` (hard cap)
+- `amount <= maxBudgetUsdc` (default 5.00)
+- `amount <= 5.00` (hard cap)
 - `reason` required, max 512 chars
 - `complexity` required: low | medium | high
 
@@ -174,7 +174,7 @@ See `agents/examples/langchain-provider-agent` for a complete PM2-compatible exa
 
 - `quote_job` is adapter-only — no on-chain call, no Runner call, no HMAC
 - `set_budget` requires `enableProviderSetBudget: true` — it writes on-chain
-- `set_budget` hard caps at 30.00 USDC
+- `set_budget` hard caps at 5.00 USDC
 - `set_budget` requires a reason that becomes public on-chain calldata
 - `run-only` is the default recommended path — no on-chain side effects
 - `run-and-submit` requires `enableProviderRunAndSubmit: true` — it submits deliverables on-chain

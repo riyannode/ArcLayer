@@ -12,7 +12,7 @@
  *
  * Provider pricing mode:
  *   ENABLE_PROVIDER_SET_BUDGET=true — arclayer_provider_quote_job + arclayer_provider_set_budget become available
- *   Provider quotes complexity, sets budget (max 30 USDC), then runs job.
+ *   Provider quotes complexity, sets budget (max 5 USDC), then runs job.
  *
  * Environment:
  *   ARCLAYER_RUNNER_URL        — Runner HTTP URL
@@ -22,10 +22,10 @@
  *   ENABLE_AUTO_SUBMIT         — "true" to expose run-and-submit tool
  *   ENABLE_PROVIDER_SET_BUDGET — "true" to expose quote + set-budget tools
  *   PROVIDER_MIN_BUDGET_USDC   — Min budget, default 1.00
- *   PROVIDER_MAX_BUDGET_USDC   — Max budget, default 30.00
+ *   PROVIDER_MAX_BUDGET_USDC   — Max budget, default 5.00
  *   PROVIDER_LOW_COMPLEXITY_BUDGET_USDC    — default 5.00
- *   PROVIDER_MEDIUM_COMPLEXITY_BUDGET_USDC — default 15.00
- *   PROVIDER_HIGH_COMPLEXITY_BUDGET_USDC   — default 30.00
+ *   PROVIDER_MEDIUM_COMPLEXITY_BUDGET_USDC — default 3.00
+ *   PROVIDER_HIGH_COMPLEXITY_BUDGET_USDC   — default 5.00
  *   TASK_POLL_INTERVAL_MS      — Poll interval, default 30000
  *   TASK_SOURCE                — "none" or "static", default "none"
  *   STATIC_PROVIDER_JOB_JSON   — JSON input for static test task
@@ -61,10 +61,10 @@ if (!Number.isFinite(TASK_POLL_INTERVAL_MS) || TASK_POLL_INTERVAL_MS < 1000) {
 const providerPricingPolicy = ENABLE_PROVIDER_SET_BUDGET
   ? {
       minBudgetUsdc: process.env.PROVIDER_MIN_BUDGET_USDC ?? "1.00",
-      maxBudgetUsdc: process.env.PROVIDER_MAX_BUDGET_USDC ?? "30.00",
+      maxBudgetUsdc: process.env.PROVIDER_MAX_BUDGET_USDC ?? "5.00",
       lowComplexityBudgetUsdc: process.env.PROVIDER_LOW_COMPLEXITY_BUDGET_USDC ?? "5.00",
-      mediumComplexityBudgetUsdc: process.env.PROVIDER_MEDIUM_COMPLEXITY_BUDGET_USDC ?? "15.00",
-      highComplexityBudgetUsdc: process.env.PROVIDER_HIGH_COMPLEXITY_BUDGET_USDC ?? "30.00",
+      mediumComplexityBudgetUsdc: process.env.PROVIDER_MEDIUM_COMPLEXITY_BUDGET_USDC ?? "3.00",
+      highComplexityBudgetUsdc: process.env.PROVIDER_HIGH_COMPLEXITY_BUDGET_USDC ?? "5.00",
     }
   : undefined;
 
@@ -123,8 +123,8 @@ function buildProviderPrompt(job: unknown): string {
       "",
       "Pricing workflow:",
       "1. Use arclayer_provider_quote_job to assess job complexity (low/medium/high).",
-      "2. Choose budget from complexity mapping: low=5 USDC, medium=15 USDC, high=30 USDC.",
-      "3. Never request more than 30 USDC.",
+      "2. Choose budget from complexity mapping: low=1 USDC, medium=3 USDC, high=5 USDC.",
+      "3. Never request more than 5 USDC.",
       "4. Call arclayer_provider_set_budget with the jobId, amount, complexity, and a pricing reason.",
       "5. The reason will be encoded into on-chain calldata — do not include secrets.",
     ];

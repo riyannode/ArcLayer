@@ -130,7 +130,7 @@ const ProviderQuoteInputSchema = z.object({
   complexityHint: z
     .enum(["low", "medium", "high"])
     .optional()
-    .describe("Hint for complexity assessment: low (5 USDC), medium (15 USDC), high (30 USDC)"),
+    .describe("Hint for complexity assessment: low (1 USDC), medium (3 USDC), high (5 USDC)"),
   reason: z
     .string()
     .optional()
@@ -146,10 +146,10 @@ const ProviderSetBudgetInputSchema = z.object({
   amount: z
     .string()
     .regex(/^[0-9]+(\.[0-9]+)?$/, "Must be a decimal string")
-    .describe("Budget amount in USDC (max 30.00)"),
+    .describe("Budget amount in USDC (max 5.00)"),
   complexity: z
     .enum(["low", "medium", "high"])
-    .describe("Job complexity level: low (5 USDC), medium (15 USDC), high (30 USDC)"),
+    .describe("Job complexity level: low (1 USDC), medium (3 USDC), high (5 USDC)"),
   reason: z
     .string()
     .min(1, "reason is required")
@@ -735,8 +735,8 @@ function createProviderQuoteJobTool(
         "This is an adapter-only tool — no on-chain call, no Runner call. " +
         "Use this BEFORE calling arclayer_provider_set_budget. " +
         "Returns complexity (low/medium/high), suggestedBudgetUsdc, maxBudgetUsdc, and reason. " +
-        "Complexity mapping: low = 5 USDC, medium = 15 USDC, high = 30 USDC. " +
-        "Max budget is hard capped at 30.00 USDC.",
+        "Complexity mapping: low = 1 USDC, medium = 3 USDC, high = 5 USDC. " +
+        "Max budget is hard capped at 5.00 USDC.",
       schema: ProviderQuoteInputSchema,
     },
   );
@@ -775,7 +775,7 @@ function createProviderSetBudgetTool(
           );
         }
 
-        // SDK-side validation: hard cap 30.00
+        // SDK-side validation: hard cap 5.00
         if (amountNum > hardCap) {
           throw new ArcLayerPolicyError(
             `amount ${input.amount} USDC exceeds hard cap of ${hardCap} USDC`,
@@ -826,7 +826,7 @@ function createProviderSetBudgetTool(
         "This is an on-chain write — calls setBudget(jobId, amount, optParams) on the ERC-8183 contract. " +
         "A reason is required and will be encoded into on-chain calldata (optParams). " +
         "Do not include secrets, private prompts, API keys, or customer private data in the reason. " +
-        "Max budget is hard capped at 30.00 USDC. " +
+        "Max budget is hard capped at 5.00 USDC. " +
         "Use arclayer_provider_quote_job first to assess complexity and get a suggested budget.",
       schema: ProviderSetBudgetInputSchema,
     },
