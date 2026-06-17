@@ -1,0 +1,22 @@
+{
+  "name": "langchain-provider-agent",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Minimal PM2-compatible ERC-8183 provider agent using @arclayer/langchain-adapter",
+  "scripts": {
+    "start": "node --loader ts-node/esm src/index.ts",
+    "build": "tsc",
+    "start:prod": "node dist/index.js"
+  },
+  "dependencies": {
+    "@arclayer/langchain-adapter": "workspace:^",
+    "langchain": "^1.0.0",
+    "@langchain/openai": "^0.5.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

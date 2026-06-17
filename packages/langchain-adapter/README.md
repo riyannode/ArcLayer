@@ -45,15 +45,40 @@ const result = await agent.invoke({
 
 ## Role-Based Tools
 
-| Role | inspect | pay | batch_pay | receipts | ledger |
-|------|---------|-----|-----------|----------|--------|
-| `read-only` (default) | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `x402-agent` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `provider` | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `evaluator` | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `client` | ✅ | ❌ | ❌ | ✅ | ✅ |
+| Role | inspect | pay | batch_pay | receipts | ledger | provider_run_only | provider_run_and_submit |
+|------|---------|-----|-----------|----------|--------|-------------------|------------------------|
+| `read-only` (default) | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| `x402-agent` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| `provider` | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| `evaluator` | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| `client` | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
 
-Provider, evaluator, and client roles will gain ERC-8183 tools in future PRs.
+Evaluator and client roles will gain ERC-8183 tools in future PRs.
+
+## Provider Runtime
+
+Provider agents can run ERC-8183 jobs through ArcLayer Runner. Two tools are available:
+
+- **`arclayer_provider_run_only`** (default) — runs the job on the LLM runtime, returns `deliverableHash`. Does NOT submit on-chain. Use this as the default execution path.
+- **`arclayer_provider_run_and_submit`** (explicit opt-in) — runs the job AND submits the deliverable on-chain via Circle CLI. Only use when on-chain settlement is required.
+
+**Do NOT use `/erc8183/provider/run`** — it is a backward-compatible wrapper that delegates to `runAndSubmit`. Always use `run-only` or `run-and-submit` explicitly.
+
+```ts
+import { createArcLayerLangChainAgent } from "@arclayer/langchain-adapter";
+
+const agent = createArcLayerLangChainAgent({
+  role: "provider",
+  model: "openai:gpt-4o",
+  runnerUrl: "http://127.0.0.1:8787",
+  runnerSecret: process.env.ARCLAYER_RUNNER_SECRET!,
+});
+
+// Agent gets: arclayer_provider_run_only (default), arclayer_provider_run_and_submit,
+//             arclayer_x402_inspect, arclayer_receipts, arclayer_spend_ledger
+```
+
+See [docs/langchain-provider-runtime.md](../../docs/langchain-provider-runtime.md) for full documentation.
 
 ## SDK-Side Guardrails
 

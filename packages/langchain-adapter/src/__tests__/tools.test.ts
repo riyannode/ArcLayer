@@ -258,6 +258,118 @@ describe("ArcLayerRunnerClient", () => {
     });
   });
 
+  describe("runProviderJobOnly", () => {
+    it("POSTs to /erc8183/provider/run-only with correct body", async () => {
+      const fetch = mockFetch({
+        body: {
+          ok: true,
+          status: "completed",
+          role: "provider",
+          result: { output: "hello" },
+          deliverableHash: "0xabc123",
+          runId: "run-1",
+          receipt: {},
+        },
+      });
+      const client = new ArcLayerRunnerClient({
+        ...defaultOpts,
+        fetchImpl: fetch,
+      });
+
+      const input = {
+        taskId: "task-1",
+        jobId: "123",
+        agentId: "agent-1",
+        provider: "0x1234567890abcdef1234567890abcdef12345678",
+        description: "test job",
+        input: { prompt: "hello" },
+      };
+
+      const result = await client.runProviderJobOnly(input);
+      expect(result).toEqual({
+        ok: true,
+        status: "completed",
+        role: "provider",
+        result: { output: "hello" },
+        deliverableHash: "0xabc123",
+        runId: "run-1",
+        receipt: {},
+      });
+
+      const [url, opts] = fetch.mock.calls[0];
+      expect(url).toBe(
+        "http://127.0.0.1:8787/erc8183/provider/run-only",
+      );
+      expect(opts.method).toBe("POST");
+      const sentBody = JSON.parse(opts.body);
+      expect(sentBody.taskId).toBe("task-1");
+      expect(sentBody.jobId).toBe("123");
+      expect(sentBody.provider).toBe(
+        "0x1234567890abcdef1234567890abcdef12345678",
+      );
+    });
+
+    it("sends HMAC headers", async () => {
+      const fetch = mockFetch({ body: { ok: true } });
+      const client = new ArcLayerRunnerClient({
+        ...defaultOpts,
+        fetchImpl: fetch,
+      });
+
+      await client.runProviderJobOnly({
+        taskId: "t",
+        jobId: "1",
+        agentId: "a",
+        provider: "0x1234567890abcdef1234567890abcdef12345678",
+        description: "d",
+        input: {},
+      });
+
+      const [, opts] = fetch.mock.calls[0];
+      expect(opts.headers["x-arclayer-runner-timestamp"]).toBeDefined();
+      expect(opts.headers["x-arclayer-runner-nonce"]).toBeDefined();
+      expect(opts.headers["x-arclayer-runner-signature"]).toMatch(
+        /^sha256=[a-f0-9]{64}$/,
+      );
+    });
+  });
+
+  describe("runAndSubmitProviderJob", () => {
+    it("POSTs to /erc8183/provider/run-and-submit", async () => {
+      const fetch = mockFetch({
+        body: {
+          ok: true,
+          status: "completed",
+          role: "provider",
+          result: {},
+          deliverableHash: "0xdef",
+          runId: "run-2",
+          submitReceipt: { txHash: "0x123" },
+          receipt: {},
+        },
+      });
+      const client = new ArcLayerRunnerClient({
+        ...defaultOpts,
+        fetchImpl: fetch,
+      });
+
+      const result = await client.runAndSubmitProviderJob({
+        taskId: "task-2",
+        jobId: "456",
+        agentId: "agent-2",
+        provider: "0x1234567890abcdef1234567890abcdef12345678",
+        description: "submit job",
+        input: { data: "test" },
+      });
+
+      const [url] = fetch.mock.calls[0];
+      expect(url).toBe(
+        "http://127.0.0.1:8787/erc8183/provider/run-and-submit",
+      );
+      expect(result).toHaveProperty("submitReceipt");
+    });
+  });
+
   describe("stripTrailingSlashes", () => {
     it("normalizes runnerUrl with many trailing slashes without regex", async () => {
       const slashyUrl = "http://127.0.0.1:8787" + "/".repeat(10_000);
@@ -390,5 +502,166 @@ describe("createArcLayerLangChainTools", () => {
       ],
     });
     expect(result).toContain("Duplicate idempotencyKey");
+  });
+
+  it("provider_run_only calls /erc8183/provider/run-only", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            status: "completed",
+            role: "provider",
+            result: { output: "done" },
+            deliverableHash: "0xabc",
+            runId: "run-1",
+            receipt: {},
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    const runOnly = tools.find(
+      (t) => t.name === "arclayer_provider_run_only",
+    );
+    expect(runOnly).toBeDefined();
+
+    const result = await runOnly!.invoke({
+      taskId: "task-1",
+      jobId: "100",
+      agentId: "agent-1",
+      provider: "0x1234567890abcdef1234567890abcdef12345678",
+      description: "test job",
+      input: { prompt: "hello" },
+    });
+
+    expect(result).not.toContain("Error:");
+    expect(calls.length).toBe(1);
+    expect(calls[0].url).toContain("/erc8183/provider/run-only");
+  });
+
+  it("provider_run_and_submit calls /erc8183/provider/run-and-submit", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            status: "completed",
+            role: "provider",
+            result: {},
+            deliverableHash: "0xdef",
+            runId: "run-2",
+            submitReceipt: { txHash: "0x123" },
+            receipt: {},
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    const runAndSubmit = tools.find(
+      (t) => t.name === "arclayer_provider_run_and_submit",
+    );
+    expect(runAndSubmit).toBeDefined();
+
+    const result = await runAndSubmit!.invoke({
+      taskId: "task-2",
+      jobId: "200",
+      agentId: "agent-2",
+      provider: "0x1234567890abcdef1234567890abcdef12345678",
+      description: "submit job",
+      input: { data: "test" },
+    });
+
+    expect(result).not.toContain("Error:");
+    expect(calls.length).toBe(1);
+    expect(calls[0].url).toContain(
+      "/erc8183/provider/run-and-submit",
+    );
+  });
+
+  it("provider tools errors are redacted", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () => {
+        throw new Error(
+          "Runner auth failed with Bearer abc123secrettoken",
+        );
+      },
+    });
+
+    const runOnly = tools.find(
+      (t) => t.name === "arclayer_provider_run_only",
+    );
+    expect(runOnly).toBeDefined();
+
+    const result = await runOnly!.invoke({
+      taskId: "task-1",
+      jobId: "1",
+      agentId: "a",
+      provider: "0x1234567890abcdef1234567890abcdef12345678",
+      description: "d",
+      input: {},
+    });
+
+    expect(result).toContain("Error:");
+    expect(result).not.toContain("abc123secrettoken");
+  });
+
+  it("read-only role does not include provider tools", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "read-only",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const toolNames = tools.map((t) => t.name);
+    expect(toolNames).not.toContain("arclayer_provider_run_only");
+    expect(toolNames).not.toContain("arclayer_provider_run_and_submit");
+  });
+
+  it("x402-agent role does not include provider tools", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "x402-agent",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const toolNames = tools.map((t) => t.name);
+    expect(toolNames).not.toContain("arclayer_provider_run_only");
+    expect(toolNames).not.toContain("arclayer_provider_run_and_submit");
   });
 });

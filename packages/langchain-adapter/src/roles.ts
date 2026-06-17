@@ -44,11 +44,14 @@ const ROLE_PRESETS: RolePreset[] = [
   {
     id: "provider",
     title: "Provider",
-    description: "Can read receipts and ledger. ERC-8183 provider tools (future PR).",
+    description:
+      "Can run ERC-8183 provider jobs, read receipts and ledger. Run-only is default; run-and-submit is explicit opt-in.",
     allowedTools: [
       "arclayer_x402_inspect",
       "arclayer_receipts",
       "arclayer_spend_ledger",
+      "arclayer_provider_run_only",
+      "arclayer_provider_run_and_submit",
     ],
     runnerRole: "provider",
   },

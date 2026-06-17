@@ -32,4 +32,8 @@ export type {
   CreateArcLayerLangChainToolsOptions,
   CreateArcLayerLangChainAgentOptions,
   ArcLayerLogger,
+  ProviderRunOnlyInput,
+  ProviderRunAndSubmitInput,
+  ProviderRunOnlyOutput,
+  ProviderRunAndSubmitOutput,
 } from "./types.js";
