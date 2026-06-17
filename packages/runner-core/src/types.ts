@@ -12,8 +12,6 @@ export const RunnerRoleSchema = z.enum([
   "evaluator",
   "x402-agent",
   "identity-agent",
-  "validation-agent",
-  "full-stack-agent",
 ]);
 export type RunnerRole = z.infer<typeof RunnerRoleSchema>;
 

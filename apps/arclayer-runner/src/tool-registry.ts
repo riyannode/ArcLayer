@@ -44,18 +44,18 @@ export type RunnerToolRegistryItem = {
 
 export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
   // Runner introspection
-  { name: "runner.health", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["health"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "Runner health check" },
-  { name: "runner.manifest", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["manifest"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "Runner manifest with capabilities" },
-  { name: "runner.skill", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["skill"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "Global Agent Skill content and hash" },
-  { name: "runner.receipts", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["receipts"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "Recent receipts" },
-  { name: "runner.ledger", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["ledger"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "Recent spending ledger records" },
-  { name: "runner.policy", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["policy"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "Current spending policy limits" },
+  { name: "runner.health", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["health"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "Runner health check" },
+  { name: "runner.manifest", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["manifest"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "Runner manifest with capabilities" },
+  { name: "runner.skill", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["skill"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "Global Agent Skill content and hash" },
+  { name: "runner.receipts", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["receipts"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "Recent receipts" },
+  { name: "runner.ledger", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["ledger"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "Recent spending ledger records" },
+  { name: "runner.policy", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["policy"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "Current spending policy limits" },
   { name: "runner.list_reconcilable_operations", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["reconciliation"], roles: [], description: "List operations needing reconciliation" },
   { name: "runner.reconcile_operation", source: "runner-local", status: "active", risk: ["write"], capabilities: ["reconciliation"], roles: [], description: "Reconcile broadcast/unknown operation" },
 
   // MCP Tool Broker introspection
-  { name: "runner.broker_status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["broker"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "MCP Tool Broker session state" },
-  { name: "runner.audit_log", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["broker", "audit"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "MCP Tool Broker audit log" },
+  { name: "runner.broker_status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["broker"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "MCP Tool Broker session state" },
+  { name: "runner.audit_log", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["broker", "audit"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "MCP Tool Broker audit log" },
 
   // Circle CLI
   { name: "circle.status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["circle", "wallet"], roles: ["provider", "x402-agent", ], requiresCircle: true, description: "Circle CLI version, wallet status, gateway balance" },
@@ -65,11 +65,11 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
   { name: "circle.wallet_policy_status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["circle", "policy"], roles: ["provider", "x402-agent", ], requiresCircle: true, description: "Compare Runner policy vs Circle wallet policy caps" },
 
   // x402
-  { name: "x402.inspect", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["x402"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "Inspect x402 service (read-only, no payment)" },
+  { name: "x402.inspect", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["x402"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "Inspect x402 service (read-only, no payment)" },
   { name: "x402.pay", source: "runner-local", status: "active", risk: ["payment", "writes-ledger"], capabilities: ["x402", "payment"], roles: ["x402-agent"], requiresPolicy: true, requiresCircle: true, description: "Pay x402 service (requires paymentEnabled + wallet)" },
   { name: "x402.batch_pay", source: "runner-local", status: "active", risk: ["payment", "writes-ledger"], capabilities: ["x402", "payment", "batch"], roles: ["x402-agent"], requiresPolicy: true, requiresCircle: true, description: "Batch pay multiple x402 services" },
-  { name: "x402.list_receipts", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["x402", "receipts"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "List x402 payment receipts" },
-  { name: "x402.payment_policy", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["x402", "policy"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "Current x402 payment policy (limits, hosts, enabled)" },
+  { name: "x402.list_receipts", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["x402", "receipts"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "List x402 payment receipts" },
+  { name: "x402.payment_policy", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["x402", "policy"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "Current x402 payment policy (limits, hosts, enabled)" },
 
   // ERC-8004
   { name: "erc8004.prepare_register", source: "runner-local", status: "active", risk: ["prepare-only"], capabilities: ["erc8004", "identity"], roles: ["identity-agent", "provider"], description: "Prepare ERC-8004 agent registration (unsigned calldata)" },
@@ -87,27 +87,27 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
   { name: "erc8183.fund_job", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["client", ], requiresCircle: true, description: "Fund an ERC-8183 job (requires prior approve_usdc)" },
   { name: "erc8183.complete_job", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["evaluator", ], requiresCircle: true, description: "Complete an ERC-8183 job (evaluator action)" },
   { name: "erc8183.reject_job", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["evaluator", ], requiresCircle: true, description: "Reject an ERC-8183 job (evaluator action)" },
-  { name: "erc8183.claim_refund", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["client", "full-stack-agent"], requiresCircle: true, description: "Claim refund for expired ERC-8183 job (client action)" },
-  { name: "erc8183.set_provider", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["client", "full-stack-agent"], requiresCircle: true, description: "Assign provider to open ERC-8183 job (client action)" },
+  { name: "erc8183.claim_refund", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["client"], requiresCircle: true, description: "Claim refund for expired ERC-8183 job (client action)" },
+  { name: "erc8183.set_provider", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8183", "lifecycle"], roles: ["client"], requiresCircle: true, description: "Assign provider to open ERC-8183 job (client action)" },
 
   // Approvals (client chat-mediated flow)
-  { name: "approvals.create", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals", "erc8183"], roles: ["client", "full-stack-agent"], description: "Create pending approval for client ERC-8183 action" },
-  { name: "approvals.get", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client", "full-stack-agent"], description: "Get approval record by ID" },
+  { name: "approvals.create", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals", "erc8183"], roles: ["client"], description: "Create pending approval for client ERC-8183 action" },
+  { name: "approvals.get", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client"], description: "Get approval record by ID" },
   { name: "approvals.approve", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["approvals", "erc8183"], roles: ["client"], requiresCircle: true, description: "Approve and execute pending approval" },
   { name: "approvals.reject", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client"], description: "Reject pending approval" },
   { name: "approvals.cancel", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client"], description: "Cancel pending approval" },
-  { name: "approvals.list_pending", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client", "full-stack-agent"], description: "List pending approvals" },
+  { name: "approvals.list_pending", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client"], description: "List pending approvals" },
 
   // ERC-8004 Register via Circle CLI (guarded)
   { name: "erc8004.register_via_circle_cli", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity"], roles: ["identity-agent", ], requiresCircle: true, description: "Register ERC-8004 identity on-chain. Gated behind allowIdentityRegister." },
 
   // ERC-8004 Chat-Approved Registration
-  { name: "erc8004.register_approval_create", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator", "full-stack-agent"], description: "Create pending ERC-8004 registration approval (provider/evaluator)" },
-  { name: "erc8004.register_approval_get", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator", "full-stack-agent"], description: "Get ERC-8004 registration approval by ID" },
-  { name: "erc8004.register_approval_approve", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator", "full-stack-agent"], description: "Approve pending ERC-8004 registration approval" },
-  { name: "erc8004.register_approval_reject", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator", "full-stack-agent"], description: "Reject pending ERC-8004 registration approval" },
-  { name: "erc8004.register_approval_execute", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator", "full-stack-agent"], requiresCircle: true, description: "Execute approved ERC-8004 registration on-chain" },
-  { name: "erc8004.register_approval_approve_and_execute", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator", "full-stack-agent"], requiresCircle: true, description: "Approve + execute ERC-8004 registration in one call" },
+  { name: "erc8004.register_approval_create", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator"], description: "Create pending ERC-8004 registration approval (provider/evaluator)" },
+  { name: "erc8004.register_approval_get", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator"], description: "Get ERC-8004 registration approval by ID" },
+  { name: "erc8004.register_approval_approve", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator"], description: "Approve pending ERC-8004 registration approval" },
+  { name: "erc8004.register_approval_reject", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator"], description: "Reject pending ERC-8004 registration approval" },
+  { name: "erc8004.register_approval_execute", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator"], requiresCircle: true, description: "Execute approved ERC-8004 registration on-chain" },
+  { name: "erc8004.register_approval_approve_and_execute", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity", "approvals"], roles: ["identity-agent", "provider", "evaluator"], requiresCircle: true, description: "Approve + execute ERC-8004 registration in one call" },
 
   // Gateway Deposit (guarded)
   { name: "circle.gateway_deposit", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["circle", "gateway"], roles: ["x402-agent"], requiresCircle: true, description: "Deposit USDC into Gateway. Gated behind allowGatewayDeposit." },
@@ -116,11 +116,11 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
 // ── Skill Context Tools (Phase 3) ─────────────────────────────────────────
 
 export const SKILL_CONTEXT_TOOLS: RunnerToolRegistryItem[] = [
-  { name: "runner.skills_list", source: "skill-context", status: "active", risk: ["read-only"], capabilities: ["skills"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "List all manifest skills with metadata" },
-  { name: "runner.skill_get", source: "skill-context", status: "active", risk: ["read-only"], capabilities: ["skills"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "Get skill content by ID" },
-  { name: "runner.skills_bundle", source: "skill-context", status: "active", risk: ["read-only"], capabilities: ["skills", "bundle"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "Bundle skills for a role (context)" },
-  { name: "runner.role_profile", source: "skill-context", status: "active", risk: ["read-only"], capabilities: ["roles"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "Role description, capabilities, tool groups" },
-  { name: "runner.role_tools", source: "skill-context", status: "active", risk: ["read-only"], capabilities: ["roles", "tools"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"], description: "Callable tools enabled for a role" },
+  { name: "runner.skills_list", source: "skill-context", status: "active", risk: ["read-only"], capabilities: ["skills"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "List all manifest skills with metadata" },
+  { name: "runner.skill_get", source: "skill-context", status: "active", risk: ["read-only"], capabilities: ["skills"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "Get skill content by ID" },
+  { name: "runner.skills_bundle", source: "skill-context", status: "active", risk: ["read-only"], capabilities: ["skills", "bundle"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "Bundle skills for a role (context)" },
+  { name: "runner.role_profile", source: "skill-context", status: "active", risk: ["read-only"], capabilities: ["roles"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "Role description, capabilities, tool groups" },
+  { name: "runner.role_tools", source: "skill-context", status: "active", risk: ["read-only"], capabilities: ["roles", "tools"], roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"], description: "Callable tools enabled for a role" },
 ];
 
 // ── Console MCP Proxy Tools (Phase 6) ─────────────────────────────────────
@@ -137,9 +137,9 @@ export const CONSOLE_MCP_PROXY_TOOLS: RunnerToolRegistryItem[] = [
   { name: "reputation.give_feedback", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["reputation"], roles: ["identity-agent", "evaluator"], description: "Submit reputation feedback" },
 
   // Validation
-  { name: "validation.request_calldata", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["validation"], roles: ["validation-agent", "identity-agent"], description: "Request validation calldata" },
-  { name: "validation.response_calldata", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["validation"], roles: ["validation-agent", "evaluator"], description: "Response validation calldata" },
-  { name: "validation.status_read", source: "console-mcp-proxy", status: "active", risk: ["read-only"], capabilities: ["validation"], roles: ["validation-agent", "identity-agent", "evaluator"], description: "Read validation status" },
+  { name: "validation.request_calldata", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["validation"], roles: ["identity-agent"], description: "Request validation calldata" },
+  { name: "validation.response_calldata", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["validation"], roles: ["evaluator"], description: "Response validation calldata" },
+  { name: "validation.status_read", source: "console-mcp-proxy", status: "active", risk: ["read-only"], capabilities: ["validation"], roles: ["identity-agent", "evaluator"], description: "Read validation status" },
 
   // Jobs
   { name: "jobs.list_public", source: "console-mcp-proxy", status: "active", risk: ["read-only"], capabilities: ["jobs", "erc8183"], roles: ["provider", "client", "evaluator", ], description: "List public jobs" },

@@ -204,44 +204,6 @@ export const ROLE_PRESETS: RunnerRolePreset[] = [
     requiredConfigFields: ["agentId", "role"],
     optionalConfigFields: ["circle.walletAddress"],
   },
-  {
-    id: "validation-agent",
-    title: "Validation Agent",
-    description: "Validate agent work, submit validation results. Specialized validation role.",
-    capabilities: ["validation", "erc8004"],
-    toolGroups: [
-      "runner.*",
-      "runner.skills_list",
-      "runner.skill_get",
-      "runner.skills_bundle",
-      "runner.role_profile",
-      "runner.role_tools",
-      "validation.request_calldata",
-      "validation.response_calldata",
-      "validation.status_read",
-    ],
-    defaultPolicy: {
-      paymentEnabled: false,
-    },
-    requiredConfigFields: ["agentId", "role"],
-    optionalConfigFields: [],
-  },
-
-  {
-    id: "full-stack-agent",
-    title: "Full-Stack Agent",
-    description: "All capabilities enabled. For advanced users who need full access.",
-    capabilities: ["erc8004", "erc8183", "x402", "runtime", "payment", "identity", "validation", "reputation", "receipts", "ledger", "circle", "skills", "jobs"],
-    toolGroups: ["*"],
-    defaultPolicy: {
-      paymentEnabled: true,
-      perTxLimitUsdc: "0.10",
-      dailyLimitUsdc: "10",
-      monthlyLimitUsdc: "100",
-    },
-    requiredConfigFields: ["agentId", "role", "circle.walletAddress"],
-    optionalConfigFields: ["circle.chain", "runtime.endpoint"],
-  },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────

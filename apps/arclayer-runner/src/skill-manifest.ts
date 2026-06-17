@@ -16,9 +16,7 @@ export type RunnerRole =
   | "client"
   | "evaluator"
   | "x402-agent"
-  | "identity-agent"
-  | "validation-agent"
-  | "full-stack-agent";
+  | "identity-agent";
 
 export type SkillStatus = "active" | "legacy" | "deprecated" | "dev-only";
 
@@ -61,7 +59,7 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "validation-agent", "full-stack-agent"],
+    roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"],
     capabilities: ["erc8004", "erc8183", "x402", "mcp", "circle", "receipts", "proof"],
   },
   {
@@ -71,7 +69,7 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["provider", "client", "full-stack-agent"],
+    roles: ["provider", "client"],
     capabilities: ["business-loop", "autonomous", "revenue"],
   },
   {
@@ -81,7 +79,7 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "full-stack-agent"],
+    roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"],
     capabilities: ["integration", "setup", "mcp"],
   },
   {
@@ -91,7 +89,7 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent", "validation-agent", "full-stack-agent"],
+    roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"],
     capabilities: ["mcp", "tools", "reference"],
   },
   {
@@ -101,7 +99,7 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["full-stack-agent"],
+    roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"],
     capabilities: ["architecture", "conventions", "repo-structure"],
   },
   {

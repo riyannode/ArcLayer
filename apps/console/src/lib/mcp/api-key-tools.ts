@@ -43,7 +43,6 @@ const PROVIDER_LIKE_ROLE_PRESETS = new Set([
   'smart-contract',
   'frontend',
   'backend',
-  'devops',
   'design',
   'data-research',
   'documentation',

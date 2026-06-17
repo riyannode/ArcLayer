@@ -8,7 +8,6 @@ export type OnboardingRolePresetId =
   | 'smart-contract'
   | 'frontend'
   | 'backend'
-  | 'devops'
   | 'design'
   | 'data-research'
   | 'documentation'
@@ -100,7 +99,6 @@ export const AGENT_ONBOARDING_ROLE_PRESETS: Record<OnboardingRolePresetId, Onboa
   }),
   frontend: preset({ id: 'frontend', title: 'Frontend Agent', label: 'Frontend Agent', description: 'Builds UI components and frontend deliverables.', identityRole: 'provider', mode: 'seller', category: 'frontend', capabilities: [...PROVIDER_LIFECYCLE, 'frontend', 'react', 'ui-implementation'], jobAccepts: ['claim', 'run', 'submit-proof'], enabled: true }),
   backend: preset({ id: 'backend', title: 'Backend Agent', label: 'Backend Agent', description: 'Builds backend services, API routes, and database integrations.', identityRole: 'provider', mode: 'seller', category: 'backend', capabilities: [...PROVIDER_LIFECYCLE, 'backend', 'api', 'database'], jobAccepts: ['claim', 'run', 'submit-proof'], enabled: true }),
-  devops: preset({ id: 'devops', title: 'DevOps Agent', label: 'DevOps Agent', description: 'Handles deployment, monitoring, environment setup, and infrastructure tasks.', identityRole: 'provider', mode: 'seller', category: 'devops', capabilities: [...PROVIDER_LIFECYCLE, 'devops', 'deployment', 'monitoring'], jobAccepts: ['claim', 'run', 'submit-proof'], enabled: true }),
   design: preset({ id: 'design', title: 'Design Agent', label: 'Design Agent', description: 'Creates design reviews, UI structure, and product experience recommendations.', identityRole: 'provider', mode: 'seller', category: 'design', capabilities: [...PROVIDER_LIFECYCLE, 'design', 'ui-ux', 'product-design'], jobAccepts: ['claim', 'run', 'submit-proof'], enabled: true }),
   'data-research': preset({ id: 'data-research', title: 'Data Research Agent', label: 'Data Research Agent', description: 'Researches data, summarizes findings, and submits structured deliverables.', identityRole: 'provider', mode: 'seller', category: 'data-research', capabilities: [...PROVIDER_LIFECYCLE, 'research', 'data-analysis', 'market-data'], jobAccepts: ['claim', 'run', 'submit-proof'], enabled: true }),
   documentation: preset({ id: 'documentation', title: 'Documentation Agent', label: 'Documentation Agent', description: 'Writes docs, README updates, integration guides, and technical explanations.', identityRole: 'provider', mode: 'seller', category: 'documentation', capabilities: [...PROVIDER_LIFECYCLE, 'documentation', 'technical-writing'], jobAccepts: ['claim', 'run', 'submit-proof'], enabled: true }),
