@@ -16,11 +16,20 @@ type RolePreset = {
   runnerRole?: string; // Mapped Runner role (undefined = SDK-only)
 };
 
+type RoleToolOverrides = {
+  allowedTools?: string[];
+  deniedTools?: string[];
+  enableProviderRunAndSubmit?: boolean;
+};
+
+const PROVIDER_RUN_AND_SUBMIT_TOOL = "arclayer_provider_run_and_submit";
+
 const ROLE_PRESETS: RolePreset[] = [
   {
     id: "read-only",
     title: "Read Only",
-    description: "Can inspect x402 resources, read receipts and ledger. No payments.",
+    description:
+      "Can inspect x402 resources, read receipts and ledger. No payments.",
     allowedTools: [
       "arclayer_x402_inspect",
       "arclayer_receipts",
@@ -31,7 +40,8 @@ const ROLE_PRESETS: RolePreset[] = [
   {
     id: "x402-agent",
     title: "x402 Agent",
-    description: "Can inspect, pay, batch pay x402 resources, read receipts and ledger.",
+    description:
+      "Can inspect, pay, batch pay x402 resources, read receipts and ledger.",
     allowedTools: [
       "arclayer_x402_inspect",
       "arclayer_x402_pay",
@@ -44,18 +54,21 @@ const ROLE_PRESETS: RolePreset[] = [
   {
     id: "provider",
     title: "Provider",
-    description: "Can read receipts and ledger. ERC-8183 provider tools (future PR).",
+    description:
+      "Can run ERC-8183 provider jobs, read receipts and ledger. Run-only is default; run-and-submit requires explicit opt-in.",
     allowedTools: [
       "arclayer_x402_inspect",
       "arclayer_receipts",
       "arclayer_spend_ledger",
+      "arclayer_provider_run_only",
     ],
     runnerRole: "provider",
   },
   {
     id: "evaluator",
     title: "Evaluator",
-    description: "Can read receipts and ledger. ERC-8183 evaluator tools (future PR).",
+    description:
+      "Can read receipts and ledger. ERC-8183 evaluator tools (future PR).",
     allowedTools: [
       "arclayer_x402_inspect",
       "arclayer_receipts",
@@ -66,7 +79,8 @@ const ROLE_PRESETS: RolePreset[] = [
   {
     id: "client",
     title: "Client",
-    description: "Can read receipts and ledger. ERC-8183 client tools (future PR).",
+    description:
+      "Can read receipts and ledger. ERC-8183 client tools (future PR).",
     allowedTools: [
       "arclayer_x402_inspect",
       "arclayer_receipts",
@@ -78,16 +92,13 @@ const ROLE_PRESETS: RolePreset[] = [
 
 /**
  * Get the list of allowed tool names for a role,
- * applying deniedTools/allowedTools overrides.
+ * applying enableProviderRunAndSubmit, deniedTools, and allowedTools overrides.
  *
- * Precedence: deniedTools > allowedTools > role preset
+ * Precedence: deniedTools > enableProviderRunAndSubmit > allowedTools > role preset
  */
 export function getArcLayerToolsForRole(
   role: ArcLayerAgentRole,
-  overrides?: {
-    allowedTools?: string[];
-    deniedTools?: string[];
-  },
+  overrides?: RoleToolOverrides,
 ): string[] {
   const preset = ROLE_PRESETS.find((p) => p.id === role);
   if (!preset) {
@@ -96,12 +107,20 @@ export function getArcLayerToolsForRole(
 
   let tools = [...preset.allowedTools];
 
-  // Apply allowedTools override (intersect with role preset)
+  // Explicit opt-in: add run-and-submit only for provider role when enabled
+  if (role === "provider" && overrides?.enableProviderRunAndSubmit) {
+    tools.push(PROVIDER_RUN_AND_SUBMIT_TOOL);
+  }
+
+  // Deduplicate
+  tools = Array.from(new Set(tools));
+
+  // Apply allowedTools override (intersect with current set)
   if (overrides?.allowedTools?.length) {
     tools = tools.filter((t) => overrides.allowedTools!.includes(t));
   }
 
-  // Apply deniedTools override (remove from set)
+  // Apply deniedTools override (remove from set) — highest precedence
   if (overrides?.deniedTools?.length) {
     tools = tools.filter((t) => !overrides.deniedTools!.includes(t));
   }

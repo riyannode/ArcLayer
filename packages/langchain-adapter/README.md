@@ -45,15 +45,48 @@ const result = await agent.invoke({
 
 ## Role-Based Tools
 
-| Role | inspect | pay | batch_pay | receipts | ledger |
-|------|---------|-----|-----------|----------|--------|
-| `read-only` (default) | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `x402-agent` | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `provider` | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `evaluator` | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `client` | ✅ | ❌ | ❌ | ✅ | ✅ |
+| Role | inspect | pay | batch_pay | receipts | ledger | provider_run_only | provider_run_and_submit |
+|------|---------|-----|-----------|----------|--------|-------------------|------------------------|
+| `read-only` (default) | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| `x402-agent` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| `provider` | ✅ | ❌ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| `evaluator` | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| `client` | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
 
-Provider, evaluator, and client roles will gain ERC-8183 tools in future PRs.
+Evaluator and client roles will gain ERC-8183 tools in future PRs.
+
+## Provider Runtime
+
+Provider agents can run ERC-8183 jobs through ArcLayer Runner. Two tools are available:
+
+- **`arclayer_provider_run_only`** (default) — runs the job on the LLM runtime, returns `deliverableHash`. Does NOT submit on-chain. Use this as the default execution path.
+- **`arclayer_provider_run_and_submit`** (explicit opt-in) — runs the job AND submits the deliverable on-chain via Circle CLI. Requires `enableProviderRunAndSubmit: true`.
+
+**Do NOT use `/erc8183/provider/run`** — it is a backward-compatible wrapper that delegates to `runAndSubmit`. Always use `run-only` or `run-and-submit` explicitly.
+
+```ts
+import { createArcLayerLangChainAgent } from "@arclayer/langchain-adapter";
+
+// Default: run-only (no on-chain submit)
+const agent = createArcLayerLangChainAgent({
+  role: "provider",
+  model: process.env.OPENAI_MODEL ?? "openai:gpt-4o",
+  runnerUrl: process.env.ARCLAYER_RUNNER_URL!,
+  runnerSecret: process.env.ARCLAYER_RUNNER_SECRET!,
+  enableProviderRunAndSubmit: false,
+});
+
+// Autonomous submit mode (explicit opt-in)
+const agent = createArcLayerLangChainAgent({
+  role: "provider",
+  model: process.env.OPENAI_MODEL ?? "openai:gpt-4o",
+  runnerUrl: process.env.ARCLAYER_RUNNER_URL!,
+  runnerSecret: process.env.ARCLAYER_RUNNER_SECRET!,
+  enableProviderRunAndSubmit: true,
+});
+```
+
+See [docs/langchain-provider-runtime.md](../../docs/langchain-provider-runtime.md) for full documentation.
 
 ## SDK-Side Guardrails
 

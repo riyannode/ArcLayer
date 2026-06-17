@@ -43,6 +43,8 @@ export type CreateArcLayerLangChainToolsOptions = {
   allowedHosts?: string[];
   deniedHosts?: string[];
   requireIdempotencyKey?: boolean;
+  /** Explicit opt-in for arclayer_provider_run_and_submit (provider role only). Default: false. */
+  enableProviderRunAndSubmit?: boolean;
   timeoutMs?: number;
   logger?: ArcLayerLogger;
   /** Custom fetch implementation (for testing or proxy) */
@@ -107,6 +109,52 @@ export type X402BatchPayInput = {
   batchId: string;
   taskId: string;
   payments: X402BatchPayPayment[];
+};
+
+// ── Provider Runtime Schemas (input shapes for ERC-8183 tools) ──────────────
+
+/**
+ * Input for arclayer_provider_run_only.
+ * Matches Runner HTTP body shape (Erc8183ProviderJobSchema superset).
+ * Runner parses body as Erc8183ProviderJobSchema which includes
+ * evaluator? and metadata? beyond the MCP input schema.
+ */
+export type ProviderRunOnlyInput = {
+  taskId: string;
+  jobId: string;
+  agentId: string;
+  provider: string;
+  evaluator?: string;
+  description: string;
+  input: unknown;
+  metadata?: Record<string, unknown>;
+};
+
+/**
+ * Input for arclayer_provider_run_and_submit.
+ * Same shape as ProviderRunOnlyInput — the Runner handles the submit step.
+ */
+export type ProviderRunAndSubmitInput = ProviderRunOnlyInput;
+
+/**
+ * Output from /erc8183/provider/run-only on success.
+ */
+export type ProviderRunOnlyOutput = {
+  ok: true;
+  status: string;
+  role: string;
+  result: unknown;
+  deliverableHash: string;
+  runId: string;
+  receipt: unknown;
+};
+
+/**
+ * Output from /erc8183/provider/run-and-submit on success.
+ * Adds submitReceipt from the on-chain submit step.
+ */
+export type ProviderRunAndSubmitOutput = ProviderRunOnlyOutput & {
+  submitReceipt: unknown;
 };
 
 // ── Runner Response Wrappers ────────────────────────────────────────────────
