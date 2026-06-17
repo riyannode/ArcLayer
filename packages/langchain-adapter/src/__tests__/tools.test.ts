@@ -548,6 +548,45 @@ describe("createArcLayerLangChainTools", () => {
     expect(calls[0].url).toContain("/erc8183/provider/run-only");
   });
 
+  it("provider_run_only sends evaluator? and metadata? in body", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({ ok: true, status: "completed", role: "provider", result: {}, deliverableHash: "0x0", runId: "r", receipt: {} }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    const runOnly = tools.find(
+      (t) => t.name === "arclayer_provider_run_only",
+    );
+
+    await runOnly!.invoke({
+      taskId: "task-1",
+      jobId: "100",
+      agentId: "agent-1",
+      provider: "0x1234567890abcdef1234567890abcdef12345678",
+      evaluator: "0xabcdef1234567890abcdef1234567890abcdef12",
+      description: "test with evaluator and metadata",
+      input: { prompt: "hello" },
+      metadata: { source: "test", priority: 1 },
+    });
+
+    const sentBody = JSON.parse(calls[0].init!.body as string);
+    expect(sentBody.evaluator).toBe(
+      "0xabcdef1234567890abcdef1234567890abcdef12",
+    );
+    expect(sentBody.metadata).toEqual({ source: "test", priority: 1 });
+  });
+
   it("provider_run_and_submit calls /erc8183/provider/run-and-submit", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const { createArcLayerLangChainTools } = await import("../tools.js");

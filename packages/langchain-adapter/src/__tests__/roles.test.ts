@@ -61,6 +61,18 @@ describe("roles", () => {
       expect(tools).not.toContain("arclayer_x402_batch_pay");
     });
 
+    it("deniedTools can remove provider_run_and_submit from provider role", () => {
+      const tools = getArcLayerToolsForRole("provider", {
+        deniedTools: ["arclayer_provider_run_and_submit"],
+      });
+      expect(tools).toContain("arclayer_provider_run_only");
+      expect(tools).not.toContain("arclayer_provider_run_and_submit");
+      // Read tools still present
+      expect(tools).toContain("arclayer_x402_inspect");
+      expect(tools).toContain("arclayer_receipts");
+      expect(tools).toContain("arclayer_spend_ledger");
+    });
+
     it("allowedTools restricts to intersection with role", () => {
       const tools = getArcLayerToolsForRole("x402-agent", {
         allowedTools: ["arclayer_x402_inspect", "arclayer_receipts"],

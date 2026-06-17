@@ -20,6 +20,8 @@ import type {
   X402BatchPayInput,
   ProviderRunOnlyInput,
   ProviderRunAndSubmitInput,
+  ProviderRunOnlyOutput,
+  ProviderRunAndSubmitOutput,
 } from "./types.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -276,8 +278,13 @@ export class ArcLayerRunnerClient {
    * Run an ERC-8183 provider job (runtime only, no on-chain submit).
    * Calls POST /erc8183/provider/run-only.
    */
-  async runProviderJobOnly(input: ProviderRunOnlyInput): Promise<unknown> {
-    return this.post("/erc8183/provider/run-only", input);
+  async runProviderJobOnly(
+    input: ProviderRunOnlyInput,
+  ): Promise<ProviderRunOnlyOutput> {
+    return this.post<ProviderRunOnlyOutput>(
+      "/erc8183/provider/run-only",
+      input,
+    );
   }
 
   /**
@@ -286,7 +293,10 @@ export class ArcLayerRunnerClient {
    */
   async runAndSubmitProviderJob(
     input: ProviderRunAndSubmitInput,
-  ): Promise<unknown> {
-    return this.post("/erc8183/provider/run-and-submit", input);
+  ): Promise<ProviderRunAndSubmitOutput> {
+    return this.post<ProviderRunAndSubmitOutput>(
+      "/erc8183/provider/run-and-submit",
+      input,
+    );
   }
 }

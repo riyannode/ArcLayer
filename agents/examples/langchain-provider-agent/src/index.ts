@@ -8,6 +8,7 @@
  *   ARCLAYER_RUNNER_URL     — Runner HTTP URL (e.g. http://127.0.0.1:8787)
  *   ARCLAYER_RUNNER_SECRET  — Runner HMAC secret
  *   OPENAI_API_KEY          — OpenAI API key for the LLM
+ *   OPENAI_MODEL            — Model string (default: openai:gpt-4o)
  *   ENABLE_AUTO_SUBMIT      — Set "true" to allow run-and-submit (default: false)
  */
 
@@ -28,20 +29,30 @@ if (!RUNNER_SECRET) {
 
 const agent = createArcLayerLangChainAgent({
   role: "provider",
-  model: "openai:gpt-4o",
+  model: process.env.OPENAI_MODEL ?? "openai:gpt-4o",
   runnerUrl: RUNNER_URL,
   runnerSecret: RUNNER_SECRET,
+  // When auto-submit is disabled, remove run-and-submit from available tools.
+  // This ensures the model cannot call it even if prompted to.
+  deniedTools: ENABLE_AUTO_SUBMIT
+    ? []
+    : ["arclayer_provider_run_and_submit"],
 });
+
+const availableTools = ["arclayer_provider_run_only"];
+if (ENABLE_AUTO_SUBMIT) {
+  availableTools.push("arclayer_provider_run_and_submit");
+}
 
 console.log(`[provider-agent] started`);
 console.log(`  runner: ${RUNNER_URL}`);
+console.log(`  model: ${process.env.OPENAI_MODEL ?? "openai:gpt-4o"}`);
 console.log(`  auto-submit: ${ENABLE_AUTO_SUBMIT}`);
-console.log(`  tools: provider_run_only${ENABLE_AUTO_SUBMIT ? ", provider_run_and_submit" : ""}`);
+console.log(`  tools: ${availableTools.join(", ")}`);
 
-// ── Main Loop ───────────────────────────────────────────────────────────
+// ── Main ────────────────────────────────────────────────────────────────
 
 async function main() {
-  // Example: run a provider job via the agent
   // In production, this would be triggered by an external event (webhook, queue, etc.)
   const prompt = ENABLE_AUTO_SUBMIT
     ? "Run provider job and submit deliverable on-chain when complete."

@@ -7,6 +7,7 @@
 
 import { tool, type DynamicStructuredTool } from "langchain";
 import { z } from "zod";
+import { Erc8183ProviderJobSchema } from "@arclayer/runner-core";
 import { ArcLayerRunnerClient } from "./client.js";
 import { getArcLayerToolsForRole } from "./roles.js";
 import { TOOL_NAME_MAP } from "./tool-map.js";
@@ -21,37 +22,30 @@ import type {
 // ── Zod Schemas ─────────────────────────────────────────────────────────────
 
 /**
- * Provider run input schema — superset of Erc8183ProviderRunJobInputSchema.
- * Matches Runner HTTP body shape (Erc8183ProviderJobSchema).
- * Runner parses body with evaluator? and metadata default {}.
+ * Provider run input schema — reuses Erc8183ProviderJobSchema from runner-core
+ * to avoid schema drift. Adds .describe() for LangChain tool parameter hints.
  */
-const ProviderRunInputSchema = z.object({
-  taskId: z.string().min(1).describe("Task identifier"),
-  jobId: z
-    .string()
-    .regex(/^[0-9]+$/, "jobId must be a numeric string")
-    .describe("ERC-8183 job ID (numeric string)"),
-  agentId: z.string().min(1).describe("Agent identifier"),
-  provider: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/, "provider must be a valid EVM address")
-    .describe("Provider wallet address (0x...)"),
-  evaluator: z
-    .string()
-    .regex(/^0x[a-fA-F0-9]{40}$/, "evaluator must be a valid EVM address")
-    .optional()
-    .describe("Evaluator wallet address (0x..., optional)"),
-  description: z.string().min(1).describe("Job description"),
-  input: z
-    .unknown()
-    .refine((v) => v !== undefined, {
-      message: "input is required (must be a JSON value, not undefined)",
-    })
-    .describe("Job input payload (any JSON value)"),
-  metadata: z
-    .record(z.string(), z.unknown())
-    .optional()
-    .describe("Optional metadata key-value pairs"),
+const ProviderRunInputSchema = Erc8183ProviderJobSchema.extend({
+  taskId: Erc8183ProviderJobSchema.shape.taskId.describe("Task identifier"),
+  jobId: Erc8183ProviderJobSchema.shape.jobId.describe(
+    "ERC-8183 job ID (numeric string)",
+  ),
+  agentId: Erc8183ProviderJobSchema.shape.agentId.describe("Agent identifier"),
+  provider: Erc8183ProviderJobSchema.shape.provider.describe(
+    "Provider wallet address (0x...)",
+  ),
+  evaluator: Erc8183ProviderJobSchema.shape.evaluator?.describe(
+    "Evaluator wallet address (0x..., optional)",
+  ),
+  description: Erc8183ProviderJobSchema.shape.description.describe(
+    "Job description",
+  ),
+  input: Erc8183ProviderJobSchema.shape.input.describe(
+    "Job input payload (any JSON value)",
+  ),
+  metadata: Erc8183ProviderJobSchema.shape.metadata.describe(
+    "Optional metadata key-value pairs",
+  ),
 });
 
 const LimitInputSchema = z.object({
