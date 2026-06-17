@@ -1201,7 +1201,7 @@ export class RunnerServices {
 
   /**
    * Gateway deposit — gated behind allowGatewayDeposit config flag.
-   * Disabled by default. Only for identity-agent role with allowGatewayDeposit flag.
+   * Disabled by default. Gated behind allowGatewayDeposit config flag.
    */
   async gatewayDeposit(body: unknown, signal?: AbortSignal) {
     if (!this.config.allowGatewayDeposit) {

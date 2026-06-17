@@ -15,8 +15,7 @@ export type RunnerRole =
   | "provider"
   | "client"
   | "evaluator"
-  | "x402-agent"
-  | "identity-agent";
+  | "x402-agent";
 
 export type SkillStatus = "active" | "legacy" | "deprecated" | "dev-only";
 
@@ -59,7 +58,7 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"],
+    roles: ["provider", "client", "evaluator", "x402-agent"],
     capabilities: ["erc8004", "erc8183", "x402", "mcp", "circle", "receipts", "proof"],
   },
   {
@@ -79,7 +78,7 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"],
+    roles: ["provider", "client", "evaluator", "x402-agent"],
     capabilities: ["integration", "setup", "mcp"],
   },
   {
@@ -89,7 +88,7 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"],
+    roles: ["provider", "client", "evaluator", "x402-agent"],
     capabilities: ["mcp", "tools", "reference"],
   },
   {
@@ -99,7 +98,7 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"],
+    roles: ["provider", "client", "evaluator", "x402-agent"],
     capabilities: ["architecture", "conventions", "repo-structure"],
   },
   {
@@ -109,7 +108,7 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["provider", "client", "evaluator", "x402-agent", "identity-agent"],
+    roles: ["provider", "client", "evaluator", "x402-agent"],
     capabilities: ["erc8004", "erc8183", "x402", "commerce"],
   },
   {
@@ -119,7 +118,7 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["provider", "client", "evaluator", "identity-agent"],
+    roles: ["provider", "client", "evaluator"],
     capabilities: ["agent-bundle", "onboarding"],
   },
   {
@@ -129,7 +128,7 @@ export const SKILL_MANIFEST: RunnerSkillManifestItem[] = [
     status: "active",
     exposeAsContext: true,
     executable: false,
-    roles: ["identity-agent", "provider"],
+    roles: ["provider"],
     capabilities: ["erc8004", "identity", "registration"],
   },
   {

@@ -1,6 +1,13 @@
 # ArcLayer Runner Role Presets
 
-Generated: 2026-06-12
+Generated: 2026-06-17
+
+---
+
+## Design Rule
+
+Public Runner roles = agent job type (what the agent does).
+ERC-8004 identity is a shared capability attached to economic roles, not a standalone role.
 
 ---
 
@@ -8,14 +15,10 @@ Generated: 2026-06-12
 
 | Role | Title | Use Case |
 |------|-------|----------|
-| `provider` | Provider | Run jobs, submit deliverables, earn USDC |
-| `client` | Client | Create jobs, fund escrow, approve USDC |
-| `evaluator` | Evaluator | Evaluate deliverables, approve/reject |
-| `x402-agent` | x402 Agent | Pay-per-call services |
-| `identity-agent` | Identity Agent | ERC-8004 identity management |
-| `validation-agent` | Validation Agent | Validate agent work |
-| `devops-admin` | DevOps Admin | Infrastructure management |
-| `full-stack-agent` | Full-Stack Agent | All capabilities |
+| `provider` | Provider | Run jobs, submit deliverables, earn USDC. Identity + job lifecycle. |
+| `client` | Client | Create jobs, fund escrow, approve USDC. Job funding only. |
+| `evaluator` | Evaluator | Evaluate deliverables, approve/reject. Identity + reputation + validation. |
+| `x402-agent` | x402 Agent | Pay-per-call services. Identity + x402 wallet/payment. |
 
 ---
 
@@ -25,9 +28,9 @@ Generated: 2026-06-12
 
 **Description:** Run jobs, submit deliverables, earn USDC. Full ERC-8183 lifecycle with Circle CLI adapter.
 
-**Capabilities:** erc8183, erc8004, x402, runtime, receipts, ledger, circle
+**Capabilities:** erc8004, identity, erc8183, x402, runtime, receipts, ledger, circle
 
-**Tools:** 40+ tools including runner.*, circle.*, erc8183.*, provider.*, jobs.*
+**Tools:** runner.*, circle.status, erc8004.register_approval_*, identity.*, erc8183.provider_*, provider.*, jobs.*
 
 **Default Policy:** payments disabled
 
@@ -41,7 +44,7 @@ Generated: 2026-06-12
 
 **Capabilities:** erc8183, x402, jobs, usdc
 
-**Tools:** runner.*, client.prepare_*, jobs.*
+**Tools:** runner.*, approvals.*, client.prepare_*, jobs.*, x402.inspect, x402.payment_policy
 
 **Default Policy:** payments disabled
 
@@ -51,11 +54,11 @@ Generated: 2026-06-12
 
 ### Evaluator
 
-**Description:** Evaluate job deliverables, approve or reject submissions.
+**Description:** Evaluate job deliverables, approve or reject submissions. Identity + reputation + validation.
 
-**Capabilities:** erc8183, validation, reputation
+**Capabilities:** erc8004, identity, erc8183, validation, reputation
 
-**Tools:** runner.*, evaluator.prepare_*, validation.status_read, jobs.*
+**Tools:** runner.*, erc8004.register_approval_*, identity.*, evaluator.prepare_*, reputation.*, validation.*, jobs.*
 
 **Default Policy:** payments disabled
 
@@ -65,73 +68,13 @@ Generated: 2026-06-12
 
 ### x402 Agent
 
-**Description:** Pay-per-call agent. Discovers, inspects, and pays for x402-protected services.
+**Description:** Pay-per-call agent. Discovers, inspects, and pays for x402-protected services. Identity + x402 wallet/payment.
 
-**Capabilities:** x402, payment, circle, receipts, ledger
+**Capabilities:** erc8004, identity, x402, payment, circle, receipts, ledger
 
-**Tools:** runner.*, circle.*, x402.*
+**Tools:** runner.*, circle.*, x402.*, erc8004.register_approval_*, identity.*
 
 **Default Policy:** payments enabled (perTx=0.05, daily=5, monthly=50)
-
-**Required Config:** agentId, role, circle.walletAddress
-
-**Live Endpoint:** `https://arclayers.xyz/api/x402/protected-resource`
-
-**allowedX402Hosts:** Use domain only: `arclayers.xyz` (not the full URL path)
-
----
-
-### Identity Agent
-
-**Description:** Manage ERC-8004 agent identity, registration, reputation, and validation.
-
-**Capabilities:** erc8004, identity, reputation, validation
-
-**Tools:** runner.*, erc8004.prepare_register, identity.*, reputation.*, validation.*
-
-**Default Policy:** payments disabled
-
-**Required Config:** agentId, role
-
----
-
-### Validation Agent
-
-**Description:** Validate agent work, submit validation results.
-
-**Capabilities:** validation, erc8004
-
-**Tools:** runner.*, validation.*
-
-**Default Policy:** payments disabled
-
-**Required Config:** agentId, role
-
----
-
-### DevOps Admin
-
-**Description:** Infrastructure management, health checks, policy inspection.
-
-**Capabilities:** health, policy, skills, doctor, install
-
-**Tools:** runner.health, runner.manifest, runner.policy, runner.skills_*, circle.status
-
-**Default Policy:** payments disabled
-
-**Required Config:** agentId, role
-
----
-
-### Full-Stack Agent
-
-**Description:** All capabilities enabled. For advanced users.
-
-**Capabilities:** all
-
-**Tools:** * (wildcard)
-
-**Default Policy:** payments enabled (perTx=0.10, daily=10, monthly=100)
 
 **Required Config:** agentId, role, circle.walletAddress
 
@@ -145,10 +88,9 @@ npx -y @arclayer/setup@next
 
 # Non-interactive with role flag
 npx -y @arclayer/setup@next --role provider
+npx -y @arclayer/setup@next --role client
 npx -y @arclayer/setup@next --role evaluator
 npx -y @arclayer/setup@next --role x402-agent
-npx -y @arclayer/setup@next --role identity-agent
-npx -y @arclayer/setup@next --role devops-admin
 ```
 
 ---
