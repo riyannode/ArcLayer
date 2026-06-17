@@ -23,7 +23,7 @@
  *   ENABLE_PROVIDER_SET_BUDGET — "true" to expose quote + set-budget tools
  *   PROVIDER_MIN_BUDGET_USDC   — Min budget, default 1.00
  *   PROVIDER_MAX_BUDGET_USDC   — Max budget, default 5.00
- *   PROVIDER_LOW_COMPLEXITY_BUDGET_USDC    — default 5.00
+ *   PROVIDER_LOW_COMPLEXITY_BUDGET_USDC    — default 1.00
  *   PROVIDER_MEDIUM_COMPLEXITY_BUDGET_USDC — default 3.00
  *   PROVIDER_HIGH_COMPLEXITY_BUDGET_USDC   — default 5.00
  *   TASK_POLL_INTERVAL_MS      — Poll interval, default 30000
@@ -62,7 +62,7 @@ const providerPricingPolicy = ENABLE_PROVIDER_SET_BUDGET
   ? {
       minBudgetUsdc: process.env.PROVIDER_MIN_BUDGET_USDC ?? "1.00",
       maxBudgetUsdc: process.env.PROVIDER_MAX_BUDGET_USDC ?? "5.00",
-      lowComplexityBudgetUsdc: process.env.PROVIDER_LOW_COMPLEXITY_BUDGET_USDC ?? "5.00",
+      lowComplexityBudgetUsdc: process.env.PROVIDER_LOW_COMPLEXITY_BUDGET_USDC ?? "1.00",
       mediumComplexityBudgetUsdc: process.env.PROVIDER_MEDIUM_COMPLEXITY_BUDGET_USDC ?? "3.00",
       highComplexityBudgetUsdc: process.env.PROVIDER_HIGH_COMPLEXITY_BUDGET_USDC ?? "5.00",
     }
