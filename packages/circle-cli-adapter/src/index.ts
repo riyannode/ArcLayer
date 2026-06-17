@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { RunnerError } from "@arclayer/runner-core";
+import type { WalletExecutionAdapter, WalletExecuteResult } from "@arclayer/runner-core";
 
 const execFileAsync = promisify(execFile);
 
@@ -56,7 +57,7 @@ function tryParseJson(stdout: string): unknown | undefined {
   }
 }
 
-export class CircleCliAdapter {
+export class CircleCliAdapter implements WalletExecutionAdapter {
   private readonly bin: string;
   private readonly timeoutMs: number;
 
@@ -127,16 +128,16 @@ export class CircleCliAdapter {
 
   // ── Balance & Budget ────────────────────────────────────────────────────
 
-  async walletBalance(address: string, chain: string): Promise<CircleCliResult> {
-    return this.run(["wallet", "balance", "--address", address, "--chain", chain, "--output", "json"]);
+  async walletBalance(address: string, chain: string, signal?: AbortSignal): Promise<CircleCliResult> {
+    return this.run(["wallet", "balance", "--address", address, "--chain", chain, "--output", "json"], signal);
   }
 
-  async walletBudget(address: string): Promise<CircleCliResult> {
-    return this.run(["wallet", "limit", "budget", "--address", address, "--output", "json"]);
+  async walletBudget(address: string, signal?: AbortSignal): Promise<CircleCliResult> {
+    return this.run(["wallet", "limit", "budget", "--address", address, "--output", "json"], signal);
   }
 
-  async gatewayBalance(address: string, chain: string): Promise<CircleCliResult> {
-    return this.run(["gateway", "balance", "--address", address, "--chain", chain, "--output", "json"]);
+  async gatewayBalance(address: string, chain: string, signal?: AbortSignal): Promise<CircleCliResult> {
+    return this.run(["gateway", "balance", "--address", address, "--chain", chain, "--output", "json"], signal);
   }
 
   // ── x402 Services ──────────────────────────────────────────────────────

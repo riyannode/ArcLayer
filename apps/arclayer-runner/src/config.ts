@@ -218,6 +218,12 @@ function buildEnvConfig(): Record<string, unknown> {
   if (process.env.CIRCLE_CHAIN) set("chain", process.env.CIRCLE_CHAIN);
   if (process.env.CIRCLE_CLI_BIN) set("circleCliBin", process.env.CIRCLE_CLI_BIN);
   set("circleWalletAddress", process.env.CIRCLE_WALLET_ADDRESS);
+  if (process.env.ARCLAYER_WALLET_RAIL) set("walletRail", process.env.ARCLAYER_WALLET_RAIL);
+  if (process.env.CIRCLE_API_KEY) set("circleApiKey", process.env.CIRCLE_API_KEY);
+  if (process.env.CIRCLE_ENTITY_SECRET) set("circleEntitySecret", process.env.CIRCLE_ENTITY_SECRET);
+  if (process.env.CIRCLE_WALLET_SET_ID) set("circleWalletSetId", process.env.CIRCLE_WALLET_SET_ID);
+  if (process.env.CIRCLE_WALLET_ID) set("circleWalletId", process.env.CIRCLE_WALLET_ID);
+  if (process.env.CIRCLE_API_BASE_URL) set("circleApiBaseUrl", process.env.CIRCLE_API_BASE_URL);
 
   if (process.env.ARCLAYER_PAYMENT_ENABLED) set("paymentEnabled", process.env.ARCLAYER_PAYMENT_ENABLED);
   if (process.env.ARCLAYER_PER_TX_LIMIT_USDC) set("perTxLimitUsdc", process.env.ARCLAYER_PER_TX_LIMIT_USDC);

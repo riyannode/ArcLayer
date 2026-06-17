@@ -170,7 +170,7 @@ export async function handleMcpTool(
       if (!config.circleWalletAddress) {
         return { ok: false, error: "CIRCLE_WALLET_NOT_CONFIGURED" };
       }
-      const gw = await services.circle.gatewayBalance(config.circleWalletAddress, config.chain);
+      const gw = await services.wallet.gatewayBalance(config.circleWalletAddress, config.chain);
       return { ok: true, result: gw };
     }
 
@@ -178,7 +178,7 @@ export async function handleMcpTool(
       if (!config.circleWalletAddress) {
         return { ok: false, error: "CIRCLE_WALLET_NOT_CONFIGURED" };
       }
-      const bal = await services.circle.walletBalance(config.circleWalletAddress, config.chain);
+      const bal = await services.wallet.walletBalance(config.circleWalletAddress, config.chain);
       return { ok: true, result: bal };
     }
 
@@ -186,7 +186,7 @@ export async function handleMcpTool(
       if (!config.circleWalletAddress) {
         return { ok: false, error: "CIRCLE_WALLET_NOT_CONFIGURED" };
       }
-      const budget = await services.circle.walletBudget(config.circleWalletAddress);
+      const budget = await services.wallet.walletBudget(config.circleWalletAddress);
       return { ok: true, result: budget };
     }
 

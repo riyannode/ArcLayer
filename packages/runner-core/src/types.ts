@@ -173,6 +173,13 @@ export const RunnerConfigSchema = z.object({
   chain: z.string().default("ARC-TESTNET"),
   circleCliBin: z.string().default("circle"),
   circleWalletAddress: HexAddressSchema.optional(),
+  // ── Wallet Rail Selection ──────────────────────────────────────────────
+  walletRail: z.enum(["circle-cli", "circle-dev"]).default("circle-cli"),
+  circleApiKey: z.string().optional(),
+  circleEntitySecret: z.string().optional(),
+  circleWalletSetId: z.string().optional(),
+  circleWalletId: z.string().optional(),
+  circleApiBaseUrl: z.string().url().optional(),
 
   paymentEnabled: z.preprocess(
     (v) => {

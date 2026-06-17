@@ -21,7 +21,8 @@ import {
   type OperationState,
   type OperationErrorCode,
 } from "@arclayer/runner-core";
-import { CircleCliAdapter, type CircleCliResult } from "@arclayer/circle-cli-adapter";
+import type { WalletExecutionAdapter, WalletExecuteResult } from "@arclayer/runner-core";
+import type { CircleCliResult } from "@arclayer/circle-cli-adapter";
 import type { JsonlReceiptStore } from "@arclayer/runner-core";
 import path from "node:path";
 import { OperationJournal } from "./operation-journal";
@@ -72,9 +73,9 @@ export type WriteOperationResult = {
 // ── Circle CLI Execution Function Type ─────────────────────────────────
 
 export type CircleCliExecuteFn = (
-  circle: CircleCliAdapter,
+  circle: WalletExecutionAdapter,
   signal?: AbortSignal
-) => Promise<CircleCliResult>;
+ ) => Promise<WalletExecuteResult>;
 
 // ── Result Classification ──────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ function truncateText(value: string, maxBytes: number): string {
   return Buffer.from(value, "utf8").subarray(0, maxBytes).toString("utf8") + "\n...[truncated]";
 }
 
-function compactCircleResult(result: CircleCliResult): CircleCliResult {
+function compactCircleResult(result: WalletExecuteResult): WalletExecuteResult {
   return {
     ...result,
     stdout: truncateText(result.stdout ?? "", MAX_CACHED_STDOUT_BYTES),
@@ -218,7 +219,7 @@ export class ExecutionGateway {
   readonly journal: OperationJournal;
 
   constructor(
-    private readonly circle: CircleCliAdapter,
+    private readonly wallet: WalletExecutionAdapter,
     private readonly receipts: JsonlReceiptStore,
     private readonly config: {
       agentId: string;
@@ -483,7 +484,7 @@ export class ExecutionGateway {
     let cliError: Error | undefined;
 
     try {
-      cliResult = await executeFn(this.circle, signal);
+      cliResult = await executeFn(this.wallet, signal);
     } catch (error) {
       cliError = error instanceof Error ? error : new Error(String(error));
     }

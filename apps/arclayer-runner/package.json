@@ -29,6 +29,7 @@
   },
   "dependencies": {
     "@arclayer/circle-cli-adapter": "workspace:^",
+    "@arclayer/circle-dev-wallet-adapter": "workspace:^",
     "@arclayer/runner-core": "workspace:^",
     "@arclayer/sdk": "workspace:^",
     "@modelcontextprotocol/sdk": "1.29.0",

@@ -22,7 +22,8 @@ import {
   type RunnerConfig,
   type RuntimeResult
 } from "@arclayer/runner-core";
-import { CircleCliAdapter } from "@arclayer/circle-cli-adapter";
+import type { WalletExecutionAdapter } from "@arclayer/runner-core";
+import { createWalletAdapter } from "./wallet-adapter-factory";
 import { CONTRACTS } from "@arclayer/sdk";
 import type { RuntimeConnector } from "./runtime";
 import { safeHostFromUrl, sanitizeTaskForUntrustedRuntime } from "./runtime";
@@ -152,8 +153,8 @@ async function withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
 export class RunnerServices {
   readonly receipts: JsonlReceiptStore;
   readonly ledger: SpendingLedger;
-  /** @private — owned by ExecutionGateway. Use gateway.execute() for writes. */
-  private readonly circle: CircleCliAdapter;
+  /** @internal — use gateway.execute() for writes. */
+  readonly wallet: WalletExecutionAdapter;
   readonly gateway: ExecutionGateway;
   readonly approvalManager: ApprovalManager;
 
@@ -165,8 +166,8 @@ export class RunnerServices {
   ) {
     this.receipts = new JsonlReceiptStore(config.dataDir);
     this.ledger = new SpendingLedger(config.dataDir);
-    this.circle = new CircleCliAdapter({ bin: config.circleCliBin });
-    this.gateway = new ExecutionGateway(this.circle, this.receipts, {
+    this.wallet = createWalletAdapter(config);
+    this.gateway = new ExecutionGateway(this.wallet, this.receipts, {
       agentId: config.agentId,
       circleWalletAddress: config.circleWalletAddress,
       chain: config.chain,
@@ -199,7 +200,9 @@ export class RunnerServices {
         "erc8183_provider_lifecycle",
         "x402_nanopayment",
         "batch_payment",
-        "circle_cli_adapter",
+        this.config.walletRail === "circle-dev"
+          ? "circle_dev_wallet_adapter"
+          : "circle_cli_adapter",
         "receipt_proof_store",
         "spending_ledger",
         "mcp_bridge",
@@ -453,7 +456,7 @@ export class RunnerServices {
     }
 
     // Call Circle CLI submit — only place this is allowed
-    const submitReceipt = await this.submitDeliverableViaCircleCli({
+    const submitReceipt = await this.submitDeliverableViaWallet({
       jobId: input.jobId,
       deliverableHash: input.deliverableHash,
       optParams: input.optParams ?? "0x"
@@ -553,7 +556,7 @@ export class RunnerServices {
     return this.runAndSubmitProviderJob(body, lifecycle);
   }
 
-  async submitDeliverableViaCircleCli(
+  async submitDeliverableViaWallet(
     input: {
       jobId: string;
       deliverableHash: `0x${string}`;
@@ -1218,7 +1221,14 @@ export class RunnerServices {
 
     const input = body as { amount: string; method?: string };
 
-    const result = await this.circle.gatewayDeposit({
+    if (!this.wallet.gatewayDeposit) {
+      throw new RunnerError(
+        "GATEWAY_DEPOSIT_UNSUPPORTED",
+        "Gateway deposit is not supported by the current wallet adapter",
+        501,
+      );
+    }
+    const result = await this.wallet.gatewayDeposit({
       amount: input.amount,
       address: this.config.circleWalletAddress,
       chain: this.config.chain,
@@ -1245,7 +1255,7 @@ export class RunnerServices {
    * Gated behind allowIdentityRegister config flag.
    * Verifies tx receipt + ownerOf(tokenId) == configured wallet.
    */
-  async registerIdentityViaCircleCli(body: unknown, signal?: AbortSignal) {
+  async registerIdentityViaWallet(body: unknown, signal?: AbortSignal) {
     if (!this.config.allowIdentityRegister) {
       throw new RunnerError(
         "IDENTITY_REGISTER_DISABLED",
@@ -1264,7 +1274,14 @@ export class RunnerServices {
     }
 
     // Execute register(string) on IdentityRegistry
-    const result = await this.circle.executeAllowedArcWrite({
+    if (!this.wallet.executeAllowedArcWrite) {
+      throw new RunnerError(
+        "IDENTITY_REGISTER_UNSUPPORTED",
+        "ERC-8004 register is not supported by the current wallet adapter",
+        501,
+      );
+    }
+    const result = await this.wallet.executeAllowedArcWrite({
       signature: "register(string)",
       params: [input.metadataURI],
       contract: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
@@ -1286,7 +1303,7 @@ export class RunnerServices {
         const json = result.json as any;
         const tokenId = json?.tokenId ?? json?.outputs?.[0];
         if (tokenId) {
-          const ownerResult = await this.circle.queryContract({
+          const ownerResult = await this.wallet.queryContract!({
             signature: "ownerOf(uint256)",
             params: [String(tokenId)],
             contract: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
@@ -1417,7 +1434,7 @@ export class RunnerServices {
         };
       }
 
-      const registerResult = await this.registerIdentityViaCircleCli(
+      const registerResult = await this.registerIdentityViaWallet(
         { metadataURI },
         signal,
       );
@@ -1547,7 +1564,14 @@ export class RunnerServices {
     const payment = PaymentRequestSchema.parse(body);
     assertX402InspectAllowed(this.config, payment);
 
-    const result = await this.circle.inspectService({
+    if (!this.wallet.inspectService) {
+      throw new RunnerError(
+        "X402_INSPECT_UNSUPPORTED",
+        "x402 inspect is not supported by the current wallet adapter",
+        501,
+      );
+    }
+    const result = await this.wallet.inspectService({
       url: payment.url,
       method: payment.method,
       body: payment.body,
@@ -1604,7 +1628,14 @@ export class RunnerServices {
       });
 
       try {
-        const result = await this.circle.payService({
+        if (!this.wallet.payService) {
+          throw new RunnerError(
+            "X402_PAY_UNSUPPORTED",
+            "x402 pay is not supported by the current wallet adapter",
+            501,
+          );
+        }
+        const result = await this.wallet.payService({
           url: payment.url,
           method: payment.method,
           body: payment.body,
@@ -1744,10 +1775,10 @@ export class RunnerServices {
 
   async circleStatus() {
     const [version, status, gatewayBalance] = await Promise.allSettled([
-      this.circle.version(),
-      this.circle.walletStatus(),
+      this.wallet.version?.() ?? Promise.resolve(undefined),
+      this.wallet.walletStatus(),
       this.config.circleWalletAddress
-        ? this.circle.gatewayBalance(this.config.circleWalletAddress, this.config.chain)
+        ? this.wallet.gatewayBalance?.(this.config.circleWalletAddress, this.config.chain)
         : Promise.resolve(undefined)
     ]);
 
