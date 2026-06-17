@@ -593,6 +593,7 @@ describe("createArcLayerLangChainTools", () => {
 
     const tools = createArcLayerLangChainTools({
       role: "provider",
+      enableProviderRunAndSubmit: true,
       runnerUrl: "http://127.0.0.1:8787",
       runnerSecret: "secret",
       fetchImpl: async (url, init) => {
@@ -702,5 +703,44 @@ describe("createArcLayerLangChainTools", () => {
     const toolNames = tools.map((t) => t.name);
     expect(toolNames).not.toContain("arclayer_provider_run_only");
     expect(toolNames).not.toContain("arclayer_provider_run_and_submit");
+  });
+
+  it("provider role does not expose run-and-submit by default", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const toolNames = tools.map((t) => t.name);
+    expect(toolNames).toContain("arclayer_provider_run_only");
+    expect(toolNames).not.toContain("arclayer_provider_run_and_submit");
+  });
+
+  it("provider role exposes run-and-submit only with explicit opt-in", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderRunAndSubmit: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const toolNames = tools.map((t) => t.name);
+    expect(toolNames).toContain("arclayer_provider_run_only");
+    expect(toolNames).toContain("arclayer_provider_run_and_submit");
   });
 });

@@ -43,6 +43,8 @@ export type CreateArcLayerLangChainToolsOptions = {
   allowedHosts?: string[];
   deniedHosts?: string[];
   requireIdempotencyKey?: boolean;
+  /** Explicit opt-in for arclayer_provider_run_and_submit (provider role only). Default: false. */
+  enableProviderRunAndSubmit?: boolean;
   timeoutMs?: number;
   logger?: ArcLayerLogger;
   /** Custom fetch implementation (for testing or proxy) */

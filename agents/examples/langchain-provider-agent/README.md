@@ -8,9 +8,10 @@ A reference implementation for running ERC-8183 provider jobs through ArcLayer R
 
 ## Safety
 
-- `ENABLE_AUTO_SUBMIT=false` (default) removes `arclayer_provider_run_and_submit` from the tool set via `deniedTools`. The model cannot call it.
-- `ENABLE_AUTO_SUBMIT=true` makes both `run-only` and `run-and-submit` available.
-- All execution goes through Runner HTTP HMAC.
+- `ENABLE_AUTO_SUBMIT=false` (default): only `arclayer_provider_run_only` is available. The model cannot call `run_and_submit`.
+- `ENABLE_AUTO_SUBMIT=true`: maps to `enableProviderRunAndSubmit: true` — both tools become available.
+- `TASK_SOURCE=none` (default): idle loop, keeps process alive for PM2.
+- `TASK_SOURCE=static`: one-shot from `STATIC_PROVIDER_JOB_JSON`, then idle.
 
 ## Setup
 
@@ -41,4 +42,7 @@ pm2 logs arclayer-provider-agent
 | `ARCLAYER_RUNNER_SECRET` | **Yes** | — | Runner HMAC secret |
 | `OPENAI_API_KEY` | **Yes** | — | OpenAI API key |
 | `OPENAI_MODEL` | No | `openai:gpt-4o` | Model string |
-| `ENABLE_AUTO_SUBMIT` | No | `false` | Set `"true"` to enable on-chain submit |
+| `ENABLE_AUTO_SUBMIT` | No | `false` | Set `"true"` to expose `run_and_submit` |
+| `TASK_SOURCE` | No | `none` | `"none"` or `"static"` |
+| `TASK_POLL_INTERVAL_MS` | No | `30000` | Poll interval in ms |
+| `STATIC_PROVIDER_JOB_JSON` | No | — | JSON for static test task |

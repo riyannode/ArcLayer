@@ -221,6 +221,7 @@ export function createArcLayerLangChainTools(
     allowedHosts,
     deniedHosts,
     requireIdempotencyKey = false,
+    enableProviderRunAndSubmit = false,
     timeoutMs,
     logger,
   } = options;
@@ -229,6 +230,7 @@ export function createArcLayerLangChainTools(
   const enabledTools = getArcLayerToolsForRole(role, {
     allowedTools,
     deniedTools,
+    enableProviderRunAndSubmit,
   });
 
   const client = new ArcLayerRunnerClient({

@@ -60,22 +60,30 @@ Evaluator and client roles will gain ERC-8183 tools in future PRs.
 Provider agents can run ERC-8183 jobs through ArcLayer Runner. Two tools are available:
 
 - **`arclayer_provider_run_only`** (default) — runs the job on the LLM runtime, returns `deliverableHash`. Does NOT submit on-chain. Use this as the default execution path.
-- **`arclayer_provider_run_and_submit`** (explicit opt-in) — runs the job AND submits the deliverable on-chain via Circle CLI. Only use when on-chain settlement is required.
+- **`arclayer_provider_run_and_submit`** (explicit opt-in) — runs the job AND submits the deliverable on-chain via Circle CLI. Requires `enableProviderRunAndSubmit: true`.
 
 **Do NOT use `/erc8183/provider/run`** — it is a backward-compatible wrapper that delegates to `runAndSubmit`. Always use `run-only` or `run-and-submit` explicitly.
 
 ```ts
 import { createArcLayerLangChainAgent } from "@arclayer/langchain-adapter";
 
+// Default: run-only (no on-chain submit)
 const agent = createArcLayerLangChainAgent({
   role: "provider",
-  model: "openai:gpt-4o",
-  runnerUrl: "http://127.0.0.1:8787",
+  model: process.env.OPENAI_MODEL ?? "openai:gpt-4o",
+  runnerUrl: process.env.ARCLAYER_RUNNER_URL!,
   runnerSecret: process.env.ARCLAYER_RUNNER_SECRET!,
+  enableProviderRunAndSubmit: false,
 });
 
-// Agent gets: arclayer_provider_run_only (default), arclayer_provider_run_and_submit,
-//             arclayer_x402_inspect, arclayer_receipts, arclayer_spend_ledger
+// Autonomous submit mode (explicit opt-in)
+const agent = createArcLayerLangChainAgent({
+  role: "provider",
+  model: process.env.OPENAI_MODEL ?? "openai:gpt-4o",
+  runnerUrl: process.env.ARCLAYER_RUNNER_URL!,
+  runnerSecret: process.env.ARCLAYER_RUNNER_SECRET!,
+  enableProviderRunAndSubmit: true,
+});
 ```
 
 See [docs/langchain-provider-runtime.md](../../docs/langchain-provider-runtime.md) for full documentation.

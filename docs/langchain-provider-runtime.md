@@ -6,14 +6,51 @@ ERC-8183 provider runtime tools for `@arclayer/langchain-adapter`.
 
 Provider agents run ERC-8183 jobs through ArcLayer Runner. The adapter exposes two tools:
 
-| Tool | Runner Endpoint | Behavior |
-|------|----------------|----------|
-| `arclayer_provider_run_only` | `POST /erc8183/provider/run-only` | Runtime only — dispatches job to LLM, returns `deliverableHash`. Does NOT submit on-chain. |
-| `arclayer_provider_run_and_submit` | `POST /erc8183/provider/run-and-submit` | Full lifecycle — runs job + submits deliverable on-chain via Circle CLI. |
+| Tool | Runner Endpoint | Behavior | Availability |
+|------|----------------|----------|-------------|
+| `arclayer_provider_run_only` | `POST /erc8183/provider/run-only` | Runtime only — dispatches job to LLM, returns `deliverableHash`. Does NOT submit on-chain. | Default |
+| `arclayer_provider_run_and_submit` | `POST /erc8183/provider/run-and-submit` | Full lifecycle — runs job + submits deliverable on-chain via Circle CLI. | `enableProviderRunAndSubmit: true` |
 
 **`run-only` is the default recommended path.** Use `run-and-submit` only when on-chain settlement is explicitly required.
 
 **Do NOT use `POST /erc8183/provider/run`** — it is a backward-compatible wrapper that delegates to `runAndSubmit`. It exists for legacy clients only.
+
+## Tool Availability
+
+```
+role: "provider"
+  → arclayer_provider_run_only          (always)
+  → arclayer_provider_run_and_submit    (only with enableProviderRunAndSubmit: true)
+  → arclayer_x402_inspect               (always)
+  → arclayer_receipts                   (always)
+  → arclayer_spend_ledger               (always)
+```
+
+`deniedTools` always wins over `enableProviderRunAndSubmit`.
+
+## Usage
+
+```ts
+import { createArcLayerLangChainAgent } from "@arclayer/langchain-adapter";
+
+// Default: run-only (no on-chain submit)
+const agent = createArcLayerLangChainAgent({
+  role: "provider",
+  model: process.env.OPENAI_MODEL ?? "openai:gpt-4o",
+  runnerUrl: process.env.ARCLAYER_RUNNER_URL!,
+  runnerSecret: process.env.ARCLAYER_RUNNER_SECRET!,
+  enableProviderRunAndSubmit: false,
+});
+
+// Autonomous submit mode (explicit opt-in)
+const agent = createArcLayerLangChainAgent({
+  role: "provider",
+  model: process.env.OPENAI_MODEL ?? "openai:gpt-4o",
+  runnerUrl: process.env.ARCLAYER_RUNNER_URL!,
+  runnerSecret: process.env.ARCLAYER_RUNNER_SECRET!,
+  enableProviderRunAndSubmit: true,
+});
+```
 
 ## Architecture
 
@@ -31,7 +68,7 @@ All execution goes through Runner HTTP HMAC. The adapter never imports `apps/arc
 
 ## Input Schema
 
-Both tools accept the same input shape, which matches Runner's `Erc8183ProviderJobSchema`:
+Both tools accept the same input shape, derived from `Erc8183ProviderJobSchema` in `@arclayer/runner-core`:
 
 ```ts
 {
@@ -46,7 +83,7 @@ Both tools accept the same input shape, which matches Runner's `Erc8183ProviderJ
 }
 ```
 
-The adapter schema is a superset of `Erc8183ProviderRunJobInputSchema` from `@arclayer/runner-core` — it adds `evaluator?` and `metadata?` to match the HTTP body shape that Runner actually parses.
+The adapter schema reuses `Erc8183ProviderJobSchema` from `@arclayer/runner-core` directly via `.extend()` to avoid schema drift.
 
 ## Output Shapes
 
@@ -79,22 +116,6 @@ The adapter schema is a superset of `Erc8183ProviderRunJobInputSchema` from `@ar
 }
 ```
 
-## Role Configuration
-
-The `provider` role includes:
-
-| Tool | Available |
-|------|-----------|
-| `arclayer_x402_inspect` | ✅ |
-| `arclayer_receipts` | ✅ |
-| `arclayer_spend_ledger` | ✅ |
-| `arclayer_provider_run_only` | ✅ |
-| `arclayer_provider_run_and_submit` | ✅ |
-| `arclayer_x402_pay` | ❌ |
-| `arclayer_x402_batch_pay` | ❌ |
-
-Other roles (`read-only`, `x402-agent`, `evaluator`, `client`) do NOT include provider tools.
-
 ## SDK-Side Guardrails
 
 Provider tools have no SDK-side financial guardrails because they perform runtime execution, not payment:
@@ -105,35 +126,13 @@ Provider tools have no SDK-side financial guardrails because they perform runtim
 
 Runner remains the trust boundary for provider operations. Policy enforcement (job ownership, budget limits, role authorization) happens server-side.
 
-## Usage Example
-
-```ts
-import { createArcLayerLangChainAgent } from "@arclayer/langchain-adapter";
-
-const agent = createArcLayerLangChainAgent({
-  role: "provider",
-  model: "openai:gpt-4o",
-  runnerUrl: process.env.ARCLAYER_RUNNER_URL!,
-  runnerSecret: process.env.ARCLAYER_RUNNER_SECRET!,
-});
-
-const result = await agent.invoke({
-  messages: [
-    {
-      role: "user",
-      content: "Run provider job 123 for task task-abc with input {prompt: 'summarize'}",
-    },
-  ],
-});
-```
-
 ## PM2 Deployment
 
 ```bash
 # .env
 ARCLAYER_RUNNER_URL=http://127.0.0.1:8787
-ARCLAYER_RUNNER_SECRET=your-secret-here
-OPENAI_API_KEY=sk-...
+ARCLAYER_RUNNER_SECRET=your-s...n
+ENABLE_AUTO_SUBMIT=false
 
 pm2 start dist/index.js --name arclayer-provider-agent
 ```
@@ -143,7 +142,8 @@ See `agents/examples/langchain-provider-agent` for a complete PM2-compatible exa
 ## Safety
 
 - `run-only` is the default recommended path — no on-chain side effects
-- `run-and-submit` must be explicitly chosen — it submits deliverables on-chain
+- `run-and-submit` requires `enableProviderRunAndSubmit: true` — it submits deliverables on-chain
+- `deniedTools` always wins over `enableProviderRunAndSubmit`
 - Never use `/erc8183/provider/run` (backward-compat wrapper to runAndSubmit)
 - All execution goes through Runner HMAC — no direct Circle CLI, no internal imports
 - Error messages are sanitized — secrets, tokens, and signatures are redacted

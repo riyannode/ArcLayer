@@ -25,18 +25,26 @@ describe("roles", () => {
       expect(tools).toContain("arclayer_spend_ledger");
     });
 
-    it("provider gets inspect, receipts, ledger, and provider runtime tools", () => {
+    it("provider default gets run-only but not run-and-submit", () => {
       const tools = getArcLayerToolsForRole("provider");
       expect(tools).toContain("arclayer_x402_inspect");
       expect(tools).toContain("arclayer_receipts");
       expect(tools).toContain("arclayer_spend_ledger");
       expect(tools).toContain("arclayer_provider_run_only");
-      expect(tools).toContain("arclayer_provider_run_and_submit");
+      expect(tools).not.toContain("arclayer_provider_run_and_submit");
       expect(tools).not.toContain("arclayer_x402_pay");
       expect(tools).not.toContain("arclayer_x402_batch_pay");
     });
 
-    it("evaluator gets only read tools in PR1", () => {
+    it("provider can opt into run-and-submit explicitly", () => {
+      const tools = getArcLayerToolsForRole("provider", {
+        enableProviderRunAndSubmit: true,
+      });
+      expect(tools).toContain("arclayer_provider_run_only");
+      expect(tools).toContain("arclayer_provider_run_and_submit");
+    });
+
+    it("evaluator gets only read tools", () => {
       const tools = getArcLayerToolsForRole("evaluator");
       expect(tools).not.toContain("arclayer_x402_pay");
     });
@@ -61,8 +69,9 @@ describe("roles", () => {
       expect(tools).not.toContain("arclayer_x402_batch_pay");
     });
 
-    it("deniedTools can remove provider_run_and_submit from provider role", () => {
+    it("deniedTools removes run-and-submit even when explicitly enabled", () => {
       const tools = getArcLayerToolsForRole("provider", {
+        enableProviderRunAndSubmit: true,
         deniedTools: ["arclayer_provider_run_and_submit"],
       });
       expect(tools).toContain("arclayer_provider_run_only");
