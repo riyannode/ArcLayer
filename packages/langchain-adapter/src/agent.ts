@@ -40,7 +40,10 @@ export function createArcLayerLangChainAgent(
     ...toolOptions
   } = options;
 
-  const tools = createArcLayerLangChainTools(toolOptions);
+  const tools = createArcLayerLangChainTools({
+    ...toolOptions,
+    role,
+  });
   const prompt = buildArcLayerSystemPrompt(role, systemPrompt);
 
   return createAgent({

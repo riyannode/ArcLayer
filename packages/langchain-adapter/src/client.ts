@@ -20,6 +20,39 @@ import type {
   X402BatchPayInput,
 } from "./types.js";
 
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Strip trailing slashes without regex backtracking risk.
+ * Avoids CodeQL alert on /\/+$/ pattern.
+ */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+  return value.slice(0, end);
+}
+
+/**
+ * Extract a human-readable error message from a Runner ok:false response.
+ */
+function extractRunnerErrorMessage(result: Record<string, unknown>): string {
+  const message =
+    result.error ?? result.message ?? result.reason ?? "Unknown runner error";
+  return typeof message === "string" ? message : String(message);
+}
+
+/**
+ * Extract an error code from a Runner ok:false response.
+ */
+function extractRunnerErrorCode(result: Record<string, unknown>): string {
+  const code = result.code ?? result.errorCode ?? "RUNNER_ERROR";
+  return typeof code === "string" ? code : String(code);
+}
+
+// ── Client ──────────────────────────────────────────────────────────────────
+
 export class ArcLayerRunnerClient {
   private readonly baseUrl: string;
   private readonly secret: string;
@@ -35,8 +68,8 @@ export class ArcLayerRunnerClient {
       throw new ArcLayerError("INVALID_CONFIG", "runnerSecret is required");
     }
 
-    // Normalize trailing slash
-    this.baseUrl = options.runnerUrl.replace(/\/+$/, "");
+    // Normalize trailing slash without regex backtracking risk.
+    this.baseUrl = stripTrailingSlashes(options.runnerUrl);
 
     // Validate URL scheme
     if (
@@ -98,29 +131,52 @@ export class ArcLayerRunnerClient {
 
       clearTimeout(timeout);
 
-      // Auth failures
-      if (response.status === 401 || response.status === 403) {
+      // Parse response first so Runner policy errors on 403 are preserved.
+      // Runner commonly returns ok:false JSON for payment-policy denials.
+      let data: unknown;
+      let hasJsonBody = false;
+      try {
+        data = await response.json();
+        hasJsonBody = true;
+      } catch {
+        data = undefined;
+      }
+
+      // Runner ok:false pattern. Preserve policy/actionable errors even on 403.
+      if (hasJsonBody && data && typeof data === "object") {
+        const result = data as Record<string, unknown>;
+        if (result.ok === false) {
+          const code = extractRunnerErrorCode(result);
+          const msg = extractRunnerErrorMessage(result);
+          throw new ArcLayerError(code, msg, response.status);
+        }
+      }
+
+      // Actual auth failures without actionable Runner JSON.
+      if (response.status === 401) {
         throw new ArcLayerRunnerAuthError(
           `Runner auth failed (${response.status})`,
         );
       }
-
-      // Parse response
-      let data: unknown;
-      try {
-        data = await response.json();
-      } catch {
-        throw new ArcLayerRunnerProtocolError(
-          `Runner returned non-JSON response (status ${response.status})`,
+      if (response.status === 403) {
+        throw new ArcLayerError(
+          "RUNNER_FORBIDDEN",
+          "Runner rejected the request with 403",
+          403,
         );
       }
 
-      // Runner ok:false pattern
-      const result = data as Record<string, unknown>;
-      if (result && result.ok === false) {
-        const code = (result.code as string) ?? "RUNNER_ERROR";
-        const msg = (result.error as string) ?? "Unknown runner error";
-        throw new ArcLayerError(code, msg, response.status);
+      // Other non-2xx responses.
+      if (!response.ok) {
+        throw new ArcLayerRunnerProtocolError(
+          `Runner returned HTTP ${response.status}`,
+        );
+      }
+
+      if (!hasJsonBody) {
+        throw new ArcLayerRunnerProtocolError(
+          `Runner returned non-JSON response (status ${response.status})`,
+        );
       }
 
       return data as T;

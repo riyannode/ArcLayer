@@ -52,7 +52,6 @@ const result = await agent.invoke({
 | `provider` | ✅ | ❌ | ❌ | ✅ | ✅ |
 | `evaluator` | ✅ | ❌ | ❌ | ✅ | ✅ |
 | `client` | ✅ | ❌ | ❌ | ✅ | ✅ |
-| `full-stack-agent` | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 Provider, evaluator, and client roles will gain ERC-8183 tools in future PRs.
 

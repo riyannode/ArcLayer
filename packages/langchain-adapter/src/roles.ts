@@ -2,7 +2,7 @@
  * @arclayer/langchain-adapter — Role presets.
  *
  * Defines which tools are available for each role.
- * "read-only" and "full-stack-agent" are SDK-only presets.
+ * "read-only" is SDK-only preset.
  * The Runner only knows: provider, client, evaluator, x402-agent.
  */
 
@@ -73,19 +73,6 @@ const ROLE_PRESETS: RolePreset[] = [
       "arclayer_spend_ledger",
     ],
     runnerRole: "client",
-  },
-  {
-    id: "full-stack-agent",
-    title: "Full Stack Agent",
-    description: "All tools enabled. Requires ALLOW_FULL_STACK_AGENT=true.",
-    allowedTools: [
-      "arclayer_x402_inspect",
-      "arclayer_x402_pay",
-      "arclayer_x402_batch_pay",
-      "arclayer_receipts",
-      "arclayer_spend_ledger",
-    ],
-    runnerRole: "x402-agent", // Maps to x402-agent on Runner side
   },
 ];
 

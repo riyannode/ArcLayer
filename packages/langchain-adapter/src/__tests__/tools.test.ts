@@ -15,8 +15,10 @@ function mockFetch(response: {
 }) {
   const status = response.status ?? 200;
   const body = response.body ?? { ok: true };
+  const ok = response.ok ?? (status >= 200 && status < 300);
   return vi.fn().mockResolvedValue({
     status,
+    ok,
     json: () => Promise.resolve(body),
   });
 }
@@ -114,7 +116,11 @@ describe("ArcLayerRunnerClient", () => {
     });
 
     it("throws ArcLayerRunnerAuthError on 401", async () => {
-      const fetch = mockFetch({ status: 401, body: { ok: false } });
+      const fetch = vi.fn().mockResolvedValue({
+        status: 401,
+        ok: false,
+        json: () => Promise.reject(new Error("not json")),
+      });
       const client = new ArcLayerRunnerClient({
         ...defaultOpts,
         fetchImpl: fetch,
@@ -125,15 +131,19 @@ describe("ArcLayerRunnerClient", () => {
       );
     });
 
-    it("throws ArcLayerRunnerAuthError on 403", async () => {
-      const fetch = mockFetch({ status: 403, body: { ok: false } });
+    it("throws ArcLayerError on 403 without JSON", async () => {
+      const fetch = vi.fn().mockResolvedValue({
+        status: 403,
+        ok: false,
+        json: () => Promise.reject(new Error("not json")),
+      });
       const client = new ArcLayerRunnerClient({
         ...defaultOpts,
         fetchImpl: fetch,
       });
 
       await expect(client.get("/protected")).rejects.toThrow(
-        ArcLayerRunnerAuthError,
+        "Runner rejected the request with 403",
       );
     });
 
@@ -246,5 +256,139 @@ describe("ArcLayerRunnerClient", () => {
       const [url] = fetch.mock.calls[0];
       expect(url).toContain("/ledger?limit=10");
     });
+  });
+
+  describe("stripTrailingSlashes", () => {
+    it("normalizes runnerUrl with many trailing slashes without regex", async () => {
+      const slashyUrl = "http://127.0.0.1:8787" + "/".repeat(10_000);
+      const calls: string[] = [];
+      const client = new ArcLayerRunnerClient({
+        runnerUrl: slashyUrl,
+        runnerSecret: "secret",
+        fetchImpl: async (url) => {
+          calls.push(String(url));
+          return new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        },
+      });
+
+      await client.listReceipts(1);
+      expect(calls[0]).toBe("http://127.0.0.1:8787/receipts?limit=1");
+    });
+  });
+
+  describe("403 policy error preservation", () => {
+    it("preserves Runner ok:false on 403 as ArcLayerError, not auth error", async () => {
+      const fetch = vi.fn().mockResolvedValue({
+        status: 403,
+        json: () =>
+          Promise.resolve({
+            ok: false,
+            code: "PAYMENT_DENIED",
+            error: "Daily limit exceeded",
+          }),
+      });
+      const client = new ArcLayerRunnerClient({
+        ...defaultOpts,
+        fetchImpl: fetch,
+      });
+
+      await expect(client.get("/x402/pay")).rejects.toThrow("Daily limit exceeded");
+      try {
+        await client.get("/x402/pay");
+      } catch (e: unknown) {
+        // Should be ArcLayerError with code PAYMENT_DENIED, not ArcLayerRunnerAuthError
+        expect((e as { code: string }).code).toBe("PAYMENT_DENIED");
+      }
+    });
+
+    it("returns RUNNER_FORBIDDEN for 403 without JSON body", async () => {
+      const fetch = vi.fn().mockResolvedValue({
+        status: 403,
+        json: () => Promise.reject(new Error("not json")),
+      });
+      const client = new ArcLayerRunnerClient({
+        ...defaultOpts,
+        fetchImpl: fetch,
+      });
+
+      await expect(client.get("/protected")).rejects.toThrow(
+        "Runner rejected the request with 403",
+      );
+    });
+  });
+});
+
+describe("createArcLayerLangChainTools", () => {
+  it("allows host with non-default port when allowedHosts includes port", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "x402-agent",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      allowedHosts: ["api.example.com:8443"],
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+
+    const inspect = tools.find((t) => t.name === "arclayer_x402_inspect");
+    expect(inspect).toBeDefined();
+
+    const result = await inspect!.invoke({
+      url: "https://api.example.com:8443/protected",
+      method: "GET",
+    });
+    expect(result).not.toContain("Error:");
+    expect(calls.length).toBe(1);
+  });
+
+  it("rejects duplicate batch idempotency keys", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "x402-agent",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      maxAmountUsdc: "0.01",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const batch = tools.find((t) => t.name === "arclayer_x402_batch_pay");
+    expect(batch).toBeDefined();
+
+    const result = await batch!.invoke({
+      batchId: "batch-1",
+      taskId: "task-1",
+      payments: [
+        {
+          url: "https://api.example.com/a",
+          method: "GET",
+          maxAmountUsdc: "0.001",
+          reason: "pay a",
+          idempotencyKey: "same-key",
+        },
+        {
+          url: "https://api.example.com/b",
+          method: "GET",
+          maxAmountUsdc: "0.001",
+          reason: "pay b",
+          idempotencyKey: "same-key",
+        },
+      ],
+    });
+    expect(result).toContain("Duplicate idempotencyKey");
   });
 });

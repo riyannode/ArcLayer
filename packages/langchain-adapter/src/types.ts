@@ -21,7 +21,7 @@ export type ArcLayerRunnerClientOptions = {
 
 /**
  * SDK-side role presets.
- * "read-only" and "full-stack-agent" are SDK-only — NOT Runner roles.
+ * "read-only" is SDK-only — NOT a Runner role.
  * The Runner only knows: provider, client, evaluator, x402-agent.
  */
 export type ArcLayerAgentRole =
@@ -29,8 +29,7 @@ export type ArcLayerAgentRole =
   | "x402-agent"
   | "provider"
   | "evaluator"
-  | "client"
-  | "full-stack-agent";
+  | "client";
 
 // ── Tool Creation Options ───────────────────────────────────────────────────
 
@@ -46,6 +45,8 @@ export type CreateArcLayerLangChainToolsOptions = {
   requireIdempotencyKey?: boolean;
   timeoutMs?: number;
   logger?: ArcLayerLogger;
+  /** Custom fetch implementation (for testing or proxy) */
+  fetchImpl?: typeof fetch;
 };
 
 // ── Agent Creation Options ──────────────────────────────────────────────────

@@ -82,23 +82,18 @@ describe("roles", () => {
     it("client returns client", () => {
       expect(getRunnerRoleForSdkRole("client")).toBe("client");
     });
-
-    it("full-stack-agent returns x402-agent (runner-side)", () => {
-      expect(getRunnerRoleForSdkRole("full-stack-agent")).toBe("x402-agent");
-    });
   });
 
   describe("listRolePresets", () => {
-    it("returns all 6 roles", () => {
+    it("returns all 5 roles", () => {
       const presets = listRolePresets();
-      expect(presets).toHaveLength(6);
+      expect(presets).toHaveLength(5);
       expect(presets.map((p) => p.id)).toEqual([
         "read-only",
         "x402-agent",
         "provider",
         "evaluator",
         "client",
-        "full-stack-agent",
       ]);
     });
 

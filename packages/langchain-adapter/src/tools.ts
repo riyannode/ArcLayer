@@ -89,26 +89,57 @@ const X402BatchPayInputSchema = z.object({
 
 // ── Host Validation ─────────────────────────────────────────────────────────
 
+function normalizeHost(value: string): string {
+  return value.trim().toLowerCase();
+}
+
 function validateHost(
   url: string,
   allowedHosts?: string[],
   deniedHosts?: string[],
 ): void {
-  let hostname: string;
+  let host: string;
   try {
-    hostname = new URL(url).hostname;
+    // Match Runner policy: URL.host includes the port for non-default ports.
+    host = normalizeHost(new URL(url).host);
   } catch {
     throw new ArcLayerPolicyError(`Invalid URL: ${url}`);
   }
 
-  if (deniedHosts?.length && deniedHosts.includes(hostname)) {
-    throw new ArcLayerPolicyError(`Host '${hostname}' is denied`);
+  const normalizedDeniedHosts = deniedHosts?.map(normalizeHost) ?? [];
+  const normalizedAllowedHosts = allowedHosts?.map(normalizeHost) ?? [];
+
+  if (
+    normalizedDeniedHosts.includes("*") ||
+    normalizedDeniedHosts.includes(host)
+  ) {
+    throw new ArcLayerPolicyError(`Host '${host}' is denied`);
   }
 
-  if (allowedHosts?.length && !allowedHosts.includes(hostname)) {
+  if (
+    normalizedAllowedHosts.length > 0 &&
+    !normalizedAllowedHosts.includes("*") &&
+    !normalizedAllowedHosts.includes(host)
+  ) {
     throw new ArcLayerPolicyError(
-      `Host '${hostname}' is not in allowed hosts: ${allowedHosts.join(", ")}`,
+      `Host '${host}' is not in allowed hosts: ${allowedHosts?.join(", ")}`,
     );
+  }
+}
+
+function assertUniqueBatchIdempotencyKeys(
+  payments: Array<{ idempotencyKey?: string }>,
+): void {
+  const seen = new Set<string>();
+  for (const payment of payments) {
+    const key = payment.idempotencyKey?.trim();
+    if (!key) continue;
+    if (seen.has(key)) {
+      throw new ArcLayerPolicyError(
+        `Duplicate idempotencyKey in batch: ${key}`,
+      );
+    }
+    seen.add(key);
   }
 }
 
@@ -176,6 +207,7 @@ export function createArcLayerLangChainTools(
     runnerUrl,
     runnerSecret,
     timeoutMs,
+    fetchImpl: options.fetchImpl,
   });
 
   const tools: DynamicStructuredTool[] = [];
@@ -207,8 +239,8 @@ export function createArcLayerLangChainTools(
         break;
 
       case "arclayer_x402_batch_pay":
-        // Only enable batch pay for x402-agent or full-stack-agent
-        if (role === "x402-agent" || role === "full-stack-agent") {
+        // Only enable batch pay for x402-agent
+        if (role === "x402-agent") {
           tools.push(createBatchPayTool(client, toolName, entry, {
             maxAmountUsdc,
             allowedHosts,
@@ -350,6 +382,8 @@ function createBatchPayTool(
             );
           }
         }
+
+        assertUniqueBatchIdempotencyKeys(input.payments);
 
         const result = await client.batchPayX402({
           batchId: input.batchId,
