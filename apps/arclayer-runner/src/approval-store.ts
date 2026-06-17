@@ -262,7 +262,112 @@ export class ApprovalStore {
     return records.filter(r => r.state === "pending");
   }
 
+  /** List approvals in active states (pending/approved/executing/executed) for a wallet. */
+  listActiveByWallet(walletAddress?: string, limit = 50): ApprovalRecord[] {
+    const states = ["pending", "approved", "executing", "executed"];
+    let rows: ApprovalRow[];
+    if (walletAddress) {
+      rows = this.db.prepare(
+        `SELECT * FROM approvals WHERE state IN (?, ?, ?, ?) AND wallet_address = ? ORDER BY created_at DESC LIMIT ?`
+      ).all(...states, walletAddress.toLowerCase(), limit) as ApprovalRow[];
+    } else {
+      rows = this.db.prepare(
+        `SELECT * FROM approvals WHERE state IN (?, ?, ?, ?) ORDER BY created_at DESC LIMIT ?`
+      ).all(...states, limit) as ApprovalRow[];
+    }
+    const records = rows.map(mapRow);
+    // Check-on-read: expire stale pending/approved approvals before returning
+    for (const record of records) {
+      this.checkAndExpire(record);
+    }
+    // Filter out records that were just expired by checkAndExpire
+    return records.filter(r => states.includes(r.state));
+  }
+
+  /**
+   * List ERC-8004 duplicate candidates: active states + failed approvals with on-chain txHash.
+   * Prevents creating duplicate on-chain registrations when a previous attempt succeeded
+   * on-chain but failed during Console sync.
+   */
+  listErc8004DuplicateCandidatesByWallet(walletAddress?: string, limit = 100): ApprovalRecord[] {
+    const activeStates = ["pending", "approved", "executing", "executed"];
+    let rows: ApprovalRow[];
+    if (walletAddress) {
+      rows = this.db.prepare(
+        `SELECT * FROM approvals WHERE wallet_address = ? AND (
+          state IN (?, ?, ?, ?)
+          OR (state = 'failed' AND action_type = 'erc8004_register_agent' AND (tx_hash IS NOT NULL OR result_json LIKE '%"txHash"%'))
+        ) ORDER BY created_at DESC LIMIT ?`
+      ).all(walletAddress.toLowerCase(), ...activeStates, limit) as ApprovalRow[];
+    } else {
+      rows = this.db.prepare(
+        `SELECT * FROM approvals WHERE (
+          state IN (?, ?, ?, ?)
+          OR (state = 'failed' AND action_type = 'erc8004_register_agent' AND (tx_hash IS NOT NULL OR result_json LIKE '%"txHash"%'))
+        ) ORDER BY created_at DESC LIMIT ?`
+      ).all(...activeStates, limit) as ApprovalRow[];
+    }
+    // Refresh each record via get() to trigger checkAndExpire on stale pending/approved
+    // Filter out records that expired during refresh (state changed to 'expired')
+    const allCandidates = rows
+      .map(mapRow)
+      .map((record) => this.get(record.approvalId))
+      .filter((record): record is ApprovalRecord => Boolean(record));
+    return allCandidates.filter(
+      (r) => r.state !== "expired"
+    );
+  }
+
   // ── Transitions ──────────────────────────────────────────────────────
+
+  /**
+   * Transition from pending → approved.
+   * Used by erc8004 registration flow (approve then execute separately).
+   */
+  transitionToApproved(approvalId: string): TransitionResult {
+    const now = new Date().toISOString();
+
+    const result = this.db.prepare(`
+      UPDATE approvals
+      SET state = 'approved', updated_at = ?
+      WHERE approval_id = ? AND state = 'pending'
+    `).run(now, approvalId);
+
+    if (result.changes === 0) {
+      const current = this.get(approvalId);
+      if (!current) {
+        return { ok: false, error: "APPROVAL_NOT_FOUND", current: undefined as unknown as ApprovalRecord };
+      }
+      return { ok: false, error: `INVALID_STATE: ${current.state}`, current };
+    }
+
+    return { ok: true, approval: this.get(approvalId)! };
+  }
+
+  /**
+   * Transition from approved → executing.
+   * Used by erc8004 registration flow after explicit approval.
+   */
+  transitionFromApprovedToExecuting(approvalId: string): TransitionResult {
+    const now = new Date().toISOString();
+
+    const result = this.db.prepare(`
+      UPDATE approvals
+      SET state = 'executing', updated_at = ?
+      WHERE approval_id = ? AND state = 'approved' AND expires_at > ?
+    `).run(now, approvalId, now);
+
+    if (result.changes === 0) {
+      const current = this.get(approvalId);
+      if (!current) {
+        return { ok: false, error: "APPROVAL_NOT_FOUND", current: undefined as unknown as ApprovalRecord };
+      }
+      return { ok: false, error: `INVALID_STATE: ${current.state}`, current };
+    }
+
+    const updated = this.get(approvalId)!;
+    return { ok: true, approval: updated };
+  }
 
   /**
    * Atomic transition from pending → executing.
@@ -317,6 +422,20 @@ export class ApprovalStore {
   }
 
   /**
+   * Save retry metadata while staying in executing state.
+   * Used by ERC-8004 sync_pending_retryable flow to persist txHash
+   * so a later retry can skip on-chain tx and only re-sync.
+   */
+  saveExecutingRetryMetadata(approvalId: string, resultJson: Record<string, unknown>): void {
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      UPDATE approvals
+      SET result_json = ?, updated_at = ?
+      WHERE approval_id = ? AND state = 'executing'
+    `).run(JSON.stringify(resultJson), now, approvalId);
+  }
+
+  /**
    * Transition from executing → failed.
    */
   transitionToFailed(approvalId: string, errorMessage: string): ApprovalRecord {
@@ -328,6 +447,30 @@ export class ApprovalStore {
       WHERE approval_id = ? AND state = 'executing'
     `).run(errorMessage.slice(0, 500), now, approvalId);
 
+    return this.get(approvalId)!;
+  }
+
+  /**
+   * Transition from executing → failed, preserving result data (txHash, etc.)
+   * for reconciliation even when persistence/sync failed.
+   */
+  transitionToFailedWithResult(
+    approvalId: string,
+    errorMessage: string,
+    result?: Record<string, unknown>,
+  ): ApprovalRecord {
+    const now = new Date().toISOString();
+    this.db.prepare(`
+      UPDATE approvals
+      SET state = 'failed', error_message = ?, result_json = ?, tx_hash = ?, updated_at = ?
+      WHERE approval_id = ? AND state = 'executing'
+    `).run(
+      errorMessage.slice(0, 500),
+      result ? JSON.stringify(result) : null,
+      result?.txHash ? String(result.txHash) : null,
+      now,
+      approvalId,
+    );
     return this.get(approvalId)!;
   }
 
@@ -380,13 +523,13 @@ export class ApprovalStore {
   // ── Expiry ───────────────────────────────────────────────────────────
 
   private checkAndExpire(record: ApprovalRecord): void {
-    if (record.state !== "pending") return;
+    if (record.state !== "pending" && record.state !== "approved") return;
 
     const now = new Date().toISOString();
     if (record.expiresAt > now) return;
 
     this.db.prepare(
-      "UPDATE approvals SET state = 'expired', updated_at = ? WHERE approval_id = ? AND state = 'pending'"
+      "UPDATE approvals SET state = 'expired', updated_at = ? WHERE approval_id = ? AND state IN ('pending', 'approved')"
     ).run(now, record.approvalId);
 
     record.state = "expired";

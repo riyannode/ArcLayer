@@ -28,6 +28,12 @@ import {
   Erc8183ClaimRefundInputSchema,
   Erc8183SetProviderInputSchema,
   CircleGatewayDepositInputSchema,
+  Erc8004RegisterApprovalCreateInputSchema,
+  Erc8004RegisterApprovalGetInputSchema,
+  Erc8004RegisterApprovalApproveInputSchema,
+  Erc8004RegisterApprovalRejectInputSchema,
+  Erc8004RegisterApprovalExecuteInputSchema,
+  Erc8004RegisterApprovalApproveAndExecuteInputSchema,
   ApprovalsCreateInputSchema,
   ApprovalsGetInputSchema,
   ApprovalsApproveInputSchema,
@@ -294,6 +300,60 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
     description: "Register ERC-8004 identity on-chain via Circle CLI. Gated behind allowIdentityRegister.",
     inputSchema: fromZod(Erc8004RegisterViaCircleCliInputSchema, {
       metadataURI: "Agent manifest URL",
+    })
+  },
+
+  // ── ERC-8004 Chat-Approved Registration ─────────────────────────────
+  {
+    name: "erc8004.register_approval_create",
+    description: "Create pending ERC-8004 registration approval. Does not execute registration. Returns approvalId and renderable chat message.",
+    inputSchema: fromZod(Erc8004RegisterApprovalCreateInputSchema, {
+      controllerAddress: "Controller wallet address (0x...)",
+      ownerAddress: "Owner wallet address (0x...)",
+      agentName: "Agent display name",
+      role: "Registration role: provider or evaluator",
+      metadataURI: "Agent metadata URI (HTTPS, IPFS, or arclayer://)",
+      metadataJson: "Optional metadata JSON object",
+      chainId: "Chain ID (default: 5042002 Arc Testnet)",
+      registryAddress: "ERC-8004 IdentityRegistry address",
+      expiresInSeconds: "Approval expiry in seconds (60-86400, default 300)",
+      idempotencyKey: "Idempotency key (optional)",
+    })
+  },
+  {
+    name: "erc8004.register_approval_get",
+    description: "Get ERC-8004 registration approval by ID.",
+    inputSchema: fromZod(Erc8004RegisterApprovalGetInputSchema, {
+      approvalId: "Approval ID (apr-...)",
+    })
+  },
+  {
+    name: "erc8004.register_approval_approve",
+    description: "Approve pending ERC-8004 registration approval. Does not execute — use erc8004.register_approval_execute after.",
+    inputSchema: fromZod(Erc8004RegisterApprovalApproveInputSchema, {
+      approvalId: "Approval ID (apr-...)",
+    })
+  },
+  {
+    name: "erc8004.register_approval_reject",
+    description: "Reject pending ERC-8004 registration approval.",
+    inputSchema: fromZod(Erc8004RegisterApprovalRejectInputSchema, {
+      approvalId: "Approval ID (apr-...)",
+      reason: "Optional rejection reason",
+    })
+  },
+  {
+    name: "erc8004.register_approval_execute",
+    description: "Execute approved ERC-8004 registration on-chain. Requires approval status=approved. Upserts to erc8004_agents for dashboard visibility.",
+    inputSchema: fromZod(Erc8004RegisterApprovalExecuteInputSchema, {
+      approvalId: "Approval ID (apr-...)",
+    })
+  },
+  {
+    name: "erc8004.register_approval_approve_and_execute",
+    description: "Convenience: approve + execute ERC-8004 registration in one call. Internal state transitions are still explicit (pending→approved→executing→executed).",
+    inputSchema: fromZod(Erc8004RegisterApprovalApproveAndExecuteInputSchema, {
+      approvalId: "Approval ID (apr-...)",
     })
   },
 

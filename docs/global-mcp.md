@@ -97,6 +97,57 @@ curl -s https://arclayers.xyz/api/mcp \
 | `validation.response_calldata` | ERC-8004 validationResponse() calldata |
 | `validation.status_read` | ERC-8004 getValidationStatus() helper |
 
+### ERC-8004 chat-approved registration
+
+These tools let a user register an ERC-8004 provider or evaluator identity through an explicit chat approval flow.
+
+| Tool | Purpose |
+| --- | --- |
+| `erc8004.register_approval_create` | Create a pending registration approval for a provider/evaluator role. |
+| `erc8004.register_approval_get` | Read approval status and rendered approval details by approval ID. |
+| `erc8004.register_approval_approve` | Move a pending ERC-8004 registration approval to approved. |
+| `erc8004.register_approval_reject` | Reject a pending ERC-8004 registration approval. |
+| `erc8004.register_approval_execute` | Execute an approved ERC-8004 registration. |
+| `erc8004.register_approval_approve_and_execute` | Convenience flow: approve and execute the registration in one call. |
+
+**Lifecycle:**
+
+1. User requests registration → `erc8004.register_approval_create` creates a pending approval.
+2. User approves → `erc8004.register_approval_approve_and_execute` (or separate approve + execute).
+3. Runner validates Console URL and sync secret before submitting any on-chain transaction.
+4. Runner calls Circle CLI registration through the configured Circle signer.
+5. Runner posts to `/api/erc8004/register/sync` with `Authorization: Bearer` header, including the approved `metadataURI`.
+6. Console validates tx hash, controller, and asserts the registered metadata URI matches the approved metadata URI.
+7. Console reads the receipt, extracts `tokenId`, upserts `erc8004_agents`, and verifies visibility.
+
+**Retry behavior:**
+
+- If the tx is not mined yet, sync returns retryable status.
+- Approval remains in `executing` state; `txHash` is preserved.
+- Later `erc8004.register_approval_execute` retries sync only — must not submit another on-chain registration.
+
+**Important constraints:**
+
+- Only Arc Testnet canonical ERC-8004 registry is supported.
+- Canonical chain and registry values must come from SDK constants (`ARC_CHAIN_ID`, `CONTRACTS.ERC8004_IDENTITY_REGISTRY`).
+- `ownerAddress` must match `controllerAddress` for the current Circle CLI `register(string)` flow.
+- `metadataURI` must be a valid URI and may use `http:`, `https:`, `ipfs:`, or `arclayer:`.
+- Duplicate active approvals and previously failed approvals with on-chain `txHash` block new duplicate registration attempts.
+
+**Common errors:**
+
+- `DUPLICATE_APPROVAL` — active approval already exists for this controller/metadataURI/role
+- `DUPLICATE_ONCHAIN_REGISTRATION_ATTEMPT` — previous failed approval already has on-chain tx
+- `OWNER_CONTROLLER_MISMATCH` — ownerAddress ≠ controllerAddress
+- `INVALID_APPROVAL_ACTION_TYPE` — generic approve path used instead of dedicated tools
+- `sync_secret_not_configured` — runner missing `ARCLAYER_RUNNER_SYNC_SECRET`
+- `sync_auth_preflight_failed` — Console rejected runner auth token
+- `controller_signer_mismatch` — approved controller ≠ configured Circle signer
+- `metadataURI_mismatch` — registered metadataURI ≠ approved metadataURI
+- `sync_pending_retryable` — tx submitted but sync not yet available
+- `partial_persistence` — agent visible but metadata enrichment failed
+- `failed_persistence` — upsert or visibility verification failed
+
 ### Jobs / ERC-8183
 | Tool | Description |
 |------|-------------|

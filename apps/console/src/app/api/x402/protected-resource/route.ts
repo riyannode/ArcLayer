@@ -23,7 +23,7 @@ async function protectedHandler(_req: NextRequest) {
 export const GET = withX402(protectedHandler, {
   amount: process.env.X402_PROTECTED_RESOURCE_AMOUNT_ATOMIC || process.env.X402_DEMO_AMOUNT_ATOMIC || DEFAULT_AMOUNT_ATOMIC,
   resource: RESOURCE,
-  description: 'ArcLayer x402 protected resource: Circle Gateway + Arc Native EIP-3009',
+  description: 'ArcLayer x402 protected resource: Circle Gateway batched EIP-3009',
   requireResourceContext: false,
 });
 

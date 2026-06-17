@@ -109,7 +109,6 @@ export function mapDashboardAgentType(agent: any): DashboardAgentType {
   }
   if (values.some((v) => v.includes('frontend') || v.includes('ui'))) return 'Frontend Agent';
   if (values.some((v) => v.includes('backend') || v.includes('api'))) return 'Backend Agent';
-  if (values.some((v) => v.includes('devops') || v.includes('infra'))) return 'DevOps Agent';
   if (values.some((v) => v.includes('design'))) return 'Design Agent';
   if (values.some((v) => v.includes('data') || v.includes('research'))) return 'Data Research Agent';
   if (values.some((v) => v.includes('doc'))) return 'Documentation Agent';
