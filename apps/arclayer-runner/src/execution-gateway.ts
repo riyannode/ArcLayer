@@ -1,5 +1,5 @@
 /**
- * ExecutionGateway — single write-operation boundary for all Circle CLI / contract writes.
+ * ExecutionGateway — single write-operation boundary for all wallet adapter writes.
  *
  * Phase 5: SQLite-backed operation journal, persistent idempotency, wallet/job locks,
  * and startup reconciliation hooks.
@@ -7,7 +7,7 @@
  * Every write operation routed through this gateway:
  *   1. Atomically creates OperationRecord + idempotency + locks (one transaction)
  *   2. Transitions through operation states
- *   3. Executes the Circle CLI write
+ *   3. Executes the wallet adapter write
  *   4. Classifies result → confirmed | broadcast | unknown | failed | cancelled
  *   5. Atomically finalizes: state + txHash + result + receipt + lock release (one transaction)
  */
@@ -22,7 +22,6 @@ import {
   type OperationErrorCode,
 } from "@arclayer/runner-core";
 import type { WalletExecutionAdapter, WalletExecuteResult } from "@arclayer/runner-core";
-import type { CircleCliResult } from "@arclayer/circle-cli-adapter";
 import type { JsonlReceiptStore } from "@arclayer/runner-core";
 import path from "node:path";
 import { OperationJournal } from "./operation-journal";
@@ -62,7 +61,7 @@ export type WriteOperationResult = {
   operationId: string;
   state: OperationState;
   txHash?: string;
-  circleResult?: CircleCliResult;
+  circleResult?: WalletExecuteResult;
   receipt?: unknown;
   errorCode?: OperationErrorCode;
   errorMessage?: string;
@@ -70,9 +69,9 @@ export type WriteOperationResult = {
   idempotent?: boolean;
 };
 
-// ── Circle CLI Execution Function Type ─────────────────────────────────
+// ── Wallet Execution Function Type ─────────────────────────────────
 
-export type CircleCliExecuteFn = (
+export type WalletExecuteFn = (
   circle: WalletExecutionAdapter,
   signal?: AbortSignal
  ) => Promise<WalletExecuteResult>;
@@ -124,7 +123,7 @@ function resolveChainId(chain: string, chainId?: number): number {
 }
 
 function classifyCircleResult(
-  result: CircleCliResult,
+  result: WalletExecuteResult,
   error?: Error
 ): OperationState {
   if (error) {
@@ -179,7 +178,7 @@ function classifyCircleResult(
   return "unknown";
 }
 
-function extractTxHash(result: CircleCliResult): string | undefined {
+function extractTxHash(result: WalletExecuteResult): string | undefined {
   const json = result.json as Record<string, unknown> | undefined;
   if (json) {
     if (typeof json.txHash === "string") return json.txHash;
@@ -203,10 +202,10 @@ export class ExecutionGateway {
   private operations = new Map<string, OperationRecord>();
 
   /**
-   * Stored CircleCliResult per operation for idempotent replay.
+   * Stored WalletExecuteResult per operation for idempotent replay.
    * Bounded to MAX_RESULT_CACHE_ENTRIES.
    */
-  private resultCache = new Map<string, CircleCliResult>();
+  private resultCache = new Map<string, WalletExecuteResult>();
 
   /**
    * Idempotency index: `${idempotencyKey}:${paramsHash}` → operationId.
@@ -324,7 +323,7 @@ export class ExecutionGateway {
 
   async execute(
     input: WriteOperationInput,
-    executeFn: CircleCliExecuteFn,
+    executeFn: WalletExecuteFn,
     signal?: AbortSignal
   ): Promise<WriteOperationResult> {
     // ── Check in-memory idempotency first ────────────────────────────────
@@ -476,11 +475,11 @@ export class ExecutionGateway {
       return this.buildResult(operationId);
     }
 
-    // ── Execute Circle CLI write ──────────────────────────────────────
+    // ── Execute wallet write ──────────────────────────────────────
     // Update in-memory state to executing
     this.operations.get(operationId)!.state = "executing";
 
-    let cliResult: CircleCliResult | undefined;
+    let cliResult: WalletExecuteResult | undefined;
     let cliError: Error | undefined;
 
     try {
@@ -499,11 +498,11 @@ export class ExecutionGateway {
 
     if (terminalState === "failed") {
       errorCode = "BROADCAST_FAILED";
-      errorMessage = cliError?.message ?? "Circle CLI write failed";
+      errorMessage = cliError?.message ?? "Wallet write failed";
     }
     if (terminalState === "unknown") {
       errorCode = "UNKNOWN_TX_STATE";
-      errorMessage = "Circle CLI timeout or ambiguous result — tx may have been broadcast";
+      errorMessage = "Wallet write timeout or ambiguous result — tx may have been broadcast";
     }
 
     // Atomic finalization: state + txHash + result + receipt + lock release
@@ -619,7 +618,7 @@ export class ExecutionGateway {
 
   private buildResult(
     operationId: string,
-    circleResult?: CircleCliResult
+    circleResult?: WalletExecuteResult
   ): WriteOperationResult {
     const record = this.operations.get(operationId)!;
     return {

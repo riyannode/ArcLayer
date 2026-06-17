@@ -81,7 +81,7 @@ export const Erc8004PrepareRegisterInputSchema = z.object({
 });
 
 /** erc8004.register_via_circle_cli — register identity on-chain */
-export const Erc8004RegisterViaCircleCliInputSchema = z.object({
+export const Erc8004RegisterExecuteInputSchema = z.object({
   metadataURI: z.string().min(1, "metadataURI is required").url("Invalid URL"),
 });
 
@@ -316,7 +316,7 @@ export const MCP_TOOL_INPUT_SCHEMAS: Record<string, z.ZodTypeAny> = {
   "x402.pay": X402PayInputSchema,
   "x402.batch_pay": X402BatchPayInputSchema,
   "erc8004.prepare_register": Erc8004PrepareRegisterInputSchema,
-  "erc8004.register_via_circle_cli": Erc8004RegisterViaCircleCliInputSchema,
+  "erc8004.register_via_circle_cli": Erc8004RegisterExecuteInputSchema,
   "erc8183.provider_run_job": Erc8183ProviderRunJobInputSchema,
   "erc8183.provider_submit_deliverable": Erc8183ProviderSubmitDeliverableInputSchema,
   "erc8183.provider_run_and_submit": Erc8183ProviderRunAndSubmitInputSchema,

@@ -26,7 +26,7 @@ export const ROLE_PRESETS: RunnerRolePreset[] = [
   {
     id: "provider",
     title: "Provider",
-    description: "Run jobs, submit deliverables, earn USDC. Full ERC-8183 lifecycle with Circle CLI adapter.",
+    description: "Run jobs, submit deliverables, earn USDC. Full ERC-8183 lifecycle with wallet adapter.",
     capabilities: ["erc8183", "erc8004", "x402", "runtime", "receipts", "ledger", "circle"],
     toolGroups: [
       "runner.*",

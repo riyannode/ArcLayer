@@ -15,7 +15,7 @@ import {
   X402PayInputSchema,
   X402BatchPayInputSchema,
   Erc8004PrepareRegisterInputSchema,
-  Erc8004RegisterViaCircleCliInputSchema,
+  Erc8004RegisterExecuteInputSchema,
   Erc8183ProviderRunJobInputSchema,
   Erc8183ProviderSubmitDeliverableInputSchema,
   Erc8183ProviderRunAndSubmitInputSchema,
@@ -114,10 +114,10 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
     }
   },
 
-  // ── Circle CLI ────────────────────────────────────────────────────────
+  // ── Wallet Status ────────────────────────────────────────────────────────
   {
     name: "circle.status",
-    description: "Circle CLI version, wallet status, gateway balance"
+    description: "Wallet adapter status, balance, gateway balance"
   },
   {
     name: "circle.gateway_balance",
@@ -201,7 +201,7 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
   },
   {
     name: "erc8183.provider_submit_deliverable",
-    description: "Submit deliverable on-chain via Circle CLI",
+    description: "Submit deliverable on-chain via wallet adapter",
     inputSchema: fromZod(Erc8183ProviderSubmitDeliverableInputSchema, {
       jobId: "ERC-8183 job ID (numeric string)",
       deliverableHash: "Deliverable hash (bytes32)",
@@ -227,7 +227,7 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
   // ── ERC-8183 Full Lifecycle (runner-local) ──────────────────────────────
   {
     name: "erc8183.create_job",
-    description: "Create ERC-8183 job on-chain via Circle CLI. hook is an address (not bytes).",
+    description: "Create ERC-8183 job on-chain via wallet adapter. hook is an address (not bytes).",
     inputSchema: fromZod(Erc8183CreateJobInputSchema, {
       provider: "Provider wallet address",
       evaluator: "Evaluator wallet address",
@@ -294,11 +294,11 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
     })
   },
 
-  // ── ERC-8004 Register via Circle CLI ────────────────────────────────────
+  // ── ERC-8004 Register (execute) ────────────────────────────────────
   {
     name: "erc8004.register_via_circle_cli",
-    description: "Register ERC-8004 identity on-chain via Circle CLI. Gated behind allowIdentityRegister.",
-    inputSchema: fromZod(Erc8004RegisterViaCircleCliInputSchema, {
+    description: "Register ERC-8004 identity on-chain via wallet adapter. Gated behind allowIdentityRegister.",
+    inputSchema: fromZod(Erc8004RegisterExecuteInputSchema, {
       metadataURI: "Agent manifest URL",
     })
   },

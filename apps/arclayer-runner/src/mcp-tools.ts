@@ -162,7 +162,7 @@ export async function handleMcpTool(
       };
     }
 
-    // ── Circle CLI ────────────────────────────────────────────────────
+    // ── Wallet Status ────────────────────────────────────────────────────
     case "circle.status":
       return services.circleStatus();
 
@@ -317,7 +317,7 @@ export async function handleMcpTool(
       const deliverableHash = (hash.startsWith("0x") && hash.length === 66
         ? hash
         : `0x${hash}`) as `0x${string}`;
-      return services.submitDeliverableViaCircleCli({
+      return services.submitDeliverableViaWallet({
         jobId: input.jobId,
         deliverableHash,
         optParams: "0x"
@@ -479,10 +479,10 @@ export async function handleMcpTool(
       }, ctx.signal);
     }
 
-    // ── ERC-8004 Register via Circle CLI (Zod-validated) ──────────────
+    // ── ERC-8004 Register (execute) (Zod-validated) ──────────────
     case "erc8004.register_via_circle_cli": {
       const input = validateMcpToolInput<{ metadataURI: string }>(name, args);
-      return services.registerIdentityViaCircleCli({
+      return services.registerIdentityViaWallet({
         metadataURI: input.metadataURI,
       }, ctx.signal);
     }
@@ -713,12 +713,12 @@ export async function handleMcpTool(
         return { ok: false, error: "INVALID_REGISTRY", message: `Only canonical registry ${CANONICAL_REGISTRY} is supported.` };
       }
 
-      // Owner must match controller for Circle CLI register(string) flow
+      // Owner must match controller for register(string) flow
       if (input.ownerAddress.toLowerCase() !== input.controllerAddress.toLowerCase()) {
         return {
           ok: false,
           error: "OWNER_CONTROLLER_MISMATCH",
-          message: "ownerAddress must match controllerAddress for Circle CLI register(string) flow",
+          message: "ownerAddress must match controllerAddress for register(string) flow",
         };
       }
 

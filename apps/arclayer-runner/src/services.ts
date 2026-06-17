@@ -455,7 +455,7 @@ export class RunnerServices {
       };
     }
 
-    // Call Circle CLI submit — only place this is allowed
+    // Submit deliverable on-chain via wallet adapter
     const submitReceipt = await this.submitDeliverableViaWallet({
       jobId: input.jobId,
       deliverableHash: input.deliverableHash,
@@ -574,7 +574,7 @@ export class RunnerServices {
     }
 
     // Always use canonical SDK contract target (Arc Testnet).
-    // circle.chain is for Circle CLI wallet ops only — contract target is hardcoded.
+    // chain config is for wallet adapter ops — contract target is hardcoded.
     const contractAddress = CONTRACTS.ERC8183_AGENTIC_COMMERCE;
 
     const normalizedOptParams = input.optParams ?? "0x";
@@ -1251,7 +1251,7 @@ export class RunnerServices {
   }
 
   /**
-   * Register ERC-8004 identity via Circle CLI.
+   * Register ERC-8004 identity via wallet adapter.
    * Gated behind allowIdentityRegister config flag.
    * Verifies tx receipt + ownerOf(tokenId) == configured wallet.
    */
@@ -1259,7 +1259,7 @@ export class RunnerServices {
     if (!this.config.allowIdentityRegister) {
       throw new RunnerError(
         "IDENTITY_REGISTER_DISABLED",
-        "Identity register via Circle CLI is disabled. Set allowIdentityRegister=true to enable.",
+        "Identity register via wallet adapter is disabled. Set allowIdentityRegister=true to enable.",
         403
       );
     }
@@ -1335,7 +1335,7 @@ export class RunnerServices {
   }
 
   /**
-   * Register ERC-8004 identity via Circle CLI and sync to erc8004_agents.
+   * Register ERC-8004 identity via wallet adapter and sync to erc8004_agents.
    * Called by ApprovalManager after approval is approved.
    *
    * Success = tx ✓ + upsert ✓ + visible in GET /api/erc8004/agents ✓
@@ -1408,7 +1408,7 @@ export class RunnerServices {
     let txHash: string;
 
     if (skipOnChainTxHash) {
-      // Retry path: reuse existing txHash, skip auth preflight and Circle CLI
+      // Retry path: reuse existing txHash, skip auth preflight and wallet adapter
       txHash = skipOnChainTxHash;
     } else {
       // Auth preflight: verify Console accepts our Bearer token BEFORE submitting irreversible tx
@@ -1450,7 +1450,7 @@ export class RunnerServices {
       if (!registerResult.txHash) {
         return {
           ok: false,
-          reason: "No txHash returned from Circle CLI registration",
+          reason: "No txHash returned from wallet registration",
           errorCode: "no_txhash",
         };
       }
@@ -1663,7 +1663,7 @@ export class RunnerServices {
         const msg = error instanceof Error ? error.message : String(error);
 
         // ── Broker timeout: payment state unknown ─────────────────────
-        // When the broker times out or signal is aborted, the Circle CLI
+        // When the broker times out or signal is aborted, the wallet adapter
         // subprocess may have already submitted the payment or may still
         // be running. We must NOT mark the ledger as terminal failure —
         // leave the attempt pending so retries check idempotency correctly.
@@ -1685,7 +1685,7 @@ export class RunnerServices {
         }
 
         // ── 409 already-paid/idempotent-safe ────────────────────────────
-        // Circle CLI exits non-zero when server returns HTTP 409 (already paid
+        // Wallet adapter returns error when server returns HTTP 409 (already paid
         // or active session). The payment WAS submitted — treat as idempotent
         // success if the server indicates the resource is already unlocked.
         const isAlreadyPaid =
