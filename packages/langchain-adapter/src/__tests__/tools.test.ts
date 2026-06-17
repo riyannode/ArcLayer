@@ -743,4 +743,584 @@ describe("createArcLayerLangChainTools", () => {
     expect(toolNames).toContain("arclayer_provider_run_only");
     expect(toolNames).toContain("arclayer_provider_run_and_submit");
   });
+
+  // ── Provider Pricing Tools ──────────────────────────────────────────────
+
+  it("provider default includes quote_job but not set_budget", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const toolNames = tools.map((t) => t.name);
+    expect(toolNames).toContain("arclayer_provider_quote_job");
+    expect(toolNames).not.toContain("arclayer_provider_set_budget");
+  });
+
+  it("provider with enableProviderSetBudget=true includes set_budget", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderSetBudget: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const toolNames = tools.map((t) => t.name);
+    expect(toolNames).toContain("arclayer_provider_quote_job");
+    expect(toolNames).toContain("arclayer_provider_set_budget");
+  });
+
+  it("quote_job is adapter-only and does not call fetch/Runner", async () => {
+    const fetchCalls: string[] = [];
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async (url) => {
+        fetchCalls.push(String(url));
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+
+    const quote = tools.find((t) => t.name === "arclayer_provider_quote_job");
+    expect(quote).toBeDefined();
+
+    const result = await quote!.invoke({
+      jobId: "100",
+      description: "A simple task",
+      input: { prompt: "hello" },
+    });
+
+    expect(result).not.toContain("Error:");
+    expect(fetchCalls.length).toBe(0); // No Runner call
+  });
+
+  it("quote_job maps low complexity to 1.00", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const quote = tools.find((t) => t.name === "arclayer_provider_quote_job")!;
+
+    const result = await quote.invoke({
+      jobId: "100",
+      description: "simple task",
+      input: {},
+      complexityHint: "low",
+    });
+
+    const parsed = JSON.parse(result as string);
+    expect(parsed.complexity).toBe("low");
+    expect(parsed.suggestedBudgetUsdc).toBe("1.00");
+  });
+
+  it("quote_job maps medium complexity to 3.00", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const quote = tools.find((t) => t.name === "arclayer_provider_quote_job")!;
+
+    const result = await quote.invoke({
+      jobId: "100",
+      description: "medium task",
+      input: {},
+      complexityHint: "medium",
+    });
+
+    const parsed = JSON.parse(result as string);
+    expect(parsed.complexity).toBe("medium");
+    expect(parsed.suggestedBudgetUsdc).toBe("3.00");
+  });
+
+  it("quote_job maps high complexity to 5.00", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const quote = tools.find((t) => t.name === "arclayer_provider_quote_job")!;
+
+    const result = await quote.invoke({
+      jobId: "100",
+      description: "complex task",
+      input: {},
+      complexityHint: "high",
+    });
+
+    const parsed = JSON.parse(result as string);
+    expect(parsed.complexity).toBe("high");
+    expect(parsed.suggestedBudgetUsdc).toBe("5.00");
+  });
+
+  it("set_budget requires reason", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderSetBudget: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const setBudget = tools.find(
+      (t) => t.name === "arclayer_provider_set_budget",
+    )!;
+
+    // Zod validation throws on empty reason before tool callback runs
+    await expect(
+      setBudget.invoke({
+        jobId: "100",
+        amount: "3.00",
+        complexity: "medium",
+        reason: "",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("set_budget requires complexity", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderSetBudget: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const setBudget = tools.find(
+      (t) => t.name === "arclayer_provider_set_budget",
+    )!;
+
+    // Missing complexity — Zod throws
+    await expect(
+      setBudget.invoke({
+        jobId: "100",
+        amount: "3.00",
+        reason: "test reason",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("set_budget rejects reason over 512 chars", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderSetBudget: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const setBudget = tools.find(
+      (t) => t.name === "arclayer_provider_set_budget",
+    )!;
+
+    const longReason = "x".repeat(513);
+    await expect(
+      setBudget.invoke({
+        jobId: "100",
+        amount: "3.00",
+        complexity: "medium",
+        reason: longReason,
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("set_budget rejects 5.01", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderSetBudget: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const setBudget = tools.find(
+      (t) => t.name === "arclayer_provider_set_budget",
+    )!;
+
+    const result = await setBudget.invoke({
+      jobId: "100",
+      amount: "5.01",
+      complexity: "high",
+      reason: "test reason",
+    });
+
+    expect(result).toContain("Error:");
+    expect(result).toContain("5");
+  });
+
+  it("set_budget accepts 5.00", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderSetBudget: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({ ok: true, txHash: "0xabc", receipt: {} }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    const setBudget = tools.find(
+      (t) => t.name === "arclayer_provider_set_budget",
+    )!;
+
+    const result = await setBudget.invoke({
+      jobId: "100",
+      amount: "5.00",
+      complexity: "high",
+      reason: "High complexity job requiring full budget",
+    });
+
+    expect(result).not.toContain("Error:");
+    expect(calls.length).toBe(1);
+    expect(calls[0].url).toContain("/erc8183/provider/set-budget");
+  });
+
+  it("set_budget rejects amount 0", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderSetBudget: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const setBudget = tools.find(
+      (t) => t.name === "arclayer_provider_set_budget",
+    )!;
+
+    const result = await setBudget.invoke({
+      jobId: "100",
+      amount: "0",
+      complexity: "low",
+      reason: "test",
+    });
+
+    expect(result).toContain("Error:");
+  });
+
+  it("set_budget sends HMAC headers", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderSetBudget: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({ ok: true, txHash: "0xabc", receipt: {} }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    const setBudget = tools.find(
+      (t) => t.name === "arclayer_provider_set_budget",
+    )!;
+
+    await setBudget.invoke({
+      jobId: "100",
+      amount: "3.00",
+      complexity: "medium",
+      reason: "Medium complexity job",
+    });
+
+    expect(calls.length).toBe(1);
+    const headers = calls[0].init?.headers as Record<string, string>;
+    expect(headers["x-arclayer-runner-timestamp"]).toBeDefined();
+    expect(headers["x-arclayer-runner-nonce"]).toBeDefined();
+    expect(headers["x-arclayer-runner-signature"]).toMatch(
+      /^sha256=[a-f0-9]{64}$/,
+    );
+  });
+
+  it("set_budget sends reason and complexity to Runner", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderSetBudget: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async (url, init) => {
+        calls.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({ ok: true, txHash: "0xabc", receipt: {} }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      },
+    });
+
+    const setBudget = tools.find(
+      (t) => t.name === "arclayer_provider_set_budget",
+    )!;
+
+    await setBudget.invoke({
+      jobId: "200",
+      amount: "3.00",
+      complexity: "medium",
+      reason: "Multi-step reasoning required",
+    });
+
+    const sentBody = JSON.parse(calls[0].init!.body as string);
+    expect(sentBody.jobId).toBe("200");
+    expect(sentBody.amount).toBe("3.00");
+    expect(sentBody.complexity).toBe("medium");
+    expect(sentBody.reason).toBe("Multi-step reasoning required");
+  });
+
+  it("set_budget errors are sanitized", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderSetBudget: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () => {
+        throw new Error(
+          "Runner auth failed with Bearer secretToken123abc",
+        );
+      },
+    });
+
+    const setBudget = tools.find(
+      (t) => t.name === "arclayer_provider_set_budget",
+    )!;
+
+    const result = await setBudget.invoke({
+      jobId: "100",
+      amount: "3.00",
+      complexity: "medium",
+      reason: "test reason",
+    });
+
+    expect(result).toContain("Error:");
+    expect(result).not.toContain("secretToken123abc");
+  });
+
+  it("quote clamps to custom maxBudgetUsdc when tier budget exceeds it", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      providerPricingPolicy: {
+        maxBudgetUsdc: "2.00",
+        lowComplexityBudgetUsdc: "1.00",
+        mediumComplexityBudgetUsdc: "3.00",
+        highComplexityBudgetUsdc: "5.00",
+      },
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const quote = tools.find((t) => t.name === "arclayer_provider_quote_job")!;
+
+    const result = await quote.invoke({
+      jobId: "100",
+      description: "complex task",
+      input: { data: "test" },
+      complexityHint: "high",
+    });
+
+    const parsed = JSON.parse(result as string);
+    expect(parsed.complexity).toBe("high");
+    expect(parsed.suggestedBudgetUsdc).toBe("2.00"); // clamped from 5.00 to 2.00
+  });
+
+  it("quote_job rejects missing input (undefined)", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const quote = tools.find((t) => t.name === "arclayer_provider_quote_job")!;
+
+    await expect(
+      quote.invoke({
+        jobId: "100",
+        description: "task",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("set_budget rejects sub-micro amount 0.0000009", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderSetBudget: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const setBudget = tools.find(
+      (t) => t.name === "arclayer_provider_set_budget",
+    )!;
+
+    // 0.0000009 has 7 fractional digits — exceeds 6 digit limit
+    await expect(
+      setBudget.invoke({
+        jobId: "100",
+        amount: "0.0000009",
+        complexity: "low",
+        reason: "test",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("set_budget rejects more than 6 fractional digits", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    const tools = createArcLayerLangChainTools({
+      role: "provider",
+      enableProviderSetBudget: true,
+      runnerUrl: "http://127.0.0.1:8787",
+      runnerSecret: "secret",
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    });
+
+    const setBudget = tools.find(
+      (t) => t.name === "arclayer_provider_set_budget",
+    )!;
+
+    // 1.1234567 has 7 fractional digits
+    await expect(
+      setBudget.invoke({
+        jobId: "100",
+        amount: "1.1234567",
+        complexity: "low",
+        reason: "test",
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("non-provider roles cannot access quote_job or set_budget", async () => {
+    const { createArcLayerLangChainTools } = await import("../tools.js");
+
+    for (const role of ["read-only", "x402-agent", "evaluator", "client"] as const) {
+      const tools = createArcLayerLangChainTools({
+        role,
+        runnerUrl: "http://127.0.0.1:8787",
+        runnerSecret: "secret",
+        fetchImpl: async () =>
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      });
+
+      const toolNames = tools.map((t) => t.name);
+      expect(toolNames).not.toContain("arclayer_provider_quote_job");
+      expect(toolNames).not.toContain("arclayer_provider_set_budget");
+    }
+  });
 });

@@ -137,6 +137,77 @@ async function main() {
         },
         {
           method: "POST",
+          path: "/erc8183/provider/set-budget",
+          handler: async ({ body }) => {
+            const HARD_CAP = "5.00";
+            const USDC_DECIMAL_6_REGEX = /^[0-9]+(\.[0-9]{1,6})?$/;
+            function parseUsdcMicros(amount: string): bigint {
+              if (!USDC_DECIMAL_6_REGEX.test(amount)) {
+                throw new Error("amount must be a decimal string with at most 6 fractional digits");
+              }
+              const [whole, fraction = ""] = amount.split(".");
+              return BigInt(`${whole}${fraction.padEnd(6, "0")}`);
+            }
+            const input = body as {
+              jobId?: string;
+              amount?: string;
+              complexity?: string;
+              reason?: string;
+              optParams?: string;
+            };
+
+            // Validate required fields
+            if (!input.jobId || !/^[0-9]+$/.test(input.jobId)) {
+              return { ok: false, error: "jobId must be a numeric string" };
+            }
+            if (!input.amount || !USDC_DECIMAL_6_REGEX.test(input.amount)) {
+              return { ok: false, error: "amount must be a decimal string with at most 6 fractional digits" };
+            }
+            if (!input.reason || typeof input.reason !== "string" || input.reason.trim().length === 0) {
+              return { ok: false, error: "reason is required and must be non-empty" };
+            }
+            if (input.reason.length > 512) {
+              return { ok: false, error: "reason must be 512 characters or fewer" };
+            }
+            if (!input.complexity || !["low", "medium", "high"].includes(input.complexity)) {
+              return { ok: false, error: "complexity must be low, medium, or high" };
+            }
+
+            // Enforce budget bounds with bigint precision
+            let amountMicros: bigint;
+            let hardCapMicros: bigint;
+            try {
+              amountMicros = parseUsdcMicros(input.amount);
+              hardCapMicros = parseUsdcMicros(HARD_CAP);
+            } catch {
+              return { ok: false, error: "amount must be a decimal string with at most 6 fractional digits" };
+            }
+            if (amountMicros <= 0n) {
+              return { ok: false, error: "amount must be greater than 0" };
+            }
+            if (amountMicros > hardCapMicros) {
+              return { ok: false, error: `amount must not exceed ${HARD_CAP} USDC` };
+            }
+
+            // Encode reason + complexity into optParams
+            const payload = {
+              version: 1,
+              type: "provider_budget_reason",
+              complexity: input.complexity,
+              budgetUsdc: input.amount,
+              reason: input.reason,
+            };
+            const optParams = `0x${Buffer.from(JSON.stringify(payload), "utf8").toString("hex")}`;
+
+            return services.setBudget({
+              jobId: input.jobId,
+              amount: input.amount,
+              optParams,
+            });
+          }
+        },
+        {
+          method: "POST",
           path: "/x402/inspect",
           handler: async ({ body }) => services.inspectX402(body)
         },

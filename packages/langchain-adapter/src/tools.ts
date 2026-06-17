@@ -3,6 +3,9 @@
  *
  * Creates LangChain tool() instances that call ArcLayer Runner via HMAC-authed HTTP.
  * All tools go through the Runner HTTP surface — no direct Circle CLI, no internal imports.
+ *
+ * Exception: adapterOnly tools (e.g. arclayer_provider_quote_job) compute locally
+ * and do not make Runner HTTP calls.
  */
 
 import { tool, type DynamicStructuredTool } from "langchain";
@@ -17,7 +20,13 @@ import type {
   CreateArcLayerLangChainToolsOptions,
   ArcLayerAgentRole,
   ArcLayerLogger,
+  ProviderPricingPolicy,
 } from "./types.js";
+import { DEFAULT_PROVIDER_PRICING_POLICY } from "./types.js";
+
+// ── USDC Precision ─────────────────────────────────────────────────────
+
+const USDC_DECIMAL_6_REGEX = /^[0-9]+(\.[0-9]{1,6})?$/;
 
 // ── Zod Schemas ─────────────────────────────────────────────────────────────
 
@@ -115,6 +124,46 @@ const X402BatchPayInputSchema = z.object({
     .describe("List of payments to execute"),
 });
 
+/**
+ * Provider quote job input — adapter-only, no Runner call.
+ */
+const ProviderQuoteInputSchema = z.object({
+  jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").describe("ERC-8183 job ID (numeric string)"),
+  description: z.string().min(1).describe("Job description for complexity assessment"),
+  input: z.unknown().refine(
+    (v) => v !== undefined,
+    { message: "input is required (must be a JSON value, not undefined)" },
+  ).describe("Job input payload"),
+  complexityHint: z
+    .enum(["low", "medium", "high"])
+    .optional()
+    .describe("Hint for complexity assessment: low (1 USDC), medium (3 USDC), high (5 USDC)"),
+  reason: z
+    .string()
+    .optional()
+    .describe("Optional model-provided reasoning for complexity assessment"),
+});
+
+/**
+ * Provider set budget input — calls Runner over HMAC.
+ * Reason is required and will be encoded into on-chain optParams.
+ */
+const ProviderSetBudgetInputSchema = z.object({
+  jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").describe("ERC-8183 job ID (numeric string)"),
+  amount: z
+    .string()
+    .regex(USDC_DECIMAL_6_REGEX, "Must be a decimal string with at most 6 fractional digits")
+    .describe("Budget amount in USDC (max 5.00)"),
+  complexity: z
+    .enum(["low", "medium", "high"])
+    .describe("Job complexity level: low (1 USDC), medium (3 USDC), high (5 USDC)"),
+  reason: z
+    .string()
+    .min(1, "reason is required")
+    .max(512, "reason must be 512 characters or fewer")
+    .describe("Pricing reason — will be encoded into on-chain calldata (do not include secrets)"),
+});
+
 // ── Host Validation ─────────────────────────────────────────────────────────
 
 function normalizeHost(value: string): string {
@@ -189,6 +238,75 @@ function assertAmountWithinSdkLimit(
   }
 }
 
+// ── Provider Pricing Helpers ────────────────────────────────────────────────
+
+function resolvePricingPolicy(
+  policy?: ProviderPricingPolicy,
+): Required<ProviderPricingPolicy> {
+  return {
+    minBudgetUsdc: policy?.minBudgetUsdc ?? DEFAULT_PROVIDER_PRICING_POLICY.minBudgetUsdc,
+    maxBudgetUsdc: policy?.maxBudgetUsdc ?? DEFAULT_PROVIDER_PRICING_POLICY.maxBudgetUsdc,
+    lowComplexityBudgetUsdc: policy?.lowComplexityBudgetUsdc ?? DEFAULT_PROVIDER_PRICING_POLICY.lowComplexityBudgetUsdc,
+    mediumComplexityBudgetUsdc: policy?.mediumComplexityBudgetUsdc ?? DEFAULT_PROVIDER_PRICING_POLICY.mediumComplexityBudgetUsdc,
+    highComplexityBudgetUsdc: policy?.highComplexityBudgetUsdc ?? DEFAULT_PROVIDER_PRICING_POLICY.highComplexityBudgetUsdc,
+    defaultBudgetUsdc: policy?.defaultBudgetUsdc ?? DEFAULT_PROVIDER_PRICING_POLICY.defaultBudgetUsdc,
+  };
+}
+
+function classifyComplexity(description: string, input: unknown): "low" | "medium" | "high" {
+  const inputStr = typeof input === "string" ? input : JSON.stringify(input ?? "");
+  const totalLength = (description?.length ?? 0) + inputStr.length;
+
+  if (totalLength > 2000) return "high";
+  if (totalLength > 500) return "medium";
+  return "low";
+}
+
+function mapComplexityToBudget(
+  complexity: "low" | "medium" | "high",
+  policy: Required<ProviderPricingPolicy>,
+): string {
+  switch (complexity) {
+    case "low":
+      return policy.lowComplexityBudgetUsdc;
+    case "medium":
+      return policy.mediumComplexityBudgetUsdc;
+    case "high":
+      return policy.highComplexityBudgetUsdc;
+  }
+}
+
+function parseUsdcMicros(amount: string): bigint {
+  if (!USDC_DECIMAL_6_REGEX.test(amount)) {
+    throw new ArcLayerPolicyError(
+      "amount must be a decimal string with at most 6 fractional digits",
+    );
+  }
+  const [whole, fraction = ""] = amount.split(".");
+  const micros = `${whole}${fraction.padEnd(6, "0")}`;
+  return BigInt(micros);
+}
+
+function assertPositiveUsdcAmount(amount: string): bigint {
+  const micros = parseUsdcMicros(amount);
+  if (micros <= 0n) {
+    throw new ArcLayerPolicyError("amount must be greater than 0");
+  }
+  return micros;
+}
+
+function clampBudgetToPolicyMax(
+  suggestedBudgetUsdc: string,
+  policy: Required<ProviderPricingPolicy>,
+): string {
+  const suggestedMicros = parseUsdcMicros(suggestedBudgetUsdc);
+  const maxMicros = parseUsdcMicros(policy.maxBudgetUsdc);
+  if (suggestedMicros > maxMicros) {
+    return policy.maxBudgetUsdc;
+  }
+  return suggestedBudgetUsdc;
+}
+
 // ── Normalize Result ────────────────────────────────────────────────────────
 
 function normalizeToolResult(result: unknown): string {
@@ -207,6 +325,7 @@ function normalizeToolResult(result: unknown): string {
  *
  * Tools are filtered by role preset, then by allowedTools/deniedTools overrides.
  * Payment tools apply SDK-side guardrails (maxAmountUsdc, host allowlist).
+ * Provider pricing tools apply budget policy guardrails.
  */
 export function createArcLayerLangChainTools(
   options: CreateArcLayerLangChainToolsOptions,
@@ -222,6 +341,8 @@ export function createArcLayerLangChainTools(
     deniedHosts,
     requireIdempotencyKey = false,
     enableProviderRunAndSubmit = false,
+    enableProviderSetBudget = false,
+    providerPricingPolicy,
     timeoutMs,
     logger,
   } = options;
@@ -231,6 +352,7 @@ export function createArcLayerLangChainTools(
     allowedTools,
     deniedTools,
     enableProviderRunAndSubmit,
+    enableProviderSetBudget,
   });
 
   const client = new ArcLayerRunnerClient({
@@ -240,6 +362,7 @@ export function createArcLayerLangChainTools(
     fetchImpl: options.fetchImpl,
   });
 
+  const pricingPolicy = resolvePricingPolicy(providerPricingPolicy);
   const tools: DynamicStructuredTool[] = [];
 
   for (const toolName of enabledTools) {
@@ -298,6 +421,25 @@ export function createArcLayerLangChainTools(
       case "arclayer_provider_run_and_submit":
         tools.push(
           createProviderRunAndSubmitTool(client, toolName, entry, { logger }),
+        );
+        break;
+
+      case "arclayer_provider_quote_job":
+        // Adapter-only: no Runner call, no HMAC, pure local compute
+        tools.push(
+          createProviderQuoteJobTool(toolName, entry, {
+            pricingPolicy,
+            logger,
+          }),
+        );
+        break;
+
+      case "arclayer_provider_set_budget":
+        tools.push(
+          createProviderSetBudgetTool(client, toolName, entry, {
+            pricingPolicy,
+            logger,
+          }),
         );
         break;
 
@@ -577,6 +719,155 @@ function createProviderRunAndSubmitTool(
         "Only use when on-chain settlement is explicitly required. " +
         "For runtime-only execution, prefer arclayer_provider_run_only.",
       schema: ProviderRunInputSchema,
+    },
+  );
+}
+
+// ── Provider Pricing Tools ──────────────────────────────────────────────────
+
+/**
+ * Create an adapter-only quote job tool.
+ * No Runner call, no HMAC, no Circle CLI.
+ * Pure complexity → budget mapping using the pricing policy.
+ */
+function createProviderQuoteJobTool(
+  toolName: string,
+  entry: (typeof TOOL_NAME_MAP)[string],
+  opts: {
+    pricingPolicy: Required<ProviderPricingPolicy>;
+    logger?: ArcLayerLogger;
+  },
+) {
+  return tool(
+    async (input) => {
+      try {
+        const complexity = input.complexityHint
+          ?? classifyComplexity(input.description, input.input);
+
+        const rawSuggestedBudgetUsdc = mapComplexityToBudget(complexity, opts.pricingPolicy);
+        const suggestedBudgetUsdc = clampBudgetToPolicyMax(
+          rawSuggestedBudgetUsdc,
+          opts.pricingPolicy,
+        );
+
+        const reason = input.reason
+          ?? `${complexity.charAt(0).toUpperCase() + complexity.slice(1)} complexity job`;
+
+        const output = {
+          ok: true as const,
+          jobId: input.jobId,
+          complexity,
+          suggestedBudgetUsdc,
+          maxBudgetUsdc: opts.pricingPolicy.maxBudgetUsdc,
+          reason,
+        };
+
+        return normalizeToolResult(output);
+      } catch (e: unknown) {
+        const msg = sanitizeErrorMessage(
+          e instanceof Error ? e.message : String(e),
+        );
+        return `Error: ${msg}`;
+      }
+    },
+    {
+      name: toolName,
+      description:
+        "Quote the complexity and suggested budget for an ERC-8183 provider job. " +
+        "This is an adapter-only tool — no on-chain call, no Runner call. " +
+        "Use this BEFORE calling arclayer_provider_set_budget. " +
+        "Returns complexity (low/medium/high), suggestedBudgetUsdc, maxBudgetUsdc, and reason. " +
+        "Complexity mapping: low = 1 USDC, medium = 3 USDC, high = 5 USDC. " +
+        "Max budget is hard capped at 5.00 USDC.",
+      schema: ProviderQuoteInputSchema,
+    },
+  );
+}
+
+/**
+ * Create a provider set-budget tool.
+ * Calls Runner over HMAC. SDK-side budget policy guardrails applied before network call.
+ * Reason is required and will be encoded into on-chain optParams by the Runner.
+ */
+function createProviderSetBudgetTool(
+  client: ArcLayerRunnerClient,
+  toolName: string,
+  entry: (typeof TOOL_NAME_MAP)[string],
+  opts: {
+    pricingPolicy: Required<ProviderPricingPolicy>;
+    logger?: ArcLayerLogger;
+  },
+) {
+  const hardCapMicros = parseUsdcMicros(DEFAULT_PROVIDER_PRICING_POLICY.maxBudgetUsdc);
+
+  return tool(
+    async (input) => {
+      try {
+        // SDK-side validation: amount > 0 and max 6 fractional digits
+        const amountMicros = assertPositiveUsdcAmount(input.amount);
+
+        // SDK-side validation: amount <= maxBudgetUsdc from policy
+        const policyMaxMicros = parseUsdcMicros(opts.pricingPolicy.maxBudgetUsdc);
+        if (amountMicros > policyMaxMicros) {
+          throw new ArcLayerPolicyError(
+            `amount ${input.amount} USDC exceeds policy maximum of ${opts.pricingPolicy.maxBudgetUsdc} USDC`,
+          );
+        }
+
+        // SDK-side validation: hard cap 5.00
+        if (amountMicros > hardCapMicros) {
+          throw new ArcLayerPolicyError(
+            `amount ${input.amount} USDC exceeds hard cap of ${DEFAULT_PROVIDER_PRICING_POLICY.maxBudgetUsdc} USDC`,
+          );
+        }
+
+        // SDK-side validation: amount >= minBudgetUsdc
+        const policyMinMicros = parseUsdcMicros(opts.pricingPolicy.minBudgetUsdc);
+        if (amountMicros < policyMinMicros) {
+          throw new ArcLayerPolicyError(
+            `amount ${input.amount} USDC is below policy minimum of ${opts.pricingPolicy.minBudgetUsdc} USDC`,
+          );
+        }
+
+        // Call Runner over HMAC
+        const raw = await client.setProviderBudget({
+          jobId: input.jobId,
+          amount: input.amount,
+          complexity: input.complexity,
+          reason: input.reason,
+        });
+
+        // Map to readable output
+        const output = {
+          ok: raw.ok,
+          jobId: input.jobId,
+          amount: input.amount,
+          complexity: input.complexity,
+          reason: input.reason,
+          status: raw.ok ? "submitted" : "failed",
+          txHash: raw.txHash,
+          receipt: raw.receipt,
+          raw,
+        };
+
+        return normalizeToolResult(output);
+      } catch (e: unknown) {
+        const msg = sanitizeErrorMessage(
+          e instanceof Error ? e.message : String(e),
+        );
+        return `Error: ${msg}`;
+      }
+    },
+    {
+      name: toolName,
+      description:
+        "Set the budget for an ERC-8183 provider job through ArcLayer Runner. " +
+        "This is an on-chain write — calls setBudget(jobId, amount, optParams) on the ERC-8183 contract. " +
+        "A reason is required and will be encoded into on-chain calldata (optParams). " +
+        "Do not include secrets, private prompts, API keys, or customer private data in the reason. " +
+        "Max budget is hard capped at 5.00 USDC. " +
+        "Use arclayer_provider_quote_job first to assess complexity and get a suggested budget.",
+      schema: ProviderSetBudgetInputSchema,
     },
   );
 }

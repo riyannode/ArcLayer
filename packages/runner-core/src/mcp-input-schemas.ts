@@ -21,6 +21,24 @@ const OptionalIdempotencyFields = {
   requestId: z.string().min(1, "requestId must not be empty").optional(),
 };
 
+// ── USDC Precision Helpers ─────────────────────────────────────────────
+
+const USDC_DECIMAL_6_REGEX = /^[0-9]+(\.[0-9]{1,6})?$/;
+
+function parseUsdcMicrosForSchema(amount: string): bigint {
+  if (!USDC_DECIMAL_6_REGEX.test(amount)) return 0n;
+  const [whole, fraction = ""] = amount.split(".");
+  return BigInt(`${whole}${fraction.padEnd(6, "0")}`);
+}
+
+const UsdcAmountInputSchema = z
+  .string()
+  .regex(USDC_DECIMAL_6_REGEX, "amount must be a decimal string with at most 6 fractional digits")
+  .refine(
+    (amount) => parseUsdcMicrosForSchema(amount) > 0n,
+    "amount must be greater than 0",
+  );
+
 // ── Individual Tool Input Schemas ─────────────────────────────────────────
 // These schemas define the MCP tool input shape — what arrives from the client.
 // Internal type literals (like `type: "x402_service_pay"`) are NOT included;
@@ -115,8 +133,28 @@ export const Erc8183CreateJobInputSchema = z.object({
 /** erc8183.set_budget — set budget for a job */
 export const Erc8183SetBudgetInputSchema = z.object({
   jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string"),
-  amount: z.string().regex(/^[0-9]+(\.[0-9]+)?$/, "amount must be a decimal string"),
-  optParams: z.string().optional(),
+  amount: UsdcAmountInputSchema,
+  optParams: z.string().regex(/^0x[0-9a-fA-F]*$/, "optParams must be hex bytes").optional(),
+  complexity: z.enum(["low", "medium", "high"]).optional(),
+  reason: z.string().min(1).max(512).optional(),
+}).superRefine((value, ctx) => {
+  const hasReasonFields = Boolean(value.reason || value.complexity);
+
+  if (hasReasonFields && value.optParams) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Provide either optParams or reason+complexity, not both",
+      path: ["optParams"],
+    });
+  }
+
+  if (hasReasonFields && (!value.reason || !value.complexity)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Both reason and complexity are required when encoding provider budget reason",
+      path: ["reason"],
+    });
+  }
 });
 
 /** erc8183.approve_usdc — approve USDC for AgenticCommerce */

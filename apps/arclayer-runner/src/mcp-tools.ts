@@ -41,6 +41,21 @@ export type McpToolContext = {
   proxyTimeoutMs?: number;
 };
 
+function encodeProviderBudgetReasonOptParams(input: {
+  complexity: "low" | "medium" | "high";
+  budgetUsdc: string;
+  reason: string;
+}): `0x${string}` {
+  const payload = {
+    version: 1,
+    type: "provider_budget_reason",
+    complexity: input.complexity,
+    budgetUsdc: input.budgetUsdc,
+    reason: input.reason,
+  };
+  return `0x${Buffer.from(JSON.stringify(payload), "utf8").toString("hex")}` as `0x${string}`;
+}
+
 export async function handleMcpTool(
   name: string,
   args: Record<string, unknown>,
@@ -359,11 +374,40 @@ export async function handleMcpTool(
         jobId: string;
         amount: string;
         optParams?: string;
+        complexity?: "low" | "medium" | "high";
+        reason?: string;
       }>(name, args);
+
+      const hasReasonFields = Boolean(input.reason || input.complexity);
+
+      if (hasReasonFields && input.optParams) {
+        return {
+          ok: false,
+          error: "INVALID_INPUT",
+          message: "Provide either optParams or reason+complexity, not both",
+        };
+      }
+
+      if (hasReasonFields && (!input.reason || !input.complexity)) {
+        return {
+          ok: false,
+          error: "INVALID_INPUT",
+          message: "Both reason and complexity are required when encoding provider budget reason",
+        };
+      }
+
+      const optParams = hasReasonFields
+        ? encodeProviderBudgetReasonOptParams({
+            complexity: input.complexity!,
+            budgetUsdc: input.amount,
+            reason: input.reason!,
+          })
+        : input.optParams;
+
       return services.setBudget({
         jobId: input.jobId,
         amount: input.amount,
-        optParams: input.optParams,
+        optParams,
       }, ctx.signal);
     }
 

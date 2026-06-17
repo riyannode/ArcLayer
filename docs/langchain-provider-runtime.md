@@ -4,12 +4,14 @@ ERC-8183 provider runtime tools for `@arclayer/langchain-adapter`.
 
 ## Overview
 
-Provider agents run ERC-8183 jobs through ArcLayer Runner. The adapter exposes two tools:
+Provider agents run ERC-8183 jobs through ArcLayer Runner. The adapter exposes four provider tools:
 
 | Tool | Runner Endpoint | Behavior | Availability |
 |------|----------------|----------|-------------|
+| `arclayer_provider_quote_job` | *(adapter-only)* | Estimates complexity and suggests budget. No on-chain call. | Default |
 | `arclayer_provider_run_only` | `POST /erc8183/provider/run-only` | Runtime only — dispatches job to LLM, returns `deliverableHash`. Does NOT submit on-chain. | Default |
 | `arclayer_provider_run_and_submit` | `POST /erc8183/provider/run-and-submit` | Full lifecycle — runs job + submits deliverable on-chain via Circle CLI. | `enableProviderRunAndSubmit: true` |
+| `arclayer_provider_set_budget` | `POST /erc8183/provider/set-budget` | Sets job budget on-chain via Runner. Reason encoded into calldata. | `enableProviderSetBudget: true` |
 
 **`run-only` is the default recommended path.** Use `run-and-submit` only when on-chain settlement is explicitly required.
 
@@ -19,36 +21,101 @@ Provider agents run ERC-8183 jobs through ArcLayer Runner. The adapter exposes t
 
 ```
 role: "provider"
-  → arclayer_provider_run_only          (always)
-  → arclayer_provider_run_and_submit    (only with enableProviderRunAndSubmit: true)
-  → arclayer_x402_inspect               (always)
-  → arclayer_receipts                   (always)
-  → arclayer_spend_ledger               (always)
+  → arclayer_provider_quote_job          (always — adapter-only, no Runner call)
+  → arclayer_provider_run_only           (always)
+  → arclayer_provider_run_and_submit     (only with enableProviderRunAndSubmit: true)
+  → arclayer_provider_set_budget         (only with enableProviderSetBudget: true)
+  → arclayer_x402_inspect                (always)
+  → arclayer_receipts                    (always)
+  → arclayer_spend_ledger                (always)
 ```
 
-`deniedTools` always wins over `enableProviderRunAndSubmit`.
+`deniedTools` always wins over `enableProviderRunAndSubmit` and `enableProviderSetBudget`.
+
+## Provider Complexity Pricing
+
+Provider agents can autonomously assess job complexity and set budgets through ERC-8183 `setBudget(jobId, amount, optParams)`.
+
+### Complexity Mapping
+
+| Complexity | Budget (USDC) |
+|-----------|--------------|
+| `low`     | 1.00         |
+| `medium`  | 3.00         |
+| `high`    | 5.00         |
+
+**Hard cap: 5.00 USDC.** No budget above 5.00 will be accepted.
+
+**Clamping:** If a custom `maxBudgetUsdc` is lower than a tier budget, the quote output is clamped to the custom max. For example, if `maxBudgetUsdc: "2.00"` and complexity is `high` (default 5.00), the quote returns `"2.00"`.
+
+### Workflow
+
+1. **Quote**: Call `arclayer_provider_quote_job` to assess complexity and get a suggested budget.
+2. **Set budget**: Call `arclayer_provider_set_budget` with the quoted complexity, amount, and a pricing reason.
+3. **Run**: Call `arclayer_provider_run_only` or `arclayer_provider_run_and_submit`.
+
+### Reason Encoding
+
+The `reason` field in `arclayer_provider_set_budget` is **required** and will be encoded into on-chain calldata through `optParams`:
+
+```
+setBudget(jobId, amount, optParams)
+```
+
+The `optParams` payload (hex-encoded JSON):
+```json
+{
+  "version": 1,
+  "type": "provider_budget_reason",
+  "complexity": "medium",
+  "budgetUsdc": "3.00",
+  "reason": "Medium complexity job requiring multi-step reasoning"
+}
+```
+
+**Do not put secrets, private prompts, API keys, customer private data, or hidden task payloads in the reason.** It becomes public on-chain calldata.
+
+### ERC-8183 ABI
+
+The contract ABI is unchanged: `setBudget(uint256 jobId, uint256 amount, bytes optParams)`. The reason is encoded into the existing `optParams` bytes parameter.
 
 ## Usage
 
 ```ts
 import { createArcLayerLangChainAgent } from "@arclayer/langchain-adapter";
 
-// Default: run-only (no on-chain submit)
+// Default: run-only, quote available (no set-budget)
 const agent = createArcLayerLangChainAgent({
   role: "provider",
   model: process.env.OPENAI_MODEL ?? "openai:gpt-4o",
   runnerUrl: process.env.ARCLAYER_RUNNER_URL!,
   runnerSecret: process.env.ARCLAYER_RUNNER_SECRET!,
-  enableProviderRunAndSubmit: false,
 });
 
-// Autonomous submit mode (explicit opt-in)
+// Autonomous pricing mode (explicit opt-in)
+const agent = createArcLayerLangChainAgent({
+  role: "provider",
+  model: process.env.OPENAI_MODEL ?? "openai:gpt-4o",
+  runnerUrl: process.env.ARCLAYER_RUNNER_URL!,
+  runnerSecret: process.env.ARCLAYER_RUNNER_SECRET!,
+  enableProviderSetBudget: true,
+  providerPricingPolicy: {
+    minBudgetUsdc: "1.00",
+    maxBudgetUsdc: "5.00",
+    lowComplexityBudgetUsdc: "5.00",
+    mediumComplexityBudgetUsdc: "3.00",
+    highComplexityBudgetUsdc: "5.00",
+  },
+});
+
+// Full autonomous mode: pricing + submit
 const agent = createArcLayerLangChainAgent({
   role: "provider",
   model: process.env.OPENAI_MODEL ?? "openai:gpt-4o",
   runnerUrl: process.env.ARCLAYER_RUNNER_URL!,
   runnerSecret: process.env.ARCLAYER_RUNNER_SECRET!,
   enableProviderRunAndSubmit: true,
+  enableProviderSetBudget: true,
 });
 ```
 
@@ -56,6 +123,16 @@ const agent = createArcLayerLangChainAgent({
 
 ```
 LangChain Agent
+  → arclayer_provider_quote_job
+    → (adapter-only: complexity mapping, no network call)
+
+  → arclayer_provider_set_budget
+    → ArcLayerRunnerClient.setProviderBudget()
+      → HMAC-signed HTTP POST
+        → ArcLayer Runner (validates, encodes reason into optParams)
+          → services.setBudget(jobId, amount, optParams)
+            → Circle CLI → ERC-8183 setBudget() on-chain
+
   → arclayer_provider_run_only / arclayer_provider_run_and_submit
     → ArcLayerRunnerClient.runProviderJobOnly() / runAndSubmitProviderJob()
       → HMAC-signed HTTP POST
@@ -64,67 +141,22 @@ LangChain Agent
           → LLM Runtime + Circle CLI (run-and-submit)
 ```
 
-All execution goes through Runner HTTP HMAC. The adapter never imports `apps/arclayer-runner/src/*`.
-
-## Input Schema
-
-Both tools accept the same input shape, derived from `Erc8183ProviderJobSchema` in `@arclayer/runner-core`:
-
-```ts
-{
-  taskId: string;        // Task identifier (required)
-  jobId: string;         // ERC-8183 job ID, numeric string (required)
-  agentId: string;       // Agent identifier (required)
-  provider: string;      // Provider wallet address, 0x... (required)
-  evaluator?: string;    // Evaluator wallet address, 0x... (optional)
-  description: string;   // Job description (required)
-  input: unknown;        // Job input payload, any JSON value (required)
-  metadata?: Record<string, unknown>;  // Optional metadata
-}
-```
-
-The adapter schema reuses `Erc8183ProviderJobSchema` from `@arclayer/runner-core` directly via `.extend()` to avoid schema drift.
-
-## Output Shapes
-
-### run-only
-
-```ts
-{
-  ok: true;
-  status: "completed";
-  role: "provider";
-  result: unknown;          // LLM runtime output
-  deliverableHash: string;  // 0x-prefixed SHA256 of result
-  runId: string;            // Internal run identifier
-  receipt: unknown;         // Receipt record
-}
-```
-
-### run-and-submit
-
-```ts
-{
-  ok: true;
-  status: "completed";
-  role: "provider";
-  result: unknown;
-  deliverableHash: string;
-  runId: string;
-  submitReceipt: unknown;   // On-chain submit receipt (tx hash, etc.)
-  receipt: unknown;
-}
-```
+All execution goes through Runner HTTP HMAC. The adapter never imports `apps/arclayer-runner/src/*`. The `quote_job` tool is adapter-only and makes no network calls.
 
 ## SDK-Side Guardrails
 
-Provider tools have no SDK-side financial guardrails because they perform runtime execution, not payment:
+Provider runtime tools (`run_only`, `run_and_submit`) have no SDK-side financial guardrails because they perform runtime execution, not payment.
 
-- No `maxAmountUsdc` — provider tools don't transfer funds directly
-- No host validation — provider tools call Runner, not external URLs
-- No idempotency key — different schema, not applicable
+Provider pricing tools (`set_budget`) apply SDK-side validation before the network call:
 
-Runner remains the trust boundary for provider operations. Policy enforcement (job ownership, budget limits, role authorization) happens server-side.
+- `amount > 0`
+- `amount >= minBudgetUsdc` (default 1.00)
+- `amount <= maxBudgetUsdc` (default 5.00)
+- `amount <= 5.00` (hard cap)
+- `reason` required, max 512 chars
+- `complexity` required: low | medium | high
+
+Runner is the final trust boundary and applies its own validation on the HTTP route.
 
 ## PM2 Deployment
 
@@ -133,6 +165,7 @@ Runner remains the trust boundary for provider operations. Policy enforcement (j
 ARCLAYER_RUNNER_URL=http://127.0.0.1:8787
 ARCLAYER_RUNNER_SECRET=your-s...n
 ENABLE_AUTO_SUBMIT=false
+ENABLE_PROVIDER_SET_BUDGET=false
 
 pm2 start dist/index.js --name arclayer-provider-agent
 ```
@@ -141,9 +174,16 @@ See `agents/examples/langchain-provider-agent` for a complete PM2-compatible exa
 
 ## Safety
 
+- `quote_job` is adapter-only — no on-chain call, no Runner call, no HMAC
+- `set_budget` requires `enableProviderSetBudget: true` — it writes on-chain
+- `set_budget` hard caps at 5.00 USDC
+- `set_budget` requires a reason that becomes public on-chain calldata
 - `run-only` is the default recommended path — no on-chain side effects
 - `run-and-submit` requires `enableProviderRunAndSubmit: true` — it submits deliverables on-chain
-- `deniedTools` always wins over `enableProviderRunAndSubmit`
+- `deniedTools` always wins over `enableProviderRunAndSubmit` and `enableProviderSetBudget`
 - Never use `/erc8183/provider/run` (backward-compat wrapper to runAndSubmit)
 - All execution goes through Runner HMAC — no direct Circle CLI, no internal imports
 - Error messages are sanitized — secrets, tokens, and signatures are redacted
+- Client still chooses whether to fund after provider budget is set
+- Evaluator reason is separate from provider pricing reason
+- Deliverable hash is separate from provider pricing reason
