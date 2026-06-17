@@ -37,6 +37,47 @@ import { ApprovalManager } from "./approval-manager";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+/**
+ * Preflight: verify Console sync endpoint accepts our Bearer token
+ * AND that the erc8004_agents Supabase table is reachable.
+ *
+ * Calls GET /api/erc8004/register/sync/health which probes:
+ * 1. Auth (Bearer token accepted)
+ * 2. Supabase client instantiation
+ * 3. erc8004_agents table accessibility (lightweight SELECT)
+ */
+async function verifyConsoleSyncAuth(
+  syncUrl: string,
+  syncSecret: string,
+  signal?: AbortSignal,
+): Promise<{ ok: true } | { ok: false; errorCode: string; reason: string }> {
+  const healthUrl = syncUrl.replace(/\/sync$/, "/sync/health");
+  try {
+    const response = await fetch(healthUrl, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${syncSecret}`,
+      },
+      signal,
+    });
+    const json = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (response.ok && json.ok === true) {
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      errorCode: String(json.error ?? "sync_auth_preflight_failed"),
+      reason: `Console sync preflight failed: status=${response.status}, error=${String(json.error ?? "unknown")}, detail=${String(json.detail ?? "")}`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      errorCode: "sync_auth_preflight_failed",
+      reason: `Console sync preflight failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
 /** Map config.chain string to numeric chainId for approval validation. */
 function resolveChainId(chain: string): number {
   const normalized = chain.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -1160,7 +1201,7 @@ export class RunnerServices {
 
   /**
    * Gateway deposit — gated behind allowGatewayDeposit config flag.
-   * Disabled by default. Only for devops-admin role.
+   * Disabled by default. Gated behind allowGatewayDeposit config flag.
    */
   async gatewayDeposit(body: unknown, signal?: AbortSignal) {
     if (!this.config.allowGatewayDeposit) {
@@ -1274,6 +1315,228 @@ export class RunnerServices {
     });
 
     return { ok: true, result, txHash, ownershipVerified, receipt };
+  }
+
+  /**
+   * Register ERC-8004 identity via Circle CLI and sync to erc8004_agents.
+   * Called by ApprovalManager after approval is approved.
+   *
+   * Success = tx ✓ + upsert ✓ + visible in GET /api/erc8004/agents ✓
+   * If tx succeeds but sync fails, returns ok: false with errorCode: failed_persistence.
+   */
+  async registerErc8004WithApproval(
+    params: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<{
+    ok: boolean;
+    txHash?: string;
+    tokenId?: string;
+    agentId?: string;
+    agentVisible?: boolean;
+    errorCode?: string;
+    reason?: string;
+    [key: string]: unknown;
+  }> {
+    const metadataURI = params.metadataURI as string;
+    const controllerAddress = params.controllerAddress as string;
+    const role = params.role as string;
+    const agentName = params.agentName as string;
+    const metadataJson = params.metadataJson as Record<string, unknown> | undefined;
+    const approvalId = params.approvalId as string | undefined;
+
+    if (!metadataURI) {
+      throw new RunnerError("MISSING_FIELD", "metadataURI is required", 400);
+    }
+
+    // Step 1: Preflight — validate sync config BEFORE submitting on-chain tx
+    const consoleUrl = this.config.consoleUrl ?? process.env.ARCLAYER_CONSOLE_URL;
+    if (!consoleUrl) {
+      return {
+        ok: false,
+        agentVisible: false,
+        errorCode: "no_console_url",
+        reason: "ARCLAYER_CONSOLE_URL/consoleUrl is required before submitting ERC-8004 registration",
+      };
+    }
+
+    // Validate Console URL format before proceeding
+    let parsedConsoleUrl: URL;
+    try {
+      parsedConsoleUrl = new URL(consoleUrl);
+      if (!["http:", "https:"].includes(parsedConsoleUrl.protocol)) {
+        throw new Error(`unsupported protocol ${parsedConsoleUrl.protocol}`);
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        agentVisible: false,
+        errorCode: "invalid_console_url",
+        reason: `ARCLAYER_CONSOLE_URL/consoleUrl must be a valid http(s) URL: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    const syncUrl = new URL("/api/erc8004/register/sync", parsedConsoleUrl).toString();
+
+    const syncSecret = process.env.ARCLAYER_RUNNER_SYNC_SECRET;
+    if (!syncSecret) {
+      return {
+        ok: false,
+        agentVisible: false,
+        errorCode: "sync_secret_not_configured",
+        reason: "ARCLAYER_RUNNER_SYNC_SECRET is required before submitting ERC-8004 registration",
+      };
+    }
+
+    // Step 2: Auth preflight + signer check before on-chain tx (skip on retry path)
+    const skipOnChainTxHash = params.skipOnChainTxHash as string | undefined;
+    let txHash: string;
+
+    if (skipOnChainTxHash) {
+      // Retry path: reuse existing txHash, skip auth preflight and Circle CLI
+      txHash = skipOnChainTxHash;
+    } else {
+      // Auth preflight: verify Console accepts our Bearer token BEFORE submitting irreversible tx
+      const preflight = await verifyConsoleSyncAuth(syncUrl, syncSecret, signal);
+      if (!preflight.ok) {
+        return { ok: false, agentVisible: false, ...preflight };
+      }
+
+      // Verify controller matches configured Circle signer
+      const configuredSigner = this.config.circleWalletAddress;
+      if (!configuredSigner) {
+        return {
+          ok: false, agentVisible: false,
+          errorCode: "controller_signer_mismatch",
+          reason: "Circle wallet address not configured — cannot verify signer",
+        };
+      }
+      if (controllerAddress.toLowerCase() !== configuredSigner.toLowerCase()) {
+        return {
+          ok: false, agentVisible: false,
+          errorCode: "controller_signer_mismatch",
+          reason: `Approved controller ${controllerAddress} does not match configured Circle signer ${configuredSigner}`,
+        };
+      }
+
+      const registerResult = await this.registerIdentityViaCircleCli(
+        { metadataURI },
+        signal,
+      );
+
+      if (!registerResult.ok) {
+        return {
+          ok: false,
+          reason: (registerResult as Record<string, unknown>).reason as string ?? "On-chain registration failed",
+          errorCode: "onchain_failed",
+        };
+      }
+
+      if (!registerResult.txHash) {
+        return {
+          ok: false,
+          reason: "No txHash returned from Circle CLI registration",
+          errorCode: "no_txhash",
+        };
+      }
+      txHash = registerResult.txHash;
+    }
+
+    // Step 3: Sync to erc8004_agents via Console API
+    try {
+      // Retry loop for unmined tx (425 retryable)
+      const MAX_SYNC_RETRIES = 12;
+      const SYNC_RETRY_DELAY_MS = 5000;
+
+      let lastSyncResult: Record<string, unknown> | null = null;
+
+      for (let attempt = 1; attempt <= MAX_SYNC_RETRIES; attempt++) {
+        if (signal?.aborted) {
+          return { ok: false, txHash, agentVisible: false, errorCode: "aborted", reason: "Sync aborted by signal" };
+        }
+
+        const syncResponse = await fetch(syncUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${syncSecret}`,
+          },
+          body: JSON.stringify({
+            txHash,
+            controllerAddress,
+            metadataURI,
+            role,
+            agentName,
+            metadataJson: metadataJson ?? {},
+            approvalId,
+          }),
+          signal,
+        });
+
+        const syncResult = (await syncResponse.json()) as Record<string, unknown>;
+        lastSyncResult = syncResult;
+
+        // Success
+        if (syncResponse.ok && syncResult.ok === true) {
+          return {
+            ok: true,
+            txHash,
+            tokenId: syncResult.tokenId as string,
+            agentId: syncResult.agentId as string,
+            agentVisible: syncResult.agentVisible === true,
+            role: syncResult.role as string,
+          };
+        }
+
+        // Retryable: tx not mined yet
+        if (syncResponse.status === 425 && syncResult.retryable === true) {
+          if (attempt < MAX_SYNC_RETRIES) {
+            await new Promise((resolve) => setTimeout(resolve, SYNC_RETRY_DELAY_MS));
+            continue;
+          }
+          // Exhausted retries — return pending, NOT failed_persistence
+          return {
+            ok: false,
+            txHash,
+            agentVisible: false,
+            errorCode: "sync_pending_retryable",
+            retryable: true,
+            reason: `Tx submitted (${txHash}) but dashboard sync pending after ${MAX_SYNC_RETRIES} attempts. Call erc8004.register_approval_execute again after receipt mines.`,
+          };
+        }
+
+        // Non-retryable sync failure
+        return {
+          ok: false,
+          txHash,
+          tokenId: syncResult.tokenId as string | undefined,
+          agentId: syncResult.agentId as string | undefined,
+          agentVisible: syncResult.agentVisible === true,
+          errorCode: (syncResult.errorCode as string) || "failed_persistence",
+          reason: `On-chain tx succeeded but erc8004_agents sync failed: ${syncResult.detail ?? syncResult.error ?? "unknown"}`,
+        };
+      }
+
+      // Should not reach here, but safety fallback
+      return {
+        ok: false,
+        txHash,
+        agentVisible: false,
+        errorCode: "sync_pending_retryable",
+        retryable: true,
+        reason: `Sync loop exited unexpectedly. Last result: ${JSON.stringify(lastSyncResult)}`,
+      };
+    } catch (syncError: unknown) {
+      // Network error calling console — tx succeeded but can't verify dashboard
+      const message = syncError instanceof Error ? syncError.message : String(syncError);
+      // If txHash exists, on-chain tx succeeded — sync can be retried later
+      return {
+        ok: false,
+        txHash,
+        agentVisible: false,
+        errorCode: "sync_pending_retryable",
+        retryable: true,
+        reason: `On-chain tx submitted (${txHash}) but console sync call failed transiently: ${message}. Retry erc8004.register_approval_execute later to resync.`,
+      };
+    }
   }
 
   /**

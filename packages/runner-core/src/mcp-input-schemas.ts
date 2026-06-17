@@ -162,6 +162,58 @@ export const CircleGatewayDepositInputSchema = z.object({
   method: z.enum(["eco", "direct"]).optional(),
 });
 
+// ── ERC-8004 Chat-Approved Registration ─────────────────────────────────
+
+/** erc8004.register_approval_create — create pending registration approval */
+export const Erc8004RegisterApprovalCreateInputSchema = z.object({
+  controllerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "controllerAddress must be a valid EVM address"),
+  ownerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "ownerAddress must be a valid EVM address"),
+  agentName: z.string().min(1, "agentName is required").max(128),
+  role: z.enum(["provider", "evaluator"], { errorMap: () => ({ message: "role must be provider or evaluator" }) }),
+  metadataURI: z.string().min(1, "metadataURI is required").refine(
+    (value) => {
+      try {
+        const parsed = new URL(value);
+        return ["http:", "https:", "ipfs:", "arclayer:"].includes(parsed.protocol);
+      } catch {
+        return false;
+      }
+    },
+    "metadataURI must be a valid http(s)://, ipfs://, or arclayer:// URI"
+  ),
+  metadataJson: z.record(z.unknown()).optional(),
+  chainId: z.number().int().positive().optional(),
+  registryAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/).optional(),
+  expiresInSeconds: z.number().int().min(60).max(86400).optional(),
+  idempotencyKey: z.string().min(1).optional(),
+});
+
+/** erc8004.register_approval_get — get registration approval by id */
+export const Erc8004RegisterApprovalGetInputSchema = z.object({
+  approvalId: z.string().min(1),
+});
+
+/** erc8004.register_approval_approve — approve pending registration approval */
+export const Erc8004RegisterApprovalApproveInputSchema = z.object({
+  approvalId: z.string().min(1),
+});
+
+/** erc8004.register_approval_reject — reject pending registration approval */
+export const Erc8004RegisterApprovalRejectInputSchema = z.object({
+  approvalId: z.string().min(1),
+  reason: z.string().optional(),
+});
+
+/** erc8004.register_approval_execute — execute approved registration */
+export const Erc8004RegisterApprovalExecuteInputSchema = z.object({
+  approvalId: z.string().min(1),
+});
+
+/** erc8004.register_approval_approve_and_execute — convenience: approve + execute */
+export const Erc8004RegisterApprovalApproveAndExecuteInputSchema = z.object({
+  approvalId: z.string().min(1),
+});
+
 // ── Approvals ───────────────────────────────────────────────────────────
 
 /** approvals.create — create a pending approval for a client action */
@@ -239,6 +291,12 @@ export const MCP_TOOL_INPUT_SCHEMAS: Record<string, z.ZodTypeAny> = {
   "erc8183.claim_refund": Erc8183ClaimRefundInputSchema,
   "erc8183.set_provider": Erc8183SetProviderInputSchema,
   "circle.gateway_deposit": CircleGatewayDepositInputSchema,
+  "erc8004.register_approval_create": Erc8004RegisterApprovalCreateInputSchema,
+  "erc8004.register_approval_get": Erc8004RegisterApprovalGetInputSchema,
+  "erc8004.register_approval_approve": Erc8004RegisterApprovalApproveInputSchema,
+  "erc8004.register_approval_reject": Erc8004RegisterApprovalRejectInputSchema,
+  "erc8004.register_approval_execute": Erc8004RegisterApprovalExecuteInputSchema,
+  "erc8004.register_approval_approve_and_execute": Erc8004RegisterApprovalApproveAndExecuteInputSchema,
   "approvals.create": ApprovalsCreateInputSchema,
   "approvals.get": ApprovalsGetInputSchema,
   "approvals.approve": ApprovalsApproveInputSchema,

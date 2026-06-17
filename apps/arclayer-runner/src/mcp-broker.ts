@@ -112,6 +112,9 @@ const NON_IDEMPOTENT_WRITE_TOOLS = new Set([
   "erc8183.set_provider",
   // ERC-8004 identity write
   "erc8004.register_via_circle_cli",
+  // ERC-8004 chat-approved registration execute (on-chain via Circle CLI)
+  "erc8004.register_approval_execute",
+  "erc8004.register_approval_approve_and_execute",
   // Circle gateway deposit
   "circle.gateway_deposit",
 ]);

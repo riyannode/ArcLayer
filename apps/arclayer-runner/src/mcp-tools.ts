@@ -18,6 +18,7 @@ import { getToolsForRole, getToolByName, CONSOLE_MCP_PROXY_TOOLS, ALL_TOOLS } fr
 import { getRolePreset, listRolePresets } from "./role-presets";
 import { proxyToConsoleMcp } from "./console-tool-proxy";
 import type { McpToolBroker } from "./mcp-broker";
+import { ARC_CHAIN_ID, CONTRACTS } from "@arclayer/sdk";
 
 export type McpToolContext = {
   services: RunnerServices;
@@ -640,6 +641,152 @@ export async function handleMcpTool(
         input.limit,
       );
       return { ok: true, approvals, count: approvals.length };
+    }
+
+    // ── ERC-8004 Chat-Approved Registration ──────────────────────────
+    case "erc8004.register_approval_create": {
+      const input = validateMcpToolInput<{
+        controllerAddress: string;
+        ownerAddress: string;
+        agentName: string;
+        role: "provider" | "evaluator";
+        metadataURI: string;
+        metadataJson?: Record<string, unknown>;
+        chainId?: number;
+        registryAddress?: string;
+        expiresInSeconds?: number;
+        idempotencyKey?: string;
+      }>(name, args);
+
+      // Enforce canonical Arc Testnet values
+      const CANONICAL_CHAIN_ID = ARC_CHAIN_ID;
+      const CANONICAL_REGISTRY = CONTRACTS.ERC8004_IDENTITY_REGISTRY;
+
+      if (input.chainId !== undefined && input.chainId !== CANONICAL_CHAIN_ID) {
+        return { ok: false, error: "INVALID_CHAIN", message: `Only Arc Testnet (${CANONICAL_CHAIN_ID}) is supported. Got ${input.chainId}.` };
+      }
+      if (input.registryAddress !== undefined && input.registryAddress.toLowerCase() !== CANONICAL_REGISTRY.toLowerCase()) {
+        return { ok: false, error: "INVALID_REGISTRY", message: `Only canonical registry ${CANONICAL_REGISTRY} is supported.` };
+      }
+
+      // Owner must match controller for Circle CLI register(string) flow
+      if (input.ownerAddress.toLowerCase() !== input.controllerAddress.toLowerCase()) {
+        return {
+          ok: false,
+          error: "OWNER_CONTROLLER_MISMATCH",
+          message: "ownerAddress must match controllerAddress for Circle CLI register(string) flow",
+        };
+      }
+
+      // Build params with role embedded
+      const params: Record<string, unknown> = {
+        controllerAddress: input.controllerAddress,
+        ownerAddress: input.ownerAddress,
+        agentName: input.agentName,
+        role: input.role,
+        metadataURI: input.metadataURI,
+        metadataJson: input.metadataJson ?? {},
+        registryAddress: input.registryAddress ?? CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+      };
+
+      // Duplicate protection: check for existing approval with same controller + metadataURI + role (in active states)
+      const existingApproval = services.approvalManager.findExistingByErc8004Signature(
+        input.controllerAddress,
+        input.metadataURI,
+        input.role,
+      );
+      if (existingApproval) {
+        const isActive = ["pending", "approved", "executing"].includes(existingApproval.state);
+        if (isActive) {
+          return {
+            ok: true,
+            approvalId: existingApproval.approvalId,
+            state: existingApproval.state,
+            duplicate: true,
+            message: `Approval already exists for ${input.role} registration with this controller and metadata URI (state: ${existingApproval.state}).`,
+            renderableMessage: services.approvalManager.buildRenderableMessage(existingApproval),
+          };
+        }
+        // failed with on-chain txHash — block duplicate on-chain registration
+        if (existingApproval.state === "failed") {
+          const parsedResult = existingApproval.resultJson
+            ? JSON.parse(existingApproval.resultJson) as Record<string, unknown>
+            : {};
+          const existingTxHash = existingApproval.txHash ?? parsedResult.txHash as string | undefined;
+          if (existingTxHash) {
+            return {
+              ok: false,
+              error: "DUPLICATE_ONCHAIN_REGISTRATION_ATTEMPT",
+              message: "A previous ERC-8004 registration for this controller/metadataURI/role already submitted an on-chain transaction but failed during sync. Reconcile or retry sync instead of creating a new on-chain registration.",
+              existingApprovalId: existingApproval.approvalId,
+              txHash: existingTxHash,
+            };
+          }
+        }
+        // executed — return idempotent/existing with result data
+        if (existingApproval.state === "executed") {
+          const resultData = existingApproval.resultJson
+            ? JSON.parse(existingApproval.resultJson) as Record<string, unknown>
+            : {};
+          return {
+            ok: true,
+            approvalId: existingApproval.approvalId,
+            state: existingApproval.state,
+            duplicate: true,
+            idempotent: true,
+            txHash: existingApproval.txHash ?? resultData.txHash as string | undefined,
+            tokenId: resultData.tokenId as string | undefined,
+            agentId: resultData.agentId as string | undefined,
+            message: `ERC-8004 registration already executed for ${input.role} with this controller and metadata URI.`,
+          };
+        }
+      }
+
+      return services.approvalManager.createApproval({
+        actionType: "erc8004_register_agent",
+        walletAddress: input.controllerAddress,
+        chainId: input.chainId ?? ARC_CHAIN_ID,
+        params,
+        expiresInSeconds: input.expiresInSeconds,
+        idempotencyKey: input.idempotencyKey,
+      });
+    }
+
+    case "erc8004.register_approval_get": {
+      const input = validateMcpToolInput<{ approvalId: string }>(name, args);
+      const approval = services.approvalManager.getApprovalById(input.approvalId);
+      if (!approval) {
+        return { ok: false, error: "APPROVAL_NOT_FOUND", message: `Approval ${input.approvalId} not found` };
+      }
+      return { ok: true, approval, renderableMessage: services.approvalManager.buildRenderableMessage(approval) };
+    }
+
+    case "erc8004.register_approval_approve": {
+      const input = validateMcpToolInput<{ approvalId: string }>(name, args);
+      const approval = services.approvalManager.getApprovalById(input.approvalId);
+      if (!approval) {
+        return { ok: false, error: "APPROVAL_NOT_FOUND" };
+      }
+      return services.approvalManager.approveById(input.approvalId);
+    }
+
+    case "erc8004.register_approval_reject": {
+      const input = validateMcpToolInput<{ approvalId: string; reason?: string }>(name, args);
+      const approval = services.approvalManager.getApprovalById(input.approvalId);
+      if (!approval) {
+        return { ok: false, error: "APPROVAL_NOT_FOUND" };
+      }
+      return services.approvalManager.rejectById(input.approvalId, input.reason);
+    }
+
+    case "erc8004.register_approval_execute": {
+      const input = validateMcpToolInput<{ approvalId: string }>(name, args);
+      return services.approvalManager.executeErc8004Registration(input.approvalId, ctx.signal);
+    }
+
+    case "erc8004.register_approval_approve_and_execute": {
+      const input = validateMcpToolInput<{ approvalId: string }>(name, args);
+      return services.approvalManager.approveAndExecuteErc8004(input.approvalId, ctx.signal);
     }
 
     default:

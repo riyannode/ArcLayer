@@ -24,11 +24,13 @@ import {
   type ApprovalActionType,
   type ApprovalRecord,
 } from "@arclayer/runner-core";
+import { CONTRACTS } from "@arclayer/sdk";
 import {
   Erc8183CreateJobInputSchema,
   Erc8183ApproveUsdcInputSchema,
   Erc8183FundJobInputSchema,
   Erc8183ClaimRefundInputSchema,
+  Erc8004RegisterApprovalCreateInputSchema,
 } from "@arclayer/runner-core";
 import { ApprovalStore } from "./approval-store";
 import type { RunnerServices } from "./services";
@@ -478,6 +480,436 @@ export class ApprovalManager {
     return this.store.listPending(walletAddress, limit);
   }
 
+  // ── ERC-8004 Registration Helpers ──────────────────────────────────
+
+  /** Get approval by ID without wallet/role validation (for chat approval flow). */
+  getApprovalById(approvalId: string): ApprovalRecord | undefined {
+    return this.store.get(approvalId);
+  }
+
+  /** Approve by ID — transitions pending → approved without wallet check (for chat approval). */
+  approveById(approvalId: string): { ok: boolean; approvalId: string; state: string; error?: string } {
+    const approval = this.store.get(approvalId);
+    if (!approval) {
+      return { ok: false, approvalId, state: "unknown", error: "APPROVAL_NOT_FOUND" };
+    }
+    if (approval.actionType !== "erc8004_register_agent") {
+      return { ok: false, approvalId, state: approval.state, error: "INVALID_APPROVAL_ACTION_TYPE" };
+    }
+    if (approval.state !== "pending") {
+      return { ok: false, approvalId, state: approval.state, error: `Cannot approve: state is ${approval.state}` };
+    }
+    const result = this.store.transitionToApproved(approvalId);
+    if (!result.ok) {
+      return { ok: false, approvalId, state: result.current?.state ?? "unknown", error: result.error };
+    }
+    return { ok: true, approvalId: result.approval.approvalId, state: result.approval.state };
+  }
+
+  /** Reject by ID — transitions pending → rejected without wallet check. */
+  rejectById(approvalId: string, reason?: string): { ok: boolean; approvalId: string; state: string; error?: string } {
+    const approval = this.store.get(approvalId);
+    if (!approval) {
+      return { ok: false, approvalId, state: "unknown", error: "APPROVAL_NOT_FOUND" };
+    }
+    if (approval.actionType !== "erc8004_register_agent") {
+      return { ok: false, approvalId, state: approval.state, error: "INVALID_APPROVAL_ACTION_TYPE" };
+    }
+    if (approval.state !== "pending") {
+      return { ok: false, approvalId, state: approval.state, error: `Cannot reject: state is ${approval.state}` };
+    }
+    const result = this.store.transitionToRejected(approvalId, reason);
+    if (!result.ok) {
+      return { ok: false, approvalId, state: result.current?.state ?? "unknown", error: result.error };
+    }
+    return { ok: true, approvalId, state: "rejected" };
+  }
+
+  /** Find existing erc8004_register_agent approval with same controller + metadataURI + role.
+   *  Includes active states AND failed approvals that already have an on-chain txHash
+   *  (to prevent duplicate on-chain registrations). */
+  findExistingByErc8004Signature(
+    controllerAddress: string,
+    metadataURI: string,
+    role: string,
+  ): ApprovalRecord | undefined {
+    const candidates = this.store.listErc8004DuplicateCandidatesByWallet(controllerAddress.toLowerCase());
+    return candidates.find((a) => {
+      if (a.actionType !== "erc8004_register_agent") return false;
+      try {
+        const params = JSON.parse(a.paramsJson) as Record<string, unknown>;
+        if (params.metadataURI !== metadataURI || params.role !== role) return false;
+        // For failed approvals, only block if on-chain tx was submitted
+        if (a.state === "failed") {
+          const result = a.resultJson ? (JSON.parse(a.resultJson) as Record<string, unknown>) : {};
+          return Boolean(a.txHash || result.txHash);
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    });
+  }
+
+  /** Make renderable message available for MCP tool handlers. */
+  buildRenderableMessage(approval: ApprovalRecord): string {
+    // Delegate to private implementation
+    if (approval.actionType === "erc8004_register_agent") {
+      return this.buildErc8004RegistrationMessage(approval);
+    }
+    const lines = [
+      "🔐 **Approval Required**",
+      "",
+      `**Action:** ${approval.actionType}`,
+      `**Wallet:** \`${approval.walletAddress}\``,
+      `**Chain ID:** ${approval.chainId}`,
+    ];
+    if (approval.jobId) lines.push(`**Job ID:** ${approval.jobId}`);
+    if (approval.amount) lines.push(`**Amount:** ${approval.amount}`);
+    lines.push(
+      "",
+      `**Expires:** ${approval.expiresAt}`,
+      `**Approval ID:** \`${approval.approvalId}\``,
+      "",
+      "Reply *approve* to execute, *reject* to decline, or *cancel* to withdraw.",
+    );
+    return lines.join("\n");
+  }
+
+  // ── ERC-8004 Execute ─────────────────────────────────────────────
+
+  /**
+   * Execute approved ERC-8004 registration.
+   * Requires approval state = approved.
+   * Transitions: approved → executing → executed | failed
+   * On success: agent is visible from GET /api/erc8004/agents.
+   * On tx success but upsert failure: returns failed_persistence.
+   */
+  async executeErc8004Registration(
+    approvalId: string,
+    signal?: AbortSignal,
+  ): Promise<{
+    ok: boolean;
+    approvalId: string;
+    state: string;
+    txHash?: string;
+    tokenId?: string;
+    agentId?: string;
+    agentVisible?: boolean;
+    errorCode?: string;
+    error?: string;
+    idempotent?: boolean;
+    retryable?: boolean;
+  }> {
+    const approval = this.store.get(approvalId);
+    if (!approval) {
+      return { ok: false, approvalId, state: "unknown", error: "APPROVAL_NOT_FOUND" };
+    }
+
+    if (approval.actionType !== "erc8004_register_agent") {
+      return { ok: false, approvalId, state: approval.state, error: "INVALID_APPROVAL_ACTION_TYPE" };
+    }
+
+    // Idempotency: if already executed, return existing result
+    if (approval.state === "executed") {
+      const result = approval.resultJson ? JSON.parse(approval.resultJson) as Record<string, unknown> : {};
+      return {
+        ok: true,
+        approvalId,
+        state: "executed",
+        txHash: approval.txHash ?? result.txHash as string | undefined,
+        tokenId: result.tokenId as string | undefined,
+        agentId: result.agentId as string | undefined,
+        agentVisible: result.agentVisible as boolean | undefined,
+        idempotent: true,
+      };
+    }
+
+    if (approval.state === "executing") {
+      // Allow sync-only retry if previous execution left sync_pending_retryable metadata
+      const existingResult = approval.resultJson
+        ? JSON.parse(approval.resultJson) as Record<string, unknown>
+        : null;
+
+      if (existingResult?.sync_pending_retryable && existingResult?.txHash) {
+        // Retry path: skip on-chain tx, only re-sync with stored txHash
+        const retryParams = JSON.parse(approval.paramsJson) as Record<string, unknown>;
+        retryParams.approvalId = approvalId;
+        retryParams.skipOnChainTxHash = existingResult.txHash;
+
+        try {
+          if (signal?.aborted) {
+            this.store.transitionToFailed(approvalId, "Retry aborted by signal");
+            return { ok: false, approvalId, state: "failed", error: "Retry aborted" };
+          }
+
+          const result = await this.services.registerErc8004WithApproval(retryParams, signal);
+          const resultObj = result as Record<string, unknown>;
+
+          if (resultObj && resultObj.ok === false) {
+            const reason = (resultObj.reason ?? resultObj.error ?? "Service returned ok: false") as string;
+            const errorCode = (resultObj.errorCode as string) ?? "EXECUTION_FAILED";
+            const isRetryable = resultObj.retryable === true || errorCode === "sync_pending_retryable";
+
+            if (isRetryable) {
+              // Still retryable — persist updated txHash and stay in executing
+              this.store.saveExecutingRetryMetadata(approvalId, {
+                sync_pending_retryable: true,
+                txHash: resultObj.txHash ?? existingResult.txHash,
+              });
+              return {
+                ok: false,
+                approvalId,
+                state: "executing",
+                txHash: resultObj.txHash as string | undefined ?? existingResult.txHash as string,
+                errorCode: "sync_pending_retryable",
+                retryable: true,
+                error: reason.slice(0, 500),
+              };
+            }
+
+            // Non-retryable failure — preserve txHash for reconciliation
+            const failResult: Record<string, unknown> = {
+              txHash: resultObj.txHash ?? existingResult.txHash,
+              errorCode, reason: resultObj.reason,
+              tokenId: resultObj.tokenId, agentId: resultObj.agentId,
+              agentVisible: resultObj.agentVisible,
+            };
+            this.store.transitionToFailedWithResult(approvalId, reason, failResult);
+            return { ok: false, approvalId, state: "failed", errorCode, txHash: resultObj.txHash as string | undefined ?? existingResult.txHash as string, agentVisible: resultObj.agentVisible as boolean | undefined, error: reason.slice(0, 500) };
+          }
+
+          // Success!
+          const txHash = resultObj?.txHash as string | undefined ?? existingResult.txHash as string;
+          const tokenId = resultObj?.tokenId as string | undefined;
+          const agentId = resultObj?.agentId as string | undefined;
+          const agentVisible = resultObj?.agentVisible as boolean | undefined;
+
+          if (agentVisible === false) {
+            // Still not visible — check if retryable
+            const errCode = resultObj?.errorCode as string | undefined;
+            const retryable = resultObj?.retryable === true || errCode === "sync_pending_retryable";
+            if (retryable) {
+              this.store.saveExecutingRetryMetadata(approvalId, {
+                sync_pending_retryable: true,
+                txHash,
+              });
+              return {
+                ok: false, approvalId, state: "executing", txHash,
+                errorCode: "sync_pending_retryable", retryable: true,
+                error: "Sync still pending. Retry after receipt mines.",
+              };
+            }
+            this.store.transitionToFailedWithResult(approvalId, "Retry sync failed: agent not dashboard-visible.", {
+              txHash, errorCode: "failed_persistence",
+              tokenId: resultObj?.tokenId, agentId: resultObj?.agentId,
+            });
+            return {
+              ok: false, approvalId, state: "failed", txHash,
+              errorCode: "failed_persistence",
+              error: "Retry sync succeeded on-chain but agent is not visible from GET /api/erc8004/agents.",
+            };
+          }
+
+          // Full success on retry
+          const executed = this.store.transitionToExecuted(approvalId, txHash, result);
+          return {
+            ok: true,
+            approvalId: executed.approvalId,
+            state: "executed",
+            txHash: executed.txHash ?? txHash,
+            tokenId,
+            agentId,
+            agentVisible: true,
+          };
+        } catch (retryError: unknown) {
+          const message = retryError instanceof Error ? retryError.message : String(retryError);
+          this.store.transitionToFailed(approvalId, message);
+          return { ok: false, approvalId, state: "failed", error: message.slice(0, 500) };
+        }
+      }
+
+      // Not a retryable — block concurrent execution
+      return { ok: false, approvalId, state: "executing", error: "Approval is currently being executed" };
+    }
+
+    if (approval.state !== "approved") {
+      return { ok: false, approvalId, state: approval.state, error: `Cannot execute: state is ${approval.state} (requires approved)` };
+    }
+
+    // Atomic: approved → executing
+    const transitionResult = this.store.transitionFromApprovedToExecuting(approvalId);
+
+    if (!transitionResult.ok) {
+      return { ok: false, approvalId, state: transitionResult.current?.state ?? "unknown", error: transitionResult.error };
+    }
+
+    // Execute
+    try {
+      if (signal?.aborted) {
+        this.store.transitionToFailed(approvalId, "Execution aborted by signal");
+        return { ok: false, approvalId, state: "failed", error: "Execution aborted" };
+      }
+
+      const params = JSON.parse(approval.paramsJson) as Record<string, unknown>;
+      params.approvalId = approvalId;
+      const result = await this.services.registerErc8004WithApproval(params, signal);
+
+      // Check if service returned structured failure
+      const resultObj = result as Record<string, unknown>;
+      if (resultObj && resultObj.ok === false) {
+        const reason = (resultObj.reason ?? resultObj.error ?? "Service returned ok: false") as string;
+        const errorCode = (resultObj.errorCode as string) ?? "EXECUTION_FAILED";
+
+        // Retryable: tx submitted but sync pending — do NOT transition to failed
+        const isRetryable = resultObj.retryable === true || errorCode === "sync_pending_retryable";
+        if (isRetryable) {
+          const txHash = resultObj.txHash as string | undefined;
+          this.store.saveExecutingRetryMetadata(approvalId, {
+            sync_pending_retryable: true,
+            txHash,
+          });
+          return {
+            ok: false,
+            approvalId,
+            state: "executing",
+            txHash,
+            agentVisible: false,
+            errorCode: "sync_pending_retryable",
+            retryable: true,
+            error: reason.slice(0, 500),
+          };
+        }
+
+        this.store.transitionToFailedWithResult(approvalId, reason, {
+          txHash: resultObj.txHash as string | undefined,
+          errorCode,
+          tokenId: resultObj.tokenId as string | undefined,
+          agentId: resultObj.agentId as string | undefined,
+          agentVisible: resultObj.agentVisible as boolean | undefined,
+        });
+        return { ok: false, approvalId, state: "failed", errorCode, txHash: resultObj.txHash as string | undefined, agentVisible: resultObj.agentVisible as boolean | undefined, error: reason.slice(0, 500) };
+      }
+
+      // Extract results
+      const txHash = resultObj?.txHash as string | undefined;
+      const tokenId = resultObj?.tokenId as string | undefined;
+      const agentId = resultObj?.agentId as string | undefined;
+      const agentVisible = resultObj?.agentVisible as boolean | undefined;
+      const errorCode = resultObj?.errorCode as string | undefined;
+
+      // Success means: tx ✓ + upsert ✓ + visible in GET /api/erc8004/agents ✓
+      // If agentVisible is false, it's a partial failure
+      if (agentVisible === false) {
+        const isRetryable = resultObj?.retryable === true || errorCode === "sync_pending_retryable";
+
+        if (isRetryable) {
+          // Tx submitted but not mined yet — keep in executing so it can be retried
+          // Persist txHash in resultJson so a later retry can skip on-chain tx
+          this.store.saveExecutingRetryMetadata(approvalId, {
+            sync_pending_retryable: true,
+            txHash,
+          });
+          return {
+            ok: false,
+            approvalId,
+            state: "executing",
+            txHash,
+            tokenId,
+            agentId,
+            agentVisible: false,
+            errorCode: "sync_pending_retryable",
+            retryable: true,
+            error: (resultObj?.reason as string) ?? "Tx submitted but dashboard sync pending. Retry after receipt mines.",
+          };
+        }
+
+        // Non-retryable: real persistence failure — preserve txHash for reconciliation
+        const failResult: Record<string, unknown> = {
+          txHash, errorCode, reason: resultObj?.reason,
+          tokenId, agentId,
+        };
+        this.store.transitionToFailedWithResult(approvalId,
+          "On-chain registration succeeded but erc8004_agents upsert failed. Agent is not dashboard-visible.",
+          failResult,
+        );
+        return {
+          ok: false,
+          approvalId,
+          state: "failed",
+          txHash,
+          tokenId,
+          agentId,
+          agentVisible: false,
+          errorCode: "failed_persistence",
+          error: "On-chain tx succeeded but agent is not visible from GET /api/erc8004/agents. Upsert to erc8004_agents failed.",
+        };
+      }
+
+      // Full success
+      const executed = this.store.transitionToExecuted(approvalId, txHash, result);
+      return {
+        ok: true,
+        approvalId: executed.approvalId,
+        state: "executed",
+        txHash: executed.txHash ?? txHash,
+        tokenId,
+        agentId,
+        agentVisible: true,
+      };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.store.transitionToFailed(approvalId, message);
+      return { ok: false, approvalId, state: "failed", error: message.slice(0, 500) };
+    }
+  }
+
+  /**
+   * Convenience: approve + execute in one call.
+   * Internal state transitions are still explicit: pending → approved → executing → executed.
+   */
+  async approveAndExecuteErc8004(
+    approvalId: string,
+    signal?: AbortSignal,
+  ): Promise<{
+    ok: boolean;
+    approvalId: string;
+    state: string;
+    txHash?: string;
+    tokenId?: string;
+    agentId?: string;
+    agentVisible?: boolean;
+    errorCode?: string;
+    error?: string;
+    idempotent?: boolean;
+    retryable?: boolean;
+  }> {
+    const approval = this.store.get(approvalId);
+    if (!approval) {
+      return { ok: false, approvalId, state: "unknown", error: "APPROVAL_NOT_FOUND" };
+    }
+
+    if (approval.actionType !== "erc8004_register_agent") {
+      return { ok: false, approvalId, state: approval.state, error: "INVALID_APPROVAL_ACTION_TYPE" };
+    }
+
+    // If already executed, return idempotent result
+    if (approval.state === "executed") {
+      return this.executeErc8004Registration(approvalId, signal);
+    }
+
+    // If pending, approve first
+    if (approval.state === "pending") {
+      const approveResult = this.approveById(approvalId);
+      if (!approveResult.ok) {
+        return { ok: false, approvalId, state: approveResult.state, error: approveResult.error };
+      }
+    }
+
+    // Now execute
+    return this.executeErc8004Registration(approvalId, signal);
+  }
+
   // ── Action Execution ─────────────────────────────────────────────────
 
   /**
@@ -497,6 +929,7 @@ export class ApprovalManager {
       approveUsdc: Erc8183ApproveUsdcInputSchema,
       fundJob: Erc8183FundJobInputSchema,
       claimRefund: Erc8183ClaimRefundInputSchema,
+      erc8004_register_agent: Erc8004RegisterApprovalCreateInputSchema,
     };
 
     const schema = schemaMap[actionType];
@@ -532,6 +965,8 @@ export class ApprovalManager {
       case "fundJob":
       case "claimRefund":
         return { derivedJobId: validatedParams.jobId as string | undefined };
+      case "erc8004_register_agent":
+        return {}; // role and agentName stored in params, not display fields
       default:
         return {};
     }
@@ -555,6 +990,12 @@ export class ApprovalManager {
         return this.services.fundJob(params);
       case "claimRefund":
         return this.services.claimRefund(params);
+      case "erc8004_register_agent":
+        throw new RunnerError(
+          "UNSUPPORTED_ACTION",
+          "erc8004_register_agent must use dedicated approve+execute tools (erc8004.register_approval_approve_and_execute), not the generic approval path.",
+          400,
+        );
       default:
         throw new RunnerError(
           "UNSUPPORTED_ACTION",
@@ -572,29 +1013,45 @@ export class ApprovalManager {
       `Wallet: ${approval.walletAddress}`,
       `Chain: ${approval.chainId}`,
     ];
+    if (approval.actionType === "erc8004_register_agent") {
+      const params = JSON.parse(approval.paramsJson);
+      if (params.role) parts.push(`Role: ${params.role}`);
+      if (params.agentName) parts.push(`Agent: ${params.agentName}`);
+    }
     if (approval.jobId) parts.push(`Job: ${approval.jobId}`);
     if (approval.amount) parts.push(`Amount: ${approval.amount}`);
     parts.push(`Expires: ${approval.expiresAt}`);
     return parts.join(" | ");
   }
 
-  private buildRenderableMessage(approval: ApprovalRecord): string {
+  private buildErc8004RegistrationMessage(approval: ApprovalRecord): string {
+    const params = JSON.parse(approval.paramsJson) as Record<string, unknown>;
+    const role = (params.role as string) ?? "unknown";
+    const roleLabel = role.charAt(0).toUpperCase() + role.slice(1);
+    const agentName = (params.agentName as string) ?? "unnamed";
+    const controller = (params.controllerAddress as string) ?? "—";
+    const owner = (params.ownerAddress as string) ?? "—";
+    const metadataURI = (params.metadataURI as string) ?? "—";
+    const chainId = approval.chainId;
+    const registryAddress = (params.registryAddress as string) ?? CONTRACTS.ERC8004_IDENTITY_REGISTRY;
+
     const lines = [
-      `🔐 **Approval Required**`,
+      `📝 **Register ERC-8004 Agent**`,
       ``,
-      `**Action:** ${approval.actionType}`,
-      `**Wallet:** \`${approval.walletAddress}\``,
-      `**Chain ID:** ${approval.chainId}`,
-    ];
-    if (approval.jobId) lines.push(`**Job ID:** ${approval.jobId}`);
-    if (approval.amount) lines.push(`**Amount:** ${approval.amount}`);
-    lines.push(
+      `**Role:** ${roleLabel}`,
+      `**Controller:** \`${controller}\``,
+      `**Owner:** \`${owner}\``,
+      `**Agent name:** ${agentName}`,
+      `**Metadata URI:** ${metadataURI}`,
+      `**Network:** Arc Testnet (${chainId})`,
+      `**Registry:** \`${registryAddress}\``,
       ``,
-      `**Expires:** ${approval.expiresAt}`,
       `**Approval ID:** \`${approval.approvalId}\``,
+      `**Expires:** ${approval.expiresAt}`,
       ``,
-      `Reply *approve* to execute, *reject* to decline, or *cancel* to withdraw.`,
-    );
+      `Approve registration?`,
+      `Reply *approve* to register, *reject* to decline, or *cancel* to withdraw.`,
+    ];
     return lines.join("\n");
   }
 

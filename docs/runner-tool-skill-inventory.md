@@ -41,7 +41,7 @@ Purpose: Classify all repo tools/skills/docs for Runner MCP expansion.
 | `x402.batch_pay` | mcp-schemas.ts | Batch pay multiple x402 | payment | x402-agent |
 | `x402.list_receipts` | mcp-schemas.ts | List x402 receipts | read-only | all |
 | `x402.payment_policy` | mcp-schemas.ts | Current x402 policy | read-only | all |
-| `erc8004.prepare_register` | mcp-schemas.ts | Prepare ERC-8004 registration | prepare-only | identity-agent, provider |
+| `erc8004.prepare_register` | mcp-schemas.ts | Prepare ERC-8004 registration | prepare-only | provider, evaluator, x402-agent |
 | `erc8183.provider_run_job` | mcp-schemas.ts | Dispatch job to runtime | runtime | provider |
 | `erc8183.provider_submit_deliverable` | mcp-schemas.ts | Submit deliverable on-chain | runtime | provider |
 | `erc8183.provider_run_and_submit` | mcp-schemas.ts | Full lifecycle run+submit | runtime | provider |
@@ -168,10 +168,10 @@ Source: `apps/console/src/lib/mcp/server.ts`
 | `docs/AUTONOMOUS_AGENT_BUSINESS_LOOP_SKILL.md` | ✅ | Business loop patterns | provider, client |
 | `docs/ARCLAYER_INTEGRATION_SKILL.md` | ✅ | Integration guide | all |
 | `docs/global-mcp.md` | ✅ | MCP tool reference | all |
-| `AGENTS.md` | ✅ | Repo operating guide | devops-admin |
+| `AGENTS.md` | ✅ | Repo operating guide | all |
 | `packages/mcp-connect/plugin/skills/arclayer-global-agent-commerce/SKILL.md` | ✅ | Packaged plugin mirror | all |
 | `packages/mcp-connect/plugin/skills/arclayer-agent-bundle/SKILL.md` | ✅ | Agent bundle skill | all |
-| `docs/mcp-erc8004-identity-tools.md` | ✅ | ERC-8004 MCP tools | identity-agent |
+| `docs/mcp-erc8004-identity-tools.md` | ✅ | ERC-8004 MCP tools | provider, evaluator, x402-agent |
 | `docs/x402-payment-flow.md` | ✅ | x402 payment flow | x402-agent |
 | `docs/x402-agent-payer-binding.md` | ✅ | x402 payer binding | x402-agent |
 | `docs/provider-runtime-memory.md` | ✅ | Provider runtime memory | provider |

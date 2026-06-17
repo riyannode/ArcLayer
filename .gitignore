@@ -119,3 +119,4 @@ indexer/indexer.db
 examples/external-pm2-bots/provider-runtime-bot/create-and-fund.mjs
 examples/external-pm2-bots/provider-runtime-bot/create-fund-direct.mjs
 examples/external-pm2-bots/provider-runtime-bot/fund-job.mjs
+.test-runner-services/

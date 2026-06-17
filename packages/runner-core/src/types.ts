@@ -11,9 +11,6 @@ export const RunnerRoleSchema = z.enum([
   "client",
   "evaluator",
   "x402-agent",
-  "identity-agent",
-  "validation-agent",
-  "full-stack-agent",
 ]);
 export type RunnerRole = z.infer<typeof RunnerRoleSchema>;
 
@@ -213,6 +210,9 @@ export const RunnerConfigSchema = z.object({
     },
     z.boolean().default(false)
   ),
+
+  // ── Console URL for erc8004_agents sync after registration ────────────
+  consoleUrl: z.string().optional(),
 
   // ── MCP Tool Broker budget config ──────────────────────────────────────
   toolBrokerEnabled: z.preprocess(
