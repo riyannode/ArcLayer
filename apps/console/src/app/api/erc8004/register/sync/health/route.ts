@@ -43,25 +43,30 @@ export async function GET(request: Request) {
       .limit(1);
 
     if (error) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: 'erc8004_agents_unreachable',
-          detail: error.message,
-        },
-        { status: 503 },
-      );
+      console.error('[sync/health] erc8004_agents query failed:', error.message);
+      const body: Record<string, unknown> = {
+        ok: false,
+        error: 'erc8004_agents_unreachable',
+        detail: 'ERC-8004 agents table is not reachable',
+      };
+      if (process.env.NODE_ENV !== 'production') {
+        body.debugDetail = error.message;
+      }
+      return NextResponse.json(body, { status: 503 });
     }
 
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: 'supabase_client_error',
-        detail: err instanceof Error ? err.message : String(err),
-      },
-      { status: 503 },
-    );
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    console.error('[sync/health] Supabase client error:', rawMessage);
+    const body: Record<string, unknown> = {
+      ok: false,
+      error: 'supabase_client_error',
+      detail: 'Supabase client check failed',
+    };
+    if (process.env.NODE_ENV !== 'production') {
+      body.debugDetail = rawMessage;
+    }
+    return NextResponse.json(body, { status: 503 });
   }
 }
