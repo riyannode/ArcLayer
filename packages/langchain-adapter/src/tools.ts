@@ -24,6 +24,10 @@ import type {
 } from "./types.js";
 import { DEFAULT_PROVIDER_PRICING_POLICY } from "./types.js";
 
+// ── USDC Precision ─────────────────────────────────────────────────────
+
+const USDC_DECIMAL_6_REGEX = /^[0-9]+(\.[0-9]{1,6})?$/;
+
 // ── Zod Schemas ─────────────────────────────────────────────────────────────
 
 /**
@@ -126,7 +130,10 @@ const X402BatchPayInputSchema = z.object({
 const ProviderQuoteInputSchema = z.object({
   jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").describe("ERC-8183 job ID (numeric string)"),
   description: z.string().min(1).describe("Job description for complexity assessment"),
-  input: z.unknown().describe("Job input payload"),
+  input: z.unknown().refine(
+    (v) => v !== undefined,
+    { message: "input is required (must be a JSON value, not undefined)" },
+  ).describe("Job input payload"),
   complexityHint: z
     .enum(["low", "medium", "high"])
     .optional()
@@ -145,7 +152,7 @@ const ProviderSetBudgetInputSchema = z.object({
   jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").describe("ERC-8183 job ID (numeric string)"),
   amount: z
     .string()
-    .regex(/^[0-9]+(\.[0-9]+)?$/, "Must be a decimal string")
+    .regex(USDC_DECIMAL_6_REGEX, "Must be a decimal string with at most 6 fractional digits")
     .describe("Budget amount in USDC (max 5.00)"),
   complexity: z
     .enum(["low", "medium", "high"])
@@ -267,6 +274,37 @@ function mapComplexityToBudget(
     case "high":
       return policy.highComplexityBudgetUsdc;
   }
+}
+
+function parseUsdcMicros(amount: string): bigint {
+  if (!USDC_DECIMAL_6_REGEX.test(amount)) {
+    throw new ArcLayerPolicyError(
+      "amount must be a decimal string with at most 6 fractional digits",
+    );
+  }
+  const [whole, fraction = ""] = amount.split(".");
+  const micros = `${whole}${fraction.padEnd(6, "0")}`;
+  return BigInt(micros);
+}
+
+function assertPositiveUsdcAmount(amount: string): bigint {
+  const micros = parseUsdcMicros(amount);
+  if (micros <= 0n) {
+    throw new ArcLayerPolicyError("amount must be greater than 0");
+  }
+  return micros;
+}
+
+function clampBudgetToPolicyMax(
+  suggestedBudgetUsdc: string,
+  policy: Required<ProviderPricingPolicy>,
+): string {
+  const suggestedMicros = parseUsdcMicros(suggestedBudgetUsdc);
+  const maxMicros = parseUsdcMicros(policy.maxBudgetUsdc);
+  if (suggestedMicros > maxMicros) {
+    return policy.maxBudgetUsdc;
+  }
+  return suggestedBudgetUsdc;
 }
 
 // ── Normalize Result ────────────────────────────────────────────────────────
@@ -706,7 +744,11 @@ function createProviderQuoteJobTool(
         const complexity = input.complexityHint
           ?? classifyComplexity(input.description, input.input);
 
-        const suggestedBudgetUsdc = mapComplexityToBudget(complexity, opts.pricingPolicy);
+        const rawSuggestedBudgetUsdc = mapComplexityToBudget(complexity, opts.pricingPolicy);
+        const suggestedBudgetUsdc = clampBudgetToPolicyMax(
+          rawSuggestedBudgetUsdc,
+          opts.pricingPolicy,
+        );
 
         const reason = input.reason
           ?? `${complexity.charAt(0).toUpperCase() + complexity.slice(1)} complexity job`;
@@ -756,35 +798,32 @@ function createProviderSetBudgetTool(
     logger?: ArcLayerLogger;
   },
 ) {
-  const hardCap = parseFloat(DEFAULT_PROVIDER_PRICING_POLICY.maxBudgetUsdc!);
+  const hardCapMicros = parseUsdcMicros(DEFAULT_PROVIDER_PRICING_POLICY.maxBudgetUsdc);
 
   return tool(
     async (input) => {
       try {
-        // SDK-side validation: amount > 0
-        const amountNum = parseFloat(input.amount);
-        if (isNaN(amountNum) || amountNum <= 0) {
-          throw new ArcLayerPolicyError("amount must be greater than 0");
-        }
+        // SDK-side validation: amount > 0 and max 6 fractional digits
+        const amountMicros = assertPositiveUsdcAmount(input.amount);
 
         // SDK-side validation: amount <= maxBudgetUsdc from policy
-        const policyMax = parseFloat(opts.pricingPolicy.maxBudgetUsdc!);
-        if (amountNum > policyMax) {
+        const policyMaxMicros = parseUsdcMicros(opts.pricingPolicy.maxBudgetUsdc);
+        if (amountMicros > policyMaxMicros) {
           throw new ArcLayerPolicyError(
             `amount ${input.amount} USDC exceeds policy maximum of ${opts.pricingPolicy.maxBudgetUsdc} USDC`,
           );
         }
 
         // SDK-side validation: hard cap 5.00
-        if (amountNum > hardCap) {
+        if (amountMicros > hardCapMicros) {
           throw new ArcLayerPolicyError(
-            `amount ${input.amount} USDC exceeds hard cap of ${hardCap} USDC`,
+            `amount ${input.amount} USDC exceeds hard cap of ${DEFAULT_PROVIDER_PRICING_POLICY.maxBudgetUsdc} USDC`,
           );
         }
 
         // SDK-side validation: amount >= minBudgetUsdc
-        const policyMin = parseFloat(opts.pricingPolicy.minBudgetUsdc!);
-        if (amountNum < policyMin) {
+        const policyMinMicros = parseUsdcMicros(opts.pricingPolicy.minBudgetUsdc);
+        if (amountMicros < policyMinMicros) {
           throw new ArcLayerPolicyError(
             `amount ${input.amount} USDC is below policy minimum of ${opts.pricingPolicy.minBudgetUsdc} USDC`,
           );

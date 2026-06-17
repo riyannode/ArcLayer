@@ -46,6 +46,8 @@ Provider agents can autonomously assess job complexity and set budgets through E
 
 **Hard cap: 5.00 USDC.** No budget above 5.00 will be accepted.
 
+**Clamping:** If a custom `maxBudgetUsdc` is lower than a tier budget, the quote output is clamped to the custom max. For example, if `maxBudgetUsdc: "2.00"` and complexity is `high` (default 5.00), the quote returns `"2.00"`.
+
 ### Workflow
 
 1. **Quote**: Call `arclayer_provider_quote_job` to assess complexity and get a suggested budget.
