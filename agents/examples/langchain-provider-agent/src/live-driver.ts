@@ -726,6 +726,35 @@ async function processJob(job: IndexerJob): Promise<StageResult> {
   };
 }
 
+
+// ── Job Priority Classification ─────────────────────────────────────────
+
+type JobPriority = "funded_ready" | "open_has_budget" | "open_set_budget" | "skip";
+
+function classifyJob(job: IndexerJob): JobPriority {
+  // Terminal → skip
+  if (job.status >= 3) return "skip";
+
+  // Funded → highest priority (ready for run_only + submit)
+  if (job.status === 1) {
+    if (isStageDone(job.id, "run_only") && isStageDone(job.id, "submit")) return "skip";
+    return "funded_ready";
+  }
+
+  // Open → check budget state
+  if (job.status === 0) {
+    if (isStageDone(job.id, "set_budget") || isOnChainExisting(job.id)) {
+      return "open_has_budget"; // waiting for client fund
+    }
+    // Has cooldown or failed waiting → skip this cycle
+    if (isStageInCooldown(job.id, "set_budget")) return "skip";
+    return "open_set_budget"; // can attempt setBudget
+  }
+
+  // Submitted (status 2) → skip
+  return "skip";
+}
+
 // ── Logging ───────────────────────────────────────────────────────────────
 
 function log(msg: string): void {
@@ -784,31 +813,72 @@ export async function runLiveDriver(): Promise<void> {
       if (jobs.length === 0) {
         log("[live] idle: no active jobs");
       } else {
-        log(`[live] found ${jobs.length} active job(s)`);
-        // Process only ONE job per cycle to avoid wallet lock conflicts
+        // Classify and prioritize: Funded > Open-has-budget > Open-set-budget > skip
+        const funded: IndexerJob[] = [];
+        const openHasBudget: IndexerJob[] = [];
+        const openSetBudget: IndexerJob[] = [];
+        let skippedTerminal = 0;
+        let skippedCooldown = 0;
+
         for (const job of jobs) {
-          if (shuttingDown) break;
-          try {
-            const result = await processJob(job);
-            log(
-              `[live] job ${job.id}: ${result.stage} → ${result.status} — ${result.detail}`
-            );
-            // If we did a write (done/failed) or are waiting, stop for this cycle
-            if (
-              result.status === "done" ||
-              result.status === "failed" ||
-              result.status === "waiting"
-            ) {
+          const pri = classifyJob(job);
+          switch (pri) {
+            case "funded_ready":
+              funded.push(job);
+              break;
+            case "open_has_budget":
+              openHasBudget.push(job);
+              break;
+            case "open_set_budget":
+              openSetBudget.push(job);
+              break;
+            case "skip":
+              if (job.status >= 3) skippedTerminal++;
+              else skippedCooldown++;
+              break;
+          }
+        }
+
+        const prioritized = [...funded, ...openHasBudget, ...openSetBudget];
+
+        log(
+          `[live] ${jobs.length} active: ${funded.length} funded, ${openHasBudget.length} waiting-fund, ${openSetBudget.length} need-budget, ${skippedTerminal} terminal, ${skippedCooldown} cooldown/blocked`
+        );
+
+        if (prioritized.length === 0) {
+          log(`[live] no_actionable_jobs: ${skippedTerminal} terminal, ${skippedCooldown} cooldown/blocked`);
+        } else {
+          let productiveAction = false;
+          for (const job of prioritized) {
+            if (shuttingDown) break;
+            try {
+              const result = await processJob(job);
               log(
-                `[live] cycle action for job ${job.id} (${result.status}), ending cycle`
+                `[live] job ${job.id}: ${result.stage} → ${result.status} — ${result.detail}`
               );
+              // Only stop cycle after a PRODUCTIVE write action
+              const isProductive =
+                result.status === "done" ||
+                result.status === "failed" ||
+                (result.status === "waiting" &&
+                  result.stage !== "skip" &&
+                  !result.detail.includes("cooldown"));
+              if (isProductive) {
+                productiveAction = true;
+                log(`[live] cycle action for job ${job.id} (${result.status}), ending cycle`);
+                break;
+              }
+              // Skipped/waiting(cooldown) → continue to next job
+            } catch (err) {
+              log(
+                `[live] job ${job.id}: UNEXPECTED: ${err instanceof Error ? err.message : err}`
+              );
+              productiveAction = true;
               break;
             }
-          } catch (err) {
-            log(
-              `[live] job ${job.id}: UNEXPECTED: ${err instanceof Error ? err.message : err}`
-            );
-            break;
+          }
+          if (!productiveAction && prioritized.length > 0) {
+            log(`[live] no productive action this cycle (${prioritized.length} checked)`);
           }
         }
       }
