@@ -58,7 +58,7 @@ function encodeProviderBudgetReasonOptParams(input: {
 
 function unsupportedWalletMethod(method: string, walletRail: string) {
   return { ok: false, error: "WALLET_METHOD_UNSUPPORTED", status: 501, method, walletRail,
-    message: \`\${method} is not supported by wallet rail \${walletRail}\` };
+    message: `${method} is not supported by wallet rail ${walletRail}` };
 }
 
 export async function handleMcpTool(
