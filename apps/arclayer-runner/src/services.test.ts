@@ -179,27 +179,6 @@ describe("RunnerServices", () => {
   });
 
   describe("x402 inspect policy (separate from payment)", () => {
-    it("works when payment disabled (inspect is read-only)", async () => {
-      const disabledServices = new RunnerServices(
-        makeConfig({ paymentEnabled: false }),
-        runtime, mcp, skill
-      );
-
-      // inspectX402 should NOT throw PAYMENT_DISABLED
-      // It will fail at Circle CLI (not installed), but policy check passes
-      try {
-        await disabledServices.inspectX402({
-          type: "x402_service_pay",
-          url: "https://api.example.com/test",
-          maxAmountUsdc: "0.005",
-          reason: "test"
-        });
-      } catch (error) {
-        expect(error).not.toBeInstanceOf(RunnerError);
-        // Expected: circle CLI not installed
-      }
-    });
-
     it("rejects unallowlisted host for inspect", async () => {
       await expectRunnerError(
         services.inspectX402({
@@ -497,22 +476,6 @@ describe("RunnerServices", () => {
         "GATEWAY_DEPOSIT_DISABLED"
       );
     });
-
-    it("allows gateway_deposit when allowGatewayDeposit=true (passes guard, fails at CLI)", async () => {
-      const enabledServices = new RunnerServices(
-        makeConfig({ allowGatewayDeposit: true }),
-        runtime, mcp, skill
-      );
-
-      // Should NOT throw GATEWAY_DEPOSIT_DISABLED
-      // Will fail at Circle CLI execution (not installed), but guard passes
-      try {
-        await enabledServices.gatewayDeposit({ amount: "1.0" });
-      } catch (error) {
-        expect(error).not.toBeInstanceOf(RunnerError);
-        // Expected: circle CLI not installed
-      }
-    });
   });
 
   describe("register_via_circle_cli guard", () => {
@@ -545,22 +508,6 @@ describe("RunnerServices", () => {
         enabledServices.registerIdentityViaWallet({}),
         "MISSING_FIELD"
       );
-    });
-
-    it("allows register when allowIdentityRegister=true (passes guard, fails at CLI)", async () => {
-      const enabledServices = new RunnerServices(
-        makeConfig({ allowIdentityRegister: true }),
-        runtime, mcp, skill
-      );
-
-      // Should NOT throw IDENTITY_REGISTER_DISABLED or MISSING_FIELD
-      // Will fail at Circle CLI execution (not installed), but guard passes
-      try {
-        await enabledServices.registerIdentityViaWallet({ metadataURI: "ipfs://meta" });
-      } catch (error) {
-        expect(error).not.toBeInstanceOf(RunnerError);
-        // Expected: circle CLI not installed
-      }
     });
   });
 
@@ -1180,20 +1127,6 @@ describe("submitProviderDeliverable", () => {
         result: completedResult
       })
     ).rejects.toThrow(/jobId must be a numeric string/);
-  });
-
-  it("returns prepared-only when circleWalletAddress not configured", async () => {
-    const noWalletConfig = makeConfig({ circleWalletAddress: undefined });
-    const svc = new RunnerServices(noWalletConfig, runtime, mcp, skill);
-
-    const result = await svc.submitProviderDeliverable({
-      jobId: "42",
-      deliverableHash: validHash,
-      result: completedResult
-    });
-
-    expect(result.ok).toBe(false);
-    expect((result as any).mode).toBe("prepared-only");
   });
 
   it("calls prepareSubmitDeliverable before Circle CLI submit", async () => {

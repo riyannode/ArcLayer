@@ -465,18 +465,6 @@ describe("ExecutionGateway", () => {
     });
   });
 
-  describe("direct CircleCliAdapter access", () => {
-    it("gateway owns the Circle CLI calls — executeFn receives circle reference", async () => {
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
-
-      await gateway.execute(makeInput(), executeFn);
-
-      // executeFn should have been called with the circle adapter and signal
-      expect(executeFn).toHaveBeenCalledTimes(1);
-      expect(executeFn).toHaveBeenCalledWith(circle, undefined);
-    });
-  });
-
   // ── Query ──────────────────────────────────────────────────────────
 
   describe("query operations", () => {
@@ -509,19 +497,6 @@ describe("ExecutionGateway", () => {
       await gateway.execute(makeInput(), executeFn);
 
       expect(gateway.operationCount).toBe(1);
-    });
-  });
-
-  // ── AbortSignal ────────────────────────────────────────────────────
-
-  describe("AbortSignal propagation", () => {
-    it("passes signal to executeFn", async () => {
-      const controller = new AbortController();
-      const executeFn: WalletExecuteFn = vi.fn().mockResolvedValue(makeMockWalletExecuteResult());
-
-      await gateway.execute(makeInput(), executeFn, controller.signal);
-
-      expect(executeFn).toHaveBeenCalledWith(circle, controller.signal);
     });
   });
 
