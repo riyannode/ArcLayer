@@ -1889,24 +1889,6 @@ export class RunnerServices {
    * Close persistent stores and release resources.
    * Called during graceful shutdown.
    */
-  // ── Deprecated Aliases (backward compat for MCP callers) ─────────
-
-  /** @deprecated Use submitDeliverableViaWallet. Circle CLI has been removed. */
-  async submitDeliverableViaCircleCli(
-    input: { jobId: string; deliverableHash: `0x${string}`; optParams?: `0x${string}` },
-    signal?: AbortSignal,
-  ) {
-    return this.submitDeliverableViaWallet(input, signal);
-  }
-
-  /** @deprecated Use registerIdentityViaWallet. Circle CLI has been removed. */
-  async registerIdentityViaCircleCli(
-    input: { metadataURI: string },
-    signal?: AbortSignal,
-  ) {
-    return this.registerIdentityViaWallet(input, signal);
-  }
-
   // ── Spend Policy ────────────────────────────────────────────────────
 
   private resolveSpendPolicy(walletAddress: string): SpendPolicy {

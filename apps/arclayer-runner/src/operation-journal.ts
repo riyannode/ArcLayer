@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS job_locks (
   acquired_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
--- Compact Circle CLI results (for idempotent replay)
+-- Compact wallet-adapter results (for idempotent replay)
 CREATE TABLE IF NOT EXISTS operation_results (
   operation_id  TEXT PRIMARY KEY REFERENCES operations(operation_id),
   stdout        TEXT,
@@ -458,7 +458,7 @@ export class OperationJournal {
     txn();
   }
 
-  // ── Operation Results (compact Circle CLI output) ────────────────────
+  // ── Operation Results (compact wallet-adapter output) ────────────────
 
   /** Get stored result for idempotent replay. */
   getResult(operationId: string): JournalResultRow | undefined {
@@ -482,7 +482,7 @@ export class OperationJournal {
    * Recover non-terminal operations on startup.
    *
    * Pre-terminal states that may have been interrupted:
-   *   - created, prepared, reserved: never reached Circle CLI → safe to fail + release locks
+   *   - created, prepared, reserved: never reached wallet adapter → safe to fail + release locks
    *   - executing: may have sent tx → move to unknown (reconcilable)
    *
    * Returns recovered operation IDs.

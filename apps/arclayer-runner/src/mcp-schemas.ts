@@ -296,7 +296,7 @@ export const RUNNER_MCP_TOOLS: McpToolDef[] = [
 
   // ── ERC-8004 Register (execute) ────────────────────────────────────
   {
-    name: "erc8004.register_via_circle_cli",
+    name: "erc8004.register_execute",
     description: "Register ERC-8004 identity on-chain via wallet adapter. Gated behind allowIdentityRegister.",
     inputSchema: fromZod(Erc8004RegisterExecuteInputSchema, {
       metadataURI: "Agent manifest URL",

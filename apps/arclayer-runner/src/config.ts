@@ -216,7 +216,6 @@ function buildEnvConfig(): Record<string, unknown> {
   set("skillHash", process.env.ARCLAYER_GLOBAL_SKILL_HASH);
 
   if (process.env.CIRCLE_CHAIN) set("chain", process.env.CIRCLE_CHAIN);
-  if (process.env.CIRCLE_CLI_BIN) set("circleCliBin", process.env.CIRCLE_CLI_BIN);
   set("circleWalletAddress", process.env.CIRCLE_WALLET_ADDRESS);
   if (process.env.ARCLAYER_WALLET_RAIL) set("walletRail", process.env.ARCLAYER_WALLET_RAIL);
   if (process.env.CIRCLE_API_KEY) set("circleApiKey", process.env.CIRCLE_API_KEY);

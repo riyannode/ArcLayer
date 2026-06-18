@@ -88,6 +88,8 @@ export type CreateArcLayerLangChainAgentOptions =
     model: unknown;
     /** Override the default system prompt */
     systemPrompt?: string;
+    /** Optional checkpointer for thread-level memory (e.g. MemorySaver). Disabled by default. */
+    checkpointer?: unknown;
   };
 
 // ── Logger ──────────────────────────────────────────────────────────────────

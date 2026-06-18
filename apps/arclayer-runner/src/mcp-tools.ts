@@ -1,7 +1,7 @@
 /**
  * Runner-local MCP tool implementations.
  * Each tool calls existing Runner service methods.
- * No direct Circle CLI calls, no policy bypass.
+ * No direct wallet tooling calls, no policy bypass.
  *
  * Write/payment tools use Zod-based input parsing (from runner-core) to ensure
  * the same validation schema is used at parse time and execution time.
@@ -30,7 +30,7 @@ export type McpToolContext = {
   /**
    * AbortSignal propagated from the broker timeout.
    * When the broker fires a timeout, this signal is aborted so that
-   * underlying Circle CLI subprocesses and HTTP fetches can be cancelled.
+   * underlying wallet-adapter operations and HTTP fetches can be cancelled.
    */
   signal?: AbortSignal;
   /**
@@ -492,7 +492,7 @@ export async function handleMcpTool(
     }
 
     // ── ERC-8004 Register (execute) (Zod-validated) ──────────────
-    case "erc8004.register_via_circle_cli": {
+    case "erc8004.register_execute": {
       const input = validateMcpToolInput<{ metadataURI: string }>(name, args);
       return services.registerIdentityViaWallet({
         metadataURI: input.metadataURI,
