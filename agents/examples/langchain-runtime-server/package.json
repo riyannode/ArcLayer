@@ -1,0 +1,26 @@
+{
+  "name": "langchain-runtime-server",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "LangChain runtime HTTP server for ArcLayer Runner — executes provider tasks via OpenAI/LangChain",
+  "scripts": {
+    "start": "node --loader ts-node/esm src/index.ts",
+    "prebuild": "pnpm --filter @arclayer/runner-core build",
+    "build": "tsc",
+    "prestart:prod": "pnpm --filter @arclayer/runner-core build && pnpm build",
+    "start:prod": "node dist/index.js"
+  },
+  "dependencies": {
+    "@arclayer/runner-core": "workspace:^",
+    "@langchain/core": "^1.0.0",
+    "@langchain/openai": "^1.0.0",
+    "langchain": "^1.0.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

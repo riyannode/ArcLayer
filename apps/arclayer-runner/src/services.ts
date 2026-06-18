@@ -1351,7 +1351,7 @@ export class RunnerServices {
       return { ok: false, mode: "prepared-only", reason: "CIRCLE_WALLET_ADDRESS not configured" };
     }
 
-    const input = body as { metadataURI: string };
+    const input = body as { metadataURI: string; idempotencyKey?: string };
     if (!input.metadataURI) {
       throw new RunnerError("MISSING_FIELD", "metadataURI is required", 400);
     }
@@ -1364,6 +1364,11 @@ export class RunnerServices {
         501,
       );
     }
+
+    // Build idempotency key: prefer caller-provided, derive if missing
+    const idempotencyKey = input.idempotencyKey
+      ?? `erc8004-register:${this.config.circleWalletAddress!.toLowerCase()}:${sha256Json(input.metadataURI)}`;
+
     const result = await this.wallet.executeAllowedArcWrite({
       signature: "register(string)",
       params: [input.metadataURI],
@@ -1371,6 +1376,7 @@ export class RunnerServices {
       address: this.config.circleWalletAddress,
       chain: this.config.chain,
       allowRegister: true,
+      idempotencyKey,
       signal,
     });
 
@@ -1415,6 +1421,151 @@ export class RunnerServices {
     });
 
     return { ok: true, result, txHash, ownershipVerified, receipt };
+  }
+
+  /**
+   * Finalize a pending ERC-8004 identity registration.
+   *
+   * Reads the transaction receipt for the provided txHash and extracts
+   * the tokenId from ERC-721 Transfer event logs emitted by the
+   * ERC-8004 identity registry contract. Verifies ownership before
+   * returning confirmed.
+   *
+   * Does NOT fall back to totalSupply scanning — this avoids confirming
+   * the wrong token if the wallet already owns an older identity.
+   *
+   * @param txHash - The on-chain tx hash from the registration
+   * @param metadataURI - Optional: if provided, verifies tokenURI matches
+   * @param _receiptOverride - Internal: test-only override for tx receipt
+   */
+  async finalizeIdentityRegistration(
+    txHash: string,
+    metadataURI?: string,
+    _receiptOverride?: unknown,
+  ): Promise<{
+    status: "confirmed" | "still_pending" | "reverted" | "not_found";
+    tokenId?: string;
+  }> {
+    if (!this.config.circleWalletAddress) {
+      return { status: "not_found" };
+    }
+
+    try {
+      // Use viem to read the tx receipt from Arc RPC
+      const { createPublicClient, http, parseAbiItem, decodeEventLog } = await import("viem");
+
+      const arcTestnet = {
+        id: 5042002,
+        name: "Arc Testnet",
+        network: "arc-testnet",
+        nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
+        rpcUrls: { default: { http: ["https://rpc.testnet.arc.network"] } },
+      } as const;
+
+      const client = createPublicClient({ chain: arcTestnet, transport: http() });
+
+      let receipt: Awaited<ReturnType<typeof client.getTransactionReceipt>>;
+      if (_receiptOverride) {
+        receipt = _receiptOverride as typeof receipt;
+      } else {
+        try {
+          receipt = await client.getTransactionReceipt({ hash: txHash as `0x${string}` });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          // Tx not found or not yet mined
+          if (msg.includes("not found") || msg.includes("TransactionNotFound")) {
+            return { status: "still_pending" };
+          }
+          return { status: "still_pending" };
+        }
+      }
+
+      // Check tx status: reverted = failed
+      if (receipt.status === "reverted") {
+        return { status: "reverted" };
+      }
+
+      // Parse Transfer event logs from the identity registry contract
+      const transferEvent = parseAbiItem(
+        "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"
+      );
+      const registryAddress = CONTRACTS.ERC8004_IDENTITY_REGISTRY.toLowerCase();
+
+      let tokenId: string | undefined;
+      for (const log of receipt.logs) {
+        if (log.address.toLowerCase() !== registryAddress) continue;
+        try {
+          const decoded = decodeEventLog({
+            abi: [transferEvent],
+            data: log.data,
+            topics: log.topics,
+          });
+          if (decoded.eventName === "Transfer") {
+            const args = decoded.args as { from: string; to: string; tokenId: bigint };
+            // Mint = Transfer(address(0), wallet, tokenId)
+            if (args.from === "0x0000000000000000000000000000000000000000" &&
+                args.to.toLowerCase() === this.config.circleWalletAddress.toLowerCase()) {
+              tokenId = args.tokenId.toString();
+              break;
+            }
+          }
+        } catch {
+          // Not a Transfer event or decoding failed, skip
+          continue;
+        }
+      }
+
+      if (!tokenId) {
+        // Tx succeeded but no matching Transfer to our wallet found
+        return { status: "still_pending" };
+      }
+
+      // Verify ownerOf(tokenId) matches our wallet
+      if (this.wallet.queryContract) {
+        try {
+          const ownerResult = await this.wallet.queryContract({
+            signature: "ownerOf(uint256)",
+            params: [tokenId],
+            contract: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+            chain: this.config.chain,
+          });
+          const ownerJson = ownerResult.json as { outputs?: string[] } | undefined;
+          const owner = (ownerJson?.outputs?.[0] ?? "").toLowerCase();
+          if (owner !== this.config.circleWalletAddress.toLowerCase()) {
+            // Token exists but not owned by our wallet — possible transfer
+            return { status: "still_pending" };
+          }
+        } catch {
+          // ownerOf failed — token may not be indexed yet
+          return { status: "still_pending" };
+        }
+
+        // Optionally verify tokenURI matches metadataURI
+        if (metadataURI) {
+          try {
+            const uriResult = await this.wallet.queryContract({
+              signature: "tokenURI(uint256)",
+              params: [tokenId],
+              contract: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
+              chain: this.config.chain,
+            });
+            const uriJson = uriResult.json as { outputs?: string[] } | undefined;
+            const onchainURI = uriJson?.outputs?.[0] ?? "";
+            if (onchainURI && onchainURI !== metadataURI) {
+              // Metadata mismatch — token may be from a different registration
+              return { status: "still_pending" };
+            }
+          } catch {
+            // tokenURI failed — not blocking, just skip verification
+          }
+        }
+      }
+
+      return { status: "confirmed", tokenId };
+    } catch {
+      // Any unexpected error — tx may not be indexed yet
+      return { status: "still_pending" };
+    }
   }
 
   /**

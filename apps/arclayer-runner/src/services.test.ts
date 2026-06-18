@@ -510,6 +510,199 @@ describe("RunnerServices", () => {
     });
   });
 
+  describe("finalizeIdentityRegistration", () => {
+    it("returns not_found when wallet address is missing", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+      const config = (enabledServices as any).config;
+      const origAddr = config.circleWalletAddress;
+      config.circleWalletAddress = undefined;
+
+      const result = await enabledServices.finalizeIdentityRegistration("0xabc");
+      expect(result.status).toBe("not_found");
+
+      config.circleWalletAddress = origAddr;
+    });
+
+    it("confirms tokenId from tx receipt Transfer event", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+      const walletAddr = makeConfig().circleWalletAddress!;
+
+      const mockReceipt = {
+        status: "success",
+        logs: [{
+          address: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x000000000000000000000000" + walletAddr.slice(2).toLowerCase(),
+            "0x000000000000000000000000000000000000000000000000000000000000002a",
+          ],
+          data: "0x",
+          blockNumber: 1n,
+          transactionHash: "0xabc" as `0x${string}`,
+          logIndex: 0,
+          transactionIndex: 0,
+          blockHash: "0xdef" as `0x${string}`,
+          removed: false,
+        }],
+      };
+
+      const wallet = (enabledServices as any).wallet;
+      const originalQuery = wallet.queryContract;
+      wallet.queryContract = vi.fn()
+        .mockResolvedValueOnce({ json: { outputs: [walletAddr.toLowerCase()] } });
+
+      const result = await enabledServices.finalizeIdentityRegistration("0xabc", undefined, mockReceipt);
+      expect(result.status).toBe("confirmed");
+      expect(result.tokenId).toBe("42");
+
+      wallet.queryContract = originalQuery;
+    });
+
+    it("returns reverted when tx receipt status is reverted", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+
+      const mockReceipt = { status: "reverted", logs: [] };
+      const result = await enabledServices.finalizeIdentityRegistration("0xabc", undefined, mockReceipt);
+      expect(result.status).toBe("reverted");
+    });
+
+    it("returns still_pending when no matching Transfer to wallet in logs", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+
+      const mockReceipt = {
+        status: "success",
+        logs: [{
+          address: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x0000000000000000000000009999999999999999999999999999999999999999",
+            "0x000000000000000000000000000000000000000000000000000000000000002a",
+          ],
+          data: "0x",
+        }],
+      };
+
+      const result = await enabledServices.finalizeIdentityRegistration("0xabc", undefined, mockReceipt);
+      expect(result.status).toBe("still_pending");
+    });
+
+    it("returns still_pending when ownerOf does not match wallet", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+      const walletAddr = makeConfig().circleWalletAddress!;
+
+      const mockReceipt = {
+        status: "success",
+        logs: [{
+          address: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x000000000000000000000000" + walletAddr.slice(2).toLowerCase(),
+            "0x000000000000000000000000000000000000000000000000000000000000002a",
+          ],
+          data: "0x",
+        }],
+      };
+
+      const wallet = (enabledServices as any).wallet;
+      const originalQuery = wallet.queryContract;
+      wallet.queryContract = vi.fn()
+        .mockResolvedValueOnce({ json: { outputs: ["0x9999999999999999999999999999999999999999"] } });
+
+      const result = await enabledServices.finalizeIdentityRegistration("0xabc", undefined, mockReceipt);
+      expect(result.status).toBe("still_pending");
+
+      wallet.queryContract = originalQuery;
+    });
+
+    it("fails metadataURI verification when tokenURI mismatches", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+      const walletAddr = makeConfig().circleWalletAddress!;
+
+      const mockReceipt = {
+        status: "success",
+        logs: [{
+          address: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x000000000000000000000000" + walletAddr.slice(2).toLowerCase(),
+            "0x000000000000000000000000000000000000000000000000000000000000002a",
+          ],
+          data: "0x",
+        }],
+      };
+
+      const wallet = (enabledServices as any).wallet;
+      const originalQuery = wallet.queryContract;
+      wallet.queryContract = vi.fn()
+        .mockResolvedValueOnce({ json: { outputs: [walletAddr.toLowerCase()] } })
+        .mockResolvedValueOnce({ json: { outputs: ["data:application/json;base64,DIFFERENT"] } });
+
+      const result = await enabledServices.finalizeIdentityRegistration(
+        "0xabc", "data:application/json;base64,ORIGINAL", mockReceipt
+      );
+      expect(result.status).toBe("still_pending");
+
+      wallet.queryContract = originalQuery;
+    });
+
+    it("wallet already owns old token, new pending tx does not confirm old token", async () => {
+      const enabledServices = new RunnerServices(
+        makeConfig({ allowIdentityRegister: true }),
+        runtime, mcp, skill
+      );
+      const walletAddr = makeConfig().circleWalletAddress!;
+
+      // Receipt shows Transfer for tokenId 99, but ownerOf(99) returns different wallet
+      // (wallet owns old token 5, not the new 99)
+      const mockReceipt = {
+        status: "success",
+        logs: [{
+          address: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+          topics: [
+            "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+            "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "0x000000000000000000000000" + walletAddr.slice(2).toLowerCase(),
+            "0x0000000000000000000000000000000000000000000000000000000000000063", // 99
+          ],
+          data: "0x",
+        }],
+      };
+
+      const wallet = (enabledServices as any).wallet;
+      const originalQuery = wallet.queryContract;
+      // ownerOf(99) → someone else (wallet owns old token 5, not 99)
+      wallet.queryContract = vi.fn()
+        .mockResolvedValueOnce({ json: { outputs: ["0x9999999999999999999999999999999999999999"] } });
+
+      const result = await enabledServices.finalizeIdentityRegistration("0xabc", undefined, mockReceipt);
+      expect(result.status).toBe("still_pending");
+
+      wallet.queryContract = originalQuery;
+    });
+  });
+
   describe("old tools still work (backward compatibility)", () => {
     it("prepareRegister still delegates to MCP", async () => {
       const result = await services.prepareRegister({

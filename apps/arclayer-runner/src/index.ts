@@ -15,6 +15,13 @@ import { registerSetupCommand } from "./setup";
 import { registerInstallCommand } from "./install";
 import { createProviderWorker } from "./workers/provider";
 import { createEvaluatorWorker } from "./workers/evaluator";
+import {
+  ensureIdentity,
+  readIdentityState,
+  readRegistrationState,
+  writeIdentityState,
+  writeRegistrationState,
+} from "./identity-ensure";
 
 function stderrLog(msg: string): void {
   process.stderr.write(`[arclayer-runner] ${msg}\n`);
@@ -367,6 +374,110 @@ async function main() {
   // ── install (MCP sidecar installer) ───────────────────────────────────
   registerInstallCommand(program);
 
+  // ── identity ──────────────────────────────────────────────────────────
+  const identityCmd = program
+    .command("identity")
+    .description("Manage ERC-8004 identity");
+
+  identityCmd
+    .command("ensure")
+    .description("Ensure ERC-8004 identity exists (register if missing)")
+    .requiredOption("--agent-name <name>", "Agent name for metadata")
+    .option("--role <role>", "Agent role", "provider")
+    .option("--description <desc>", "Agent description")
+    .option("--capabilities <caps>", "Comma-separated capabilities")
+    .option("--auto-register", "Register identity if missing (requires allowIdentityRegister=true)")
+    .action(async (opts: {
+      agentName: string;
+      role: string;
+      description?: string;
+      capabilities?: string;
+      autoRegister?: boolean;
+    }) => {
+      const config = loadRunnerConfig();
+
+      if (opts.autoRegister && !config.allowIdentityRegister) {
+        console.error("❌ --auto-register requires allowIdentityRegister=true in config");
+        console.error("   Set ARCLAYER_ALLOW_IDENTITY_REGISTER=true in .env.runner");
+        process.exit(1);
+      }
+
+      if (!config.circleWalletAddress) {
+        console.error("❌ CIRCLE_WALLET_ADDRESS required for identity ensure");
+        process.exit(1);
+      }
+
+      const skill = loadGlobalSkill(config.skillPath);
+      const runtime = createRuntimeConnector(
+        config.runtimeKind,
+        config.runtimeEndpoint,
+        config.runtimeRunPath,
+        undefined,
+        config.runtimeTimeoutMs,
+      );
+      const mcp = new ArcLayerMcpConnector({
+        baseUrl: process.env.ARCLAYER_MCP_BASE_URL ?? config.runtimeEndpoint,
+        token: process.env.ARCLAYER_MCP_TOKEN,
+        agentId: config.agentId,
+      });
+      const services = new RunnerServices(config, runtime, mcp, skill);
+
+      try {
+        const result = await ensureIdentity({
+          agentName: opts.agentName,
+          role: opts.role,
+          description: opts.description,
+          capabilities: opts.capabilities,
+          autoRegister: opts.autoRegister ?? false,
+          walletAddress: config.circleWalletAddress,
+          registerFn: async (metadataURI: string, idempotencyKey: string) => {
+            return services.registerIdentityViaWallet({ metadataURI, idempotencyKey }) as Promise<{
+              ok: boolean;
+              txHash?: string;
+              result?: unknown;
+            }>;
+          },
+          finalizeFn: async (txHash: string, metadataURI?: string) => {
+            return services.finalizeIdentityRegistration(txHash, metadataURI);
+          },
+        });
+
+        console.log(`\n${result.action === "already_confirmed" || result.action === "confirmed_pending" ? "✅" : result.action === "registered" ? "🔧" : "⚠️"} ${result.message}`);
+
+        if (result.identity.tokenId) {
+          console.log(`   Token ID: ${result.identity.tokenId}`);
+        }
+        if (result.identity.txHash) {
+          console.log(`   TX Hash: ${result.identity.txHash}`);
+        }
+
+        if (result.action === "failed") {
+          process.exit(1);
+        }
+      } catch (err) {
+        console.error(`❌ Identity ensure failed: ${err instanceof Error ? err.message : err}`);
+        process.exit(1);
+      } finally {
+        await mcp.close();
+      }
+    });
+
+  identityCmd
+    .command("status")
+    .description("Show current ERC-8004 identity state")
+    .action(() => {
+      const identity = readIdentityState();
+      const registration = readRegistrationState();
+
+      console.log("Identity state:");
+      console.log(JSON.stringify(identity, null, 2));
+
+      if (registration) {
+        console.log("\nRegistration state:");
+        console.log(JSON.stringify(registration, null, 2));
+      }
+    });
+
   // ── Helper: create runner context for workers ───────────────────────
   function createRunnerContext() {
     const config = loadRunnerConfig();
@@ -398,12 +509,48 @@ async function main() {
     return { config, skill, runtime, mcp, services };
   }
 
-  // ── provider-worker ─────────────────────────────────────────────────
+  // ── provider (primary command) ──────────────────────────────────────
   program
-    .command("provider-worker")
-    .description("Run the autonomous provider worker")
+    .command("provider")
+    .description("Run the autonomous ERC-8183 provider service")
     .option("--once", "Run one poll cycle then exit")
     .action(async ({ once }: { once?: boolean }) => {
+      const context = createRunnerContext();
+
+      const worker = createProviderWorker(
+        context.config,
+        context.services,
+        context.mcp,
+        context.runtime,
+      );
+
+      const shutdown = async () => {
+        await worker.stop();
+        await context.mcp.close();
+        process.exit(0);
+      };
+
+      process.once("SIGINT", shutdown);
+      process.once("SIGTERM", shutdown);
+
+      if (once) {
+        await worker.runOnce();
+        await context.mcp.close();
+        return;
+      }
+
+      await worker.start();
+    });
+
+  // ── provider-worker (deprecated alias) ─────────────────────────────
+  program
+    .command("provider-worker")
+    .description("[deprecated] Use 'arclayer-runner provider' instead")
+    .option("--once", "Run one poll cycle then exit")
+    .action(async ({ once }: { once?: boolean }) => {
+      process.stderr.write(
+        "[arclayer-runner] provider-worker is deprecated. Use arclayer-runner provider.\n",
+      );
       const context = createRunnerContext();
 
       const worker = createProviderWorker(
