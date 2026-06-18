@@ -37,22 +37,29 @@ import { join } from "node:path";
 
 // ── Config ────────────────────────────────────────────────────────────────
 
+
+// ── Env validation ────────────────────────────────────────────────────────
+
+function readPositiveIntEnv(name: string, fallback: number, min: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const value = Number.parseInt(raw, 10);
+  if (!Number.isFinite(value) || value < min) {
+    throw new Error(`${name} must be a finite integer >= ${min}, got "${raw}"`);
+  }
+  return value;
+}
+
 const RUNNER_URL = process.env.ARCLAYER_RUNNER_URL ?? "http://127.0.0.1:8787";
 const RUNNER_SECRET = process.env[Buffer.from("QVJDTEFZRVJfUlVOTkVSX1NFQ1JFVA==", "base64").toString()] ?? "";
 const AGENT_ID = process.env.ARCLAYER_AGENT_ID ?? "";
 const PROVIDER_WALLET = (process.env.CIRCLE_WALLET_ADDRESS ?? "").toLowerCase();
 const INDEXER_URL = process.env.INDEXER_URL ?? "http://localhost:3535";
-const POLL_INTERVAL_MS = Number.parseInt(
-  process.env.LIVE_POLL_INTERVAL_MS ?? "30000",
-  10
-);
+const POLL_INTERVAL_MS = readPositiveIntEnv("LIVE_POLL_INTERVAL_MS", 30000, 5000);
 const REQUESTED_BUDGET = process.env.LIVE_PROVIDER_BUDGET_USDC ?? "1.00";
 const MAX_BUDGET = process.env.PROVIDER_MAX_LIVE_BUDGET_USDC ?? "0.01";
 const DRAIN_MODE = process.env.PROVIDER_LIVE_DRAIN_MODE === "true";
-const STAGE_RETRY_COOLDOWN_MS = Number.parseInt(
-  process.env.PROVIDER_STAGE_RETRY_COOLDOWN_MS ?? "120000",
-  10
-);
+const STAGE_RETRY_COOLDOWN_MS = readPositiveIntEnv("PROVIDER_STAGE_RETRY_COOLDOWN_MS", 120000, 5000);
 
 const STATE_DIR = join(
   process.env.HOME ?? "/root",
@@ -406,11 +413,28 @@ async function processJob(job: IndexerJob): Promise<StageResult> {
         reason: `autonomous provider ${AGENT_ID} budget for job ${jobId}`,
       })) as Record<string, unknown>;
 
+      // P2 fix: only mark done when result is genuinely ok
+      const resultOk = result["ok"] !== false;
       const txHash = String(
         result["txHash"] ??
           (result["receipt"] as Record<string, unknown>)?.["txHash"] ??
           ""
       );
+      const operationState = String(
+        (result["receipt"] as Record<string, unknown>)?.["operationState"] ?? ""
+      );
+
+      if (!resultOk || operationState === "failed") {
+        const failMsg = String(result["error"] ?? result["message"] ?? "setBudget returned ok=false");
+        log(`[live] job ${jobId}: set_budget returned not-ok (${failMsg}), writing .waiting`);
+        markStageWaiting(jobId, "set_budget", failMsg);
+        return {
+          stage: "set_budget",
+          status: "waiting",
+          detail: `Runner returned not-ok: ${failMsg}`,
+        };
+      }
+
       markStageDone(jobId, "set_budget", {
         txHash,
         amount: EFFECTIVE_BUDGET,
