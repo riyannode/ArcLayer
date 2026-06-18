@@ -28,6 +28,7 @@ import { CONTRACTS } from "@arclayer/sdk";
 import type { RuntimeConnector } from "./runtime";
 import { safeHostFromUrl, sanitizeTaskForUntrustedRuntime } from "./runtime";
 import type { ArcLayerMcpConnector } from "./mcp-connector";
+import { mapToCircleIdempotencyKey } from "./identity-ensure";
 import { isBrokerAbortOrTimeout } from "./mcp-broker";
 import { randomUUID } from "node:crypto";
 import { ExecutionGateway, assertGatewayWriteSucceeded } from "./execution-gateway";
@@ -1565,6 +1566,73 @@ export class RunnerServices {
     } catch {
       // Any unexpected error — tx may not be indexed yet
       return { status: "still_pending" };
+    }
+  }
+
+  /**
+   * Sync a confirmed ERC-8004 identity to Console erc8004_agents roster.
+   * Called after successful mint to make the provider visible on the dashboard.
+   */
+  async syncToConsole(
+    txHash: string,
+    controllerAddress: string,
+    metadataURI: string,
+    role: string,
+    agentName: string,
+  ): Promise<{ ok: boolean; tokenId?: string; error?: string; retryable?: boolean }> {
+    const consoleUrl = process.env.ARCLAYER_CONSOLE_URL;
+    const syncSecret = process.env.ARCLAYER_RUNNER_SYNC_SECRET;
+
+    if (!consoleUrl || !syncSecret) {
+      // Console sync not configured — non-fatal
+      return { ok: false, error: 'console_sync_not_configured' };
+    }
+
+    try {
+      const resp = await fetch(consoleUrl + "/api/erc8004/register/sync", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + syncSecret,
+          'x-arclayer-runner-sync-secret': syncSecret,
+        },
+        body: JSON.stringify({
+          txHash,
+          controllerAddress,
+          metadataURI,
+          role,
+          agentName,
+          metadataJson: {
+            schema: 'arclayer.agent/v1',
+            name: agentName,
+            role,
+            autonomous: true,
+            source: 'runner_identity_ensure',
+          },
+        }),
+      });
+
+      const data = await resp.json() as {
+        ok: boolean;
+        tokenId?: string;
+        error?: string;
+        detail?: string;
+        retryable?: boolean;
+      };
+
+      if (data.ok && data.tokenId) {
+        return { ok: true, tokenId: data.tokenId };
+      }
+
+      // Check if retryable (tx not mined yet)
+      if (data.retryable || resp.status === 425) {
+        return { ok: false, error: data.detail ?? data.error, retryable: true };
+      }
+
+      return { ok: false, error: data.detail ?? data.error, retryable: false };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: 'console_sync_fetch_failed: ' + msg, retryable: false };
     }
   }
 

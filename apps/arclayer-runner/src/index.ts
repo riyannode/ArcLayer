@@ -518,12 +518,14 @@ async function main() {
     .option("--description <desc>", "Agent description")
     .option("--capabilities <caps>", "Comma-separated capabilities")
     .option("--auto-register", "Register identity if missing (requires allowIdentityRegister=true)")
+    .option("--confirm-second-mint", "Allow minting a second ERC-8004 identity (wallet already has one)")
     .action(async (opts: {
       agentName: string;
       role: string;
       description?: string;
       capabilities?: string;
       autoRegister?: boolean;
+      confirmSecondMint?: boolean;
     }) => {
       const config = loadRunnerConfig();
 
@@ -561,6 +563,9 @@ async function main() {
           capabilities: opts.capabilities,
           autoRegister: opts.autoRegister ?? false,
           walletAddress: config.circleWalletAddress,
+          confirmSecondMint: opts.confirmSecondMint ?? false,
+          consoleUrl: process.env.ARCLAYER_CONSOLE_URL,
+          syncSecret: process.env.ARCLAYER_RUNNER_SYNC_SECRET,
           registerFn: async (metadataURI: string, idempotencyKey: string) => {
             return services.registerIdentityViaWallet({ metadataURI, idempotencyKey }) as Promise<{
               ok: boolean;
@@ -570,6 +575,9 @@ async function main() {
           },
           finalizeFn: async (txHash: string, metadataURI?: string) => {
             return services.finalizeIdentityRegistration(txHash, metadataURI);
+          },
+          syncToConsoleFn: async (txHash: string, controllerAddress: string, metadataURI: string, role: string, agentName: string) => {
+            return services.syncToConsole(txHash, controllerAddress, metadataURI, role, agentName);
           },
         });
 
