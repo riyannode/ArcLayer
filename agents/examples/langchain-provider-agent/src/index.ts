@@ -40,6 +40,7 @@
 import { createArcLayerLangChainAgent } from "@arclayer/langchain-adapter";
 import { ChatOpenAI } from "@langchain/openai";
 import { MemorySaver } from "@langchain/langgraph";
+import { runLiveDriver } from "./live-driver.js";
 
 // ── Config ──────────────────────────────────────────────────────────────
 
@@ -296,3 +297,14 @@ workerLoop().catch((err) => {
   console.error("[provider-agent] fatal:", err);
   process.exit(1);
 });
+
+// ── Live Mode (deterministic driver) ──────────────────────────────────────
+
+const LIVE_MODE = process.env.LIVE_MODE === "true";
+
+if (LIVE_MODE) {
+  runLiveDriver().catch((err) => {
+    console.error("[live-driver] fatal:", err);
+    process.exit(1);
+  });
+}
