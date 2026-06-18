@@ -4,7 +4,7 @@
  * Creates LangChain tool() instances that call ArcLayer Runner via HMAC-authed HTTP.
  * All tools go through the Runner HTTP surface — no direct wallet tooling calls, no internal imports.
  *
- * Exception: adapterOnly tools (e.g. arclayer_provider_quote_job) compute locally
+ * Exception: adapterOnly tools (e.g. erc8183_provider_quote_job) compute locally
  * and do not make Runner HTTP calls.
  */
 
@@ -162,6 +162,52 @@ const ProviderSetBudgetInputSchema = z.object({
     .min(1, "reason is required")
     .max(512, "reason must be 512 characters or fewer")
     .describe("Pricing reason — will be encoded into on-chain calldata (do not include secrets)"),
+});
+
+// ── Provider Runtime Proxy Schemas ──────────────────────────────────────────
+
+/** Generic schema for provider runtime proxy tools that accept a JSON body. */
+const ProviderProxyInputSchema = z.object({}).passthrough().describe("Tool-specific input (passed through to Console MCP)");
+
+/** Schema for erc8183_provider_write_checkpoint — Console MCP requires agentId, jobId, phase, status. */
+const ProviderWriteCheckpointInputSchema = z.object({
+  agentId: z.string().min(1).describe("Agent identifier"),
+  jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").describe("ERC-8183 job ID"),
+  phase: z.string().min(1).describe("Checkpoint phase (e.g. 'executing', 'deliverable_ready')"),
+  status: z.string().min(1).describe("Checkpoint status (e.g. 'in_progress', 'completed')"),
+  runId: z.string().optional().describe("Optional run ID"),
+  txHash: z.string().optional().describe("Optional transaction hash"),
+  deliverableHash: z.string().optional().describe("Optional deliverable hash"),
+  payloadHash: z.string().optional().describe("Optional payload hash"),
+  note: z.string().optional().describe("Optional human-readable note"),
+  metadata: z.record(z.string(), z.unknown()).optional().describe("Optional metadata"),
+});
+
+/** Schema for erc8183_provider_publish_deliverable — Console MCP requires agentId, jobId, providerAddress, canonicalPayload, deliverableHash. */
+const ProviderPublishDeliverableInputSchema = z.object({
+  agentId: z.string().min(1).describe("Agent identifier"),
+  jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").describe("ERC-8183 job ID"),
+  providerAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, "Must be a valid 0x address").describe("Provider wallet address"),
+  canonicalPayload: z.string().min(1).describe("Canonical deliverable payload (server recomputes Keccak-256)"),
+  deliverableHash: z.string().min(1).describe("Expected Keccak-256 hash of canonicalPayload (0x-prefixed, 66 chars)"),
+  artifacts: z.array(z.unknown()).optional().describe("Optional artifacts array"),
+  runtimeReceiptHash: z.string().optional().describe("Optional runtime receipt hash"),
+});
+
+/** Schema for erc8183_provider_submit_deliverable. */
+const ProviderSubmitDeliverableInputSchema = z.object({
+  jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").describe("ERC-8183 job ID (numeric string)"),
+  deliverableHash: z.string().min(1).describe("Keccak-256 hash of the deliverable (0x-prefixed, 66 chars)"),
+});
+
+/** Schema for erc8183_job_status. */
+const JobStatusInputSchema = z.object({
+  jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").describe("ERC-8183 job ID (numeric string)"),
+});
+
+/** Schema for erc8183_job_lifecycle_summary. */
+const JobLifecycleSummaryInputSchema = z.object({
+  jobId: z.string().regex(/^[0-9]+$/, "jobId must be a numeric string").describe("ERC-8183 job ID (numeric string)"),
 });
 
 // ── Host Validation ─────────────────────────────────────────────────────────
@@ -342,6 +388,8 @@ export function createArcLayerLangChainTools(
     requireIdempotencyKey = false,
     enableProviderRunAndSubmit = false,
     enableProviderSetBudget = false,
+    enableProviderPublishDeliverable = false,
+    enableProviderSubmitDeliverable = false,
     providerPricingPolicy,
     timeoutMs,
     logger,
@@ -353,6 +401,8 @@ export function createArcLayerLangChainTools(
     deniedTools,
     enableProviderRunAndSubmit,
     enableProviderSetBudget,
+    enableProviderPublishDeliverable,
+    enableProviderSubmitDeliverable,
   });
 
   const client = new ArcLayerRunnerClient({
@@ -373,7 +423,7 @@ export function createArcLayerLangChainTools(
     }
 
     switch (toolName) {
-      case "arclayer_x402_inspect":
+      case "x402_inspect":
         tools.push(createInspectTool(client, toolName, entry, {
           allowedHosts,
           deniedHosts,
@@ -381,7 +431,7 @@ export function createArcLayerLangChainTools(
         }));
         break;
 
-      case "arclayer_x402_pay":
+      case "x402_pay":
         tools.push(createPayTool(client, toolName, entry, {
           maxAmountUsdc,
           allowedHosts,
@@ -391,7 +441,7 @@ export function createArcLayerLangChainTools(
         }));
         break;
 
-      case "arclayer_x402_batch_pay":
+      case "x402_batch_pay":
         // Only enable batch pay for x402-agent
         if (role === "x402-agent") {
           tools.push(createBatchPayTool(client, toolName, entry, {
@@ -404,27 +454,27 @@ export function createArcLayerLangChainTools(
         }
         break;
 
-      case "arclayer_receipts":
+      case "payment_receipts":
         tools.push(createReceiptsTool(client, toolName, entry, { logger }));
         break;
 
-      case "arclayer_spend_ledger":
+      case "payment_spend_ledger":
         tools.push(createLedgerTool(client, toolName, entry, { logger }));
         break;
 
-      case "arclayer_provider_run_only":
+      case "erc8183_provider_run_only":
         tools.push(
           createProviderRunOnlyTool(client, toolName, entry, { logger }),
         );
         break;
 
-      case "arclayer_provider_run_and_submit":
+      case "erc8183_provider_run_and_submit":
         tools.push(
           createProviderRunAndSubmitTool(client, toolName, entry, { logger }),
         );
         break;
 
-      case "arclayer_provider_quote_job":
+      case "erc8183_provider_quote_job":
         // Adapter-only: no Runner call, no HMAC, pure local compute
         tools.push(
           createProviderQuoteJobTool(toolName, entry, {
@@ -434,13 +484,49 @@ export function createArcLayerLangChainTools(
         );
         break;
 
-      case "arclayer_provider_set_budget":
+      case "erc8183_provider_set_budget":
         tools.push(
           createProviderSetBudgetTool(client, toolName, entry, {
             pricingPolicy,
             logger,
           }),
         );
+        break;
+
+      // ── Provider Runtime (Console MCP proxy) ──────────────────────
+      case "erc8183_provider_get_context":
+      case "erc8183_provider_get_resume_plan":
+      case "erc8183_provider_heartbeat":
+      case "erc8183_provider_start_job":
+      case "erc8183_provider_retry_job":
+      case "erc8183_provider_complete_run":
+      case "erc8183_provider_list_assigned_jobs":
+      case "erc8183_provider_list_assigned_jobs_extended":
+      case "erc8183_provider_list_open_jobs":
+      case "erc8183_provider_list_my_open_job_applications":
+      case "erc8183_provider_apply_open_job":
+      case "erc8183_provider_withdraw_open_job_application":
+        tools.push(createProviderProxyTool(client, toolName, entry, { logger }));
+        break;
+
+      case "erc8183_provider_write_checkpoint":
+        tools.push(createProviderWriteCheckpointTool(client, toolName, entry, { logger }));
+        break;
+
+      case "erc8183_provider_publish_deliverable":
+        tools.push(createProviderPublishDeliverableTool(client, toolName, entry, { logger }));
+        break;
+
+      case "erc8183_provider_submit_deliverable":
+        tools.push(createProviderSubmitDeliverableTool(client, toolName, entry, { logger }));
+        break;
+
+      case "erc8183_job_status":
+        tools.push(createJobStatusTool(client, toolName, entry, { logger }));
+        break;
+
+      case "erc8183_job_lifecycle_summary":
+        tools.push(createJobLifecycleSummaryTool(client, toolName, entry, { logger }));
         break;
 
       default:
@@ -678,7 +764,7 @@ function createProviderRunOnlyTool(
         "Run an ERC-8183 provider job through ArcLayer Runner (runtime only, no on-chain submit). " +
         "Dispatches the job to the configured LLM runtime and returns the result + deliverableHash. " +
         "Use this as the default provider execution path. " +
-        "The deliverable is NOT submitted on-chain — use arclayer_provider_run_and_submit for that.",
+        "The deliverable is NOT submitted on-chain — use erc8183_provider_run_and_submit for that.",
       schema: ProviderRunInputSchema,
     },
   );
@@ -717,7 +803,7 @@ function createProviderRunAndSubmitTool(
         "Run an ERC-8183 provider job AND submit the deliverable on-chain through ArcLayer Runner. " +
         "This is the full lifecycle: runtime execution + wallet-adapter on-chain submit through ArcLayer Runner. " +
         "Only use when on-chain settlement is explicitly required. " +
-        "For runtime-only execution, prefer arclayer_provider_run_only.",
+        "For runtime-only execution, prefer erc8183_provider_run_only.",
       schema: ProviderRunInputSchema,
     },
   );
@@ -775,7 +861,7 @@ function createProviderQuoteJobTool(
       description:
         "Quote the complexity and suggested budget for an ERC-8183 provider job. " +
         "This is an adapter-only tool — no on-chain call, no Runner call. " +
-        "Use this BEFORE calling arclayer_provider_set_budget. " +
+        "Use this BEFORE calling erc8183_provider_set_budget. " +
         "Returns complexity (low/medium/high), suggestedBudgetUsdc, maxBudgetUsdc, and reason. " +
         "Complexity mapping: low = 1 USDC, medium = 3 USDC, high = 5 USDC. " +
         "Max budget is hard capped at 5.00 USDC.",
@@ -866,8 +952,256 @@ function createProviderSetBudgetTool(
         "A reason is required and will be encoded into on-chain calldata (optParams). " +
         "Do not include secrets, private prompts, API keys, or customer private data in the reason. " +
         "Max budget is hard capped at 5.00 USDC. " +
-        "Use arclayer_provider_quote_job first to assess complexity and get a suggested budget.",
+        "Use erc8183_provider_quote_job first to assess complexity and get a suggested budget.",
       schema: ProviderSetBudgetInputSchema,
+    },
+  );
+}
+
+// ── Provider Runtime Proxy Tool Creator ─────────────────────────────────────
+
+/**
+ * Tool descriptions for provider proxy tools.
+ * Each maps the erc8183_* name to a human-readable description.
+ */
+const PROVIDER_PROXY_DESCRIPTIONS: Record<string, string> = {
+  erc8183_provider_get_context:
+    "Get provider runtime context: state, active run, checkpoint, applications, and resume plan. " +
+    "Pass { agentId }.",
+  erc8183_provider_get_resume_plan:
+    "Get the resume plan for a provider run — computes the next action from checkpoint and on-chain state. " +
+    "Pass { agentId, runId?, jobId? }.",
+  erc8183_provider_heartbeat:
+    "Send a provider heartbeat — updates last_seen_at for the provider agent. " +
+    "Pass { agentId }.",
+  erc8183_provider_start_job:
+    "Start a provider job run — creates a durable runtime entry for the job. " +
+    "Idempotent on (agentId, jobId). Pass { agentId, jobId, taskId, ... }.",
+  erc8183_provider_retry_job:
+    "Retry a failed provider job run — max 3 retries. " +
+    "Phase must be 'runtime_failed' or 'submit_tx_failed'. Pass { agentId, jobId }.",
+  erc8183_provider_complete_run:
+    "Mark a provider runtime run as completed — terminal cleanup. " +
+    "Pass { agentId, jobId, runId?, status }.",
+  erc8183_provider_list_assigned_jobs:
+    "List jobs assigned to the provider address. " +
+    "Pass { agentId, providerAddress, limit? }.",
+  erc8183_provider_list_assigned_jobs_extended:
+    "List assigned jobs with extended status filtering (Open/Funded/Submitted). " +
+    "Pass { agentId, providerAddress, status?, limit? }.",
+  erc8183_provider_list_open_jobs:
+    "List open/global jobs where provider = address(0). " +
+    "Pass { agentId, limit?, minBudgetUsdc?, includeExpired? }.",
+  erc8183_provider_list_my_open_job_applications:
+    "List the provider's open job applications. " +
+    "Pass { agentId, status? }.",
+  erc8183_provider_apply_open_job:
+    "Apply for an open/global job as a provider. " +
+    "Pass { agentId, jobId, providerAddress, quoteAmountUsdc?, quoteAmountAtomic?, message?, capabilities?, metadata? }.",
+  erc8183_provider_withdraw_open_job_application:
+    "Withdraw an open job application. " +
+    "Pass { agentId, jobId }.",
+};
+
+/**
+ * Create a generic provider proxy tool.
+ * These tools forward directly to Console MCP via Runner proxy.
+ */
+function createProviderProxyTool(
+  client: ArcLayerRunnerClient,
+  toolName: string,
+  entry: (typeof TOOL_NAME_MAP)[string],
+  opts: { logger?: ArcLayerLogger },
+) {
+  const description = PROVIDER_PROXY_DESCRIPTIONS[toolName]
+    ?? `Provider proxy tool: ${toolName}. Pass tool-specific input as JSON.`;
+
+  return tool(
+    async (input) => {
+      try {
+        const result = await client.post(entry.runnerPath, input ?? {});
+        return normalizeToolResult(result);
+      } catch (e: unknown) {
+        const msg = sanitizeErrorMessage(
+          e instanceof Error ? e.message : String(e),
+        );
+        return `Error: ${msg}`;
+      }
+    },
+    {
+      name: toolName,
+      description,
+      schema: ProviderProxyInputSchema,
+    },
+  );
+}
+
+/**
+ * Create the provider write checkpoint tool (dedicated schema).
+ * Calls Runner POST /provider/write-checkpoint (proxied to Console MCP).
+ */
+function createProviderWriteCheckpointTool(
+  client: ArcLayerRunnerClient,
+  toolName: string,
+  entry: (typeof TOOL_NAME_MAP)[string],
+  opts: { logger?: ArcLayerLogger },
+) {
+  return tool(
+    async (input) => {
+      try {
+        const result = await client.post(entry.runnerPath, input);
+        return normalizeToolResult(result);
+      } catch (e: unknown) {
+        const msg = sanitizeErrorMessage(
+          e instanceof Error ? e.message : String(e),
+        );
+        return `Error: ${msg}`;
+      }
+    },
+    {
+      name: toolName,
+      description:
+        "Write a provider runtime checkpoint — append-only progress record for a running job. " +
+        "Required: { agentId, jobId, phase, status }. " +
+        "Optional: { runId, txHash, deliverableHash, payloadHash, note, metadata }. " +
+        "Idempotent on provider:<agentId>:job:<jobId>:checkpoint:<phase>.",
+      schema: ProviderWriteCheckpointInputSchema,
+    },
+  );
+}
+
+/**
+ * Create the provider publish deliverable tool (dedicated schema).
+ * Calls Runner POST /provider/publish-deliverable (proxied to Console MCP).
+ */
+function createProviderPublishDeliverableTool(
+  client: ArcLayerRunnerClient,
+  toolName: string,
+  entry: (typeof TOOL_NAME_MAP)[string],
+  opts: { logger?: ArcLayerLogger },
+) {
+  return tool(
+    async (input) => {
+      try {
+        const result = await client.post(entry.runnerPath, input);
+        return normalizeToolResult(result);
+      } catch (e: unknown) {
+        const msg = sanitizeErrorMessage(
+          e instanceof Error ? e.message : String(e),
+        );
+        return `Error: ${msg}`;
+      }
+    },
+    {
+      name: toolName,
+      description:
+        "Publish the canonical deliverable for a funded job. " +
+        "Server recomputes Keccak-256 hash from canonicalPayload and verifies on-chain provider/status. " +
+        "Required: { agentId, jobId, providerAddress, canonicalPayload, deliverableHash }. " +
+        "Optional: { artifacts, runtimeReceiptHash }. " +
+        "Idempotent — provider can re-publish until submit locks it.",
+      schema: ProviderPublishDeliverableInputSchema,
+    },
+  );
+}
+
+/**
+ * Create the provider submit deliverable tool.
+ * Calls Runner POST /erc8183/provider/submit-deliverable.
+ */
+function createProviderSubmitDeliverableTool(
+  client: ArcLayerRunnerClient,
+  toolName: string,
+  entry: (typeof TOOL_NAME_MAP)[string],
+  opts: { logger?: ArcLayerLogger },
+) {
+  return tool(
+    async (input) => {
+      try {
+        const result = await client.providerSubmitDeliverable({
+          jobId: input.jobId,
+          deliverableHash: input.deliverableHash,
+        });
+        return normalizeToolResult(result);
+      } catch (e: unknown) {
+        const msg = sanitizeErrorMessage(
+          e instanceof Error ? e.message : String(e),
+        );
+        return `Error: ${msg}`;
+      }
+    },
+    {
+      name: toolName,
+      description:
+        "Submit a deliverable on-chain via the Runner wallet adapter. " +
+        "This is a direct on-chain write — submit(jobId, deliverableHash, optParams). " +
+        "Only use when the deliverable hash is already computed. " +
+        "For the full lifecycle (run + submit), prefer erc8183_provider_run_and_submit.",
+      schema: ProviderSubmitDeliverableInputSchema,
+    },
+  );
+}
+
+/**
+ * Create the job status tool.
+ * Calls Runner POST /jobs/onchain-status (proxied to Console MCP).
+ */
+function createJobStatusTool(
+  client: ArcLayerRunnerClient,
+  toolName: string,
+  entry: (typeof TOOL_NAME_MAP)[string],
+  opts: { logger?: ArcLayerLogger },
+) {
+  return tool(
+    async (input) => {
+      try {
+        const result = await client.getJobStatus({ jobId: input.jobId });
+        return normalizeToolResult(result);
+      } catch (e: unknown) {
+        const msg = sanitizeErrorMessage(
+          e instanceof Error ? e.message : String(e),
+        );
+        return `Error: ${msg}`;
+      }
+    },
+    {
+      name: toolName,
+      description:
+        "Get the on-chain status of an ERC-8183 job. " +
+        "Returns current status, provider, evaluator, budget, and other on-chain fields.",
+      schema: JobStatusInputSchema,
+    },
+  );
+}
+
+/**
+ * Create the job lifecycle summary tool.
+ * Calls Runner POST /jobs/lifecycle-summary (proxied to Console MCP).
+ */
+function createJobLifecycleSummaryTool(
+  client: ArcLayerRunnerClient,
+  toolName: string,
+  entry: (typeof TOOL_NAME_MAP)[string],
+  opts: { logger?: ArcLayerLogger },
+) {
+  return tool(
+    async (input) => {
+      try {
+        const result = await client.getJobLifecycleSummary({ jobId: input.jobId });
+        return normalizeToolResult(result);
+      } catch (e: unknown) {
+        const msg = sanitizeErrorMessage(
+          e instanceof Error ? e.message : String(e),
+        );
+        return `Error: ${msg}`;
+      }
+    },
+    {
+      name: toolName,
+      description:
+        "Get the lifecycle summary of an ERC-8183 job — " +
+        "computes next actor and next action from current on-chain status.",
+      schema: JobLifecycleSummaryInputSchema,
     },
   );
 }

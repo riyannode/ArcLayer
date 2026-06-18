@@ -163,7 +163,11 @@ export const CONSOLE_MCP_PROXY_TOOLS: RunnerToolRegistryItem[] = [
   { name: "provider.runtime_complete_run", source: "console-mcp-proxy", status: "active", risk: ["runtime"], capabilities: ["provider", "runtime"], roles: ["provider"], description: "Complete runtime run" },
   { name: "provider.list_open_jobs", source: "console-mcp-proxy", status: "active", risk: ["read-only"], capabilities: ["provider", "jobs"], roles: ["provider"], description: "List open jobs" },
   { name: "provider.list_assigned_jobs", source: "console-mcp-proxy", status: "active", risk: ["read-only"], capabilities: ["provider", "jobs"], roles: ["provider"], description: "List assigned jobs" },
+  { name: "provider.list_assigned_jobs_extended", source: "console-mcp-proxy", status: "active", risk: ["read-only"], capabilities: ["provider", "jobs"], roles: ["provider"], description: "List assigned jobs with status filter" },
+  { name: "provider.list_my_open_job_applications", source: "console-mcp-proxy", status: "active", risk: ["read-only"], capabilities: ["provider", "jobs", "applications"], roles: ["provider"], description: "List provider applications" },
   { name: "provider.apply_open_job", source: "console-mcp-proxy", status: "active", risk: ["prepare-only"], capabilities: ["provider", "jobs"], roles: ["provider"], description: "Apply for open job" },
+  { name: "provider.withdraw_open_job_application", source: "console-mcp-proxy", status: "active", risk: ["runtime"], capabilities: ["provider", "jobs", "applications"], roles: ["provider"], description: "Withdraw open job application" },
+  { name: "provider.publish_deliverable", source: "console-mcp-proxy", status: "active", risk: ["runtime"], capabilities: ["provider", "deliverable", "erc8183"], roles: ["provider"], description: "Publish deliverable for funded job" },
   { name: "provider.runtime_retry_job", source: "console-mcp-proxy", status: "active", risk: ["runtime"], capabilities: ["provider", "runtime"], roles: ["provider"], description: "Retry a failed provider job run" },
 
   // Evaluator

@@ -41,6 +41,10 @@ export type {
   ProviderQuoteJobOutput,
   ProviderSetBudgetInput,
   ProviderSetBudgetOutput,
+  ProviderProxyInput,
+  ProviderSubmitDeliverableInput,
+  JobStatusInput,
+  JobLifecycleSummaryInput,
 } from "./types.js";
 
 export { DEFAULT_PROVIDER_PRICING_POLICY } from "./types.js";

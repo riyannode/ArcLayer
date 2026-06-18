@@ -248,6 +248,137 @@ async function main() {
             const limit = Number(url.searchParams.get("limit") ?? "100");
             return services.getLedger(limit);
           }
+        },
+
+        // ── Provider Runtime (Console MCP proxy) ─────────────────────────
+        {
+          method: "POST",
+          path: "/provider/context",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.runtime_get_context", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/resume-plan",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.runtime_get_resume_plan", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/heartbeat",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.runtime_heartbeat", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/start-job",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.runtime_start_job", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/write-checkpoint",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.runtime_write_checkpoint", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/retry-job",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.runtime_retry_job", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/complete-run",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.runtime_complete_run", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/list-assigned-jobs",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.list_assigned_jobs", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/list-assigned-jobs-extended",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.list_assigned_jobs_extended", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/list-open-jobs",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.list_open_jobs", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/list-my-open-job-applications",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.list_my_open_job_applications", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/apply-open-job",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.apply_open_job", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/withdraw-open-job-application",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.withdraw_open_job_application", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/provider/publish-deliverable",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("provider.publish_deliverable", body as Record<string, unknown>)
+        },
+
+        // ── Provider: Submit Deliverable (runner-local, wallet adapter) ──
+        {
+          method: "POST",
+          path: "/erc8183/provider/submit-deliverable",
+          handler: async ({ body }) => {
+            const input = body as { jobId?: string; deliverableHash?: string };
+            if (!input.jobId || !/^[0-9]+$/.test(input.jobId)) {
+              return { ok: false, error: "jobId must be a numeric string" };
+            }
+            if (!input.deliverableHash || typeof input.deliverableHash !== "string") {
+              return { ok: false, error: "deliverableHash is required" };
+            }
+            const hash = input.deliverableHash;
+            const deliverableHash = (hash.startsWith("0x") && hash.length === 66
+              ? hash
+              : `0x${hash}`) as `0x${string}`;
+            return services.submitDeliverableViaWallet({
+              jobId: input.jobId,
+              deliverableHash,
+              optParams: "0x"
+            });
+          }
+        },
+
+        // ── Provider: Runtime Status (runner-local, MCP connector) ───────
+        {
+          method: "POST",
+          path: "/erc8183/provider/runtime-status",
+          handler: async () => services.mcp.getRuntimeContext()
+        },
+
+        // ── Job Status + Lifecycle (Console MCP proxy) ───────────────────
+        {
+          method: "POST",
+          path: "/jobs/onchain-status",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("jobs.get_onchain_status", body as Record<string, unknown>)
+        },
+        {
+          method: "POST",
+          path: "/jobs/lifecycle-summary",
+          handler: async ({ body }) =>
+            services.proxyToConsoleMcp("jobs.get_lifecycle_summary", body as Record<string, unknown>)
         }
       ],
       config.runnerSecret

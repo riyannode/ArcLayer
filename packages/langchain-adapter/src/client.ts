@@ -24,6 +24,9 @@ import type {
   ProviderRunAndSubmitOutput,
   ProviderSetBudgetInput,
   ProviderSetBudgetOutput,
+  ProviderSubmitDeliverableInput,
+  JobStatusInput,
+  JobLifecycleSummaryInput,
 } from "./types.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -314,5 +317,100 @@ export class ArcLayerRunnerClient {
       "/erc8183/provider/set-budget",
       input,
     );
+  }
+
+  // ── Provider Runtime (Console MCP proxy) ────────────────────────────
+
+  /** Get provider runtime context (state + active run + checkpoint + applications + resume plan). */
+  async getProviderContext(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/context", body ?? {});
+  }
+
+  /** Get resume plan for a provider run. */
+  async getProviderResumePlan(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/resume-plan", body ?? {});
+  }
+
+  /** Send provider heartbeat (update last_seen_at). */
+  async providerHeartbeat(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/heartbeat", body ?? {});
+  }
+
+  /** Start a provider job run. */
+  async providerStartJob(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/start-job", body ?? {});
+  }
+
+  /** Write a provider runtime checkpoint. */
+  async providerWriteCheckpoint(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/write-checkpoint", body ?? {});
+  }
+
+  /** Retry a failed provider job run. */
+  async providerRetryJob(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/retry-job", body ?? {});
+  }
+
+  /** Complete a provider runtime run. */
+  async providerCompleteRun(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/complete-run", body ?? {});
+  }
+
+  // ── Provider Marketplace ────────────────────────────────────────────
+
+  /** List jobs assigned to the provider. */
+  async listProviderAssignedJobs(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/list-assigned-jobs", body ?? {});
+  }
+
+  /** List assigned jobs with extended status filtering. */
+  async listProviderAssignedJobsExtended(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/list-assigned-jobs-extended", body ?? {});
+  }
+
+  /** List open/global jobs where provider = address(0). */
+  async listProviderOpenJobs(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/list-open-jobs", body ?? {});
+  }
+
+  /** List provider's open job applications. */
+  async listProviderOpenJobApplications(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/list-my-open-job-applications", body ?? {});
+  }
+
+  /** Apply for an open/global job. */
+  async providerApplyOpenJob(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/apply-open-job", body ?? {});
+  }
+
+  /** Withdraw an open job application. */
+  async providerWithdrawOpenJobApplication(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/withdraw-open-job-application", body ?? {});
+  }
+
+  /** Publish a canonical deliverable for a funded job. */
+  async providerPublishDeliverable(body?: Record<string, unknown>): Promise<unknown> {
+    return this.post("/provider/publish-deliverable", body ?? {});
+  }
+
+  // ── Provider Submit Deliverable (runner-local) ──────────────────────
+
+  /** Submit a deliverable on-chain via wallet adapter. */
+  async providerSubmitDeliverable(
+    input: ProviderSubmitDeliverableInput,
+  ): Promise<unknown> {
+    return this.post("/erc8183/provider/submit-deliverable", input);
+  }
+
+  // ── Job Status (Console MCP proxy) ──────────────────────────────────
+
+  /** Get on-chain job status. */
+  async getJobStatus(input: JobStatusInput): Promise<unknown> {
+    return this.post("/jobs/onchain-status", input);
+  }
+
+  /** Get job lifecycle summary (next actor/action). */
+  async getJobLifecycleSummary(input: JobLifecycleSummaryInput): Promise<unknown> {
+    return this.post("/jobs/lifecycle-summary", input);
   }
 }

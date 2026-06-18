@@ -452,7 +452,7 @@ describe("createArcLayerLangChainTools", () => {
       },
     });
 
-    const inspect = tools.find((t) => t.name === "arclayer_x402_inspect");
+    const inspect = tools.find((t) => t.name === "x402_inspect");
     expect(inspect).toBeDefined();
 
     const result = await inspect!.invoke({
@@ -478,7 +478,7 @@ describe("createArcLayerLangChainTools", () => {
         }),
     });
 
-    const batch = tools.find((t) => t.name === "arclayer_x402_batch_pay");
+    const batch = tools.find((t) => t.name === "x402_batch_pay");
     expect(batch).toBeDefined();
 
     const result = await batch!.invoke({
@@ -530,7 +530,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const runOnly = tools.find(
-      (t) => t.name === "arclayer_provider_run_only",
+      (t) => t.name === "erc8183_provider_run_only",
     );
     expect(runOnly).toBeDefined();
 
@@ -566,7 +566,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const runOnly = tools.find(
-      (t) => t.name === "arclayer_provider_run_only",
+      (t) => t.name === "erc8183_provider_run_only",
     );
 
     await runOnly!.invoke({
@@ -615,7 +615,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const runAndSubmit = tools.find(
-      (t) => t.name === "arclayer_provider_run_and_submit",
+      (t) => t.name === "erc8183_provider_run_and_submit",
     );
     expect(runAndSubmit).toBeDefined();
 
@@ -650,7 +650,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const runOnly = tools.find(
-      (t) => t.name === "arclayer_provider_run_only",
+      (t) => t.name === "erc8183_provider_run_only",
     );
     expect(runOnly).toBeDefined();
 
@@ -682,8 +682,8 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const toolNames = tools.map((t) => t.name);
-    expect(toolNames).not.toContain("arclayer_provider_run_only");
-    expect(toolNames).not.toContain("arclayer_provider_run_and_submit");
+    expect(toolNames).not.toContain("erc8183_provider_run_only");
+    expect(toolNames).not.toContain("erc8183_provider_run_and_submit");
   });
 
   it("x402-agent role does not include provider tools", async () => {
@@ -701,8 +701,8 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const toolNames = tools.map((t) => t.name);
-    expect(toolNames).not.toContain("arclayer_provider_run_only");
-    expect(toolNames).not.toContain("arclayer_provider_run_and_submit");
+    expect(toolNames).not.toContain("erc8183_provider_run_only");
+    expect(toolNames).not.toContain("erc8183_provider_run_and_submit");
   });
 
   it("provider role does not expose run-and-submit by default", async () => {
@@ -720,8 +720,8 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const toolNames = tools.map((t) => t.name);
-    expect(toolNames).toContain("arclayer_provider_run_only");
-    expect(toolNames).not.toContain("arclayer_provider_run_and_submit");
+    expect(toolNames).toContain("erc8183_provider_run_only");
+    expect(toolNames).not.toContain("erc8183_provider_run_and_submit");
   });
 
   it("provider role exposes run-and-submit only with explicit opt-in", async () => {
@@ -740,8 +740,8 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const toolNames = tools.map((t) => t.name);
-    expect(toolNames).toContain("arclayer_provider_run_only");
-    expect(toolNames).toContain("arclayer_provider_run_and_submit");
+    expect(toolNames).toContain("erc8183_provider_run_only");
+    expect(toolNames).toContain("erc8183_provider_run_and_submit");
   });
 
   // ── Provider Pricing Tools ──────────────────────────────────────────────
@@ -761,8 +761,8 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const toolNames = tools.map((t) => t.name);
-    expect(toolNames).toContain("arclayer_provider_quote_job");
-    expect(toolNames).not.toContain("arclayer_provider_set_budget");
+    expect(toolNames).toContain("erc8183_provider_quote_job");
+    expect(toolNames).not.toContain("erc8183_provider_set_budget");
   });
 
   it("provider with enableProviderSetBudget=true includes set_budget", async () => {
@@ -781,8 +781,8 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const toolNames = tools.map((t) => t.name);
-    expect(toolNames).toContain("arclayer_provider_quote_job");
-    expect(toolNames).toContain("arclayer_provider_set_budget");
+    expect(toolNames).toContain("erc8183_provider_quote_job");
+    expect(toolNames).toContain("erc8183_provider_set_budget");
   });
 
   it("quote_job is adapter-only and does not call fetch/Runner", async () => {
@@ -802,7 +802,7 @@ describe("createArcLayerLangChainTools", () => {
       },
     });
 
-    const quote = tools.find((t) => t.name === "arclayer_provider_quote_job");
+    const quote = tools.find((t) => t.name === "erc8183_provider_quote_job");
     expect(quote).toBeDefined();
 
     const result = await quote!.invoke({
@@ -829,7 +829,7 @@ describe("createArcLayerLangChainTools", () => {
         }),
     });
 
-    const quote = tools.find((t) => t.name === "arclayer_provider_quote_job")!;
+    const quote = tools.find((t) => t.name === "erc8183_provider_quote_job")!;
 
     const result = await quote.invoke({
       jobId: "100",
@@ -857,7 +857,7 @@ describe("createArcLayerLangChainTools", () => {
         }),
     });
 
-    const quote = tools.find((t) => t.name === "arclayer_provider_quote_job")!;
+    const quote = tools.find((t) => t.name === "erc8183_provider_quote_job")!;
 
     const result = await quote.invoke({
       jobId: "100",
@@ -885,7 +885,7 @@ describe("createArcLayerLangChainTools", () => {
         }),
     });
 
-    const quote = tools.find((t) => t.name === "arclayer_provider_quote_job")!;
+    const quote = tools.find((t) => t.name === "erc8183_provider_quote_job")!;
 
     const result = await quote.invoke({
       jobId: "100",
@@ -915,7 +915,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const setBudget = tools.find(
-      (t) => t.name === "arclayer_provider_set_budget",
+      (t) => t.name === "erc8183_provider_set_budget",
     )!;
 
     // Zod validation throws on empty reason before tool callback runs
@@ -945,7 +945,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const setBudget = tools.find(
-      (t) => t.name === "arclayer_provider_set_budget",
+      (t) => t.name === "erc8183_provider_set_budget",
     )!;
 
     // Missing complexity — Zod throws
@@ -974,7 +974,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const setBudget = tools.find(
-      (t) => t.name === "arclayer_provider_set_budget",
+      (t) => t.name === "erc8183_provider_set_budget",
     )!;
 
     const longReason = "x".repeat(513);
@@ -1004,7 +1004,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const setBudget = tools.find(
-      (t) => t.name === "arclayer_provider_set_budget",
+      (t) => t.name === "erc8183_provider_set_budget",
     )!;
 
     const result = await setBudget.invoke({
@@ -1037,7 +1037,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const setBudget = tools.find(
-      (t) => t.name === "arclayer_provider_set_budget",
+      (t) => t.name === "erc8183_provider_set_budget",
     )!;
 
     const result = await setBudget.invoke({
@@ -1068,7 +1068,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const setBudget = tools.find(
-      (t) => t.name === "arclayer_provider_set_budget",
+      (t) => t.name === "erc8183_provider_set_budget",
     )!;
 
     const result = await setBudget.invoke({
@@ -1100,7 +1100,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const setBudget = tools.find(
-      (t) => t.name === "arclayer_provider_set_budget",
+      (t) => t.name === "erc8183_provider_set_budget",
     )!;
 
     await setBudget.invoke({
@@ -1138,7 +1138,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const setBudget = tools.find(
-      (t) => t.name === "arclayer_provider_set_budget",
+      (t) => t.name === "erc8183_provider_set_budget",
     )!;
 
     await setBudget.invoke({
@@ -1171,7 +1171,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const setBudget = tools.find(
-      (t) => t.name === "arclayer_provider_set_budget",
+      (t) => t.name === "erc8183_provider_set_budget",
     )!;
 
     const result = await setBudget.invoke({
@@ -1205,7 +1205,7 @@ describe("createArcLayerLangChainTools", () => {
         }),
     });
 
-    const quote = tools.find((t) => t.name === "arclayer_provider_quote_job")!;
+    const quote = tools.find((t) => t.name === "erc8183_provider_quote_job")!;
 
     const result = await quote.invoke({
       jobId: "100",
@@ -1233,7 +1233,7 @@ describe("createArcLayerLangChainTools", () => {
         }),
     });
 
-    const quote = tools.find((t) => t.name === "arclayer_provider_quote_job")!;
+    const quote = tools.find((t) => t.name === "erc8183_provider_quote_job")!;
 
     await expect(
       quote.invoke({
@@ -1259,7 +1259,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const setBudget = tools.find(
-      (t) => t.name === "arclayer_provider_set_budget",
+      (t) => t.name === "erc8183_provider_set_budget",
     )!;
 
     // 0.0000009 has 7 fractional digits — exceeds 6 digit limit
@@ -1289,7 +1289,7 @@ describe("createArcLayerLangChainTools", () => {
     });
 
     const setBudget = tools.find(
-      (t) => t.name === "arclayer_provider_set_budget",
+      (t) => t.name === "erc8183_provider_set_budget",
     )!;
 
     // 1.1234567 has 7 fractional digits
@@ -1319,8 +1319,8 @@ describe("createArcLayerLangChainTools", () => {
       });
 
       const toolNames = tools.map((t) => t.name);
-      expect(toolNames).not.toContain("arclayer_provider_quote_job");
-      expect(toolNames).not.toContain("arclayer_provider_set_budget");
+      expect(toolNames).not.toContain("erc8183_provider_quote_job");
+      expect(toolNames).not.toContain("erc8183_provider_set_budget");
     }
   });
 });
