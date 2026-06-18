@@ -91,7 +91,7 @@ FORBIDDEN_DEP_PATTERNS=(
 PACKAGES=(
   "sdk"
   "packages/runner-core"
-  "packages/circle-cli-adapter"
+  "packages/circle-dev-wallet-adapter"
   "apps/arclayer-runner"
   "packages/arclayer-setup"
 )

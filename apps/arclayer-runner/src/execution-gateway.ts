@@ -1,5 +1,5 @@
 /**
- * ExecutionGateway — single write-operation boundary for all Circle CLI / contract writes.
+ * ExecutionGateway — single write-operation boundary for all wallet adapter writes.
  *
  * Phase 5: SQLite-backed operation journal, persistent idempotency, wallet/job locks,
  * and startup reconciliation hooks.
@@ -7,7 +7,7 @@
  * Every write operation routed through this gateway:
  *   1. Atomically creates OperationRecord + idempotency + locks (one transaction)
  *   2. Transitions through operation states
- *   3. Executes the Circle CLI write
+ *   3. Executes the wallet adapter write
  *   4. Classifies result → confirmed | broadcast | unknown | failed | cancelled
  *   5. Atomically finalizes: state + txHash + result + receipt + lock release (one transaction)
  */
@@ -21,7 +21,7 @@ import {
   type OperationState,
   type OperationErrorCode,
 } from "@arclayer/runner-core";
-import { CircleCliAdapter, type CircleCliResult } from "@arclayer/circle-cli-adapter";
+import type { WalletExecutionAdapter, WalletExecuteResult } from "@arclayer/runner-core";
 import type { JsonlReceiptStore } from "@arclayer/runner-core";
 import path from "node:path";
 import { OperationJournal } from "./operation-journal";
@@ -54,6 +54,12 @@ export type WriteOperationInput = {
   description?: string;
   /** ERC-8183 job ID for job-level locking. */
   jobId?: string;
+  /** Policy metadata for spend enforcement. */
+  policy?: {
+    action: string;
+    method: string;
+    amountUsdc?: string;
+  };
 };
 
 export type WriteOperationResult = {
@@ -61,7 +67,7 @@ export type WriteOperationResult = {
   operationId: string;
   state: OperationState;
   txHash?: string;
-  circleResult?: CircleCliResult;
+  circleResult?: WalletExecuteResult;
   receipt?: unknown;
   errorCode?: OperationErrorCode;
   errorMessage?: string;
@@ -69,12 +75,13 @@ export type WriteOperationResult = {
   idempotent?: boolean;
 };
 
-// ── Circle CLI Execution Function Type ─────────────────────────────────
+// ── Wallet Execution Function Type ─────────────────────────────────
 
-export type CircleCliExecuteFn = (
-  circle: CircleCliAdapter,
-  signal?: AbortSignal
-) => Promise<CircleCliResult>;
+export type WalletExecuteFn = (
+  wallet: WalletExecutionAdapter,
+  signal?: AbortSignal,
+  idempotencyKey?: string,
+) => Promise<WalletExecuteResult>;
 
 // ── Result Classification ──────────────────────────────────────────────
 
@@ -103,7 +110,7 @@ function truncateText(value: string, maxBytes: number): string {
   return Buffer.from(value, "utf8").subarray(0, maxBytes).toString("utf8") + "\n...[truncated]";
 }
 
-function compactCircleResult(result: CircleCliResult): CircleCliResult {
+function compactCircleResult(result: WalletExecuteResult): WalletExecuteResult {
   return {
     ...result,
     stdout: truncateText(result.stdout ?? "", MAX_CACHED_STDOUT_BYTES),
@@ -123,7 +130,7 @@ function resolveChainId(chain: string, chainId?: number): number {
 }
 
 function classifyCircleResult(
-  result: CircleCliResult,
+  result: WalletExecuteResult,
   error?: Error
 ): OperationState {
   if (error) {
@@ -178,7 +185,7 @@ function classifyCircleResult(
   return "unknown";
 }
 
-function extractTxHash(result: CircleCliResult): string | undefined {
+function extractTxHash(result: WalletExecuteResult): string | undefined {
   const json = result.json as Record<string, unknown> | undefined;
   if (json) {
     if (typeof json.txHash === "string") return json.txHash;
@@ -202,10 +209,10 @@ export class ExecutionGateway {
   private operations = new Map<string, OperationRecord>();
 
   /**
-   * Stored CircleCliResult per operation for idempotent replay.
+   * Stored WalletExecuteResult per operation for idempotent replay.
    * Bounded to MAX_RESULT_CACHE_ENTRIES.
    */
-  private resultCache = new Map<string, CircleCliResult>();
+  private resultCache = new Map<string, WalletExecuteResult>();
 
   /**
    * Idempotency index: `${idempotencyKey}:${paramsHash}` → operationId.
@@ -218,7 +225,7 @@ export class ExecutionGateway {
   readonly journal: OperationJournal;
 
   constructor(
-    private readonly circle: CircleCliAdapter,
+    private readonly wallet: WalletExecutionAdapter,
     private readonly receipts: JsonlReceiptStore,
     private readonly config: {
       agentId: string;
@@ -226,7 +233,17 @@ export class ExecutionGateway {
       chain: string;
       dataDir?: string;
     },
-    journal?: OperationJournal
+    journal?: OperationJournal,
+    private readonly policyGuard?: {
+      assertAllowed(input: {
+        walletAddress: string; agentId: string;
+        action: string; contract: string; method: string; amountUsdc?: string;
+      }): void;
+      reserveSpend(input: {
+        walletAddress: string; agentId: string; action: string;
+        amountUsdc: string; operationId: string; idempotencyKey: string;
+      }): void;
+    }
   ) {
     if (journal) {
       this.journal = journal;
@@ -323,7 +340,7 @@ export class ExecutionGateway {
 
   async execute(
     input: WriteOperationInput,
-    executeFn: CircleCliExecuteFn,
+    executeFn: WalletExecuteFn,
     signal?: AbortSignal
   ): Promise<WriteOperationResult> {
     // ── Check in-memory idempotency first ────────────────────────────────
@@ -475,15 +492,37 @@ export class ExecutionGateway {
       return this.buildResult(operationId);
     }
 
-    // ── Execute Circle CLI write ──────────────────────────────────────
+    // ── Policy guard (spend enforcement) ───────────────────────────
+    if (input.policy && this.policyGuard) {
+      this.policyGuard.assertAllowed({
+        walletAddress: input.walletAddress,
+        agentId: input.agentId ?? this.config.agentId,
+        action: input.policy.action,
+        contract: input.contractAddress,
+        method: input.policy.method,
+        amountUsdc: input.policy.amountUsdc,
+      });
+      if (input.policy.amountUsdc && input.policy.amountUsdc !== "0") {
+        this.policyGuard.reserveSpend({
+          walletAddress: input.walletAddress,
+          agentId: input.agentId ?? this.config.agentId,
+          action: input.policy.action,
+          amountUsdc: input.policy.amountUsdc,
+          operationId,
+          idempotencyKey: input.idempotencyKey,
+        });
+      }
+    }
+
+    // ── Execute wallet write ──────────────────────────────────────
     // Update in-memory state to executing
     this.operations.get(operationId)!.state = "executing";
 
-    let cliResult: CircleCliResult | undefined;
+    let cliResult: WalletExecuteResult | undefined;
     let cliError: Error | undefined;
 
     try {
-      cliResult = await executeFn(this.circle, signal);
+      cliResult = await executeFn(this.wallet, signal, input.idempotencyKey);
     } catch (error) {
       cliError = error instanceof Error ? error : new Error(String(error));
     }
@@ -498,11 +537,11 @@ export class ExecutionGateway {
 
     if (terminalState === "failed") {
       errorCode = "BROADCAST_FAILED";
-      errorMessage = cliError?.message ?? "Circle CLI write failed";
+      errorMessage = cliError?.message ?? "Wallet write failed";
     }
     if (terminalState === "unknown") {
       errorCode = "UNKNOWN_TX_STATE";
-      errorMessage = "Circle CLI timeout or ambiguous result — tx may have been broadcast";
+      errorMessage = "Wallet write timeout or ambiguous result — tx may have been broadcast";
     }
 
     // Atomic finalization: state + txHash + result + receipt + lock release
@@ -618,7 +657,7 @@ export class ExecutionGateway {
 
   private buildResult(
     operationId: string,
-    circleResult?: CircleCliResult
+    circleResult?: WalletExecuteResult
   ): WriteOperationResult {
     const record = this.operations.get(operationId)!;
     return {

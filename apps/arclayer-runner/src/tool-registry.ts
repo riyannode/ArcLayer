@@ -57,8 +57,8 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
   { name: "runner.broker_status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["broker"], roles: ["provider", "client", "evaluator", "x402-agent"], description: "MCP Tool Broker session state" },
   { name: "runner.audit_log", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["broker", "audit"], roles: ["provider", "client", "evaluator", "x402-agent"], description: "MCP Tool Broker audit log" },
 
-  // Circle CLI
-  { name: "circle.status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["circle", "wallet"], roles: ["provider", "x402-agent", ], requiresCircle: true, description: "Circle CLI version, wallet status, gateway balance" },
+  // Wallet Status
+  { name: "circle.status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["circle", "wallet"], roles: ["provider", "x402-agent", ], requiresCircle: true, description: "Wallet adapter status, balance, gateway balance" },
   { name: "circle.gateway_balance", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["circle", "gateway"], roles: ["provider", "x402-agent"], requiresCircle: true, description: "Gateway balance for configured wallet" },
   { name: "circle.wallet_balance", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["circle", "wallet"], roles: ["provider", "x402-agent"], requiresCircle: true, description: "Wallet balance for configured wallet" },
   { name: "circle.wallet_budget", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["circle", "wallet", "budget"], roles: ["provider", "x402-agent"], requiresCircle: true, description: "Wallet budget/limit for configured wallet" },
@@ -76,7 +76,7 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
 
   // ERC-8183
   { name: "erc8183.provider_run_job", source: "runner-local", status: "active", risk: ["runtime"], capabilities: ["erc8183", "runtime"], roles: ["provider"], requiresRuntime: true, description: "Dispatch job to LLM runtime (no on-chain submit)" },
-  { name: "erc8183.provider_submit_deliverable", source: "runner-local", status: "active", risk: ["runtime", "external-process"], capabilities: ["erc8183", "submit"], roles: ["provider"], requiresCircle: true, description: "Submit deliverable on-chain via Circle CLI" },
+  { name: "erc8183.provider_submit_deliverable", source: "runner-local", status: "active", risk: ["runtime", "external-process"], capabilities: ["erc8183", "submit"], roles: ["provider"], requiresCircle: true, description: "Submit deliverable on-chain via wallet adapter" },
   { name: "erc8183.provider_run_and_submit", source: "runner-local", status: "active", risk: ["runtime", "external-process"], capabilities: ["erc8183", "runtime", "submit"], roles: ["provider"], requiresRuntime: true, requiresCircle: true, description: "Run job + submit deliverable (full lifecycle)" },
   { name: "erc8183.provider_runtime_status", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["erc8183", "runtime"], roles: ["provider"], description: "Provider runtime context from hosted MCP" },
 
@@ -98,7 +98,7 @@ export const RUNNER_LOCAL_TOOLS: RunnerToolRegistryItem[] = [
   { name: "approvals.cancel", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client"], description: "Cancel pending approval" },
   { name: "approvals.list_pending", source: "runner-local", status: "active", risk: ["read-only"], capabilities: ["approvals"], roles: ["client"], description: "List pending approvals" },
 
-  // ERC-8004 Register via Circle CLI (guarded)
+  // ERC-8004 Register (execute) (guarded)
   { name: "erc8004.register_via_circle_cli", source: "runner-local", status: "active", risk: ["external-process"], capabilities: ["erc8004", "identity"], roles: ["provider", "evaluator", "x402-agent"], requiresCircle: true, description: "Register ERC-8004 identity on-chain. Gated behind allowIdentityRegister." },
 
   // ERC-8004 Chat-Approved Registration

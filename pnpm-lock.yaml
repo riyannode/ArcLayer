@@ -55,9 +55,9 @@ importers:
 
   apps/arclayer-runner:
     dependencies:
-      '@arclayer/circle-cli-adapter':
+      '@arclayer/circle-dev-wallet-adapter':
         specifier: workspace:^
-        version: link:../../packages/circle-cli-adapter
+        version: link:../../packages/circle-dev-wallet-adapter
       '@arclayer/runner-core':
         specifier: workspace:^
         version: link:../../packages/runner-core
@@ -237,11 +237,20 @@ importers:
         specifier: ^3.2.4
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.19.19)(esbuild@0.28.1)(jiti@1.21.7)(tsx@4.21.0)(yaml@2.9.0)
 
-  packages/circle-cli-adapter:
+  packages/circle-dev-wallet-adapter:
     dependencies:
       '@arclayer/runner-core':
         specifier: workspace:^
         version: link:../runner-core
+      '@circle-fin/developer-controlled-wallets':
+        specifier: ^10.6.0
+        version: 10.6.0(@solana/kit@5.5.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))
+      '@circle-fin/x402-batching':
+        specifier: ^3.0.4
+        version: 3.0.4(@x402/core@2.12.0)(@x402/evm@2.12.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))(viem@2.48.11(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3))
+      viem:
+        specifier: ^2.17.0
+        version: 2.48.11(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)
     devDependencies:
       '@types/node':
         specifier: ^22.19.19
@@ -359,6 +368,20 @@ packages:
 
   '@cfworker/json-schema@4.1.1':
     resolution: {integrity: sha512-gAmrUZSGtKc3AiBL71iNWxDsyUC5uMaKKGdvzYsBoTW/xi42JQHl7eKV2OYzCUqvc+D2RCcf7EXY2iCyFIk6og==}
+
+  '@circle-fin/developer-controlled-wallets@10.6.0':
+    resolution: {integrity: sha512-EVXVaJ1lNRznJ7osyL4DQDm3RQmwLiCyWqr8Rs/m0RsdKwmcykossyLycXeyQZvsj5ExUS8iVDlHzNqUjs5FKg==}
+    peerDependencies:
+      '@solana/codecs-strings': ^2.0.0
+      '@solana/kit': ^2.1.0 || ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0
+      '@solana/web3.js': ^1.63.0
+    peerDependenciesMeta:
+      '@solana/codecs-strings':
+        optional: true
+      '@solana/kit':
+        optional: true
+      '@solana/web3.js':
+        optional: true
 
   '@circle-fin/modular-wallets-core@1.0.13':
     resolution: {integrity: sha512-ohRRpmjqSToHRUIRAdB7EMMnX3qNTUp9XYCRaaHU71922LWavUAhzn7itHoTOQYd0P8kvm52/OBh/N+lH71a8g==}
@@ -1068,7 +1091,7 @@ packages:
 
   '@paulmillr/qr@0.2.1':
     resolution: {integrity: sha512-IHnV6A+zxU7XwmKFinmYjUcwlyK9+xkG3/s9KcQhI9BjQKycrJ1JRO+FbNYPwZiPKW3je/DR0k7w8/gLa5eaxQ==}
-    deprecated: 'Switch to "qr" (new package name) for security updates: npm install qr'
+    deprecated: 'The package is now available as "qr": npm install qr'
 
   '@phosphor-icons/webcomponents@2.1.5':
     resolution: {integrity: sha512-JcvQkZxvcX2jK+QCclm8+e8HXqtdFW9xV4/kk2aL9Y3dJA2oQVt+pzbv1orkumz3rfx4K9mn9fDoMr1He1yr7Q==}
@@ -2831,10 +2854,6 @@ packages:
 
   has-tostringtag@1.0.2:
     resolution: {integrity: sha512-NqADB8VjPFLM2V0VvHUewwwsw0ZWBaIdgo+ieHtK3hasLz4qeCRjYcqfB6AQrBggRKppKF8L52/VqdVsO47Dlw==}
-    engines: {node: '>= 0.4'}
-
-  hasown@2.0.3:
-    resolution: {integrity: sha512-ej4AhfhfL2Q2zpMmLo7U1Uv9+PyhIZpgQLGT1F9miIGmiCJIoCgSmczFdrc97mWT4kVY72KA+WnnhJ5pghSvSg==}
     engines: {node: '>= 0.4'}
 
   hasown@2.0.4:
@@ -4675,6 +4694,15 @@ snapshots:
       - zod
 
   '@cfworker/json-schema@4.1.1': {}
+
+  '@circle-fin/developer-controlled-wallets@10.6.0(@solana/kit@5.5.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10))':
+    dependencies:
+      axios: 1.16.1
+    optionalDependencies:
+      '@solana/kit': 5.5.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)
+    transitivePeerDependencies:
+      - debug
+      - supports-color
 
   '@circle-fin/modular-wallets-core@1.0.13(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.4.3)':
     dependencies:
@@ -9135,10 +9163,6 @@ snapshots:
     dependencies:
       has-symbols: 1.1.0
 
-  hasown@2.0.3:
-    dependencies:
-      function-bind: 1.1.2
-
   hasown@2.0.4:
     dependencies:
       function-bind: 1.1.2
@@ -9197,7 +9221,7 @@ snapshots:
 
   is-core-module@2.16.2:
     dependencies:
-      hasown: 2.0.3
+      hasown: 2.0.4
 
   is-extglob@2.1.1: {}
 

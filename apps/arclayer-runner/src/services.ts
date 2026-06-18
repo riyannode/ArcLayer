@@ -22,7 +22,8 @@ import {
   type RunnerConfig,
   type RuntimeResult
 } from "@arclayer/runner-core";
-import { CircleCliAdapter } from "@arclayer/circle-cli-adapter";
+import type { WalletExecutionAdapter } from "@arclayer/runner-core";
+import { createWalletAdapter } from "./wallet-adapter-factory";
 import { CONTRACTS } from "@arclayer/sdk";
 import type { RuntimeConnector } from "./runtime";
 import { safeHostFromUrl, sanitizeTaskForUntrustedRuntime } from "./runtime";
@@ -32,6 +33,9 @@ import { randomUUID } from "node:crypto";
 import { ExecutionGateway, assertGatewayWriteSucceeded } from "./execution-gateway";
 import type { WriteOperationKind } from "./execution-gateway";
 import { ApprovalManager } from "./approval-manager";
+import crypto from "node:crypto";
+import { assertSpendPolicy, type SpendPolicy } from "./spend-policy";
+import { SpendLedger } from "./spend-ledger";
 
 // ── Canonical Helpers ──────────────────────────────────────────────────
 
@@ -152,8 +156,9 @@ async function withKeyLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
 export class RunnerServices {
   readonly receipts: JsonlReceiptStore;
   readonly ledger: SpendingLedger;
-  /** @private — owned by ExecutionGateway. Use gateway.execute() for writes. */
-  private readonly circle: CircleCliAdapter;
+  readonly spendLedger: SpendLedger;
+  /** @internal — use gateway.execute() for writes. */
+  readonly wallet: WalletExecutionAdapter;
   readonly gateway: ExecutionGateway;
   readonly approvalManager: ApprovalManager;
 
@@ -165,12 +170,39 @@ export class RunnerServices {
   ) {
     this.receipts = new JsonlReceiptStore(config.dataDir);
     this.ledger = new SpendingLedger(config.dataDir);
-    this.circle = new CircleCliAdapter({ bin: config.circleCliBin });
-    this.gateway = new ExecutionGateway(this.circle, this.receipts, {
+    this.spendLedger = new SpendLedger(config.dataDir);
+    this.wallet = createWalletAdapter(config);
+    this.gateway = new ExecutionGateway(this.wallet, this.receipts, {
       agentId: config.agentId,
       circleWalletAddress: config.circleWalletAddress,
       chain: config.chain,
       dataDir: config.dataDir,
+    }, undefined, {
+      assertAllowed: (input) => {
+        assertSpendPolicy({
+          policy: this.resolveSpendPolicy(input.walletAddress),
+          action: input.action,
+          contract: input.contract,
+          method: input.method,
+          amountUsdc: input.amountUsdc,
+          dailySpentUsdc: this.spendLedger.getSpent({ walletAddress: input.walletAddress, window: "daily" }),
+          monthlySpentUsdc: this.spendLedger.getSpent({ walletAddress: input.walletAddress, window: "monthly" }),
+        });
+      },
+      reserveSpend: (input) => {
+        this.spendLedger.append({
+          id: crypto.randomUUID(),
+          walletAddress: input.walletAddress,
+          agentId: input.agentId,
+          action: input.action,
+          amountUsdc: input.amountUsdc,
+          state: "reserved",
+          operationId: input.operationId,
+          idempotencyKey: input.idempotencyKey,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      },
     });
     this.approvalManager = new ApprovalManager(
       this,
@@ -197,9 +229,9 @@ export class RunnerServices {
         "runtime_connector",
         "erc8004_identity_guard",
         "erc8183_provider_lifecycle",
-        "x402_nanopayment",
-        "batch_payment",
-        "circle_cli_adapter",
+        ...(typeof this.wallet.payService === "function" ? ["x402_nanopayment"] : []),
+        ...(typeof this.wallet.payService === "function" ? ["batch_payment"] : []),
+        "circle_dev_wallet_adapter",
         "receipt_proof_store",
         "spending_ledger",
         "mcp_bridge",
@@ -452,8 +484,8 @@ export class RunnerServices {
       };
     }
 
-    // Call Circle CLI submit — only place this is allowed
-    const submitReceipt = await this.submitDeliverableViaCircleCli({
+    // Submit deliverable on-chain via wallet adapter
+    const submitReceipt = await this.submitDeliverableViaWallet({
       jobId: input.jobId,
       deliverableHash: input.deliverableHash,
       optParams: input.optParams ?? "0x"
@@ -553,7 +585,7 @@ export class RunnerServices {
     return this.runAndSubmitProviderJob(body, lifecycle);
   }
 
-  async submitDeliverableViaCircleCli(
+  async submitDeliverableViaWallet(
     input: {
       jobId: string;
       deliverableHash: `0x${string}`;
@@ -571,7 +603,7 @@ export class RunnerServices {
     }
 
     // Always use canonical SDK contract target (Arc Testnet).
-    // circle.chain is for Circle CLI wallet ops only — contract target is hardcoded.
+    // chain config is for wallet adapter ops — contract target is hardcoded.
     const contractAddress = CONTRACTS.ERC8183_AGENTIC_COMMERCE;
 
     const normalizedOptParams = input.optParams ?? "0x";
@@ -581,6 +613,11 @@ export class RunnerServices {
     const gwResult = await this.gateway.execute(
       {
         kind: "submitDeliverable" as WriteOperationKind,
+        policy: {
+          action: "erc8183.submitDeliverable",
+          method: "submit(uint256,bytes32,bytes)",
+          amountUsdc: "0",
+        },
         idempotencyKey,
         paramsHash,
         walletAddress: this.config.circleWalletAddress,
@@ -588,13 +625,14 @@ export class RunnerServices {
         contractAddress,
         jobId: input.jobId,
       },
-      async (circle, sig) => circle.executeErc8183Write({
+      async (wallet, sig, gatewayIdempotencyKey) => wallet.executeErc8183Write({
         signature: "submit(uint256,bytes32,bytes)",
         params: [input.jobId, input.deliverableHash, input.optParams ?? "0x"],
         contract: contractAddress,
         address: this.config.circleWalletAddress!,
         chain: this.config.chain,
         signal: sig,
+        idempotencyKey: gatewayIdempotencyKey,
       }),
       signal
     );
@@ -680,13 +718,18 @@ export class RunnerServices {
     const gwResult = await this.gateway.execute(
       {
         kind: "createJob" as WriteOperationKind,
+        policy: {
+          action: "erc8183.createJob",
+          method: "createJob(address,address,uint256,string,address)",
+          amountUsdc: "0",
+        },
         idempotencyKey,
         paramsHash,
         walletAddress: this.config.circleWalletAddress,
         chain: this.config.chain,
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
       },
-      async (circle, sig) => circle.executeErc8183Write({
+      async (wallet, sig, gatewayIdempotencyKey) => wallet.executeErc8183Write({
         signature: "createJob(address,address,uint256,string,address)",
         params: [
           normalizedProvider,
@@ -699,6 +742,7 @@ export class RunnerServices {
         address: this.config.circleWalletAddress!,
         chain: this.config.chain,
         signal: sig,
+        idempotencyKey: gatewayIdempotencyKey,
       }),
       signal
     );
@@ -744,6 +788,11 @@ export class RunnerServices {
     const gwResult = await this.gateway.execute(
       {
         kind: "setBudget" as WriteOperationKind,
+        policy: {
+          action: "erc8183.setBudget",
+          method: "setBudget(uint256,uint256,bytes)",
+          amountUsdc: input.amount,
+        },
         idempotencyKey,
         paramsHash,
         walletAddress: this.config.circleWalletAddress,
@@ -751,13 +800,14 @@ export class RunnerServices {
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         jobId: input.jobId,
       },
-      async (circle, sig) => circle.executeErc8183Write({
+      async (wallet, sig, gatewayIdempotencyKey) => wallet.executeErc8183Write({
         signature: "setBudget(uint256,uint256,bytes)",
         params: [input.jobId, amountMicros, input.optParams ?? "0x"],
         contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         address: this.config.circleWalletAddress!,
         chain: this.config.chain,
         signal: sig,
+        idempotencyKey: gatewayIdempotencyKey,
       }),
       signal
     );
@@ -817,19 +867,25 @@ export class RunnerServices {
     const gwResult = await this.gateway.execute(
       {
         kind: "approveUsdc" as WriteOperationKind,
+        policy: {
+          action: "erc8183.approveUsdc",
+          method: "approve(address,uint256)",
+          amountUsdc: input.amount,
+        },
         idempotencyKey,
         paramsHash,
         walletAddress: this.config.circleWalletAddress,
         chain: this.config.chain,
         contractAddress: CONTRACTS.USDC,
       },
-      async (circle, sig) => circle.approveUsdc({
+      async (wallet, sig, gatewayIdempotencyKey) => wallet.approveUsdc({
         amount: input.amount,
         usdcAddress: CONTRACTS.USDC,
         spenderAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         walletAddress: this.config.circleWalletAddress!,
         chain: this.config.chain,
         signal: sig,
+        idempotencyKey: gatewayIdempotencyKey,
       }),
       signal
     );
@@ -873,6 +929,11 @@ export class RunnerServices {
     const gwResult = await this.gateway.execute(
       {
         kind: "fundJob" as WriteOperationKind,
+        policy: {
+          action: "erc8183.fundJob",
+          method: "fund(uint256,bytes)",
+          amountUsdc: "0",
+        },
         idempotencyKey,
         paramsHash,
         walletAddress: this.config.circleWalletAddress,
@@ -880,13 +941,14 @@ export class RunnerServices {
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         jobId: input.jobId,
       },
-      async (circle, sig) => circle.executeErc8183Write({
+      async (wallet, sig, gatewayIdempotencyKey) => wallet.executeErc8183Write({
         signature: "fund(uint256,bytes)",
         params: [input.jobId, input.optParams ?? "0x"],
         contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         address: this.config.circleWalletAddress!,
         chain: this.config.chain,
         signal: sig,
+        idempotencyKey: gatewayIdempotencyKey,
       }),
       signal
     );
@@ -935,6 +997,11 @@ export class RunnerServices {
     const gwResult = await this.gateway.execute(
       {
         kind: "completeJob" as WriteOperationKind,
+        policy: {
+          action: "erc8183.completeJob",
+          method: "complete(uint256,bytes32,bytes)",
+          amountUsdc: "0",
+        },
         idempotencyKey,
         paramsHash,
         walletAddress: this.config.circleWalletAddress,
@@ -942,13 +1009,14 @@ export class RunnerServices {
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         jobId: input.jobId,
       },
-      async (circle, sig) => circle.executeErc8183Write({
+      async (wallet, sig, gatewayIdempotencyKey) => wallet.executeErc8183Write({
         signature: "complete(uint256,bytes32,bytes)",
         params: [input.jobId, reasonHash, input.optParams ?? "0x"],
         contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         address: this.config.circleWalletAddress!,
         chain: this.config.chain,
         signal: sig,
+        idempotencyKey: gatewayIdempotencyKey,
       }),
       signal
     );
@@ -997,6 +1065,11 @@ export class RunnerServices {
     const gwResult = await this.gateway.execute(
       {
         kind: "rejectJob" as WriteOperationKind,
+        policy: {
+          action: "erc8183.rejectJob",
+          method: "reject(uint256,bytes32,bytes)",
+          amountUsdc: "0",
+        },
         idempotencyKey,
         paramsHash,
         walletAddress: this.config.circleWalletAddress,
@@ -1004,13 +1077,14 @@ export class RunnerServices {
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         jobId: input.jobId,
       },
-      async (circle, sig) => circle.executeErc8183Write({
+      async (wallet, sig, gatewayIdempotencyKey) => wallet.executeErc8183Write({
         signature: "reject(uint256,bytes32,bytes)",
         params: [input.jobId, reasonHash, input.optParams ?? "0x"],
         contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         address: this.config.circleWalletAddress!,
         chain: this.config.chain,
         signal: sig,
+        idempotencyKey: gatewayIdempotencyKey,
       }),
       signal
     );
@@ -1054,6 +1128,11 @@ export class RunnerServices {
     const gwResult = await this.gateway.execute(
       {
         kind: "claimRefund" as WriteOperationKind,
+        policy: {
+          action: "erc8183.claimRefund",
+          method: "claimRefund(uint256)",
+          amountUsdc: "0",
+        },
         idempotencyKey,
         paramsHash,
         walletAddress: this.config.circleWalletAddress,
@@ -1061,13 +1140,14 @@ export class RunnerServices {
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         jobId: input.jobId,
       },
-      async (circle, sig) => circle.executeErc8183Write({
+      async (wallet, sig, gatewayIdempotencyKey) => wallet.executeErc8183Write({
         signature: "claimRefund(uint256)",
         params: [input.jobId],
         contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         address: this.config.circleWalletAddress!,
         chain: this.config.chain,
         signal: sig,
+        idempotencyKey: gatewayIdempotencyKey,
       }),
       signal
     );
@@ -1121,6 +1201,11 @@ export class RunnerServices {
     const gwResult = await this.gateway.execute(
       {
         kind: "setProvider" as WriteOperationKind,
+        policy: {
+          action: "erc8183.setProvider",
+          method: "setProvider(uint256,address)",
+          amountUsdc: "0",
+        },
         idempotencyKey,
         paramsHash,
         walletAddress: this.config.circleWalletAddress,
@@ -1128,13 +1213,14 @@ export class RunnerServices {
         contractAddress: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         jobId: input.jobId,
       },
-      async (circle, sig) => circle.executeErc8183Write({
+      async (wallet, sig, gatewayIdempotencyKey) => wallet.executeErc8183Write({
         signature: "setProvider(uint256,address)",
         params: [input.jobId, input.provider],
         contract: CONTRACTS.ERC8183_AGENTIC_COMMERCE,
         address: this.config.circleWalletAddress!,
         chain: this.config.chain,
         signal: sig,
+        idempotencyKey: gatewayIdempotencyKey,
       }),
       signal
     );
@@ -1218,7 +1304,14 @@ export class RunnerServices {
 
     const input = body as { amount: string; method?: string };
 
-    const result = await this.circle.gatewayDeposit({
+    if (!this.wallet.gatewayDeposit) {
+      throw new RunnerError(
+        "GATEWAY_DEPOSIT_UNSUPPORTED",
+        "Gateway deposit is not supported by the current wallet adapter",
+        501,
+      );
+    }
+    const result = await this.wallet.gatewayDeposit({
       amount: input.amount,
       address: this.config.circleWalletAddress,
       chain: this.config.chain,
@@ -1241,15 +1334,15 @@ export class RunnerServices {
   }
 
   /**
-   * Register ERC-8004 identity via Circle CLI.
+   * Register ERC-8004 identity via wallet adapter.
    * Gated behind allowIdentityRegister config flag.
    * Verifies tx receipt + ownerOf(tokenId) == configured wallet.
    */
-  async registerIdentityViaCircleCli(body: unknown, signal?: AbortSignal) {
+  async registerIdentityViaWallet(body: unknown, signal?: AbortSignal) {
     if (!this.config.allowIdentityRegister) {
       throw new RunnerError(
         "IDENTITY_REGISTER_DISABLED",
-        "Identity register via Circle CLI is disabled. Set allowIdentityRegister=true to enable.",
+        "Identity register via wallet adapter is disabled. Set allowIdentityRegister=true to enable.",
         403
       );
     }
@@ -1264,7 +1357,14 @@ export class RunnerServices {
     }
 
     // Execute register(string) on IdentityRegistry
-    const result = await this.circle.executeAllowedArcWrite({
+    if (!this.wallet.executeAllowedArcWrite) {
+      throw new RunnerError(
+        "IDENTITY_REGISTER_UNSUPPORTED",
+        "ERC-8004 register is not supported by the current wallet adapter",
+        501,
+      );
+    }
+    const result = await this.wallet.executeAllowedArcWrite({
       signature: "register(string)",
       params: [input.metadataURI],
       contract: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
@@ -1286,7 +1386,7 @@ export class RunnerServices {
         const json = result.json as any;
         const tokenId = json?.tokenId ?? json?.outputs?.[0];
         if (tokenId) {
-          const ownerResult = await this.circle.queryContract({
+          const ownerResult = await this.wallet.queryContract!({
             signature: "ownerOf(uint256)",
             params: [String(tokenId)],
             contract: CONTRACTS.ERC8004_IDENTITY_REGISTRY,
@@ -1318,7 +1418,7 @@ export class RunnerServices {
   }
 
   /**
-   * Register ERC-8004 identity via Circle CLI and sync to erc8004_agents.
+   * Register ERC-8004 identity via wallet adapter and sync to erc8004_agents.
    * Called by ApprovalManager after approval is approved.
    *
    * Success = tx ✓ + upsert ✓ + visible in GET /api/erc8004/agents ✓
@@ -1391,7 +1491,7 @@ export class RunnerServices {
     let txHash: string;
 
     if (skipOnChainTxHash) {
-      // Retry path: reuse existing txHash, skip auth preflight and Circle CLI
+      // Retry path: reuse existing txHash, skip auth preflight and wallet adapter
       txHash = skipOnChainTxHash;
     } else {
       // Auth preflight: verify Console accepts our Bearer token BEFORE submitting irreversible tx
@@ -1417,7 +1517,7 @@ export class RunnerServices {
         };
       }
 
-      const registerResult = await this.registerIdentityViaCircleCli(
+      const registerResult = await this.registerIdentityViaWallet(
         { metadataURI },
         signal,
       );
@@ -1433,7 +1533,7 @@ export class RunnerServices {
       if (!registerResult.txHash) {
         return {
           ok: false,
-          reason: "No txHash returned from Circle CLI registration",
+          reason: "No txHash returned from wallet registration",
           errorCode: "no_txhash",
         };
       }
@@ -1547,7 +1647,14 @@ export class RunnerServices {
     const payment = PaymentRequestSchema.parse(body);
     assertX402InspectAllowed(this.config, payment);
 
-    const result = await this.circle.inspectService({
+    if (!this.wallet.inspectService) {
+      throw new RunnerError(
+        "X402_INSPECT_UNSUPPORTED",
+        "x402 inspect is not supported by the current wallet adapter",
+        501,
+      );
+    }
+    const result = await this.wallet.inspectService({
       url: payment.url,
       method: payment.method,
       body: payment.body,
@@ -1604,13 +1711,21 @@ export class RunnerServices {
       });
 
       try {
-        const result = await this.circle.payService({
+        if (!this.wallet.payService) {
+          throw new RunnerError(
+            "X402_PAY_UNSUPPORTED",
+            "x402 pay is not supported by the current wallet adapter",
+            501,
+          );
+        }
+        const result = await this.wallet.payService({
           url: payment.url,
           method: payment.method,
           body: payment.body,
           maxAmountUsdc: payment.maxAmountUsdc,
           address: this.config.circleWalletAddress!,
           chain: this.config.chain,
+          idempotencyKey,
           signal,
         });
 
@@ -1632,7 +1747,7 @@ export class RunnerServices {
         const msg = error instanceof Error ? error.message : String(error);
 
         // ── Broker timeout: payment state unknown ─────────────────────
-        // When the broker times out or signal is aborted, the Circle CLI
+        // When the broker times out or signal is aborted, the wallet adapter
         // subprocess may have already submitted the payment or may still
         // be running. We must NOT mark the ledger as terminal failure —
         // leave the attempt pending so retries check idempotency correctly.
@@ -1654,7 +1769,7 @@ export class RunnerServices {
         }
 
         // ── 409 already-paid/idempotent-safe ────────────────────────────
-        // Circle CLI exits non-zero when server returns HTTP 409 (already paid
+        // Wallet adapter returns error when server returns HTTP 409 (already paid
         // or active session). The payment WAS submitted — treat as idempotent
         // success if the server indicates the resource is already unlocked.
         const isAlreadyPaid =
@@ -1744,10 +1859,10 @@ export class RunnerServices {
 
   async circleStatus() {
     const [version, status, gatewayBalance] = await Promise.allSettled([
-      this.circle.version(),
-      this.circle.walletStatus(),
+      this.wallet.version?.() ?? Promise.resolve(undefined),
+      this.wallet.walletStatus(),
       this.config.circleWalletAddress
-        ? this.circle.gatewayBalance(this.config.circleWalletAddress, this.config.chain)
+        ? this.wallet.gatewayBalance?.(this.config.circleWalletAddress, this.config.chain)
         : Promise.resolve(undefined)
     ]);
 
@@ -1774,6 +1889,70 @@ export class RunnerServices {
    * Close persistent stores and release resources.
    * Called during graceful shutdown.
    */
+  // ── Deprecated Aliases (backward compat for MCP callers) ─────────
+
+  /** @deprecated Use submitDeliverableViaWallet. Circle CLI has been removed. */
+  async submitDeliverableViaCircleCli(
+    input: { jobId: string; deliverableHash: `0x${string}`; optParams?: `0x${string}` },
+    signal?: AbortSignal,
+  ) {
+    return this.submitDeliverableViaWallet(input, signal);
+  }
+
+  /** @deprecated Use registerIdentityViaWallet. Circle CLI has been removed. */
+  async registerIdentityViaCircleCli(
+    input: { metadataURI: string },
+    signal?: AbortSignal,
+  ) {
+    return this.registerIdentityViaWallet(input, signal);
+  }
+
+  // ── Spend Policy ────────────────────────────────────────────────────
+
+  private resolveSpendPolicy(walletAddress: string): SpendPolicy {
+    return {
+      status: "active",
+      walletAddress,
+      role: this.config.defaultRole,
+      accountType: this.config.circleWalletAccountType ?? "EOA",
+      perTxLimitUsdc: this.config.perTxLimitUsdc ?? "1",
+      dailyLimitUsdc: this.config.dailyLimitUsdc ?? "10",
+      monthlyLimitUsdc: this.config.monthlyLimitUsdc ?? "100",
+      maxJobBudgetUsdc: this.config.maxJobBudgetUsdc ?? "5",
+      requireApprovalAboveUsdc: this.config.requireApprovalAboveUsdc,
+      allowedContracts: [CONTRACTS.ERC8183_AGENTIC_COMMERCE, CONTRACTS.USDC],
+      allowedMethods: this.allowedMethodsForRole(this.config.defaultRole),
+      blockedMethods: [],
+      x402Enabled: this.config.paymentEnabled,
+      gatewayEnabled: this.config.allowGatewayDeposit,
+    };
+  }
+
+  private allowedMethodsForRole(role: string): string[] {
+    if (role === "provider") {
+      return ["setBudget(uint256,uint256,bytes)", "submit(uint256,bytes32,bytes)", "approve(address,uint256)"];
+    }
+    if (role === "evaluator") {
+      return ["complete(uint256,bytes32,bytes)", "reject(uint256,bytes32,bytes)"];
+    }
+    if (role === "client") {
+      return ["createJob(address,address,uint256,string,address)", "approve(address,uint256)", "fund(uint256,bytes)", "claimRefund(uint256)"];
+    }
+    return [];
+  }
+
+  getSpendPolicyStatus() {
+    if (!this.config.circleWalletAddress) {
+      return { ok: false, error: "CIRCLE_WALLET_NOT_CONFIGURED" };
+    }
+    const policy = this.resolveSpendPolicy(this.config.circleWalletAddress);
+    return {
+      ok: true, policy,
+      dailySpentUsdc: this.spendLedger.getSpent({ walletAddress: this.config.circleWalletAddress, window: "daily" }),
+      monthlySpentUsdc: this.spendLedger.getSpent({ walletAddress: this.config.circleWalletAddress, window: "monthly" }),
+    };
+  }
+
   async close(): Promise<void> {
     // Close gateway (operation journal SQLite) first
     this.gateway.close();

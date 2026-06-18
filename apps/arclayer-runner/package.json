@@ -3,7 +3,7 @@
   "version": "0.1.4",
   "private": false,
   "type": "module",
-  "description": "ArcLayer Runner — policy boundary for external LLM runtimes with MCP bridge, Circle CLI, ERC-8004, ERC-8183, and x402",
+  "description": "ArcLayer Runner — policy boundary for external LLM runtimes with MCP bridge, Circle Dev Wallet, ERC-8004, ERC-8183, and x402",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -28,7 +28,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@arclayer/circle-cli-adapter": "workspace:^",
+    "@arclayer/circle-dev-wallet-adapter": "workspace:^",
     "@arclayer/runner-core": "workspace:^",
     "@arclayer/sdk": "workspace:^",
     "@modelcontextprotocol/sdk": "1.29.0",
