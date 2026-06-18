@@ -17,6 +17,10 @@ function makeConfig(overrides: Partial<RunnerConfig> = {}): RunnerConfig {
     chain: "ARC-TESTNET",
     circleCliBin: "circle",
     circleWalletAddress: "0x0000000000000000000000000000000000000002",
+    walletRail: "circle-dev" as const,
+    circleApiKey: "test-api-key",
+    circleEntitySecret: "test-entity-secret",
+    circleWalletId: "test-wallet-id",
     paymentEnabled: true,
     perTxLimitUsdc: "0.01",
     dailyLimitUsdc: "1",
@@ -42,8 +46,8 @@ function makeMockServices(): any {
     batchPayX402: async () => ({ ok: true, results: [] }),
     prepareRegister: async () => ({ ok: true, mode: "prepare-only" }),
     runErc8183ProviderJob: async () => ({ ok: true, result: {} }),
-    submitDeliverableViaCircleCli: async () => ({ ok: true }),
-    circle: {
+    submitDeliverableViaWallet: async () => ({ ok: true }),
+    wallet: {
       gatewayBalance: async () => ({ ok: true }),
       walletBalance: async () => ({ ok: true }),
       walletBudget: async () => ({ ok: true })
@@ -142,7 +146,7 @@ describe("MCP Runner: Role enforcement", () => {
     const result = await executeRunnerMcpTool("erc8183.complete_job", { jobId: "1", reason: "test" }, ctx);
     const textBlock = result.content.find((c: any) => c.type === "text") as any;
     const parsed = JSON.parse(textBlock.text);
-    // Should NOT be blocked by role enforcement (may fail for other reasons like Circle CLI)
+    // Should NOT be blocked by role enforcement (may fail for other reasons like wallet adapter)
     expect(parsed.error).not.toBe("ROLE_TOOL_NOT_ALLOWED");
   });
 

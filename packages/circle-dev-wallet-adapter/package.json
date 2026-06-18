@@ -1,13 +1,13 @@
 {
-  "name": "@arclayer/circle-cli-adapter",
+  "name": "@arclayer/circle-dev-wallet-adapter",
   "version": "0.1.4",
   "type": "module",
-  "description": "ArcLayer Circle CLI Adapter \u2014 allowlisted shell bridge to Circle CLI with input redaction and blocked dangerous commands",
+  "description": "ArcLayer Circle Developer-Controlled Wallet Adapter — implements WalletExecutionAdapter via Circle Dev-Controlled Wallet API",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/riyannode/ArcLayer.git",
-    "directory": "packages/circle-cli-adapter"
+    "directory": "packages/circle-dev-wallet-adapter"
   },
   "publishConfig": {
     "access": "public",
@@ -33,7 +33,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@arclayer/runner-core": "workspace:^"
+    "@arclayer/runner-core": "workspace:^",
+    "@circle-fin/developer-controlled-wallets": "^10.6.0",
+    "@circle-fin/x402-batching": "^3.0.4",
+    "viem": "^2.17.0"
   },
   "devDependencies": {
     "@types/node": "^22.19.19",

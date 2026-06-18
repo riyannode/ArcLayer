@@ -14,3 +14,4 @@ export * from "./job-envelope";
 export * from "./deliverable";
 export * from "./evaluation-verdict";
 export * from "./approval";
+export * from "./wallet-adapter";

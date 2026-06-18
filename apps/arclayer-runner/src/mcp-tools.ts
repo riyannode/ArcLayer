@@ -56,6 +56,11 @@ function encodeProviderBudgetReasonOptParams(input: {
   return `0x${Buffer.from(JSON.stringify(payload), "utf8").toString("hex")}` as `0x${string}`;
 }
 
+function unsupportedWalletMethod(method: string, walletRail: string) {
+  return { ok: false, error: "WALLET_METHOD_UNSUPPORTED", status: 501, method, walletRail,
+    message: `${method} is not supported by wallet rail ${walletRail}` };
+}
+
 export async function handleMcpTool(
   name: string,
   args: Record<string, unknown>,
@@ -162,7 +167,7 @@ export async function handleMcpTool(
       };
     }
 
-    // ── Circle CLI ────────────────────────────────────────────────────
+    // ── Wallet Status ────────────────────────────────────────────────────
     case "circle.status":
       return services.circleStatus();
 
@@ -170,7 +175,10 @@ export async function handleMcpTool(
       if (!config.circleWalletAddress) {
         return { ok: false, error: "CIRCLE_WALLET_NOT_CONFIGURED" };
       }
-      const gw = await services.circle.gatewayBalance(config.circleWalletAddress, config.chain);
+      if (!services.wallet.gatewayBalance) {
+        return unsupportedWalletMethod("gatewayBalance", config.walletRail);
+      }
+      const gw = await services.wallet.gatewayBalance(config.circleWalletAddress, config.chain);
       return { ok: true, result: gw };
     }
 
@@ -178,7 +186,7 @@ export async function handleMcpTool(
       if (!config.circleWalletAddress) {
         return { ok: false, error: "CIRCLE_WALLET_NOT_CONFIGURED" };
       }
-      const bal = await services.circle.walletBalance(config.circleWalletAddress, config.chain);
+      const bal = await services.wallet.walletBalance(config.circleWalletAddress, config.chain);
       return { ok: true, result: bal };
     }
 
@@ -186,8 +194,12 @@ export async function handleMcpTool(
       if (!config.circleWalletAddress) {
         return { ok: false, error: "CIRCLE_WALLET_NOT_CONFIGURED" };
       }
-      const budget = await services.circle.walletBudget(config.circleWalletAddress);
-      return { ok: true, result: budget };
+      if (services.wallet.walletBudget) {
+        const budget = await services.wallet.walletBudget(config.circleWalletAddress);
+        return { ok: true, result: budget };
+      }
+      return { ok: true, source: "runner-policy", walletRail: config.walletRail,
+        walletAddress: config.circleWalletAddress, budget: services.getSpendPolicyStatus() };
     }
 
     case "circle.wallet_policy_status":
@@ -317,7 +329,7 @@ export async function handleMcpTool(
       const deliverableHash = (hash.startsWith("0x") && hash.length === 66
         ? hash
         : `0x${hash}`) as `0x${string}`;
-      return services.submitDeliverableViaCircleCli({
+      return services.submitDeliverableViaWallet({
         jobId: input.jobId,
         deliverableHash,
         optParams: "0x"
@@ -479,10 +491,10 @@ export async function handleMcpTool(
       }, ctx.signal);
     }
 
-    // ── ERC-8004 Register via Circle CLI (Zod-validated) ──────────────
+    // ── ERC-8004 Register (execute) (Zod-validated) ──────────────
     case "erc8004.register_via_circle_cli": {
       const input = validateMcpToolInput<{ metadataURI: string }>(name, args);
-      return services.registerIdentityViaCircleCli({
+      return services.registerIdentityViaWallet({
         metadataURI: input.metadataURI,
       }, ctx.signal);
     }
@@ -713,12 +725,12 @@ export async function handleMcpTool(
         return { ok: false, error: "INVALID_REGISTRY", message: `Only canonical registry ${CANONICAL_REGISTRY} is supported.` };
       }
 
-      // Owner must match controller for Circle CLI register(string) flow
+      // Owner must match controller for register(string) flow
       if (input.ownerAddress.toLowerCase() !== input.controllerAddress.toLowerCase()) {
         return {
           ok: false,
           error: "OWNER_CONTROLLER_MISMATCH",
-          message: "ownerAddress must match controllerAddress for Circle CLI register(string) flow",
+          message: "ownerAddress must match controllerAddress for register(string) flow",
         };
       }
 

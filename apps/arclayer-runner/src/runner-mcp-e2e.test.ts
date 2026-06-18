@@ -28,6 +28,10 @@ function makeConfig(overrides: Partial<RunnerConfig> = {}): RunnerConfig {
     chain: "ARC-TESTNET",
     circleCliBin: "circle",
     circleWalletAddress: "0x0000000000000000000000000000000000000002",
+    walletRail: "circle-dev" as const,
+    circleApiKey: "test-api-key",
+    circleEntitySecret: "test-entity-secret",
+    circleWalletId: "test-wallet-id",
     paymentEnabled: true,
     perTxLimitUsdc: "0.01",
     dailyLimitUsdc: "1",
@@ -59,8 +63,8 @@ function makeMockServices(): any {
     batchPayX402: async () => ({ ok: true, results: [] }),
     prepareRegister: async () => ({ ok: true, mode: "prepare-only" }),
     runErc8183ProviderJob: async () => ({ ok: true, result: {} }),
-    submitDeliverableViaCircleCli: async () => ({ ok: true }),
-    circle: {
+    submitDeliverableViaWallet: async () => ({ ok: true }),
+    wallet: {
       gatewayBalance: async () => ({ ok: true }),
       walletBalance: async () => ({ ok: true }),
       walletBudget: async () => ({ ok: true }),
