@@ -263,6 +263,70 @@ function readStageData(
   }
 }
 
+// ── On-chain budget check ───────────────────────────────────────────────
+
+type OnChainBudget = {
+  hasBudget: boolean;
+  budgetAtomic: string;
+  budgetUsdc: string;
+  raw: Record<string, unknown>;
+};
+
+function atomicToUsdc(atomic: string): string {
+  const n = BigInt(atomic);
+  const intPart = n / 1_000_000n;
+  const fracPart = n % 1_000_000n;
+  if (fracPart === 0n) return intPart.toString();
+  return `${intPart}.${fracPart.toString().padStart(6, "0").replace(/0+$/, "")}`;
+}
+
+async function checkOnChainBudget(jobId: string): Promise<OnChainBudget> {
+  const onchain = (await runnerPost("/jobs/onchain-status", {
+    jobId,
+  })) as Record<string, unknown>;
+  const raw = (onchain["raw"] as Record<string, unknown>) ?? {};
+  // Console MCP top-level fields: hasBudget (boolean), statusCode, statusLabel
+  // raw fields: budget (atomic string, may be stale from indexer)
+  const topLevelHasBudget = onchain["hasBudget"] === true;
+  const budgetFromRaw = String(raw["budget"] ?? "0");
+  const budgetAtomic = topLevelHasBudget
+    ? (budgetFromRaw !== "0" && budgetFromRaw !== "0n" ? budgetFromRaw : "1")
+    : budgetFromRaw;
+  const hasBudget = topLevelHasBudget || (budgetAtomic !== "0" && budgetAtomic !== "0n" && budgetAtomic !== "");
+  return {
+    hasBudget,
+    budgetAtomic,
+    budgetUsdc: hasBudget && budgetAtomic !== "1" ? atomicToUsdc(budgetAtomic) : (hasBudget ? "unknown" : "0"),
+    raw,
+  };
+}
+
+function markOnChainExisting(
+  jobId: string,
+  budgetAtomic: string,
+  budgetUsdc: string
+): void {
+  mkdirSync(STATE_DIR, { recursive: true });
+  const p = join(STATE_DIR, `job-${jobId}-set-budget.onchain.json`);
+  const tmp = p + ".tmp";
+  writeFileSync(
+    tmp,
+    JSON.stringify({
+      stage: "set_budget",
+      source: "onchain_existing",
+      budgetAtomic,
+      budgetUsdc,
+      next: "waiting_for_funding",
+      timestamp: new Date().toISOString(),
+    })
+  );
+  renameSync(tmp, p);
+}
+
+function isOnChainExisting(jobId: string): boolean {
+  return existsSync(join(STATE_DIR, `job-${jobId}-set-budget.onchain.json`));
+}
+
 // ── Job Lifecycle Processing ──────────────────────────────────────────────
 
 async function processJob(job: IndexerJob): Promise<StageResult> {
@@ -296,22 +360,25 @@ async function processJob(job: IndexerJob): Promise<StageResult> {
       };
     }
 
-    // Check on-chain budget
-    const onchain = (await runnerPost("/jobs/onchain-status", {
-      jobId,
-    })) as Record<string, unknown>;
-    const raw = onchain["raw"] as Record<string, unknown> | undefined;
-    const hasBudget =
-      raw?.budget &&
-      String(raw.budget) !== "0" &&
-      String(raw.budget) !== "0n";
-
-    if (hasBudget) {
-      markStageDone(jobId, "set_budget", { note: "already set on-chain" });
+    // Check on-chain budget — if already set, skip setBudget entirely
+    if (isOnChainExisting(jobId)) {
       return {
         stage: "set_budget",
         status: "skipped",
-        detail: "budget already set on-chain",
+        detail: "budget already set on-chain (previous check)",
+      };
+    }
+
+    const budgetCheck = await checkOnChainBudget(jobId);
+    if (budgetCheck.hasBudget) {
+      markOnChainExisting(jobId, budgetCheck.budgetAtomic, budgetCheck.budgetUsdc);
+      log(
+        `[live] job ${jobId}: budget already on-chain (atomic=${budgetCheck.budgetAtomic}, usdc=${budgetCheck.budgetUsdc}), skipping setBudget`
+      );
+      return {
+        stage: "set_budget",
+        status: "skipped",
+        detail: `budget already on-chain: ${budgetCheck.budgetUsdc} USDC (atomic ${budgetCheck.budgetAtomic}), waiting_for_funding`,
       };
     }
 
@@ -400,6 +467,21 @@ async function processJob(job: IndexerJob): Promise<StageResult> {
         };
       }
 
+      // Re-read on-chain budget — contract may have accepted the tx despite error
+      const recheck = await checkOnChainBudget(jobId);
+      if (recheck.hasBudget) {
+        markOnChainExisting(jobId, recheck.budgetAtomic, recheck.budgetUsdc);
+        log(
+          `[live] job ${jobId}: set_budget reverted but budget is on-chain (atomic=${recheck.budgetAtomic}, usdc=${recheck.budgetUsdc}), treating as existing`
+        );
+        return {
+          stage: "set_budget",
+          status: "skipped",
+          detail: `budget appeared on-chain after revert: ${recheck.budgetUsdc} USDC`,
+        };
+      }
+
+      markStageWaiting(jobId, "set_budget", msg);
       log(`[live] job ${jobId}: set_budget FAILED: ${msg}`);
       return { stage: "set_budget", status: "failed", detail: msg };
     }
